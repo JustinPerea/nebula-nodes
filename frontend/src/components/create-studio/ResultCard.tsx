@@ -8,6 +8,7 @@ import { usePanelFocus } from '../../hooks/usePanelFocus';
 import type { ResultContext } from '../../lib/resultContext';
 import { ResultDetails, ResultMetadata } from './ResultDetails';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
+import { failureMessage } from '../../lib/errorCopy';
 
 function firstMediaUrl(outputs: Record<string, PortValue>): string | null {
   for (const t of ['Image', 'Video', 'Audio', 'Mesh', 'SVG'] as const) {
@@ -109,7 +110,7 @@ function ResultCardOutput({ node, prompt, url, onOpenInCanvas, onUseAsInput, onD
         }, 2000);
       }
     } catch (error) {
-      if (ownsRequest()) setSaveError(error instanceof Error ? error.message : 'Could not save this output. Please try again.');
+      if (ownsRequest()) setSaveError(failureMessage(error, "Couldn't save the output."));
     } finally {
       if (ownsRequest()) {
         savePending.current = false;
@@ -133,6 +134,11 @@ function ResultCardOutput({ node, prompt, url, onOpenInCanvas, onUseAsInput, onD
           streamingPartials={node.data.streamingPartials}
           streamingSvg={node.data.streamingSvg}
           error={node.data.error}
+          errorCategory={node.data.errorCategory}
+          errorFriendly={node.data.errorFriendly}
+          errorPerson={node.data.errorPerson}
+          errorProviderText={node.data.errorProviderText}
+          errorProvider={node.data.errorProvider}
         />
         {canZoom && (
           <button

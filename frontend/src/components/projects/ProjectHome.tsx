@@ -1,9 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { ArrowUpRight, Check, ChevronRight, ImageIcon, Pencil, Plus, RotateCcw, Search, Settings, Trash2, X } from 'lucide-react';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { coverImages, type CoverChoices, type ProjectCover } from '../../lib/projects';
 import { actorLabel } from '../../lib/trash';
 import { CrabMark } from '../brand/CrabMark';
+import { ProposalsFor } from '../proposals/ProposalsFor';
+import { UpdatesSlot } from '../agent-notes/UpdatesSlot';
+import { InNoticeRegion } from '../InNoticeRegion';
+import { failureMessage, shortLine } from '../../lib/errorCopy';
+import { ErrorDetails } from '../failure/ErrorDetails';
+import { UnsavedEditsNotice } from './UnsavedEditsNotice';
+import { editsSavedLine } from './unsavedEditsCopy';
+import type { SavedEditsFile } from '../../lib/graphFileShared';
 import '../../styles/project-home.css';
 
 export interface ProjectSummary {
@@ -17,6 +25,10 @@ export interface ProjectSummary {
   thumbnail: string | null;
   /** Missing from a backend older than covers; then `thumbnail` is used. */
   cover?: ProjectCover | null;
+  /** Who pinned the cover; none on a pin from before it was recorded (the person's). */
+  coverBy?: { kind: string; name: string };
+  /** A pin whose image left the project (Q90 a): it no longer counts, and the cover is automatic. */
+  coverLostPin?: { url: string; by: { kind: string; name: string } | null };
   createdBy?: { kind: 'agent'; name: string };
 }
 
@@ -32,17 +44,34 @@ export interface ProjectHomeProps {
   loading: boolean;
   busy: boolean;
   error: string | null;
+  /** The text behind `error`'s collapsed Details toggle: a person-only
+   * refusal's own words, written for agents (GM, Q116 a). */
+  errorDetails?: string | null;
   onCreate: (name?: string) => void;
   onOpen: (id: string) => void;
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
   onRetry: () => void;
+  /** What Try again does for `error` (error copy round 3b, store/projectStore
+   * projectRetryOffer): 'redo' redoes the failure (the reason is GM's short
+   * line), 'reload' only reloads the saved projects (the whole line stays),
+   * 'none' hides Try again (the whole line). */
+  retry?: 'redo' | 'reload' | 'none';
   trash?: TrashedProject[];
   lastDeleted?: { id: string; name: string } | null;
   onRestore?: (id: string) => void;
   onPurge?: (id: string) => void;
   onEmptyTrash?: () => void;
   onDismissUndo?: () => void;
+  /** A stale tab's unsaved edits Nebula refused for good (Q116 a): GM's
+   * "Couldn't save your edits." with this reason, in place of the error line
+   * and its Try again, until the person downloads them or continues without. */
+  unsavedEdits?: { reason: string; downloadFailed?: boolean; downloadTooBig?: boolean; keptIn?: string; agentOpening?: { agent: string; projectName: string } } | null;
+  /** The file the held edits were downloaded as, for GM's line after it, and
+   * whether Load graph can open it. */
+  editsSavedAs?: SavedEditsFile | null;
+  onDownloadEdits?: () => void;
+  onContinueWithoutEdits?: () => void;
   /** Settings (API keys included) opens from home too, so a first run needn't start a project to add keys. */
   settingsOpen?: boolean;
   onToggleSettings?: () => void;
@@ -101,19 +130,23 @@ function CoverPicker({ project, busy, load, onPin, onClose }: {
   useEffect(() => {
     let live = true;
     load(project.id).then((found) => { if (live) setChoices(found); })
-      .catch((error: unknown) => { if (live) setFailed(error instanceof Error ? error.message : 'Could not load the images.'); });
+      .catch((error: unknown) => { if (live) setFailed(failureMessage(error, "Couldn't load the cover choices.")); });
     return () => { live = false; };
   }, [load, project.id]);
   const pinned = choices?.pinned ?? null;
+  // An agent's pick says so; yours stays plain "Cover".
+  const setBy = pinned && choices?.pinnedBy && choices.pinnedBy.kind !== 'person' ? actorLabel(choices.pinnedBy) : null;
   return (
     <div className="project-home__cover-picker" role="group" aria-label={`Cover for ${project.name}`}
       onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); onClose(); } }}>
       <div className="project-home__cover-picker-head">
-        <span>Cover</span>
+        <span>{setBy ? `Cover · set by ${setBy}` : 'Cover'}</span>
         <button type="button" className="project-home__cover-auto" aria-pressed={!pinned} disabled={busy || !choices}
           onClick={() => { onPin(null); onClose(); }}>Automatic</button>
         <button type="button" className="project-home__cover-close" aria-label="Close cover picker" onClick={onClose}><X aria-hidden="true" /></button>
       </div>
+      {choices?.lostPin && <p className="project-home__cover-note">
+        {choices.lostPin.by?.kind === 'person' ? 'The image you pinned' : 'The pinned image'} is no longer in this project, so the cover is automatic.</p>}
       {failed ? <p className="project-home__cover-note">{failed}</p>
         : !choices ? <p className="project-home__cover-note">Loading images…</p>
           : choices.images.length === 0 ? <p className="project-home__cover-note">No images in this project yet.</p>
@@ -130,6 +163,11 @@ function CoverPicker({ project, busy, load, onPin, onClose }: {
             )}
     </div>
   );
+}
+
+function coverTitle(project: ProjectSummary): string {
+  if (project.cover?.source !== 'pinned') return 'Choose cover';
+  return project.coverBy && project.coverBy.kind !== 'person' ? `Cover: set by ${actorLabel(project.coverBy)}` : 'Cover: pinned';
 }
 
 function editedDate(value: string) {
@@ -170,7 +208,7 @@ function ProjectCard({ project, busy, onOpen, onRename, onDelete, loadCoverChoic
         <span className="project-home__card-actions">
           {loadCoverChoices && onPinCover && (
             <button type="button" className="project-home__rename" ref={coverButton} aria-label={`Choose a cover for ${project.name}`}
-              title={project.cover?.source === 'pinned' ? 'Cover: pinned' : 'Choose cover'} aria-expanded={choosingCover}
+              title={coverTitle(project)} aria-expanded={choosingCover}
               disabled={busy || editing} onClick={() => setChoosingCover(!choosingCover)}><ImageIcon aria-hidden="true" /></button>
           )}
           <button type="button" className="project-home__rename" ref={renameButton} aria-label={`Rename ${project.name}`} aria-expanded={editing} disabled={busy} onClick={() => {
@@ -181,6 +219,8 @@ function ProjectCard({ project, busy, onOpen, onRename, onDelete, loadCoverChoic
             title="Move to Recently deleted" disabled={busy || editing} onClick={() => onDelete(project.id)}><Trash2 aria-hidden="true" /></button>
         </span>
       </div>
+      {/* An agent asking to change the cover the person pinned (Q60 a). */}
+      <ProposalsFor kind="project" targetId={project.id} />
       {choosingCover && loadCoverChoices && onPinCover && (
         <CoverPicker project={project} busy={busy} load={loadCoverChoices} onPin={(url) => onPinCover(project.id, url)}
           onClose={() => { setChoosingCover(false); requestAnimationFrame(() => coverButton.current?.focus()); }} />
@@ -301,23 +341,51 @@ function UndoToast({ project, busy, onUndo, onDismiss }: {
     const timer = window.setTimeout(onDismiss, UNDO_VISIBLE_MS);
     return () => window.clearTimeout(timer);
   }, [paused, onDismiss, project.id]);
+  // In the app's notice region, like every toast (GM - Design, 2026-10-23).
   return (
-    <div className="project-home__toast" role="status" aria-live="polite"
-      onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
-      onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
-      <span className="project-home__toast-text">Moved “{project.name}” to Recently deleted</span>
-      <button type="button" className="project-home__toast-undo" disabled={busy} onClick={onUndo}>Undo</button>
-      <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
-    </div>
+    <InNoticeRegion slot="project-home">
+      <div className="project-home__toast" role="status" aria-live="polite"
+        onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
+        onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
+        <span className="project-home__toast-text">Moved “{project.name}” to Recently deleted</span>
+        <button type="button" className="project-home__toast-undo" disabled={busy} onClick={onUndo}>Undo</button>
+        <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
+      </div>
+    </InNoticeRegion>
   );
 }
 
 const noop = () => {};
 
-export function ProjectHome({ projects, loading, busy, error, onCreate, onOpen, onRename, onDelete, onRetry,
+/** The held edits' notice goes when the person chooses, and takes the
+ * focused button (or the confirm's) with it, which would drop focus to the
+ * page body and send the next Tab back to the top. Focus moves to the line
+ * that says where the file went, or, after Continue without them, to the
+ * page heading. Only when focus was lost: never from something the person
+ * moved to meanwhile (Q116 a review). */
+function useFocusAfterHeldEdits(held: boolean, savedLine: RefObject<HTMLElement | null>,
+  heading: RefObject<HTMLElement | null>): void {
+  const wasHeld = useRef(held);
+  useEffect(() => {
+    const had = wasHeld.current;
+    wasHeld.current = held;
+    if (!had || held) return;
+    // After the commit that removed the notice: no frame to wait for (a
+    // frame never comes in a background tab).
+    const active = document.activeElement;
+    if (active && active !== document.body && active.isConnected) return;
+    (savedLine.current ?? heading.current)?.focus();
+  }, [held, savedLine, heading]);
+}
+
+export function ProjectHome({ projects, loading, busy, error, errorDetails = null, onCreate, onOpen, onRename, onDelete, onRetry, retry = 'redo',
   trash = [], lastDeleted = null, onRestore = noop, onPurge = noop, onEmptyTrash = noop, onDismissUndo = noop,
-  settingsOpen = false, onToggleSettings, loadCoverChoices, onPinCover }: ProjectHomeProps) {
+  settingsOpen = false, onToggleSettings, loadCoverChoices, onPinCover,
+  unsavedEdits = null, editsSavedAs = null, onDownloadEdits = noop, onContinueWithoutEdits = noop }: ProjectHomeProps) {
   const [query, setQuery] = useState('');
+  const savedLine = useRef<HTMLDivElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  useFocusAfterHeldEdits(Boolean(unsavedEdits), savedLine, heading);
   const visibleProjects = useMemo(() => projects
     .filter((project) => project.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
     .sort((left, right) => recentTimestamp(right) - recentTimestamp(left)), [projects, query]);
@@ -327,6 +395,8 @@ export function ProjectHome({ projects, loading, busy, error, onCreate, onOpen, 
       <header className="project-home__header">
         <div className="project-home__brand"><CrabMark size={34} palette={monochromeMark} /><span>Nebula Nodes</span></div>
         <span className="project-home__location">Projects</span>
+        {/* Room for the Updates chip beside Settings (Q107 a; layouts.css). */}
+        <UpdatesSlot />
         {onToggleSettings && <button type="button" className="project-home__settings" aria-label="Settings"
           title="Settings and API keys" aria-haspopup="dialog" aria-expanded={settingsOpen} onClick={onToggleSettings}>
           <Settings aria-hidden="true" />
@@ -334,11 +404,23 @@ export function ProjectHome({ projects, loading, busy, error, onCreate, onOpen, 
       </header>
       <main className="project-home__main" aria-busy={loading || busy}>
         <section className="project-home__welcome" aria-labelledby="project-home-title">
-          <div><p className="project-home__eyebrow">Your workspace</p><h1 id="project-home-title">A place for your next idea.</h1><p className="project-home__intro">Start a new canvas or pick up where you left off.</p></div>
-          <button className="project-home__new" type="button" disabled={loading || busy} onClick={() => onCreate()}><Plus aria-hidden="true" />New project</button>
+          <div><p className="project-home__eyebrow">Your workspace</p><h1 id="project-home-title" ref={heading} tabIndex={-1}>A place for your next idea.</h1><p className="project-home__intro">Start a new canvas or pick up where you left off.</p></div>
+          <button className="project-home__new" type="button" disabled={loading || busy || Boolean(unsavedEdits)} onClick={() => onCreate()}><Plus aria-hidden="true" />New project</button>
         </section>
 
-        {error && <div className="project-home__error" role="alert"><span>{error}</span><button type="button" disabled={loading || busy} onClick={onRetry}>Try again</button></div>}
+        {/* GM's WRAP rule: where "Try again" redoes the failure it is the retry, so the
+            reason drops its own; where it only reloads, or can't help, the line stays whole. */}
+        {unsavedEdits ? <UnsavedEditsNotice reason={unsavedEdits.reason} downloadFailed={unsavedEdits.downloadFailed}
+          downloadTooBig={unsavedEdits.downloadTooBig}
+          keptIn={unsavedEdits.keptIn} agentOpening={unsavedEdits.agentOpening} busy={busy}
+          onDownload={onDownloadEdits} onContinue={onContinueWithoutEdits} />
+          : editsSavedAs && <div ref={savedLine} tabIndex={-1} className="project-home__notice" role="status">
+            {editsSavedLine(editsSavedAs.name)}</div>}
+        {!unsavedEdits && error && <div className="project-home__error" role="alert">
+          {errorDetails ? <div className="project-home__error-text"><span>{retry === 'redo' ? shortLine(error) : error}</span>
+            <ErrorDetails raw={errorDetails} className="project-home__error-details" /></div>
+            : <span>{retry === 'redo' ? shortLine(error) : error}</span>}
+          {retry !== 'none' && <button type="button" disabled={loading || busy} onClick={onRetry}>Try again</button>}</div>}
 
         <section className="project-home__projects" aria-labelledby="recent-projects-title">
           <div className="project-home__section-header">
@@ -348,7 +430,7 @@ export function ProjectHome({ projects, loading, busy, error, onCreate, onOpen, 
           {loading ? <div className="project-home__loading" role="status"><span className="project-home__loading-dot" />Loading your projects…</div>
             : visibleProjects.length > 0 ? <div className="project-home__grid">{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} busy={busy} onOpen={onOpen} onRename={onRename} onDelete={onDelete} loadCoverChoices={loadCoverChoices} onPinCover={onPinCover} />)}</div>
               : projects.length > 0 ? <div className="project-home__empty" role="status"><Search className="project-home__empty-search" aria-hidden="true" /><h3>No projects match “{query.trim()}”</h3><p>Try another name or clear your search.</p><button type="button" className="project-home__secondary" onClick={() => setQuery('')}>Clear search</button></div>
-                : !error && <div className="project-home__empty"><div className="project-home__empty-graph"><NodeGraphPlaceholder /></div><h3>Your first project starts here.</h3><p>Connect ideas, models and media on a canvas of your own.</p><button type="button" className="project-home__secondary" disabled={busy} onClick={() => onCreate()}><Plus aria-hidden="true" />Create your first project</button></div>}
+                : !error && !unsavedEdits && <div className="project-home__empty"><div className="project-home__empty-graph"><NodeGraphPlaceholder /></div><h3>Your first project starts here.</h3><p>Connect ideas, models and media on a canvas of your own.</p><button type="button" className="project-home__secondary" disabled={busy} onClick={() => onCreate()}><Plus aria-hidden="true" />Create your first project</button></div>}
         </section>
         {!loading && trash.length > 0 && <RecentlyDeleted trash={trash} busy={busy} onRestore={onRestore} onPurge={onPurge} onEmptyTrash={onEmptyTrash} />}
       </main>

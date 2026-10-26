@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StoreApi, UseBoundStore } from 'zustand';
 import { Toolbar } from '../../src/components/panels/Toolbar';
 import { GRAPH_LOAD_EVENT, GRAPH_SAVE_EVENT } from '../../src/lib/graphFileActions';
+import { ConnectionLostError, RequestFailedError } from '../../src/lib/errorCopy';
 
 interface ToolbarGraph {
   isExecuting: boolean;
@@ -41,6 +42,7 @@ const mocks = vi.hoisted(() => ({
   flow: { transform: [0, 0, 1] as [number, number, number], minZoom: 0.1, maxZoom: 4 },
 }));
 
+import { CANVAS_NOTICE_EVENT, type CanvasNoticeDetail } from '../../src/lib/canvasNotice';
 vi.mock('@xyflow/react', () => ({
   useReactFlow: () => ({ fitView: mocks.fit, zoomIn: mocks.zoomIn, zoomOut: mocks.zoomOut, zoomTo: mocks.zoomTo }),
   useStore: <T,>(selector: (state: typeof mocks.flow) => T) => selector(mocks.flow),
@@ -75,6 +77,8 @@ vi.mock('../../src/lib/api', () => ({ fetchCLIGraph: () => mocks.cli() }));
 vi.mock('../../src/lib/canvasFit', () => ({ CANVAS_ZOOM_DURATION: 200, CANVAS_FIT_DURATION: 300, computeCanvasFitPadding: () => 0.2 }));
 
 const INITIAL_GRAPH = { ...mocks.graph!.getState() };
+const notices = vi.fn();
+const onNotice = (event: Event) => notices((event as CustomEvent<CanvasNoticeDetail>).detail.text);
 const INITIAL_UI = { ...mocks.ui!.getState() };
 function openActions() {
   const trigger = screen.getByRole('button', { name: 'Canvas actions' });
@@ -91,11 +95,38 @@ describe('Canvas toolbar hierarchy', () => {
     mocks.fetch.mockResolvedValue({ ok: true });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    // Error copy round 3f (GM): the alerts are canvas notices now.
+    notices.mockReset();
+    window.addEventListener(CANVAS_NOTICE_EVENT, onNotice);
   });
   afterEach(() => {
     cleanup();
+    window.removeEventListener(CANVAS_NOTICE_EVENT, onNotice);
     vi.restoreAllMocks();
     vi.useRealTimers();
+  });
+
+  // GM - Design, 2026-10-23: notices sit "just above the bottom bar", and the
+  // Inspector clamps "so it stays above the bottom bar". Both read where the
+  // bar really starts, measured here, not a fixed number.
+  it('publishes where the bar starts, its open Canvas actions panel included', () => {
+    vi.stubGlobal('innerHeight', 800);
+    const root = document.documentElement;
+    const { unmount } = render(<Toolbar />);
+    const bar = screen.getByRole('group', { name: 'Canvas controls' });
+    expect(bar).toHaveAttribute('data-bottom-bar');
+    bar.getBoundingClientRect = () => new DOMRect(395, 729, 490, 47);
+    fireEvent(window, new Event('resize'));
+    expect(root.style.getPropertyValue('--bottom-bar-clearance')).toBe('71px');
+    const { panel } = openActions();
+    // Marked as the panel: it covers only its own width (lib/bottomBar.ts).
+    expect(panel).toHaveAttribute('data-bottom-bar', 'panel');
+    panel.getBoundingClientRect = () => new DOMRect(485, 480, 310, 237);
+    fireEvent(window, new Event('resize'));
+    expect(root.style.getPropertyValue('--bottom-bar-clearance')).toBe('320px');
+    unmount();
+    expect(root.style.getPropertyValue('--bottom-bar-clearance')).toBe('');
+    vi.unstubAllGlobals();
   });
 
   it('keeps zoom on the bar: steps, a live percentage that resets to 100%, and fit', () => {
@@ -244,7 +275,7 @@ describe('Canvas toolbar hierarchy', () => {
     render(<Toolbar />);
     const { panel } = openActions();
     expect(within(panel).getByRole('button', { name: 'Save graph' })).toBeDisabled();
-    expect(within(panel).getByRole('button', { name: 'Save graph' })).toHaveAccessibleDescription('Resolve the World Labs paid-start review before saving.');
+    expect(within(panel).getByRole('button', { name: 'Save graph' })).toHaveAccessibleDescription('Check the waiting World Labs run before you save.');
     expect(within(panel).getByRole('button', { name: 'Load graph' })).toBeEnabled();
   });
 
@@ -288,11 +319,21 @@ describe('Canvas toolbar hierarchy', () => {
     render(<Toolbar />);
     const { panel } = openActions();
     fireEvent.click(within(panel).getByRole('button', { name: 'Clear canvas…' }));
-    await waitFor(() => expect(window.alert).toHaveBeenCalledWith('Provider is still settling.'));
+    // error-copy round 2 (GM): the heading names the action, then the reason.
+    await waitFor(() => expect(notices).toHaveBeenCalledWith("Couldn't clear the canvas. Provider is still settling."));
     expect(mocks.clear).not.toHaveBeenCalled();
     expect(mocks.cancelStep).toHaveBeenCalledWith(mocks.undoStep);
     expect(mocks.graph!.getState().providerRecoveries).toHaveLength(1);
     expect(mocks.graph!.getState().nodes).toHaveLength(1);
+  });
+
+  it('error-copy round 2: a refused clear with no reason says GM\'s line, never the status', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mocks.fetch.mockResolvedValue({ ok: false, status: 409, json: async () => ({}) });
+    render(<Toolbar />);
+    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Clear canvas…' }));
+    await waitFor(() => expect(notices).toHaveBeenCalledWith(
+      "Couldn't clear the canvas. Try again, or reload if it keeps happening."));
   });
 
   it('does not request clear after a declined confirmation or a run starting during confirmation', () => {
@@ -370,6 +411,19 @@ describe('Canvas toolbar hierarchy', () => {
     await act(async () => finishCLI!({ nodes: [{ id: 'imported' }], edges: [] }));
     expect(mocks.load).not.toHaveBeenCalled();
     expect(mocks.fit).not.toHaveBeenCalled();
+  });
+
+  // Error copy round 3e (GM): "Couldn't import the CLI graph." then the
+  // reason; it said "Could not fetch CLI graph — is the backend running?".
+  it.each([
+    [new ConnectionLostError(new TypeError('Failed to fetch')), "Nebula's server isn't answering. Make sure it's running, then try again."],
+    [new RequestFailedError("Couldn't load the canvas.", 503), "Nebula didn't respond. Try again."],
+    [new Error('boom'), "Try again, or reload if it keeps happening."],
+  ])('a failed CLI import names the action over the reason (%#)', async (error, reason) => {
+    mocks.cli.mockRejectedValue(error);
+    render(<Toolbar />);
+    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI graph' }));
+    await waitFor(() => expect(notices).toHaveBeenCalledWith(`Couldn't import the CLI graph. ${reason}`));
   });
 
   it('runs layout only after explicit selection and preserves Reset panels behavior', () => {

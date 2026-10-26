@@ -119,9 +119,9 @@ def test_preserves_ids_outputs_recipe_and_creator_state_on_switch(workspace, per
     # The opened project's pins (canvasPins) follow the graph replacement.
     replacement = next(call.args[0] for call in reversed(broadcast.await_args_list)
                        if call.args[0]["type"] == "graphSync")
-    # Then projectsChanged, for the Projects screen's list.
+    # Then its Updates (agentNotes), and projectsChanged for the Projects screen's list.
     kinds = [call.args[0]["type"] for call in broadcast.await_args_list]
-    assert kinds[-3:] == ["graphSync", "canvasPins", "projectsChanged"]
+    assert kinds[-4:] == ["graphSync", "canvasPins", "agentNotes", "projectsChanged"]
     assert replacement["graphReplaced"] is True
     assert replacement["workspaceRevision"] == opened.json()["workspaceRevision"]
     assert replacement["activeProjectId"] == project_id
@@ -298,7 +298,8 @@ def test_non_finite_and_protected_snapshot_refs_are_rejected(workspace):
     before = store.path.read_bytes()
     payload = {"workspaceRevision": created["workspaceRevision"], "snapshot": {"nodes": [], "edges": [], "viewport": {"x": float("inf"), "y": 0, "zoom": 1}}}
     response = client.put(f"/api/projects/{project_id}", content=json.dumps(payload), headers={"Content-Type": "application/json"})
-    assert response.status_code == 400
+    # json.dumps writes inf as Infinity, which JsonNumberGuard refuses before the route (2026-10-20).
+    assert response.status_code == 422 and "Infinity" in response.json()["detail"]
     payload["snapshot"] = {"nodes": [node()], "edges": [], "runHistory": []}
     from services.agent_profiles import default_secret_paths
     payload["snapshot"]["nodes"][0]["data"]["params"]["value"] = str(default_secret_paths()[0])

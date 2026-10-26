@@ -86,7 +86,10 @@ function listen() {
   listening = true;
   wsClient.subscribe((event) => {
     const store = useStoredAssetsStore.getState();
-    if (event.type === 'storedAssetChanged') store.applyChange(event);
+    if (event.type === 'storedAssetChanged') {
+      // A Style has no canvas card (applying one copies it into Create).
+      if (event.kind !== 'style') store.applyChange({ kind: event.kind, id: event.id, deleted: event.deleted });
+    }
     // Another project (or an import) arrived, or the socket was down and its
     // changes weren't replayed: anything may have changed meanwhile.
     else if ((event.type === 'graphSync' && event.graphReplaced) || event.type === 'socketReconnected') {
@@ -103,7 +106,7 @@ interface StoredAssetsState {
   refresh: (kind: StoredAssetKind, id: string) => Promise<void>;
   /** Show what the caller already has (a panel's list) until the fetch lands. */
   prime: (kind: StoredAssetKind, summary: StoredAssetSummary) => void;
-  applyChange: (event: Pick<StoredAssetChangedEvent, 'kind' | 'id' | 'deleted'>) => void;
+  applyChange: (event: Pick<StoredAssetChangedEvent, 'id' | 'deleted'> & { kind: StoredAssetKind }) => void;
   refreshAll: () => Promise<void>;
 }
 

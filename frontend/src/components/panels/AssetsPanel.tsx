@@ -7,6 +7,8 @@ import { useGraphStore } from '../../store/graphStore';
 import { fetchCharacters, fetchMoodboards, moveStoredAsset } from '../../lib/api';
 import { fetchPresets, type Preset } from '../../lib/createPresets';
 import { backendAssetUrlSync } from '../../lib/backend';
+import { storedImageView } from '../../lib/storedImage';
+import { OutsideImageNote } from '../OutsideImageNote';
 import { CHARACTER_DRAG_MIME, MOODBOARD_DRAG_MIME } from '../../lib/dragMime';
 import { NEW_CHARACTER_SENTINEL, NEW_MOODBOARD_SENTINEL } from '../../lib/studioSentinels';
 import { findAvailableNodePosition } from '../../lib/nodePlacement';
@@ -18,7 +20,11 @@ import { moveChoices } from '../../lib/assetMove';
 import { moodboardImagesLabel, setAsideCount } from '../../lib/moodboardCount';
 import { AssetMoveMenu } from '../asset-move/AssetMoveMenu';
 import { useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
+import { RecentlyDeletedAssets, UndoDeleteToast } from '../asset-trash/AssetTrash';
+import { useAssetDelete } from '../../hooks/useAssetDelete';
 import '../../styles/panels.css';
+import { FailureLines } from '../failure/FailureLines';
+import { failureMessage } from '../../lib/errorCopy';
 import '../../styles/character-studio.css';
 import '../../styles/moodboard-studio.css';
 
@@ -42,7 +48,9 @@ const TABS: Array<{ id: Tab; label: string }> = [
  * "Add to canvas" (or dragging the item) puts a Character or Moodboard node
  * on the canvas through the existing add*Node paths + drag MIMEs. "Move"
  * files a Character or Moodboard under Global or the open project
- * (contract 07, 1.10).
+ * (contract 07, 1.10). Styles have no Studio, so their Delete is here: it
+ * moves the Style to Recently deleted with an Undo toast, and Recently
+ * deleted lists under the Styles, as in the Studios (Q53 a, 2026-10-20).
  */
 export function AssetsPanel() {
   const togglePanel = useUIStore((s) => s.togglePanel);
@@ -108,7 +116,8 @@ export function AssetsPanel() {
     };
     load()
       .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load assets.');
+        // Each list's request names itself ("Couldn't load the boards. <reason>").
+        if (!cancelled) setError(failureMessage(err, "Couldn't load your assets."));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -177,10 +186,19 @@ export function AssetsPanel() {
       useAssetStudioDraftStore.getState().rehome(kind, id, result.to);
       setRelistKey((value) => value + 1);
     } catch (err) {
-      setMoveError(err instanceof Error ? err.message : 'Move failed.');
+      setMoveError(failureMessage(err, kind === 'moodboard' ? "Couldn't move the board." : "Couldn't move the character."));
     }
     setMovingId(null);
   };
+
+  // Delete a Style: it goes to Recently deleted, and Undo brings it back.
+  const deleting = useAssetDelete('style');
+  const deleteStyle = async (p: Preset) => {
+    const removed = await deleting.remove({ id: p.id, name: p.name, scope });
+    if (removed) setSelected(null);
+    setRelistKey((value) => value + 1);
+  };
+  const relist = () => setRelistKey((value) => value + 1);
 
   const applyStyle = (p: Preset) => {
     // Hand the preset to Create (consumed on mount) and switch surfaces.
@@ -268,6 +286,9 @@ export function AssetsPanel() {
           {moveError && (
             <div className="character-palette__empty character-palette__empty--error" role="alert">{moveError}</div>
           )}
+          {tab === 'styles' && deleting.deleteError && (
+            <div className="character-palette__empty character-palette__empty--error" role="alert"><FailureLines failure={deleting.deleteError} /></div>
+          )}
 
           {!noProject && !busy && !failed && tab === 'characters' && (
             filteredCharacters.length === 0 ? (
@@ -279,6 +300,7 @@ export function AssetsPanel() {
                   name={c.name}
                   sub={`${c.referenceViews.length} views`}
                   thumbnail={c.thumbnail}
+                  localOnly
                   emptyThumb="◐"
                   selected={selected === `characters:${c.id}`}
                   onSelect={() => setSelected(`characters:${c.id}`)}
@@ -304,6 +326,7 @@ export function AssetsPanel() {
                   name={m.name}
                   sub={`${moodboardImagesLabel(m.images.length, setAsideCount(m.images))} · ${m.mode}`}
                   thumbnail={m.thumbnail}
+                  localOnly
                   emptyThumb="▦"
                   selected={selected === `moodboards:${m.id}`}
                   onSelect={() => setSelected(`moodboards:${m.id}`)}
@@ -331,17 +354,30 @@ export function AssetsPanel() {
                   name={p.name}
                   sub={p.category}
                   thumbnail={p.thumbnail}
+                  localOnly
                   emptyThumb="✦"
                   selected={selected === `styles:${p.id}`}
                   onSelect={() => setSelected(`styles:${p.id}`)}
                   onOpen={() => applyStyle(p)}
                   openLabel="Use in Create"
+                  onDelete={() => { void deleteStyle(p); }}
+                  deleteBusy={deleting.busy}
                 />
               ))
             )
           )}
+          {!noProject && tab === 'styles' && (
+            <RecentlyDeletedAssets kind="style" scope={scope} refreshKey={deleting.refreshKey}
+              onRestored={relist} onTrashChanged={relist} />
+          )}
         </ScrollFade>
       </ScrollFade>
+      {/* The toast draws in the app's notice region (UndoDeleteToast), never in the panel. */}
+      {deleting.lastDeleted && (
+        <UndoDeleteToast key={deleting.lastDeleted.id} name={deleting.lastDeleted.name} busy={deleting.busy}
+          error={deleting.undoError} onDismiss={deleting.dismiss}
+          onUndo={() => { void deleting.undo().then((asset) => { if (asset) relist(); }); }} />
+      )}
     </div>
   );
 }
@@ -354,6 +390,7 @@ function AssetItem({
   name,
   sub,
   thumbnail,
+  localOnly = false,
   emptyThumb,
   selected,
   onSelect,
@@ -362,10 +399,15 @@ function AssetItem({
   onAdd,
   onDragStart,
   move,
+  onDelete,
+  deleteBusy = false,
 }: {
   name: string;
   sub: ReactNode;
   thumbnail?: string;
+  /** A Style's or Character's thumbnail: loaded only when it is one of
+   *  Nebula's own files (lib/storedImage.ts). */
+  localOnly?: boolean;
   emptyThumb: string;
   selected: boolean;
   onSelect: () => void;
@@ -375,8 +417,13 @@ function AssetItem({
   onDragStart?: (e: ReactDragEvent<HTMLButtonElement>) => void;
   /** The Move menu (Characters and Moodboards). */
   move?: ReactNode;
+  /** Styles: move it to Recently deleted (an Undo toast follows). */
+  onDelete?: () => void;
+  deleteBusy?: boolean;
 }) {
   const label = name || 'Untitled';
+  const stored = localOnly ? storedImageView(thumbnail) : null;
+  const src = stored ? stored.src : thumbnail ? backendAssetUrlSync(thumbnail) : null;
   return (
     <div className={`assets-item${selected ? ' assets-item--selected' : ''}`}>
       <button
@@ -390,8 +437,8 @@ function AssetItem({
         title={onAdd ? 'Double-click to open · drag onto the canvas to add' : 'Double-click to use in Create'}
       >
         <span className="character-palette__thumb">
-          {thumbnail ? (
-            <img src={backendAssetUrlSync(thumbnail)} alt="" draggable={false} />
+          {src ? (
+            <img src={src} alt="" draggable={false} />
           ) : (
             <span className="character-palette__thumb-empty" aria-hidden="true">{emptyThumb}</span>
           )}
@@ -399,6 +446,7 @@ function AssetItem({
         <span className="character-palette__meta">
           <span className="character-palette__name">{label}</span>
           <span className="character-palette__sub">{sub}</span>
+          {stored?.outside && <OutsideImageNote />}
         </span>
       </button>
       {selected && (
@@ -412,6 +460,12 @@ function AssetItem({
             </button>
           )}
           {move}
+          {onDelete && (
+            <button type="button" className="assets-item__action" onClick={onDelete} disabled={deleteBusy}
+              title="Move to Recently deleted" aria-label={`Delete ${label}`}>
+              Delete
+            </button>
+          )}
         </div>
       )}
     </div>

@@ -107,20 +107,62 @@ def test_cli_ordinary_export_and_import_roundtrip(tmp_path):
 
     assert json.loads(path.read_text()) == graph.get_state()
     client.reset_mock()
-    client.import_graph.return_value = {"nodeCount": 2, "edgeCount": 1, "warnings": []}
+    sent: list[tuple[str, str, dict]] = []
+
+    def answer(method, route, **kwargs):
+        sent.append((method, route, kwargs.get("json")))
+        if route == "/api/projects":
+            return {"activeProjectId": None, "projects": []}
+        return {"nodeCount": 2, "edgeCount": 1, "warnings": [], "idMap": {}}
+
+    client.api.request.side_effect = answer
     run_load(client, str(path))
-    # One atomic import of the file as saved; no clear-then-recreate.
-    client.import_graph.assert_called_once_with(graph.get_state())
+    # One atomic import of the file as saved (graph_file_client.py, the
+    # module MCP load_graph_file shares); no clear-then-recreate.
+    imports = [body for method, route, body in sent if route == "/api/graph/import"]
+    assert imports == [graph.get_state()]
     client.clear_graph.assert_not_called()
     client.create_node.assert_not_called()
     assert list(tmp_path.iterdir()) == [path]
+
+
+def test_cli_load_of_a_bundle_restores_it_through_the_backend(tmp_path, capsys):
+    # #184 refused a .nebula.zip here and sent the person to Load graph. Since
+    # Q123 a (Justin: "Yes: `nebula load` and an MCP tool open a bundle,
+    # restoring its files, as Load graph does.") it goes to the restore, with
+    # rewriteLinks; a refusal there prints as one error line, no traceback.
+    import io
+    import zipfile
+
+    from nebula_api import NebulaAPIError
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as bundle:
+        bundle.writestr("graph.json", json.dumps({"nodes": [], "edges": []}))
+    path = tmp_path / "Big campaign.nebula.zip"
+    path.write_bytes(buffer.getvalue())
+    client = Mock()
+    client.api.request.side_effect = NebulaAPIError("Unsupported .nebula file version", status=400)
+
+    with pytest.raises(SystemExit) as exc:
+        run_load(client, str(path))
+
+    assert exc.value.code == 1
+    err = capsys.readouterr().err
+    assert err.startswith("error: ") and "Unsupported .nebula file version" in err and "Traceback" not in err
+    (method, route), kwargs = client.api.request.call_args
+    assert (method, route) == ("POST", "/api/outputs/restore") and kwargs["params"] == {"rewriteLinks": "true"}
+    assert kwargs["headers"]["Content-Type"] == "application/zip"
 
 
 def test_cli_export_failure_preserves_existing_file_and_cleans_temporary(
     tmp_path, monkeypatch
 ):
     target = tmp_path / "export.json"
-    target.write_text("existing export")
+    # An earlier export: run_save replaces only a saved graph (any other
+    # existing file is refused, tests/test_input_size_security.py).
+    existing = json.dumps({"nodes": [{"id": "n1"}], "edges": []})
+    target.write_text(existing)
     client = Mock()
     client.get_graph.return_value = {"nodes": [], "edges": []}
 
@@ -131,5 +173,5 @@ def test_cli_export_failure_preserves_existing_file_and_cleans_temporary(
     with pytest.raises(OSError, match="simulated disk failure"):
         run_save(client, str(target))
 
-    assert target.read_text() == "existing export"
+    assert target.read_text() == existing
     assert list(tmp_path.iterdir()) == [target]

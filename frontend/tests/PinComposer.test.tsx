@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { RequestFailedError } from '../src/lib/errorCopy';
 
 const api = vi.hoisted(() => ({ createPin: vi.fn(), fetchPins: vi.fn(), deletePin: vi.fn() }));
 
@@ -63,7 +64,9 @@ describe('PinComposer', () => {
 
   it('shows a dismissable alert when the backend refuses the pin', async () => {
     useCanvasPinsStore.getState().compose({ nodeId: 'n4' });
-    api.createPin.mockRejectedValue(new Error('This action only works from the Nebula canvas.'));
+    // Round 3e: a refusal arrives as the API's typed error (apiRequest), not a plain Error,
+    // whose own text no surface shows any more.
+    api.createPin.mockRejectedValue(new RequestFailedError("Couldn't save the note.", 403, { reason: 'This action only works from the Nebula canvas.' }));
     render(<PinComposer />);
     fireEvent.change(screen.getByRole('textbox', { name: 'Note for agents' }), { target: { value: 'redo this one' } });
     await act(async () => {

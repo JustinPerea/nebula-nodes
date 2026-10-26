@@ -166,7 +166,8 @@ describe('Create draft integration', () => {
     await act(async () => { await beforeAttach(); });
     expect(mocks.author).not.toHaveBeenCalled(); expect(mocks.execute).not.toHaveBeenCalled();
     await act(async () => { finish({ ok: false, status: 413, json: async () => ({ detail: 'Image exceeds 20 MB limit' }) }); });
-    expect(await view.findByText('Image exceeds 20 MB limit')).toBeInTheDocument();
+    // error-copy round 2 (GM): "Couldn't upload {filename}." then the reason.
+    expect(await view.findByText("Couldn't upload slow.png. Image exceeds 20 MB limit")).toBeInTheDocument();
     expect(view.getByRole('button', { name: 'Generate' })).toBeDisabled();
     await act(async () => { await mocks.directGenerate!(); });
     expect(mocks.author).not.toHaveBeenCalled();
@@ -181,7 +182,8 @@ describe('Create draft integration', () => {
     mocks.fetch.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({ detail: 'Upload storage unavailable' }) });
     const view = render(<CreateView />);
     fireEvent.change(view.getByLabelText('Attach reference'), { target: { files: [image('retry.png')] } });
-    expect(await view.findByText('Upload storage unavailable')).toBeInTheDocument();
+    // A 503 says GM's line, short beside the chip's Retry (WRAP rule).
+    expect(await view.findByText("Couldn't upload retry.png. Nebula didn't respond.")).toBeInTheDocument();
     fireEvent.change(view.getByRole('textbox', { name: 'Create prompt' }), { target: { value: 'Newer draft while uploading' } });
     fireEvent.click(view.getByRole('button', { name: 'Retry retry.png' }));
     expect(await view.findByAltText('Reference 1')).toBeInTheDocument();
@@ -227,6 +229,18 @@ describe('Create draft integration', () => {
     expect(mocks.graph!.getState().nodes).toEqual(earlierNodes);
     expect(mocks.graph!.getState().edges).toEqual(earlierEdges);
     expect(mocks.execute).not.toHaveBeenCalled();
+  });
+
+  it('applying a Style attaches only Nebula’s own images and says an outside link was left out', () => {
+    mocks.pendingPreset = { id: 'old-style', name: 'Old', category: 'My Styles', prompt: 'Old scene',
+      modelId: 'gpt-image-2-generate', params: {}, refImages: ['/api/outputs/style.png', 'https://images.example.com/x.png'],
+      thumbnail: '', scope: 'project', projectId: null, version: 1, createdAt: '', updatedAt: '' };
+    const view = render(<CreateView />);
+    expect(view.getByAltText('Reference 1')).toHaveAttribute('src', '/api/outputs/style.png');
+    expect(view.queryByAltText('Reference 2')).toBeNull();
+    expect(useCreateDraftStore.getState().drafts['draft-session'].refs.map((ref) => ref.filePath)).toEqual(['/api/outputs/style.png']);
+    expect(view.getByRole('status')).toHaveTextContent('1 image link from outside Nebula in this Style was left out.');
+    expect(document.querySelector('img[src^="https://"]')).toBeNull();
   });
 
   it('applies an explicit pending Style only once to the saved draft and resets the composer without creating a new run', () => {

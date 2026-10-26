@@ -2,14 +2,19 @@ import { useState } from 'react';
 import { Home } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
 import { useGraphStore } from '../../store/graphStore';
+import { shortLine } from '../../lib/errorCopy';
+import { HEADER_TOOLTIP, headerLine } from '../../lib/savePausedCopy';
 import './ProjectWorkspaceControls.css';
 
-export function ProjectWorkspaceControls() {
+/** `onHome`: the screen's own way to Projects (the Commons asks first); `homeBusy`: it waits on a save. */
+export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?: (button: HTMLButtonElement) => void; homeBusy?: boolean }) {
   const project = useProjectStore((state) => state.activeProject);
   const screen = useProjectStore((state) => state.screen);
   const status = useProjectStore((state) => state.saveStatus);
   const busy = useProjectStore((state) => state.busy);
-  const error = useProjectStore((state) => state.error);
+  const saveError = useProjectStore((state) => state.saveError);
+  const pausedBytes = useProjectStore((state) => state.savePaused?.bytes ?? null);
+  const panelOpen = useProjectStore((state) => state.sizePanelOpen);
   const nodeCount = useGraphStore((state) => state.nodes.length);
   const [draft, setDraft] = useState<string | null>(null);
   if (!project || screen !== 'workspace') return null;
@@ -21,9 +26,11 @@ export function ProjectWorkspaceControls() {
   const label = status === 'saving' ? 'Saving…' : status === 'error' ? 'Save failed' : status === 'unsaved' ? 'Unsaved changes' : 'Saved';
   return (
     <div className="project-workspace-controls">
-      <button type="button" className="project-workspace-controls__home" aria-label="Back to projects"
-        title="Projects" disabled={busy} onClick={() => void useProjectStore.getState().goHome()}>
+      <button type="button" className="project-workspace-controls__home" aria-label={homeBusy ? 'Saving…' : 'Back to projects'}
+        aria-busy={homeBusy || undefined} title="Projects" disabled={busy}
+        onClick={(event) => (onHome ? onHome(event.currentTarget) : void useProjectStore.getState().goHome())}>
         <Home size={16} aria-hidden="true" />
+        {homeBusy && <span className="project-workspace-controls__busy">Saving…</span>}
       </button>
       {draft !== null
         ? <input className="project-workspace-controls__name project-workspace-controls__name-input" aria-label="Project name"
@@ -39,9 +46,17 @@ export function ProjectWorkspaceControls() {
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === 'F2') { event.preventDefault(); setDraft(project.name); }
             }}>{project.name}</button>}
-      {status === 'error'
-        ? <button type="button" className="project-workspace-controls__retry" title={error ?? 'Retry saving'}
-            onClick={() => void useProjectStore.getState().retry()}>Save failed · Retry</button>
+      {status === 'paused' && pausedBytes !== null
+        // Q118 (GM): the persistent state, where "Saved" usually is, in Save
+        // failed's warning colour; it opens the "what's large" panel.
+        ? <button type="button" className="project-workspace-controls__retry project-workspace-controls__paused"
+            data-size-status="" title={HEADER_TOOLTIP} aria-haspopup="dialog" aria-expanded={panelOpen}
+            onClick={() => useProjectStore.getState().openSizePanel()}>{headerLine(pausedBytes)}</button>
+        : status === 'error'
+        // Round 3b: this Retry saves, so its tooltip is the save's own failure
+        // (short: the button is the retry), never another action's.
+        ? <button type="button" className="project-workspace-controls__retry" title={saveError ? shortLine(saveError) : 'Retry saving'}
+            onClick={() => void useProjectStore.getState().retrySave()}>Save failed · Retry</button>
         : <span className={`project-workspace-controls__status${status === 'saved' ? ' project-workspace-controls__status--settled' : ''}`}
             role="status">{label}</span>}
       <span className="project-workspace-controls__count">{nodeCount} {nodeCount === 1 ? 'node' : 'nodes'}</span>

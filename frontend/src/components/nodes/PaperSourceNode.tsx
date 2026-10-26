@@ -16,13 +16,18 @@ import {
   type PaperSelection,
   type PaperSourceRecord,
 } from '../../lib/paperSource';
+import { NodeRunError } from './NodeError';
+import { ErrorDetails } from '../failure/ErrorDetails';
 import '../../styles/paper-source-node.css';
+import { failureCopy, failureMessage, oneLine, REFUSED_FALLBACK_COPY } from '../../lib/errorCopy';
 
 function refreshLabel(value?: string): string {
   if (!value) return 'Never refreshed';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
+
+const REFRESH_HEADING = "Couldn't refresh the source.";
 
 /** Explicit source lifecycle only: no timer, watcher or generation action. */
 export function PaperSourceNode({ id, data, selected }: NodeProps) {
@@ -40,15 +45,16 @@ export function PaperSourceNode({ id, data, selected }: NodeProps) {
   const snapshot = source?.snapshot;
   const sourceLinks = source ? paperObjectLinks(source.identity) : null;
 
-  function reportError(value: unknown) {
-    const message = value instanceof Error ? value.message : 'Paper source is unavailable.';
-    setError(message);
+  function reportError(value: unknown, heading: string) {
+    // The route's heading and line (lib/paperSource), never its text.
+    const copy = failureCopy(value, { heading });
+    setError(oneLine(copy));
     if (value instanceof PaperSourceError && value.source) {
       applyPaperSource(id, value.source);
     } else if (source) {
       // Network failure has no newer server record. Keep immutable bytes and
       // source identity while making its last-good status visible.
-      applyPaperSource(id, { ...source, state: 'unavailable', lastError: message });
+      applyPaperSource(id, { ...source, state: 'unavailable', lastError: copy.reason, lastErrorPerson: copy.reason });
     }
   }
 
@@ -63,7 +69,7 @@ export function PaperSourceNode({ id, data, selected }: NodeProps) {
       setObjectId(current.selection.length === 1 ? current.selection[0].id : '');
       setScale(source?.exportSettings.scale ?? '2x');
     } catch (value) {
-      reportError(value);
+      reportError(value, "Couldn't read the Paper selection.");
     } finally {
       setBusy(null);
     }
@@ -85,7 +91,7 @@ export function PaperSourceNode({ id, data, selected }: NodeProps) {
       setObjectId(result.selection[0].id);
       setScale(source?.exportSettings.scale ?? '2x');
     } catch (value) {
-      setError(value instanceof Error ? value.message : 'Could not resolve this exact Paper object.');
+      setError(failureMessage(value, "Couldn't find that Paper object."));
     } finally {
       setBusy(null);
     }
@@ -106,8 +112,8 @@ export function PaperSourceNode({ id, data, selected }: NodeProps) {
       void openExternalUrl(sourceLinks[destination]).catch(() => {
         setNotice('');
         setError(destination === 'desktop'
-          ? 'Could not open Paper Desktop. Use Open source link.'
-          : 'Could not open the source link. Copy its address and open it in your browser.');
+          ? "Couldn't open Paper Desktop. Use Open source link."
+          : "Couldn't open the source link. Copy its address and open it in your browser.");
       });
     }
   }
@@ -126,7 +132,7 @@ export function PaperSourceNode({ id, data, selected }: NodeProps) {
       setManual(false);
       setNotice(source ? 'Object reconnected. Rerun the saved recipe explicitly.' : 'Artwork linked. Connect the image output to a recipe.');
     } catch (value) {
-      reportError(value);
+      reportError(value, source ? "Couldn't reconnect the object." : "Couldn't link the artwork.");
     } finally {
       setBusy(null);
     }
@@ -144,7 +150,7 @@ export function PaperSourceNode({ id, data, selected }: NodeProps) {
         ? 'Source updated. Previous results are out of date. Rerun the saved recipe explicitly.'
         : 'Artwork unchanged. No new snapshot.');
     } catch (value) {
-      reportError(value);
+      reportError(value, REFRESH_HEADING);
     } finally {
       setBusy(null);
     }
@@ -156,7 +162,14 @@ export function PaperSourceNode({ id, data, selected }: NodeProps) {
     : source?.state === 'unavailable' ? 'Paper unavailable'
     : source ? 'Connected' : 'Not linked';
   const lastGood = Boolean(snapshot && source?.state !== 'current');
-  const displayedError = error || source?.lastError;
+  // This session's line, else the record's: its line (lastErrorPerson,
+  // round 3e) or, for a record saved before it, GM's general line with the
+  // text agents read behind Details. lastError itself is never the line.
+  const recordLine = source?.lastError
+    ? oneLine({ heading: REFRESH_HEADING, reason: source.lastErrorPerson || REFUSED_FALLBACK_COPY })
+    : '';
+  const displayedError = error || recordLine;
+  const recordDetails = !error && source?.lastError && !source.lastErrorPerson ? source.lastError : '';
 
   return (
     <div className={`paper-source-node ${selected ? 'paper-source-node--selected' : ''}`}>
@@ -224,7 +237,10 @@ export function PaperSourceNode({ id, data, selected }: NodeProps) {
         </div>
       )}
       {displayedError && <p className="paper-source-node__error" role="alert">{displayedError}{snapshot && ' Last good artwork retained.'}</p>}
+      {recordDetails && <ErrorDetails raw={recordDetails} className="paper-source-node__error-details nodrag nowheel" />}
       {notice && <p className="paper-source-node__note" role="status">{notice}</p>}
+      {/* The node's run error (error copy round 3e), apart from the source's own refresh and link errors above. */}
+      <NodeRunError data={nodeData} className="paper-source-node__run-error nodrag nopan" />
       <p className="paper-source-node__note">Refresh exports artwork only. Run the saved recipe separately.</p>
       {source && source.snapshots.length > 0 && (
         <details className="paper-source-node__history nodrag nopan">

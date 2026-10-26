@@ -10,6 +10,7 @@ from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
 from services.output import get_run_dir
 from execution.missing_credential import MissingCredentialError
+from execution.person_line import missing_file_line, with_api_status, with_person_line
 
 OPENAI_AUDIO_BASE = "https://api.openai.com/v1/audio"
 
@@ -25,7 +26,7 @@ async def handle_openai_stt(
 ) -> dict[str, Any]:
     audio_input = inputs.get("audio")
     if not audio_input or not audio_input.value:
-        raise ValueError("Audio input is required for transcription")
+        raise with_person_line(ValueError("Audio input is required for transcription"), "Connect audio to this node, then run it again.")
 
     api_key = api_keys.get("OPENAI_API_KEY")
     if not api_key:
@@ -33,7 +34,7 @@ async def handle_openai_stt(
 
     audio_path = Path(str(audio_input.value))
     if not audio_path.exists():
-        raise ValueError(f"Audio file not found: {audio_path}")
+        raise with_person_line(ValueError(f"Audio file not found: {audio_path}"), missing_file_line("audio file"))
 
     model = node.params.get("model", "whisper-1")
     response_format = node.params.get("response_format", "text")
@@ -66,7 +67,8 @@ async def handle_openai_stt(
             data=data,
         )
         if response.status_code != 200:
-            raise RuntimeError(f"OpenAI STT error {response.status_code}: {response.text}")
+            raise with_api_status(
+                RuntimeError(f"OpenAI STT error {response.status_code}: {response.text}"), response.status_code)
 
     # Response structure depends on format
     if response_format in ("json", "verbose_json"):
@@ -85,7 +87,7 @@ async def handle_openai_translate(
 ) -> dict[str, Any]:
     audio_input = inputs.get("audio")
     if not audio_input or not audio_input.value:
-        raise ValueError("Audio input is required for translation")
+        raise with_person_line(ValueError("Audio input is required for translation"), "Connect audio to this node, then run it again.")
 
     api_key = api_keys.get("OPENAI_API_KEY")
     if not api_key:
@@ -93,7 +95,7 @@ async def handle_openai_translate(
 
     audio_path = Path(str(audio_input.value))
     if not audio_path.exists():
-        raise ValueError(f"Audio file not found: {audio_path}")
+        raise with_person_line(ValueError(f"Audio file not found: {audio_path}"), missing_file_line("audio file"))
 
     files = {"file": (audio_path.name, require_allowed_path(audio_path).read_bytes(), "audio/mpeg")}
     # Only whisper-1 supports the translation endpoint; model is fixed.
@@ -120,7 +122,8 @@ async def handle_openai_translate(
             data=data,
         )
         if response.status_code != 200:
-            raise RuntimeError(f"OpenAI Translate error {response.status_code}: {response.text}")
+            raise with_api_status(
+                RuntimeError(f"OpenAI Translate error {response.status_code}: {response.text}"), response.status_code)
 
     if response_format in ("json", "verbose_json"):
         result_data = response.json()
@@ -138,7 +141,7 @@ async def handle_openai_tts(
 ) -> dict[str, Any]:
     text_input = inputs.get("text")
     if not text_input or not text_input.value:
-        raise ValueError("Text input is required for TTS")
+        raise with_person_line(ValueError("Text input is required for TTS"), "Connect text to this node, then run it again.")
 
     api_key = api_keys.get("OPENAI_API_KEY")
     if not api_key:
@@ -172,7 +175,8 @@ async def handle_openai_tts(
             json=body,
         )
         if response.status_code != 200:
-            raise RuntimeError(f"OpenAI TTS error {response.status_code}: {response.text}")
+            raise with_api_status(
+                RuntimeError(f"OpenAI TTS error {response.status_code}: {response.text}"), response.status_code)
 
     run_dir = get_run_dir()
     # Use the selected format as the file extension. Defensively fall back to

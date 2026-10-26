@@ -1,15 +1,17 @@
 body.app-slava-restraint .workspace-header.workspace-header {
+  --workspace-header-pad-x: 14px;
+  --workspace-header-gap-x: 16px;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px 16px;
+  gap: 8px var(--workspace-header-gap-x);
   min-width: 0;
   min-height: 48px;
   height: auto;
   max-height: max(56px, 35dvh);
   overflow: auto;
   overscroll-behavior: contain;
-  padding: 8px 14px;
+  padding: 8px var(--workspace-header-pad-x);
   border-bottom: 1px solid var(--sr-edge);
   background: var(--sr-glass);
   color: var(--sr-ink);
@@ -120,4 +122,19 @@ body.app-slava-restraint .workspace-header .remotion-editor-toolbar__group {
   body.app-slava-restraint .workspace-header__actions { justify-content: flex-start; }
   body.app-slava-restraint .canvas-tabs-wrap { max-width: calc(100vw - 96px); }
   body.app-slava-restraint .workspace-header.workspace-header--canvas { padding: 5px 10px; gap: 8px; }
+}
+
+/* The Updates corner (Q107 a): while the chip shows, the header keeps the
+ * chip's width in its right padding, so its own controls wrap inside the rest
+ * and never under the chip, and the slot the chip centres on is pinned to the
+ * first row's right end (components/agent-notes). A flex-item slot wrapped
+ * onto its own line once a toolbar filled its row (the Commons at 1280). */
+body.app-slava-restraint.agent-notes-shown .workspace-header.workspace-header--updates-slot {
+  position: relative;
+  padding-right: calc(var(--workspace-header-pad-x) + var(--agent-notes-chip-w) + var(--workspace-header-gap-x));
+}
+body.app-slava-restraint.agent-notes-shown .workspace-header.workspace-header--updates-slot > .agent-notes-slot {
+  position: absolute;
+  top: 8px;
+  right: var(--workspace-header-pad-x);
 }

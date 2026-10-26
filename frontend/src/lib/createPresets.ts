@@ -1,4 +1,4 @@
-import { apiFetch } from './backend';
+import { apiRequest } from './apiRequest';
 import { resolveProjectId } from './currentProject';
 
 export interface Preset {
@@ -41,8 +41,7 @@ export type PresetCreateInput = {
 export async function fetchPresets(scope: 'global' | 'project', projectId?: string): Promise<Preset[]> {
   const params = new URLSearchParams({ scope });
   if (scope === 'project') params.append('projectId', await resolveProjectId(projectId));
-  const res = await apiFetch(`/api/presets?${params.toString()}`);
-  if (!res.ok) throw new Error(`Fetch presets failed: ${res.status}`);
+  const res = await apiRequest("Couldn't load the styles.", `/api/presets?${params.toString()}`);
   return res.json();
 }
 
@@ -50,16 +49,18 @@ export async function createPreset(body: PresetCreateInput): Promise<Preset> {
   const resolvedBody = body.scope === 'project'
     ? { ...body, projectId: await resolveProjectId(body.projectId) }
     : body;
-  const res = await apiFetch('/api/presets', {
+  // A refusal says why (an image that isn't one of Nebula's files, a
+  // project in Recently deleted), so Create can show it after the heading.
+  const res = await apiRequest("Couldn't save the style.", '/api/presets', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(resolvedBody),
   });
-  if (!res.ok) throw new Error(`Create preset failed: ${res.status}`);
   return res.json();
 }
 
+/** Move a Style to Recently deleted (backend services/preset_store.py);
+ * `restoreTrashed('style', id)` brings it back with the same id. */
 export async function deletePreset(id: string): Promise<void> {
-  const res = await apiFetch(`/api/presets/${id}`, { method: 'DELETE' });
-  if (!res.ok) throw new Error(`Delete preset failed: ${res.status}`);
+  await apiRequest("Couldn't delete the style.", `/api/presets/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }

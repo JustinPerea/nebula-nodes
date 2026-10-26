@@ -1,0 +1,123 @@
+/**
+ * Where the canvas's bottom bar (Run / Canvas actions / zoom) really starts,
+ * for what must keep clear of it: the app's notices sit just above it, and a
+ * floating panel opened beside a node low on the screen ends above it (GM -
+ * Design, 2026-10-23: "Clamp it so it stays above the bottom bar inside the
+ * viewport"). Measured, never a fixed number: the bar's height changes with
+ * its contents, and its Canvas actions panel opens above it.
+ *
+ * Every box that belongs to the bar carries `data-bottom-bar`: the bar itself
+ * (empty value) and, while open, its Canvas actions panel (`"panel"`). The
+ * bar is a band across the whole width: nothing floats down beside it. The
+ * panel is 310 px wide and centred, so it only pushes up what it is under
+ * (review, 2026-10-23: a far-left Inspector jumped 400 px off its node when
+ * the panel opened). The bar publishes the distance from the window's bottom
+ * edge to its top, panel included, as `--bottom-bar-clearance` on the root,
+ * which the notice region's CSS reads (canvasProposals.css): the notices are
+ * centred, so they always clear the panel.
+ */
+export const BOTTOM_BAR_ATTR = 'data-bottom-bar';
+/** The `data-bottom-bar` value on a part that covers only its own width (the Canvas actions panel). */
+export const BOTTOM_BAR_PANEL = 'panel';
+export const BOTTOM_BAR_CLEARANCE_VAR = '--bottom-bar-clearance';
+
+/** The gap a floating panel keeps above the bar (the notices' too, in CSS: --sr-space-2). */
+export const BOTTOM_BAR_GAP = 8;
+
+/** A horizontal stretch of the window, in viewport px. */
+export type HorizontalSpan = { left: number; right: number };
+
+/**
+ * The top edge of the bar and its open panel, or null when no bar is on
+ * screen. With `span`, the panel counts only where it overlaps that stretch;
+ * the bar always counts.
+ */
+export function bottomBarTop(span?: HorizontalSpan): number | null {
+  if (typeof document === 'undefined') return null;
+  let top: number | null = null;
+  for (const part of document.querySelectorAll<HTMLElement>(`[${BOTTOM_BAR_ATTR}]`)) {
+    const box = part.getBoundingClientRect();
+    if (box.width <= 0 || box.height <= 0) continue;
+    if (span && part.getAttribute(BOTTOM_BAR_ATTR) === BOTTOM_BAR_PANEL
+      && (box.right <= span.left || box.left >= span.right)) continue;
+    top = top === null ? box.top : Math.min(top, box.top);
+  }
+  return top;
+}
+
+/**
+ * The notice region's reserved band (GM - Design, 2026-10-23: "Floating
+ * panels stop above a reserved notice band, whether or not a notice is
+ * showing. The band is the region's height for one notice plus its gap,
+ * measured like the bottom line."). The region always keeps an empty box
+ * marked `data-notice-band`, as tall as one notice plus its gap (both read
+ * the region's `--notice-h` and `--notice-gap`), its foot on the notices'
+ * bottom line. Its box, or null when no region is on screen.
+ */
+export const NOTICE_BAND_ATTR = 'data-notice-band';
+
+function noticeBand(): DOMRect | null {
+  if (typeof document === 'undefined') return null;
+  const band = document.querySelector<HTMLElement>(`[${NOTICE_BAND_ATTR}]`)?.getBoundingClientRect();
+  return band && band.height > 0 ? band : null;
+}
+
+/**
+ * The lowest a floating panel's bottom edge may go: `gutter` above the
+ * window's bottom edge, above the bar (with its gap) when there is one, and
+ * above the notice region's reserved band, shown or not, so a notice never
+ * covers a panel's foot row and a panel never moves when a notice comes or
+ * goes. Pass the panel's own `span` so the Canvas actions panel pushes it up
+ * only when it would be over it: the band then stands on the line the panel
+ * sees (the region itself lifts over the centred actions panel, which a panel
+ * off to the side never meets).
+ */
+export function floatingBottomLimit(gutter: number, viewportHeight = window.innerHeight, span?: HorizontalSpan): number {
+  const edge = viewportHeight - gutter;
+  const bar = bottomBarTop(span);
+  const band = noticeBand();
+  if (bar === null) return band ? Math.min(edge, band.top) : edge;
+  return Math.min(edge, bar - BOTTOM_BAR_GAP - (band?.height ?? 0));
+}
+
+/**
+ * The top line floating panels stop below (GM - Design, 2026-10-23: "Floating
+ * panels stop below the workspace header and the selection toolbar, whichever
+ * is lower, plus the same 8 px gap."). Each carries `data-top-bar`; measured
+ * when asked, so a resize moves the line. With neither on screen, the
+ * window's `gutter`.
+ *
+ * Round 3 (GM: "The Inspector jumping on deselect: hold it. A panel
+ * shouldn't move unless someone moves it. While it's open, use the lower of
+ * the two top lines (the toolbar's) whether or not the toolbar is showing."):
+ * the toolbar's marker is its React Flow Panel, which keeps the toolbar's
+ * height while it is empty (canvas.css --selection-toolbar-h). An empty Panel
+ * has no width, so a part counts by its height alone: the toolbar going or
+ * coming back never moves the line.
+ */
+export const TOP_BAR_ATTR = 'data-top-bar';
+
+export function floatingTopLimit(gutter: number): number {
+  if (typeof document === 'undefined') return gutter;
+  let line = gutter;
+  for (const part of document.querySelectorAll<HTMLElement>(`[${TOP_BAR_ATTR}]`)) {
+    const box = part.getBoundingClientRect();
+    if (box.height <= 0) continue;
+    line = Math.max(line, box.bottom + BOTTOM_BAR_GAP);
+  }
+  return line;
+}
+
+/** Writes the bar's clearance on the root (or clears it when no bar is on screen). */
+export function publishBottomBarClearance(): void {
+  if (typeof document === 'undefined') return;
+  const root = document.documentElement;
+  const top = bottomBarTop();
+  if (top === null) root.style.removeProperty(BOTTOM_BAR_CLEARANCE_VAR);
+  else root.style.setProperty(BOTTOM_BAR_CLEARANCE_VAR, `${Math.max(0, Math.round(window.innerHeight - top))}px`);
+}
+
+export function clearBottomBarClearance(): void {
+  if (typeof document === 'undefined') return;
+  document.documentElement.style.removeProperty(BOTTOM_BAR_CLEARANCE_VAR);
+}

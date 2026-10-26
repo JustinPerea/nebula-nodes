@@ -14,34 +14,48 @@ real working tree.
 
 All must be set BEFORE any test module imports `main` or `services.output`,
 which happens at collection time for files that do `from main import app`.
+They live in one temp folder that is removed when the run exits, so test runs
+don't pile up folders in /tmp (a run that is killed still leaves its one).
 """
 from __future__ import annotations
 
+import atexit
 import os
+import shutil
 import tempfile
 from pathlib import Path
 
-_TEST_STATE_DIR = Path(tempfile.mkdtemp(prefix="nebula-test-state-"))
+_TEST_ROOT = Path(tempfile.mkdtemp(prefix="nebula-test-"))
+atexit.register(shutil.rmtree, _TEST_ROOT, ignore_errors=True)
+
+
+def _sandbox_dir(name: str) -> Path:
+    path = _TEST_ROOT / name
+    path.mkdir()
+    return path
+
+
+_TEST_STATE_DIR = _sandbox_dir("state")
 os.environ["NEBULA_STATE_DIR"] = str(_TEST_STATE_DIR)
 
-_TEST_OUTPUT_DIR = Path(tempfile.mkdtemp(prefix="nebula-test-output-"))
+_TEST_OUTPUT_DIR = _sandbox_dir("output")
 os.environ["NEBULA_OUTPUT_ROOT"] = str(_TEST_OUTPUT_DIR)
 
-_TEST_CHARACTER_DIR = Path(tempfile.mkdtemp(prefix="nebula-test-characters-"))
+_TEST_CHARACTER_DIR = _sandbox_dir("characters")
 os.environ["NEBULA_CHARACTER_ROOT"] = str(_TEST_CHARACTER_DIR)
 
 # Moodboard routes write under ~/.nebula/moodboards otherwise; tests that
 # create boards through the API (not the store) rely on this.
-_TEST_MOODBOARD_DIR = Path(tempfile.mkdtemp(prefix="nebula-test-moodboards-"))
+_TEST_MOODBOARD_DIR = _sandbox_dir("moodboards")
 os.environ["NEBULA_MOODBOARD_ROOT"] = str(_TEST_MOODBOARD_DIR)
 
-_TEST_PRESET_DIR = Path(tempfile.mkdtemp(prefix="nebula-test-presets-"))
+_TEST_PRESET_DIR = _sandbox_dir("presets")
 os.environ["NEBULA_PRESET_ROOT"] = str(_TEST_PRESET_DIR)
 
-_TEST_SETTINGS_PATH = Path(tempfile.mkdtemp(prefix="nebula-test-settings-")) / "settings.json"
+_TEST_SETTINGS_PATH = _sandbox_dir("settings") / "settings.json"
 os.environ["NEBULA_SETTINGS_PATH"] = str(_TEST_SETTINGS_PATH)
 
-_TEST_COMMONS_DIR = Path(tempfile.mkdtemp(prefix="nebula-test-commons-"))
+_TEST_COMMONS_DIR = _sandbox_dir("commons")
 os.environ["NEBULA_COMMONS_ROOT"] = str(_TEST_COMMONS_DIR)
 os.environ["NEBULA_COMMONS_NO_STARTUP_SCAN"] = "1"
 # The one-time project re-home (services/asset_project_rehome.py) would move
@@ -165,3 +179,22 @@ def person(fresh_person_session) -> PersonFixture:
     (FORGED_ORIGIN) as negatives."""
     fresh_person_session.set(PERSON_TOKEN)
     return PersonFixture(PERSON_TOKEN)
+
+
+def stored_image_urls(count: int = 3, *, name: str = "view") -> list[str]:
+    """``count`` small images in the test output folder, as /api/uploads
+    leaves them, and their /api/outputs URLs. A Character's referenceViews and
+    a Style's refImages and thumbnail must be Nebula's own files
+    (services/stored_image_refs.py). Call it where the test writes one, not at
+    import: some tests empty the output folder."""
+    from services.output import OUTPUT_ROOT
+
+    folder = OUTPUT_ROOT / "chat-uploads"
+    folder.mkdir(parents=True, exist_ok=True)
+    urls = []
+    for index in range(count):
+        path = folder / f"test-{name}-{index}.png"
+        if not path.exists():
+            path.write_bytes(b"\x89PNG\r\n\x1a\n" + bytes([index % 256]) * 16)
+        urls.append(f"/api/outputs/chat-uploads/{path.name}")
+    return urls

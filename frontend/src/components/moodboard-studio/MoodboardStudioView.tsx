@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { DragEvent as ReactDragEvent } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import {
@@ -9,11 +9,16 @@ import {
   fetchMoodboards,
   keepMoodboardBriefOverride,
   lookupStoredAsset,
+  SAVE_BOARD,
   updateMoodboard,
 } from '../../lib/api';
 import { RecentlyDeletedAssets, UndoDeleteToast } from '../asset-trash/AssetTrash';
 import { useAssetDelete } from '../../hooks/useAssetDelete';
-import { apiFetch, backendAssetUrlSync } from '../../lib/backend';
+import { apiRequest } from '../../lib/apiRequest';
+import { failureCopy, failureMessage } from '../../lib/errorCopy';
+import { FailureLines } from '../failure/FailureLines';
+import { storedImageView } from '../../lib/storedImage';
+import { OutsideImageNote } from '../OutsideImageNote';
 import { WorkspaceHeader } from '../WorkspaceHeader';
 import { useAssetStudioDraft } from '../../hooks/useAssetStudioDraft';
 import { assetStudioDraftKey, resolveAssetStudioDraftKey, useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
@@ -23,20 +28,34 @@ import { useProjectName } from '../../hooks/useProjectName';
 import type { AssetScope } from '../../store/uiStore';
 import type { Moodboard, MoodboardAnalysis, MoodboardBrief, MoodboardClashMode, MoodboardImage, MoodboardPinnedColors } from '../../types';
 import { BriefFields, BriefPanel, type ColorChoice } from './MoodboardBrief';
-import { BoardSwatches, ImageColors, SourcesOutdated } from './MoodboardColors';
+import { BoardSwatches, SourcesOutdated } from './MoodboardColors';
 import { overrideAuthor } from './briefAuthor';
 import { AutoGrowTextarea } from '../AutoGrowTextarea';
 import { assetHome, emptyRailMessage, railNotice, type AssetHome } from '../../lib/assetHome';
 import { wsClient } from '../../lib/wsClient';
+import { AssetProposalStrip } from '../proposals/AssetProposalStrip';
 import { moveChoices, type MoveChoice } from '../../lib/assetMove';
 import { useStudioAssetMove } from '../../hooks/useStudioAssetMove';
 import { AssetMoveMenu } from '../asset-move/AssetMoveMenu';
-import { isSetAside, patchSteers, setAsidePatch } from './steering';
+import { patchSteers } from './steering';
 import { moodboardImagesLabel, setAsideCount } from '../../lib/moodboardCount';
-import { BOARD_FIELD_KEYS, MoodboardVersionConflict, applyOps, imagePatchOps, queueOps, rebaseDraft,
-  fieldChanges, type BoardFieldKey, type MoodboardOp } from '../../lib/moodboardEdits';
+import { BOARD_FIELD_KEYS, MoodboardVersionConflict, applyOps, imagePatchOps, opKey, opSteers, queueOps, rebaseDraft, sameValue, sendableBatch,
+  fieldChanges, type BoardFieldKey, type MoodboardEditResult, type MoodboardOp } from '../../lib/moodboardEdits';
 import { TAB_ID } from '../../lib/tabId';
+import { batchesOf, useBoardUndoStore, type BoardUndoStep } from '../../lib/boardUndo';
+import { dropLayout, provisionalForCreate, readImageAspect } from '../../lib/boardDrop';
+import { sizeFor } from '../../lib/moodboardLayout';
+import { useBoardCanvasStore, useBoardSelection, type MoodboardView } from '../../store/boardCanvasStore';
+import { BoardCanvas, type BoardMove } from './BoardCanvas';
+import { BoardSidePanel } from './BoardSidePanel';
+import { BoardUndoToast, type BoardToast } from './BoardUndoToast';
+import { MoodboardListView } from './MoodboardListView';
+import { selectedImageIds } from './boardNodes';
+import { isStudioShortcutTarget, studioKey } from './studioKeys';
+import { boardCover } from '../../lib/moodboardCover';
+import { FieldStepTracker, fieldGroups, fieldStepKeys, type FieldStep } from './fieldSteps';
 import '../../styles/moodboard-studio.css';
+import '../../styles/moodboard-board.css';
 
 interface MoodboardDraft {
   name: string;
@@ -59,6 +78,9 @@ interface MoodboardDraft {
   colorChoices?: { keep: string[]; leaveOut: string[] };
   sendNotes?: boolean;
   projectId?: string;
+  // The image the board opens on (lib/moodboardCover): the board's, with a
+  // queued `cover` op on top. Changed only through that op, never a PUT.
+  coverImageId?: string | null;
   // A saved board's checked edits (lib/moodboardEdits): its board fields as
   // last read, that board's version, and the image ops not yet confirmed.
   // Never sent as they are.
@@ -82,6 +104,7 @@ function emptyDraft(): MoodboardDraft {
     clashMode: 'leave-out',
     colorChoices: { keep: [], leaveOut: [] },
     sendNotes: false,
+    coverImageId: null,
   };
 }
 
@@ -104,6 +127,7 @@ function moodboardFields(m: Moodboard): Omit<MoodboardDraft, 'base' | 'version' 
     colorChoices: { keep: [...(m.colorChoices?.keep ?? [])], leaveOut: [...(m.colorChoices?.leaveOut ?? [])] },
     sendNotes: m.sendNotes === true,
     projectId: m.projectId,
+    coverImageId: m.coverImageId ?? null,
   };
 }
 
@@ -126,7 +150,20 @@ function moodboardToDraft(m: Moodboard): MoodboardDraft {
  *  overwrite) the next outside edit of that field. */
 function draftOnBoard(draft: MoodboardDraft, board: Moodboard, sent?: ReadonlySet<MoodboardOp>,
   asSent?: Partial<Record<BoardFieldKey, unknown>>): MoodboardDraft {
-  return rebaseDraft(draft, board, { ...boardFieldsOf(board), ...asSent }, sent);
+  // A field the PUT sent is the person's since only if the draft moved off
+  // what was sent: an edit made while the save was out, even one back to the
+  // value last read, must not read as untouched and take the sent value.
+  const since = asSent && draft.base ? { ...draft, base: { ...draft.base, ...asSent } } : draft;
+  return rebaseDraft(since, board, { ...boardFieldsOf(board), ...asSent }, sent);
+}
+
+/** The draft's cover after `ops`: the last `cover` op's pick, and #1 again
+ *  (null) when the cover image comes off, as the server does in the same
+ *  write (its undo brings both back). */
+function coverAfter(cover: string | null, ops: MoodboardOp[], images: MoodboardImage[]): string | null {
+  let next = cover;
+  for (const op of ops) if (op.op === 'cover') next = op.image;
+  return next !== null && !images.some((image) => image.id === next) ? null : next;
 }
 
 /** A draft's board fields with the name as it is sent (trimmed). */
@@ -136,7 +173,7 @@ function trimmedName<D extends Partial<Record<BoardFieldKey, unknown>>>(fields: 
 
 /** A new board's first save: everything but the checked-edit bookkeeping. */
 function createBody(draft: MoodboardDraft) {
-  const body: MoodboardDraft = { ...withBriefFields(draft), name: draft.name.trim() };
+  const body: MoodboardDraft = { ...withBriefFields(draft), name: draft.name.trim(), images: provisionalForCreate(draft.images) };
   delete body.base;
   delete body.version;
   delete body.pendingOps;
@@ -182,8 +219,26 @@ function createDraftImage(url: string): MoodboardImage {
   };
 }
 
-// The backend's cap on a private note (services/moodboard_store.py).
-const PRIVATE_NOTE_LIMIT = 2000;
+/** The board fields whose change clears the analysis (it reads them). */
+const STEERING_FIELDS = ['mode', 'strength', 'notes'] as const;
+
+/** A step's name for the undo toast: what changed on which reference. */
+function imagePatchLabel(patch: Partial<MoodboardImage>, number: number): string {
+  if ('excluded' in patch) return patch.excluded ? `Set aside #${number}` : `Used #${number} again`;
+  if ('weight' in patch) return `Weight of #${number}`;
+  if ('privateNote' in patch) return `Private note on #${number}`;
+  return `Note on #${number}`;
+}
+
+/** What an undo left as it was, in the server's words (contract 07, 1.12),
+ *  each once: a field step that saved twice undoes in two restores. */
+function skippedLines(edited: MoodboardEditResult): string[] {
+  return [...new Set(edited.applied.flatMap((entry) => {
+    const skipped = Array.isArray(entry.skipped) ? entry.skipped as Array<{ message?: unknown; number?: unknown }> : [];
+    return skipped.map((slice) => (typeof slice.message === 'string' && slice.message ? slice.message
+      : typeof slice.number === 'number' ? `#${slice.number} changed since, left as is` : 'Part of it changed since, left as is'));
+  }))];
+}
 
 export function MoodboardStudioView() {
   const moodboardEditorId = useUIStore((s) => s.moodboardEditorId);
@@ -192,8 +247,12 @@ export function MoodboardStudioView() {
   const exitMoodboardEditor = useUIStore((s) => s.exitMoodboardEditor);
 
   const studio = useAssetStudioDraft('moodboard', moodboardEditorScope, moodboardEditorId, emptyDraft);
-  const { draft: storedDraft, savedId, thumbnail, saveState, saveError, loadError, loaded,
+  const { draft: storedDraft, savedId, saveState, saveError, retry, retryStep, loadError, loaded,
     dirty, pendingSaveId, pendingAnalysisId, key, revision, epoch, projectId, projectReady, verifyProject, setDraft, initialize, patch } = studio;
+  // The steps undo and redo would take next: a failed undo's Retry runs only
+  // while its step is still that one (round 3; else it is hidden).
+  const nextUndoId = useBoardUndoStore((state) => state.history(key, epoch).done.at(-1)?.id ?? null);
+  const nextRedoId = useBoardUndoStore((state) => state.history(key, epoch).undone.at(-1)?.id ?? null);
   const draft = withBriefFields(storedDraft);
   const loading = !loaded;
   const [uploading, setUploading] = useState(false);
@@ -220,6 +279,32 @@ export function MoodboardStudioView() {
   }, [moodboardEditorId, moodboardEditorScope, key, epoch, projectReady, projectId]);
   const isDraftId = !moodboardEditorId || moodboardEditorId === NEW_MOODBOARD_SENTINEL;
   const canSave = draft.name.trim().length > 0 && draft.images.length > 0;
+
+  // The Board view (moodboard canvas PR5): which view, the selected cards
+  // (per board draft), and this tab's undo steps for the board.
+  const view = useBoardCanvasStore((state) => state.view);
+  const setView = useBoardCanvasStore((state) => state.setView);
+  const selection = useBoardSelection(key);
+  const selectedIds = view === 'board' ? selectedImageIds(draft.images, selection) : [];
+  const [toast, setToast] = useState<(BoardToast & { key: string }) | null>(null);
+  const toastSeq = useRef(0);
+  const showToast = useCallback((next: Omit<BoardToast, 'id'>) => {
+    toastSeq.current += 1;
+    setToast({ ...next, id: toastSeq.current, key });
+  }, [key]);
+  const dismissToast = useCallback(() => setToast(null), []);
+  // Undo steps are this board's, in this tab, at this epoch: a board switch,
+  // a new epoch or leaving the Studio clears them (plan section 5.4).
+  // Board field steps (Q83, fieldSteps.ts) go with them.
+  const steps = useRef({ key, epoch, canRecord: false });
+  const [fieldSteps] = useState(() => new FieldStepTracker({
+    record: (label, keys) => (steps.current.canRecord
+      ? useBoardUndoStore.getState().recordFields(steps.current.key, steps.current.epoch, label, keys) : null),
+    forget: (stepId) => useBoardUndoStore.getState().forget(steps.current.key, stepId),
+  }));
+  useEffect(() => () => { useBoardUndoStore.getState().clear(key); fieldSteps.reset(); }, [key, epoch, fieldSteps]);
+  // A drag, a drop or a removal goes at once, not 600 ms later.
+  const urgent = useRef(false);
 
   useEffect(() => {
     setUploading(false);
@@ -259,21 +344,12 @@ export function MoodboardStudioView() {
         rememberBrief(found);
         initialize(moodboardToDraft(found), found.id, found.thumbnail);
       }).catch((err) => {
-        if (current()) patch({ loadError: err instanceof Error ? err.message : 'Failed to load Moodboard.' });
+        if (current()) patch({ loadError: failureCopy(err, { heading: "Couldn't load the board." }) });
       });
     }
     return () => { cancelled = true; };
   }, [key, revision, loaded, projectReady, projectId, moodboardEditorId, moodboardEditorScope, initialize, patch, isDraftId, isCurrent,
     enterMoodboardEditor, rememberBrief]);
-
-  // A draft kept from an earlier visit loads without a fetch; read its brief.
-  const needsBrief = loaded && Boolean(savedId) && !brief;
-  useEffect(() => {
-    if (!needsBrief || !savedId) return;
-    let cancelled = false;
-    void fetchMoodboard(savedId).then((board) => { if (!cancelled && board) rememberBrief(board); }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [needsBrief, savedId, rememberBrief]);
 
   useEffect(() => {
     if (isDraftId && loaded && savedId && isCurrent()) enterMoodboardEditor(savedId, moodboardEditorScope);
@@ -284,6 +360,32 @@ export function MoodboardStudioView() {
   const announced = useRef(0);
   const draftNow = useCallback(() => useAssetStudioDraftStore.getState().entries[resolveAssetStudioDraftKey(
     useAssetStudioDraftStore.getState(), key)]?.draft as MoodboardDraft | undefined, [key]);
+
+  // The board's own Updates (Justin's Q113 c): the corner shows them under
+  // "This board" while this saved board is open. Say which board that is,
+  // with its images in board order (their numbers), and forget it on leaving.
+  const imageOrder = draft.images.map((image) => image.id).join('\n');
+  useEffect(() => {
+    useBoardCanvasStore.getState().setStudioBoard(loaded && savedId
+      ? { boardId: savedId, boardKey: key, imageIds: imageOrder ? imageOrder.split('\n') : [] }
+      : null);
+  }, [loaded, savedId, key, imageOrder]);
+  useEffect(() => () => useBoardCanvasStore.getState().setStudioBoard(null), []);
+  // An Update's Show ("Show #37", "Show on board"): the Board view, with the
+  // cards of the images it names selected and framed. It writes nothing.
+  const showRequest = useBoardCanvasStore((state) => state.showRequest);
+  useEffect(() => {
+    if (!showRequest || !loaded || !savedId || showRequest.boardId !== savedId) return;
+    const boards = useBoardCanvasStore.getState();
+    useBoardCanvasStore.setState({ showRequest: null });
+    const wanted = new Set(showRequest.imageIds);
+    const cards = (draftNow()?.images ?? []).filter((image) => wanted.has(image.id))
+      .flatMap((image) => (image.placements ?? []).map((card) => card.id));
+    if (cards.length === 0) return;
+    boards.setView('board');
+    boards.setSelection(key, cards);
+    boards.requestFrame(key, cards);
+  }, [showRequest, loaded, savedId, key, draftNow]);
   const moveDraft = useCallback((board: Moodboard, sent?: ReadonlySet<MoodboardOp>,
     asSent?: Partial<Record<BoardFieldKey, unknown>>) => {
     const store = useAssetStudioDraftStore.getState();
@@ -300,9 +402,10 @@ export function MoodboardStudioView() {
     const board = await fetchMoodboard(entry.savedId).catch(() => null);
     const latest = useAssetStudioDraftStore.getState().entries[resolveAssetStudioDraftKey(useAssetStudioDraftStore.getState(), key)];
     if (!board || !mounted.current || !latest || latest.pendingSaveId || latest.savedId !== board.id) return;
-    if (board.version <= ((latest.draft as MoodboardDraft).version ?? 0)) return;
+    // Not newer: nothing to move, but the brief is read from it all the same.
+    if (board.version <= ((latest.draft as MoodboardDraft).version ?? 0)) { rememberBrief(board); return; }
     moveDraft(board);
-  }, [key, moveDraft]);
+  }, [key, moveDraft, rememberBrief]);
 
   useEffect(() => wsClient.subscribe((event) => {
     // Back after the socket was down: what was said meanwhile isn't replayed,
@@ -322,6 +425,34 @@ export function MoodboardStudioView() {
     void follow();
   }), [key, follow]);
 
+  /** Steps none of whose ops wait any more, and that never landed: a later
+   *  edit of the same thing replaced them in the queue (it is its own step),
+   *  or a rebase dropped them (someone removed the image). Nothing to undo. */
+  const forgetUnsentSteps = useCallback(() => {
+    const queued = new Set(draftNow()?.pendingOps ?? []);
+    const undoStore = useBoardUndoStore.getState();
+    for (const step of undoStore.history(key, epoch).done) {
+      if (step.fields) continue;  // a field step goes with its PUT, not an op
+      if (step.state === 'pending' && !step.ops.some((op) => queued.has(op))) undoStore.forget(key, step.id);
+    }
+    const current = draftNow();
+    const unsent = current?.base ? fieldChanges(trimmedName(current.base),
+      trimmedName(current as Partial<Record<BoardFieldKey, unknown>>)) : {};
+    fieldSteps.settle((field) => field in unsent);
+  }, [key, epoch, draftNow, fieldSteps]);
+
+  // A draft kept from an earlier visit opens as it was left, without a fetch,
+  // and what was said while the Studio was closed isn't replayed: read the
+  // board once (follow keeps it only if it's newer, replays the draft's own
+  // edits, and reads the brief either way), so its cover, name, images and
+  // brief match the rail. A fresh load reads it anyway.
+  const followedKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (followedKey.current === key) return;
+    followedKey.current = key;
+    if (loaded && savedId) void follow();
+  }, [key, loaded, savedId, follow]);
+
   const persist = useCallback(async () => {
     if (!isCurrent() || !await verifyProject() || !isCurrent()) return null;
     const store = useAssetStudioDraftStore.getState();
@@ -330,6 +461,7 @@ export function MoodboardStudioView() {
     if (!currentDraft || !currentDraft.name.trim() || !currentDraft.images.length) return null;
     const attempt = store.beginSave(key);
     if (!attempt) return null;
+    urgent.current = false;
     try {
       const savedId = attempt.entry.savedId;
       let result: Moodboard | null = null;
@@ -349,23 +481,45 @@ export function MoodboardStudioView() {
           try {
             const ops = snapshot.pendingOps ?? [];
             let version = snapshot.version;
-            if (ops.length) {
-              const edited = await editMoodboard(savedId, ops, version);
-              moveDraft(edited.board, new Set(ops));
+            // One batch per undo step, so each batch's `undo` is that step's.
+            for (const batch of batchesOf(ops)) {
+              const edited = await editMoodboard(savedId, sendableBatch(batch.ops), version);
+              moveDraft(edited.board, new Set(batch.ops));
               result = edited.board;
               version = edited.board.version;
+              if (batch.stepId) {
+                const undo = (edited.undo?.ops ?? []) as MoodboardOp[];
+                const undoStore = useBoardUndoStore.getState();
+                // A batch that changed nothing: the step goes only if none of
+                // it ever landed. An open note's later batch typed back to what
+                // the server holds keeps the undo its first batch got.
+                if (undo.length) undoStore.landed(key, batch.stepId, undo);
+                else if (undoStore.history(key, epoch).done.find((step) => step.id === batch.stepId)?.state !== 'saved') {
+                  undoStore.forget(key, batch.stepId);
+                }
+              }
             }
             const after = draftNow() ?? snapshot;
             const drafted = snapshot as Partial<Record<BoardFieldKey, unknown>>;
             const fields = after.base ? fieldChanges(trimmedName(after.base), trimmedName(drafted)) : createBody(snapshot);
             delete (fields as { images?: unknown }).images;
-            if (Object.keys(fields).length) {
-              result = await updateMoodboard(savedId, { ...(fields as Parameters<typeof updateMoodboard>[1]),
+            // One PUT per field step (Q83), so each answer's `undo` is that step's.
+            for (const group of fieldGroups(fields as Record<string, unknown>, (field) => fieldSteps.owner(field))) {
+              if (group.stepId) fieldSteps.sending(group.stepId);
+              const { undo, ...saved } = await updateMoodboard(savedId, {
+                ...(group.fields as Parameters<typeof updateMoodboard>[1]),
                 ...(snapshot.projectId ? { projectId: snapshot.projectId } : {}),
                 ...(version === undefined ? {} : { baseVersion: version }) });
-              const asSent = Object.fromEntries(Object.keys(fields).filter((field) => field !== 'analysis')
+              result = saved;
+              version = saved.version;
+              const asSent = Object.fromEntries(Object.keys(group.fields).filter((field) => field !== 'analysis')
                 .map((field) => [field, drafted[field as BoardFieldKey]]));
-              moveDraft(result, undefined, asSent);
+              moveDraft(saved, undefined, asSent);
+              const ops = (undo?.ops ?? []) as MoodboardOp[];
+              if (group.stepId && ops.length) {
+                useBoardUndoStore.getState().landed(key, group.stepId, ops);
+                fieldSteps.landed(group.stepId);
+              }
             }
             break;
           } catch (err) {
@@ -376,6 +530,7 @@ export function MoodboardStudioView() {
       }
       const thumbnail = result?.thumbnail ?? attempt.entry.thumbnail;
       const id = result?.id ?? savedId!;
+      forgetUnsentSteps();
       if (!store.finishSave(key, attempt.id, attempt.revision, id, thumbnail)) return null;
       if (!savedId && result) {
         const createdScope: AssetScope = result.projectId ? 'project' : 'global';
@@ -389,10 +544,10 @@ export function MoodboardStudioView() {
       if (announced.current > (draftNow()?.version ?? 0)) void follow();
       return id;
     } catch (err) {
-      store.failSave(key, attempt.id, err instanceof Error ? err.message : 'Save failed. Retry?');
+      store.failSave(key, attempt.id, failureCopy(err, { heading: SAVE_BOARD }));
       return null;
     }
-  }, [key, isCurrent, verifyProject, enterMoodboardEditor, moveDraft, draftNow, follow]);
+  }, [key, epoch, isCurrent, verifyProject, enterMoodboardEditor, moveDraft, draftNow, follow, forgetUnsentSteps, fieldSteps]);
 
   /** Text sends 600 ms after the last key, or when it loses focus. */
   const sendNow = () => {
@@ -402,37 +557,88 @@ export function MoodboardStudioView() {
 
   useEffect(() => {
     if (!loaded || !dirty || !canSave || pendingSaveId || saveState === 'error') return;
-    const timer = window.setTimeout(() => { void persist(); }, 600);
+    const timer = window.setTimeout(() => { void persist(); }, urgent.current ? 0 : 600);
     return () => window.clearTimeout(timer);
   }, [loaded, dirty, canSave, pendingSaveId, saveState, draft, savedId, persist]);
+
+  /** Undo steps belong to a saved board: a new board's first save has no undo. */
+  const canRecord = Boolean(savedId) && !isDraftId;
+  useLayoutEffect(() => { steps.current = { key, epoch, canRecord }; }, [key, epoch, canRecord]);
+  /** A board field's values now (its keys, fieldSteps.ts), to tell whether its step changed it. */
+  const fieldValues = (field: FieldStep) => {
+    const current = (draftNow() ?? draft) as unknown as Record<string, unknown>;
+    return fieldStepKeys(field).map((name) => current[name]);
+  };
+  /** A board field is about to change: its step opens (it joins one already open). */
+  const beginField = (field: FieldStep) => { if (isCurrent()) fieldSteps.begin(field, fieldValues(field)); };
+  /** The field lost focus, or a control's change is done: its step closes.
+   *  A text field's blur sends what waits ('now'); a control's step goes at
+   *  once, but only when it changed something ('soon'). */
+  const endField = (field: FieldStep, send: 'now' | 'soon' = 'now') => {
+    const closed = fieldSteps.end(field, fieldValues(field));
+    if (send === 'now') sendNow();
+    else if (closed) sendSoon();
+  };
+  /** A control's change (a pick, a switch, a mode): one step, sent at once
+   *  (or, `send: false`, by whatever saves next). */
+  const changeField = (field: FieldStep, apply: () => void, send = true) => {
+    beginField(field);
+    apply();
+    if (send) endField(field, 'soon');
+    else fieldSteps.end(field, fieldValues(field));
+  };
+  /** A step for `ops`, which the caller is about to queue (lib/boardUndo). */
+  const recordStep = (label: string, ops: MoodboardOp[], joinKey?: string, open?: boolean): string | null => {
+    if (!canRecord || ops.length === 0) return null;
+    return useBoardUndoStore.getState().record(key, epoch, label, ops, joinKey, open);
+  };
+  /** Send the queue now: a drag, a drop or a removal doesn't wait 600 ms. */
+  const sendSoon = () => {
+    urgent.current = true;
+    const entry = useAssetStudioDraftStore.getState().entries[resolveAssetStudioDraftKey(useAssetStudioDraftStore.getState(), key)];
+    if (entry?.dirty && !entry.pendingSaveId) void persist();
+  };
+  /** Image ops as one step: applied to the draft at once, queued, and sent now when `now`. */
+  const commitOps = (ops: MoodboardOp[], label: string,
+    options: { now?: boolean; aspects?: Record<string, number>; joinKey?: string } = {}) => {
+    if (ops.length === 0 || !isCurrent()) return null;
+    const stepId = recordStep(label, ops, options.joinKey);
+    setDraft((current) => {
+      const images = applyOps(current.images, ops, { aspects: options.aspects });
+      return {
+        ...current,
+        analysis: ops.some(opSteers) ? null : current.analysis,
+        images,
+        coverImageId: coverAfter(current.coverImageId ?? null, ops, images),
+        pendingOps: queueOps(current.pendingOps, ops),
+      };
+    });
+    if (options.now) sendSoon();
+    return stepId;
+  };
+  const numberOf = (images: MoodboardImage[], id: string) => images.findIndex((image) => image.id === id) + 1;
 
   const addImageUrls = (urls: string[]) => {
     if (urls.length === 0 || !isCurrent()) return;
     const add: MoodboardOp = { op: 'add', images: urls.map(createDraftImage).map(({ id, url }) => ({ id, url })) };
-    setDraft((current) => ({
-      ...current,
-      analysis: null,
-      images: applyOps(current.images, [add]),
-      pendingOps: queueOps(current.pendingOps, [add]),
-    }));
+    const count = (draftNow()?.images ?? draft.images).length;
+    commitOps([add], urls.length === 1 ? `Added #${count + 1}` : `Added ${urls.length} references`);
   };
+
+  const uploadFiles = (files: File[]) => Promise.all(files.map((file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return apiRequest(`Couldn't upload ${file.name || 'the image'}.`, '/api/uploads', { method: 'POST', body: fd })
+      .then((r) => r.json())
+      .then((data: { url: string }) => data.url);
+  }));
 
   const handleFiles = (files: FileList | File[] | null) => {
     if (!files || files.length === 0) return;
     setUploading(true);
-    const uploads = Array.from(files).map((file) => {
-      const fd = new FormData();
-      fd.append('file', file);
-      return apiFetch('/api/uploads', { method: 'POST', body: fd })
-        .then((r) => {
-          if (!r.ok) throw new Error(`Upload failed: ${r.status}`);
-          return r.json();
-        })
-        .then((data: { url: string }) => data.url);
-    });
-    Promise.all(uploads)
+    uploadFiles(Array.from(files))
       .then((urls) => addImageUrls(urls.filter(Boolean)))
-      .catch(() => { if (isCurrent()) patch({ saveError: 'Upload failed. Retry.' }); })
+      .catch((err: unknown) => { if (isCurrent()) patch({ saveError: failureCopy(err, { heading: "Couldn't upload the image." }) }); })
       .finally(() => { if (isCurrent()) setUploading(false); });
   };
 
@@ -442,26 +648,215 @@ export function MoodboardStudioView() {
     handleFiles(files);
   };
 
+  /** Files dropped on the Board view: each lands where it was dropped (the
+   *  first centred at the pointer, the rest in a row beside it), sized from
+   *  its aspect, as one step sent at once. */
+  const dropFiles = (files: File[], at: { x: number; y: number }) => {
+    if (files.length === 0 || !isCurrent()) return;
+    setUploading(true);
+    Promise.all([uploadFiles(files), Promise.all(files.map((file) => readImageAspect(file)))])
+      .then(([urls, aspects]) => {
+        if (!isCurrent()) return;
+        const placed = urls.map((url, index) => ({ url, aspect: aspects[index] })).filter((item) => item.url);
+        if (placed.length === 0) return;
+        const spots = dropLayout(at, placed.map((item) => sizeFor(1, item.aspect)));
+        const ops: MoodboardOp[] = placed.map((item, index) => ({
+          op: 'add', images: [{ id: createDraftImage(item.url).id, url: item.url }], at: spots[index] }));
+        const count = (draftNow()?.images ?? []).length;
+        commitOps(ops, placed.length === 1 ? `Added #${count + 1}` : `Added ${placed.length} references`, {
+          now: true, aspects: Object.fromEntries(placed.map((item) => [item.url, item.aspect])) });
+      })
+      .catch((err: unknown) => { if (isCurrent()) patch({ saveError: failureCopy(err, { heading: "Couldn't upload the image." }) }); })
+      .finally(() => { if (isCurrent()) setUploading(false); });
+  };
+
   const updateImage = (id: string, patch: Partial<MoodboardImage>) => {
     // Only what the analysis reads clears it: a private note or a card's
     // place keeps it.
     const steers = patchSteers(patch);
+    const ops = imagePatchOps(id, patch);
+    // A note or a weight being set joins its step until the step is sent.
+    const typed = 'notes' in patch || 'privateNote' in patch;
+    const joinKey = typed || ('weight' in patch && !('excluded' in patch)) ? ops.map(opKey).join('+') : undefined;
+    // A note is one step until its box loses focus (Q83), however often it saved meanwhile.
+    recordStep(imagePatchLabel(patch, numberOf(draftNow()?.images ?? draft.images, id)), ops, joinKey, typed);
     setDraft((current) => ({
       ...current,
       analysis: steers ? null : current.analysis,
       images: current.images.map((img) => (img.id === id ? { ...img, ...patch } : img)),
-      pendingOps: queueOps(current.pendingOps, imagePatchOps(id, patch)),
+      pendingOps: queueOps(current.pendingOps, ops),
     }));
   };
 
-  const removeImage = (id: string) => {
-    const remove: MoodboardOp = { op: 'remove', images: [id] };
-    setDraft((current) => ({
-      ...current,
-      analysis: null,
-      images: applyOps(current.images, [remove]),
-      pendingOps: queueOps(current.pendingOps, [remove]),
-    }));
+  /** An image's note box lost focus: its step is done, and it saves now. */
+  const imageTextDone = () => {
+    useBoardUndoStore.getState().seal(key);
+    sendNow();
+  };
+
+  /** Remove references as one step, sent at once, with Undo in the toast (Q15). */
+  const removeImages = (ids: string[]) => {
+    if (ids.length === 0) return;
+    const images = draftNow()?.images ?? draft.images;
+    const label = ids.length === 1 ? `Removed #${numberOf(images, ids[0])}` : `Removed ${ids.length} references`;
+    const stepId = commitOps([{ op: 'remove', images: ids }], label, { now: true });
+    if (stepId) showToast({ text: label, action: { label: 'Undo', run: () => { void runUndo('undo', stepId); } } });
+  };
+  const removeImage = (id: string) => removeImages([id]);
+
+  /** Cards moved on the board: one `place` op each, one step, sent at once. */
+  const moveCards = (moves: BoardMove[]) => {
+    if (moves.length === 0) return;
+    const images = draftNow()?.images ?? draft.images;
+    const owner = images.findIndex((image) => image.placements?.some((card) => card.id === moves[0].placement));
+    const label = moves.length === 1 ? `Moved #${owner + 1}` : `Moved ${moves.length} references`;
+    commitOps(moves.map(({ placement, x, y }) => ({ op: 'place', placement, x, y })), label, { now: true });
+  };
+
+  /** Resolves once the open board has no save in flight (at most 10 s). */
+  const saveSettled = useCallback(() => new Promise<void>((resolve) => {
+    const busy = () => Boolean(useAssetStudioDraftStore.getState().entries[resolveAssetStudioDraftKey(
+      useAssetStudioDraftStore.getState(), key)]?.pendingSaveId);
+    if (!busy()) {
+      resolve();
+      return;
+    }
+    let unsubscribe = () => {};
+    const done = () => {
+      window.clearTimeout(timer);
+      unsubscribe();
+      resolve();
+    };
+    const timer = window.setTimeout(done, 10_000);
+    unsubscribe = useAssetStudioDraftStore.subscribe(() => { if (!busy()) done(); });
+  }), [key]);
+
+  /** Undo (or redo) a step of this tab's (plan section 5.4). Edits not sent
+   *  yet go first, so the step undone is the one the person sees last. The
+   *  undo is the `restore` the server gave for the step's batch: it puts back
+   *  only what is still as the step left it and names the rest. Its answer
+   *  carries the `restore` that redoes it, checked the same way; the step's
+   *  own ops are the fallback. Sent without `baseVersion`: a restore is
+   *  checked slice by slice instead. */
+  const runUndo = async (direction: 'undo' | 'redo', stepId?: string) => {
+    if (!isCurrent() || !savedId || isDraftId) return;
+    // A field step still open (a slider never let go) closes first.
+    fieldSteps.endAll(fieldValues);
+    // A step still saving (a Cmd+Z right after a drag), an earlier undo still
+    // on its way, or edits not sent yet: wait for them, so this undo takes
+    // the step the person sees last and is never dropped for a busy save.
+    for (let tries = 0; tries < 5; tries += 1) {
+      await saveSettled();
+      if (!isCurrent()) return;
+      const entry = useAssetStudioDraftStore.getState().entries[resolveAssetStudioDraftKey(useAssetStudioDraftStore.getState(), key)];
+      if (entry?.pendingSaveId) continue;
+      if (!entry?.dirty || !canSave) break;
+      await persist();
+    }
+    if (!isCurrent()) return;
+    const undoStore = useBoardUndoStore.getState();
+    // The newest step is a field change nothing could save (a blank name, a
+    // board with no images): none of it is on the server, so undoing it is
+    // putting the field back in the draft. Then the step under it is next.
+    const unsent = draftNow();
+    if (direction === 'undo' && !stepId && unsent && (!unsent.name.trim() || !unsent.images.length)) {
+      const { done } = undoStore.history(key, epoch);
+      const top = done[done.length - 1];
+      const start = top?.fields && top.state === 'pending' ? fieldSteps.unsentStart(top.id) : undefined;
+      if (top?.fields && start) {
+        const fields = top.fields;
+        setDraft((current) => {
+          const next = { ...current, ...Object.fromEntries(fields.map((field, index) => [field, start[index]])) };
+          // Mode, strength and notes clear the analysis when they change: back
+          // as the board has them, with nothing else steering queued, the
+          // analysis the server holds still fits, so it is kept, not cleared.
+          const base = current.base;
+          const fits = base && base.analysis != null && next.analysis == null
+            && STEERING_FIELDS.every((field) => sameValue(next[field], base[field]))
+            && !(next.pendingOps ?? []).some(opSteers);
+          return fits ? { ...next, analysis: base.analysis as MoodboardDraft['analysis'] } : next;
+        });
+        fieldSteps.release(top.id);
+        undoStore.forget(key, top.id);
+        showToast({ text: `Undid: ${top.label}` });
+        return;
+      }
+    }
+    const step: BoardUndoStep | null = direction === 'undo' ? undoStore.takeUndo(key, epoch, stepId) : undoStore.takeRedo(key, epoch);
+    if (!step) return;
+    const from = direction === 'undo' ? 'done' : 'undone';
+    // Redo is only ever the undo's own checked `restore`, never the step's
+    // ops again: those would overwrite what changed since.
+    const ops = direction === 'undo' ? step.undo ?? [] : step.redo ?? [];
+    const store = useAssetStudioDraftStore.getState();
+    const attempt = store.beginSave(key);
+    if (!attempt || ops.length === 0) {
+      undoStore.restoreTaken(key, step, from);
+      return;
+    }
+    try {
+      const edited = await editMoodboard(savedId, ops);
+      moveDraft(edited.board);
+      const next = (edited.undo?.ops ?? []) as MoodboardOp[];
+      // Put nothing back (all of it changed since): there is nothing to redo
+      // (or undo again), so the step goes rather than wait to overwrite it.
+      if (!next.length) undoStore.forget(key, step.id);
+      else if (direction === 'undo') undoStore.redone(key, step.id, next);
+      else undoStore.reapplied(key, step.id, next);
+      store.finishSave(key, attempt.id, attempt.revision, savedId, edited.board.thumbnail ?? attempt.entry.thumbnail);
+      if (!isCurrent()) return;
+      showToast({ text: `${direction === 'undo' ? 'Undid' : 'Redid'}: ${step.label}`, skipped: skippedLines(edited),
+        action: direction === 'undo' && next.length ? { label: 'Redo', run: () => { void runUndo('redo'); } } : undefined });
+    } catch (err) {
+      undoStore.restoreTaken(key, step, from);
+      // The step names its own action (the edit request's heading is the
+      // board save's), and the toolbar's Retry runs the same undo (or redo)
+      // of this step again (GM, round 3: "Make Retry redo the failed action").
+      store.failSave(key, attempt.id, {
+        ...failureCopy(err),
+        heading: direction === 'undo' ? "Couldn't undo the change." : "Couldn't redo the change.",
+      }, { retry: direction, step: step.id });
+    }
+  };
+
+  // The Studio's keys (plan section 5.4): on the document, in the capture
+  // phase, so they run before the canvas's own (GraphFileActions' Cmd+S
+  // yields to a handled key) and work wherever focus is in the Studio,
+  // except text fields and dialogs. Read through a ref: the handler stays
+  // bound once and always sees this render.
+  const keyHandler = useRef<(event: KeyboardEvent) => void>(() => {});
+  useLayoutEffect(() => {
+    keyHandler.current = (event: KeyboardEvent) => {
+      const action = studioKey(event);
+      if (!action || action === 'fit' || event.defaultPrevented || !isStudioShortcutTarget(event.target, action)) return;
+      if (action === 'save') {
+        event.preventDefault();
+        if (!loading) sendSoon();
+        return;
+      }
+      if (action === 'delete') {
+        if (view !== 'board' || selectedIds.length === 0 || loading) return;
+        event.preventDefault();
+        removeImages(selectedIds);
+        return;
+      }
+      event.preventDefault();
+      void runUndo(action);
+    };
+  });
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => keyHandler.current(event);
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, []);
+
+  /** The image the board opens on, or null for #1: a pick, not a reorder,
+   *  so no image moves and the analysis stays. One undo step, like any image
+   *  change: its batch's `undo` restores the cover field. Picks made before
+   *  the step is sent join it, so one undo goes back to the cover before them. */
+  const setCover = (id: string | null) => {
+    const label = id ? `Made #${numberOf(draftNow()?.images ?? draft.images, id)} the cover` : 'Cover back to #1';
+    commitOps([{ op: 'cover', image: id }], label, { joinKey: 'cover' });
   };
 
   const runAnalyze = async () => {
@@ -500,7 +895,10 @@ export function MoodboardStudioView() {
       if (ownsAnalysis()) store.patch(targetKey, { draft: moodboardToDraft(updated), savedId: updated.id,
         thumbnail: updated.thumbnail, dirty: false, loaded: true, saveState: 'saved' });
     } catch (err) {
-      if (ownsAnalysis()) store.patch(targetKey, { saveError: err instanceof Error ? err.message : 'Analyze failed.', saveState: 'error' });
+      if (ownsAnalysis()) {
+        store.patch(targetKey, { saveError: failureCopy(err, { heading: "Couldn't analyze the board." }), saveState: 'error',
+          retry: 'analyze', retryStep: null });
+      }
     } finally {
       store.clearAnalysis(targetKey, attempt.id);
     }
@@ -519,12 +917,12 @@ export function MoodboardStudioView() {
       return next;
     });
   };
-  const chooseColors = (choice: ColorChoice, hexes: string[]) => {
+  const chooseColors = (choice: ColorChoice, hexes: string[]) => changeField('colorChoices', () => {
     setDraft((current) => {
       const board = withBriefFields(current);
       return { ...board, colorChoices: nextColorChoices(board.colorChoices, choice, hexes) };
     });
-  };
+  });
 
   const keepOverride = async () => {
     if (!isCurrent()) return;
@@ -536,12 +934,13 @@ export function MoodboardStudioView() {
       if (isCurrent() && !useAssetStudioDraftStore.getState().entries[key]?.pendingSaveId) moveDraft(kept);
       else rememberBrief(kept);
     } catch (err) {
-      if (isCurrent()) patch({ saveError: err instanceof Error ? err.message : 'Keep failed.' });
+      if (isCurrent()) patch({ saveError: failureCopy(err, { heading: "Couldn't save your brief." }) });
     }
   };
 
   const regenerateBrief = () => {
-    setBriefFields({ briefOverride: null });
+    // Not sent here: Analyze, when it runs, saves first.
+    changeField('briefOverride', () => setBriefFields({ briefOverride: null }), false);
     // The generated brief needs an analysis of the board as it is now.
     if (!draft.analysis) void runAnalyze();
   };
@@ -559,6 +958,7 @@ export function MoodboardStudioView() {
     }
     const removed = await deleting.remove({ id: savedId, name: draft.name.trim(), scope });
     if (!removed || !mounted.current) return;
+    useBoardUndoStore.getState().clear(deletedKey);
     const store = useAssetStudioDraftStore.getState();
     // Forget the session draft, so reopening it after a restore loads what was saved.
     store.reset(deletedKey, emptyDraft());
@@ -594,290 +994,352 @@ export function MoodboardStudioView() {
   const boardHome: AssetHome | null = loaded && savedId ? assetHome(draft.projectId, projectId, boardProjectName) : null;
   const shownRailScope = boardHome?.scope ?? railScope;
 
-  const previewThumbnail = thumbnail || draft.images.find((img) => !img.excluded)?.url || '';
+  // What the board opens on, as the server's thumbnail reads it: the chosen
+  // cover, else #1, from the draft so a pick shows before it is saved.
+  const cover = boardCover(draft.images, draft.coverImageId);
+  const previewThumbnail = cover ? draft.images[cover.number - 1].url : '';
+  // Only Nebula's own files are loaded (lib/storedImage.ts): an old board's
+  // link to another site gets the placeholder (Q98).
+  const previewView = storedImageView(previewThumbnail);
   const analysis = draft.analysis;
+
+  /** The toolbar's Retry runs exactly the action that failed (GM, error-copy
+   * round 3: "A Retry that does something else is a defect."): a save, an
+   * analyze, or the same undo or redo while its step is still the next one.
+   * A line no button redoes (an upload, the brief) gets no Retry of its own,
+   * so it keeps its full reason. But a failed save it replaced is still
+   * owed (Error, dirty, and autosave waits while it says Error): the toolbar
+   * keeps a Retry for it, and that Retry saves (round 3 review). */
+  const canRetry = saveState === 'error' && (retry === 'save' || retry === 'analyze'
+    || (retry === 'undo' && Boolean(retryStep) && nextUndoId === retryStep)
+    || (retry === 'redo' && Boolean(retryStep) && nextRedoId === retryStep));
+  const saveOwed = saveState === 'error' && dirty && retry == null;
+  const retryFailed = () => {
+    if (retry === 'analyze') void runAnalyze();
+    else if (retry === 'undo' && retryStep) void runUndo('undo', retryStep);
+    else if (retry === 'redo') void runUndo('redo');
+    else void persist();
+  };
+
+  const header = (
+    <WorkspaceHeader title="Moodboard" onBack={exitMoodboardEditor} className="moodboard-studio-toolbar">
+      <ViewSwitch view={view} onChange={setView} />
+      <div className={`moodboard-studio-toolbar__state moodboard-studio-toolbar__state--${saveState}`}>
+        {saveState === 'saving' ? 'Saving' : saveState === 'saved' ? 'Saved' : saveState === 'error' ? 'Error' : 'Draft'}
+      </div>
+      {(canRetry || saveOwed) && (
+        <button type="button" className="moodboard-studio-toolbar__button" onClick={retryFailed}>
+          Retry
+        </button>
+      )}
+      {savedId && !isDraftId && loaded && (
+        <AssetMoveMenu noun="board" buttonClassName="moodboard-studio-toolbar__button"
+          choices={moveChoices(draft.projectId, openProject)} onChoose={moveBoard} busy={moving.busy}
+          disabled={deleting.busy || Boolean(pendingSaveId) || analyzing} />
+      )}
+      {savedId && !isDraftId && (
+        <button type="button" className="moodboard-studio-toolbar__button" title="Move to Recently deleted"
+          disabled={deleting.busy || Boolean(pendingSaveId) || analyzing} onClick={() => void deleteBoard()}>
+          Delete
+        </button>
+      )}
+    </WorkspaceHeader>
+  );
+
+  const rail = (
+    <aside className="moodboard-studio-view__rail">
+      <MoodboardRail
+        key={shownRailScope}
+        activeId={savedId ?? (isDraftId ? NEW_MOODBOARD_SENTINEL : moodboardEditorId)}
+        initialScope={shownRailScope}
+        boardHome={boardHome}
+        projectId={projectId}
+        refreshKey={`${deleting.refreshKey}:${moving.moves}`}
+        onSelect={(id, scope) => {
+          setRailScope(scope);
+          enterMoodboardEditor(id, scope);
+        }}
+        onNew={(scope) => {
+          if (!isCurrent()) return;
+          const project = scope === 'project' ? currentProject() : null;
+          if (scope === 'project' && !project) {
+            patch({ saveError: NO_PROJECT_OPEN });
+            return;
+          }
+          useAssetStudioDraftStore.getState().reset(
+            assetStudioDraftKey('moodboard', scope, NEW_MOODBOARD_SENTINEL, project?.id), emptyDraft());
+          setRailScope(scope);
+          enterMoodboardEditor(NEW_MOODBOARD_SENTINEL, scope);
+        }}
+      />
+    </aside>
+  );
+
+  const loadingBlock = (
+    <div className="moodboard-studio-view__loading">
+      {/* Retry loading reloads the board, so it shows (with GM's short line)
+          only for a load that failed; with no project open there's nothing
+          to reload, and the line says what to do (round 3b). */}
+      {loadError ? <div role="alert"><FailureLines failure={loadError} retry={projectReady} /></div> : 'Loading Moodboard...'}
+      {loadError && projectReady && <button type="button" className="moodboard-studio-toolbar__button"
+        onClick={() => patch({ loadError: null, revision: revision + 1 })}>Retry loading</button>}
+    </div>
+  );
+
+  const notices = (
+    <>
+      {loadError && <div className="moodboard-studio__notice moodboard-studio__notice--warn"><FailureLines failure={loadError} /></div>}
+      {/* A delete's failure shows here even while the last delete's Undo toast is up (round 3b). */}
+      {deleting.deleteError && (
+        <div className="moodboard-studio__notice moodboard-studio__notice--error" role="alert"><FailureLines failure={deleting.deleteError} /></div>
+      )}
+      {/* Beside the toolbar's Retry (it redoes this failure) the reason is GM's short line (WRAP rule). */}
+      {saveError && <div className="moodboard-studio__notice moodboard-studio__notice--error">
+        <FailureLines failure={saveError} retry={canRetry} /></div>}
+      {moving.error && (
+        <div className="moodboard-studio__notice moodboard-studio__notice--error" role="alert"><FailureLines failure={moving.error} /></div>
+      )}
+    </>
+  );
+
+  const boardFields = (
+    <div className="moodboard-def__fields">
+      <label className="moodboard-field">
+        <span>Name</span>
+        <input
+          value={draft.name}
+          onChange={(event) => { const name = event.target.value; beginField('name'); setDraft((current) => ({ ...current, name })); }}
+          onBlur={() => endField('name')}
+        />
+      </label>
+      <div className="moodboard-def__row">
+        <label className="moodboard-field">
+          <span>Mode</span>
+          <select
+            value={draft.mode}
+            onChange={(event) => {
+              const mode = event.target.value as Moodboard['mode'];
+              changeField('mode', () => setDraft((current) => ({ ...current, analysis: null, mode })));
+            }}
+          >
+            <option value="look">Look</option>
+            <option value="world">World</option>
+            <option value="subject">Subject</option>
+          </select>
+        </label>
+        <label className="moodboard-field moodboard-field--grow">
+          {/* Q21 b: Krea 2's board references share out this strength.
+              Q36 a: at 0 no node gets the board, text included. */}
+          <span>Strength {draft.strength.toFixed(2)} · {draft.strength <= 0
+            ? 'board off: connected nodes get none of it'
+            : <>the total the board&apos;s images share on Krea 2</>}</span>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.05}
+            value={draft.strength}
+            onChange={(event) => {
+              const strength = Number(event.target.value);
+              beginField('strength');
+              setDraft((current) => ({ ...current, analysis: null, strength }));
+            }}
+            // One step per drag, closed when let go; arrow keys make one step
+            // until the slider loses focus (or Cmd+Z closes it).
+            onPointerUp={() => endField('strength', 'soon')}
+            onBlur={() => endField('strength', 'soon')}
+          />
+        </label>
+      </div>
+      <label className="moodboard-field">
+        <span>Notes</span>
+        <AutoGrowTextarea
+          rows={3}
+          value={draft.notes}
+          onChange={(event) => { const notes = event.target.value; beginField('notes'); setDraft((current) => ({ ...current, analysis: null, notes })); }}
+          onBlur={() => endField('notes')}
+          placeholder="Anything about the board, in your words."
+        />
+      </label>
+      <NotesSwitch on={draft.sendNotes === true}
+        onChange={(sendNotes) => changeField('sendNotes', () => setBriefFields({ sendNotes }))} />
+      {/* An agent asking to turn it on: only the person may. */}
+      {savedId && <AssetProposalStrip kind="moodboard" targetId={savedId} />}
+    </div>
+  );
+
+  const briefFields = (
+    <BriefFields
+      direction={draft.direction}
+      avoid={draft.avoid}
+      pinnedColors={draft.pinnedColors}
+      clashMode={draft.clashMode ?? 'leave-out'}
+      onChange={(fields) => {
+        // Direction is typed: its step closes when it loses focus. The rest
+        // are picks (an Avoid item, a pinned colour, the clash mode).
+        if ('direction' in fields) {
+          beginField('direction');
+          setBriefFields(fields);
+          return;
+        }
+        const field: FieldStep = 'avoid' in fields ? 'avoid' : 'pinnedColors' in fields ? 'pinnedColors' : 'clashMode';
+        changeField(field, () => setBriefFields(fields));
+      }}
+      onTextDone={() => endField('direction')}
+    />
+  );
+
+  const analysisSection = (
+    <section className="moodboard-analysis">
+      <div className="moodboard-analysis__head">
+        <div>
+          <span className="moodboard-analysis__label">Extraction</span>
+          <span className="moodboard-analysis__hint">
+            Produces the editable creative-direction object used by nodes.
+          </span>
+        </div>
+        <button type="button" onClick={() => void runAnalyze()} disabled={!canSave || analyzing || Boolean(pendingSaveId)}>
+          {analyzing ? 'Analyzing' : 'Analyze'}
+        </button>
+      </div>
+
+      <BriefPanel
+        brief={brief}
+        override={draft.briefOverride}
+        author={overrideAuthor(savedOverride, draft.briefOverride)}
+        saving={dirty || Boolean(pendingSaveId)}
+        busy={analyzing}
+        onEdit={(text) => { beginField('briefOverride'); setBriefFields({ briefOverride: { text } }); }}
+        onEditDone={() => endField('briefOverride')}
+        onKeep={() => void keepOverride()}
+        onRegenerate={regenerateBrief}
+        onColorChoice={(choice, hex) => chooseColors(choice, [hex])}
+        onLeaveOutAll={(hexes) => chooseColors('leaveOut', hexes)}
+      />
+
+      {analysis ? (
+        <div className="moodboard-analysis__body">
+          <BoardSwatches label="Palette" role="dominant" analysis={analysis} leftOut={brief?.leftOut} />
+          <BoardSwatches label="Accents" role="accent" analysis={analysis} leftOut={brief?.leftOut} />
+          <SourcesOutdated analysis={analysis} />
+          <div className="moodboard-analysis__summary">{analysis.summary}</div>
+          {analysis.version < 2 && (
+            <div className="moodboard-analysis__outdated">
+              Made by the older analyzer, which ignored image weights and dropped small accent colors. Analyze again to update it.
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="moodboard-analysis__empty">
+          Analyze after adding images to extract palette, representative references, a style brief, and provider hints.
+        </div>
+      )}
+    </section>
+  );
+
+  const shownToast = toast && toast.key === key ? toast : null;
+  const trashToast = deleting.lastDeleted && (
+    <UndoDeleteToast key={deleting.lastDeleted.id} name={deleting.lastDeleted.name} busy={deleting.busy}
+      error={deleting.undoError} onDismiss={deleting.dismiss}
+      onUndo={() => { void deleting.undo().then((asset) => { if (asset) openRestored(asset.id, asset.scope); }); }} />
+  );
+
+  if (view === 'board') {
+    return (
+      <div className="moodboard-studio-view moodboard-studio-view--board">
+        {header}
+        {rail}
+        <main className="moodboard-studio-view__board">
+          {loading ? loadingBlock : (
+            <>
+              <div className="moodboard-studio-view__board-notices">{notices}</div>
+              <BoardCanvas key={key} boardKey={key} images={draft.images} onMove={moveCards} onDropFiles={dropFiles}
+                uploading={uploading} />
+              {shownToast && <BoardUndoToast key={shownToast.id} toast={shownToast} onDismiss={dismissToast} />}
+            </>
+          )}
+        </main>
+        {!loading && (
+          <BoardSidePanel images={draft.images} selected={selectedIds} analysis={analysis} onUpdate={updateImage}
+            onRemove={removeImages} onTextDone={imageTextDone}>
+            <div className="moodboard-board-panel__section">{boardFields}</div>
+            {briefFields}
+            {analysisSection}
+          </BoardSidePanel>
+        )}
+        {trashToast}
+      </div>
+    );
+  }
 
   return (
     <div className="moodboard-studio-view">
-      <WorkspaceHeader title="Moodboard" onBack={exitMoodboardEditor} className="moodboard-studio-toolbar">
-        <div className={`moodboard-studio-toolbar__state moodboard-studio-toolbar__state--${saveState}`}>
-          {saveState === 'saving' ? 'Saving' : saveState === 'saved' ? 'Saved' : saveState === 'error' ? 'Error' : 'Draft'}
-        </div>
-        {saveState === 'error' && (
-          <button type="button" className="moodboard-studio-toolbar__button" onClick={() => void persist()}>
-            Retry
-          </button>
-        )}
-        {savedId && !isDraftId && loaded && (
-          <AssetMoveMenu noun="board" buttonClassName="moodboard-studio-toolbar__button"
-            choices={moveChoices(draft.projectId, openProject)} onChoose={moveBoard} busy={moving.busy}
-            disabled={deleting.busy || Boolean(pendingSaveId) || analyzing} />
-        )}
-        {savedId && !isDraftId && (
-          <button type="button" className="moodboard-studio-toolbar__button" title="Move to Recently deleted"
-            disabled={deleting.busy || Boolean(pendingSaveId) || analyzing} onClick={() => void deleteBoard()}>
-            Delete
-          </button>
-        )}
-      </WorkspaceHeader>
-
-      <aside className="moodboard-studio-view__rail">
-        <MoodboardRail
-          key={shownRailScope}
-          activeId={savedId ?? (isDraftId ? NEW_MOODBOARD_SENTINEL : moodboardEditorId)}
-          initialScope={shownRailScope}
-          boardHome={boardHome}
-          projectId={projectId}
-          refreshKey={`${deleting.refreshKey}:${moving.moves}`}
-          onSelect={(id, scope) => {
-            setRailScope(scope);
-            enterMoodboardEditor(id, scope);
-          }}
-          onNew={(scope) => {
-            if (!isCurrent()) return;
-            const project = scope === 'project' ? currentProject() : null;
-            if (scope === 'project' && !project) {
-              patch({ saveError: NO_PROJECT_OPEN });
-              return;
-            }
-            useAssetStudioDraftStore.getState().reset(
-              assetStudioDraftKey('moodboard', scope, NEW_MOODBOARD_SENTINEL, project?.id), emptyDraft());
-            setRailScope(scope);
-            enterMoodboardEditor(NEW_MOODBOARD_SENTINEL, scope);
-          }}
-        />
-      </aside>
-
+      {header}
+      {rail}
       <main className="moodboard-studio-view__main">
-        {loading ? (
-          <div className="moodboard-studio-view__loading">
-            {loadError ? <div role="alert">{loadError}</div> : 'Loading Moodboard...'}
-            {loadError && <button type="button" className="moodboard-studio-toolbar__button"
-              onClick={() => { if (!projectReady) void verifyProject(); else patch({ loadError: null, revision: revision + 1 }); }}>Retry loading</button>}
-          </div>
-        ) : (
+        {loading ? loadingBlock : (
           <>
-            {loadError && <div className="moodboard-studio__notice moodboard-studio__notice--warn">{loadError}</div>}
-            {deleting.error && !deleting.lastDeleted && (
-              <div className="moodboard-studio__notice moodboard-studio__notice--error" role="alert">{deleting.error}</div>
-            )}
-            {saveError && <div className="moodboard-studio__notice moodboard-studio__notice--error">{saveError}</div>}
-            {moving.error && (
-              <div className="moodboard-studio__notice moodboard-studio__notice--error" role="alert">{moving.error}</div>
-            )}
-
+            {notices}
             <section className="moodboard-def">
-              <div className="moodboard-def__cover">
-                {previewThumbnail ? (
-                  <img src={backendAssetUrlSync(previewThumbnail)} alt="" draggable={false} />
-                ) : (
-                  <span>No images</span>
-                )}
-              </div>
-              <div className="moodboard-def__fields">
-                <label className="moodboard-field">
-                  <span>Name</span>
-                  <input
-                    value={draft.name}
-                    onChange={(event) => { const name = event.target.value; setDraft((current) => ({ ...current, name })); }}
-                    onBlur={sendNow}
-                  />
-                </label>
-                <div className="moodboard-def__row">
-                  <label className="moodboard-field">
-                    <span>Mode</span>
-                    <select
-                      value={draft.mode}
-                      onChange={(event) => { const mode = event.target.value as Moodboard['mode']; setDraft((current) => ({ ...current, analysis: null, mode })); }}
-                    >
-                      <option value="look">Look</option>
-                      <option value="world">World</option>
-                      <option value="subject">Subject</option>
-                    </select>
-                  </label>
-                  <label className="moodboard-field moodboard-field--grow">
-                    {/* Q21 b: Krea 2's board references share out this strength.
-                        Q36 a: at 0 no node gets the board, text included. */}
-                    <span>Strength {draft.strength.toFixed(2)} · {draft.strength <= 0
-                      ? 'board off: wired nodes get none of it'
-                      : <>the total the board&apos;s images share on Krea 2</>}</span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={1}
-                      step={0.05}
-                      value={draft.strength}
-                      onChange={(event) => { const strength = Number(event.target.value); setDraft((current) => ({ ...current, analysis: null, strength })); }}
-                    />
-                  </label>
-                </div>
-                <label className="moodboard-field">
-                  <span>Notes</span>
-                  <AutoGrowTextarea
-                    rows={3}
-                    value={draft.notes}
-                    onChange={(event) => { const notes = event.target.value; setDraft((current) => ({ ...current, analysis: null, notes })); }}
-                    onBlur={sendNow}
-                    placeholder="Anything about the board, in your words."
-                  />
-                </label>
-                <NotesSwitch on={draft.sendNotes === true}
-                  onChange={(sendNotes) => setBriefFields({ sendNotes })} />
-              </div>
-            </section>
-
-            <section
-              className={`moodboard-dropzone ${uploading ? 'moodboard-dropzone--busy' : ''}`}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={handleDrop}
-            >
-              <div className="moodboard-dropzone__head">
-                <div>
-                  <span className="moodboard-dropzone__label">Images ({draft.images.length})</span>
-                  <span className="moodboard-dropzone__hint">Drag images here or add files.</span>
-                </div>
-                <label className={`moodboard-dropzone__file-wrap ${uploading ? 'moodboard-dropzone__file-wrap--disabled' : ''}`}>
-                  <span className="moodboard-dropzone__file-button">
-                    {uploading ? 'Uploading' : 'Add Images'}
-                  </span>
-                  <input
-                    className="moodboard-dropzone__file-input"
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    disabled={uploading}
-                    aria-label="Add Images"
-                    onChange={(event) => {
-                      handleFiles(event.target.files);
-                      event.target.value = '';
-                    }}
-                  />
-                </label>
-              </div>
-              <div className="moodboard-grid">
-                {draft.images.map((img, index) => (
-                  <div key={img.id} className={`moodboard-tile ${isSetAside(img) ? 'moodboard-tile--set-aside' : ''}`}>
-                    <div className="moodboard-tile__image">
-                      <img src={backendAssetUrlSync(img.url)} alt="" draggable={false} />
-                      <span className="moodboard-tile__number" aria-label={`Image ${index + 1}`}>#{index + 1}</span>
-                      <button type="button" className="moodboard-tile__remove" onClick={() => removeImage(img.id)}>
-                        x
-                      </button>
-                    </div>
-                    <ImageColors analysis={analysis} imageId={img.id} />
-                    <div className="moodboard-tile__controls">
-                      <label>
-                        <span>Weight {img.weight.toFixed(2)}</span>
-                        <input
-                          type="range"
-                          min={0}
-                          max={1}
-                          step={0.05}
-                          value={img.weight}
-                          onChange={(event) => updateImage(img.id, { weight: Number(event.target.value) })}
-                        />
-                      </label>
-                      <label className="moodboard-tile__toggle" title="Still read for its colors; never steers">
-                        <input
-                          type="checkbox"
-                          checked={isSetAside(img)}
-                          onChange={(event) => updateImage(img.id, setAsidePatch(img, event.target.checked))}
-                        />
-                        <span>Set aside</span>
-                      </label>
-                      <label className="moodboard-tile__note">
-                        <span>Image note</span>
-                        <AutoGrowTextarea
-                          rows={2}
-                          value={img.notes}
-                          placeholder="What to take from this image"
-                          onChange={(event) => updateImage(img.id, { notes: event.target.value })}
-                          onBlur={sendNow}
-                        />
-                      </label>
-                      <div className="moodboard-tile__note moodboard-tile__note--private">
-                        <label className="moodboard-tile__note">
-                          <span>Private note</span>
-                          <AutoGrowTextarea
-                            rows={1}
-                            value={img.privateNote ?? ''}
-                            maxLength={PRIVATE_NOTE_LIMIT}
-                            placeholder="A label for you, like Liked"
-                            aria-describedby={`private-note-hint-${img.id}`}
-                            onChange={(event) => updateImage(img.id, { privateNote: event.target.value })}
-                            onBlur={sendNow}
-                          />
-                        </label>
-                        <span id={`private-note-hint-${img.id}`} className="moodboard-tile__note-hint">
-                          Only for you. Not sent anywhere.
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <BriefFields
-              direction={draft.direction}
-              avoid={draft.avoid}
-              pinnedColors={draft.pinnedColors}
-              clashMode={draft.clashMode ?? 'leave-out'}
-              onChange={setBriefFields}
-            />
-
-            <section className="moodboard-analysis">
-              <div className="moodboard-analysis__head">
-                <div>
-                  <span className="moodboard-analysis__label">Extraction</span>
-                  <span className="moodboard-analysis__hint">
-                    Produces the editable creative-direction object used by nodes.
-                  </span>
-                </div>
-                <button type="button" onClick={() => void runAnalyze()} disabled={!canSave || analyzing || Boolean(pendingSaveId)}>
-                  {analyzing ? 'Analyzing' : 'Analyze'}
-                </button>
-              </div>
-
-              <BriefPanel
-                brief={brief}
-                override={draft.briefOverride}
-                author={overrideAuthor(savedOverride, draft.briefOverride)}
-                saving={dirty || Boolean(pendingSaveId)}
-                busy={analyzing}
-                onEdit={(text) => setBriefFields({ briefOverride: { text } })}
-                onKeep={() => void keepOverride()}
-                onRegenerate={regenerateBrief}
-                onColorChoice={(choice, hex) => chooseColors(choice, [hex])}
-                onLeaveOutAll={(hexes) => chooseColors('leaveOut', hexes)}
-              />
-
-              {analysis ? (
-                <div className="moodboard-analysis__body">
-                  <BoardSwatches label="Palette" role="dominant" analysis={analysis} leftOut={brief?.leftOut} />
-                  <BoardSwatches label="Accents" role="accent" analysis={analysis} leftOut={brief?.leftOut} />
-                  <SourcesOutdated analysis={analysis} />
-                  <div className="moodboard-analysis__summary">{analysis.summary}</div>
-                  {analysis.version < 2 && (
-                    <div className="moodboard-analysis__outdated">
-                      Made by the older analyzer, which ignored image weights and dropped small accent colors. Analyze again to update it.
-                    </div>
+              <div className="moodboard-def__cover-col">
+                <div className="moodboard-def__cover">
+                  {previewView.src ? (
+                    // Keyed by the image, so a new cover enters on the spring.
+                    <img key={previewThumbnail} src={previewView.src} alt="" draggable={false} />
+                  ) : previewView.outside ? <OutsideImageNote /> : (
+                    <span>No images</span>
                   )}
                 </div>
-              ) : (
-                <div className="moodboard-analysis__empty">
-                  Analyze after adding images to extract palette, representative references, a style brief, and provider hints.
-                </div>
-              )}
+                {cover && (
+                  <p className="moodboard-def__cover-caption" aria-live="polite">
+                    {cover.chosen ? `Cover: #${cover.number}` : 'Cover: #1, the first image'}
+                  </p>
+                )}
+              </div>
+              {boardFields}
             </section>
+
+            <MoodboardListView images={draft.images} analysis={analysis} cover={cover} uploading={uploading}
+              onFiles={handleFiles} onDrop={handleDrop} onRemove={removeImage} onUpdate={updateImage}
+              onSetCover={setCover} onTextDone={imageTextDone} />
+
+            {briefFields}
+            {analysisSection}
           </>
         )}
       </main>
-      {deleting.lastDeleted && (
-        <UndoDeleteToast key={deleting.lastDeleted.id} name={deleting.lastDeleted.name} busy={deleting.busy}
-          error={deleting.error} onDismiss={deleting.dismiss}
-          onUndo={() => { void deleting.undo().then((asset) => { if (asset) openRestored(asset.id, asset.scope); }); }} />
-      )}
+      {shownToast && <BoardUndoToast key={shownToast.id} toast={shownToast} onDismiss={dismissToast} />}
+      {trashToast}
+    </div>
+  );
+}
+
+/** Board or List (moodboard canvas PR5). Board is a preview for now; List stays the default. */
+function ViewSwitch({ view, onChange }: { view: MoodboardView; onChange: (view: MoodboardView) => void }) {
+  const options: Array<{ id: MoodboardView; label: string }> = [{ id: 'board', label: 'Board' }, { id: 'list', label: 'List' }];
+  const refs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const index = options.findIndex((option) => option.id === view);
+  return (
+    <div className="moodboard-view-switch" role="radiogroup" aria-label="View"
+      style={{ ['--mb-view-index' as string]: index }}>
+      <span className="moodboard-view-switch__thumb" aria-hidden="true" />
+      {options.map((option) => (
+        <button key={option.id} ref={(node) => { refs.current[option.id] = node; }} type="button" role="radio"
+          aria-checked={view === option.id} tabIndex={view === option.id ? 0 : -1}
+          className="moodboard-view-switch__option"
+          title={option.id === 'board' ? 'The board as a canvas (preview)' : 'The board as a list'}
+          onClick={() => onChange(option.id)}
+          onKeyDown={(event) => {
+            if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+            event.preventDefault();
+            const next = options[(options.findIndex((candidate) => candidate.id === option.id) + 1) % options.length];
+            onChange(next.id);
+            refs.current[next.id]?.focus();
+          }}>
+          {option.label}
+          {option.id === 'board' && <span className="moodboard-view-switch__badge" aria-hidden="true">Preview</span>}
+        </button>
+      ))}
     </div>
   );
 }
@@ -931,7 +1393,7 @@ function MoodboardRail({
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to load.');
+          setError(failureMessage(err, "Couldn't load the boards."));
           setListing({ for: listKey, items: [] });
         }
       })
@@ -978,7 +1440,9 @@ function MoodboardRail({
         {!busy && !failed && shown.length === 0 && (
           <div className="moodboard-rail__empty">{emptyRailMessage('moodboard', scope, boardHome, !noProject)}</div>
         )}
-        {shown.map((m) => (
+        {shown.map((m) => {
+          const thumb = storedImageView(m.thumbnail);
+          return (
           <button
             key={m.id}
             type="button"
@@ -986,16 +1450,18 @@ function MoodboardRail({
             onClick={() => onSelect(m.id, scope)}
           >
             <span className="moodboard-rail__thumb">
-              {m.thumbnail ? <img src={backendAssetUrlSync(m.thumbnail)} alt="" draggable={false} /> : <span>MB</span>}
+              {thumb.src ? <img src={thumb.src} alt="" draggable={false} /> : <span>MB</span>}
             </span>
             <span className="moodboard-rail__meta">
               <span className="moodboard-rail__name">{m.name || 'Untitled'}</span>
               <span className="moodboard-rail__sub">
                 {moodboardImagesLabel(m.images.length, setAsideCount(m.images))} · {m.mode}
               </span>
+              {thumb.outside && <OutsideImageNote />}
             </span>
           </button>
-        ))}
+          );
+        })}
       </div>
       <RecentlyDeletedAssets kind="moodboard" scope={scope} refreshKey={`${String(refreshKey)}:${activeId}`}
         onRestored={(item) => onSelect(item.id, scope)} onTrashChanged={relist} />

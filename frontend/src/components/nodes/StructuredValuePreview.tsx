@@ -2,12 +2,14 @@ import { useMemo } from 'react';
 import type { PortValue } from '../../types';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { isMoodboardBundle } from '../../lib/moodboardBundle';
+import { storedImageView } from '../../lib/storedImage';
 import {
   boundedJson, CARD_LIMITS, describeStructuredValue, FULL_LIMITS, thumbnailLoading, type StructuredView,
 } from '../../lib/structuredValue';
 import { CopyValueButton, ExpandableBlock } from './ExpandableBlock';
 import { MoodboardBundlePreview, SwatchRow, type StructuredVariant } from './MoodboardBundlePreview';
 import { OverviewImage, OverviewVideoStill } from './OverviewImage';
+import { OutsideImageNote } from '../OutsideImageNote';
 import '../../styles/structured-preview.css';
 
 /** The most JSON the Inspector shows; Copy takes the whole value. */
@@ -15,6 +17,16 @@ const FULL_JSON_LIMIT = 20_000;
 /** The most of one string a card puts in its DOM (it shows a few lines;
  *  "Read all" scrolls inside the card past 320 px). */
 const CARD_TEXT_LIMIT = 4_000;
+
+/** The output ports, per node, whose values are a board's own images (Q98):
+ *  drawn only when they are Nebula's files (lib/storedImage.ts), since a run
+ *  saved before board images were checked can hold an old board's link to
+ *  another site. Other nodes' media are drawn as they come (a provider may
+ *  return a remote URL). The `moodboard` bundle port guards its own images
+ *  (MoodboardBundlePreview). */
+const BOARD_IMAGE_PORTS: Readonly<Record<string, readonly string[]>> = {
+  'nebula-moodboard': ['representative_images'],
+};
 
 function plural(count: number, one: string, many = `${one}s`): string {
   return `${count} ${count === 1 ? one : many}`;
@@ -36,11 +48,14 @@ function copyJson(value: unknown): string {
  * text. On a card (`card`) everything is capped; in the Inspector (`full`)
  * objects and lists show as JSON (up to FULL_JSON_LIMIT characters) with Copy.
  */
-export function StructuredValuePreview({ output, label, variant = 'card' }: {
+export function StructuredValuePreview({ output, label, variant = 'card', storedOnly = false }: {
   output: PortValue;
   /** The port's name, when the card shows more than one value. */
   label?: string;
   variant?: StructuredVariant;
+  /** Load only Nebula's own files (a board's images): anything else is left
+   *  out, and an outside link says so. */
+  storedOnly?: boolean;
 }) {
   const { type, value } = output;
   const view = useMemo(
@@ -75,7 +90,7 @@ export function StructuredValuePreview({ output, label, variant = 'card' }: {
         </span>
         {meta && <span className="structured-preview__meta">{meta}</span>}
       </div>
-      <StructuredBody view={view} variant={variant} json={json} name={title ?? typeName} />
+      <StructuredBody view={view} variant={variant} json={json} name={title ?? typeName} storedOnly={storedOnly} />
       {variant === 'full' && view.kind !== 'empty' && (
         <div className="structured-preview__actions">
           {json?.truncated && (
@@ -100,12 +115,13 @@ function countFor(view: StructuredView): string | null {
   }
 }
 
-function StructuredBody({ view, variant, json, name }: {
+function StructuredBody({ view, variant, json, name, storedOnly }: {
   view: StructuredView;
   variant: StructuredVariant;
   json: { text: string; truncated: boolean } | null;
   /** What the value is called, so a toggle can say what it opens. */
   name: string;
+  storedOnly: boolean;
 }) {
   const collapsible = variant === 'card';
   const textLimit = variant === 'card' ? CARD_TEXT_LIMIT : FULL_JSON_LIMIT;
@@ -124,7 +140,8 @@ function StructuredBody({ view, variant, json, name }: {
     case 'colors':
       return <SwatchRow label="Colors" colors={view.colors} limit={variant === 'full' ? 40 : 12} />;
     case 'media':
-      return <MediaStrip media={view.media} urls={view.urls} more={view.total - view.urls.length} variant={variant} />;
+      return <MediaStrip media={view.media} urls={view.urls} more={view.total - view.urls.length} variant={variant}
+        storedOnly={storedOnly} />;
     case 'list':
       if (json) return <JsonBlock json={json} />;
       return (
@@ -143,7 +160,9 @@ function StructuredBody({ view, variant, json, name }: {
     case 'record':
       return (
         <>
-          {view.thumbnails.length > 0 && <MediaStrip media="image" urls={view.thumbnails} more={0} variant={variant} />}
+          {view.thumbnails.length > 0 && (
+            <MediaStrip media="image" urls={view.thumbnails} more={0} variant={variant} storedOnly={storedOnly} />
+          )}
           {json ? <JsonBlock json={json} /> : (
             <ExpandableBlock lines={7} contentKey={view.fields.map((field) => field.key).join('\n')}
               longHint={view.fields.length > 6} collapsible={collapsible}
@@ -174,41 +193,52 @@ function JsonBlock({ json }: { json: { text: string; truncated: boolean } }) {
   );
 }
 
-function MediaStrip({ media, urls, more, variant }: {
-  media: 'image' | 'video' | 'audio'; urls: string[]; more: number; variant: StructuredVariant;
+function MediaStrip({ media, urls, more, variant, storedOnly }: {
+  media: 'image' | 'video' | 'audio'; urls: string[]; more: number; variant: StructuredVariant; storedOnly: boolean;
 }) {
+  // What each item loads. A board's images (`storedOnly`) load only when they
+  // are Nebula's files; the rest are never put in a src.
+  const views = urls.map((url) => (storedOnly ? storedImageView(url) : { src: backendAssetUrlSync(url), outside: false }));
+  const srcs = views.flatMap((view) => (view.src === null ? [] : [view.src]));
+  const outside = views.some((view) => view.outside) && <OutsideImageNote />;
   if (media === 'audio') {
     return (
       <div className="structured-preview__audio">
-        {urls.slice(0, 3).map((url, index) => (
+        {srcs.slice(0, 3).map((src, index) => (
           // The same file can be listed twice, so its place is part of the key.
-          <audio key={`${url}-${index}`} src={backendAssetUrlSync(url)} controls preload="none"
+          <audio key={`${src}-${index}`} src={src} controls preload="none"
             className="nodrag nowheel" onMouseDown={(event) => event.stopPropagation()} />
         ))}
-        {more + Math.max(0, urls.length - 3) > 0 && (
-          <span className="structured-preview__note">+{more + Math.max(0, urls.length - 3)} more</span>
+        {more + Math.max(0, srcs.length - 3) > 0 && (
+          <span className="structured-preview__note">+{more + Math.max(0, srcs.length - 3)} more</span>
         )}
+        {outside}
       </div>
     );
   }
   return (
-    <div className={`structured-preview__thumbs structured-preview__thumbs--${Math.min(urls.length, 4)}`}>
-      {urls.map((url, index) => (
-        <span key={`${url}-${index}`} className="structured-preview__thumb">
-          {media === 'image'
-            ? <OverviewImage src={backendAssetUrlSync(url)} alt={`Item ${index + 1}`} loading={thumbnailLoading(variant)} draggable={false} />
-            : (
-              <>
-                <video src={backendAssetUrlSync(url)} muted preload="metadata" aria-label={`Video ${index + 1}`} />
-                <OverviewVideoStill src={backendAssetUrlSync(url)} />
-              </>
-            )}
-          {more > 0 && index === urls.length - 1 && (
-            <span className="structured-preview__thumb-more" aria-label={`${more} more`}>+{more}</span>
-          )}
-        </span>
-      ))}
-    </div>
+    <>
+      {srcs.length > 0 && (
+        <div className={`structured-preview__thumbs structured-preview__thumbs--${Math.min(srcs.length, 4)}`}>
+          {srcs.map((src, index) => (
+            <span key={`${src}-${index}`} className="structured-preview__thumb">
+              {media === 'image'
+                ? <OverviewImage src={src} alt={`Item ${index + 1}`} loading={thumbnailLoading(variant)} draggable={false} />
+                : (
+                  <>
+                    <video src={src} muted preload="metadata" aria-label={`Video ${index + 1}`} />
+                    <OverviewVideoStill src={src} />
+                  </>
+                )}
+              {more > 0 && index === srcs.length - 1 && (
+                <span className="structured-preview__thumb-more" aria-label={`${more} more`}>+{more}</span>
+              )}
+            </span>
+          ))}
+        </div>
+      )}
+      {outside}
+    </>
   );
 }
 
@@ -216,11 +246,14 @@ function MediaStrip({ media, urls, more, variant }: {
  * Every value of a run that nothing else on the card drew. A card shows the
  * first few; the Inspector (`full`) shows them all.
  */
-export function StructuredOutputs({ outputs, variant = 'card', labels }: {
+export function StructuredOutputs({ outputs, variant = 'card', labels, definitionId }: {
   outputs: Array<[string, PortValue]>;
   variant?: StructuredVariant;
   labels?: Record<string, string>;
+  /** The node's kind: a board's image ports load only Nebula's files. */
+  definitionId?: string;
 }) {
+  const boardPorts = (definitionId && BOARD_IMAGE_PORTS[definitionId]) || [];
   const limit = variant === 'card' ? 3 : 12;
   const shown = outputs.slice(0, limit);
   const several = outputs.length > 1;
@@ -228,7 +261,7 @@ export function StructuredOutputs({ outputs, variant = 'card', labels }: {
     <div className={`structured-outputs structured-outputs--${variant}`}>
       {shown.map(([port, output]) => (
         <StructuredValuePreview key={port} output={output} variant={variant}
-          label={several ? labels?.[port] ?? port : undefined} />
+          label={several ? labels?.[port] ?? port : undefined} storedOnly={boardPorts.includes(port)} />
       ))}
       {outputs.length > shown.length && (
         <p className="structured-preview__note">{plural(outputs.length - shown.length, 'more output')}</p>

@@ -272,3 +272,16 @@ def test_token_file_folders_are_protected(tmp_path, monkeypatch, folder):
     alias.symlink_to(token_file)
     with pytest.raises(ProtectedPathError):
         require_allowed_path(alias)
+
+
+def test_kept_upload_name_is_not_a_file_reference(protected):
+    # An upload keeps the name it was dropped with, for the card to show
+    # (`_fileName`, fix/drop-followups). The name is display text: a file
+    # named like a protected one must not make the node unrunnable. The
+    # stored file's own path is still checked.
+    from services.file_access import validate_file_references
+    secret = protected / "settings.json"
+    secret.write_text("{}")
+    validate_file_references({"_fileName": {"file": "abc.json", "name": str(secret)}})
+    with pytest.raises(ProtectedPathError):
+        validate_file_references({"filePath": str(secret), "_fileName": {"file": "abc.json", "name": "notes.json"}})

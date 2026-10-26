@@ -17,6 +17,8 @@ the ops it hasn't seen confirmed on top of a board someone else changed.
   ``link`` (a copy of an image in a frame), ``unlink``.
 - Image settings: ``setAside``, ``weight`` (scales the copies), ``note``
   (``notes`` or ``privateNote``).
+- The cover: ``cover`` (the image the board opens on, by number or id; null
+  opens it on #1 again). It moves nothing: no image changes number.
 - Frames: ``frame.create`` (a rectangle, or ``around`` some cards),
   ``frame.update`` (name or rectangle; a move moves its cards),
   ``frame.delete`` (its cards stay), ``frame.merge``.
@@ -61,7 +63,7 @@ UNDO_BROADCAST_LIMIT = 200
 SAY_LIMIT = 140
 MOVE_THRESHOLD_PX = 8.0
 
-OPS = ("add", "remove", "place", "resize", "link", "unlink", "setAside", "weight", "note",
+OPS = ("add", "remove", "place", "resize", "link", "unlink", "setAside", "weight", "note", "cover",
        "frame.create", "frame.update", "frame.delete", "frame.merge", "restore")
 # Ops a later Nebula adds (plan section 5.1); refused by name until then.
 LATER_OPS = ("arrange", "look.set", "look.inherit", "suggestion.accept", "suggestion.dismiss", "realPerson")
@@ -78,15 +80,19 @@ SLICE_PARTS = ("frame", "image", "settings", "card", "fields")
 # against them, the hand-written brief last (it is stamped with the board
 # as it ends up). Values are as ``field_value`` reads them.
 FIELD_KEYS = ("name", "notes", "mode", "strength", "direction", "avoid", "pinnedColors", "clashMode",
-              "colorChoices", "sendNotes", "briefOverride")
+              "colorChoices", "sendNotes", "coverImageId", "briefOverride")
 # What the board's mode, strength and notes are to the whole-board analysis.
 STEERING_FIELDS = ("mode", "strength", "notes")
 FIELD_LABELS = {
     "name": "The name", "notes": "The board's notes", "mode": "Mode", "strength": "Strength",
     "direction": "Direction", "avoid": "The Avoid list", "pinnedColors": "The pinned colours",
     "clashMode": "The clash mode", "colorChoices": "The colour choices",
-    "sendNotes": "Send notes to generators", "briefOverride": "The hand-written brief",
+    "sendNotes": "Send notes to generators", "coverImageId": "The cover",
+    "briefOverride": "The hand-written brief",
 }
+# The fields a ``board.fields`` journal event names, in this order. The
+# cover is left out: it has its own event (``board.cover``, with the image).
+JOURNAL_FIELDS = tuple(key for key in FIELD_KEYS if key != "coverImageId")
 SETTING_LABELS = {"weight": "weight", "excluded": "Set aside switch", "notes": "notes",
                   "privateNote": "private note"}
 
@@ -333,8 +339,10 @@ class _Batch:
         urls = op.get("urls") or []
         if not isinstance(urls, list):
             raise EditError("urls must be a list")
-        for url in urls:
+        labels: list[str] = []  # each item's place in the op, for a refusal
+        for position, url in enumerate(urls):
             items.append({"url": _text(url, "each url")})
+            labels.append(f"urls[{position}]")
         raw_images = op.get("images") or []
         if not isinstance(raw_images, list):
             raise EditError("images must be a list of {url, ...}")
@@ -347,6 +355,7 @@ class _Batch:
             if raw.get("id") is not None and (not isinstance(raw["id"], str) or not _ID_RE.fullmatch(raw["id"])):
                 raise EditError("an added image's id must be 1 to 64 letters, digits, - or _")
             items.append(dict(raw))
+            labels.append(f"images[{len(labels) - len(urls)}].url")
         if not items:
             raise EditError("add needs urls or images")
         for item in items:
@@ -364,6 +373,16 @@ class _Batch:
 
         on_board = {str(img.get("url")) for img in self.images}
         ids = {str(img.get("id")) for img in self.images}
+        # Only Nebula's own files (services/stored_image_refs.py), named as
+        # this op names them; a url the board already holds isn't checked
+        # again. The store checks every write once more (_normalize_images).
+        from services.stored_image_refs import board_image_problem
+
+        held = {url.strip() for url in on_board}
+        for item, label in zip(items, labels):
+            refused = None if item["url"].strip() in held else board_image_problem(item["url"].strip(), label)
+            if refused:
+                raise EditError(refused)
         fresh: list[dict[str, Any]] = []
         skipped = 0
         for item in items:
@@ -542,6 +561,15 @@ class _Batch:
                 raise EditError(f"privateNote is longer than {PRIVATE_NOTE_LIMIT} characters")
             changed |= self.set(img, "privateNote", text)
         return {"changed": changed}
+
+    def op_cover(self, op: dict[str, Any]) -> dict[str, Any]:
+        """The image the board opens on (its thumbnail), or null for #1. A
+        pick, not a reorder: ``images`` and every number stay as they are."""
+        _keys(op, ("image",))
+        if "image" not in op:
+            raise EditError("cover needs image: its number or id, or null to open the board on #1 again")
+        image_id = None if op["image"] is None else self.image_id(op["image"])
+        return {"changed": self.set(self.board, "coverImageId", image_id)}
 
     def _rect(self, op: dict[str, Any], label: str) -> tuple[int, int, int, int] | None:
         raw = op.get("rect") if op.get("rect") is not None else (
@@ -727,6 +755,12 @@ class _Batch:
                 continue
             if item["part"] == "settings":
                 outcome = self._restore_settings(item, skipped)
+            elif (refused := self._not_nebulas(item)) is not None:
+                # Putting back an image that isn't one of Nebula's files (an
+                # old board's outside link, or a made-up slice) would store
+                # it again: left off, saying why; the rest goes back.
+                skipped.append(self._skip_report(item, refused))
+                continue
             else:
                 outcome = self._restore(item)
                 if outcome == "skipped":
@@ -841,6 +875,10 @@ class _Batch:
                 report["number"] = self.number(img)
             elif image_id in self.numbers:
                 report["number"] = self.numbers.index(image_id) + 1
+            elif item["part"] == "image" and isinstance(item.get("index"), int) and not isinstance(item["index"], bool):
+                # Gone before this batch (an undo of its removal): the number
+                # it had, which the slice keeps as its place.
+                report["number"] = item["index"] + 1
             label = f"#{report['number']}" if "number" in report else "An image"
         else:
             report["frame"] = item.get("frame")
@@ -848,6 +886,23 @@ class _Batch:
         report["reason"] = reason
         report["message"] = f"{label} {reason}, left as is"
         return report
+
+    def _not_nebulas(self, item: dict[str, Any]) -> str | None:
+        """Why an image slice can't go back (its url isn't one of Nebula's
+        files and the board doesn't hold it now), or None. As every other
+        board write (services/stored_image_refs.py): a url the board holds
+        isn't checked again."""
+        from services.stored_image_refs import board_image_problem, is_outside_link
+
+        before = item.get("before")
+        if item["part"] != "image" or not isinstance(before, dict):
+            return None
+        url = str(before.get("url") or "").strip()
+        if url in {str(img.get("url") or "").strip() for img in self.images}:
+            return None
+        if board_image_problem(url, "url") is None:
+            return None
+        return "is an image link from outside Nebula" if is_outside_link(url) else "isn't one of Nebula's own files"
 
     def _restore(self, item: dict[str, Any]) -> str:
         """Put one slice back: "applied", "unchanged" (already as it was) or "skipped"."""
@@ -1010,6 +1065,9 @@ def _check_fields_slice(item: dict[str, Any], label: str) -> None:
                 if not isinstance(value, str):
                     raise ValueError("is the brief's text (\"\" for none)")
                 brief.normalize_override_text(value)
+            if key == "coverImageId" and value is not None and (not isinstance(value, str)
+                                                               or not _ID_RE.fullmatch(value)):
+                raise ValueError("is an image's id, or null for no cover")
         except EditError:
             raise
         except ValueError as exc:
@@ -1091,7 +1149,8 @@ def diff(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
     """What changed from ``before`` to ``after``: the slices that undo it,
     the ids it touched and what the journal says (kinds and the images
     named). Images, their cards, the frames and the board's own fields (a
-    ``fields`` slice); of those, only the board's notes are journaled."""
+    ``fields`` slice); ``fields`` names the board fields that changed, in
+    JOURNAL_FIELDS order, for the ``board.fields`` event (``fields_entry``)."""
     old, new = _images_by_id(before), _images_by_id(after)
     slices: list[dict[str, Any]] = []
     touched_images: list[str] = []
@@ -1159,15 +1218,20 @@ def diff(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
         touched_frames.append(frame_id)
     if touched_frames:
         kinds.setdefault("frame", [])
-    if before.get("notes") != after.get("notes") and "notes" in after:
-        kinds.setdefault("noted", [])
+    was_cover, cover = field_value(before, "coverImageId"), field_value(after, "coverImageId")
+    if was_cover != cover:
+        # The journal names the new cover, or the one that went.
+        note("cover", str(cover or was_cover))
+        if cover and was_cover and str(was_cover) not in touched_images:
+            touched_images.append(str(was_cover))
     fields = fields_slice(before, after)
     if fields is not None:
         slices.append(fields)
+    changed_fields = [key for key in JOURNAL_FIELDS if fields is not None and key in fields["expect"]]
 
     slices.sort(key=_phase)
     return {"slices": slices, "touched": {"images": touched_images, "frames": touched_frames, "looks": []},
-            "kinds": kinds, "private": private}
+            "kinds": kinds, "private": private, "fields": changed_fields}
 
 
 def holds_private_note(undo: Any) -> bool:
@@ -1199,7 +1263,7 @@ def steering(board: dict[str, Any]) -> list[tuple[Any, ...]]:
 # -- the journal's words ----------------------------------------------------------
 
 # One event per batch: the kind of the most telling change, the rest in data.kinds.
-KIND_ORDER = ("added", "removed", "frame", "grouped", "setAside", "resized", "noted", "moved")
+KIND_ORDER = ("added", "removed", "frame", "grouped", "setAside", "resized", "noted", "moved", "cover")
 
 
 # A board's name in a summary is cut to this many characters.
@@ -1222,9 +1286,10 @@ def board_where(board: Mapping[str, Any] | None, *fallbacks: Mapping[str, Any] |
 
 
 def journal_entry(changes: dict[str, Any], before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any] | None:
-    """The journal event for a change (``diff``'s), or None when nothing worth
-    journaling changed (a move under 8 px, a rename). Never any note text:
-    a private note changed is "private note changed"."""
+    """The journal event for a change to the board's images, cards or frames
+    (``diff``'s), or None when nothing of those worth journaling changed (a
+    move under 8 px; the board's own fields are ``fields_entry``'s). Never
+    any note text: a private note changed is "private note changed"."""
     kinds = [kind for kind in KIND_ORDER if kind in changes["kinds"]]
     if not kinds:
         return None
@@ -1238,8 +1303,12 @@ def journal_entry(changes: dict[str, Any], before: dict[str, Any], after: dict[s
         return None if index is None else index + 1
 
     refs = [{"number": number(image_id), "id": image_id} for image_id in named]
-    listed = _listed([f"#{ref['number']}" for ref in refs if ref["number"]])
     kind = kinds[0]
+    # A cover picked with another change is said on its own ("made #2 the
+    # cover"), so its image isn't listed as part of that change.
+    others = {image_id for k in kinds if k != "cover" for image_id in changes["kinds"][k]}
+    listed = _listed([f"#{ref['number']}" for ref in refs
+                      if ref["number"] and (kind == "cover" or ref["id"] in others)])
     where = board_where(after, before)
     if kind == "added":
         summary = f"added {listed} to {where}"
@@ -1256,11 +1325,11 @@ def journal_entry(changes: dict[str, Any], before: dict[str, Any], after: dict[s
         summary = f"{verb} {_listed([f'#{number(i)}' for i in ids])} on {where}"
     elif kind == "resized":
         summary = f"resized {listed} on {where}"
+    elif kind == "cover":
+        summary = cover_words(after, where)
     elif kind == "noted":
         noted = changes["kinds"]["noted"]
-        if not noted:
-            summary = f"changed the notes of {where}"
-        elif all(image_id in changes["private"] for image_id in noted):
+        if all(image_id in changes["private"] for image_id in noted):
             summary = f"private note changed on {_listed([f'#{number(i)}' for i in noted])} on {where}"
         else:
             summary = f"changed the notes on {_listed([f'#{number(i)}' for i in noted])} on {where}"
@@ -1270,6 +1339,61 @@ def journal_entry(changes: dict[str, Any], before: dict[str, Any], after: dict[s
         summary += " (private note changed)"
     return {"kind": f"board.{kind}", "kinds": [f"board.{k}" for k in kinds], "refs": refs[:50],
             "summary": summary}
+
+
+def field_label(key: str) -> str:
+    """A board field as a sentence names it mid-line: "Direction", "the
+    Avoid list", "Send notes to generators" (FIELD_LABELS, lower-cased "The")."""
+    label = FIELD_LABELS.get(key, key)
+    return "the " + label[4:] if label.startswith("The ") else label
+
+
+def listed_words(words: list[str]) -> str:
+    """"a", "a and b", "a, b and c"."""
+    return words[0] if len(words) == 1 else ", ".join(words[:-1]) + " and " + words[-1]
+
+
+# A ``board.fields`` summary names this many fields, then "and N more".
+MAX_SUMMARY_FIELDS = 4
+
+
+def fields_entry(changes: Mapping[str, Any], before: Mapping[str, Any],
+                 after: Mapping[str, Any]) -> dict[str, Any] | None:
+    """The ``board.fields`` journal event for a change (``diff``'s): the
+    board fields that changed, by name, or None when none did. Never a
+    value, so no Direction, Avoid or notes text, no colour, no strength and
+    no switch's on or off (Justin's Q91: "the field names but none of your
+    text"): "changed Direction and the Avoid list on board Dusk"."""
+    fields = [key for key in JOURNAL_FIELDS if key in (changes.get("fields") or ())]
+    if not fields:
+        return None
+    words = [field_label(key) for key in fields]
+    if len(words) > MAX_SUMMARY_FIELDS:
+        words = [*words[:MAX_SUMMARY_FIELDS - 1], f"{len(words) - MAX_SUMMARY_FIELDS + 1} more fields"]
+    return {"kind": "board.fields", "fields": fields,
+            "summary": f"changed {listed_words(words)} on {board_where(dict(after), dict(before))}"}
+
+
+def journal_entries(changes: dict[str, Any], before: dict[str, Any], after: dict[str, Any]) -> list[dict[str, Any]]:
+    """Every journal event for one board write, in order: the images, cards
+    and frames (``journal_entry``), then the board's own fields
+    (``fields_entry``). Empty when the write changed nothing worth saying."""
+    return [entry for entry in (journal_entry(changes, before, after), fields_entry(changes, before, after))
+            if entry is not None]
+
+
+def cover_words(after: dict[str, Any], where: str = "") -> str:
+    """A cover change in the journal's words: "made #3 the cover of board
+    Dusk", "set the cover of board Dusk back to #1" (no cover chosen now).
+    Without ``where``, the short form the Agent log adds to another change:
+    "made #3 the cover", "the cover is #1 again"."""
+    chosen = field_value(after, "coverImageId")
+    index = _images_by_id(after).get(str(chosen), (None, None))[0] if chosen else None
+    if index is not None:
+        return f"made #{index + 1} the cover of {where}" if where else f"made #{index + 1} the cover"
+    if not where:
+        return "the cover is #1 again" if after.get("images") else "the board has no cover now"
+    return f"set the cover of {where} back to #1" if after.get("images") else f"cleared the cover of {where}"
 
 
 def _listed(items: list[str], limit: int = 6) -> str:
@@ -1299,6 +1423,9 @@ def apply_edits(board: dict[str, Any], ops: Any, *, by: str, now: str | None = N
     staged["frames"] = layout.frames_of(staged)
     batch = _Batch(staged, by=by, now=now or _now_iso())
     applied: list[dict[str, Any]] = []
+    # The batch's last cover pick (op index, image id or None): an earlier
+    # pick it replaced or cleared doesn't have to stay on the board.
+    last_cover: tuple[int, str | None] | None = None
     for index, op in enumerate(ops):
         name = op.get("op") if isinstance(op, dict) else None
         try:
@@ -1306,15 +1433,30 @@ def apply_edits(board: dict[str, Any], ops: Any, *, by: str, now: str | None = N
         except EditError as exc:
             raise EditError(f"ops[{index}] ({str(name)[:40]}): {exc}") from None
         applied.append({"index": index, **entry})
+        if name == "cover":
+            chosen = staged.get("coverImageId")
+            last_cover = (index, str(chosen) if chosen else None)
+    # A batch can't both pick an image as the cover and take it off (the CLI
+    # and MCP refuse the same call before sending it).
+    left = {str(img.get("id")) for img in staged["images"]}
+    if last_cover is not None and last_cover[1] is not None:
+        index, image_id = last_cover
+        if image_id not in left:
+            name = f"#{batch.numbers.index(image_id) + 1}" if image_id in batch.numbers else repr(image_id)
+            raise EditError(f"ops[{index}] (cover): image {name} can't be the cover and come off the board "
+                            "in one batch: pick one")
     try:
         layout.check_frames(staged["frames"])
         layout.check_image_placements(staged["images"], {f["id"] for f in staged["frames"]})
     except ValueError as exc:
         raise EditError(f"the board after these ops: {exc}") from None
+    # A cover whose image left the board goes (it opens on #1 again), before
+    # the diff, so the batch's undo brings the cover back with the image.
+    from services.moodboard_store import follow_cover
+    follow_cover(staged)
     changes = diff(board, staged)
     changed = bool(changes["slices"])
     if changed:
-        staged["thumbnail"] = staged["images"][0]["url"] if staged["images"] else ""
         if steering(board) != steering(staged) or any(board.get(key) != staged.get(key) for key in STEERING_FIELDS):
             staged["analysis"] = None
     undo = {"ops": [{"op": "restore", "slices": changes["slices"]}]} if changed else {"ops": []}
@@ -1325,6 +1467,7 @@ def apply_edits(board: dict[str, Any], ops: Any, *, by: str, now: str | None = N
                       touched=changes["touched"], changes=changes)
 
 
-__all__ = ["EditError", "EditResult", "FIELD_KEYS", "MAX_OPS", "OPS", "UNDO_BROADCAST_LIMIT", "apply_edits",
-           "board_where", "clean_say", "diff", "field_value", "fields_slice", "holds_private_note", "journal_entry",
+__all__ = ["EditError", "EditResult", "FIELD_KEYS", "JOURNAL_FIELDS", "MAX_OPS", "OPS", "UNDO_BROADCAST_LIMIT",
+           "apply_edits", "board_where", "clean_say", "cover_words", "diff", "field_label", "field_value",
+           "fields_entry", "fields_slice", "holds_private_note", "journal_entries", "journal_entry", "listed_words",
            "parse_ops", "steering"]

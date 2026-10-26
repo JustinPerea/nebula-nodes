@@ -1,0 +1,431 @@
+# 2026-10-21 — The Updates corner on every screen, and "Closed: Nebula restarted"
+
+Branch `feat/updates-corner-every-screen`, from main `296e9199` (after #148). Uncommitted (the coordinator commits). No paid provider call, no package installed.
+
+- **What changed and why.**
+  - **Q107**, Justin: "a) Show it on every screen, with the open project's Updates (a small follow-up PR)." The Updates corner used to mount only on the canvas. It now mounts once, at App level (`AppAgentNotes`, still a deferred chunk). It shows on the canvas, Projects, Creator Studio, Moodboard Studio, Character, Cinema, Remotion's Composition, the Video editor and the Commons, always with the open project's list. Everything comes with it: unread count, cards, the list, Review and its outcomes, and the live socket ops. One mount means the count and an open list carry across a screen switch.
+  - **Q108**, Justin: "a) "Closed: Nebula restarted" (the agent can ask again)." When a moodboard or Commons proposal is open and Nebula restarts, the proposal is lost from memory. Its Update used to settle as "Expired". It now settles as **"Closed: Nebula restarted"**: `asset_proposals.RESTART_OUTCOME`, set in `main._settle_asset_updates`. That function runs on `list_notes`, on a tab's socket connect and on a project switch. `nebula notes` prints `[Closed: Nebula restarted]`.
+  - A proposal that really timed out (15 minutes) still reads "Expired". A `get_proposal` on a gone id now answers "decided proposals are kept for 30 minutes, and a restart of Nebula closes open ones: propose again if you still want it". This applies to both canvas and asset ids.
+  - **Agent support.** These now say the corner is on every screen and name the restart outcome, with "ask again":
+    - the `post_note`, `list_notes`, `propose_asset_change` and `get_proposal` docstrings;
+    - docs/MCP-SETUP.md (three places);
+    - skills/nebula/SKILL.md.
+  - No new tool: Review is a person-only click, and agents already read the outcome through `list_notes` / `nebula notes`. The plan (`docs/moodboard-canvas-plan.md` §5.9) has a Q107 line.
+- **Decisions not in the spec.**
+  - **No project open: no corner** (on Projects before any project was opened, or after the open project is deleted). Updates are kept with a project, so there is no list to show.
+  - **No corner on the brand showcase** (`#brand`). It is a demo page, not a product screen.
+  - **Where it sits off the canvas.** Each screen's header keeps an `aria-hidden` slot (`UpdatesSlot`), and the chip centres on it. The card and list drop below the header.
+    - Projects: the slot sits just before the Settings gear.
+    - Studios and the Commons: the slot is pinned in the header's own right padding (`workspace-header.css`: `padding-right` = gutter + `--agent-notes-chip-w` + column gap; the slot is `position: absolute` on the first row). The header's controls wrap inside the rest of the row.
+    - The slot takes room only while the corner shows (`body.agent-notes-shown`).
+    - The canvas keeps its own corner and the pill gets no slot (`updatesSlot={false}`).
+    - New tokens: `--agent-notes-chip-w`, `--agent-notes-slot-h`, `--workspace-header-pad-x`, `--workspace-header-gap-x`. No pixel nudges.
+  - **Layer.** The studios sit on the workspace layer (50), above the canvas corner's 46. Off the canvas, the chip, card and list use `--sr-layer-workspace-overlay` (55), still below modals (60).
+  - **Review from any screen.**
+    - A canvas Update's "Show on canvas" first goes to the canvas the way that screen's Back does (`lib/goToCanvas.ts`; from Projects it opens the open project first). It then outlines and frames once the canvas has drawn the node.
+    - An asset proposal's Review goes to the Projects strip, to Moodboard Studio on that board, or to the Commons detail, from wherever the person is (`assetProposalReview` opens the workspace first when on Projects).
+    - The list closes once Review succeeds, so it doesn't sit over the destination. A failing Review keeps it open with its message.
+  - **Off the canvas the list's footer names the project** ("kept with Harbor"), since the screen itself may not.
+  - **Keyboard.** The chip and card belong to both shortcut scopes (`studioKeys.isStudioShortcutTarget`, `canvasShortcutScope`). With focus on the chip, Moodboard Studio's Cmd+Z still undoes, and the corner never `preventDefault`s it.
+  - **Canvas proposals (propose_change) have no restart case of their own.** They post no Update (`post_nebula` has no callers), so the only change is their 404 wording.
+- **Tradeoffs.**
+  - On the Commons at 1280 wide the toolbar now wraps to two rows (header 86 px instead of 49 px). Its controls had filled the row exactly before the chip took 112+ px. At 1440 it stays one row.
+  - The corner is a deferred chunk, so on a cold load it appears a moment after the screen.
+- **Surprises.**
+  - **Live check at 1280, the Commons.** The first version's slot was a flex item, so it wrapped onto its own line, and the chip landed over "Worker stopped · Start". In Cinema, Remotion and the Video editor (no actions) the slot sat right after the title. Both are fixed by the header-padding rule above (test first).
+  - **Live check.**
+    - The chip was under the studios (46 < 50): fixed with the overlay layer.
+    - The chip missed a header that mounted after it: fixed with the `nebula:updates-slot` event fired by `UpdatesSlot` on mount, resize and unmount.
+    - On a scrolled Projects page the chip went off-screen: it now stays at the gutter, and the corner re-places on any scroll.
+  - In the harness, the person token from `devserver.py --no-reload` under a pty gave 403s even to harness requests. I switched to a launcher that writes the token to a file, and requests then returned 200. The cause was not looked into.
+- **Tests (written first, seen failing).**
+  - **Backend: `tests/test_proposal_restart_outcome.py` (11 tests).** 9 failed first:
+    - the constant was missing;
+    - the restart closed as "Expired";
+    - the 404 wording didn't say "restart" / "propose again";
+    - the docstrings, MCP-SETUP and SKILL had no restart outcome and no "every screen".
+    - The 2 timed-out-stays-"Expired" tests passed by design.
+    - `test_asset_proposal_updates.py`'s restart test now expects the new outcome.
+  - **Frontend: `tests/AgentNotesEveryScreen.test.tsx` and `tests/App.updatesEveryScreen.test.tsx`.** 18 failed and 13 passed first. The failures:
+    - the hidden-without-a-project case;
+    - reserved only on the canvas;
+    - the Projects→Studio and Projects→Commons Reviews;
+    - both Show-from-elsewhere tests;
+    - the slot placement;
+    - Cmd+Z scope;
+    - 7 studios and Projects with no chip;
+    - "one corner across switches".
+  - **Later additions, each failing first:**
+    - list closes after Review (2);
+    - scrolled header (chip at -104 px);
+    - late-mounting slot (module missing);
+    - overlay z-index rule;
+    - header padding reservation (3 CSS + 7 App tests).
+  - The "kept with Harbor" test was written after its code, not first.
+  - `AgentNotesCorner.test.tsx` and `agentNotesLayoutCss.test.ts` were updated.
+  - The App test waits up to 10 s (test limit 20 s) for the lazy corner and studios. In the whole run under load (load average about 25) the 1 s default timed out on two studios.
+- **Live check.** Isolated backend on 8839 and Vite on 5839 (`VITE_NEBULA_BACKEND_PORT=8839`), with a temp HOME, every NEBULA_* root in scratch and no keys. One MCP stdio agent named "Claude Code". Headless Chromium with 8000-8010 and 5173 blocked (CDP plus a dead proxy).
+  - **Placement.** Chip rect against every visible control, at 1440x900 and 1280x800, on Projects, the canvas, Creator Studio, Moodboard Studio, the Commons, Character, Cinema, Remotion and the Video editor: **0 overlaps** on all 18, and the chip is the top element at its centre. At 1280 the studios put it at x 1121-1266, y 4-44, and the canvas at 1119-1264, y 24-64.
+  - **Live notes.** The agent posted while the person was on Projects, then Moodboard Studio, then the Commons (1280). Each card showed in about 0.5 s, and the count went 0→1→2→3 unread.
+  - **Review.**
+    - Projects→Moodboard Studio on the board (strip shown);
+    - Commons→Studio;
+    - Studio→Projects strip;
+    - canvas→Commons detail;
+    - Accept from the strip gave "Accepted: the cover changed";
+    - "Show on canvas" from the Commons revealed n1.
+  - **Restart.** I restarted the isolated backend with a cover proposal open. After the tab reconnected, its Update read "Closed: Nebula restarted" live. `list_notes` gave the same outcome (resolvedBy system), and `get_proposal` returned the new 404 text.
+  - **Blocked requests.** 10, all in the deliberate canary probe (5 browser launches × 8000 and 5173). **0 during the run.** Proxy failures during the run: Google Fonts and `localhost:8839` health only. Canary hits: 0.
+  - **Console.** A fresh load visiting every screen showed no errors. Early in the run, while I was editing the corner under HMR, React logged "Lazy element type must resolve to a class or function" three times. I couldn't reproduce it on fresh loads.
+- **Gates (2026-10-21, load average 20-30 from other sessions).**
+  - **Backend whole suite** (iso.sh): 1 failed, 9405 passed, 61 skipped in 38:39. The failure was `test_agent_process.py::test_terminate_agent_process_tree_kills_setsid_grandchild` (process-tree timing); alone, its file passes 4/4. A first attempt was stopped by its 20-minute guard at 35%.
+  - **Frontend vitest whole run:** 93 failed, 3847 passed (35 files). 79 of the failures were "Test timed out", and the backend suite was running at the same time.
+    - Rerun of those 35 files together: 12 failed, 489 passed.
+    - `App.updatesEveryScreen` (2 studios, 1 s findBy) passes 11/11 with its lazy-chunk waits.
+    - Each of the other 8 files passes alone: ChatPanel.personal 12, CommandPalette 3, ConnectionPopup 16, GraphFileActions 25, NodeLibrary 20, Settings 68, ModelDiscovery.integration 4, ResultsGallery 8.
+  - `tsc -b` rc 0, and `npm run -s lint` rc 0.
+  - `vite build` plus the budget passed: **511,253 bytes raw** / 149,457 gzip (747 under 512,000). The corner stays lazy; the eager parts are `UpdatesSlot` and the header class.
+- **Review (two confirmed findings, fixed, tests first).**
+  - **The corner sat on top of an open chat in the studios.** A chat left open on the canvas stays mounted in the studios. Off the canvas the docked chat went back to the top gutter (x 924-1264, y 16 at 1280x800). That put the chip over the chat's header buttons, and the cards and the list over its body, all on layer 55 with the corner painted later. Fixed in two parts:
+    - The corner writes the line it drops from as `--agent-notes-drop-top` on the root. A new layouts.css rule (`body.agent-notes-shown:not(.agent-notes-reserved) .workspace-overlays--studio .chat-panel`) starts the docked chat there, below the header, just as it starts below the chip on the canvas. Before the corner has placed itself, the canvas's chip line is the fallback. The canvas clears the line, and so does the corner going away. The clear is a layout-effect cleanup: a passive one ran after a remounted corner (a project switch) had already set the line, and left it empty. The new test caught that.
+    - Off the canvas, a card or the list that would meet the chat (docked or dragged free) now sits just left of it (`cornerRight` with the slot's right edge). The chip stays in its header slot, because moving it would put it over the screen's own controls.
+    - Tests that failed first: two `AgentNotesEveryScreen` tests (the card's `--an-right` was 14 and needed at least 364; the drop line was unset) and one `agentNotesLayoutCss` test (the rule was missing). A control test (no chat, so the card stays at its slot) passed before and after.
+    - Live check, 8839/5839, chat open. In Moodboard Studio and Create at 1280x800, and Moodboard Studio, Create and Character at 1440x900, the docked chat starts at y 57-60 (below the 49 px header). The chip is at 1121-1266 / 1281-1426, the card at 556-916 / 682-1042 and the list left of the chat: 0 overlaps. The Commons shows no chat. A chat dragged free to (900, 20) at 1280: the card and list moved left of it (532-892). The chip, still in its slot, overlaps that free chat. That is the agreed tradeoff: the person dragged the chat over the header. Back on the canvas the line clears and the chat docks at 72 as before. Blocked requests during the run: 0 (2 in the deliberate canary probe). Canary hits: 0. Proxy failures: Google Fonts only.
+  - **Agent docs sent a board's Updates where nobody sees them.** The words now say "every screen ... Moodboard Studio". But a post_note with `board` lands in the board's list, and no screen shows that list (the corner shows only the open project's), not even Moodboard Studio on that board. This gap existed before this PR. Docs-only fix, as the reviewer suggested: the `post_note` `board` bullet, the `list_notes` docstring, docs/MCP-SETUP.md (the tool list and the Updates section, plus a comment on the `--board` example), skills/nebula/SKILL.md and `nebula note`'s help and `--board` flag now say a board's updates are "not on screen yet", and to post without `board` to reach the person. Test that failed first: `test_agents_are_told_a_boards_updates_are_not_on_screen_yet`. Showing a board's list in Moodboard Studio is a bigger change and needs Justin's call (open items).
+  - **Surprise.** In the whole backend run, `test_first_turn_cli.py::test_skill_examples_parse` caught my first SKILL.md wording. It had split `` `nebula notes --board` `` across a line break, and the bare `--board` with no argument didn't parse. I rewrapped it as `nebula notes --board <name>` and gave the same argument to MCP-SETUP and the CLI help.
+  - **Gates after the review fixes (load average about 25).**
+    - Backend whole suite: 1 failed, 9406 passed, 61 skipped (25:32). The one failure was that SKILL example. After the fix, its file plus every test file that reads the agent docs passed: 400 passed (13 files). I didn't rerun the whole suite.
+    - Frontend whole `vitest run`: 25 failed, 3919 passed (10 of 333 files failed). Each of those 10 files passes alone: CommonsDetail 1, ChatPanel.personal 12, CommandPalette 3, ModelDiscovery.integration 4, ModelPicker 11, ResultsGallery 8, ConnectionPopup 16, GraphFileActions 25, NodeLibrary 20, Settings 68. 18 of the 25 failures were "Test timed out".
+    - `tsc -b` rc 0, and `npm run -s lint` rc 0.
+    - `vite build` and the budget passed at 511,253 bytes raw / 149,449 gzip. The raw size is the same as before the review fixes.
+- **Open items.**
+  - A board's Updates (post_note with `board`) are not shown on any screen. Showing the open board's list in Moodboard Studio next to the project's needs Justin to decide where it lives.
+  - A chat dragged free over a studio header sits under the chip (both on layer 55, the corner painted later). The card and the list keep clear of it.
+  - A canvas proposal made while the person is on another screen posts no Update, so nothing tells them. Canvas proposals have never posted one.
+  - Show/Review's navigation can leave a Commons blind-labeling draft or a Character draft. This is the same as #149's Review: the Commons Back is disabled while labeling is dirty, but a programmatic switch isn't.
+  - A transient card can cover page content under it, such as Projects' New project button, for about 4 s.
+  - When Review starts on Moodboard Studio for that same board, the strip doesn't take focus.
+  - The Commons toolbar wraps to two rows at 1280 (above).
+
+## Header fix (GM review)
+
+- **What changed and why.** GM - Design, relaying Justin's design, rejected the tradeoff above: "treat the two-row wrap at 1280 as a defect, not something to accept". 1280 is a common laptop width, and a taller toolbar pushes the canvas down on the screens with the least room. GM's fixes, in order: (1) below about 1360 px the chip shrinks to its author dots and the count, and the header reserves that compact width; (2) only if a header still wraps at 1280 with the compact chip, that header's lowest-priority items move into an overflow menu. Q107 asked to show the corner without harming each screen, so this is part of the approved build.
+  - **(1) Compact chip.** `@media (max-width: 1359px)` hides `.agent-notes-chip__label` (agentNotes.css). The chip keeps its `aria-label` ("Updates, 1 unread"), both dots, the count, its 40 px height and the list it opens. layouts.css now has `--agent-notes-chip-w-full: 145px` and `--agent-notes-chip-w-compact: 85px` (both measured live). `--agent-notes-chip-w` is the full width by default and the compact one under the same media query. The slot and the header padding read only that one token. The corner still writes the chip's measured width into it (a two-digit count widens the chip and the slot). It now measures again on a window resize, because crossing the breakpoint changes the chip's width without a re-render.
+  - **(2) The Commons folds two tabs.** With the compact chip the Commons toolbar still needed 1346 px for one row, so it still wrapped at 1280. Blind labeling and Settings now fold into a **More** menu. This happens below 1440 px and only while the chip shows (`body.agent-notes-shown`, commons.css). They are the least-used sections: Blind labeling is an occasional evaluation session and Settings is set once. All, Inbox and Agent review, Add to / Add, and the worker line are what each visit acts on, so they stay. More uses the app's existing toolbar menu. AssetMoveMenu's popover is now exported as `ToolbarMenuPopover`, with an optional `checked` that turns items into `menuitemradio`. The keyboard is the same: arrows, Home/End, Escape or Tab closes and returns focus, and a press outside closes. While a folded section is open, More shows as the active tab and is named "More: Settings".
+- **Decisions not in the spec.**
+  - **Two breakpoints, both from measurement.** The chip is compact below 1360, as GM said. The Commons folds below 1440, because at 1366 even the full chip wrapped it: it needs 1406 px with all five tabs. With the fold, the Commons header takes about 1 px less than main's below 1360. At 1366 to 1439 it has 101 px to spare.
+  - **The canvas follows the same rule.** There is one chip, carried across screens, so at a given window width it looks the same everywhere. Otherwise the word would appear and vanish on each canvas↔studio switch. The canvas corner's placement is unchanged.
+  - The card and the list are right-aligned to the slot's right edge, so they line up with the chip at both sizes. Live at 1280: chip right edge 1266, list right edge 1266, list top 57 below the 49 px header.
+  - The old token value (112 px) was stale. The chip has measured 145 px since the count and the dots were added. Only the measured inline value had been in use.
+- **Tradeoffs.**
+  - Below 1440, with a project open, Blind labeling and Settings are one click further away, behind More.
+  - At 1440 and up the Commons keeps 34 px to spare with the seeded worker line ("Worker stopped · 1 queued"). A much longer status, such as "Library analysis paused until reference labels are sealed", can still wrap there. On main that status wraps even at 1280.
+  - The first-load entry grew by 133 bytes (the shared menu is eager through AssetsPanel).
+- **Surprises.**
+  - Calling `projectStore.goHome()` inside a Puppeteer `evaluate` gave "Promise was collected". Calling it from a `setTimeout` worked. This was a harness issue only.
+- **Tests (written first, seen failing).**
+  - `agentNotesLayoutCss.test.ts`: 5 new tests, all 5 failed first.
+    - The tokens were missing (`--agent-notes-chip-w-full` was null).
+    - `@media (max-width: 1359px)` was missing in layouts.css and in agentNotes.css.
+    - commons.css had no `.commons-tabs__more` rule and no `@media (max-width: 1439px)`.
+    - One test resolves the token at 1280/1359/1366/1440/1920 (85/85/145/145/145) and checks that the slot and the padding read it.
+  - `AgentNotesEveryScreen.test.tsx`, "measures the chip again on a window resize": failed first with `expected '145px' to be '85px'`. A guard that the compact chip keeps its name, two dots and count passed before and after (the label is CSS-hidden).
+  - New `commonsTabsOverflow.test.tsx`, 3 tests, all failed first ("Unable to find ... button ... /^More/"). They cover which tabs fold, More outside the tablist, the radio menu, focus on the first item, ArrowDown, choosing Settings (the menu closes, focus returns, the tab is selected, More becomes "More: Settings"), and Escape.
+- **Live check.** Isolated backend 8839 and Vite 5839 (`VITE_NEBULA_BACKEND_PORT=8839`), temp HOME, every NEBULA_* root in scratch, no keys. One real MCP stdio agent (NEBULA_AGENT_NAME "Claude Code") posted two Updates through `post_note`, so the chip showed "Updates, 1 unread". Main's frontend came from `git archive origin/main frontend` (d128fb9b; no frontend change since this branch's base). It ran on the same ports, one Vite at a time.
+  - Header height in px, main / before this fix / after. Chip width after. Overlaps: chip rect against every text or control in the header. The chip was the top element at its centre in every after row.
+
+    | Screen | 1280x800 | 1366x768 | 1440x900 | 1920x1080 |
+    |---|---|---|---|---|
+    | Projects | 72 / 72 / 72 | 72 / 72 / 72 | 72 / 72 / 72 | 72 / 72 / 72 |
+    | Creator Studio | 49 / 49 / 49 | 49 / 49 / 49 | 49 / 49 / 49 | 49 / 49 / 49 |
+    | Moodboard Studio | 49 / 49 / 49 | 49 / 49 / 49 | 49 / 49 / 49 | 49 / 49 / 49 |
+    | Character | 49 / 49 / 49 | 49 / 49 / 49 | 49 / 49 / 49 | 49 / 49 / 49 |
+    | Cinema | 49 / 49 / 49 | 49 / 49 / 49 | 49 / 49 / 49 | 49 / 49 / 49 |
+    | Remotion | 49 / 49 / 49 | 49 / 49 / 49 | 49 / 49 / 49 | 49 / 49 / 49 |
+    | Video editor | 51 / 51 / 51 | 51 / 51 / 51 | 51 / 51 / 51 | 51 / 51 / 51 |
+    | Commons | 49 / **86** / 49 | 49 / **86** / 49 | 49 / 49 / 49 | 49 / 49 / 49 |
+    | Chip width after | 85 | 145 | 145 | 145 |
+    | Overlaps after | 0 | 0 | 0 | 0 |
+
+  - **The Commons by size.** At 1280 and 1366 it shows All, Inbox, Agent review and More. At 1440 it shows all five tabs and no More. More opened by keyboard (Enter) under its button (x 436-636, y 43), with focus on "Blind labeling". ArrowDown then Enter opened Settings: the header stayed 49, focus went back to "More: Settings", and the menu closed.
+  - Screenshots are in the scratch dir `updates-chip/shots/`: `final-{commons,create,moodboard-editor}-{1280,1440}.png`, `commons-1280-more-open.png` and `after-canvas-1280.png`.
+  - **Blocked requests.** 4 in total, all in the deliberate canary probe (8000 and 5173). 0 during the run, and canary hits 0. Proxy failures during the run: only `localhost:8839/api/health` (the page's discovery; only 127.0.0.1 is bypassed). Console: the usual 403 on `PUT /api/settings` without the person link, and connection-refused while the Vite was switched to main's copy.
+- **Agents.** Nothing changes for agents. The chip, its name, the list and Review are the same, and the Commons sections are the same tabs behind one more click. No MCP tool, CLI command or doc describes the chip's label or the Commons toolbar layout.
+- **Gates (2026-10-21, load average about 11).**
+  - `tsc -b` rc 0, and `npm run -s lint` rc 0.
+  - `vite build` plus the budget passed: **511,386 bytes raw** / 149,574 gzip (614 under 512,000; +133 from the shared menu).
+  - Focused vitest: 15 files (agent-notes, layout CSS, App every-screen, the Commons files, AssetsPanel and studio drafts), **143 passed**.
+  - **Whole `vitest run`:** 28 failed, 3970 passed (10 of 337 files failed; 18 of the failures were "Test timed out"). The 10 files rerun together all passed (168): CommonsDetail, ChatPanel.personal, CommandPalette, ModelDiscovery.integration, ModelPicker, ResultsGallery, ConnectionPopup, GraphFileActions, NodeLibrary, Settings. These are the same load-sensitive files as in the earlier runs.
+  - **Backend whole suite** (iso.sh; no backend file changed): 1 failed, 9450 passed, 61 skipped in 22:45. The failure was `test_krea_mcp_server.py::test_stdio_bridge_process_connects_to_only_local_discovery_routes`, an anyio deadline on a subprocess under load. Alone, its file passes 5/5.
+- **Open items.**
+  - At 1440 and up, a long Commons worker status can still wrap the toolbar when main's wouldn't (above). Fixed in p157c (below).
+- **Review (three confirmed findings on the More fold, all fixed).**
+  - *Sighted people couldn't see which folded section was open.* More's menu now draws a check and bold text on the checked item (`asset-move.css`, `[role="menuitemradio"]` / `[aria-checked="true"]`). The Move menu never passes `checked`, so it looks the same as before. The reviewer also suggested putting the section's name on the button. I measured that live first: at 1280 there are 33 px to spare, "Settings ▾" needs 17 more and fits, but "Blind labeling ▾" needs 46 more and wraps the header to 86 px. So the button keeps "More", as the reviewer's fallback said. When More's menu is closed, the toolbar shows only that More is active. The menu and the panel show which section is open.
+  - *The tablist had no selected tab.* The open folded tab used to get `display: none`, which removed it from the accessibility tree. Now only the closed folded tabs are `display: none`. The open one is hidden on screen only (the clip pattern, `position: absolute`, 1 px), so the tablist still has one selected tab. While the toolbar folds, that tab gets `tabIndex=-1`, so Tab never lands on something invisible. CommonsView works out "folds" the same way the stylesheet does: `(max-width: 1439px)` plus `body.agent-notes-shown`, through `useSyncExternalStore`, a matchMedia listener and a body-class observer. With the chip hidden, no tab ever leaves the Tab order.
+  - *Focus fell to `<body>` when crossing 1440.* If More or a folded tab had focus when the window crossed the fold, focus now moves to whichever counterpart is on screen. Going wide, it moves to the open folded tab, or to Blind labeling when neither is open. Going narrow, it moves to More. The blur and the media change can arrive in either order, so a blur to nowhere keeps the mark for two frames. The move waits one frame and only takes focus from `<body>` or from these controls. The same applies when More's menu is open, which closes on resize: focus in the menu counts as More's.
+  - Tests first. `agentNotesLayoutCss.test.ts`: the fold test now needs the `:not(.commons-tab--active)` selector; a new test checks that the open folded tab is clipped rather than `display: none`; another new test checks the menu's check mark. All 3 failed first ("missing rule ..."). `commonsTabsOverflow.test.tsx` has 6 new tests with a matchMedia stub whose change event can fire either before or after the blur. Four failed first: the selected folded tab's tabIndex was 0 instead of -1, and three focus tests left focus on `<body>`. Two were guards and passed before and after: no tab leaves the Tab order without the chip, and focus elsewhere is left alone.
+  - Live, 8839/5839, the same harness with one real MCP agent ("Updates, 1 unread"). At 1280, with the keyboard, I chose More, then Settings: the header stayed 49, focus returned to "More: Settings", and the accessibility tree showed "All | Inbox | Agent review | Settings*". The menu showed ✓ and bold on Settings only. Shift+Tab from More went to Agent review, skipping the hidden tab. Widening to 1440 moved focus to the Settings tab, and narrowing to 1280 moved it back to More. With Blind labeling open and its menu open, widening closed the menu and focused the Blind labeling tab. Focus on Add stayed on Add across the fold. A new sweep of all 8 screens at 4 sizes matched main's header heights everywhere, with 0 overlaps and the chip on top in every row. Main's numbers come from the earlier sweep: origin/main is still d128fb9b and its frontend is the same. Blocked requests: 0 during the run, and 2 in the deliberate canary probe. Shots: `updates-chip/shots/review-*.png`.
+  - Nothing changes for agents.
+  - Gates after the review fixes:
+    - `tsc -b` rc 0, and lint rc 0.
+    - Build and budget passed: 511,386 bytes raw / 149,572 gzip. That is unchanged, because the Commons is a lazy chunk.
+    - Focused vitest: 28 files, 243 passed.
+    - Whole `vitest run`: 31 failed, 3975 passed. 10 of 337 files failed, with 21 "Test timed out". They were the same 10 load-sensitive files as before, and rerun alone all 10 passed (168).
+    - Backend whole suite (iso.sh, no backend file changed): 9451 passed, 61 skipped, 0 failed.
+
+## p157 fixes: See all actions off the canvas, the folded panels' heading, the chip's count (GM review)
+
+Same branch, on top of `acd0a0e2` (PR #157). Uncommitted. Files touched: `frontend/src/components/agent-notes/AgentNotesCorner.tsx`, `agentNotes.css`, `frontend/src/components/commons/CommonsSettings.tsx`, `CommonsEvaluation.tsx`, `frontend/src/styles/commons.css`, `commons-evaluation.css`, `layouts.css`, `frontend/tests/AgentNotesEveryScreen.test.tsx`, `agentNotesLayoutCss.test.ts`, the new `frontend/tests/commonsPanelHeadings.test.tsx`, `docs/moodboard-canvas-plan.md` (§5.9 chip line) and `docs/contracts/07-studios-and-resources.md` (the corner paragraph). No backend file, no package.
+
+- **What changed and why.** Still Justin's Q107 a: "Show it on every screen, with the open project's Updates." Two fixes come from GM - Design's review of the 1280 shots, and one is a bug the coordinator found.
+  - **"See all actions →" off the canvas (bug).** App mounts the Agent log only on the canvas. Off the canvas the link set `agentLogOpen` and focused `.agent-log__header`, which wasn't there. Nothing showed, and the log popped open later, when the person reached the canvas. Now, from Projects, a studio or the Commons, the link goes to the canvas first (`goToCanvas`, the way "Show on canvas" does). Once the log's header has mounted there (`whenReady`), it opens the log and focuses the header. `agentLogOpen` is set only then, on the canvas, so it is never left set with no log on screen. If the person moves on before the log mounts (3 s wait), nothing opens. A newer click wins over an older one that is still waiting. On the canvas it works as before. The link is still absent while the Agent log is switched off (Q38). The Agent log is still mounted only on the canvas. I grepped for other callers of `openAgentLog`, `agentLogOpen` and `.agent-log__header`: the corner's link is the only one (`AgentLog.tsx` only reads the flag and clears it on unmount).
+  - **The folded Commons panels get a heading (GM).** GM: "Put the open section's name as a heading at the top of its panel ("Settings", "Blind labeling"), set like the other section titles. Don't shorten "Blind labeling". The heading works at every width." Settings and Blind labeling now open with an h2 of the section's name, in full. It uses the Commons' section-title class (`.commons-heading`, 13 px, 700, `--sr-ink`), the same class as "Linked folders" and "Meter", so there is no new type scale. It shows at every width and from the tab or from More. The More button still reads "More". Its boxed active state and "More: Settings" name are unchanged.
+  - **The chip's count gets its own form, and the dots get a ring (GM).** GM: "the "1" is a lime circle the same size and colour as the "C" author dot ... Give the count its own form: plain number text, or a small neutral or orange pill with a clear gap after the dots. It should not share the author-dot palette ... A 1px ring in the chip's background colour around each dot would separate them." The count is now plain figures, with no fill and no circle: 12 px bold mono, tabular, in the chip's own ink (`--an-ink-bold`; muted 0 in `--an-faint`). It sits 4 px past the chip's 8 px gap, so there is a clear 12 px after the dots. This is the same at both widths. Each dot in the chip has `box-shadow: 0 0 0 1px var(--an-raised)`, the chip's background. The chip's name ("Updates, 3 unread") and the count's pop on a new update are unchanged.
+- **Decisions not in the spec.**
+  - **Neutral, not the orange accent.** The default agent colour is orange (`DEFAULT_AGENT_COLOR` #E8825A), close to the app's accent (#FF5A1F). An orange count would share the author-dot palette, which GM ruled out. I used plain text rather than a neutral pill, because any small filled shape still sits next to two filled circles. Plain figures can't be read as a person. Unread still stands out: the figures are bold white beside the muted "Updates", the dots light up, and the ring shows while a card is up.
+  - **A dimmed dot is now opaque.** "Ar half under C" came from `opacity: 0.42` on the dimmed reader dot: the "C" below showed through it and through its ring. The dim is now `filter: saturate(0.5) brightness(0.45)`, which looks about the same but is opaque, so the 1 px ring separates the two dots. The transition stays on the soft spring token. There is no new animation.
+  - **Heading levels.** The page's one h1 is "Commons" (the header), so the panel heading is an h2. Under it:
+    - Settings' four section titles went from h2 to h3. They look the same: same class.
+    - Blind labeling's own title "A fresh pair of eyes." was a second h1 on the page. It is now an h3 (`.evaluation-title`). Its steps ("Prepare the held-out set", "Reference 01", "What catches your eye?", ...) went from h2 to h3 (`.evaluation-step`), and its "Character" / "Keywords" headings from h3 to h4 (`.evaluation-subhead`).
+    - `commons-evaluation.css` keeps every size: measured live at 30 px / margin 10 for the title and 22 px / margin 18.26 for a step, as before.
+    - Agent review (`CommonsReview`, same stylesheet) keeps its own h1/h2: it isn't folded and wasn't in scope. That is an open item below.
+  - **One accessible name per panel.** There is no `role="tabpanel"` in the Commons today: the tabs have no `aria-controls`. Each folded panel is now a `<section aria-labelledby>` pointing at its heading, so its region is named "Settings" or "Blind labeling". Blind labeling's old `aria-label="Blind reference labeling"` was dropped, so the region has one name, the tab's. Settings' container was an unnamed `<div>`. The `<main>` around it stays unnamed, as before.
+  - **Blind labeling shows its heading while loading.** It used to render a bare "Loading held-out references…" line. The line now sits inside the panel, under the heading.
+  - **Tokens re-measured.** With plain figures the chip is 11 px narrower: compact **74** (was 85) and full **134** (was 145). `--agent-notes-chip-w-compact` and `-full` are updated to those values. A two-digit count makes it 81 / 141, and the corner writes that into the token as before.
+- **Tradeoffs.**
+  - Plain figures have less pull than the old filled circle. GM offered them as an option, and the dots and the ring still carry the "something new" signal.
+  - Settings' heading is the same size as its section titles, as GM asked ("set like the other section titles"). It is the first line and sits above the first rule, which marks it as the panel's title.
+- **Surprises.**
+  - The live check hit `post_note`'s limit ("at most 6 a minute"), so getting to 9 and 12 unread took two minutes of spaced posts.
+  - jsdom never shows a focus ring on `.focus()`, and neither does headless Chromium without a keyboard event. The focus check reads `document.activeElement`.
+- **Tests (written first, seen failing).** 12 failed and 52 passed on the old code (3 files run together):
+  - **`AgentNotesEveryScreen.test.tsx`, "See all actions →" from any screen.** A stand-in Agent log mounts only on the canvas and clears the flag on unmount, as `AgentLog.tsx` does. A store subscription records any moment `agentLogOpen` is true off the canvas.
+    - From Projects, Create and the Commons: 3 tests failed (`expected 'home' to be 'workspace'`, `expected 'create' to be 'canvas'`, `expected 'commons' to be 'canvas'`).
+    - "never leaves the log set to open off the canvas when the person leaves before it mounts": failed with `expected 'create' to be 'canvas'`.
+    - Guards that passed before and after: on the canvas it opens in place; no link while the log is off, on Projects, Create and the Commons (3).
+    - The count tests: `.agent-notes-chip__count` at 0, 1, 9 and 12 unread is its own element after the dots, never `.agent-notes-dot`, never inside the dots, with no inline colour (4). These passed before too: the count was already its own element, and its look was the problem. The CSS tests below are the ones that pin the form.
+  - **`agentNotesLayoutCss.test.ts`**, 2 new tests, both failed first:
+    - The count rule uses no author colour (`--an-newest`/`--an-dot`), no `border-radius` and no fill, sets `color: var(--an-ink-bold)`, tabular figures and `margin-left` ≥ 4 px. It failed on `--an-newest`.
+    - Every chip dot has a `0 0 0 1px var(--an-raised)` ring, and the dimmed dot has no `opacity`. It failed with "missing rule".
+    - The token test now expects 134/74 and resolves 74 at 1280/1359 and 134 at 1366/1440/1920.
+  - **New `commonsPanelHeadings.test.tsx`**, 6 tests, all 6 failed first ("Unable to find role="heading" and name "Settings"" / "Blind labeling"). It uses the real `CommonsSettings` and `CommonsEvaluation` with the API mocked. Settings and Blind labeling are each opened from the tab and from More (4). Each check covers:
+    - an h2 with the name in full and `.commons-heading`;
+    - the panel is a region named by it (`aria-labelledby`, no `aria-label`), and the heading is its first child;
+    - the page still has one h1, "Commons";
+    - the panel's own headings sit below it.
+    - The other two: the loading state shows the heading, and More still reads "More▾" with Blind labeling open.
+  - After the build: these 3 files plus `AgentNotesCorner`, `commonsTabsOverflow`, `commonsEvaluation` and `commonsCapability` gave 118 passed.
+- **Live check.** Isolated backend on 8853 and Vite on 5853 (`VITE_NEBULA_BACKEND_PORT=8853`; `/api/health` through Vite answered from the isolated backend). Temp HOME and every NEBULA_* root in `scratchpad/p157/state`, no keys, and nothing paid. One real MCP stdio agent ("Claude Code") posted the Updates. Headless Chromium had 8000-8010 and 5173 blocked: CDP `Network.setBlockedURLs` plus a dead proxy with only 8853/5853 bypassed.
+  - **Headers.** I swept 8 screens at 4 sizes (1280x800, 1366x768, 1440x900, 1920x1080), with 1 unread and again with 12. Header heights matched main everywhere: Projects 72, the five studios 49, the Video editor 51, the Commons 49. There were **0 overlaps** in all 64 rows, and the chip was the top element at its centre in every row. Chip and slot width: 74 / 134 (1 unread) and 81 / 141 (12 unread). The slot followed the chip every time.
+  - **The count's form** was checked at 3x zoom at 1280 and 1440, with 0, 1, 9 and 12 unread:
+    - The count is plain white figures, 7.2 px wide (14.4 px for 12), with a transparent background and 0 radius.
+    - At 0 it is faint, 40 % white.
+    - The "Ar" dot is opaque now, and sits clearly on top of "C" with its ring.
+  - **Commons panels.**
+    - Settings opened from More at 1280: an h2 "Settings" at y 63, under the 49 px header. The accessibility tree reads `1:Commons, [region:Settings], 2:Settings, 3:Linked folders, 3:Meter, ...`. More shows its boxed active state, is named "More: Settings" and its text is "More▾".
+    - Blind labeling from More: `2:Blind labeling, 3:A fresh pair of eyes., 3:Prepare the held-out set`.
+    - Both checks gave the same result from the tabs at 1440.
+  - **See all actions.**
+    - From Projects, Moodboard Studio and the Commons at 1280, each run landed on the canvas with the log expanded (`aria-expanded="true"`, 154 px tall) and focus on `.agent-log__header`. The list was closed.
+    - A store subscription in the page saw `agentLogOpen` turn true 3 times, every time on the canvas (0 off it).
+  - **Blocked requests: 2 in total**, both in the deliberate canary probe (8000 and 5173). **0 during the run**, canary hits 0, and no proxy failures during the run. Console during the run: no errors.
+  - Screenshots in `scratchpad/p157/shots/`:
+    - the compact chip with 2 authors and 1 unread: `create-1280.png`, `chip-zoom4-1280.png`;
+    - the full chip: `create-1440.png`, `chip-zoom4-1440.png`;
+    - every count: `count-forms.png` (0/1/9/12 at both widths);
+    - the Commons panels: `commons-settings-more-1280.png`, `commons-labeling-more-1280.png`, `commons-settings-tab-1440.png`, `commons-labeling-tab-1440.png`;
+    - See all from Projects: `seeall-from-projects-1280.png`.
+  - Servers stopped (lg stop), ports 8853/5853 free, and the state dir deleted.
+- **Agents.** Nothing changes for agents: the chip's look, the Commons panels' titles and where "See all actions →" lands are person-only UI. No MCP tool, CLI command or agent doc describes them; I grepped `mcp_server.py`, `backend/cli`, `docs/MCP-SETUP.md` and `skills/nebula/SKILL.md`.
+- **Gates (2026-10-21; the backend suite and the whole vitest run overlapped, with other sessions loading the machine).**
+  - `tsc -b` rc 0, and `npm run -s lint` rc 0.
+  - `vite build` plus the budget passed: **511,386 bytes raw** / 149,584 gzip, 614 under 512,000. The raw size is unchanged, because the corner and the Commons are lazy chunks.
+  - **Whole `vitest run`:** 39 failed, 3987 passed (15 of 338 files failed; 28 "Test timed out"). None of the 15 files is one this change touches. Rerun together, all 15 passed (256 tests): CommonsDetail, MoodboardStudioEdits, MoodboardStudioFieldUndo, ChatPanel.personal, CommandPalette, AssetStudioDrafts, CinemaShotArtDirection, CinemaStudioLayout, ModelDiscovery.integration, ModelPicker, ResultsGallery, ConnectionPopup, GraphFileActions, NodeLibrary and Settings.
+  - **Backend whole suite** (iso.sh; no backend file changed): 1 failed, 9465 passed, 61 skipped in 23:40. The failure was `test_gemini_cli_setup.py::test_version_and_help_run_side_by_side`, a wall-clock limit (took 1.95 s, limit 1.8 s) under load. Alone, its file passes 15/15.
+- **Open items.**
+  - Agent review (`CommonsReview`) still has its own h1 ("Does this read right?"), a second h1 on the page. It isn't folded, so it was out of scope. Making it an h2 or h3 under a "Agent review" heading would match the two panels done here. This needs GM's call on whether Agent review should get a visible title too.
+  - The Commons' tabs have no `role="tabpanel"` / `aria-controls` pairing, before this change and after. Each panel is a named region now; a full tabs pattern would be its own change.
+  - `CommonsCloseBatch`'s alertdialog keeps its h3 inside Blind labeling's review step, now beside the step's own h3. It is a dialog with its own name, so I left it.
+  - The More button's comment in `CommonsView.tsx` says "Blind labeling" would wrap the toolbar at 1280. The narrower chip gives the toolbar 11 px more room, but "More: Blind labeling ▾" still needs about 2 px more than there is. The button keeps "More", as asked.
+- **Review (2 confirmed findings, fixed).** Files touched in this round: `frontend/src/components/agent-notes/AgentNotesCorner.tsx`, `AgentNoteParts.tsx` (the adapter's `show` may return a promise), `frontend/src/lib/goToCanvas.ts`, `assetProposalReview.ts`, `deferredChunks.ts`, the new `frontend/src/lib/commonsUnsaved.ts`, `frontend/src/components/commons/CommonsView.tsx`, `frontend/tests/AgentNotesEveryScreen.test.tsx` and the new `frontend/tests/commonsUnsavedFlag.test.tsx`. No CSS, no backend file.
+  - **A step away that fails now says why, where the person looks.** "See all actions →" and an off-canvas Show used to close the list first, so their reason went to a list that was gone, and showed up later with nothing to explain it. Now the list stays open until the step lands: See all closes it once the log is open, Show once the canvas is up. If the step fails, the reason shows in the open list. Each click clears an older reason first. A See all whose log never shows within 3 s, while the person is still on the canvas, says "The Agent log didn't open. Try again." (It used to do nothing.) A Show or Review that fails from a card opens the list, so its reason shows there too. Before, the card had no place for it. On the canvas, See all still closes the list at once, as before. The reviewer said Show "keeps the list open". That was true only on the canvas: off the canvas Show closed it first too, so it got the same fix.
+  - **The corner no longer leaves the Commons while it holds unsaved labels.** CommonsView publishes its `labelingDirty` (Blind labeling's or Agent review's unsaved, saving or generating state) to `lib/commonsUnsaved.ts`. `goToCanvas` (See all, Show) and `reviewAssetProposal` (Review, for a project, board or Commons ask) refuse while it is set, with "The Commons has unsaved changes: save or discard them first." That is the same rule as the Commons' own disabled Back, tabs and More. A Commons ask's Review used to be swallowed silently by CommonsView's `reviewProposal` while dirty. It now says why too. The flag lives in a plain module, not a `uiStore` field: only the Commons (lazy) and the corner (deferred) read it, and nothing renders from it. The entry still grew by 42 bytes, from 511,386 to 511,428 raw, which is 572 under the budget. Vite builds the module as a small shared chunk, and the entry's preload map for the Commons' lazy import now names it. A `uiStore` field would have put the code itself in the entry. It is listed in `DEFERRED_MODULES`, so `entrySplit` pins that. Other ways out of the Commons that the corner doesn't own (the command palette, a project switch) are unchanged and out of scope.
+  - **Tests first.** 11 failed on the old code: the 9 new corner tests, each with `Unable to find ... role "dialog" and name "Updates"` (the list had closed), and the 2 CommonsView flag tests (`expected false to be true`). That run used a bare `commonsUnsaved.ts` that only stored a value, because Vite won't load a test that imports a missing file. 2 guards passed before and after: a clean panel reports nothing, and once saved See all goes through. 4 older tests asserted that the list closes the moment you click (See all ×3, Show from a studio). They now wait for the step to land, and are otherwise unchanged. After the fix: 9 related files, 145 passed.
+  - **Live check** (backend 8853, Vite 5853 with `VITE_NEBULA_BACKEND_PORT=8853`, `/api/health` through Vite from the isolated backend, temp HOME and NEBULA_* roots, no keys, nothing paid; a real MCP agent posted a note and a board proposal).
+    - At 1440, the Commons Blind labeling had one unsaved accent point. See all and Review each stayed in the Commons. The open list showed the reason, the point was still there ("Unsaved changes ..."), `agentLogOpen` stayed false and no review request was made.
+    - After Discard, See all landed on the canvas with the log expanded and focused, and the list closed. Review went to Moodboard Studio.
+    - From Projects at 1440, See all landed on the canvas with the log open and focused. `agentLogOpen` was never true off the canvas.
+    - At 1280, with `projects.open` stubbed to do nothing in the page to simulate a project that doesn't open: the list stayed open with "The project didn't open. Try again." With `open` restored, the same click went through, and the old reason was gone.
+    - Blocked requests: 2, both in the canary probe (8000, 5173). 0 during the run, 0 proxy failures, canary hits 0. Sockets went only to 5853/8853.
+    - One console 403 on the first page load. Its URL wasn't captured, and it didn't come back on a reload through Commons and Blind labeling, or on Discard and Review. It matches the known startup settings 403.
+    - Screenshots in `scratchpad/p157/shots2/`: `commons-unsaved-seeall-1440.png`, `commons-unsaved-review-1440.png`, `commons-saved-seeall-landed-1440.png`, `seeall-from-projects-1440.png`, `projects-open-failed-seeall-1280.png`.
+    - Servers stopped, ports free, state dir deleted.
+  - **Agents.** Nothing changes for agents: this is person-only UI, and a proposal's Review is still the person's.
+  - **Open item.** Other failures from a card on the canvas (an Accept that fails) now also open the list to show their reason. Before, they were silent. This is the same rule, but it is a small change on the canvas too.
+  - **Gates (review round).**
+    - `tsc -b` rc 0, and `npm run -s lint` rc 0.
+    - `vite build` plus the budget passed: 511,428 bytes raw / 149,601 gzip. That is 572 under 512,000, and 42 more than before (see above).
+    - Whole `vitest run`: 18 failed, 4022 passed (9 of 339 files failed; 12 "Test timed out", plus focus and search assertions that depend on timing). None of the 9 is a file this change touches: ChatPanel.personal, CommandPalette, ModelDiscovery.integration, ModelPicker, ResultsGallery, ConnectionPopup, GraphFileActions, NodeLibrary and Settings. Rerun together, all 9 passed (167 tests).
+    - Backend whole suite (iso.sh; no backend file changed): 9466 passed, 61 skipped, 0 failed.
+
+## p157b: second design round (GM review of the round-1 shots)
+
+Same branch, on top of `adcde818` (PR #157). Uncommitted. Files touched: `frontend/src/components/agent-notes/AgentNotesCorner.tsx`, `agentNotes.css`, `frontend/src/components/commons/CommonsEvaluation.tsx`, `CommonsReview.tsx`, the new `CommonsSectionEyebrow.tsx`, `frontend/src/styles/commons-evaluation.css`, `commons.css`, `frontend/tests/AgentNotesEveryScreen.test.tsx`, `agentNotesLayoutCss.test.ts`, `commonsPanelHeadings.test.tsx` (rewritten), `docs/contracts/07-studios-and-resources.md` (the corner paragraph) and `docs/moodboard-canvas-plan.md` (§5.9 chip line). No layout token changed, no backend file, no package.
+
+- **What changed and why.** Still Justin's Q107 a ("Show it on every screen, with the open project's Updates"). GM - Design reviewed the round-1 shots and kept the plain figures and the opaque, ringed dots. GM owns the visual design; this round builds its four points.
+  - **The ring at any unread count.** GM: "If that's the real one-unread state, a single unread is carried only by a white figure, the weakest signal in the set ... The ring should come on at any count of 1 or more."
+    - What drove it: `ringed = Boolean(card) && !leaving && !open`. The lime ring showed only while a dropped card was up (about 4 s), not for unread as such. In round 1's `count-forms.png` the 9 and 12 rows were taken right after a burst of posts, so a card was still up. The 1 row was taken after its card had gone. It was the real one-unread state, not a hover or focus state.
+    - Now `ringed = count > 0`, where `count` is already 0 while the list is open. So the ring shows whenever anything is unread and the list is closed, at any count. It is off at 0. The ring's colour (the newest author's) and its spring fade are unchanged.
+  - **The grey outer ring was the focus-visible outline.** It is the chip's own `:focus-visible` rule (2 px, ink at 55 %, offset 2 px), not a resting style. The round-1 harness closed the list with Escape, which returns focus to the chip on purpose, so the chip stayed focus-visible for the 0, 9 and 12 rows. I reproduced it live: Enter, then Escape, gave `:focus-visible` true and `outline: solid 2px rgba(255,255,255,.51) offset 2px`. Kept as is. The new shots blur any focus first, and every shot reports `focused=false`, `:focus-visible=false`, `outline: none`.
+  - **One face for every count.** GM: "the dim '0' is mono with a slashed zero, but 1/9/12 look like Inter bold."
+    - What it was: every count was already JetBrains Mono (CDP `CSS.getPlatformFontsForNode`), but at two weights. The unread count asked for 700, which the bundled JetBrains Mono doesn't ship (400/500/600, `src/assets/fonts/README.md`). Chromium drew it from the variable font at 600 (`JetBrainsMono-Regular_wght258`). The muted 0 dropped to 500 (`JetBrainsMonoRoman-Medium`). JetBrains Mono's "1" has no foot, and at the heavier weight the figures read as a grotesque, while the lighter 0 showed the mono's marked zero.
+    - Now every count is `600 12px/1` mono, tabular, and the muted 0 changes only its colour (`--an-faint`). 600 is the heaviest weight the app ships. Live, all five counts render from the same instance.
+    - The 0 keeps JetBrains Mono's marked zero. At the same weight it reads as the same face as 1/9/12 in the 3x shots, so I kept the mono rather than switching every count to Inter. GM can still choose Inter tabular figures, which have a plain zero.
+    - The widths didn't change (a monospace advance is the same at every weight). Live: 74.2 / 134.2 px with one digit and 81.4 / 141.4 with two, and the slot followed (74/134, 81/141). The tokens stay 74/134.
+  - **One heading pattern for the three Commons sections.** GM: "The page h1 stays 'Commons' in the header. The section name is the h2, set as the eyebrow line. Merge it with the existing eyebrow: 'Blind labeling · C1 / C2 human ground truth'. The section's own display line stays big but isn't a heading level above that ... So Agent review gets a visible 'Agent review' eyebrow like the others, and 'Does this read right?' stops being an h1. Settings has no display line, so set its h2 one step above the subsection titles."
+    - **Blind labeling** and **Agent review** open with an eyebrow line (`SectionEyebrow`): `<h2>Blind labeling</h2> · C1 / C2 human ground truth` and `<h2>Agent review</h2> · agent grades · your judgment`. It uses the eyebrow style Blind labeling already had: the same rule as `.commons-evaluation small` (10 px, 1.5 px tracking, #a0b28f), now also `.commons-eyebrow`. The h2 takes the line's type (`font: inherit`, inline). Round 1's separate 13 px "Blind labeling" title is gone.
+    - **Settings** keeps its h2 "Settings" first in the panel, now at 22 px / 450 (13 px before), above its 13 px section titles (h3).
+    - Each section is a `<section aria-labelledby>` pointing at its h2, so the region is named "Settings", "Blind labeling" or "Agent review". Agent review's old `aria-label="Agent reference review"` is gone. The page has one h1, "Commons".
+    - Agent review's loading state now shows its eyebrow too, as Blind labeling's already did.
+- **Decisions not in the spec.**
+  - **The display line is a styled p, not an h3.** "A fresh pair of eyes." and "Does this read right?" are a lead sentence for the section, not a title for the content below them. The steps title that content. As an h3, the display line would sit in the outline as a sibling of "Prepare the held-out set" and "Reference 01", with nothing under it. So under each h2 the outline goes straight to the steps (h3) and their parts (h4), with no level skipped:
+    - Blind labeling: steps and "Reference NN" are h3, and "Character" / "Assign color roles" / "Keywords" are h4, as in round 1.
+    - Agent review: "Reference 01" and the grade's summary (or "Waiting for a grade") go from h2 to h3 (`.evaluation-step`). "Structure", "Character", "Color roles" and "Keywords" go from h3 to h4 (`.evaluation-subhead`).
+    - The p keeps the old h1 look: 30 px, weight 450, -0.8 px tracking, margin 10 px. It also sets `color: inherit` and `line-height: normal`, so the panel's paragraph rule doesn't restyle it. The `h1`/`h2` tag selectors in commons-evaluation.css are gone.
+    - Agent review's behaviour, copy and layout are otherwise unchanged. The only copy change is that the eyebrow now starts with "Agent review".
+  - **The eyebrow is written in sentence case and shown in capitals** (`text-transform: uppercase`), as GM wrote it and as the old eyebrow looked. Chromium names a heading from the transformed text: the live accessibility tree first read "2:BLIND LABELING" and "[region:BLIND LABELING]". So the h2 also carries `aria-label` with its name as written. After that, live: `[region:Blind labeling]`, `2:Blind labeling`. jsdom doesn't apply CSS, so a test pins the `aria-label`.
+  - **Settings' size.** The app's tokenised type scale stops at 15 px (`--sr-type-title`), only 2 px above the 13 px titles, so the hierarchy would stay flat. The step nearest 20 px in the Commons' own scale is 22 px / 450: the `.evaluation-step` size used for "Prepare the held-out set" and "Reference 01". Settings' h2 uses that size and weight, so there is no new size. The CSS test checks that it matches `.evaluation-step` and is larger than `.commons-heading`. GM's "about 20px against their 14": the section titles are actually 13 px.
+  - **"All three eyebrows".** Settings has no eyebrow descriptor and no display line, so it gets GM's larger h2, not an eyebrow line. The eyebrow style is shared by the two sections that have one.
+  - **(d) The green-black background is the section's own palette, but no design decision records it.** `background: #1c211d` came with the whole of `commons-evaluation.css` in `17296921` (2026-09-26, "feat(commons): connect browser blind labeling to persistent evaluation"). It is a self-contained palette: a green-black panel, a light olive form card, green accents, all hard-coded rather than `--sr-*` tokens. Agent review adopted the same panel class in `cd2bec11` (2026-09-26), squash-merged as #34 (`362d201b`). So it isn't one stray line. But no spec, design doc or note says why: the labeling report in `specs/` and the implementation notes only mention "inherited light-form contrast". GM's premise is also only half right: **Agent review has the same green-black** (rgb 28,33,29 live). Only Settings, All and Inbox are black. Left unchanged here, as asked. Whether it is a deliberate evaluation mode is GM's call (open items).
+- **Tradeoffs.**
+  - The ring now stays on as long as anything is unread, so it is on most of the time on a busy project. That is what GM asked for: the ring is the unread signal. A card still adds the drop. It no longer adds a ring of its own.
+  - The Settings h2 at 22 px is a step larger than the toolbar's "Commons" h1 (14 px header type). The header is the app's chrome, so I left it.
+- **Surprises.**
+  - The chip slides to its new slot on a spring after a window resize. Two of my first shots caught it mid-move. The shot helper now waits until the chip is centred on the visible slot and its rect is steady for three reads.
+  - Preparing the held-out set (done through the UI, for the fuller Agent review outline) switches the worker line to "Library analysis paused until reference labels are sealed". With that line the Commons toolbar wraps to 86 px at 1280, 1366 and 1440 (49 at 1920). This is the open item already listed in this file ("a long Commons worker status can still wrap the toolbar"), not this change. Before the batch was prepared, the Commons header was 49 at 1280 and 1440.
+- **Tests (written first, seen failing): 14 failed, 71 passed** (3 files run together on the old code).
+  - `AgentNotesEveryScreen.test.tsx`, 5 new:
+    - "rings the chip at 1 / 2 / 9 / 12 unread, with no card up" (4): each failed with `expected false to be true`.
+    - "no ring at 0 unread, and none while the list is open": failed at its "2 unread → ringed" step.
+  - `agentNotesLayoutCss.test.ts`, 5 new, all failed:
+    - the count's weight is one the bundled JetBrains Mono ships, and it is the skin's mono: `expected false to be true` (700 isn't shipped);
+    - the muted and pop rules change no font property: matched `font-weight`;
+    - the eyebrow shares `.commons-evaluation small`'s rule and the h2 inherits its type: "missing rule";
+    - the display line keeps its look as a p: `color` was null;
+    - Settings' h2 is at the `.evaluation-step` size and above `.commons-heading`: "missing rule".
+  - `commonsPanelHeadings.test.tsx`, rewritten for the new pattern. It uses the real CommonsSettings, CommonsEvaluation and CommonsReview, with the API mocked and one graded reference. 4 failed first:
+    - Blind labeling from the tab and from More: "the h2 is set as the eyebrow line: expected null";
+    - Agent review: "Unable to find role="heading" and name "Agent review"";
+    - the loading states.
+    - 3 passed before and after as guards: Settings from the tab and from More, and More's text "More▾".
+    - Each check covers: an h2 named just the section, the region named by it (`aria-labelledby`, no `aria-label` on the region), one h1 "Commons", every other heading in the section at level 3 or below with no skipped level, the eyebrow's exact text, the display line as a `p.evaluation-title` and not a heading, and the exact heading list (Agent review: Reference 01 h3, the summary h3, then Structure, Character, Color roles and Keywords as h4).
+    - After the live check, one more assertion (the h2's `aria-label` is its name) failed first on all 4 eyebrow tests (`expected null to be 'Blind labeling'`), then passed.
+  - Round-1 tests that pinned the old structure (a 13 px `.commons-heading` h2 first in the panel, "A fresh pair of eyes." as an h3) are replaced by the above.
+  - After the build: the 3 files plus `AgentNotesCorner`, `commonsReview`, `commonsReviewRequest`, `commonsEvaluation`, `commonsCapability`, `commonsTabsOverflow`, `commonsUnsavedFlag` and `commonsCloseBatch`: **161 passed**.
+- **Live check.** Isolated backend on 8855 and Vite on 5855 (`VITE_NEBULA_BACKEND_PORT=8855`). `/api/projects` through Vite returned the seeded "Dusk"/"Harbor", so the proxy reached the isolated backend. Temp HOME and every NEBULA_* root under `scratchpad/p157b/state`, no keys, nothing paid. One real MCP stdio agent ("Claude Code") posted the Updates through `post_note`. Headless Chromium had 8000-8010 and 5173 blocked by CDP `Network.setBlockedURLs` plus a dead proxy with only 8855/5855 bypassed.
+  - **Count forms** (Creator Studio; compact at 1280x800, full at 1440x900, 3x). No focus on the chip in any shot, and no card up except where noted.
+    - 0: no ring, faint 0.
+    - 1, 2 and 9: ring on (the `::after` at opacity 1), white figures.
+    - 12: ring on. A card was up in the compact shot, outside the clip.
+    - Every count rendered from `JetBrainsMono-Regular_wght258` (600). Chip widths 74.2/134.2, and 81.4/141.4 at 12.
+    - With the list open: ring off, count 0.
+  - **Commons sections** (accessibility tree from Chromium, in document order):
+    - Settings, from More at 1280 and from the tab at 1440: `1:Commons, [region:Settings], 2:Settings, 3:Linked folders, 3:Meter, 3:Vocabulary candidates, 3:Maintenance`. The h2 is 22 px / 450 at y 63, and "Linked folders" is 13 px / 700. More read "More: Settings" / "More▾".
+    - Blind labeling, from More at 1280 and from the tab at 1440: `1:Commons, [region:Blind labeling], 2:Blind labeling, 3:Prepare the held-out set`. The eyebrow is 10 px capitals at y 77. The display p is 30 px / 450 at y 99. More read "More: Blind labeling" / "More▾".
+    - Agent review, from the tab at 1280 and at 1440: `1:Commons, [region:Agent review], 2:Agent review`. It has the same eyebrow and display sizes.
+    - With the held-out set prepared: Blind labeling `… 2:Blind labeling, 3:Reference 01, 3:What catches your eye?`, and Agent review `… 2:Agent review, 3:Reference 01, 3:Waiting for a grade`.
+    - One h1 ("Commons") in every case, and the header was 49 px before the batch was prepared.
+  - **Headers.** The chip's width didn't change, so the tokens stay and the full re-measure wasn't required. I swept all 8 screens at 4 sizes with 2 unread anyway. Projects 72, the five studios 49, the Video editor 51 at every size, **0 overlaps** and the chip on top in all 32 rows. The Commons was 49 at 1920 but 86 at 1280-1440, because of the worker status after preparing the batch (see Surprises; known open item). At 1280 the first pass reached Remotion and the Video editor before their lazy chunks mounted. A second pass with a 5 s wait gave 49 and 51, 0 overlaps.
+  - **Blocked requests: 2**, both in the deliberate canary probe (8000 and 5173). **0 during the run**, and canary hits 0. One proxy failure during the run: `localhost:8855/api/health`, the page's discovery, since only 127.0.0.1 is bypassed. That was the only console error during the run. Sockets went only to 5855 and 8855.
+  - Screenshots in `scratchpad/p157b/shots/`:
+    - `count-forms.png` (compact and full at 0/1/2/9/12, 3x), from `chip-{0,1,2,9,12}-{1280,1440}.png` and `chip-list-open-1280.png`;
+    - `commons-settings-more-1280.png`, `commons-settings-tab-1440.png`, `commons-blind-labeling-more-1280.png`, `commons-blind-labeling-tab-1440.png`, `commons-agent-review-tab-1280.png`, `commons-agent-review-tab-1440.png`, plus the `*-prepared.png` set;
+    - `header-create-1280.png` and `header-create-1440.png`;
+    - `probe-before-*.png` (the old chip: the focus outline and the two weights).
+  - Servers stopped (`lg stop`), ports 8855/5855 free, and the state dir deleted.
+- **Agents.** Nothing changes for agents. The chip's ring and type and the Commons headings are person-only UI. Blind labeling and Agent review stay human-only (MCP-SETUP's Commons section). No MCP tool, CLI command or agent doc describes the ring, the count's face or the section headings. I grepped `docs/MCP-SETUP.md`, `skills/nebula/SKILL.md` and `backend/` for "ring", "Does this read right" and "fresh pair".
+- **Gates (2026-10-21; the backend suite and the whole vitest run overlapped, load average 25-35).**
+  - `tsc -b` rc 0, and `npm run -s lint` rc 0.
+  - `vite build` plus the budget passed: **511,428 bytes raw** / 149,612 gzip. The raw size is unchanged, because the corner and the Commons are lazy chunks.
+  - **Whole `vitest run`:** 119 failed, 3932 passed (49 of 339 files failed; 101 of the failures were "Test timed out"). None of the 49 is a file this change touches.
+    - Rerun together: 35 failed, 585 passed (14 files still failing, 26 timeouts).
+    - Each of those 14 passes alone: MoodboardStudioFieldUndo 22, App.canvasFocus 6, ChatPanel.commons 8, ChatPanel.personal 12, CommandPalette 3, CinemaMotionHandoff 25, CreateView.draft 8, ModelDiscovery.integration 4, ModelPicker 11, ResultsGallery 8, ConnectionPopup 16, GraphFileActions 25, NodeLibrary 20 and Settings 68.
+  - **Backend whole suite** (iso.sh; no backend file changed): 1 failed, 9465 passed, 61 skipped in 28:44. The failure was `test_agent_process.py::test_terminate_agent_process_tree_kills_setsid_grandchild` (process-tree timing, as before). Alone, its file passes 4/4.
+- **Open items.**
+  - GM: is Blind labeling and Agent review's green-black palette a deliberate evaluation mode? It is consistent across both, but no doc records it (above).
+  - GM: JetBrains Mono's marked zero stays on the muted 0. Inter's tabular figures would give a plain zero if GM prefers.
+  - The long worker status ("Library analysis paused until reference labels are sealed") still wraps the Commons toolbar at 1280-1440 (already listed). Fixed in p157c (below).
+
+## p157c: the long worker status no longer wraps the Commons header
+
+Same branch, on top of `bdcdde87` (PR #157). Uncommitted. Files touched: `frontend/src/components/commons/CommonsView.tsx` (`StatusLine` and the toolbar's spacer), `frontend/src/styles/commons.css` (the toolbar's token and the status rules), `frontend/tests/commonsStatusLine.test.tsx`, `frontend/tests/agentNotesLayoutCss.test.ts`, `frontend/tests/commonsTabsOverflow.test.tsx`, and this file. No layout token in `layouts.css` or `workspace-header.css` changed, no backend file, no package. Motion: none.
+
+- **What changed and why.** Still Justin's Q107 a ("Show it on every screen, with the open project's Updates"), with GM - Design's ruling that a header wrapping to two rows is a defect. The seeded status fit, but a real one didn't. After preparing a Blind labeling reference set, the status reads "Library analysis paused until reference labels are sealed". The Commons header then wrapped to 86 px. Before this fix I reproduced it live at 1280 and 1440 (p157b also saw it at 1366).
+  - **The status gives way first.** Its text now sits in its own element (`.commons-status__text`). That element truncates on one line with an ellipsis. The whole status line grows into the row's free room and keeps its text right-aligned against its control, so it looks the same as before whenever the text fits.
+  - **Only a minimum counts toward the row.** The text element has `contain: inline-size`, so the browser sizes the row as if the text were only its minimum, never its full length. So no status length can push the controls, or the header, onto a second row.
+  - **The minimum** is `min(--commons-status-min, the status's own length)`.
+    - `--commons-status-min` is 12.5em (137.5 px at the status's 11 px). That shows "Library analysis paused…", "Paused: machine busy (l…" and "Worker stopped · 2 queu…".
+    - The status's own length is its character count × 1ch, passed in as `--commons-status-chars`. 1ch is 6.9 px in this face, and every status's average glyph measured 5.2-5.9 px. So a short status like "Worker stopped" reserves a little more than its own width (97 px for 83), never truncates, and never takes more room than it needs.
+  - **Start and Stop never shrink** (`flex: none`). They stay outside the part that truncates.
+  - **The full text stays available.**
+    - The element's `title` gives the tooltip.
+    - Its own text is the whole status. Chromium's accessibility tree has a StaticText node with the full string, so a screen reader reads all of it.
+    - The status was never a live region, and it still isn't.
+  - **The toolbar's spacer is gone.** It was an empty `commons-spacer` that grew to fill the row. The status now does that itself. Left in, the spacer would split the free room in half and cut the status short even when there was room for all of it.
+- **Every worker status the Commons can show.** They are all built in `StatusLine`, from `/api/commons/status`. The backend sends states, not text: `commons/worker.py` uses stopped, running, idle, analyzing, paused_load, cap_reached and budget_exhausted, and `routes/commons.py` sends `evaluation_waiting` and `evaluation_assisted`. Natural widths at the status's font (Inter 400 11px), measured live:
+  - Connecting… 69.3 px. Worker idle 59.1 px. Worker stopped 83.1 px.
+  - Worker stopped · 1 queued 139.4 px. Worker stopped · 999 queued · 999 held 210.6 px. Analyzing (0 queued) 111.6 px. Analyzing (999 queued) · 999 held 180.4 px.
+  - Call budget used (0/∞) 118.1 px. Call budget used (9999/9999) · 999 held 212.8 px.
+  - Daily cap reached, resets 09:00 AM 186.4 px. Daily cap reached, resets 11:59 PM · 999 held 235.8 px.
+  - Paused: machine busy (load 0.5 / 8) 187.1 px. Paused: machine busy (load 128.0 / 128) · 999 held 264.9 px.
+  - Library analysis paused until reference labels are sealed 292.0 px.
+  - **Library analysis paused · close the agent review to resume 304.7 px (the longest).**
+  - Any state with " · N held" appended grows by about 40 px. Start or Stop takes another 48-49 px plus an 8 px gap.
+- **Room for the text, live.** At 1280 and 1440 (with More folded at 1280, all five tabs at 1440) the text gets 290 px with no control and 233-234 px beside Start or Stop. At 1366 it gets 316 / 259-260 px.
+  - So the longest status loses about 15 px at 1280 and 1440: "Library analysis paused · close the agent revi…". The sealed one loses 2 px: "… reference labels …".
+  - The longest status with a control, "Paused: machine busy (load 128 / 128) · 999 held", shows 234 of its 255 px.
+  - Everything shows in full at 1920.
+- **What gives next.** At 1280 the minimum fits with about 95-150 px to spare, so nothing else had to fold. The header now stays one row down to these widths, whatever the status says:
+  - 1184 px for a status with Stop or Start;
+  - 1128 px for the paused statuses (no control);
+  - 1145 px for the short "Worker stopped".
+  - Below those widths the existing wrap takes over unchanged: the actions drop to a second row, as on main. That is outside the four desktop sizes. I didn't fold more sections.
+- **Decisions not in the spec.**
+  - The minimum is the status's first words, not a fixed word count. 12.5em keeps the state ("Library analysis paused", "Paused: machine busy", "Daily cap reached", "Call budget used", "Worker stopped · N…") and drops the detail.
+  - For short statuses the reservation is capped by character count, not a constant. A constant 12.5em would have made "Worker stopped" reserve 138 px instead of 83. The header would then wrap about 50 px sooner at narrow window widths than before this change. With the cap it wraps about 7 px sooner (1145 vs about 1138).
+  - I didn't add `role="status"` or an `aria-label`. The status wasn't announced before, and a label on a plain span isn't reliably read. The full text is the element's content.
+- **Tradeoffs.**
+  - The 1ch cap is an estimate. A status made mostly of glyphs wider than "0" could reserve a little less than its width and truncate a few pixels, but only when the row is already tight. None of today's strings comes close (the closest is at 85 % of its cap).
+  - The text element spans the free room, so the tooltip also shows when hovering the blank space just left of the text.
+- **Surprises.**
+  - Chrome's ellipsis on the sealed status drops the whole last word ("labels …"), not a few letters, even though only 2 px overflow.
+  - Before this fix, at 1366 in this run, the long sealed status didn't wrap (49). p157b measured 86 there, with a different chip width.
+- **Tests (written first, run on the old code and seen failing).**
+  - First version: 11 failed.
+    - `agentNotesLayoutCss.test.ts`, the new "Commons worker status gives way" block: 3 failed. `.commons-status` had no `flex`, and the rules `.commons-status__text` and `.commons-status > .commons-button` were missing.
+    - `commonsStatusLine.test.tsx`: 7 failed. Six statuses, from the two long pauses to "Worker idle" with Stop, had no `.commons-status__text` element. "Connecting…" had none either.
+    - `commonsTabsOverflow.test.tsx`: 1 failed, because the toolbar still had its `.commons-spacer`.
+  - The character-count cap was added test-first too. Its CSS expectation and the `--commons-status-chars` checks failed 7 times before the change.
+  - After the change, the three files pass: 45 tests. No earlier test pinned the old layout; the three existing StatusLine tests pass unchanged.
+- **Live check.** Isolated backend on 8857 and Vite on 5857 (`VITE_NEBULA_BACKEND_PORT=8857`; `/api/health` through Vite reached the isolated backend). Temp HOME and every NEBULA_* root under `scratchpad/p157c/state`, no keys, one real MCP agent posting one note ("Updates, 1 unread"). Chromium had 8000-8010 and 5173 blocked by CDP plus the dead proxy.
+  - Before the fix, with the sealed status reached through the UI: Commons header 86 at 1280 and 1440, 49 at 1366 and 1920.
+  - After, on a fresh state. Every row was 49 px, with 0 overlaps (chip against every header text and control, and every pair of controls), the chip on top at its centre, and Start/Stop whole, unclipped and left of the chip:
+    - the seeded "Worker stopped" + Start, not truncated;
+    - "Library analysis paused until reference labels are sealed", reached by preparing the held-out set through Blind labeling;
+    - "Library analysis paused · close the agent review to resume", the longest. To reach it I added one `failed` row to `assisted_reviews` in the isolated database. No grading ran and no model was called.
+    - "Worker stopped · 2 queued · 1 held" + Start, as real state: I closed the batch through the page's session, imported the seeded board and held one asset in the isolated database. It is not truncated at any size.
+    - "Paused: machine busy (load 128 / 128) · 999 held" + Stop. This one came from a page-level stand-in for the status poll only (a `window.fetch` wrapper, not CDP interception). It is truncated at 1280 and 1440, with Stop at 1128-1176 and 1228-1276.
+  - Each was measured at 1280x800, 1366x768, 1440x900 and 1920x1080.
+  - Other screens at 1280, once: Projects 72, Create, Moodboard Studio, Character, Cinema and Remotion 49, the Video editor 51. 0 overlaps, chip on top.
+  - Hovering the truncated longest status at 1280: `:hover` true, and `title` is the whole status.
+  - Blocked requests: 0 during the run, and 2 in the deliberate canary probe. Canary hits 0, no proxy failures during the run. Sockets went only to 5857 and 8857.
+  - Shots: `scratchpad/p157c/shots/commons-header-long-1280.png`, `commons-header-long-1440.png` and `commons-status-hover-1280@2x.png`.
+  - The native title tooltip isn't in the shots. Headless Chromium doesn't paint OS tooltips. A headful window plus a screen capture would have put a window on, and captured, Justin's shared screen, so I checked the title instead.
+- **Gates.**
+  - Backend whole suite (iso.sh): 9466 passed, 61 skipped, 0 failed (9:02).
+  - `npx vitest run`: 9 failed, 4053 passed (6 of 339 files; 6 of the 9 failures were "Test timed out"). All six files pass alone, 135 tests: CommandPalette, ModelPicker, ResultsGallery, GraphFileActions, NodeLibrary, Settings. None is touched here.
+  - `npx tsc -b`: clean. `npm run -s lint`: clean, including the inline-style and Slava CSS scope guards.
+  - `vite build` plus the budget passed: **511,428 bytes raw** / 149,598 gzip (572 under 512,000).
+- **Open items.**
+  - At 1280 and 1440 the two longest statuses still truncate (by 2-15 px). The tooltip and the accessible text carry the rest. If GM wants them whole there, shorter wording would fix it, such as "Analysis paused until labels are sealed". That is a copy call, so I left it.
+  - Below about 1184 px wide (1128 for the paused statuses) the Commons header still wraps through its existing rule, the same as main.

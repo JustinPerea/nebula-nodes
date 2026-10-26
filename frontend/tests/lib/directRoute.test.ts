@@ -21,6 +21,8 @@ type RouteCase = {
     routeId?: string | null; block?: Record<string, unknown> | null; missing?: string[];
   };
   unavailable?: Record<string, unknown> | null;
+  /** node_route.route_unavailable_line: the card's words for the same stop. */
+  unavailableLine?: string | null;
   paramKeys?: string[];
   shownRoute?: string | null;
   routeParams?: Record<string, unknown>[];
@@ -60,7 +62,10 @@ describe('selectRoute (cases shared with backend services/node_route.py)', () =>
       const route = selectRoute(definition, params, testCase.apiKeys);
       if (hasRoutes(definition)) {
         expect({ ...route, block: blockFields(route.block) }).toEqual(testCase.expected);
-        expect(routeUnavailable(definition, params, testCase.apiKeys)).toEqual(testCase.unavailable);
+        // The router's facts, with the card's line as its message (error
+        // copy round 3e): node_route.route_unavailable_line, word for word.
+        expect(routeUnavailable(definition, params, testCase.apiKeys)).toEqual(
+          testCase.unavailable ? { ...testCase.unavailable, message: testCase.unavailableLine } : testCase.unavailable);
         // Plan billing reads the same routed values the router does.
         expect(usesRoutePlan(definition, params)).toBe(route.kind === 'plan');
       } else {

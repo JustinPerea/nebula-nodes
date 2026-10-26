@@ -1,9 +1,13 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useUIStore } from '../store/uiStore';
 import { useGraphStore } from '../store/graphStore';
 import { useCanvasPinsStore } from '../store/canvasPinsStore';
 import { isBackendNodeId } from '../lib/canvasPins';
+import { floatingBottomLimit } from '../lib/bottomBar';
 import '../styles/panels.css';
+
+/** How close the menu may come to the window's edges. */
+const MENU_EDGE = 8;
 
 interface MenuItem {
   label: string;
@@ -22,6 +26,26 @@ export function ContextMenu() {
   const deleteNode = useGraphStore((s) => s.deleteNode);
   const isExecuting = useGraphStore((s) => s.isExecuting);
   const menuRef = useRef<HTMLDivElement>(null);
+  const [place, setPlace] = useState<{ left: number; top: number } | null>(null);
+
+  // Opened at the pointer, then kept whole: inside the window and above the
+  // canvas's bottom bar (the Inspector's bug, GM - Design 2026-10-23), so its
+  // last item (Delete) is never cut off or under the bar.
+  useLayoutEffect(() => {
+    if (!visible) return;
+    const measure = () => {
+      const box = menuRef.current?.getBoundingClientRect();
+      if (!box) return;
+      const left = Math.max(MENU_EDGE, Math.min(position.x, window.innerWidth - box.width - MENU_EDGE));
+      // The Canvas actions panel pushes it up only when it is over the panel (lib/bottomBar.ts).
+      const bottom = floatingBottomLimit(MENU_EDGE, window.innerHeight, { left, right: left + box.width });
+      setPlace({ left, top: Math.max(MENU_EDGE, Math.min(position.y, bottom - box.height)) });
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [visible, position, nodeId]);
+  const style = { left: place?.left ?? position.x, top: place?.top ?? position.y };
 
   // Dismiss on outside click or Escape
   useEffect(() => {
@@ -57,7 +81,7 @@ export function ContextMenu() {
     // Right-click on the empty canvas: the only thing to do here is leave a note.
     if (!flowPosition) return null;
     return (
-      <div ref={menuRef} className="context-menu" style={{ left: position.x, top: position.y }}>
+      <div ref={menuRef} className="context-menu" style={style}>
         <button
           className="context-menu__item"
           onClick={() => {
@@ -102,7 +126,9 @@ export function ContextMenu() {
       shortcut: 'Del',
       danger: true,
       action: () => {
-        deleteNode(nodeId);
+        // A World Labs hold refuses, with its notice; otherwise it deletes at
+        // once and says "Deleted the node." with Undo (GM, 2026-10-23).
+        if (useGraphStore.getState().allowCanvasDelete([nodeId])) deleteNode(nodeId);
         hideContextMenu();
       },
     },
@@ -112,7 +138,7 @@ export function ContextMenu() {
     <div
       ref={menuRef}
       className="context-menu"
-      style={{ left: position.x, top: position.y }}
+      style={style}
     >
       {items.map((item) => (
         <button

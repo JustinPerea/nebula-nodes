@@ -19,6 +19,7 @@ vi.mock('../../lib/wsClient', () => ({
 }));
 
 import { RecentlyDeletedAssets, UndoDeleteToast, UNDO_VISIBLE_MS } from './AssetTrash';
+import { RequestFailedError } from '../../lib/errorCopy';
 import { RestoreTrashedAsset } from '../nodes/RestoreTrashedAsset';
 import { useStoredAssetsStore } from '../../store/storedAssetsStore';
 import { publishOpenProject } from '../../lib/currentProject';
@@ -40,6 +41,25 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); });
 
 describe('RecentlyDeletedAssets', () => {
+  it('never loads a deleted Character’s outside thumbnail and says why it shows none', async () => {
+    trash.fetchTrash.mockResolvedValue([board({ kind: 'character', id: 'c1', name: 'Old hero',
+      thumbnail: 'https://images.example.com/face.png' })]);
+    const { container } = render(<RecentlyDeletedAssets kind="character" scope="global" />);
+    fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
+    expect(screen.getByText('Old hero')).toBeTruthy();
+    expect(container.querySelector('img')).toBeNull();
+    expect(screen.getByText('Image link from outside Nebula')).toBeTruthy();
+  });
+
+  it('never loads a deleted board’s outside thumbnail either (Q98)', async () => {
+    trash.fetchTrash.mockResolvedValue([board({ id: 'b9', name: 'Old board', thumbnail: 'https://example.com/x.png' })]);
+    const { container } = render(<RecentlyDeletedAssets kind="moodboard" scope="global" />);
+    fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
+    expect(screen.getByText('Old board')).toBeTruthy();
+    expect(container.querySelector('img')).toBeNull();
+    expect(screen.getByText('Image link from outside Nebula')).toBeTruthy();
+  });
+
   it('stays hidden while nothing is in the trash', async () => {
     trash.fetchTrash.mockResolvedValue([]);
     const { container } = render(<RecentlyDeletedAssets kind="moodboard" scope="global" />);
@@ -94,7 +114,10 @@ describe('RecentlyDeletedAssets', () => {
 
   it('asks before deleting for good, and shows the refusal when the backend says no', async () => {
     trash.fetchTrash.mockResolvedValue([board({ deletedBy: { kind: 'person', name: 'You' } })]);
-    trash.purgeTrashed.mockRejectedValueOnce(new Error('Only the person can do this from the Nebula canvas.'));
+    // What lib/trash's purgeTrashed throws (apiRequest): a request's own line. Round 3b: the list
+    // shows a request's line and never another error's message.
+    trash.purgeTrashed.mockRejectedValueOnce(new RequestFailedError("Couldn't delete the board for good.", 403,
+      { detail: 'Only the person can do this from the Nebula canvas.' }));
     render(<RecentlyDeletedAssets kind="moodboard" scope="global" />);
     fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
     expect(screen.getByText(/by you/)).toBeTruthy();
@@ -103,7 +126,25 @@ describe('RecentlyDeletedAssets', () => {
     expect(screen.getByRole('group', { name: 'This can’t be undone.' })).toBeTruthy();
     fireEvent.click(screen.getAllByRole('button', { name: 'Delete forever' }).at(-1)!);
     await waitFor(() => expect(trash.purgeTrashed).toHaveBeenCalledWith('moodboard', 'b1'));
-    expect((await screen.findByRole('alert')).textContent).toContain('Only the person');
+    expect((await screen.findByRole('alert')).textContent).toContain("Couldn't delete the board for good. Only the person can do this from the Nebula canvas.");
+  });
+
+  it('keeps Styles too, in their own words, and restores one as kind "style"', async () => {
+    trash.fetchTrash.mockResolvedValue([board({ kind: 'style', id: 's1', name: 'Neon noir' })]);
+    render(<RecentlyDeletedAssets kind="style" scope="global" />);
+    fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
+    expect(trash.fetchTrash).toHaveBeenCalledWith({ kind: 'style', scope: 'global' });
+    expect(screen.getByRole('region', { name: 'Recently deleted styles' })).toBeTruthy();
+    expect(screen.getByText('Deleted styles stay here until you delete them for good.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Restore Neon noir' }));
+    await waitFor(() => expect(trash.restoreTrashed).toHaveBeenCalledWith('style', 's1'));
+    await waitFor(() => expect(trash.fetchTrash).toHaveBeenCalledTimes(2)); // listed again after the restore
+    // A Style's change elsewhere lists it again; a board's doesn't.
+    const calls = trash.fetchTrash.mock.calls.length;
+    act(() => ws.handlers.forEach((handler) => handler({ type: 'storedAssetChanged', kind: 'moodboard', id: 'b1', deleted: true })));
+    expect(trash.fetchTrash.mock.calls.length).toBe(calls);
+    act(() => ws.handlers.forEach((handler) => handler({ type: 'storedAssetChanged', kind: 'style', id: 's2', deleted: true })));
+    await waitFor(() => expect(trash.fetchTrash.mock.calls.length).toBe(calls + 1));
   });
 
   it('empties only the scope it shows', async () => {

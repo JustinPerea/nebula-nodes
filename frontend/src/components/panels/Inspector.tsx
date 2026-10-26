@@ -11,7 +11,9 @@ import { CATEGORY_COLORS } from '../../constants/ports';
 import { PORT_COLORS } from '../../lib/portCompatibility';
 import type { NodeData, DynamicNodeData, DynamicParamDefinition, ParamDefinition } from '../../types';
 import { fetchOpenRouterModels, fetchNousModels, fetchQuiverModels, getSettings, updateSettings, type OpenRouterModel, type QuiverModel } from '../../lib/api';
-import { apiFetch, backendAssetUrlSync } from '../../lib/backend';
+import { backendAssetUrlSync } from '../../lib/backend';
+import { apiRequest } from '../../lib/apiRequest';
+import { quoted } from '../../lib/canvasFileDrop';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { MaskPainterModal } from '../DeferredPanels';
 import { DeferredMaskPainterModal } from '../../lib/deferredChunks';
@@ -24,11 +26,15 @@ import { definitionSnap, definitionStartShapeNote, sizeNote } from '../../lib/ma
 import { paramDefaultFor, snapParamDefaults, type DefaultSnapNote } from '../../lib/paramDefaults';
 import { nodeWiredCounts, nodeWiredPorts } from '../../lib/runScope';
 import { ProviderSwitcher } from '../nodes/ProviderSwitcher';
+import { InspectorFoot } from './InspectorFoot';
 import { useProviderNoteStore } from '../../store/providerNoteStore';
 import { snapHidden } from '../../lib/providerSwitch';
 import { skippedLabel } from '../../lib/gating';
 import '../../styles/panels.css';
 import '../../styles/mask-painter.css';
+import { failureMessage } from '../../lib/errorCopy';
+import { extractPaletteFromImage, paletteNotice } from '../../lib/paletteExtract';
+import { fileNameParam, inputFileName } from '../../lib/fileName';
 
 type InspectorParamDefinition = ParamDefinition | DynamicParamDefinition;
 
@@ -38,18 +44,7 @@ type InspectorProps = {
 
 // --- Palette param helpers -------------------------------------------------
 // The 'palette' control stores a string[] of `#rrggbb` hex values. Extraction
-// runs client-side (k-means on a downscaled canvas) so v1 needs no backend
-// endpoint — see spec §7. If this grows, a /api/cinema/extract-palette endpoint
-// can replace `extractPaletteFromImage` without touching the render branch.
-
-function clampByte(n: number): number {
-  return Math.max(0, Math.min(255, Math.round(n)));
-}
-
-function rgbToHex(r: number, g: number, b: number): string {
-  const toHex = (n: number) => clampByte(n).toString(16).padStart(2, '0');
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-}
+// runs client-side (lib/paletteExtract.ts, k-means on a downscaled canvas).
 
 /** Normalize arbitrary user/text input into a `#rrggbb` hex string. Returns
  *  null when the input can't be coerced to a valid 6-digit hex. */
@@ -62,112 +57,6 @@ function normalizeHex(input: string): string | null {
     v = `#${v[1]}${v[1]}${v[2]}${v[2]}${v[3]}${v[3]}`;
   }
   return /^#[0-9a-f]{6}$/.test(v) ? v : null;
-}
-
-/** Deterministic k-means over RGB pixels. Fixed initial centroids (evenly
- *  sampled) + fixed iteration count → stable output for the same image. */
-function kMeansColors(pixels: number[][], k: number, iterations = 8): number[][] {
-  if (pixels.length === 0) return [];
-  const clusterCount = Math.min(k, pixels.length);
-  // Deterministic seeding: evenly spaced samples across the pixel list.
-  const centroids: number[][] = [];
-  for (let i = 0; i < clusterCount; i++) {
-    const idx = Math.floor((i * pixels.length) / clusterCount);
-    centroids.push([...pixels[idx]]);
-  }
-
-  for (let iter = 0; iter < iterations; iter++) {
-    const sums = centroids.map(() => [0, 0, 0]);
-    const counts = new Array(clusterCount).fill(0);
-    for (const px of pixels) {
-      let best = 0;
-      let bestDist = Infinity;
-      for (let c = 0; c < clusterCount; c++) {
-        const dr = px[0] - centroids[c][0];
-        const dg = px[1] - centroids[c][1];
-        const db = px[2] - centroids[c][2];
-        const dist = dr * dr + dg * dg + db * db;
-        if (dist < bestDist) {
-          bestDist = dist;
-          best = c;
-        }
-      }
-      sums[best][0] += px[0];
-      sums[best][1] += px[1];
-      sums[best][2] += px[2];
-      counts[best] += 1;
-    }
-    for (let c = 0; c < clusterCount; c++) {
-      if (counts[c] > 0) {
-        centroids[c] = [
-          sums[c][0] / counts[c],
-          sums[c][1] / counts[c],
-          sums[c][2] / counts[c],
-        ];
-      }
-    }
-  }
-
-  // Order clusters by population (most-dominant first) for a stable, useful order.
-  const finalCounts = new Array(clusterCount).fill(0);
-  for (const px of pixels) {
-    let best = 0;
-    let bestDist = Infinity;
-    for (let c = 0; c < clusterCount; c++) {
-      const dr = px[0] - centroids[c][0];
-      const dg = px[1] - centroids[c][1];
-      const db = px[2] - centroids[c][2];
-      const dist = dr * dr + dg * dg + db * db;
-      if (dist < bestDist) {
-        bestDist = dist;
-        best = c;
-      }
-    }
-    finalCounts[best] += 1;
-  }
-  return centroids
-    .map((c, i) => ({ c, n: finalCounts[i] }))
-    .sort((a, b) => b.n - a.n)
-    .map((entry) => entry.c);
-}
-
-/** Load an image URL, downscale onto a canvas, and k-means the pixels into
- *  `k` dominant `#rrggbb` swatches. Resolves to [] on any failure. */
-async function extractPaletteFromImage(url: string, k = 6): Promise<string[]> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      try {
-        const maxDim = 96;
-        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-        const w = Math.max(1, Math.round(img.width * scale));
-        const h = Math.max(1, Math.round(img.height * scale));
-        const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          resolve([]);
-          return;
-        }
-        ctx.drawImage(img, 0, 0, w, h);
-        const { data } = ctx.getImageData(0, 0, w, h);
-        const pixels: number[][] = [];
-        for (let i = 0; i < data.length; i += 4) {
-          // Skip mostly-transparent pixels so the palette reflects visible color.
-          if (data[i + 3] < 128) continue;
-          pixels.push([data[i], data[i + 1], data[i + 2]]);
-        }
-        const centroids = kMeansColors(pixels, k);
-        resolve(centroids.map((c) => rgbToHex(c[0], c[1], c[2])));
-      } catch {
-        resolve([]);
-      }
-    };
-    img.onerror = () => resolve([]);
-    img.src = url;
-  });
 }
 
 export function Inspector({ embedded = false }: InspectorProps) {
@@ -326,8 +215,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        const msg = err instanceof Error ? err.message : String(err);
-        setModelLoadError(msg);
+        setModelLoadError(failureMessage(err, universalProvider === 'openrouter'
+          ? "Couldn't load the OpenRouter models." : "Couldn't load the Nous models."));
         setOpenRouterModels([]);
       })
       .finally(() => {
@@ -551,7 +440,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
             modelsLoading
               ? 'Loading models...'
               : modelLoadError
-                ? 'Could not load models'
+                ? "Couldn't load the models."
                 : 'Search models...'
           }
           value={modelSearch}
@@ -830,24 +719,25 @@ export function Inspector({ embedded = false }: InspectorProps) {
                   e.target.value = '';
                   const paramKey = param.key;
                   setPaletteExtracting((prev) => ({ ...prev, [paramKey]: true }));
-                  const formData = new FormData();
-                  formData.append('file', file);
-                  apiFetch('/api/uploads', { method: 'POST', body: formData })
-                    .then((r) => r.json())
-                    .then((data: { filePath: string; url: string }) =>
-                      extractPaletteFromImage(backendAssetUrlSync(data.url)),
-                    )
-                    .then((extracted) => {
-                      if (extracted.length > 0) writeSwatches(extracted);
-                    })
-                    .catch((err) => console.error('Palette extraction failed:', err))
-                    .finally(() => {
+                  const notify = (text: string) => useGraphStore.getState().notify(text, 'error');
+                  // The colours come from the picked file itself, so nothing
+                  // is uploaded (it was stored in output/ only to be read
+                  // back). A file the browser can't decode says so below.
+                  void (async () => {
+                    try {
+                      // GM: "Couldn't find colors in {filename}." over why,
+                      // when Nebula can tell; the heading alone otherwise.
+                      const extracted = await extractPaletteFromImage(file);
+                      if (extracted.ok && extracted.colors.length > 0) writeSwatches(extracted.colors);
+                      else notify(paletteNotice(file.name, extracted.ok ? 'other' : extracted.reason));
+                    } finally {
                       setPaletteExtracting((prev) => {
                         const next = { ...prev };
                         delete next[paramKey];
                         return next;
                       });
-                    });
+                    }
+                  })();
                 }}
               />
             </label>
@@ -858,8 +748,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
 
     if (param.type === 'file') {
       const fileValue = String(value);
+      // The name it was uploaded with (the stored copy's name is a hash).
       const loadedFilename = fileValue
-        ? fileValue.split('/').pop() ?? fileValue
+        ? (param.key === 'filePath' ? inputFileName(activeNodeData.params) : null) ?? fileValue.split(/[\\/]/).pop() ?? fileValue
         : null;
       const isVideoNode = activeNodeData.definitionId === 'video-input' || activeNodeData.definitionId === 'audio-input';
       const isDocNode = activeNodeData.definitionId === 'document-input';
@@ -888,18 +779,25 @@ export function Inspector({ embedded = false }: InspectorProps) {
                 if (!file) return;
                 const formData = new FormData();
                 formData.append('file', file);
-                apiFetch('/api/uploads', { method: 'POST', body: formData })
+                // GM, error-copy round 2: "Couldn't upload {filename}." then the
+                // reason, in the canvas notice (as a canvas drop says it).
+                const heading = `Couldn't upload ${quoted(file.name)}.`;
+                apiRequest(heading, '/api/uploads', { method: 'POST', body: formData })
                   .then((r) => r.json())
                   .then((data: { filePath: string; url: string }) => {
+                    // filePath's card names the file (lib/fileName.ts), as
+                    // /api/uploads keeps it for a node it creates.
+                    const kept = param.key === 'filePath' ? fileNameParam(data.filePath, file.name) : null;
                     updateNodeData(activeNode.id, {
-                      params: { ...activeNodeData.params, [param.key]: data.filePath, _previewUrl: backendAssetUrlSync(data.url) },
+                      params: { ...activeNodeData.params, [param.key]: data.filePath, _previewUrl: backendAssetUrlSync(data.url),
+                        ...(kept ? { _fileName: kept } : {}) },
                     });
                   })
-                  .catch((err) => console.error('Upload failed:', err));
+                  .catch((err) => useGraphStore.getState().notify(failureMessage(err, heading), 'error'));
               }}
             />
           </label>
-          {!isDocNode && typeof activeNodeData.params._previewUrl === 'string' && (
+          {!isDocNode && !isVideoNode && typeof activeNodeData.params._previewUrl === 'string' && (
             <img
               src={String(activeNodeData.params._previewUrl)}
               alt="Preview"
@@ -1139,7 +1037,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           return (
             <section className="inspector__section inspector__last-output" aria-label="Last output">
               <div className="inspector__label">Last output</div>
-              <StructuredOutputs outputs={entries} variant="full" labels={labels} />
+              <StructuredOutputs outputs={entries} variant="full" labels={labels} definitionId={nodeData.definitionId} />
             </section>
           );
         })()}
@@ -1213,7 +1111,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
               {editNeedsBaseImage && !editHasBaseImageWire && (
                 <p className="mask-painter__hint">
                   Connect the source image to the edit node&apos;s Image port too — mask-painter only passes the mask.
-                  Re-connect the mask wire to auto-wire the base image.
+                  Reconnect the mask, and Nebula connects the base image for you.
                 </p>
               )}
               {maskPainterOpen && (
@@ -1247,7 +1145,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
           )}
         </div>
 
-        {/* Actions */}
+        {/* Actions: in the floating Inspector's foot, outside its scrolling
+            body, so the row is always whole (GM - Design, 2026-10-23). */}
+        <InspectorFoot>
         <div className="inspector__section inspector__actions">
           <button
             type="button"
@@ -1282,7 +1182,11 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button inspector__action-button--danger"
-            onClick={() => deleteNode(renderNode.id)}
+            onClick={() => {
+              // A World Labs hold refuses, with its notice; otherwise it deletes at
+              // once and says "Deleted the node." with Undo (GM, 2026-10-23).
+              if (useGraphStore.getState().allowCanvasDelete([renderNode.id])) deleteNode(renderNode.id);
+            }}
             title="Delete this node"
           >
             <Trash2
@@ -1295,6 +1199,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
             <span>Delete</span>
           </button>
         </div>
+        </InspectorFoot>
       </div>
   );
 

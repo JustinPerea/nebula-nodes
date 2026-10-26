@@ -1,8 +1,13 @@
-"""`nebula trash list|restore`: Recently deleted moodboards, characters and projects.
+"""`nebula trash list|restore`: Recently deleted moodboards, characters, Styles and projects.
 
 Anyone may restore, agents included: a restore undoes a delete. Deleting for
 good can't be undone, so it is the person's alone and has no CLI command; the
-person does it in Nebula (Moodboard Studio, Character Studio or Projects).
+person does it in Nebula (Moodboard Studio, Character Studio, the Assets
+panel's Styles tab or Projects).
+
+`list` is MCP list_trash, through project_client.py: `--kind`, `--scope` and
+`--project` (`--project-id`, the tool's name, works too) are its kind, scope
+and project_id, and `--json` prints what it returns.
 """
 from __future__ import annotations
 
@@ -11,9 +16,11 @@ import json
 import sys
 from typing import Any, TextIO
 
+import project_client
+
 from ..client import NebulaClient
 
-KINDS = ("moodboard", "character", "project")
+KINDS = ("moodboard", "character", "style", "project")
 
 
 def _who(item: dict[str, Any]) -> str:
@@ -36,21 +43,35 @@ def _when(item: dict[str, Any]) -> str:
     return str(item.get("deletedAt") or "")[:16].replace("T", " ")
 
 
-def run_list(client: NebulaClient, *, kind: str | None = None, as_json: bool = False,
-             out: TextIO | None = None) -> int:
+def _where(client: NebulaClient, scope: str | None, project: str | None) -> str:
+    """Where a scoped listing looked, in words: "in Global" or "in project <name> (<id>)".
+    scope=global ignores the project server-side, so it is checked first."""
+    if scope == "global":
+        return "in Global"
+    if not project:
+        return ""
+    listing = client.list_projects()
+    project_id = listing.get("activeProjectId") if project == "current" else project
+    name = next((row.get("name") for row in listing.get("projects") or [] if row.get("id") == project_id), None)
+    return f"in project {name} ({project_id})" if name else f"in project {project_id}"
+
+
+def run_list(client: NebulaClient, *, kind: str | None = None, scope: str | None = None,
+             project: str | None = None, as_json: bool = False, out: TextIO | None = None) -> int:
     out = out or sys.stdout
-    listing = client.list_trash(kind)
+    listing = client.shared(project_client.list_trash, kind=kind, scope=scope, project_id=project, via="cli")
     items = listing.get("items") or []
     if as_json:
-        print(json.dumps(listing, indent=2), file=out)
+        print(json.dumps(listing, indent=2, ensure_ascii=False), file=out)
         return 0
+    where = _where(client, scope, project) if scope or project else ""
     if not items:
-        print("Recently deleted is empty.", file=out)
+        print(f"Nothing in Recently deleted {where}." if where else "Recently deleted is empty.", file=out)
         return 0
-    print(f"RECENTLY DELETED ({len(items)}):", file=out)
+    print(f"RECENTLY DELETED {where} ({len(items)}):" if where else f"RECENTLY DELETED ({len(items)}):", file=out)
     for item in items:
         scope = ""
-        if item.get("kind") in ("moodboard", "character"):
+        if item.get("kind") in ("moodboard", "character", "style"):
             scope = f"  [project {item['projectId']}]" if item.get("projectId") else "  [global]"
         expiry = f", removed for good after {str(item['purgeAt'])[:10]}" if item.get("purgeAt") else ""
         print(f"  {item.get('kind', '?'):<9} {item.get('id')}  {item.get('name') or 'Untitled'}{scope}"
@@ -83,6 +104,8 @@ def run_restore(client: NebulaClient, target: list[str], *, out: TextIO | None =
     print(f"Restored {kind} {item_id} ({name}).", file=out)
     if kind == "project":
         print(f"It is back in the project list, closed. `nebula project open {item_id}` opens it.", file=out)
+    elif kind == "style":
+        print("It is back in the Styles list (Create and the Assets panel).", file=out)
     else:
         print("Nodes that point at it work again.", file=out)
     return 0
@@ -90,7 +113,7 @@ def run_restore(client: NebulaClient, target: list[str], *, out: TextIO | None =
 
 def run(client: NebulaClient, args: argparse.Namespace) -> int:
     if args.trash_cmd == "list":
-        return run_list(client, kind=args.kind, as_json=args.json)
+        return run_list(client, kind=args.kind, scope=args.scope, project=args.project, as_json=args.json)
     if args.trash_cmd == "restore":
         return run_restore(client, args.target)
     print(f"error: unknown trash command {args.trash_cmd}", file=sys.stderr)

@@ -29,6 +29,10 @@ import {
   WorldSplatTooLargeError,
 } from '../../lib/worldSplat';
 
+/** Error copy round 3e (GM): the SPZ format check's line on the card. */
+const WORLD_SPZ_FORMAT_LINE = "This world's preview file is damaged or in a format Nebula can't open. "
+  + 'Use the panorama or the downloaded splat in a 3D viewer.';
+
 export type WorldNavigationMode = 'orbit' | 'fly';
 export type WorldViewerStatus = 'loading' | 'ready' | 'error';
 
@@ -204,9 +208,12 @@ function WorldSplatScene({
       } catch (error) {
         if (!cancelled && !isAbortError(error)) {
           console.warn('[nebula] World splat load failed:', error);
+          // Error copy round 3e (GM): the format check's own text ("not a
+          // valid supported SPZ file (invalid NGSP magic)") stays in the
+          // console above; the card reads a written line.
           onError(
-            error instanceof WorldSplatTooLargeError || error instanceof WorldSplatFormatError
-              ? error.message
+            error instanceof WorldSplatTooLargeError ? error.message
+              : error instanceof WorldSplatFormatError ? WORLD_SPZ_FORMAT_LINE
               : undefined,
           );
         }

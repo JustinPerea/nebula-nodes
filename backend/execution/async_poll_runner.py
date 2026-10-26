@@ -7,6 +7,7 @@ from urllib.parse import quote
 
 import httpx
 
+from execution.person_line import as_job_failure, slow_job_line, with_api_status, with_person_line
 from execution.poll_retry import UpstreamTask, poll_request
 from models.events import ExecutionEvent, ProgressEvent
 from services.cancellation import schedule_detached_cancel
@@ -42,6 +43,9 @@ class AsyncPollConfig:
     # whose cancel differs (e.g. Replicate's POST .../cancel) set these.
     cancel_url_template: str | None = None
     cancel_method: str = "DELETE"
+    # Who runs the job, as Settings names them ("Runway", "Replicate"): the
+    # card's line when Nebula stops waiting on it.
+    provider: str | None = None
 
 
 def _get_nested(data: dict[str, Any], path: str) -> Any:
@@ -68,7 +72,9 @@ async def async_poll_execute(
     async with httpx.AsyncClient(timeout=config.timeout) as client:
         submit_resp = await client.post(config.submit_url, headers=config.headers, json=submit_body)
         if submit_resp.status_code not in (200, 201):
-            raise RuntimeError(f"Async submit failed ({submit_resp.status_code}): {submit_resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Async submit failed ({submit_resp.status_code}): {submit_resp.text}"),
+                submit_resp.status_code)
 
         submit_data = submit_resp.json()
         task_id = str(_get_nested(submit_data, config.task_id_path))
@@ -103,7 +109,9 @@ async def poll_until_terminal(
             await asyncio.sleep(config.poll_interval)
             poll_resp = await poll_request(lambda: client.get(poll_url, headers=config.headers))
             if poll_resp.status_code != 200:
-                raise RuntimeError(f"Poll request failed ({poll_resp.status_code}): {poll_resp.text}")
+                raise with_api_status(
+                    RuntimeError(f"Poll request failed ({poll_resp.status_code}): {poll_resp.text}"),
+                    poll_resp.status_code)
 
             poll_data = poll_resp.json()
             status = str(_get_nested(poll_data, config.status_path))
@@ -118,7 +126,14 @@ async def poll_until_terminal(
             if status in config.terminal_failure:
                 task.finished = True
                 error_msg = poll_data.get("error", poll_data.get("failure", f"Job failed with status: {status}"))
-                raise RuntimeError(f"Async job failed: {error_msg}")
+                raise as_job_failure(RuntimeError(f"Async job failed: {error_msg}"))
 
+        # The provider accepted the job and may still finish and bill it (GM,
+        # error copy round 3d); a config that names no provider keeps the
+        # classifier's timeout line.
+        if config.provider:
+            raise with_person_line(RuntimeError(
+                f"Async job timed out after {config.max_polls} polls ({config.max_polls * config.poll_interval:.0f}s)"),
+                slow_job_line(config.provider))
         raise RuntimeError(
             f"Async job timed out after {config.max_polls} polls ({config.max_polls * config.poll_interval:.0f}s)")

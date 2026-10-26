@@ -35,8 +35,8 @@ export const useAgentLogStore = create<AgentLogState>((set) => ({
 
 /**
  * One agent action as a log entry, from the event that also moves its cursor
- * (agentPresenceStore): the same name, colour and words ("Added Moodboard",
- * "Running Krea 2", "Accepted"). A moodboard write comes without a target, so
+ * (agentPresenceStore): the same name, colour and words ("Added “Moodboard”",
+ * "Running “Krea 2”", "Accepted"). A moodboard write comes without a target, so
  * it moves no cursor and is listed here only. Null for an event with nothing
  * to say, such as a bare cursor move.
  */

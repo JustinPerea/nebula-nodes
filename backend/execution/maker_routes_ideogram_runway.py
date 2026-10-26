@@ -31,6 +31,7 @@ from urllib.parse import urlsplit
 
 from models.graph import GraphNode, PortValueDict
 from services import maker_sizes
+from execution.person_line import as_person_line, field_label, input_words, it_was, option_labels, or_list, with_person_line
 
 # -- shared -------------------------------------------------------------------
 
@@ -51,28 +52,28 @@ def media_ref(value: Any, what: str) -> str:
     from services.media_input import is_loopback_host, owned_output_value
 
     if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{what} is required")
+        raise with_person_line(ValueError(f"{what} is required"), f"Connect {input_words(what)} to this node, then run it again.")
     value = value.strip()
     try:
         parts = urlsplit(value)
         hostname = parts.hostname or ""
     except ValueError as exc:
-        raise ValueError(f"{what} is not a valid URL") from exc
+        raise with_person_line(ValueError(f"{what} is not a valid URL"), f"{what} isn't a valid link. Connect another one.") from exc
     if parts.scheme in {"http", "https"} and is_loopback_host(hostname):
         if not parts.path.startswith("/api/outputs/") or parts.query or parts.fragment:
-            raise ValueError(f"{what} points at this machine; connect the output itself or use a public URL")
+            raise with_person_line(ValueError(f"{what} points at this machine; connect the output itself or use a public URL"), f"{what} points at this computer. Connect the output itself, or use a public link.")
     return owned_output_value(value)
 
 
 def _number(value: Any, label: str) -> float:
     if isinstance(value, bool):
-        raise ValueError(f"{label} must be a number (received {value!r})")
+        raise with_person_line(ValueError(f"{label} must be a number (received {value!r})"), f"Set {label} to a number, then run the node again. {it_was(value)}")
     try:
         number = float(value)
     except (TypeError, ValueError):
-        raise ValueError(f"{label} must be a number (received {value!r})") from None
+        raise with_person_line(ValueError(f"{label} must be a number (received {value!r})"), f"Set {label} to a number, then run the node again. {it_was(value)}") from None
     if not math.isfinite(number):
-        raise ValueError(f"{label} must be a finite number (received {value!r})")
+        raise with_person_line(ValueError(f"{label} must be a finite number (received {value!r})"), f"Set {label} to a number, then run the node again. {it_was(value)}")
     return number
 
 
@@ -83,7 +84,7 @@ def whole_seed(value: Any, maximum: int) -> int | None:
     number = _number(value, "Seed")
     seed = int(round(number))
     if not 0 <= seed <= maximum:
-        raise ValueError(f"Seed must be from 0 to {maximum} (received {value!r})")
+        raise with_person_line(ValueError(f"Seed must be from 0 to {maximum} (received {value!r})"), f"Set “Seed” to a whole number from 0 to {maximum}. {it_was(value)}")
     return seed
 
 
@@ -92,7 +93,7 @@ def _size(body: Mapping[str, Any]) -> tuple[float, float]:
     width = _number(body.get("width", 1024), "Width")
     height = _number(body.get("height", 1024), "Height")
     if width <= 0 or height <= 0:
-        raise ValueError("Width and height must be positive")
+        raise with_person_line(ValueError("Width and height must be positive"), "“Width” and “Height” must be more than 0.")
     return width, height
 
 
@@ -130,7 +131,7 @@ def _as_list(value: Any) -> list[Any]:
 def _required_prompt(body: Mapping[str, Any]) -> str:
     prompt = body.get("prompt")
     if not isinstance(prompt, str) or not prompt.strip():
-        raise ValueError("Prompt is required")
+        raise with_person_line(ValueError("Prompt is required"), "Connect a prompt to this node, then run it again.")
     return prompt
 
 
@@ -218,16 +219,19 @@ def ideogram_3_request(body: Mapping[str, Any]) -> tuple[dict[str, Any], list[st
     strength has no Ideogram field, so a recipe with them, saved or wired,
     stays on Krea (directRoute.blockedBy)."""
     if _as_list(body.get("style_images")):
-        raise ValueError(
+        raise with_person_line(ValueError(
             "Ideogram's own API has no per-image style strength, so Krea's style images can't run on your "
             "Ideogram key. Disconnect them, or choose the Krea connection (or remove the Ideogram key) to "
             "run this node on Krea."
-        )
+        ), "Ideogram's own API has no per-image style strength, so Krea's style images can't run on your "
+            "Ideogram key. Disconnect them, or choose the Krea connection or remove the Ideogram key to "
+            "run this node on Krea.")
     characters = [str(item) for item in _as_list(body.get("character_reference_images"))]
     if len(characters) > 1:
-        raise ValueError(
+        raise with_person_line(ValueError(
             f"Ideogram's API takes one character reference image per request ({len(characters)} connected)."
-        )
+        ), f"Ideogram's API takes one character reference image per request, and {len(characters)} are "
+            "connected. Disconnect all but one, then run the node again.")
     fields: dict[str, Any] = {
         "prompt": _required_prompt(body),
         "resolution": size_snap("krea-ideogram-3", body).value,
@@ -254,18 +258,19 @@ def ideogram_precise_edit_request(body: Mapping[str, Any]) -> tuple[dict[str, An
     width and height")."""
     image = body.get("image_url")
     if not image:
-        raise ValueError("Image is required for Ideogram 4.5 Precise Edit")
+        raise with_person_line(ValueError("Image is required for Ideogram 4.5 Precise Edit"), "Connect an image to this node, then run it again.")
     mask = body.get("mask_url") or None
     references = [str(item) for item in _as_list(body.get("reference_images"))]
     limit = PRECISE_EDIT_MAX_REFS_WITH_MASK if mask else PRECISE_EDIT_MAX_REFS
     if len(references) > limit:
-        raise ValueError(
+        raise with_person_line(ValueError(
             f"Ideogram 4.5 Precise Edit takes up to {limit} reference images"
             f"{' with a mask' if mask else ''} ({len(references)} given)."
-        )
+        ), f"Ideogram 4.5 Precise Edit takes up to {limit} reference images{' with a mask' if mask else ''}, and "
+            f"{len(references)} are connected. Disconnect the extra ones, then run the node again.")
     quality = str(body.get("quality") or "high")
     if quality not in PRECISE_EDIT_QUALITIES:
-        raise ValueError(f"Quality must be one of {', '.join(PRECISE_EDIT_QUALITIES)} (received {quality!r})")
+        raise with_person_line(ValueError(f"Quality must be one of {', '.join(PRECISE_EDIT_QUALITIES)} (received {quality!r})"), "Pick one of the “Quality” options, then run the node again.")
     fields: dict[str, Any] = {"prompt": _required_prompt(body), "quality": quality, "num_images": 1}
     seed = whole_seed(body.get("seed"), IDEOGRAM_SEED_MAX)
     if seed is not None:
@@ -323,6 +328,8 @@ async def krea_ideogram_precise_edit(node: GraphNode, inputs: dict[str, PortValu
 RUNWAY_SEED_MAX = 4294967295
 RUBY_OUTPUT_FORMATS = ("hdr10", "hlg", "hdr_prores")  # the three Krea offers, of Runway's six
 RUBY_PRORES_PROFILES = ("422", "4444", "422 HQ")
+# The node whose fields runway_ruby_request reads (its card line names them).
+RUBY_DEFINITION = "krea-enhance-runway-ruby"
 
 
 async def _runway_media(value: str, what: str, api_key: str, *, video: bool = False) -> str:
@@ -332,7 +339,8 @@ async def _runway_media(value: str, what: str, api_key: str, *, video: bool = Fa
 
     value = media_ref(value, what)
     if value.startswith("http://"):
-        raise ValueError(f"{what} must be an https URL for Runway (received an http URL)")
+        raise with_person_line(ValueError(f"{what} must be an https URL for Runway (received an http URL)"), f"{what} must be an https URL for Runway, and this one is http. Use an https URL, then run the node "
+                         "again.")
     if video:
         return await _local_media_uri(value, "video/mp4", api_key, what)
     return await _resolve_image(value, api_key)
@@ -352,7 +360,7 @@ def runway_gen4_image_request(body: Mapping[str, Any]) -> tuple[dict[str, Any], 
     spec = RUNWAY_IMAGE_MODELS["gen4_image"]
     prompt = _required_prompt(body)
     if len(prompt) > spec["prompt_max"]:
-        raise ValueError(f"Runway Gen-4 Image takes a prompt of up to {spec['prompt_max']} characters.")
+        raise as_person_line(ValueError(f"Runway Gen-4 Image takes a prompt of up to {spec['prompt_max']} characters."))
     references = []
     for item in _as_list(body.get("reference_images")):
         if not isinstance(item, Mapping) or not item.get("url"):
@@ -362,7 +370,8 @@ def runway_gen4_image_request(body: Mapping[str, Any]) -> tuple[dict[str, Any], 
             reference["tag"] = str(item["tag"])
         references.append(reference)
     if len(references) > spec["refs_max"]:
-        raise ValueError(f"Runway Gen-4 Image takes up to {spec['refs_max']} reference images ({len(references)} given).")
+        raise with_person_line(ValueError(f"Runway Gen-4 Image takes up to {spec['refs_max']} reference images ({len(references)} given)."), f"Runway Gen-4 Image takes up to {spec['refs_max']} reference images, and {len(references)} are "
+                         f"connected. Disconnect the extra ones, then run the node again.")
     request: dict[str, Any] = {
         "model": "gen4_image",
         "promptText": prompt,
@@ -405,15 +414,16 @@ def runway_ruby_request(body: Mapping[str, Any]) -> tuple[dict[str, Any], str]:
     (Runway: "Only valid when `outputFormat` is `hdr_prores`")."""
     video = body.get("video_url")
     if not video:
-        raise ValueError("Video is required for Runway Ruby")
+        raise with_person_line(ValueError("Video is required for Runway Ruby"), "Connect a video to this node, then run it again.")
     output_format = str(body.get("output_format") or "hdr10")
     if output_format not in RUBY_OUTPUT_FORMATS:
-        raise ValueError(f"Output format must be one of {', '.join(RUBY_OUTPUT_FORMATS)} (received {output_format!r})")
+        raise with_person_line(ValueError(f"Output format must be one of {', '.join(RUBY_OUTPUT_FORMATS)} (received {output_format!r})"), "Pick one of the node's output formats, then run the node again.")
     request: dict[str, Any] = {"model": "ruby", "outputFormat": output_format}
     profile = body.get("prores_profile")
     if output_format == "hdr_prores" and profile:
         if str(profile) not in RUBY_PRORES_PROFILES:
-            raise ValueError(f"ProRes profile must be one of {', '.join(RUBY_PRORES_PROFILES)} (received {profile!r})")
+            raise with_person_line(ValueError(f"ProRes profile must be one of {', '.join(RUBY_PRORES_PROFILES)} (received {profile!r})"), f"Set “{field_label(RUBY_DEFINITION, 'prores_profile', 'Prores profile')}” to "
+                f"{option_labels(RUBY_DEFINITION, 'prores_profile', RUBY_PRORES_PROFILES)}, then run the node again.")
         request["proresProfile"] = str(profile)
     return request, str(video)
 

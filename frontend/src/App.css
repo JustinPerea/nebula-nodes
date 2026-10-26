@@ -52,17 +52,13 @@ a {
   pointer-events: none;
 }
 
+/* Placed by the app's notice region (NoticeRegion), like every toast. */
 .person-required {
-  position: fixed;
-  z-index: 10000;
-  bottom: 16px;
-  left: 50%;
   display: flex;
   align-items: center;
   gap: 10px;
   width: max-content;
-  max-width: min(92vw, 620px);
-  transform: translateX(-50%);
+  max-width: min(92vw, var(--notice-max-w, 560px));
   padding: 8px 8px 8px 14px;
   border: 1px solid rgb(255 255 255 / 14%);
   border-radius: 12px;
@@ -152,5 +148,13 @@ a {
 .provider-recovery-status button:hover,
 .provider-recovery-status button:focus-visible {
   background: rgb(255 255 255 / 14%);
+}
+
+.provider-recovery-status button:hover {
   outline: 1px solid rgb(255 210 180 / 58%);
+}
+
+.provider-recovery-status button:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid #fff);
+  outline-offset: var(--sr-focus-offset, 2px);
 }

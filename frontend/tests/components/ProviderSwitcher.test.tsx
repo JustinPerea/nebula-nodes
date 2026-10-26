@@ -93,7 +93,8 @@ describe('ProviderSwitcher rows', () => {
     expect(screen.getByRole('menuitem', { name: 'Sign in to Krea in Settings' })).toHaveTextContent('Sign in');
     // fal can't take 9:21: a block note, and no price.
     const fal = row(/^fal\.ai/);
-    expect(fal).toHaveTextContent("Doesn't take 9:21");
+    // Round 3f (GM): the setting by its label, in quotes, with the option's label.
+    expect(fal).toHaveTextContent("Doesn't take “Aspect ratio” set to 9:21.");
     expect(fal.querySelector('.provider-switcher__price')).toHaveTextContent('-');
   });
 
@@ -145,7 +146,7 @@ describe('ProviderSwitcher picks', () => {
     withKeys({ FAL_KEY: KEY, REPLICATE_API_TOKEN: KEY });
     const onPick = vi.fn();
     render(<Controlled initial={{ resolution: '1.5k' }} onPick={onPick} />);
-    expect(row(/^Auto/)).toHaveTextContent("Auto · can't run: 1.5k isn't on fal.ai");
+    expect(row(/^Auto/)).toHaveTextContent("Auto · can't run: fal.ai doesn't take “Resolution” set to 1.5k");
     expect(screen.getByRole('status')).toHaveTextContent("Fixture Route Table can't run on fal.ai");
     fireEvent.click(screen.getByRole('menuitem', { name: 'Switch to Replicate' }));
     expect(onPick).toHaveBeenCalledWith({ resolution: '1.5k', _provider: 'replicate', _kreaAuth: 'api-token' }, []);
@@ -166,14 +167,14 @@ describe('ProviderSwitcher picks', () => {
     const onPick = vi.fn();
     const params = { resolution: '1.5k' };
     const { rerender } = render(<ProviderSwitcher definition={TABLE} params={params} variant="chip" onPick={onPick} />);
-    const chip = screen.getByRole('button', { name: /^Provider for Fixture Route Table: Auto · BFL$/ });
+    const chip = screen.getByRole('button', { name: /^Provider for Fixture Route Table: Auto · Black Forest Labs$/ });
     expect(chip).not.toHaveClass('model-node__provider-chip--blocked');
     // The BFL key goes away: Auto now lands on fal, which lacks 1.5k.
     act(() => withKeys({ FAL_KEY: KEY }));
     rerender(<ProviderSwitcher definition={TABLE} params={params} variant="chip" onPick={onPick} />);
     expect(onPick).not.toHaveBeenCalled();
     expect(params).toEqual({ resolution: '1.5k' });
-    const blocked = screen.getByRole('button', { name: /^Provider for Fixture Route Table: Auto · fal\. Can't run/ });
+    const blocked = screen.getByRole('button', { name: /^Provider for Fixture Route Table: Auto · fal\.ai\. Can't run/ });
     expect(blocked).toHaveClass('model-node__provider-chip--blocked');
     expect(blocked).toHaveTextContent('⚠');
   });
@@ -225,7 +226,8 @@ describe('ProviderSwitcher keyboard', () => {
     fireEvent.click(row(/^Black Forest Labs/));
     expect(screen.queryByRole('menu')).toBeNull();
     expect(document.activeElement).toBe(pill);
-    expect(pill).toHaveTextContent('BFL');
+    // Round 3g: the pill wraps, so it names the provider in full.
+    expect(pill).toHaveTextContent('Black Forest Labs');
   });
 
   it('keeps one row in the tab order when the menu is in place', () => {
@@ -289,7 +291,7 @@ describe('Inspector and pills show only the route options', () => {
     }
     render(<Pills />);
     const pills = document.querySelector('.param-pills')!;
-    expect(pills.firstElementChild).toHaveAccessibleName(/^Provider for Fixture Route Table: Auto · fal\. Can't run/);
+    expect(pills.firstElementChild).toHaveAccessibleName(/^Provider for Fixture Route Table: Auto · fal\.ai\. Can't run/);
     const resolution = screen.getByTitle('Resolution').querySelector('select')!;
     expect(optionValues(resolution)).toEqual(['768sq', '1k', '2k', '4k']);
     expect(screen.getByRole('option', { name: '1.5k (not on fal.ai)' })).toBeDisabled();
@@ -373,14 +375,47 @@ describe('hidden settings: a provider shows only what it offers (PR 5)', () => {
     selectNode('krea-3', { reasoning_level: 'medium' });
     render(<Inspector embedded />);
     const menu = within(document.querySelector('[data-inspector-provider]') as HTMLElement).getByRole('menu');
-    expect(within(menu).getAllByRole('menuitemradio')[0]).toHaveTextContent("Auto · can't run: Krea doesn't offer Reasoning level Medium");
-    expect(row(/^Krea · API balance/)).toHaveTextContent("Doesn't take Reasoning level Medium");
+    expect(within(menu).getAllByRole('menuitemradio')[0]).toHaveTextContent("Auto · can't run: Krea doesn't take “Reasoning level”");
+    expect(row(/^Krea · API balance/)).toHaveTextContent("Doesn't take “Reasoning level”.");
     const reset = within(menu).getByRole('menuitem', { name: 'Set Reasoning level back to Low' });
     expect(within(menu).getByRole('menuitem', { name: 'Switch to fal.ai' })).toBeVisible();
-    expect(screen.getByRole('status')).toHaveTextContent("Krea 3 can't run on Krea: it doesn't offer Reasoning level Medium. Set Reasoning level back to Low, or switch provider.");
+    expect(screen.getByRole('status')).toHaveTextContent("Krea 3 can't run on Krea with “Reasoning level” set to Medium. Set “Reasoning level” back to Low, or switch provider.");
     fireEvent.click(reset);
     expect(useGraphStore.getState().nodes[0].data.params).toMatchObject({ reasoning_level: 'low' });
     expect(document.querySelector('.provider-switcher__stop')).toBeNull();
+  });
+
+  // The Inspector's bug (GM - Design, 2026-10-23): a floating panel beside a
+  // node low on the canvas must stay above the bottom bar. The chip's popover
+  // flipped up only when it ran off the window, so just above the bar it
+  // opened down over the bar.
+  it('the chip popover flips above the chip rather than over the bottom bar', () => {
+    vi.stubGlobal('innerWidth', 1280);
+    vi.stubGlobal('innerHeight', 800);
+    const bar = document.createElement('div');
+    bar.setAttribute('data-bottom-bar', '');
+    document.body.append(bar);
+    const rects = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this.hasAttribute('data-bottom-bar')) return new DOMRect(395, 729, 490, 47);
+      if (this.classList.contains('provider-switcher__popover')) return new DOMRect(0, 0, 300, 200);
+      if (this.classList.contains('model-node__provider-chip')) return new DOMRect(600, 536, 120, 24);
+      return new DOMRect();
+    });
+    try {
+      withKeys({ FAL_KEY: KEY });
+      const node: Node<NodeData> = { id: 'n1', type: 'model-node', position: { x: 0, y: 0 },
+        data: { definitionId: 'flux-2-pro', label: 'FLUX.2', params: {}, state: 'idle', outputs: {} } };
+      useGraphStore.setState({ nodes: [node], edges: [] });
+      render(<ModelNode {...({ id: 'n1', data: node.data, selected: false } as NodeProps)} />);
+      fireEvent.click(screen.getByRole('button', { name: /^Provider for FLUX\.2/ }));
+      const popover = document.querySelector<HTMLElement>('.provider-switcher__popover')!;
+      expect(popover.classList.contains('provider-switcher__popover--above')).toBe(true);
+      expect(parseFloat(popover.style.top) + 200).toBeLessThanOrEqual(536);
+    } finally {
+      rects.mockRestore();
+      bar.remove();
+      vi.unstubAllGlobals();
+    }
   });
 
   it('the chip popover offers the same reset row, and it writes the node', () => {
@@ -389,7 +424,7 @@ describe('hidden settings: a provider shows only what it offers (PR 5)', () => {
       data: { definitionId: 'flux-2-pro', label: 'FLUX.2', params: { model: 'klein-9b', safety_tolerance: '5' }, state: 'idle', outputs: {} } };
     useGraphStore.setState({ nodes: [node], edges: [] });
     render(<ModelNode {...({ id: 'n1', data: node.data, selected: false } as NodeProps)} />);
-    fireEvent.click(screen.getByRole('button', { name: /^Provider for FLUX\.2: Auto · fal\. Can't run/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Provider for FLUX\.2: Auto · fal\.ai\. Can't run/ }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Set Safety back to 2' }));
     expect(useGraphStore.getState().nodes[0].data.params).toMatchObject({ model: 'klein-9b', safety_tolerance: '2' });
     expect(screen.queryByRole('menu')).toBeNull();
@@ -422,7 +457,7 @@ describe('the card', () => {
   it('shows the provider chip in place of the missing-key badge, and the switch note until dismissed', () => {
     withKeys({ FAL_KEY: KEY });
     renderCard({ _provider: 'replicate' });
-    const chip = screen.getByRole('button', { name: /^Provider for Fixture Route Table: Rep\. Can't run/ });
+    const chip = screen.getByRole('button', { name: /^Provider for Fixture Route Table: Replicate\. Can't run/ });
     expect(chip).toHaveClass('model-node__provider-chip--blocked');
     expect(document.querySelector('.model-node__badge--warning')).toBeNull();
     act(() => useProviderNoteStore.getState().show('n1', ["1.5k isn't on fal.ai: set to 2k"]));
@@ -434,7 +469,7 @@ describe('the card', () => {
   it('a pick from the chip writes the node and leaves the note on the card', () => {
     withKeys({ FAL_KEY: KEY, BFL_API_KEY: KEY });
     renderCard({ resolution: '1.5k' });
-    fireEvent.click(screen.getByRole('button', { name: /^Provider for Fixture Route Table: Auto · BFL$/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Provider for Fixture Route Table: Auto · Black Forest Labs$/ }));
     fireEvent.click(row(/^fal\.ai/));
     expect(useGraphStore.getState().nodes[0].data.params).toMatchObject({ _provider: 'fal', resolution: '2k' });
     expect(useProviderNoteStore.getState().notes.n1).toBe("1.5k isn't on fal.ai: set to 2k");

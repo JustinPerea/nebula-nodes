@@ -18,6 +18,7 @@ from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
 from services.ffmpeg import ProbeResult, ffprobe_video, run_ffmpeg
 from services.output import OUTPUT_ROOT, get_run_dir
+from execution.person_line import missing_file_line, with_person_line
 
 
 _OUTPUTS_URL_PREFIX = "/api/outputs/"
@@ -310,10 +311,14 @@ async def handle_video_edit(
     """Run the edit graph on the upstream source."""
     src_input = inputs.get("video_in")
     if src_input is None or not src_input.value:
-        raise ValueError("video_in port is required for video-edit")
+        raise with_person_line(
+            ValueError("video_in port is required for video-edit"),
+            "Connect a video to this node, then run it again.")
     src_path = _resolve_local_path(str(src_input.value))
     if src_path is None:
-        raise FileNotFoundError(f"Source video not found: {src_input.value}")
+        raise with_person_line(
+            FileNotFoundError(f"Source video not found: {src_input.value}"),
+            missing_file_line("video file"))
 
     probe = await ffprobe_video(src_path)
     node.params["sourceDuration"] = probe.duration

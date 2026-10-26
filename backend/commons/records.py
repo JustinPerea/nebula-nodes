@@ -8,6 +8,11 @@ from typing import Any
 from commons.db import now_iso
 from commons.ids import new_id
 from commons.measure import phash_distance
+from commons.person_copy import Refused
+
+# Written for the person (GM - Design, error-copy round 2); agents and the log keep the message.
+OUTSIDE_IMAGE = "That region is outside the image. Draw it again."
+REGION_GONE = "That region isn't on this reference anymore. Reload to get the latest version."
 
 DEFAULT_DAILY_CAP = 20
 QUARANTINE_DISTANCE = 8
@@ -20,10 +25,10 @@ def _iso(dt: datetime) -> str:
 
 def validate_box(box: Any) -> list[float]:
     if not isinstance(box, (list, tuple)) or len(box) != 4:
-        raise ValueError("box must be [x, y, w, h]")
+        raise Refused("box must be [x, y, w, h]", OUTSIDE_IMAGE)
     x, y, w, h = (float(v) for v in box)
     if not (0 <= x <= 1 and 0 <= y <= 1 and 0 < w <= 1 and 0 < h <= 1 and x + w <= 1.0001 and y + h <= 1.0001):
-        raise ValueError("box must lie within 0-1 with positive size")
+        raise Refused("box must lie within 0-1 with positive size", OUTSIDE_IMAGE)
     return [x, y, w, h]
 
 
@@ -70,8 +75,8 @@ def write_analysis_ok(store, asset_id: str, *, fields: dict, raw_output: str, fe
             (aid, asset_id, prompt_version, model_id, code_version, vocab_version, json.dumps(fields),
              raw_output, json.dumps(fewshot_ids), duration_ms, now),
         )
-        conn.execute("UPDATE assets SET analysis_state = 'ready', last_error = NULL, next_attempt_at = NULL "
-                     "WHERE id = ?", (asset_id,))
+        conn.execute("UPDATE assets SET analysis_state = 'ready', last_error = NULL, last_error_kind = NULL, "
+                     "next_attempt_at = NULL WHERE id = ?", (asset_id,))
         existing = [json.loads(r["box"]) for r in conn.execute(
             "SELECT box FROM regions WHERE asset = ? AND status != 'deleted'", (asset_id,))]
         for region in proposed_regions:
@@ -99,7 +104,13 @@ def write_analysis_ok(store, asset_id: str, *, fields: dict, raw_output: str, fe
 
 def write_analysis_failed(store, asset_id: str, *, error: str, raw_output: str | None, prompt_version: str,
                           model_id: str, vocab_version: str, fewshot_ids: list[str],
-                          max_attempts: int = 3, code_version: str = "measure-1") -> dict:
+                          max_attempts: int = 3, code_version: str = "measure-1",
+                          error_kind: str | None = None) -> dict:
+    """Record a failed analysis. `error_kind` is why, for the person's UI
+    (commons/analysis_errors.py); left out, it is read from `error`'s text."""
+    from commons import analysis_errors
+
+    kind = error_kind if error_kind in analysis_errors.KINDS else analysis_errors.classify_text(error)
     aid = new_id("ana")
     now = datetime.now(timezone.utc)
     with store.db.tx() as conn:
@@ -112,11 +123,11 @@ def write_analysis_failed(store, asset_id: str, *, error: str, raw_output: str |
         attempts = conn.execute("SELECT attempts FROM assets WHERE id = ?", (asset_id,)).fetchone()[0]
         if attempts < max_attempts:
             due = _iso(now + timedelta(seconds=30 * 2 ** attempts))
-            conn.execute("UPDATE assets SET analysis_state = 'queued', next_attempt_at = ?, last_error = ? "
-                         "WHERE id = ?", (due, error[:500], asset_id))
+            conn.execute("UPDATE assets SET analysis_state = 'queued', next_attempt_at = ?, last_error = ?, "
+                         "last_error_kind = ? WHERE id = ?", (due, error[:500], kind, asset_id))
         else:
-            conn.execute("UPDATE assets SET analysis_state = 'analysis_failed', last_error = ? WHERE id = ?",
-                         (error[:500], asset_id))
+            conn.execute("UPDATE assets SET analysis_state = 'analysis_failed', last_error = ?, last_error_kind = ? "
+                         "WHERE id = ?", (error[:500], kind, asset_id))
         store.emit(conn, "analysis_failed", {"asset": asset_id, "analysis": aid, "error": error[:200]},
                    "worker:analysis")
         terminal = attempts >= max_attempts
@@ -187,7 +198,7 @@ def stale_asset_ids(store, *, prompt_version: str, model_id: str, collection_id:
 def add_correction(store, asset_id: str, *, field_path: str, op: str, value: Any, actor: str,
                    reason: str | None = None) -> dict:
     if op not in ("set", "add", "remove"):
-        raise ValueError("op must be set, add or remove")
+        raise Refused("op must be set, add or remove")
     cid = new_id("cor")
     with store.db.tx() as conn:
         conn.execute("INSERT INTO corrections(id, asset, field_path, op, value, actor, reason, at) "
@@ -229,7 +240,7 @@ def update_region(store, region_id: str, *, actor: str, label: str | None = None
         sets.append("note = ?"); args.append(note)
     if status is not None:
         if status not in ("proposed", "confirmed", "deleted"):
-            raise ValueError("bad region status")
+            raise Refused("bad region status")
         sets.append("status = ?"); args.append(status)
     if box is not None:
         sets.append("box = ?"); args.append(json.dumps(validate_box(box)))
@@ -260,13 +271,13 @@ def add_comment(store, membership_id: str, *, text: str, actor: str, region_id: 
                 source_date: str | None = None) -> dict:
     text = text.strip()
     if not text:
-        raise ValueError("comment text is empty")
+        raise Refused("comment text is empty", "Write a comment first.")
     if region_id is not None:
         membership = store.get_membership(membership_id)
         with store.db.read() as conn:
             region = conn.execute("SELECT asset FROM regions WHERE id = ?", (region_id,)).fetchone()
         if membership is None or region is None or region["asset"] != membership["asset"]:
-            raise ValueError("region not found on this asset")
+            raise Refused("region not found on this asset", REGION_GONE)
     cid = new_id("cmt")
     with store.db.tx() as conn:
         conn.execute("INSERT INTO comments(id, membership, region, actor, text, source_date, created_at) "

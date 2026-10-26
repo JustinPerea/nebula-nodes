@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { fetchCharacters } from '../../lib/api';
-import { backendAssetUrlSync } from '../../lib/backend';
+import { storedImageView } from '../../lib/storedImage';
+import { OutsideImageNote } from '../OutsideImageNote';
 import type { Character } from '../../types';
 import type { AssetScope } from '../../store/uiStore';
 import { RecentlyDeletedAssets } from '../asset-trash/AssetTrash';
 import { emptyRailMessage, railNotice, type AssetHome } from '../../lib/assetHome';
 import { NO_PROJECT_OPEN } from '../../lib/currentProject';
 import { wsClient } from '../../lib/wsClient';
+import { failureMessage } from '../../lib/errorCopy';
 
 interface CharacterLibraryRailProps {
   /** Currently-open Character id (or the 'new' sentinel for a fresh draft). */
@@ -70,7 +72,8 @@ export function CharacterLibraryRail({
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to load.');
+          // The request's error is already "Couldn't load the characters. <reason>".
+          setError(failureMessage(err, "Couldn't load the characters."));
           setListing({ for: listKey, items: [] });
         }
       })
@@ -125,26 +128,31 @@ export function CharacterLibraryRail({
             {emptyRailMessage('character', scope, characterHome, !noProject)}
           </div>
         )}
-        {characters.map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            className={`character-rail__item ${c.id === activeId ? 'character-rail__item--active' : ''}`}
-            onClick={() => onSelect(c.id, scope)}
-          >
-            <span className="character-rail__thumb">
-              {c.thumbnail ? (
-                <img src={backendAssetUrlSync(c.thumbnail)} alt="" draggable={false} />
-              ) : (
-                <span className="character-rail__thumb-empty">◐</span>
-              )}
-            </span>
-            <span className="character-rail__meta">
-              <span className="character-rail__name">{c.name || 'Untitled'}</span>
-              <span className="character-rail__sub">{c.referenceViews.length} views</span>
-            </span>
-          </button>
-        ))}
+        {characters.map((c) => {
+          // Only Nebula's own files are loaded (lib/storedImage.ts).
+          const thumb = storedImageView(c.thumbnail);
+          return (
+            <button
+              key={c.id}
+              type="button"
+              className={`character-rail__item ${c.id === activeId ? 'character-rail__item--active' : ''}`}
+              onClick={() => onSelect(c.id, scope)}
+            >
+              <span className="character-rail__thumb">
+                {thumb.src ? (
+                  <img src={thumb.src} alt="" draggable={false} />
+                ) : (
+                  <span className="character-rail__thumb-empty">◐</span>
+                )}
+              </span>
+              <span className="character-rail__meta">
+                <span className="character-rail__name">{c.name || 'Untitled'}</span>
+                <span className="character-rail__sub">{c.referenceViews.length} views</span>
+                {thumb.outside && <OutsideImageNote />}
+              </span>
+            </button>
+          );
+        })}
       </div>
       <RecentlyDeletedAssets kind="character" scope={scope} refreshKey={`${String(refreshKey)}:${activeId}`}
         onRestored={(item) => onSelect(item.id, scope)} onTrashChanged={relist} />

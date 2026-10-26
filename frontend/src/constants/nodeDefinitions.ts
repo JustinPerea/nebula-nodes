@@ -8396,7 +8396,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'style_images', label: 'Style Images', dataType: 'Image', required: false, multiple: true, maxConnections: 10, role: 'style' },
       { id: 'image_style_references', label: 'Image Style Refs', dataType: 'Any', required: false, multiple: true, maxConnections: 10 },
       { id: 'styles', label: 'Styles', dataType: 'Any', required: false, multiple: true },
-      { id: 'moodboard', label: 'Moodboard', dataType: 'Any', required: false, maxConnections: 1 },
+      { id: 'moodboard', label: 'Moodboard', dataType: 'Moodboard', required: false, maxConnections: 1 },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -9069,7 +9069,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'ID',
         type: 'string',
         required: false,
-        placeholder: 'Or wire a style / moodboard',
+        placeholder: 'Or connect a style / moodboard',
       },
       {
         key: 'new_name',
@@ -9173,7 +9173,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Job ID',
         type: 'string',
         required: false,
-        placeholder: 'Or wire a Krea 3D job',
+        placeholder: 'Or connect a Krea 3D job',
       },
       {
         key: 'node_app_key',
@@ -13315,7 +13315,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'jev-decide': {
     id: 'jev-decide',
     displayName: 'Jev Decide (judge / classify / yes-no)',
-    description: 'Judge, classify or score text and images with one typed question: yes/no, pick one option, or rate on a scale. Returns the answer, its probability, confidence and a pass / fail / unsure verdict. Also a gate: whatever is wired into Through comes out of On Pass or On Fail, and the nodes on the other branch are skipped. TypeSafe Jev makes decisions only, no text generation. Image input is experimental.',
+    description: 'Judge, classify or score text and images with one typed question: yes/no, pick one option, or rate on a scale. Returns the answer, its probability, confidence and a pass / fail / unsure verdict. Also a gate: whatever is connected to “Through” comes out of “On Pass” or “On Fail”, and the nodes on the other branch are skipped. TypeSafe Jev makes decisions only, no text generation. Image input is experimental.',
     category: 'analyzer',
     apiProvider: 'typesafe',
     apiEndpoint: '/v1/systemone',
@@ -13437,7 +13437,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'jev-box': {
     id: 'jev-box',
     displayName: 'Jev Box (experimental)',
-    description: 'Find one thing in an image and get its bounding box, a crop and a rectangle mask for inpainting. A presence check runs in the same request, so a missing target gives found false, no crop, and the nodes wired to Crop, Mask or Annotated are skipped. TypeSafe Jev makes decisions only, no text generation. Experimental at TypeSafe.',
+    description: 'Find one thing in an image and get its bounding box, a crop and a rectangle mask for inpainting. A presence check runs in the same request, so a missing target gives found false, no crop, and the nodes connected to “Crop”, “Mask” or “Annotated” are skipped. TypeSafe Jev makes decisions only, no text generation. Experimental at TypeSafe.',
     category: 'analyzer',
     apiProvider: 'typesafe',
     apiEndpoint: '/v1/systemone',

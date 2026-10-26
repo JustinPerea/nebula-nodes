@@ -18,6 +18,8 @@ from services.public_url import fetch_public_media
 from services.provider_capabilities import enforce_gemini_omni_capabilities
 from execution.missing_credential import MissingCredentialError
 from execution.poll_retry import UpstreamTask, poll_request
+from execution.person_line import (as_job_failure, it_was, missing_file_line, slow_job_line, with_api_status,
+                                   with_person_line)
 
 INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
 FILES_URL = "https://generativelanguage.googleapis.com/v1beta/files"
@@ -74,7 +76,7 @@ async def _load_bytes(value: str) -> tuple[bytes, str]:
         return base64.b64decode(b64_data), mime
     path = Path(value)
     if not path.exists():
-        raise ValueError(f"Media not found: {value}")
+        raise with_person_line(ValueError(f"Media not found: {value}"), missing_file_line("Media", value))
     return read_local_media(path, label="Gemini Omni input", max_bytes=MAX_INPUT_BYTES)[1], _mime_for_path(path)
 
 
@@ -111,7 +113,7 @@ async def _build_input_parts(
         parts.append({"type": "text", "text": prompt})
 
     if not parts:
-        raise ValueError("Prompt, images, or video input is required")
+        raise with_person_line(ValueError("Prompt, images, or video input is required"), "Connect a prompt, images or a video to this node, then run it again.")
 
     if len(parts) == 1 and parts[0]["type"] == "text":
         return str(parts[0]["text"])
@@ -151,7 +153,8 @@ async def _wait_for_file_active(
     for _ in range(max_polls):
         resp = await poll_request(lambda: client.get(poll_url, headers={"x-goog-api-key": api_key}))
         if resp.status_code != 200:
-            raise RuntimeError(f"Gemini file poll failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Gemini file poll failed ({resp.status_code}): {resp.text}"), resp.status_code)
         state = str(resp.json().get("state", "")).upper()
         if state == "ACTIVE":
             return
@@ -177,7 +180,8 @@ async def _poll_interaction(
         await asyncio.sleep(poll_interval)
         resp = await poll_request(lambda: client.get(poll_url, headers={"x-goog-api-key": api_key}))
         if resp.status_code != 200:
-            raise RuntimeError(f"Gemini Omni poll failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Gemini Omni poll failed ({resp.status_code}): {resp.text}"), resp.status_code)
         data = resp.json()
         status = str(data.get("status", "")).lower()
         await emit(ProgressEvent(node_id=node_id, value=min(poll_num / max_polls, 0.99)))
@@ -186,8 +190,8 @@ async def _poll_interaction(
         if status == "completed":
             return data
         if status in {"failed", "cancelled", "canceled"}:
-            raise RuntimeError(f"Gemini Omni interaction {status}: {data.get('error', data)}")
-    raise RuntimeError(f"Gemini Omni timed out after {max_polls} polls")
+            raise as_job_failure(RuntimeError(f"Gemini Omni interaction {status}: {data.get('error', data)}"))
+    raise with_person_line(RuntimeError(f"Gemini Omni timed out after {max_polls} polls"), slow_job_line("Gemini"))
 
 
 async def handle_gemini_omni(
@@ -257,7 +261,7 @@ async def handle_gemini_omni(
     if duration not in (None, ""):
         seconds = int(str(duration).rstrip("s"))
         if not 3 <= seconds <= 10:
-            raise ValueError(f"Gemini Omni makes 3-10 second videos (got {seconds})")
+            raise with_person_line(ValueError(f"Gemini Omni makes 3-10 second videos (got {seconds})"), f"Gemini Omni makes videos of 3 to 10 seconds. Set “Duration” in that range. {it_was(seconds)}")
         request_body["response_format"]["duration"] = f"{seconds}s"
 
     if task:
@@ -276,7 +280,8 @@ async def handle_gemini_omni(
     async with httpx.AsyncClient(timeout=900.0) as client:
         resp = await client.post(INTERACTIONS_URL, json=request_body, headers=headers)
         if resp.status_code != 200:
-            raise RuntimeError(f"Gemini Omni submit failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Gemini Omni submit failed ({resp.status_code}): {resp.text}"), resp.status_code)
 
         data = resp.json()
         interaction_id = str(data.get("id") or "")

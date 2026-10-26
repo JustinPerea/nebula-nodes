@@ -5,7 +5,10 @@ import type { Character, Moodboard } from '../../types';
 
 const api = vi.hoisted(() => ({ fetchMoodboards: vi.fn(), fetchCharacters: vi.fn(), moveStoredAsset: vi.fn() }));
 vi.mock('../../lib/api', () => api);
-vi.mock('../../lib/createPresets', () => ({ fetchPresets: vi.fn().mockResolvedValue([]) }));
+const presets = vi.hoisted(() => ({ fetchPresets: vi.fn(), deletePreset: vi.fn() }));
+vi.mock('../../lib/createPresets', () => presets);
+const trash = vi.hoisted(() => ({ fetchTrash: vi.fn(), restoreTrashed: vi.fn(), purgeTrashed: vi.fn(), emptyTrash: vi.fn() }));
+vi.mock('../../lib/trash', async (importOriginal) => ({ ...(await importOriginal<object>()), ...trash }));
 vi.mock('../../lib/backend', async (importOriginal) => ({ ...(await importOriginal<object>()), backendAssetUrlSync: (url: string) => url }));
 const socket = vi.hoisted(() => ({ handlers: new Set<(event: unknown) => void>() }));
 vi.mock('../../lib/wsClient', () => ({ wsClient: {
@@ -17,6 +20,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { setOpenProject } from '../../test/projectState';
 import { assetStudioDraftKey, emptyAssetStudioEntry, useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
+import { RequestFailedError } from '../../lib/errorCopy';
 
 const board = { id: 'b1', name: 'Warm editorial', thumbnail: '/api/outputs/a.png', images: [{}], mode: 'look' } as unknown as Moodboard;
 const character = { id: 'c1', name: 'Nari', thumbnail: '/api/outputs/n.png', referenceViews: ['a', 'b', 'c'] } as unknown as Character;
@@ -27,7 +31,13 @@ const enterMoodboardEditor = vi.fn();
 const enterCharacterEditor = vi.fn();
 
 beforeEach(() => {
+  presets.fetchPresets.mockReset().mockResolvedValue([]);
+  presets.deletePreset.mockReset().mockResolvedValue(undefined);
+  Object.values(trash).forEach((mock) => mock.mockReset());
+  trash.fetchTrash.mockResolvedValue([]);
+  trash.restoreTrashed.mockResolvedValue(undefined);
   api.fetchMoodboards.mockReset().mockResolvedValue([board]);
+  presets.fetchPresets.mockReset().mockResolvedValue([]);
   api.fetchCharacters.mockReset().mockResolvedValue([character]);
   api.moveStoredAsset.mockReset().mockImplementation(async (_kind: string, _id: string, to: string | null) =>
     ({ status: 'moved', from: null, to, fromName: 'Global', toName: to ? 'Shoot A' : 'Global', detail: '', asset: {} }));
@@ -188,14 +198,111 @@ describe.each([
   it("a project item offers Move to Global; a refused move says why", async () => {
     api[kind === 'moodboard' ? 'fetchMoodboards' : 'fetchCharacters'].mockResolvedValue([
       { ...(kind === 'moodboard' ? board : character), projectId: 'pA' }]);
-    api.moveStoredAsset.mockRejectedValueOnce(new Error('Move failed: No project has the id'));
+    // Round 3e: a refusal arrives as the API's typed error (apiRequest), not a plain Error,
+    // whose own text no surface shows any more.
+    api.moveStoredAsset.mockRejectedValueOnce(new RequestFailedError("Couldn't move it.", 404, { reason: 'No project has the id.' }));
     await openTab(tab);
     fireEvent.click(screen.getByRole('tab', { name: 'Project' }));
     fireEvent.click(await screen.findByRole('button', { name: new RegExp(`^${item}`) }));
     fireEvent.click(screen.getByRole('button', { name: /^Move/ }));
     expect(screen.getAllByRole('menuitem').map((el) => el.textContent)).toEqual(['Move to Global']);
     fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Global' }));
-    expect(await screen.findByText('Move failed: No project has the id')).toBeTruthy();
+    expect(await screen.findByText("Couldn't move it. No project has the id.")).toBeTruthy();
     expect(api.moveStoredAsset).toHaveBeenCalledWith(kind, id, null);
+  });
+});
+
+// A Character or Style saved before Nebula checked its images can hold an
+// outside link: the row keeps it listed but never loads that picture.
+describe('Assets panel images from outside Nebula', () => {
+  it('a board row shows its placeholder and says why (Q98)', async () => {
+    api.fetchMoodboards.mockResolvedValue([{ ...board, thumbnail: 'https://example.com/x.png' }]);
+    await openTab('Moodboards');
+    expect(await screen.findByText('Image link from outside Nebula')).toBeTruthy();
+    expect(document.querySelector('img[src^="https://"]')).toBeNull();
+    expect(screen.getByText('Warm editorial')).toBeTruthy();
+  });
+
+  it('a Character row shows its placeholder and says why', async () => {
+    api.fetchCharacters.mockResolvedValue([{ ...character, thumbnail: 'https://images.example.com/face.png' }]);
+    const view = renderPanel();
+    fireEvent.click(screen.getByRole('tab', { name: 'Characters' }));
+    expect(await screen.findByText('Image link from outside Nebula')).toBeTruthy();
+    expect(view.container.querySelector('img[src^="https://"]')).toBeNull();
+    expect(screen.getByRole('button', { name: /^Nari/ })).toBeTruthy();
+  });
+
+  it('a Style row shows its placeholder and says why', async () => {
+    presets.fetchPresets.mockImplementation(async (scope: string) => scope === 'global' ? [{
+      id: 's1', name: 'Old noir', category: 'My Styles', prompt: '', params: {}, modelId: 'nano-banana',
+      refImages: [], thumbnail: 'https://images.example.com/noir.png', version: 1, scope: 'global', projectId: null,
+      createdAt: '', updatedAt: '' }] : []);
+    const view = renderPanel();
+    fireEvent.click(screen.getByRole('tab', { name: 'Styles' }));
+    expect(await screen.findByText('Old noir')).toBeTruthy();
+    expect(screen.getByText('Image link from outside Nebula')).toBeTruthy();
+    expect(view.container.querySelector('img[src^="https://"]')).toBeNull();
+  });
+});
+
+describe('Assets panel Styles', () => {
+  const style = { id: 's1', name: 'Neon noir', category: 'My Styles', prompt: 'neon', params: {}, modelId: null,
+    refImages: [], thumbnail: '', version: 1, scope: 'global', projectId: null, createdAt: '', updatedAt: '' };
+
+  it('deletes a Style to Recently deleted with Undo, and Undo restores it', async () => {
+    presets.fetchPresets.mockResolvedValue([style]);
+    renderPanel();
+    fireEvent.click(screen.getByRole('tab', { name: 'Styles' }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Neon noir/ }));
+    const listed = presets.fetchPresets.mock.calls.length;
+    presets.fetchPresets.mockResolvedValue([]);
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Neon noir' }));
+
+    await waitFor(() => expect(presets.deletePreset).toHaveBeenCalledWith('s1'));
+    expect(await screen.findByText('Moved “Neon noir” to Recently deleted')).toBeTruthy();
+    await waitFor(() => expect(presets.fetchPresets.mock.calls.length).toBeGreaterThan(listed));
+    expect(await screen.findByText('No Styles yet.')).toBeTruthy();
+
+    presets.fetchPresets.mockResolvedValue([style]);
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(trash.restoreTrashed).toHaveBeenCalledWith('style', 's1'));
+    expect(await screen.findByRole('button', { name: /^Neon noir/ })).toBeTruthy();
+    expect(screen.queryByText('Moved “Neon noir” to Recently deleted')).toBeNull();
+  });
+
+  it('shows Recently deleted Styles for the scope it lists, and a refused delete says why', async () => {
+    presets.fetchPresets.mockResolvedValue([style]);
+    trash.fetchTrash.mockResolvedValue([{ kind: 'style', id: 's0', name: 'Old look', projectId: null,
+      deletedAt: '2026-10-20T12:00:00Z', deletedBy: { kind: 'agent', name: 'GM - Design' } }]);
+    // What deletePreset throws (error-copy round 2): its heading and the backend's reason.
+    presets.deletePreset.mockRejectedValueOnce(
+      new RequestFailedError("Couldn't delete the style.", 404, { detail: "Style 's1' not found" }));
+    renderPanel();
+    fireEvent.click(screen.getByRole('tab', { name: 'Styles' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
+    expect(trash.fetchTrash).toHaveBeenCalledWith({ kind: 'style', scope: 'global' });
+    expect(screen.getByText('Old look')).toBeTruthy();
+    expect(screen.getByText(/by GM - Design \(agent\)/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Neon noir/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Neon noir' }));
+    expect((await screen.findByRole('alert')).textContent).toBe("Couldn't delete the style. Style 's1' not found");
+    expect(screen.queryByText(/to Recently deleted/)).toBeNull();
+  });
+
+  it('lists again when an agent changes a Style', async () => {
+    presets.fetchPresets.mockResolvedValue([style]);
+    renderPanel();
+    fireEvent.click(screen.getByRole('tab', { name: 'Styles' }));
+    await screen.findByRole('button', { name: /^Neon noir/ });
+    presets.fetchPresets.mockResolvedValue([{ ...style, name: 'Neon rain' }]);
+    act(() => { for (const handler of socket.handlers) handler({ type: 'storedAssetChanged', kind: 'style', id: 's1', deleted: false }); });
+    expect(await screen.findByRole('button', { name: /^Neon rain/ })).toBeTruthy();
+  });
+
+  it('Characters and Moodboards keep no Delete in the panel (their Studios have it)', async () => {
+    await openTab('Moodboards');
+    fireEvent.click(await screen.findByRole('button', { name: /^Warm editorial/ }));
+    expect(screen.queryByRole('button', { name: 'Delete Warm editorial' })).toBeNull();
   });
 });

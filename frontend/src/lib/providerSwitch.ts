@@ -1,12 +1,13 @@
 import type { ModelNodeDefinition, ParamDefinition, RouteSpec } from '../types';
 import {
-  allParamDefinitions, AUTO, effectiveValues, hiddenStops, matchValue, portLimitName, PROVIDER_PARAM, providerChoice,
+  allParamDefinitions, AUTO, blockedSetting, effectiveValues, hiddenStops, matchValue, personWords, portLimitName,
+  PROVIDER_PARAM, providerChoice,
   providerLabel, routeAcceptRule, routeBlock, routeById, routeParamDefinitions, routeSentKeys, routesOf, routeSwitch,
   routeTakesValue,
   routeUnavailable, selectRoute, settingText, usesRoutePlan, withWiredBlockers, type DirectBlock, type HiddenStop,
   type RouteFix,
 } from './directRoute';
-import { estimateRoutes, formatUsdRange, routePriceUnconfirmed, type PricingTable } from './pricing';
+import { awaitsInput, entryForRoute, estimateRoutes, formatUsdRange, routePriceUnconfirmed, type PricingTable } from './pricing';
 import type { ProviderSetupTarget } from './providerReadiness';
 
 /**
@@ -58,8 +59,13 @@ export interface ProviderRow {
 export interface SwitchState {
   /** The Auto row plus one row per route. */
   rows: ProviderRow[];
-  /** The card chip: "Auto · BFL", "fal", "Rep", "OR", "Krea", "Krea plan". */
+  /** The card chip as it shows: each provider's full name where it fits
+   * ("Auto · fal.ai", "Replicate"), its short name where it can't ("Auto ·
+   * BFL"), round 3g (chipText). */
   chip: string;
+  /** The chip with every provider named in full ("Auto · Black Forest Labs"),
+   * for its title and aria-label (GM, round 3g). */
+  chipName: string;
   /** The run can't start as saved: the chip turns accent with a warning glyph. */
   blocked: boolean;
   /** Why, in the router's words (routeUnavailable), or the Krea sign-in. */
@@ -73,11 +79,29 @@ export interface SwitchState {
   fixes: (RouteFix & { label: string })[];
 }
 
-/** Short names for the 10px card chip; anything else uses its full label. */
+/** Short names for the 10px card chip, used only where the full name can't
+ * fit (chipText); anything else has only its full label. */
 const SHORT: Readonly<Record<string, string>> = { bfl: 'BFL', fal: 'fal', replicate: 'Rep', openrouter: 'OR', krea: 'Krea' };
 
 export function shortProvider(provider: string | null | undefined): string {
   return provider && Object.hasOwn(SHORT, provider) ? SHORT[provider] : providerLabel(provider);
+}
+
+/**
+ * The chip's room, in characters of its 10px JetBrains Mono (6px each): its
+ * 96px max-width less padding and border leaves 84px, and 75px beside the
+ * warning glyph and its gap when the run can't start (measured in Chrome at
+ * 1280x800 and 1440x900, round 3g; the chip never shrinks below its text,
+ * provider-switcher.css). GM: "Provider chip: "Auto · Black Forest Labs". If
+ * the chip can't fit it at its narrowest, keep "BFL" in the chip only, with
+ * the full name in its title and aria-label."
+ */
+export const CHIP_ROOM = 14;
+export const CHIP_ROOM_BLOCKED = 12;
+
+/** What the chip shows: `full` when it fits the chip's room, else `short`. */
+export function chipText(full: string, short: string, blocked: boolean): string {
+  return [...full].length <= (blocked ? CHIP_ROOM_BLOCKED : CHIP_ROOM) ? full : short;
 }
 
 function isSet(apiKeys: SwitchContext['apiKeys'], key: string): boolean {
@@ -102,44 +126,42 @@ function billingWrites(definition: ModelNodeDefinition, routeId: string, plan: b
   return { [PROVIDER_PARAM]: routeId, _kreaAuth: plan ? 'mcp' : 'api-token' };
 }
 
-/** A block's value without its param name: "resolution 1.5k" -> "1.5k". A
- * switch keeps its name ("draft true" -> "draft", "draft false" -> "no
- * draft"), since "true" alone says nothing. */
-function blockedValue(block: Partial<DirectBlock>): string {
-  const detail = String(block.detail ?? block.param ?? '');
-  const value = block.param && detail.startsWith(`${block.param} `) ? detail.slice(block.param.length + 1) : detail;
-  if (block.param && value === 'true') return block.param;
-  if (block.param && value === 'false') return `no ${block.param}`;
-  return value;
-}
-
-/** A row's block note: what this route doesn't take of the recipe. */
-function rowBlock(route: RouteSpec, block: DirectBlock): string {
-  if (block.reason === 'hidden') return `Doesn't take ${block.detail ?? block.param}`;
-  if (block.reason === 'unsupported') return `Doesn't take ${blockedValue(block)}`;
-  if (block.reason === 'blocked') return `Doesn't take ${block.param}`;
-  if (block.reason === 'requires') return `Needs ${block.param}`;
-  if (block.reason === 'size') return "Can't make that size";
-  if (block.reason === 'retired') return 'Retired by the maker';
+/** A row's block note: what this route doesn't take of the recipe, the
+ * setting by its label in quotes (error copy round 3f, GM: "Switcher notes
+ * become "Doesn't take “{Label}”." / "Needs “{Label}”.""). */
+function rowBlock(definition: ModelNodeDefinition, route: RouteSpec, block: DirectBlock, params: Params): string {
+  if (block.reason === 'hidden' || block.reason === 'unsupported' || block.reason === 'blocked') {
+    return `Doesn't take ${blockedSetting(definition, block, params)}.`;
+  }
+  if (block.reason === 'requires') return `Needs ${blockedSetting(definition, block, params)}.`;
+  if (block.reason === 'size') return "Can't make that size.";
+  if (block.reason === 'retired') return 'Retired by the maker.';
   if (block.reason === 'ports') {
     const limit = route.rules?.ports?.[block.param ?? ''];
-    const name = portLimitName(block.param ?? '', limit);
-    return limit?.max ? `Takes at most ${limit.max} ${name}` : `Doesn't take wired ${name}`;
+    const name = personWords(portLimitName(block.param ?? '', limit));
+    return limit?.max ? `Takes at most ${limit.max} ${name}.` : `Doesn't take connected ${name}.`;
   }
-  return String(block.detail ?? block.reason);
+  return `${personWords(String(block.detail ?? block.reason))}.`;
 }
 
-/** The Auto row's reason when the run can't start ("1.5k isn't on Black Forest Labs"). */
-function autoReason(definition: ModelNodeDefinition, unavailable: NonNullable<ReturnType<typeof routeUnavailable>>): string {
+/** The Auto row's reason when the run can't start ("fal.ai doesn't take
+ * “Resolution” set to 1.5K"). */
+function autoReason(definition: ModelNodeDefinition, unavailable: NonNullable<ReturnType<typeof routeUnavailable>>,
+  params: Params): string {
   const spec = unavailable.routeId ? routeById(definition, unavailable.routeId) : undefined;
   const label = providerLabel(spec?.provider);
   const block = unavailable.block;
   if (!spec) return unavailable.missing.length ? 'no provider key set' : 'no route can take it';
   if (!block) return `no ${label} key`;
-  if (block.reason === 'hidden') return `${label} doesn't offer ${block.detail ?? block.param}`;
-  if (block.reason === 'unsupported' || block.reason === 'blocked') return `${blockedValue(block)} isn't on ${label}`;
-  if (block.reason === 'ports') return `too many ${portLimitName(block.param ?? '', spec.rules?.ports?.[block.param ?? ''])} for ${label}`;
-  return rowBlock(spec, block as DirectBlock).toLowerCase();
+  if (block.reason === 'hidden' || block.reason === 'unsupported' || block.reason === 'blocked') {
+    return `${label} doesn't take ${blockedSetting(definition, block, params)}`;
+  }
+  if (block.reason === 'requires') return `${label} needs ${blockedSetting(definition, block, params)}`;
+  if (block.reason === 'ports') {
+    return `too many ${personWords(portLimitName(block.param ?? '', spec.rules?.ports?.[block.param ?? '']))} for ${label}`;
+  }
+  const note = rowBlock(definition, spec, block as DirectBlock, params);
+  return note.charAt(0).toLowerCase() + note.slice(1, -1);
 }
 
 function price(definition: ModelNodeDefinition, route: RouteSpec, estimates: ReturnType<typeof estimateRoutes>,
@@ -147,6 +169,9 @@ function price(definition: ModelNodeDefinition, route: RouteSpec, estimates: Ret
   wired: Iterable<string>): { price: string; priceTitle?: string } {
   if (plan) return { price: '-', priceTitle: 'Billed to your Krea plan' };
   const estimate = estimates[route.id];
+  if (!estimate && awaitsInput(entryForRoute(pricing?.nodes[definition.id], route.pricing ?? route.id))) {
+    return { price: 'by size', priceTitle: "Priced from the input's size when it runs" };
+  }
   if (!estimate || estimate.currency !== 'usd') return { price: '-', priceTitle: 'No list price for these settings' };
   const unconfirmed = routePriceUnconfirmed(definition, route.id, pricing, params, wired);
   return {
@@ -174,14 +199,14 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
 
   const rows: ProviderRow[] = [{
     id: AUTO, routeId: null, plan: false,
-    label: autoUnavailable ? `Auto · can't run: ${autoReason(definition, autoUnavailable)}` : `Auto · runs on ${autoName}`,
+    label: autoUnavailable ? `Auto · can't run: ${autoReason(definition, autoUnavailable, { ...routed, [PROVIDER_PARAM]: AUTO })}` : `Auto · runs on ${autoName}`,
     keyState: null, price: autoUnavailable || !autoSpec ? '-'
       : price(definition, autoSpec, estimates, context.pricing, autoRoute.kind === 'plan', saved, wiredPorts).price,
     block: null, selected: choice === AUTO, writes: billingWrites(definition, AUTO, false),
   }];
   for (const spec of routesOf(definition)) {
     const block = routeBlock(definition, spec, routed);
-    const note = block ? rowBlock(spec, block) : null;
+    const note = block ? rowBlock(definition, spec, block, routed) : null;
     const keyed = spec.keys.some((key) => isSet(context.apiKeys, key));
     const label = providerLabel(spec.provider);
     if (spec.plan !== 'only') {
@@ -215,13 +240,17 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
   const planRun = usesRoutePlan(definition, routed);
   const signInNeeded = planRun && !context.kreaSignedIn;
   const shownSpec = route.routeId ? routeById(definition, route.routeId) : undefined;
-  const short = route.kind === 'plan' ? 'Krea plan' : shortProvider(shownSpec?.provider ?? route.provider);
-  const chip = choice === AUTO ? (autoRoute.routeId ? `Auto · ${autoRoute.kind === 'plan' ? 'Krea plan' : shortProvider(autoSpec?.provider)}` : 'Auto')
-    : routeById(definition, choice) ? short : 'Unknown';
+  const shownProvider = shownSpec?.provider ?? route.provider;
+  const named = (name: (provider: string | null | undefined) => string) => (choice === AUTO
+    ? (autoRoute.routeId ? `Auto · ${autoRoute.kind === 'plan' ? 'Krea plan' : name(autoSpec?.provider)}` : 'Auto')
+    : routeById(definition, choice) ? (route.kind === 'plan' ? 'Krea plan' : name(shownProvider)) : 'Unknown');
+  const blocked = Boolean(unavailable) || signInNeeded;
+  const chipName = named(providerLabel);
   return {
     rows,
-    chip,
-    blocked: Boolean(unavailable) || signInNeeded,
+    chip: chipText(chipName, named(shortProvider), blocked),
+    chipName,
+    blocked,
     message: unavailable?.message
       ?? (signInNeeded ? `${definition.displayName} bills your Krea plan. Sign in to Krea in Settings, or choose another provider.` : null),
     alternatives: (unavailable?.alternatives ?? []).map((routeId) => ({

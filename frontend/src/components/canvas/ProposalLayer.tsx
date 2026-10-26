@@ -9,6 +9,7 @@ import {
   ghostKeyWarning,
   ghostPosition,
   ghostRows,
+  notReadyWarning,
   wireEnd,
   wirePath,
   type ProposalView,
@@ -97,7 +98,7 @@ function GhostCard({
       className="proposal-ghost nodrag nopan nowheel"
       style={{ ['--ghost-rows' as string]: ghostRows(node) }}
       data-ref={node.ref}
-      aria-label={`Proposed ${node.name} (${node.ref}) from ${agentName}`}
+      aria-label={`Proposed ${node.name} (${node.model ? `${node.ref}, ${node.model}` : node.ref}) from ${agentName}`}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}
@@ -126,7 +127,8 @@ function GhostCard({
         )}
         <span className={`proposal-ghost__cost proposal-ghost__cost--${node.cost.kind}`}>{node.cost.label}</span>
         <p className="proposal-ghost__caption">
-          {node.ref} · proposed by {agentName}
+          {node.model ? `${node.ref} · ${node.model}` : node.ref} ·{' '}
+          <span className="proposal-ghost__by">proposed by {agentName}</span>
         </p>
       </div>
       {node.ports.inputs.map((port, row) => (
@@ -280,7 +282,7 @@ function ProposalGhosts({ entry }: { entry: ProposalEntry }) {
           exact={entry.values?.nodes[node.ref]}
           agentName={view.agent.name}
           warning={ghostKeyWarning(NODE_DEFINITIONS[node.definitionId], entry.values?.nodes[node.ref] ?? node.params, cache)
-            ?? notReady.find((row) => row.nodeId === null && row.ref === node.ref)?.missing ?? null}
+            ?? notReadyWarning(notReady.find((row) => row.nodeId === null && row.ref === node.ref))}
           register={(ref, el) => {
             if (el) {
               cards.current.set(ref, el);

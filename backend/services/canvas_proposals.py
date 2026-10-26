@@ -22,13 +22,16 @@ Cost: each node is ``free`` (a local utility node) or ``paid`` (a provider
 call, labelled with the provider). ``estimate`` adds up list prices from
 ``data/model_pricing.json`` (see ``services/model_pricing.py``) for the nodes
 that have one; it is None when none do, and ``open`` when some paid node has
-no list price, so the real total can be higher.
+no list price, so the real total can be higher. ``awaitingInput`` (only
+when there are some) names the unpriced nodes priced from their input's
+size, which isn't known until that input exists (model_pricing sizing).
 
 Memory-only: open and recently decided proposals are lost on restart.
 """
 from __future__ import annotations
 
 import copy
+import json
 import re
 import secrets
 import time
@@ -52,6 +55,9 @@ MAX_RUN = 6
 MAX_NOTE = 160
 MAX_REASON = 140
 MAX_HANDLE = 64
+# A node's name, as edit_canvas's rename takes it (canvas_edits.MAX_LABEL).
+MAX_NAME = 80
+RENAME_EXISTING = "Rename existing nodes with edit_canvas (or `nebula rename`)"
 CLOSED_KEEP_SECONDS = 1800
 MAX_CLOSED = 50
 COORD_LIMIT = 1e7
@@ -61,7 +67,7 @@ PERSON_VALUE_CHARS = 4000
 
 REF_RE = re.compile(r"^\+[A-Za-z0-9_-]{1,24}$")
 NODE_ID_RE = re.compile(r"^n\d{1,9}$")
-_ALLOWED_KEYS = frozenset({"note", "nodes", "edges", "params", "run"})
+_ALLOWED_KEYS = frozenset({"note", "nodes", "edges", "params", "run", "rename"})
 
 OPEN = "open"
 CLOSED_STATUSES = frozenset({"accepted", "rejected", "withdrawn", "expired", "invalidated"})
@@ -116,6 +122,12 @@ class ProposalSpec:
     edges: tuple[ProposedEdge, ...] = ()
     params: tuple[ParamChange, ...] = ()
     run: tuple[str, ...] = ()
+    # Names for this proposal's own new nodes: (+ref, name). Accepting applies them.
+    rename: tuple[tuple[str, str], ...] = ()
+
+    @property
+    def names(self) -> dict[str, str]:
+        return dict(self.rename)
 
     @property
     def refs(self) -> set[str]:
@@ -138,6 +150,17 @@ def clean_note(raw: Any, *, limit: int = MAX_NOTE, label: str = "note") -> str:
         raise ProposalError(422, exc.detail) from exc
 
 
+def _placeable(value: Any) -> bool:
+    """A number position takes: finite and under COORD_LIMIT (an int past float's range isn't)."""
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        number = float(value)
+    except OverflowError:
+        return False
+    return number == number and abs(number) < COORD_LIMIT
+
+
 def _point(raw: Any, label: str) -> dict[str, float]:
     if not isinstance(raw, Mapping):
         raise ProposalError(422, f"{label} must be an object with x and y")
@@ -146,10 +169,9 @@ def _point(raw: Any, label: str) -> dict[str, float]:
         value = raw.get(axis)
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise ProposalError(422, f"{label}.{axis} must be a number")
-        number = float(value)
-        if number != number or abs(number) >= COORD_LIMIT:
+        if not _placeable(value):
             raise ProposalError(422, f"{label}.{axis} must be a finite canvas coordinate")
-        result[axis] = round(number, 2)
+        result[axis] = round(float(value), 2)
     return result
 
 
@@ -177,10 +199,125 @@ def _end(raw: Any, refs: set[str], label: str) -> str:
     return raw
 
 
-def _handle(raw: Any, label: str) -> str:
+# A wire end's ports, for the line a missing port gets: called with the end
+# (a node id, or a ref of this request), the ref's definition id (None for a
+# node id) and "outputPorts" or "inputPorts"; it gives (definition id, port
+# ids), or None when it can't tell. main passes one that reads the canvas.
+PortLookup = Callable[[str, "str | None", str], "tuple[str, list[str]] | None"]
+HINT_PORTS = 12
+
+
+def _handle(raw: Any, label: str, ports: PortLookup | None = None, end: str = "",
+            definitions: Mapping[str, str] | None = None, kind: str = "") -> str:
     if not isinstance(raw, str) or not raw.strip() or len(raw) > MAX_HANDLE:
-        raise ProposalError(422, f"{label} must be a port id")
+        raise ProposalError(422, f"{label} must be a port id{_ports_hint(ports, end, definitions or {}, kind)}")
     return raw
+
+
+def _ports_hint(ports: PortLookup | None, end: str, definitions: Mapping[str, str], kind: str) -> str:
+    """". Valid outputPorts on +mb (nebula-moodboard): ['moodboard']", as a wrong port name's error says."""
+    found = ports(end, definitions.get(end), kind) if ports and end else None
+    if not found:
+        return ""
+    definition_id, ids = found
+    more = f" and {len(ids) - HINT_PORTS} more" if len(ids) > HINT_PORTS else ""
+    return f". Valid {kind} on {end} ({_short(definition_id, 128)}): {ids[:HINT_PORTS] or '(none)'}{more}"
+
+
+# Shapes agents guess for a node's type and a wire's ends (the PR26
+# measurement's runs sent `type` and `from`/`to`): the error names the right
+# field and, when it can, gives the agent's own node or wire rewritten.
+_DEFINITION_ALIASES = ("type", "definition", "kind", "definition_id", "definitionID", "nodeType", "node_type",
+                       "model")
+_EDGE_KEYS = ("source", "sourceHandle", "target", "targetHandle")
+_EDGE_ALIASES = {
+    "source": ("from", "sourceId", "source_id", "fromNode"),
+    "sourceHandle": ("sourcePort", "source_handle", "fromPort", "fromHandle", "sourceOutput", "output"),
+    "target": ("to", "targetId", "target_id", "toNode"),
+    "targetHandle": ("targetPort", "target_handle", "toPort", "toHandle", "targetInput", "input"),
+}
+WIRE_SHAPE = "{source, sourceHandle, target, targetHandle}"
+# The hints copy the agent's node back, but stay one short line whatever it
+# holds (a data URL in a param, a 50,000-character type).
+HINT_PARAMS = 8
+HINT_VALUE_CHARS = 40
+
+
+def _short(text: str, limit: int) -> str:
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+_NODE_KEYS = frozenset({"ref", "definitionId", "params", "position"})
+_NAME_KEYS = ("name", "label", "title")
+
+
+def _node_field_error(index: int, raw: Mapping[str, Any]) -> str | None:
+    """A node field parse_spec doesn't take, in one line saying where it goes
+    (E1 and E2 sent "x": 0, which was dropped without a word)."""
+    unknown = sorted(str(key) for key in raw if key not in _NODE_KEYS)
+    if not unknown:
+        return None
+    if "x" in raw or "y" in raw:
+        # The agent's numbers only when position would take them (finite, under COORD_LIMIT).
+        point = {axis: raw[axis] for axis in ("x", "y") if _placeable(raw.get(axis))}
+        shown = json.dumps(point) if len(point) == 2 else '{"x": ..., "y": ...}'
+        return (f"nodes[{index}] puts its place in position {shown}, not x and y "
+                "(or leave it out: new nodes are placed for you)")
+    name_key = next((key for key in _NAME_KEYS if key in raw), None)
+    if name_key is not None:
+        ref = _short(str(raw.get("ref")), 30)
+        name = raw[name_key]
+        shown = json.dumps(_short(name, 60)) if isinstance(name, str) else '"..."'
+        return f'nodes[{index}] is named with rename={{"{ref}": {shown}}}, not {name_key}'
+    return (f"nodes[{index}] has unknown field '{_short(unknown[0], 40)}': "
+            "a node is {ref, definitionId, params, position}")
+
+
+def _definition_hint(raw: Mapping[str, Any]) -> str:
+    """After "nodes[i].definitionId must be a node definition id": where the agent put it instead."""
+    alias = next((key for key in _DEFINITION_ALIASES if isinstance(raw.get(key), str) and raw.get(key)), None)
+    ref = _short(raw["ref"], 30) if isinstance(raw.get("ref"), str) else "+img"
+    if alias is None:
+        return f': a node is {{"ref": "{ref}", "definitionId": "nano-banana", "params": {{...}}}}'
+    example: dict[str, Any] = {"ref": ref, "definitionId": _short(raw[alias], 128)}
+    params = raw.get("params")
+    more = ""
+    if isinstance(params, dict) and params:
+        # Short values as sent, the rest as "...", and at most HINT_PARAMS keys.
+        example["params"] = {
+            _short(str(key), HINT_VALUE_CHARS):
+                value if len(json.dumps(value, ensure_ascii=False, default=str)) <= HINT_VALUE_CHARS else "..."
+            for key, value in list(params.items())[:HINT_PARAMS]}
+        if len(params) > HINT_PARAMS:
+            more = f" (and {len(params) - HINT_PARAMS} more params)"
+    return f"; the node type goes in definitionId, not {alias}: {json.dumps(example, ensure_ascii=False)}{more}"
+
+
+def wire_shape_error(raw: Mapping[str, Any], label: str) -> str | None:
+    """A wire written with other keys (from/to, sourcePort/targetPort), in one
+    line naming the four fields, with the agent's own wire rewritten when its
+    ends can be read ("+mb.moodboard" or "+mb:moodboard" is node and port).
+    None when the wire has all four fields or none of those other keys
+    (then the field's own error says what is wrong)."""
+    if all(key in raw for key in _EDGE_KEYS):
+        return None
+    aliases = {alias for options in _EDGE_ALIASES.values() for alias in options}
+    others = [str(key) for key in raw if key in aliases]
+    if not others:
+        return None
+    ends: dict[str, Any] = {}
+    for node_key, handle_key in (("source", "sourceHandle"), ("target", "targetHandle")):
+        node = next((raw[key] for key in (node_key, *_EDGE_ALIASES[node_key]) if isinstance(raw.get(key), str)), None)
+        handle = next((raw[key] for key in (handle_key, *_EDGE_ALIASES[handle_key])
+                       if isinstance(raw.get(key), str)), None)
+        if node and handle is None and re.search(r"[.:]", node):
+            node, handle = re.split(r"[.:]", node, maxsplit=1)
+        ends[node_key], ends[handle_key] = node, handle
+    message = f"{label} is a connection {WIRE_SHAPE}, not {'/'.join(others)}"
+    # Rewritten only when every end is short enough to be a real one.
+    if all(isinstance(ends[key], str) and ends[key] and len(ends[key]) <= MAX_HANDLE for key in _EDGE_KEYS):
+        message += ": " + json.dumps({key: ends[key] for key in _EDGE_KEYS}, ensure_ascii=False)
+    return message
 
 
 def _params(raw: Any, label: str, internal_ok: frozenset[str] = frozenset()) -> dict[str, Any]:
@@ -197,7 +334,8 @@ def _params(raw: Any, label: str, internal_ok: frozenset[str] = frozenset()) -> 
     return dict(raw)
 
 
-def parse_spec(body: Any, *, internal_ok: frozenset[str] = frozenset(), capped: bool = True) -> ProposalSpec:
+def parse_spec(body: Any, *, internal_ok: frozenset[str] = frozenset(), capped: bool = True,
+               ports: PortLookup | None = None) -> ProposalSpec:
     """Shape-check and sanitise a proposal body. Graph validation happens in main.
 
     `internal_ok` names underscore params a caller may set anyway: proposals
@@ -209,7 +347,9 @@ def parse_spec(body: Any, *, internal_ok: frozenset[str] = frozenset(), capped: 
     MAX_PARAM_NODES, MAX_RUN). The person reviews a proposal item by item, so
     it stays small. A direct edit (services/canvas_edits.py) passes False: it
     is bounded only by the canvas's own size limits, which main checks on the
-    staged graph."""
+    staged graph.
+
+    `ports` (PortLookup) lets a wire with no port name the ports its end has."""
     if not isinstance(body, dict):
         raise ProposalError(422, "the proposal must be a JSON object")
     unknown = sorted(set(body) - _ALLOWED_KEYS)
@@ -219,18 +359,24 @@ def parse_spec(body: Any, *, internal_ok: frozenset[str] = frozenset(), capped: 
 
     nodes: list[ProposedNode] = []
     refs: set[str] = set()
+    definitions: dict[str, str] = {}
     for index, raw in enumerate(_list(body, "nodes", MAX_NODES if capped else None)):
         if not isinstance(raw, dict):
             raise ProposalError(422, f"nodes[{index}] must be an object")
         ref = raw.get("ref")
         if not isinstance(ref, str) or not REF_RE.fullmatch(ref):
-            raise ProposalError(422, f"nodes[{index}].ref must look like +up (letters, digits, - or _)")
+            raise ProposalError(422, f"nodes[{index}].ref must look like +up (letters, digits, - or _): a node is "
+                                     '{"ref": "+up", "definitionId": "...", "params": {...}}')
         if ref in refs:
             raise ProposalError(400, f"duplicate ref '{ref}'")
         refs.add(ref)
         definition_id = raw.get("definitionId")
         if not isinstance(definition_id, str) or not definition_id or len(definition_id) > 128:
-            raise ProposalError(422, f"nodes[{index}].definitionId must be a node definition id")
+            raise ProposalError(422, f"nodes[{index}].definitionId must be a node definition id{_definition_hint(raw)}")
+        field_error = _node_field_error(index, raw)
+        if field_error:
+            raise ProposalError(422, field_error)
+        definitions[ref] = definition_id
         position = raw.get("position")
         nodes.append(ProposedNode(
             ref=ref,
@@ -243,12 +389,17 @@ def parse_spec(body: Any, *, internal_ok: frozenset[str] = frozenset(), capped: 
     for index, raw in enumerate(_list(body, "edges", MAX_EDGES if capped else None)):
         if not isinstance(raw, dict):
             raise ProposalError(422, f"edges[{index}] must be an object")
-        edges.append(ProposedEdge(
-            source=_end(raw.get("source"), refs, f"edges[{index}].source"),
-            source_handle=_handle(raw.get("sourceHandle"), f"edges[{index}].sourceHandle"),
-            target=_end(raw.get("target"), refs, f"edges[{index}].target"),
-            target_handle=_handle(raw.get("targetHandle"), f"edges[{index}].targetHandle"),
-        ))
+        shape = wire_shape_error(raw, f"edges[{index}]")
+        if shape:
+            raise ProposalError(422, shape)
+        source = _end(raw.get("source"), refs, f"edges[{index}].source")
+        source_handle = _handle(raw.get("sourceHandle"), f"edges[{index}].sourceHandle", ports, source, definitions,
+                                "outputPorts")
+        target = _end(raw.get("target"), refs, f"edges[{index}].target")
+        target_handle = _handle(raw.get("targetHandle"), f"edges[{index}].targetHandle", ports, target, definitions,
+                                "inputPorts")
+        edges.append(ProposedEdge(source=source, source_handle=source_handle, target=target,
+                                  target_handle=target_handle))
 
     changes: list[ParamChange] = []
     seen_nodes: set[str] = set()
@@ -273,9 +424,31 @@ def parse_spec(body: Any, *, internal_ok: frozenset[str] = frozenset(), capped: 
             raise ProposalError(400, f"run lists '{item}' twice")
         run.append(item)
 
+    names = _names(body.get("rename"), refs)
+
     if not (nodes or edges or changes or run):
-        raise ProposalError(422, "a proposal needs at least one node, wire, param change or run")
-    return ProposalSpec(note=note, nodes=tuple(nodes), edges=tuple(edges), params=tuple(changes), run=tuple(run))
+        raise ProposalError(422, "a proposal needs at least one node, connection, param change or run")
+    return ProposalSpec(note=note, nodes=tuple(nodes), edges=tuple(edges), params=tuple(changes), run=tuple(run),
+                        rename=tuple(names.items()))
+
+
+def _names(raw: Any, refs: set[str]) -> dict[str, str]:
+    """`rename` names the proposal's own new nodes ({"+g": "Lake hero"}).
+    Renaming a node already on the canvas isn't something the person needs to
+    decide, so it stays a direct edit (edit_canvas, `nebula rename`)."""
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ProposalError(422, 'rename must be an object of {"+ref": "name"} for this proposal\'s new nodes')
+    names: dict[str, str] = {}
+    for key, value in raw.items():
+        if isinstance(key, str) and NODE_ID_RE.fullmatch(key):
+            raise ProposalError(422, f"{RENAME_EXISTING}; a proposal names only the nodes it adds ({key} is on "
+                                     "the canvas already)")
+        if not isinstance(key, str) or key not in refs:
+            raise ProposalError(400, f"rename names '{str(key)[:30]}', which is not one of this proposal's new nodes")
+        names[key] = clean_note(value, limit=MAX_NAME, label=f"rename.{key}")
+    return names
 
 
 def clean_positions(raw: Any, refs: Iterable[str]) -> dict[str, dict[str, float]]:
@@ -382,6 +555,9 @@ def summarize_cost(
             "plan": list(estimate.get("plan") or []),
             "plus": list(estimate.get("plus") or []),
         }
+        if estimate.get("awaitingInput"):
+            # Priced from their input's size, which isn't known until it exists.
+            summary_estimate["awaitingInput"] = list(estimate["awaitingInput"])
     return {
         "paidRuns": paid,
         "freeRuns": len(entries) - paid,
@@ -396,33 +572,100 @@ def summarize_cost(
 
 # Where each surface's agent finds a node that runs here. The HTTP answer
 # names the route; propose_change (MCP) and `nebula propose` (CLI) word the
-# warning again from cost.notReady for their own reader.
+# warning again from cost.notReady for their own reader (agent_wording). The CLI names
+# `nebula nodes`, find_nodes' twin on the same route: by default it lists only
+# what runs here, and `nebula context`'s list is cut at its budget.
 READY_NODES_HTTP = "GET /api/agent/nodes"
 READY_NODES_MCP = "find_nodes"
-READY_NODES_CLI = "`nebula context`"
+READY_NODES_CLI = "`nebula nodes`"
+
+# How each surface's agent withdraws a proposal ({id} is the proposal's id).
+# A proposal that can't run here is kept with its warning (Justin, Q109: "Keep
+# it with the warning, and tell the agent to withdraw it before proposing
+# something else"), so the warning and the reminder name the exact call.
+WITHDRAW_HTTP = "DELETE /api/canvas/proposals/{id}"
+WITHDRAW_MCP = 'withdraw_proposal(proposal_id="{id}")'
+WITHDRAW_CLI = "nebula proposal withdraw {id}"
 
 
-def readiness_warning(cost: Mapping[str, Any], *, lister: str = READY_NODES_HTTP) -> str | None:
+def cli_withdraw_form(agent_name: str | None) -> str:
+    """WITHDRAW_CLI, with `--as <name>` when the agent named itself that way
+    (withdrawing needs the same name the proposal was made under)."""
+    if not agent_name:
+        return WITHDRAW_CLI
+    import shlex
+
+    return f"{WITHDRAW_CLI} --as {shlex.quote(agent_name)}"
+
+
+def withdraw_call(proposal_id: str, form: str = WITHDRAW_HTTP) -> str:
+    return form.replace("{id}", proposal_id)
+
+
+def readiness_warning(cost: Mapping[str, Any], *, lister: str = READY_NODES_HTTP,
+                      proposal_id: str | None = None, withdraw: str = WITHDRAW_HTTP) -> str | None:
     """One paragraph for the agent naming the run's nodes that can't run here, or None.
 
     propose_change and `nebula propose` show it, so the agent can tell the
     person what to set up, or propose a model that runs here, before Accept.
-    ``lister`` is what lists the nodes that run here on the caller's surface."""
+    ``lister`` is what lists the nodes that run here on the caller's surface;
+    with ``proposal_id`` it ends with the call (``withdraw``, the caller's
+    surface) that takes this proposal back before the agent proposes
+    something else, so the person isn't left two to answer."""
     rows = [row for row in cost.get("notReady") or [] if isinstance(row, Mapping)]
     if not rows:
         return None
     lines = []
     for row in rows[:6]:
         label = str(row.get("ref") or row.get("nodeId") or "?")
-        need = str(row.get("missing") or "can't run here")
+        # Route messages end in their own period; the join below adds the punctuation.
+        need = str(row.get("missing") or "can't run here").rstrip().rstrip(".")
         name = str(row.get("name") or "")
         # Route messages already start with the node's name.
         lines.append(f"{label}: {need}" if name and need.startswith(name) else f"{label} ({name}) {need}")
     more = f" and {len(rows) - 6} more" if len(rows) > 6 else ""
     count = f"{len(rows)} node{'s' if len(rows) != 1 else ''}"
+    then = (f" If you propose something else instead, withdraw this one first: "
+            f"`{withdraw_call(proposal_id, withdraw)}`." if proposal_id else "")
     return (f"If the person accepts, the run fails: {count} can't run here as set up. "
             f"{'; '.join(lines)}{more}. Tell the person what to set up, or propose a node that runs here "
-            f"({lister} lists them).")
+            f"({lister} lists them).{then}")
+
+
+def still_open_reminder(rows: Iterable[Mapping[str, Any]], *, withdraw: str = WITHDRAW_HTTP) -> str | None:
+    """The line a new proposal's answer carries when the same agent still has
+    an open proposal here that can't run (ProposalBook.open_unrunnable)."""
+    lines = [f"Your proposal {row['id']} is still open and can't run here; withdraw it if this one replaces it: "
+             f"`{withdraw_call(str(row['id']), withdraw)}`." for row in rows]
+    return " ".join(lines) or None
+
+
+def agent_wording(response: Mapping[str, Any], *, lister: str = READY_NODES_HTTP,
+                  withdraw: str = WITHDRAW_HTTP) -> dict[str, Any]:
+    """A propose answer's agent lines in one surface's words: `warning` and
+    `withdrawWith` for this proposal, `stillOpen` and `reminder` for the
+    agent's other open proposals that can't run. main words them for HTTP;
+    propose_change and `nebula propose` again for their own reader."""
+    out = dict(response)
+    view = out.get("proposal") if isinstance(out.get("proposal"), Mapping) else {}
+    proposal_id = str(view.get("id") or "") or None
+    warning = readiness_warning(view.get("cost") or {}, lister=lister, proposal_id=proposal_id, withdraw=withdraw)
+    if view.get("status", OPEN) != OPEN:
+        # It closed already (it can while its Update is written), so there is nothing to withdraw.
+        out.pop("warning", None)
+        warning = None
+    out.pop("withdrawWith", None)
+    if warning:
+        out["warning"] = warning
+        if proposal_id:
+            out["withdrawWith"] = withdraw_call(proposal_id, withdraw)
+    # A warning the cost can't word again (an older backend) is kept as sent.
+    rows = [row for row in out.pop("stillOpen", None) or [] if isinstance(row, Mapping) and row.get("id")]
+    out.pop("reminder", None)
+    if rows:
+        out["stillOpen"] = [{**row, "withdrawWith": withdraw_call(str(row["id"]), withdraw)} for row in rows]
+        out["reminder"] = still_open_reminder(rows, withdraw=withdraw)
+    return out
 
 
 # -- placement ----------------------------------------------------------------
@@ -517,6 +760,22 @@ class Proposal:
     id_map: dict[str, str] | None = None
     run_node_ids: list[str] | None = None
     closed_at: float | None = None
+    # Its Update on the project's list ({id, projectId}; Justin's Q112 a), or
+    # None when no project was open. main posts it and settles it.
+    update: dict[str, str] | None = None
+    # The node deletes that closed it, or deleted another node it needs while
+    # it was closed that way: removal id (rm_...) -> node id. Only deletes in
+    # its own project tag it, and only the undo of a matching (removal, node)
+    # pair may reopen it (ProposalBook.closed_by_pairs, reopen).
+    closed_by: dict[str, str] = field(default_factory=dict)
+    # Tags a clear, an import or a project switch dropped (node ids started
+    # again, so a later delete of "n1" may be another node): the undo of
+    # those deletes can't reopen it, and says so (``dropped_reason``).
+    dropped_by: dict[str, str] = field(default_factory=dict)
+    dropped_reason: str | None = None
+    # Which node it read under each id (main.node_removals.lineage, set when
+    # it was made): a delete tags it only when it took that very node.
+    lineage: dict[str, str] = field(default_factory=dict)
 
     @property
     def references(self) -> set[str]:
@@ -551,6 +810,11 @@ def person_value(value: Any, *, key: str = "", depth: int = 0) -> Any:
     if isinstance(value, (list, tuple)):
         return [person_value(item, key=key, depth=depth + 1) for item in list(value)[:50]]
     return str(value)[:200]
+
+
+def cant_run(proposal: Proposal) -> int:
+    """How many of the proposal's run nodes can't run here (cost.notReady, read when it was made)."""
+    return sum(1 for row in (proposal.cost or {}).get("notReady") or [] if isinstance(row, Mapping))
 
 
 def new_proposal_id() -> str:
@@ -615,6 +879,14 @@ class ProposalBook:
     def open_list(self) -> list[Proposal]:
         return [p for p in self._items.values() if p.is_open]
 
+    def open_unrunnable(self, proposal: Proposal) -> list[Proposal]:
+        """The same agent's other open proposals on this canvas (project) whose
+        run can't run here, as read when each was made (cost.notReady). Another
+        agent's proposals, and ones that can run, are not this agent's to withdraw."""
+        return [p for p in self.open_list()
+                if p.id != proposal.id and p.agent.id == proposal.agent.id
+                and p.project_id == proposal.project_id and cant_run(p)]
+
     def close(
         self,
         proposal_id: str,
@@ -635,7 +907,55 @@ class ProposalBook:
         proposal.id_map = dict(id_map) if id_map else None
         proposal.run_node_ids = list(run_node_ids) if run_node_ids else None
         proposal.closed_at = self._clock()
+        proposal.closed_by = {}
+        proposal.dropped_by = {}
+        proposal.dropped_reason = None
         self._prune()
+        return proposal
+
+    def closed_by_pairs(self, pairs: Iterable[tuple[str, str]], project_id: str | None) -> list[Any]:
+        """Proposals in ``project_id`` a node delete closed that are still
+        closed that way: invalidated, and tagged by one of these (removal id,
+        node id) pairs. Never by a removal id or a node id alone."""
+        wanted = set(pairs)
+        return [p for p in self._items.values()
+                if p.status == "invalidated" and p.project_id == project_id
+                and any(pair in wanted for pair in p.closed_by.items())]
+
+    def drop_removal_tags(self, reason: str) -> None:
+        """Node ids start again (a clear, an import) or another project's
+        ids are live now (a project switch): no earlier delete's undo may
+        reopen a proposal by its node id any more. The dropped tags are kept
+        to say why (``dropped_by``)."""
+        for proposal in self._items.values():
+            if proposal.closed_by:
+                proposal.dropped_by.update(proposal.closed_by)
+                proposal.dropped_reason = reason
+                proposal.closed_by = {}
+
+    def reopen(self, proposal_id: str) -> Any:
+        """Open again an invalidated proposal a node delete closed (main finds
+        it by its removal, closed_by_pairs) once main checked it still fits
+        the restored graph. Its expiry stays the one it had: a proposal past
+        it doesn't reopen. The open caps apply, as to a new proposal (429)."""
+        proposal = self._items.get(proposal_id)
+        if proposal is None:
+            raise ProposalError(404, f"No proposal {proposal_id[:20]}")
+        if proposal.status != "invalidated":
+            raise ProposalError(409, f"Proposal {proposal_id} is {proposal.status}")
+        if proposal.expires_at <= self._clock():
+            raise ProposalError(409, "it expired")
+        open_now = self.open_list()
+        if len([p for p in open_now if p.agent.id == proposal.agent.id]) >= MAX_OPEN_PER_AGENT:
+            raise ProposalError(429, "its agent already has the most open proposals it may have")
+        if len(open_now) >= MAX_OPEN_TOTAL:
+            raise ProposalError(429, "too many proposals are waiting for the person")
+        proposal.status = OPEN
+        proposal.reason = None
+        proposal.closed_at = None
+        proposal.closed_by = {}
+        proposal.dropped_by = {}
+        proposal.dropped_reason = None
         return proposal
 
     def sweep(self) -> list[Proposal]:
@@ -651,16 +971,37 @@ class ProposalBook:
         self._prune()
         return expired
 
-    def invalidate_referencing(self, node_id: str, reason: str) -> list[Proposal]:
+    def invalidate_referencing(self, node_id: str, reason: str, removal: str | None = None,
+                               project_id: str | None = None, lineage: str | None = None) -> list[Proposal]:
+        """Close the open proposals that read ``node_id`` (it was deleted).
+        ``removal`` is that delete's removal id, so its undo may reopen them;
+        it tags only proposals of ``project_id``, the project the delete was
+        in, that read this very node (``lineage``), not another node that had
+        the same id."""
+        def read_it(proposal: Proposal) -> bool:
+            return (proposal.project_id == project_id
+                    and proposal.lineage.get(node_id, lineage) == lineage)
+
         hit = [p for p in self.open_list() if node_id in p.references]
         for proposal in hit:
             self.close(proposal.id, "invalidated", reason=reason)
+            if removal and read_it(proposal):
+                proposal.closed_by = {removal: node_id}
+        if removal:
+            # Closed by an earlier delete in this project and needing this
+            # node too: undoing only that earlier delete won't bring it back,
+            # undoing both may.
+            for proposal in self._items.values():
+                if (proposal.status == "invalidated" and proposal.closed_by and proposal not in hit
+                        and node_id in proposal.references and read_it(proposal)):
+                    proposal.closed_by[removal] = node_id
         return hit
 
     def invalidate_all(self, reason: str) -> list[Proposal]:
         hit = self.open_list()
         for proposal in hit:
             self.close(proposal.id, "invalidated", reason=reason)
+        self.drop_removal_tags(reason)
         return hit
 
     def _prune(self) -> None:
@@ -679,12 +1020,16 @@ class ProposalBook:
         spec = proposal.spec
         node_costs = {entry.get("ref"): entry for entry in proposal.cost.get("nodes", [])}
         nodes: list[dict[str, Any]] = []
+        names = spec.names
         for node in spec.nodes:
             definition = definitions.get(node.definition_id, {}) if isinstance(definitions, dict) else {}
+            model = str(definition.get("displayName") or node.definition_id)
             nodes.append({
                 "ref": node.ref,
                 "definitionId": node.definition_id,
-                "name": str(definition.get("displayName") or node.definition_id),
+                # The name the proposal gives it (accepting applies it), else the model's.
+                "name": names.get(node.ref) or model,
+                **({"model": model} if names.get(node.ref) else {}),
                 "category": str(definition.get("category") or ""),
                 "params": safe_value(node.params, key="params"),
                 "position": dict(proposal.positions.get(node.ref) or node.position or {"x": 0.0, "y": 0.0}),
@@ -724,6 +1069,7 @@ class ProposalBook:
             "reason": proposal.reason,
             "idMap": dict(proposal.id_map) if proposal.id_map else None,
             "runNodeIds": list(proposal.run_node_ids) if proposal.run_node_ids else None,
+            "update": dict(proposal.update) if proposal.update else None,
         }
 
     def person_values(self, proposal: Proposal) -> dict[str, Any]:
@@ -746,13 +1092,17 @@ class ProposalBook:
         return {"nodes": nodes, "params": params}
 
     def brief(self, proposal: Proposal) -> dict[str, Any]:
-        """The one-line form `nebula look` lists."""
+        """The one-line form `nebula look`, `nebula context` and start_here list.
+        `cantRun` counts the run's nodes that can't run here, when any do, so an
+        agent that comes back later sees it should withdraw that one."""
+        missing = cant_run(proposal)
         return {
             "id": proposal.id,
             "agent": proposal.agent.name,
             "note": proposal.spec.note,
             "status": proposal.status,
             "expiresInSeconds": max(0, int(proposal.expires_at - self._clock())),
+            **({"cantRun": missing} if missing else {}),
         }
 
 
@@ -785,6 +1135,46 @@ def _ports_for(ref: str, definition: Mapping[str, Any], edges: Iterable[Proposed
         "inputs": [_port_info(inputs.get(handle), handle) for handle in wanted_in],
         "outputs": [_port_info(outputs.get(handle), handle) for handle in wanted_out],
     }
+
+
+# -- the Update each proposal posts (Justin's Q112 a, 2026-10-21) --------------
+#
+# "a) Yes, every one: "Claude Code proposes 3 changes on the canvas", with
+# Review taking you to the canvas and its bar. It settles like the others
+# (Accepted, Rejected, Expired, Closed: Nebula restarted)." main posts it on
+# the project's Updates when the proposal opens and settles it when it ends.
+
+def change_count(spec: ProposalSpec) -> int:
+    """What the Update counts as a change: each new node, each wire and each
+    existing node whose params change (the bar's own groups). A run changes
+    nothing on the canvas, and a name belongs to its new node."""
+    return len(spec.nodes) + len(spec.edges) + len(spec.params)
+
+
+def update_text(proposal: Proposal) -> str:
+    """The Update's line, from a fixed template: never the agent's note
+    (that is the bar's), as an asset proposal's never is."""
+    agent = proposal.agent.name
+    count = change_count(proposal.spec)
+    if count == 0:
+        return f"{agent} proposes a run on the canvas"
+    return f"{agent} proposes {count} change{'' if count == 1 else 's'} on the canvas"
+
+
+# How the Update reads once its proposal closed, in place of Review. A
+# restart's line is asset_proposals.RESTART_OUTCOME (main settles it).
+_OUTCOMES = {"accepted": "Accepted", "rejected": "Rejected", "expired": "Expired",
+             "invalidated": "No longer fits"}
+
+
+def update_outcome(proposal: Proposal) -> str:
+    """Short, never the person's reason: "Accepted", "Rejected", "Expired",
+    "Withdrawn by <agent>" or "No longer fits" (a node it needed was
+    deleted, the canvas was cleared or replaced, or what it changes was
+    edited since)."""
+    if proposal.status == "withdrawn":
+        return f"Withdrawn by {proposal.agent.name}"
+    return _OUTCOMES.get(proposal.status, "No longer fits")
 
 
 canvas_proposals = ProposalBook()

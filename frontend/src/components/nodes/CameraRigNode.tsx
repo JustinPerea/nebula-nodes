@@ -3,7 +3,8 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { PORT_COLORS } from '../../lib/portCompatibility';
 import { useGraphStore } from '../../store/graphStore';
-import type { CameraRigBundle } from '../../types';
+import type { CameraRigBundle, NodeData } from '../../types';
+import { NodeRunError } from './NodeError';
 import '../../styles/camera-rig-node.css';
 
 // The CameraRigNode is the canvas card for the camera-rig utility node. It
@@ -245,6 +246,8 @@ export function CameraRigNode({ id, data, selected }: NodeProps) {
           );
         })}
       </div>
+
+      <NodeRunError data={data as unknown as NodeData} className="camera-rig-node__run-error" />
 
       {/* Single CameraRig-typed source handle on the right. */}
       <Handle

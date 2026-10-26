@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { commonsEvaluationApi } from '../../lib/commonsApi';
 import type { EvaluationBatch } from '../../lib/commonsEvaluationTypes';
+import { failureMessage } from '../../lib/errorCopy';
 
 /**
  * Ends the held-out batch without sealing it. Irreversible, so it always asks
@@ -23,7 +24,7 @@ export function CommonsCloseBatch({ revision, assisted, reviewed, total, disable
     setClosing(true); setError('');
     let closed: EvaluationBatch;
     try { closed = await commonsEvaluationApi.close(revision); }
-    catch (e) { setError((e as Error).message); setClosing(false); return; }
+    catch (e) { setError(failureMessage(e, "Couldn't close the review.")); setClosing(false); return; }
     setClosing(false); setConfirming(false);
     onClosed(closed);
   }

@@ -37,6 +37,7 @@ from models.graph import GraphNode, PortValueDict
 from services.image_input import is_remote_or_data_uri, load_local_image
 from services.media_input import owned_output_value
 from services.output import get_run_dir, save_base64_image
+from execution.person_line import field_label, it_was, model_name, or_list, with_api_status, with_person_line
 
 XAI_API_BASE = "https://api.x.ai/v1"
 GENERATIONS_URL = f"{XAI_API_BASE}/images/generations"
@@ -61,7 +62,7 @@ def xai_image_url(value: Any) -> str:
     or unsupported file (services.image_input) instead of dropping it."""
     text = str(value or "").strip()
     if not text:
-        raise ValueError("Image input is empty")
+        raise with_person_line(ValueError("Image input is empty"), "The connected image is empty. Connect another image.")
     text = owned_output_value(text)
     if is_remote_or_data_uri(text):
         return text
@@ -77,13 +78,15 @@ def xai_video_url(value: Any) -> str:
 
     text = str(value or "").strip()
     if not text:
-        raise ValueError("Video input is empty")
+        raise with_person_line(ValueError("Video input is empty"), "The connected video is empty. Connect another video.")
     text = owned_output_value(text)
     if is_remote_or_data_uri(text):
         return text
     suffix = Path(text).suffix
     if suffix.lower() != ".mp4":
-        raise ValueError(f"xAI takes .mp4 video input, not {suffix or 'a file without an extension'} ({text!r})")
+        raise with_person_line(
+            ValueError(f"xAI takes .mp4 video input, not {suffix or 'a file without an extension'} ({text!r})"),
+            f"xAI takes MP4 video, not {suffix or 'a file without an extension'}. Connect an MP4.")
     _path, data = read_local_media(text, label="Video input", max_bytes=MAX_VIDEO_BYTES)
     return "data:video/mp4;base64," + base64.b64encode(data).decode("ascii")
 
@@ -99,7 +102,8 @@ def _count(value: Any) -> int:
     if value in (None, ""):
         return 1
     if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= MAX_IMAGES_PER_REQUEST:
-        raise ValueError(f"xAI makes 1 to {MAX_IMAGES_PER_REQUEST} images per request (received {value!r})")
+        raise with_person_line(ValueError(f"xAI makes 1 to {MAX_IMAGES_PER_REQUEST} images per request (received {value!r})"), f"xAI makes 1 to {MAX_IMAGES_PER_REQUEST} images per request. Set the number of images in that range. "
+                         f"{it_was(value)}")
     return value
 
 
@@ -135,11 +139,11 @@ async def handle_xai_image(
     params = node.params
     model = str(params.get("model") or "")
     if not model:
-        raise ValueError("xAI image model is required")
+        raise with_person_line(ValueError("xAI image model is required"), "Pick a model in “Model”, then run the node again.")
     prompt_port = inputs.get("prompt")
     prompt = str(prompt_port.value).strip() if prompt_port and prompt_port.value not in (None, "") else ""
     if not prompt:
-        raise ValueError("Prompt is required")
+        raise with_person_line(ValueError("Prompt is required"), "Connect a prompt to this node, then run it again.")
 
     body: dict[str, Any] = {"model": model, "prompt": prompt, "response_format": "b64_json"}
     count = _count(params.get("n"))
@@ -150,12 +154,14 @@ async def handle_xai_image(
             body[key] = str(params[key])
     if params.get("quality"):
         if model not in QUALITY_MODELS:
-            raise ValueError(f"xAI takes quality only on {', '.join(sorted(QUALITY_MODELS))}, not {model}")
+            quality = field_label(node.definition_id, "quality", "Quality")
+            raise with_person_line(ValueError(f"xAI takes quality only on {', '.join(sorted(QUALITY_MODELS))}, not {model}"), f"xAI takes “{quality}” only on {or_list(model_name(name) for name in sorted(QUALITY_MODELS))}. "
+                             f"Clear “{quality}”, then run the node again.")
         body["quality"] = str(params["quality"])
 
     sources = _image_values(inputs.get("images"))
     if len(sources) > MAX_EDIT_IMAGES:
-        raise ValueError(f"xAI edits take up to {MAX_EDIT_IMAGES} source images (received {len(sources)})")
+        raise with_person_line(ValueError(f"xAI edits take up to {MAX_EDIT_IMAGES} source images (received {len(sources)})"), f"xAI edits take up to {MAX_EDIT_IMAGES} source images, and {len(sources)} are connected. Disconnect the extra ones, then run the node again.")
     urls = [xai_image_url(value) for value in sources]
     if len(urls) == 1:
         body["image"] = {"url": urls[0]}
@@ -171,7 +177,9 @@ async def handle_xai_image(
             json=body,
         )
     if response.status_code != 200:
-        raise RuntimeError(f"xAI image request failed ({response.status_code}): {_error_text(response)}")
+        raise with_api_status(
+            RuntimeError(f"xAI image request failed ({response.status_code}): {_error_text(response)}"),
+            response.status_code)
     items = (response.json() or {}).get("data") or []
     run_dir = get_run_dir()
     saved: list[str] = []

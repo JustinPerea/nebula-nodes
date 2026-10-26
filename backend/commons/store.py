@@ -33,6 +33,11 @@ def _row(row: sqlite3.Row | None) -> dict | None:
                 out[key] = json.loads(out[key])
             except json.JSONDecodeError:
                 pass
+    if "last_error" in out and "analysis_state" in out:
+        # An asset: why its analysis failed, as a kind (commons/analysis_errors.py).
+        from commons.analysis_errors import kind_of
+
+        out["last_error_kind"] = kind_of(out)
     return out
 
 

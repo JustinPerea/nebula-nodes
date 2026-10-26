@@ -23,6 +23,7 @@
  */
 import type { Edge, Node } from '@xyflow/react';
 import type { CinemaSceneSpec, NodeData } from '../types';
+import type { RemovalRecord } from './deleteNotice';
 
 /** Backend (cli_graph) node ids: n1, n2, ... Everything else is frontend-only. */
 export const CLI_NODE_ID_RE = /^n\d+$/;
@@ -36,10 +37,17 @@ export interface EditActor {
   color?: string;
 }
 
-/** `edit` on a graphSync: who made the edit and, for a canvas, which tab. */
+/** `edit` on a graphSync: who made the edit and, for a canvas, which tab.
+ * `id` names an agent's edit (or undo) on the backend, `undoes` the edit an
+ * agent's undo reverted (backend services/canvas_undo.py). */
 export interface EditOrigin {
   actor?: EditActor;
   tab?: string;
+  id?: string;
+  undoes?: string;
+  /** The nodes the edit deleted, with the pins and proposals each delete
+   * removed (lib/deleteNotice.ts), so undoing it here puts those back too. */
+  removals?: unknown;
 }
 
 export interface GraphSlice {
@@ -54,6 +62,14 @@ export interface ForeignEdit {
   agentColor?: string;
   /** Where it came from, for the notice when it is undone. */
   source: 'agent' | 'window' | 'outside';
+  /** The backend's id for this edit: Undo and Redo send it, so the journal
+   * tells the agent its edit was undone, and by whom. */
+  editId?: string;
+  /** Set when the edit is an agent undoing its own earlier edit. */
+  undoes?: string;
+  /** What the edit's deletes removed (from its graphSync), or what this
+   * step's last redo removed: undo names them in its restore. */
+  removals?: RemovalRecord[];
   at: number;
   before: GraphSlice;
   after: GraphSlice;
@@ -82,7 +98,8 @@ export function foreignSource(origin: EditOrigin): ForeignEdit['source'] {
 
 /** "Claude changed the canvas": shown when an agent's edit lands, with Undo. */
 export function editArrivedText(edit: ForeignEdit): string | null {
-  return edit.source === 'agent' && edit.agentName ? `${edit.agentName} changed the canvas` : null;
+  if (edit.source !== 'agent' || !edit.agentName) return null;
+  return edit.undoes ? `${edit.agentName} undid its edit` : `${edit.agentName} changed the canvas`;
 }
 
 /** "Undid Claude's edit", "Redid an edit from another window". */
@@ -201,7 +218,7 @@ export function diffCanvas(
 /** Runtime fields a node keeps from the live canvas when an undo restores its recipe. */
 export const RUNTIME_FIELDS = [
   'outputs', 'state', 'progress', 'runStartedAt', 'batchOutputs', 'batchVariants', 'batchRunId',
-  'runNotes', 'outputFreshness', 'error', 'errorCategory', 'errorFriendly', 'skipReason',
+  'runNotes', 'outputFreshness', 'error', 'errorCategory', 'errorFriendly', 'errorPerson', 'errorProviderText', 'errorProvider', 'skipReason',
   'skipGateNodeId', 'withheldPorts', 'keyStatus', 'streamingText', 'streamingPartials', 'streamingSvg',
 ] as const;
 
@@ -279,6 +296,11 @@ export interface RestoreBody {
   remove: string[];
   wire: WireBody[];
   unwire: WireBody[];
+  /** The edit this step undoes or redoes (ForeignEdit.editId). */
+  edit?: string;
+  /** The deletes this step undoes, for the nodes it brings back: the
+   * backend puts their pins back and reopens their proposals that still fit. */
+  removals?: RemovalRecord[];
 }
 
 function wire(edge: Edge): WireBody {

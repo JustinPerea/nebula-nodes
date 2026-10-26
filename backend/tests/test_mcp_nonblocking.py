@@ -32,7 +32,7 @@ NATIVE_ASYNC_TOOLS = {"run_nodes", "get_run", "moodboard_create", "moodboard_add
 
 
 class _FakeNebula(BaseHTTPRequestHandler):
-    """/api/canvas/events and a proposal hold for their `wait`, node "slow" for 1 s; the rest answer at once."""
+    """/api/canvas/events, a proposal and a question set hold for their `wait`, node "slow" for 1 s; the rest answer at once."""
 
     def do_GET(self) -> None:  # noqa: N802 (http.server's name)
         url = urlsplit(self.path)
@@ -45,6 +45,9 @@ class _FakeNebula(BaseHTTPRequestHandler):
         elif url.path.startswith("/api/canvas/proposals/"):
             time.sleep(float(parse_qs(url.query).get("wait", ["0"])[0]))
             body = {"proposal": {"id": "p1", "status": "open"}}
+        elif url.path.startswith("/api/canvas/questions/"):
+            time.sleep(float(parse_qs(url.query).get("wait", ["0"])[0]))
+            body = {"questions": {"id": "s1", "status": "open"}}
         else:
             body = {"ok": True, "path": url.path}
         data = json.dumps(body).encode()
@@ -122,6 +125,7 @@ def _borrowed() -> int:
     # The long-polls stop at their next poll.
     ("wait_for_canvas_change", {"timeout_seconds": 8}, 1.5),
     ("get_proposal", {"proposal_id": "p1", "wait_seconds": 8}, 1.5),
+    ("get_answers", {"question_id": "s1", "wait_seconds": 8}, 1.5),
     # One request can't be interrupted; it ends when Nebula answers (1 s).
     ("describe_node", {"definition_id": "slow"}, 1.5),
 ])

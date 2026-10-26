@@ -25,11 +25,13 @@ vi.mock('../../src/lib/backend', async (importOriginal) => {
 const fetchMock = vi.fn();
 globalThis.fetch = fetchMock as unknown as typeof fetch;
 vi.spyOn(console, 'warn').mockImplementation(() => {});
-const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
+// Round 3f: the alerts are canvas notices (tests/helpers/noticeSpy.ts).
+const alertMock = noticeSpy();
 
 import { useGraphStore } from '../../src/store/graphStore';
 import { wsClient, type ExecutionEvent } from '../../src/lib/wsClient';
 import { GRAPH_PARAMS_VERSION } from '../../src/lib/savedParamsUpgrades';
+import { noticeSpy } from '../helpers/noticeSpy';
 
 function mockResponse(body: unknown, ok = true, status = 200) {
   return {
@@ -419,7 +421,7 @@ describe('graphStore', () => {
       isExecuting: true,
       isCancelling: false,
       uncertainWorldLabsRunId: runId,
-      providerRecoveryWarning: expect.stringContaining('Run remains locked'),
+      providerRecoveryWarning: expect.stringContaining('the node stays locked to avoid paying twice'),
       runHistory: [expect.objectContaining({ id: runId, status: 'running' })],
     });
 
@@ -592,8 +594,10 @@ describe('graphStore', () => {
 
     expect(nodeId).toBeNull();
     expect(useGraphStore.getState().nodes).toHaveLength(0);
+    // error-copy round 2 (GM): a 5xx says Nebula didn't respond, whatever its
+    // body said; the backend's text stays in the console.
     expect(alertMock).toHaveBeenCalledWith(
-      expect.stringContaining('Paid-start safety journal unavailable'),
+      "Couldn't add World Labs Environment. Nebula didn't respond. Try again.",
     );
   });
 
@@ -607,8 +611,9 @@ describe('graphStore', () => {
     expect(nodeId).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(useGraphStore.getState().nodes).toHaveLength(0);
+    // error-copy round 2 (GM): the backend's reason, never the status.
     expect(alertMock).toHaveBeenCalledWith(
-      expect.stringContaining('Backend rejected graph clear (HTTP 409)'),
+      "Couldn't add Text Input. Graph has protected provider state",
     );
   });
 
@@ -746,7 +751,8 @@ describe('graphStore', () => {
 
     expect(nodeId).toBeNull();
     expect(useGraphStore.getState().nodes).toHaveLength(0);
-    expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('known backend'));
+    // Round 3e (GM): a written line, no "known backend" or "node creation".
+    expect(alertMock).toHaveBeenCalledWith("Couldn't add Text Input. Nebula lost contact with its backend, so the node wasn't added. Reconnect, then add it again.");
   });
 
   it('removes a node and cleans up connected edges', async () => {
@@ -823,7 +829,7 @@ describe('graphStore', () => {
   });
 
   it('keeps a CLI node visible when the backend rejects its deletion', async () => {
-    const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const alert = noticeSpy();
     const cliNode: Node<NodeData> = {
       id: 'n1',
       type: 'model-node',

@@ -32,7 +32,15 @@ class ProjectStoreError(Exception):
 
 
 class ProjectLimitError(ProjectStoreError):
-    pass
+    """A limit the store keeps. ``limit`` says which: "projects" (how many
+    there may be) or "storage" (how big the catalog may grow). The answer
+    carries it beside ``detail`` (main._storage_error_body), so the Projects
+    screen can tell a full store from a copy that is itself too large without
+    reading the words (Q116 a)."""
+
+    def __init__(self, message: str, limit: str) -> None:
+        super().__init__(message)
+        self.limit = limit
 
 
 def now() -> str:
@@ -66,7 +74,26 @@ def metadata(project: dict[str, Any]) -> dict[str, Any]:
     found["cover"] = copy.deepcopy(project.get("cover"))
     if project.get("createdBy"):
         found["createdBy"] = copy.deepcopy(project["createdBy"])
+    # Who pinned the cover ({kind, name}); a pin from before it was recorded
+    # has none and is the person's (main._cover_owner). A pin whose image left
+    # the project no longer counts (Q90 a): the card is automatic, and
+    # `coverLostPin` names the old pin so a screen can say why.
+    pin = project.get("coverPin")
+    if pin and (project.get("cover") or {}).get("source") == "pinned":
+        if isinstance(project.get("coverBy"), dict):
+            found["coverBy"] = copy.deepcopy(project["coverBy"])
+    elif pin and "cover" in project:
+        found["coverLostPin"] = {"url": pin, "by": recorded_cover_owner(project)}
     return found
+
+
+def recorded_cover_owner(project: dict[str, Any]) -> dict[str, str] | None:
+    """Who the stored pin says pinned the cover, whether or not it counts now.
+    A pin saved before ``coverBy`` existed is the person's: only they could pin."""
+    if not project.get("coverPin"):
+        return None
+    by = project.get("coverBy")
+    return copy.deepcopy(dict(by)) if isinstance(by, dict) and by.get("kind") else {"kind": "person", "name": "You"}
 
 
 def needs_cover(project: dict[str, Any]) -> bool:
@@ -215,6 +242,17 @@ class ProjectStore:
         with self.transaction() as catalog:
             return catalog
 
+    def read_unlocked(self) -> dict[str, Any]:
+        """The catalog as last committed, without taking the lock.
+
+        For work done ahead of a transaction in a worker thread
+        (main._open_ingress_verdict): the event loop takes the lock, so a
+        thread holding it would stall the loop. Commits replace catalog.json
+        whole (os.replace), so this reads one complete version, possibly one
+        a transaction is about to replace: a caller compares what it read
+        with what its transaction then holds, and never commits from it."""
+        return self._read()
+
     def workspace(self) -> dict[str, Any]:
         """{activeProjectId, workspaceRevision} without copying the catalog.
 
@@ -242,6 +280,11 @@ class ProjectStore:
         if signature is not None:
             self._workspace_cache = (signature, dict(answer))
         return answer
+
+    def signature(self) -> tuple[int, int, int] | None:
+        """catalog.json's (inode, mtime, size): it changes on every commit, so a
+        caller can keep something it read until then (main._open_project_record)."""
+        return self._signature()
 
     def _signature(self) -> tuple[int, int, int] | None:
         try:
@@ -276,10 +319,10 @@ class ProjectStore:
         """Write/fsync a private temporary catalog before any live graph edit."""
         self._ensure_root()
         if len(catalog["projects"]) > MAX_PROJECTS:
-            raise ProjectLimitError("Project limit reached")
+            raise ProjectLimitError("Project limit reached", "projects")
         encoded = json.dumps(catalog, ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode("utf-8")
         if len(encoded) > MAX_CATALOG_BYTES:
-            raise ProjectLimitError("Project storage limit reached")
+            raise ProjectLimitError("Project storage limit reached", "storage")
         temporary = self.root / f".catalog.{uuid4().hex}.tmp"
         try:
             fd = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)

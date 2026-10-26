@@ -24,6 +24,7 @@ from PIL import Image
 from handlers.krea import (
     KREA_BASE_URL,
     KREA_STATUS_PENDING,
+    UNSET_CONNECTION_LINE,
     _api_key,
     _auth_headers,
     _cancel_krea_job,
@@ -36,6 +37,7 @@ from models.graph import GraphNode, PortValueDict
 from services.cancellation import schedule_detached_cancel
 from services.file_access import require_allowed_path
 from services.output import _MEDIA_EXTENSIONS, get_run_dir, materialize_media_value, portable_output_ref
+from execution.person_line import as_job_failure, missing_file_line, slow_job_line, with_person_line
 
 
 CATALOG_PATH = Path(__file__).resolve().parents[1] / "data" / "krea_gateway_models.json"
@@ -134,7 +136,7 @@ def _asset_data(value: str) -> tuple[str, bytes, str] | None:
         if not loopback:
             return None
         if not parsed.path.startswith("/api/outputs/") or parsed.query or parsed.fragment:
-            raise ValueError("Krea cannot access a local URL; upload the media or use an owned output reference")
+            raise with_person_line(ValueError("Krea cannot access a local URL; upload the media or use an owned output reference"), "Krea can't open a link to this computer. Connect the file or the output itself instead.")
         value = unquote(parsed.path)
         parsed = urlsplit(value)
     if value.startswith("data:"):
@@ -153,19 +155,21 @@ def _asset_data(value: str) -> tuple[str, bytes, str] | None:
             raise ValueError("Krea media must be an HTTP URL, base64 data URI, or local file")
         path = _resolve_local_path(value)
         if path is None:
-            raise ValueError("Krea media input is not a readable local file")
+            raise with_person_line(ValueError("Krea media input is not a readable local file"),
+                                   missing_file_line("file", value))
         # Nested JSON fields are decoded here, after generic graph validation.
         # Enforce the protected-store/workspace boundary at the actual reader.
         path = require_allowed_path(path)
         if not path.is_file():
-            raise ValueError("Krea media input is not a readable local file")
+            raise with_person_line(ValueError("Krea media input is not a readable local file"),
+                                   missing_file_line("file", value))
         if path.stat().st_size > MAX_ASSET_BYTES:
-            raise ValueError("Krea media input exceeds the 75 MB asset limit")
+            raise with_person_line(ValueError("Krea media input exceeds the 75 MB asset limit"), "A connected file is over Krea's 75 MB limit. Connect a smaller one.")
         raw = path.read_bytes()
         mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
         filename = path.name
     if not raw or len(raw) > MAX_ASSET_BYTES:
-        raise ValueError("Krea media input is empty or exceeds the 75 MB asset limit")
+        raise with_person_line(ValueError("Krea media input is empty or exceeds the 75 MB asset limit"), "A connected file is empty or over Krea's 75 MB limit. Connect another one.")
     return filename, raw, mime
 
 
@@ -260,7 +264,8 @@ async def _poll_job(client, api_key, job_id, node_id, emit) -> dict:
             if status == "completed":
                 return job
             if status in {"failed", "cancelled"}:
-                raise RuntimeError(f"Krea job {status}: {job.get('error') or job.get('message') or status}")
+                raise as_job_failure(
+                    RuntimeError(f"Krea job {status}: {job.get('error') or job.get('message') or status}"))
             if status not in KREA_STATUS_PENDING:
                 schedule_detached_cancel(lambda: _cancel_krea_job(job_id, api_key))
                 raise RuntimeError(f"Krea job returned unknown status: {status}")
@@ -268,7 +273,7 @@ async def _poll_job(client, api_key, job_id, node_id, emit) -> dict:
         schedule_detached_cancel(lambda: _cancel_krea_job(job_id, api_key))
         raise
     schedule_detached_cancel(lambda: _cancel_krea_job(job_id, api_key))
-    raise RuntimeError(f"Krea job timed out after {MAX_POLLS} polls")
+    raise with_person_line(RuntimeError(f"Krea job timed out after {MAX_POLLS} polls"), slow_job_line("Krea"))
 
 
 def _result_artifacts(job: dict, media_type: str) -> list[tuple[str, str]]:
@@ -306,7 +311,8 @@ async def handle_krea_gateway(
     model = _model(node.definition_id)
     auth_mode = node.params.get("_kreaAuth", "api-token")
     if auth_mode not in {"api-token", "mcp"}:
-        raise ValueError("Unknown Krea connection; choose API token or Krea account")
+        raise with_person_line(ValueError("Unknown Krea connection; choose API token or Krea account"),
+                               UNSET_CONNECTION_LINE)
     api_key = _api_key(api_keys) if auth_mode == "api-token" else None
     body = await _request_body(node, inputs, model)
     return await run_gateway(node, model, body, auth_mode, api_key, emit)

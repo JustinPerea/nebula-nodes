@@ -2,6 +2,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { CommonsEvaluation } from '../src/components/commons/CommonsEvaluation';
 import { evaluationComplete, type EvaluationBatch } from '../src/lib/commonsEvaluationTypes';
+import { CommonsRequestError } from '../src/lib/commonsRequestError';
+import type { LabelingWork } from '../src/components/commons/commonsLeave';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), prepare: vi.fn(), image: vi.fn(), accents: vi.fn(), labels: vi.fn(), seal: vi.fn() }));
 vi.mock('../src/lib/commonsApi', () => ({ commonsEvaluationApi: api }));
@@ -41,7 +43,7 @@ it('does not reveal palette until the server accepts accent observations', async
 
 it('preserves unsaved labels when a stale revision is rejected', async () => {
   const value = batch(); value.items[0].accent_locked = true; value.items[0].palette = [{ index: 0, hex: '#ff0000', share: 1 }];
-  api.get.mockResolvedValue(value); api.labels.mockRejectedValue(new Error('Labels changed in another window. Reload before saving.'));
+  api.get.mockResolvedValue(value); api.labels.mockRejectedValue(new CommonsRequestError('Labels changed in another window. Reload before saving.', 409));
   render(<CommonsEvaluation />);
   await screen.findByText('Set neutral');
   fireEvent.click(screen.getByText('Set neutral'));
@@ -50,6 +52,46 @@ it('preserves unsaved labels when a stale revision is rejected', async () => {
   await screen.findByRole('alert');
   expect(screen.getByLabelText('quiet loud').getAttribute('aria-valuetext')).toBe('0');
   expect((screen.getByText('Review batch · 0 / 15') as HTMLButtonElement).disabled).toBe(true);
+});
+
+// GM (commons-leave): "UNSAVED" beside Save gives the state, so the status
+// line keeps only the rule. And the leave popover offers Save and leave
+// again only when saving again could work: a conflict can't, a lost
+// connection or a server error can.
+it('says only the rule while unsaved, and tells a leave whether saving again could work', async () => {
+  const value = batch(); value.items[0].accent_locked = true; value.items[0].palette = [{ index: 0, hex: '#ff0000', share: 1 }];
+  api.get.mockResolvedValue(value);
+  let work: LabelingWork | null = null;
+  render(<CommonsEvaluation onWork={(next) => { work = next; }} />);
+  await screen.findByText('Set neutral');
+  fireEvent.click(screen.getByText('Set neutral'));
+  expect(screen.getByText('Save before changing reference')).toBeTruthy();
+  expect(screen.queryByText(/Unsaved changes ·/)).toBeNull();
+  await waitFor(() => expect(work?.unsaved).toBe(true));
+
+  api.labels.mockRejectedValueOnce(new CommonsRequestError('Labels changed in another window. Reload before saving.', 409));
+  expect(await work!.save()).toMatchObject({ ok: false, reason: 'Labels changed in another window. Reload before saving.', retry: false });
+  // The API's error carries the copy (lib/commonsApi, error-copy); round 2:
+  // the leave popover offers Save and leave, so its line is GM's short one.
+  api.labels.mockRejectedValueOnce(new CommonsRequestError("Nebula didn't respond. Try again.", 503));
+  expect(await work!.save()).toMatchObject({ ok: false, reason: "Nebula didn't respond.", retry: true });
+  api.labels.mockRejectedValueOnce(new CommonsRequestError("Nebula's server isn't answering. Make sure it's running, then try again.", 0));
+  expect(await work!.save()).toMatchObject({ ok: false, reason: "Nebula's server isn't answering. Make sure it's running.", retry: true });
+  // An error that didn't come through the API never shows its own message
+  // (GM), and a TypeError the API didn't classify is not "isn't answering"
+  // (typeerror, 2026-10-24): GM's general line.
+  api.labels.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+  expect(await work!.save()).toMatchObject({ ok: false, reason: 'Try again, or reload if it keeps happening.',
+    message: "Couldn't save your labels. Try again, or reload if it keeps happening.", retry: true });
+  // GM: a timeout or a rate limit is a 4xx that works on a second try.
+  for (const status of [408, 429]) {
+    api.labels.mockRejectedValueOnce(new CommonsRequestError('Try again', status));
+    expect(await work!.save()).toMatchObject({ ok: false, reason: 'Try again', retry: true });
+  }
+  for (const status of [400, 401, 403, 404, 413, 422]) {
+    api.labels.mockRejectedValueOnce(new CommonsRequestError('Refused', status));
+    expect(await work!.save()).toMatchObject({ ok: false, reason: 'Refused', retry: false });
+  }
 });
 
 it('does not treat untouched zero sliders, missing keywords, or review flags as complete', () => {
@@ -78,4 +120,16 @@ it('offers sealing and the abandon close before any agent grade', async () => {
   fireEvent.click(await screen.findByText('Review batch · 0 / 15'));
   expect(screen.getByText('Seal all 15 labels')).toBeTruthy();
   expect(screen.getByText('Close without sealing…')).toBeTruthy();
+});
+
+it('error copy round 3b: the intro uses GM\'s words for what Blind labeling picks, not "near-duplicate clusters"', async () => {
+  api.get.mockResolvedValue(null);
+  render(<CommonsEvaluation />);
+  await screen.findByText('Prepare the held-out set');
+  // GM's refusal says "references that look different from each other"; the intro now says the same.
+  expect(screen.getByText(/Nebula picks 15 references to label and 30 to tune with/).textContent).toBe(
+    'Scan a local folder before you import it. Nebula picks 15 references to label and 30 to tune with, '
+    + 'choosing references that look different from each other and spreading them across subfolders. '
+    + 'It never uses the 15, or anything that looks like them, as examples.');
+  expect(document.body.textContent).not.toMatch(/near-duplicate|clusters|quarantined/);
 });

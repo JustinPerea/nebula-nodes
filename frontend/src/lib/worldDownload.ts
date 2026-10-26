@@ -1,6 +1,7 @@
-import { backendAssetUrlSync } from './backend';
+import { backendAssetUrlSync, fetchUrl } from './backend';
 import { AssetByteLimitError, readBoundedAssetResponse } from './boundedAsset';
 import { isSafeWorldUrl } from './worldValue';
+import { FailureNotice, requestError, requestSucceeded } from './errorCopy';
 
 // Blob fallback intentionally stays below graph-bundle totals: the browser
 // briefly holds both the byte array and Blob/object URL. Larger exports should
@@ -11,6 +12,9 @@ export interface WorldDownloadOptions {
   signal?: AbortSignal;
   maxBlobBytes?: number;
   tooLargeMessage?: string;
+  /** What a failure's heading names (GM, error-copy round 2): "Couldn't
+   * download the world." by default; a node's output or a mesh say theirs. */
+  heading?: string;
 }
 
 function safeDownloadName(filename: string): string {
@@ -28,32 +32,32 @@ function safeDownloadName(filename: string): string {
 
 /** Fetch an asset into a Blob before triggering save, including cross-port
  * localhost assets where an `<a download>` attribute would otherwise be
- * ignored. Throws a user-safe error so the caller can render failure state. */
+ * ignored. Throws a user-safe error so the caller can render failure state:
+ * one line, "<heading> <reason>" (never a status code). */
 export async function downloadWorldAsset(
   url: string,
   filename: string,
   options: WorldDownloadOptions = {},
 ): Promise<void> {
-  if (!isSafeWorldUrl(url)) throw new Error('The asset URL is not safe to download.');
+  const heading = options.heading ?? "Couldn't download the world.";
+  const failed = (reason: string) => new FailureNotice(heading, reason);
+  if (!isSafeWorldUrl(url)) throw failed('The asset URL is not safe to download.');
 
-  let response: Response;
-  try {
-    response = await fetch(backendAssetUrlSync(url), { signal: options.signal, cache: 'no-store' });
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') throw error;
-    throw new Error('The asset could not be reached.');
-  }
-  if (!response.ok) throw new Error(`The asset server returned HTTP ${response.status}.`);
+  // No answer is a ConnectionLostError under the heading (fetchUrl).
+  const response = await fetchUrl(backendAssetUrlSync(url), { signal: options.signal, cache: 'no-store' }, heading);
+  if (!response.ok) throw await requestError(heading, response);
+  requestSucceeded(heading);
 
   let bytes: Uint8Array<ArrayBuffer>;
   try {
     bytes = await readBoundedAssetResponse(
       response,
       options.maxBlobBytes ?? WORLD_DOWNLOAD_MAX_BLOB_BYTES,
+      { heading },
     );
   } catch (error) {
     if (error instanceof AssetByteLimitError) {
-      throw new Error(
+      throw failed(
         options.tooLargeMessage
         ?? 'This asset is too large for a safe in-browser download. Open it in Marble instead.',
       );

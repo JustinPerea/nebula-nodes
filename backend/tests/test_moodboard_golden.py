@@ -93,6 +93,41 @@ before it was replaced (the review lists every path that moved):
   for the late" reasons. On the CLI's board only ``colorCheck.basis`` (it
   hashes the version) and ``colorCheck.checks.words.version`` moved, on all
   7 boards. No old board clashes, so every finding list is still empty.
+- 2026-10-20, weight 0 is set aside in the bundle and the summary (plan
+  section 4.4; Justin's go on #100's review, recommendation a). The 4 boards
+  with a weight-0 image (``prebrief_unanalyzed``, ``prebrief_v2_edited``,
+  ``v3_current``, ``v4_current_private``) moved on 15 paths: the node
+  bundle's ``images`` and ``analysis.images`` each lose that one image, and
+  ``analysis.summary``'s count drops by one, on all 4 (12 paths); the CLI's
+  ``analysis.summary`` (the saved analysis as read, counted again in memory
+  by ``with_steering_count``) drops by one on the 3 analyzed ones (3 paths).
+  Nothing else moved: no generator prompt, Krea style reference, brief,
+  ``compose`` output, run note, hash or saved analysis key besides that
+  summary. ``test_q21b_changed_only_the_krea_style_references`` pins the
+  file before the change with those paths normalized
+  (``_without_weight_zero``), and ``tests/test_moodboard_weight_zero.py``
+  pins that no generator request changes.
+- 2026-10-21, Q98 (Justin: "a) Yes: the same check, and the same
+  placeholder for old boards"; contract 07 section 1.19). The 3 boards with
+  an external https image (``prebrief_v2_edited``, ``v3_current``,
+  ``v4_current_private``) moved on 15 paths: the node bundle's ``images``
+  and ``analysis.images`` each lose that one image (it was never resolved or
+  analyzed, so no colour, brief, summary or Krea reference moved), the run
+  notes gain "1 image on Moodboard '...' is an image link from outside
+  Nebula, so it was left out. ...", and the CLI's view marks that image
+  ``outside: true`` and adds one ``outsideNote`` (9 paths on the bundle and
+  notes, 6 on the CLI). Nothing else moved: no generator prompt, Krea style
+  reference, brief, ``compose`` output, hash or saved analysis key.
+  ``test_q21b_changed_only_the_krea_style_references`` normalizes those
+  paths too (``_without_outside_links``); the file at 26572670, the file
+  just before this change and this one give the same hash.
+  Q98's review (same day) moved 9 more paths on those 3 boards: the bundle's
+  and the CLI's ``analysis.summary`` count drops by one (the outside image
+  steers by its settings but no generator gets it, so it isn't counted,
+  ``moodboard_analysis.counts``), and ``outsideNote`` tells an agent to ask
+  the person before fetching the link. ``_without_weight_zero`` already
+  normalizes the count and ``_without_outside_links`` drops the note, so the
+  hash is unchanged.
 
 The board images are copied into the test OUTPUT_ROOT at
 ``moodboard-golden/``, so the boards' ``/api/outputs/moodboard-golden/...``
@@ -104,6 +139,7 @@ import asyncio
 import copy
 import hashlib
 import json
+import re
 import shutil
 from pathlib import Path
 from typing import Any
@@ -319,7 +355,59 @@ def test_reading_an_old_board_leaves_its_file_unchanged(seeded) -> None:
 # clash-wording change (``LEXICON_VERSION`` 3, same day) moves only the
 # lexicon's own stamps, ``cli.colorCheck.basis`` (it hashes the version) and
 # ``cli.colorCheck.checks.words.version``, so those are left out of both sides.
-BEFORE_Q21B_WITHOUT_KREA_REFS = "c97b6c2d4b073e70115d52cd93ac09324090af592d33aea2fe9821aa966e0a80"
+# The weight-0 change (2026-10-20) moves only the paths ``_without_weight_zero``
+# normalizes, so the hash is of the file at 26572670 with those normalized too
+# (it was c97b6c2d4b07... before them); the file just before that change gives
+# the same hash. Q98 (2026-10-21) moves only the paths ``_without_outside_links``
+# normalizes, so the hash is of the file at 26572670 with those normalized too
+# (it was ef8f5d4016bb... before them); the file just before Q98 and the file
+# after it give the same hash.
+BEFORE_Q21B_WITHOUT_KREA_REFS = "5cc3283db0dfd28e80d29ef1651607f2926df7a7fac5d3fd24661d438a45ac1c"
+
+
+_COUNT = re.compile(r"^\d+ reference image\(s\) analyzed as ")
+
+
+def _without_weight_zero(outputs: dict[str, Any]) -> None:
+    """The paths the weight-0 change moved, normalized in place: weight-0
+    images out of the bundle's ``images`` and ``analysis.images`` (where
+    the file before it still had them), and the count in the bundle's and
+    the CLI's ``analysis.summary``."""
+    bundle = ((outputs.get("node") or {}).get("moodboard") or {}).get("value") or {}
+    analysis = bundle.get("analysis") or {}
+    for holder in (bundle, analysis):
+        if isinstance(holder.get("images"), list):
+            holder["images"] = [img for img in holder["images"]
+                                if not (isinstance(img, dict) and img.get("weight") in (0, 0.0))]
+    for view in (analysis, (outputs.get("cli") or {}).get("analysis") or {}):
+        if isinstance(view.get("summary"), str):
+            view["summary"] = _COUNT.sub("N reference image(s) analyzed as ", view["summary"])
+
+
+_OUTSIDE_NOTE = re.compile(r"from outside Nebula")
+
+
+def _without_outside_links(outputs: dict[str, Any]) -> None:
+    """The paths Q98 moved (2026-10-21), normalized in place: an image that
+    is a link to another site out of the bundle's ``images`` and
+    ``analysis.images`` (where the file before it still had them), the run
+    note that says so, and the CLI view's ``outside`` mark and
+    ``outsideNote``."""
+    from services.stored_image_refs import is_outside_link
+
+    bundle = ((outputs.get("node") or {}).get("moodboard") or {}).get("value") or {}
+    analysis = bundle.get("analysis") or {}
+    for holder in (bundle, analysis):
+        if isinstance(holder.get("images"), list):
+            holder["images"] = [img for img in holder["images"]
+                                if not (isinstance(img, dict) and is_outside_link(str(img.get("url") or "")))]
+    if isinstance(outputs.get("runNotes"), list):
+        outputs["runNotes"] = [note for note in outputs["runNotes"] if not _OUTSIDE_NOTE.search(str(note))]
+    cli = outputs.get("cli") or {}
+    cli.pop("outsideNote", None)
+    for image in cli.get("images") or []:
+        if isinstance(image, dict):
+            image.pop("outside", None)
 
 
 def _without_krea_refs(expected: dict[str, Any]) -> str:
@@ -331,6 +419,8 @@ def _without_krea_refs(expected: dict[str, Any]) -> str:
         if isinstance(check, dict):
             check.pop("basis", None)
             ((check.get("checks") or {}).get("words") or {}).pop("version", None)
+        _without_weight_zero(outputs)
+        _without_outside_links(outputs)
     canonical = json.dumps(rest, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 

@@ -11,6 +11,7 @@ import pytest
 from services import asset_project_rehome as rehome
 from services.asset_project_rehome import AssetRoot, rehome_legacy_assets
 from services.project_store import ProjectStore, make_project, move_to_trash
+from tests.conftest import stored_image_urls
 
 OLD = "nebula_nodes"
 
@@ -62,7 +63,7 @@ def env(tmp_path, monkeypatch):
 
 def _board(project_id=OLD, name="Board"):
     from services.moodboard_store import MoodboardStore
-    return MoodboardStore().create(name=name, images=[{"url": "/api/outputs/a.png"}], projectId=project_id)
+    return MoodboardStore().create(name=name, images=[{"url": stored_image_urls(1, name="rehome")[0]}], projectId=project_id)
 
 
 def _character(project_id=OLD, name="Nari"):
@@ -242,7 +243,8 @@ def test_roots_come_from_each_stores_own_resolver(tmp_path, monkeypatch):
     assert [(spec.kind, spec.root, spec.has_trash) for spec in rehome.default_roots()] == [
         ("moodboard", moodboard_store.store_root(), True),
         ("character", character_store.store_root(), True),
-        ("preset", preset_store.store_root(), False),
+        # Styles have Recently deleted since 2026-10-20 (Q53 a).
+        ("preset", preset_store.store_root(), True),
     ]
     assert moodboard_store.store_root() == tmp_path / "NEBULA_MOODBOARD_ROOT"
     # A store that resolves differently is followed, not re-derived.

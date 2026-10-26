@@ -7,6 +7,7 @@ import {
 } from '../../lib/api';
 import { usePanelFocus } from '../../hooks/usePanelFocus';
 import { ScrollFade } from '../ScrollFade';
+import { shortLine } from '../../lib/errorCopy';
 import '../../styles/chat-model-picker.css';
 
 type Agent = 'claude' | 'codex';
@@ -176,10 +177,12 @@ export function ChatModelPicker({ agent, personalAgents = [], model, effort, cat
       </p>
       <ScrollFade className="chat-model-picker__body">
         {isPersonalAgent(agent) ? <p className="chat-model-picker__personal" role="status">
-          {personal?.note || 'It picks its own model.'} Nebula doesn&rsquo;t choose its model or effort; change those
-          in the agent&rsquo;s own settings.
+          {personal?.note || 'It picks its own model.'} Nebula doesn&rsquo;t choose its model or effort. If the agent
+          offers a choice, it shows under its name once the conversation starts; otherwise change those in the
+          agent&rsquo;s own settings.
         </p> : loading ? <p role="status">Loading models…</p> : !ready || !models.length ? <div className="chat-model-picker__unavailable">
-          <p role="status">{unavailable}</p>
+          {/* GM's WRAP rule: Retry is the retry, so the reason drops its own. */}
+          <p role="status">{shortLine(unavailable)}</p>
           <button type="button" className="chat-model-picker__retry" onClick={onRetry}>Retry model discovery</button>
         </div> : <>
           {model && !selected && <p role="status">Saved model is unavailable. Choose a model from this CLI.</p>}

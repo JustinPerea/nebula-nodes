@@ -7,6 +7,7 @@ import { CreateView } from '../../src/components/create-studio/CreateView';
 import { CREATE_DRAFT_STORAGE_KEY, useCreateDraftStore } from '../../src/store/createDraftStore';
 import { GRAPH_PARAMS_VERSION } from '../../src/lib/savedParamsUpgrades';
 import { publishOpenProject } from '../../src/lib/currentProject';
+import { RequestFailedError } from '../../src/lib/errorCopy';
 
 const mocks = vi.hoisted(() => ({
   createPreset: vi.fn(), fetchPresets: vi.fn(),
@@ -96,13 +97,25 @@ describe('Create style saving', () => {
     fireEvent.click(view.getByRole('button', { name: 'OK' }));
     await waitFor(() => expect(mocks.createPreset).toHaveBeenCalledTimes(1));
     expect(view.getByRole('button', { name: 'Saving…' })).toBeDisabled();
-    await act(async () => { reject(new Error('Preset storage unavailable')); });
+    await act(async () => { reject(new RequestFailedError("Couldn't save the style.", 409, { reason: 'Preset storage unavailable.' })); });
     expect(view.getByRole('alert')).toHaveTextContent('Preset storage unavailable');
     fireEvent.click(view.getByRole('button', { name: 'Save current' }));
     expect(await view.findByRole('textbox', { name: 'Name this style:' })).toHaveValue('Retry name');
     fireEvent.click(await view.findByRole('button', { name: 'OK' }));
     await waitFor(() => expect(mocks.createPreset).toHaveBeenCalledTimes(2));
     expect(view.queryByRole('alert')).toBeNull();
+  });
+
+  it('refuses to save a Style holding an image link from outside Nebula, and says so', async () => {
+    const view = render(<CreateView />);
+    act(() => useCreateDraftStore.getState().updateDraft('test-session', () => ({ refs: [
+      { filePath: '/api/outputs/chat-uploads/a.png', previewUrl: '/api/outputs/chat-uploads/a.png' },
+      { filePath: 'https://images.example.com/x.png', previewUrl: '' }] })));
+    fireEvent.click(view.getByRole('button', { name: 'Styles' }));
+    fireEvent.click(await view.findByRole('button', { name: 'Save current' }));
+    expect(await view.findByRole('alert')).toHaveTextContent('image link from outside Nebula');
+    expect(view.queryByRole('dialog', { name: 'Name this style:' })).toBeNull();
+    expect(mocks.createPreset).not.toHaveBeenCalled();
   });
 
   it('refreshes the real preset library only after persistence resolves', async () => {
@@ -146,7 +159,7 @@ describe('Create result save delegation', () => {
     expect(mocks.saveToFolder).toHaveBeenCalledExactlyOnceWith('/api/outputs/result.png');
     expect(view.getByTitle('Saving…')).toBeDisabled();
     expect(view.queryByTitle('Saved!')).toBeNull();
-    await act(async () => { reject(new Error('Export storage unavailable')); });
+    await act(async () => { reject(new RequestFailedError("Couldn't save the output.", 409, { reason: 'Export storage unavailable.' })); });
     expect(view.getByRole('alert')).toHaveTextContent('Export storage unavailable');
     expect(view.getByTitle('Save to folder')).toBeEnabled();
     expect(view.queryByTitle('Saved!')).toBeNull();

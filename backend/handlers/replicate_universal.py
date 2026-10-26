@@ -11,6 +11,9 @@ from execution.async_poll_runner import AsyncPollConfig, poll_until_terminal, _c
 from execution.stream_runner import ReplicateStreamOutputMode, stream_execute_replicate
 from services.cancellation import schedule_detached_cancel
 from execution.missing_credential import MissingCredentialError
+from services import universal_ports
+from services.media_types import MEDIA_PORT_IDS, media_of_value
+from execution.person_line import field_label, with_api_status, with_person_line
 
 REPLICATE_API_BASE = "https://api.replicate.com/v1"
 
@@ -82,11 +85,16 @@ async def _resolve_version(owner: str, name: str, api_key: str) -> str:
             headers={"Authorization": f"Bearer {api_key}"},
         )
         if resp.status_code != 200:
-            raise RuntimeError(f"Failed to fetch Replicate model {owner}/{name}: {resp.status_code} {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Failed to fetch Replicate model {owner}/{name}: {resp.status_code} {resp.text}"),
+                resp.status_code)
         data = resp.json()
         version_id = data.get("latest_version", {}).get("id")
         if not version_id:
-            raise RuntimeError(f"No version found for {owner}/{name}")
+            # The text names the model for agents; the card names the field (GM: no ids).
+            raise with_person_line(RuntimeError(f"No version found for {owner}/{name}"),
+                                   "Replicate has no version of the model in “Model ID” to run. "
+                                   "Check the model on Replicate, then run the node again.")
         return str(version_id)
 
 
@@ -129,6 +137,77 @@ def _infer_output_type(output: Any) -> dict[str, Any]:
     return {"text": {"type": "Text", "value": str(output)}}
 
 
+def _first_value(output: Any) -> Any:
+    """The value a run passes on: the output, or a list's first item (a list
+    of files returns its first, as _infer_output_type always did)."""
+    return output[0] if isinstance(output, list) and output else output
+
+
+def _fill_declared_port(node: GraphNode, output: Any, task_id: str | None) -> dict[str, Any]:
+    """Put a run's output under the port its node declares.
+
+    A node configured for its model (services/universal_ports.py) declares one
+    output, typed before the run from the model's metadata, and the engine
+    passes outputs between nodes by that handle, so the run fills it:
+
+    - a Text port takes output that names no media type as text (plain text,
+      or a URL with no telling extension);
+    - a file port takes the returned file when the file's type agrees (or
+      can't be told, e.g. a URL with no telling extension);
+    - a port typed as a guess (`typeUnconfirmed`: the model's data said
+      nothing) takes the file's word for it: a file of another type goes out
+      under that type's own port (`video`, `audio`, ...), so a paid result is
+      kept and shown, though a wire on the guessed port gets nothing;
+    - anything else (a file of another type on a confirmed port, a media
+      file on a Text port, text on a file port) fails the run naming both, so
+      nothing is passed on silently under a type the next node can't take.
+
+    A node never configured keeps naming its output by the returned file, as
+    it always has, and so does a node whose kept ports were written before
+    file outputs were typed (#132's stamp: every file `image`): there a
+    contradicting file goes out under its own handle as before, and sending
+    the model again types the port (universal_ports.untyped_output_stamp)."""
+    declared = universal_ports.declared_output(node.definition_id, node.params)
+    inferred = _infer_output_type(output)
+    if declared is None:
+        return inferred
+    port_id, port_type = str(declared["id"]), str(declared["dataType"])
+    value = _first_value(output)
+    is_file = isinstance(value, str) and value.startswith(("http://", "https://", "data:"))
+    returned = media_of_value(value) if is_file else None
+    if port_type == "Text":
+        # Plain text, or a URL that names no media type, is text; a file whose
+        # type can be told (a data: URI's MIME type, a URL's extension) is not.
+        if returned is None:
+            text = output if isinstance(output, str) else next(iter(inferred.values()))["value"]
+            return {port_id: {"type": "Text", "value": text}}
+    elif is_file and (returned is None or returned == port_type):
+        return {port_id: {"type": port_type, "value": value}}
+    if universal_ports.untyped_output_stamp(node.definition_id, node.params):
+        return inferred
+    if declared.get("typeUnconfirmed") and returned:
+        # The port was a guess (no hint, no example run); the file says what it is.
+        return {MEDIA_PORT_IDS[returned]: {"type": returned, "value": value}}
+    model = str(node.params.get("model_id") or "this model")
+    what = (f"{'an' if returned[0] in 'AEIOU' else 'a'} {returned} file" if returned else "text (Text), not a file")
+    if declared.get("typeUnconfirmed"):
+        why = (f"Replicate's data for the model doesn't say what it returns, so Nebula typed that port "
+               f"{port_type}, unconfirmed, before the run")
+    else:
+        why = ("typed from the model's data before the run; if the model changed, pick it again (or set its "
+               "model_id again) to re-read its ports")
+    where = f" The result is still on Replicate (prediction {task_id})." if task_id else ""
+    # The text names the model, the port and the prediction for agents; the
+    # card says it in words and names the field to set again.
+    got = f"{'an' if returned[0] in 'AEIOU' else 'a'} {returned.lower()} file" if returned else "text"
+    line = (f"The model returned {got}, but this node's output is set to {port_type.lower()}, so nothing was "
+            "passed on. Pick the model again in “Model ID” to re-read its outputs, then run the "
+            "node again.")
+    raise with_person_line(RuntimeError(
+        f"{model} returned {what}, but this node's output `{port_id}` is {port_type} ({why}), so nothing was "
+        f"passed on.{where}"), line)
+
+
 async def handle_replicate_universal(
     node: GraphNode,
     inputs: dict[str, PortValueDict],
@@ -141,7 +220,8 @@ async def handle_replicate_universal(
 
     model_id = node.params.get("model_id", "")
     if not model_id or "/" not in str(model_id):
-        raise ValueError("Model ID is required (format: owner/name, e.g. stability-ai/sdxl)")
+        raise with_person_line(ValueError("Model ID is required (format: owner/name, e.g. stability-ai/sdxl)"), f"Enter a Replicate model in “{field_label(node.definition_id, 'model_id', 'Model ID')}”, "
+            "as its page on Replicate writes it, then run the node again.")
 
     owner, name = str(model_id).split("/", 1)
 
@@ -159,7 +239,8 @@ async def handle_replicate_universal(
             prediction_input[input_key] = input_val.value
 
     # Map node params (excluding our internal keys) to prediction input
-    INTERNAL_KEYS = {"model_id", "_version_id", "_schema_fetched"}
+    # `_model_ports` is the canvas's record of the model's ports (services/universal_ports.py).
+    INTERNAL_KEYS = {"model_id", "_version_id", "_schema_fetched", "_model_ports"}
     for param_key, param_val in node.params.items():
         if param_key not in INTERNAL_KEYS and param_val is not None and param_val != "":
             prediction_input[param_key] = param_val
@@ -185,6 +266,7 @@ async def handle_replicate_universal(
         timeout=30.0,
         cancel_url_template=f"{REPLICATE_API_BASE}/predictions/{{task_id}}/cancel",
         cancel_method="POST",
+        provider="Replicate",
     )
 
     async def noop_emit(event: ExecutionEvent) -> None:
@@ -198,7 +280,9 @@ async def handle_replicate_universal(
     async with httpx.AsyncClient(timeout=config.timeout) as client:
         submit_resp = await client.post(config.submit_url, headers=config.headers, json=submit_body)
         if submit_resp.status_code not in (200, 201):
-            raise RuntimeError(f"Replicate submit failed ({submit_resp.status_code}): {submit_resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Replicate submit failed ({submit_resp.status_code}): {submit_resp.text}"),
+                submit_resp.status_code)
 
         submit_data = submit_resp.json()
         task_id = submit_data.get("id")
@@ -230,7 +314,7 @@ async def handle_replicate_universal(
             # Preserve text-model behavior while routing streamed media through
             # the same type inference used by polled predictions so the engine
             # can materialize it into the run directory.
-            return _infer_output_type(text)
+            return _fill_declared_port(node, text, task_id)
 
         # Non-streaming output (images/video/audio/mesh/structured) — poll to terminal.
         result = await poll_until_terminal(client, config, task_id, node.id, emit_fn)
@@ -239,4 +323,4 @@ async def handle_replicate_universal(
     if output is None:
         raise RuntimeError("Replicate returned no output")
 
-    return _infer_output_type(output)
+    return _fill_declared_port(node, output, task_id)

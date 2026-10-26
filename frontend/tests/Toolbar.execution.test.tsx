@@ -105,7 +105,7 @@ describe('Toolbar execution lifecycle', () => {
     expect(save).toBeDisabled();
     expect(save).toHaveAttribute(
       'title',
-      'Resolve the World Labs paid-start review before saving.',
+      'Check the waiting World Labs run before you save.',
     );
     fireEvent(window, new CustomEvent('nebula:save'));
 
@@ -151,6 +151,7 @@ describe('Toolbar execution lifecycle', () => {
       })],
       [],
       { x: 0, y: 0, zoom: 1 },
+      undefined,
     ));
   });
 });

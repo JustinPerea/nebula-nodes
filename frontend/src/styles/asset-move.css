@@ -54,11 +54,21 @@
   text-align: left;
   cursor: pointer;
 }
-.asset-move__item:hover:not([aria-disabled="true"]),
-.asset-move__item:focus-visible {
+.asset-move__item:hover:not([aria-disabled="true"]) {
   background: var(--sr-accent-soft, rgba(255, 90, 31, 0.12));
-  outline: none;
+}
+/* Keyboard focus: the neutral ring inside the menu's edge, not the orange
+ * hover wash (orange means the agent and the primary action). */
+.asset-move__item:focus-visible {
+  background: var(--sr-surface-control-hover, rgba(255, 255, 255, 0.05));
+  outline: var(--sr-focus-outline, 2px solid #e8e6e1);
+  outline-offset: -2px;
 }
 .asset-move__item[aria-disabled="true"] { cursor: default; color: var(--sr-ink-faint, rgba(0, 0, 0, 0.4)); }
+/* A radio item (the Commons toolbar's More): the checked one carries a mark,
+ * so the open section shows in the menu. The Move menu's items stay plain. */
+.asset-move__item[role="menuitemradio"] { position: relative; padding-left: 24px; }
+.asset-move__item[aria-checked="true"] { color: var(--sr-ink, inherit); font-weight: 600; }
+.asset-move__item[aria-checked="true"]::before { content: "✓"; position: absolute; left: 8px; top: 6px; line-height: inherit; }
 .asset-move__label { overflow-wrap: anywhere; }
 .asset-move__reason { font-size: 11px; color: var(--sr-ink-meta, rgba(0, 0, 0, 0.6)); white-space: normal; }

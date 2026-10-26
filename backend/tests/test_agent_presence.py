@@ -276,9 +276,9 @@ def test_agent_graph_edits_move_the_cursor_but_browser_edits_do_not(api):
 
     events = _presence_events(sent)
     assert [event["say"] for event in events] == [
-        "Added Text Input",
-        "Added GPT Image 2.5",
-        f"Wiring {text} → {image}",
+        "Added “Text Input”",
+        "Added “GPT Image 2.5”",
+        "Connecting “Text Input” to “GPT Image 2.5”",
         "Set quality",
     ]
     drag = events[2]
@@ -334,8 +334,10 @@ def test_mcp_point_at_and_look_name_the_cursor(monkeypatch):
 
     monkeypatch.delenv("NEBULA_AGENT_NAME")
     assert mcp_server._cursor_name(None) == "MCP agent"
+    # Nothing to point at and nothing to say. (`say` alone narrates at the
+    # cursor since PR26b: tests/test_first_turn_fixes.py.)
     with pytest.raises(ValueError):
-        mcp_server.point_at(say="nowhere")
+        mcp_server.point_at()
 
 
 def test_clearing_the_canvas_forgets_cursors_anchored_to_its_nodes(api):
@@ -374,4 +376,4 @@ def test_an_agents_whole_canvas_run_is_said_with_no_cursor_and_a_node_run_points
 
     whole, one = _presence_events(sent)
     assert whole["say"] == "Running 2 nodes" and "target" not in whole
-    assert one["say"] == "Running Text Input" and one["target"] == {"nodeId": node_id}
+    assert one["say"] == "Running “Text Input”" and one["target"] == {"nodeId": node_id}

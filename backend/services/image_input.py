@@ -20,6 +20,8 @@ import base64
 import logging
 from pathlib import Path
 
+from execution.person_line import missing_file_line, with_person_line
+
 logger = logging.getLogger(__name__)
 
 # MIME types the Anthropic, OpenAI, and Gemini vision APIs accept for image input.
@@ -72,14 +74,14 @@ def load_local_image(path_str: str, *, max_bytes: int = DEFAULT_MAX_IMAGE_BYTES)
             "is the usual cause."
         )
         logger.warning(msg)
-        raise ValueError(msg)
+        raise with_person_line(ValueError(msg), missing_file_line("image file"))
 
     if not path.is_file():
         msg = (
             f"Image input is not a file: {path_str!r}. It was NOT sent to the model."
         )
         logger.warning(msg)
-        raise ValueError(msg)
+        raise with_person_line(ValueError(msg), missing_file_line("image file"))
 
     suffix = path.suffix.lstrip(".").lower()
     mime_type = _IMAGE_MIME_BY_SUFFIX.get(suffix)

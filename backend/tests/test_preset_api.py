@@ -38,5 +38,7 @@ def test_crud_flow():
     updated = client.put(f"/api/presets/{pid}", json={"name": "Y2K Studio v2"}).json()
     assert updated["name"] == "Y2K Studio v2"
 
-    assert client.delete(f"/api/presets/{pid}").json()["status"] == "deleted"
+    # A delete moves it to Recently deleted (2026-10-20, Q53 a).
+    assert client.delete(f"/api/presets/{pid}").json()["status"] == "trashed"
     assert client.get(f"/api/presets/{pid}").status_code == 404
+    assert client.get(f"/api/presets/{pid}").json()["code"] == "in_trash"

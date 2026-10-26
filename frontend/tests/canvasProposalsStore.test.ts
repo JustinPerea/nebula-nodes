@@ -19,7 +19,9 @@ const api = vi.hoisted(() => ({ acceptProposal: vi.fn(), rejectProposal: vi.fn()
 vi.mock('../src/lib/wsClient', () => ({
   wsClient: { subscribe: (handler: (event: unknown) => void) => { ws.handlers.push(handler); return () => {}; } },
 }));
-vi.mock('../src/store/graphStore', () => ({ useGraphStore: { getState: () => graph.state } }));
+const syncs = vi.hoisted(() => ({ seen: new Set<string>(), stop: vi.fn() }));
+vi.mock('../src/store/graphStore', () => ({ useGraphStore: { getState: () => graph.state },
+  watchGraphSyncs: () => syncs }));
 vi.mock('../src/lib/canvasProposals', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/lib/canvasProposals')>()),
   acceptProposal: api.acceptProposal,
@@ -119,7 +121,9 @@ describe('canvas proposals store', () => {
     api.acceptProposal.mockResolvedValue(result);
     await useCanvasProposalsStore.getState().accept('p_a');
     expect(api.acceptProposal).toHaveBeenCalledWith('p_a', 'key-a', { '+up': { x: 900, y: -40 } });
-    expect(graph.state.adoptAcceptedProposal).toHaveBeenCalledWith(result, { undoStep: expect.any(Object) });
+    // With what syncs carried while the accept was out: those are the syncs' to keep or remove.
+    expect(graph.state.adoptAcceptedProposal).toHaveBeenCalledWith(result, { undoStep: expect.any(Object), synced: syncs.seen });
+    expect(syncs.stop).toHaveBeenCalled();
     // One undo step for the accept, taken before the request.
     expect(graph.state.beginUndoStep).toHaveBeenCalledTimes(1);
     expect(graph.state.cancelUndoStep).not.toHaveBeenCalled();
@@ -176,5 +180,29 @@ describe('canvas proposals store', () => {
     await useCanvasProposalsStore.getState().accept('p_a');
     expect(graph.state.executeNode).not.toHaveBeenCalled();
     expect(api.releaseApproval).not.toHaveBeenCalled();
+  });
+});
+
+describe("a person-only refusal on accept or reject (GM, Q116 a)", () => {
+  const GM_LINE = "This change needs your OK, and this tab isn't connected as you. Open the link Nebula printed when it started, then try again.";
+  it("says GM's line, not the accept-key line", async () => {
+    const { ProposalRequestError } = await import('../src/lib/canvasProposals');
+    emit({ type: 'proposalOpened', proposal: proposal('p_a'), acceptKey: 'key-a' });
+    api.acceptProposal.mockRejectedValue(new ProposalRequestError(403, 'Only the person can do this.',
+      { heading: "Couldn't accept the proposal.", detail: 'Only the person can do this.', code: 'person_required' } as never));
+    await useCanvasProposalsStore.getState().accept('p_a');
+    expect(useCanvasProposalsStore.getState().errors.p_a).toBe(`Couldn't accept the proposal. ${GM_LINE}`);
+    api.rejectProposal.mockRejectedValue(new ProposalRequestError(403, 'Only the person can do this.',
+      { heading: "Couldn't reject the proposal.", detail: 'Only the person can do this.', code: 'person_required' } as never));
+    await useCanvasProposalsStore.getState().reject('p_a');
+    expect(useCanvasProposalsStore.getState().errors.p_a).toBe(`Couldn't reject the proposal. ${GM_LINE}`);
+  });
+
+  it('a 403 without the code keeps the accept-key line', async () => {
+    const { ProposalRequestError } = await import('../src/lib/canvasProposals');
+    emit({ type: 'proposalOpened', proposal: proposal('p_a'), acceptKey: 'key-a' });
+    api.acceptProposal.mockRejectedValue(new ProposalRequestError(403, 'This proposal can only be accepted from the Nebula canvas.'));
+    await useCanvasProposalsStore.getState().accept('p_a');
+    expect(useCanvasProposalsStore.getState().errors.p_a).toBe('Only the canvas can accept this. Reload the page.');
   });
 });

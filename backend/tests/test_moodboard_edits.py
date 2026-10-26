@@ -6,7 +6,8 @@ with a 409 that carries the current one; every batch returns ``undo``, a
 ``restore`` of before-slices with ``expect`` after-slices, so undoing it
 skips what changed since (docs/moodboard-canvas-plan.md sections 5.1, 5.2,
 4.7, 4.9). The journal gets one ``board.*`` event per batch, and so do PUTs
-that change images, so older clients' edits show up too.
+that change images, so older clients' edits show up too; a change to the
+board's own fields is a ``board.fields`` event (tests/test_moodboard_field_journal.py).
 """
 from __future__ import annotations
 
@@ -470,9 +471,12 @@ def test_put_diffs_show_up_in_the_journal(client, root, journal):
     put(lambda images: [{**images[0], "excluded": True}, images[1]], notes="new board notes")
     put(lambda images: images[1:])
     _ok(client.put(f"/api/moodboards/{BOARD_ID}", json={"name": "Only a rename"}))
-    kinds = [e["kind"] for e in _board_events(journal)]
-    assert kinds == ["board.resized", "board.setAside", "board.removed"]
-    assert _board_events(journal)[1]["data"]["kinds"] == ["board.setAside", "board.noted"]
+    events = _board_events(journal)
+    # The board's own fields (its notes, a rename) are board.fields events (Q91).
+    assert [e["kind"] for e in events] == ["board.resized", "board.setAside", "board.fields", "board.removed",
+                                           "board.fields"]
+    assert events[1]["data"]["kinds"] == ["board.setAside"]
+    assert [events[2]["data"]["fields"], events[4]["data"]["fields"]] == [["notes"], ["name"]]
 
 
 def test_cli_set_journals_its_image_changes_as_board_edits(app, client, root, journal):
@@ -483,7 +487,7 @@ def test_cli_set_journals_its_image_changes_as_board_edits(app, client, root, jo
     boards.update_board(app.api, BOARD_ID, name="Only a rename")
     # The image changes are one edit; the board's notes go with the PUT after it.
     kinds = [e["kind"] for e in _board_events(journal)]
-    assert kinds == ["board.resized", "board.setAside", "board.noted", "board.removed"]
+    assert kinds == ["board.resized", "board.setAside", "board.fields", "board.removed", "board.fields"]
 
 
 # -- old boards ----------------------------------------------------------------------

@@ -14,6 +14,7 @@ from pathlib import Path
 
 import sys
 from execution.missing_credential import MissingCredentialError
+from execution.person_line import as_job_failure, missing_file_line, slow_job_line, with_api_status, with_person_line
 
 MESHY_API_BASE = "https://api.meshy.ai/openapi"
 # "Maximum file size: 20 MB" for image_url and texture_image_url
@@ -35,19 +36,20 @@ def check_smart_topology(params: dict[str, Any]) -> None:
     if params.get("model_type") != "smart-topology":
         return
     if params.get("topology") == "quad":
-        raise ValueError("Smart Topology makes triangles only. Set Topology to Triangle.")
+        raise with_person_line(ValueError("Smart Topology makes triangles only. Set Topology to Triangle."), "Smart Topology makes triangles only. Set “Topology” to Triangle.")
     polycount = params.get("target_polycount")
     if isinstance(polycount, (int, float)) and polycount > SMART_TOPOLOGY_MAX_POLYCOUNT:
-        raise ValueError(
+        raise with_person_line(ValueError(
             f"Smart Topology makes at most {SMART_TOPOLOGY_MAX_POLYCOUNT:,} faces. "
             f"Set Polycount to {SMART_TOPOLOGY_MAX_POLYCOUNT:,} or less."
-        )
+        ), f"Smart Topology makes at most {SMART_TOPOLOGY_MAX_POLYCOUNT:,} faces. "
+            f"Set “Polycount” to {SMART_TOPOLOGY_MAX_POLYCOUNT:,} or less.")
 
 
 def check_model_options(params: dict[str, Any]) -> None:
     """Meshy 6 Lite makes "``2k`` texture only" (https://docs.meshy.ai/llms.txt, checked 2026-10-14)."""
     if params.get("ai_model") == "meshy-6-lite" and params.get("hd_texture") is True:
-        raise ValueError("Meshy 6 Lite makes 2K textures only. Turn off HD Texture (4K) or pick another model.")
+        raise with_person_line(ValueError("Meshy 6 Lite makes 2K textures only. Turn off HD Texture (4K) or pick another model."), "Meshy 6 Lite makes 2K textures only. Turn off “HD Texture (4K)” or pick another model.")
 
 
 def _apply_smart_topology(body: dict[str, Any]) -> None:
@@ -89,7 +91,7 @@ async def handle_meshy_image_to_3d(
 
     image_input = inputs.get("image")
     if not image_input or not image_input.value:
-        raise ValueError("Image input is required")
+        raise with_person_line(ValueError("Image input is required"), "Connect an image to this node, then run it again.")
 
     image_value = str(image_input.value)
     _log(f"image_value starts with: {image_value[:80]}...")
@@ -97,7 +99,9 @@ async def handle_meshy_image_to_3d(
     if not image_value.startswith(("http://", "https://", "data:")):
         image_path = Path(image_value)
         if not image_path.exists():
-            raise ValueError(f"Image file not found: {image_value}")
+            raise with_person_line(
+                ValueError(f"Image file not found: {image_value}"),
+                missing_file_line("image file"))
         image_value = image_to_data_uri(image_path, max_bytes=MAX_IMAGE_BYTES)
         _log(f"converted to data URI, length={len(image_value)}")
 
@@ -135,7 +139,8 @@ async def handle_meshy_image_to_3d(
         )
         _log(f"submit response: {resp.status_code}")
         if resp.status_code not in (200, 201, 202):
-            raise RuntimeError(f"Meshy submit failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Meshy submit failed ({resp.status_code}): {resp.text}"), resp.status_code)
 
         task_data = resp.json()
         _log(f"task_data: {task_data}")
@@ -175,7 +180,7 @@ async def handle_meshy_text_to_3d(
 
     prompt_input = inputs.get("prompt")
     if not prompt_input or not prompt_input.value:
-        raise ValueError("Prompt input is required")
+        raise with_person_line(ValueError("Prompt input is required"), "Connect a prompt to this node, then run it again.")
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -223,7 +228,8 @@ async def handle_meshy_text_to_3d(
             json=body,
         )
         if resp.status_code not in (200, 201, 202):
-            raise RuntimeError(f"Meshy submit failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Meshy submit failed ({resp.status_code}): {resp.text}"), resp.status_code)
 
         task_data = resp.json()
         task_id = task_data.get("result") or task_data.get("id") or task_data.get("task_id")
@@ -256,7 +262,8 @@ async def handle_meshy_text_to_3d(
                 json=refine_body,
             )
             if resp2.status_code not in (200, 201, 202):
-                raise RuntimeError(f"Meshy refine submit failed ({resp2.status_code}): {resp2.text}")
+                raise with_api_status(
+                    RuntimeError(f"Meshy refine submit failed ({resp2.status_code}): {resp2.text}"), resp2.status_code)
 
             refine_data = resp2.json()
             refine_id = refine_data.get("result") or refine_data.get("id") or refine_data.get("task_id")
@@ -299,7 +306,8 @@ async def _poll_meshy_task(
             schedule_detached_cancel(lambda: _cancel_meshy_task(poll_url, api_key))
             raise
         if resp.status_code != 200:
-            raise RuntimeError(f"Meshy poll failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Meshy poll failed ({resp.status_code}): {resp.text}"), resp.status_code)
 
         data = resp.json()
         status = data.get("status", "")
@@ -311,9 +319,9 @@ async def _poll_meshy_task(
             return data
         elif status in {"FAILED", "CANCELED"}:
             error = data.get("task_error", {}).get("message", "Unknown error")
-            raise RuntimeError(f"Meshy task {status.lower()}: {error}")
+            raise as_job_failure(RuntimeError(f"Meshy task {status.lower()}: {error}"))
 
-    raise RuntimeError(f"Meshy task timed out after {max_polls} polls")
+    raise with_person_line(RuntimeError(f"Meshy task timed out after {max_polls} polls"), slow_job_line("Meshy"))
 
 
 async def handle_meshy_multi_image_to_3d(
@@ -328,7 +336,7 @@ async def handle_meshy_multi_image_to_3d(
 
     images_input = inputs.get("images")
     if not images_input or not images_input.value:
-        raise ValueError("At least one image input is required")
+        raise with_person_line(ValueError("At least one image input is required"), "Connect at least one image to this node, then run it again.")
 
     image_values = images_input.value if isinstance(images_input.value, list) else [images_input.value]
     image_urls: list[str] = []
@@ -337,7 +345,9 @@ async def handle_meshy_multi_image_to_3d(
         if not img_str.startswith(("http://", "https://", "data:")):
             img_path = Path(img_str)
             if not img_path.exists():
-                raise ValueError(f"Image file not found: {img_str}")
+                raise with_person_line(
+                    ValueError(f"Image file not found: {img_str}"),
+                    missing_file_line("image file"))
             img_str = image_to_data_uri(img_path, max_bytes=MAX_IMAGE_BYTES)
         image_urls.append(img_str)
 
@@ -366,7 +376,8 @@ async def handle_meshy_multi_image_to_3d(
             json=body,
         )
         if resp.status_code not in (200, 201, 202):
-            raise RuntimeError(f"Meshy multi-image submit failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Meshy multi-image submit failed ({resp.status_code}): {resp.text}"), resp.status_code)
 
         task_data = resp.json()
         task_id = task_data.get("result") or task_data.get("id") or task_data.get("task_id")
@@ -399,7 +410,7 @@ async def handle_meshy_retexture(
 
     model_url_input = inputs.get("model_url")
     if not model_url_input or not model_url_input.value:
-        raise ValueError("Model URL input is required for retexturing")
+        raise with_person_line(ValueError("Model URL input is required for retexturing"), "Connect a 3D model to this node, then run it again.")
 
     prompt_input = inputs.get("prompt")
 
@@ -432,7 +443,8 @@ async def handle_meshy_retexture(
             json=body,
         )
         if resp.status_code not in (200, 201, 202):
-            raise RuntimeError(f"Meshy retexture submit failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Meshy retexture submit failed ({resp.status_code}): {resp.text}"), resp.status_code)
 
         task_data = resp.json()
         task_id = task_data.get("result") or task_data.get("id") or task_data.get("task_id")
@@ -465,7 +477,7 @@ async def handle_meshy_rigging(
 
     model_url_input = inputs.get("model_url")
     if not model_url_input or not model_url_input.value:
-        raise ValueError("Model URL input is required for rigging")
+        raise with_person_line(ValueError("Model URL input is required for rigging"), "Connect a 3D model to this node, then run it again.")
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -493,7 +505,8 @@ async def handle_meshy_rigging(
             json=body,
         )
         if resp.status_code not in (200, 201, 202):
-            raise RuntimeError(f"Meshy rigging submit failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Meshy rigging submit failed ({resp.status_code}): {resp.text}"), resp.status_code)
 
         task_data = resp.json()
         task_id = task_data.get("result") or task_data.get("id") or task_data.get("task_id")
@@ -530,11 +543,11 @@ async def handle_meshy_animate(
 
     rig_task_id_input = inputs.get("rig_task_id")
     if not rig_task_id_input or not rig_task_id_input.value:
-        raise ValueError("Rig Task ID is required — connect from a Meshy Auto-Rig node")
+        raise with_person_line(ValueError("Rig Task ID is required — connect from a Meshy Auto-Rig node"), "Connect a Meshy Auto-Rig node to “Rig Task ID”, then run the node again.")
 
     action_id = node.params.get("action_id")
     if not action_id:
-        raise ValueError("Action ID is required — pick an animation from the library")
+        raise with_person_line(ValueError("Action ID is required — pick an animation from the library"), "Pick an animation in “Animation”, then run the node again.")
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -566,7 +579,8 @@ async def handle_meshy_animate(
             json=body,
         )
         if resp.status_code not in (200, 201, 202):
-            raise RuntimeError(f"Meshy animation submit failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Meshy animation submit failed ({resp.status_code}): {resp.text}"), resp.status_code)
 
         task_data = resp.json()
         task_id = task_data.get("result") or task_data.get("id") or task_data.get("task_id")
@@ -599,7 +613,7 @@ async def handle_meshy_remesh(
 
     model_url_input = inputs.get("model_url")
     if not model_url_input or not model_url_input.value:
-        raise ValueError("Model URL input is required for remeshing")
+        raise with_person_line(ValueError("Model URL input is required for remeshing"), "Connect a 3D model to this node, then run it again.")
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -631,7 +645,8 @@ async def handle_meshy_remesh(
             json=body,
         )
         if resp.status_code not in (200, 201, 202):
-            raise RuntimeError(f"Meshy remesh submit failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Meshy remesh submit failed ({resp.status_code}): {resp.text}"), resp.status_code)
 
         task_data = resp.json()
         task_id = task_data.get("result") or task_data.get("id") or task_data.get("task_id")
@@ -664,7 +679,7 @@ async def handle_meshy_text_to_image(
 
     prompt_input = inputs.get("prompt")
     if not prompt_input or not prompt_input.value:
-        raise ValueError("Prompt is required")
+        raise with_person_line(ValueError("Prompt is required"), "Connect a prompt to this node, then run it again.")
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -693,7 +708,8 @@ async def handle_meshy_text_to_image(
             json=body,
         )
         if resp.status_code not in (200, 201, 202):
-            raise RuntimeError(f"Meshy text-to-image submit failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Meshy text-to-image submit failed ({resp.status_code}): {resp.text}"), resp.status_code)
 
         task_data = resp.json()
         task_id = task_data.get("result") or task_data.get("id") or task_data.get("task_id")
@@ -735,11 +751,11 @@ async def handle_meshy_image_to_image(
 
     prompt_input = inputs.get("prompt")
     if not prompt_input or not prompt_input.value:
-        raise ValueError("Prompt is required")
+        raise with_person_line(ValueError("Prompt is required"), "Connect a prompt to this node, then run it again.")
 
     images_input = inputs.get("images")
     if not images_input or not images_input.value:
-        raise ValueError("At least one reference image is required")
+        raise with_person_line(ValueError("At least one reference image is required"), "Connect at least one reference image to this node, then run it again.")
 
     image_values = images_input.value if isinstance(images_input.value, list) else [images_input.value]
     image_urls: list[str] = []
@@ -748,7 +764,9 @@ async def handle_meshy_image_to_image(
         if not img_str.startswith(("http://", "https://", "data:")):
             img_path = Path(img_str)
             if not img_path.exists():
-                raise ValueError(f"Image file not found: {img_str}")
+                raise with_person_line(
+                    ValueError(f"Image file not found: {img_str}"),
+                    missing_file_line("image file"))
             img_str = image_to_data_uri(img_path, max_bytes=MAX_IMAGE_BYTES)
         image_urls.append(img_str)
 
@@ -779,7 +797,8 @@ async def handle_meshy_image_to_image(
             json=body,
         )
         if resp.status_code not in (200, 201, 202):
-            raise RuntimeError(f"Meshy image-to-image submit failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Meshy image-to-image submit failed ({resp.status_code}): {resp.text}"), resp.status_code)
 
         task_data = resp.json()
         task_id = task_data.get("result") or task_data.get("id") or task_data.get("task_id")
@@ -820,7 +839,7 @@ async def handle_meshy_3d_print(
 
     task_id_input = inputs.get("task_id")
     if not task_id_input or not task_id_input.value:
-        raise ValueError("Task ID from a completed 3D generation is required")
+        raise with_person_line(ValueError("Task ID from a completed 3D generation is required"), "Connect a finished Meshy 3D generation to “Task ID”, then run the node again.")
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -851,7 +870,8 @@ async def handle_meshy_3d_print(
             json=body,
         )
         if resp.status_code not in (200, 201, 202):
-            raise RuntimeError(f"Meshy 3D print submit failed ({resp.status_code}): {resp.text}")
+            raise with_api_status(
+                RuntimeError(f"Meshy 3D print submit failed ({resp.status_code}): {resp.text}"), resp.status_code)
 
         task_data = resp.json()
         task_id = task_data.get("result") or task_data.get("id") or task_data.get("task_id")

@@ -96,7 +96,9 @@ describe('Paper source explicit UI lifecycle', () => {
 
   it('retains and labels last-good pixels when the linked object is missing', async () => {
     seed(source);
-    vi.mocked(refreshPaperSource).mockRejectedValue(new PaperSourceError('Linked object was deleted.', { ...source, state: 'missing', lastError: 'Linked object was deleted.', sequence: 2 }));
+    vi.mocked(refreshPaperSource).mockRejectedValue(new PaperSourceError("Couldn't refresh the source.", 409, {
+      reason: 'The linked object is missing in Paper. Reconnect it, or link another object.',
+      source: { ...source, state: 'missing', lastError: 'Linked object was deleted.', sequence: 2 } }));
     render(<Harness />);
     fireEvent.click(screen.getByRole('button', { name: 'Refresh source' }));
     await screen.findByText('Object missing');
@@ -180,7 +182,7 @@ describe('Paper source explicit UI lifecycle', () => {
     vi.mocked(openExternalUrl).mockRejectedValue(new Error('No protocol handler'));
     render(<Harness />);
     fireEvent.click(screen.getByRole('link', { name: 'Open in Paper' }));
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Could not open Paper Desktop. Use Open source link.'));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent("Couldn't open Paper Desktop. Use Open source link."));
     expect(screen.queryByText(/Opening this object/)).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open source link' })).toHaveAttribute('href', 'https://app.paper.design/file/file-a/page-a/logo-a');
     expect(useGraphStore.getState().nodes[0].data.params._paperSource).toBe(source);

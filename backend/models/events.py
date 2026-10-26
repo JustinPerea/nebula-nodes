@@ -110,12 +110,39 @@ class ErrorEvent(RunScopedEvent):
     # The handler stopped at its own key check, before any provider request
     # (execution.missing_credential), so the node cost nothing.
     missing_credential: bool = False
+    # The person's line for this failure, when the handler wrote one
+    # (execution/person_line.py, error copy round 3c): what the canvas card
+    # shows, with no ids or record names. `error` keeps the specific text
+    # word for word for agents, the run record and MCP. Additive: None means
+    # the card shows its fallback, with `error` behind "Details".
+    person: str | None = None
+    # The exception text in `error` carries the provider's own words, so the
+    # card keeps it behind "Details" beside `person` (error copy round 3d,
+    # GM: "Raw provider text stays behind Details in every case."): the
+    # status table's lines, an empty answer's, and a handler's
+    # with_provider_line. False: a `person` in Nebula's own words, with no
+    # Details (the specific text is for agents).
+    provider_text: bool = False
+    # The provider the run called, from the route it took (round 3f): the
+    # card's general line says "Details shows what {Provider} said." when a
+    # failure has no line of its own. Additive and card-only: never read from
+    # the error's text, None for a node that calls no provider or a failure
+    # that provider never answered (execution/provider_status.card_line).
+    provider: str | None = None
 
 
 class ValidationErrorDetail(BaseModel):
     node_id: str
     port_id: str
     message: str
+    # The person's line for this check (error copy round 3e), as ErrorEvent's
+    # `person`: what the canvas card shows, naming a field by its label, an
+    # input in words and a key by its provider, never a key, id or env-var
+    # name. `message` keeps the specific text word for word for agents (run
+    # results, look_at_canvas, the run record). Additive: None is a check
+    # only an agent or a damaged saved graph reaches; the card shows GM's
+    # general line with `message` behind "Details".
+    person: str | None = None
 
 
 class ValidationErrorEvent(RunScopedEvent):

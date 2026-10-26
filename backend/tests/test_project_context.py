@@ -7,12 +7,19 @@ import pytest
 from fastapi.testclient import TestClient
 
 from services.project_store import ProjectStore, make_project, move_to_trash
+from tests.conftest import stored_image_urls
 
-CHARACTER = {"name": "Rina", "subjectType": "human", "referenceViews": ["a", "b", "c"],
+CHARACTER = {"name": "Rina", "subjectType": "human", "referenceViews": stored_image_urls(),
              "frozenTraitString": "warm", "seed": 7, "consistencyStrength": 0.9}
-BOARD = {"name": "Warm", "images": [{"url": "/api/outputs/a.png"}]}
+BOARD = {"name": "Warm", "images": [{"url": stored_image_urls(1, name="board")[0]}]}
 STYLE = {"name": "Warm", "category": "My Styles", "prompt": "warm", "params": {}, "modelId": None,
          "refImages": [], "scope": "project", "paramsVersion": 0}
+
+@pytest.fixture(autouse=True)
+def _stored_views():
+    """The Character's views must be files Nebula serves (services/stored_image_refs.py)."""
+    stored_image_urls()
+
 
 
 @pytest.fixture

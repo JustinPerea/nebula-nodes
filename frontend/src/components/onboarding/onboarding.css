@@ -109,7 +109,7 @@
 
 .onboarding__cta:focus-visible,
 .onboarding__skip:focus-visible {
-  outline: 2px solid var(--sr-accent, #ff5a1f);
+  outline: var(--sr-focus-outline, 2px solid #e8e6e1);
   outline-offset: 3px;
 }
 

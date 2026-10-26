@@ -1,0 +1,63 @@
+/* "Image link from outside Nebula": shown where a saved Style's or
+   Character's image would be when it points outside Nebula, so it is never
+   loaded (lib/storedImage.ts). Structural only, so it reads in every skin:
+   it takes its colour from the placeholder or line it sits in. */
+.outside-image-note {
+  display: block;
+  font-size: 10px;
+  line-height: 1.3;
+  letter-spacing: normal;
+  text-transform: none;
+  opacity: 0.78;
+  overflow-wrap: anywhere;
+}
+
+.preset-card .outside-image-note {
+  position: relative;
+  z-index: 2;
+}
+
+.character-def__ref--empty,
+.character-def__thumb .outside-image-note,
+.character-node__thumb-placeholder .outside-image-note {
+  text-align: center;
+}
+
+.character-def__ref--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+}
+
+/* A board image that links to another site (Q98): the card, tile, side
+   panel, cover and Moodboard node keep their size and show the line in the
+   middle, in the colour of the box it sits in. */
+.moodboard-card__placeholder,
+.moodboard-tile__outside {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 8px;
+  box-sizing: border-box;
+}
+
+.moodboard-tile__outside {
+  position: absolute;
+  inset: 0;
+}
+
+.moodboard-card__placeholder .outside-image-note,
+.moodboard-tile__outside .outside-image-note,
+.moodboard-board-panel__image .outside-image-note,
+.moodboard-def__cover .outside-image-note,
+.moodboard-node__preview .outside-image-note {
+  text-align: center;
+  padding: 4px;
+}
+
+.moodboard-board-panel__image .outside-image-note {
+  padding: 24px 8px;
+}

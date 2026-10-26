@@ -6,7 +6,8 @@ import sys
 from typing import Any
 from uuid import uuid4
 
-from services.file_access import ProtectedPathError, require_allowed_path, validate_file_references
+from services.file_access import ProtectedPathError, require_allowed_path
+from services.node_names import quoted
 
 from ..client import NebulaClient
 from ..formatter import format_graph
@@ -48,11 +49,34 @@ def run_show(client: NebulaClient) -> None:
     print(format_graph(state, node_defs))
 
 
+# A saved graph past this isn't one `nebula save` wrote.
+_MAX_SAVED_GRAPH_BYTES = 64 * 1024 * 1024
+
+
+def _is_saved_graph(path) -> bool:
+    """Whether the file at ``path`` is a graph export (`nebula save`'s JSON)."""
+    try:
+        if not path.is_file() or path.stat().st_size > _MAX_SAVED_GRAPH_BYTES:
+            return False
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, UnicodeDecodeError, RecursionError):
+        return False
+    return isinstance(data, dict) and isinstance(data.get("nodes"), list)
+
+
 def run_save(client: NebulaClient, filepath: str) -> None:
     try:
         path = require_allowed_path(filepath)
     except ProtectedPathError as exc:
         print(f"error: {exc}", file=sys.stderr)
+        sys.exit(1)
+    if path.exists() and not _is_saved_graph(path):
+        # It replaces only an earlier export. Anything else (an image or clip
+        # in Nebula's output folder, which the spending check prices runs
+        # from because nothing an agent runs changes it: services/input_sizes.py)
+        # is left as it is.
+        print(f"error: {filepath} already exists and isn't a saved graph, so it was left as it is. "
+              "Save to a new file name.", file=sys.stderr)
         sys.exit(1)
     state = client.get_graph()
     # Keep the previous export intact until the complete replacement is ready.
@@ -71,32 +95,22 @@ def run_save(client: NebulaClient, filepath: str) -> None:
 
 
 def run_load(client: NebulaClient, filepath: str) -> None:
+    """Open a .nebula, .json or .nebula.zip as the canvas's Load graph does
+    (MCP load_graph_file; graph_file_client.py): a bundle's files are
+    restored, and a file over the save limit opens as a new project named
+    after it (Q123 a). Under the limit it replaces the open project's canvas."""
+    import graph_file_client
+
     try:
-        path = require_allowed_path(filepath)
-    except ProtectedPathError as exc:
+        # The module adds this agent's name ($NEBULA_AGENT_NAME) as the
+        # client does; nothing is sent before the file and its path are checked.
+        result = graph_file_client.load(client.api, filepath, via="cli")
+    except graph_file_client.GraphFileError as exc:
         print(f"error: {exc}", file=sys.stderr)
         sys.exit(1)
-    if not path.exists():
-        print(f"error: file not found: {filepath}", file=sys.stderr)
-        sys.exit(1)
-
-    data = json.loads(path.read_text())
-    try:
-        validate_file_references(data)
-    except ProtectedPathError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        sys.exit(1)
-
-    # One atomic replace through the route the canvas uses for .nebula files:
-    # the saved params (the canvas's own _ bookkeeping included) arrive as
-    # saved, retired nodes are migrated, and a refusal leaves the graph as it was.
-    body: dict[str, Any] = {"nodes": data.get("nodes", []), "edges": data.get("edges", [])}
-    if "paramsVersion" in data:
-        body["paramsVersion"] = data["paramsVersion"]
-    result = client.import_graph(body)
     for warning in result.get("warnings") or []:
         print(f"note: {warning}", file=sys.stderr)
-    print(f"Loaded graph ({result.get('nodeCount', 0)} nodes, {result.get('edgeCount', 0)} connections) from {filepath}")
+    print(result["note"])
 
 
 def run_clear(client: NebulaClient, force: bool = False) -> None:
@@ -128,8 +142,11 @@ def _port_ref(value: str, role: str) -> tuple[str, str]:
 
 def run_delete(client: NebulaClient, node_refs: list[str]) -> None:
     for node_ref in node_refs:
-        client.delete_node(node_ref)
-        print(f"Deleted {node_ref} and its wires")
+        result = client.delete_node(node_ref)
+        # The id stays beside the name, so several deletes, or two nodes with
+        # one name, still map back to ids.
+        node_id = str(result.get("id") or node_ref)
+        print(f"Deleted {quoted(str(result.get('label') or node_id))} ({node_id}) and its connections")
 
 
 def run_disconnect(client: NebulaClient, src: str, dst: str) -> None:
@@ -137,7 +154,7 @@ def run_disconnect(client: NebulaClient, src: str, dst: str) -> None:
     dst_node, dst_port = _port_ref(dst, "destination")
     result = client.disconnect(src_node, src_port, dst_node, dst_port)
     if result.get("status") != "deleted":
-        print(f"error: no wire {src} → {dst} (`nebula graph` lists them)", file=sys.stderr)
+        print(f"error: no connection {src} → {dst} (`nebula graph` lists them)", file=sys.stderr)
         sys.exit(1)
     print(f"Disconnected {src} → {dst}")
 

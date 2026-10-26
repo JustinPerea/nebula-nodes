@@ -10,6 +10,7 @@ import asyncio
 import os
 from typing import Callable
 
+from commons import analysis_errors
 from commons import media, records
 from commons.db import now_iso
 from commons.reader import MODEL_ID, PROMPT_VERSION, AnalysisInvalid, read_image, validate
@@ -100,7 +101,7 @@ class AnalysisWorker:
             png = media.encode_png(media.load_image(data, asset["mime"]), max_edge=1568)
         except (media.MediaError, OSError) as exc:
             await asyncio.to_thread(records.write_analysis_failed, store, asset["id"], error=f"cannot load image: {exc}",
-                                    raw_output=None, fewshot_ids=[], **common)
+                                    raw_output=None, fewshot_ids=[], error_kind=analysis_errors.UNREADABLE, **common)
             self.state = "running"
             return "failed"
         palette = (asset.get("measurements") or {}).get("palette") or []
@@ -112,19 +113,23 @@ class AnalysisWorker:
             result = await self._reader(png, palette, shots, vocab=vocab)
         except Exception as exc:  # noqa: BLE001 - never leave the asset stuck in 'analyzing'
             await asyncio.to_thread(records.write_analysis_failed, store, asset["id"], error=f"reader crashed: {exc}",
-                                    raw_output=None, fewshot_ids=shot_ids, **common)
+                                    raw_output=None, fewshot_ids=shot_ids,
+                                    error_kind=analysis_errors.classify_exception(exc), **common)
             self.state = "running"
             return "failed"
         if result.error or result.structured is None:
             await asyncio.to_thread(records.write_analysis_failed, store, asset["id"], error=result.error or "no output",
-                                    raw_output=result.raw, fewshot_ids=shot_ids, **common)
+                                    raw_output=result.raw, fewshot_ids=shot_ids,
+                                    error_kind=result.error_kind or analysis_errors.classify_text(result.error)
+                                    or analysis_errors.OTHER, **common)
             self.state = "running"
             return "failed"
         try:
             fields, candidates, regions = validate(result.structured, palette_len=len(palette), vocab=vocab)
         except AnalysisInvalid as exc:
             await asyncio.to_thread(records.write_analysis_failed, store, asset["id"], error=str(exc),
-                                    raw_output=result.raw, fewshot_ids=shot_ids, **common)
+                                    raw_output=result.raw, fewshot_ids=shot_ids,
+                                    error_kind=analysis_errors.OTHER, **common)
             self.state = "running"
             return "failed"
         await asyncio.to_thread(

@@ -135,7 +135,7 @@ Text to Image:
 Before building a Meshy graph:
 
 1. Read the shared Meshy reference.
-2. Run `nebula nodes` to confirm the current node IDs.
+2. Run `nebula nodes meshy` to confirm the current node IDs and which run here (`--all` adds the ones that need a key).
 3. Run `nebula info <node_id>` to confirm the live input/param schema.
 4. Build one stage, run it, download/inspect the output, then continue.
 

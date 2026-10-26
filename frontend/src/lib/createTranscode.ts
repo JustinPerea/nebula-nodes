@@ -1,4 +1,4 @@
-import { apiFetch } from './backend';
+import { apiRequest } from './apiRequest';
 
 /** Image formats the gallery download menu offers (server-side transcode). */
 export const DOWNLOAD_FORMATS = ['png', 'jpg', 'webp'] as const;
@@ -10,21 +10,11 @@ export type DownloadFormat = (typeof DOWNLOAD_FORMATS)[number];
  * readable message on failure.
  */
 export async function downloadTranscoded(url: string, format: DownloadFormat): Promise<void> {
-  const res = await apiFetch('/api/transcode-image', {
+  const res = await apiRequest("Couldn't convert the image.", '/api/transcode-image', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url, format }),
   });
-  if (!res.ok) {
-    let detail = `Transcode failed (${res.status})`;
-    try {
-      const body = await res.json();
-      if (body?.detail) detail = String(body.detail);
-    } catch {
-      /* keep the status fallback */
-    }
-    throw new Error(detail);
-  }
   const blob = await res.blob();
   const cd = res.headers.get('Content-Disposition') ?? '';
   const match = /filename="?([^"]+)"?/.exec(cd);

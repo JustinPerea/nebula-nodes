@@ -33,6 +33,8 @@ let execution: ReturnType<typeof vi.fn>[];
 let opener: HTMLButtonElement;
 let menuSize: { width: number; height: number };
 let observers: FakeResizeObserver[];
+/** The canvas's bottom bar, when a test puts one on screen. */
+let barRect: DOMRect | null = null;
 
 class FakeResizeObserver {
   constructor(private callback: ResizeObserverCallback) { observers.push(this); }
@@ -99,6 +101,7 @@ beforeEach(() => {
   menuSize = { width: 320, height: 240 };
   vi.stubGlobal('ResizeObserver', FakeResizeObserver);
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+    if (this.hasAttribute('data-bottom-bar')) return barRect ?? new DOMRect();
     return this.classList.contains('connection-popup')
       ? new DOMRect(parseFloat(this.style.left) || 0, parseFloat(this.style.top) || 0,
         Math.min(menuSize.width, window.innerWidth - 16), Math.min(menuSize.height, window.innerHeight - 16))
@@ -281,7 +284,7 @@ describe('ConnectionPopup next-step preparation', () => {
     openPopup();
     const before = useGraphStore.getState();
     await act(async () => { fireEvent.click(searchFor('veo-3')); });
-    expect(screen.getByRole('alert')).toHaveTextContent('Could not confirm the connected step');
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't confirm the connected step. Check the canvas before trying again.");
     expect(screen.getByRole('dialog', { name: 'Add next step' })).toBeVisible();
     expect(useGraphStore.getState().nodes).toBe(before.nodes);
     expect(useGraphStore.getState().edges).toBe(before.edges);
@@ -297,7 +300,7 @@ describe('ConnectionPopup next-step preparation', () => {
     openPopup();
     const item = searchFor('veo-3');
     await act(async () => { fireEvent.click(item); });
-    expect(screen.getByRole('alert')).toHaveTextContent('Could not add the step');
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't add the step. Check the canvas before trying again.");
     expect(item).toBeEnabled();
     expect(screen.getByRole('dialog')).toHaveAttribute('aria-busy', 'false');
     expect(useUIStore.getState().connectionPopup.visible).toBe(true);
@@ -354,6 +357,26 @@ describe('ConnectionPopup next-step preparation', () => {
     expect(useUIStore.getState().selectedNodeId).toBe('n1');
     expect(addConnected).not.toHaveBeenCalled();
     expect(addNode).not.toHaveBeenCalled();
+  });
+
+  // The Inspector's bug (GM - Design, 2026-10-23) on the drop picker: dropped
+  // just above the canvas's bottom bar, it opened down over the bar.
+  it('a picker dropped just above the bottom bar opens above it', () => {
+    vi.stubGlobal('innerWidth', 1280);
+    vi.stubGlobal('innerHeight', 800);
+    barRect = new DOMRect(395, 729, 490, 47);
+    const bar = document.createElement('div');
+    bar.setAttribute('data-bottom-bar', '');
+    document.body.append(bar);
+    try {
+      openPopup({ ...popupOptions, position: { x: 600, y: 600 } });
+      const dialog = screen.getByRole('dialog', { name: 'Add next step' });
+      expect(parseFloat(dialog.style.top) + menuSize.height).toBeLessThan(barRect.top);
+      expect(useUIStore.getState().connectionPopup.position).toEqual({ x: 600, y: 600 });
+    } finally {
+      bar.remove();
+      barRect = null;
+    }
   });
 
   it.each(['source', 'target'] as const)('bounds a dragged %s picker without changing the original drop destination or wire direction', async (direction) => {

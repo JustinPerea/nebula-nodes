@@ -26,6 +26,7 @@ from execution import maker_routes
 from execution.missing_credential import MissingCredentialError
 from models.events import ExecutionEvent
 from models.graph import GraphNode, PortValueDict
+from execution.person_line import with_person_line
 
 Emit = Callable[[ExecutionEvent], Awaitable[None]] | None
 
@@ -111,16 +112,19 @@ def identity_edit_request(
     image_input = inputs.get("image")
     base_image = str(image_input.value).strip() if image_input and image_input.value else ""
     if not base_image:
-        raise ValueError("identity-edit requires a base image on the 'image' port")
+        raise with_person_line(
+            ValueError("identity-edit requires a base image on the 'image' port"),
+            "Connect a base image to “Image”, then run the node again.")
 
     mask_input = inputs.get("mask")
     if mask_input and mask_input.value:
         # Retain old graph ports/edges, but never bill an unsupported
         # masked edit or quietly generate a different, unmasked image.
-        raise ValueError(
+        raise with_person_line(ValueError(
             "Identity Edit does not support masks on the Nano Banana 2 endpoint; "
             "disconnect Mask before running this node"
-        )
+        ), "Identity Edit can't take a mask on the Nano Banana 2 endpoint. Disconnect “Mask (unavailable)”, "
+           "then run the node again.")
 
     prompt_input = inputs.get("prompt")
     base_prompt = str(prompt_input.value) if prompt_input and prompt_input.value else ""
@@ -276,29 +280,35 @@ async def vertex_krea_veo(
     params = node.params
     model = str(params.get("model") or "")
     if model not in veo.VEO_MODELS:
+        # The model is the route's own (vertex_krea_veo's translate), never
+        # the person's: a developer-only state keeps the general line.
         raise ValueError(f"'{model}' isn't a Veo 3.1 model on Vertex")
     prompt = inputs.get("prompt")
     image, last = inputs.get("image"), inputs.get("last_frame")
     references = list((inputs.get("reference_images") or PortValueDict(type="Image", value=[])).value or [])
     if last and not image:
         # Gemini API Veo reference: lastFrame "Must be used in combination with the image parameter."
-        raise ValueError("An end image needs a start image too")
+        raise with_person_line(ValueError("An end image needs a start image too"), "An end image needs a start image too. Connect one, then run the node again.")
     if not (prompt and prompt.value) and not image:
-        raise ValueError("Veo needs a prompt or a start image")
+        raise with_person_line(ValueError("Veo needs a prompt or a start image"), "Veo needs a prompt or a start image. Connect one, then run the node again.")
     resolution = str(params.get("resolution") or "")
     if resolution == "4k" and model not in veo.VERTEX_4K_MODELS:
-        raise ValueError("On Vertex only Veo 3.1 (Standard) renders 4K; pick 1080p")
+        raise with_person_line(ValueError("On Vertex only Veo 3.1 (Standard) renders 4K; pick 1080p"), "On Vertex AI, only Veo 3.1 Standard renders 4K. Pick 1080p.")
     if references:
         if model not in VERTEX_REFERENCE_MODELS:
-            raise ValueError("Veo 3.1 Lite takes no reference images on Vertex")
+            raise with_person_line(ValueError("Veo 3.1 Lite takes no reference images on Vertex"), "Veo 3.1 Lite takes no reference images on Vertex AI. Disconnect them, then run the node again.")
         if len(references) > MAX_VEO_REFERENCES:
-            raise ValueError(f"Vertex takes up to {MAX_VEO_REFERENCES} reference images (got {len(references)})")
+            raise with_person_line(ValueError(f"Vertex takes up to {MAX_VEO_REFERENCES} reference images (got {len(references)})"), f"Vertex AI takes up to {MAX_VEO_REFERENCES} reference images, and {len(references)} are "
+                f"connected. Disconnect the extra ones, then run the node again.")
         if str(params.get("duration") or "8") != "8":
-            raise ValueError("On Vertex, reference images only make 8-second videos; set duration to 8")
+            raise with_person_line(ValueError("On Vertex, reference images only make 8-second videos; set duration to 8"), "On Vertex AI, reference images make 8-second videos only. Set “Duration” to 8, then run the node again.")
         if resolution == "4k":
-            raise ValueError("Google documents 4K with reference images only on the Veo previews; pick 720p or 1080p")
+            raise with_person_line(ValueError("Google documents 4K with reference images only on the Veo previews; pick 720p or 1080p"), "Google offers 4K with reference images only on the Veo previews. Pick 720p or 1080p in “Resolution”.")
         if image or last:
-            raise ValueError("Vertex documents reference images as their own mode; remove the start/end image")
+            raise with_person_line(
+                ValueError("Vertex documents reference images as their own mode; remove the start/end image"),
+                "On Vertex AI, reference images are their own mode. Disconnect the start and end images, then run the "
+                "node again.")
 
     instance: dict[str, Any] = {}
     if prompt and prompt.value:
@@ -365,12 +375,14 @@ def krea_omni_to_google(model: str) -> maker_routes.Translate:
         images = _port_or_param_list(inputs, params, "reference_images")
         videos = _port_or_param_list(inputs, params, "reference_videos")
         if len(videos) > MAX_OMNI_VIDEO_REFERENCES:
-            raise ValueError(f"Gemini Omni takes up to {MAX_OMNI_VIDEO_REFERENCES} reference videos (got {len(videos)})")
+            raise with_person_line(ValueError(f"Gemini Omni takes up to {MAX_OMNI_VIDEO_REFERENCES} reference videos (got {len(videos)})"), f"Gemini Omni takes up to {MAX_OMNI_VIDEO_REFERENCES} reference videos, and {len(videos)} are "
+                f"connected. Disconnect the extra ones, then run the node again.")
         if start and (images or videos):
-            raise ValueError(
+            raise with_person_line(ValueError(
                 "Gemini Omni on Google's API can't take a start image and references together "
                 "(Google tells them apart only by tags in the prompt); use one or the other"
-            )
+            ), "Gemini Omni on Google's API can't take a start image and references together, since Google tells "
+                "them apart only by tags in the prompt. Use one or the other.")
         if start:
             out["task"] = "image_to_video"
             routed["images"] = PortValueDict(type="Image", value=[start])

@@ -400,8 +400,17 @@ def codex_profile_args(*, effort: str | None) -> list[str]:
     return args
 
 
-def codex_filesystem_args(*, workdir: Path, deny_paths: list[Path]) -> list[str]:
+def codex_filesystem_args(*, workdir: Path, deny_paths: list[Path], output_root: Path | None = None) -> list[str]:
     """Keep the current session writable while denying protected storage and peers.
+
+    ``output_root`` (Nebula's output folder; codex_session passes OUTPUT_ROOT)
+    is read-only. The ':workspace' base makes /tmp and $TMPDIR writable as
+    well as the workdir (checked live with `codex sandbox`, codex-cli
+    0.163.0), so an output folder under one of them would otherwise be
+    writable, and the spending check prices runs from files there because
+    no agent can change them after the check (services/input_sizes.py). A
+    read entry wins over the base's write; a workdir inside the output
+    folder is refused.
 
     Never combine these flags with --sandbox or sandbox_mode: those legacy
     settings override named profiles. The clean config and strict parsing
@@ -420,7 +429,11 @@ def codex_filesystem_args(*, workdir: Path, deny_paths: list[Path]) -> list[str]
     """
     from services.agent_workspaces import workspace_deny_roots
 
-    validate_agent_read_grants(workdir=workdir, extra_dirs=[], protected=deny_paths)
+    validate_agent_read_grants(workdir=workdir, extra_dirs=[output_root] if output_root else [],
+                               protected=deny_paths)
+    if output_root is not None and paths_overlap(workdir, output_root):
+        raise GrantOverlapsProtectedDir(
+            f"agent workdir {workdir} overlaps Nebula's output folder {output_root}, which agents may only read")
     denied: set[str] = set()
     for path in deny_paths:
         # Deny the configured spelling as well as a symlink's current target.
@@ -430,6 +443,10 @@ def codex_filesystem_args(*, workdir: Path, deny_paths: list[Path]) -> list[str]
     for root in workspace_roots:
         denied.update((str(root.absolute()), str(root.resolve())))
     filesystem = {path: "deny" for path in sorted(denied)}
+    if output_root is not None:
+        # Both spellings, as for the denies: the configured one and a symlink's target.
+        for spelling in (str(Path(output_root).absolute()), str(Path(output_root).resolve())):
+            filesystem.setdefault(spelling, "read")
     # A narrower current-session grant reopens only this subtree. Denying the
     # parent also covers sessions created after this subprocess starts.
     if workspace_roots and workdir.resolve().is_relative_to(workspace_roots[0].resolve()):

@@ -99,10 +99,10 @@ describe('asset studio workspace continuity', () => {
     useUIStore.getState().enterCharacterEditor('character-a'); render(<CharacterStudioView />); await settle();
     expect(screen.getByLabelText('Name')).toHaveValue('New name before debounce');
     await act(async () => { vi.advanceTimersByTime(600); }); await settle();
-    expect(api.updateCharacter).toHaveBeenCalledExactlyOnceWith('character-a', expect.objectContaining({
-      name: 'New name before debounce', frozenTraitString: 'Verbatim traits', seed: 14,
-      referenceViews: ['/one.png', '/two.png', '/three.png'],
-    }));
+    // Only what the person changed goes, checked against the version read
+    // (contract 07, 2.1); the rest of the recipe stays as saved.
+    expect(api.updateCharacter).toHaveBeenCalledExactlyOnceWith('character-a',
+      { name: 'New name before debounce', baseVersion: 1 });
   });
 
   it('records a pending create under its original draft without navigating away from a newer Character', async () => {
@@ -229,7 +229,10 @@ describe('asset studio workspace continuity', () => {
   it('keeps a failed asset load behind explicit Retry instead of authoring an accidental replacement', async () => {
     api.characters.mockRejectedValue(new Error('Offline fixture'));
     useUIStore.getState().enterCharacterEditor('character-a'); render(<CharacterStudioView />); await settle();
-    expect(screen.getByRole('alert')).toHaveTextContent('Offline fixture');
+    // error-copy round 2 (GM): the heading and a written reason, never the
+    // error's own text.
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load the character.");
+    expect(screen.getByRole('alert')).not.toHaveTextContent('Offline fixture');
     expect(screen.queryByLabelText('Name')).toBeNull();
     api.characters.mockImplementation(async (scope: string) => scope === 'global' ? [character()] : []);
     fireEvent.click(screen.getByRole('button', { name: 'Retry loading' })); await settle();

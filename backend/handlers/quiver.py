@@ -29,6 +29,7 @@ from services.quiver_client import (
     QuiverServerError,
 )
 from execution.missing_credential import MissingCredentialError
+from execution.person_line import key_line, with_api_status, with_person_line
 
 
 _OUTPUTS_URL_PREFIX = "/api/outputs/"
@@ -152,15 +153,21 @@ def _wrap_provider_error(exc: QuiverError) -> ValueError:
     UI, so this keeps the failure surface clear instead of "RuntimeError:
     Quiver server error (502)".
     """
+    # The status Quiver's API answered goes with the new exception, so the
+    # card's table reads it from the call (round 3d, part 2), not the text.
+    status = exc.status_code
     if isinstance(exc, QuiverAuthError):
-        return ValueError("QuiverAI auth failed — check QUIVER_API_KEY")
+        # Names the env var for agents; the card asks for the key in Settings.
+        return with_api_status(with_person_line(ValueError("QuiverAI auth failed — check QUIVER_API_KEY"),
+                                                key_line(["QUIVER_API_KEY"]) or ""), status)
     if isinstance(exc, QuiverInsufficientCreditsError):
-        return ValueError("Insufficient QuiverAI credits — top up or upgrade plan")
+        return with_api_status(with_person_line(ValueError("Insufficient QuiverAI credits — top up or upgrade plan"), "Your QuiverAI account is out of credits. Add credits, then run the node again."),
+                               status)
     if isinstance(exc, QuiverRateLimitError):
-        return ValueError("QuiverAI rate limit exceeded — retry in a moment")
+        return with_api_status(ValueError("QuiverAI rate limit exceeded — retry in a moment"), status)
     if isinstance(exc, QuiverServerError):
-        return ValueError(f"QuiverAI server error: {exc}")
-    return ValueError(f"QuiverAI request failed: {exc}")
+        return with_api_status(ValueError(f"QuiverAI server error: {exc}"), status)
+    return with_api_status(ValueError(f"QuiverAI request failed: {exc}"), status)
 
 
 async def _consume_quiver_stream(
@@ -223,7 +230,7 @@ async def handle_quiver_arrow_generate(
 
     prompt_input = inputs.get("prompt")
     if not prompt_input or not prompt_input.value:
-        raise ValueError("Prompt input is required for Quiver Arrow generate")
+        raise with_person_line(ValueError("Prompt input is required for Quiver Arrow generate"), "Connect a prompt to this node, then run it again.")
 
     references_input = inputs.get("references")
     references = _coerce_references(references_input.value if references_input else None)
@@ -270,7 +277,7 @@ async def handle_quiver_arrow_vectorize(
 
     image_input = inputs.get("image")
     if not image_input or not image_input.value:
-        raise ValueError("Image input is required for Quiver Arrow vectorize")
+        raise with_person_line(ValueError("Image input is required for Quiver Arrow vectorize"), "Connect an image to this node, then run it again.")
 
     image_url, image_base64 = _to_quiver_image_arg(str(image_input.value))
 

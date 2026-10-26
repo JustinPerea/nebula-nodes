@@ -28,6 +28,8 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, Callable, Iterator, Mapping
 
+from services import universal_ports
+from services.input_file_name import input_file_name
 from services.selection_context import _safe_value as safe_value
 
 PRESENCE_TTL_SECONDS = 120.0
@@ -73,10 +75,17 @@ class RequestHeadersContext:
 
     Graph endpoints keep their existing signatures (tests call several of
     them directly); presence reads the headers from this request-local value.
+
+    It sees every HTTP request, so it is also where an agent shows it is
+    still there (Q125 item 2): ``on_agent`` gets the identity of every
+    identified request, whatever the route (main passes the status book's
+    ``saw``, which keeps that agent's status line alive). Never fails the
+    request.
     """
 
-    def __init__(self, app):
+    def __init__(self, app, on_agent: Callable[["AgentIdentity"], None] | None = None):
         self.app = app
+        self.on_agent = on_agent
 
     async def __call__(self, scope, receive, send):
         if scope.get("type") != "http":
@@ -86,6 +95,14 @@ class RequestHeadersContext:
             key.decode("latin-1").lower(): value.decode("latin-1")
             for key, value in scope.get("headers", [])
         }
+        if self.on_agent is not None and (headers.get("authorization", "").startswith("Agent ")
+                                          or headers.get("x-nebula-agent")):
+            try:
+                identity = identify(headers)
+                if identity is not None:
+                    self.on_agent(identity)
+            except Exception:  # noqa: BLE001 - a sign is bookkeeping; the request goes on
+                pass
         token = _request_headers.set(headers)
         try:
             await self.app(scope, receive, send)
@@ -176,7 +193,10 @@ def identify(
 def _finite(value: Any, label: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise PresenceError(f"{label} must be a number")
-    number = float(value)
+    try:
+        number = float(value)
+    except OverflowError:  # an int past float's range
+        number = math.inf
     if not math.isfinite(number) or abs(number) > 1e7:
         raise PresenceError(f"{label} must be a finite number")
     return number
@@ -202,6 +222,19 @@ def parse_target(raw: Any, graph_nodes: Mapping[str, Any], label: str = "target"
     if "x" in raw and "y" in raw:
         return {"x": _finite(raw["x"], f"{label}.x"), "y": _finite(raw["y"], f"{label}.y")}
     raise PresenceError(f"{label} must include nodeId or x and y")
+
+
+def _clean_did(raw: Mapping[str, Any]) -> dict[str, Any]:
+    """What an action was, for the Agents panel: a past-tense verb, and the
+    node it names (its id while it is on the canvas, and its name)."""
+    verb = " ".join(str(raw.get("verb") or "").split())[:40]
+    node_id = raw.get("nodeId")
+    label = raw.get("label")
+    return {
+        "verb": verb,
+        "nodeId": node_id if isinstance(node_id, str) and _NODE_ID_RE.fullmatch(node_id) else None,
+        "label": " ".join(label.split())[:80] if isinstance(label, str) and label.strip() else None,
+    }
 
 
 def _clean_say(raw: Any) -> str:
@@ -231,6 +264,8 @@ class AgentPresence:
         origin: dict[str, Any] | None = None,
         action: str = "move",
         say: Any = None,
+        did: Mapping[str, Any] | None = None,
+        project_id: str | None = None,
     ) -> dict[str, Any]:
         """The broadcast event for one agent action.
 
@@ -238,6 +273,16 @@ class AgentPresence:
         write): the event carries no ``target``, so the browser lists it in
         the Agent log and moves no cursor, and the agent's cursor here keeps
         its last place.
+
+        ``did`` names what the action was in the Agents panel's words (Q125
+        item 2): ``{"verb": "Added", "nodeId", "label"}``, the verb past
+        tense, the node's name when it has one. With none (a line said in
+        place, or a pointer gesture GM cut: a click, a drag, a bare move to a
+        spot), the cursor keeps the agent's last action wherever it goes,
+        with that action's own time: the event's ``did`` carries
+        ``secondsAgo``, 0 for an action that just happened.
+        ``project_id`` is the project open when it happened: the roster
+        lists a cursor only in its own project.
         """
         if action not in ACTIONS:
             raise PresenceError(f"action must be one of {', '.join(ACTIONS)}")
@@ -248,14 +293,46 @@ class AgentPresence:
             "action": action,
             "say": _clean_say(say),
             "at": int(now * 1000),
+            "projectId": project_id,
         }
         if target is None:
             return event
         event["target"] = target
         if origin is not None:
             event["from"] = origin
-        self._agents[identity.id] = {**event, "_t": now}
+        previous = self._agents.get(identity.id)
+        if previous is not None and now - previous["_t"] > PRESENCE_TTL_SECONDS:
+            previous = None  # expired: its action went with it
+        did_at = now
+        # Carried only within its own project: a rename in A never shows in B.
+        if did is None and previous is not None and previous.get("did") and previous.get("projectId") == project_id:
+            did = previous["did"]
+            did_at = previous.get("_did_t", previous["_t"])
+        stored: dict[str, Any] = {**event, "_t": now}
+        if did is not None:
+            clean = _clean_did(did)
+            event["did"] = {**clean, "secondsAgo": round(now - did_at, 1)}
+            stored["did"] = clean
+            stored["_did_t"] = did_at
+        self._agents[identity.id] = stored
         return event
+
+    def here(self, identity: AgentIdentity) -> tuple[dict[str, Any], str]:
+        """Where a line said with no target goes, and which place that is:
+        the agent's own cursor (`cursor`, so it doesn't move), else the
+        middle of the person's view when the browser reported one (`view`),
+        else (0, 0) (`origin`)."""
+        self.active()  # drops expired cursors first
+        current = self._agents.get(identity.id)
+        if current is not None:
+            return dict(current["target"]), "cursor"
+        view = self._view or {}
+        viewport, screen = view.get("viewport"), view.get("screen")
+        if viewport and screen:
+            zoom = viewport["zoom"]
+            return {"x": round((screen["width"] / 2 - viewport["x"]) / zoom, 1),
+                    "y": round((screen["height"] / 2 - viewport["y"]) / zoom, 1)}, "view"
+        return {"x": 0.0, "y": 0.0}, "origin"
 
     def active(self) -> list[dict[str, Any]]:
         now = self._clock()
@@ -269,6 +346,9 @@ class AgentPresence:
                 "action": value["action"],
                 "say": value["say"],
                 "secondsAgo": round(now - value["_t"], 1),
+                "projectId": value.get("projectId"),
+                **({"did": {**value["did"], "secondsAgo": round(now - value.get("_did_t", value["_t"]), 1)}}
+                   if value.get("did") else {}),
             }
             for value in sorted(self._agents.values(), key=lambda v: -v["_t"])
         ]
@@ -290,6 +370,9 @@ class AgentPresence:
             origin = value.get("from")
             if isinstance(origin, dict) and origin.get("nodeId") == node_id:
                 value.pop("from")
+            did = value.get("did")
+            if isinstance(did, dict) and did.get("nodeId") == node_id:
+                value["did"] = {**did, "nodeId": None}  # its name stays: "Removed “Hero”"
             if value["target"].get("nodeId") == node_id:
                 if fallback is None:
                     del self._agents[key]
@@ -306,6 +389,9 @@ class AgentPresence:
             origin = value.get("from")
             if isinstance(origin, dict) and "nodeId" in origin:
                 value.pop("from")
+            did = value.get("did")
+            if isinstance(did, dict) and did.get("nodeId"):
+                value["did"] = {**did, "nodeId": None}
             if "nodeId" in value["target"]:
                 del self._agents[key]
 
@@ -402,26 +488,8 @@ class AgentPresence:
             definition_id = str(node.get("definitionId", ""))
             definition = definitions.get(definition_id, {}) if isinstance(definitions, dict) else {}
             reported = view_nodes.get(node_id)
-            entry: dict[str, Any] = {
-                "id": node_id,
-                "definitionId": definition_id,
-                # The person's (or an agent's) name for it, else the model's.
-                "name": node.get("label") or definition.get("displayName") or definition_id,
-                "state": (reported or {}).get("state", "unknown" if reported is None else "idle"),
-                "params": safe_value(node.get("params") or {}, key="params"),
-                # Like the selection surface: what exists, never the values
-                # (they can be signed URLs). `nebula path` / `nebula graph` fetch them.
-                "outputs": {
-                    str(port): {
-                        "type": value.get("type") if isinstance(value, dict) else None,
-                        "available": bool(value.get("value") if isinstance(value, dict) else value),
-                    }
-                    for port, value in (node.get("outputs") or {}).items()
-                },
-                "inputsFrom": incoming.get(node_id, []),
-            }
-            if node.get("label"):
-                entry["model"] = definition.get("displayName") or definition_id
+            entry = redacted_node(node_id, node, definition, incoming.get(node_id, []))
+            entry["state"] = (reported or {}).get("state", "unknown" if reported is None else "idle")
             if reported is not None:
                 entry["position"] = {"x": round(reported["x"], 1), "y": round(reported["y"], 1)}
                 if "width" in reported:
@@ -456,6 +524,65 @@ class AgentPresence:
             "selection": [node_id for node_id in (selected_ids or []) if node_id in graph_nodes],
             "agents": self.active(),
         }
+
+
+def output_availability(outputs: Any) -> dict[str, Any]:
+    """Like the selection surface: what exists, never the values (they can be
+    signed URLs). `nebula path` / `nebula graph` fetch them."""
+    return {
+        str(port): {
+            "type": value.get("type") if isinstance(value, dict) else None,
+            "available": bool(value.get("value") if isinstance(value, dict) else value),
+        }
+        for port, value in (outputs if isinstance(outputs, Mapping) else {}).items()
+    }
+
+
+def redacted_node(node_id: str, node: Mapping[str, Any], definition: Mapping[str, Any],
+                  inputs_from: list[str]) -> dict[str, Any]:
+    """One node as agents read it (look_at_canvas, and get_project for a saved
+    project): its name, redacted params, which outputs exist, its wires in, an
+    input's `fileName` (the name its file was uploaded with), and a universal
+    node's `ports` (from its model).
+    `node` is a canvas node: definitionId, params, outputs and the label the
+    person or an agent gave it (none when it goes by the model's name)."""
+    definition_id = str(node.get("definitionId", ""))
+    entry: dict[str, Any] = {
+        "id": node_id,
+        "definitionId": definition_id,
+        # The person's (or an agent's) name for it, else the model's.
+        "name": node.get("label") or definition.get("displayName") or definition_id,
+        "params": safe_value(node.get("params") or {}, key="params"),
+        "outputs": output_availability(node.get("outputs") or {}),
+        "inputsFrom": inputs_from,
+    }
+    if node.get("label"):
+        entry["model"] = definition.get("displayName") or definition_id
+    # The name the file was uploaded with: params keep only its stored
+    # (hashed) path, and the private `_fileName` isn't copied above.
+    params = node.get("params")
+    file_name = input_file_name(params) if isinstance(params, Mapping) else None
+    if file_name:
+        entry["fileName"] = file_name
+    # A universal node's ports come from its model: say which, once
+    # (its `_model_ports` record isn't repeated in params).
+    model_ports = universal_ports.stored_ports(definition_id, node.get("params"))
+    if model_ports is not None:
+        if isinstance(entry["params"], dict):
+            entry["params"].pop(universal_ports.PORTS_PARAM, None)
+        entry["ports"] = {"inputs": universal_ports.port_ids(model_ports[0]),
+                          "outputs": universal_ports.port_ids(model_ports[1])}
+        # Ports typed without the model's data saying so (a Replicate
+        # file output with no hint or example): model_schema's `note`.
+        guessed = [str(port["id"]) for port in [*model_ports[0], *model_ports[1]]
+                   if port.get("typeUnconfirmed")]
+        if guessed:
+            entry["ports"]["unconfirmed"] = guessed
+            # What that means and what to do (re-send an old stamp's model).
+            note = universal_ports.stored_port_note(definition_id, node.get("params"))
+            if note:
+                entry["ports"]["note"] = note
+    return entry
 
 
 def _overlaps(node: Mapping[str, Any], area: Mapping[str, float]) -> bool:

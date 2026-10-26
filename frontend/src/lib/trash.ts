@@ -1,15 +1,15 @@
-import { apiFetch } from './backend';
+import { apiRequest } from './apiRequest';
 import { resolveProjectId } from './currentProject';
 
 /**
  * Recently deleted (backend main.py `/api/trash`, services/asset_trash.py).
  *
- * Deleting a moodboard, a character or a project moves it here. Anyone,
+ * Deleting a moodboard, a character, a Style or a project moves it here. Anyone,
  * agents included, may restore it with the same id. Deleting for good can't
  * be undone, so the backend lets only the person do it.
  */
 
-export type TrashKind = 'moodboard' | 'character' | 'project';
+export type TrashKind = 'moodboard' | 'character' | 'style' | 'project';
 
 export interface DeletedBy {
   kind: 'person' | 'agent' | 'anonymous' | 'system';
@@ -25,7 +25,7 @@ export interface TrashedItem {
   deletedAt: string;
   /** Missing on projects deleted before who-deleted-it was recorded. */
   deletedBy?: DeletedBy;
-  /** Projects only: when they're removed for good. Boards and characters stay until you delete them. */
+  /** Projects only: when they're removed for good. Boards, characters and Styles stay until you delete them. */
   purgeAt?: string;
 }
 
@@ -44,42 +44,37 @@ async function query(filter: TrashFilter): Promise<string> {
   return text ? `?${text}` : '';
 }
 
-async function failure(response: Response, fallback: string): Promise<Error> {
-  try {
-    const body = await response.json() as { detail?: unknown };
-    if (typeof body?.detail === 'string' && body.detail) return new Error(body.detail);
-  } catch { /* not JSON */ }
-  return new Error(`${fallback}: ${response.status}`);
-}
+/* Every call names its action (GM, error-copy round 2: "Couldn't {verb}
+ * {object}." then the reason); apiRequest says the reason: GM's line for no
+ * answer, 408, 429 and 5xx, else the backend's reason, else GM's line for
+ * the status. Never a status code. Objects are named as the UI names them,
+ * lowercase mid-sentence. */
+const NOUN: Record<TrashKind, string> = { moodboard: 'board', character: 'character', style: 'style', project: 'project' };
 
 export async function fetchTrash(filter: TrashFilter = {}): Promise<TrashedItem[]> {
-  const response = await apiFetch(`/api/trash${await query(filter)}`);
-  if (!response.ok) throw await failure(response, 'Loading Recently deleted failed');
+  const response = await apiRequest("Couldn't load Recently deleted.", `/api/trash${await query(filter)}`);
   const body = await response.json() as { items?: TrashedItem[] };
   return body.items ?? [];
 }
 
 export async function restoreTrashed(kind: TrashKind, id: string): Promise<void> {
-  const response = await apiFetch(`/api/trash/${kind}/${encodeURIComponent(id)}/restore`, { method: 'POST' });
-  if (!response.ok) throw await failure(response, 'Restore failed');
+  await apiRequest(`Couldn't restore the ${NOUN[kind]}.`, `/api/trash/${kind}/${encodeURIComponent(id)}/restore`, { method: 'POST' });
 }
 
 /** Delete for good. The backend allows only the person. */
 export async function purgeTrashed(kind: TrashKind, id: string): Promise<void> {
-  const response = await apiFetch(`/api/trash/${kind}/${encodeURIComponent(id)}`, { method: 'DELETE' });
-  if (!response.ok) throw await failure(response, 'Delete failed');
+  await apiRequest(`Couldn't delete the ${NOUN[kind]} for good.`, `/api/trash/${kind}/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
 /** Delete for good the `shown` items (what the list showed the person) that
  * `fetchTrash(filter)` still lists. Person only. Sending `shown` keeps an
  * agent's delete that landed after the list loaded restorable. */
 export async function emptyTrash(filter: TrashFilter, shown: Array<Pick<TrashedItem, 'kind' | 'id'>>): Promise<void> {
-  const response = await apiFetch(`/api/trash/empty${await query(filter)}`, {
+  await apiRequest("Couldn't empty Recently deleted.", `/api/trash/empty${await query(filter)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ items: shown.map(({ kind, id }) => ({ kind, id })) }),
   });
-  if (!response.ok) throw await failure(response, 'Emptying Recently deleted failed');
 }
 
 /**

@@ -1,0 +1,1463 @@
+{
+ "_about": "Shared by backend/tests/test_graph_file_links.py and frontend/tests/graphFileLinksParity.test.ts (Q123 a): how a graph file's local output links are read and rewritten (frontend/src/lib/graphFile.ts, backend/services/graph_file_links.py), and the name a file over the save limit opens as (projectNameForFile / project_name_for_file). The canvas's functions are the reference.",
+ "links": [
+  {
+   "value": "",
+   "expected": {
+    "kind": "none"
+   }
+  },
+  {
+   "value": "a cat on a mat",
+   "expected": {
+    "kind": "none"
+   }
+  },
+  {
+   "value": "https://example.com/api/outputs/a.png",
+   "expected": {
+    "kind": "none"
+   }
+  },
+  {
+   "value": "data:image/png;base64,AAAA",
+   "expected": {
+    "kind": "none"
+   }
+  },
+  {
+   "value": "/api/other/a.png",
+   "expected": {
+    "kind": "none"
+   }
+  },
+  {
+   "value": "api/outputs/a.png",
+   "expected": {
+    "kind": "none"
+   }
+  },
+  {
+   "value": "Note: /api/outputs/a.png",
+   "expected": {
+    "kind": "none"
+   }
+  },
+  {
+   "value": "http://localhost/api/other/x.png",
+   "expected": {
+    "kind": "none"
+   }
+  },
+  {
+   "value": "http://LOCALHOST:8000/static/app.js",
+   "expected": {
+    "kind": "none"
+   }
+  },
+  {
+   "value": "//example.com/api/outputs/a.png",
+   "expected": {
+    "kind": "none"
+   }
+  },
+  {
+   "value": "file:///api/outputs/a.png",
+   "expected": {
+    "kind": "none"
+   }
+  },
+  {
+   "value": "http://[::1]/api/outputs/a.png",
+   "expected": {
+    "kind": "none"
+   }
+  },
+  {
+   "value": "http://localhost:99999/api/outputs/a.png",
+   "expected": {
+    "kind": "none"
+   }
+  },
+  {
+   "value": "ftp://example.com/api/outputs/a.png",
+   "expected": {
+    "kind": "none"
+   }
+  },
+  {
+   "value": " /api/outputs/a.png",
+   "expected": {
+    "kind": "none"
+   }
+  },
+  {
+   "value": "/API/outputs/a.png",
+   "expected": {
+    "kind": "none"
+   }
+  },
+  {
+   "value": "\\api\\outputs\\a.png",
+   "expected": {
+    "kind": "none"
+   }
+  },
+  {
+   "value": "%2Fapi%2Foutputs%2Fa.png",
+   "expected": {
+    "kind": "none"
+   }
+  },
+  {
+   "value": "http://localhost./api/outputs/x.png",
+   "expected": {
+    "kind": "none"
+   }
+  },
+  {
+   "value": "http://localhost:8000",
+   "expected": {
+    "kind": "none"
+   }
+  },
+  {
+   "value": "mailto:someone@example.com",
+   "expected": {
+    "kind": "none"
+   }
+  },
+  {
+   "value": "blob:http://localhost/abc",
+   "expected": {
+    "kind": "none"
+   }
+  },
+  {
+   "value": "https://marble.worldlabs.ai/world/abc",
+   "expected": {
+    "kind": "none"
+   }
+  },
+  {
+   "value": "http://exa mple.com/api/outputs/a.png",
+   "expected": {
+    "kind": "none"
+   }
+  },
+  {
+   "value": "/api/outputs/2026-04-24_22-10-51/n20_final.png",
+   "expected": {
+    "kind": "valid",
+    "relativePath": "2026-04-24_22-10-51/n20_final.png"
+   }
+  },
+  {
+   "value": "/api/outputs/a%20b.png",
+   "expected": {
+    "kind": "valid",
+    "relativePath": "a%20b.png"
+   }
+  },
+  {
+   "value": "/api/outputs/caf%C3%A9.png",
+   "expected": {
+    "kind": "valid",
+    "relativePath": "caf%C3%A9.png"
+   }
+  },
+  {
+   "value": "/api/outputs/caf\u00e9.png",
+   "expected": {
+    "kind": "valid",
+    "relativePath": "caf%C3%A9.png"
+   }
+  },
+  {
+   "value": "/api/outputs/cafe\u0301.png",
+   "expected": {
+    "kind": "valid",
+    "relativePath": "caf%C3%A9.png"
+   }
+  },
+  {
+   "value": "/api/outputs/it's (1)!~.png",
+   "expected": {
+    "kind": "valid",
+    "relativePath": "it's%20(1)!~.png"
+   }
+  },
+  {
+   "value": "http://localhost:8000/api/outputs/x/y.png",
+   "expected": {
+    "kind": "valid",
+    "relativePath": "x/y.png"
+   }
+  },
+  {
+   "value": "http://127.0.0.1:8797/api/outputs/x.png",
+   "expected": {
+    "kind": "valid",
+    "relativePath": "x.png"
+   }
+  },
+  {
+   "value": "https://LOCALHOST/api/outputs/x.png",
+   "expected": {
+    "kind": "valid",
+    "relativePath": "x.png"
+   }
+  },
+  {
+   "value": "HTTP://localhost/api/outputs/x.png",
+   "expected": {
+    "kind": "valid",
+    "relativePath": "x.png"
+   }
+  },
+  {
+   "value": "http://localhost/api/outputs/x.png?",
+   "expected": {
+    "kind": "valid",
+    "relativePath": "x.png"
+   }
+  },
+  {
+   "value": "http://@localhost/api/outputs/x.png",
+   "expected": {
+    "kind": "valid",
+    "relativePath": "x.png"
+   }
+  },
+  {
+   "value": "http://127.1/api/outputs/x.png",
+   "expected": {
+    "kind": "valid",
+    "relativePath": "x.png"
+   }
+  },
+  {
+   "value": "http://0x7f.0.0.1/api/outputs/x.png",
+   "expected": {
+    "kind": "valid",
+    "relativePath": "x.png"
+   }
+  },
+  {
+   "value": "http://2130706433/api/outputs/x.png",
+   "expected": {
+    "kind": "valid",
+    "relativePath": "x.png"
+   }
+  },
+  {
+   "value": "http://local%68ost/api/outputs/x.png",
+   "expected": {
+    "kind": "valid",
+    "relativePath": "x.png"
+   }
+  },
+  {
+   "value": "http://\uff4c\uff4f\uff43\uff41\uff4c\uff48\uff4f\uff53\uff54/api/outputs/x.png",
+   "expected": {
+    "kind": "valid",
+    "relativePath": "x.png"
+   }
+  },
+  {
+   "value": "http://127.0.0.1.:8000/api/outputs/x.png",
+   "expected": {
+    "kind": "valid",
+    "relativePath": "x.png"
+   }
+  },
+  {
+   "value": "/api/outputs/",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "/api/outputs",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "/api/outputs/../secret.png",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "/api/outputs/a.png?x=1",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "/api/outputs/a.png#frag",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "/api/outputs/a\\b.png",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "/api/outputs/a.png ",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "/api%2Foutputs/a.png",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "\\\\localhost\\api\\outputs\\a.png",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "//localhost/api/outputs/a.png",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "http://localhost/x/../api/outputs/a.png",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "http:/localhost/api/outputs/a.png",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "http:localhost/api/outputs/a.png",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "http://user:pw@localhost/api/outputs/a.png",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "ftp://localhost/api/outputs/a.png",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "http://localhost/api/outputs/a.png#x",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "http://localhost/api/outputs/a.png?v=2",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "/api/outputs/a%2Fb.png",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "/api/outputs/a%252e%252e",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "/api/outputs/%2e%2e/x",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "/api/outputs/con.png",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "/api/outputs/__proto__/x.png",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "/api/outputs/a%zz.png",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "/api/outputs/a\u0007.png",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "/api/outputs/%ED%A0%80.png",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "/api/outputs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "http://local\nhost/api/outputs/a.png",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "/api/outputs/a.png\t",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "http://localhost/api/outputs/a%2Fb.png",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "foo://localhost/api/outputs/x.png",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "http://localhost/api/outputs/x.png/",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "http://localhost/api/outputs//x.png",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "http://localhost/api/out\tputs/a.png",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "http:\\\\localhost\\api\\outputs\\a.png",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "http://\ud83c\udd3b\ud83c\udd3e\ud83c\udd32\ud83c\udd30\ud83c\udd3b\ud83c\udd37\ud83c\udd3e\ud83c\udd42\ud83c\udd43:8000/api/outputs/a.png",
+   "expected": {
+    "kind": "valid",
+    "relativePath": "a.png"
+   }
+  },
+  {
+   "value": "http://%F0%9F%84%BB%F0%9F%84%BE%F0%9F%84%B2%F0%9F%84%B0%F0%9F%84%BB%F0%9F%84%B7%F0%9F%84%BE%F0%9F%85%82%F0%9F%85%83/api/outputs/a.png",
+   "expected": {
+    "kind": "valid",
+    "relativePath": "a.png"
+   }
+  },
+  {
+   "value": "http://\uff4c\uff4f\uff43\uff41\uff4c\uff48\uff4f\uff53\uff54/api/outputs/a.png",
+   "expected": {
+    "kind": "valid",
+    "relativePath": "a.png"
+   }
+  },
+  {
+   "value": "http://loc\u00adalhost/api/outputs/a.png",
+   "expected": {
+    "kind": "valid",
+    "relativePath": "a.png"
+   }
+  },
+  {
+   "value": "http://\uff11\uff12\uff17.\uff10.\uff10.\uff11/api/outputs/a.png",
+   "expected": {
+    "kind": "valid",
+    "relativePath": "a.png"
+   }
+  },
+  {
+   "value": "http://\ud83c\udd3b\ud83c\udd3e\ud83c\udd32\ud83c\udd30\ud83c\udd3b\ud83c\udd37\ud83c\udd3e\ud83c\udd42\ud83c\udd43/api/outputs/a.png?x=1",
+   "expected": {
+    "kind": "invalid"
+   }
+  },
+  {
+   "value": "http://local\u200dhost/api/outputs/a.png",
+   "expected": {
+    "kind": "none"
+   }
+  }
+ ],
+ "paths": [
+  {
+   "raw": "a.png",
+   "expected": "a.png"
+  },
+  {
+   "raw": "a b.png",
+   "expected": "a%20b.png"
+  },
+  {
+   "raw": "x/y.png",
+   "expected": "x/y.png"
+  },
+  {
+   "raw": "%E2%82%AC.png",
+   "expected": "%E2%82%AC.png"
+  },
+  {
+   "raw": "a%2525.png",
+   "expected": null
+  },
+  {
+   "raw": "",
+   "expected": null
+  },
+  {
+   "raw": "/a",
+   "expected": null
+  },
+  {
+   "raw": "a/",
+   "expected": null
+  },
+  {
+   "raw": "a//b",
+   "expected": null
+  },
+  {
+   "raw": "a\\b",
+   "expected": null
+  },
+  {
+   "raw": "COM1.txt",
+   "expected": null
+  },
+  {
+   "raw": "Constructor",
+   "expected": null
+  },
+  {
+   "raw": "con\u017ftructor",
+   "expected": null
+  },
+  {
+   "raw": "a\ud800.png",
+   "expected": null
+  },
+  {
+   "raw": "trailing.",
+   "expected": null
+  },
+  {
+   "raw": "trailing ",
+   "expected": null
+  },
+  {
+   "raw": "q?.png",
+   "expected": null
+  },
+  {
+   "raw": "star*.png",
+   "expected": null
+  },
+  {
+   "raw": "%41.png",
+   "expected": "A.png"
+  },
+  {
+   "raw": "A%2541.png",
+   "expected": "A%2541.png"
+  },
+  {
+   "raw": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "expected": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "raw": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "expected": null
+  },
+  {
+   "raw": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy/yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy/yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy/yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy/yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy/yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+   "expected": null
+  }
+ ],
+ "mappings": [
+  {
+   "mapping": {
+    "a.png": "/api/outputs/2026/restored-1/a.png"
+   },
+   "expected": {
+    "a.png": "/api/outputs/2026/restored-1/a.png"
+   },
+   "error": null
+  },
+  {
+   "mapping": {
+    "caf%C3%A9.png": "http://localhost:8000/api/outputs/r/caf%C3%A9.png"
+   },
+   "expected": {
+    "caf%C3%A9.png": "/api/outputs/r/caf%C3%A9.png"
+   },
+   "error": null
+  },
+  {
+   "mapping": {
+    "caf\u00e9.png": "/api/outputs/r/caf\u00e9.png"
+   },
+   "expected": {
+    "caf%C3%A9.png": "/api/outputs/r/caf%C3%A9.png"
+   },
+   "error": null
+  },
+  {
+   "mapping": {},
+   "expected": {},
+   "error": null
+  },
+  {
+   "mapping": {
+    "a.png": 5
+   },
+   "expected": null,
+   "error": "Asset restore returned an invalid URL mapping"
+  },
+  {
+   "mapping": {
+    "../a.png": "/api/outputs/x.png"
+   },
+   "expected": null,
+   "error": "Asset restore returned an invalid URL mapping"
+  },
+  {
+   "mapping": {
+    "a.png": "https://example.com/x.png"
+   },
+   "expected": null,
+   "error": "Asset restore returned an invalid URL mapping"
+  },
+  {
+   "mapping": {
+    "a.png": "/api/outputs/x.png?y"
+   },
+   "expected": null,
+   "error": "Asset restore returned an invalid URL mapping"
+  },
+  {
+   "mapping": {
+    "caf\u00e9.png": "/api/outputs/r/1.png",
+    "caf%C3%A9.png": "/api/outputs/r/2.png"
+   },
+   "expected": null,
+   "error": "Asset restore returned colliding URL mapping keys"
+  },
+  {
+   "mapping": [],
+   "expected": null,
+   "error": "Asset restore returned an invalid URL mapping"
+  },
+  {
+   "mapping": null,
+   "expected": null,
+   "error": "Asset restore returned an invalid URL mapping"
+  }
+ ],
+ "rewrite": {
+  "nodes": [
+   {
+    "id": "n1",
+    "type": "model-node",
+    "position": {
+     "x": 0,
+     "y": 0
+    },
+    "data": {
+     "label": "n1",
+     "definitionId": "text-input",
+     "params": {
+      "prompt": "a cat",
+      "image": "/api/outputs/old/a.png",
+      "refs": [
+       "/api/outputs/old/b.png",
+       "https://example.com/c.png",
+       3,
+       null,
+       true,
+       1.5
+      ],
+      "nested": {
+       "deep": {
+        "url": "http://localhost:8000/api/outputs/old/a.png"
+       }
+      }
+     },
+     "outputs": {
+      "image": {
+       "type": "Image",
+       "value": "/api/outputs/old/a.png"
+      }
+     }
+    }
+   },
+   {
+    "id": "n2",
+    "type": "model-node",
+    "position": {
+     "x": 0,
+     "y": 0
+    },
+    "data": {
+     "label": "n2",
+     "definitionId": "text-input",
+     "params": {
+      "bad": "/api/outputs/../x.png",
+      "gone": "/api/outputs/old/missing.png",
+      "goneAgain": "/api/outputs/old/missing.png",
+      "evil": "/api/outputs/old/a.png?x=1",
+      "accent": "/api/outputs/old/caf\u00e9.png"
+     },
+     "outputs": {}
+    }
+   },
+   {
+    "id": "n3",
+    "type": "model-node",
+    "position": {
+     "x": 0,
+     "y": 0
+    },
+    "data": {
+     "label": "n3",
+     "definitionId": "text-input",
+     "params": {
+      "__proto__": "/api/outputs/old/b.png",
+      "constructor": {
+       "x": "/api/outputs/old/a.png"
+      }
+     }
+    }
+   },
+   {
+    "id": "n4",
+    "type": "model-node",
+    "position": {
+     "x": 0,
+     "y": 0
+    },
+    "data": {
+     "label": "n4",
+     "definitionId": "text-input",
+     "params": {
+      "many": [
+       "/api/outputs/m/0.png",
+       "/api/outputs/m/1.png",
+       "/api/outputs/m/2.png",
+       "/api/outputs/m/3.png",
+       "/api/outputs/m/4.png",
+       "/api/outputs/m/5.png",
+       "/api/outputs/m/6.png",
+       "/api/outputs/m/7.png",
+       "/api/outputs/m/8.png",
+       "/api/outputs/m/9.png",
+       "/api/outputs/m/10.png",
+       "/api/outputs/m/11.png",
+       "/api/outputs/m/12.png",
+       "/api/outputs/m/13.png",
+       "/api/outputs/m/14.png",
+       "/api/outputs/m/15.png",
+       "/api/outputs/m/16.png",
+       "/api/outputs/m/17.png",
+       "/api/outputs/m/18.png",
+       "/api/outputs/m/19.png",
+       "/api/outputs/m/20.png",
+       "/api/outputs/m/21.png"
+      ]
+     },
+     "outputs": null
+    }
+   }
+  ],
+  "mapping": {
+   "old/a.png": "/api/outputs/2026-10-24_00-00-00/restored-abcd1234/old/a.png",
+   "old/b.png": "/api/outputs/2026-10-24_00-00-00/restored-abcd1234/old/b.png",
+   "old/caf%C3%A9.png": "/api/outputs/2026-10-24_00-00-00/restored-abcd1234/old/caf%C3%A9.png"
+  },
+  "expectedNodes": [
+   {
+    "id": "n1",
+    "type": "model-node",
+    "position": {
+     "x": 0,
+     "y": 0
+    },
+    "data": {
+     "label": "n1",
+     "definitionId": "text-input",
+     "params": {
+      "prompt": "a cat",
+      "image": "/api/outputs/2026-10-24_00-00-00/restored-abcd1234/old/a.png",
+      "refs": [
+       "/api/outputs/2026-10-24_00-00-00/restored-abcd1234/old/b.png",
+       "https://example.com/c.png",
+       3,
+       null,
+       true,
+       1.5
+      ],
+      "nested": {
+       "deep": {
+        "url": "/api/outputs/2026-10-24_00-00-00/restored-abcd1234/old/a.png"
+       }
+      }
+     },
+     "outputs": {
+      "image": {
+       "type": "Image",
+       "value": "/api/outputs/2026-10-24_00-00-00/restored-abcd1234/old/a.png"
+      }
+     }
+    }
+   },
+   {
+    "id": "n2",
+    "type": "model-node",
+    "position": {
+     "x": 0,
+     "y": 0
+    },
+    "data": {
+     "label": "n2",
+     "definitionId": "text-input",
+     "params": {
+      "bad": null,
+      "gone": null,
+      "goneAgain": null,
+      "evil": null,
+      "accent": "/api/outputs/2026-10-24_00-00-00/restored-abcd1234/old/caf%C3%A9.png"
+     },
+     "outputs": {}
+    }
+   },
+   {
+    "id": "n3",
+    "type": "model-node",
+    "position": {
+     "x": 0,
+     "y": 0
+    },
+    "data": {
+     "label": "n3",
+     "definitionId": "text-input",
+     "params": {
+      "__proto__": "/api/outputs/2026-10-24_00-00-00/restored-abcd1234/old/b.png",
+      "constructor": {
+       "x": "/api/outputs/2026-10-24_00-00-00/restored-abcd1234/old/a.png"
+      }
+     }
+    }
+   },
+   {
+    "id": "n4",
+    "type": "model-node",
+    "position": {
+     "x": 0,
+     "y": 0
+    },
+    "data": {
+     "label": "n4",
+     "definitionId": "text-input",
+     "params": {
+      "many": [
+       null,
+       null,
+       null,
+       null,
+       null,
+       null,
+       null,
+       null,
+       null,
+       null,
+       null,
+       null,
+       null,
+       null,
+       null,
+       null,
+       null,
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     "outputs": null
+    }
+   }
+  ],
+  "expectedWarnings": [
+   "Bundled asset unavailable: old/missing.png",
+   "Bundled asset unavailable: m/0.png",
+   "Bundled asset unavailable: m/1.png",
+   "Bundled asset unavailable: m/2.png",
+   "Bundled asset unavailable: m/3.png",
+   "Bundled asset unavailable: m/4.png",
+   "Bundled asset unavailable: m/5.png",
+   "Bundled asset unavailable: m/6.png",
+   "Bundled asset unavailable: m/7.png",
+   "Bundled asset unavailable: m/8.png",
+   "Bundled asset unavailable: m/9.png",
+   "Bundled asset unavailable: m/10.png",
+   "Bundled asset unavailable: m/11.png",
+   "Bundled asset unavailable: m/12.png",
+   "Bundled asset unavailable: m/13.png",
+   "Bundled asset unavailable: m/14.png",
+   "Bundled asset unavailable: m/15.png",
+   "Bundled asset unavailable: m/16.png",
+   "Bundled asset unavailable: m/17.png",
+   "Bundled asset unavailable: m/18.png",
+   "4 additional bundled asset references were unavailable.",
+   "Rejected 2 unsafe bundled asset references."
+  ]
+ },
+ "worldUrls": [
+  {
+   "value": "/api/outputs/w/s.spz",
+   "expected": true
+  },
+  {
+   "value": "http://localhost:8000/api/outputs/w/s.spz",
+   "expected": true
+  },
+  {
+   "value": "https://127.0.0.1/api/outputs/w/s.spz",
+   "expected": true
+  },
+  {
+   "value": "https://evil.example/api/outputs/w/s.spz",
+   "expected": false
+  },
+  {
+   "value": "/api/outputs/w/s.spz?x=1",
+   "expected": false
+  },
+  {
+   "value": "/api/outputs/../s.spz",
+   "expected": false
+  },
+  {
+   "value": "/static/s.spz",
+   "expected": false
+  },
+  {
+   "value": "//evil.example/api/outputs/s.spz",
+   "expected": false
+  },
+  {
+   "value": " /api/outputs/s.spz",
+   "expected": false
+  },
+  {
+   "value": "/api/outputs/",
+   "expected": false
+  },
+  {
+   "value": "http://user@localhost/api/outputs/s.spz",
+   "expected": false
+  },
+  {
+   "value": "ftp://localhost/api/outputs/s.spz",
+   "expected": false
+  },
+  {
+   "value": "/api/outputs/a/../s.spz",
+   "expected": true
+  },
+  {
+   "value": "/api/outputs/s.spz?",
+   "expected": true
+  },
+  {
+   "value": "\\\\localhost\\api\\outputs\\x.spz",
+   "expected": true
+  },
+  {
+   "value": "//nebula.invalid/api/outputs/x.spz",
+   "expected": true
+  },
+  {
+   "value": "/api/outputs/%2e%2e/x.spz",
+   "expected": false
+  },
+  {
+   "value": "/api/outputs/a%2Fb.spz",
+   "expected": false
+  },
+  {
+   "value": "/api/outputs/a%zz.spz",
+   "expected": false
+  },
+  {
+   "value": "api/outputs/x.spz",
+   "expected": false
+  },
+  {
+   "value": "https://marble.worldlabs.ai/world/abc",
+   "expected": false
+  },
+  {
+   "value": "http://127.1/api/outputs/x.spz",
+   "expected": true
+  },
+  {
+   "value": "/api/outputs/x.spz#f",
+   "expected": false
+  },
+  {
+   "value": "",
+   "expected": false
+  },
+  {
+   "value": "/api/outputs/caf%C3%A9.spz",
+   "expected": true
+  },
+  {
+   "value": "http://localhost/api/outputs/x\\y.spz",
+   "expected": true
+  },
+  {
+   "value": "/api/outputs/ok/",
+   "expected": false
+  },
+  {
+   "value": "/api/outputs//x.spz",
+   "expected": false
+  },
+  {
+   "value": "http://\ud83c\udd3b\ud83c\udd3e\ud83c\udd32\ud83c\udd30\ud83c\udd3b\ud83c\udd37\ud83c\udd3e\ud83c\udd42\ud83c\udd43/api/outputs/w/s.spz",
+   "expected": true
+  },
+  {
+   "value": "http://local\u200dhost/api/outputs/w/s.spz",
+   "expected": false
+  }
+ ],
+ "projectNames": [
+  {
+   "fileName": "Big campaign.nebula",
+   "expected": "Big campaign"
+  },
+  {
+   "fileName": "Big campaign.nebula.zip",
+   "expected": "Big campaign"
+  },
+  {
+   "fileName": "x.JSON",
+   "expected": "x"
+  },
+  {
+   "fileName": "x.zip",
+   "expected": "x"
+  },
+  {
+   "fileName": ".nebula",
+   "expected": "Untitled project"
+  },
+  {
+   "fileName": "  spaced  .nebula ",
+   "expected": "spaced"
+  },
+  {
+   "fileName": "tab\tname.nebula",
+   "expected": "tab name"
+  },
+  {
+   "fileName": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn.nebula",
+   "expected": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
+  },
+  {
+   "fileName": "\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8",
+   "expected": "\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8\ud83c\udfa8"
+  },
+  {
+   "fileName": "a.nebula.nebula",
+   "expected": "a.nebula"
+  },
+  {
+   "fileName": null,
+   "expected": "Untitled project"
+  },
+  {
+   "fileName": "\u0000\u0001.nebula",
+   "expected": "Untitled project"
+  },
+  {
+   "fileName": "\u0085x.nebula",
+   "expected": "\u0085x"
+  },
+  {
+   "fileName": "\u00a0name.nebula",
+   "expected": "name"
+  },
+  {
+   "fileName": "Glass\u001fcampaign.json",
+   "expected": "Glass campaign"
+  },
+  {
+   "fileName": "plain",
+   "expected": "plain"
+  },
+  {
+   "fileName": "Big campaign.nebula.json",
+   "expected": "Big campaign.nebula"
+  },
+  {
+   "fileName": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx y.nebula",
+   "expected": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  }
+ ],
+ "spatial": [
+  {
+   "name": "the review's case: outside links off the checked slots",
+   "nodes": [
+    {
+     "id": "s1",
+     "type": "model-node",
+     "position": {
+      "x": 0,
+      "y": 0
+     },
+     "data": {
+      "label": "s1",
+      "definitionId": "fixture",
+      "params": {},
+      "outputs": {
+       "d": {
+        "type": "DepthMap",
+        "value": {
+         "preview": "https://evil.example/x.png"
+        }
+       },
+       "w": {
+        "type": "World",
+        "value": {
+         "assets": {
+          "splats": {},
+          "extra": "https://evil.example/w.spz"
+         },
+         "caption": "https://evil.example/c"
+        }
+       }
+      }
+     }
+    }
+   ],
+   "canvas": {
+    "kept": {
+     "s1": []
+    },
+    "warnings": [
+     "1 invalid World output was made unavailable.",
+     "1 invalid spatial output was made unavailable."
+    ]
+   },
+   "backend": {
+    "kept": {
+     "s1": []
+    },
+    "warnings": [
+     "1 invalid World output was made unavailable.",
+     "1 invalid spatial output was made unavailable."
+    ]
+   }
+  },
+  {
+   "name": "a World as Nebula's World Labs node writes it",
+   "nodes": [
+    {
+     "id": "s1",
+     "type": "model-node",
+     "position": {
+      "x": 0,
+      "y": 0
+     },
+     "data": {
+      "label": "s1",
+      "definitionId": "fixture",
+      "params": {},
+      "outputs": {
+       "world": {
+        "type": "World",
+        "value": {
+         "schemaVersion": 1,
+         "provider": "worldlabs",
+         "worldId": "abc",
+         "model": "marble",
+         "displayName": "Beach",
+         "marbleUrl": "https://marble.worldlabs.ai/world/abc",
+         "promptType": "text",
+         "assets": {
+          "splats": {
+           "100k": "/api/outputs/w/s.spz"
+          },
+          "panorama": null,
+          "colliderMesh": null,
+          "thumbnail": "/api/outputs/w/t.png"
+         },
+         "semantics": {
+          "metricScaleFactor": 1.0,
+          "groundPlaneOffset": null,
+          "coordinateFrame": "marble_raw_opencv"
+         },
+         "caption": "Scene: dusk, 5:30",
+         "cost": {
+          "credits": 3
+         }
+        }
+       },
+       "image": {
+        "type": "Image",
+        "value": "/api/outputs/w/t.png"
+       }
+      }
+     }
+    }
+   ],
+   "canvas": {
+    "kept": {
+     "s1": [
+      "world",
+      "image"
+     ]
+    },
+    "warnings": []
+   },
+   "backend": {
+    "kept": {
+     "s1": [
+      "world",
+      "image"
+     ]
+    },
+    "warnings": []
+   }
+  },
+  {
+   "name": "a World with an outside splat",
+   "nodes": [
+    {
+     "id": "s1",
+     "type": "model-node",
+     "position": {
+      "x": 0,
+      "y": 0
+     },
+     "data": {
+      "label": "s1",
+      "definitionId": "fixture",
+      "params": {},
+      "outputs": {
+       "world": {
+        "type": "World",
+        "value": {
+         "schemaVersion": 1,
+         "provider": "worldlabs",
+         "worldId": "abc",
+         "model": "marble",
+         "displayName": "Beach",
+         "marbleUrl": "https://marble.worldlabs.ai/world/abc",
+         "promptType": "text",
+         "assets": {
+          "splats": {
+           "100k": "/api/outputs/w/s.spz",
+           "500k": "https://evil.example/s.spz"
+          },
+          "panorama": null,
+          "colliderMesh": null,
+          "thumbnail": "/api/outputs/w/t.png"
+         },
+         "semantics": {
+          "metricScaleFactor": 1.0,
+          "groundPlaneOffset": null,
+          "coordinateFrame": "marble_raw_opencv"
+         },
+         "caption": "A beach at dusk",
+         "cost": {
+          "credits": 3
+         }
+        }
+       }
+      }
+     }
+    }
+   ],
+   "canvas": {
+    "kept": {
+     "s1": []
+    },
+    "warnings": [
+     "1 external World asset reference was omitted; only Nebula output assets can be loaded.",
+     "1 invalid World output was made unavailable."
+    ]
+   },
+   "backend": {
+    "kept": {
+     "s1": []
+    },
+    "warnings": [
+     "1 external World asset reference was omitted; only Nebula output assets can be loaded.",
+     "1 invalid World output was made unavailable."
+    ]
+   }
+  },
+  {
+   "name": "a World with outside links the canvas rebuilds away (the backend drops more, never less)",
+   "nodes": [
+    {
+     "id": "s1",
+     "type": "model-node",
+     "position": {
+      "x": 0,
+      "y": 0
+     },
+     "data": {
+      "label": "s1",
+      "definitionId": "fixture",
+      "params": {},
+      "outputs": {
+       "world": {
+        "type": "World",
+        "value": {
+         "schemaVersion": 1,
+         "provider": "worldlabs",
+         "worldId": "abc",
+         "model": "marble",
+         "displayName": "Beach",
+         "marbleUrl": "https://evil.example/m",
+         "promptType": "text",
+         "assets": {
+          "splats": {
+           "100k": "/api/outputs/w/s.spz"
+          },
+          "panorama": null,
+          "colliderMesh": null,
+          "thumbnail": "/api/outputs/w/t.png",
+          "extra": "https://evil.example/w.spz"
+         },
+         "semantics": {
+          "metricScaleFactor": 1.0,
+          "groundPlaneOffset": null,
+          "coordinateFrame": "marble_raw_opencv"
+         },
+         "caption": "A beach at dusk",
+         "cost": {
+          "credits": 3
+         }
+        }
+       }
+      }
+     }
+    }
+   ],
+   "canvas": {
+    "kept": {
+     "s1": [
+      "world"
+     ]
+    },
+    "warnings": []
+   },
+   "backend": {
+    "kept": {
+     "s1": []
+    },
+    "warnings": [
+     "1 invalid World output was made unavailable."
+    ]
+   }
+  },
+  {
+   "name": "a spatial value with an outside link beside a local asset",
+   "nodes": [
+    {
+     "id": "s1",
+     "type": "model-node",
+     "position": {
+      "x": 0,
+      "y": 0
+     },
+     "data": {
+      "label": "s1",
+      "definitionId": "fixture",
+      "params": {},
+      "outputs": {
+       "p": {
+        "type": "PointCloud",
+        "value": {
+         "asset": {
+          "id": "p",
+          "uri": "/api/outputs/r/p.ply",
+          "mediaType": "model/ply"
+         },
+         "source": "//evil.example/p.ply"
+        }
+       }
+      }
+     }
+    }
+   ],
+   "canvas": {
+    "kept": {
+     "s1": []
+    },
+    "warnings": [
+     "1 invalid spatial output was made unavailable."
+    ]
+   },
+   "backend": {
+    "kept": {
+     "s1": []
+    },
+    "warnings": [
+     "1 invalid spatial output was made unavailable."
+    ]
+   }
+  }
+ ]
+}

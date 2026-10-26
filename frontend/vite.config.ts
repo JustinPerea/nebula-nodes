@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import { fileURLToPath } from 'node:url'
 import { assertBackendEnvConsistent, devProxyPort, type BackendPortEnv } from './src/lib/devBackendPort'
 import { nebulaBuildStamp } from './vite-plugins/buildStamp.ts'
+import { inlineAssetUnlessFont } from './vite-plugins/assetInline.ts'
 
 const configDir = fileURLToPath(new URL('.', import.meta.url))
 
@@ -81,6 +82,9 @@ export default defineConfig(({ mode }) => {
       // absolute /assets/... URLs resolve to file:///assets/... under Electron,
       // so the window loaded an empty #root.
       outDir: process.env.NEBULA_DESKTOP_BUILD === '1' ? 'dist-desktop' : 'dist',
+      // The bundled fonts stay files even under 4 KiB, so unicode-range can
+      // skip the subsets a page never uses (scripts/check-built-fonts.mjs).
+      assetsInlineLimit: inlineAssetUnlessFont,
       // Three.js ships as one indivisible ~717 kB module, but it is only fetched
       // by lazy 3D workspaces. Track the initial entry with a stricter dedicated
       // budget instead of treating this deferred module as startup payload.

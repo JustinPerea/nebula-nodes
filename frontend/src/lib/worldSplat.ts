@@ -1,7 +1,11 @@
 import { utils as sparkUtils } from '@sparkjsdev/spark';
-import { backendAssetUrlSync } from './backend';
+import { backendAssetUrlSync, fetchUrl } from './backend';
 import { AssetByteLimitError, readBoundedAssetResponse } from './boundedAsset';
 import { isSafeWorldUrl } from './worldValue';
+import { requestError, requestSucceeded } from './errorCopy';
+
+/** GM's heading for the world preview (error-copy round 2). */
+const LOAD_WORLD = "Couldn't load the world.";
 
 // Spark expands compressed SPZ data into substantially larger GPU buffers.
 // Keep the source ceiling below the graph/download ceilings so an imported
@@ -57,7 +61,7 @@ export function preflightWorldSpz(
   try {
     headerBytes = sparkUtils.decompressPartialGzip(fileBytes, SPZ_HEADER_BYTES);
   } catch {
-    invalidSpz('header could not be decompressed');
+    invalidSpz('header does not decompress');
   }
   if (headerBytes.byteLength !== SPZ_HEADER_BYTES) invalidSpz('truncated header');
 
@@ -166,27 +170,23 @@ export async function fetchWorldSplatBytes(
 ): Promise<Uint8Array<ArrayBuffer>> {
   if (!isSafeWorldUrl(url)) throw new Error('The spatial preview URL is not safe to load.');
 
-  let response: Response;
-  try {
-    response = await fetch(backendAssetUrlSync(url), {
-      signal: options.signal,
-      // Output files can be archived or deleted independently of the graph.
-      // Never let the browser resurrect an SPZ that the backend no longer owns.
-      cache: 'no-store',
-    });
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') throw error;
-    throw new Error('The spatial preview could not be reached.');
-  }
+  // No answer is a ConnectionLostError under LOAD_WORLD (fetchUrl).
+  const response = await fetchUrl(backendAssetUrlSync(url), {
+    signal: options.signal,
+    // Output files can be archived or deleted independently of the graph.
+    // Never let the browser resurrect an SPZ that the backend no longer owns.
+    cache: 'no-store',
+  }, LOAD_WORLD);
 
-  if (!response.ok) {
-    throw new Error(`The spatial preview server returned HTTP ${response.status}.`);
-  }
+  // GM's line for the status; the status itself stays in the console.
+  if (!response.ok) throw await requestError(LOAD_WORLD, response);
+  requestSucceeded(LOAD_WORLD);
 
   try {
     const bytes = await readBoundedAssetResponse(
       response,
       options.maxBytes ?? WORLD_SPLAT_MAX_SOURCE_BYTES,
+      { heading: LOAD_WORLD },
     );
     const header = preflightWorldSpz(bytes, options.variant);
     await validateWorldSpzInflation(bytes, header.expectedUncompressedBytes, options.signal);

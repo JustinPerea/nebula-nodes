@@ -1,4 +1,4 @@
-"""nebula moodboard list|show|new|add|set|analyze [--dry-run] [--read-with MODEL]|move|delete.
+"""nebula moodboard list|show|new|add|set|edit|analyze [--dry-run] [--read-with MODEL]|move|delete.
 
 The boards Moodboard Studio edits, from the terminal. The work is in
 moodboard_client.py, which the MCP server's moodboard tools share; this file
@@ -31,11 +31,11 @@ def _print_json(data: Any) -> None:
 def _changes_flags(args) -> bool:
     """Whether `set` was given any change besides the image edits."""
     values = (args.name, args.notes, args.mode, args.strength, args.direction, args.brief, args.clash_mode,
-              args.send_notes)
+              args.send_notes, args.cover)
     lists = (args.avoid, args.unavoid, args.pin_color, args.keep_out_color, args.unpin_color, args.keep_anyway,
              args.leave_out, args.reset_color)
     return (any(value is not None for value in values) or any(lists)
-            or args.clear_avoid or args.clear_brief or args.keep_brief or args.leave_out_flagged)
+            or args.clear_avoid or args.clear_brief or args.keep_brief or args.leave_out_flagged or args.clear_cover)
 
 
 def _read_previous(source: str) -> dict[str, Any]:
@@ -54,6 +54,42 @@ def _read_previous(source: str) -> dict[str, Any]:
     if unknown:
         _fail(f"--restore: `previous` has no setting called {', '.join(unknown)}")
     return data
+
+
+def _read_json(source: str, flag: str) -> Any:
+    """JSON from a file, or from stdin for -."""
+    try:
+        text = sys.stdin.read() if source == "-" else Path(source).expanduser().read_text(encoding="utf-8")
+        return json.loads(text)
+    except (OSError, ValueError) as exc:
+        _fail(f"{flag}: can't read {source}: {exc}")
+
+
+def _edit_flags(args) -> bool:
+    return any((args.place, args.resize, args.into, args.link, args.set_aside, args.use, args.note,
+                args.private_note, args.ops is not None))
+
+
+def _print_edit(result: dict[str, Any], *, undoing: bool) -> None:
+    board = result.get("board") or {}
+    applied = [entry for entry in result.get("applied") or [] if isinstance(entry, dict)]
+    changed = sum(1 for entry in applied if entry.get("status") == "applied")
+    same = len(applied) - changed
+    label = f"{board.get('name')} ({board.get('id')})"
+    if undoing:
+        print(f"Put {label} back." if changed else f"Nothing on {label} was put back:")
+    else:
+        line = f"Edited {label}: {changed} change{'' if changed == 1 else 's'}"
+        print(line + (f", {same} already so." if same else "."))
+    for message in boards.skipped_messages(result):
+        print(f"  {message}.")
+    undo = result.get("undo") or {}
+    if undo.get("ops"):
+        text = json.dumps(undo, ensure_ascii=False, separators=(",", ":"))
+        print(f"{'Redo it' if undoing else 'Undo it'}: echo {shlex.quote(text)} | "
+              f"nebula moodboard edit {board.get('id')} --undo -")
+    if not board.get("analysis") and changed:
+        print(f"Its analysis is out of date now: `nebula moodboard analyze {board.get('id')}`")
 
 
 def _pairs(items: list[str], flag: str) -> list[tuple[str, str]]:
@@ -96,7 +132,7 @@ def _print_brief(board: dict[str, Any]) -> None:
     source = _OVERRIDE_AUTHOR[override["by"]] if override else "generated"
     if board_is_off(board):
         # Q36 a: at 0 no node it's wired into gets any of it.
-        print(f"  Brief ({source}), not sent: board strength is 0, so no node it's wired into gets the board:")
+        print(f"  Brief ({source}), not sent: board strength is 0, so no node it's connected to gets the board:")
     else:
         print(f"  Brief sent to generators ({source}):")
     if composed.get("styleBrief"):
@@ -177,15 +213,28 @@ def _print_board(board: dict[str, Any], names: dict[str, tuple[str, bool]] | Non
     for label, key in (("Colors that must appear", "include"), ("Colors to keep out", "exclude")):
         if pinned.get(key):
             print(f"  {label}: {' '.join(pinned[key])}")
+    cover = boards.cover_of(board) if "coverImageId" in board else None
+    if cover is not None:
+        print(f"  Cover: #{cover['number']} ({cover['id']})" if cover["chosen"]
+              else f"  Cover: #{cover['number']}, the first image (none chosen)")
     print(f"  Images ({len(images)}):")
+    outside = {str(image_id) for image_id in board.get("outsideImages") or []}
     for index, image in enumerate(images, start=1):
         flags = ("  set aside" if image.get("excluded")
                  else "  set aside (weight 0)" if boards.is_set_aside(image) else "")
+        if cover is not None and cover["chosen"] and cover["number"] == index:
+            flags += "  cover"
         note = f'  "{image["notes"]}"' if image.get("notes") else ""
+        # A board saved before images were checked can hold a link to another
+        # site: never loaded, so the placeholder says so beside the link.
+        shown = (f"[{boards.OUTSIDE_PLACEHOLDER}] {image.get('url')}" if str(image.get("id")) in outside
+                 else image.get("url"))
         print(f"    {index:>2}  {image.get('id')}  weight {float(image.get('weight', 1)):.2f}{flags}  "
-              f"{image.get('url')}{note}")
+              f"{shown}{note}")
         if image.get("privateNote"):
             print(f'        Private note (not sent anywhere): "{image["privateNote"]}"')
+    if outside:
+        print(f"  {boards.OUTSIDE_NOTE_CLI}")
     _print_brief(board)
     analysis = board.get("analysis")
     if not analysis:
@@ -448,6 +497,9 @@ def run(client: NebulaClient, args) -> None:
                 aside = sum(1 for image in images if boards.is_set_aside(image))
                 counted = f"{len(images)} {'image' if len(images) == 1 else 'images'}" + (
                     f", {aside} set aside" if aside else "")
+                cover = boards.cover_of(board) if "coverImageId" in board else None
+                if cover is not None and cover["chosen"]:
+                    counted += f", cover #{cover['number']}"
                 print(f"{board.get('id')}  {board.get('name')}  ({counted}, "
                       f"{board.get('mode')}, {analyzed}, {_scope_label(board, names)})")
         elif verb == "show":
@@ -497,6 +549,8 @@ def run(client: NebulaClient, args) -> None:
                 edits.setdefault(image, {"image": image})["excluded"] = False
             if args.brief is not None and args.clear_brief:
                 _fail("--brief and --clear-brief can't go together")
+            if args.cover is not None and args.clear_cover:
+                _fail("--cover and --clear-cover can't go together")
             if args.clear_avoid and args.unavoid:
                 _fail("--clear-avoid empties the Avoid list, so --unavoid has nothing to take off")
             if args.restore is not None:
@@ -519,7 +573,8 @@ def run(client: NebulaClient, args) -> None:
                     unpin_colors=args.unpin_color, brief_override="" if args.clear_brief else args.brief,
                     keep_brief=args.keep_brief, keep_anyway=args.keep_anyway, leave_out=args.leave_out,
                     leave_out_flagged=args.leave_out_flagged, reset_colors=args.reset_color,
-                    clash_mode=args.clash_mode, send_notes=args.send_notes, headers=headers)
+                    clash_mode=args.clash_mode, send_notes=args.send_notes,
+                    cover="" if args.clear_cover else args.cover, headers=headers)
             if args.json:
                 _print_json({**boards.brief(board), "removed": removed, "previous": previous,
                              **({"skipped": skipped} if args.restore is not None else {})})
@@ -531,6 +586,33 @@ def run(client: NebulaClient, args) -> None:
                 print(f"  Took {url} off the board. Put it back with `nebula moodboard add {board.get('id')} {url}`.")
             if not board.get("analysis"):
                 print(f"Its analysis is out of date now: `nebula moodboard analyze {board.get('id')}`")
+        elif verb == "edit":
+            if args.undo is not None:
+                if _edit_flags(args) or args.base_version is not None:
+                    _fail("--undo puts back a whole edit, so it can't go with other changes or --base-version")
+                ops = boards.undo_ops(_read_json(args.undo, "--undo"))
+            else:
+                board = boards.get_board(api, args.board, headers)
+                ops = []
+                if args.ops is not None:
+                    raw = _read_json(args.ops, "--ops")
+                    raw = raw.get("ops") if isinstance(raw, dict) else raw
+                    if not isinstance(raw, list) or not all(isinstance(op, dict) for op in raw):
+                        _fail("--ops takes a JSON list of ops, or {\"ops\": [...]} (contract 07, section 1.12)")
+                    ops += raw
+                ops += boards.edit_ops(board, place=args.place, resize=args.resize, into=args.into, link=args.link,
+                                       set_aside=args.set_aside, use=args.use, note=args.note,
+                                       private_note=args.private_note)
+                if not ops:
+                    _fail("nothing to change: give --place, --resize, --in, --link, --set-aside, --use, --note, "
+                          "--private-note, --ops or --undo")
+            result = boards.edit_board(api, args.board, ops, base_version=args.base_version, say=args.say,
+                                       headers=headers)
+            if args.json:
+                _print_json({**boards.brief(result["board"], layout=True), "version": result.get("version"),
+                             "applied": result.get("applied") or [], "undo": result.get("undo") or {"ops": []}})
+                return
+            _print_edit(result, undoing=args.undo is not None)
         elif verb == "analyze" and args.read_with:
             _read_with(api, args, headers)
         elif verb == "analyze":
@@ -641,6 +723,11 @@ def add_parser(sub) -> None:
                             "unless --weight sets one (repeatable; --include is the old name)")
     set_p.add_argument("--remove", action="append", default=[], metavar="IMAGE",
                        help="Take an image off the board (its file stays; repeatable)")
+    set_p.add_argument("--cover", metavar="IMAGE",
+                       help="The image the board opens on (its picture on the canvas card and in lists), by "
+                            "number or id, e.g. --cover 5. Nothing moves: no image changes number")
+    set_p.add_argument("--clear-cover", dest="clear_cover", action="store_true",
+                       help="Open the board on image #1 again (no cover chosen)")
     set_p.add_argument("--name", help="Rename the board")
     set_p.add_argument("--notes", help="Notes for the whole board")
     set_p.add_argument("--mode", choices=boards.MODES)
@@ -691,6 +778,43 @@ def add_parser(sub) -> None:
                             "as a file or - for stdin. What someone changed since is left as they set it, "
                             "and said")
     set_p.add_argument("--json", action="store_true", help="Print JSON")
+
+    edit_p = msub.add_parser(
+        "edit", help="Move, resize and group a board's cards in one checked edit",
+        description=("The ops Moodboard Studio sends when the person drags a card (contract 07, section 1.12): "
+                     "they land together or not at all, an open Studio shows them at once, and each edit "
+                     "prints how to undo it. A CARD is an image's number or id (when it has one card), a card "
+                     "id from `show --json`, or 12@<look>. Coordinates are board pixels, the card's top-left."))
+    edit_p.add_argument("board", help=board_help)
+    edit_p.add_argument("--place", action="append", default=[], metavar="CARD=X,Y",
+                        help="Move a card, e.g. --place 12=200,40 (repeatable)")
+    edit_p.add_argument("--resize", action="append", default=[], metavar="CARD=SIZE",
+                        help="Resize a card to a weight (0.05 to 1) or WxH, keeping its aspect; the image "
+                             "weighs its largest card, e.g. --resize 12=0.6 (repeatable)")
+    edit_p.add_argument("--in", dest="into", action="append", default=[], metavar="CARD=LOOK",
+                        help="Put a card in a look (a frame), by its id or name; a card in another look "
+                             "moves there, e.g. --in 12=Dither (repeatable)")
+    edit_p.add_argument("--link", action="append", default=[], metavar="IMAGE=LOOK",
+                        help="Add a copy of an image to another look, e.g. --link 12=Glass (repeatable)")
+    edit_p.add_argument("--set-aside", dest="set_aside", action="append", default=[], metavar="IMAGE",
+                        help="Set an image aside: still read for its colours, never steers (repeatable)")
+    edit_p.add_argument("--use", action="append", default=[], metavar="IMAGE",
+                        help="Use a set-aside image again (repeatable)")
+    edit_p.add_argument("--note", action="append", default=[], metavar="IMAGE=TEXT",
+                        help="An image's note, which steers (repeatable)")
+    edit_p.add_argument("--private-note", dest="private_note", action="append", default=[], metavar="IMAGE=TEXT",
+                        help="The person's own label for an image; never sent anywhere (repeatable)")
+    edit_p.add_argument("--ops", metavar="FILE",
+                        help="More ops as JSON (a list, or {\"ops\": [...]}), from a file or - for stdin; "
+                             "they go before the flags' ops")
+    edit_p.add_argument("--undo", metavar="FILE",
+                        help="Undo an edit: what `edit --json` (or `add --json`) printed, or its `undo`, as a "
+                             "file or - for stdin. What someone changed since is left as they set it, and said")
+    edit_p.add_argument("--base-version", dest="base_version", type=int, metavar="N",
+                        help="Refuse the edit if the board was saved since version N (`show --json` gives it)")
+    edit_p.add_argument("--say", metavar="TEXT",
+                        help="What you did, in your words, for the person's Agent log (up to 140 characters)")
+    edit_p.add_argument("--json", action="store_true", help="Print JSON (the board with its cards, applied, undo)")
 
     analyze_p = msub.add_parser(
         "analyze", help="Analyze a board (palette, accents, brief), or read it with a vision model",

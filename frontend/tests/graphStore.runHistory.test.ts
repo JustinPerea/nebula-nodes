@@ -9,6 +9,7 @@ import {
   WORLD_LABS_RECONNECTING_NOTE,
   type RunRecord,
 } from '../src/lib/runHistory';
+import { noticeSpy } from './helpers/noticeSpy';
 
 function worldEnvironmentNode(id = 'world') {
   return {
@@ -416,7 +417,7 @@ describe('graphStore run-history lifecycle', () => {
 
     expect(useGraphStore.getState().isExecuting).toBe(true);
     expect(useGraphStore.getState().runHistory[0].status).toBe('running');
-    expect(useGraphStore.getState().providerRecoveryWarning).toMatch(/remains locked/i);
+    expect(useGraphStore.getState().providerRecoveryWarning).toMatch(/stays locked/i);
     expect(useGraphStore.getState().uncertainWorldLabsRunId).toBe(runId);
 
     useGraphStore.getState().acknowledgeUncertainWorldLabsRun();
@@ -1272,7 +1273,7 @@ describe('graphStore run-history lifecycle', () => {
   });
 
   it('blocks cloning a blank fresh-paid World node even when this stale tab has no checkpoint', () => {
-    const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const alert = noticeSpy();
     const source = {
       ...worldEnvironmentNode('world-stale-source'),
       selected: true,
@@ -1286,7 +1287,9 @@ describe('graphStore run-history lifecycle', () => {
 
     expect(useGraphStore.getState().nodes).toEqual([source]);
     expect(alert).toHaveBeenCalledTimes(3);
-    expect(alert.mock.calls[0][0]).toContain('separate paid operation');
+    // GM - Design, round 4: one line at 560 px.
+    expect(alert.mock.calls.map(([text]) => text)).toEqual(Array(3).fill(
+      "Couldn't duplicate a paid World Labs node. Add a new one from the Nodes rail instead."));
   });
 
   it('does not clear a checkpoint that advances while exact deletion is in flight', async () => {

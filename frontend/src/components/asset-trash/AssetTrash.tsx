@@ -1,17 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronRight, RotateCcw, X } from 'lucide-react';
-import { backendAssetUrlSync } from '../../lib/backend';
+import { storedImageView } from '../../lib/storedImage';
+import { OutsideImageNote } from '../OutsideImageNote';
+import { InNoticeRegion } from '../InNoticeRegion';
 import {
   deletedByLabel, emptyTrash, fetchTrash, purgeTrashed, restoreTrashed,
   type TrashedItem,
 } from '../../lib/trash';
 import type { AssetScope } from '../../store/uiStore';
 import { wsClient } from '../../lib/wsClient';
+import { failureMessage, oneLine, shortReason, type FailureCopy } from '../../lib/errorCopy';
 import '../../styles/asset-trash.css';
 import { useCurrentProjectId } from '../../lib/currentProject';
 
 /**
- * Recently deleted, inside Moodboard Studio and Character Studio.
+ * Recently deleted, inside Moodboard Studio and Character Studio, and under
+ * the Assets panel's Styles.
  *
  * A deleted board or character waits here until the person deletes it for
  * good (no timer). Restore brings it back with the same id, so canvas nodes
@@ -19,14 +23,21 @@ import { useCurrentProjectId } from '../../lib/currentProject';
  * backend refuses agents.
  */
 
-type AssetKind = 'moodboard' | 'character';
+type AssetKind = 'moodboard' | 'character' | 'style';
 
 const NOUNS: Record<AssetKind, { one: string; many: string }> = {
   moodboard: { one: 'board', many: 'boards' },
   character: { one: 'character', many: 'characters' },
+  style: { one: 'style', many: 'styles' },
 };
 
 export const UNDO_VISIBLE_MS = 8000;
+
+/** A deleted item's picture, only when it is one of Nebula's own files
+ *  (lib/storedImage.ts): a Character's and, since Q98, a board's. */
+function thumbnailOf(item: TrashedItem): string | null {
+  return storedImageView(item.thumbnail).src;
+}
 
 function deletedLine(item: TrashedItem): string {
   const date = new Date(item.deletedAt);
@@ -108,7 +119,7 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
       .catch((err) => {
         if (cancelled) return;
         setItemsFor(where);
-        setError(err instanceof Error ? err.message : 'Couldn’t load Recently deleted.');
+        setError(failureMessage(err, "Couldn't load Recently deleted."));
       });
     return () => { cancelled = true; };
   }, [kind, scope, projectId, noProject, where, refreshKey, reload]);
@@ -127,7 +138,8 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
       await work();
       after?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'That didn’t work. Try again.');
+      // A request's own line; never another error's message (round 3b).
+      setError(failureMessage(err, ''));
     } finally {
       setBusy(false);
       setReload((value) => value + 1);
@@ -158,11 +170,12 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
             {items.map((item) => (
               <li key={item.id} className="asset-trash__row" aria-label={item.name || 'Untitled'}>
                 <span className="asset-trash__thumb">
-                  {item.thumbnail ? <img src={backendAssetUrlSync(item.thumbnail)} alt="" draggable={false} /> : null}
+                  {thumbnailOf(item) && <img src={thumbnailOf(item) ?? undefined} alt="" draggable={false} />}
                 </span>
                 <span className="asset-trash__meta">
                   <span className="asset-trash__name">{item.name || 'Untitled'}</span>
                   <span className="asset-trash__sub">{deletedLine(item)}</span>
+                  {storedImageView(item.thumbnail).outside && <OutsideImageNote />}
                 </span>
                 <span className="asset-trash__actions">
                   <button type="button" className="asset-trash__button" disabled={busy}
@@ -185,7 +198,9 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
 export interface UndoDeleteToastProps {
   name: string;
   busy?: boolean;
-  error?: string | null;
+  /** Undo's own failure, one line (GM: "Couldn't {verb} {object}. {reason}"
+   * in one string), short: the Undo beside it redoes it (round 3b). */
+  error?: string | FailureCopy | null;
   onUndo: () => void;
   onDismiss: () => void;
 }
@@ -198,13 +213,16 @@ export function UndoDeleteToast({ name, busy = false, error = null, onUndo, onDi
     const timer = window.setTimeout(onDismiss, UNDO_VISIBLE_MS);
     return () => window.clearTimeout(timer);
   }, [paused, busy, error, onDismiss]);
+  // In the app's notice region, like every toast (GM - Design, 2026-10-23).
   return (
-    <div className="asset-trash__toast" role="status" aria-live="polite"
-      onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
-      onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
-      <span className="asset-trash__toast-text">{error ?? `Moved “${name || 'Untitled'}” to Recently deleted`}</span>
-      <button type="button" className="asset-trash__toast-undo" disabled={busy} onClick={onUndo}>Undo</button>
-      <button type="button" className="asset-trash__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
-    </div>
+    <InNoticeRegion slot="asset-trash">
+      <div className="asset-trash__toast" role="status" aria-live="polite"
+        onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
+        onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
+        <span className="asset-trash__toast-text">{error ? (typeof error === 'string' ? error : oneLine({ ...error, reason: shortReason(error.reason) })) : `Moved “${name || 'Untitled'}” to Recently deleted`}</span>
+        <button type="button" className="asset-trash__toast-undo" disabled={busy} onClick={onUndo}>Undo</button>
+        <button type="button" className="asset-trash__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
+      </div>
+    </InNoticeRegion>
   );
 }

@@ -18,6 +18,7 @@ import { SkippedBadge } from './SkippedBadge';
 import { VideoEditAction } from './VideoEditAction';
 import { NodeTypeIcon } from './NodeTypeIcon';
 import { useSelectionActionSlot } from '../../lib/selectionActionSlot';
+import { useCardSelection } from '../../hooks/useCardSelection';
 import '../../styles/nodes.css';
 import { NodeLabel } from './NodeLabel';
 import { NodeRunStatus } from './NodeRunStatus';
@@ -34,8 +35,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
   const previewOutputs = batchPreview.outputs;
   const previewComplete = nodeData.state === 'complete' || batchPreview.browsing;
   const selectNode = useUIStore((s) => s.selectNode);
-  const selectedNodeId = useUIStore((s) => s.selectedNodeId);
-  const inspectorVisible = useUIStore((s) => s.panels.inspector.visible);
+  const { selectedInUi, inspectorOpen } = useCardSelection(id);
   const setInspectorVisible = useUIStore((s) => s.setInspectorVisible);
   const isSlavaSkin = useUIStore((s) => s.skin === 'slava-restraint');
   const actionSlot = useSelectionActionSlot(id);
@@ -95,16 +95,16 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
 
   // Model badge: show selected model compactly
   const modelBadge = dynData?.modelId || (nodeData.params.model as string) || (nodeData.params.model_id as string) || (nodeData.params.endpoint_id as string) || null;
-  const isNodeSelected = selected || selectedNodeId === id;
+  const isNodeSelected = selected || selectedInUi;
 
   const handleInspectorButtonClick = useCallback(
     (e: React.MouseEvent<HTMLButtonElement>) => {
       e.stopPropagation();
-      const shouldOpen = selectedNodeId !== id || !inspectorVisible;
+      const shouldOpen = !inspectorOpen;
       selectNode(id);
       setInspectorVisible(shouldOpen);
     },
-    [id, inspectorVisible, selectNode, selectedNodeId, setInspectorVisible],
+    [id, inspectorOpen, selectNode, setInspectorVisible],
   );
 
   const renderNodeActions = (variant: 'pill' | 'toolbar') => {
@@ -117,7 +117,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
           type="button"
           className={inToolbar ? 'selection-toolbar__button nodrag' : 'model-node__settings-edit nodrag'}
           aria-haspopup="dialog"
-          aria-expanded={inspectorVisible && selectedNodeId === id}
+          aria-expanded={inspectorOpen}
           aria-label="Show node settings"
           onClick={handleInspectorButtonClick}
           onMouseDown={(e) => e.stopPropagation()}
@@ -262,6 +262,9 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
         <NodeError
           category={nodeData.errorCategory}
           friendly={nodeData.errorFriendly}
+          person={nodeData.errorPerson}
+          providerText={nodeData.errorProviderText}
+          provider={nodeData.errorProvider}
           raw={nodeData.error}
         />
       )}
@@ -277,7 +280,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
 
       {isStructuredSurface && (
         <div className="model-node__preview model-node__preview--structured model-node__preview--overview">
-          <StructuredOutputs outputs={structuredOutputs}
+          <StructuredOutputs outputs={structuredOutputs} definitionId={nodeData.definitionId}
             labels={Object.fromEntries(outputPorts.map((port) => [port.id, port.label]))} />
         </div>
       )}

@@ -21,6 +21,9 @@ def agent(monkeypatch):
     monkeypatch.setattr(main.node_registry, "get",
                         lambda definition_id: TABLE if definition_id == TABLE["id"] else real_get(definition_id))
     monkeypatch.setattr(main, "_is_person_request", lambda: False)
+    # An agent's request: its refusal is the plain 403 (a request with no
+    # agent marker gets person_required instead; test_person_required_routes.py).
+    monkeypatch.setattr(main, "current_request_headers", lambda: {"X-Nebula-Agent": "Codex"})
 
 
 def _refusal(changes) -> str | None:

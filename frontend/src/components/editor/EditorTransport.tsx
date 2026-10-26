@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type Ref } from 'react';
 import type { Node } from '@xyflow/react';
 import {
   Gauge,
@@ -34,9 +34,18 @@ const EMPTY_CLIPS: EditClip[] = [];
 interface Props {
   editNode: Node<NodeData>;
   sourceUrl: string;
+  /** The row's box, for the editor's bottom-bar clearance (EditorView). */
+  ref?: Ref<HTMLDivElement>;
 }
 
-export function EditorTransport({ editNode, sourceUrl }: Props) {
+/** The trim editor's transport row. With the timeline under it, it is the
+ * screen's bottom bar (`data-bottom-bar`): EditorView publishes its top edge,
+ * so the app's notices sit 8 px above it, over the preview's bottom edge (GM -
+ * Design, round 4b: "publish the transport's top edge as well, so notices sit
+ * over the preview's bottom edge. Cut, Vol and zoom are being used while
+ * someone edits."). It wraps to two rows when a clip is selected; the
+ * clearance follows (it is measured whenever the row changes size). */
+export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
   const [isRendering, setIsRendering] = useState(false);
   const [hasRendered, setHasRendered] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -134,7 +143,7 @@ export function EditorTransport({ editNode, sourceUrl }: Props) {
   }
 
   return (
-    <div className="editor-transport">
+    <div ref={ref} className="editor-transport" data-bottom-bar="">
       <div className="editor-transport__group">
         <button
           className="editor-transport__btn editor-transport__btn--primary"

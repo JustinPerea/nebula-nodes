@@ -1,0 +1,511 @@
+/* Moodboard Studio's Board view (moodboard canvas PR5): the board as a canvas
+   (BoardCanvas), its side panel, the Board / List switch and the undo toast.
+
+   Unlike moodboard-studio.css these rules are not scoped to the Slava skin:
+   every colour is a token with a fallback, so the Board view also draws with
+   the skin class removed. The person's selection is ink, never orange:
+   orange is the agent's colour on the board (plan C5). */
+
+.moodboard-studio-view,
+.moodboard-board,
+.moodboard-board-toast {
+  --mb-board-bg: var(--sr-canvas, #000);
+  --mb-board-dot: var(--sr-canvas-dot-color, rgba(201, 202, 200, 0.15));
+  --mb-board-ink: var(--sr-ink, rgba(255, 255, 255, 0.92));
+  --mb-board-meta: var(--sr-ink-meta, rgba(255, 255, 255, 0.4));
+  --mb-board-edge: var(--sr-edge, rgba(255, 255, 255, 0.06));
+  --mb-board-edge-strong: var(--sr-edge-strong, rgba(255, 255, 255, 0.12));
+  --mb-board-glass: var(--sr-glass-raised, rgba(28, 28, 31, 0.78));
+  --mb-board-panel: var(--sr-glass-strong, rgba(36, 36, 40, 0.86));
+  --mb-board-select: rgba(255, 255, 255, 0.92);
+  --mb-board-font: var(--sr-ui, 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif);
+  --mb-board-mono: var(--sr-mono, 'JetBrains Mono', 'SF Mono', Menlo, monospace);
+  /* A spring with a small overshoot (stiffness ~260, damping ~22), sampled for linear(). */
+  --mb-board-spring: linear(0, 0.049, 0.163, 0.305, 0.452, 0.588, 0.705, 0.801, 0.876, 0.931, 0.97, 0.995,
+    1.011, 1.019, 1.022, 1.022, 1.02, 1.017, 1.014, 1.011, 1.008, 1.005, 1.003, 1.002, 1);
+}
+
+/* The Studio laid out for the Board view: rail | canvas | panel. Complete on
+   its own, so it holds in either skin; `html body` puts it above the Slava
+   skin's two-column grid (body.app-slava-restraint .moodboard-studio-view). */
+html body .moodboard-studio-view.moodboard-studio-view--board {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  grid-template-rows: 44px minmax(0, 1fr);
+  grid-template-columns: 250px minmax(0, 1fr) 320px;
+  grid-template-areas:
+    "toolbar toolbar toolbar"
+    "rail board panel";
+  background: var(--mb-board-bg);
+  color: var(--mb-board-ink);
+  font-family: var(--mb-board-font);
+  overflow: hidden;
+}
+
+.moodboard-studio-view--board > .moodboard-studio-toolbar {
+  grid-area: toolbar;
+}
+
+.moodboard-studio-view--board > .moodboard-studio-view__rail {
+  grid-area: rail;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.moodboard-studio-view__board {
+  grid-area: board;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Notices float over the top of the canvas instead of pushing it down. */
+.moodboard-studio-view__board-notices {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: min(560px, calc(100% - 32px));
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.moodboard-studio-view__board-notices > * {
+  pointer-events: auto;
+  padding: 6px 10px;
+  border: 1px solid var(--mb-board-edge-strong);
+  border-radius: 4px;
+  background: var(--mb-board-panel);
+  font-size: 12px;
+}
+
+.moodboard-studio-view__board-loading {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: var(--mb-board-meta);
+  font-size: 12px;
+}
+
+/* The canvas. */
+.moodboard-board {
+  position: absolute;
+  inset: 0;
+  background: var(--mb-board-bg);
+}
+
+.moodboard-board__underlay {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.moodboard-board__flow {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  --xy-background-color: transparent;
+  --xy-node-boxshadow-selected: none;
+  --xy-selection-background-color: rgba(255, 255, 255, 0.06);
+  --xy-selection-border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.moodboard-board__flow .react-flow__node-card {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.moodboard-board__flow .react-flow__node-card:focus,
+.moodboard-board__flow .react-flow__node-card:focus-visible {
+  outline: none;
+}
+
+.moodboard-card {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.03);
+  /* A ring, no blurred shadow: 300 blurred shadows are slow to paint. */
+  box-shadow: 0 0 0 1px var(--mb-board-edge-strong);
+  cursor: grab;
+}
+
+.react-flow__node-card.dragging .moodboard-card {
+  cursor: grabbing;
+}
+
+.moodboard-card__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.moodboard-card--selected {
+  box-shadow: 0 0 0 2px var(--mb-board-select);
+}
+
+.react-flow__node-card:focus-visible .moodboard-card {
+  box-shadow: 0 0 0 2px var(--mb-board-select), 0 0 0 5px rgba(255, 255, 255, 0.18);
+}
+
+.moodboard-board--drop::after {
+  content: '';
+  position: absolute;
+  inset: 12px;
+  z-index: 4;
+  border: 1px dashed var(--mb-board-meta);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+  pointer-events: none;
+}
+
+.moodboard-board__controls {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--mb-board-edge-strong);
+  border-radius: 6px;
+  background: var(--mb-board-glass);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.moodboard-board__control {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--mb-board-ink);
+  font: inherit;
+  font-family: var(--mb-board-font);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.moodboard-board__control--text {
+  padding: 0 9px;
+  font-size: 12px;
+}
+
+.moodboard-board__control:hover,
+.moodboard-board__control:focus-within {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.moodboard-board__control:focus-visible,
+.moodboard-board__control:has(.moodboard-board__file:focus-visible) {
+  outline: var(--sr-focus-outline, 2px solid var(--mb-board-select));
+  outline-offset: 1px;
+}
+
+.moodboard-board__control--busy {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.moodboard-board__file {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.moodboard-board__file:disabled {
+  cursor: default;
+}
+
+.moodboard-board__empty {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  transform: translate(-50%, -50%);
+  color: var(--mb-board-meta);
+  font-size: 12px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.moodboard-board__empty-title {
+  color: var(--mb-board-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* The side panel. */
+.moodboard-board-panel {
+  grid-area: panel;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 16px 40px;
+  border-left: 1px solid var(--mb-board-edge-strong);
+  background: var(--mb-board-panel);
+}
+
+/* The board's Mode and Strength stack in the narrow panel. */
+html body .moodboard-board-panel .moodboard-def__row {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.moodboard-board-panel__head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.moodboard-board-panel__title {
+  margin: 0;
+  color: var(--mb-board-ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.moodboard-board-panel__sub {
+  color: var(--mb-board-meta);
+  font-family: var(--mb-board-mono);
+  font-size: 11px;
+}
+
+.moodboard-board-panel__image {
+  overflow: hidden;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.22);
+  box-shadow: 0 0 0 1px var(--mb-board-edge-strong);
+}
+
+.moodboard-board-panel__image img {
+  display: block;
+  width: 100%;
+  max-height: 240px;
+  object-fit: contain;
+}
+
+.moodboard-board-panel__section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.moodboard-board-panel__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.moodboard-board-panel__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--mb-board-ink);
+  font-size: 12px;
+}
+
+.moodboard-board-panel__hint {
+  color: var(--mb-board-meta);
+  font-size: 11px;
+}
+
+.moodboard-board-panel__remove {
+  align-self: flex-start;
+  padding: 5px 10px;
+  border: 1px solid var(--mb-board-edge-strong);
+  border-radius: 2px;
+  background: none;
+  color: var(--mb-board-ink);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.moodboard-board-panel__remove:hover {
+  border-color: #e0796b;
+  color: #e0796b;
+}
+
+/* The Board / List switch in the header. The thumb slides on a spring. */
+.moodboard-view-switch {
+  position: relative;
+  display: inline-grid;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  padding: 2px;
+  border: 1px solid var(--mb-board-edge-strong);
+  border-radius: 4px;
+  font-family: var(--mb-board-font);
+}
+
+.moodboard-view-switch__thumb {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 2px;
+  width: calc(50% - 2px);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  transform: translateX(calc(var(--mb-view-index, 0) * 100%));
+  transition: transform 420ms var(--mb-board-spring);
+  pointer-events: none;
+}
+
+.moodboard-view-switch__option {
+  position: relative;
+  z-index: 1;
+  min-width: 52px;
+  height: 22px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: var(--mb-board-meta);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.moodboard-view-switch__option[aria-checked='true'] {
+  color: var(--mb-board-ink);
+}
+
+.moodboard-view-switch__option:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid var(--mb-board-select));
+  outline-offset: 1px;
+}
+
+.moodboard-view-switch__badge {
+  margin-left: 5px;
+  color: var(--mb-board-meta);
+  font-family: var(--mb-board-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* The undo toast, in the app's notice region (NoticeRegion), which places
+   it on the Board and in the List view alike. Springs up. */
+.moodboard-board-toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(var(--notice-max-w, 560px), calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 6px 6px 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  background: rgba(20, 20, 22, 0.94);
+  color: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  font-family: var(--mb-board-font);
+  font-size: 12px;
+  animation: moodboard-board-toast-in 420ms var(--mb-board-spring) both;
+}
+
+.moodboard-board-toast__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.moodboard-board-toast__line {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.moodboard-board-toast__line--skipped {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.moodboard-board-toast__action,
+.moodboard-board-toast__close {
+  flex-shrink: 0;
+  height: 28px;
+  border-radius: 7px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.moodboard-board-toast__action {
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.9);
+  color: #111;
+  font-weight: 600;
+}
+
+.moodboard-board-toast__action:hover {
+  background: #fff;
+}
+
+.moodboard-board-toast__close {
+  width: 28px;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.moodboard-board-toast__close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.moodboard-board-toast__action:focus-visible,
+.moodboard-board-toast__close:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid var(--mb-board-select));
+  outline-offset: 1px;
+}
+
+@keyframes moodboard-board-toast-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  30% { opacity: 1; }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .moodboard-view-switch__thumb {
+    transition: none;
+  }
+
+  .moodboard-board-toast {
+    animation: none;
+  }
+}

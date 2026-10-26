@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  antigravityAction,
   createPersonalAgent,
   deletePersonalAgent,
   fetchPersonalAgents,
@@ -7,9 +8,9 @@ import {
   type PersonalAgent,
   type PersonalAgentList,
 } from '../../../lib/api';
+import { PERSONAL_AGENTS_CHANGED_EVENT } from '../../../lib/personalAgentsEvents';
 import '../../../styles/personal-agents.css';
-
-export const PERSONAL_AGENTS_CHANGED_EVENT = 'nebula:personal-agents-changed';
+import { failureMessage } from '../../../lib/errorCopy';
 
 const STATUS_TEXT: Record<PersonalAgent['status'], string> = {
   ready: 'Ready',
@@ -23,6 +24,101 @@ function announceChange() {
   window.dispatchEvent(new CustomEvent(PERSONAL_AGENTS_CHANGED_EVENT));
 }
 
+const POLL_MS = 1000;
+
+function megabytes(bytes: number | null | undefined): string {
+  return `${Math.round((bytes ?? 0) / 1_000_000)} MB`;
+}
+
+/** Something Nebula is doing for an agent that Settings should follow (a download, a sign-in). */
+function personalAgentBusy(agent: PersonalAgent): boolean {
+  return agent.install?.state === 'downloading' || agent.signIn?.state === 'waiting';
+}
+
+type Run = (work: () => Promise<unknown>) => Promise<void>;
+
+/** Gemini: hand the CLI the Gemini API key saved in Settings, only when the person turns it on. */
+function KeyOption({ agent, busy, run }: { agent: PersonalAgent; busy: boolean; run: Run }) {
+  const option = agent.keyOption;
+  if (!option) return null;
+  const blocked = option.blocked ?? (!option.keySaved && !option.enabled
+    ? 'Save a Gemini API key in Settings > API keys (Google) to use this.' : null);
+  return (
+    <span className="personal-agents__option" data-testid="personal-agent-key-option">
+      <label className="personal-agents__option-label">
+        <input type="checkbox" role="switch" className="settings-switch" checked={option.enabled}
+          disabled={busy || (Boolean(blocked) && !option.enabled)}
+          onChange={(event) => void run(() => updatePersonalAgent(agent.id, { useNebulaKey: event.target.checked }))} />
+        Use my Gemini API key from Nebula
+      </label>
+      <span className="personal-agents__fine">{option.billing}</span>
+      {blocked && <span className="personal-agents__fine">{blocked}</span>}
+    </span>
+  );
+}
+
+/** Antigravity: the pinned download and Google's sign-in, run by Google's own server. */
+function DownloadAndSignIn({ agent, busy, run }: { agent: PersonalAgent; busy: boolean; run: Run }) {
+  const install = agent.install;
+  if (!install) return null;
+  const job = install.job;
+  const signIn = agent.signIn;
+  const signJob = signIn?.job;
+  return (
+    <span className="personal-agents__option" data-testid="personal-agent-download">
+      {install.state === 'downloading' && job ? (
+        <span className="personal-agents__progress" role="status">
+          <progress max={job.totalBytes || 1} value={job.receivedBytes ?? 0}
+            aria-label={`Downloading ${agent.displayName}`} />
+          {job.message} {megabytes(job.receivedBytes)} of {megabytes(job.totalBytes)}
+        </span>
+      ) : job?.state === 'failed' ? <span className="settings-row__error" role="alert">{job.message}</span> : null}
+      <span className="personal-agents__actions">
+        {(install.state === 'missing' || install.state === 'changed') && (
+          <button type="button" className="settings__button settings__button--primary" disabled={busy}
+            onClick={() => void run(() => antigravityAction('install'))}>
+            {install.state === 'changed' ? 'Download again' : `Download ${install.version} (${megabytes(install.sizeBytes)})`}
+          </button>
+        )}
+        {install.state === 'downloading' && (
+          <button type="button" className="settings__button" disabled={busy}
+            onClick={() => void run(() => antigravityAction('remove'))}>Stop download</button>
+        )}
+        {install.state === 'installed' && signIn?.state === 'signed_out' && (
+          <button type="button" className="settings__button settings__button--primary" disabled={busy}
+            onClick={() => void run(() => antigravityAction('sign-in'))}>Sign in with Google</button>
+        )}
+        {signIn?.state === 'waiting' && (
+          <button type="button" className="settings__button" disabled={busy}
+            onClick={() => void run(() => antigravityAction('cancel-sign-in'))}>Cancel sign-in</button>
+        )}
+        {signIn?.state === 'signed_in' && (
+          <button type="button" className="settings__button" disabled={busy}
+            onClick={() => void run(() => antigravityAction('sign-out'))}>Sign out</button>
+        )}
+        {(install.state === 'installed' || install.state === 'changed') && (
+          <button type="button" className="settings__button" disabled={busy || signIn?.state === 'waiting'}
+            onClick={() => void run(() => antigravityAction('remove'))}>Remove download</button>
+        )}
+      </span>
+      {signIn?.state === 'waiting' && signJob && (
+        <span className="personal-agents__fine" role="status">
+          {signJob.message}
+          {signJob.signInUrl && <> <a href={signJob.signInUrl} target="_blank" rel="noreferrer noopener">
+            Open Google&rsquo;s sign-in page</a></>}
+        </span>
+      )}
+      {signJob?.state === 'failed' && <span className="settings-row__error" role="alert">{signJob.message}</span>}
+      {install.source && install.state !== 'unsupported' && (
+        <span className="personal-agents__fine">
+          From {new URL(install.source).host}, pinned to {install.version} and checked by SHA-256 before it runs.
+          Nebula never updates it on its own.
+        </span>
+      )}
+    </span>
+  );
+}
+
 /** Settings > Preferences > Personal agents: the person's own ACP agents that
  * the chat panel can start (backend services/personal_agents.py). */
 export function PersonalAgentsSection() {
@@ -34,10 +130,18 @@ export function PersonalAgentsSection() {
   const load = useCallback(() => {
     fetchPersonalAgents()
       .then((next) => { setList(next); setError(null); })
-      .catch((exc: unknown) => setError(exc instanceof Error ? exc.message : String(exc)));
+      .catch((exc: unknown) => setError(failureMessage(exc, "Couldn't load your agents.")));
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Follow a download or sign-in while it runs.
+  const following = (list?.agents ?? []).some(personalAgentBusy);
+  useEffect(() => {
+    if (!following) return undefined;
+    const timer = window.setInterval(load, POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [following, load]);
 
   const run = async (work: () => Promise<unknown>) => {
     setBusy(true);
@@ -47,7 +151,7 @@ export function PersonalAgentsSection() {
       load();
       announceChange();
     } catch (exc) {
-      setError(exc instanceof Error ? exc.message : String(exc));
+      setError(failureMessage(exc, "Couldn't update your agents."));
     } finally {
       setBusy(false);
     }
@@ -84,7 +188,10 @@ export function PersonalAgentsSection() {
                 {agent.note ? ` · ${agent.note}` : ''}
                 <br />
                 <code>{[agent.command, ...agent.args].join(' ')}</code>
+                {agent.termsNote && <span className="personal-agents__terms" role="note">{agent.termsNote}</span>}
               </span>
+              <KeyOption agent={agent} busy={busy} run={run} />
+              <DownloadAndSignIn agent={agent} busy={busy} run={run} />
             </span>
             <span className="settings-model-limit__controls">
               {agent.startable && (

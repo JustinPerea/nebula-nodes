@@ -24,10 +24,10 @@ describe('chat authority', () => {
   it('keeps the token away from a chat socket on another backend', async () => {
     history.replaceState({}, '', `/#nebula-person=${crypto.randomUUID()}&backend=http://127.0.0.1:8000`);
     expect(await chatAuthority('ws://127.0.0.1:9999/ws/chat', false, '')).toEqual({});
-    await expect(chatAuthority('ws://127.0.0.1:9999/ws/chat', true, '')).rejects.toThrow('no UI session');
+    await expect(chatAuthority('ws://127.0.0.1:9999/ws/chat', true, '')).rejects.toThrow('Your session expired. Open a fresh Commons link from the backend terminal.');
   });
   it('does not authorize a Commons turn without the person', async () => {
-    await expect(chatAuthority(SOCKET, true, '')).rejects.toThrow('no UI session');
+    await expect(chatAuthority(SOCKET, true, '')).rejects.toThrow('Your session expired. Open a fresh Commons link from the backend terminal.');
     expect(api.fetch).not.toHaveBeenCalled();
   });
   it('uses a fresh backend link instead of a stored older token', async () => {

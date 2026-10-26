@@ -41,9 +41,14 @@ body.app-slava-restraint button.project-workspace-controls__name:focus-visible {
 body.app-slava-restraint .project-workspace-controls__name-input {
   width: min(180px, 24vw);
   background: var(--sr-surface-control-focus);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sr-accent) 55%, transparent);
   outline: none;
   cursor: text;
+}
+/* The field only exists while renaming (it saves on blur), so its ring is its
+ * focus: the token, tight to the field (it was an inset orange line). */
+body.app-slava-restraint .project-workspace-controls__name-input:focus {
+  outline: var(--sr-focus-outline);
+  outline-offset: 0;
 }
 body.app-slava-restraint .project-workspace-controls__status {
   display: inline-block;
@@ -84,6 +89,14 @@ body.app-slava-restraint .project-workspace-controls__retry {
   font: 11px/1.4 var(--sr-ui);
   cursor: pointer;
 }
+/* "Saving paused · {size} MB" (Q118): the same warning colour, never cut off. */
+body.app-slava-restraint .project-workspace-controls__paused {
+  padding: 3px 5px;
+  margin: 0 -5px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+body.app-slava-restraint .project-workspace-controls__paused:hover { background: var(--sr-surface-control-hover); }
 body.app-slava-restraint .project-workspace-controls button:focus-visible {
   outline: var(--sr-focus-outline);
   outline-offset: var(--sr-focus-offset);
@@ -92,3 +105,11 @@ body.app-slava-restraint .project-workspace-controls button:focus-visible {
   body.app-slava-restraint :is(.project-workspace-controls__status, .project-workspace-controls__count) { display: none; }
   body.app-slava-restraint .project-workspace-controls__name { max-width: 100px; }
 }
+/* Waiting on the Commons' save in progress before Projects (commons-leave). */
+body.app-slava-restraint .project-workspace-controls__home[aria-busy="true"] {
+  grid-auto-flow: column;
+  gap: 6px;
+  width: auto;
+  padding: 0 8px;
+}
+body.app-slava-restraint .project-workspace-controls__busy { font-size: 12px; white-space: nowrap; }

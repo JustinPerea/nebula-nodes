@@ -44,6 +44,7 @@ vi.mock('../src/lib/api', () => ({
   updatePersonalAgent: (...args: unknown[]) => updatePersonalAgentMock(...args),
   createPersonalAgent: (...args: unknown[]) => createPersonalAgentMock(...args),
   deletePersonalAgent: (...args: unknown[]) => deletePersonalAgentMock(...args),
+  antigravityAction: vi.fn(),
 }));
 
 vi.mock('../src/lib/kreaConnection', async (importOriginal) => ({
@@ -68,6 +69,7 @@ import { useProviderReadinessStore } from '../src/store/providerReadinessStore';
 import { resetSettingsWrites } from '../src/lib/settingsWrites';
 import { resetRunCostConfirmMigration } from '../src/lib/runCostConfirm';
 import { readServiceAccount } from '../src/components/panels/settings/rowHelpers';
+import { ConnectionLostError, RequestFailedError } from '../src/lib/errorCopy';
 
 // ---------------------------------------------------------------------------
 // Setup and helpers
@@ -214,16 +216,47 @@ describe('Settings shell', () => {
     expect(screen.getByRole('tab', { name: 'Storage' })).toHaveAttribute('tabindex', '-1');
   });
 
+  // Round 3f (GM): ""Check your connection" sends people to their Wi-Fi, but
+  // the backend is on this computer." No answer reads GM's server line; an
+  // answer reads its own reason, never "the backend isn't running".
+  it.each([
+    [new ConnectionLostError(new TypeError('Failed to fetch')),
+      "Couldn't check Krea. Nebula's server isn't answering. Make sure it's running, then try again."],
+    [new RequestFailedError("Couldn't check the Krea connection.", 503), "Couldn't check Krea. Nebula didn't respond. Try again."],
+  ])("Krea's first check says why it failed (%#)", async (error, line) => {
+    getKreaConnectionMock.mockReset().mockRejectedValue(error);
+    await renderSettings();
+    expect(await screen.findByText(line)).toBeInTheDocument();
+    expect(screen.queryByText(/backend is running/)).toBeNull();
+  });
+
   it('counts connected providers on the Providers tab', async () => {
     getKreaConnectionMock.mockResolvedValue({ status: 'connected' });
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa', FAL_KEY: '***bbbb', GOOGLE_API_KEY: '' } });
     await waitFor(() => expect(screen.getByRole('tab', { name: /Providers/ })).toHaveTextContent('Providers3'));
   });
 
+  // error-copy round 2 (GM): a retry surface shows the heading and the short
+  // reason ("the button is the retry"); on 1fc3d846 this always said
+  // "Settings couldn't load. Check that the Nebula backend is running."
+  it.each([
+    [new ConnectionLostError(new TypeError('Failed to fetch'), { heading: "Couldn't load your API keys." }),
+      "Nebula's server isn't answering. Make sure it's running."],
+    [new RequestFailedError("Couldn't load your API keys.", 503), "Nebula didn't respond."],
+    [new RequestFailedError("Couldn't load your API keys.", 400), "Try again, or reload if it keeps happening."],
+  ])('a failed first load says the heading and the short reason (%#)', async (error, reason) => {
+    getSettingsMock.mockRejectedValueOnce(error);
+    render(<Settings />);
+    const alert = await screen.findByRole('alert');
+    expect(alert.querySelector('.failure-lines__heading')?.textContent).toBe("Couldn't load your API keys.");
+    expect(alert.querySelector('.failure-lines__reason')?.textContent).toBe(reason);
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+  });
+
   it('keeps a failed first load actionable, and Try again loads the panel', async () => {
     getSettingsMock.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: {} });
     render(<Settings />);
-    expect(await screen.findByRole('alert')).toHaveTextContent("Settings couldn't load");
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load your API keys.");
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await screen.findByRole('searchbox', { name: 'Search providers and models' });
@@ -953,10 +986,12 @@ describe('Settings — preferences', () => {
   });
 
   it('says why the connected apps could not load', async () => {
-    getOutsideSpendMock.mockRejectedValue(new Error('Only the person can do this from the Nebula canvas.'));
+    // Round 3e: a refusal arrives as the API's typed error (apiRequest), not a plain Error,
+    // whose own text no surface shows any more.
+    getOutsideSpendMock.mockRejectedValue(new RequestFailedError("Couldn't load the connected apps.", 403, { reason: 'Only the person can do this from the Nebula canvas.' }));
     await renderSettings({ apiKeys: {}, runCostConfirmUsd: 1 });
     openTab('Preferences');
-    expect(await screen.findByText('Only the person can do this from the Nebula canvas.')).toBeInTheDocument();
+    expect(await screen.findByText("Couldn't load the connected apps. Only the person can do this from the Nebula canvas.")).toBeInTheDocument();
   });
 });
 

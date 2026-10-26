@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 const apiMocks = vi.hoisted(() => ({
   fetchClaudeStatus: vi.fn(), fetchCodexStatus: vi.fn(), fetchChatModels: vi.fn(), fetchPersonalAgents: vi.fn(),
   acknowledgePersonalAgentWarning: vi.fn(), updatePersonalAgent: vi.fn(), createPersonalAgent: vi.fn(),
-  deletePersonalAgent: vi.fn(), apiFetch: vi.fn(),
+  deletePersonalAgent: vi.fn(), apiFetch: vi.fn(), antigravityAction: vi.fn(),
 }));
 vi.mock('../src/lib/api', async (original) => ({
   ...await original<typeof import('../src/lib/api')>(),
@@ -12,7 +12,7 @@ vi.mock('../src/lib/api', async (original) => ({
   fetchChatModels: apiMocks.fetchChatModels, fetchPersonalAgents: apiMocks.fetchPersonalAgents,
   acknowledgePersonalAgentWarning: apiMocks.acknowledgePersonalAgentWarning,
   updatePersonalAgent: apiMocks.updatePersonalAgent, createPersonalAgent: apiMocks.createPersonalAgent,
-  deletePersonalAgent: apiMocks.deletePersonalAgent,
+  deletePersonalAgent: apiMocks.deletePersonalAgent, antigravityAction: apiMocks.antigravityAction,
 }));
 vi.mock('../src/lib/backend', async (original) => ({
   ...await original<typeof import('../src/lib/backend')>(), apiFetch: apiMocks.apiFetch,
@@ -210,6 +210,41 @@ describe('Personal agents in the chat panel', () => {
   });
 });
 
+describe('A personal agent that offers models', () => {
+  it('shows its choices for the conversation and sends the pick with the person token', async () => {
+    const socket = await connected();
+    await pickFake();
+    fireEvent.keyDown(screen.getByRole('dialog', { name: 'Chat model settings' }), { key: 'Escape' });
+    expect(screen.queryByRole('combobox', { name: /for this conversation/ })).toBeNull();
+    await sendText('Hello');
+    await waitFor(() => expect(socket.sent).toHaveLength(1));
+    await act(async () => {
+      socket.receive({ type: 'session', sessionId: 'host-1', source: 'personal', promptImages: true, options: [
+        { id: 'model', name: 'Model', category: 'model', current: 'argon-medium',
+          options: [{ value: 'argon-low', name: 'Argon (low)' }, { value: 'argon-medium', name: 'Argon (medium)' }] },
+        { id: 'broken' }] });
+      socket.receive({ type: 'done', source: 'personal' });
+    });
+    const select = screen.getByRole('combobox', { name: 'Model for this conversation' }) as HTMLSelectElement;
+    expect(select.value).toBe('argon-medium');
+    // Its own row under the status line, so the menus never split "· ready · id" across lines.
+    expect(select.closest('.chat-panel__meta')).toBeNull();
+    expect(select.closest('.chat-panel__personal-options')).not.toBeNull();
+    expect(screen.getAllByRole('combobox', { name: /for this conversation/ })).toHaveLength(1);
+    fireEvent.change(select, { target: { value: 'argon-low' } });
+    await waitFor(() => expect(socket.sent).toHaveLength(2));
+    expect(socket.sent[1]).toEqual({ type: 'personal_option', sessionId: 'host-1', configId: 'model', value: 'argon-low',
+      personToken: TOKEN });
+    await act(async () => {
+      socket.receive({ type: 'personal_options', sessionId: 'host-1', source: 'personal', error: 'Fake Agent didn\'t switch: busy.',
+        options: [{ id: 'model', name: 'Model', category: 'model', current: 'argon-medium',
+          options: [{ value: 'argon-low', name: 'Argon (low)' }, { value: 'argon-medium', name: 'Argon (medium)' }] }] });
+    });
+    expect((screen.getByRole('combobox', { name: 'Model for this conversation' }) as HTMLSelectElement).value).toBe('argon-medium');
+    expect(screen.getByText(/didn.t switch: busy/)).toBeInTheDocument();
+  });
+});
+
 describe('Settings > Personal agents', () => {
   it('lists agents, switches one on and adds a custom one', async () => {
     apiMocks.updatePersonalAgent.mockResolvedValue({ agent: { ...OFF, enabled: true } });
@@ -225,5 +260,93 @@ describe('Settings > Personal agents', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add' }));
     await waitFor(() => expect(apiMocks.createPersonalAgent).toHaveBeenCalledWith({
       id: 'mine', displayName: undefined, command: '/usr/local/bin/mine', args: ['--acp', '--quiet'] }));
+  });
+});
+
+
+describe('Settings > Personal agents: Gemini and Antigravity', () => {
+  const GEMINI = { ...OFF, enabled: true, status: 'needs_setup', version: '0.25.2', args: ['--experimental-acp'],
+    note: 'Gemini CLI 0.25.2, started with `--experimental-acp`. It signs in with a Google account. Since 2026-06-18 ...',
+    keyOption: { enabled: false, keySaved: true, billing: 'Google bills that key for every turn this agent runs.', blocked: null } };
+  const ANTIGRAVITY = { ...FAKE, id: 'antigravity', kind: 'preset', displayName: 'Antigravity (your setup)', enabled: false,
+    status: 'not_installed', command: 'agy_acp_server.par', note: 'Download first.',
+    termsNote: 'Google\'s FAQ says using Antigravity through third-party apps "is not supported under consumer plans". Your Google account carries that risk.',
+    install: { state: 'missing', version: '1.4.1', sizeBytes: 112737434, message: 'Download first.',
+      source: 'https://dl.google.com/agy-extensions/releases/macos/agy-acp-server-1.4.1-darwin-arm64.zip' },
+    signIn: { state: 'signed_out' } };
+
+  it('offers the Gemini key off by default, says who bills it, and saves the choice', async () => {
+    apiMocks.fetchPersonalAgents.mockResolvedValue({ warningAcknowledged: true, agents: [GEMINI] });
+    apiMocks.updatePersonalAgent.mockResolvedValue({ agent: GEMINI });
+    render(<PersonalAgentsSection />);
+    const option = await screen.findByTestId('personal-agent-key-option');
+    const toggle = within(option).getByRole('switch', { name: 'Use my Gemini API key from Nebula' });
+    expect(toggle).not.toBeChecked();
+    expect(within(option).getByText(/Google bills that key/)).toBeInTheDocument();
+    expect(screen.getByText(/2026-06-18/)).toBeInTheDocument();
+    fireEvent.click(toggle);
+    await waitFor(() => expect(apiMocks.updatePersonalAgent).toHaveBeenCalledWith('gemini', { useNebulaKey: true }));
+  });
+
+  it('can not turn the Gemini key on before a key is saved', async () => {
+    apiMocks.fetchPersonalAgents.mockResolvedValue({ warningAcknowledged: true, agents: [
+      { ...GEMINI, keyOption: { ...GEMINI.keyOption, keySaved: false } }] });
+    render(<PersonalAgentsSection />);
+    const option = await screen.findByTestId('personal-agent-key-option');
+    expect(within(option).getByRole('switch', { name: 'Use my Gemini API key from Nebula' })).toBeDisabled();
+    expect(within(option).getByText(/Save a Gemini API key/)).toBeInTheDocument();
+  });
+
+  it('shows the terms note and walks download, sign-in and sign-out through the backend', async () => {
+    apiMocks.fetchPersonalAgents.mockResolvedValue({ warningAcknowledged: true, agents: [ANTIGRAVITY] });
+    apiMocks.antigravityAction.mockResolvedValue({ agent: ANTIGRAVITY });
+    render(<PersonalAgentsSection />);
+    const panel = await screen.findByTestId('personal-agent-download');
+    expect(screen.getByRole('note')).toHaveTextContent('not supported under consumer plans');
+    expect(within(panel).getByText(/dl.google.com, pinned to 1.4.1 and checked by SHA-256/)).toBeInTheDocument();
+    fireEvent.click(within(panel).getByRole('button', { name: 'Download 1.4.1 (113 MB)' }));
+    await waitFor(() => expect(apiMocks.antigravityAction).toHaveBeenCalledWith('install'));
+
+    cleanup();
+    apiMocks.fetchPersonalAgents.mockResolvedValue({ warningAcknowledged: true, agents: [{ ...ANTIGRAVITY,
+      status: 'needs_setup', install: { ...ANTIGRAVITY.install, state: 'installed' },
+      signIn: { state: 'waiting', job: { state: 'running', message: 'Finish signing in with Google in your browser.',
+        signInUrl: 'https://accounts.google.com/o/oauth2/auth?x=1' } } }] });
+    render(<PersonalAgentsSection />);
+    const waiting = await screen.findByTestId('personal-agent-download');
+    expect(within(waiting).getByRole('link', { name: /Open Google.s sign-in page/ }))
+      .toHaveAttribute('href', 'https://accounts.google.com/o/oauth2/auth?x=1');
+    fireEvent.click(within(waiting).getByRole('button', { name: 'Cancel sign-in' }));
+    await waitFor(() => expect(apiMocks.antigravityAction).toHaveBeenCalledWith('cancel-sign-in'));
+
+    cleanup();
+    apiMocks.fetchPersonalAgents.mockResolvedValue({ warningAcknowledged: true, agents: [{ ...ANTIGRAVITY,
+      status: 'disabled', install: { ...ANTIGRAVITY.install, state: 'installed' }, signIn: { state: 'signed_in' } }] });
+    render(<PersonalAgentsSection />);
+    const signedIn = await screen.findByTestId('personal-agent-download');
+    fireEvent.click(within(signedIn).getByRole('button', { name: 'Sign out' }));
+    await waitFor(() => expect(apiMocks.antigravityAction).toHaveBeenCalledWith('sign-out'));
+    expect(within(signedIn).getByRole('button', { name: 'Remove download' })).toBeInTheDocument();
+  });
+
+  it('follows a download while it runs', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      apiMocks.fetchPersonalAgents.mockResolvedValue({ warningAcknowledged: true, agents: [{ ...ANTIGRAVITY,
+        install: { ...ANTIGRAVITY.install, state: 'downloading',
+          job: { state: 'running', message: 'Downloading from dl.google.com…', receivedBytes: 40_000_000, totalBytes: 112737434 } } }] });
+      render(<PersonalAgentsSection />);
+      expect(await screen.findByText(/40 MB of 113 MB/)).toBeInTheDocument();
+      const calls = apiMocks.fetchPersonalAgents.mock.calls.length;
+      // The poll starts in an effect after the list renders. Let React run it
+      // before the clock moves: run alone, this test moved the clock first and
+      // no poll was set yet (0 timers), so it failed every time.
+      await act(async () => {});
+      expect(vi.getTimerCount()).toBeGreaterThan(0);
+      await act(async () => { vi.advanceTimersByTime(2100); });
+      expect(apiMocks.fetchPersonalAgents.mock.calls.length).toBeGreaterThan(calls);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

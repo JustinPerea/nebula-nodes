@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { commonsApi } from '../../lib/commonsApi';
 import type { CommonsStatus, FolderLink } from '../../lib/commonsTypes';
 import { saveBlob } from '../../lib/commonsFiles';
+import { failureMessage } from '../../lib/errorCopy';
 
 interface Props {
   status: CommonsStatus | null;
@@ -86,7 +87,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
         setSettings(s);
         setCandidates(c);
       },
-      (e: Error) => { if (!cancelled) setError(e.message); },
+      (e: unknown) => { if (!cancelled) setError(failureMessage(e, "Couldn't load the Commons settings.")); },
     );
     return () => { cancelled = true; };
   }, []);
@@ -102,7 +103,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
       onChanged();
       return true;
     } catch (e) {
-      setError((e as Error).message);
+      setError(failureMessage(e, "Couldn't save the settings."));
       // The write may have committed even if its read-back failed. Preserve
       // the error without inviting the user to submit that write again.
       if (committed) onChanged();
@@ -115,17 +116,21 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
       const blob = await commonsApi.exportZip();
       await saveBlob(blob, `commons-export-${new Date().toISOString().slice(0, 10)}.zip`);
     } catch (e) {
-      setError((e as Error).message);
+      setError(failureMessage(e, "Couldn't export the Commons."));
     }
   };
 
+  // The panel's name, at every width (GM review of p157: folded into More,
+  // the panel had no title anywhere). Under the page's h1, "Commons".
+  const headingId = useId();
   return (
-    <div className="commons-settings">
+    <section className="commons-settings" aria-labelledby={headingId}>
+      <h2 id={headingId} className="commons-heading commons-panel-title">Settings</h2>
       {error && <p className="commons-notice commons-notice--error" role="alert">{error}</p>}
       {message && <p className="commons-notice" role="status">{message}</p>}
 
       <section className="commons-detail__section" aria-label="Linked folders">
-        <h2 className="commons-heading">Linked folders</h2>
+        <h3 className="commons-heading">Linked folders</h3>
         <ul className="commons-folders">
           {folders.map((link) => <FolderRow key={link.id} link={link} run={run} />)}
         </ul>
@@ -156,7 +161,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
       </section>
 
       <section className="commons-detail__section" aria-label="Meter">
-        <h2 className="commons-heading">Meter</h2>
+        <h3 className="commons-heading">Meter</h3>
         {status && (
           <p className="commons-meta">
             Analysis calls today {status.meter.calls} / {status.meter.cap}
@@ -191,7 +196,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
       </section>
 
       <section className="commons-detail__section" aria-label="Vocabulary candidates">
-        <h2 className="commons-heading">Vocabulary candidates</h2>
+        <h3 className="commons-heading">Vocabulary candidates</h3>
         {candidates.length === 0 ? (
           <p className="commons-meta">No new terms proposed yet.</p>
         ) : (
@@ -210,7 +215,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
       </section>
 
       <section className="commons-detail__section" aria-label="Maintenance">
-        <h2 className="commons-heading">Maintenance</h2>
+        <h3 className="commons-heading">Maintenance</h3>
         <div className="commons-detail__actions">
           <button
             type="button" className="commons-button"
@@ -233,6 +238,6 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
           <button type="button" className="commons-button" onClick={() => void exportZip()}>Export zip</button>
         </div>
       </section>
-    </div>
+    </section>
   );
 }

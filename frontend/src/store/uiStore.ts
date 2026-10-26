@@ -15,6 +15,7 @@ import type { ProviderSetupTarget } from '../lib/providerReadiness';
 import { useProviderReadinessStore } from './providerReadinessStore';
 import { useGraphStore } from './graphStore';
 import { ONBOARDING_TOUR } from '../lib/onboarding';
+import { holdCommonsExits, type CommonsHold } from '../lib/commonsUnsaved';
 
 const AGENT_LOG_ENABLED_KEY = 'nebula:agentLog:enabled';
 const CANVAS_PERF_MODE_KEY = 'nebula:canvas:perfMode';
@@ -202,6 +203,11 @@ interface UIState {
    * Flow's start, or its first fit), not one the person moved: opening a
    * project doesn't make it an unsaved change (projectStore). */
   canvasViewportInitial?: boolean;
+  /** canvasViewport is a later move the canvas made itself (its fit after an
+   * agent's nodes land, an arrange's reveal; lib/canvasCameraOwner), not the
+   * person's pan or zoom: projectStore saves it with the change that caused
+   * it, without reading "Unsaved changes" or restarting the autosave wait. */
+  canvasViewportByCanvas?: boolean;
   /** Invalidates delayed initialization after an authoritative graph replacement. */
   canvasViewportRevision: number;
   /** Counts fresh-canvas panel resets (a project opened, created or deleted). */
@@ -287,6 +293,9 @@ interface UIState {
   settingsProviderTarget: ProviderSetupTarget | null;
   skin: SkinId;
   agentLogEnabled: boolean;
+  /** The Agent log is expanded (not saved; it starts collapsed). The Updates
+   * list's "See all actions →" opens it (PR9a). */
+  agentLogOpen: boolean;
   canvasPerfMode: boolean;
   canvasLowDetail: boolean;
   /** Zoomed out past the level-of-detail cutoff (lib/canvasOverview.ts); set by the canvas. */
@@ -304,7 +313,7 @@ interface UIState {
   inspectorPinned: boolean;
 
   enterEditor: (sourceNodeId: string) => void;
-  setCanvasViewport: (viewport: Viewport, options?: { initial?: boolean }) => void;
+  setCanvasViewport: (viewport: Viewport, options?: { initial?: boolean; byCanvas?: boolean }) => void;
   clearCanvasViewport: () => void;
   setCinemaSelectedShot: (nodeId: string, shotId: string | null) => void;
   clearCinemaSelectedShots: () => void;
@@ -366,6 +375,9 @@ interface UIState {
   setKreaConnection: (connection: KreaConnectionState) => void;
   setKreaConnectionMode: (mode: KreaConnectionMode) => void;
   setAgentLogEnabled: (enabled: boolean) => void;
+  setAgentLogOpen: (open: boolean) => void;
+  /** Expand the Agent log ("See all actions →"). Does nothing while it is switched off. */
+  openAgentLog: () => void;
   setCanvasPerfMode: (enabled: boolean) => void;
   setCanvasLowDetail: (enabled: boolean) => void;
   setCanvasZoomedOut: (zoomedOut: boolean) => void;
@@ -385,7 +397,30 @@ interface UIState {
   resetPanelsForFreshCanvas: (options?: { canvasEmpty?: boolean }) => void;
 }
 
-export const useUIStore = create<UIState>((set, get) => ({
+let commonsOffHeld = false;
+/**
+ * While the Commons holds unsaved labels nothing leaves it (commons-exits):
+ * a write's viewMode is dropped (Back, the hash routes, a project load, a
+ * graph import, an agent's Show node, the tour), and the capability going
+ * off waits until the Commons is clean, then leaves as it would have. One
+ * that sends the person to the canvas also makes the canvas where Back goes:
+ * those writers (a project load, an import, a node focus) are the ones that
+ * make the studio the Commons was opened from stale.
+ */
+const holdCommons: CommonsHold<UIState> = (state, next, later) => {
+  if (state.viewMode !== 'commons' || !state.commonsEnabled) return next;
+  if (next.commonsEnabled !== undefined) commonsOffHeld = !next.commonsEnabled;
+  if ((next.viewMode === undefined || next.viewMode === 'commons') && next.commonsEnabled !== false) return next;
+  const { viewMode, commonsEnabled, ...rest } = next;
+  if (commonsEnabled === false) {
+    later(() => {
+      if (commonsOffHeld) { commonsOffHeld = false; useUIStore.getState().setCommonsEnabled(false); }
+    });
+  }
+  return viewMode === 'canvas' ? { ...rest, commonsReturnView: 'canvas' } : rest;
+};
+
+export const useUIStore = create<UIState>(holdCommonsExits(holdCommons, (set, get) => ({
   selectedNodeId: null,
   canvasViewport: null,
   canvasViewportRevision: 0,
@@ -434,6 +469,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   settingsProviderTarget: null,
   skin: loadSkin(),
   agentLogEnabled: loadAgentLogEnabled(),
+  agentLogOpen: false,
   canvasPerfMode: loadCanvasPref(CANVAS_PERF_MODE_KEY),
   canvasLowDetail: loadCanvasPref(CANVAS_LOW_DETAIL_KEY),
   canvasZoomedOut: false,
@@ -450,7 +486,8 @@ export const useUIStore = create<UIState>((set, get) => ({
     if (![viewport.x, viewport.y, viewport.zoom].every(Number.isFinite) || viewport.zoom <= 0) return;
     const previous = get().canvasViewport;
     if (previous?.x === viewport.x && previous.y === viewport.y && previous.zoom === viewport.zoom) return;
-    set({ canvasViewport: { x: viewport.x, y: viewport.y, zoom: viewport.zoom }, canvasViewportInitial: options?.initial });
+    set({ canvasViewport: { x: viewport.x, y: viewport.y, zoom: viewport.zoom }, canvasViewportInitial: options?.initial,
+      canvasViewportByCanvas: options?.byCanvas });
   },
 
   clearCanvasViewport: () => set((state) => ({
@@ -665,11 +702,14 @@ export const useUIStore = create<UIState>((set, get) => ({
     if (!targetId) return;
     const graph = useGraphStore.getState();
     if (graph.nodes.some((node) => node.id === targetId)) {
-      graph.onNodesChange(graph.nodes.map((node) => ({
+      // Only the nodes whose selection changes: a change for every node
+      // copies every node, which re-renders every card.
+      const selectionChanges = graph.nodes.filter((node) => !!node.selected !== (node.id === targetId)).map((node) => ({
         id: node.id,
         type: 'select' as const,
         selected: node.id === targetId,
-      })));
+      }));
+      if (selectionChanges.length) graph.onNodesChange(selectionChanges);
       graph.onEdgesChange(graph.edges.filter((edge) => edge.selected).map((edge) => ({
         id: edge.id, type: 'select' as const, selected: false,
       })));
@@ -829,6 +869,12 @@ export const useUIStore = create<UIState>((set, get) => ({
     set({ agentLogEnabled: enabled });
   },
 
+  setAgentLogOpen: (open) => set({ agentLogOpen: open }),
+
+  openAgentLog: () => {
+    if (get().agentLogEnabled) set({ agentLogOpen: true });
+  },
+
   setCanvasPerfMode: (enabled) => {
     persistCanvasPref(CANVAS_PERF_MODE_KEY, enabled);
     set({ canvasPerfMode: enabled });
@@ -938,7 +984,7 @@ export const useUIStore = create<UIState>((set, get) => ({
       },
     });
   },
-}));
+})));
 
 // Apply the supported appearance on module load so the first paint is correct.
 if (typeof document !== 'undefined') {

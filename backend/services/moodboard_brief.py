@@ -18,11 +18,14 @@ Avoid list; content intent goes into the brief as positive sentences.
 
 ``apply_to_generator`` is the one place a board reaches a generator's request
 (the engine calls it before any handler). A board at strength 0 is dropped
-first, as if it weren't wired (Q36 a). Otherwise the brief joins the prompt, the
-negatives fill a ``negative_prompt`` field when the model has one, and the
-Avoid list joins the prompt only for instruction-following models (GPT Image,
-Nano Banana, Krea 2). Diffusion-style models read "no X" as "X", so they never
-get it in the prompt.
+first, as if it weren't wired (Q36 a). Then it resolves the node's moodboard
+adapter entry (``services/moodboard_adapters.py``, plan section 5.7.3 step 2)
+and sends the text through it: the brief joins the prompt, the negatives fill
+a ``negative_prompt`` field when the model has one, and the Avoid list joins
+the prompt only for instruction-following models (GPT Image, Nano Banana,
+Krea 2). Diffusion-style models read "no X" as "X", so they never get it in
+the prompt. The Moodboard port is not passed on unless the entry's handler
+reads the board (step 8).
 
 ``migrate_board`` moves boards saved before these fields existed (B7).
 
@@ -116,13 +119,6 @@ _INSTRUCTION_FOLLOWING_PREFIXES = (
     "krea-image-google-nano-banana",
     "krea-image-krea-krea-2",
 )
-
-# Nodes whose handler reads the wired board itself (Krea 2 turns its images
-# into style references). Every other generator's Moodboard port exists only
-# for the brief, so the port is folded into the prompt and not passed on: a
-# handler that sends wired ports by name (Krea's catalog routes) would
-# otherwise send the bundle to the provider.
-_HANDLER_READS_BOARD = frozenset({"krea-2-generate"})
 
 # A board at strength 0 is off for every node it's wired into, text included
 # (Q36 a, Justin 2026-10-20): no brief, Avoid, negatives or images. The
@@ -682,22 +678,49 @@ def generator_analysis(board: dict[str, Any], analysis: dict[str, Any], brief: d
     to keep out, so an LLM node reading the bundle can't put a left-out
     colour back. The bundle's ``leftOut`` names what went, with why.
 
-    Set-aside images (``images[].setAside``, analysis version 5) are left
-    out, as the bundle's own ``images`` leaves them out: they never steer,
-    so a generator never sees them or their colours."""
-    from services.moodboard_analysis import _summary, _taste_profile, set_aside
+    Set-aside images are left out, as the bundle's own ``images`` leaves
+    them out: the switch (``images[].setAside``, analysis version 5) and
+    weight 0 (plan section 4.4). They never steer, so a generator never sees
+    them or their colours, and the summary counts only the images that
+    steer. The representative images keep only images that steer too: an
+    analysis from version 1 (before 2026-10-18) ranked weight-0 images
+    among them and stays current while the board is unchanged."""
+    from services.moodboard_analysis import _clamp_float, _summary, _taste_profile, steering_count, steers
+
+    from services.stored_image_refs import is_outside_link
 
     view = copy.deepcopy(analysis)
     if isinstance(view.get("images"), list):
-        view["images"] = [item for item in view["images"] if not (isinstance(item, dict) and item.get("setAside"))]
+        view["images"] = [item for item in view["images"] if not (isinstance(item, dict) and (
+            item.get("setAside") or _clamp_float(item.get("weight"), 1.0, 0.0, 1.0) <= 0
+            or is_outside_link(str(item.get("url") or ""))))]
+    steering_urls = {str(img.get("url") or "").strip() for img in board.get("images") or []
+                     if isinstance(img, dict) and steers(img)}
+    # A URL no board image has is left as it was: only a set-aside one goes.
+    held_urls = {str(img.get("url") or "").strip() for img in board.get("images") or [] if isinstance(img, dict)}
+
+    def steering_only(urls: Any) -> Any:
+        if not isinstance(urls, list):
+            return urls
+        # Never a link to another site (services/stored_image_refs.py): a
+        # board or analysis saved before writes were checked may name one.
+        return [url for url in urls if not (isinstance(url, str) and is_outside_link(url))
+                and (not isinstance(url, str) or url.strip() not in held_urls or url.strip() in steering_urls)]
+
+    if "representativeImages" in view:
+        view["representativeImages"] = steering_only(view["representativeImages"])
+    krea_hint = (view.get("providerHints") or {}).get("krea") if isinstance(view.get("providerHints"), dict) else None
+    if isinstance(krea_hint, dict) and "representativeImages" in krea_hint:
+        krea_hint["representativeImages"] = steering_only(krea_hint["representativeImages"])
     notes_sent = bool(brief.get("notesSent"))
     notes = str(board.get("notes") or "").strip() if notes_sent else ""
     mode = str(analysis.get("mode") or board.get("mode") or "look")
     keywords = generator_keywords(analysis, notes_sent)
     palette, accents = list(brief.get("palette") or []), list(brief.get("accents") or [])
-    count = len([img for img in board.get("images") or [] if isinstance(img, dict) and not set_aside(img)])
+    count, has_images, outside_only = steering_count(board)
     view["keywords"] = keywords
-    view["summary"] = _summary(mode, count, palette, accents, notes)
+    view["summary"] = _summary(mode, count, palette, accents, notes, has_images=has_images,
+                               outside_only=outside_only)
     view["tasteProfile"] = _taste_profile(mode, keywords, palette)
     if not notes_sent:
         view["subjectBias"] = []
@@ -831,28 +854,56 @@ def apply_to_generator(
     definition: dict[str, Any] | None,
     inputs: dict[str, Any],
     params: dict[str, Any],
+    *,
+    api_keys: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Fold wired boards into a generator's prompt and negative field.
 
     Returns new ``inputs`` and the params to use for this call (the node's own
     params are left alone, so a saved recipe doesn't collect the board's
-    negatives). A board at strength 0 is taken out first, with the run note
-    ``BOARD_STRENGTH_ZERO_NOTE`` (Q36 a), so none of its text, negatives or
-    images reach the node. The Moodboard port itself is not passed on unless
-    the handler reads the board (``_HANDLER_READS_BOARD``). A node with no
-    prompt, or no board wired, keeps its prompt and params as they are.
+    negatives). Plan section 5.7.3, steps 1, 2 and 8 (PR13; PR14 builds the
+    rest):
+
+    1. A board at strength 0 is taken out first, with the run note
+       ``BOARD_STRENGTH_ZERO_NOTE`` (Q36 a), so none of its text, negatives or
+       images reach the node.
+    2. The node's adapter entry is resolved for its params and the route the
+       run takes (``api_keys`` pick it, as the dual-route handler does). A
+       node with a Moodboard port and no entry can't pass the contract test;
+       if one runs anyway, the board goes as text only, with
+       ``moodboard_adapters.MISSING_ENTRY_NOTE``.
+    3. The text goes to the entry's text slot, the ``prompt`` input, as
+       today: a node with no prompt, or no board wired, keeps its prompt and
+       params as they are.
+    8. The Moodboard port is not passed on unless the entry's handler reads
+       the board (``handler: "reads-board"``, Krea 2 until PR15): a handler
+       that sends wired ports by name (Krea's catalog routes) would otherwise
+       send the bundle to the provider.
     """
+    from models.events import add_run_note
     from models.graph import PortValueDict
+    from services import moodboard_adapters
 
     inputs = _without_off_boards(inputs)
     bundles = board_bundles(inputs)
-    prompt_port = inputs.get("prompt")
+    entry: dict[str, Any] | None = None
+    board_port = has_board_port(definition)
+    if board_port and "moodboard" in inputs:
+        route = moodboard_adapters.run_route(definition, params, inputs, api_keys)
+        entry = moodboard_adapters.resolve(definition_id, params, route, definition=definition)
+    text_slot = (entry or {}).get("textSlot") or {}
+    prompt_key = text_slot.get("port") if isinstance(text_slot.get("port"), str) else "prompt"
+    prompt_port = inputs.get(prompt_key)
     prompt = getattr(prompt_port, "value", None)
     passed_on = inputs
-    if "moodboard" in inputs and definition_id not in _HANDLER_READS_BOARD and has_board_port(definition):
+    if "moodboard" in inputs and board_port and (entry or {}).get("handler") != "reads-board":
         passed_on = {key: port for key, port in inputs.items() if key != "moodboard"}
     if not bundles or not isinstance(prompt, str) or not prompt.strip():
         return passed_on, params
+    if board_port and entry is None:
+        # Said only when the text goes: with no prompt nothing goes, as on
+        # every node until PR14.
+        add_run_note(moodboard_adapters.MISSING_ENTRY_NOTE)
 
     instructions = follows_instructions(definition_id)
     briefs = [str(b.get("styleBrief") or "").strip() for b in bundles]
@@ -874,7 +925,7 @@ def apply_to_generator(
             new_params = {**params, "negative_prompt": ", ".join(merged)}
 
     new_inputs = dict(passed_on)
-    new_inputs["prompt"] = PortValueDict(type=prompt_port.type, value="\n\n".join(sections))
+    new_inputs[prompt_key] = PortValueDict(type=prompt_port.type, value="\n\n".join(sections))
     return new_inputs, new_params
 
 
@@ -1029,14 +1080,16 @@ def migrate_store(root: Path, backup_root: Path) -> dict[str, Any]:
     are not touched, so running it again does nothing.
     """
     from services.asset_trash import RECORD_SUFFIX, is_trash_folder
-    from services.moodboard_store import _write_json
+    from services.moodboard_store import _write_json, board_scopes
 
     report: dict[str, Any] = {"migrated": [], "skipped": [], "backupDir": None}
     if not root.exists():
         return report
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     backup_dir = backup_root / f"brief-fields-{stamp}"
-    for scope in sorted(p for p in root.iterdir() if p.is_dir()):
+    # The board folders and the trash only: other dot folders hold side files
+    # (Updates, later the word history), which are not boards.
+    for scope in board_scopes(root):
         files = sorted(scope.glob("*.json"))
         if is_trash_folder(scope):
             # Boards in Recently deleted migrate too, so a restore brings one
@@ -1092,12 +1145,12 @@ def save_colour_checks(root: Path) -> dict[str, Any]:
     holds, so no backup. Boards in Recently deleted get one too. Running it
     again does nothing."""
     from services.asset_trash import RECORD_SUFFIX, is_trash_folder
-    from services.moodboard_store import _write_json
+    from services.moodboard_store import _write_json, board_scopes
 
     report: dict[str, Any] = {"saved": [], "skipped": []}
     if not root.exists():
         return report
-    for scope in sorted(p for p in root.iterdir() if p.is_dir()):
+    for scope in board_scopes(root):
         files = sorted(scope.glob("*.json"))
         if is_trash_folder(scope):
             files = [path for path in files if not path.name.endswith(RECORD_SUFFIX)]

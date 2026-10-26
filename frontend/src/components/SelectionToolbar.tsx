@@ -15,12 +15,14 @@ import { useCanvasPinsStore } from '../store/canvasPinsStore';
 import { isBackendNodeId } from '../lib/canvasPins';
 import { describeRunScope, runChipLabel, summarizeRunScope } from '../lib/runScope';
 import { usePricingStore } from '../store/pricingStore';
+import { useInputSizeStore } from '../store/inputSizeStore';
 import { setSelectionActionSlot } from '../lib/selectionActionSlot';
 import {
   collectDownloadableOutputs,
   downloadSelectedOutputs,
   selectedNodeIds,
 } from '../lib/canvasSelection';
+import { failureMessage } from '../lib/errorCopy';
 
 
 export function SelectionToolbar() {
@@ -49,9 +51,13 @@ export function SelectionToolbar() {
   // several run as an explicit cluster.
   const pricing = usePricingStore((s) => s.table);
   const apiKeys = useUIStore((s) => s.settingsCache.apiKeys);
+  const sizes = useInputSizeStore((s) => s.sizes);
+  const requestSizes = useInputSizeStore((s) => s.request);
   const runScope = useMemo(() => summarizeRunScope(nodes, edges ?? [],
     ids.length === 1 ? { kind: 'node', nodeId: ids[0] } : { kind: 'cluster', nodeIds: ids },
-    { pricing, apiKeys }), [nodes, edges, ids, pricing, apiKeys]);
+    { pricing, apiKeys, sizes }), [nodes, edges, ids, pricing, apiKeys, sizes]);
+  const sizeRefs = runScope.cost?.sizeRefs;
+  useEffect(() => { if (sizeRefs?.length) requestSizes(sizeRefs); }, [sizeRefs, requestSizes]);
   const runChip = runChipLabel(runScope);
   const runScopeId = useId();
   // "Ask agent" focuses the chat box once the panel has opened. A toolbar
@@ -78,15 +84,16 @@ export function SelectionToolbar() {
     try {
       await downloadSelectedOutputs(selectedNodes);
     } catch (error) {
-      setDownloadError(error instanceof Error ? error.message : String(error));
+      setDownloadError(failureMessage(error, "Couldn't download the outputs."));
     } finally {
       setDownloading(false);
     }
   }
 
   function removeSelection() {
-    const noun = ids.length === 1 ? 'node' : 'nodes';
-    if (window.confirm(`Delete ${ids.length} selected ${noun}?`)) deleteSelected();
+    // A World Labs hold refuses, with its notice; otherwise it deletes at
+    // once and says "Deleted {n} nodes." with Undo (GM, 2026-10-23).
+    if (useGraphStore.getState().allowCanvasDelete(ids)) deleteSelected();
   }
 
   function runSelection() {

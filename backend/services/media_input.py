@@ -25,6 +25,7 @@ import math
 import mimetypes
 from pathlib import Path
 from urllib.parse import unquote_to_bytes, urlsplit
+from execution.person_line import missing_file_line, with_person_line
 
 
 def _megabytes(limit: int) -> str:
@@ -32,7 +33,7 @@ def _megabytes(limit: int) -> str:
 
 
 def too_large(label: str, limit: int) -> ValueError:
-    return ValueError(f"{label} is larger than {_megabytes(limit)}, the most this provider takes")
+    return with_person_line(ValueError(f"{label} is larger than {_megabytes(limit)}, the most this provider takes"), f"{label} is larger than {_megabytes(limit)}, the most this provider takes. Connect a smaller one.")
 
 
 def is_loopback_host(hostname: str) -> bool:
@@ -75,7 +76,7 @@ def checked_local_file(value: str | Path, *, label: str, max_bytes: int) -> Path
 
     path = require_allowed_path(value)
     if not path.is_file():
-        raise ValueError(f"{label} not found: {value}")
+        raise with_person_line(ValueError(f"{label} not found: {value}"), missing_file_line(label, value))
     if path.stat().st_size > max_bytes:
         raise too_large(label, max_bytes)
     return path
@@ -119,7 +120,7 @@ async def load_media(value: str, *, label: str, max_bytes: int, timeout: float =
 
     text = str(value).strip()
     if not text:
-        raise ValueError(f"{label} is empty")
+        raise with_person_line(ValueError(f"{label} is empty"), f"{label} is empty. Connect another one.")
     if text.startswith("data:"):
         return decode_data_uri(text, label=label, max_bytes=max_bytes)
     text = owned_output_value(text)

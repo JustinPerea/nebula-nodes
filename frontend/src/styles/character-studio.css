@@ -390,8 +390,8 @@ body.app-slava-restraint .character-def__textarea {
 body.app-slava-restraint .character-def__input:focus,
 body.app-slava-restraint .character-def__select:focus,
 body.app-slava-restraint .character-def__textarea:focus {
-  outline: none;
-  border-color: var(--sr-accent);
+  outline: var(--sr-focus-outline);
+  outline-offset: var(--sr-focus-offset);
 }
 
 body.app-slava-restraint .character-def__textarea {
@@ -482,6 +482,7 @@ body.app-slava-restraint .character-def__ref-add:disabled {
 
 /* ── Inline notices (load / guard / save errors) ─────────────────────────── */
 body.app-slava-restraint .character-studio-view__notice {
+  text-wrap: pretty;
   font-size: 12px;
   line-height: 1.45;
   padding: 8px 12px;
@@ -503,6 +504,23 @@ body.app-slava-restraint .character-studio-view__notice--warn {
 body.app-slava-restraint .character-studio-view__notice--error {
   border-color: #e0796b;
   color: #e0796b;
+}
+
+/* Someone else changed a field the person was editing: theirs is kept, and
+   this says so. It springs in (the undo notice's spring) so it's seen. */
+body.app-slava-restraint .character-studio-view__notice--conflict {
+  --character-studio-spring: linear(0, 0.049, 0.163, 0.305, 0.452, 0.588, 0.705, 0.801, 0.876, 0.931, 0.97, 0.995, 1.011, 1.019, 1.022, 1.022, 1.02, 1.017, 1.014, 1.011, 1.008, 1.005, 1.003, 1.002, 1);
+  color: var(--sr-ink);
+  animation: character-studio-note-in 420ms var(--character-studio-spring) both;
+}
+
+@keyframes character-studio-note-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .character-studio-view__notice--conflict { animation: none; }
 }
 
 body.app-slava-restraint .character-studio-view__retry {
@@ -620,6 +638,10 @@ body.app-slava-restraint .assets-panel__search {
   background: var(--sr-glass, rgba(255, 255, 255, 0.5));
   color: var(--sr-ink, #1a1a1a);
 }
+body.app-slava-restraint .assets-panel__search:focus-visible {
+  outline: var(--sr-focus-outline);
+  outline-offset: var(--sr-focus-offset);
+}
 
 body.app-slava-restraint .character-palette__scope {
   display: flex;
@@ -647,7 +669,7 @@ body.app-slava-restraint .assets-item--selected .assets-item__select {
 
 body.app-slava-restraint .assets-item__select:focus-visible,
 body.app-slava-restraint .assets-item__action:focus-visible {
-  outline: 2px solid var(--sr-accent);
+  outline: var(--sr-focus-outline);
   outline-offset: 1px;
 }
 

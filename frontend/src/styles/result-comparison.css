@@ -136,7 +136,7 @@ body.app-slava-restraint .result-comparison__reuse:hover {
 }
 
 body.app-slava-restraint .result-comparison :is(button, summary, video):focus-visible {
-  outline: 2px solid var(--sr-accent);
+  outline: var(--sr-focus-outline);
   outline-offset: 3px;
 }
 

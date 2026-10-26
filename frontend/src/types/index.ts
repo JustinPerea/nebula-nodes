@@ -371,7 +371,14 @@ export interface CinemaShot {
   refImageUrls?: string[];
   /** Lets one shot deviate from the shared palette/look without breaking the rest. */
   overrides?: { palette?: Partial<CinemaSceneSpec['palette']>; look?: Partial<CinemaSceneSpec['look']> };
-  output?: { imageUrl?: string; status: 'idle' | 'running' | 'done' | 'error'; error?: string; hash?: string };
+  /** `error` is the text agents read. The error* fields are how the Cinema
+   *  panel reads a failure, as a node card reads its run error (error copy
+   *  round 3c-2): the classifier's category and line, the handler's person
+   *  line, and the full raw text for Details when `error` was cut. */
+  output?: { imageUrl?: string; status: 'idle' | 'running' | 'done' | 'error'; error?: string; hash?: string;
+    errorCategory?: string; errorFriendly?: string; errorPerson?: string; errorProviderText?: boolean;
+    /** The provider the shot's base model called (round 3f): GM's general line names it. */
+    errorProvider?: string; errorRaw?: string };
   /** Candidate variations of this shot (one base-model run per distinct seed).
    *  The canonical image (output.imageUrl, the dynamic port, Send-to-motion) is
    *  the `selectedVariation`. Persists on the scene spec so save/load keeps them. */
@@ -619,7 +626,9 @@ export interface MoodboardAnalysisImage {
   id: string;
   url: string;
   weight: number;
-  status: 'analyzed' | 'unresolved' | 'error';
+  /** `outside`: an image link from outside Nebula on a board saved before
+   *  board images were checked (contract 07 §1.19), never fetched. */
+  status: 'analyzed' | 'unresolved' | 'error' | 'outside';
   /** Set aside (version 5 on): measured, never steers. Absent otherwise. */
   setAside?: boolean;
   colors?: Array<{ hex: string; share: number; accent: boolean }>;
@@ -715,7 +724,16 @@ export interface Moodboard {
   frames?: MoodboardFrame[];
   suggestions?: Array<Record<string, unknown>>;
   readings?: Record<string, Record<string, unknown>>;
+  /** The id of the image the board opens on (lib/moodboardCover); null or
+   *  absent: it opens on #1. A pick, not a reorder: no image changes number,
+   *  and nothing that generates reads it. Set with the `cover` op. */
+  coverImageId?: string | null;
+  /** The server's: the cover image's url, else #1's. */
   thumbnail: string;
+  /** The server's, on read only: ids of images that are links to another
+   *  site (a board saved before images were checked). Never loaded: the app
+   *  draws board images through lib/storedImage.ts. */
+  outsideImages?: string[];
   projectId?: string;
   createdAt: string;
   updatedAt: string;
@@ -779,6 +797,19 @@ export interface NodeData {
    *  still holds the raw provider string for the expandable debug details. */
   errorCategory?: string;
   errorFriendly?: string;
+  /** The person's line for a run error (error copy round 3c, GM - Design:
+   *  "the canvas shows the written line"): the handler wrote it, with no ids
+   *  or record names. `error` keeps the specific text for agents; the card
+   *  never shows it beside this line (lib/nodeErrorCopy.ts). */
+  errorPerson?: string;
+  /** That line was written for a provider's answer (round 3d, GM: "Raw
+   *  provider text stays behind Details in every case."): the card keeps
+   *  `error`, the provider's words, behind Details. */
+  errorProviderText?: boolean;
+  /** The provider the run called, from the route the backend took (round 3f,
+   *  the ErrorEvent's `provider`): the card's general line says "Details
+   *  shows what {Provider} said." Never read from `error`'s text. */
+  errorProvider?: string;
   /** UI-only: why the latest run skipped this node, e.g. "Jev Decide failed
    *  (answered no, 0.12)", and the gate node that caused it. */
   skipReason?: string;

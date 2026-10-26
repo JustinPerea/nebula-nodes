@@ -17,6 +17,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from commons import analysis_errors
 from commons.records import validate_box
 from commons.search import AXES
 from services.agent_process import spawn_agent_process, terminate_agent_process_tree
@@ -71,6 +72,8 @@ class ReaderResult:
     duration_ms: int
     event_types: list[str] = field(default_factory=list)
     error: str | None = None
+    # Why it failed, for the person's UI (commons/analysis_errors.py); None on success.
+    error_kind: str | None = None
 
 
 def _field(value_schema: dict) -> dict:
@@ -144,7 +147,7 @@ async def read_image(png: bytes, palette: list[dict], fewshots: list[dict], *, v
             proc = await spawn(*cmd, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
                                stderr=asyncio.subprocess.PIPE, cwd=cwd, env=child_env())
         except OSError as exc:
-            return ReaderResult(None, None, None, 0, [], f"cannot start claude: {exc}")
+            return ReaderResult(None, None, None, 0, [], f"cannot start claude: {exc}", analysis_errors.UNAVAILABLE)
         try:
             out, err = await asyncio.wait_for(proc.communicate(payload), timeout=timeout)
         except (asyncio.TimeoutError, asyncio.CancelledError) as exc:
@@ -156,7 +159,8 @@ async def read_image(png: bytes, palette: list[dict], fewshots: list[dict], *, v
             await _kill(proc)
             if isinstance(exc, asyncio.CancelledError):
                 raise
-            return ReaderResult(None, None, None, int((time.monotonic() - started) * 1000), [], "reader timed out")
+            return ReaderResult(None, None, None, int((time.monotonic() - started) * 1000), [], "reader timed out",
+                                analysis_errors.UNAVAILABLE)
     types: list[str] = []
     model = None
     result = None
@@ -171,17 +175,33 @@ async def read_image(png: bytes, palette: list[dict], fewshots: list[dict], *, v
             model = event.get("model")
             tools = event.get("tools") or []
             if any(t != "StructuredOutput" for t in tools):
-                return ReaderResult(None, None, model, 0, types, f"reader had unexpected tools: {tools}")
+                return ReaderResult(None, None, model, 0, types, f"reader had unexpected tools: {tools}",
+                                    analysis_errors.OTHER)
         if kind == "result":
             result = event
     ms = int((time.monotonic() - started) * 1000)
     if result is None:
+        # The CLI ended without an answer: it never reached the model, or lost it.
         return ReaderResult(None, None, model, ms, types,
-                            f"no result event (rc={proc.returncode}): {err.decode(errors='replace')[-400:]}")
+                            f"no result event (rc={proc.returncode}): {err.decode(errors='replace')[-400:]}",
+                            analysis_errors.UNAVAILABLE)
     raw = result.get("result") if isinstance(result.get("result"), str) else json.dumps(result.get("structured_output"))
     if result.get("is_error") or not isinstance(result.get("structured_output"), dict):
-        return ReaderResult(None, raw, model, ms, types, f"reader error: {result.get('subtype')}")
+        return ReaderResult(None, raw, model, ms, types, f"reader error: {result.get('subtype')}",
+                            _result_error_kind(result))
     return ReaderResult(result["structured_output"], raw, model, ms, types, None)
+
+
+def _result_error_kind(result: dict) -> str:
+    """Why a result event carries no analysis: the provider down or slow
+    (an error whose text says so), the model declining or not reading the
+    image (a refusal, or an answer without the structure), or else other."""
+    text = result.get("result") if isinstance(result.get("result"), str) else ""
+    if result.get("is_error"):
+        return analysis_errors.classify_provider_text(text) or (
+            analysis_errors.UNREADABLE if analysis_errors.looks_like_refusal(text) else analysis_errors.OTHER)
+    # It answered, but not with the analysis: it declined, or couldn't read the image.
+    return analysis_errors.UNREADABLE
 
 
 async def _kill(proc) -> None:

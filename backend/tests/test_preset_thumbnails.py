@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import main as m  # noqa: E402
 import services.preset_store as ps  # noqa: E402
+from tests.conftest import stored_image_urls  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -203,18 +204,20 @@ def test_put_preset_sets_thumbnail(fresh, client):
     }).json()
     pid = created["id"]
 
-    updated = client.put(f"/api/presets/{pid}", json={"thumbnail": "/api/outputs/foo.webp"}).json()
-    assert updated["thumbnail"] == "/api/outputs/foo.webp"
+    thumb = stored_image_urls(1, name="foo")[0]  # one of Nebula's files (services/stored_image_refs.py)
+    updated = client.put(f"/api/presets/{pid}", json={"thumbnail": thumb}).json()
+    assert updated["thumbnail"] == thumb
 
     got = client.get(f"/api/presets/{pid}").json()
-    assert got["thumbnail"] == "/api/outputs/foo.webp"
+    assert got["thumbnail"] == thumb
 
 
 def test_post_preset_with_thumbnail(fresh, client):
     """POST /api/presets with thumbnail field stores it on creation."""
+    thumb = stored_image_urls(1, name="thumb")[0]
     created = client.post("/api/presets", json={
         "name": "Styled", "category": "Style", "prompt": "y",
         "params": {}, "modelId": None, "refImages": [], "scope": "global",
-        "thumbnail": "/api/outputs/thumb.webp",
+        "thumbnail": thumb,
     }).json()
-    assert created["thumbnail"] == "/api/outputs/thumb.webp"
+    assert created["thumbnail"] == thumb

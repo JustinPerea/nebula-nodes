@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ReactFlow,
   Background,
@@ -8,8 +8,6 @@ import {
   useInternalNode,
   useStore,
   type Connection,
-  type NodeTypes,
-  type EdgeTypes,
   type OnConnectEnd,
   type OnConnectStart,
   type Viewport,
@@ -19,65 +17,35 @@ import '@xyflow/react/dist/style.css';
 import { useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
 import { useIsValidConnection } from '../hooks/useIsValidConnection';
-import { ModelNode } from './nodes/ModelNode';
-import { DynamicNode } from './nodes/DynamicNode';
-import { RerouteNode } from './nodes/RerouteNode';
-import { EditNode } from './nodes/EditNode';
-import { RemotionNode } from './nodes/RemotionNode';
-import { CinemaSceneNode } from './nodes/CinemaSceneNode';
-import { CharacterNode } from './nodes/CharacterNode';
-import { CameraRigNode } from './nodes/CameraRigNode';
-import { ReferenceSetNode } from './nodes/ReferenceSetNode';
-import { MoodboardNode } from './nodes/MoodboardNode';
-import { VideoQcNode } from './nodes/VideoQcNode';
-import { PaperSourceNode } from './nodes/PaperSourceNode';
-import { BatchNode } from './nodes/BatchNode';
-import { TypedEdge } from './edges/TypedEdge';
+import { CANVAS_EDGE_TYPES, CANVAS_NODE_TYPES } from './canvasTypes';
 import { ContextMenu } from './ContextMenu';
-import { ConnectionPopup } from './DeferredPanels';
+import { AgentNoteOutlines, ConnectionPopup } from './DeferredPanels';
 import { SelectionToolbar } from './SelectionToolbar';
 import { CanvasNavigation } from './CanvasNavigation';
-import { AgentCursorLayer } from './canvas/AgentCursorLayer';
-import { PinLayer } from './canvas/PinLayer';
 import { PinComposer } from './canvas/PinComposer';
-import { ProposalLayer } from './canvas/ProposalLayer';
-import { ProposalBar } from './canvas/ProposalBar';
+// Loaded after the first paint (lib/deferredChunks.ts); they draw only what the socket or a fetch brings in.
+import { AgentCursorLayer, PinLayer, ProposalBar, ProposalLayer } from './canvas/DeferredCanvasOverlays';
 import { CanvasViewReporter } from './canvas/CanvasViewReporter';
 import { ArrangeController } from './canvas/ArrangeController';
 import { selectMeasuring, useArrangeStore } from '../store/arrangeStore';
 import { CrabMarkAnimated } from './brand/CrabMarkAnimated';
 import { CHARACTER_DRAG_MIME, MOODBOARD_DRAG_MIME } from '../lib/dragMime';
-import { apiFetch } from '../lib/backend';
+import { addDroppedFiles, fileDropInFlight } from '../lib/canvasFileDrop';
 import { CANVAS_INTERACTION_PROPS } from '../lib/canvasNavigation';
 import { CANVAS_FIT_DURATION, CANVAS_ZOOM_DURATION, computeCanvasFitPadding } from '../lib/canvasFit';
 import { useFitCanvasView } from '../hooks/useFitCanvasView';
+import { cameraMoveIsCanvasOwn, cameraMoveStarted, claimCameraMove } from '../lib/canvasCameraOwner';
 import { CANVAS_LOD_ZOOM } from '../lib/canvasOverview';
 import { isCanvasShortcutTarget } from '../lib/canvasShortcutScope';
 import { boundingRect, UNMEASURED_NODE_SIZE, type NodeRect } from '../lib/nodePlacement';
+import { visibleFlowRect } from '../lib/visibleFlowRect';
 import type { NodeData } from '../types';
 import { NODE_RENAME_EVENT } from '../lib/keyboardShortcuts';
 import { publishCanvasSelection, selectedNodeIds } from '../lib/canvasSelection';
 import '../styles/canvas.css';
 
-const nodeTypes: NodeTypes = {
-  'model-node': ModelNode,
-  'dynamic-node': DynamicNode,
-  'reroute-node': RerouteNode,
-  editNode: EditNode,
-  remotionNode: RemotionNode,
-  cinemaSceneNode: CinemaSceneNode,
-  characterNode: CharacterNode,
-  cameraRigNode: CameraRigNode,
-  referenceSetNode: ReferenceSetNode,
-  moodboardNode: MoodboardNode,
-  videoQcNode: VideoQcNode,
-  paperSourceNode: PaperSourceNode,
-  batchNode: BatchNode,
-};
-
-const edgeTypes: EdgeTypes = {
-  'typed-edge': TypedEdge,
-};
+const nodeTypes = CANVAS_NODE_TYPES;
+const edgeTypes = CANVAS_EDGE_TYPES;
 
 const DEFAULT_FIT_MAX_ZOOM = 0.85;
 const FIRST_NODE_FIT_MAX_ZOOM = 0.62;
@@ -319,10 +287,15 @@ export function Canvas() {
   // The fitView prop's fit waits for nodes: on a canvas that mounted empty it
   // runs when a followed project's graph arrives, and is still the canvas's own.
   const initialFit = useRef(initialCanvasState.fitEnabled);
-  const rememberViewport = useCallback((viewport: Viewport, initial?: boolean) => {
+  // React Flow's own first fit (the fitView prop) waits for nodes. A drop
+  // places them where the person chose, so it cancels that waiting fit:
+  // otherwise the first file dropped on an empty canvas is zoomed to 400%
+  // and away from the drop point (fix/canvas-drop-files).
+  const [fitFirstNodes, setFitFirstNodes] = useState(initialCanvasState.fitEnabled);
+  const rememberViewport = useCallback((viewport: Viewport, options?: { initial?: boolean; byCanvas?: boolean }) => {
     const ui = useUIStore.getState();
     const canvasActive = ui.viewMode === 'canvas' || (ui.viewMode === 'commons' && !ui.commonsEnabled);
-    if (canvasMounted.current && canvasActive) ui.setCanvasViewport(viewport, { initial });
+    if (canvasMounted.current && canvasActive) ui.setCanvasViewport(viewport, options);
   }, []);
   const onViewportInitialized = useCallback((instance: { getViewport: () => Viewport }) => {
     // React Flow schedules onInit. An import can replace the graph before that
@@ -332,11 +305,14 @@ export function Canvas() {
     // still be waiting for node measurements. A quick studio visit must not
     // turn that temporary origin camera into a restored, never-fitted viewport.
     if (initialCanvasState.fitEnabled && useGraphStore.getState().nodes.length > 0) return;
-    rememberViewport(instance.getViewport(), true);
+    rememberViewport(instance.getViewport(), { initial: true });
   }, [initialCanvasState.fitEnabled, initialCanvasState.viewportRevision, rememberViewport]);
   const onViewportMove = useCallback((event: MouseEvent | TouchEvent | null, viewport: Viewport) => {
     // The first fit has no input event; the person's pan or zoom ends it.
-    rememberViewport(viewport, !event && initialFit.current);
+    // Later, the moves the canvas claimed (its fit after an agent's nodes
+    // land, an arrange's reveal) are its own too; projectStore saves them
+    // with that edit instead of reading them as unsaved changes.
+    rememberViewport(viewport, { initial: !event && initialFit.current, byCanvas: cameraMoveIsCanvasOwn(event) });
     initialFit.current = false;
   }, [rememberViewport]);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -438,6 +414,9 @@ export function Canvas() {
         typeof window !== 'undefined' &&
         (window as unknown as { __nebulaSuppressFitView?: boolean }).__nebulaSuppressFitView;
       if (suppressed) return;
+      // The person's own file drop: its nodes land where they dropped them,
+      // so the camera stays put (lib/canvasFileDrop.ts).
+      if (fileDropInFlight()) return;
       const focusState = useUIStore.getState();
       if (focusState.canvasFocusRequest) return;
       const scheduledRevision = focusState.canvasFocusRevision;
@@ -454,6 +433,8 @@ export function Canvas() {
           event instanceof CustomEvent && typeof event.detail?.totalCount === 'number'
             ? event.detail.totalCount
             : useGraphStore.getState().nodes.length;
+        // The canvas's own move: it never restarts the autosave wait.
+        claimCameraMove();
         fitView({
           padding,
           duration: 400,
@@ -472,6 +453,15 @@ export function Canvas() {
   // Track the connection being dragged so onConnectEnd knows what port it came from
   const connectStartRef = useRef<{ nodeId: string; handleId: string; handleType: 'source' | 'target' } | null>(null);
   const connectionSucceededRef = useRef(false);
+
+  // The Delete key: a node holding World Labs state stays, and the canvas
+  // says why (error copy round 3b). Refused here, before React Flow removes
+  // anything, so its wires stay too; one notice per press. Otherwise it
+  // deletes at once, and the store says "Deleted the node." with Undo: undo
+  // puts back everything a delete removed (GM, 2026-10-23, lib/deleteNotice.ts).
+  const onBeforeDelete = useCallback(async ({ nodes: doomed }: { nodes: { id: string }[] }) => (
+    doomed.length === 0 || useGraphStore.getState().allowCanvasDelete(doomed.map((node) => node.id))
+  ), []);
 
   const onConnectStart: OnConnectStart = useCallback((_event, params) => {
     connectionSucceededRef.current = false;
@@ -516,41 +506,19 @@ export function Canvas() {
   const onDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault();
+      setFitFirstNodes(false);
 
-      // Check for image or video file drops first
-      const files = event.dataTransfer.files;
+      // Files from the desktop: every one is handled (lib/canvasFileDrop.ts).
+      // Images, video, audio, PDF and text upload with create_node at the
+      // drop point, in flow coordinates; the backend keeps that position
+      // (main._display_positions) and its graphSync draws the input nodes
+      // there, several fanned out from it. Anything else, and a failed
+      // upload, gets a written line in the canvas notice.
+      const files = Array.from(event.dataTransfer.files ?? []);
       if (files.length > 0) {
-        const mediaFiles = Array.from(files).filter(
-          (f) => f.type.startsWith('image/') || f.type.startsWith('video/'),
-        );
-        if (mediaFiles.length > 0) {
-          const reactFlowBounds = (event.target as HTMLElement)
-            .closest('.react-flow')
-            ?.getBoundingClientRect();
-          if (!reactFlowBounds) return;
-
-          mediaFiles.forEach((file) => {
-            // Upload then register the node in cli_graph so Claude's `nebula graph`
-            // sees it with a short ID. graphSync will push it back to the canvas.
-            // Position from the drop event is discarded — cli_graph export auto-lays-out.
-            // Backend routes image → image-input node, video → video-input node.
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('create_node', 'true');
-            // One undo step per dropped file, taken before its graphSync lands.
-            const undoStep = useGraphStore.getState().beginUndoStep();
-            apiFetch('/api/uploads', { method: 'POST', body: formData })
-              .then((r) => {
-                if (!r.ok) useGraphStore.getState().cancelUndoStep(undoStep);
-                return r.json();
-              })
-              .catch((err) => {
-                useGraphStore.getState().cancelUndoStep(undoStep);
-                console.error('Upload/create failed:', err);
-              });
-          });
-          return;
-        }
+        const origin = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+        void addDroppedFiles(files, origin);
+        return;
       }
 
       // Character palette drag → drop a `character` node referencing that asset.
@@ -771,9 +739,10 @@ export function Canvas() {
         onNodeContextMenu={onNodeContextMenu}
         onPaneClick={onPaneClick}
         onPaneContextMenu={onPaneContextMenu}
-        fitView={initialCanvasState.fitEnabled}
+        fitView={fitFirstNodes}
         defaultViewport={initialCanvasState.viewport ?? undefined}
         onInit={onViewportInitialized}
+        onMoveStart={cameraMoveStarted}
         onMove={onViewportMove}
         fitViewOptions={{ padding: computeCanvasFitPadding() }}
         minZoom={0.1}
@@ -781,6 +750,7 @@ export function Canvas() {
         defaultEdgeOptions={{ type: 'typed-edge' }}
         proOptions={{ hideAttribution: true }}
         deleteKeyCode={isExecuting ? null : ['Backspace', 'Delete']}
+        onBeforeDelete={onBeforeDelete}
         {...CANVAS_INTERACTION_PROPS}
         onlyRenderVisibleElements={canvasPerfMode && !arrangeMeasuring}
       >
@@ -794,13 +764,21 @@ export function Canvas() {
         />
         <ZoomLodController wrapperRef={wrapperRef} threshold={CANVAS_LOD_ZOOM} enabled={canvasLowDetail} />
         <CanvasFocusController />
-        <Panel position="top-center" className="selection-toolbar-panel">
+        {/* Floating panels stop below the selection toolbar (lib/bottomBar.ts
+            floatingTopLimit; GM - Design, 2026-10-23). The marker is on the
+            panel, the toolbar's layout box: the toolbar's entry animation
+            transforms it, and a measured line would ease down with it. With
+            nothing selected the panel is empty, 0 px wide but still one
+            toolbar tall (canvas.css), so an open Inspector holds its place
+            (GM, round 3: "A panel shouldn't move unless someone moves it"). */}
+        <Panel position="top-center" className="selection-toolbar-panel" data-top-bar="">
           <SelectionToolbar />
         </Panel>
         <CanvasNavigation />
         <CanvasViewReporter />
         <ArrangeController />
         <AgentCursorLayer />
+        <AgentNoteOutlines />
         <PinLayer />
         <ProposalLayer />
         <ProposalBar />
@@ -829,18 +807,6 @@ export function Canvas() {
       <PinComposer />
     </div>
   );
-}
-
-/** The canvas the person can see, in flow coordinates, or undefined before it has a size. */
-function visibleFlowRect(
-  wrapper: HTMLDivElement | null,
-  screenToFlowPosition: (point: { x: number; y: number }) => { x: number; y: number },
-): NodeRect | undefined {
-  const box = wrapper?.getBoundingClientRect();
-  if (!box || box.width <= 0 || box.height <= 0) return undefined;
-  const topLeft = screenToFlowPosition({ x: box.left, y: box.top });
-  const bottomRight = screenToFlowPosition({ x: box.right, y: box.bottom });
-  return { x: topLeft.x, y: topLeft.y, width: bottomRight.x - topLeft.x, height: bottomRight.y - topLeft.y };
 }
 
 /** The pasted nodes' bounding box, with measured sizes when known. */

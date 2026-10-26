@@ -7,6 +7,11 @@ adds nothing to what steers: the palette, accents, sources, keywords,
 summary, brief, negatives and representative images are what they would be
 without it. The node's bundle, the brief's colour lists and Krea's
 references never carry it (docs/moodboard-canvas-plan.md section 4.4).
+
+Weight 0 is set aside too (section 4.4: ``excluded || weight == 0``): its
+version 4 entry stays in the saved analysis, measured, but the summary
+doesn't count it and the node's bundle leaves it out, as it leaves out the
+switch.
 """
 from __future__ import annotations
 
@@ -143,15 +148,16 @@ def test_v4_analysis_stays_current() -> None:
     assert not analysis_is_current(flipped, analysis)
 
 
-def test_the_summary_counts_only_images_not_set_aside() -> None:
+def test_the_summary_counts_only_images_that_steer() -> None:
     board = _set_aside_board()
 
     summary = analyze_moodboard(board)["summary"]
 
-    # Four images, one set aside. Weight 0 still counts, as it did in
-    # version 4, so the summary of every pinned board stays as it was.
-    assert summary.startswith("3 reference image(s) analyzed as look.")
-    assert summary == analyze_moodboard(_without(board, "aside"))["summary"]
+    # Four images: one switched aside, one at weight 0. Weight 0 is set aside
+    # too (plan section 4.4), so neither is counted: what the Preview and the
+    # node card count.
+    assert summary.startswith("2 reference image(s) analyzed as look.")
+    assert summary == analyze_moodboard(_without(_without(board, "aside"), "zero"))["summary"]
 
 
 def test_every_image_set_aside_warns() -> None:
@@ -167,7 +173,11 @@ def test_every_image_set_aside_warns() -> None:
         assert analysis["palette"] == [] and analysis["representativeImages"] == []
         assert all(item["colors"] for item in analysis["images"])
     assert [item.get("setAside") for item in switched["images"]] == [True, True]
-    assert switched["summary"].startswith("Empty moodboard")
+    # A board with images, none of which steers, isn't empty: it says why
+    # nothing is counted.
+    for analysis in (switched, mixed, weightless):
+        assert analysis["summary"] == "No reference image steers this board: every one is set aside."
+    assert analyze_moodboard(_board([]))["summary"].startswith("Empty moodboard")
     # One image that steers is enough.
     assert analyze_moodboard(_board([_image(navy, excluded=True), _image(cream)]))["warnings"] == []
 
@@ -179,7 +189,8 @@ def test_a_set_aside_image_that_cant_be_read_is_listed_without_a_warning() -> No
     analysis = analyze_moodboard(board)
 
     far = analysis["images"][1]
-    assert far["status"] == "unresolved" and far["setAside"] is True and far["palette"] == []
+    # An outside link is never read (Q98): "outside", with no warning when set aside.
+    assert far["status"] == "outside" and far["setAside"] is True and far["palette"] == []
     # The warnings are the steering board's: what it would say without it.
     assert analysis["warnings"] == []
 
@@ -233,15 +244,55 @@ def test_krea_references_never_include_a_set_aside_image(tmp_path, monkeypatch) 
         # Q21 b: the two share out the board's 0.7 (weights 0.8 and 0.5).
         assert [ref["strength"] for ref in refs] == [0.4308, 0.2692]
         assert bundle["representativeImages"] == [cream, navy]
-        # The bundle carries no set-aside image: not in images, not in the
-        # analysis's images, not in a colour's sources.
-        assert [img["url"] for img in bundle["images"]] == [navy, zero, cream]
-        assert [item["url"] for item in bundle["analysis"]["images"]] == [navy, zero, cream]
+        # The bundle carries no set-aside image, the switch or weight 0 (plan
+        # section 4.4): not in images, not in the analysis's images, not in a
+        # colour's sources, not in the summary's count.
+        assert [img["url"] for img in bundle["images"]] == [navy, cream]
+        assert [item["url"] for item in bundle["analysis"]["images"]] == [navy, cream]
         assert not any(item.get("setAside") for item in bundle["analysis"]["images"])
-        assert all(s["number"] != 2 for c in bundle["analysis"]["colors"] for s in c["sources"])
-    # The saved analysis does list it.
-    assert [item.get("setAside") for item in store.get(created["id"])["analysis"]["images"]] == [
-        None, True, None, None]
+        assert all(s["number"] not in (2, 3) for c in bundle["analysis"]["colors"] for s in c["sources"])
+        assert bundle["analysis"]["summary"].startswith("2 reference image(s) analyzed as look.")
+    # The saved analysis does list both, measured; its summary counts the two
+    # that steer.
+    saved_analysis = store.get(created["id"])["analysis"]
+    assert [item.get("setAside") for item in saved_analysis["images"]] == [None, True, None, None]
+    assert [item["weight"] for item in saved_analysis["images"]] == [0.5, 1.0, 0.0, 0.8]
+    assert saved_analysis["summary"].startswith("2 reference image(s) analyzed as look.")
+
+
+def test_a_saved_analysis_that_counted_weight_zero_reads_with_the_steering_count(tmp_path, monkeypatch) -> None:
+    """An analysis saved before weight 0 left the count still describes the
+    board (the hash is the same), so it stays current; reading it gives the
+    count of the images that steer, in memory. The file isn't written."""
+    import json
+
+    from services.moodboard_store import MoodboardStore, _find_moodboard_file, _moodboard_root
+
+    navy, zero = _blocks("sa-old-navy", NAVY, seed=41), _blocks("sa-old-zero", LIME, seed=42)
+    cream = _blocks("sa-old-cream", CREAM, seed=43)
+    created = _store_board(tmp_path, monkeypatch, [
+        {"url": navy, "weight": 1.0}, {"url": zero, "weight": 0.0}, {"url": cream, "weight": 0.6}])
+    store = MoodboardStore()
+    analysis = analyze_moodboard(store.get(created["id"]))
+    # As the version 5 analyzer wrote it before this change: weight 0 counted.
+    old = {**analysis, "summary": analysis["summary"].replace("2 reference image(s)", "3 reference image(s)", 1)}
+    assert old["summary"] != analysis["summary"]
+    store.update(created["id"], analysis=old)
+    path = _find_moodboard_file(_moodboard_root(), created["id"])
+    before = path.read_bytes()
+    assert json.loads(before)["analysis"]["summary"].startswith("3 reference image(s)")
+
+    board = store.get(created["id"])
+
+    assert analysis_is_current(board, board["analysis"])
+    assert board["analysis"]["summary"] == analysis["summary"]
+    assert path.read_bytes() == before
+    # One that no longer describes the board is left as it was saved.
+    images = [{**img, "weight": 0.9} if img["url"] == cream else img for img in board["images"]]
+    store.update(created["id"], images=images, analysis=old)
+    stale = store.get(created["id"])
+    assert not analysis_is_current(stale, stale["analysis"])
+    assert stale["analysis"]["summary"] == old["summary"]
 
 
 def test_the_cli_brief_says_which_images_are_set_aside() -> None:

@@ -1,0 +1,84 @@
+# 2026-10-21 — Ship Inter and JetBrains Mono with the app (no Google Fonts at startup)
+
+Branch `feat/ship-app-fonts`, base origin/main 296e9199.
+
+Justin, Q103: "a) Ship them with the app, so it asks no outside server when it opens." Until now `frontend/index.html` preconnected to fonts.googleapis.com and fonts.gstatic.com and loaded `css2?family=Inter:wght@200;300;400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap`. That meant Google saw every start, and offline the app fell back to other fonts. The Q98 review found it: it was the only request the page made to a non-loopback host.
+
+- **What changed.**
+  - `frontend/src/assets/fonts/`: 13 woff2 files (7 Inter subsets in `inter/`, 6 JetBrains Mono subsets in `jetbrains-mono/`), each family's `OFL.txt`, `fonts.css`, and a `README.md` that lists the source, version, every source URL and a sha256 for each file.
+  - `fonts.css` has the same 53 `@font-face` rules Google served (5 Inter weights x 7 subsets, 3 JetBrains Mono weights x 6 subsets). They keep `unicode-range` and `font-display: swap`; only the URLs are changed, to local `./inter/inter-latin.woff2`-style paths.
+  - `index.html`: the two preconnects and the Google stylesheet are gone. It now links `/src/assets/fonts/fonts.css`, which Vite bundles into `assets/index-*.css` and rewrites per base: `/assets/...` on the web, `./...` on the desktop. It also preloads the two latin files (see the preload bullet below).
+  - `vite.config.ts`: `build.assetsInlineLimit: inlineAssetUnlessFont` (from `vite-plugins/assetInline.ts`). Fonts always stay files. Without it the 1,664-byte JetBrains Mono cyrillic-ext subset would be inlined as base64, because it is under Vite's 4 KiB limit. Every other asset keeps Vite's default rule.
+  - `scripts/check-built-fonts.mjs`, run by `check-build-budget.mjs` (so by `npm run build`, `build:desktop` and CI). The build fails if index.html, or any built CSS or JS, names a font CDN. It also fails if index.html links anything from another origin, if a font was inlined as `data:`, or if an `@font-face` src or font preload is not a woff2 file the build emitted. A desktop build also fails on a root-absolute font URL, as does a font preload without `crossorigin` or any missing family/weight.
+- **Source choice (Google's files, not the upstream releases).** I took the exact woff2 files Google served for the old CSS (fetched 2026-10-21 with a Chrome 141 macOS user agent). Rendering stays identical, and a page downloads only the subsets it uses. Normally that is the two latin files, 79,772 bytes together.
+  - The upstream releases are newer builds: rsms/inter v4.1 (2024-11-16) and JetBrains/JetBrainsMono v2.304 (2023-01-14). Google serves Inter 4.001 and JetBrains Mono 2.211, so the upstream files would not match today's rendering.
+  - The upstream files are whole fonts. InterVariable.woff2 alone is 352,240 bytes, more than all 13 files here (285,052 bytes).
+- **Age (14-day rule).** Inter 4.001;git-66647c0bb was added to google/fonts on 2024-06-06 (commit e1d6480102), and JetBrains Mono 2.211 on 2020-11-18 (commit 2e05c1cf00). The gstatic files report Last-Modified of 2025-09-09 (Inter) and 2025-09-10 (JetBrains Mono). I read the versions from each file's name table.
+- **Files, sources, sha256** (all from `https://fonts.gstatic.com/s/...`; the full URLs are in the fonts README):
+  - `inter/inter-cyrillic-ext.woff2` 25,844 B `fccca918fea40089dacadc7045861314d1a6bc91f1f323cc1eeb22ebcdb321b5` (inter/v20/…SjIa2JL7W0Q5n-wU)
+  - `inter/inter-cyrillic.woff2` 18,744 B `aebf2ab4a4ce6810d73c1ac7be7cafb4e5ec4cee2d6db5fb3e09691747ec4bd6` (…SjIa0ZL7W0Q5n-wU)
+  - `inter/inter-greek-ext.woff2` 11,272 B `a2e2c783ca6f9c20486e81e72a279203e86730bbf8f01ff6a5ee9dbd09e1c271` (…SjIa2ZL7W0Q5n-wU)
+  - `inter/inter-greek.woff2` 19,044 B `46dd4cdca58c26ae87cc6927657bf83b2e8abfc39ffd0ab176e301a8d28d22bf` (…SjIa1pL7W0Q5n-wU)
+  - `inter/inter-vietnamese.woff2` 10,280 B `8db00ff46c67b22cda8bed865acf7077651cac8d2841d5b40980556b48961931` (…SjIa2pL7W0Q5n-wU)
+  - `inter/inter-latin-ext.woff2` 85,272 B `a28eb6d3ccb534ae0c94ca999371df024aab60b08c3c8a5720ee9e32fa0faaa2` (…SjIa25L7W0Q5n-wU)
+  - `inter/inter-latin.woff2` 48,432 B `c940764593d0fe5d596be327ca7558855e018039fb78509aa21921fd3644c3e4` (…SjIa1ZL7W0Q5nw)
+  - `jetbrains-mono/jetbrains-mono-cyrillic-ext.woff2` 1,664 B `9343de2ca5d9549f792e7962375af8efb0f320c7643bfd36c884b5a30e5c396f` (jetbrainsmono/v24/…Px3cwgknk-6nFg)
+  - `jetbrains-mono/jetbrains-mono-cyrillic.woff2` 8,892 B `4995a9a43ac659ec32fcd8b463755cd6a07b31a6e6b3894a6a153b661cf490e2` (…PxTcwgknk-6nFg)
+  - `jetbrains-mono/jetbrains-mono-greek.woff2` 6,800 B `49c3da6c9a2b279b0f1f860f5cfb1f5dc38d88a5c7be9c9b1837bbc4e3db6111` (…PxPcwgknk-6nFg)
+  - `jetbrains-mono/jetbrains-mono-vietnamese.woff2` 5,872 B `d44eb1936043a56038eb02dd70b243f379bef65783f94ec12f277550720411f1` (…Px_cwgknk-6nFg)
+  - `jetbrains-mono/jetbrains-mono-latin-ext.woff2` 11,596 B `9c38cb2d0d2d93c1ee6e21fa78db76f13ea7e15e15cc64214c7ca89b6aaa35c4` (…Px7cwgknk-6nFg)
+  - `jetbrains-mono/jetbrains-mono-latin.woff2` 31,340 B `2c32b9b3ee358c119e210f6f5195f9bd34894d78a785ff2e95d60e718e400af4` (…PxDcwgknk-4)
+  - Licenses: `inter/OFL.txt` (sha256 `5b9321a4…fd58c57`) and `jetbrains-mono/OFL.txt` (`b2fe5e89…f5d73eb8`), both from google/fonts `main` (`ofl/inter/OFL.txt` and `ofl/jetbrainsmono/OFL.txt`). Both fonts are SIL OFL 1.1.
+- **Third-party notices.** The repo keeps no NOTICE, THIRD_PARTY or licenses file (searched), so the licenses sit next to the font files and the fonts README names them.
+- **Every other font CDN reference.** I searched the frontend (`src`, `index.html`, `public`), `desktop/`, `themes/`, `videos/` and `docs/`. The only references to Google Fonts or another font CDN were the three lines in `frontend/index.html`. Nothing else uses `@font-face`, `FontFace` or a font URL.
+  - `.agents/skills` mentions googleapis.com for model APIs, not fonts.
+  - `implementation-notes.md` has old live-check lines that say "only Google Fonts failed at the dead proxy". Those are history, and that file takes no new entries.
+- **Electron.** There is no CSP anywhere: no meta tag in index.html, no `webRequest` header and no `font-src`. Nothing allowed or needed the Google hosts, so there was nothing to change.
+  - The renderer loads `dist-desktop/index.html` over `file://`. `desktop/renderer-files.mjs` serves only files inside that folder, and the fonts are in `dist-desktop/assets/`, so they are allowed.
+  - I did not launch Electron itself; the desktop pass is deferred. I did load the desktop build over `file://` in Chrome (details under Live check).
+- **Decisions not in the spec.**
+  - Preload both latin files (Inter and JetBrains Mono), not only Inter. Every start uses both, so the preload adds no bytes. I measured 6 fresh loads per variant on the production preview:
+    - no preload: one fallback-font frame on every load, for Inter and for mono;
+    - Inter only: 0 Inter fallback frames, but still 1 mono frame per load;
+    - both: 0 fallback frames of either.
+    - An earlier round with no preload had Inter fallback frames in 4 of 6 loads, and Inter-only had 0 in 12 loads. The base build with Google showed 4 and 1 fallback frames on its two loads.
+  - I kept the 53 per-weight rules rather than collapsing each subset into one `font-weight: 200 600` rule. A range would change how weight 700 (used in Moodboard Studio) is matched and synthesized, and the point was identical rendering.
+  - The fonts live in `src/assets/fonts/`, not `public/`, so Vite hashes them (they can be cached long-term) and rewrites URLs for the desktop's `./` base.
+  - `FONT_CDN_HOSTS` covers Google, Typekit, Bunny, rsms.me and cdnfonts, so a future font link from any of them fails the build.
+- **Tradeoffs.**
+  - The repo grows by 285 KB of binary files. Each page still downloads only the subsets it uses.
+  - `index-*.css` grows by 13,381 bytes (the `@font-face` rules).
+  - Updating the fonts is now a manual step (the README says how). It is pinned by the sha256 check in `tests/localFonts.test.ts`.
+- **Surprises.**
+  - This Mac has Inter installed as a system font. So the base build offline still drew Inter from the system copy, a different build: widths were off by up to 1.1 px, e.g. "Nebula Nodes" 97.516 vs 96.719. JetBrains Mono fell back to another monospace font (216.7 px wider on the 85-character probe string).
+  - `document.fonts.check()` returns true when no `@font-face` matches, so it reported "true" for the broken base too. The live check therefore also counts loaded FontFace objects and which woff2 URLs were fetched.
+  - Machines without Inter installed lost the font entirely offline before this change.
+- **Agent support.** Nothing changes for agents. This is page loading only, with no new state, action or API, so there are no MCP tools, no `nebula` CLI change and no SKILL/MCP-SETUP edits. No doc (README, CONTRIBUTING, docs/, desktop/README) said the app loads fonts from Google or listed its outside requests, so no doc needed updating.
+- **Tests (written first, then seen failing).**
+  - `tests/localFonts.test.ts`: on the old code, 8 of its first 21 tests failed. index.html named fonts.googleapis.com, linked 3 remote URLs and had no local stylesheet. fonts.css, the files, the README hashes and the licenses did not exist.
+  - The test file also covers: no font CDN host anywhere under `src/`, the `inlineAssetUnlessFont` rule, and the two preloads (exact hrefs, `as="font"`, `type`, `crossorigin`, files exist). I added the preload test after the flash measurement, so it was not run red first.
+  - `tests/builtFontsCheck.test.ts`: 10 tests that feed the checker fake dist folders. One passes; the others each check that a specific broken dist fails: a Google link, a CDN in CSS, a remote src, an inlined data: font, a missing file, a missing weight, a root-absolute desktop URL, and a font preload that is missing or lacks crossorigin.
+  - Seen red on real output: `node scripts/check-built-fonts.mjs` on the base production build failed with 13 problems (3 remote links, 2 CDN names, and no local face for any of the 8 family/weights).
+  - After the change all 23 tests pass, and the checker passes on the web build, the desktop build and every live-check build: 53 rules, 13 woff2 files, 285,052 bytes.
+- **Budget.** The entry JS is 510,722 bytes raw / 149,257 gzip on the web build, the same size as the base build (the budget is 512,000). The desktop build is 510,780. The fonts are 13 separate files in `assets/`; none is in the JS entry or inlined.
+- **Live check.**
+  - Setup: isolated backend 8837 (iso.sh: temp HOME, NEBULA_* roots in scratch, keys dropped) and Vite 5837 pinned with `VITE_NEBULA_BACKEND_PORT=8837`. curl through 5837 reached 8837's `/api/health` first.
+  - Blocking: Puppeteer with CDP `setBlockedURLs` for 8000-8010 and 5173 on 127.0.0.1, localhost and [::1], plus a dead proxy that lets through only 5837 and 8837. That means every non-loopback host was unreachable (fully offline) except in the one base run where the two Google hosts were let through.
+  - Seeded one project ("Font check") and one empty moodboard. Opened Projects, then the canvas, then Moodboard Studio (`#moodboard/<id>`), at 1280x800 and 1440x900.
+  - Runs: new production preview (offline), new dev server (offline), base production preview with Google allowed, and base offline.
+  - New build: **0 requests to a non-loopback host** at startup, Projects, canvas or Moodboard Studio. That held in both the preview (131 requests) and dev (781 requests) runs. **0 blocked attempts** at 8000-8010 or 5173 in either. The only failed request was the page's existing `localhost:8837` health probe, refused by the dead proxy (loopback, known).
+  - Base with Google: 6 non-loopback requests (googleapis CSS plus the two gstatic latin files, at each viewport). Base offline: 2 (the refused googleapis CSS).
+  - Canaries per viewport: a dead-proxy port (8899), a blocked port (8005) and example.com all failed.
+  - Fonts offline (new build, both servers, every screen and viewport): `document.fonts.check` was true for all 8 family/weights. `document.fonts.load` matched one loaded face each, and the woff2 files came from `/assets/` or `/src/assets/fonts/`. Base offline had 0 Inter or JetBrains Mono faces.
+  - Text widths, base with Google vs new offline: an 85-character probe string in all 8 family/weights, plus 10 (Projects), 35 (canvas) and 37 or 42 (Moodboard Studio) real UI texts. All differences were 0 px at both viewports.
+  - Pixel diff of the screenshots: Projects and Moodboard Studio 0 differing pixels. The canvas differs only inside the animated dot sphere (bbox 541,209-738,402 at 1280x800), and the text is identical.
+  - Desktop build over `file://` in Chrome (offline, `--allow-file-access-from-files`): all 8 family/weights loaded from `./assets/` and 0 non-loopback requests. The 44 blocked attempts were the page probing 8000-8010 because there is no Electron preload to give it a port. They were blocked as intended.
+  - Screenshots and side-by-sides are in scratch, deleted afterwards.
+- **Gates** (the machine was heavily loaded, with a load average of 20-50):
+  - Backend, whole suite: 1 failed, 9,394 passed, 61 skipped. The failure was `test_agent_process.py::test_terminate_agent_process_tree_kills_setsid_grandchild`; that file alone passed 4/4. No backend file changed. The first try hit the 50-minute limit at 90%.
+  - Frontend vitest, whole suite: 86 files failed (337 tests, 250 of them "Test timed out", plus 21 worker-response timeouts) and 226 files passed (3,391 tests). Rerunning the 86 alone with 4 workers: 82 passed, 4 failed (4 tests, timeouts). Those 4 alone with 1 worker: 111/111 passed.
+  - `tsc -b` clean; `npm run lint` clean.
+  - `vite build` + `check-build-budget.mjs`: passed, 510,722 B raw / 149,257 B gzip, 13 woff2 files (285,052 B).
+- **Open items.**
+  - A real Electron launch to confirm fonts over the app's confined `file:` handler belongs in the deferred desktop pass. Module scripts with `crossorigin` already load through it the same way.
+  - If a future font update is wanted, follow the fonts README.

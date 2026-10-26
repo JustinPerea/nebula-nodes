@@ -44,6 +44,7 @@ import httpx
 from execution.async_poll_runner import AsyncPollConfig, poll_until_terminal
 from execution.missing_credential import MissingCredentialError
 from models.events import ExecutionEvent
+from execution.person_line import with_api_status, with_person_line
 
 REPLICATE_KEY = "REPLICATE_API_TOKEN"
 REPLICATE_API_BASE = "https://api.replicate.com/v1"
@@ -67,6 +68,8 @@ def model_path(model: Any) -> str:
     a query, a ``..``)."""
     parts = str(model or "").split("/")
     if len(parts) != 2 or not all(_SEGMENT.fullmatch(part) and part not in (".", "..") for part in parts):
+        # The model comes from Nebula's route table (route_clients), never
+        # from the person: a developer-only state keeps the general line.
         raise ValueError(f"Replicate model must be owner/name (got {model!r})")
     return f"{quote(parts[0], safe='')}/{quote(parts[1], safe='')}"
 
@@ -92,22 +95,28 @@ def _error(response: httpx.Response, what: str) -> RuntimeError:
     said = str(detail or response.text.strip())[:400] or "no detail"
     status = response.status_code
     if status in (401, 403):
-        return RuntimeError(f"Replicate rejected the token ({status}): check {REPLICATE_KEY} in Settings.")
+        return with_api_status(
+            RuntimeError(f"Replicate rejected the token ({status}): check {REPLICATE_KEY} in Settings."), status)
     if status == 402:
-        return RuntimeError(f"Replicate needs billing set up or more credit ({status}: {said}). "
-                            "Add it at replicate.com/account/billing, then run again.")
+        return with_api_status(
+            RuntimeError(f"Replicate needs billing set up or more credit ({status}: {said}). "
+                         "Add it at replicate.com/account/billing, then run again."), status)
     if status == 404:
-        return RuntimeError(f"Replicate doesn't have that model ({status}: {said}).")
+        return with_api_status(RuntimeError(f"Replicate doesn't have that model ({status}: {said})."), status)
     if status == 429:
-        return RuntimeError(f"Replicate is rate-limiting this account ({status}: {said}). Wait a moment, then run again.")
-    return RuntimeError(f"Replicate {what} failed ({status}): {said}")
+        return with_api_status(
+            RuntimeError(f"Replicate is rate-limiting this account ({status}: {said}). Wait a moment, then run again."),
+            status)
+    return with_api_status(RuntimeError(f"Replicate {what} failed ({status}): {said}"), status)
 
 
 async def upload_file(client: httpx.AsyncClient, key: str, path: Path) -> str:
     """Upload a local file with the files API; returns its ``urls.get``."""
     size = path.stat().st_size
     if not size or size > MAX_UPLOAD_BYTES:
-        raise ValueError(f"{path.name} is empty or over Replicate's 100MB file limit")
+        raise with_person_line(
+            ValueError(f"{path.name} is empty or over Replicate's 100MB file limit"),
+            "A connected file is empty or over Replicate's 100 MB limit. Connect another one.")
     mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
     try:
         response = await client.post(f"{REPLICATE_API_BASE}/files", headers={"Authorization": f"Bearer {key}"},
@@ -150,7 +159,10 @@ async def _save_output(client: httpx.AsyncClient, key: str, output: Any, media_t
     except httpx.TransportError as exc:
         raise RuntimeError(f"Couldn't download Replicate's result: {type(exc).__name__}: {exc}") from exc
     if response.status_code >= 400:
-        raise RuntimeError(f"Replicate's result download failed (HTTP {response.status_code}). Run again.")
+        # no API status: a download of the result file, not Replicate's API.
+        raise with_person_line(
+            RuntimeError(f"Replicate's result download failed (HTTP {response.status_code}). Run again."),
+            "Couldn't download the result from Replicate. Its download link may have expired. Run the node again.")
     path = await write_media_bytes(response.content, response.headers.get("content-type", ""), media_type,
                                    get_run_dir(), url)
     return str(path)
@@ -198,6 +210,7 @@ async def run_model(
                 max_polls=MAX_POLLS,
                 cancel_url_template=f"{REPLICATE_API_BASE}/predictions/{{task_id}}/cancel",
                 cancel_method="POST",
+                provider="Replicate",
             )
             prediction = await poll_until_terminal(client, config, task_id, node_id, emit or _quiet)
         logging.getLogger(__name__).info("Replicate %s prediction %s: %s", model, task_id,

@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
 import { commonsApi } from '../../lib/commonsApi';
+import { wsClient } from '../../lib/wsClient';
+import { ProposalsFor } from '../proposals/ProposalsFor';
 import { CommonsMedia } from './CommonsMedia';
 import {
   AXES, AXIS_LABELS, ENUMS, ROLES, TEXT_FIELDS,
@@ -8,6 +10,10 @@ import {
 import { showConfirm } from '../../lib/commonsFiles';
 import { actorLabel, STATE_LABELS } from '../../lib/commonsFormat';
 import { useCommonsPrompt } from '../../hooks/useCommonsPrompt';
+import { FailureLines } from '../failure/FailureLines';
+import { ErrorDetails } from '../failure/ErrorDetails';
+import { ANALYSIS_FAILED, analysisFailureReason } from '../../lib/commonsAnalysisCopy';
+import { failureMessage } from '../../lib/errorCopy';
 
 interface Props {
   assetId: string;
@@ -164,7 +170,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
       setDetail(await commonsApi.asset(assetId));
       setError(null);
     } catch (e) {
-      setError((e as Error).message);
+      setError(failureMessage(e, "Couldn't load the reference."));
     }
   }, [assetId]);
 
@@ -172,10 +178,27 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
     let cancelled = false;
     commonsApi.asset(assetId).then(
       (d) => { if (!cancelled) setDetail(d); },
-      (e: Error) => { if (!cancelled) setError(e.message); },
+      (e: unknown) => { if (!cancelled) setError(failureMessage(e, "Couldn't load the reference.")); },
     );
     return () => { cancelled = true; };
   }, [assetId]);
+
+  // An agent's proposal for this reference was accepted (here or in another
+  // tab): the reading changed under the open detail, so read it again.
+  useEffect(() => wsClient.subscribe((event) => {
+    if (event.type === 'assetProposalClosed' && event.kind === 'commons' && event.targetId === assetId
+      && event.status === 'accepted') {
+      void load().then(onChanged);
+    }
+  }), [assetId, load, onChanged]);
+
+  // The strip names a region by its label and a membership by its collection.
+  const proposalNames = useMemo(() => {
+    const names: Record<string, string> = {};
+    for (const region of detail?.regions ?? []) names[region.id] = region.label;
+    for (const membership of detail?.memberships ?? []) names[membership.id] = membership.collection_name;
+    return names;
+  }, [detail]);
 
   const run = useCallback(async (work: () => Promise<unknown>) => {
     try {
@@ -184,7 +207,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
       onChanged();
       return true;
     } catch (e) {
-      setError((e as Error).message);
+      setError(failureMessage(e, "Couldn't save the change."));
       return false;
     }
   }, [load, onChanged]);
@@ -261,7 +284,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
       await commonsApi.purge(assetId);
       onDeleted();
     } catch (e) {
-      setError((e as Error).message);
+      setError(failureMessage(e, "Couldn't delete the reference."));
     }
   };
 
@@ -282,9 +305,16 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
 
       {error && <p className="commons-notice commons-notice--error" role="alert">{error}</p>}
 
+      <ProposalsFor kind="commons" targetId={assetId} names={proposalNames} />
+
       {asset.analysis_state === 'analysis_failed' && (
-        <div className="commons-notice commons-notice--error">
-          <span>Analysis failed{asset.last_error ? `: ${asset.last_error}` : ''}</span>
+        <div className="commons-notice commons-notice--error commons-analysis-failure">
+          <div className="commons-analysis-failure__text">
+            <FailureLines failure={{ heading: ANALYSIS_FAILED, reason: analysisFailureReason(asset.last_error_kind) }} />
+            {asset.last_error && (
+              <ErrorDetails raw={asset.last_error} className="commons-analysis-failure__details" />
+            )}
+          </div>
           <button type="button" className="commons-button" onClick={() => run(() => commonsApi.reanalyze(assetId))}>Retry</button>
         </div>
       )}

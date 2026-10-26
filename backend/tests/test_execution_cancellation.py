@@ -228,7 +228,10 @@ async def test_canvas_stop_syncs_recovery_params_before_cancelled_event(
     record = main_module.execution_runs.get(response["runId"])
     assert record is not None
     await asyncio.wait_for(started.wait(), timeout=1)
-    await main_module.cancel_execution(run_id)
+    # The person's Stop carries their token, as the canvas sends it; only the
+    # person stops a run the person started (tests/test_run_stop_scope.py).
+    with request_headers_scope(PERSON):
+        await main_module.cancel_execution(run_id)
     with pytest.raises(asyncio.CancelledError):
         await record.task
 

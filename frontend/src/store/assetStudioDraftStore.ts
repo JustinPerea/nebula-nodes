@@ -1,15 +1,31 @@
 import { create } from 'zustand';
+import type { FailureCopy } from '../lib/errorCopy';
 
 export type AssetStudioKind = 'character' | 'moodboard';
 export type AssetStudioSaveState = 'draft' | 'idle' | 'saving' | 'saved' | 'error';
+export type StudioFailure = string | FailureCopy;
+/** What the toolbar's Retry runs again for `saveError` (GM, error-copy round
+ * 3: "Make Retry redo the failed action, never a different one."). */
+export type StudioRetry = 'save' | 'analyze' | 'undo' | 'redo';
 
 export interface AssetStudioDraftEntry<D = unknown> {
   draft: D;
   savedId: string | null;
   thumbnail: string;
   saveState: AssetStudioSaveState;
-  loadError: string | null;
-  saveError: string | null;
+  /** A failure as the Studio shows it: a request's heading and reason
+   * (two lines, components/failure/FailureLines), or a line of its own. */
+  loadError: StudioFailure | null;
+  saveError: StudioFailure | null;
+  /** The action that failed with `saveError`, which the toolbar's Retry
+   * runs again: a save, an analyze, or an undo or redo of `retryStep`. Null
+   * for a line no button redoes (an upload, the brief, no project open):
+   * then Retry is hidden and the line keeps GM's full reason; with a retry
+   * it takes the short one (WRAP rule). Any other line patched in clears it. */
+  retry?: StudioRetry | null;
+  /** The undo step an undo or redo failed on: Retry runs only while it is
+   * still the step that undo (or redo) would take. */
+  retryStep?: string | null;
   loaded: boolean;
   dirty: boolean;
   revision: number;
@@ -47,7 +63,11 @@ interface AssetStudioDraftState {
   reset: (key: string, draft: unknown) => void;
   beginSave: (key: string) => { id: string; revision: number; entry: AssetStudioDraftEntry } | null;
   finishSave: (key: string, id: string, revision: number, savedId: string, thumbnail: string) => boolean;
-  failSave: (key: string, id: string, message: string) => void;
+  /** A write failed. `retry` is what failed, for the toolbar's Retry: a save
+   * (the default), or an undo or redo of `step`, sent as an edit. Only a
+   * save leaves the draft dirty: an undo that didn't land changed nothing. */
+  failSave: (key: string, id: string, message: StudioFailure,
+    options?: { retry?: Extract<StudioRetry, 'save' | 'undo' | 'redo'>; step?: string }) => void;
   copyTo: (key: string, destination: string) => void;
   /** The asset moved (Global <-> a project): drafts kept for it take its new
    * `projectId` and the key of its new scope, so a later save never sends
@@ -67,14 +87,17 @@ export const useAssetStudioDraftStore = create<AssetStudioDraftState>((set, get)
   }),
   patch: (key, patch) => set((state) => {
     key = resolveAssetStudioDraftKey(state, key);
-    return state.entries[key] ? { entries: { ...state.entries, [key]: { ...state.entries[key], ...patch } } } : {};
+    if (!state.entries[key]) return {};
+    const next = { ...state.entries[key], ...patch };
+    if ('saveError' in patch && !('retry' in patch)) { next.retry = null; next.retryStep = null; }
+    return { entries: { ...state.entries, [key]: next } };
   }),
   edit: (key, update) => set((state) => {
     key = resolveAssetStudioDraftKey(state, key);
     const entry = state.entries[key];
     if (!entry) return {};
     return { entries: { ...state.entries, [key]: { ...entry, draft: update(entry.draft),
-      revision: entry.revision + 1, dirty: true, saveError: null,
+      revision: entry.revision + 1, dirty: true, saveError: null, retry: null, retryStep: null,
       saveState: entry.pendingSaveId ? 'saving' : 'draft' } } };
   }),
   reset: (key, draft) => set((state) => {
@@ -100,10 +123,13 @@ export const useAssetStudioDraftStore = create<AssetStudioDraftState>((set, get)
       saveState: dirty ? 'draft' : 'saved', saveError: null });
     return true;
   },
-  failSave: (key, id, message) => {
+  failSave: (key, id, message, options = {}) => {
     key = resolveAssetStudioDraftKey(get(), key);
-    if (get().entries[key]?.pendingSaveId !== id) return;
-    get().patch(key, { pendingSaveId: null, dirty: true, saveState: 'error', saveError: message });
+    const entry = get().entries[key];
+    if (entry?.pendingSaveId !== id) return;
+    const retry = options.retry ?? 'save';
+    get().patch(key, { pendingSaveId: null, dirty: retry === 'save' ? true : entry.dirty, saveState: 'error',
+      saveError: message, retry, retryStep: retry === 'save' ? null : options.step ?? null });
   },
   copyTo: (key, destination) => {
     const source = resolveAssetStudioDraftKey(get(), key);
@@ -111,7 +137,13 @@ export const useAssetStudioDraftStore = create<AssetStudioDraftState>((set, get)
     if (!entry || source === destination) return;
     set((state) => {
       const entries = { ...state.entries, [destination]: { ...entry } }; delete entries[source];
-      return { entries, aliases: { ...state.aliases, [source]: destination, [key]: destination } };
+      // The destination holds the draft now, so it is no alias any more: an
+      // asset moved there and back would otherwise leave the two keys
+      // pointing at each other and the open Studio reading neither.
+      const aliases = Object.fromEntries(Object.entries(state.aliases)
+        .filter(([from]) => from !== destination)
+        .map(([from, to]) => [from, to === source ? destination : to]));
+      return { entries, aliases: { ...aliases, [source]: destination, [key]: destination } };
     });
   },
   rehome: (kind, id, projectId) => {

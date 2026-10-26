@@ -1,10 +1,10 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useLayoutEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { WorkspaceHeader } from '../WorkspaceHeader';
 import { WorkspaceModeNavigation } from '../CanvasTabs';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
-import { useCreateDraftStore, type CreateDraft, type CreateDraftSeed } from '../../store/createDraftStore';
+import { newCreateDraft, useCreateDraftStore, type CreateDraft, type CreateDraftSeed } from '../../store/createDraftStore';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { buildDefaultParamsForUi } from '../../lib/createParams';
 import { isCreateModel } from '../../lib/createModels';
@@ -17,16 +17,23 @@ import type { ResultContext } from '../../lib/resultContext';
 import { applyPresetToComposer } from '../../lib/applyPreset';
 import { createPreset, type Preset } from '../../lib/createPresets';
 import { GRAPH_PARAMS_VERSION } from '../../lib/savedParamsUpgrades';
+import { storedImageView } from '../../lib/storedImage';
 import { CreateComposer } from './CreateComposer';
 import { PresetLibrary } from './PresetLibrary';
 import { ResultsGallery } from './ResultsGallery';
 import { ReferenceTray } from './ReferenceTray';
 import { usePrompt } from '../../hooks/usePrompt';
+import { useBottomBarClearance } from '../../hooks/useBottomBarClearance';
+import { BOTTOM_BAR_ATTR } from '../../lib/bottomBar';
 import type { AttachedRef } from './ReferenceTray';
 import '../../styles/create-studio.css';
 import '../../styles/create-gallery.css';
+import { FailureNotice, failureMessage } from '../../lib/errorCopy';
 
 const MAX_CONCURRENT = 2;
+/** A Generate that didn't start, named by its button (error copy round 3e). */
+// GM, round 3f: "Couldn't generate." → "Couldn't start the generation."
+const GENERATE_HEADING = "Couldn't start the generation.";
 
 export function CreateView() {
   const exitCreateView = useUIStore((s) => s.exitCreateView);
@@ -62,12 +69,19 @@ export function CreateView() {
     params: buildDefaultParamsForUi(NODE_DEFINITIONS['nano-banana'], apiKeys, normalizeKreaMode(kreaConnectionMode)),
     refs: [], quantity: 1,
   });
-  const [seededDraft] = useState<CreateDraft>(() => {
-    const seed = { ...defaultDraft(), ...initial.prefill };
-    return sessionId ? useCreateDraftStore.getState().getOrCreateDraft(sessionId, seed)
-      : { ...seed, revision: 'uninitialized', uploads: [] };
-  });
-  const draft = useCreateDraftStore((state) => sessionId ? state.drafts[sessionId] : undefined) ?? seededDraft;
+  // The session's draft, or a new one from the selection, built without
+  // storing it: a store write while rendering re-rendered App mid-render (the
+  // autosave marks the project unsaved). The layout effect stores it before
+  // paint and before any edit, keeping its revision so the composer stays.
+  const [seeded] = useState<{ sessionId: string | null; draft: CreateDraft }>(() => ({
+    sessionId,
+    draft: (sessionId ? useCreateDraftStore.getState().drafts[sessionId] : undefined)
+      ?? newCreateDraft({ ...defaultDraft(), ...initial.prefill }),
+  }));
+  useLayoutEffect(() => {
+    if (seeded.sessionId) useCreateDraftStore.getState().adoptDraft(seeded.sessionId, seeded.draft);
+  }, [seeded]);
+  const draft = useCreateDraftStore((state) => sessionId ? state.drafts[sessionId] : undefined) ?? seeded.draft;
   const { modelId, prompt, params, refs, quantity, uploads } = draft;
   const updateDraft = (patch: Partial<CreateDraft> | ((current: CreateDraft) => Partial<CreateDraft>)) => {
     if (sessionId) useCreateDraftStore.getState().updateDraft(sessionId, patch);
@@ -90,9 +104,13 @@ export function CreateView() {
   const [ask, promptElement] = usePrompt();
   const [savingStyle, setSavingStyle] = useState(false);
   const [styleSaveError, setStyleSaveError] = useState<string | null>(null);
+  const [styleNote, setStyleNote] = useState<string | null>(null);
   const [reusedDraft, setReusedDraft] = useState<{ previous: CreateDraftSeed; fingerprint: string; removedAttachments: boolean } | null>(null);
   const focusDraft = useRef(false);
   const composerArea = useRef<HTMLDivElement>(null);
+  // The composer is Creator Studio's bottom bar: it publishes where it starts,
+  // so the notices sit 8 px above it (GM - Design, 2026-10-23).
+  useBottomBarClearance([composerArea]);
   const canUndoReuse = reusedDraft?.fingerprint === JSON.stringify(draft);
   useEffect(() => {
     if (!focusDraft.current) return;
@@ -120,10 +138,17 @@ export function CreateView() {
 
   const handleApplyPreset = (preset: Preset) => {
     const next = applyPresetToComposer(preset, { modelId, prompt, params }, apiKeys, normalizeKreaMode(kreaConnectionMode));
+    // Only Nebula's own files are attached and drawn (lib/storedImage.ts). A
+    // Style saved before Nebula checked its images can hold an outside link:
+    // it is left out, so neither the tray nor a run fetches it.
+    const outside = preset.refImages.filter((fp) => storedImageView(fp).outside).length;
+    setStyleNote(outside === 0 ? null
+      : `${outside} image link${outside === 1 ? '' : 's'} from outside Nebula in this Style ${outside === 1 ? 'was' : 'were'} left out.`);
     updateDraft((current) => ({
       modelId: next.modelId ?? current.modelId, prompt: next.prompt, params: next.params,
-      refs: [...current.refs, ...preset.refImages.filter((fp) => !current.refs.some((ref) => ref.filePath === fp))
-        .map((fp) => ({ filePath: fp, previewUrl: fp }))],
+      refs: [...current.refs, ...preset.refImages
+        .filter((fp) => !storedImageView(fp).outside && !current.refs.some((ref) => ref.filePath === fp))
+        .map((fp) => ({ filePath: fp, previewUrl: storedImageView(fp).src ?? '' }))],
     }));
   };
 
@@ -139,6 +164,11 @@ export function CreateView() {
     if (!modelDef || styleSavePending.current) return;
     if (uploads.length > 0) {
       setStyleSaveError('Finish attaching references or remove them before saving this style.');
+      return;
+    }
+    // A Style holds only Nebula's own images; the backend refuses others too.
+    if (refs.some((ref) => storedImageView(ref.filePath).outside)) {
+      setStyleSaveError('A reference is an image link from outside Nebula. Remove it, or upload the image, before saving this style.');
       return;
     }
     styleSavePending.current = true;
@@ -159,7 +189,7 @@ export function CreateView() {
           const node = nodes.find((n) => n.id === nodeId);
           if (!node || node.data.state !== 'complete') continue;
           for (const output of Object.values(node.data.outputs ?? {})) {
-            if (output?.type === 'Image' && typeof output.value === 'string' && output.value) {
+            if (output?.type === 'Image' && typeof output.value === 'string' && storedImageView(output.value).src) {
               thumbnail = output.value;
               break outer;
             }
@@ -172,7 +202,7 @@ export function CreateView() {
       styleName.current = null;
       if (mounted.current) setPresetReloadKey((k) => k + 1);
     } catch (err) {
-      if (mounted.current) setStyleSaveError(err instanceof Error ? err.message : 'Could not save this style. Please try again.');
+      if (mounted.current) setStyleSaveError(failureMessage(err, "Couldn't save the style."));
     } finally {
       styleSavePending.current = false;
       if (mounted.current) setSavingStyle(false);
@@ -189,6 +219,7 @@ export function CreateView() {
     useCreateDraftStore.getState().resetDraft(sessionId, defaultDraft());
     setGenerationError(null);
     setStyleSaveError(null);
+    setStyleNote(null);
     setReusedDraft(null);
   };
 
@@ -256,13 +287,15 @@ export function CreateView() {
       });
       const lifecycle = useGraphStore.getState();
       if (!lifecycle.createLaunchingIds.includes(genId) || lifecycle.createCancelledLaunchIds.includes(genId)) return;
-      if (modelNodeIds.length === 0 || allNodeIds.length === 0) throw new Error('Could not create generation nodes. Please try again.');
+      if (modelNodeIds.length === 0 || allNodeIds.length === 0) {
+        throw new FailureNotice(GENERATE_HEADING, "Its nodes weren't added to the canvas. Try again.");
+      }
       // The shared execution store consumes the reservation atomically when it
       // creates the history/Stop owner. This survives leaving Create mid-launch.
       await store.executeClusterConcurrent(allNodeIds, { genId, prompt: currentDraft.prompt, ts, sessionId, modelNodeIds, allNodeIds });
     } catch (error) {
       if (mounted.current && !useGraphStore.getState().createCancelledLaunchIds.includes(genId)) {
-        setGenerationError(error instanceof Error ? error.message : 'Could not start generation. Please try again.');
+        setGenerationError(failureMessage(error, GENERATE_HEADING));
       }
     } finally {
       store.releaseCreateGeneration(genId);
@@ -310,6 +343,7 @@ export function CreateView() {
         navigation={<WorkspaceModeNavigation />}>
         <button type="button" className="create-view__back" onClick={handleNewDraft}>New draft</button>
         {styleSaveError && <span className="create-view__save-error" role="alert">{styleSaveError}</span>}
+        {styleNote && <span className="create-view__style-note" role="status">{styleNote}</span>}
         {generationError && <span className="create-view__run-error" role="alert">{generationError}</span>}
         {createLaunchingIds.length > 0 && <span role="status">Preparing generation…</span>}
         {createLaunchingIds.map((genId) => {
@@ -372,7 +406,7 @@ export function CreateView() {
           saving={savingStyle}
         />
       )}
-      <div ref={composerArea} className="create-view__composer-area">
+      <div ref={composerArea} className="create-view__composer-area" {...{ [BOTTOM_BAR_ATTR]: '' }}>
         {canUndoReuse && <div className="create-view__reuse-feedback">
           <span role="status">Settings copied to draft. Generate when ready.</span>
           {reusedDraft?.removedAttachments && <span>Unfinished attachments were removed. Reattach those files after Undo.</span>}

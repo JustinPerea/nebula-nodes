@@ -552,7 +552,7 @@ def test_the_capability_and_its_instructions_come_only_with_the_flag(nebula):
 
     plain, channel, plain_tools, channel_tools = anyio.run(main)
     assert not plain.capabilities.experimental
-    assert plain.instructions == mcp_server.INSTRUCTIONS + "\n" + mcp_server.COMMONS_SKILL
+    assert plain.instructions == mcp_server.INSTRUCTIONS + "\n" + mcp_server.COMMONS_MCP_GUIDE
     assert channel.capabilities.experimental == {"claude/channel": {}}
     assert "claude/channel/permission" not in channel.capabilities.experimental  # no permission relay
     assert channel.instructions.startswith(mcp_channel.INSTRUCTIONS)

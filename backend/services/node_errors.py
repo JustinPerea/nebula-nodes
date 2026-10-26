@@ -5,8 +5,8 @@ here, so it is still there when the page reloads, the person switches
 projects and back, or the backend restarts:
 
 - every graph the page loads says it (main._cli_node_to_rf: state "error"
-  with the card's error, errorFriendly and errorCategory), in graphSync and
-  GET /api/projects/{id} alike;
+  with the card's error, errorFriendly, errorCategory and errorPerson), in
+  graphSync and GET /api/projects/{id} alike;
 - look_at_canvas and `nebula look` give it as the node's `error`, and
   view_output and `nebula path` answer with it instead of "no output yet".
 
@@ -74,7 +74,7 @@ class NodeErrors:
                 continue
             kept = {
                 str(node_id): {key: _clip(value) for key, value in entry.items()
-                               if key in {"error", "hint", "category"} and value}
+                               if key in {"error", "hint", "category", "person", "providerText", "provider"} and value}
                 for node_id, entry in nodes.items()
                 if isinstance(entry, dict) and entry.get("error")
             }
@@ -127,16 +127,29 @@ class NodeErrors:
     # -- the open project's nodes -------------------------------------------
 
     def record(self, node_id: str, message: str, *, friendly: str | None = None,
-               category: str | None = None) -> None:
+               category: str | None = None, person: str | None = None, provider_text: bool = False,
+               provider: str | None = None) -> None:
         if not node_id or not message:
             return
         entry = {"error": _clip(message)}
+        # The person's line (error copy round 3c): the card shows it, agents
+        # never get it from here (get() is the specific text, word for word).
+        if person:
+            entry["person"] = _clip(person)
+            # Its line was written for a provider's answer: the card keeps the
+            # text behind Details beside it (error copy round 3d).
+            if provider_text:
+                entry["providerText"] = "1"
         hint = _clip(friendly) if friendly else ""
         # classify_error's fallback is the message itself less its full stop.
         if hint and hint.rstrip(".") != entry["error"].rstrip("."):
             entry["hint"] = hint
         if category:
             entry["category"] = _clip(category)
+        # Who the run called (round 3f): the card's general line names them.
+        # Card-only, like the person line: get() never returns it.
+        if provider:
+            entry["provider"] = _clip(provider)
         errors = self._projects.setdefault(self._project, {})
         errors.pop(node_id, None)
         errors[node_id] = entry
@@ -145,20 +158,33 @@ class NodeErrors:
         self._save()
 
     def record_validation(self, errors: Iterable[Any]) -> None:
-        """A pre-call check's errors (ValidationErrorDetail), several per node joined in order."""
+        """A pre-call check's errors (ValidationErrorDetail), several per node joined in order.
+
+        The card's line (error copy round 3e) is their `person` lines joined
+        (execution.person_line.joined_lines); a check with none (only agents
+        or a damaged saved graph reach it) is kept as category "unknown", so
+        after a reload the card shows GM's general line with the text behind
+        Details, as it did live. get() is the specific text, as before."""
+        from execution.person_line import joined_lines
+
         by_node: dict[str, list[str]] = {}
+        lines: dict[str, list[str | None]] = {}
         for error in errors:
             node_id = str(getattr(error, "node_id", "") or "")
             message = str(getattr(error, "message", "") or "")
             if node_id and message and message not in by_node.setdefault(node_id, []):
                 by_node[node_id].append(message)
+                lines.setdefault(node_id, []).append(getattr(error, "person", None))
         for node_id, messages in by_node.items():
-            self.record(node_id, "; ".join(messages))
+            person = joined_lines(lines.get(node_id, []))
+            self.record(node_id, "; ".join(messages), person=person, category=None if person else "unknown")
 
     def observe(self, event: Any) -> None:
         """Follow one execution event the way the canvas card does."""
         if isinstance(event, ErrorEvent):
-            self.record(event.node_id, event.error, friendly=event.friendly, category=event.category)
+            self.record(event.node_id, event.error, friendly=event.friendly, category=event.category,
+                        person=event.person, provider_text=event.provider_text,
+                        provider=getattr(event, "provider", None))
         elif isinstance(event, (ExecutingEvent, ExecutedEvent, SkippedEvent)):
             self.forget(event.node_id)
 
@@ -176,14 +202,22 @@ class NodeErrors:
         entry = self._errors.get(node_id)
         return {key: value for key, value in entry.items() if key in {"error", "hint"}} if entry else None
 
-    def card(self, node_id: str) -> dict[str, str] | None:
+    def card(self, node_id: str) -> dict[str, Any] | None:
         """The node data fields the canvas card shows a failure with (NodeError)."""
         entry = self._errors.get(node_id)
         if not entry:
             return None
+        # An entry saved before round 3e's validation lines (no category, no
+        # person line) is a check Nebula wrote for agents, so the card reads
+        # GM's general line with the text behind Details (round 3f), not the
+        # raw text as if it were a line for the person.
+        category = entry.get("category") or (None if entry.get("person") else "unknown")
         return {"state": "error", "error": entry["error"],
                 **({"errorFriendly": entry["hint"]} if entry.get("hint") else {}),
-                **({"errorCategory": entry["category"]} if entry.get("category") else {})}
+                **({"errorCategory": category} if category else {}),
+                **({"errorProvider": entry["provider"]} if entry.get("provider") else {}),
+                **({"errorPerson": entry["person"]} if entry.get("person") else {}),
+                **({"errorProviderText": True} if entry.get("person") and entry.get("providerText") else {})}
 
     def forget_canvas(self) -> None:
         """The open project's canvas was replaced or cleared: node ids restart.

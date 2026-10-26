@@ -29,6 +29,6 @@ body.app-slava-restraint .provider-readiness__setup {
 }
 
 body.app-slava-restraint .provider-readiness__setup:hover { border-color: var(--sr-accent); }
-body.app-slava-restraint .provider-readiness__setup:focus-visible { outline: 2px solid var(--sr-accent); outline-offset: 2px; }
+body.app-slava-restraint .provider-readiness__setup:focus-visible { outline: var(--sr-focus-outline); outline-offset: var(--sr-focus-offset); }
 body.app-slava-restraint .create-composer > .provider-readiness { padding: 0 0 8px; justify-content: flex-start; }
 body.app-slava-restraint .create-composer > .provider-readiness .provider-readiness__setup { margin-left: 0; }

@@ -49,7 +49,7 @@ describe('ProviderRecoveryStatus', () => {
     });
 
     render(<ProviderRecoveryStatus />);
-    expect(screen.getByRole('alert')).toHaveTextContent('Paid start needs review.');
+    expect(screen.getByRole('alert')).toHaveTextContent('A World Labs run needs your check.');
     expect(screen.queryByRole('button', { name: 'Dismiss recovery warning' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', {
@@ -75,7 +75,8 @@ describe('ProviderRecoveryStatus', () => {
 
     render(<ProviderRecoveryStatus />);
     expect(screen.getByRole('alert')).toHaveTextContent(
-      'The hold could not be saved durably; do not restart the backend.',
+      // Error copy round 3e (GM): no "could not", and the reason in words.
+      "Nebula couldn't save the hold, so keep Nebula running until this run finishes.",
     );
   });
 
@@ -93,7 +94,7 @@ describe('ProviderRecoveryStatus', () => {
     });
 
     render(<ProviderRecoveryStatus />);
-    expect(screen.getByRole('alert')).toHaveTextContent('Paid start status unknown.');
+    expect(screen.getByRole('alert')).toHaveTextContent("Nebula can't tell if this World Labs run started.");
     expect(screen.queryByRole('button', { name: 'Dismiss recovery warning' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', {

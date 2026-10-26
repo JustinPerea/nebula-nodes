@@ -125,6 +125,27 @@ body:not(.app-slava-restraint) .model-node__id-chip:hover {
 .model-node__port-label { font-size: 11px; }
 body:not(.app-slava-restraint) .model-node__port-label { color: #888; }
 
+/* What a wired moodboard does on this node (MoodboardAdapterRow): one line
+ * under the ports. The empty line drawn while it loads keeps the same box.
+ * An Audio or Document Input's file name is the same one muted line
+ * (lib/fileName.ts cuts it in the middle; the clip is a fallback). */
+.model-node__board-line,
+.model-node__file-name {
+  min-height: calc(11px * 1.35);
+  padding: 0 10px 6px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.model-node__file-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+body:not(.app-slava-restraint) .model-node__board-line,
+body:not(.app-slava-restraint) .model-node__file-name { color: #888; }
+body.app-slava-restraint .model-node__board-line,
+body.app-slava-restraint .model-node__file-name { color: var(--sr-ink-light); font-size: var(--sr-type-label); }
+
 /* Semantic reference role badge — small colored dot rendered next to an input
  * port's label when the port carries `role` metadata (see referenceRoles.ts).
  * The color is set inline from the role definition; this rule only shapes the
@@ -272,13 +293,20 @@ body:not(.app-slava-restraint) .model-node__error--blocked {
   opacity: 0.7;
   font-size: 9px;
   list-style: revert;
+  width: fit-content;
 }
-.model-node__error-raw {
+/* The raw provider text (error copy round 3c): it can be a long body, so it
+   wraps anywhere and scrolls inside the card's error area rather than
+   stretching the card (nowheel on the toggle lets the wheel scroll it). */
+.model-node__error-details .error-details__raw {
   display: block;
   margin-top: 3px;
+  max-height: 8.5em;
+  overflow-y: auto;
   opacity: 0.75;
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
+  user-select: text;
 }
 
 /* --- Before/after compare slider (image-compare node) --- */
@@ -524,6 +552,18 @@ body:not(.app-slava-restraint) .reroute-node {
 body:not(.app-slava-restraint) .reroute-node:hover {
   background: #555;
   border-color: #888;
+}
+
+/* The reroute dot's run error (error copy round 3e): the dot has no body,
+   so the shared error block hangs centred below it at a card's width. */
+.reroute-node__run-error {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  width: 200px;
+  translate: -50% 0;
+  z-index: 1;
+  cursor: default;
 }
 
 .reroute-node__handle {

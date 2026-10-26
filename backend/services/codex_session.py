@@ -391,6 +391,8 @@ def _codex_model(model: str | None) -> str | None:
 
 def _codex_base_args(model: str | None, effort: str | None = DEFAULT_EFFORT,
                      workdir: Path | None = None, backend_url: str | None = None) -> list[str]:
+    from services.output import OUTPUT_ROOT
+
     workdir = workdir or agent_workspace()
     args = [
         CODEX_BIN,
@@ -400,7 +402,8 @@ def _codex_base_args(model: str | None, effort: str | None = DEFAULT_EFFORT,
         "never",
         *codex_profile_args(effort=effort),
         *codex_filesystem_args(workdir=workdir,
-                               deny_paths=[*protected_agent_dirs(), *default_secret_paths()]),
+                               deny_paths=[*protected_agent_dirs(), *default_secret_paths()],
+                               output_root=OUTPUT_ROOT),
         "-c",
         'approval_policy="never"',
         "--cd",

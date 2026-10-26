@@ -24,6 +24,7 @@ from services.character_store import CharacterStore
 from services.moodboard_store import MoodboardStore
 from tests.conftest import FORGED_ORIGIN, PERSON
 from tests.test_asset_reference_params import AGENT, CHARACTER, MCP, _board, _changed, api  # noqa: F401
+from tests.conftest import stored_image_urls
 
 
 
@@ -32,7 +33,7 @@ from tests.test_asset_reference_params import AGENT, CHARACTER, MCP, _board, _ch
 def test_delete_moves_the_file_untouched_and_restore_puts_it_back(tmp_path, monkeypatch):
     monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path))
     store = MoodboardStore()
-    board = store.create(name="Warm", images=[{"url": "/api/outputs/a.png"}], projectId="proj1")
+    board = store.create(name="Warm", images=[{"url": stored_image_urls(1, name="trash")[0]}], projectId="proj1")
     live = tmp_path / "proj1" / f"{board['id']}.json"
     original = live.read_bytes()
 
@@ -75,7 +76,7 @@ def test_a_record_without_its_file_is_ignored(tmp_path, monkeypatch):
     """A crash between writing the record and moving the file leaves the board live."""
     monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path))
     store = MoodboardStore()
-    board = store.create(name="Half", images=[{"url": "/api/outputs/a.png"}])
+    board = store.create(name="Half", images=[{"url": stored_image_urls(1, name="trash")[0]}])
     (tmp_path / ".trash").mkdir()
     (tmp_path / ".trash" / f"{board['id']}{asset_trash.RECORD_SUFFIX}").write_text(json.dumps({"id": board["id"]}))
     assert store.trashed(board["id"]) is None
@@ -86,7 +87,7 @@ def test_a_record_without_its_file_is_ignored(tmp_path, monkeypatch):
 def test_restore_refuses_when_the_id_is_live_again(tmp_path, monkeypatch):
     monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path))
     store = MoodboardStore()
-    board = store.create(name="Twice", images=[{"url": "/api/outputs/a.png"}])
+    board = store.create(name="Twice", images=[{"url": stored_image_urls(1, name="trash")[0]}])
     store.delete(board["id"])
     (tmp_path / "_global" / f"{board['id']}.json").write_text(json.dumps(board))
     with pytest.raises(asset_trash.AlreadyLive):
@@ -202,7 +203,8 @@ def test_only_the_person_deletes_for_good(api, headers):
 def test_the_person_deletes_one_for_good_or_empties_a_scope(api):
     keep, purge, other = _board(api, "Keep"), _board(api, "Purge"), _board(api, "Other")
     project_board = api.client.post("/api/moodboards", json={
-        "name": "In project", "images": [{"url": "/api/outputs/x.png"}], "projectId": api.project_id}).json()
+        "name": "In project", "images": [{"url": stored_image_urls(1, name="trash")[0]}],
+        "projectId": api.project_id}).json()
     for board in (purge, other, project_board):
         api.client.delete(f"/api/moodboards/{board['id']}")
 
@@ -356,6 +358,8 @@ def test_cli_lists_and_restores(api, monkeypatch):
     client = NebulaClient("http://testserver")
     monkeypatch.setattr(client, "_request", lambda method, path, **kw: api.client.request(
         method, path, headers=AGENT, params=kw.get("params")).json())
+    # `trash list` reads through project_client (MCP list_trash's code), on the client's connection.
+    client._client = api.client
 
     out = io.StringIO()
     with redirect_stdout(out):
@@ -383,6 +387,7 @@ def test_cli_parser_has_trash_list_and_restore_only():
 
 def test_mcp_tools_list_and_restore(api, monkeypatch):
     import mcp_server
+    from nebula_api import NebulaAPI
 
     board = _board(api)
     api.client.delete(f"/api/moodboards/{board['id']}")
@@ -393,6 +398,8 @@ def test_mcp_tools_list_and_restore(api, monkeypatch):
         return api.client.request(method, path, headers=AGENT, params=kwargs.get("params")).json()
 
     monkeypatch.setattr(mcp_server, "_canvas_call", fake_call)
+    # list_trash goes through project_client (shared with `nebula trash list`) on mcp_server._api().
+    monkeypatch.setattr(mcp_server, "_api", lambda: NebulaAPI("http://testserver", client=api.client))
     assert mcp_server.list_trash("moodboard")["items"][0]["id"] == board["id"]
     assert mcp_server.restore_from_trash("moodboard", board["id"])["restored"] == "moodboard"
     assert calls[-1][:2] == ("POST", f"/api/trash/moodboard/{board['id']}/restore")
