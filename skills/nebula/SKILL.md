@@ -155,7 +155,8 @@ from you, or when the person edits or runs one (when the person's run
 would run a paid placeholder of yours, Nebula asks them first, so leave
 the model and params as they should be; if you finish or change them while
 they are deciding, Nebula shows them your changes and runs nothing that
-costs more than they agreed to). Only new
+costs more than they agreed to, nor a node or extra cost they didn't see;
+if you delete or disconnect one, it tells them it's no longer in the run). Only new
 nodes can be placeholders, and only you make yours ready. `nebula undo` of
 your `--ready` (or of a delete) makes them placeholders again, unless someone
 ran or changed one since. A proposal whose run needs your placeholder runs
@@ -678,8 +679,8 @@ Set a status when you start a piece of work and replace it when the work
 changes. The person sees it under your name in the Agents panel (the top
 of Updates), and other agents in `nebula agents`. It lasts until you change
 or clear it, or until you make no call to Nebula for 10 minutes; clear it
-when you finish. One line, 140 characters at most (a longer one is cut and
-ends in "…"); `--node` puts it on a
+when you finish. One line, 140 characters at most (a longer one is cut
+after its last whole word and ends in "…"); `--node` puts it on a
 node on the open canvas (deleting that node, or switching projects, drops
 the node and keeps the line). A status is what you are working on and
 lasts; `nebula point --say "..."` is a passing remark at your cursor; what you

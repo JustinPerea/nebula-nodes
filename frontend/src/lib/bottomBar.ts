@@ -108,16 +108,46 @@ export function floatingTopLimit(gutter: number): number {
   return line;
 }
 
+/**
+ * On the root while a bar comes or goes: a screen switch (back to the canvas
+ * from a Studio, into Creator Studio). The notice region then jumps to its
+ * new line (noticeRegion.css) instead of springing there: springing up from
+ * where it sits with no bar, a notice showing crossed the bar that had just
+ * arrived and covered Canvas actions and the zoom for the length of the spring
+ * (GM - Design, round 7, the r6-zz-error-cinema.png question). The bar
+ * growing (its Canvas actions panel opening) keeps the spring.
+ */
+export const BOTTOM_BAR_SWITCH_ATTR = 'data-bottom-bar-switch';
+
+let switchFrame: number | null = null;
+
+/** Marks the root for this frame and the next, so the new line is styled without the spring. */
+function markBarSwitch(root: HTMLElement): void {
+  root.setAttribute(BOTTOM_BAR_SWITCH_ATTR, '');
+  if (switchFrame !== null) cancelAnimationFrame(switchFrame);
+  switchFrame = requestAnimationFrame(() => {
+    switchFrame = requestAnimationFrame(() => {
+      switchFrame = null;
+      root.removeAttribute(BOTTOM_BAR_SWITCH_ATTR);
+    });
+  });
+}
+
 /** Writes the bar's clearance on the root (or clears it when no bar is on screen). */
 export function publishBottomBarClearance(): void {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
+  const before = root.style.getPropertyValue(BOTTOM_BAR_CLEARANCE_VAR);
   const top = bottomBarTop();
-  if (top === null) root.style.removeProperty(BOTTOM_BAR_CLEARANCE_VAR);
-  else root.style.setProperty(BOTTOM_BAR_CLEARANCE_VAR, `${Math.max(0, Math.round(window.innerHeight - top))}px`);
+  const next = top === null ? '' : `${Math.max(0, Math.round(window.innerHeight - top))}px`;
+  if ((before === '') !== (next === '')) markBarSwitch(root);
+  if (next === '') root.style.removeProperty(BOTTOM_BAR_CLEARANCE_VAR);
+  else root.style.setProperty(BOTTOM_BAR_CLEARANCE_VAR, next);
 }
 
 export function clearBottomBarClearance(): void {
   if (typeof document === 'undefined') return;
-  document.documentElement.style.removeProperty(BOTTOM_BAR_CLEARANCE_VAR);
+  const root = document.documentElement;
+  if (root.style.getPropertyValue(BOTTOM_BAR_CLEARANCE_VAR) !== '') markBarSwitch(root);
+  root.style.removeProperty(BOTTOM_BAR_CLEARANCE_VAR);
 }

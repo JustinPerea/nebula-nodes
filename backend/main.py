@@ -8807,11 +8807,6 @@ def _placeholder_confirm_refusal(run_id: str, paid: list[str], estimate: Mapping
     })
 
 
-# The canvas sends its total rounded to 6 places (lib/placeholderRunConfirm.ts),
-# as _run_estimate rounds Nebula's: the two can differ in the last place.
-_CONFIRMED_COST_SLACK = 1e-6
-
-
 async def _require_placeholder_confirmation(
     run_id: str, nodes: list[GraphNode], edges: list[GraphEdge], ready: list[str], confirmed: list[str] | None,
     confirmed_cost: float | None = None, *, passes: int = 1, api_keys: Mapping[str, Any] | None = None,
@@ -8849,7 +8844,11 @@ async def _require_placeholder_confirmation(
     high = None if estimate is None else estimate["high"]
     if high is None:
         return  # nothing in it has a list price: the person confirmed the rows
-    if confirmed_cost is None or high > confirmed_cost + _CONFIRMED_COST_SLACK:
+    # No slack (review 6, L-e; GM - Design's answer): the canvas sends the
+    # amount it showed, in cents rounded up (lib/placeholderRunConfirm.ts
+    # roundUpToCent), so a run Nebula prices even a millionth higher than that
+    # is refused and asked again at Nebula's numbers.
+    if confirmed_cost is None or high > confirmed_cost:
         raise _placeholder_confirm_refusal(run_id, paid, estimate, shot=shot)
 
 

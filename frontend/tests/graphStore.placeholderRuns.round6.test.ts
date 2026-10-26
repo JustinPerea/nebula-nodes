@@ -109,7 +109,7 @@ describe("review 5: the person's direct run once the placeholder dialog has show
       expect(askMock).toHaveBeenCalledTimes(2);
       expect(askMock.mock.calls[1][1]).toMatchObject({ changed: true });
       expect(askMock.mock.calls[1][0]).toMatchObject({
-        heading: "Run with Codex's changes?", intro: 'Codex finished setting up these nodes.',
+        heading: "Run with Codex's changes?", intro: 'Codex finished setting up this node.',
         runLabel: 'Run for $9.60', confirmIds: [] });
       expect(confirm).not.toHaveBeenCalled();
       expect(execute).toHaveBeenCalledOnce();

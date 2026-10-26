@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import type { PlaceholderRunConfirm } from '../lib/placeholderRunConfirm';
 import '../styles/prompt-dialog.css';
@@ -28,6 +28,14 @@ import '../styles/placeholder-run-dialog.css';
  * node of the run that is no placeholder has a muted row with no dot (item
  * 3). Run hands back the words it was showing when it was clicked (review 5,
  * L6), so the run sends what the person saw, not what was about to be drawn.
+ *
+ * Review 6, M1 (GM - Design: "rows scroll with everything else pinned: yes.
+ * The scroll area must be reachable by keyboard, and initial focus stays on
+ * Cancel."): with many paid nodes the rows scroll inside the card, which
+ * never grows past the window (placeholder-run-dialog.css), so the heading,
+ * the changed line, the total, the footnotes and the buttons stay on screen.
+ * A list that scrolls is a Tab stop named by the heading; one that fits isn't.
+ * Review 6, L-b: the line for placeholders that left the run sits under the intro.
  */
 export const CHANGED_LINE = 'This run changed since you last reviewed it.';
 /** How long Run ignores clicks after the dialog's numbers change (GM: "~500 ms"). */
@@ -35,8 +43,27 @@ export const RUN_CLICK_GUARD_MS = 500;
 
 /** What the person reads before Run: a change to any of it holds Run back. */
 function signature(model: PlaceholderRunConfirm): string {
-  return JSON.stringify([model.heading, model.intro, model.rows, model.freeLine, model.totalLine, model.notes,
-    model.runLabel]);
+  return JSON.stringify([model.heading, model.intro, model.leftLine, model.rows, model.freeLine, model.totalLine,
+    model.notes, model.runLabel]);
+}
+
+/** Whether the rows overflow their box: then the list scrolls and takes keyboard focus. */
+function useScrolls(list: RefObject<HTMLUListElement | null>, rows: number): boolean {
+  const [scrolls, setScrolls] = useState(false);
+  useLayoutEffect(() => {
+    const element = list.current;
+    if (!element) return undefined;
+    const measure = () => setScrolls(element.scrollHeight > element.clientHeight + 1);
+    measure();
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
+    observer?.observe(element);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [list, rows]);
+  return scrolls;
 }
 
 export function PlaceholderRunDialog({ model, changed = false, onDone }: {
@@ -50,6 +77,8 @@ export function PlaceholderRunDialog({ model, changed = false, onDone }: {
   const bodyId = useId();
   const card = useRef<HTMLDivElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
+  const list = useRef<HTMLUListElement>(null);
+  const scrolls = useScrolls(list, model.rows.length);
   const shown = useRef<string | null>(null);
   const heldUntil = useRef(0);
   const current = signature(model);
@@ -82,10 +111,11 @@ export function PlaceholderRunDialog({ model, changed = false, onDone }: {
       event.stopPropagation();
       onDone(false, model);
     } else if (event.key === 'Tab') {
-      const buttons = card.current?.querySelectorAll<HTMLElement>('button');
-      if (!buttons?.length) return;
-      const first = buttons[0];
-      const last = buttons[buttons.length - 1];
+      // The Tab stops: the rows when they scroll (review 6, M1), then the buttons.
+      const stops = card.current?.querySelectorAll<HTMLElement>('button, [tabindex="0"]');
+      if (!stops?.length) return;
+      const first = stops[0];
+      const last = stops[stops.length - 1];
       if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
         last.focus();
@@ -102,8 +132,10 @@ export function PlaceholderRunDialog({ model, changed = false, onDone }: {
         <h2 id={headingId} className="placeholder-run__heading">{model.heading}</h2>
         <div id={bodyId} className="placeholder-run__body">
           <p className="prompt-dialog__line">{model.intro}</p>
+          {model.leftLine && <p className="prompt-dialog__line placeholder-run__left">{model.leftLine}</p>}
           {(changed || changes > 0) && <p className="prompt-dialog__line placeholder-run__changed">{CHANGED_LINE}</p>}
-          <ul className="placeholder-run__rows">
+          <ul ref={list} className="placeholder-run__rows"
+            {...(scrolls ? { tabIndex: 0, 'aria-labelledby': headingId } : {})}>
             {model.rows.map((row) => (
               row.agent ? (
                 <li key={row.nodeId} className="placeholder-run__row" style={{ '--prd-color': row.agent.color } as CSSProperties}>

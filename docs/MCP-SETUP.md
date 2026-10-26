@@ -1281,7 +1281,8 @@ Needs-you row opens its oldest question set or proposal.
 - **Set your status:** MCP `set_status(text, node_id?)`, CLI
   `nebula status "<text>" [--node nX]`, HTTP `POST /api/canvas/status` with
   `{text, nodeId?}`. One line, cleaned like a cursor's `say` (whitespace
-  collapsed, 140 characters at most: a longer one is cut and ends in
+  collapsed, 140 characters at most: a longer one is cut after its last
+  whole word that fits (one with no space is cut hard) and ends in
   "…", so the node's pill never ends mid-word); `nodeId` must be a node on the open
   canvas. Empty text clears it (`set_status("")`, `nebula status --clear`).
   Only an identified agent sets one, and only its own: the browser gets 403,
@@ -1397,39 +1398,60 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   dollar in the total has a row, the free placeholders in one line, the
   run's total, then "Cancel" and "Run for $0.12" ("Run for up to $0.86" for
   a range; from Cinema "Generate for $0.12", "Generate for up to $0.50",
-  "Generate"). A dollar amount shows only when it covers every paid row (a
+  "Generate"). The amount in the button and the total line is always in
+  cents, rounded up to the next cent ($0.201 shows "$0.21", $10.481
+  "$10.49", anything under a cent "$0.01"); the rows keep their own prices.
+  A dollar amount shows only when it covers every paid row (a
   Krea-plan row costs nothing extra): with a row that has none the total
   reads "The listed prices total $0.43." and the button just "Run", and a
-  footnote names the rows with no list price ("“Flux still” has no list
-  price, so the run may cost more.", two by name, "3 nodes have no list
-  price, …" for more); with nothing priced there is no total and no
-  footnote. Cancel changes nothing. A price read from an input file (FLUX
+  footnote names those rows: "“Flux still” has no list price, so the run
+  may cost more." (two by name, "3 nodes have no list price, …" for more);
+  for rows priced by their input, "“Upscale” is priced by its input, so the
+  run may cost more." / "“Upscale” and “Grade” are priced by their input,
+  …"; both kinds together, or three or more priced by their input, "3 nodes
+  have no price yet, so the run may cost more."; with nothing priced there
+  is no total and no footnote. With many paid nodes the rows scroll inside
+  the dialog (a Tab stop when they do), and the heading, total, footnote
+  and buttons stay on screen; focus starts on Cancel. Cancel changes nothing. A price read from an input file (FLUX
   Video Upscale, SeedVR2) is measured while the dialog is open, and the
   row updates in place. Whenever a row, a price or the heading changes
   after the dialog first shows, it says "This run changed since you last
   reviewed it." above the rows (a screen reader hears it), and Run takes
   no click for 500 ms. Once it has shown, the dialog stays in charge of
-  that run until it is sent or cancelled: if the agents finish their
-  placeholders while it is open, it reads "Run with Codex's changes?" /
-  "Codex finished setting up these nodes." ("Run with the agents'
-  changes?" / "The agents finished setting up these nodes." for several),
-  and if some are still left, the first heading counting only those. If
-  anything changed by the time the person clicks, it asks again over the
-  new run; a run with no placeholder left that the total the person saw
-  still covers goes ahead, held to that total. The costly-run setting's
-  browser confirm never follows it.
+  that run until it is sent or cancelled. It follows only that run's
+  placeholders (another agent's elsewhere on the canvas never changes it):
+  if their agents finish them while it is open, it reads "Run with Codex's
+  changes?" / "Codex finished setting up this node." ("… these nodes." for
+  two or more; "Run with the agents' changes?" / "The agents finished
+  setting up these nodes." for several agents); if they leave the run
+  (deleted, or disconnected) and none finished, "Run without the node Codex
+  was setting up?" / "It's no longer in this run." ("Run without the nodes
+  Codex was setting up?" / "They're no longer in this run."; several
+  agents, "Run without the nodes agents were setting up?"); if some
+  finished and some left, the "changes" heading counting the finished ones,
+  then "1 node Codex was setting up is no longer in this run." ("2 nodes …
+  are no longer in this run."); and if some are still placeholders, the
+  first heading counting only those. If anything changed by the time the
+  person clicks, it asks again over the new run; a run with no placeholder
+  left goes ahead without asking again only if its total is no higher than
+  the one the person saw and every row and every "Not included" note in it
+  was on screen, held to that total. If another run started first, a yes
+  runs nothing and the canvas says "Nothing ran. Another run started first.
+  Click “Run” again when it finishes." (from Cinema, "… Generate again when
+  it finishes."). The costly-run setting's browser confirm never follows it.
   `/api/execute-node` and `/api/cinema/generate-shot` enforce it: the
   person's run carries `confirmedPlaceholders` (exactly those paid
-  placeholder ids) and `confirmedCost` (the total of the listed prices the
-  dialog showed, USD, rounded to 6 places; required with
+  placeholder ids) and `confirmedCost` (the amount the dialog showed in its
+  button and total line, USD: the listed prices' upper total rounded up to
+  the cent; required with
   `confirmedPlaceholders` whenever Nebula can price the run) or gets 409
   `placeholder_confirm_required` before anything is priced or changes.
   Nebula holds the run to its own estimate: at the keys in Settings, with
   every price read from an input file measured first (an inline `data:`
   image too, as `POST /api/pricing/input-sizes` measures it for the
   canvas), a shot as one shot times its variations, multiplied and then
-  rounded to 6 places; above `confirmedCost` (by more than $0.000001) gets
-  the same 409. A run that carries `confirmedCost` is held to it even when
+  rounded to 6 places; anything above `confirmedCost` (no slack) gets the
+  same 409. A run that carries `confirmedCost` is held to it even when
   no placeholder is left (their agents finished them while the dialog was
   open); `confirmedPlaceholders` then doesn't matter. A paid node with no
   list price counts nothing on either side, as the dialog says. The 409
@@ -1443,8 +1465,8 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   review it."). The canvas never shows that message: it takes the start
   back (no Run history record, nothing Queued, no Stop), asks again at
   once in its dialog, priced at `estimate`, and starts the same run again
-  with `estimate.high` after a yes; the message is for a tab too old to do
-  that. Free placeholders need no confirmation. Agents' runs are
+  with `estimate.high` rounded up to the cent after a yes; the message is
+  for a tab too old to do that. Free placeholders need no confirmation. Agents' runs are
   unchanged: your own placeholders run when you run them, and a Cinema
   shot you start skips another agent's.
 - **Saved with the graph:** the flag lives on the node with its owner

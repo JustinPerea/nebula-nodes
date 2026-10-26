@@ -3,7 +3,7 @@ import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { NodeData } from '../types';
 import { isLocalRun, modelChoice } from './nodeKeys';
 import { cleanPending, type PendingAgent } from './pendingNodes';
-import { formatUsd, formatUsdRange } from './pricing';
+import { formatUsdRange } from './pricing';
 import { runCostNotes, type RunCost, type RunScopeSummary } from './runScope';
 
 /**
@@ -16,7 +16,9 @@ import { runCostNotes, type RunCost, type RunScopeSummary } from './runScope';
  * Copy is GM - Design's, 2026-10-25 and 26 (round 4 for the rows' prices
  * and the button, round 5 for the total when a row has no dollar amount,
  * round 6 for the footnotes, the other paid nodes' rows, Cinema's Generate and
- * the heading once no placeholder is left), verbatim.
+ * the heading once no placeholder is left, round 7 for "this node", the
+ * input-priced footnotes, placeholders that left the run and the amounts in
+ * cents), verbatim.
  * The backend refuses the run unless it carries these exact paid
  * placeholders and a total no lower than its own estimate (main.execute_node
  * and main.generate_cinema_shot, `confirmedPlaceholders` and
@@ -44,24 +46,36 @@ export interface PlaceholderRunRow {
 export interface PlaceholderRunConfirm {
   heading: string;
   intro: string;
+  /** Under the intro when some placeholders the dialog showed finished and
+   * others left the run (deleted or disconnected): "1 node Codex was setting
+   * up is no longer in this run." (GM - Design, round 7, review 6 L-b); else null. */
+  leftLine: string | null;
   rows: PlaceholderRunRow[];
   /** "Plus 1 free node." / "Plus 2 free nodes.", or null. */
   freeLine: string | null;
   /** The costly-run confirm's own line; "The listed prices total $0.43." when
-   * a row's price isn't listed; null when no amount covers any row (GM, round 5). */
+   * a row's price isn't listed; null when no amount covers any row (GM, round 5).
+   * Its amount is in cents, rounded up (round 7: formatConfirmUsd). */
   totalLine: string | null;
   /** The gates and what's not included, then, under a total, the rows that
    * have no list price (GM, round 6, item 1). */
   notes: string[];
+  /** Of `notes`, the gates and what's not included ("Not included: input
+   * images."): a run that got cheaper after the click goes ahead without
+   * asking again only if it adds none of these unseen (review 6, L-a). */
+  costNotes: string[];
   /** "Run for $0.12" (a fixed total), "Run for up to $0.86" (a range), or
    * "Run" when a row's price isn't listed or no price table loaded (GM, round
-   * 4); "Generate…" from Cinema (GM, round 6, item 3). */
+   * 4); "Generate…" from Cinema (GM, round 6, item 3). The amount is in
+   * cents, rounded up, never whole dollars (GM, round 7: formatConfirmUsd). */
   runLabel: string;
   /** The paid placeholders the person confirms; the run sends them. */
   confirmIds: string[];
-  /** The run's upper total of its listed prices (USD), rounded to 6 places as
-   * Nebula rounds its own (review 4, L1), or null with no price table: the
-   * run sends it, and the backend refuses a run its own estimate puts higher. */
+  /** The amount the person is shown and confirms: the run's upper total of
+   * its listed prices (USD) rounded up to the cent, exactly as the button and
+   * the total line show it (review 6, L-e; GM - Design: "Send that shown
+   * amount as confirmedCost"), or null with no price table. The run sends it,
+   * and the backend refuses a run its own estimate puts any higher. */
   confirmCost: number | null;
 }
 
@@ -71,10 +85,12 @@ export interface PlaceholderRunOptions {
   verb?: 'Run' | 'Generate';
   /** A node's name for this run, unquoted: a Cinema shot's scene is “Shot 1”. */
   names?: Readonly<Record<string, string>>;
-  /** Every placeholder an earlier dialog of this same run showed, with its
-   * agent. Once the dialog has shown it stays the authority (review 5, H1):
-   * when their agents finish them while it is open there is still a dialog,
-   * "Run with Codex's changes?", never none. */
+  /** Every placeholder of this run a dialog of it showed, with its agent
+   * (runPlaceholders: only this run's, review 6 L-b). Once the dialog has
+   * shown it stays the authority (review 5, H1): when their agents finish
+   * them while it is open, or they leave the run, there is still a dialog
+   * ("Run with Codex's changes?", "Run without the node Codex was setting
+   * up?"), never none. One no longer in the run is never "finished". */
   shown?: ReadonlyMap<string, PendingAgent>;
 }
 
@@ -123,6 +139,18 @@ function nodeScope(nodes: Node<NodeData>[], edges: Edge[], nodeId: string): Node
   return nodes.filter((node) => ids.has(node.id));
 }
 
+/** The placeholders in the person's direct run of `nodeId`, with their
+ * agents: what a dialog of this run shows, and all it remembers (review 6,
+ * L-b: never another agent's placeholder elsewhere on the canvas). */
+export function runPlaceholders(nodes: Node<NodeData>[], edges: Edge[], nodeId: string): Map<string, PendingAgent> {
+  const found = new Map<string, PendingAgent>();
+  for (const node of nodeScope(nodes, edges, nodeId)) {
+    const flag = cleanPending(node.data?.pending);
+    if (flag) found.set(node.id, flag.agent);
+  }
+  return found;
+}
+
 /** A row's price (GM - Design, rounds 4 and 6, verbatim): the list price,
  * "on your Krea plan", "price depends on its input" (its size isn't known
  * yet), or "price not listed". `missing`: no dollar amount covers it, which
@@ -137,9 +165,27 @@ function rowPrice(nodeId: string, summary: RunScopeSummary, name: string): { tex
   return { text: PRICE_NOT_LISTED, missing: true };
 }
 
-/** Whether the amount is a range ("up to"), as the costly-run confirm shows it. */
+/** USD rounded up to the cent: what the person confirms (review 6, L-e; GM -
+ * Design, round 7: "amounts the person confirms (button and total line)
+ * ALWAYS show cents, rounded UP to the next cent, regardless of size ... and
+ * "$0.01" for anything under a cent"). Read at 6 places first, Nebula's own
+ * arithmetic (main._run_estimate), so float noise (0.07 * 100 =
+ * 7.000000000000001) never adds a cent. */
+export function roundUpToCent(amount: number): number {
+  if (!(amount > 0)) return 0;
+  const micros = Math.round(amount * 1e6);
+  return Math.ceil(micros / 1e4) / 100;
+}
+
+/** "$0.21", "$10.49", "$0.01": an amount the person confirms, always in
+ * cents (GM - Design, round 7). Row prices keep formatUsd. */
+export function formatConfirmUsd(amount: number): string {
+  return `$${roundUpToCent(amount).toFixed(2)}`;
+}
+
+/** Whether the amount is a range ("up to"), as the confirmed amounts show it. */
 function isRange(cost: RunCost): boolean {
-  return formatUsd(cost.low) !== formatUsd(cost.high);
+  return formatConfirmUsd(cost.low) !== formatConfirmUsd(cost.high);
 }
 
 /** "Run for $0.12" when the total is fixed, "Run for up to $0.86" when it is a
@@ -148,7 +194,7 @@ function isRange(cost: RunCost): boolean {
  * rounds 4 and 5, verbatim); "Generate" in place of "Run" from Cinema (round 6). */
 function runLabelFor(cost: RunScopeSummary['cost'], anyMissing: boolean, verb: string): string {
   if (!cost || anyMissing || cost.lines.length === 0) return verb;
-  return isRange(cost) ? `${verb} for up to ${formatUsd(cost.high)}` : `${verb} for ${formatUsd(cost.high)}`;
+  return isRange(cost) ? `${verb} for up to ${formatConfirmUsd(cost.high)}` : `${verb} for ${formatConfirmUsd(cost.high)}`;
 }
 
 /** The total under the rows (GM - Design, round 5, verbatim: "a dollar amount
@@ -158,22 +204,25 @@ function runLabelFor(cost: RunScopeSummary['cost'], anyMissing: boolean, verb: s
  * listed; none when nothing in the run has a listed price. */
 function totalLineFor(cost: RunScopeSummary['cost'], anyMissing: boolean): string | null {
   if (!cost || cost.lines.length === 0) return null;
-  if (!anyMissing) return `This run could cost up to ${formatUsd(cost.high)} at list prices.`;
-  return isRange(cost) ? `The listed prices total up to ${formatUsd(cost.high)}.` : `The listed prices total ${formatUsd(cost.high)}.`;
+  if (!anyMissing) return `This run could cost up to ${formatConfirmUsd(cost.high)} at list prices.`;
+  return isRange(cost) ? `The listed prices total up to ${formatConfirmUsd(cost.high)}.`
+    : `The listed prices total ${formatConfirmUsd(cost.high)}.`;
 }
 
-/** Under a total, the rows with no list price (GM - Design, round 6, item 1,
- * verbatim): one or two by name, quoted, then a count. */
-function unlistedFootnote(names: string[]): string | null {
-  if (names.length === 0) return null;
-  if (names.length === 1) return `${names[0]} has no list price, so the run may cost more.`;
-  if (names.length === 2) return `${names[0]} and ${names[1]} have no list price, so the run may cost more.`;
-  return `${names.length} nodes have no list price, so the run may cost more.`;
-}
-
-/** USD at 6 places: the arithmetic Nebula's check uses (main._run_estimate). */
-function roundUsd(amount: number): number {
-  return Math.round(amount * 1e6) / 1e6;
+/** Under a total, the rows no dollar amount covers (GM - Design, verbatim):
+ * "price not listed" ones by name, one or two, then a count (round 6, item
+ * 1); "price depends on its input" ones the same way (round 7, item 2); both
+ * kinds together, or three or more priced by their input, as one count. */
+function missingFootnote(unlisted: string[], byInput: string[]): string | null {
+  const count = unlisted.length + byInput.length;
+  if (count === 0) return null;
+  if (unlisted.length > 0 && byInput.length > 0) return `${count} nodes have no price yet, so the run may cost more.`;
+  if (byInput.length === 1) return `${byInput[0]} is priced by its input, so the run may cost more.`;
+  if (byInput.length === 2) return `${byInput[0]} and ${byInput[1]} are priced by their input, so the run may cost more.`;
+  if (byInput.length > 2) return `${count} nodes have no price yet, so the run may cost more.`;
+  if (unlisted.length === 1) return `${unlisted[0]} has no list price, so the run may cost more.`;
+  if (unlisted.length === 2) return `${unlisted[0]} and ${unlisted[1]} have no list price, so the run may cost more.`;
+  return `${count} nodes have no list price, so the run may cost more.`;
 }
 
 /** The distinct agent names, in order. */
@@ -204,15 +253,21 @@ export function placeholderRunConfirm(
     return flag ? [{ node, agent: flag.agent }] : [];
   });
   const paid = placeholders.filter(({ node }) => isPaid(node));
-  // Placeholders a dialog of this run showed that their agents have finished since (H1).
+  // Placeholders a dialog of this run showed that their agents have finished
+  // since (H1): still in the run, no longer placeholders.
   const finished = scope.flatMap((node) => {
     const agent = options.shown?.get(node.id);
     return agent && !cleanPending(node.data?.pending) ? [{ node, agent }] : [];
   });
+  // And those that left the run since (deleted or disconnected): never
+  // "finished" (review 6, L-b).
+  const inScope = new Set(scope.map((node) => node.id));
+  const left = [...(options.shown ?? [])].filter(([id]) => !inScope.has(id)).map(([, agent]) => agent);
   if (paid.length === 0 && !(options.shown && options.shown.size > 0)) return null;
   const agentOf = new Map<string, PendingAgent>([...finished, ...placeholders].map(({ node, agent }) => [node.id, agent]));
   let anyMissing = false;
   const unlisted: string[] = [];
+  const byInput: string[] = [];
   const row = (node: Node<NodeData>): PlaceholderRunRow => {
     const definition = NODE_DEFINITIONS[node.data?.definitionId];
     const label = options.names?.[node.id] || node.data?.label || definition?.displayName || node.id;
@@ -220,6 +275,7 @@ export function placeholderRunConfirm(
     const price = rowPrice(node.id, summary, node.data?.label || definition?.displayName || node.id);
     if (price.missing) anyMissing = true;
     if (price.text === PRICE_NOT_LISTED) unlisted.push(`“${label}”`);
+    if (price.text === PRICE_DEPENDS_ON_INPUT) byInput.push(`“${label}”`);
     return { nodeId: node.id, name: `“${label}”`, model: model === label ? null : model, price: price.text,
       agent: agentOf.get(node.id) ?? null };
   };
@@ -233,6 +289,7 @@ export function placeholderRunConfirm(
   const free = count - paid.length;
   let heading: string;
   let intro: string;
+  let leftLine: string | null = null;
   if (count > 0) {
     const agents = agentNames(placeholders.map(({ agent }) => agent));
     const one = agents.length === 1 ? agents[0] : null;
@@ -240,26 +297,48 @@ export function placeholderRunConfirm(
     intro = one
       ? `${one} hasn't finished ${count === 1 ? 'this, so its settings' : 'these, so their settings'} may not be final.`
       : `Agents haven't finished ${count === 1 ? 'this, so its settings' : 'these, so their settings'} may not be final.`;
-  } else {
+  } else if (finished.length > 0) {
     // No placeholder left: their agents finished them while the dialog was
-    // open (GM - Design, round 6, copy answer to review 5 H1, verbatim).
-    const agents = agentNames(finished.length ? finished.map(({ agent }) => agent) : options.shown?.values() ?? []);
+    // open (GM - Design, round 6, copy answer to review 5 H1; round 7, item 1
+    // for "this node"), and any others left the run (review 6, L-b answer).
+    // All verbatim.
+    const agents = agentNames(finished.map(({ agent }) => agent));
     const one = agents.length === 1 ? agents[0] : null;
+    const these = finished.length === 1 ? 'this node' : 'these nodes';
     heading = one ? `Run with ${one}'s changes?` : "Run with the agents' changes?";
-    intro = one ? `${one} finished setting up these nodes.` : 'The agents finished setting up these nodes.';
+    intro = one ? `${one} finished setting up ${these}.` : `The agents finished setting up ${these}.`;
+    if (left.length > 0) {
+      const leftAgents = agentNames(left);
+      const who = leftAgents.length === 1 ? leftAgents[0] : 'agents';
+      leftLine = left.length === 1
+        ? `1 node ${who} was setting up is no longer in this run.`
+        : `${left.length} nodes ${who} ${leftAgents.length === 1 ? 'was' : 'were'} setting up are no longer in this run.`;
+    }
+  } else {
+    // Every placeholder the dialog showed left the run, none finished
+    // (GM - Design, answer to review 6 L-b, verbatim): neutral, never "removed".
+    const agents = agentNames(left);
+    const one = agents.length === 1 ? agents[0] : null;
+    heading = left.length === 1 && one
+      ? `Run without the node ${one} was setting up?`
+      : one ? `Run without the nodes ${one} was setting up?` : 'Run without the nodes agents were setting up?';
+    intro = left.length === 1 ? "It's no longer in this run." : "They're no longer in this run.";
   }
   const totalLine = totalLineFor(cost, anyMissing);
-  const footnote = totalLine ? unlistedFootnote(unlisted) : null;
+  const footnote = totalLine ? missingFootnote(unlisted, byInput) : null;
+  const costNotes = runCostNotes(summary, { prices: false });
   return {
     heading,
     intro,
+    leftLine,
     rows,
     freeLine: free > 0 ? `Plus ${free} free ${free === 1 ? 'node' : 'nodes'}.` : null,
     totalLine,
-    notes: [...runCostNotes(summary, { prices: false }), ...(footnote ? [footnote] : [])],
+    notes: [...costNotes, ...(footnote ? [footnote] : [])],
+    costNotes,
     runLabel: runLabelFor(cost, anyMissing, verb),
     confirmIds: paid.map(({ node }) => node.id).sort(),
-    confirmCost: cost ? roundUsd(cost.high) : null,
+    confirmCost: cost ? roundUpToCent(cost.high) : null,
   };
 }
 

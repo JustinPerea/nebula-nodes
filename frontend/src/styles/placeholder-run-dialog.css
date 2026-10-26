@@ -1,8 +1,22 @@
 /* The dialog before the person's direct run of agents' paid placeholders
    (components/PlaceholderRunDialog.tsx; Q133). Built on prompt-dialog.css. */
 
+/* Review 6, M1 (GM - Design: "rows scroll with everything else pinned"):
+   the card never grows past the window. The heading and the buttons keep
+   their height, the body shrinks, and inside it only the rows do, so the
+   heading, the changed line, the total, the footnotes and Run / Cancel stay
+   on screen however many paid nodes the run has. */
 .placeholder-run__card {
   width: min(420px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+}
+
+.placeholder-run__card > * {
+  flex-shrink: 0;
+}
+
+.placeholder-run__card > .placeholder-run__body {
+  flex-shrink: 1;
 }
 
 .placeholder-run__heading {
@@ -13,18 +27,40 @@
 }
 
 .placeholder-run__body {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
+  min-height: 0;
+}
+
+.placeholder-run__body > * {
+  flex-shrink: 0;
+}
+
+/* The only part that scrolls. A Tab stop when it does (PlaceholderRunDialog
+   useScrolls), with the dialog's own focus ring. */
+.placeholder-run__body > .placeholder-run__rows {
+  flex-shrink: 1;
 }
 
 .placeholder-run__rows {
   display: grid;
+  align-content: start;
   gap: 6px;
+  min-height: 0;
   margin: 2px 0;
   padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   list-style: none;
   font-size: 14px;
   line-height: 1.4;
+}
+
+.placeholder-run__rows:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid #f0f0f0);
+  outline-offset: var(--sr-focus-offset, 2px);
+  border-radius: 4px;
 }
 
 /* One line per placeholder; a long name wraps under its dot. */

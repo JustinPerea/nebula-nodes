@@ -54,13 +54,21 @@ def clean_status_text(raw: Any) -> str:
     """One line, like a cursor's ``say``: whitespace collapsed, at most
     MAX_STATUS_CHARS. A longer one is cut and ends in "…", so the pill that
     shows it whole (GM - Design, round 6: "let it wrap until the whole status
-    shows") never ends mid-word as if that were all of it."""
+    shows") never ends as if that were all of it. The cut lands after the
+    last whole word that fits (GM, round 7: it reads "then…", not
+    "then checki…"); a status with no space to cut at is cut hard."""
     if not isinstance(raw, str):
         raise StatusError("text must be text: one line about what you're working on (\"\" clears it)")
     text = " ".join(raw.split())
     if len(text) <= MAX_STATUS_CHARS:
         return text
-    return text[:MAX_STATUS_CHARS - 1].rstrip() + "…"
+    room = MAX_STATUS_CHARS - 1  # the "…" takes the last place
+    kept = text[:room]
+    if text[room] != " ":  # the cut falls inside a word: drop that word
+        space = kept.rfind(" ")
+        if space > 0:
+            kept = kept[:space]
+    return kept.rstrip() + "…"
 
 
 @dataclass

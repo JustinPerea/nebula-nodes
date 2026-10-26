@@ -67,10 +67,13 @@ describe("GM round 5: the placeholder dialog's $0 lines", () => {
 });
 
 describe('review 4, L1: the total the run sends', () => {
-  it('is rounded to 6 places, as Nebula rounds its own', () => {
+  // Superseded by review 6, L-e (GM - Design, round 7): the amount sent is
+  // the one shown, in cents rounded up ("$0.01" for anything under a cent).
+  it('is the amount shown, rounded up to the cent', () => {
     const model = placeholderRunConfirm([node('i', 'Hero still', codex)], [], 'i', summaryOf({
       low: 0.00005024, high: 0.00005024, lines: [line('i', 'Hero still', 0.00005024, 0.00005024)] }))!;
-    expect(model.confirmCost).toBe(0.00005);
+    expect(model.confirmCost).toBe(0.01);
+    expect(model.runLabel).toBe('Run for $0.01');
   });
 
   it('is still sent ($0) when the dialog shows no total, so Nebula can hold the run to it', () => {

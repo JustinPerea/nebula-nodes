@@ -96,7 +96,7 @@ import { usePricingStore } from './pricingStore';
 import { useInputSizeStore } from './inputSizeStore';
 import { useStoredAssetsStore } from './storedAssetsStore';
 import { repeatRun, runCostConfirmMessage, shouldConfirmRunCost, summarizeRunScope, type RunScope } from '../lib/runScope';
-import { PRICE_DEPENDS_ON_INPUT, PRICE_NOT_LISTED, placeholderRefusalOf, placeholderRunConfirm, withRefusalFlags, withRunEstimate, type PlaceholderRunConfirm, type PlaceholderRunOptions, type RunEstimate } from '../lib/placeholderRunConfirm';
+import { PRICE_DEPENDS_ON_INPUT, PRICE_NOT_LISTED, placeholderRefusalOf, placeholderRunConfirm, runPlaceholders, withRefusalFlags, withRunEstimate, type PlaceholderRunConfirm, type PlaceholderRunOptions, type RunEstimate } from '../lib/placeholderRunConfirm';
 import { placeholderRunDialogModule } from '../lib/placeholderRunDialogModule';
 import { useCreateDraftStore } from './createDraftStore';
 import { getCinemaUploadIssue, useCinemaUploadStore } from './cinemaUploadStore';
@@ -705,6 +705,15 @@ function scopeOverlaps(nodeIds: Iterable<string>, shot?: { nodeId: string; shotI
     }
     return owner.nodeIds.some((id) => ids.has(id));
   });
+}
+
+/** Whether a running or starting run holds nodes the shot `shotId` of the
+ * scene `nodeId` would run (its own shot, or nodes they share). */
+function shotOverlapsActiveRun(nodes: Node<NodeData>[], edges: Edge[], nodeId: string, shotId: string): boolean {
+  const snapshot = captureRunSnapshot(nodes, edges);
+  const scope = snapshotExecutionScopeIds(snapshot, nodeId);
+  const shareableInputs = new Set(snapshot.nodes.filter((node) => STATIC_INPUT_IDS.has(node.definitionId)).map((node) => node.id));
+  return scopeOverlaps(scope, { nodeId, shotId, shareableInputs });
 }
 
 function closeTrackedRun(set: GraphSet, runId: string, patch: Parameters<typeof closeRunRecord>[2]): void {
@@ -2463,7 +2472,7 @@ async function executeHistoricalRun(
       first = false;
       const graph = snapshotCanvas(snapshot, get().nodes);
       return shot ? { nodes: oneShotCanvas(graph.nodes, shot.nodeId, shot.shotId), edges: graph.edges } : graph;
-    }, directTarget, { passes: shot?.variations ?? 1, costly: false, ...wording });
+    }, directTarget, { passes: shot?.variations ?? 1, costly: false, busy: () => get().isExecuting, ...wording });
     agreed = answer instanceof Promise ? await answer : answer;
     if (!agreed) return;
   }
@@ -2514,7 +2523,8 @@ async function executeHistoricalRun(
           sourceHandle: edge.sourceHandle, targetHandle: edge.targetHandle })), shot.nodeId,
           shot.shotId, shot.seed, shot.variations, runId, placeholders, cost)
         : apiExecuteNode(snapshot.nodes, snapshot.edges, targetNodeId!, runId, true, undefined, placeholders, cost)),
-      { begin: () => begin(true), withdraw: () => withdrawRunStart(runId, set, before, trimmed) }, wording)
+      { begin: () => begin(true), withdraw: () => withdrawRunStart(runId, set, before, trimmed),
+        busy: () => get().isExecuting }, wording)
       : await apiExecuteGraph(snapshot.nodes, snapshot.edges, runId, true);
     if (result === DECLINED) return;
     pendingStartRunIds.delete(runId);
@@ -3541,7 +3551,8 @@ interface DirectRunConfirmed extends DirectRunGraph {
 function confirmDirectRun(
   read: () => DirectRunGraph | null,
   nodeId: string,
-  { passes = 1, costly = true, verb, names }: { passes?: number; costly?: boolean } & DirectRunWording = {},
+  { passes = 1, costly = true, verb, names, busy }: { passes?: number; costly?: boolean; busy?: () => boolean }
+    & DirectRunWording = {},
 ): DirectRunConfirmed | null | Promise<DirectRunConfirmed | null> {
   const graph = read();
   if (!graph) return null;
@@ -3551,7 +3562,17 @@ function confirmDirectRun(
   if (!asked) {
     return !costly || confirmRunCost(graph.nodes, graph.edges, { kind: 'node', nodeId }, passes) ? graph : null;
   }
-  return askUntilSettled(read, nodeId, asked, passes, { verb, names }, graph);
+  return askUntilSettled(read, nodeId, asked, passes, { verb, names }, graph, busy);
+}
+
+/** GM - Design's notice (round 7, review 6 L-c, verbatim) when the person's
+ * yes in the dialog can't start the run because another run started first:
+ * the yes is dropped, never run over the other one. */
+export const ANOTHER_RUN_FIRST = 'Nothing ran. Another run started first. Click “Run” again when it finishes.';
+export const ANOTHER_RUN_FIRST_CINEMA = 'Nothing ran. Another run started first. Generate again when it finishes.';
+
+function announceAnotherRunFirst(verb: DirectRunWording['verb']): void {
+  useGraphStore.getState().notify(verb === 'Generate' ? ANOTHER_RUN_FIRST_CINEMA : ANOTHER_RUN_FIRST);
 }
 
 /**
@@ -3571,15 +3592,14 @@ async function askUntilSettled(
   passes: number,
   wording: DirectRunWording,
   firstGraph: DirectRunGraph,
+  busy?: () => boolean,
 ): Promise<DirectRunConfirmed | null> {
   refreshSettingsCache();
-  // Every placeholder of this run a dialog has shown, with its agent.
+  // Every placeholder of this run a dialog has shown, with its agent: only
+  // this run's, never another agent's elsewhere on the canvas (review 6, L-b).
   const shown = new Map<string, PendingAgent>();
   const remember = (graph: DirectRunGraph) => {
-    for (const node of graph.nodes) {
-      const flag = cleanPending(node.data?.pending);
-      if (flag) shown.set(node.id, flag.agent);
-    }
+    for (const [id, agent] of runPlaceholders(graph.nodes, graph.edges, nodeId)) shown.set(id, agent);
   };
   const build = (graph: DirectRunGraph) => {
     remember(graph);
@@ -3596,7 +3616,11 @@ async function askUntilSettled(
     const answer = await askDirectRun(asked, changed, recompute);
     if (!answer) return null;
     const graph = read();
-    if (!graph) return null;
+    if (!graph) {
+      // A yes that can't start: say so when another run started first (L-c).
+      if (busy?.()) announceAnotherRunFirst(wording.verb);
+      return null;
+    }
     const now = build(graph);
     if (!now) return null;
     if (sameConfirm(now, answer)) {
@@ -3616,12 +3640,20 @@ function unpricedRows(model: PlaceholderRunConfirm): string[] {
     .map((row) => `${row.nodeId}\u0000${row.model ?? ''}`);
 }
 
-/** Whether the total the person confirmed (`shown`) covers the run now: no
- * higher, and no row without a price that the dialog didn't show as such. */
+/** Whether what the person confirmed (`shown`, as the dialog drew it) covers
+ * the run now (review 6, L-a): a total no higher than the one shown, every
+ * row (by node) on screen, no row without a price the dialog didn't show as
+ * such, and no gate or "Not included" note it didn't show. Anything new
+ * asks again. */
 function coveredBy(shown: PlaceholderRunConfirm, now: PlaceholderRunConfirm): boolean {
   if (shown.confirmCost === null || now.confirmCost === null) return false;
-  const before = new Set(unpricedRows(shown));
-  return now.confirmCost <= shown.confirmCost + 1e-6 && unpricedRows(now).every((row) => before.has(row));
+  if (now.confirmCost > shown.confirmCost) return false;
+  const rows = new Set(shown.rows.map((row) => row.nodeId));
+  if (!now.rows.every((row) => rows.has(row.nodeId))) return false;
+  const unpriced = new Set(unpricedRows(shown));
+  if (!unpricedRows(now).every((row) => unpriced.has(row))) return false;
+  const notes = new Set(shown.costNotes);
+  return now.costNotes.every((note) => notes.has(note));
 }
 
 /** The person said no when Nebula's refusal asked again, or the run can no
@@ -3636,6 +3668,9 @@ const DECLINED = Symbol('declined');
 interface DirectRunStart {
   begin: () => boolean;
   withdraw: () => void;
+  /** Whether another run holds what this one needs: then a yes that can't
+   * start says so (review 6, L-c). */
+  busy?: () => boolean;
 }
 
 /**
@@ -3655,7 +3690,7 @@ async function sendDirectRun<T>(
   passes: number,
   stillOurs: () => boolean,
   send: (placeholders?: string[], cost?: number) => Promise<T>,
-  { begin, withdraw }: DirectRunStart,
+  { begin, withdraw, busy }: DirectRunStart,
   wording: DirectRunWording = {},
 ): Promise<T | typeof DECLINED> {
   let placeholders = agreed.confirmedPlaceholders;
@@ -3672,7 +3707,13 @@ async function sendDirectRun<T>(
       if (!model) throw error;
       withdraw();
       const shown = await askDirectRun({ ...model, confirmIds: [...refusal.placeholders].sort() }, placeholders !== undefined);
-      if (!shown || !begin()) return DECLINED;
+      if (!shown) return DECLINED;
+      if (!begin()) {
+        // The person said yes but another run started first: it is left
+        // alone, and the yes is dropped out loud (review 6, L-c).
+        if (busy?.()) announceAnotherRunFirst(wording.verb);
+        return DECLINED;
+      }
       placeholders = shown.confirmIds;
       cost = shown.confirmCost ?? undefined;
     }
@@ -5378,7 +5419,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
         if (!first && (get().isExecuting || get().isImportingGraph)) return null;
         first = false;
         return { nodes: get().nodes, edges: get().edges };
-      }, nodeId, { verb: options?.verb });
+      }, nodeId, { verb: options?.verb, busy: () => get().isExecuting });
       agreed = answer instanceof Promise ? await answer : answer;
     }
     if (!agreed) return;
@@ -5430,7 +5471,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
         () => ownsRun(runId) && !cancellationRequestedRunIds.has(runId),
         (placeholders, cost) => apiExecuteNode(snapshot.nodes, snapshot.edges, nodeId, runId, undefined,
           options?.approvalId, placeholders, cost),
-        { begin: () => begin(true), withdraw: () => withdrawRunStart(runId, set, before, trimmed) },
+        { begin: () => begin(true), withdraw: () => withdrawRunStart(runId, set, before, trimmed),
+          busy: () => get().isExecuting },
         { verb: options?.verb });
       // The person said no when Nebula asked again: nothing ran, and the
       // start was already taken back.
@@ -5479,10 +5521,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   isShotAdmissionBlocked: (nodeId, shotId) => {
     if (get().isImportingGraph) return true;
     if (pendingCinemaUploadIssue(nodesInExecutionScope(get().nodes, get().edges, nodeId), { nodeId, shotId })) return true;
-    const snapshot = captureRunSnapshot(get().nodes, get().edges);
-    const scope = snapshotExecutionScopeIds(snapshot, nodeId);
-    const shareableInputs = new Set(snapshot.nodes.filter((node) => STATIC_INPUT_IDS.has(node.definitionId)).map((node) => node.id));
-    return scopeOverlaps(scope, { nodeId, shotId, shareableInputs });
+    return shotOverlapsActiveRun(get().nodes, get().edges, nodeId, shotId);
   },
 
   executeShot: async (nodeId, shotId, seed, variations) => {
@@ -5512,10 +5551,18 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     // From Cinema the dialog says Generate, and the scene's row is the shot's
     // (GM - Design, round 6, item 3: “Shot 1” · Nano Banana · $0.07).
     const wording: DirectRunWording = { verb: 'Generate', names: { [nodeId]: shotName(live.scene, shotId) } };
+    // Another run holds this shot: it started meanwhile, or a run over the
+    // same nodes did (review 6, L-c: a yes then says so).
+    const shotBusy = () => {
+      if (get().isImportingGraph) return false;
+      const current = (get().nodes.find((n) => n.id === nodeId)?.data.params as { scene?: CinemaSceneSpec } | undefined)?.scene;
+      if (current?.shots?.find((s) => s.id === shotId)?.output?.status === 'running') return true;
+      return shotOverlapsActiveRun(get().nodes, get().edges, nodeId, shotId);
+    };
     const answer = confirmDirectRun(() => {
       live = admissible();
       return live && { nodes: oneShotCanvas(live.nodes, nodeId, shotId), edges: live.edges };
-    }, nodeId, { passes: variations ?? 1, ...wording });
+    }, nodeId, { passes: variations ?? 1, busy: shotBusy, ...wording });
     const agreed = answer instanceof Promise ? await answer : answer;
     if (!agreed || !live) return;
     const { nodes, edges, scene, shot } = live;
@@ -5602,7 +5649,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
         () => ownsRun(runId) && !cancellationRequestedRunIds.has(runId),
         (placeholders, cost) => apiGenerateShot(graphNodes, graphEdges, nodeId, shotId, seed, variations, runId,
           placeholders, cost),
-        { begin: () => begin(true), withdraw }, wording);
+        { begin: () => begin(true), withdraw, busy: shotBusy }, wording);
       if (result === DECLINED) return;
       pendingStartRunIds.delete(runId);
       if (!ownsRun(runId)) return;

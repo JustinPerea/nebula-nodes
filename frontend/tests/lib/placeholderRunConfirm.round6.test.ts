@@ -92,7 +92,8 @@ describe('GM round 6, item 3 and review 5, L5: every dollar in the total has a r
       lines: [line('h', 'Hero still', 0.067, 0.067)], unpriced: ['Plate'] }))!;
     expect(text(model)).toEqual(['“Hero still” · Nano Banana 2 (3.1 Flash) · $0.067', '“Plate” · Nano Banana 2 (3.1 Flash) · price not listed']);
     expect(model.runLabel).toBe('Run');
-    expect(model.totalLine).toBe('The listed prices total $0.067.');
+    // In cents, rounded up (review 6, L-e; GM round 7); the row keeps $0.067.
+    expect(model.totalLine).toBe('The listed prices total $0.07.');
     expect(model.notes).toEqual(['“Plate” has no list price, so the run may cost more.']);
   });
 
@@ -138,10 +139,11 @@ describe('review 5, H1 (GM copy answer): once no placeholder is left', () => {
     expect(placeholderRunConfirm(nodes, edges, 'o', priced)).toBeNull();
   });
 
-  it('"Run with Codex\'s changes?" and "Codex finished setting up these nodes." with its rows as usual', () => {
+  it('"Run with Codex\'s changes?" and "Codex finished setting up this node." with its rows as usual', () => {
     const model = placeholderRunConfirm(nodes, edges, 'o', priced, { shown: new Map([['h', codex]]) })!;
     expect(model.heading).toBe("Run with Codex's changes?");
-    expect(model.intro).toBe('Codex finished setting up these nodes.');
+    // One finished node: "this node" (GM - Design, round 7, item 1).
+    expect(model.intro).toBe('Codex finished setting up this node.');
     expect(text(model)).toEqual(['“Hero still” · Nano Banana 2 (3.1 Flash) · $9.00', '“Plate” · Nano Banana 2 (3.1 Flash) · $0.07']);
     expect(model.rows.map((row) => row.agent?.name ?? null)).toEqual(['Codex', null]);
     expect(model.runLabel).toBe('Run for $9.07');

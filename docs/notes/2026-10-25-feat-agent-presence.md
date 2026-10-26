@@ -487,3 +487,86 @@ Justin, Q133 b, again the rule: a paid placeholder never runs without the person
 - `tsc -b` clean, lint clean.
 - Build budget: 389,508 bytes raw entry, 117,299 gzip (limit 512,000 raw).
 - MCP INSTRUCTIONS: 2,233 characters, unchanged.
+
+## Round 7: review 6 and GM - Design's round-7 rulings (2026-10-26)
+
+Justin, Q133 b, the same two rules: a paid placeholder never runs without the person's confirmation, and what runs never costs more than the person was shown. Review 6 found no high finding; one medium (many rows pushed Run off-screen) and five lows. GM ruled the copy for round 7 and answered the two open questions (placeholders that left the run; a yes dropped because another run started), plus M1 and the rounding. Every fix was test-first.
+
+### What changed and why
+
+- **M1: many rows scroll, everything else stays.** The card never grows past the window (`max-height: calc(100dvh - 32px)`); the heading, intro, changed line, total, footnotes and buttons keep their height, and only the rows list shrinks and scrolls (placeholder-run-dialog.css). GM: "rows scroll with everything else pinned: yes. The scroll area must be reachable by keyboard, and initial focus stays on Cancel." A list that overflows is a Tab stop named by the heading (`tabIndex=0`, `aria-labelledby`), part of the dialog's Tab cycle; a list that fits isn't. Focus still starts on Cancel. No new words.
+- **L-a: a cheaper run goes ahead only if everything in it was on screen.** After a yes, a run with no placeholder left runs without asking again only if its total is no higher than the one shown, every row (by node) was on screen, no row without a price is new, and no gate or "Not included" note is new (`coveredBy`, graphStore.ts; the model's new `costNotes`). Probe N1 (Codex finishes on a cheaper model and wires in a FLUX.2 node with "Not included: input images") now asks again with the new row.
+- **L-b: only this run's placeholders; one that left is never "finished".** The dialog remembers only placeholders in this run's scope (`runPlaceholders`), so another agent's placeholder elsewhere on the canvas never changes it. GM's words, verbatim: none finished, all left: "Run without the node Codex was setting up?" / "It's no longer in this run." ("Run without the nodes Codex was setting up?" / "They're no longer in this run."; several agents "Run without the nodes agents were setting up?"). Some finished, some left: "Run with Codex's changes?", the body counting only the finished, then "1 node Codex was setting up is no longer in this run." ("2 nodes Codex was setting up are no longer in this run.").
+- **L-c: a yes dropped because another run started first says so.** GM: "Nothing ran. Another run started first. Click “Run” again when it finishes." (Cinema: "Nothing ran. Another run started first. Generate again when it finishes."). Shown as the canvas notice on both places a yes can be dropped: the first dialog (the run can't be read any more because another run holds the canvas) and Nebula's re-ask (`begin` refused). The other run is left alone. It shows only when another run really holds it (`busy`: `isExecuting` for node runs, Generate all and replays; for a shot, the shot running or an active run over its nodes); a Cancel, or an import in progress, says nothing.
+- **L-d and GM item 2: rows priced by their input under a total.** The button already dropped the amount; the footnote is GM's: "“Upscale” is priced by its input, so the run may cost more." / "“Upscale” and “Grade” are priced by their input, so the run may cost more."; both kinds together, or three or more by input: "3 nodes have no price yet, so the run may cost more." Unlisted-only rows keep round 6's words.
+- **L-e: amounts the person confirms are in cents, rounded up.** GM: "ALWAYS show cents, rounded UP to the next cent, regardless of size: "$0.21", "$10.49", and "$0.01" for anything under a cent. Never whole dollars there. Row prices keep their current formatting. Send that shown amount as confirmedCost; the backend must not let a run exceed it." The button and the total line use `formatConfirmUsd`; `confirmCost` is `roundUpToCent` (read at 6 places first, so 0.07 never becomes 0.08). Nebula's refusal estimate is rounded up the same way before it is sent. Backend: `_CONFIRMED_COST_SLACK` is gone; any estimate above `confirmedCost` is refused.
+- **GM item 1:** "Codex finished setting up this node." for one, "these nodes" for two or more; "The agents finished setting up this node / these nodes."
+- **GM polish: the status cut lands on a word.** `clean_status_text` cuts after the last whole word that fits, then "…" ("…then…" not "…then checki…"); a word ending exactly at the cap is kept; with no space, a hard cut.
+- **The r6 zz-error question: reachable, fixed.** See "Surprises".
+- **Agent support:** docs/MCP-SETUP.md (cents and no slack for `confirmedCost`; "this node"; "Run without…"; the left line; only this run's placeholders; what lets a cheaper run go ahead; the "Another run started first" notice; input-priced footnotes; the rows scrolling; the status cut at a word); skills/nebula/SKILL.md (nothing runs that the person didn't see; a deleted or disconnected placeholder is "no longer in the run"; the status cut); the `set_status` MCP docstring. INSTRUCTIONS unchanged. No CLI change: confirming is the person's alone.
+
+### Decisions not in the spec
+
+- Several agents in the left line ("2 nodes agents were setting up are no longer in this run.") follows GM's "Run without the nodes agents were setting up?"; GM gave only Codex's forms for that line. Listed for GM.
+- A placeholder that left while others are still placeholders: the first heading counts only those left in the run (GM round 6) and no left line is added; GM ruled the left line only for the "changes" heading.
+- "Run for up to" now means the low and high differ in cents (rounded up), the same unit the button shows.
+- The L-c notice uses the canvas notice's error tone (announced as an alert), like the other "Nothing ran" lines.
+- A list that fits is not a Tab stop (it would be an empty stop for keyboard users); it becomes one when it overflows (measured on resize).
+
+### Tradeoffs
+
+- No slack in the backend: a tab whose arithmetic differs from Nebula's in the last place now gets a 409 and an immediate re-ask at Nebula's numbers instead of passing; with the canvas rounding up to the cent this only happens when the two prices really differ.
+- The left line and "Run without…" count shown placeholders by id; a placeholder deleted and re-added by its agent with a new id counts as one that left and a new one.
+
+### Surprises
+
+- **r6-zz-error-cinema.png was a real bug.** Reproduced live (r7, section Z, CPU throttled 8x as on a busy machine): back on the canvas from Cinema Studio, the notice region still sat where it sits with no bar (24 px up, the bar's own place) and sprang to its line above the bar on its 420 ms `bottom` transition; for that time a showing notice ("Codex changed the canvas" with Undo) covered Canvas actions and the zoom. The fade was the canvas coming back (and Run's price not computed yet), which is why it looked like a faded canvas. The earlier r6 attempt's screenshot was taken in that window. Fix: a bar that comes or goes is a screen switch; `publishBottomBarClearance`/`clearBottomBarClearance` mark the root (`data-bottom-bar-switch`) for two frames and the region jumps (`transition: none`); the bar growing (Canvas actions) keeps the spring. After the fix the region's line was above the bar in every sample; a notice remounting on return still plays its own 12 px rise from opacity 0, as every new notice does.
+- Probe N4's yes was not clobbering the shot (the node's `begin` already refused); it was only silent.
+
+### Tests (first, each seen failing)
+
+- **Backend** (`tests/test_pending_nodes_round7.py`, 7 tests): 4 failed first, 3 passed.
+  - L-e (2): 200 "started" for a `confirmedCost` 0.0000005 below Nebula's estimate (with and without a placeholder left).
+  - GM polish (2): the cut status ended "then checki…" (direct and over HTTP).
+  - Passing before and after: the canvas's cents rounded up runs; a word ending exactly at the cap is kept; no space, hard cut.
+- **Frontend:** 41 failed first, 8 passed.
+  - `lib/placeholderRunConfirm.round7.test.ts` (27): 24 failed (no `formatConfirmUsd`/`roundUpToCent`, "these nodes" for one, "Run with Codex's changes?" where GM's "Run without…" belongs, no left line, no input-priced footnotes, "$0.20" for $0.201 and "$10" for $10.481); 3 passed (two finished nodes, several agents, unlisted-only footnote).
+  - `PlaceholderRunDialog.round7.test.tsx` (5): 4 failed (the overflowing list not a Tab stop, no name, no max-height/overflow in the CSS, no left line); 1 passed (a list that fits is no Tab stop).
+  - `graphStore.placeholderRuns.round7.test.ts` (13): 10 failed (N1 ran f unasked, a new priced node ran unasked, "The agents finished…" after a delete or disconnect, no left line, no notice on any of the three dropped yeses, "Run for $0.20", "$1.20" for $1.2001); 3 passed (same rows cheaper goes ahead, another agent's placeholder elsewhere changes nothing, Cancel says nothing).
+  - `noticeRegionScreenSwitch.test.ts` (4): 3 failed (no mark on a bar arriving or leaving, no CSS rule); 1 passed (the bar growing keeps the spring).
+  - Updated to the new rulings: round 5's "rounded to 6 places" (now cents, rounded up: $0.00005 confirms $0.01), round 6's "$0.067" total line ("$0.07") and "these nodes" for one finished node ("this node", lib and store).
+
+### Live check (1280x800, and 1440x900 for many rows)
+
+- Isolated backend on 8795 (temp HOME and every NEBULA_* root under scratch, no keys) and Vite on 5795 (`VITE_NEBULA_BACKEND_PORT=8795`); `/api/health` through Vite matched. Codex verified (an app token), Claude Code self-named. No key was set, so nothing paid could run. Run was clicked once (the L-c check): another run held the canvas, the yes sent nothing, and the only run request was the free Video Edit's.
+- 18 of 18 checks passed on the final run (script `agent-presence/live-r7.mjs`). Two earlier runs: the first failed the zz check (the reproduction, before the fix); the second hit a Puppeteer "Promise was collected" error in the L-c section's async `waitForFunction`, replaced by a Node-side poll.
+  - Z: canvas → Cinema Studio → canvas at 8x CPU throttling, sampled every 80 ms. Before the fix: back on the canvas the region sat 730–776 over the bar's 728–776 (`r7-zz-repro-bug-before-fix.png`). After: the region's line stayed above the bar in every sample (674–720), and the notice ended above it.
+  - "Codex finished setting up this node." (one), "… these nodes." (two), "The agents finished setting up these nodes." (Codex and Claude Code).
+  - “Upscale” · SeedVR2 Upscale · price depends on its input (a remote input, never downloaded) under "The listed prices total $0.07.", plain "Run", "“Upscale” is priced by its input, so the run may cost more."; with a FLUX still and a second upscale: "3 nodes have no price yet, so the run may cost more.".
+  - Three rows at $0.067 ($0.201): "This run could cost up to $0.21 at list prices." and "Run for $0.21".
+  - 32 rows: at 1280x800 the heading at 33 px, the total ending at 717, Cancel and "Run for $2.15" at 729–767; at 1440x900 the same at 817 / 829–867. Focus on Cancel; Tab, Tab reached the rows; End scrolled them 245 px.
+  - Codex removed its placeholder while the dialog was open: "Run without the node Codex was setting up?" / "It's no longer in this run." and the changed line.
+  - A Video Edit run started while the dialog was open; Run in the dialog: "Nothing ran. Another run started first. Click “Run” again when it finishes.", no request for the placeholder's node.
+  - The 172-character status shows "…, then…" in the focused pill, nothing clipped.
+- Blocked requests: 2, both the canaries; 0 toward 8000-8010 or 5173. Console errors: the canary's only. Servers stopped by PID; the state dir deleted.
+- Screenshots in the scratchpad `agent-presence/`: `r7-finished-one.png`, `r7-finished-several.png`, `r7-finished-agents.png`, `r7-input-priced-footnote.png`, `r7-no-price-yet.png`, `r7-rounded-up.png`, `r7-many-rows.png`, `r7-many-rows-1440.png`, `r7-many-rows-scrolled.png`, `r7-left-run.png`, `r7-another-run-first.png`, `r7-pill-word-cut.png`, `r7-zz-repro-bug-before-fix.png`, `r7-zz-repro-before.png`, `r7-zz-repro-after.png`.
+
+### Open items (round 7)
+
+- For GM:
+  - The left line for several agents ("2 nodes agents were setting up are no longer in this run."), built on GM's "Run without the nodes agents were setting up?" pattern.
+  - A placeholder that left while others are still placeholders: no left line under "Run 1 node Codex is still setting up?" (GM ruled the line only under the "changes" heading).
+  - L-d: the dropped note "Nebula can't read the size of its input (a file on another host is never downloaded to price it)" said something GM's footnote doesn't: for a remote input the price will never be known before the run, so the row stays "price depends on its input" and won't update in place. Not restored.
+  - A yes dropped while a graph import is running says nothing (no words for that; "Another run started first" would be wrong).
+  - The browser's costly-run confirm (item 7) still shows whole dollars from $10 ("$10"); GM's cents rule was given for this dialog.
+- Known gaps unchanged (item 7 follow-up, for the PR body): the tab that hasn't heard of an agent's placeholder with "Ask before costly runs" on (browser confirm, then Nebula's dialog); free-placeholder runs still use the browser's costly-run confirm. No browser-confirm fallback added.
+- L8 as before.
+
+### Gates (round 7)
+
+- Backend full suite: 11,010 passed, 71 skipped (13 min 4 s).
+- Vitest full: 461 files, 5,882 tests. The first run, during the backend suite, had 21 failures in 8 files, all load-shaped: 16 "Test timed out", 2 `toHaveFocus` waits, 1 role not found in time, 1 leftover request from a timed-out test. None is a file this round touched. Rerun alone, those 8 files passed: 175 of 175.
+- errorCopy ratchets: 14 files, 173 tests passed.
+- `tsc -b` clean, lint clean.
+- Build budget: 389,865 bytes raw entry, 117,428 gzip (limit 512,000 raw).
+- MCP INSTRUCTIONS: 2,233 characters, unchanged (2,957 with the commons guide).
