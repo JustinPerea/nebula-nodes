@@ -3028,3 +3028,108 @@ def test_a_check_answer_counts_only_strictly_before_its_deadline(arrives_at, app
     assert (answer[0] == "answered") is applied, answer
     if not applied:
         assert isinstance(answer[1], TimeoutError), answer
+
+
+def test_a_cancelled_check_that_answers_late_never_overrides_the_live_one():
+    # Fuzz seed 9218 (round 11), the coordinator's rule: at most one live
+    # check at a time, and a cancelled one's answer is never applied. A
+    # fetch that ignores cancellation (a worker thread) lingers past its
+    # deadline; the next check doesn't wait for it, the late answer is
+    # dropped, and the live check's answer is the one the decision gets.
+    state = ChannelState(now=0.0)
+    state.last_person = 100.0
+    state.observe(resp(pin(1)), now=100.0)
+    clock = {"t": 100.0}
+    release_old, release_new = anyio.Event(), anyio.Event()
+    calls = {"n": 0}
+
+    async def fetch_pins():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            with anyio.CancelScope(shield=True):  # ignores its cancellation
+                with anyio.move_on_after(1):  # (bounded, so a failing test can't hang)
+                    await release_old.wait()
+            return {"projectId": None, "pins": [], "from": "old"}
+        await release_new.wait()
+        return {"projectId": None, "pins": [{"id": "pin_00000001", "status": "open"}], "from": "new"}
+
+    async def never(*args):
+        await anyio.sleep_forever()
+
+    async def push(content, meta):
+        pass
+
+    listener = mcp_channel.Listener(state, fetch_events=never, fetch_run=never, push=push,
+                                    clock=lambda: clock["t"], log=lambda line: None, fetch_pins=fetch_pins)
+
+    async def main():
+        with anyio.fail_after(2):
+            async with anyio.create_task_group() as group:
+                listener._start_check(group, ["pin_00000001"], 100.0)
+                await anyio.sleep(0.01)
+                old_scope = listener._check_scope
+                # Its deadline passes: the decision fails it and cancels it.
+                clock["t"] = 100.0 + mcp_channel.PIN_CHECK_TIMEOUT
+                listener._check_timed_out(clock["t"])
+                assert listener._take_check_answer(clock["t"]) is True  # a failure, applied as one
+                assert old_scope.cancel_called and listener._lingering == {old_scope}
+                # The next check starts at once, without waiting for it.
+                clock["t"] += 1.0
+                listener._start_check(group, ["pin_00000001"], clock["t"])
+                await anyio.sleep(0.01)
+                # The old fetch answers now, late, while the new one is live.
+                release_old.set()
+                await anyio.sleep(0.01)
+                assert listener._check_answer is None, listener._check_answer
+                assert listener._lingering == set()
+                release_new.set()
+                await anyio.sleep(0.01)
+                return listener._check_answer
+
+    answer = anyio.run(main)
+    assert answer is not None and answer[0] == "answered", answer
+    assert answer[1]["from"] == "new"
+
+
+def test_the_listener_shutdown_cancels_and_awaits_a_lingering_check():
+    # Round 11: a check cancelled at its deadline whose fetch is still out
+    # when listening stops is cancelled again and awaited, so nothing leaks.
+    state = ChannelState(now=0.0)
+    state.last_person = 100.0
+    clock = {"t": 100.0}
+    ended: list[str] = []
+
+    async def fetch_pins():
+        try:
+            with anyio.CancelScope(shield=True):
+                await anyio.sleep(0.2)  # ignores the deadline's cancellation for a while
+            await anyio.sleep_forever()  # then waits on the network again: the shutdown's cancel ends it
+        finally:
+            ended.append("fetch")
+
+    async def never(*args):
+        await anyio.sleep_forever()
+
+    async def push(content, meta):
+        pass
+
+    listener = mcp_channel.Listener(state, fetch_events=never, fetch_run=never, push=push,
+                                    clock=lambda: clock["t"], log=lambda line: None, fetch_pins=fetch_pins)
+
+    async def decide(checks):
+        listener._start_check(checks, ["pin_00000001"], 100.0)
+        await anyio.sleep(0.01)
+        clock["t"] = 100.0 + mcp_channel.PIN_CHECK_TIMEOUT
+        listener._check_timed_out(clock["t"])
+        assert listener._lingering and not ended  # still in its shield
+        # Listening stops now (_decide returns), while it lingers.
+
+    listener._decide = decide
+
+    async def main():
+        with anyio.fail_after(2):
+            await listener._push_when_due()
+
+    anyio.run(main)
+    assert ended == ["fetch"]
+    assert listener._lingering == set() and listener._check_scope is None

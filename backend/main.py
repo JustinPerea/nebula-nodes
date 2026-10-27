@@ -765,7 +765,9 @@ def _check_workspace_revision(revision: str | None = None) -> None:
 # otherwise write the project opened meanwhile. Such a route takes
 # _graph_fence() before its first await and calls _refuse_if_graph_moved()
 # right before it writes; the notes for round 10 list every route.
-GRAPH_MOVED_DETAIL = ("Another project is open now, so nothing was changed. Read the canvas again "
+# "changed since", not "another project is open": true after a switch away
+# and back to the same project too (round 11).
+GRAPH_MOVED_DETAIL = ("The open project changed since this started, so nothing was changed. Read the canvas again "
                       "and send the change again if it still fits.")
 GRAPH_RESTARTED_DETAIL = ("The canvas was cleared or replaced since, so nothing was changed. Read the canvas again "
                           "and send the change again if it still fits.")
@@ -790,6 +792,50 @@ def _refuse_if_graph_moved(fence: tuple[str, str | None, int]) -> None:
         raise refusal_copy.refusal(409, GRAPH_MOVED_DETAIL, CANVAS_OUT_OF_DATE, route="canvas")
     if epoch != fence[2]:
         raise refusal_copy.refusal(409, GRAPH_RESTARTED_DETAIL, CANVAS_OUT_OF_DATE, route="canvas")
+
+
+# A run writes back only to the canvas it registered on (round 11 of PR #114,
+# review 10's F4). Node ids restart after a clear or an import and per
+# project, and a run's outputs, params, node errors, node events and Cinema
+# merges land by node id, so each checks the canvas the run noted at
+# registration (_register_run) and drops itself if the open project or its
+# id epoch moved. Nothing is journaled for a write that didn't happen.
+# Normally unreachable: a registered run blocks a clear, an import, a switch
+# and a delete of the open project (_project_replacement_guard).
+def _run_canvas_now() -> tuple[str | None, int]:
+    project_id = _workspace_context()["activeProjectId"]
+    return project_id, canvas_undo_book.epoch(project_id)
+
+
+def _register_run(run_id: str, task: asyncio.Task[Any]) -> Any:
+    """execution_runs.register, noting the canvas the run starts on. Callers
+    check _refuse_if_graph_moved right before, with no await between."""
+    return execution_runs.register(run_id, task, canvas=_run_canvas_now())
+
+
+_runs_told_moved: OrderedDict[str, None] = OrderedDict()
+
+
+def _run_canvas_moved(run_id: str | None, what: str) -> bool:
+    """Whether a write-back (``what``) from run ``run_id`` must be dropped:
+    the canvas it registered on is no longer the open one. Logged once per
+    run. An unknown run, or one registered without a canvas, writes as before."""
+    record = execution_runs.get(run_id) if run_id else None
+    noted = getattr(record, "canvas", None)
+    if noted is None:
+        return False
+    try:
+        if _run_canvas_now() == noted:
+            return False
+    except ProjectStoreError:
+        pass  # which canvas is open can't be read: don't write by node id
+    if run_id not in _runs_told_moved:
+        _runs_told_moved[run_id] = None
+        while len(_runs_told_moved) > 256:
+            _runs_told_moved.popitem(last=False)
+        print(f"[run] run {run_id} started on a canvas that was cleared or replaced since; "
+              f"dropped its {what} (and any later write-back)", flush=True)
+    return True
 
 
 def _capture_execution_workspace() -> None:
@@ -2231,14 +2277,20 @@ def _settle_hold(run_id: str) -> None:
 
 
 async def _require_run_spend_approval(
-    run_id: str, nodes: list[GraphNode], edges: list[GraphEdge], *, approval_id: str | None = None, **kwargs: Any,
+    run_id: str, nodes: list[GraphNode], edges: list[GraphEdge], *, approval_id: str | None = None,
+    fence: tuple[str, str | None, int] | None = None, **kwargs: Any,
 ) -> None:
     """The approval and spend checks for a run already noted for its actor: a
     refusal forgets the note. The inputs a price reads are measured first,
     off the event loop (_measure_run_inputs); the approval is taken and the
-    limits checked after that, with no await between them."""
+    limits checked after that, with no await between them. ``fence``
+    (_graph_fence, taken before the route's first await) is checked right
+    after the measure, before the approval is used up or anything counts
+    (round 11, as run_graph does)."""
     try:
         measured = await _measure_run_inputs(nodes, edges)
+        if fence is not None:
+            _refuse_if_graph_moved(fence)
         approval = _check_run_approval(approval_id, nodes, edges)
         _require_spend_approval(nodes, edges, run_id=run_id, measured=measured, **kwargs)
     except (HTTPException, PersonGateError):
@@ -8612,7 +8664,7 @@ async def _finalize_cancelled_execution(
     """Sync late live-run params, preserve replay canvas params, then emit Stop.
     run.cancelled is journaled first, before any await, with the run's own
     project (_run_project; round 8 of PR #114)."""
-    synced = not preserve_graph_params and _sync_params_to_cli_graph(nodes, submitted=submitted)
+    synced = not preserve_graph_params and _sync_params_to_cli_graph(nodes, submitted=submitted, run_id=run_id)
     stopped_by, started_by = _run_cancelled_actor(run_id)
     _journal(
         "run.cancelled",
@@ -8936,12 +8988,14 @@ async def execute(request: ExecuteRequest) -> dict:
 
     # After validation, so a graph that can't run reports why, not its cost.
     await _require_run_spend_approval(run_id, nodes, request.edges, approval_id=request.approval_id,
-                                run_ids=_end_node_ids(nodes, request.edges), settings=settings)
+                                run_ids=_end_node_ids(nodes, request.edges), settings=settings, fence=fence)
 
     handler_registry = get_handler_registry(emit=_emit_and_sync)
     try:
         # The run's outputs land by node id on the live graph: start it only
-        # on the canvas it was asked on (a switch during the spend check).
+        # on the canvas it was asked on. Checked after the measure too (in
+        # _require_run_spend_approval); again here, the last check before it
+        # registers, with no await between (round 11).
         _refuse_if_graph_moved(fence)
         _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=nodes)
     except BaseException:
@@ -8969,7 +9023,8 @@ async def execute(request: ExecuteRequest) -> dict:
             # authoritative terminal state.
             if _execution_is_cancelling(run_id):
                 raise asyncio.CancelledError
-            if not request.preserve_graph_params and _sync_params_to_cli_graph(nodes, submitted=submitted):
+            if not request.preserve_graph_params and _sync_params_to_cli_graph(nodes, submitted=submitted,
+                                                                                run_id=run_id):
                 # ExecutedEvent carries outputs, but handlers such as
                 # video-edit also enrich params. Without a final graphSync the
                 # backend persisted those edits while the live Canvas stayed
@@ -8999,7 +9054,7 @@ async def execute(request: ExecuteRequest) -> dict:
     run_coroutine = _run()
     try:
         task = asyncio.create_task(run_coroutine)
-        execution_runs.register(run_id, task)
+        _register_run(run_id, task)
         _watch_for_cross_process_stop(run_id, task)
     except ExecutionCancelledBeforeStartError as exc:
         if task is None:
@@ -9093,7 +9148,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
 
     # After validation, so a graph that can't run reports why, not its cost.
     await _require_run_spend_approval(run_id, sub_nodes, sub_edges, approval_id=request.approval_id,
-                                run_ids=[request.target_node_id], settings=settings)
+                                run_ids=[request.target_node_id], settings=settings, fence=fence)
 
     handler_registry = get_handler_registry(emit=_emit_and_sync)
     try:
@@ -9118,7 +9173,8 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
             )
             if _execution_is_cancelling(run_id):
                 raise asyncio.CancelledError
-            if not request.preserve_graph_params and _sync_params_to_cli_graph(sub_nodes, submitted=submitted):
+            if not request.preserve_graph_params and _sync_params_to_cli_graph(sub_nodes, submitted=submitted,
+                                                                                run_id=run_id):
                 await _broadcast_graph_sync()
         except asyncio.CancelledError:
             await _finalize_cancelled_execution(sub_nodes, run_id, preserve_graph_params=request.preserve_graph_params,
@@ -9137,7 +9193,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
 
     try:
         task = asyncio.create_task(_run())
-        execution_runs.register(run_id, task)
+        _register_run(run_id, task)
         _watch_for_cross_process_stop(run_id, task)
     except ExecutionCancelledBeforeStartError as exc:
         await asyncio.gather(task, return_exceptions=True)
@@ -9331,6 +9387,7 @@ async def _merge_shot_result(
     *,
     terminal_error: str | None = None,
     terminal_fields: dict[str, str] | None = None,
+    run_id: str | None = None,
 ) -> dict[str, Any] | None:
     """Merge a single-shot regeneration into the canonical cli_graph node WITHOUT
     clobbering sibling shots.
@@ -9352,6 +9409,9 @@ async def _merge_shot_result(
     a node card does (error copy round 3c-2): ``errorCategory``,
     ``errorFriendly``, ``errorPerson`` and ``errorRaw`` (_shot_failure_fields).
     ``error`` stays the text agents read, word for word.
+
+    ``run_id``: the shot's run. Nothing is merged if the canvas it registered
+    on was cleared or replaced since (_run_canvas_moved, round 11).
     """
     new_output: dict[str, Any] | None = None
     if terminal_error is None and executed_node is not None:
@@ -9365,7 +9425,7 @@ async def _merge_shot_result(
 
     async with _shot_merge_lock(node_id):
         node = cli_graph.nodes.get(node_id)
-        if node is None:
+        if node is None or _run_canvas_moved(run_id, "shot result"):
             return result_output
 
         # Patch ONLY the target shot's output on the live scene; siblings (incl.
@@ -9505,65 +9565,23 @@ async def _execute_single_shot_pass(
     return executed_node, captured.get("outputs") or {}
 
 
-async def _run_single_shot_task(
-    *,
-    node_id: str,
-    shot_id: str,
-    sub_nodes: list[GraphNode],
-    sub_edges: list[GraphEdge],
-    api_keys: dict[str, str],
-) -> None:
-    """Execute and persist one per-shot task, including terminal failures."""
-    import traceback
-
-    try:
-        executed_node, outputs = await _execute_single_shot_pass(
-            node_id=node_id,
-            sub_nodes=sub_nodes,
-            sub_edges=sub_edges,
-            api_keys=api_keys,
-            use_cache=True,
-        )
-    except _ShotPassError as exc:
-        await _merge_shot_result(
-            node_id,
-            shot_id,
-            None,
-            {},
-            terminal_error=_shot_task_error_message(exc),
-            terminal_fields=_shot_failure_fields(exc),
-        )
-    except Exception as exc:
-        traceback.print_exc()
-        await _merge_shot_result(
-            node_id,
-            shot_id,
-            None,
-            {},
-            terminal_error=_shot_task_error_message(exc),
-            terminal_fields=_shot_failure_fields(exc),
-        )
-    else:
-        await _merge_shot_result(node_id, shot_id, executed_node, outputs)
-    finally:
-        await _broadcast_graph_sync()
-
-
 async def _merge_shot_variations(
     node_id: str,
     shot_id: str,
     variations: list[dict[str, Any]],
+    *,
+    run_id: str | None = None,
 ) -> dict[str, Any] | None:
     """Store a batch of variations on the live cli_graph scene and promote the
     first as canonical (output + the one shot port). Sibling shots are untouched;
     lock-serialized like _merge_shot_result. Returns the canonical output, or None
-    when the batch produced no images."""
+    when the batch produced no images. ``run_id`` as in _merge_shot_result."""
     if not variations:
         return None
     canonical = {"imageUrl": variations[0]["url"], "status": "done"}
     async with _shot_merge_lock(node_id):
         node = cli_graph.nodes.get(node_id)
-        if node is None:
+        if node is None or _run_canvas_moved(run_id, "shot variations"):
             return canonical
         params = dict(node.get("params") or {})
         scene = params.get("scene")
@@ -9752,7 +9770,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     # can't run doesn't count.
     spend_nodes, spend_edges = get_subgraph(request.nodes, request.edges, request.node_id)
     await _require_run_spend_approval(run_id, spend_nodes, spend_edges, run_ids=[request.node_id], passes=count,
-                                settings=settings)
+                                settings=settings, fence=fence)
 
     # A per-shot run does not acquire the frontend's Canvas-wide ``isExecuting``
     # gate, so sibling work remains available. It does register its background
@@ -9808,7 +9826,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
                         failures.append(f"Variation seed {seed_i} returned no image.")
                         last_fields = {}
                 if variations:
-                    await _merge_shot_variations(request.node_id, request.shot_id, variations)
+                    await _merge_shot_variations(request.node_id, request.shot_id, variations, run_id=run_id)
                 else:
                     last_failure = failures[-1] if failures else "No variation returned an image."
                     terminal_error = f"All {count} variation passes failed. {last_failure}"
@@ -9824,7 +9842,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
                     run_id=run_id,
                 )
                 await _merge_shot_result(
-                    request.node_id, request.shot_id, executed_node, outputs
+                    request.node_id, request.shot_id, executed_node, outputs, run_id=run_id,
                 )
         except _ShotPassError as exc:
             terminal_error = _shot_task_error_message(exc)
@@ -9843,6 +9861,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
                         {},
                         terminal_error=terminal_error,
                         terminal_fields=terminal_fields,
+                        run_id=run_id,
                     )
                 await _broadcast_graph_sync()
             finally:
@@ -9858,7 +9877,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
         # is cancelled after create_task succeeds but before _run receives its
         # first event-loop turn (in which case the coroutine's finally never
         # executes).
-        execution_runs.register(run_id, task)
+        _register_run(run_id, task)
         _watch_for_cross_process_stop(run_id, task)
     except ExecutionCancelledBeforeStartError as exc:
         if task is None:
@@ -10100,8 +10119,8 @@ async def _broadcast_graph_sync(
         # their errors go.
         canvas_arrange.clear()
         if reason == "import":
+            # (The import moved the id epoch itself, with its commit.)
             node_errors.forget_canvas()
-            _forget_canvas_undo("a graph was loaded into the project since, so its node ids started again")
         # Journaled here, in the step that replaced the canvas (a switch's
         # commit, an import's), before any await (round 8 of PR #114): the
         # event names the project it opened or loaded into, and lands before
@@ -10166,6 +10185,17 @@ async def _broadcast_graph_sync(
     return export
 
 
+def _normalized_event_outputs(outputs: Any) -> dict[str, Any]:
+    """An ExecutedEvent's outputs in the shape cli_graph stores and browsers get."""
+    if not isinstance(outputs, dict):
+        return {}
+    shaped_outputs = {
+        k: v if isinstance(v, dict) else {"type": "Any", "value": v}
+        for k, v in outputs.items()
+    }
+    return _normalize_outputs_for_storage(shaped_outputs)
+
+
 def _sync_outputs_to_cli_graph(
     node_id: str,
     outputs: dict[str, Any],
@@ -10179,14 +10209,7 @@ def _sync_outputs_to_cli_graph(
     Source previews and Cinema shot ports may preserve newer canonical state
     instead of storing every output from an older recipe.
     """
-    if not isinstance(outputs, dict):
-        normalized_outputs: dict[str, Any] = {}
-    else:
-        shaped_outputs = {
-            k: v if isinstance(v, dict) else {"type": "Any", "value": v}
-            for k, v in outputs.items()
-        }
-        normalized_outputs = _normalize_outputs_for_storage(shaped_outputs)
+    normalized_outputs = _normalized_event_outputs(outputs)
 
     if node_id not in cli_graph.nodes:
         return normalized_outputs
@@ -10289,7 +10312,12 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
         _journal_provider_hold("recovery", "held", run_id=event.run_id or execution_run_id.get(),
                                node_id=event.node_id, durable=event.durable,
                                actor=canvas_events.run_actor(event.run_id or execution_run_id.get()))
-        await manager.broadcast(event)
+        # The checkpoint above is kept (run and node); the canvas puts the
+        # event on its node by id, so not from a run whose canvas was cleared
+        # or replaced since (round 11; unreachable while Clear, import and a
+        # switch wait for runs).
+        if not _run_canvas_moved(event.run_id or execution_run_id.get(), "recovery event"):
+            await manager.broadcast(event)
         if changed or safety_hold_changed:
             await _broadcast_graph_sync()
         return
@@ -10299,9 +10327,15 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
     record = execution_runs.get(run_id) if run_id else None
     if record is not None and record.status in {"cancelling", "cancelled"}:
         return
-    _journal_execution_event(event, run_id)
-    _note_node_ran(event, run_id)
-    node_errors.observe(event)
+    # A node's event from a run whose canvas was cleared or replaced since
+    # names a node id that is now another node (round 11): it writes nothing
+    # there (outputs, error, the canvas's card, the journal). The run's own
+    # record and its report (get_run) still get it.
+    moved = isinstance(getattr(event, "node_id", None), str) and _run_canvas_moved(run_id, "node events")
+    if not moved:
+        _journal_execution_event(event, run_id)
+        _note_node_ran(event, run_id)
+        node_errors.observe(event)
     if isinstance(event, ErrorEvent) and run_id is not None:
         # The engine reports per-node failures as events and then returns
         # normally after GraphComplete. Preserve that semantic failure in the
@@ -10312,7 +10346,8 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
         # handlers intentionally use absolute paths while composing a run, but
         # those paths are not browser-loadable and may live under a relocated
         # output root whose directory name is not literally ``output``.
-        normalized_outputs = _sync_outputs_to_cli_graph(event.node_id, event.outputs)
+        normalized_outputs = (_normalized_event_outputs(event.outputs) if moved
+                              else _sync_outputs_to_cli_graph(event.node_id, event.outputs))
         updates: dict[str, Any] = {"outputs": normalized_outputs}
         if event.batch_outputs is not None:
             updates["batch_outputs"] = [
@@ -10322,6 +10357,9 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
         event = event.model_copy(update=updates)
     # What get_run reports for the run (services/run_reports.py).
     _run_reports().observe(event, run_id)
+    if moved:
+        # The canvas would put it on its node with that id (graphStore).
+        return
     await manager.broadcast(event)
 
 
@@ -10373,6 +10411,10 @@ def _sync_provider_recovery_to_cli_graph(
     current = cli_graph.nodes.get(event.node_id)
     if current is None:
         return False, durability_warning, safety_hold_changed
+    # The checkpoint above is kept by run and node (the paid-state record);
+    # the node's params only on the canvas the run started on (round 11).
+    if _run_canvas_moved(run_id, "recovery params"):
+        return False, durability_warning, safety_hold_changed
 
     params = copy.deepcopy(current.get("params") or {})
     params.pop("resume_operation_id", None)
@@ -10391,6 +10433,7 @@ def _sync_provider_recovery_to_cli_graph(
 
 def _sync_params_to_cli_graph(
     nodes: list[GraphNode], *, submitted: Mapping[str, Mapping[str, Any]] | None = None,
+    run_id: str | None = None,
 ) -> bool:
     """Mirror handler-mutated params from in-memory GraphNode instances back
     to cli_graph. Pydantic deep-copies params at model_validate time, so any
@@ -10405,7 +10448,12 @@ def _sync_params_to_cli_graph(
     only what the run itself changed is copied, never who bills it
     (``_provider``, ``_kreaAuth``: BILLING_PARAMS), so a request can't edit
     the canvas by running a node with the canvas node's id; edits go through
-    the edit routes and their checks."""
+    the edit routes and their checks.
+
+    ``run_id``: the run they came from. Nothing is written if the canvas it
+    registered on was cleared or replaced since (_run_canvas_moved)."""
+    if _run_canvas_moved(run_id, "params"):
+        return False
     persisted = False
     for node in nodes:
         current = cli_graph.nodes.get(node.id, {})
@@ -11580,8 +11628,15 @@ async def clear_graph(force: bool = False) -> dict:
     _check_workspace_revision()
     _require_clear_intent(force)
     with _paid_graph_mutation("clear the canvas"):
-        _reject_graph_replacement_during_paid_start("clear the canvas")
+        # As a switch, an import and a delete of the open project (round 11 of
+        # PR #114): a registered run writes back by node id, and ids start
+        # again after a clear. Its paid-start fence and the run fence.
+        _project_replacement_guard("clear the canvas", person=CLEAR_DURING_RUN_PERSON)
         cli_graph.clear()
+        # The id epoch moves in the step that restarted the ids, before any
+        # await (review 10's F6): a write fenced before this clear that
+        # rechecks during the awaits below must see it.
+        _forget_canvas_undo("the canvas was cleared since")
         run_approvals.clear()
         # Ids start again at n1: no node now is one a restore brought back.
         node_removals.forget_project(_workspace_context()["activeProjectId"])
@@ -11600,7 +11655,6 @@ async def clear_graph(force: bool = False) -> dict:
     asset_proposals.drop_removal_tags("the canvas was cleared")
     agent_presence.forget_graph()
     await _forget_status_anchors()
-    _forget_canvas_undo("the canvas was cleared since")
     await _broadcast_graph_sync(edit=True)
     publish_action("Cleared the canvas")
     if detached:
@@ -12659,10 +12713,14 @@ def _canvas_undo_keep(identity: Any, after: dict[str, Any]) -> dict[str, Any] | 
                                  mark=after.get("mark"), removals=after.get("removals"))
 
 
-def _forget_canvas_undo(why: str) -> None:
-    """The open project's node ids start again: its undo tokens end."""
+def _forget_canvas_undo(why: str, *, project_id: Any = ...) -> None:
+    """The open project's node ids start again: its undo tokens end, and its
+    id epoch moves (_graph_fence, _run_canvas_now). ``project_id``: that
+    project, when the caller knows it (inside a catalog transaction)."""
     try:
-        canvas_undo_book.forget_project(_workspace_context()["activeProjectId"], why)
+        if project_id is ...:
+            project_id = _workspace_context()["activeProjectId"]
+        canvas_undo_book.forget_project(project_id, why)
     except Exception:  # noqa: BLE001 - never break a clear or a load over undo bookkeeping
         pass
 
@@ -13470,6 +13528,8 @@ async def import_graph(body: dict[str, Any]) -> dict:
             list(candidate.nodes.values()),
             source="import",
         )
+        # The id epoch moves with the commit, in the same step (round 11).
+        _forget_canvas_undo("a graph was loaded into the project since, so its node ids started again")
         # Ids start again under this project: no node now is one a restore
         # brought back. Here, with the commit, not after the sync's awaits: a
         # delete landing during the sync would name the old node's removal.
@@ -14139,10 +14199,23 @@ async def _projects_live_export() -> dict[str, Any]:
     return await export_graph_for_frontend()
 
 
-def _project_replacement_guard(action: str = "switch projects") -> None:
+def _project_replacement_guard(action: str = "switch projects", *, person: str | None = None) -> None:
+    """409 while a paid start settles or a run is registered. ``person``: the
+    person's own line for the run refusal (refusal_copy), where GM wrote one
+    (Clear, round 11); agents keep the specific text either way."""
     _reject_graph_replacement_during_paid_start(action)
     if execution_runs.has_active() or _synchronous_workspace_runs:
-        raise HTTPException(status_code=409, detail=f"Cannot {action} while a run is active. Wait for the run to finish or stop it first.")
+        specific = f"Cannot {action} while a run is active. Wait for the run to finish or stop it first."
+        if person is None:
+            raise HTTPException(status_code=409, detail=specific)
+        raise refusal_copy.refusal(409, specific, person, route="canvas")
+
+
+# GM (round 11 of PR #114), under the canvas's "Couldn't clear the canvas."
+# heading: "Couldn't clear the canvas. A run is still going. Wait for it to
+# finish or stop it first." The reason replaces "Nothing was removed.", which
+# stays for refusals that give no reason.
+CLEAR_DURING_RUN_PERSON = "A run is still going. Wait for it to finish or stop it first."
 
 
 def _commit_project_workspace(catalog: dict[str, Any], candidate: CLIGraph) -> None:
@@ -14829,6 +14902,9 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
             _commit_project_workspace(catalog, CLIGraph())
             # The canvas is now the unfiled one, empty, its ids starting again at n1.
             node_removals.forget_project(None)
+            # So the unfiled canvas's id epoch moves, in this step (round 11):
+            # a write or run noted on an earlier unfiled canvas isn't this one.
+            _forget_canvas_undo("the open project was deleted since, so the canvas started again", project_id=None)
         else:
             project_store.commit(catalog)
         result = {
@@ -15118,16 +15194,10 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
                             run_ids=[target] if target else _end_node_ids(sub_nodes, sub_edges))
     _note_run(run_id)
     _note_run_nodes(run_id, sub_nodes)
-    publish_action(
-        f"Running {target}..." if target else f"Running {len(sub_nodes)} node(s)..."
-    )
-    if target:
-        await _show_agent({"nodeId": target}, say=f"Running {_quoted(_node_label(target))}", did=_did("Ran", target))
-    else:
-        # The whole canvas has no one node to point at: the Agent log only.
-        await _say_agent_action(f"Running {len(sub_nodes)} node{'' if len(sub_nodes) == 1 else 's'}")
     try:
-        _refuse_if_graph_moved(fence)  # and not during the cursor's line either
+        # Right before it registers, with no await between (round 11): the
+        # run notes this canvas as the one its write-backs go to.
+        _refuse_if_graph_moved(fence)
     except HTTPException:
         _return_hold(run_id)
         canvas_events.forget_run(run_id)
@@ -15138,7 +15208,7 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     # Registered like canvas runs: it fences project switching until it ends,
     # and DELETE /api/executions/{runId} (`nebula cancel`) stops it.
     try:
-        execution_runs.register(run_id, task)
+        _register_run(run_id, task)
     except (ExecutionCancelledBeforeStartError, ExecutionCancellationCapacityError, ValueError) as exc:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
@@ -15147,6 +15217,16 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     _watch_for_cross_process_stop(run_id, task)
     _cli_runs.start(run_id, task, target, outcome)
+    # The canvas says "Running X" / "Ran X" only for a run that started
+    # (review 10's F3: one its fence refused still said it ran).
+    publish_action(
+        f"Running {target}..." if target else f"Running {len(sub_nodes)} node(s)..."
+    )
+    if target:
+        await _show_agent({"nodeId": target}, say=f"Running {_quoted(_node_label(target))}", did=_did("Ran", target))
+    else:
+        # The whole canvas has no one node to point at: the Agent log only.
+        await _say_agent_action(f"Running {len(sub_nodes)} node{'' if len(sub_nodes) == 1 else 's'}")
     return _hide_run_key_echoes(await _cli_run_response(run_id, None if wait is None else float(wait)))
 
 
@@ -15250,7 +15330,7 @@ async def _execute_cli_run(
         canvas_events.forget_run(run_id)
     duration = _time_module.time() - start
 
-    _sync_params_to_cli_graph(sub_nodes)
+    _sync_params_to_cli_graph(sub_nodes, run_id=run_id)
 
     # Sync outputs to frontend canvas
     await _broadcast_graph_sync()

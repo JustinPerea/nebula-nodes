@@ -23,6 +23,7 @@ import atexit
 import os
 import shutil
 import tempfile
+import uuid
 from pathlib import Path
 
 _TEST_ROOT = Path(tempfile.mkdtemp(prefix="nebula-test-"))
@@ -135,6 +136,33 @@ def spending_limits_off(monkeypatch):
     monkeypatch.setattr(agent_spend, "caps_from_settings",
                         lambda settings: {"sessionUsd": None, "outsideDailyUsd": None, "kreaPlanRuns": None,
                                           "models": {}})
+
+
+@pytest.fixture
+def run_shot_task(monkeypatch, spending_limits_off):
+    """Run one Cinema shot through POST /api/cinema/generate-shot's own task
+    (main.generate_cinema_shot) and wait for it to end.
+
+    For tests about what that task writes back (the shot's output, its
+    terminal error); what comes before the task (validation, base models,
+    spend) is tested elsewhere and is waved through here. The tests patch
+    execute_graph; ``scene`` is the scene node as the canvas sends it."""
+    import main
+    from models.graph import GenerateShotRequest
+
+    monkeypatch.setattr(main, "validate_graph", lambda *_args: [])
+    monkeypatch.setattr(main, "_validate_cinema_base_models", lambda *_args: None)
+
+    async def run(scene, shot_id: str) -> None:
+        run_id = f"test-shot-{uuid.uuid4().hex}"
+        response = await main.generate_cinema_shot(GenerateShotRequest(
+            nodes=[scene], edges=[], nodeId=scene.id, shotId=shot_id, runId=run_id))
+        assert response["status"] == "started", response
+        record = main.execution_runs.get(run_id)
+        assert record is not None
+        await record.task
+
+    return run
 
 
 # The person's launch token in tests (services/person_session.py). The

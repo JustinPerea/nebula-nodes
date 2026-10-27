@@ -59,7 +59,7 @@ right one (`nebula project open <id>`). The person's canvas follows (from
 their Projects screen too), names you, and offers them a button back.
 **Never run `nebula clear` to make room**: a new project keeps their work.
 `nebula clear` refuses on a canvas with nodes, and `--force` clears it
-anyway. With their canvas open that is one undo step for them; with none
+anyway (not while a run is going: it waits for runs, as a project switch does). With their canvas open that is one undo step for them; with none
 open it can't be undone yet. `nebula selection` is what they have selected.
 `nebula project rename <id> "<name>"` (or `current`) renames one, prints the
 old name and the command that puts it back. `nebula project show <id>` reads
@@ -758,7 +758,7 @@ Connections must match types; `Any` connects to anything.
    their limits and propose anything bigger.
 5. Canvas edits can be undone, so when the person gives you room, use it.
    Ask before anything that can't be undone.
-6. A 409 "Another project is open now" (or "The canvas was cleared or
-   replaced since") means the person switched or cleared the canvas while
-   your change was on its way: nothing changed. Read the canvas again before
-   you retry, since node ids start again in each project.
+6. A 409 "The open project changed since this started" (or "The canvas was
+   cleared or replaced since") means the person switched or cleared the
+   canvas while your change was on its way: nothing changed. Read the
+   canvas again before you retry, since node ids start again in each project.

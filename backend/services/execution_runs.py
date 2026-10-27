@@ -33,6 +33,10 @@ class ExecutionRunRecord:
     # stop_refusal below). Attribution and the Stop rule, nothing else.
     started_by: dict[str, Any] = field(default_factory=lambda: dict(ANONYMOUS_STARTER))
     stopped_by: dict[str, Any] | None = None
+    # The canvas the run registered on, as main.py notes it (the open project
+    # and its id epoch): every write-back from the run checks it is still the
+    # one open (round 11 of PR #114). None: not noted (writes go through).
+    canvas: Any = None
 
 
 class ExecutionRunRegistry:
@@ -57,7 +61,7 @@ class ExecutionRunRegistry:
         self._starter_source = source
 
     def register(self, run_id: str, task: asyncio.Task[None], *,
-                 started_by: Mapping[str, Any] | None = None) -> ExecutionRunRecord:
+                 started_by: Mapping[str, Any] | None = None, canvas: Any = None) -> ExecutionRunRecord:
         if not run_id or len(run_id) > 128:
             raise ValueError("runId must be between 1 and 128 characters")
         if run_id in self._records:
@@ -71,7 +75,7 @@ class ExecutionRunRegistry:
         if started_by is None and self._starter_source is not None:
             started_by = self._starter_source()
         record = ExecutionRunRecord(run_id=run_id, task=task,
-                                    started_by=dict(started_by or ANONYMOUS_STARTER))
+                                    started_by=dict(started_by or ANONYMOUS_STARTER), canvas=canvas)
         self._records[run_id] = record
         task.add_done_callback(lambda completed, rid=run_id: self._finish(rid, completed))
         return record

@@ -34,7 +34,7 @@ import { claimIntent } from '../../lib/heldIntents';
 import '../../styles/personal-agents.css';
 import { apiFetch, backendAssetUrlSync, backendWebSocketUrl, personTokenForSocket } from '../../lib/backend';
 import { DEFAULT_BACKEND_PORT, devProxyPort } from '../../lib/devBackendPort';
-import { CONNECTION_LOST_COPY, NO_ANSWER_STATUS, PERSON_REQUIRED_CODE, isBackendUnreachable, personRequiredCopy, readDetail, warnFailure, failureMessage, failureCopy, oneLine } from '../../lib/errorCopy';
+import { CONNECTION_LOST_COPY, NO_ANSWER_STATUS, PERSON_REQUIRED_CODE, isBackendUnreachable, personRequiredCopy, readDetail, requestError, warnFailure, failureMessage, failureCopy, oneLine } from '../../lib/errorCopy';
 import { ErrorDetails } from '../failure/ErrorDetails';
 import { chatUploadChipError } from '../../lib/chatUploadCopy';
 import { chatAuthority } from '../../lib/commonsChatAuthority';
@@ -52,6 +52,11 @@ type ChatAgent = ChatAgentId;
 type ModelSelection = { model: string | null; effort: string | null };
 const NO_MODEL: ModelSelection = { model: null, effort: null };
 const PERSONAL_AGENT_RE = /^personal:[a-z0-9-]{1,32}$/;
+// /clear's lines. The canvas clear can be refused (a run going): GM's line
+// then, with the refusal under Clear's heading as the notice.
+const SESSION_CLEARED = 'Session cleared. Next message starts a fresh conversation with an empty canvas.';
+const SESSION_CLEARED_CANVAS_KEPT = "Session cleared. Next message starts a fresh conversation. The canvas wasn't cleared.";
+const CLEAR_CANVAS = "Couldn't clear the canvas.";
 type ChatSelection = { agent: ChatAgent; claude: ModelSelection; codex: ModelSelection };
 const CHAT_SELECTION_KEY = 'nebula:chat-selection';
 
@@ -1456,18 +1461,30 @@ export function ChatPanel() {
       const undoStep = useGraphStore.getState().beginUndoStep();
       // force: typing /clear is the person's confirmation (the backend
       // refuses a clear of a project with nodes without it).
-      apiFetch('/api/graph?force=true', { method: 'DELETE' }).then((response) => {
-        if (!response.ok) useGraphStore.getState().cancelUndoStep(undoStep);
-      }).catch(() => useGraphStore.getState().cancelUndoStep(undoStep));
-      setMessages([
-        {
-          role: 'assistant',
-          id: newId(),
-          streaming: false,
-          parts: [{ kind: 'system', text: 'Session cleared. Next message starts a fresh conversation with an empty canvas.' }],
-        },
+      const said = (text: string) => setMessages([
+        { role: 'assistant', id: newId(), streaming: false, parts: [{ kind: 'system', text }] },
       ]);
       setInput('');
+      // The session is this tab's own and always clears; the canvas clear is
+      // the backend's and can be refused (a run going: round 11 of PR #114),
+      // so the line waits for its answer and says only what happened (GM).
+      let response: Response;
+      try {
+        response = await apiFetch('/api/graph?force=true', { method: 'DELETE' });
+      } catch {
+        useGraphStore.getState().cancelUndoStep(undoStep);
+        said(SESSION_CLEARED);  // no answer: whether the canvas cleared isn't known
+        return;
+      }
+      if (response.ok) {
+        said(SESSION_CLEARED);
+        return;
+      }
+      useGraphStore.getState().cancelUndoStep(undoStep);
+      // GM: "Session cleared. Next message starts a fresh conversation. The
+      // canvas wasn't cleared.", and the refusal itself under Clear's heading.
+      said(SESSION_CLEARED_CANVAS_KEPT);
+      setNotice(failureMessage(await requestError(CLEAR_CANVAS, response), CLEAR_CANVAS));
       return;
     }
 

@@ -208,11 +208,11 @@ class TestMergeShotResult:
 
     @pytest.mark.asyncio
     async def test_background_error_event_persists_terminal_shot_error(
-        self, monkeypatch
+        self, monkeypatch, run_shot_task
     ):
         """execute_graph returns normally after upstream ErrorEvent. Absence of
         the target ExecutedEvent must still reconcile the shot and broadcast."""
-        from main import _run_single_shot_task, cli_graph
+        from main import cli_graph
         from models.events import ErrorEvent
         from models.graph import GraphNode
 
@@ -251,13 +251,7 @@ class TestMergeShotResult:
                 }
             },
         )
-        await _run_single_shot_task(
-            node_id="n1",
-            shot_id="b",
-            sub_nodes=[target],
-            sub_edges=[],
-            api_keys={},
-        )
+        await run_shot_task(target, "b")
 
         node = cli_graph.nodes["n1"]
         shots = {s["id"]: s for s in node["params"]["scene"]["shots"]}
@@ -274,9 +268,9 @@ class TestMergeShotResult:
 
     @pytest.mark.asyncio
     async def test_background_exception_persists_terminal_shot_error(
-        self, monkeypatch
+        self, monkeypatch, run_shot_task
     ):
-        from main import _run_single_shot_task, cli_graph
+        from main import cli_graph
         from models.graph import GraphNode
 
         self._seed_cli_node()
@@ -296,13 +290,7 @@ class TestMergeShotResult:
             definitionId="cinema-scene",
             params={"scene": {"shots": [{"id": "b"}]}},
         )
-        await _run_single_shot_task(
-            node_id="n1",
-            shot_id="b",
-            sub_nodes=[target],
-            sub_edges=[],
-            api_keys={},
-        )
+        await run_shot_task(target, "b")
 
         shot_b = next(
             shot

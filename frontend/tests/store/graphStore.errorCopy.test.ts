@@ -62,12 +62,23 @@ describe('adding a node', () => {
     expect(alerted()).toBe(`Couldn't add Text Input. ${NO_ANSWER}`);
   });
 
-  it('a refused fresh-canvas clear keeps the backend\'s reason, without the status', async () => {
+  // Round 11 (GM): a refused fresh-canvas clear reads under the clear's own
+  // heading, not "Couldn't add Text Input." (it said that before round 11).
+  it('a refused fresh-canvas clear keeps the backend\'s reason under the clear\'s heading, without the status', async () => {
     fetchMock
       .mockResolvedValueOnce(json({ empty: false, nodes: [{ id: 'n9' }], edges: [] }))
       .mockResolvedValueOnce(json({ detail: 'Graph has protected provider state' }, 409));
     expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
-    expect(alerted()).toBe("Couldn't add Text Input. Graph has protected provider state");
+    expect(alerted()).toBe("Couldn't clear the canvas. Graph has protected provider state");
+  });
+
+  it('round 11 (GM): a fresh-canvas clear refused during a run reads GM\'s whole line, word for word', async () => {
+    fetchMock
+      .mockResolvedValueOnce(json({ empty: false, nodes: [{ id: 'n9' }], edges: [] }))
+      .mockResolvedValueOnce(json({ detail: 'A run is still going. Wait for it to finish or stop it first.' }, 409));
+    expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
+    expect(alerted()).toBe("Couldn't clear the canvas. A run is still going. Wait for it to finish or stop it first.");
+    expect(useGraphStore.getState().nodes).toHaveLength(0);
   });
 
   // Round 3e (GM): the store's own lines were written for developers

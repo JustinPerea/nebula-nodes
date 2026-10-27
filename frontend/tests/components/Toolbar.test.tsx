@@ -327,6 +327,18 @@ describe('Canvas toolbar hierarchy', () => {
     expect(mocks.graph!.getState().nodes).toHaveLength(1);
   });
 
+  it('round 11 (GM): a clear refused while a run is going reads GM\'s line, word for word', async () => {
+    // The backend's person line (main.CLEAR_DURING_RUN_PERSON) under the
+    // canvas's heading; agents keep "Cannot clear the canvas while a run is active. ...".
+    mocks.fetch.mockResolvedValue({ ok: false, status: 409,
+      json: async () => ({ detail: 'A run is still going. Wait for it to finish or stop it first.' }) });
+    render(<Toolbar />);
+    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Clear canvas…' }));
+    await waitFor(() => expect(notices).toHaveBeenCalledWith(
+      "Couldn't clear the canvas. A run is still going. Wait for it to finish or stop it first."));
+    expect(mocks.clear).not.toHaveBeenCalled();
+  });
+
   it('error-copy round 2: a refused clear with no reason says GM\'s line, never the status', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     mocks.fetch.mockResolvedValue({ ok: false, status: 409, json: async () => ({}) });

@@ -1079,6 +1079,13 @@ class Listener:
         self._check_deadline = math.inf
         self._check_scope: anyio.CancelScope | None = None
         self._check_answer: tuple[str, Any] | None = None
+        # Checks the decisions gave up on (cancelled at their deadline) whose
+        # fetch hasn't returned yet: one may ignore cancellation for a while
+        # (a worker thread). A new check never waits for them (one hanging
+        # forever would stop every later check); their answers are dropped
+        # (_ask_nebula), and the listener's shutdown cancels and awaits them
+        # (round 11 of PR #114, seed 9218).
+        self._lingering: set[anyio.CancelScope] = set()
         self._push = push
         self._clock = clock
         self._sleep = sleep or anyio.sleep
@@ -1174,6 +1181,15 @@ class Listener:
         wait it makes (review 7, item 3; _check_timed_out). ``scope`` is made
         by _start_check, so a deadline that passes before this task's first
         step still cancels it (review 8)."""
+        try:
+            await self._ask_nebula_in(scope)
+        finally:
+            self._lingering.discard(scope)
+            if self._check_scope is scope:
+                self._check_scope = None
+            self._nudge()
+
+    async def _ask_nebula_in(self, scope: anyio.CancelScope) -> None:
         with scope:
             try:
                 listing: Any = await self._fetch_pins()
@@ -1189,9 +1205,6 @@ class Listener:
             # already called failed.
             if not scope.cancel_called and self._check_scope is scope and self._clock() < self._check_deadline:
                 self._check_answer = answer
-        if self._check_scope is scope:
-            self._check_scope = None
-        self._nudge()
 
     def _start_check(self, group: anyio.abc.TaskGroup, checked: list[str], now: float) -> None:
         self.state.pin_check_started()
@@ -1211,6 +1224,8 @@ class Listener:
         self._check_answer = ("failed", TimeoutError(f"no answer in {PIN_CHECK_TIMEOUT:g} s"))
         if self._check_scope is not None:
             self._check_scope.cancel()
+            # Until its fetch returns; the next check doesn't wait for it.
+            self._lingering.add(self._check_scope)
 
     def _take_check_answer(self, now: float) -> bool:
         """Apply the answer of the check out, if it came, to the decision made
@@ -1285,8 +1300,14 @@ class Listener:
         """Push what is due; otherwise sleep until a push may be due or something changed."""
         try:
             async with anyio.create_task_group() as checks:
-                await self._decide(checks)
-                checks.cancel_scope.cancel()  # a check still out (listening stopped)
+                try:
+                    await self._decide(checks)
+                finally:
+                    # Listening stopped: the check out and any lingering one
+                    # are cancelled, and the group awaits them all.
+                    for lingering in list(self._lingering):
+                        lingering.cancel()
+                    checks.cancel_scope.cancel()
         except BaseExceptionGroup as group:
             # The check task keeps its own errors (_ask_nebula), so one here
             # came from the decisions: raise it as it was.

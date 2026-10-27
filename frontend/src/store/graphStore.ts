@@ -660,8 +660,36 @@ function ownershipState(): Pick<GraphState, 'activeRuns' | 'isExecuting' | 'isCa
     isCancelling: activeRuns.some((run) => run.status === 'cancelling') || cancelledCreateLaunches.size > 0 };
 }
 
+/** The canvas a run started on (round 11 of PR #114): the open project, its
+ * load, and the replacement count every graph replacement bumps (a switch,
+ * an import, Load graph). A start that fails after the graph was replaced
+ * marks nothing: the new graph's nodes only share its node ids. */
+interface RunCanvas { projectId: string | null; load: number; replacement: number }
+const runCanvases = new Map<string, RunCanvas>();
+
+function canvasNow(): RunCanvas {
+  return { projectId: getProjectContext()?.id ?? null, load: canvasLoad, replacement: canvasReplacementRevision };
+}
+
+/** Whether the graph is still the one run `runId` started on. */
+function runOnItsCanvas(runId: string): boolean {
+  const started = runCanvases.get(runId);
+  if (!started) return false;
+  const now = canvasNow();
+  return started.projectId === now.projectId && started.load === now.load && started.replacement === now.replacement;
+}
+
+/** The graph was replaced: no run is this canvas's current run any more, and
+ * other runs' node marks named the old graph's nodes. A run still starting
+ * keeps its owner, so its answer still ends it (runOnItsCanvas). */
+function forgetRunsOfReplacedGraph(): void {
+  currentRunId = null;
+  foreignRunNodes.clear();
+}
+
 function registerRun(runId: string, snapshot: RunGraphSnapshot, targetNodeId?: string, shotId?: string): void {
   if (targetNodeId && shotId) settledCinemaRuns.delete(`${targetNodeId}\u0000${shotId}`);
+  runCanvases.set(runId, canvasNow());
   activeRunOwners.set(runId, { id: runId, kind: shotId ? 'cinema-shot' : 'graph',
     nodeIds: [...snapshotExecutionScopeIds(snapshot, targetNodeId)],
     nodeId: targetNodeId, shotId, status: 'starting' });
@@ -705,6 +733,7 @@ function closeTrackedRun(set: GraphSet, runId: string, patch: Parameters<typeof 
     if (settledCinemaRuns.size > 1000) settledCinemaRuns.delete(settledCinemaRuns.keys().next().value!);
   }
   activeRunOwners.delete(runId);
+  runCanvases.delete(runId);
   terminalRunIds.add(runId);
   if (terminalRunIds.size > 1000) terminalRunIds.delete(terminalRunIds.values().next().value!);
   if (currentRunId === runId) currentRunId = null;
@@ -746,19 +775,6 @@ function rememberCancelledRun(runId: string): void {
     const oldest = cancelledRunIds.values().next().value as string | undefined;
     if (oldest) cancelledRunIds.delete(oldest);
   }
-}
-
-/** Close the in-flight run-history record (if any) with a terminal status, then
- *  clear `currentRunId`. No-op when no run is open, so it's safe to call on every
- *  execution-exit path — and centralizing the null-guard keeps the cancel-vs-restart
- *  invariant correct (a leaked open run would otherwise be mis-marked 'cancelled'
- *  by the next run's resetExecution). */
-function closeCurrentRun(
-  set: (partial: Partial<GraphState> | ((state: GraphState) => Partial<GraphState>)) => void,
-  patch: Parameters<typeof closeRunRecord>[2],
-): void {
-  if (!currentRunId) return;
-  closeTrackedRun(set, currentRunId, patch);
 }
 
 /** Like pushUndo but debounces rapid param changes on the same node (500ms window). */
@@ -2475,10 +2491,11 @@ async function executeHistoricalRun(
         400,
       );
     }
-    if (result.status === 'validation_error' && currentRunId === runId) {
-      closeCurrentRun(set, { status: 'failed' });
+    if (result.status === 'validation_error' && (currentRunId === runId || ownsRun(runId))) {
+      const onItsCanvas = runOnItsCanvas(runId);
+      closeTrackedRun(set, runId, { status: 'failed' });
       set((state) => ({
-        nodes: markNodesWithValidationErrors(
+        nodes: !onItsCanvas ? state.nodes : markNodesWithValidationErrors(
           state.nodes,
           scopeIds,
           'errors' in result ? result.errors as ExecutionValidationError[] : undefined,
@@ -2489,14 +2506,17 @@ async function executeHistoricalRun(
   } catch (err) {
     settleFailedStart(runId, err);
     console.error('Failed to replay historical run:', err);
-    if (currentRunId !== runId) return;
+    // Not ours any more (it ended), or the graph was replaced since: then it
+    // still closes, but marks nothing on the new graph (round 11).
+    if (currentRunId !== runId && !ownsRun(runId)) return;
     if (!(err instanceof ExecutionStartRejectedError)) {
       await reconcileWorldLabsExecutionStatus(runId, set, get);
       return;
     }
-    closeCurrentRun(set, { status: 'failed' });
+    const onItsCanvas = runOnItsCanvas(runId);
+    closeTrackedRun(set, runId, { status: 'failed' });
     set((state) => ({
-      nodes: markNodesErrored(
+      nodes: !onItsCanvas ? state.nodes : markNodesErrored(
         state.nodes,
         scopeIds,
         failureMessage(err, "Couldn't start the run."),
@@ -2506,6 +2526,8 @@ async function executeHistoricalRun(
     }));
   }
 }
+
+const CLEAR_CANVAS_HEADING = "Couldn't clear the canvas.";
 
 async function ensureBackendFreshForLocalCanvas(
   localCanvasWasEmpty: boolean,
@@ -2548,7 +2570,10 @@ async function ensureBackendFreshForLocalCanvas(
         + 'The canvas may be clear already. Reload before you add it again.');
     }
     if (!clearRes.ok) {
-      throw new FailureNotice('', await backendRejectionReason(clearRes, "Couldn't clear the canvas."));
+      // Round 11 (GM): the refused clear reads under its own heading, the
+      // whole line ("Couldn't clear the canvas. A run is still going. ..."),
+      // not under "Couldn't add {node}." (reportNodeCreationError).
+      throw new FailureNotice(CLEAR_CANVAS_HEADING, await backendRejectionReason(clearRes, CLEAR_CANVAS_HEADING));
     }
   }
 
@@ -2632,6 +2657,18 @@ function observePendingConnectedNodeCreation(nodes: Node<NodeData>[], edges: Edg
   // An unrelated sync or a standalone node cannot resolve a potentially
   // committed pair. A sending request remains locked until its HTTP settles.
   if (attempt.phase === 'uncertain' && attempt.observedNodeId) pendingConnectedNodeCreationAttempt = null;
+}
+
+/** ensureBackendFreshForLocalCanvas's failure: a line with its own heading
+ * (a refused clear) is said whole; the rest read under "Couldn't add {node}.". */
+function reportNodeCreationError(displayName: string, err: unknown): null {
+  if (err instanceof FailureNotice && err.heading) {
+    const message = failureMessage(err, err.heading);
+    console.warn(`[nebula] ${message}`);
+    useGraphStore.getState().notify(message);
+    return null;
+  }
+  return reportNodeCreationFailure(displayName, failureCopy(err).reason);
 }
 
 function reportNodeCreationFailure(displayName: string, reason: string): null {
@@ -3049,6 +3086,7 @@ wsClient.subscribe((event) => {
     };
     if (graphReplaced) {
       canvasReplacementRevision += 1;
+      forgetRunsOfReplacedGraph();
       pendingConnectedNodeCreationAttempt = null;
       wireWrites.clear();
       unsavedParamEdits.clear();
@@ -3686,7 +3724,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     try {
       backendFresh = await ensureBackendFreshForLocalCanvas(localCanvasWasEmpty, set, get);
     } catch (err) {
-      return reportNodeCreationFailure(definition.displayName, failureCopy(err).reason);
+      return reportNodeCreationError(definition.displayName, err);
     }
     if (!backendFresh) return addLocally(new Error('Backend is unavailable.'));
 
@@ -4915,10 +4953,11 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
           400,
         );
       }
-      if (result.status === 'validation_error' && currentRunId === runId) {
-        closeCurrentRun(set, { status: 'failed' });
+      if (result.status === 'validation_error' && (currentRunId === runId || ownsRun(runId))) {
+        const onItsCanvas = runOnItsCanvas(runId);
+        closeTrackedRun(set, runId, { status: 'failed' });
         set((state) => ({
-          nodes: markNodesWithValidationErrors(
+          nodes: !onItsCanvas ? state.nodes : markNodesWithValidationErrors(
             state.nodes,
             new Set(nodesInExecutionScope(state.nodes, state.edges).map((node) => node.id)),
             result.errors,
@@ -4929,14 +4968,15 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     } catch (err) {
       settleFailedStart(runId, err);
       console.error('Failed to start execution:', err);
-      if (currentRunId !== runId) return;
+      if (currentRunId !== runId && !ownsRun(runId)) return;  // see the replay's catch
       if (!(err instanceof ExecutionStartRejectedError)) {
         await reconcileWorldLabsExecutionStatus(runId, set, get);
         return;
       }
-      closeCurrentRun(set, { status: 'failed' });
+      const onItsCanvas = runOnItsCanvas(runId);
+      closeTrackedRun(set, runId, { status: 'failed' });
       set((state) => ({
-        nodes: markNodesErrored(
+        nodes: !onItsCanvas ? state.nodes : markNodesErrored(
           state.nodes,
           new Set(nodesInExecutionScope(state.nodes, state.edges).map((node) => node.id)),
           failureMessage(err, "Couldn't start the run."),
@@ -4992,10 +5032,11 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
           400,
         );
       }
-      if (result.status === 'validation_error' && currentRunId === runId) {
-        closeCurrentRun(set, { status: 'failed' });
+      if (result.status === 'validation_error' && (currentRunId === runId || ownsRun(runId))) {
+        const onItsCanvas = runOnItsCanvas(runId);
+        closeTrackedRun(set, runId, { status: 'failed' });
         set((state) => ({
-          nodes: markNodesWithValidationErrors(
+          nodes: !onItsCanvas ? state.nodes : markNodesWithValidationErrors(
             state.nodes,
             new Set(nodesInExecutionScope(state.nodes, state.edges, nodeId).map((node) => node.id)),
             result.errors,
@@ -5006,14 +5047,15 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     } catch (err) {
       settleFailedStart(runId, err);
       console.error('Failed to start node execution:', err);
-      if (currentRunId !== runId) return;
+      if (currentRunId !== runId && !ownsRun(runId)) return;  // see the replay's catch
       if (!(err instanceof ExecutionStartRejectedError)) {
         await reconcileWorldLabsExecutionStatus(runId, set, get);
         return;
       }
-      closeCurrentRun(set, { status: 'failed' });
+      const onItsCanvas = runOnItsCanvas(runId);
+      closeTrackedRun(set, runId, { status: 'failed' });
       set((state) => ({
-        nodes: markNodesErrored(
+        nodes: !onItsCanvas ? state.nodes : markNodesErrored(
           state.nodes,
           new Set(nodesInExecutionScope(state.nodes, state.edges, nodeId).map((node) => node.id)),
           failureMessage(err, "Couldn't run the node."),
@@ -5081,6 +5123,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     // Clear the optimistic spinner to an error state when no graphSync will
     // follow (up-front validation failure or a thrown request).
     const failShot = (message: string, reading?: ValidationReading) => {
+      if (!runOnItsCanvas(runId)) return;  // a replaced graph's node only shares the id (round 11)
       const cur = get().nodes.find((n) => n.id === nodeId);
       const curScene = (cur?.data.params as { scene?: CinemaSceneSpec } | undefined)?.scene;
       if (!curScene) return;
@@ -5227,10 +5270,11 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
           400,
         );
       }
-      if (result.status === 'validation_error' && currentRunId === runId) {
-        closeCurrentRun(set, { status: 'failed' });
+      if (result.status === 'validation_error' && (currentRunId === runId || ownsRun(runId))) {
+        const onItsCanvas = runOnItsCanvas(runId);
+        closeTrackedRun(set, runId, { status: 'failed' });
         set((state) => ({
-          nodes: markNodesWithValidationErrors(
+          nodes: !onItsCanvas ? state.nodes : markNodesWithValidationErrors(
             state.nodes,
             idSet,
             result.errors,
@@ -5241,14 +5285,16 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     } catch (err) {
       settleFailedStart(runId, err);
       console.error('Failed to start generation:', err);
-      if (currentRunId !== runId) return;
+      if (currentRunId !== runId && !ownsRun(runId)) return;  // see the replay's catch
       if (!(err instanceof ExecutionStartRejectedError)) {
         await reconcileWorldLabsExecutionStatus(runId, set, get);
         return;
       }
-      closeCurrentRun(set, { status: 'failed' });
+      const onItsCanvas = runOnItsCanvas(runId);
+      closeTrackedRun(set, runId, { status: 'failed' });
       set((state) => ({
-        nodes: markNodesErrored(state.nodes, idSet, failureMessage(err, "Couldn't start the run."), err),
+        nodes: !onItsCanvas ? state.nodes
+          : markNodesErrored(state.nodes, idSet, failureMessage(err, "Couldn't start the run."), err),
         ...ownershipState(),
       }));
     }
@@ -5297,8 +5343,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
         scheduleWorldLabsStatusReconciliation(runId, set, get);
         return;
       }
+      const onItsCanvas = runOnItsCanvas(runId);
       closeTrackedRun(set, runId, { status: 'failed' });
-      set((state) => ({ nodes: result.status === 'validation_error'
+      set((state) => ({ nodes: !onItsCanvas ? state.nodes : result.status === 'validation_error'
         ? markNodesWithValidationErrors(state.nodes, idSet, result.errors)
         : markNodesErrored(state.nodes, idSet, notStartedMessage("Couldn't start the run.", result.status)) }));
     } catch (error) {
@@ -5311,8 +5358,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
         await reconcileWorldLabsExecutionStatus(runId, set, get);
         return;
       }
+      const onItsCanvas = runOnItsCanvas(runId);
       closeTrackedRun(set, runId, { status: cancellationRequestedRunIds.has(runId) ? 'cancelled' : 'failed' });
-      set((state) => ({ nodes: markNodesErrored(state.nodes, idSet,
+      set((state) => ({ nodes: !onItsCanvas ? state.nodes : markNodesErrored(state.nodes, idSet,
         failureMessage(error, "Couldn't start the run."), error) }));
     }
   },
@@ -5836,6 +5884,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   loadGraph: (nodes, edges, options) => {
     if (get().isExecuting && !options?.allowDuringExecution) return;
     canvasReplacementRevision += 1;
+    forgetRunsOfReplacedGraph();
     pendingConnectedNodeCreationAttempt = null;
     clearCinemaScenePersistence();
     useCinemaMotionStore.getState().clear();
@@ -5896,6 +5945,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     for (const timer of statusReconciliationTimers.values()) clearTimeout(timer);
     statusReconciliationTimers.clear();
     activeRunOwners.clear();
+    runCanvases.clear();
+    forgetRunsOfReplacedGraph();
     runErrors.clear();
     runShareableInputs.clear();
     createLaunchOwners.clear();

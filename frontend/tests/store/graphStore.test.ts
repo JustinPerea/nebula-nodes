@@ -611,9 +611,10 @@ describe('graphStore', () => {
     expect(nodeId).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(useGraphStore.getState().nodes).toHaveLength(0);
-    // error-copy round 2 (GM): the backend's reason, never the status.
+    // error-copy round 2 (GM): the backend's reason, never the status;
+    // round 11 (GM): under the clear's own heading, not "Couldn't add Text Input.".
     expect(alertMock).toHaveBeenCalledWith(
-      "Couldn't add Text Input. Graph has protected provider state",
+      "Couldn't clear the canvas. Graph has protected provider state",
     );
   });
 
