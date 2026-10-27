@@ -195,44 +195,45 @@ describe('a refused create after the sync: the add path\'s own line, and nothing
   });
 });
 
-// Round 13 of PR #114 (GM): "Couldn't add “Text Input” while Nebula is
-// offline." when the add can't reach a backend this tab had found, and
-// before sending anything while the offline banner shows.
-const offlineLine = (definitionId: string) => `Couldn't add “${label(definitionId)}” while Nebula is offline.`;
+// Round 13 of PR #114 (GM) said "Couldn't add “Text Input” while Nebula is
+// offline."; round 14 (GM) dropped it: offline is read-only, so an add while
+// the banner shows sends nothing and says nothing (the banner pulses;
+// graphStore.readOnly.test.ts walks every edit), and an add whose sync finds
+// the backend gone reads the add heading, as any failed sync.
 describe('an add while Nebula is offline', () => {
   it.each(ADDS)('%s: the backend can\'t be reached during the sync', async (_name, definitionId, add) => {
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     expect(await add({ x: 10, y: 20 })).toBeNull();
     expect(useGraphStore.getState().nodes).toEqual([]);
-    expect(alerted()).toEqual([offlineLine(definitionId)]);
+    expect(alerted()).toEqual([couldntAdd(definitionId)]);
     // The reason still goes to the Agent log, under GM's line.
     expect(logged()[0]).toMatch(/Failed to fetch|Nebula's/);
   });
 
-  it.each(ADDS)('%s: the banner shows offline, so nothing is sent at all', async (_name, definitionId, add) => {
+  it.each(ADDS)('%s: the banner shows offline, so nothing is sent and no toast shows', async (_name, _definitionId, add) => {
     useGraphStore.setState({ nodes: [{ ...agentsNode }] as never });
     noteBackendConnection('offline');
     expect(await add({ x: 10, y: 20 })).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(alerted()).toEqual([offlineLine(definitionId)]);
+    expect(alerted()).toEqual([]);
     expect(useGraphStore.getState().nodes.map((node) => node.id)).toEqual(['n1']);
   });
 
-  it('a tab that never found a backend reads "isn\'t connected yet" even while the banner says offline', async () => {
+  it('a tab that never found a backend while the banner says offline: blocked the same way', async () => {
     backendDiscovery.baseUrl = null;
     noteBackendConnection('offline');
     expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(alerted()).toEqual(["Couldn't add “Text Input”. Nebula isn't connected yet. Try again once it is."]);
+    expect(alerted()).toEqual([]);
   });
 
-  it('a dynamic node while offline: no card, no step, the same line', async () => {
+  it('a dynamic node while offline: no card, no step, no toast', async () => {
     noteBackendConnection('offline');
     expect(useGraphStore.getState().addDynamicNode('openrouter-universal', { x: 10, y: 20 })).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
     expect(useGraphStore.getState().nodes).toEqual([]);
     expect(useGraphStore.getState().undoStack).toEqual([]);
-    expect(alerted()).toEqual([offlineLine('openrouter-universal')]);
+    expect(alerted()).toEqual([]);
   });
 });
 

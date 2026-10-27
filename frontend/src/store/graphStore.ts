@@ -74,7 +74,8 @@ import {
   rewriteBackendAssetUrls,
   rewriteExecutionAssetUrls,
 } from '../lib/backend';
-import { isBackendOffline } from '../lib/backendConnection';
+import { isBackendOffline, refuseEditWhileOffline } from '../lib/backendConnection';
+import { noteNodeLabels } from '../lib/lastNodeLabels';
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 import { WORLD_LABS_STATUS_UNCERTAIN_WARNING, deleteRefusalText, heldDeleteText } from '../lib/worldLabsWaiting';
 import {
@@ -85,8 +86,9 @@ import { CANVAS_NOTICE_EVENT, type CanvasNoticeDetail } from '../lib/canvasNotic
 import { cleanRemovals, deletedNoticeText, lateRestoreText, mergeRemovals, notRestoredText, pinsOnAnotherModel, restoredNoticeText, supersededBy, type RemovalRecord } from '../lib/deleteNotice';
 import { NOTHING_RAN_LINE, OTHER_NODE_LINE, SHOT_NOT_STARTED_LINE, validationReadings, writtenReading, type ValidationReading } from '../lib/validationCopy';
 import {
-  RUNTIME_FIELDS, applySlice, diffCanvas, edgeKey, editArrivedText, foldArrange, foreignSource, isForeignEdit, isOwnEcho,
-  restoreRequest, undoNoticeText, type EditOrigin, type ForeignEdit, type RestoreBody,
+  RUNTIME_FIELDS, applySlice, captureOwnAdd, diffCanvas, edgeKey, editArrivedText, foldArrange, foreignSource, isForeignEdit,
+  isOwnAdd, isOwnEcho, isSliceStep, ownAddStep, renameOwnedNode, restoreRequest, undoNoticeText,
+  type EditOrigin, type ForeignEdit, type OwnAdd, type RestoreBody,
 } from '../lib/canvasUndo';
 import { TAB_ID } from '../lib/tabId';
 import { notifyJobComplete } from '../lib/jobNotifications';
@@ -431,7 +433,7 @@ interface UndoSnapshot {
   removals?: RemovalRecord[];
 }
 
-type UndoEntry = UndoSnapshot | ForeignEdit;
+type UndoEntry = UndoSnapshot | ForeignEdit | OwnAdd;
 
 /**
  * A node has one live removal, its latest delete's: only that one's undo can
@@ -599,6 +601,27 @@ function pushUndo(
   if (newStack.length > UNDO_CAP) newStack.shift();
   set({ undoStack: newStack, redoStack: [] });
   return snapshot;
+}
+
+/** One of the person's own adds: a step that owns exactly `nodeIds` (round
+ * 14 of PR #114; lib/canvasUndo.ts OwnAdd). Pushed when the add's ids are
+ * known; a later step depends on nothing it holds, so it may land above
+ * steps taken while the add was out. */
+function pushOwnAdd(set: GraphSet, get: GraphGet, nodeIds: Iterable<string>): OwnAdd | null {
+  const step = ownAddStep(nodeIds);
+  if (step.nodeIds.length === 0) return null;
+  breakUndoDebounce();
+  const undoStack = [...get().undoStack, step];
+  if (undoStack.length > UNDO_CAP) undoStack.shift();
+  set({ undoStack, redoStack: [] });
+  return step;
+}
+
+/** An add that failed: its step leaves the stack wherever it sits (it owns
+ * only what that add made, so nothing above depends on it). */
+function dropOwnAdd(set: GraphSet, step: OwnAdd | null): void {
+  if (!step) return;
+  set((state) => (state.undoStack.includes(step) ? { undoStack: state.undoStack.filter((entry) => entry !== step) } : {}));
 }
 
 // Debounce state for updateNodeData undo pushes
@@ -822,6 +845,9 @@ interface GraphState {
    * Pass the step to cancelUndoStep if the request fails. */
   beginUndoStep: () => object;
   cancelUndoStep: (step: object) => void;
+  /** An add made outside the store (a file drop) landed: one undo step that
+   * owns exactly these node ids (round 14 of PR #114). */
+  noteOwnAdd: (nodeIds: string[]) => void;
   /** The notice for someone else's edit: it landed, or was undone or redone. */
   undoNotice: UndoNotice | null;
   dismissUndoNotice: () => void;
@@ -1177,6 +1203,17 @@ function withEditsSinceRequest(nodeId: string, definitionId: string, configured:
   return params;
 }
 
+/** A model change that didn't happen: GM's line (round 14 of PR #114) with
+ * the model the node is still on (its route, as its card's badge shows it);
+ * the reason stays in the console. */
+function reportModelChangeFailed(nodeId: string): void {
+  const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
+  if (!node) return;
+  const current = node.data.params[UNIVERSAL_MODEL_PARAM[node.data.definitionId] ?? 'model'];
+  useGraphStore.getState().notify(modelChangeFailedLine(node.data.label,
+    typeof current === 'string' ? current.trim() : ''));
+}
+
 /** Whether a wire keeps its ends on the node's new ports (a wire leaving the
  * node is checked at its source end), as universal_ports.edge_fits says. */
 function edgeFitsPorts(nodeId: string, edge: Edge, ports: Pick<UniversalModelResult, 'dynamicInputPorts' | 'dynamicOutputPorts'>): boolean {
@@ -1356,6 +1393,12 @@ const PARAM_PUSH_DEBOUNCE_MS = 250;
  */
 const unsavedParamEdits = new Map<string, { keys: Set<string>; inFlight: number }>();
 
+/** For each unsaved key, the value the backend last took (or ABSENT_PARAM):
+ * where a failed save puts the field back (round 14 of PR #114, GM: "It's
+ * back to its last saved value."). Kept while the key is unsaved. */
+const savedParamValues = new Map<string, Map<string, unknown>>();
+const ABSENT_PARAM = Symbol('absent');
+
 function noteParamEdit(nodeId: string, before: Record<string, unknown>, after: Record<string, unknown>): void {
   const keys = [...new Set([...Object.keys(before), ...Object.keys(after)])]
     .filter((key) => before[key] !== after[key]);
@@ -1363,12 +1406,60 @@ function noteParamEdit(nodeId: string, before: Record<string, unknown>, after: R
   const entry = unsavedParamEdits.get(nodeId) ?? { keys: new Set<string>(), inFlight: 0 };
   for (const key of keys) entry.keys.add(key);
   unsavedParamEdits.set(nodeId, entry);
+  const saved = savedParamValues.get(nodeId) ?? new Map<string, unknown>();
+  for (const key of keys) if (!saved.has(key)) saved.set(key, key in before ? before[key] : ABSENT_PARAM);
+  savedParamValues.set(nodeId, saved);
 }
 
 function settleParamEdit(nodeId: string, entry: { keys: Set<string>; inFlight: number }): void {
   if (unsavedParamEdits.get(nodeId) !== entry) return;
   entry.inFlight = Math.max(0, entry.inFlight - 1);
-  if (entry.inFlight === 0 && paramPushTimers[nodeId] === undefined) unsavedParamEdits.delete(nodeId);
+  if (entry.inFlight === 0 && paramPushTimers[nodeId] === undefined) {
+    unsavedParamEdits.delete(nodeId);
+    savedParamValues.delete(nodeId);
+  }
+}
+
+/** A param's label as the node's settings show it, else its key. */
+function paramLabel(node: Node<NodeData>, key: string): string {
+  const dynamic = (node.data as Partial<DynamicNodeData>).dynamicParams?.find((param) => param.key === key)?.label;
+  const defined = NODE_DEFINITIONS[node.data.definitionId]?.params.find((param) => param.key === key)?.label;
+  return dynamic || defined || key;
+}
+
+/** GM - Design, round 14 of PR #114, verbatim. */
+export function paramSaveFailedLine(param: string, node: string, reverted: boolean): string {
+  return `Couldn't save \u201c${param}\u201d for \u201c${node}\u201d.${reverted ? " It's back to its last saved value." : ''}`;
+}
+export function modelChangeFailedLine(node: string, currentModel: string): string {
+  return `Couldn't change the model for \u201c${node}\u201d.${currentModel ? ` It's still on ${currentModel}.` : ''}`;
+}
+
+/** A param save the backend didn't take (no answer, or a refusal): the
+ * field goes back to the value the backend last took and the person reads
+ * GM's line. When a newer edit to the node is still on its way, nothing is
+ * put back (that edit decides) and the second sentence goes (GM). */
+function paramSaveFailed(nodeId: string, edits: { inFlight: number } | undefined): void {
+  const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
+  const saved = savedParamValues.get(nodeId);
+  if (!node || !saved || saved.size === 0) return;
+  const newer = paramPushTimers[nodeId] !== undefined || (edits?.inFlight ?? 1) > 1;
+  const label = paramLabel(node, [...saved.keys()][0]);
+  if (!newer) {
+    const params = { ...node.data.params };
+    for (const [key, previous] of saved) {
+      if (previous === ABSENT_PARAM) delete params[key];
+      else params[key] = previous;
+    }
+    savedParamValues.delete(nodeId);
+    useGraphStore.setState((state) => ({
+      nodes: state.nodes.map((candidate) => candidate.id !== nodeId ? candidate : { ...candidate, data: {
+        ...candidate.data, params,
+        keyStatus: nodeKeyStatus(NODE_DEFINITIONS[candidate.data.definitionId], params, useUIStore.getState().settingsCache),
+      } }),
+    }));
+  }
+  useGraphStore.getState().notify(paramSaveFailedLine(label, node.data.label, !newer));
 }
 
 /** The backend's params for a node, with the keys the person hasn't saved yet kept as the canvas has them. */
@@ -1417,16 +1508,25 @@ function pushNodeParams(nodeId: string): Promise<void> {
   const node = useGraphStore.getState().nodes.find((n) => n.id === nodeId);
   if (!node) {
     unsavedParamEdits.delete(nodeId);
+    savedParamValues.delete(nodeId);
     return Promise.resolve();
   }
   const edits = unsavedParamEdits.get(nodeId);
   if (edits) edits.inFlight += 1;
+  const sent = node.data.params;
   return graphMutationFetch(`/api/graph/node/${nodeId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ params: node.data.params }),
-  }).then(() => undefined).catch((err) => {
+    body: JSON.stringify({ params: sent }),
+  }).then((response) => {
+    // Until round 14 a refusal counted as saved here (only the network error was caught).
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    // The backend took these: they are the last saved values now.
+    const saved = savedParamValues.get(nodeId);
+    if (saved) for (const key of saved.keys()) saved.set(key, key in sent ? sent[key] : ABSENT_PARAM);
+  }).catch((err) => {
     console.warn(`[nebula] Param sync for ${nodeId} failed:`, err);
+    paramSaveFailed(nodeId, edits);
   }).finally(() => { if (edits) settleParamEdit(nodeId, edits); });
 }
 
@@ -1444,6 +1544,7 @@ function clearAllParamPushTimers(): void {
     delete paramPushTimers[id];
   }
   unsavedParamEdits.clear();
+  savedParamValues.clear();
 }
 
 interface CinemaScenePersistence {
@@ -2534,26 +2635,21 @@ async function executeHistoricalRun(
  * the Agent log; the person reads only "Couldn't add “<label>”." (GM). */
 class TabSyncFailure extends Error {
   readonly raw: string;
-  /** The backend this tab had found couldn't be reached at all: the person
-   * reads GM's offline line (round 13 of PR #114). */
-  readonly offline: boolean;
-  constructor(raw: string, offline = false) {
+  constructor(raw: string) {
     super(raw);
     this.name = 'TabSyncFailure';
     this.raw = raw;
-    this.offline = offline;
   }
 }
 
 /** GM - Design, round 13 of PR #114, verbatim: an add that never reached the
- * backend because the tab never found one, and one made while Nebula is
- * offline (the banner showing, or the backend this tab had found not
- * answering at all). */
+ * backend because the tab never found one. Round 14 (GM) dropped the offline
+ * add line ("Couldn't add “Text Input” while Nebula is offline."): offline is
+ * read-only, so an add while the banner shows is blocked with no toast
+ * (refuseEditWhileOffline), and one whose sync finds the backend gone reads
+ * the add heading, as any failed sync does. */
 export function addNotConnectedLine(label: string): string {
   return `Couldn't add \u201c${label}\u201d. Nebula isn't connected yet. Try again once it is.`;
-}
-export function addOfflineLine(label: string): string {
-  return `Couldn't add \u201c${label}\u201d while Nebula is offline.`;
 }
 /** Every add path's heading (GM's quoted form; round 13 made the refused
  * create's unquoted "Couldn't add <label>." match it). */
@@ -2596,8 +2692,9 @@ async function bringBackendGraphIntoEmptyTab(
     // No backend found at all, before or now (false): the caller refuses
     // the add (GM, round 13 of PR #114: local-only adds are refused).
     if (!backendWasDiscovered && getCachedBackendBaseUrl() === null) return false;
-    // The backend this tab had found doesn't answer: Nebula is offline.
-    throw new TabSyncFailure(err instanceof Error ? err.message : String(err), true);
+    // The backend this tab had found doesn't answer (it went away after the
+    // banner's last probe): the add heading, the reason in the Agent log.
+    throw new TabSyncFailure(err instanceof Error ? err.message : String(err));
   }
   if (!exportRes.ok) {
     set({ backendFreshStartPending: true });
@@ -2716,7 +2813,7 @@ function observePendingConnectedNodeCreation(nodes: Node<NodeData>[], edges: Edg
  * round 12 of PR #114); anything else reads under "Couldn't add {node}.". */
 function reportNodeCreationError(displayName: string, err: unknown): null {
   if (err instanceof TabSyncFailure) {
-    const heading = err.offline ? addOfflineLine(displayName) : addHeading(displayName);
+    const heading = addHeading(displayName);
     console.warn(`[nebula] ${heading} ${err.raw}`);
     // The Agent log takes any component's line as this event (agentLogStore,
     // loaded with the app).
@@ -2735,13 +2832,6 @@ function reportNodeCreationFailure(displayName: string, reason: string): null {
   console.warn(`[nebula] ${message}`);
   useGraphStore.getState().notify(message);
   return null;
-}
-
-/** The line for an add made while the banner says Nebula is offline: GM's
- * "isn't connected yet" when this tab never found a backend at all, else
- * the offline line (round 13 of PR #114). */
-function offlineAddLine(label: string): string {
-  return getCachedBackendBaseUrl() === null ? addNotConnectedLine(label) : addOfflineLine(label);
 }
 
 /** An add Nebula can't make right now, said before or instead of sending
@@ -2771,7 +2861,6 @@ async function createNodeOnBackend(
 ): Promise<string | null> {
   const definition = NODE_DEFINITIONS[definitionId];
   if (!definition) return null;
-  if (isBackendOffline()) return refuseAdd(offlineAddLine(definition.displayName));
   if (pendingNodeCreationAttempt) {
     const previousAttempt = pendingNodeCreationAttempt;
     if (previousAttempt.phase === 'sending') {
@@ -2816,14 +2905,21 @@ async function createNodeOnBackend(
   };
   pendingNodeCreationAttempt = attempt;
 
+  // The add's undo step owns the node it made, and nothing else (round 14
+  // of PR #114): taken once its id is known, whatever syncs came meanwhile.
+  const added = (nodeId: string): string => {
+    pushOwnAdd(set, get, [nodeId]);
+    return nodeId;
+  };
+
   const reconcileDispatchedCreate = async (reason: string): Promise<string | null> => {
     attempt.phase = 'uncertain';
     if (attempt.observedNodeId) {
       if (pendingNodeCreationAttempt === attempt) pendingNodeCreationAttempt = null;
-      return attempt.observedNodeId;
+      return added(attempt.observedNodeId);
     }
     const reconciledId = await reconcilePendingNodeCreation(set, get);
-    if (reconciledId) return reconciledId;
+    if (reconciledId) return added(reconciledId);
     return reportNodeCreationFailure(definition.displayName, reason);
   };
 
@@ -2862,7 +2958,7 @@ async function createNodeOnBackend(
     );
   }
   if (pendingNodeCreationAttempt === attempt) pendingNodeCreationAttempt = null;
-  return node.id;
+  return added(node.id);
 }
 
 async function reconcilePendingNodeCreation(
@@ -3032,7 +3128,10 @@ function stepHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet): voi
   const { nodes, edges } = state;
   let next: { nodes: Node<NodeData>[]; edges: Edge[] };
   let inverse: UndoEntry;
-  if (isForeignEdit(entry)) {
+  if (isSliceStep(entry)) {
+    // An own add is read from the canvas as it is undone, so Redo brings its
+    // nodes back as they are now (lib/canvasUndo.ts captureOwnAdd).
+    if (action === 'undo' && isOwnAdd(entry)) captureOwnAdd(entry, nodes, edges);
     next = action === 'undo'
       ? applySlice(nodes, edges, entry.before, entry.after)
       : applySlice(nodes, edges, entry.after, entry.before);
@@ -3208,7 +3307,7 @@ function sendRestore(
       const stack = action === 'undo' ? state.redoStack : state.undoStack;
       if (stack[stack.length - 1] !== inverse) return {};
       // Put the canvas and both stacks back as they were before this step.
-      const undone = isForeignEdit(entry)
+      const undone = isSliceStep(entry)
         ? (action === 'undo'
           ? applySlice(state.nodes, state.edges, entry.after, entry.before)
           : applySlice(state.nodes, state.edges, entry.before, entry.after))
@@ -3248,7 +3347,31 @@ function graphNotForThisTab(event: { workspaceRevision?: unknown; paramsVersion?
 }
 
 wsClient.connect();
+/** Set when the socket reconnects; the backend's first message on the new
+ * socket is its whole graph (main.py's websocket hello), applied in
+ * applyGraphSync. */
+let firstSyncAfterReconnect = false;
+
+/**
+ * A create whose answer was lost stays "uncertain" (it may have landed), and
+ * holds the next create until a sync shows it. The first sync on a socket
+ * that reconnected since is the backend's whole graph after that request: a
+ * create it doesn't show never landed, so it stops holding the next one
+ * (review 13, M2: add-and-connect stayed refused, "Another node-create
+ * request is still unresolved", until a reload). A create still being sent
+ * keeps its hold until its answer.
+ */
+function releaseUnresolvedCreates(): void {
+  if (pendingConnectedNodeCreationAttempt?.phase === 'uncertain' && !pendingConnectedNodeCreationAttempt.observedNodeId) {
+    pendingConnectedNodeCreationAttempt = null;
+  }
+  if (pendingNodeCreationAttempt?.phase === 'uncertain' && !pendingNodeCreationAttempt.observedNodeId) {
+    pendingNodeCreationAttempt = null;
+  }
+}
+
 wsClient.subscribe((event) => {
+  if (event.type === 'socketReconnected') firstSyncAfterReconnect = true;
   const revision = (event as ExecutionEvent & { workspaceRevision?: string }).workspaceRevision;
   const context = getProjectContext();
   if (revision !== undefined && revision !== context?.revision) return;
@@ -3313,6 +3436,7 @@ function applyGraphSync(event: ExecutionEvent): boolean {
     pendingConnectedNodeCreationAttempt = null;
     wireWrites.clear();
     unsavedParamEdits.clear();
+    savedParamValues.clear();
     // The committed import can arrive before, or instead of, its HTTP ack.
     // Revoke old same-ID uploads/writes and suspended drafts before merging.
     clearCinemaScenePersistence();
@@ -3345,6 +3469,10 @@ function applyGraphSync(event: ExecutionEvent): boolean {
   });
   const observedPendingNodeId = observePendingNodeCreation(cliNodes as Node<NodeData>[]);
   observePendingConnectedNodeCreation(cliNodes as Node<NodeData>[], cliEdges as Edge[]);
+  if (firstSyncAfterReconnect) {
+    firstSyncAfterReconnect = false;
+    releaseUnresolvedCreates();
+  }
 
   const state = useGraphStore.getState();
   const held = heldWires(cliEdges ?? []);
@@ -3659,6 +3787,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       ? { undoStack: state.undoStack.slice(0, -1) } : {});
   },
 
+  noteOwnAdd: (nodeIds) => { pushOwnAdd(set, get, nodeIds); },
+
   undoNotice: null,
   dismissUndoNotice: () => set({ undoNotice: null }),
   lateNotice: null,
@@ -3701,7 +3831,6 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     }
 
     const offset = pasteOffset(state, clipboard, target?.view);
-    pushUndo(set, get);
 
     const idMap = new Map<string, string>();
     const newNodes = clipboard.nodes.map((node) => {
@@ -3745,6 +3874,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       ],
       edges: [...state.edges, ...newEdges],
     }));
+    // The step owns the copies it made (round 14 of PR #114).
+    pushOwnAdd(set, get, newNodes.map((node) => node.id));
     return newNodes.map((node) => node.id);
   },
 
@@ -3775,8 +3906,6 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       }
       safeParams.set(node.id, params);
     }
-
-    pushUndo(set, get);
 
     const idMap = new Map<string, string>();
     const newNodes = selected.map((node) => {
@@ -3822,6 +3951,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       ],
       edges: [...state.edges, ...newEdges],
     }));
+    pushOwnAdd(set, get, newNodes.map((node) => node.id));
   },
 
   deleteSelected: () => {
@@ -3901,8 +4031,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
         keyStatus: nodeKeyStatus(definition, params, useUIStore.getState().settingsCache) } };
     const edge: Edge = { id: uuidv4(), type: 'typed-edge', source: nodeId, sourceHandle: shotPortId(shotId),
       target: targetId, targetHandle: 'image', data: { dataType: 'Image' } };
-    pushUndo(set, get);
     set((state) => ({ nodes: [...state.nodes, target], edges: [...state.edges, edge] }));
+    pushOwnAdd(set, get, [targetId]);
     return targetId;
   },
 
@@ -3931,10 +4061,6 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       return fail('These ports cannot be connected. Choose a compatible node.');
     }
 
-    // Capture before dispatch: the backend broadcasts the committed graph
-    // before returning its HTTP acknowledgement, so a later snapshot would
-    // contain the very node/edge this undo step must remove.
-    const undoSnapshot = createSnapshot(before.nodes, before.edges);
     const knownIds = new Set(before.nodes.map((node) => node.id));
     const replacementRevision = canvasReplacementRevision;
     let originRevoked = false;
@@ -4009,9 +4135,10 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
         nodes: synced.seen.has(nodeId) || state.nodes.some((item) => item.id === nodeId) ? state.nodes : [...state.nodes, newNode],
         edges: synced.seen.has(edgeKey(edge)) || state.edges.some((item) => edgeKey(item) === edgeKey(edge))
           ? state.edges : [...state.edges, edge],
-        undoStack: [...state.undoStack, undoSnapshot].slice(-UNDO_CAP),
-        redoStack: [],
       }));
+      // Its step owns the new node; its wire goes with it (round 14 of PR
+      // #114: never a snapshot, which a sync landing first could widen).
+      pushOwnAdd(set, get, [nodeId]);
       definiteOutcome = true;
       return nodeId;
     } catch (err) {
@@ -4031,10 +4158,6 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     if (get().isImportingGraph) return null;
     const definition = NODE_DEFINITIONS[definitionId];
     if (!definition) return null;
-    // GM, round 13 of PR #114: no card at all while the banner says offline.
-    if (isBackendOffline()) return refuseAdd(offlineAddLine(definition.displayName));
-
-    pushUndo(set, get);
 
     const defaults: Record<string, unknown> = {};
     for (const param of definition.params) {
@@ -4071,7 +4194,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     });
     set((state) => ({ nodes: [...state.nodes, buildNode(tempId) as unknown as Node<NodeData>] }));
 
-    const undoStep = get().undoStack[get().undoStack.length - 1];
+    // Its step owns this card, and later the backend id it gets (round 14 of
+    // PR #114): the sync below, or another add racing this one, never widens it.
+    const undoStep = pushOwnAdd(set, get, [tempId]);
 
     // Round 12 of PR #114: the same path as every add. On an empty tab the
     // backend's own nodes come in first (never a clear), and a failure takes
@@ -4081,9 +4206,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       set((state) => ({
         nodes: state.nodes.filter((n) => n.id !== tempId),
         edges: state.edges.filter((e) => e.source !== tempId && e.target !== tempId),
-        undoStack: state.undoStack[state.undoStack.length - 1] === undoStep
-          ? state.undoStack.slice(0, -1) : state.undoStack,
       }));
+      dropOwnAdd(set, undoStep);
       return null;
     };
 
@@ -4100,17 +4224,6 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       } catch (err) {
         takeBack();
         return reportNodeCreationError(definition.displayName, err);
-      }
-      // The step was taken before the sync brought the backend's nodes in
-      // (an empty tab): it owns only this card, so its snapshot is the
-      // canvas as it is now without the card (review 12, R12-C). Otherwise
-      // Undo would take the agent's nodes away with it. Steps are kept by
-      // identity, so it is rebased in place, and only while it is the top.
-      if (localCanvasWasEmpty && undoStep && get().undoStack[get().undoStack.length - 1] === undoStep) {
-        const now = get();
-        const rebased = createSnapshot(now.nodes.filter((n) => n.id !== tempId),
-          now.edges.filter((e) => e.source !== tempId && e.target !== tempId));
-        Object.assign(undoStep, { nodes: rebased.nodes, edges: rebased.edges });
       }
       let res: Response;
       try {
@@ -4147,8 +4260,14 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       // Remap edges too so any connections drawn during the race window
       // keep pointing at the renamed node.
       const drawn = new Set(get().edges.filter((e) => e.source === tempId || e.target === tempId).map((e) => e.id));
+      if (undoStep) renameOwnedNode(undoStep, tempId, shortId);
       set((state) => ({
-        nodes: state.nodes.map((n) => (n.id === tempId ? { ...n, id: shortId } : n)),
+        // The create's own graphSync lands before its answer (the backend
+        // broadcasts first) and may have brought the node in already: the
+        // card then goes, rather than becoming a second node with that id.
+        nodes: state.nodes.some((n) => n.id === shortId)
+          ? state.nodes.filter((n) => n.id !== tempId)
+          : state.nodes.map((n) => (n.id === tempId ? { ...n, id: shortId } : n)),
         edges: state.edges.map((e) => ({
           ...e,
           source: e.source === tempId ? shortId : e.source,
@@ -5607,7 +5726,6 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       } } : n,
     );
 
-    pushUndo(set, get);
     set((state) => {
       const taggedById = new Map(taggedNodes.map((n) => [n.id, n]));
       const existingIds = new Set(state.nodes.map((n) => n.id));
@@ -5627,6 +5745,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
 
     const modelNodeIds = modelTemps.map((t) => idMap[t]).filter(Boolean);
     const allNodeIds = [...modelTemps, ...(textTemp ? [textTemp] : []), ...imageTemps].map((t) => idMap[t]).filter(Boolean);
+    // One step that owns the cluster's nodes (round 14 of PR #114): a
+    // snapshot taken now would already hold them if their sync came first.
+    pushOwnAdd(set, get, rfNodes.map((n) => n.id));
     return { modelNodeIds, allNodeIds };
   },
 
@@ -5686,8 +5807,6 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       return;
     }
 
-    pushUndo(set, get);
-
     const newNode: Node<NodeData> = {
       id: uuidv4(),
       type: node.type,
@@ -5708,6 +5827,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       },
     };
     set((state) => ({ nodes: [...state.nodes, newNode] }));
+    pushOwnAdd(set, get, [newNode.id]);
   },
 
   deleteNode: (nodeId) => {
@@ -6231,6 +6351,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     } catch (err) {
       get().cancelUndoStep(step);
       console.error('Failed to set the model:', err);
+      reportModelChangeFailed(nodeId);
     }
   },
 
@@ -6264,6 +6385,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     } catch (err) {
       get().cancelUndoStep(step);
       console.error('Failed to fetch Replicate schema:', err);
+      reportModelChangeFailed(nodeId);
     }
   },
 
@@ -6718,6 +6840,81 @@ useGraphStore.setState({
   fetchReplicateSchemaAndConfigure: withGraphMutationLifetime(projectMutationMethods.fetchReplicateSchemaAndConfigure),
   configureOpenRouterModel: withGraphMutationLifetime(projectMutationMethods.configureOpenRouterModel),
   promoteShotVariation: withGraphMutationLifetime(projectMutationMethods.promoteShotVariation),
+});
+
+/**
+ * Offline is read-only (GM - Design, round 14 of PR #114: "Blocking it is.
+ * Edits are blocked while offline, not queued", because a restarted backend
+ * refuses replayed writes). The one gate: every edit action of this store
+ * asks refuseEditWhileOffline() before it touches the canvas or sends
+ * anything, and a refused one changes nothing and says nothing (the banner
+ * pulses; GM: "No toast for a blocked edit"). Outside the store, a file
+ * drop, Clear, chat /clear, a chat image upload and Load graph ask the same
+ * gate. Review 13 found add-and-connect and a file drop still sending, and
+ * round 13's offline edits were reverted by the reconnect's sync with no
+ * word. Reads, selection and run-state updates are not edits and pass.
+ */
+type EditGate = { refused: () => unknown; blocks?: (...args: never[]) => boolean };
+const REFUSED_VOID: EditGate = { refused: () => undefined };
+const REFUSED_NULL: EditGate = { refused: () => null };
+const REFUSED_NULL_ASYNC: EditGate = { refused: () => Promise.resolve(null) };
+const REFUSED_ASYNC: EditGate = { refused: () => Promise.resolve() };
+const EDIT_GATES: Partial<Record<keyof GraphState, EditGate>> = {
+  addNode: REFUSED_NULL_ASYNC, addCharacterNode: REFUSED_NULL_ASYNC, addMoodboardNode: REFUSED_NULL_ASYNC,
+  addNodeAndConnect: REFUSED_NULL_ASYNC, addDynamicNode: REFUSED_NULL, addLocalCinemaMotionNode: REFUSED_NULL,
+  addShot: REFUSED_NULL, pasteClipboard: { refused: () => [] },
+  duplicateSelected: REFUSED_VOID, duplicateNode: REFUSED_VOID, deleteSelected: REFUSED_VOID, deleteNode: REFUSED_VOID,
+  deleteGeneration: REFUSED_VOID, onConnect: REFUSED_VOID, renameNode: REFUSED_VOID, applyPaperSource: REFUSED_VOID,
+  updateRemotionManifest: REFUSED_VOID, addTrackItemWithCanvasMirror: REFUSED_VOID, deleteTrackItem: REFUSED_VOID,
+  duplicateTrackItemAtPlayhead: REFUSED_VOID, updateTrackItemProps: REFUSED_VOID, updateTrackItemTime: REFUSED_VOID,
+  updateTrackItemSpatial: REFUSED_VOID, reorderTrackItem: REFUSED_VOID, addOrUpdateKeyframe: REFUSED_VOID,
+  updateKeyframe: REFUSED_VOID, deleteKeyframe: REFUSED_VOID, autoLayoutSelected: REFUSED_VOID, autoLayout: REFUSED_VOID,
+  loadSampleGraph: REFUSED_VOID, clearGraph: REFUSED_VOID, undo: REFUSED_VOID, redo: REFUSED_VOID,
+  removeEmptyEditNode: REFUSED_VOID, updateEditNodeClip: REFUSED_VOID, cutEditNodeAtSource: REFUSED_VOID,
+  removeEditNodeClip: REFUSED_VOID, removeShot: REFUSED_VOID, updateScene: REFUSED_VOID,
+  configureOpenRouterModel: REFUSED_ASYNC, fetchReplicateSchemaAndConfigure: REFUSED_ASYNC,
+  promoteShotVariation: REFUSED_ASYNC,
+  // A param edit is an edit; a run's state or outputs are not.
+  updateNodeData: { ...REFUSED_VOID, blocks: ((_nodeId: string, data: Partial<NodeData>) => 'params' in data) as EditGate['blocks'] },
+};
+
+/** React Flow's changes minus the edits (moves, removals, adds); a refused
+ * one pulses the banner once. Selection and measured sizes pass. */
+function readOnlyChanges<C extends { type: string }>(changes: C[]): C[] {
+  if (!isBackendOffline()) return changes;
+  const kept = changes.filter((change) => change.type === 'select' || change.type === 'dimensions');
+  if (kept.length < changes.length) refuseEditWhileOffline();
+  return kept;
+}
+
+{
+  const ungated = useGraphStore.getState();
+  const gated: Partial<GraphState> = {};
+  for (const [name, gate] of Object.entries(EDIT_GATES) as [keyof GraphState, EditGate][]) {
+    const action = ungated[name] as unknown as (...args: unknown[]) => unknown;
+    (gated as Record<string, unknown>)[name] = (...args: unknown[]) => {
+      if ((!gate.blocks || (gate.blocks as (...a: unknown[]) => boolean)(...args)) && refuseEditWhileOffline()) {
+        return gate.refused();
+      }
+      return action(...args);
+    };
+  }
+  gated.onNodesChange = (changes) => {
+    const kept = readOnlyChanges(changes);
+    if (kept.length > 0) ungated.onNodesChange(kept);
+  };
+  gated.onEdgesChange = (changes) => {
+    const kept = readOnlyChanges(changes);
+    if (kept.length > 0) ungated.onEdgesChange(kept);
+  };
+  useGraphStore.setState(gated);
+}
+
+// Every card title this tab shows is remembered past its node's removal, so
+// a World Labs record whose node left the canvas is still named by it (GM,
+// round 14 of PR #114; lib/lastNodeLabels.ts).
+useGraphStore.subscribe((state, previous) => {
+  if (state.nodes !== previous.nodes) noteNodeLabels(state.nodes);
 });
 
 // Removal/wrong-type replacement permanently revokes ownership. Undoing the

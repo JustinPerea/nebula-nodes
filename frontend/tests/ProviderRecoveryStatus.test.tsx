@@ -53,8 +53,9 @@ describe('ProviderRecoveryStatus', () => {
     expect(screen.queryByRole('button', { name: 'Dismiss recovery warning' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', {
-      // GM, round 13 of PR #114: the label and its accessible name.
-      name: 'I\'ve checked Marble. Unlock “world-1”.',
+      // GM, round 13 of PR #114: the label and its accessible name; round
+      // 14: a node not on the canvas (never seen with a label) is named so.
+      name: 'I\'ve checked Marble. Unlock a removed World Labs node.',
     }));
     await waitFor(() => expect(acknowledge).toHaveBeenCalledWith(
       'worldlabs-environment',
@@ -99,8 +100,8 @@ describe('ProviderRecoveryStatus', () => {
     expect(screen.queryByRole('button', { name: 'Dismiss recovery warning' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', {
-      // No node to name: the accessible name is the label (a gap for GM).
-      name: "I've checked Marble",
+      // No node to name: GM's round 14 line.
+      name: "I've checked Marble. Unlock this World Labs run.",
     }));
 
     expect(acknowledge).toHaveBeenCalledOnce();

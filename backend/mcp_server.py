@@ -17,8 +17,8 @@ import anyio.lowlevel
 import anyio.to_thread
 import httpx  # noqa: F401 - tests patch httpx.request through this module
 from commons.client_paths import asset_path
-from nebula_api import (NebulaAPI, NebulaAPIError, dropped_mid_request, error_detail, next_backoff,
-                        unanswered, with_identity)
+from nebula_api import (NebulaAPI, NebulaAPIError, dropped_mid_request, error_detail, never_reached, next_backoff,
+                        offline_read_only, unanswered, with_identity)
 from services.file_access import require_allowed_path
 from services.canvas_proposals import READY_NODES_MCP, WITHDRAW_MCP, agent_wording
 from services import universal_ports as _universal_ports
@@ -140,8 +140,29 @@ def argument_problem(tool: Any, arguments: dict[str, Any]) -> str | None:
     return None
 
 
+# Round 14 of PR #114: while the tab can't reach Nebula the person's canvas
+# is read-only (edits blocked, not queued). An agent meets the same outage as
+# a connect Nebula never took, so that tool error says what it means for the
+# canvas and to re-read it once Nebula is back.
+OFFLINE_NOTE = offline_read_only("call start_here")
+
+
+def _never_reached_in(exc: BaseException) -> bool:
+    """Whether the first NebulaAPIError behind `exc` (a tool's own error may
+    wrap it: load_graph_file's file name first) is a Nebula it couldn't reach."""
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, NebulaAPIError):
+            return never_reached(current)
+        current = current.__cause__ or current.__context__
+    return False
+
+
 class _NebulaMCP(FastMCP):
-    """FastMCP whose tools refuse wrong arguments in one line (argument_problem)."""
+    """FastMCP whose tools refuse wrong arguments in one line (argument_problem),
+    and whose errors for a Nebula they couldn't reach add OFFLINE_NOTE."""
 
     async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
         from mcp.server.fastmcp.exceptions import ToolError
@@ -150,7 +171,12 @@ class _NebulaMCP(FastMCP):
         problem = argument_problem(tool, arguments or {}) if tool is not None else None
         if problem:
             raise ToolError(problem)
-        return await super().call_tool(name, arguments)
+        try:
+            return await super().call_tool(name, arguments)
+        except ToolError as exc:
+            if _never_reached_in(exc) and OFFLINE_NOTE not in str(exc):
+                raise ToolError(f"{exc} {OFFLINE_NOTE}") from exc
+            raise
 
 
 mcp = _NebulaMCP("Nebula Nodes", instructions=INSTRUCTIONS + "\n" + COMMONS_MCP_GUIDE)
@@ -1261,7 +1287,7 @@ def _edit_in_steps(plan: dict[str, Any], ctx: Context | None) -> dict[str, Any]:
         raise ValueError(str(exc)) from exc
     outcome = apply_steps.run_steps(
         steps, lambda step: _canvas_call("POST", "/api/graph/apply", ctx, json=step),
-        reason=lambda exc: apply_steps.stop_reason(exc, _current_url()))
+        reason=lambda exc: apply_steps.stop_reason(exc, _current_url(), reread="call start_here"))
     return outcome.as_json()
 
 

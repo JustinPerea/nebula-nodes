@@ -1005,6 +1005,19 @@ a run start the paid-start guard refuses (`POST /api/execute`,
 journals "at capacity") and a canvas edit that races the recovery journal.
 You still get each text word for word; only the person's line is new.
 
+Round 14 of PR #114 gave one World Labs state its own detail. When the
+backend started, if Nebula couldn't journal a World Labs recovery ID it read
+from the canvas, restoring a graph bundle (`POST /api/outputs/restore`,
+`load_graph_file` or `nebula load` with a `.nebula.zip`) first retries that
+journal write under the paid-start fence, as a run start does. If the retry
+works, the restore goes on. If the journal still can't be written, it
+refuses with 409: "Cannot restore a graph bundle: Nebula retried saving its
+World Labs recovery journal and couldn't write it. Restart the Nebula
+backend, then try again." (`load_graph_file` and `nebula load` put the
+file's path first). Retrying won't clear it; the person has to restart
+Nebula. The person's canvas reads the general line, "Try again, or reload if
+it keeps happening.", for now.
+
 Round 3c gave a node's run error the same split. `error` stays the
 handler's specific text, word for word, wherever agents read it: `get_run`
 and `nebula result` (`errors`), `look_at_canvas` and `nebula look` (the
@@ -2323,7 +2336,10 @@ refused with 409 and nothing changes: "The open project changed since this
 started, so nothing was changed. Read the canvas again and send the change
 again if it still fits." After a Clear or a loaded graph
 on the same project the detail starts "The canvas was cleared or replaced
-since". This covers `edit_canvas` and `remove_from_canvas` (`nebula
+since". Nebula filing an unfiled canvas as "Recovered canvas" (the same
+graph and ids, when the project list files it) isn't a switch: your change
+and your run carry on.
+This covers `edit_canvas` and `remove_from_canvas` (`nebula
 apply`), `propose_change`, `upload_file` with a node, `load_graph_file`,
 `run_nodes` (`nebula run`), and the routes under them (`PUT
 /api/graph/node/{id}`, `POST /api/graph/node`, the canvas's own Run and a
@@ -2343,6 +2359,19 @@ its own `detail`:
 
 A quick run (`nebula quick`, `POST /api/quick`) doesn't count: its nodes
 are temporary and never on the canvas, so nothing waits for it.
+
+While the person's tab can't reach Nebula, their canvas is read-only: its
+banner says "Nebula is offline. Editing is paused until it reconnects.", and
+their edits are blocked, not queued, because a restarted backend refuses
+replayed writes. You meet the same outage as a connect Nebula never took
+("Nebula isn't running at <url>. Start Nebula, then retry."), and the tool's
+error then adds: "While Nebula is offline the person's canvas is read-only:
+nothing you or they edit is saved or queued. Once it's back, call start_here
+to re-read the canvas before assuming your plan landed." `edit_canvas(steps=...)`
+puts the same sentence in the stopped plan's `error`. The CLI (and `nebula
+apply`'s stop) says it with "run `nebula graph`" in place of "call
+start_here". A request Nebula took and then dropped (a restart mid-request),
+a timeout or a real refusal doesn't add it: Nebula was there.
 
 #### Universal nodes: ports from the model
 

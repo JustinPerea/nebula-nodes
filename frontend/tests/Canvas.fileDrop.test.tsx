@@ -257,16 +257,17 @@ describe('Canvas file drop', () => {
     expect(notice()).toBeUndefined();
   });
 
-  it('takes one undo step per dropped file and gives back a failed one', async () => {
-    const begin = vi.spyOn(useGraphStore.getState(), 'beginUndoStep');
-    const cancel = vi.spyOn(useGraphStore.getState(), 'cancelUndoStep');
+  // Round 14 of PR #114: each file that made a node is one step that owns
+  // only that node (never a snapshot taken before the upload); a failed
+  // upload takes none.
+  it('takes one undo step per dropped file that made a node, owning only that node', async () => {
+    const owned = vi.spyOn(useGraphStore.getState(), 'noteOwnAdd');
     let calls = 0;
     api.fetch.mockImplementation(async () => (++calls === 2
-      ? new Response('', { status: 503 }) : new Response('{}', { status: 200 })));
+      ? new Response('', { status: 503 }) : new Response(JSON.stringify({ nodeId: 'n7' }), { status: 200 })));
     await drop([file('a.png', 'image/png'), file('b.pdf', 'application/pdf'), file('z.zip')]);
-    expect(begin).toHaveBeenCalledTimes(2);
-    expect(cancel).toHaveBeenCalledTimes(1);
-    expect(cancel).toHaveBeenCalledWith(begin.mock.results[1].value);
+    expect(owned).toHaveBeenCalledTimes(1);
+    expect(owned).toHaveBeenCalledWith(['n7']);
   });
 
   it('does not refit the camera over the nodes the person just dropped', async () => {

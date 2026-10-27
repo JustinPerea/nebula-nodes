@@ -22,7 +22,8 @@ const checkpoint = { runId: 'paid-run', nodeId: 'world-node', resumeOperationId:
 
 function forget() {
   render(<RunHistoryPanel />);
-  fireEvent.click(screen.getByRole('button', { name: 'Forget ID' }));
+  // Round 14 (GM): the row's button is named for the ID it forgets.
+  fireEvent.click(screen.getByRole('button', { name: /^Forget the recovery ID for / }));
   fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Forget ID' }));
 }
 
@@ -77,7 +78,7 @@ describe('I\'ve checked Marble never shows a raw message', () => {
       acknowledgeProviderStartAmbiguity: vi.fn().mockRejectedValue(new Error('internal: lifecycle fd closed')),
     });
     render(<ProviderRecoveryStatus />);
-    fireEvent.click(screen.getByRole('button', { name: 'I\'ve checked Marble. Unlock “world-node”.' }));
+    fireEvent.click(screen.getByRole('button', { name: /^I've checked Marble\. Unlock / }));
     await waitFor(() => expect(screen.getByText(`Couldn't unlock the node. ${GENERAL}`)).toBeTruthy());
     expect(screen.queryByText(/lifecycle fd/)).toBeNull();
   });

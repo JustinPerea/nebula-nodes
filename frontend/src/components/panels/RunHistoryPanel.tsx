@@ -7,7 +7,7 @@ import { PaperRunInspection } from './PaperRunInspection';
 import { BatchRunInspection } from './BatchRunInspection';
 import { ScrollFade } from '../ScrollFade';
 import { ForgetRecoveryConfirm } from './ForgetRecoveryConfirm';
-import { FORGET_LABEL, cardTitle } from '../../lib/worldLabsWaiting';
+import { FORGET_LABEL, forgetAriaLabel, recordNodeName, recoveryIdLabel } from '../../lib/worldLabsWaiting';
 import { FORGET_RECOVERY_HEADING } from '../../lib/api';
 import { failureMessage } from '../../lib/errorCopy';
 import { showNotice } from '../../lib/canvasNotice';
@@ -80,6 +80,12 @@ export function RunHistoryPanel() {
     return () => window.clearInterval(id);
   }, [visible]);
 
+  // Closing Run History cancels a confirm that's open (review 13, L5: it
+  // stayed open behind the closing panel and came back when it reopened).
+  useEffect(() => {
+    if (!visible) setConfirmingForget(null);
+  }, [visible]);
+
   const { shouldRender, exiting } = useDelayedUnmount(visible, 500);
   if (!shouldRender) return null;
 
@@ -144,10 +150,14 @@ export function RunHistoryPanel() {
               {providerRecoveries.map((checkpoint) => {
                 const key = `${checkpoint.runId}:${checkpoint.nodeId}`;
                 const recoveryId = checkpoint.existingWorldId ?? checkpoint.resumeOperationId;
+                // GM, round 14 of PR #114: named by node, then "Operation ID"
+                // or "World ID", the ID in mono (was "n2 · operation op-…").
+                const name = recordNodeName(nodes, checkpoint.nodeId);
+                const idLabel = recoveryIdLabel(checkpoint.existingWorldId);
                 return (
                   <li key={key}>
-                    <span id={`run-history-recovery-${key}`} title={`${checkpoint.nodeId} · ${recoveryId ?? ''}`}>
-                      {checkpoint.nodeId} · {checkpoint.existingWorldId ? 'world' : 'operation'}{' '}
+                    <span id={`run-history-recovery-${key}`} title={`${name} · ${idLabel} ${recoveryId ?? ''}`}>
+                      {name} · {idLabel}{' '}
                       <code>{recoveryId}</code>
                       {checkpoint.durable === false && ' · volatile; keep this tab open'}
                     </span>
@@ -156,7 +166,9 @@ export function RunHistoryPanel() {
                         type="button"
                         onClick={() => setConfirmingForget({ runId: checkpoint.runId, nodeId: checkpoint.nodeId })}
                         disabled={isExecuting || clearingRecovery === key}
-                        // Its row (node and ID) describes which one it forgets.
+                        // GM, round 14: its name says which ID it forgets;
+                        // its row (node and ID) stays its description.
+                        aria-label={forgetAriaLabel(recordNodeName(nodes, checkpoint.nodeId, true))}
                         aria-describedby={`run-history-recovery-${key}`}
                         title="Check Marble first; forgetting permits a future fresh paid request"
                       >
@@ -280,9 +292,10 @@ export function RunHistoryPanel() {
           </ScrollFade>
         )}
       </ScrollFade>
-      {confirmingForget && (
+      {confirmingForget && visible && (
         <ForgetRecoveryConfirm
-          node={cardTitle(nodes, confirmingForget.nodeId)}
+          name={recordNodeName(nodes, confirmingForget.nodeId, true)}
+          closing={exiting}
           onCancel={() => setConfirmingForget(null)}
           onConfirm={() => {
             const { runId, nodeId } = confirmingForget;

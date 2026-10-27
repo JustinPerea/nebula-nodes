@@ -37,6 +37,7 @@ import { DEFAULT_BACKEND_PORT, devProxyPort } from '../../lib/devBackendPort';
 import { CONNECTION_LOST_COPY, NO_ANSWER_STATUS, PERSON_REQUIRED_CODE, isBackendUnreachable, personRequiredCopy, readDetail, requestError, warnFailure, failureMessage, failureCopy, oneLine } from '../../lib/errorCopy';
 import { ErrorDetails } from '../failure/ErrorDetails';
 import { chatUploadChipError } from '../../lib/chatUploadCopy';
+import { refuseEditWhileOffline } from '../../lib/backendConnection';
 import { chatAuthority } from '../../lib/commonsChatAuthority';
 import {
   CHAT_CLEAR_ANSWER_MS, CHAT_CLEARED_CANVAS, CHAT_CLEARED_CANVAS_KEPT, CHAT_CLEARED_CANVAS_UNCONFIRMED,
@@ -845,13 +846,14 @@ export function ChatPanel() {
       const form = new FormData();
       form.append('file', file);
       form.append('create_node', 'true');
-      // The upload adds a node to the canvas: one undo step, taken before the
-      // backend's graphSync can add it.
-      const undoStep = useGraphStore.getState().beginUndoStep();
+      // Offline is read-only (GM, round 14 of PR #114): nothing is sent.
+      if (refuseEditWhileOffline()) {
+        setPendingImages((prev) => prev.filter((p) => p.id !== chipId));
+        return;
+      }
       try {
         const resp = await apiFetch('/api/uploads', { method: 'POST', body: form });
         if (!resp.ok) {
-          useGraphStore.getState().cancelUndoStep(undoStep);
           const detail = await readDetail(resp);
           warnFailure("Couldn't upload the image.", resp.status, detail);
           const errMsg = chatUploadChipError(resp.status, detail);
@@ -876,6 +878,10 @@ export function ChatPanel() {
           thumbUrl: string;
           filename: string;
         };
+        // The upload added a node to the canvas: one undo step that owns only
+        // that node (round 14 of PR #114; a snapshot taken before the upload
+        // could take an agent's node away with it).
+        if (typeof body.nodeId === 'string' && body.nodeId) useGraphStore.getState().noteOwnAdd([body.nodeId]);
         setPendingImages((prev) => {
           const prior = prev.find((p) => p.id === chipId);
           // URL.revokeObjectURL is idempotent — safe inside a StrictMode-
@@ -904,7 +910,6 @@ export function ChatPanel() {
         const textarea = document.querySelector<HTMLTextAreaElement>('.chat-panel__textarea');
         if (textarea) insertAtCaret(textarea, `@${body.nodeId}`);
       } catch {
-        useGraphStore.getState().cancelUndoStep(undoStep);
         setPendingImages((prev) => {
           const prior = prev.find((p) => p.id === chipId);
           // URL.revokeObjectURL is idempotent — safe inside a StrictMode-
@@ -1453,6 +1458,9 @@ export function ChatPanel() {
       return;
     }
     if (raw === '/clear') {
+      // Offline is read-only (GM, round 14 of PR #114): the clear is refused
+      // whole, chat and canvas, and the banner pulses; the command stays typed.
+      if (refuseEditWhileOffline()) return;
       if (personal && sessionId) closePersonalSessionRef.current(sessionId);
       setSessionId(null);
       // Also wipe cli_graph on the backend so Claude starts with a clean canvas,

@@ -770,11 +770,10 @@ describe('graphStore', () => {
 
     expect(nodeId).toBeNull();
     expect(useGraphStore.getState().nodes).toHaveLength(0);
-    // Round 13 (GM): the backend this tab had found doesn't answer, so the
-    // person reads the offline line; the reason goes to the Agent log. Round
-    // 12 said "Couldn't add “Text Input”." and before that "Couldn't add Text
-    // Input. Nebula lost contact with its backend, ...".
-    expect(alertMock).toHaveBeenCalledWith("Couldn't add \u201cText Input\u201d while Nebula is offline.");
+    // Round 14 (GM dropped round 13's offline add line): the add heading,
+    // as round 12 had it; the reason goes to the Agent log. Before round 12:
+    // "Couldn't add Text Input. Nebula lost contact with its backend, ...".
+    expect(alertMock).toHaveBeenCalledWith("Couldn't add \u201cText Input\u201d.");
   });
 
   it('removes a node and cleans up connected edges', async () => {

@@ -18,7 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from nebula_api import NebulaAPIError
+from nebula_api import NebulaAPIError, never_reached, offline_read_only
 
 _STEP_KEYS = frozenset({"note", "steps"})
 _EDIT_KEYS = ("nodes", "edges", "params", "rename", "move", "remove", "unwire")
@@ -122,10 +122,13 @@ def resolve_step(step: dict[str, Any], id_map: dict[str, str]) -> dict[str, Any]
     return out
 
 
-def stop_reason(exc: NebulaAPIError, base_url: str) -> str:
-    """Why a step didn't land, in words the caller can act on."""
+def stop_reason(exc: NebulaAPIError, base_url: str, *, reread: str | None = None) -> str:
+    """Why a step didn't land, in words the caller can act on. `reread`: the
+    caller's way to read the canvas again; with it, a Nebula never reached
+    also says the person's canvas is read-only meanwhile (round 14 of PR #114)."""
     if exc.kind == "connect":
-        return f"cannot connect to Nebula backend at {base_url}"
+        reason = f"cannot connect to Nebula backend at {base_url}"
+        return f"{reason}. {offline_read_only(reread)}" if reread and never_reached(exc) else reason
     if exc.kind == "timeout":
         return "Nebula didn't answer in time; `nebula graph` (MCP: look_at_canvas) shows whether it landed"
     return exc.detail

@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type KeyboardEvent } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { FORGET_BODY, FORGET_LABEL, forgetHeading } from '../../lib/worldLabsWaiting';
 import '../../styles/prompt-dialog.css';
@@ -8,10 +8,20 @@ import '../../styles/prompt-dialog.css';
  * pattern as the Projects screen's "Continue without them" confirm
  * (UnsavedEditsNotice): focus starts on Cancel, Escape is Cancel, Tab stays
  * inside, and focus goes back where it was when it closes. The forget runs
- * only from its "Forget ID" button. */
-export function ForgetRecoveryConfirm({ node, onCancel, onConfirm }: {
-  /** The node's card title. */
-  node: string;
+ * only from its "Forget ID" button.
+ *
+ * Round 14 (GM): Cancel on the left, "Forget ID" on the right in the
+ * destructive style (the selection toolbar trash's red text on the secondary
+ * button; orange is run/go). Review 13, L5: the dialog owns Escape and Tab
+ * whenever it is open, however focus got where it is (a click on the
+ * backdrop sent it to the page), through a capture listener on the document,
+ * so Escape never reaches Run History or the rail behind it; the backdrop
+ * keeps focus where it was; and while Run History is closing (`closing`) its
+ * buttons are disabled. */
+export function ForgetRecoveryConfirm({ name, closing = false, onCancel, onConfirm }: {
+  /** The node as recordNodeName says it (quoted card title, or the removed forms). */
+  name: string;
+  closing?: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
@@ -19,39 +29,55 @@ export function ForgetRecoveryConfirm({ node, onCancel, onConfirm }: {
   const bodyId = useId();
   const card = useRef<HTMLDivElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
+  const onCancelRef = useRef(onCancel);
+  useEffect(() => { onCancelRef.current = onCancel; }, [onCancel]);
+
   useEffect(() => {
     const previous = document.activeElement;
     cancel.current?.focus();
     return () => { if (previous instanceof HTMLElement && previous.isConnected) previous.focus(); };
   }, []);
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      event.stopPropagation();
-      onCancel();
-    } else if (event.key === 'Tab') {
-      const buttons = card.current?.querySelectorAll<HTMLElement>('button');
-      if (!buttons?.length) return;
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        onCancelRef.current();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const buttons = [...(card.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
+      if (buttons.length === 0) return;
       const first = buttons[0];
       const last = buttons[buttons.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
+      const inside = card.current?.contains(document.activeElement) ?? false;
+      if (!inside) {
+        event.preventDefault();
+        (cancel.current ?? first).focus();
+      } else if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
         last.focus();
       } else if (!event.shiftKey && document.activeElement === last) {
         event.preventDefault();
         first.focus();
       }
-    }
-  };
+    };
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
+  }, []);
+
   return createPortal(
-    <div className="prompt-dialog">
+    // A press on the backdrop keeps focus in the dialog (it did nothing else
+    // before either; nothing outside it can be used while it is open).
+    <div className="prompt-dialog" onMouseDown={(event) => { if (event.target === event.currentTarget) event.preventDefault(); }}>
       <div ref={card} className="prompt-dialog__card" role="alertdialog" aria-modal="true"
-        aria-labelledby={headingId} aria-describedby={bodyId} onKeyDown={onKeyDown}>
-        <h2 id={headingId} className="prompt-dialog__heading">{forgetHeading(node)}</h2>
+        aria-labelledby={headingId} aria-describedby={bodyId}>
+        <h2 id={headingId} className="prompt-dialog__heading">{forgetHeading(name)}</h2>
         <p id={bodyId} className="prompt-dialog__line">{FORGET_BODY}</p>
         <div className="prompt-dialog__actions">
-          <button type="button" className="prompt-dialog__danger" onClick={onConfirm}>{FORGET_LABEL}</button>
-          <button type="button" ref={cancel} onClick={onCancel}>Cancel</button>
+          <button type="button" ref={cancel} disabled={closing} onClick={onCancel}>Cancel</button>
+          <button type="button" className="prompt-dialog__destructive" disabled={closing} onClick={onConfirm}>{FORGET_LABEL}</button>
         </div>
       </div>
     </div>,

@@ -1,3 +1,5 @@
+import { lastNodeLabel } from './lastNodeLabels';
+
 /**
  * The backend's words when it refuses because a node holds World Labs state
  * (backend/main.py _paid_state_person), GM - Design's wording for round 13
@@ -19,13 +21,39 @@ export const RECOVERY_ID_SAVED_TAIL = " has a saved World Labs recovery ID. Chec
 /** The status bar's button and Run History's (GM, round 13 of PR #114). */
 export const UNLOCK_LABEL = "I've checked Marble";
 export const FORGET_LABEL = 'Forget ID';
-/** The status bar button's accessible name for a held node. */
-export function unlockAriaLabel(node: string): string {
-  return `I've checked Marble. Unlock \u201c${node}\u201d.`;
+/**
+ * How a held node is named in the World Labs controls (GM - Design, round 14
+ * of PR #114): its card title in quotes; for a record whose node left the
+ * canvas, "“<last label>”, no longer on the canvas"; with no label known, "A
+ * removed World Labs node" ("a ..." inside a sentence, `inSentence`).
+ */
+export const REMOVED_WORLD_LABS_NODE = 'A removed World Labs node';
+export function recordNodeName(nodes: readonly { id: string; data?: { label?: unknown } }[], nodeId: string,
+  inSentence = false): string {
+  const label = nodes.find((node) => node.id === nodeId)?.data?.label;
+  if (typeof label === 'string' && label.trim()) return `\u201c${label}\u201d`;
+  const last = lastNodeLabel(nodeId);
+  if (last) return `\u201c${last}\u201d, no longer on the canvas`;
+  return inSentence ? 'a removed World Labs node' : REMOVED_WORLD_LABS_NODE;
 }
+
+/** The status bar button's accessible name for a held node; `name` from recordNodeName. */
+export function unlockAriaLabel(name: string): string {
+  return `I've checked Marble. Unlock ${name}.`;
+}
+/** The same button for a run Nebula couldn't confirm: there is no node to name (GM, round 14). */
+export const UNLOCK_RUN_ARIA = "I've checked Marble. Unlock this World Labs run.";
 /** "Forget ID"'s confirm, in the app's own dialog (GM, round 13). */
-export function forgetHeading(node: string): string {
-  return `Forget the recovery ID for \u201c${node}\u201d?`;
+export function forgetHeading(name: string): string {
+  return `Forget the recovery ID for ${name}?`;
+}
+/** Run History's "Forget ID" button's accessible name (GM, round 14); the row stays its description. */
+export function forgetAriaLabel(name: string): string {
+  return `Forget the recovery ID for ${name}`;
+}
+/** A Run History safeguard row: "“<node>” · Operation ID" or "· World ID", then the ID in mono (GM, round 14). */
+export function recoveryIdLabel(existingWorldId: string | null): string {
+  return existingWorldId ? 'World ID' : 'Operation ID';
 }
 export const FORGET_BODY = "Only do this after you've checked the run in Marble. Without the ID, Nebula can't stop you from paying for the same run twice.";
 

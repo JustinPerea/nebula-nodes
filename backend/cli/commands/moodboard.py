@@ -16,7 +16,7 @@ import moodboard_client as boards
 from nebula_api import NebulaAPIError
 from services.moodboard_brief import board_is_off
 
-from ..client import NebulaClient
+from ..client import NebulaClient, connect_failure
 
 
 def _fail(message: str) -> None:
@@ -660,7 +660,7 @@ def run(client: NebulaClient, args) -> None:
         _fail(str(exc))
     except NebulaAPIError as exc:
         if exc.kind == "connect":
-            _fail(f"cannot connect to Nebula backend at {client.base_url} — is the server running?")
+            _fail(connect_failure(client.base_url, exc))
         _fail(exc.detail)
 
 

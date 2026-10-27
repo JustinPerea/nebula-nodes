@@ -4,7 +4,7 @@ import { useGraphStore } from '../store/graphStore';
 import { UNLOCK_NODE_HEADING } from '../lib/api';
 import { failureMessage } from '../lib/errorCopy';
 import {
-  UNLOCK_LABEL, WORLD_LABS_RUN_NEEDS_CHECK, WORLD_LABS_RUN_STATUS_UNKNOWN, cardTitle, moreNodesNeedCheck, unlockAriaLabel,
+  UNLOCK_LABEL, WORLD_LABS_RUN_NEEDS_CHECK, WORLD_LABS_RUN_STATUS_UNKNOWN, moreNodesNeedCheck, recordNodeName, unlockAriaLabel, UNLOCK_RUN_ARIA,
 } from '../lib/worldLabsWaiting';
 
 /** Persistent paid-provider safety status. Recovery-journal write warnings may
@@ -19,7 +19,7 @@ export function ProviderRecoveryStatus() {
   // doesn't re-render the bar).
   const heldTitle = useGraphStore((state) => {
     const held = state.providerStartAmbiguities[0];
-    return held ? cardTitle(state.nodes, held.nodeId) : null;
+    return held ? recordNodeName(state.nodes, held.nodeId, true) : null;
   });
   const acknowledge = useGraphStore((state) => state.acknowledgeProviderStartAmbiguity);
   const acknowledgeUncertainRun = useGraphStore(
@@ -70,7 +70,7 @@ export function ProviderRecoveryStatus() {
           onClick={() => void unlock()}
           disabled={unlocking === ambiguityKey}
           // GM, round 13 of PR #114: the node by its card title. No confirm.
-          aria-label={unlockAriaLabel(heldTitle ?? ambiguity.nodeId)}
+          aria-label={unlockAriaLabel(heldTitle ?? recordNodeName([], ambiguity.nodeId, true))}
           title="Only unlock after checking Marble for an accepted operation"
         >
           <ShieldCheck size={15} strokeWidth={1.8} aria-hidden="true" />
@@ -81,8 +81,8 @@ export function ProviderRecoveryStatus() {
           type="button"
           className="provider-recovery-status__ack"
           onClick={acknowledgeUncertainRun}
-          // No node to name (GM wrote the node form only): the accessible
-          // name is the label itself until GM words one (round 13).
+          // No node to name: GM's line (round 14 of PR #114).
+          aria-label={UNLOCK_RUN_ARIA}
           title="Only unlock after checking Marble for an accepted operation"
         >
           <ShieldCheck size={15} strokeWidth={1.8} aria-hidden="true" />

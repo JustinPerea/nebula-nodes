@@ -528,8 +528,11 @@ def _reject_graph_replacement_during_paid_start(action: str) -> None:
     canonical_checkpoints = _graph_worldlabs_recovery_checkpoints(nodes)
     node: str | None = None
     fields: list[str] = []
-    records = provider_recovery_store.list() if not provider_start_guard.list() else []
-    if provider_start_guard.list():
+    # One read of the ambiguity list (review 13, nit 7): the rule is
+    # literally b2b1529e's, never an ambiguity seen by one read and not the next.
+    ambiguities = provider_start_guard.list()
+    records = provider_recovery_store.list() if not ambiguities else []
+    if ambiguities:
         state = "ambiguity"
     elif records:
         state = "recovery"
@@ -539,10 +542,10 @@ def _reject_graph_replacement_during_paid_start(action: str) -> None:
         held = cli_graph.nodes.get(canonical_checkpoints[0][0]) or {}
         node = _node_label(canonical_checkpoints[0][0])
         fields = _recovery_field_labels([held])
-    elif _graph_recovery_bootstrap_error is not None:
+    elif _graph_recovery_bootstrap_error is not None and not _retry_graph_recovery_bootstrap(action):
         # Nebula couldn't journal a recovery it read from the canvas at boot
-        # (see WORLD_LABS_BOOTSTRAP_PERSON).
-        state = "bootstrap"
+        # (see WORLD_LABS_BOOTSTRAP_PERSON), and retrying that just now failed.
+        raise _graph_paid_refusal(_graph_bootstrap_specific(action), "bootstrap")
     else:
         return
     raise _graph_paid_refusal(
@@ -550,6 +553,47 @@ def _reject_graph_replacement_during_paid_start(action: str) -> None:
         "Check Marble and resolve the exact recovery/ambiguity record first.",
         state, node=node, fields=fields,
     )
+
+
+def _graph_bootstrap_specific(action: str) -> str:
+    """Agents' detail for the bootstrap state (round 14 of PR #114): the
+    retry was made, the journal still can't be written, and only a backend
+    restart helps. The person reads WORLD_LABS_BOOTSTRAP_PERSON."""
+    return (f"Cannot {action}: Nebula retried saving its World Labs recovery journal and "
+            "couldn't write it. Restart the Nebula backend, then try again.")
+
+
+def _retry_graph_recovery_bootstrap(action: str) -> bool:
+    """The bootstrap retry path (round 14 of PR #114). Before the bootstrap
+    state refuses, re-run the re-seed a run start does
+    (_claim_fresh_paid_worldlabs_starts' prepare_recovery_journal) under the
+    lifecycle fence a canvas replacement takes (_paid_graph_mutation), and
+    require the journal to be healthy after it. True (and the error cleared)
+    when it held; False (the error kept) when it still can't be written.
+    Reached only where the error is set, which the fence's own preflight
+    clears, so only outside it: the bundle restore's pre-check and the open's
+    ahead-of-time check (_open_ingress_verdict_off_loop)."""
+    global _graph_recovery_bootstrap_error
+    try:
+        with provider_start_guard.exclusive_lifecycle():
+            _ensure_shared_graph_recoveries(list(cli_graph.nodes.values()), source="bootstrap-retry")
+            if not provider_recovery_store.is_healthy():
+                raise ProviderRecoveryPersistenceError("provider recovery storage is unhealthy")
+    except ProviderStartConflictError as exc:
+        # A start began since has_active() was read: the settling refusal, as
+        # _paid_graph_mutation answers it.
+        raise _graph_paid_refusal(_graph_settling_specific(action), "active") from exc
+    except (
+        ProviderRecoveryCapacityError,
+        ProviderRecoveryConflictError,
+        ProviderRecoveryPersistenceError,
+        ProviderStartPersistenceError,
+        ValueError,
+    ) as exc:
+        _graph_recovery_bootstrap_error = str(exc)
+        return False
+    _graph_recovery_bootstrap_error = None
+    return True
 
 
 @contextmanager

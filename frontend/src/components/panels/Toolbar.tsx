@@ -36,6 +36,7 @@ import { useFitCanvasView } from '../../hooks/useFitCanvasView';
 import type { Edge, Node } from '@xyflow/react';
 import '../../styles/panels.css';
 import '../../styles/canvas-toolbar.css';
+import { refuseEditWhileOffline } from '../../lib/backendConnection';
 
 const CLEAR_CANVAS = "Couldn't clear the canvas.";
 
@@ -163,6 +164,8 @@ export function Toolbar() {
   };
 
   const handleClear = useCallback(async () => {
+    // Offline is read-only (GM, round 14 of PR #114): no confirm, no request.
+    if (refuseEditWhileOffline()) return;
     if (!canLoadGraph(useGraphStore.getState())) return;
     const { nodes } = useGraphStore.getState();
     const msg =

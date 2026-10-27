@@ -75,6 +75,70 @@ export interface ForeignEdit {
   after: GraphSlice;
 }
 
+/**
+ * One of the person's own adds in this tab (round 14 of PR #114, review 13
+ * M1 + M3): it owns exactly the ids that add created, never a whole-canvas
+ * snapshot. Undo removes those nodes (their wires go with them) and nothing
+ * else; Redo puts them back. A sync that brings the backend's nodes into the
+ * tab (an empty tab's first add, a reconnect), another add racing this one,
+ * or an agent's edit landing meanwhile never widens it, so Undo never sends
+ * an id the add didn't make. `after` is filled from the canvas as the step is
+ * undone (captureOwnAdd), so Redo brings the nodes back as they were then.
+ */
+export interface OwnAdd {
+  kind: 'own-add';
+  nodeIds: string[];
+  before: GraphSlice;
+  after: GraphSlice;
+  /** What its undo's restore removed, so Redo names them (as ForeignEdit). */
+  removals?: RemovalRecord[];
+}
+
+export function isOwnAdd(entry: unknown): entry is OwnAdd {
+  return Boolean(entry) && (entry as { kind?: unknown }).kind === 'own-add';
+}
+
+/** A step undone and redone by its slices (applySlice), its own inverse. */
+export function isSliceStep(entry: unknown): entry is ForeignEdit | OwnAdd {
+  return isForeignEdit(entry) || isOwnAdd(entry);
+}
+
+export function ownAddStep(nodeIds: Iterable<string>): OwnAdd {
+  const ids = [...new Set(nodeIds)];
+  return {
+    kind: 'own-add',
+    nodeIds: ids,
+    before: { nodes: Object.fromEntries(ids.map((id) => [id, null])), edges: {} },
+    after: { nodes: {}, edges: {} },
+  };
+}
+
+/** A dynamic add's card got its backend id: the step owns the new id now. */
+export function renameOwnedNode(step: OwnAdd, from: string, to: string): void {
+  step.nodeIds = step.nodeIds.map((id) => (id === from ? to : id));
+  for (const slice of [step.before, step.after]) {
+    if (from in slice.nodes) {
+      const node = slice.nodes[from];
+      delete slice.nodes[from];
+      slice.nodes[to] = node ? { ...node, id: to } : node;
+    }
+  }
+}
+
+/** Before an own add is undone: what it owns as the canvas has it now (its
+ * nodes, and the wires that touch them), so Redo brings that back. */
+export function captureOwnAdd(step: OwnAdd, nodes: Node<NodeData>[], edges: Edge[]): void {
+  const owned = new Set(step.nodeIds);
+  step.before = { nodes: Object.fromEntries(step.nodeIds.map((id) => [id, null])), edges: {} };
+  step.after = { nodes: {}, edges: {} };
+  for (const node of nodes) if (owned.has(node.id)) step.after.nodes[node.id] = keep(node);
+  for (const edge of edges) {
+    if (!owned.has(edge.source) && !owned.has(edge.target)) continue;
+    step.before.edges[edgeKey(edge)] = null;
+    step.after.edges[edgeKey(edge)] = { ...edge, selected: false };
+  }
+}
+
 export function edgeKey(edge: Pick<Edge, 'source' | 'target' | 'sourceHandle' | 'targetHandle'>): string {
   return `${edge.source}:${edge.sourceHandle ?? ''}->${edge.target}:${edge.targetHandle ?? ''}`;
 }
@@ -370,7 +434,7 @@ interface CanvasSnapshot {
   edges: Edge[];
 }
 
-function addedBy(entry: ForeignEdit | CanvasSnapshot, id: string): entry is ForeignEdit {
+function addedBy(entry: ForeignEdit | OwnAdd | CanvasSnapshot, id: string): entry is ForeignEdit {
   return isForeignEdit(entry) && entry.before.nodes[id] === null && Boolean(entry.after.nodes[id]);
 }
 
@@ -393,7 +457,7 @@ function addedBy(entry: ForeignEdit | CanvasSnapshot, id: string): entry is Fore
  * restore find their step by identity.
  */
 export function foldArrange(
-  history: Array<ForeignEdit | CanvasSnapshot>,
+  history: Array<ForeignEdit | OwnAdd | CanvasSnapshot>,
   positions: Record<string, Point>,
   shown: Record<string, Point | undefined>,
 ): void {
@@ -420,7 +484,7 @@ export function foldArrange(
     }
   }
   for (const entry of history.slice(start + 1)) {
-    if (isForeignEdit(entry)) {
+    if (isSliceStep(entry)) {
       for (const slice of [entry.before, entry.after]) {
         for (const id of ids) {
           const node = slice.nodes[id];

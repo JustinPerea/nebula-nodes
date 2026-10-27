@@ -6,6 +6,8 @@ import { useUIStore } from '../../store/uiStore';
 import { Inspector } from './Inspector';
 import { InspectorFootContext } from './inspectorFootContext';
 import { ScrollFade } from '../ScrollFade';
+import { useBackendOffline } from '../../lib/useBackendOffline';
+import { useReadOnlyFields } from '../../hooks/useReadOnlyFields';
 import { floatingBottomLimit, floatingTopLimit } from '../../lib/bottomBar';
 
 const POPOVER_GAP = 10;
@@ -221,6 +223,8 @@ export function NodeInspectorPopover() {
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const pinnedPreferenceRef = useRef<PinnedPreference | null>(null);
   const dragRef = useRef<{ startX: number; startY: number; left: number; top: number } | null>(null);
+  // Offline is read-only (GM, round 14 of PR #114): its fields are disabled.
+  useReadOnlyFields(popoverRef, useBackendOffline(), Boolean(visible && selectedNodeId && frame));
 
   useLayoutEffect(() => {
     if (!pinned) pinnedPreferenceRef.current = null;

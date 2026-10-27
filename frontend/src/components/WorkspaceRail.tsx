@@ -78,7 +78,9 @@ export function WorkspaceRail() {
   useEffect(() => {
     function onEscape(event: KeyboardEvent) {
       if (event.key !== 'Escape' || event.defaultPrevented || !useUIStore.getState().leftDock) return;
-      if (document.querySelector('[role="dialog"], .command-palette, .context-menu, .connection-popup')) return;
+      // Any open dialog holds Escape, an alertdialog or aria-modal one too
+      // (review 13, L5: the Forget ID confirm's Escape closed Run History).
+      if (document.querySelector('[role="dialog"], [role="alertdialog"], [aria-modal="true"], .command-palette, .context-menu, .connection-popup')) return;
       useUIStore.getState().setLeftDock(null);
     }
     document.addEventListener('keydown', onEscape);

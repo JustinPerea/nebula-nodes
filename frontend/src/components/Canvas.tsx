@@ -43,6 +43,8 @@ import type { NodeData } from '../types';
 import { NODE_RENAME_EVENT } from '../lib/keyboardShortcuts';
 import { publishCanvasSelection, selectedNodeIds } from '../lib/canvasSelection';
 import '../styles/canvas.css';
+import { useBackendOffline } from '../lib/useBackendOffline';
+import { useReadOnlyFields } from '../hooks/useReadOnlyFields';
 
 const nodeTypes = CANVAS_NODE_TYPES;
 const edgeTypes = CANVAS_EDGE_TYPES;
@@ -258,6 +260,8 @@ export function Canvas() {
   const storeOnConnect = useGraphStore((s) => s.onConnect);
   const executeGraph = useGraphStore((s) => s.executeGraph);
   const isExecuting = useGraphStore((s) => s.isExecuting);
+  // Offline is read-only (GM, round 14 of PR #114).
+  const readOnly = useBackendOffline();
   const isValidConnection = useIsValidConnection();
   const skin = useUIStore((s) => s.skin);
   const canvasPerfMode = useUIStore((s) => s.canvasPerfMode);
@@ -316,6 +320,7 @@ export function Canvas() {
     initialFit.current = false;
   }, [rememberViewport]);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  useReadOnlyFields(wrapperRef, readOnly);
   const showContextMenu = useUIStore((s) => s.showContextMenu);
   const hideContextMenu = useUIStore((s) => s.hideContextMenu);
   const showConnectionPopup = useUIStore((s) => s.showConnectionPopup);
@@ -719,7 +724,8 @@ export function Canvas() {
   return (
     <div
       ref={wrapperRef}
-      className={`canvas-wrapper${isSlavaSkin ? ' canvas-wrapper--slava' : ''}${isSlavaSkin && nodes.length === 0 ? ' canvas-wrapper--slava-empty' : ''}`}
+      className={`canvas-wrapper${isSlavaSkin ? ' canvas-wrapper--slava' : ''}${isSlavaSkin && nodes.length === 0 ? ' canvas-wrapper--slava-empty' : ''}${readOnly ? ' canvas--read-only' : ''}`}
+      data-read-only={readOnly || undefined}
       data-dock-open={leftDock !== null}
       tabIndex={0}
       onDrop={onDrop}
@@ -752,6 +758,8 @@ export function Canvas() {
         deleteKeyCode={isExecuting ? null : ['Backspace', 'Delete']}
         onBeforeDelete={onBeforeDelete}
         {...CANVAS_INTERACTION_PROPS}
+        nodesDraggable={!readOnly}
+        nodesConnectable={!readOnly}
         onlyRenderVisibleElements={canvasPerfMode && !arrangeMeasuring}
       >
         <Background

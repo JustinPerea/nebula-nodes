@@ -33,10 +33,17 @@ a {
   letter-spacing: 0.02em;
 }
 
+/* The offline banner (GM, round 14 of PR #114): below the project bar so it
+   covers nothing. The selection toolbar's line sits in between (canvas.css
+   .selection-toolbar-panel: 92px down, 50px tall), and the 28px gap above it
+   is shorter than the banner, so the banner sits under that line with the
+   same 8px gap floating panels keep (lib/bottomBar.ts floatingTopLimit):
+   92 + 50 + 8. It takes no pointer events. */
 .backend-connection {
+  --backend-offline-spring: linear(0, 0.062, 0.215, 0.411, 0.615, 0.799, 0.95, 1.059, 1.126, 1.158, 1.161, 1.145, 1.116, 1.083, 1.051, 1.023, 1.001, 0.986, 0.977, 0.974, 0.974, 0.978, 0.983, 0.988, 0.994, 0.998, 1.001, 1.003, 1);
   position: fixed;
   z-index: 10000;
-  top: 12px;
+  top: 150px;
   left: 50%;
   max-width: min(92vw, 560px);
   transform: translateX(-50%);
@@ -50,6 +57,44 @@ a {
   line-height: 1.25;
   letter-spacing: 0.01em;
   pointer-events: none;
+}
+
+/* A blocked edit nudges the banner once (GM, round 14): it springs from a
+   slightly larger scale back to rest, on an underdamped spring (zeta 0.5,
+   2.4 Hz) sampled into linear(). */
+.backend-connection[data-pulse='spring'] {
+  animation: backend-offline-nudge 700ms var(--backend-offline-spring) both;
+}
+
+@keyframes backend-offline-nudge {
+  from { transform: translateX(-50%) scale(1.045); }
+  to { transform: translateX(-50%) scale(1); }
+}
+
+/* Reduced motion: a brief colour flash instead of any movement. */
+.backend-connection[data-pulse='flash'] {
+  animation: backend-offline-flash 600ms steps(1, end) both;
+}
+
+@keyframes backend-offline-flash {
+  0% { background: rgb(92 36 26 / 98%); border-color: rgb(255 180 159 / 60%); }
+  100% { background: rgb(32 16 13 / 96%); border-color: rgb(255 255 255 / 14%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backend-connection[data-pulse='spring'] { animation: backend-offline-flash 600ms steps(1, end) both; }
+}
+
+/* Offline is read-only (GM, round 14): what would edit shows not-allowed,
+   nodes and handles don't drag, and fields are disabled (ReadOnlyFields). */
+.canvas--read-only .react-flow__node,
+.canvas--read-only .react-flow__handle,
+[data-offline-disabled] {
+  cursor: not-allowed;
+}
+
+[data-offline-disabled] {
+  opacity: 0.6;
 }
 
 /* Placed by the app's notice region (NoticeRegion), like every toast. */

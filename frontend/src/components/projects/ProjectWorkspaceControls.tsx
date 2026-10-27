@@ -4,6 +4,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useGraphStore } from '../../store/graphStore';
 import { shortLine } from '../../lib/errorCopy';
 import { HEADER_TOOLTIP, headerLine } from '../../lib/savePausedCopy';
+import { useBackendOffline } from '../../lib/useBackendOffline';
 import './ProjectWorkspaceControls.css';
 
 /** `onHome`: the screen's own way to Projects (the Commons asks first); `homeBusy`: it waits on a save. */
@@ -16,6 +17,9 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
   const pausedBytes = useProjectStore((state) => state.savePaused?.bytes ?? null);
   const panelOpen = useProjectStore((state) => state.sizePanelOpen);
   const nodeCount = useGraphStore((state) => state.nodes.length);
+  // GM, round 14 of PR #114: while offline "Save failed · Retry" hides (the
+  // banner says it); a retry couldn't reach Nebula anyway.
+  const offline = useBackendOffline();
   const [draft, setDraft] = useState<string | null>(null);
   if (!project || screen !== 'workspace') return null;
   const finishRename = (save: boolean) => {
@@ -52,6 +56,7 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
         ? <button type="button" className="project-workspace-controls__retry project-workspace-controls__paused"
             data-size-status="" title={HEADER_TOOLTIP} aria-haspopup="dialog" aria-expanded={panelOpen}
             onClick={() => useProjectStore.getState().openSizePanel()}>{headerLine(pausedBytes)}</button>
+        : status === 'error' && offline ? null
         : status === 'error'
         // Round 3b: this Retry saves, so its tooltip is the save's own failure
         // (short: the button is the retry), never another action's.
