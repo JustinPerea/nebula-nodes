@@ -112,7 +112,8 @@ import { createEmptyManifest, DEFAULT_FPS } from '../types/video';
 import { validateManifest } from '../lib/video/manifestValidator';
 import { componentTypeToCanvasDefId, pruneTrackItemsForDeletedNode } from '../lib/video/mirroring';
 import { isPortCompatible } from '../lib/portCompatibility';
-import { STALE_CANVAS_DETAIL, getProjectContext, type ProjectContext } from '../lib/projectContext';
+import { STALE_CANVAS_DETAIL, adoptCanvasRevision, getProjectContext, type ProjectContext } from '../lib/projectContext';
+import { savingCutOffLine, type CutOffEnding, type CutOffSave } from '../lib/savingCutOff';
 import { boundingRect, findOpenGroupOffset, UNMEASURED_NODE_SIZE, type NodeRect } from '../lib/nodePlacement';
 import { withParamDefaults } from '../lib/paramDefaults';
 import { replaceChanged, shareUnchanged } from '../lib/structuralShare';
@@ -1022,8 +1023,28 @@ interface GraphState {
     edges: Edge[],
     options?: { allowDuringExecution?: boolean; preserveCinemaUploads?: boolean },
   ) => void;
-  /** A project replacement never cancels a paid run or drops unresolved authoring. */
-  canSwitchProject: () => boolean;
+  /** A project replacement never cancels a paid run or drops unresolved authoring.
+   *  `exceptSaves`: graph writes on their way don't count (a switch drains them first, round 19). */
+  canSwitchProject: (options?: { exceptSaves?: boolean }) => boolean;
+  /** Round 19 (GM): a switch or an import starts. Graph writes made from now
+   *  wait (finishCanvasReplacement lets them go); those made before are
+   *  sent and waited for, 15 s at most. The saves that failed or didn't
+   *  answer in time, for GM's line. */
+  drainGraphWrites: (kind: 'switch' | 'import') => Promise<CutOffSave[]>;
+  /** Round 19: an agent switched projects (Nebula already has). Graph
+   *  writes wait from now; an undo still on its way is dropped and its
+   *  change taken back off the canvas (the person never saw it land). The
+   *  saves still on their way, for the handoff's line; `force`: the
+   *  handoff must be sent even when the canvas matches what was last saved
+   *  (a write or an undo Nebula may not have, so its switch saved without it). */
+  beginAgentSwitch: () => { cutOff: CutOffSave[]; force: boolean };
+  /** The switch or import is done (`report`: the canvas now shown is the new
+   *  one, with GM's line when `show`), or didn't happen (null). The writes
+   *  that waited go now, under their own admission. */
+  finishCanvasReplacement: (report: { kind: 'switch' | 'import' | 'agent'; agent?: string | null; project: string;
+    cutOff: CutOffSave[]; show: boolean } | null) => void;
+  /** The open project's name, for GM's line after an agent's import. */
+  setCanvasProjectName: (read: () => string | null) => void;
   loadProjectGraph: (nodes: Node<NodeData>[], edges: Edge[], history: RunRecord[],
     options?: { bootstrap?: boolean }) => boolean;
   loadSampleGraph: () => void;
@@ -1588,11 +1609,13 @@ function withGraphMutationLifetime<Args extends unknown[], Result>(operation: (.
  * caller treats it as it always treated that refusal. A write that is sent
  * carries the revision read at admission (apiFetch's `project`).
  */
-interface WriteAdmission { project: ProjectContext | null; graph: number }
+interface WriteAdmission { project: ProjectContext | null; graph: number; seq: number }
+/** Admissions in the order made: a switch's gate holds the ones made after it began. */
+let admissionSeq = 0;
 
 function admitWrite(): WriteAdmission {
   const project = getProjectContext();
-  return { project: project ? { ...project } : null, graph: canvasReplacementRevision };
+  return { project: project ? { ...project } : null, graph: canvasReplacementRevision, seq: ++admissionSeq };
 }
 
 function stillAdmitted(admission: WriteAdmission): boolean {
@@ -1625,6 +1648,159 @@ function droppedWriteAnswer(): Response {
 /** A restore that hasn't answered within the hold limit (review 17, L-2). */
 class RestoreTimeout extends Error {}
 
+// ---------------------------------------------------------------------------
+// Round 19 (GM - Design, review 18 G-1, H-B): a project switch or an import
+// waits for the saves on their way. "When the switch or import starts, new
+// graph writes are blocked right away. Writes already admitted or queued
+// drain first, up to the same 15 s limit undo uses. [...] If a save fails or
+// times out, the switch still happens, and the new canvas shows one of
+// these (replacing the "out of date" line)". Drained writes keep their own
+// admission: they never land in the new project.
+// ---------------------------------------------------------------------------
+
+/** A write from its admission to its answer. `save`: what it saves, as the
+ * line names it (read at admission, while its node is on the canvas). */
+interface TrackedWrite { graph: number; seq: number; restore: boolean; save: CutOffSave; counted: boolean }
+const liveWrites = new Set<TrackedWrite>();
+
+/** New writes wait here while a switch or an import drains (writeGate). */
+interface WriteGate { fromSeq: number; opened: Promise<void>; open: () => void }
+let writeGate: WriteGate | null = null;
+
+/** The drain under way: the writes it waits for, and those that didn't make it. */
+interface Drain { watching: Set<TrackedWrite>; cutOff: TrackedWrite[]; changed: () => void }
+let drain: Drain | null = null;
+
+/** The line about saves a replacement cut off: for the canvas now shown. */
+interface ReplacementReport { graph: number; project: string | null; ending: CutOffEnding | null; saves: CutOffSave[]; noticeId: number | null }
+let replacementReport: ReplacementReport | null = null;
+/** The open project's name, for that line (projectStore registers it). */
+let canvasProjectName: () => string | null = () => null;
+
+/** What a write saves, as GM's line names it: one setting of one node, or
+ * nothing in particular ("your last change"). */
+function describeSave(path: string, init?: RequestInit): CutOffSave {
+  const match = /^\/api\/graph\/node\/(n\d+)$/.exec(path);
+  if (!match || String(init?.method ?? 'GET').toUpperCase() !== 'PUT') return { node: null, setting: null };
+  const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === match[1]);
+  if (!node) return { node: null, setting: null };
+  const definition = NODE_DEFINITIONS[node.data.definitionId];
+  const title = nodeTitle(definition, node.data.label) || null;
+  let keys: string[] = [];
+  try { keys = Object.keys((JSON.parse(String(init?.body ?? '{}')) as { params?: object }).params ?? {}); } catch { keys = []; }
+  if (keys.length !== 1) return { node: title, setting: null };
+  const param = (definition ? allParamDefinitions(definition) : []).find((candidate) => candidate.key === keys[0])
+    ?? (node.data.dynamicParams as Array<{ key: string; label?: string }> | undefined)?.find((candidate) => candidate.key === keys[0]);
+  // Never a raw key (GM, round 16): with no label the line says "your last change".
+  return { node: title, setting: param?.label || null };
+}
+
+function settleTracked(write: TrackedWrite, ok: boolean): void {
+  liveWrites.delete(write);
+  if (write.graph !== canvasReplacementRevision) lastCutOffAt = Date.now();
+  if (!drain?.watching.has(write)) return;
+  drain.watching.delete(write);
+  if (!ok) { drain.cutOff.push(write); write.counted = true; }
+  drain.changed();
+}
+
+/** A write made for a canvas that was replaced since (a switch, an import,
+ * a clear) didn't land: GM's line names it, once, instead of the canvas's
+ * out-of-date line. A restore says its own (sendRestore). */
+function noteCutOff(write: TrackedWrite): void {
+  if (write.counted || write.restore) return;
+  write.counted = true;
+  const report = replacementReport;
+  if (!report || report.graph !== canvasReplacementRevision) return;
+  report.saves.push(write.save);
+  showReplacementReport();
+}
+
+function showReplacementReport(): void {
+  const report = replacementReport;
+  if (!report?.ending || !report.project || report.saves.length === 0) return;
+  const seen = new Set<string>();
+  const saves = report.saves.filter((save) => {
+    const key = `${save.node}\u0000${save.setting}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const text = savingCutOffLine(saves, report.project, report.ending);
+  useGraphStore.setState((state) => {
+    // The line already shown for this replacement is updated in place.
+    if (report.noticeId !== null && state.undoNotice?.id === report.noticeId) {
+      return { undoNotice: { ...state.undoNotice, text } };
+    }
+    if (report.noticeId !== null && state.messageNotice?.id === report.noticeId) {
+      return { messageNotice: { ...state.messageNotice, text } };
+    }
+    const shown = plainLine(state, text, 'error');
+    report.noticeId = (shown.undoNotice ?? shown.messageNotice)?.id ?? null;
+    return shown;
+  });
+}
+
+/** The canvas was replaced (canvasReplacementRevision moved): the line for
+ * saves it cut off belongs to this canvas now. `ending` null: say nothing
+ * (a clear: the nodes are gone with their changes; an agent's switch whose
+ * handoff save carried them). */
+function startReplacementReport(ending: CutOffEnding | null, project: string | null, saves: CutOffSave[] = []): void {
+  replacementReport = { graph: canvasReplacementRevision, project, ending, saves: [...saves], noticeId: null };
+  showReplacementReport();
+}
+
+/** Typing still in its debounce (or out) on `nodeId`, as GM's line names it. */
+function typingSave(nodeId: string, edits: UnsavedParamEdit): CutOffSave {
+  const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
+  const params = node?.data.params as Record<string, unknown> | undefined;
+  const keys = [...edits.keys].filter((key) => params && key in params);
+  return describeSave(`/api/graph/node/${nodeId}`, { method: 'PUT',
+    body: JSON.stringify({ params: Object.fromEntries(keys.map((key) => [key, null])) }) });
+}
+
+/** Typing a replacement found still in its debounce: never sent (the
+ * canvas it was for is gone), so GM's line names it. */
+const typingLost: CutOffSave[] = [];
+function noteTypingLost(): void {
+  for (const nodeId of Object.keys(paramPushTimers)) {
+    const edits = unsavedParamEdits.get(nodeId);
+    if (edits) typingLost.push(typingSave(nodeId, edits));
+  }
+}
+
+/** Undos and redos on their way, by admission: how each is dropped (beginAgentSwitch). */
+const restoreAbandons = new Map<number, () => void>();
+
+/** A clear emptied the canvas (the person's, an agent's, chat /clear): the
+ * held and debounced writes made for its nodes go with them, silently. */
+function replaceCanvasByClear(): void {
+  canvasReplacementRevision += 1;
+  newWriteQueue();
+  // Its nodes are gone: nothing an undo or a write holds on the canvas stays.
+  nodeWrites.clear();
+  wireWrites.clear();
+  clearAllParamPushTimers();
+  deferredParamPushes.clear();
+  heldCopies.clear();
+  startReplacementReport(null, null);
+}
+
+/** Writes that waited at the gate go now: under their own admission, so
+ * after a switch or an import they are dropped and named. */
+function openWriteGate(): void {
+  const gate = writeGate;
+  writeGate = null;
+  gate?.open();
+}
+
+function closeWriteGate(): void {
+  if (writeGate) return;
+  let open = () => {};
+  const opened = new Promise<void>((resolve) => { open = resolve; });
+  writeGate = { fromSeq: admissionSeq + 1, opened, open };
+}
+
 /** Even fire-and-forget layout/edge/param writes hold project navigation until
  * their backend request settles. Admission happens before invoking fetch.
  * While an undo or redo waits to reach Nebula, the person's other graph
@@ -1633,61 +1809,160 @@ class RestoreTimeout extends Error {}
  * would be undone by the restore behind it, and its echo would take the
  * undo back off the canvas. `admission`: read when the person acted (the
  * default: now). `timeoutMs`: a restore's bound (it rejects with
- * RestoreTimeout). */
+ * RestoreTimeout); `onLate` then gets its answer if one comes. */
 function graphMutationFetch(path: string, init?: RequestInit,
-  options: { admission?: WriteAdmission; timeoutMs?: number } = {}): Promise<Response> {
+  options: { admission?: WriteAdmission; timeoutMs?: number; onLate?: (response: Response) => void; save?: CutOffSave } = {}): Promise<Response> {
   const admission = options.admission ?? admitWrite();
+  const save = options.save ?? describeSave(path, init);
+  // Round 19: made after a switch or an import began: it waits until that
+  // is done, then goes under its own admission (dropped and named if the
+  // canvas was replaced, sent as usual if not).
+  const gate = writeGate;
+  if (gate && admission.seq >= gate.fromSeq) {
+    return trackGraphMutation(async () => {
+      await gate.opened;
+      return graphMutationFetch(path, init, { ...options, admission, save });
+    }, { restoreBound: true });
+  }
+  const tracked: TrackedWrite = { graph: admission.graph, seq: admission.seq, restore: path === '/api/graph/restore',
+    save, counted: false };
+  liveWrites.add(tracked);
+  if (drain && writeGate && admission.seq < writeGate.fromSeq) drain.watching.add(tracked);
   // A write sent in the turn it was admitted reads the same project as
   // apiFetch does; one that waited names the one read at admission.
-  const fetchNow = (request?: RequestInit) => (options.admission || writesWaiting > 0 || restoresPending > 0
+  const fetchNow = (request?: RequestInit) => (options.admission || writesWaitingNow() > 0 || restoresPendingNow() > 0
     ? apiFetch(path, request, { project: admission.project }) : apiFetch(path, request));
   const send = () => {
     if (!stillAdmitted(admission)) return Promise.resolve(staleCanvasAnswer());
     if (options.timeoutMs === undefined) return fetchNow(init);
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let timedOut = false;
     const late = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => { controller.abort(); reject(new RestoreTimeout()); }, options.timeoutMs);
+      timer = setTimeout(() => { timedOut = true; reject(new RestoreTimeout()); }, options.timeoutMs);
     });
     const fetching = fetchNow({ ...init, signal: controller.signal });
-    // A late answer (or the abort's own rejection) is left unread.
-    fetching.catch(() => {});
+    // Review 18, L-B: a request Nebula already has can't be called back, so
+    // its answer is still read after the limit: Nebula may apply it late.
+    fetching.then((response) => { if (timedOut) options.onLate?.(response); }, () => {});
     return Promise.race([fetching, late]).finally(() => clearTimeout(timer));
   };
-  if (path === '/api/graph/restore') return trackGraphMutation(send, { restoreBound: true });
-  if (restoresPending > 0 || writesWaiting > 0) {
-    // In the order admitted: behind the restores queued now, and behind
-    // every write already waiting (round 18's property test, seed 286: a
-    // write admitted after the restore answered went out ahead of one still
-    // waiting behind it, and Nebula kept the older value).
-    const after = restoreQueue;
-    const previous = waitingTail;
-    let dispatched = () => {};
-    const mine = new Promise<void>((resolve) => { dispatched = resolve; });
-    waitingTail = mine;
-    writesWaiting += 1;
-    const target = nodeWriteTarget(path, init);
-    return trackGraphMutation(async () => {
-      try {
-        await after;
-        await previous;
-        if (stillAdmitted(admission) && target && !useGraphStore.getState().nodes.some((node) => node.id === target)) {
-          return droppedWriteAnswer();
+  const sent = (() => {
+    if (tracked.restore) return trackGraphMutation(send, { restoreBound: true });
+    if (restoresPendingNow() > 0 || writesWaitingNow() > 0) {
+      // In the order admitted: behind the restores queued now, and behind
+      // every write already waiting (round 18's property test, seed 286: a
+      // write admitted after the restore answered went out ahead of one still
+      // waiting behind it, and Nebula kept the older value).
+      const after = restoreQueue;
+      const previous = waitingTail;
+      let dispatched = () => {};
+      const mine = new Promise<void>((resolve) => { dispatched = resolve; });
+      waitingTail = mine;
+      const waiting = { graph: admission.graph };
+      writesWaitingSet.add(waiting);
+      const target = nodeWriteTarget(path, init);
+      return trackGraphMutation(async () => {
+        try {
+          await after;
+          await previous;
+          // Review 18, M-A: a node off the canvas because its own delete is
+          // still on its way is in Nebula until that delete lands, which
+          // goes after this write: it is sent, so a delete that fails brings
+          // the node back as its card shows it. Off for any other reason
+          // (its delete landed, an agent deleted it), it is dropped.
+          if (stillAdmitted(admission) && target && !deletesInFlight.has(target)
+            && !useGraphStore.getState().nodes.some((node) => node.id === target)) {
+            return droppedWriteAnswer();
+          }
+          const sending = send();
+          dispatched();
+          return await sending;
+        } finally {
+          dispatched();
+          writesWaitingSet.delete(waiting);
         }
-        const sending = send();
-        dispatched();
-        return await sending;
-      } finally {
-        dispatched();
-        writesWaiting -= 1;
-      }
-    }, { restoreBound: true });
-  }
-  return trackGraphMutation(send);
+      }, { restoreBound: true });
+    }
+    return trackGraphMutation(send);
+  })();
+  return sent.then((response) => {
+    settleTracked(tracked, response.ok);
+    // Round 19: an answer for a canvas replaced since never reads as about
+    // this one. Nebula's refusal (or the tab's own) is the out-of-date line,
+    // which a canvas replaced since doesn't show (plainLine): GM's line names
+    // the save instead.
+    if (!response.ok && tracked.graph !== canvasReplacementRevision) {
+      noteCutOff(tracked);
+      return tracked.restore ? response : staleCanvasAnswer();
+    }
+    return response;
+  }, (error: unknown) => {
+    settleTracked(tracked, false);
+    if (tracked.graph !== canvasReplacementRevision && !tracked.restore) {
+      noteCutOff(tracked);
+      return staleCanvasAnswer();
+    }
+    throw error;
+  });
 }
 /** Writes waiting their turn (graphMutationFetch), and the last one's dispatch. */
-let writesWaiting = 0;
+const writesWaitingSet = new Set<{ graph: number }>();
 let waitingTail: Promise<void> = Promise.resolve();
+/** Those made for the canvas shown now: a write for a newer canvas never
+ * waits behind one for a canvas replaced since (it will be dropped). */
+function writesWaitingNow(): number {
+  return [...writesWaitingSet].filter((write) => write.graph === canvasReplacementRevision).length;
+}
+function restoresPendingNow(): number {
+  return [...restoreSeqs.values()].filter((graph) => graph === canvasReplacementRevision).length;
+}
+/** The canvas was replaced: its writes' queue goes with it (round 19, C3:
+ * the person's add after a clear waited behind a restore for the cleared
+ * canvas, which can only be dropped). */
+function newWriteQueue(): void {
+  restoreQueue = Promise.resolve();
+  waitingTail = Promise.resolve();
+}
+
+/** Round 19 (GM): wait, at most HOLD_LIMIT_MS, for every graph write made
+ * before now: the person's typing still in its debounce is sent first, and
+ * new writes wait at the gate (openWriteGate). Returns the saves that failed
+ * or hadn't answered when the time ran out. */
+async function drainWrites(): Promise<CutOffSave[]> {
+  for (const nodeId of Object.keys(paramPushTimers)) {
+    window.clearTimeout(paramPushTimers[nodeId]);
+    delete paramPushTimers[nodeId];
+    void pushNodeParams(nodeId);
+  }
+  closeWriteGate();
+  const gateFrom = writeGate!.fromSeq;
+  let wake = () => {};
+  const watching = new Set([...liveWrites].filter((write) => write.seq < gateFrom));
+  const current: Drain = { watching, cutOff: [], changed: () => wake() };
+  drain = current;
+  const deadline = Date.now() + HOLD_LIMIT_MS;
+  try {
+    for (;;) {
+      // Restores pressed before the gate, still queued, are writes too.
+      const queued = [...restoreSeqs.keys()].some((seq) => seq < gateFrom);
+      if (current.watching.size === 0 && !queued) break;
+      const left = deadline - Date.now();
+      if (left <= 0) break;
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, Math.min(left, queued ? 50 : left));
+        wake = () => { clearTimeout(timer); resolve(); };
+      });
+    }
+  } finally {
+    if (drain === current) drain = null;
+  }
+  for (const write of current.watching) {
+    write.counted = true;
+    current.cutOff.push(write);
+  }
+  return current.cutOff.map((write) => write.save);
+}
 
 /** Send a node's params to the backend after the debounce; a node whose
  * model request is in flight waits for its answer (requestUniversalModel). */
@@ -1715,24 +1990,30 @@ function pushNodeParams(nodeId: string): Promise<void> {
     return Promise.resolve();
   }
   const edits = unsavedParamEdits.get(nodeId);
-  if (edits) {
-    edits.inFlight += 1;
-    // What this write carries, until a sync shows it (review 16, L-3).
-    const params = node.data.params as Record<string, unknown>;
-    edits.sent = new Map([...edits.keys].map((key) => [key, stableJson(params[key])]));
-    edits.echoed = false;
-    edits.answered = false;
-    if (edits.linger !== undefined) clearTimeout(edits.linger);
-    edits.linger = undefined;
-  }
+  // Review 18, M-C and L-C: only the keys the person changed, merged by
+  // Nebula into what it has (PUT /api/graph/node/{id} merges the keys it is
+  // sent). A whole-params copy, read before an agent's edit reached the
+  // canvas (or carrying a value a refused undo left on it), overwrote the
+  // agent's edit, or let the undo take effect after all.
+  if (!edits || edits.keys.size === 0) return Promise.resolve();
+  const params = node.data.params as Record<string, unknown>;
+  const changed = Object.fromEntries([...edits.keys].filter((key) => key in params).map((key) => [key, params[key]]));
+  if (Object.keys(changed).length === 0) return Promise.resolve();
+  edits.inFlight += 1;
+  // What this write carries, until a sync shows it (review 16, L-3).
+  edits.sent = new Map([...edits.keys].map((key) => [key, stableJson(params[key])]));
+  edits.echoed = false;
+  edits.answered = false;
+  if (edits.linger !== undefined) clearTimeout(edits.linger);
+  edits.linger = undefined;
   let ok = false;
   return graphMutationFetch(`/api/graph/node/${nodeId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ params: node.data.params }),
+    body: JSON.stringify({ params: changed }),
   }).then((response) => { ok = response.ok; }).catch((err) => {
     console.warn(`[nebula] Param sync for ${nodeId} failed:`, err);
-  }).finally(() => { if (edits) settleParamEdit(nodeId, edits, ok); });
+  }).finally(() => settleParamEdit(nodeId, edits, ok));
 }
 
 /** Send a node's debounced params now, if any are waiting. */
@@ -1993,6 +2274,22 @@ const nodeWrites = new Map<string, WireWrite>();
  * (review 8, L-d). `tone` as notify gives it; none keeps the notice's default.
  */
 function noticeLine(state: Pick<GraphState, 'undoNotice'>, text: string, tone?: 'error' | 'info'): Partial<GraphState> {
+  // Round 19 (GM): a write made for a canvas replaced since says nothing of
+  // its own; GM's line names what it would have saved (noteCutOff).
+  if (text.includes(STALE_CANVAS_DETAIL) && cutOffAnswersArriving()) return {};
+  return plainLine(state, text, tone);
+}
+
+/** Answers for a canvas replaced since are still arriving, or just did
+ * (their callers word them a moment after the answer). */
+function cutOffAnswersArriving(): boolean {
+  if ([...liveWrites].some((write) => write.graph !== canvasReplacementRevision)) return true;
+  return Date.now() - lastCutOffAt < CUT_OFF_GRACE_MS;
+}
+let lastCutOffAt = Number.NEGATIVE_INFINITY;
+const CUT_OFF_GRACE_MS = 2_000;
+
+function plainLine(state: Pick<GraphState, 'undoNotice'>, text: string, tone?: 'error' | 'info'): Partial<GraphState> {
   const toned = tone ? { tone } : {};
   return state.undoNotice?.offer
     // No tone reads as a status in either place (CanvasUndoNotice's role).
@@ -2097,7 +2394,7 @@ function noteHeldCopies(held: Map<string, boolean>, incoming: Node<NodeData>[], 
 
 /** The canvas takes the newest copy synced for each node whose hold ended
  * (`ids`), unless another write still holds it. */
-function applyHeldCopies(ids: Iterable<string>): void {
+function applyHeldCopies(ids: Iterable<string>, options: { wires?: boolean } = {}): void {
   const set = useGraphStore.setState as GraphSet;
   const get = useGraphStore.getState;
   for (const id of ids) {
@@ -2117,9 +2414,23 @@ function applyHeldCopies(ids: Iterable<string>): void {
       const merged = mergeSyncedNode(copy.node, existing, copy.moved ? [id] : [], useUIStore.getState().settingsCache);
       nodes = existing ? state.nodes.map((node) => (node.id === id ? merged : node)) : [...state.nodes, merged];
       const present = new Set(nodes.map((node) => node.id));
-      const wired = new Set(state.edges.map(edgeKey));
-      edges = existing ? state.edges : [...state.edges, ...copy.edges.filter((edge) => present.has(edge.source)
-        && present.has(edge.target) && !wired.has(edgeKey(edge)))];
+      if (existing && options.wires) {
+        // Review 18, M-B: a node a failed delete put back takes the wires
+        // Nebula has for it (the newest sync while it was off), not the
+        // ones it had when Delete was pressed. A wire this tab is still
+        // writing keeps its way (heldWires).
+        const synced = new Set(copy.edges.map(edgeKey));
+        const kept = state.edges.filter((edge) => !(edge.source === id || edge.target === id)
+          || !CLI_ID_RE.test(edge.source) || !CLI_ID_RE.test(edge.target)
+          || synced.has(edgeKey(edge)) || wireWrites.get(edgeKey(edge))?.want === true);
+        const wired = new Set(kept.map(edgeKey));
+        edges = [...kept, ...copy.edges.filter((edge) => present.has(edge.source) && present.has(edge.target)
+          && !wired.has(edgeKey(edge)) && wireWrites.get(edgeKey(edge))?.want !== false)];
+      } else {
+        const wired = new Set(state.edges.map(edgeKey));
+        edges = existing ? state.edges : [...state.edges, ...copy.edges.filter((edge) => present.has(edge.source)
+          && present.has(edge.target) && !wired.has(edgeKey(edge)))];
+      }
     }
     // An agent's change to it is its own step (outputs and run state alone are none).
     set({ nodes, edges, ...(copy.foreign ? foreignEditStep(state, nodes, edges, copy.foreign, false, copy.moved ? [id] : []) : {}) });
@@ -2326,8 +2637,9 @@ function changeCanvasNodes(
     }
     if (failed.length > 0) putBackFailedDeletes(failed);
     for (const done of holds.values()) done(false);
-    // What Nebula synced of a node that came back while it was held (M-2).
-    applyHeldCopies(failed);
+    // What Nebula synced of a node that came back while it was held (M-2),
+    // with its wires as Nebula has them (review 18, M-B).
+    applyHeldCopies(failed, { wires: true });
     // Typing not yet sent when Delete was pressed goes out for a node that
     // came back, so Nebula has what its card shows.
     for (const nodeId of failed) {
@@ -4606,9 +4918,16 @@ function removalsFor(entry: UndoEntry, body: RestoreBody): RemovalRecord[] {
 // Undo and redo reach the backend one at a time, in the order the person
 // pressed them.
 let restoreQueue: Promise<void> = Promise.resolve();
-/** Restores queued and not yet answered: the person's other writes wait
- * behind them while there are any (graphMutationFetch). */
-let restoresPending = 0;
+/** Restores queued and not yet answered, by admission, with the canvas each
+ * was for: the person's other writes for that canvas wait behind them
+ * (graphMutationFetch), and a switch's drain waits for the ones pressed
+ * before it. */
+const restoreSeqs = new Map<number, number>();
+
+/** GM - Design, round 19, verbatim for an undo; a redo's says "redone". */
+function restoreTimeoutLine(action: 'undo' | 'redo'): string {
+  return `Nothing was ${action === 'undo' ? 'undone' : 'redone'}. Nebula isn't answering. Make sure it's running, then try again.`;
+}
 
 /** The nodes and wires a refused restore changed, put back as Nebula still
  * has them (W5): a node it brought back goes, one it took off comes back,
@@ -4623,7 +4942,25 @@ function revertRestoreOnCanvas(nodes: Node<NodeData>[], edges: Edge[],
     const now = change.after.nodes[id];
     const here = byId.get(id);
     const untouched = !was || !now || (here !== undefined && diffCanvas([here], [], [now], []) === null);
-    if (!untouched) continue;
+    if (!untouched) {
+      // Review 18, L-C: the person changed the node since. The keys the
+      // restore changed go back to what Nebula still has; the person's own
+      // keys stay as they are (their write carries only those keys now).
+      if (!was || !now || !here || here.data.definitionId !== was.data.definitionId) continue;
+      const wasParams = was.data.params as Record<string, unknown>;
+      const nowParams = now.data.params as Record<string, unknown>;
+      const restored = [...new Set([...Object.keys(wasParams), ...Object.keys(nowParams)])]
+        .filter((key) => stableJson(wasParams[key]) !== stableJson(nowParams[key]));
+      if (restored.length === 0) continue;
+      const params = { ...(here.data.params as Record<string, unknown>) };
+      for (const key of restored) {
+        if (key in wasParams) params[key] = wasParams[key];
+        else delete params[key];
+      }
+      target.nodes[id] = { ...here, data: { ...here.data, params } };
+      other.nodes[id] = here;
+      continue;
+    }
     target.nodes[id] = was;
     other.nodes[id] = now;
   }
@@ -4714,18 +5051,19 @@ function sendRestore(
     }
     return lateCount(state, missed);
   });
-  restoresPending += 1;
+  restoreSeqs.set(admission.seq, admission.graph);
   /** Review 17, W5 and L-2: Nebula refused it, or it never answered within
    * the hold limit. The person reads the undo failure line, always. On
    * the graph it was made in, the canvas goes back to where Nebula is. */
-  const refused = (reason: string) => {
+  const refused = (reason: string, how: { text?: string; quiet?: boolean } = {}) => {
     ownLinesWaiting.delete(notice.noticeId);
     skippedAfter.delete(notice.noticeId);
     // Another graph is open now: nothing here is that graph's (as before).
     if (admission.graph !== canvasReplacementRevision) return;
     set((state) => {
-      const line = { undoNotice: { id: ++undoNoticeSeq, text: `Couldn't ${action} that. ${reason}`, offer: null,
+      const line = how.quiet ? {} : { undoNotice: { id: ++undoNoticeSeq, text: how.text ?? `Couldn't ${action} that. ${reason}`, offer: null,
         ...(isForeignEdit(entry) ? { agentColor: entry.agentColor, entry } : {}) } };
+      if (how.text) timeoutNoticeId = undoNoticeSeq;
       const stack = action === 'undo' ? state.redoStack : state.undoStack;
       if (stack[stack.length - 1] === inverse) {
         // Put the canvas and both stacks back as they were before this step.
@@ -4768,6 +5106,33 @@ function sendRestore(
   // waited behind an earlier restore, this restore went out first, and
   // Nebula kept the typing the canvas had undone).
   const writesBefore = waitingTail;
+  // Round 19: an agent's switch drops it (beginAgentSwitch): its change
+  // comes back off the canvas, quietly, and its answer changes nothing.
+  let abandoned = false;
+  restoreAbandons.set(admission.seq, () => {
+    if (abandoned) return;
+    abandoned = true;
+    refused('', { quiet: true });
+  });
+  /** Which line the timeout showed, so a late landing can take it back. */
+  let timeoutNoticeId: number | null = null;
+  /** Review 18, L-B: Nebula applied it after the limit. The step follows
+   * Nebula: it counts as done, so the next Cmd+Z is never a silent no-op;
+   * GM's "Nothing was undone" line, no longer true, goes. */
+  const landedLate = (response: Response) => {
+    if (!response.ok || abandoned || admission.graph !== canvasReplacementRevision) return;
+    set((state) => {
+      const from = action === 'undo' ? state.undoStack : state.redoStack;
+      const to = action === 'undo' ? state.redoStack : state.undoStack;
+      const top = from[from.length - 1] === entry;
+      const left = from.filter((step) => step !== entry);
+      const moved = top ? [...to, inverse] : to;
+      return {
+        ...(action === 'undo' ? { undoStack: left, redoStack: moved } : { redoStack: left, undoStack: moved }),
+        ...(timeoutNoticeId !== null && state.undoNotice?.id === timeoutNoticeId ? { undoNotice: null } : {}),
+      };
+    });
+  };
   const task = Promise.all([restoreQueue, writesBefore]).then(async () => {
     // Read now, not when the step was taken: the answer to the delete (or to
     // the redo before this undo) may have landed since.
@@ -4780,7 +5145,7 @@ function sendRestore(
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-      }, { admission, timeoutMs: HOLD_LIMIT_MS });
+      }, { admission, timeoutMs: HOLD_LIMIT_MS, onLate: landedLate });
     } catch (err) {
       if (err instanceof RestoreTimeout) timedOut = true;
       // No answer: it may have landed. The next graphSync shows which.
@@ -4789,12 +5154,14 @@ function sendRestore(
     for (const done of wireHolds) done(Boolean(response?.ok));
     const ended = nodeHolds.filter(([, done]) => done(Boolean(response?.ok))).map(([id]) => id);
     try {
+      if (abandoned) return;
       if (timedOut) {
         // Review 17, L-2: the same bound as a held Cmd+Z (HOLD_LIMIT_MS).
         // The writes waiting behind it go out now, in order, each under
-        // its own admission check.
+        // its own admission check. GM, round 19: "Nothing was undone.
+        // Nebula isn't answering. Make sure it's running, then try again."
         console.warn(`[nebula] ${action} had no answer in ${HOLD_LIMIT_MS / 1000} s`);
-        refused(CONNECTION_LOST_COPY);
+        refused(CONNECTION_LOST_COPY, { text: restoreTimeoutLine(action) });
         return;
       }
       if (!response) {
@@ -4833,7 +5200,10 @@ function sendRestore(
       if (admission.graph === canvasReplacementRevision) applyHeldCopies(ended);
     }
   });
-  restoreQueue = task.catch(() => {}).finally(() => { restoresPending -= 1; });
+  restoreQueue = task.catch(() => {}).finally(() => {
+    restoreSeqs.delete(admission.seq);
+    restoreAbandons.delete(admission.seq);
+  });
   return task;
 }
 
@@ -5014,9 +5384,25 @@ wsClient.subscribe((event) => {
     // The presses held for the old graph's steps go (review 11, L-4); the
     // line saying so shows once the new graph is on the canvas, beside an
     // agent's "changed the canvas" rather than under it (review 12, L-2).
+    // Round 19 (review 18, H-A): which canvas Nebula holds. When it moved
+    // (a clear, an import) the writes held from before are another canvas's:
+    // node ids start again at n1, so they must never reach the new nodes.
+    // A sync from a backend that doesn't say it (older, or a test's) reads
+    // an agent's clear by its empty graph.
+    const canvasRevision = (event as { canvasRevision?: unknown }).canvasRevision;
+    const knownCanvas = getProjectContext()?.canvas;
+    const canvasMoved = typeof canvasRevision === 'string' ? knownCanvas !== undefined && canvasRevision !== knownCanvas
+      : empty && Boolean(origin) && !isOwnEcho(origin!, TAB_ID);
+    adoptCanvasRevision(revision, canvasRevision);
+    // The tab's own clear moved it already (clearGraph), before its echo.
+    if (canvasMoved && !graphReplaced && !(origin && isOwnEcho(origin, TAB_ID))) replaceCanvasByClear();
     let replacedPresses: DroppedPresses | null = null;
     if (graphReplaced) {
       canvasReplacementRevision += 1;
+      newWriteQueue();
+      // An agent's import into this project (a switch comes through
+      // projectStore): GM's line names a save it cut off.
+      startReplacementReport({ kind: 'import' }, canvasProjectName());
       replacedPresses = forgetStepsInFlight();
       pendingConnectedNodeCreationAttempt = null;
       wireWrites.clear();
@@ -5341,11 +5727,16 @@ async function knowRunInputs(nodes: Node<NodeData>[], edges: Edge[], scope: RunS
  */
 async function rereadRunKeys(): Promise<boolean> {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const limit = new Promise<boolean>((resolve) => { timer = setTimeout(() => resolve(false), RUN_INPUTS_WAIT_MS); });
+  // Review 18, L-D: a read that lands after the limit is ignored. The dialog
+  // already shows rows without a route; keys changing under it would read as
+  // a route that moved and ask again for nothing.
+  let late = false;
+  const limit = new Promise<boolean>((resolve) => { timer = setTimeout(() => { late = true; resolve(false); }, RUN_INPUTS_WAIT_MS); });
   const read = (async () => {
     const before = useUIStore.getState().settingsCache;
     try {
       const settings = await apiGetSettings();
+      if (late) return false;
       const now = useUIStore.getState().settingsCache;
       // App's own read may have landed meanwhile: it wins.
       if (now.apiKeys === before.apiKeys && now.kreaConnectionMode === before.kreaConnectionMode) {
@@ -5729,12 +6120,18 @@ async function sendDirectRun<T>(
       // bounded wait. When they can't be read in that time, the re-ask keeps
       // Nebula's numbers, as before (review 4, M1: the yes it sends passes;
       // the canvas's own numbers would be refused again, and again).
-      await rereadRunKeys();
+      // Review 18, L-D: keys that couldn't be read leave the route out of
+      // each row (it may be an old one); the model and Nebula's price stay.
+      // Until a read lands meanwhile (App's own: the cache changes), which
+      // names the route again.
+      const keysRead = await rereadRunKeys();
+      const cacheRead = useUIStore.getState().settingsCache;
+      const routeUnknown = () => !keysRead && useUIStore.getState().settingsCache === cacheRead;
       if (!stillOurs()) throw error;
       const estimate = refusal.estimate;
       const nodes = withRefusalFlags(agreed.nodes, refusal);
       const model = directRunConfirm(nodes, agreed.edges, nodeId, passes, estimate,
-        { ...wording, shown: agreed.shown, gone: agreed.gone, changed: agreed.changed });
+        { ...wording, shown: agreed.shown, gone: agreed.gone, changed: agreed.changed, routeUnknown: routeUnknown() });
       if (!model) throw error;
       withdraw();
       const confirmIds = [...refusal.placeholders].sort();
@@ -5755,7 +6152,7 @@ async function sendDirectRun<T>(
         // 409). Review 16, M2: only for the rows still on the route it was
         // for; a row whose route moved takes the canvas's numbers for its new
         // route, as Nebula's estimate for it reads.
-        const options = { ...wording, shown: agreed.shown, gone: agreed.gone, changed: agreed.changed };
+        const options = { ...wording, shown: agreed.shown, gone: agreed.gone, changed: agreed.changed, routeUnknown: routeUnknown() };
         const onRoutes = directRunConfirm(nodes, agreed.edges, nodeId, passes, estimate, options);
         const movedRoutes = new Set((onRoutes?.rows ?? []).filter((row) => refusedRoutes.has(row.nodeId)
           && refusedRoutes.get(row.nodeId) !== routeKey(row)).map((row) => row.nodeId));
@@ -8501,6 +8898,12 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   loadGraph: (nodes, edges, options) => {
     if (get().isExecuting && !options?.allowDuringExecution) return;
     canvasReplacementRevision += 1;
+    newWriteQueue();
+    // Typing still in its debounce was for the graph this replaces: its
+    // node ids may name imported nodes now (round 19).
+    noteTypingLost();
+    clearAllParamPushTimers();
+    deferredParamPushes.clear();
     const droppedPresses = forgetStepsInFlight();
     pendingConnectedNodeCreationAttempt = null;
     clearCinemaScenePersistence();
@@ -8520,7 +8923,38 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     useCinemaUploadStore.getState().reconcileTargets(get().nodes);
   },
 
-  canSwitchProject: () => {
+  drainGraphWrites: () => drainWrites(),
+
+  beginAgentSwitch: () => {
+    closeWriteGate();
+    // An undo or redo still on its way is dropped, not folded into the
+    // handoff (coordinator, round 19): its change comes back off the canvas.
+    const dropped = restoreAbandons.size;
+    for (const abandon of [...restoreAbandons.values()]) abandon();
+    const saves: CutOffSave[] = [...liveWrites].filter((write) => !write.restore).map((write) => write.save);
+    // Typing still in its debounce is never sent: the handoff carries it.
+    // (Typing already out is one of the writes above.)
+    for (const [nodeId, edits] of unsavedParamEdits) {
+      if (paramPushTimers[nodeId] === undefined) continue;
+      window.clearTimeout(paramPushTimers[nodeId]);
+      delete paramPushTimers[nodeId];
+      saves.push(typingSave(nodeId, edits));
+    }
+    return { cutOff: saves, force: saves.length > 0 || dropped > 0 };
+  },
+
+  finishCanvasReplacement: (report) => {
+    if (report) {
+      const ending: CutOffEnding = report.kind === 'agent' ? { kind: 'agent', agent: report.agent ?? null } : { kind: report.kind };
+      startReplacementReport(report.show ? ending : null, report.project, [...report.cutOff, ...typingLost.splice(0)]);
+    }
+    typingLost.length = 0;
+    openWriteGate();
+  },
+
+  setCanvasProjectName: (read) => { canvasProjectName = read; },
+
+  canSwitchProject: (options) => {
     const state = get();
     const session = useUIStore.getState().createSessionId;
     const createUploads = session ? useCreateDraftStore.getState().drafts[session]?.uploads ?? [] : [];
@@ -8532,8 +8966,10 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       && !pendingNodeCreationAttempt && !pendingConnectedNodeCreationAttempt
       // An undo's restore, and the writes waiting behind it, never hold a
       // switch (review 17, L-2): the switch goes ahead and drops them (H-1).
-      && !referencesUploading && pendingGraphMutationCount - restoreBoundMutationCount === 0
-      && Object.keys(paramPushTimers).length === 0;
+      && !referencesUploading
+      // Round 19: a switch drains them first (drainGraphWrites, beginAgentSwitch).
+      && (options?.exceptSaves || writeGate !== null
+        || (pendingGraphMutationCount - restoreBoundMutationCount === 0 && Object.keys(paramPushTimers).length === 0));
   },
 
   loadProjectGraph: (nodes, edges, history, options) => {
@@ -8556,10 +8992,13 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     if (!get().canSwitchProject() && !bootstrapSameOwners) return false;
 
     canvasReplacementRevision += 1;
+    newWriteQueue();
     const droppedPresses = forgetStepsInFlight();
     pendingNodeCreationAttempt = null;
     pendingConnectedNodeCreationAttempt = null;
+    noteTypingLost();
     clearAllParamPushTimers();
+    deferredParamPushes.clear();
     clearCinemaScenePersistence();
     useCinemaUploadStore.getState().clear();
     useCinemaMotionStore.getState().clear();
@@ -8699,6 +9138,10 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     // The clear's answer after another graph opened: its nodes are gone, and
     // these are another graph's.
     if (step && !sameGraphAs(step)) return;
+    // Round 19 (review 18, H-A): a clear is a replacement. Writes held from
+    // before it never reach the nodes that take their ids after it.
+    replaceCanvasByClear();
+    if (step) stepRevisions.set(step, canvasReplacementRevision);
     clearCinemaScenePersistence();
     useCinemaMotionStore.getState().clear();
     clearReplacedCanvasFocus();
@@ -8725,6 +9168,10 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     const { nodes, edges, undoStack } = get();
     const step = undoStep as UndoEntry;
     if (!sameGraphAs(step)) return;
+    // Round 19 (review 18, H-A): the chat's clear replaces the canvas as the
+    // Toolbar's does (clearGraph): its own echo doesn't move it again.
+    replaceCanvasByClear();
+    stepRevisions.set(step, canvasReplacementRevision);
     // As the clear's graphSync has it (its `empty` branch): only nodes this
     // tab alone has stay; and only the ones the clear sent go (as above).
     const remaining = nodes.filter((node) => !CLI_ID_RE.test(node.id) || !clearedBy(step, node.id));

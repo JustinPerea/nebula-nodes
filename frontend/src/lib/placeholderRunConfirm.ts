@@ -1,8 +1,8 @@
 import type { Edge, Node } from '@xyflow/react';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { NodeData } from '../types';
-import { allParamDefinitions, canvasTitle, hasRoutes, isDefaultTitle, nameOnRoute, nodeTitle, providerLabel, routeById, selectRoute,
-  withWiredBlockers } from './directRoute';
+import { allParamDefinitions, canvasTitle, hasRoutes, isDefaultTitle, nameOnRoute, nodeTitle, providerLabel, routeById, routeDependsOnKeys,
+  selectRoute, withWiredBlockers } from './directRoute';
 import { isLocalRun, modelChoice } from './nodeKeys';
 import { cleanPending, type PendingAgent } from './pendingNodes';
 import { formatUsdRange } from './pricing';
@@ -128,6 +128,13 @@ export interface PlaceholderRunOptions {
    * replay uses the saved settings, and says so (GM - Design on review 8
    * L-b: "Replay the saved version?"). Its saved version is a muted row. */
   changed?: ReadonlySet<string>;
+  /** The keys couldn't be read (a 409 re-ask's key read failed or timed out:
+   * graphStore rereadRunKeys returned false), so the route each row would
+   * take is unknown. A row whose route depends on keys drops only the route,
+   * never naming a possibly old one (review 18, L-D; GM - Design, round 19,
+   * verbatim: "“Grok Imagine 2.0” · $0.06", "“Alt still” · Grok Imagine 2.0
+   * · $0.06"). Its price stays Nebula's. */
+  routeUnknown?: boolean;
 }
 
 /** A row's price words (GM - Design, rounds 4 and 6, verbatim). */
@@ -225,10 +232,13 @@ function modelName(node: Node<NodeData>): string {
 
 /** The model a node runs, named on the route its run takes (GM - Design,
  * round 15, item 3): a node type's own name names that route's provider. */
-function modelOnRoute(node: Node<NodeData>, provider: string | null): string {
+function modelOnRoute(node: Node<NodeData>, provider: string | null, routeUnknown = false): string {
   const model = modelName(node);
   const definition = NODE_DEFINITIONS[node.data?.definitionId];
-  return definition && model === definition.displayName ? nameOnRoute(definition, provider) : model;
+  if (!definition || model !== definition.displayName) return model;
+  // Review 18, L-D: with the route unknown, the model without any route.
+  if (routeUnknown && routeDependsOnKeys(definition)) return canvasTitle(definition);
+  return nameOnRoute(definition, provider);
 }
 
 function unset(value: unknown): boolean {
@@ -692,7 +702,7 @@ export function placeholderRunConfirm(
   };
   const row = (node: Node<NodeData>): PlaceholderRunRow => {
     const label = labelOf(node);
-    const model = modelOnRoute(node, routeOf(node));
+    const model = modelOnRoute(node, routeOf(node), options.routeUnknown);
     const price = rowPrice(node.id, summary, runNodeName(node, routeOf(node)));
     if (price.missing) anyMissing = true;
     if (price.text === PRICE_NOT_LISTED) unlisted.push(`“${label}”`);
@@ -701,7 +711,7 @@ export function placeholderRunConfirm(
     const route = routeOf(node);
     // The model segment of an unnamed node whose name is the model: only the route.
     const shownModel = definition && modelName(node) === definition.displayName
-      ? (route ? `via ${providerLabel(route)}` : null)
+      ? (route && !options.routeUnknown ? `via ${providerLabel(route)}` : null)
       : model === label ? null : model;
     return { nodeId: node.id, name: `“${label}”`, model: shownModel, modelKey: model,
       setting: kreaSetting(node), price: price.text, agent: agentOf.get(node.id) ?? null };

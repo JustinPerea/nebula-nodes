@@ -28,7 +28,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, Callable, Iterator, Mapping
 
-from services import universal_ports
+from services import node_route, universal_ports
 from services.input_file_name import input_file_name
 from services.selection_context import _safe_value as safe_value
 from services.text_cut import safe_cut
@@ -553,16 +553,18 @@ def redacted_node(node_id: str, node: Mapping[str, Any], definition: Mapping[str
     `node` is a canvas node: definitionId, params, outputs and the label the
     person or an agent gave it (none when it goes by the model's name)."""
     definition_id = str(node.get("definitionId", ""))
+    name = node_route.node_name(definition, node.get("label"), definition_id)
     entry: dict[str, Any] = {
         "id": node_id,
         "definitionId": definition_id,
-        # The person's (or an agent's) name for it, else the model's.
-        "name": node.get("label") or definition.get("displayName") or definition_id,
+        # The person's (or an agent's) name for it, else its canvas title
+        # (review 18 M-D: the name the canvas shows).
+        "name": name,
         "params": safe_value(node.get("params") or {}, key="params"),
         "outputs": output_availability(node.get("outputs") or {}),
         "inputsFrom": inputs_from,
     }
-    if node.get("label"):
+    if node.get("label") and name == node.get("label"):
         entry["model"] = definition.get("displayName") or definition_id
     # An agent's placeholder (Q125 item 3): whose; runs skip it.
     from services.pending_nodes import owner as pending_owner  # imports this module

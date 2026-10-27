@@ -407,6 +407,8 @@ export async function apiFetch(path: string, init?: RequestInit,
   headers.set(PARAMS_VERSION_HEADER, String(GRAPH_PARAMS_VERSION));
   if (project && method !== 'GET' && method !== 'HEAD') {
     headers.set('X-Nebula-Workspace-Revision', project.revision);
+    // Which canvas it was made for (round 19): Nebula refuses it after a clear or an import.
+    if (project.canvas !== undefined) headers.set('X-Nebula-Canvas-Revision', project.canvas);
   }
   // Which tab wrote, so this tab can tell its own edits' graphSync echoes
   // from edits made elsewhere (lib/tabId.ts).

@@ -45,14 +45,17 @@ def test_cost_for_names_a_krea_copy_on_its_makers_key_with_via():
         "paid · GPT Image 2.5 Flare via OpenAI")
 
 
-def test_on_the_gateway_the_label_is_unchanged():
+def test_on_the_gateway_a_key_routed_node_names_the_gateway_with_via():
+    # Round 19 (review 18 L-A, GM's visual pass) replaces round 16's "rows on
+    # the gateway keep the card's own display name" for nodes whose route
+    # depends on keys: "Grok Imagine 2.0 via Krea".
     from services.canvas_proposals import cost_for
 
     grok = _definitions()[GROK]
-    assert cost_for(grok, {}, None, {"KREA_API_TOKEN": "k"})["label"] == "paid · krea"
+    assert cost_for(grok, {}, None, {"KREA_API_TOKEN": "k"})["label"] == "paid · Grok Imagine 2.0 via Krea"
     assert cost_for(grok, {}, None, {"XAI_API_KEY": "x", "KREA_API_TOKEN": "k"},
-                    wired={"style_images"})["label"] == "paid · krea"
-    assert cost_for(grok, {})["label"] == "paid · krea"
+                    wired={"style_images"})["label"] == "paid · Grok Imagine 2.0 via Krea"
+    assert cost_for(grok, {})["label"] == "paid · Grok Imagine 2.0 via Krea"
 
 
 def test_name_on_route_matches_the_canvas():
@@ -60,8 +63,8 @@ def test_name_on_route_matches_the_canvas():
 
     defs = _definitions()
     assert name_on_route(defs[GROK], "xai") == "Grok Imagine 2.0 via xAI"
-    assert name_on_route(defs[GROK], "krea") == "Grok Imagine 2.0 (Krea)"
-    assert name_on_route(defs[GROK], None) == "Grok Imagine 2.0 (Krea)"
+    assert name_on_route(defs[GROK], "krea") == "Grok Imagine 2.0 via Krea"
+    assert name_on_route(defs[GROK], None) == "Grok Imagine 2.0 via Krea"
     assert name_on_route(defs["nano-banana-fal"], "google") == "Nano Banana via Google"
     assert name_on_route(defs["gpt-image-1-5"], "openai") == "GPT Image 1.5"
 

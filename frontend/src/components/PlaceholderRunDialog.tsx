@@ -144,15 +144,18 @@ export function PlaceholderRunDialog({ model, changed = false, moved, onDone }: 
   const { changes } = seen;
   const movedLine = movedNodesLine(model.rows, [...(moved ?? []), ...seen.moved]);
   // Before any click can land: a layout effect runs in the same task as the commit.
-  const price = `${model.runLabel}\u0000${model.confirmCost ?? ''}`;
+  // GM - Design, round 19 (verbatim): "focus moves to Cancel ONLY when the run
+  // button's price changes in place": the button's own words, never the
+  // amount behind them alone.
+  const price = model.runLabel;
   const shownPrice = useRef(price);
   useLayoutEffect(() => {
     if (current === shown.current) return;
     const opening = shown.current === null;
     shown.current = current;
     if (!opening || changed) heldUntil.current = Date.now() + RUN_CLICK_GUARD_MS;
-    // Review 17 (nit): a price that changes in place moves focus to Cancel,
-    // as on a re-ask (GM: focus stays on Cancel).
+    // Review 17 (nit), GM round 19: the run button's price changing in place
+    // moves focus to Cancel; every other in-place update keeps it where it was.
     if (!opening && price !== shownPrice.current) cancel.current?.focus();
     shownPrice.current = price;
   }, [current, changed, price]);

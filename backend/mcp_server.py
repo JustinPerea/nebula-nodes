@@ -1189,7 +1189,8 @@ def edit_canvas(
       refs start with "+" and only live inside this call.
     - `edges`: connections [{"source", "sourceHandle", "target", "targetHandle"}];
       ends are refs or existing ids ("n4"); handles are port ids from describe_node.
-    - `params`: changes to existing nodes [{"nodeId": "n4", "params": {...}}].
+    - `params`: changes to existing nodes [{"nodeId": "n4", "params": {...}}];
+      only the keys you send change (the person's other settings stay).
     - `rename`: {"n4" or "+img": "Hero shot"} ("" restores the model's name).
     - `move`: {"n4" or "+img": {"x": 0, "y": 0}}. New nodes are placed for you.
     - `arrange`: true (or {"direction": "right" or "down", "gap": 120}) to have

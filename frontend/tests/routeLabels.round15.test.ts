@@ -51,9 +51,9 @@ describe('nameOnRoute: the gateway a display name names becomes the route that r
     expect(nameOnRoute(NODE_DEFINITIONS[FLARE], 'openai')).toBe('GPT Image 2.5 Flare via OpenAI');
     expect(nameOnRoute(NODE_DEFINITIONS['nano-banana-fal'], 'google')).toBe('Nano Banana via Google');
   });
-  it('on the gateway itself, or a name that names no provider, it stays', () => {
-    expect(nameOnRoute(NODE_DEFINITIONS[GROK], 'krea')).toBe('Grok Imagine 2.0 (Krea)');
-    expect(nameOnRoute(NODE_DEFINITIONS[GROK], null)).toBe('Grok Imagine 2.0 (Krea)');
+  it('on the gateway itself it names the gateway (round 19, L-A); a name that names no provider stays', () => {
+    expect(nameOnRoute(NODE_DEFINITIONS[GROK], 'krea')).toBe('Grok Imagine 2.0 via Krea');
+    expect(nameOnRoute(NODE_DEFINITIONS[GROK], null)).toBe('Grok Imagine 2.0 via Krea');
     expect(nameOnRoute(NODE_DEFINITIONS['gpt-image-1-5'], 'openai')).toBe('GPT Image 1.5');
   });
 });
@@ -76,7 +76,8 @@ describe("GM round 15, item 3: the placeholder dialog's row names the route that
   it('Style images wired keeps the run on Krea: the Krea name, never the xAI price', () => {
     const { row } = dialogRow(GROK, 'Alt still', { XAI_API_KEY: 'x', KREA_API_TOKEN: 'k' },
       { aspect_ratio: '1:1', resolution: '1K' }, ['style_images']);
-    expect(row.model).toBe('Grok Imagine 2.0 (Krea)');
+    // Round 19 (review 18, L-A): the gateway is named as a route too.
+    expect(row.model).toBe('Grok Imagine 2.0 via Krea');
     expect(row.price).not.toBe('$0.06');
   });
   it('GPT Image 2.5 Flare on an OpenAI key alone: the OpenAI name and "price not listed" (no total, so no footnote)', () => {

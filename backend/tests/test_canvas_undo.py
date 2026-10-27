@@ -25,12 +25,12 @@ from services.cli_graph import CLIGraph
 from services.project_store import ProjectStore, make_project
 from services.provider_recovery import ProviderRecoveryStore
 from services.provider_start_guard import ProviderStartGuard
-from tests.conftest import PERSON
+from tests.conftest import PERSON, TabHeaders
 
 AGENT = {"X-Nebula-Agent": "Claude Code"}
 OTHER = {"X-Nebula-Agent": "Codex"}
 TAB = "tab-0123456789abcdef"
-CANVAS = {**PERSON, "X-Nebula-Tab": TAB}
+CANVAS = TabHeaders({**PERSON, "X-Nebula-Tab": TAB})
 
 
 class Clock:

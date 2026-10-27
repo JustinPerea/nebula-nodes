@@ -863,7 +863,8 @@ async def test_clear_refuses_unresolved_ambiguity_until_exact_ack() -> None:
     await main_module.acknowledge_provider_start_ambiguity(
         ENVIRONMENT, "world-node", "ambiguous"
     )
-    assert await main_module.clear_graph(force=True) == {"status": "cleared"}
+    # The answer names the new canvas (round 19 of PR #195).
+    assert await main_module.clear_graph(force=True) == {"status": "cleared", "canvasRevision": main_module._canvas_revision()}
 
 
 def test_ambiguity_blocks_fresh_node_with_new_identity() -> None:

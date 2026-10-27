@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import Any, Iterable, Mapping
 
 from services.agent_presence import MAX_SNAPSHOT_NODES, NODE_STATES, output_availability, redacted_node
+from services import node_route
 from services.key_echoes import hide_key_echoes
 from services.selection_context import _safe_value as safe_value
 
@@ -67,7 +68,8 @@ def _node(rf: Mapping[str, Any], definitions: Mapping[str, Any], incoming: Mappi
     label = data.get("label")
     # A saved card always has a label; it is the person's name for the node
     # only when it isn't the model's own (main._cli_node_to_rf writes that).
-    custom = label if isinstance(label, str) and label and label != (definition.get("displayName") or definition_id) else None
+    custom = label if isinstance(label, str) and label and label != (definition.get("displayName") or definition_id) \
+        and not (definition and node_route.is_default_title(definition, label)) else None
     entry = redacted_node(rf["id"], {"definitionId": definition_id, "params": data.get("params") or {},
                                      "outputs": data.get("outputs") or {}, "label": custom},
                           definition, list(incoming.get(rf["id"], [])))

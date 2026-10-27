@@ -1394,10 +1394,20 @@ def name_on_route(definition: Mapping[str, Any], provider: Any) -> str:
     parens: "Grok Imagine 2.0 via xAI""). A display name that ends by naming
     its own gateway ("Grok Imagine 2.0 (Krea)", "Nano Banana (FAL)") names the
     route the run actually takes instead, by the card's label for it. On the
-    gateway itself, or a name that names no provider, it is the display name.
+    gateway itself, or a name that names no provider, it is the display name;
+    except (GM - Design, round 19, review 18 L-A: "“Alt still” · Grok Imagine
+    2.0 via Krea · price not listed") a node whose route depends on keys
+    (:func:`canvas_title` strips its gateway) names the gateway route the same
+    way, "Grok Imagine 2.0 via Krea", with no route given too (the gateway's,
+    as the canvas's nameOnRoute reads ``provider ?? apiProvider``). Only the
+    canvas drops the route, when it couldn't read the keys (GM, round 19:
+    "“Grok Imagine 2.0” · $0.06"); Nebula always reads them.
     frontend/src/lib/directRoute.ts nameOnRoute is the same."""
     name = str(definition.get("displayName") or "")
     gateway = definition.get("apiProvider")
+    title = canvas_title(definition)
+    if title != name:
+        return f"{title} via {provider_label(provider or gateway)}"
     if not provider or provider == gateway:
         return name
     own = _OWN_GATEWAY.match(name)
@@ -1444,6 +1454,19 @@ def is_default_title(definition: Mapping[str, Any], label: Any) -> bool:
     """A label that is either form of the definition's default title (its
     display name or :func:`canvas_title`): the node is unnamed."""
     return isinstance(label, str) and label in {str(definition.get("displayName") or ""), canvas_title(definition)}
+
+
+def node_name(definition: Mapping[str, Any] | None, label: Any, fallback: str = "") -> str:
+    """A canvas node's name wherever Nebula names it (MCP results, the
+    cursor bubble, the Agent log, run refusals): ``label`` when it is a name
+    of its own, else the node's :func:`canvas_title` (an unnamed node: no
+    label, or either form of the default title, :func:`is_default_title`),
+    else ``fallback`` (the node's id or type when its definition is gone).
+    Review 18 M-D: agents see the same names as the canvas; the catalog
+    (find_nodes, describe_node, search) keeps the catalog names."""
+    if isinstance(label, str) and label.strip() and not (definition and is_default_title(definition, label)):
+        return label
+    return (canvas_title(definition) if definition else "") or fallback
 
 
 def _or_list(items: Iterable[str]) -> str:

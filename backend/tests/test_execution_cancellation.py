@@ -403,6 +403,8 @@ async def test_unknown_uuid_recovery_survives_in_export_without_graph_insertion(
     exported = await main_module.export_graph_for_frontend()
     assert exported == {
         **main_module._workspace_context(),
+        # Round 19 of PR #195: which canvas of the project this is.
+        "canvasRevision": main_module._canvas_revision(),
         "nodes": [],
         "edges": [],
         "empty": True,

@@ -8,6 +8,8 @@ import { graphFileModule } from '../lib/deferredChunks';
 import { canLoadGraph, canSaveGraph, GRAPH_LOAD_EVENT, GRAPH_SAVE_EVENT } from '../lib/graphFileActions';
 import { apiRequest } from '../lib/apiRequest';
 import { rewriteBackendAssetUrls } from '../lib/backend';
+import { adoptCanvasRevision } from '../lib/projectContext';
+import type { CutOffSave } from '../lib/savingCutOff';
 import { failureMessage, RequestFailedError } from '../lib/errorCopy';
 import { showNotice } from '../lib/canvasNotice';
 import { isModalDialogOpen } from '../lib/canvasShortcutScope';
@@ -65,7 +67,23 @@ export function GraphFileActions() {
     asNewProject = false): Promise<'over' | void> => {
     if (!canLoadGraph(useGraphStore.getState())) return;
     let importReserved = false;
+    // Round 19 (GM): new graph writes wait from here; those on their way go
+    // first (15 s at most, "Saving…" on the project bar), so none can land
+    // on the imported nodes. One that failed or didn't land in time doesn't
+    // hold the import: the new canvas says it.
+    const leaving = useProjectStore.getState().activeProject?.name ?? null;
+    const statusBefore = useProjectStore.getState().saveStatus;
+    const showSaving = leaving !== null && (statusBefore === 'saved' || statusBefore === 'unsaved');
+    if (showSaving) useProjectStore.setState({ saveStatus: 'saving' });
+    let replaced = false;
+    let cutOff: CutOffSave[] = [];
     try {
+      cutOff = await useGraphStore.getState().drainGraphWrites('import');
+    } finally {
+      if (showSaving && useProjectStore.getState().saveStatus === 'saving') useProjectStore.setState({ saveStatus: statusBefore });
+    }
+    try {
+      if (!canLoadGraph(useGraphStore.getState())) return;
       // graphSync can publish the imported graph before this HTTP response.
       // Fence every local generation admission through that entire interval.
       importReserved = useGraphStore.getState().reserveGraphImport();
@@ -88,7 +106,10 @@ export function GraphFileActions() {
           ...(refuseOverLimit ? { refuseOverSaveLimit: true } : {}),
         }),
       });
-      const imported = await response.json() as { nodes: Node<NodeData>[]; edges: Edge[]; warnings?: string[] };
+      const imported = await response.json() as { nodes: Node<NodeData>[]; edges: Edge[]; warnings?: string[];
+        canvasRevision?: string };
+      // The canvas Nebula holds now: the tab's writes to it carry it.
+      adoptCanvasRevision(undefined, imported.canvasRevision);
       // Read from what the backend loaded: a node folded into another
       // (services/retired_nodes.py MERGED) arrives as its new node.
       // Nodes set to a provider with no key here keep their choice and values
@@ -107,6 +128,9 @@ export function GraphFileActions() {
       // this backend's links resolved, so a file:// desktop tab can draw them.
       // A World keeps its relative links; saves canonicalize the rest again.
       useGraphStore.getState().loadGraph(rewriteBackendAssetUrls(imported.nodes), rewriteBackendAssetUrls(imported.edges));
+      replaced = true;
+      useGraphStore.getState().finishCanvasReplacement({ kind: 'import', project: leaving ?? '', cutOff,
+        show: leaving !== null });
       // A file over the save limit opens (Q118): the project store says so
       // with GM's Load graph line and pauses saving until it is trimmed.
       useProjectStore.getState().noteLoadedGraph(result.fileName ?? 'the graph', asNewProject);
@@ -142,6 +166,8 @@ export function GraphFileActions() {
       showNotice(failureMessage(error, LOAD_GRAPH));
     } finally {
       if (importReserved) useGraphStore.getState().releaseGraphImport();
+      // Not replaced: the writes that waited go to the canvas still there.
+      if (!replaced) useGraphStore.getState().finishCanvasReplacement(null);
     }
   }, [fitView]);
 

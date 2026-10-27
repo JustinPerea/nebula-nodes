@@ -598,6 +598,8 @@ export async function fetchCLIGraph(): Promise<{
   empty: boolean;
   activeProjectId?: string | null;
   workspaceRevision?: string;
+  /** The canvas's revision (round 19): the tab sends it back with its graph writes. */
+  canvasRevision?: string;
   providerRecoveries?: ProviderRecoveryCheckpoint[];
   providerStartAmbiguities?: ProviderStartAmbiguity[];
   executionStatuses?: ExecutionStatusResult[];

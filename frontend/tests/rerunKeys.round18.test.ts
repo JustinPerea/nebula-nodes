@@ -36,7 +36,8 @@ const estimate = (keys: Record<string, string>) => keys.XAI_API_KEY
 
 const initialCache = useUIStore.getState().settingsCache;
 
-async function run(tab: Record<string, string>, nebula: Record<string, string>, { settingsFail = false, maxAsks = 5 } = {}) {
+async function run(tab: Record<string, string>, nebula: Record<string, string>,
+  { settingsFail = false, maxAsks = 5, settingsLateMs = 0, askOpenMs = 0 } = {}) {
   useUIStore.setState({ settingsCache: { apiKeys: tab, loaded: true }, runCostConfirmUsd: 0 } as never);
   useGraphStore.setState({
     nodes: [node('n1', 'Prompt', 'text-input', { value: 'a fox' }),
@@ -45,6 +46,7 @@ async function run(tab: Record<string, string>, nebula: Record<string, string>, 
     undoStack: [], redoStack: [], runHistory: [], isExecuting: false, providerRecoveries: [], providerStartAmbiguities: [],
   } as never);
   apiFetchMock.mockReset().mockImplementation(async (path: string) => {
+    if (path === '/api/settings' && settingsLateMs) await new Promise((resolve) => setTimeout(resolve, settingsLateMs));
     if (path === '/api/settings' && !settingsFail) return { ok: true, status: 200, json: async () => ({ apiKeys: nebula }) };
     throw new TypeError('Offline fixture');
   });
@@ -66,6 +68,8 @@ async function run(tab: Record<string, string>, nebula: Record<string, string>, 
   const asks: PlaceholderRunConfirm[] = [];
   askMock.mockImplementation(async (model: PlaceholderRunConfirm) => {
     asks.push(model);
+    // The person reads the dialog a while (a read landing late lands meanwhile).
+    if (askOpenMs && asks.length > 1) await new Promise((resolve) => setTimeout(resolve, askOpenMs));
     return asks.length > maxAsks ? null : model;
   });
   await useGraphStore.getState().executeNode('n2');
@@ -87,7 +91,7 @@ afterEach(() => {
 describe('m2stale: the 409 re-ask names and prices each row on one route', () => {
   it('the tab read only Krea, Nebula has the xAI key: the re-ask reads via xAI at $0.06', async () => {
     const { rows, sends } = await run(KREA, XAI);
-    expect(rows[0]).toBe('Grok Imagine 2.0 (Krea)|price not listed');
+    expect(rows[0]).toBe('Grok Imagine 2.0 via Krea|price not listed');
     expect(rows[1]).toBe('Grok Imagine 2.0 via xAI|$0.06');
     expect(sends.map((send) => send.outcome)).toEqual(['409', 'started']);
     expect(useUIStore.getState().settingsCache.apiKeys).toEqual(XAI);
@@ -96,15 +100,26 @@ describe('m2stale: the 409 re-ask names and prices each row on one route', () =>
   it('the tab read xAI, Nebula has only Krea: the re-ask reads the Krea copy, price not listed', async () => {
     const { rows, sends } = await run(XAI, KREA);
     expect(rows[0]).toBe('Grok Imagine 2.0 via xAI|$0.06');
-    expect(rows[1]).toBe('Grok Imagine 2.0 (Krea)|price not listed');
+    expect(rows[1]).toBe('Grok Imagine 2.0 via Krea|price not listed');
     expect(sends.map((send) => send.outcome)).toEqual(['409', 'started']);
   });
 
+  it('review 18, L-D: a key read that lands after the limit is ignored, so no route moves under the open dialog', async () => {
+    const { rows, sends, asks } = await run(KREA, XAI, { settingsLateMs: 4300, askOpenMs: 800, maxAsks: 3 });
+    expect(rows[1]).toBe('Grok Imagine 2.0|$0.06');
+    // No "changed while this was open" re-ask for a read that came too late.
+    expect(asks).toHaveLength(2);
+    expect(sends.map((send) => send.outcome)).toEqual(['409', 'started']);
+    expect(useUIStore.getState().settingsCache.apiKeys).toEqual(KREA);
+  }, 15_000);
+
   it('keys that can’t be read: the re-ask keeps Nebula’s numbers, so the yes it sends passes', async () => {
-    // Known residue (round 18 notes): with the keys unreadable, the row is
-    // named by the route the tab last knew.
+    // Review 18, L-D (GM, round 19: "drop only the route"): with the keys
+    // unreadable the row names the model alone, never a route the tab last
+    // knew; the price is still Nebula's (tests/routeNames.round19.test.ts
+    // pins the row builder's side).
     const { rows, sends } = await run(KREA, XAI, { settingsFail: true, maxAsks: 2 });
-    expect(rows[1]).toBe('Grok Imagine 2.0 (Krea)|$0.06');
+    expect(rows[1]).toBe('Grok Imagine 2.0|$0.06');
     expect(sends.map((send) => send.outcome)).toEqual(['409', 'started']);
   });
 });

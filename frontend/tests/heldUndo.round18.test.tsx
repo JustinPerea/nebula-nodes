@@ -43,7 +43,6 @@ import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
 import { TAB_ID } from '../src/lib/tabId';
 import { getProjectContext, setProjectContext } from '../src/lib/projectContext';
 import { DROPPED_UNDO_TEXT } from '../src/lib/deleteNotice';
-import { CONNECTION_LOST_COPY } from '../src/lib/errorCopy';
 
 fake.backend = new FakeNebula();
 const nebula = () => fake.backend;
@@ -359,7 +358,8 @@ describe('round 18 (review 17)', () => {
       fake.override = (path, init) => {
         if (path === '/api/graph/node/n1' && init?.method === 'PUT') {
           const body = JSON.parse(String(init.body)) as { params: Record<string, unknown> };
-          body.params = { ...body.params, value: String(body.params.value).trim() };
+          // Round 19: a write carries only the keys it changed (M-C).
+          if ('value' in body.params) body.params = { ...body.params, value: String(body.params.value).trim() };
           return nebula().apiFetch(path, { ...init, body: JSON.stringify(body) });
         }
         return nebula().apiFetch(path, init);
@@ -390,7 +390,8 @@ describe('round 18 (review 17)', () => {
       expect(store().canSwitchProject()).toBe(true);
       expect(writes()).not.toContain('PUT /api/graph/node/n2');
       await tick(15_000); await settle();
-      expect(lines()).toContain(`Couldn't undo that. ${CONNECTION_LOST_COPY}`);
+      // GM, round 19: "Nothing was undone. Nebula isn't answering. …"
+      expect(lines()).toContain("Nothing was undone. Nebula isn't answering. Make sure it's running, then try again.");
       expect(writes()).toContain('PUT /api/graph/node/n2');
       expect(nebula().valueOf('n2')).toBe('B');
       // Nebula took the undo after all (its echo showed it): the canvas shows Nebula's.

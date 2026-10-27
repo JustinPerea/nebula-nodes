@@ -309,6 +309,8 @@ def _agent_sign(identity: AgentIdentity) -> None:
 
 
 _request_workspace_revision: ContextVar[str | None] = ContextVar("workspace_revision", default=None)
+# The canvas a tab's request was made for (X-Nebula-Canvas-Revision), round 19.
+_request_canvas_revision: ContextVar[str | None] = ContextVar("canvas_revision", default=None)
 _execution_workspace_context: ContextVar[dict[str, Any] | None] = ContextVar("execution_workspace", default=None)
 _synchronous_workspace_runs: set[str] = set()
 _live_graph_load_failed = False
@@ -733,10 +735,31 @@ def _workspace_context() -> dict[str, Any]:
             "paramsVersion": PARAMS_VERSION}
 
 
+CANVAS_OUT_OF_DATE = "This canvas is out of date. Open the current project before editing or running it."
+
+
+def _canvas_revision() -> str:
+    """Which canvas is live in the open project: its id epoch
+    (canvas_undo_book.epoch), new on every clear and every import, when node
+    ids start again at n1 (round 19 of PR #195, review 18 H-A). Opening or
+    making a project moves the workspace revision instead. PR #114's
+    ``_graph_fence`` reads this same epoch for agents' writes, so a Clear is a
+    replacement for both. Every graphSync, GET /api/graph/export and the
+    answers to a clear, an import, an open and a create carry it
+    (``canvasRevision``); a tab sends the one it had when the person acted
+    (``X-Nebula-Canvas-Revision``)."""
+    return str(canvas_undo_book.epoch(_workspace_context()["activeProjectId"]))
+
+
 def _check_workspace_revision(revision: str | None = None) -> None:
     supplied = revision if revision is not None else _request_workspace_revision.get()
     if supplied is not None and supplied != _workspace_context()["workspaceRevision"]:
-        raise HTTPException(status_code=409, detail="This canvas is out of date. Open the current project before editing or running it.")
+        raise HTTPException(status_code=409, detail=CANVAS_OUT_OF_DATE)
+    # A tab's write made for a canvas cleared or replaced since (round 19):
+    # its node ids may name new nodes now.
+    canvas = _request_canvas_revision.get()
+    if canvas is not None and canvas != _canvas_revision():
+        raise HTTPException(status_code=409, detail=CANVAS_OUT_OF_DATE)
 
 
 def _capture_execution_workspace() -> None:
@@ -832,7 +855,17 @@ async def project_workspace_fence(request: Request, call_next):
         "/api/graph", "/api/execute", "/api/cinema", "/api/quick",
     ))
     supplied = request.headers.get("x-nebula-workspace-revision") if guarded else None
+    # Round 19 (review 18, H-B): a canvas tab's graph write always says which
+    # project it was made in. Every tab request carries X-Nebula-Tab (the
+    # canvas's apiFetch) and agents, the CLI and MCP never send one, so the
+    # no-header pass stays theirs only. Without it the tab's write is refused
+    # with the canvas's out-of-date line: a write sent while the tab had no
+    # project (an agent's switch half-followed) never lands in whatever is
+    # open now.
+    if guarded and supplied is None and request.headers.get("x-nebula-tab") is not None:
+        return JSONResponse(status_code=409, content={"detail": CANVAS_OUT_OF_DATE})
     token = _request_workspace_revision.set(supplied)
+    canvas_token = _request_canvas_revision.set(request.headers.get("x-nebula-canvas-revision") if guarded else None)
     execution_token = _execution_workspace_context.set(None)
     try:
         try:
@@ -844,6 +877,7 @@ async def project_workspace_fence(request: Request, call_next):
         return await call_next(request)
     finally:
         _execution_workspace_context.reset(execution_token)
+        _request_canvas_revision.reset(canvas_token)
         _request_workspace_revision.reset(token)
 
 
@@ -887,7 +921,7 @@ app.add_middleware(LocalRequestGuard)
 _DESKTOP_RENDERER_ORIGINS = frozenset({"null", "file://"})
 _DESKTOP_CORS_HEADERS = ", ".join((
     "Content-Type", "Authorization", "X-Nebula-Person", "X-Nebula-Workspace-Revision", "X-Nebula-Proposal-Key",
-    "X-Nebula-Params-Version", "X-Nebula-Tab",
+    "X-Nebula-Params-Version", "X-Nebula-Tab", "X-Nebula-Canvas-Revision",
 ))
 
 
@@ -4786,13 +4820,13 @@ def _custom_node_label(raw: Any, definition_id: str) -> str | None:
 
 
 def _node_label(node_id: str, graph: CLIGraph | None = None) -> str:
-    """A node's name: its label, else its type's name, else its id. ``graph``
-    is a staged copy (a proposal's), else the live canvas."""
+    """A node's name: its own label, else its canvas title (review 18 M-D:
+    agents, the cursor and the Agent log name it as the canvas does,
+    node_route.node_name), else its type, else its id. ``graph`` is a staged
+    copy (a proposal's), else the live canvas."""
     node = (graph or cli_graph).nodes.get(node_id) or {}
-    if isinstance(node.get("label"), str) and node["label"]:
-        return node["label"]
     definition = node_registry.get_all().get(str(node.get("definitionId", "")), {})
-    return str(definition.get("displayName") or node.get("definitionId") or node_id)
+    return node_route.node_name(definition, node.get("label"), str(node.get("definitionId") or node_id))
 
 
 def _run_node_name(node_id: str, run_nodes: Mapping[str, GraphNode]) -> str:
@@ -4806,16 +4840,14 @@ def _run_node_name(node_id: str, run_nodes: Mapping[str, GraphNode]) -> str:
         node = run_nodes.get(node_id)
         if node is None:
             return node_id
+        definition = node_registry.get_all().get(node.definition_id) or {}
         own = getattr(node, "label", None)
         if isinstance(own, str) and own.strip():
-            return own
+            return node_route.node_name(definition, own, node_id)
         live = cli_graph.nodes.get(node_id)
         if isinstance(live, dict) and live.get("definitionId") == node.definition_id:
-            canvas_label = live.get("label")
-            if isinstance(canvas_label, str) and canvas_label.strip():
-                return canvas_label
-        definition = node_registry.get_all().get(node.definition_id) or {}
-        return str(definition.get("displayName") or node_id)
+            return node_route.node_name(definition, live.get("label"), node_id)
+        return node_route.node_name(definition, None, node_id)
     except Exception:  # noqa: BLE001 - a name in a refusal must never turn it into a 500
         return node_id
 
@@ -6538,7 +6570,7 @@ def _not_ready_nodes(
         need = node_readiness.instance_missing(definition, node.get("params") or {}, keys, krea_signed_in,
                                                definitions, wired.get(node_id, {}))
         if need:
-            name = str(node.get("label") or definition.get("displayName") or definition.get("id"))
+            name = node_route.node_name(definition, node.get("label"), str(definition.get("id")))
             rows.append({
                 "ref": ref_for.get(node_id, node_id),
                 "nodeId": None if node_id in ref_for else node_id,
@@ -10446,7 +10478,7 @@ def _run_model_name(node: GraphNode) -> str:
         value = params.get(spec["key"], spec.get("default"))
         if isinstance(value, str) and value.strip():
             return value.strip()[:80]
-    return f"“{str(definition.get('displayName') or node.definition_id)[:78]}”"
+    return f"“{node_route.node_name(definition, None, node.definition_id)[:78]}”"
 
 
 def _start_agent_run(run_id: str, nodes: list[GraphNode], edges: list[GraphEdge]) -> None:
@@ -11852,9 +11884,11 @@ async def clear_graph(force: bool = False) -> dict:
         run_approvals.clear()
         # Ids start again at n1: no node now is one a restore brought back.
         node_removals.forget_project(_workspace_context()["activeProjectId"])
+        # With the clear, before any await: a tab's write made for the old
+        # canvas is refused from now on (_canvas_revision, round 19).
+        _forget_canvas_undo("the canvas was cleared since")
     agent_presence.forget_graph()
     await _forget_status_anchors()
-    _forget_canvas_undo("the canvas was cleared since")
     await _broadcast_graph_sync(edit=True)
     publish_action("Cleared the canvas")
     _journal("canvas.cleared", summary="cleared the canvas")
@@ -11865,7 +11899,7 @@ async def clear_graph(force: bool = False) -> dict:
     await _journal_detached_pins(detached, "the canvas was cleared")
     await _announce_closed_proposals(canvas_proposals.invalidate_all("the canvas was cleared"))
     asset_proposals.drop_removal_tags("the canvas was cleared")
-    return {"status": "cleared"}
+    return {"status": "cleared", "canvasRevision": _canvas_revision()}
 
 
 @app.delete("/api/provider-recoveries/{run_id}/{node_id}")
@@ -12804,7 +12838,7 @@ async def _restore_graph(
             )
     for node_id, (was, now) in renamed.items():
         definition_id = str((cli_graph.nodes.get(node_id) or {}).get("definitionId") or "")
-        display = (node_registry.get(definition_id) or {}).get("displayName", definition_id)
+        display = node_route.node_name(node_registry.get(definition_id), None, definition_id)
         _journal(
             "node.renamed",
             node_id=node_id,
@@ -13711,6 +13745,7 @@ async def import_graph(body: dict[str, Any]) -> dict:
     )
     return {
         "status": "imported",
+        "canvasRevision": _canvas_revision(),
         "idMap": id_map,
         "nodeCount": len(cli_graph.nodes),
         "edgeCount": len(cli_graph.edges),
@@ -13991,7 +14026,7 @@ def _migrate_rf_graph(nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) 
             continue
         original = by_id.get(item["id"])
         definition_id = str(item["definitionId"])
-        label = item.get("label") or (node_registry.get(definition_id) or {}).get("displayName") or definition_id
+        label = node_route.node_name(node_registry.get(definition_id), item.get("label"), definition_id)
         if original is not None:
             data = {**original["data"], "definitionId": definition_id, "params": item["params"], "label": label}
             if "outputs" in item:
@@ -14130,8 +14165,8 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
         if staged_node["definitionId"] != definition_id:
             # Migrated from a retired definition: the canvas shows the replacement.
             result["nodes"][index]["data"]["definitionId"] = staged_node["definitionId"]
-            result["nodes"][index]["data"]["label"] = staged_node.get("label") or (
-                node_registry.get(staged_node["definitionId"]) or {}).get("displayName")
+            result["nodes"][index]["data"]["label"] = node_route.node_name(
+                node_registry.get(staged_node["definitionId"]), staged_node.get("label"))
         result["nodes"][index]["data"]["params"] = copy.deepcopy(staged_node["params"])
         result["nodes"][index]["data"]["outputs"] = _rewrite_output_paths(staged_node["outputs"])
         if match := re.fullmatch(r"n(\d+)", node_id):
@@ -14498,8 +14533,7 @@ async def get_project_size(project_id: str) -> dict[str, Any]:
                     **({"count": row["count"]} if "count" in row else {}),
                     "bytes": row["bytes"], "size": project_size.row_size(row["bytes"])}
         definition_id = str(row.get("definitionId") or "")
-        model = (all_defs.get(definition_id) or {}).get("displayName") or definition_id
-        label = row.get("label") if isinstance(row.get("label"), str) and row["label"].strip() else model
+        label = node_route.node_name(all_defs.get(definition_id), row.get("label"), definition_id)
         return {"kind": "node", "nodeId": row["nodeId"], "name": label, "definitionId": definition_id,
                 "part": project_size.PART_LABELS[row["part"]], "bytes": row["bytes"],
                 "size": project_size.row_size(row["bytes"])}
@@ -14718,7 +14752,8 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
     await _broadcast_projects_changed("created", project["id"])
     _journal_project_change("project.created", project)
     # A bundle built for another version doesn't load it (projectStore.ts activate).
-    return {"project": public_project(project), "workspaceRevision": revision, "paramsVersion": PARAMS_VERSION}
+    return {"project": public_project(project), "workspaceRevision": revision, "canvasRevision": _canvas_revision(),
+            "paramsVersion": PARAMS_VERSION}
 
 
 async def _open_ingress_verdict_off_loop(project_id: str, body: dict[str, Any]) -> _IngressVerdict | None:
@@ -14803,7 +14838,8 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
     # What opening changed that the person should know (a folded Krea node's
     # dropped job-output connections); the snapshot is saved migrated, so
     # this is said once.
-    return {"project": public_project(project), "workspaceRevision": revision, "warnings": warnings,
+    return {"project": public_project(project), "workspaceRevision": revision, "canvasRevision": _canvas_revision(),
+            "warnings": warnings,
             "paramsVersion": PARAMS_VERSION}
 
 
@@ -15225,7 +15261,8 @@ async def export_graph_for_frontend() -> dict:
     # rewritten. Idempotent — does no work when no migration is needed.
     _normalize_cli_graph_output_refs()
     state = cli_graph.get_state()
-    workspace = _workspace_context()
+    # Which canvas this is too (round 19): a tab sends it back on its writes.
+    workspace = {**_workspace_context(), "canvasRevision": _canvas_revision()}
     # The open project's nodes' last errors (ids restart in each project).
     node_errors.use_project(workspace["activeProjectId"])
     if not state["nodes"]:

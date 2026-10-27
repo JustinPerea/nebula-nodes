@@ -1,4 +1,5 @@
 import { apiFetch } from './backend';
+import { adoptCanvasRevisionFrom } from './projectContext';
 import { CLEAR_FAILED_TEXT, CLEAR_REFUSED_TEXT, type ChatClearOutcome } from './failureLines';
 import { useGraphStore } from '../store/graphStore';
 
@@ -30,6 +31,8 @@ export async function clearCanvasFromChat(): Promise<ChatClearOutcome> {
   try {
     const response = await apiFetch('/api/graph?force=true', { method: 'DELETE' });
     if (response.ok) {
+      // The canvas Nebula holds now (round 19): writes to it carry it.
+      await adoptCanvasRevisionFrom(response);
       useGraphStore.getState().clearBackendNodes({ undoStep });
       return 'cleared';
     }

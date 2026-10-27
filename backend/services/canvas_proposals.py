@@ -1042,6 +1042,8 @@ class ProposalBook:
 
     # -- what agents and the canvas see (never the accept key) ---------------
     def view(self, proposal: Proposal, *, registry: Any) -> dict[str, Any]:
+        from services import node_route
+
         definitions = registry.get_all() if registry is not None else {}
         spec = proposal.spec
         node_costs = {entry.get("ref"): entry for entry in proposal.cost.get("nodes", [])}
@@ -1053,8 +1055,9 @@ class ProposalBook:
             nodes.append({
                 "ref": node.ref,
                 "definitionId": node.definition_id,
-                # The name the proposal gives it (accepting applies it), else the model's.
-                "name": names.get(node.ref) or model,
+                # The name the proposal gives it (accepting applies it), else
+                # its canvas title (review 18 M-D).
+                "name": names.get(node.ref) or node_route.node_name(definition, None, node.definition_id),
                 **({"model": model} if names.get(node.ref) else {}),
                 "category": str(definition.get("category") or ""),
                 "params": safe_value(node.params, key="params"),

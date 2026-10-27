@@ -23,6 +23,7 @@ import atexit
 import os
 import shutil
 import tempfile
+from collections.abc import Mapping
 from pathlib import Path
 
 _TEST_ROOT = Path(tempfile.mkdtemp(prefix="nebula-test-"))
@@ -163,6 +164,34 @@ CANVAS_PARAMS_VERSION = {"X-Nebula-Params-Version": str(PARAMS_VERSION)}
 PERSON = {"Origin": "http://localhost:5173", "X-Nebula-Person": PERSON_TOKEN, **CANVAS_PARAMS_VERSION}
 FORGED_ORIGIN = {"Origin": "http://localhost:5173", **CANVAS_PARAMS_VERSION}
 PERSON_HELLO = {"type": "hello", "personToken": PERSON_TOKEN}
+
+
+class TabHeaders(Mapping):
+    """What a canvas tab sends on a graph write: ``base`` (PERSON and
+    X-Nebula-Tab) plus the open workspace's revision, read when the request
+    is made. Round 19 of PR #195: Nebula refuses a tab's write on /api/graph,
+    /api/execute, /api/cinema and /api/quick that carries no revision, as the
+    canvas's apiFetch always sends one while a project is open."""
+
+    def __init__(self, base: Mapping[str, str]) -> None:
+        self._base = dict(base)
+
+    def _live(self) -> dict[str, str]:
+        # A tab says its params version on every request, beside the revision.
+        live = {**CANVAS_PARAMS_VERSION, **self._base}
+        if "X-Nebula-Workspace-Revision" in live:
+            return live
+        import main
+        return {**live, "X-Nebula-Workspace-Revision": main.project_store.workspace()["workspaceRevision"]}
+
+    def __getitem__(self, key: str) -> str:
+        return self._live()[key]
+
+    def __iter__(self):
+        return iter(self._live())
+
+    def __len__(self) -> int:
+        return len(self._live())
 
 
 class PersonFixture:

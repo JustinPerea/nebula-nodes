@@ -278,7 +278,7 @@ describe("L-4, M2 and GM (a): a 409 re-ask after a route change prices each row 
     expect(askMock).toHaveBeenCalledTimes(3);
     const third = askMock.mock.calls[2][0] as PlaceholderRunConfirm;
     // Review 16, M2: "$0.07" here was the 409's price for the xAI route.
-    expect(third.rows.find((row) => row.nodeId === 'n2')?.model).toContain('Grok Imagine 2.0 (Krea)');
+    expect(third.rows.find((row) => row.nodeId === 'n2')?.model).toContain('Grok Imagine 2.0 via Krea');
     expect(third.rows.find((row) => row.nodeId === 'n2')?.price).toBe('price not listed');
     // Nothing in it has a list price: the yes confirms $0, as any unpriced run's does.
     expect(third.confirmCost).toBe(0);

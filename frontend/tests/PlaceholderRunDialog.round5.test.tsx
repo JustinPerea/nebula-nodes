@@ -82,6 +82,26 @@ describe('a price that changes while the dialog is open', () => {
     expect(answers).toEqual([true]);
   });
 
+  // GM - Design, round 19 (verbatim): "focus moves to Cancel ONLY when the
+  // run button's price changes in place. Every other in-place update keeps
+  // focus where it was. The "changed while this was open" line is announced
+  // via aria-live."
+  it('a change that leaves the run button\'s price alone keeps focus where it was, and is announced', () => {
+    const { rerender } = render(<PlaceholderRunDialog model={model('$0.03', '$0.03')} onDone={() => {}} />);
+    const run = document.querySelector<HTMLButtonElement>('.prompt-dialog__confirm')!;
+    act(() => { run.focus(); });
+    // The row's price moves but the button still reads "Run for $0.03".
+    rerender(<PlaceholderRunDialog model={model('$0.02', '$0.03')} onDone={() => {}} />);
+    expect(run.textContent).toBe('Run for $0.03');
+    expect(document.activeElement).toBe(run);
+    expect(document.querySelector('[aria-live="polite"]')!.textContent?.trim())
+      .toBe('“Hero still” changed while this was open.');
+    // The confirmed amount behind the button moves, its words don't: focus stays.
+    rerender(<PlaceholderRunDialog model={{ ...model('$0.01', '$0.03'), confirmCost: 0.04 }} onDone={() => {}} />);
+    expect(run.textContent).toBe('Run for $0.03');
+    expect(document.activeElement).toBe(run);
+  });
+
   it('the same words again hold nothing back', () => {
     const answers: boolean[] = [];
     const { rerender } = render(<PlaceholderRunDialog model={model('$0.03', '$0.03')} onDone={(ok) => answers.push(ok)} />);

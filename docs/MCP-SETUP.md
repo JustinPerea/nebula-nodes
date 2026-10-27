@@ -152,10 +152,13 @@ The server exposes these tools for building and running (see
   (`propose_change`) takes the same nodes, connections and params, but not moves,
   removals, unwires, `arrange`, `steps` or renames of nodes already on the
   canvas; it can name its own new nodes (`rename`). An unnamed node whose
-  provider depends on the person's keys shows its model without the
-  gateway on the person's card ("Grok Imagine 2.0" for a "Grok Imagine 2.0
-  (Krea)" node); the catalog, search and your reads keep the full name, and
-  renaming a node to either form leaves it unnamed.
+  provider depends on the person's keys goes by its model without the
+  gateway ("Grok Imagine 2.0" for a "Grok Imagine 2.0 (Krea)" node), on the
+  person's card and everywhere Nebula names a node to you: `look_at_canvas`
+  and `get_project` `name`, `edit_canvas`'s `added[].name`, proposals, run
+  refusals, the cursor's bubble and the Agent log. The catalog and search
+  (`find_nodes`, `describe_node`) keep the full name, and renaming a node to
+  either form leaves it unnamed.
 - `upload_file`: adds a local image, video, audio file or document to
   Nebula (`nebula upload <file>`): Nebula copies it into its output folder
   through `POST /api/uploads` and puts an Image Input, Video Input,
@@ -945,6 +948,45 @@ themselves follow the same rule through `loads_checked`: the `/ws` and
 accept and reject bodies, and `graph.json` in a restore bundle (400 "Invalid
 graph.json: ...").
 
+### Canvas writes: the project and the canvas they were made for
+
+The person's canvas tab sends two headers with every write to
+`/api/graph…`, `/api/execute…`, `/api/cinema…` and `/api/quick…`:
+`X-Nebula-Workspace-Revision` (the project it holds open) and
+`X-Nebula-Canvas-Revision` (which canvas of that project: a new one after
+every clear and every graph load or import). Nebula refuses the write with
+409 `{"detail": "This canvas is out of date. Open the current project before
+editing or running it."}` when either names something other than what is
+open now, so an edit made for one canvas never lands on the nodes of the
+next (node ids start again at n1 after a clear or a load).
+
+Since round 19 a write that carries `X-Nebula-Tab` (only the canvas sends
+it) must also carry `X-Nebula-Workspace-Revision`; without it, the same 409.
+A tab that has let go of its project (it is following an agent's switch)
+can't write into whatever is open next. Agents, the CLI, MCP and scripts
+send none of these headers and are unchanged: their writes go to the canvas
+open when they land. A script that sends `X-Nebula-Tab` is treated as a
+canvas tab.
+
+`/api/projects/…` isn't fenced this way. A project save names its project
+by id (`PUT /api/projects/{id}` with the workspace revision in its body),
+so when an agent's `open_project` or `new_project` switches away, the
+person's canvas still saves its last edits into the project it left (the
+handoff), including typing it hadn't sent yet.
+
+The canvas revision is in every graphSync (`canvasRevision`), in
+`GET /api/graph/export`, and in the answers of `DELETE /api/graph`,
+`POST /api/graph/import`, and opening or making a project. It is the same
+per-project counter undo restores use: a restore made for a canvas a clear
+or an import replaced is refused.
+
+Param writes merge per key. `PUT /api/graph/node/{id}` with `{"params":
+{...}}` changes only the keys sent; a key not sent keeps its value, whoever
+set it. The canvas sends only the keys the person changed, so your edit to
+another setting of the same node is never written back over. Two writers
+setting the same key: the later write wins. (One exception: an agent that
+changes a universal node's model sets the node's params for that model.)
+
 ### Pins
 
 The person can pin a short note to a node or to a spot on the canvas for
@@ -1139,7 +1181,9 @@ the `propose_change` arguments:
 ```
 
 A named node's entry in the proposal has `name` (the given name) and
-`model` (the model's own name); an unnamed one has only `name`, the model's.
+`model` (the model's own name); an unnamed one has only `name`, the name its
+card will show (the model's, without the gateway for a node whose provider
+depends on the keys).
 
 `--wait` exits 0 when accepted (printing the new ids and what the canvas will
 run), 3 when rejected (with the person's reason, if any), 4 when withdrawn,
@@ -1152,9 +1196,13 @@ provider its run would go through with the keys set (`provider`, and
 on its maker's API with the person's key names the maker (Grok Imagine 2.0
 on an xAI key: `xai`, priced at xAI's price, never Krea's; its `label` is
 "paid · Grok Imagine 2.0 via xAI"), and a connection into a Krea-only input
-(Grok's style images) keeps it on `krea` ("paid · krea"); the person's
-confirm rows name the same route ("Grok Imagine 2.0 via xAI · $0.06"; a row
-on Krea's own gateway keeps the card's name, "Grok Imagine 2.0 (Krea)"). If
+(Grok's style images) keeps it on `krea`, named the same way ("paid · Grok
+Imagine 2.0 via Krea"); the person's confirm rows name the same route
+("Grok Imagine 2.0 via xAI · $0.06", "“Alt still” · Grok Imagine 2.0 via
+Krea · price not listed"). When the canvas can't read the person's keys in
+time, a row leaves the route out rather than name one that may be old
+("“Grok Imagine 2.0” · $0.06", "“Alt still” · Grok Imagine 2.0 · $0.06"); the
+price is still Nebula's. If
 a route or price has moved by the time the person says yes, the confirm asks
 again and says which node moved, named as its row reads now ("“Alt still”
 changed while this was open."; two or three by name, "4 nodes changed while

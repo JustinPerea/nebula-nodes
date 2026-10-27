@@ -857,19 +857,21 @@ export function providerLabel(provider: string | null | undefined): string {
  * card uses for that route ("xAI · 6s": providerLabel). GM - Design, round
  * 16 (b), verbatim: "when the dialog builds the label, no parens: "Grok
  * Imagine 2.0 via xAI", "GPT Image 2.5 Flare via OpenAI"". On the gateway
- * itself, or a name that names no provider, it is the display name (the
- * card's own). A proposal's cost names the same route to agents (backend
+ * itself it names the gateway the same way ("Grok Imagine 2.0 via Krea": round
+ * 19, review 18 L-A) when the route depends on keys; else, or for a name that
+ * names no provider, it is the display name (the card's own). A proposal's cost names the same route to agents (backend
  * services/canvas_proposals.py cost_for; node_route.name_on_route).
  */
-export function nameOnRoute(definition: Pick<ModelNodeDefinition, 'displayName' | 'apiProvider'>,
+export function nameOnRoute(definition: RoutedDefinition & Pick<ModelNodeDefinition, 'displayName'>,
   provider: string | null | undefined): string {
-  const name = definition.displayName;
-  if (!provider || provider === definition.apiProvider) return name;
-  const own = /^(.*\S)\s+\(([^()]+)\)$/.exec(name);
-  if (!own) return name;
-  const said = own[2].trim().toLowerCase();
-  const gateway = [definition.apiProvider, providerLabel(definition.apiProvider)].map((word) => String(word).toLowerCase());
-  return gateway.includes(said) ? `${own[1]} via ${providerLabel(provider)}` : name;
+  const stripped = gatewayStripped(definition);
+  if (!stripped) return definition.displayName;
+  // Review 18, L-A (GM - Design, round 19): a node whose route depends on the
+  // keys names the route on the gateway too ("Grok Imagine 2.0 via Krea"),
+  // never "Grok Imagine 2.0 (Krea)"; with no route, the gateway is the route.
+  if (routeDependsOnKeys(definition)) return `${stripped} via ${providerLabel(provider || definition.apiProvider)}`;
+  if (!provider || provider === definition.apiProvider) return definition.displayName;
+  return `${stripped} via ${providerLabel(provider)}`;
 }
 
 /** The model part of a display name that ends by naming its own gateway

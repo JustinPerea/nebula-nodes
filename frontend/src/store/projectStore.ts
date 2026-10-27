@@ -19,6 +19,7 @@ import { clearPersistedRunHistory, loadRunHistory } from '../lib/runHistory';
 import * as api from '../lib/projects';
 import { wsClient } from '../lib/wsClient';
 import type { ProjectSwitch } from '../lib/wsClient';
+import type { CutOffSave } from '../lib/savingCutOff';
 import { isOwnEcho, type EditOrigin } from '../lib/canvasUndo';
 import { TAB_ID } from '../lib/tabId';
 import { holdCommonsExits, holdProjects, refuseWhileCommonsUnsaved } from '../lib/commonsUnsaved';
@@ -425,11 +426,11 @@ function clearSavePause(): void {
 
 /** `heading` names the action that loads it, for the busy line. */
 function applyProject(project: SavedProject, revision: string, bootstrap = false,
-  heading = "Couldn't load the project."): void {
+  heading = "Couldn't load the project.", canvas?: string): void {
   applying = true;
   const previous = getProjectContext();
   try {
-    setProjectContext({ id: project.id, revision });
+    setProjectContext({ id: project.id, revision, ...(canvas !== undefined ? { canvas } : {}) });
     canvasParamsVersion = GRAPH_PARAMS_VERSION;
     const snapshot = rewriteBackendAssetUrls(project.snapshot);
     if (!useGraphStore.getState().loadProjectGraph(snapshot.nodes, snapshot.edges, snapshot.runHistory, { bootstrap })) {
@@ -932,13 +933,25 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
   const offered: ProjectRetry = retry.action === 'create' && then ? { ...retry, then } : retry;
   const held = worldLabsHold(heading);
   if (held) { showError(held, offered); return false; }
-  if (!useGraphStore.getState().canSwitchProject()) {
+  // Graph writes on their way don't hold it: they're waited for below.
+  if (!useGraphStore.getState().canSwitchProject({ exceptSaves: true })) {
     showError(runStillGoing(heading), offered);
     return false;
   }
   useProjectStore.setState({ busy: true, error: null, errorRetry: null, editsSavedAs: null });
   let reserved = false;
+  // Round 19 (GM): new graph writes wait from here; those on their way go
+  // first, 15 s at most, with "Saving…" on the project bar. One that failed
+  // or didn't land in time doesn't hold the switch: the new canvas says it.
+  const leaving = state.activeProject?.name ?? null;
+  let draining = false;
+  let cutOff: CutOffSave[] = [];
   try {
+    if (getProjectContext()) {
+      draining = true;
+      useProjectStore.setState({ saveStatus: 'saving' });
+      cutOff = await useGraphStore.getState().drainGraphWrites('switch');
+    }
     // The outgoing snapshot must be durable before the backend can replace it.
     await useProjectStore.getState().flush();
     // Saving is paused with edits the backend would refuse (Q118): they go to
@@ -954,7 +967,7 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
     }
     const heldNow = worldLabsHold(heading);
     if (heldNow) throw heldNow;
-    if (!useGraphStore.getState().canSwitchProject()) {
+    if (!useGraphStore.getState().canSwitchProject({ exceptSaves: true })) {
       throw runStillGoing(heading);
     }
     reserved = useGraphStore.getState().reserveGraphImport();
@@ -969,7 +982,11 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
       void handleParamsVersionChange(backendVersion);
       return false;
     }
-    applyProject(result.project, result.workspaceRevision, false, heading);
+    applyProject(result.project, result.workspaceRevision, false, heading, result.canvasRevision);
+    if (draining) {
+      draining = false;
+      useGraphStore.getState().finishCanvasReplacement({ kind: 'switch', project: leaving ?? '', cutOff, show: leaving !== null });
+    }
     updateSummary(result.project);
     useProjectStore.setState({ screen: 'workspace' });
     // A canvas notice, not a window.alert (round 3f).
@@ -996,6 +1013,8 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
   }
   finally {
     if (reserved) useGraphStore.getState().releaseGraphImport();
+    // Not switched: the writes that waited go to the project still open.
+    if (draining) useGraphStore.getState().finishCanvasReplacement(null);
     useProjectStore.setState({ busy: false });
     markDirty(true);
   }
@@ -1106,7 +1125,7 @@ async function loadWorkspace(): Promise<void> {
       // Try again sits beside the line and reloads the projects (WRAP).
       throw new FailureNotice(LOAD_HEADING, 'The active project changed while loading.');
     }
-    applyProject(project, list.workspaceRevision, true);
+    applyProject(project, list.workspaceRevision, true, undefined, graph.canvasRevision);
     useGraphStore.getState().hydrateProviderRecoveries(graph.providerRecoveries ?? []);
     useGraphStore.getState().hydrateProviderStartAmbiguities(graph.providerStartAmbiguities ?? []);
     if (graph.executionStatuses) useGraphStore.getState().hydrateExecutionStatuses(graph.executionStatuses);
@@ -1168,10 +1187,17 @@ function switchedAwayFrom(notice: ProjectSwitch | undefined, context: { id: stri
  * new_project and open_project say the person's canvas follows), and says
  * who switched it. */
 async function followProjectSwitch(notice: ProjectSwitch, context: { id: string; revision: string } | null,
-  snapshot: ProjectSnapshot | null, unsaved: boolean): Promise<void> {
+  snapshot: ProjectSnapshot | null, unsaved: boolean, cutOff: CutOffSave[] = []): Promise<void> {
+  // Round 19 (N1, N2): no graph write goes out from here until the new
+  // canvas is loaded (the caller has already stopped them when it captured
+  // the snapshot; a tab with no project open stops them here).
+  if (!context) useGraphStore.getState().beginAgentSwitch();
   cancelPendingSaves();
   // Nothing else may save under the old project from here on.
   setProjectContext(null);
+  const agent = notice.actor?.kind === 'agent' && typeof notice.actor.name === 'string' ? notice.actor.name : null;
+  let handoffFailed = false;
+  let followed = false;
   // The held edits' screen already up (the person's own switch, say) keeps
   // its cause: this switch adds no agent line to it.
   const alreadyHeld = Boolean(useProjectStore.getState().unsavedEdits);
@@ -1189,8 +1215,11 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
     }
     if (unsaved && context && snapshot) {
       try {
+        // The handoff: by the project's id, never the live canvas (Nebula
+        // has already switched it), so no canvas header and no fence.
         await api.saveProject(context.id, snapshot, context.revision);
       } catch {
+        handoffFailed = true;
         pendingRecovery = pendingRecoveryOf(context.id, snapshot);
         await recoverPendingWork();
         keptCopy = true;
@@ -1198,9 +1227,13 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
     }
     lastSaved = '';
     await loadWorkspace();
+    // GM (round 19): the line only when the handoff failed, naming who switched.
+    followed = true;
+    useGraphStore.getState().finishCanvasReplacement({ kind: 'agent', agent, project: notice.previousProjectName ?? '',
+      cutOff, show: handoffFailed && typeof notice.previousProjectName === 'string' });
     // Loaded unless the backend is on another params version (that reloads).
     if (getProjectContext()) useProjectStore.setState({ screen: 'workspace' });
-    const actor = notice.actor?.kind === 'agent' && typeof notice.actor.name === 'string' ? notice.actor.name : null;
+    const actor = agent;
     // An agent that reopened the project this tab was showing reloaded it
     // from what was saved: there's no other project to go back to.
     const reopened = notice.previousProjectId === notice.projectId;
@@ -1219,6 +1252,7 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
     useProjectStore.setState({ screen: 'home', initialized: false, dirty: Boolean(pendingRecovery),
       error: line, errorDetails: detailsFor(line, error), errorRetry: { action: 'load' } });
   } finally {
+    if (!followed) useGraphStore.getState().finishCanvasReplacement(null);
     useProjectStore.setState({ busy: false });
   }
 }
@@ -1647,6 +1681,8 @@ export function subscribeProjectAutosave(): () => void {
     else if (moved || state.createSessionId !== previous.createSessionId) noteChange();
   });
   const drafts = useCreateDraftStore.subscribe(() => markDirty());
+  // GM's line after an import names the project open then.
+  useGraphStore.getState().setCanvasProjectName(() => useProjectStore.getState().activeProject?.name ?? null);
   // First, so it sees the canvas before the graph store swaps in the new graph.
   const socket = wsClient.subscribeFirst((event) => {
     if (event.type === 'projectsChanged') {
@@ -1697,13 +1733,20 @@ export function subscribeProjectAutosave(): () => void {
       applyingSync(event as { edit?: EditOrigin; arranged?: unknown });
       return;
     }
-    const snapshot = captureProjectSnapshot();
-    const unsaved = JSON.stringify(snapshot) !== lastSaved;
     // An agent or script opened or made a project: follow it, with a way back.
     if (switchedAwayFrom(event.projectSwitch, context)) {
-      void followProjectSwitch(event.projectSwitch, context, snapshot, unsaved);
+      // Round 19: graph writes stop now; an undo on its way is taken back
+      // first, so the snapshot is what the person sees. The handoff carries
+      // every value typed that Nebula may not have, even when the autosave
+      // already saved that canvas (Nebula's switch saved its own, without it).
+      const stopped = useGraphStore.getState().beginAgentSwitch();
+      const snapshot = captureProjectSnapshot();
+      const unsaved = JSON.stringify(snapshot) !== lastSaved || stopped.force;
+      void followProjectSwitch(event.projectSwitch, context, snapshot, unsaved, stopped.cutOff);
       return;
     }
+    const snapshot = captureProjectSnapshot();
+    const unsaved = JSON.stringify(snapshot) !== lastSaved;
     // On Projects with everything saved there is nothing to protect: let go
     // of the project still loaded from before (another window opened another
     // one, or it was deleted) instead of stopping the screen with a conflict.

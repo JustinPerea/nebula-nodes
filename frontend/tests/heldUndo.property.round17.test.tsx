@@ -18,11 +18,26 @@ import { FakeNebula, canvasNode, textFakeNode } from './helpers/undoFakeBackend'
 // end; an agent's or another window's add is a step the person can undo.
 // Seeds: UNDO_PROPERTY_FOREIGN_SEEDS (default 60), from
 // UNDO_PROPERTY_FOREIGN_FIRST (default 1).
+// Review 18 (round 19): the refusal variant refuses 30% of node DELETEs at
+// random (409, on its way like any answer), so a failed delete's put-back
+// meets every other write in flight (M-A: typing that waited behind an undo;
+// M-B: a wire made while the delete was out). Seeds:
+// UNDO_PROPERTY_REFUSE_SEEDS (default 30), from UNDO_PROPERTY_REFUSE_FIRST
+// (default 1); UNDO_PROPERTY_SKIP_REFUSE=1 / UNDO_PROPERTY_ONLY_REFUSE=1.
 
-const fake = vi.hoisted(() => ({ backend: null as unknown as FakeNebula }));
+const fake = vi.hoisted(() => ({ backend: null as unknown as FakeNebula, refuseDelete: null as null | (() => boolean) }));
 vi.mock('../src/lib/backend', async (importOriginal) => ({
   ...await importOriginal<typeof import('../src/lib/backend')>(),
-  apiFetch: (path: string, init?: RequestInit) => fake.backend.apiFetch(path, init),
+  apiFetch: (path: string, init?: RequestInit) => {
+    // The refusal variant: Nebula refuses this node's delete (it is running).
+    if (init?.method === 'DELETE' && /^\/api\/graph\/node\/n\d+$/.test(path) && fake.refuseDelete?.()) {
+      fake.backend.calls.push({ path, method: 'DELETE' });
+      fake.backend.request += 1;
+      return fake.backend.later(`refused delete ${path}`,
+        () => new Response(JSON.stringify({ detail: 'It is still running.' }), { status: 409 }));
+    }
+    return fake.backend.apiFetch(path, init);
+  },
   getCachedBackendBaseUrl: () => null,
 }));
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn(), disconnect: vi.fn(), send: vi.fn() } }));
@@ -83,8 +98,12 @@ const noticeIds = () => `${store().undoNotice?.id ?? '-'}/${store().messageNotic
 
 interface Failure { seed: number; step: number; what: string; log: string[]; calls: string[] }
 
-async function runSeed(seed: number, foreign = false): Promise<Failure | null> {
-  const failure = await runSeedInner(seed, foreign);
+type Variant = 'plain' | 'foreign' | 'refuse';
+
+async function runSeed(seed: number, variant: Variant = 'plain'): Promise<Failure | null> {
+  const refuser = rng(seed + 7_000_000);
+  fake.refuseDelete = variant === 'refuse' ? () => refuser() < 0.3 : null;
+  const failure = await runSeedInner(seed, variant === 'foreign');
   if (failure) failure.calls = nebula().calls.filter((call) => call.method !== 'GET').map((call) => `${call.method} ${call.path} ${call.body ?? ''}`.slice(0, 300));
   return failure;
 }
@@ -323,14 +342,18 @@ describe('round 17 (review 16, H1): random sequences of edits, undos and echoes'
     return chunks.map((seeds) => [`${seeds[0]}-${seeds[seeds.length - 1]}`, seeds] as const);
   };
   const ONLY_FOREIGN = process.env.UNDO_PROPERTY_ONLY_FOREIGN === '1';
-  const plain = ONLY_FOREIGN ? [] : chunksOf(FIRST, SEEDS);
-  const foreign = process.env.UNDO_PROPERTY_SKIP_FOREIGN === '1' ? []
+  const ONLY_REFUSE = process.env.UNDO_PROPERTY_ONLY_REFUSE === '1';
+  const plain = ONLY_FOREIGN || ONLY_REFUSE ? [] : chunksOf(FIRST, SEEDS);
+  const foreign = process.env.UNDO_PROPERTY_SKIP_FOREIGN === '1' || ONLY_REFUSE ? []
     : chunksOf(Number(process.env.UNDO_PROPERTY_FOREIGN_FIRST ?? 1), Number(process.env.UNDO_PROPERTY_FOREIGN_SEEDS ?? 60));
-  it.each([...plain.map(([range, seeds]) => [range, seeds, false] as const),
-    ...foreign.map(([range, seeds]) => [`${range}, others adding nodes`, seeds, true] as const)])('seeds %s', async (_range, seeds, withForeign) => {
+  const refuse = process.env.UNDO_PROPERTY_SKIP_REFUSE === '1' || ONLY_FOREIGN ? []
+    : chunksOf(Number(process.env.UNDO_PROPERTY_REFUSE_FIRST ?? 1), Number(process.env.UNDO_PROPERTY_REFUSE_SEEDS ?? 30));
+  it.each([...plain.map(([range, seeds]) => [range, seeds, 'plain'] as const),
+    ...foreign.map(([range, seeds]) => [`${range}, others adding nodes`, seeds, 'foreign'] as const),
+    ...refuse.map(([range, seeds]) => [`${range}, 30% of deletes refused`, seeds, 'refuse'] as const)])('seeds %s', async (_range, seeds, variant) => {
     const failures: Failure[] = [];
     for (const seed of seeds) {
-      const failure = await runSeed(seed, withForeign);
+      const failure = await runSeed(seed, variant);
       if (failure) failures.push(failure);
       await tick(20_000);
     }

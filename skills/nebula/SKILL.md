@@ -140,6 +140,19 @@ step's token, newest first. Only your own `nebula apply` edits have tokens.
 Single edits also exist: `nebula create`, `connect`, `set`, `rename`, `move`,
 `delete`, `disconnect`.
 
+An unnamed node goes by its card's title everywhere Nebula names it to you
+(`nebula look`, `apply`'s output, proposals, run refusals): for a node whose
+provider depends on the keys, the model without the gateway ("Grok Imagine
+2.0", not "Grok Imagine 2.0 (Krea)"). `nebula nodes` and `nebula info` keep
+the catalog name.
+
+`nebula set` changes only the params you name; the rest keep their values,
+including ones the person set. The person's canvas sends only the keys they
+change, so it never writes your other settings back over. The same key from
+both: the later write wins. Your writes need no revision headers; the
+canvas's are refused once a clear, a load or a project switch replaced the
+canvas they were made for (docs/MCP-SETUP.md, "Canvas writes").
+
 ### Placeholders while you set nodes up
 
 ```bash

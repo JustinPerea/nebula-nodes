@@ -33,6 +33,7 @@ import { usePricingStore } from '../../store/pricingStore';
 import { useInputSizeStore } from '../../store/inputSizeStore';
 import type { NodeData } from '../../types';
 import { useFitCanvasView } from '../../hooks/useFitCanvasView';
+import { adoptCanvasRevisionFrom } from '../../lib/projectContext';
 import type { Edge, Node } from '@xyflow/react';
 import '../../styles/panels.css';
 import '../../styles/canvas-toolbar.css';
@@ -182,7 +183,9 @@ export function Toolbar() {
       // force: the person just confirmed, and a project with nodes needs it
       // (the backend refuses a clear without it, 409).
       // GM, error-copy round 2: "Couldn't clear the canvas." then the reason.
-      await apiRequest(CLEAR_CANVAS, '/api/graph?force=true', { method: 'DELETE' });
+      const response = await apiRequest(CLEAR_CANVAS, '/api/graph?force=true', { method: 'DELETE' });
+      // The canvas Nebula holds now (round 19): writes to it carry it.
+      await adoptCanvasRevisionFrom(response);
       // A successful backend clear proves no provider safety record remains;
       // unlike ordinary snapshot hydration, this is authoritative removal.
       useGraphStore.setState({ providerRecoveries: [], providerStartAmbiguities: [] });

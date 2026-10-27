@@ -57,6 +57,8 @@ export interface ProjectList {
 }
 export interface ProjectActivation {
   project: SavedProject; workspaceRevision: string;
+  /** The canvas's revision once it's loaded (round 19): sent back with graph writes. */
+  canvasRevision?: string;
   /** Create and open only: the backend's params version (none = 0, a backend from before the gate). */
   paramsVersion?: number;
   /** Open only: what opening changed that the person should know (a folded
