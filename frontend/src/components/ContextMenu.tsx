@@ -4,7 +4,7 @@ import { useGraphStore } from '../store/graphStore';
 import { useCanvasPinsStore } from '../store/canvasPinsStore';
 import { isBackendNodeId } from '../lib/canvasPins';
 import { floatingBottomLimit } from '../lib/bottomBar';
-import { offlineMark, useBackendOffline } from '../lib/useBackendOffline';
+import { useCanvasLock } from '../lib/canvasLock';
 import '../styles/panels.css';
 import { keyBlockedByModal } from '../lib/canvasShortcutScope';
 
@@ -29,9 +29,11 @@ export function ContextMenu() {
   const isExecuting = useGraphStore((s) => s.isExecuting);
   // A run waiting for its inputs counts as starting (review 15, M-B).
   const runStarting = useGraphStore((s) => s.runStarting);
-  // Offline is read-only (round 15 of PR #114): every item here edits, so
-  // each is disabled and looks it.
-  const offline = useBackendOffline();
+  // Offline is read-only (round 15 of PR #114), and so is following an
+  // agent's switch (GM round 22, A: one state, lib/canvasLock): every item
+  // here edits, so each is disabled and looks it, with "Wait for “<project>”
+  // to open." while following.
+  const lock = useCanvasLock();
   const menuRef = useRef<HTMLDivElement>(null);
   const [place, setPlace] = useState<{ left: number; top: number } | null>(null);
 
@@ -92,8 +94,7 @@ export function ContextMenu() {
       <div ref={menuRef} className="context-menu" style={style}>
         <button
           className="context-menu__item"
-          disabled={offline}
-          {...offlineMark(offline)}
+          {...lock.act()}
           onClick={() => {
             composeNote({ position: flowPosition });
             hideContextMenu();
@@ -108,7 +109,7 @@ export function ContextMenu() {
   const items: MenuItem[] = [
     {
       label: 'Run This Node',
-      disabled: isExecuting || runStarting || offline,
+      disabled: isExecuting || runStarting,
       action: () => {
         executeNode(nodeId);
         hideContextMenu();
@@ -117,7 +118,7 @@ export function ContextMenu() {
     {
       label: 'Leave a note for agents…',
       // Agents only see nodes the backend knows (ids like n4).
-      disabled: !isBackendNodeId(nodeId) || offline,
+      disabled: !isBackendNodeId(nodeId),
       action: () => {
         composeNote({ nodeId });
         hideContextMenu();
@@ -126,7 +127,6 @@ export function ContextMenu() {
     {
       label: 'Duplicate',
       shortcut: 'Ctrl+D',
-      disabled: offline,
       action: () => {
         duplicateNode(nodeId);
         hideContextMenu();
@@ -136,7 +136,6 @@ export function ContextMenu() {
       label: 'Delete',
       shortcut: 'Del',
       danger: true,
-      disabled: offline,
       action: () => {
         // A World Labs hold refuses, with its notice; otherwise it deletes at
         // once and says "Deleted the node." with Undo (GM, 2026-10-23).
@@ -157,8 +156,7 @@ export function ContextMenu() {
           key={item.label}
           className={`context-menu__item ${item.danger ? 'context-menu__item--danger' : ''}`}
           onClick={item.action}
-          disabled={item.disabled}
-          {...offlineMark(offline)}
+          {...lock.act({ disabled: item.disabled })}
         >
           <span>{item.label}</span>
           {item.shortcut && <span className="context-menu__shortcut">{item.shortcut}</span>}

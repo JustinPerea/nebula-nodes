@@ -7509,6 +7509,30 @@ def _refuse_changed_runs(proposal: Proposal, candidate: CLIGraph, id_map: dict[s
             f"what it runs changed after it was proposed ({_listed(sorted(changed, key=_node_order), 4)})"))
 
 
+# GM - Design, round 22 (4b): the person reads "Couldn't accept this
+# proposal. The canvas was cleared or replaced after it was made. Ask the
+# agent for a new one." (the canvas reads the code, never these words);
+# agents and logs read the detail, which says the same.
+PROPOSAL_CANVAS_REPLACED_CODE = "proposal_canvas_replaced"
+PROPOSAL_CANVAS_REPLACED_DETAIL = (
+    "Couldn't accept this proposal: the canvas was cleared or replaced after it was made. "
+    "Make a new proposal for the canvas as it is now.")
+
+
+class ProposalCanvasReplaced(HTTPException):
+    """409: Accept of a proposal whose canvas was cleared or replaced since it
+    was made (its node ids may name other nodes now). Answers ``code:
+    "proposal_canvas_replaced"`` beside ``detail``."""
+
+    def __init__(self) -> None:
+        super().__init__(status_code=409, detail=PROPOSAL_CANVAS_REPLACED_DETAIL)
+
+
+@app.exception_handler(ProposalCanvasReplaced)
+async def proposal_canvas_replaced(request, exc: ProposalCanvasReplaced):
+    return JSONResponse(status_code=409, content={"detail": exc.detail, "code": PROPOSAL_CANVAS_REPLACED_CODE})
+
+
 def _ensure_still_decidable(proposal: Proposal, *, reject: bool = False) -> None:
     """Re-check after an await: still open, still for the open project, and
     still on the canvas it was made on (not for a reject, which only closes
@@ -7521,7 +7545,7 @@ def _ensure_still_decidable(proposal: Proposal, *, reject: bool = False) -> None
         # A clear or an import landed since it was made (they close open
         # proposals only after their awaits): its node ids may name other
         # nodes now (round 21 of PR #195, review 20 L-3).
-        raise HTTPException(status_code=409, detail="This proposal was made before the canvas was cleared or replaced")
+        raise ProposalCanvasReplaced()
 
 
 async def _proposal_body(request: Request) -> dict[str, Any]:
@@ -9630,16 +9654,27 @@ async def _make_ready(node_ids: Iterable[str]) -> None:
         await _broadcast_graph_sync()
 
 
-def _admit_registered_run(run_id: str, ready: Iterable[str], nodes: list[GraphNode], edges: list[GraphEdge]) -> bool:
+def _admit_registered_run(run_id: str, ready: Iterable[str], nodes: list[GraphNode], edges: list[GraphEdge],
+                          canvas: tuple[str | None, int]) -> bool:
     """A run that just registered (_register_run, after the last
     _refuse_if_graph_moved and _run_canvas_now with no await between, PR
     #114's round 11): the placeholders it runs turn normal and an agent's run
     is kept (its marks and done card). Synchronous, so the run's task hasn't
     had a turn yet; a run refused before this leaves the placeholders and
     the agent-run record as they were (round 21, the #114 merge). True when a
-    placeholder changed: the caller then broadcasts the graph."""
+    placeholder changed: the caller then broadcasts the graph.
+
+    Round 22 (review 21, L-e): nothing here reads storage. The project is
+    the one the run registered on (``canvas``, read by _run_canvas_now), and
+    what can fail comes before the one write: the plan (who asked, which
+    nodes) is read first, then the placeholders are made normal (saved
+    whole, or not at all: CLIGraph.replace_with), and only then is the run
+    kept, in memory. A refusal here leaves everything as it was."""
+    plan = _agent_run_plan(nodes, edges)
     cleared = bool(_clear_pending(ready))
-    _start_agent_run(run_id, nodes, edges)
+    if plan is not None:
+        identity, planned, models = plan
+        agent_runs.start(run_id, identity, project_id=canvas[0], planned=planned, models=models)
     return cleared
 
 
@@ -9786,7 +9821,7 @@ async def execute(request: ExecuteRequest) -> dict:
         task = asyncio.create_task(run_coroutine)
         _register_run(run_id, task, run_canvas)
         _watch_for_cross_process_stop(run_id, task)
-        placeholders_changed = _admit_registered_run(run_id, ready, nodes, edges)
+        placeholders_changed = _admit_registered_run(run_id, ready, nodes, edges, run_canvas)
     except ExecutionCancelledBeforeStartError as exc:
         if task is None:
             run_coroutine.close()
@@ -9950,7 +9985,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
         task = asyncio.create_task(_run())
         _register_run(run_id, task, run_canvas)
         _watch_for_cross_process_stop(run_id, task)
-        placeholders_changed = _admit_registered_run(run_id, ready, sub_nodes, sub_edges)
+        placeholders_changed = _admit_registered_run(run_id, ready, sub_nodes, sub_edges, run_canvas)
     except ExecutionCancelledBeforeStartError as exc:
         await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
@@ -11254,17 +11289,18 @@ def _run_model_name(node: GraphNode) -> str:
     return f"“{node_route.node_name(definition, None, node.definition_id)[:78]}”"
 
 
-def _start_agent_run(run_id: str, nodes: list[GraphNode], edges: list[GraphEdge]) -> None:
-    """Keep this run while it goes when an identified agent started it."""
+def _agent_run_plan(nodes: list[GraphNode], edges: list[GraphEdge]) -> tuple[Any, list[str], dict[str, str]] | None:
+    """What keeping this run needs, read before anything changes (round 22,
+    review 21 L-e): the identified agent that started it, its nodes in run
+    order and the model each shows. None when no identified agent asked."""
     identity = identify_agent(current_request_headers())
     if identity is None or not nodes:
-        return
+        return None
     try:
         planned = [str(node_id) for node_id in topological_sort(nodes, edges)]
     except CycleError:
         planned = [node.id for node in nodes]
-    agent_runs.start(run_id, identity, project_id=_workspace_context()["activeProjectId"], planned=planned,
-                     models={node.id: _run_model_name(node) for node in nodes})
+    return identity, planned, {node.id: _run_model_name(node) for node in nodes}
 
 
 async def _observe_agent_run(event: ExecutionEvent, run_id: str | None) -> None:
@@ -16660,7 +16696,7 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     # Only now, so a run refused above leaves both as they were (round 21,
     # the #114 merge: these used to await before the fence).
     try:
-        placeholders_changed = _admit_registered_run(run_id, ready, sub_nodes, sub_edges)
+        placeholders_changed = _admit_registered_run(run_id, ready, sub_nodes, sub_edges, run_canvas)
     except BaseException:
         task.cancel()  # it never had a turn
         await asyncio.gather(task, return_exceptions=True)

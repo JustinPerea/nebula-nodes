@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { refuseEditWhileFollowing, useFollowingSwitch } from '../lib/canvasFollow';
+import { FOLLOWING_MARK } from '../lib/canvasLock';
 
 /** Where the canvas's fields live: its nodes and the Inspector, docked or
  * the popover the canvas opens over a node (portaled into the body; round
@@ -34,13 +35,22 @@ export function useFollowingReadOnly(): void {
       const field = event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"]');
       if (field) refuse(event);
     };
+    // Round 22 (GM A): a press on a control the follow disabled
+    // (lib/canvasLock's mark), or on a wire handle, pulses the bar, as
+    // offline pulses its banner (BackendConnectionStatus).
+    const pressed = (event: PointerEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest(`[${FOLLOWING_MARK}], .canvas--read-only .react-flow__handle`)) refuseEditWhileFollowing();
+    };
     const types = ['beforeinput', 'paste', 'drop'] as const;
     for (const type of types) document.addEventListener(type, refuse, true);
     document.addEventListener('keydown', onKey, true);
+    document.addEventListener('pointerdown', pressed, true);
     return () => {
       document.body.classList.remove('nebula-following');
       for (const type of types) document.removeEventListener(type, refuse, true);
       document.removeEventListener('keydown', onKey, true);
+      document.removeEventListener('pointerdown', pressed, true);
     };
   }, [following]);
 }

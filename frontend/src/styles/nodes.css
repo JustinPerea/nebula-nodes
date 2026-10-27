@@ -531,7 +531,7 @@ body:not(.app-slava-restraint) .model-node__enhance {
   transition: background 0.1s, color 0.1s, border-color 0.1s;
 }
 
-body:not(.app-slava-restraint) .model-node__enhance:hover {
+body:not(.app-slava-restraint) .model-node__enhance:hover:not(:disabled) {
   background: #242424;
   border-color: #3a3a3a;
   color: #ddd;

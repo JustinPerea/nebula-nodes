@@ -258,8 +258,9 @@ describe('Round 21 (review 20, M-1): an agent reopens the project the tab shows'
         previousProjectName: 'Glass campaign', previousRevision: 'rev-a', actor: { kind: 'agent', name: 'Codex' } } });
     await vi.waitFor(() => expect(useProjectStore.getState().busy).toBe(false));
     expect(handoffs()).toContain('Typed');
-    // Params only: a rename an earlier test in this file left on its way is
-    // carried too (the module's writes outlive a test), with the same name.
-    expect((pendingOf() as { params: unknown }).params).toEqual({ n1: { value: 'Typed' } });
+    // Round 22 (review 21, L-c): the labels again. The "leak" was the app's:
+    // a rename draft an earlier test folded into its switch stayed in
+    // labelsInFlight for good; it goes once handed off now.
+    expect(pendingOf()).toEqual({ params: { n1: { value: 'Typed' } }, labels: {} });
   });
 });

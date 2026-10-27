@@ -46,7 +46,7 @@ import type { NodeData } from '../types';
 import { NODE_RENAME_EVENT } from '../lib/keyboardShortcuts';
 import { publishCanvasSelection, selectedNodeIds } from '../lib/canvasSelection';
 import '../styles/canvas.css';
-import { useBackendOffline } from '../lib/useBackendOffline';
+import { useCanvasLock } from '../lib/canvasLock';
 
 const nodeTypes = CANVAS_NODE_TYPES;
 const edgeTypes = CANVAS_EDGE_TYPES;
@@ -265,7 +265,11 @@ export function Canvas() {
   const executeGraph = useGraphStore((s) => s.executeGraph);
   const isExecuting = useGraphStore((s) => s.isExecuting);
   // Offline is read-only (GM, round 14 of PR #114).
-  const readOnly = useBackendOffline();
+  // Offline or following an agent's switch: one read-only state (GM round
+  // 22, A). Selecting stays local view state; it is published unless offline.
+  const lock = useCanvasLock();
+  const readOnly = lock.locked;
+  const offline = lock.offline;
   const isValidConnection = useIsValidConnection();
   const skin = useUIStore((s) => s.skin);
   const canvasPerfMode = useUIStore((s) => s.canvasPerfMode);
@@ -347,7 +351,7 @@ export function Canvas() {
   // Round 16 (L1): selecting while offline is local view state; nothing is
   // sent then, and the selection in hand goes out once Nebula answers again.
   useEffect(() => {
-    if (readOnly) return undefined;
+    if (offline) return undefined;
     const controller = new AbortController();
     const timeout = window.setTimeout(() => {
       publishCanvasSelection(liveSelectedNodeIds, controller.signal).catch((error) => {
@@ -359,7 +363,7 @@ export function Canvas() {
       window.clearTimeout(timeout);
       controller.abort();
     };
-  }, [liveSelectionKey, readOnly]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [liveSelectionKey, offline]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const reactFlow = useReactFlow();
   const { fitView, screenToFlowPosition, zoomIn, zoomOut, zoomTo } = reactFlow;

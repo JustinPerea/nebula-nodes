@@ -34,12 +34,12 @@ import { useInputSizeStore } from '../../store/inputSizeStore';
 import type { NodeData } from '../../types';
 import { useFitCanvasView } from '../../hooks/useFitCanvasView';
 import { adoptCanvasRevisionFrom } from '../../lib/projectContext';
-import { refuseEditWhileFollowing, useFollowingSwitch, waitToOpenTooltip } from '../../lib/canvasFollow';
+import { refuseEditWhileFollowing, waitToOpenTooltip } from '../../lib/canvasFollow';
 import type { Edge, Node } from '@xyflow/react';
 import '../../styles/panels.css';
 import '../../styles/canvas-toolbar.css';
 import { refuseEditWhileOffline } from '../../lib/backendConnection';
-import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { useCanvasLock } from '../../lib/canvasLock';
 
 const CLEAR_CANVAS = "Couldn't clear the canvas.";
 
@@ -53,18 +53,19 @@ export function Toolbar() {
   const maxZoom = useStore((s) => s.maxZoom);
   const zoomPercent = Math.round(zoom * 100);
   const executeGraph = useGraphStore((s) => s.executeGraph);
-  const following = useFollowingSwitch();
   const cancelExecution = useGraphStore((s) => s.cancelExecution);
   const isExecuting = useGraphStore((s) => s.isExecuting);
   // A run waiting for its inputs counts as starting (review 15, M-B).
   const runStarting = useGraphStore((s) => s.runStarting);
   const isImportingGraph = useGraphStore((s) => s.isImportingGraph);
   const isCancelling = useGraphStore((s) => s.isCancelling);
-  // Offline is read-only (GM, round 15 of PR #114): Run (and Stop) and the
+  // Offline is read-only (GM, round 15 of PR #114), and so is following an
+  // agent's switch (GM round 22, A: one state, lib/canvasLock): Run and the
   // canvas actions that edit are disabled and look it; Save graph (a
   // download), zoom and Reset panels stay.
-  const offline = useBackendOffline();
-  const off = offlineMark(offline);
+  const lock = useCanvasLock();
+  const offline = lock.offline;
+  const following = lock.following;
   const canSave = useGraphStore(canSaveGraph);
   const canLoad = useGraphStore(canLoadGraph);
   const isPreparing = useGraphStore((s) => s.createLaunchingIds.length > 0);
@@ -237,7 +238,8 @@ export function Toolbar() {
   }, [resetPanelLayout]);
 
   const handleImportCLI = useCallback(async () => {
-    if (!canLoadGraph(useGraphStore.getState())) return;
+    // Round 22 (review 21): it replaces the canvas, so it waits for a follow too.
+    if (refuseEditWhileFollowing() || !canLoadGraph(useGraphStore.getState())) return;
     try {
       const data = await fetchCLIGraph();
       if (!mounted.current || !canLoadGraph(useGraphStore.getState())) return;
@@ -296,7 +298,7 @@ export function Toolbar() {
           onClick={() => { if (refuseEditWhileFollowing()) return; void executeGraph(); }}
           disabled={nodeCount === 0 || isImportingGraph || runStarting || offline}
           aria-disabled={following ? true : undefined}
-          {...off}
+          {...lock.mark}
           aria-describedby={nodeCount > 0 ? runScopeId : undefined}
           title={following ? waitToOpenTooltip(following.projectName)
             : isImportingGraph ? 'Wait for the graph import to finish' : `Run graph. ${describeRunScope(runScope)} (${displayKey('Mod')}${displayKey('Enter')})`}
@@ -333,29 +335,29 @@ export function Toolbar() {
                 aria-keyshortcuts="Control+s Meta+s" onClick={() => runSecondaryAction(requestGraphSave)}>
                 <ToolbarIcon name="save" /><span>Save graph</span><kbd aria-hidden="true">Ctrl / ⌘ S</kbd>
               </button>
-              <button type="button" className="toolbar__action" disabled={!canLoad || offline} {...off}
+              <button type="button" className="toolbar__action"
+                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Load graph (Ctrl+O or ⌘O)' })}
                 aria-describedby={!canLoad ? blockedId : undefined}
-                title={!canLoad ? loadBlockedReason : 'Load graph (Ctrl+O or ⌘O)'}
                 aria-keyshortcuts="Control+o Meta+o" onClick={() => runSecondaryAction(requestGraphLoad)}>
                 <ToolbarIcon name="load" /><span>Load graph</span><kbd aria-hidden="true">Ctrl / ⌘ O</kbd>
               </button>
-              <button type="button" className="toolbar__action" disabled={!canLoad || offline} {...off}
+              <button type="button" className="toolbar__action"
+                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Import graph built by Nebula CLI' })}
                 aria-describedby={!canLoad ? blockedId : undefined}
-                title={!canLoad ? loadBlockedReason : 'Import graph built by Nebula CLI'}
                 onClick={() => runSecondaryAction(() => void handleImportCLI())}>
                 <ToolbarIcon name="cli" /><span>Import CLI graph</span>
               </button>
-              <button type="button" className="toolbar__action toolbar__action--danger" disabled={!canLoad || offline} {...off}
+              <button type="button" className="toolbar__action toolbar__action--danger"
+                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Clear canvas — asks for confirmation' })}
                 aria-describedby={!canLoad ? blockedId : undefined}
-                title={!canLoad ? loadBlockedReason : 'Clear canvas — asks for confirmation'}
                 onClick={() => runSecondaryAction(() => void handleClear())}>
                 <ToolbarIcon name="clear" /><span>Clear canvas…</span>
               </button>
             </div>
             <div className="toolbar__action-group" role="group" aria-label="Canvas layout">
               <h2 className="toolbar__action-heading">Layout</h2>
-              <button type="button" className="toolbar__action" disabled={nodeCount === 0 || offline} {...off}
-                title="Arrange nodes by dependency" onClick={() => runSecondaryAction(autoLayout)}>
+              <button type="button" className="toolbar__action"
+                {...lock.act({ disabled: nodeCount === 0, title: 'Arrange nodes by dependency' })} onClick={() => runSecondaryAction(autoLayout)}>
                 <ToolbarIcon name="layout" /><span>Arrange nodes</span>
               </button>
               <button type="button" className="toolbar__action" title="Reset panel positions and sizes"

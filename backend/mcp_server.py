@@ -802,7 +802,10 @@ def get_proposal(proposal_id: str, wait_seconds: float = 0, ctx: Context | None 
 
     `proposal.status` is open, accepted, rejected, withdrawn, expired (15
     minutes without a decision) or invalidated (a node it needed was deleted,
-    or the canvas changed; `reason` says why). An invalidated one can be open
+    or the canvas changed; `reason` says why). When the canvas was cleared or
+    replaced after you proposed, the person's Accept is refused (they read
+    "Ask the agent for a new one."): read the canvas again and propose anew.
+    An invalidated one can be open
     again: when the person (or you) undoes the delete and it still fits, it
     reopens with the same id and expiry (event proposal.reopened). When accepted, `idMap` maps
     your refs to the new node ids and `runNodeIds` lists the nodes the canvas

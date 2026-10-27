@@ -18,7 +18,7 @@ import { NodeRunError } from './NodeError';
 import { PlaceholderLine } from './PlaceholderLine';
 import { pendingAttr } from '../../lib/pendingNodes';
 import '../../styles/reference-set-node.css';
-import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { useCanvasLock } from '../../lib/canvasLock';
 
 // The ReferenceSetNode is the canvas card for the reference-set utility node.
 // It renders one role-labeled input slot per semantic reference role (7 total,
@@ -55,7 +55,8 @@ function formatWeight(weight: number): string {
 }
 
 export function ReferenceSetNode({ id, data, selected }: NodeProps) {
-  const readOnly = useBackendOffline();
+  const lock = useCanvasLock(); // offline or following (GM round 22, A)
+  const readOnly = lock.locked;
   const updateNodeData = useGraphStore((s) => s.updateNodeData);
   // Which role ports have a wire in, as text, so wires elsewhere on the
   // canvas don't re-render this card.
@@ -133,7 +134,7 @@ export function ReferenceSetNode({ id, data, selected }: NodeProps) {
                 step={REFERENCE_WEIGHT_STEP}
                 value={weights[role]}
                 disabled={readOnly}
-                {...offlineMark(readOnly)}
+                {...lock.mark}
                 onChange={handleWeightChange(role)}
                 aria-label={`${roleDef.label} reference priority`}
               />

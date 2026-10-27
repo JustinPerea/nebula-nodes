@@ -21,6 +21,13 @@ import { refuseEditWhileOffline } from '../lib/backendConnection';
 import { refuseEditWhileFollowing } from '../lib/canvasFollow';
 
 /** How long a closed proposal's ghosts fade before they go. Matches canvasProposals.css. */
+/** The answer's code for an Accept refused because the canvas was cleared or
+ * replaced after the proposal was made (backend PROPOSAL_CANVAS_REPLACED_CODE). */
+export const PROPOSAL_CANVAS_REPLACED_CODE = 'proposal_canvas_replaced';
+/** GM - Design, round 22 (4b), verbatim; the same with no agent named. */
+export const PROPOSAL_CANVAS_REPLACED_LINE =
+  "Couldn't accept this proposal. The canvas was cleared or replaced after it was made. Ask the agent for a new one.";
+
 export const PROPOSAL_EXIT_MS = 220;
 
 export interface ProposalEntry {
@@ -264,7 +271,11 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
       if (!accepted) useGraphStore.getState().cancelUndoStep(undoStep);
       // A person-only refusal (this tab isn't connected as the person) says
       // GM's line, by its code (Q116 a); a refused accept key, the canvas line.
-      const message = error instanceof ProposalRequestError && error.status === 403 && error.code !== PERSON_REQUIRED_CODE
+      // GM round 22 (4b): a proposal made before a clear or an import of
+      // this canvas, by the answer's code (never its words).
+      const message = error instanceof ProposalRequestError && error.code === PROPOSAL_CANVAS_REPLACED_CODE
+        ? PROPOSAL_CANVAS_REPLACED_LINE
+        : error instanceof ProposalRequestError && error.status === 403 && error.code !== PERSON_REQUIRED_CODE
         ? 'Only the canvas can accept this. Reload the page.'
         : failureMessage(error, "Couldn't accept the proposal.");
       set((state) => ({ errors: { ...state.errors, [id]: message } }));

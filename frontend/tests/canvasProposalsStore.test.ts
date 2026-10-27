@@ -234,3 +234,16 @@ describe("a person-only refusal on accept or reject (GM, Q116 a)", () => {
     expect(useCanvasProposalsStore.getState().errors.p_a).toBe('Only the canvas can accept this. Reload the page.');
   });
 });
+
+describe('GM round 22 (4b): Accept after the canvas was cleared or replaced', () => {
+  it("says GM's line, read from the answer's code", async () => {
+    const { ProposalRequestError } = await import('../src/lib/canvasProposals');
+    emit({ type: 'proposalOpened', proposal: proposal('p_a'), acceptKey: 'key-a' });
+    api.acceptProposal.mockRejectedValue(new ProposalRequestError(409,
+      "Couldn't accept this proposal: the canvas was cleared or replaced after it was made. Make a new proposal for the canvas as it is now.",
+      { heading: "Couldn't accept the proposal.", code: 'proposal_canvas_replaced' } as never));
+    await useCanvasProposalsStore.getState().accept('p_a');
+    expect(useCanvasProposalsStore.getState().errors.p_a).toBe(
+      "Couldn't accept this proposal. The canvas was cleared or replaced after it was made. Ask the agent for a new one.");
+  });
+});

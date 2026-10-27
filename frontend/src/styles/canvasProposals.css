@@ -547,21 +547,18 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 }
 
 .canvas-undo-notice__text {
+  flex: 1 1 auto;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* A written line with no button (a refusal) wraps, so the step it names is
-   never cut off by the ellipsis (error copy round 3b). A file drop's
-   failures each take a line of their own (lib/canvasFileDrop.ts). */
-.canvas-undo-notice--message .canvas-undo-notice__text {
-  overflow: visible;
   white-space: pre-line;
   overflow-wrap: anywhere;
   line-height: 1.4;
 }
+
+/* GM round 22 (answer 1): every line wraps (up to three at this width) and
+   is never cut with "…", with a button or without (a refusal's step, error
+   copy round 3b; an agent's clear with its Undo). A file drop's failures
+   each take a line of their own (lib/canvasFileDrop.ts). Undo, Open copy
+   and × sit vertically centred on the right (align-items above). */
 
 .canvas-undo-notice__action,
 .canvas-undo-notice__close {

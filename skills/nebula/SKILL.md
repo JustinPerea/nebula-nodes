@@ -193,7 +193,9 @@ your `--ready` (or of a delete) makes them placeholders again, unless someone
 ran or changed one since. A proposal whose run needs your placeholder runs
 nothing until you finish it, and once one turns normal the proposal no longer
 fits (Accept refuses it): propose again when they're ready. Accept also
-refuses a proposal made before the canvas was cleared or replaced. In a steps file,
+refuses a proposal when the canvas was cleared or replaced after it was made
+(the person reads "…Ask the agent for a new one."): read the canvas again and
+make a new proposal. In a steps file,
 put `"pending": true` on the step that adds them and `{"pending": false,
 "nodeIds": ["+hero"]}` in a later step. MCP: `edit_canvas(pending=True)`,
 then `edit_canvas(pending=False, node_ids=[...])`.

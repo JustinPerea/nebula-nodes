@@ -3,7 +3,8 @@ import { lastForeignToucher, useGraphStore } from '../../store/graphStore';
 import { droppedRenameLine } from '../../lib/canvasUndo';
 import { NODE_RENAME_EVENT } from '../../lib/keyboardShortcuts';
 import { isBackendOffline, refuseEditWhileOffline } from '../../lib/backendConnection';
-import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { useCanvasLock } from '../../lib/canvasLock';
+import { followingSwitch, refuseEditWhileFollowing } from '../../lib/canvasFollow';
 
 interface NodeLabelProps {
   nodeId: string;
@@ -36,7 +37,9 @@ export function NodeLabel({ nodeId, label, displayName, defaultTitle }: NodeLabe
   const shown = displayName && !custom && fallback ? fallback : label;
   const renameNode = useGraphStore((state) => state.renameNode);
   const noteRenameDraft = useGraphStore((state) => state.noteRenameDraft);
-  const readOnly = useBackendOffline();
+  // Offline or following an agent's switch: one read-only state (GM round 22, A).
+  const lock = useCanvasLock();
+  const readOnly = lock.offline;
   const [draft, setDraft] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   /** The name when this rename started: a different one on reconnect means
@@ -44,6 +47,15 @@ export function NodeLabel({ nodeId, label, displayName, defaultTitle }: NodeLabe
   const startedFrom = useRef(label);
   const wasReadOnly = useRef(readOnly);
   const begin = () => { startedFrom.current = label; setDraft(shown); };
+
+  // Round 22 (review 21, L-c): a draft open when an agent switched project
+  // was handed off into the project left (graphStore.beginAgentSwitch saves
+  // it as clicking away would have). It goes here, so the next canvas's
+  // node with the same id never gets it.
+  const following = lock.following;
+  useEffect(() => {
+    if (following) setDraft(null);
+  }, [following]);
 
   useEffect(() => {
     const reconnected = wasReadOnly.current && !readOnly;
@@ -72,7 +84,7 @@ export function NodeLabel({ nodeId, label, displayName, defaultTitle }: NodeLabe
   useEffect(() => {
     const onRename = (event: Event) => {
       if ((event as CustomEvent<{ nodeId?: string }>).detail?.nodeId !== nodeId) return;
-      if (refuseEditWhileOffline()) return;
+      if (refuseEditWhileFollowing() || refuseEditWhileOffline()) return;
       startedFrom.current = label;
       setDraft(shown);
     };
@@ -98,14 +110,15 @@ export function NodeLabel({ nodeId, label, displayName, defaultTitle }: NodeLabe
         ref={inputRef}
         className="model-node__label model-node__label-input nodrag nopan"
         value={draft}
-        disabled={readOnly}
-        {...offlineMark(readOnly)}
+        disabled={lock.locked}
+        {...lock.mark}
         maxLength={80}
         aria-label="Node name"
         placeholder={fallback}
         onChange={(event) => setDraft(event.target.value)}
         // Offline, the field is disabled and loses focus: keep the draft.
-        onBlur={() => { if (!isBackendOffline()) finish(true); }}
+        // Following: the switch handed the draft off; the effect above drops it.
+        onBlur={() => { if (!isBackendOffline() && !followingSwitch()) finish(true); }}
         onClick={(event) => event.stopPropagation()}
         onDoubleClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
@@ -123,7 +136,7 @@ export function NodeLabel({ nodeId, label, displayName, defaultTitle }: NodeLabe
       title={custom ? `${displayName} · double-click to rename` : 'Double-click to rename'}
       onDoubleClick={(event) => {
         event.stopPropagation();
-        if (refuseEditWhileOffline()) return;
+        if (refuseEditWhileFollowing() || refuseEditWhileOffline()) return;
         begin();
       }}
     >

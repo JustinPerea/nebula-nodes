@@ -1308,7 +1308,12 @@ on a reviewed list of routes that don't write the open canvas by node id,
 or check their own revision (`backend/tests/test_round20_fence.py`): a
 project's open, create and delete check the body's workspace revision, and
 a proposal's Accept is refused when the canvas it was made on was cleared
-or replaced since; Stop (`DELETE /api/executions/…`)
+or replaced since (409, `code: "proposal_canvas_replaced"`, detail "Couldn't
+accept this proposal: the canvas was cleared or replaced after it was made.
+Make a new proposal for the canvas as it is now."; the person reads "Couldn't
+accept this proposal. The canvas was cleared or replaced after it was made.
+Ask the agent for a new one.", so propose again against the canvas as it is
+now); Stop (`DELETE /api/executions/…`)
 stays open while the canvas follows an agent's switch.
 
 A write that carries `X-Nebula-Tab` (only the canvas sends it) to one of
@@ -1354,14 +1359,21 @@ couldn't be read at boot (deleted, or unreadable while a canvas was saved
 before), revisions start again from a number unique to that boot, never
 from 0, and every graphSync and `GET /api/graph/export` says
 `"canvasRevisionRestored": false` until Nebula restarts with them read
-(the base is saved at once, so the next boot restores it). Only then does
-an open canvas take a moved revision with the same nodes as the same canvas
-(and send the writes it held under it); otherwise a moved revision is
-another canvas.
+(the base is saved at once, so the next boot restores it). Only then, and
+only across an actual restart (the sync comes from another backend process
+than the canvas last synced with: the socket's first graphSync carries
+`bootId`), does an open canvas take a moved revision with the same nodes as
+the same canvas, once per boot, and send the writes it held under it,
+including a param save Nebula refused as out of date before that sync came.
+Otherwise a moved revision is another canvas: within one boot, a clear the
+tab missed that re-added the same ids is a replacement, and typing the
+canvas held for it is named in a line ("Couldn't save “<setting>” for
+“<node>”."), never sent to the new nodes.
 
 A proposal keeps the canvas revision it was made on: Accept is refused
-(409) once a clear or an import moved it, so a proposal never lands on a
-canvas whose node ids name other nodes. Reject still closes it.
+(409, `code: "proposal_canvas_replaced"`) once a clear or an import moved
+it, so a proposal never lands on a canvas whose node ids name other nodes.
+Reject still closes it.
 
 A run notes its canvas when it starts. If that canvas is cleared while the
 run goes, the run's results and the settings its nodes changed are not

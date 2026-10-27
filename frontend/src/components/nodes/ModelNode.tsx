@@ -49,7 +49,7 @@ import { isJevNode, jevBrandStyle, parseJevOutputs, JEV_BOX, JEV_BRAND, JEV_DECI
 import { JEV_CARD_FIELDS, jevCardText, jevResultKey, upstreamPortValues } from '../../lib/jevView';
 import { failureMessage } from '../../lib/errorCopy';
 import { showNotice } from '../../lib/canvasNotice';
-import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { useCanvasLock } from '../../lib/canvasLock';
 
 // Input cards that name the file they hold, under the picture for an image.
 const INPUT_FILE_CARDS = new Set(['image-input', 'video-input', 'audio-input', 'document-input']);
@@ -90,7 +90,9 @@ function portLabels(definition: { outputPorts: Array<{ id: string; label: string
 
 function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as unknown as NodeData;
-  const readOnly = useBackendOffline();
+  // Offline or following an agent's switch: one read-only state (GM round 22, A).
+  const lock = useCanvasLock();
+  const readOnly = lock.locked;
   const batchPreview = useBatchPreview(id, nodeData);
   const actionSlot = useSelectionActionSlot(id);
   const previewOutputs = batchPreview.outputs;
@@ -389,9 +391,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         {hasMediaPreview && <button type="button"
           className={inToolbar ? 'selection-toolbar__button nodrag' : 'model-node__next-step nodrag'}
           data-next-step-anchor={id}
-          disabled={!nextStepSource || isExecuting || !/^n\d+$/.test(id) || readOnly}
-          {...offlineMark(readOnly)}
-          title={nextStepTitle}
+          {...lock.act({ disabled: !nextStepSource || isExecuting || !/^n\d+$/.test(id), title: nextStepTitle })}
           onMouseDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
@@ -581,7 +581,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
             className="model-node__textarea nodrag nowheel"
             value={inlineTextValue}
             disabled={readOnly}
-            {...offlineMark(readOnly)}
+            {...lock.mark}
             onChange={handleInlineTextChange}
             onMouseDown={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
@@ -593,14 +593,12 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
             <button
               type="button"
               className="model-node__enhance nodrag"
-              disabled={readOnly}
-              {...offlineMark(readOnly)}
+              {...lock.act({ title: "Ask Claude to rewrite this prompt for the node it's connected to" })}
               onClick={(e) => {
                 e.stopPropagation();
                 handleEnhance();
               }}
               onMouseDown={(e) => e.stopPropagation()}
-              title="Ask Claude to rewrite this prompt for the node it's connected to"
             >
               Enhance
             </button>

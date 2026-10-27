@@ -2031,3 +2031,59 @@ origin/main at c1e7338c (#114) merged by hand into c898138e, keeping both sides'
 - `noteOwnAdd` is not used beside `arrives` in the file drop (it would make a second step).
 - A rename still in flight from an earlier test leaked into a later test's handoff labels in projectSwitchSaves.round20 (module state outlives a test); the reopen test checks params only. In the app it would carry the node's current name, which changes nothing.
 - The refused-run live check uses a wrong canvas header (refused at the first fence); the last-fence refusal is tested in the backend only.
+
+## Round 22: review 21 and GM - Design's round-22 rulings (2026-10-27)
+
+### GM's blockers (verbatim) and the toasts
+
+- **A, one read-only state:** `lib/canvasLock.ts` (`useCanvasLock`, `canvasLockOf`) is the only place a surface reads following and offline. `lock.act({disabled, title})` gives a control that acts `disabled`, the marks (`data-following-disabled`, `data-offline-disabled`) and, while following, "Wait for “<project>” to open." in place of its own tooltip. Converted: the selection toolbar (Ask, Note, Run, Duplicate, Arrange, Delete; Settings, Copy and Download stay), the Inspector (panel and popover: Run, Duplicate, Delete, every field), the context menu, the connection popup, the bottom toolbar (Run keeps `aria-disabled` so a press still pulses; Load, Import CLI, Clear, Arrange), node cards (NodeLabel, ModelNode's next step and Enhance, ReferenceSet, PaperSource, JevCardField, CameraRig, VideoEditAction, StoredAssetPicker), the node library, CinemaShotPanel, the proposal bar and Run history. A press on any `[data-following-disabled]` control pulses the bar (`useFollowingReadOnly`). The neutral disabled look: the primary Run's `:disabled` and `:disabled:hover` are transparent at 0.34, and every hover on an action button is guarded with `:not(:disabled)`. `tests/round22Surfaces` renders each surface following and offline+following, and ratchets the one source (only an allowlist of files may call `useBackendOffline`; the listed surfaces must use `useCanvasLock`).
+- **B, the bar while following:** the save status and the node count are hidden (as in round 21); "Opening “X”…" takes the slot at the locked width; the bar itself now carries `role="group"`, `title` and `aria-label` with the full line, so the name is whole even when the slot cuts it. Tested for every save status, offline, paused and a long name.
+- **Toasts:** `.canvas-undo-notice__text` wraps (`white-space: pre-line`, `overflow-wrap: anywhere`, no ellipsis); Undo and × are centred vertically on the right. The class is shared by the agent-clear line, the 500 delete line, CanvasMessageNotice, CanvasLateNotice and SavePausedNotice. ProjectSwitchToast already wrapped (only its Back button's label is cut); the asset-trash, project-home and moodboard toasts are other components and weren't changed.
+- **Wording:** the Agent log line for a delete answered 500 is GM's ("Couldn't delete “Hero prompt”, node n1. Nebula returned HTTP 500.", one entry per node; `deleteServerErrorLogLine`). Accept after a clear or replace: Nebula answers 409 with `code: "proposal_canvas_replaced"` and "Couldn't accept this proposal: the canvas was cleared or replaced after it was made. Make a new proposal for the canvas as it is now."; the canvas reads the code and shows GM's line ("Couldn't accept this proposal. The canvas was cleared or replaced after it was made. Ask the agent for a new one."). Create's wording was already GM's (round 21's G1 test).
+- **G-a:** Undo on the agent-clear line puts the canvas back as last saved: `lastSavedView()` (unsaved keys back to their saved values, names in flight back to the name saved before) is what the foreign step records (`asLastSaved`). Tested for typing in its debounce, typing held then refused, and a landed control.
+
+### Review 21
+
+- **L-a:** a param PUT refused as out of date while the tab saw no replacement is parked (`parkParamSave`, at most 15 s) instead of dropped. When the tab already holds a newer revision it is sent again at once; otherwise the next sync decides: adopted as the same canvas (a restart) or no replacement, it goes out again under the tab's revision; a replacement names it in the cut-off line. A resend refused again is a failed save with its line. Never lost with no line.
+- **L-b:** the same-canvas adoption needs an actual restart: the socket's hello sync carries #114's `bootId`, and `applyGraphSync` adopts only when the sync's boot differs from the one the canvas last synced with (`canvasSyncBoot`). After that, in the same boot, a missed agent clear that re-adds the same ids is a replacement (the reconnect ending). A broadcast without a `bootId` is the same process.
+- **L-c:** `beginAgentSwitch` drops the drafts it folded into `labelsInFlight` once the handoff is sent; `loadProjectGraph` clears drafts, names in flight and parked saves. projectSwitchSaves.round20's M-1 checks the labels again (`labels: {}`).
+- **L-d:** Cinema's "Send to motion" refuses while following (with the bar pulse) and offline.
+- **L-e:** `_admit_registered_run` reads first (`_agent_run_plan`: identity, plan and models, from the canvas the run registered on) and then makes the one write (`_clear_pending`), then starts the agent run. A 507 "nothing started" now leaves the placeholders as they were.
+- **Agents:** MCP-SETUP (the reviewed list and proposal paragraphs name the new code, detail and the person's line; the restored-flag paragraph says adoption is once per restart and resends refused typing, and that a missed clear in the same boot is a replacement), `mcp_server.py` (get_proposal), SKILL.md. The CLI has no proposal Accept (person-only), so nothing changed there.
+
+### New copy for GM (derived, not ruled)
+
+- `changesNotSavedLine`: across nodes "Couldn't save N settings."; two on one node "Couldn't save “a” and “b” for “node”."; three or more "Couldn't save N settings for “node”."; none named "Couldn't save your last change.".
+- A replacement found by a sync with no origin (the reconnect after a gap, or a restart that brought another canvas) names the typing with that failed-save form, with no agent named.
+
+### Tests written first, and how they failed
+
+- `backend/tests/test_round22.py`: 8 of 11 failed first (the three L-e routes answered 507 with storage read after registration; `_agent_run_plan` didn't exist, three; Accept had no `code`; the docs test). The three failing-save controls passed on the old code too.
+- `frontend/tests/round22Store.test.ts`: 5 of 7 failed (G-a debounce and held, L-c's leak, L-d following, the Agent log line); the landed G-a control and offline Cinema passed.
+- `frontend/tests/round22Restart.test.tsx`: 6 of 7 failed (L5W three, the debounce on another canvas, L4P two); RSTB (a control) passed.
+- `frontend/tests/round22Surfaces.test.tsx`: 28 of 32 failed. `canvasProposalsStore`'s new case failed.
+- Changed on purpose: round16OfflineUi (the neutral Run is transparent), round21Store L-4/L-5 (a hello on boot a, then the restored:false sync on boot b), heldUndo.round20 (the restart cases carry boot ids; the empty-canvas restart now names "Couldn't save “Text” for “n2”."), projectSwitchSaves.round20 M-1 (labels checked again).
+
+### Live check (8795/5795, isolated; scratchpad agent-presence/r22/live/live-r22.mjs)
+
+- First full run: 35 of 39. The four misses were the script's: Settings (allowed to stay) wasn't in its list of untouched toolbar buttons (three checks) and the right-click missed the node (the context menu read nothing). Fixed (the menu opened through the store) and follow + offline run again: 26 of 26.
+- Following, the popover open: the selection toolbar's Ask, Note, Run, Duplicate, Arrange and Delete disabled with "Wait for “Second canvas” to open." (Settings and Copy enabled); the popover's Run, Duplicate, Delete disabled the same way and its field read-only; typing changed nothing; a press on Run pulsed the bar and sent no run. The pinned Inspector and the context menu (Run This Node, Leave a note, Duplicate, Delete) the same. The Delete key removed nothing and sent no DELETE.
+- The bar (popover open, the Delete key, offline + following): no status, no count, the line using 91-93% of the slot after the home button, the bar's title and aria-label "Opening “Second canvas”…", the width unchanged (217 px).
+- Offline + following, Run hovered: transparent background, opacity 0.34, `not-allowed`, the Wait tooltip; the follow finished on "Second canvas" once Nebula was back.
+- The agent-clear toast: the whole line on two lines, nothing clipped, Undo and × 0 px off centre on the right; Undo put the node back with "a lighthouse at dusk" (the saved value) on the canvas and in Nebula. The 500 toast wraps; the Agent log has GM's line.
+- L-a (review 20's repro: the PUT held over a SIGKILL, canvas-revisions.json deleted, restart): restored false, the tab adopted the boot base, the held PUT got 409 under the old canvas and went out again (200) under the adopted one; the typing is in Nebula and on the canvas, no line.
+- L-b (then, same boot): the socket closed, Codex cleared and re-added n1 = "AG", the held typing refused (409); on reconnect the tab took the new revision, no PUT landed, n1 reads "AG" in Nebula and on the canvas, and the line says "Couldn't save “Text” for “Hero prompt”.".
+- Blocked: 2 requests in each run, both the canaries; 0 toward 8000-8010 or 5173.
+
+### Gates (round 22, on the final code)
+
+- **Backend:** the full suite passed 11,666 with 71 skipped (isolated, 34 min). A first run with `-x` was stopped by its own 40-minute limit at 79% under load with no failure; the full run was then repeated without `-x`.
+- **Frontend:** the full vitest run under heavy load (load average near 40; other lanes running): 6,822 of 6,851 passed in 533 files; 29 failed in 13 files (23 of them 5 s timeouts, the rest focus and find-by-role misses), and 15 files never started ("Failed to start forks worker"). Those 28 files run again (3 workers): 332 of 351; the 11 files still failing then each passed alone (GraphFileActions 35, NodeLibrary 20, ChatPanel.clear 12, CommandPalette 3, PlaceholderRunDialog.round12 3, modalStyles.round11 4, CommonsDetail 8, ModelDiscovery 4, ResultsGallery 8, ModelPicker 11, Settings 75). The errorCopy ratchets (`tests/errorCopy.*`): 14 files, 173 of 173. tsc -b and lint (with both style guards) are clean.
+- **Build:** first load 402,013 bytes raw (121,505 gzip), under 512,000.
+
+### Open items (round 22)
+
+- **For GM:** the derived `changesNotSavedLine` forms above (across nodes, two settings, none named), and that a no-origin replacement (a reconnect after a gap, or a restart that brought another canvas) names the lost typing with the failed-save line and no agent.
+- The agent-clear screenshot also shows the earlier section's "Codex opened “Second canvas”." toast stacked above (a real toast the live script left; not part of the frame's subject).
+- Parked saves wait at most 15 s for a sync; past that they are sent once more under the same revision and, if refused again, become a failed save with its line.
+- The full vitest run was taken under heavy machine load; every file that failed or didn't start there passed alone or in the rerun.

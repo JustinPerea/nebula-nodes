@@ -22,7 +22,7 @@ import {
 } from '../../lib/runHistory';
 import '../../styles/panels.css';
 import '../../styles/run-history.css';
-import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { useCanvasLock } from '../../lib/canvasLock';
 
 const STATUS_LABEL: Record<RunRecord['status'], string> = {
   running: 'Running',
@@ -53,10 +53,12 @@ export function RunHistoryPanel() {
   const isExecuting = useGraphStore((s) => s.isExecuting);
   const isCancelling = useGraphStore((s) => s.isCancelling);
   const cancelExecution = useGraphStore((s) => s.cancelExecution);
-  // Offline is read-only (round 15 of PR #114): Stop, Rerun, Retry, Recover
-  // and Forget ID are disabled and look it.
-  const offline = useBackendOffline();
-  const off = offlineMark(offline);
+  // Offline is read-only (round 15 of PR #114), and so is following an
+  // agent's switch (GM round 22, A: one state, lib/canvasLock): Rerun,
+  // Retry, Recover and Forget ID are disabled and look it.
+  const lock = useCanvasLock();
+  const locked = lock.locked;
+  const off = lock.mark;
 
   const [now, setNow] = useState(() => Date.now());
   const [clearingRecovery, setClearingRecovery] = useState<string | null>(null);
@@ -172,7 +174,7 @@ export function RunHistoryPanel() {
                       <button
                         type="button"
                         onClick={() => setConfirmingForget({ runId: checkpoint.runId, nodeId: checkpoint.nodeId })}
-                        disabled={isExecuting || clearingRecovery === key || offline}
+                        disabled={isExecuting || clearingRecovery === key || locked}
                         {...off}
                         // GM, round 14: its name says which ID it forgets;
                         // its row (node and ID) stays its description.
@@ -260,7 +262,7 @@ export function RunHistoryPanel() {
                           if (r.status === 'failed') void retryFailedRun(r.id);
                           else void rerunHistoryRecord(r.id);
                         }}
-                        disabled={isExecuting || offline}
+                        disabled={isExecuting || locked}
                         {...off}
                         aria-label={recoveryReplayReady
                           ? `Recover ${runTriggerLabel(r.trigger)} run`
@@ -280,7 +282,7 @@ export function RunHistoryPanel() {
                         <button
                           type="button"
                           className="run-history__replay"
-                          disabled={isExecuting || !latestSourceReady || offline}
+                          disabled={isExecuting || !latestSourceReady || locked}
                           {...off}
                           onClick={() => void rerunHistoryWithLatestPaperSource(r.id)}
                           aria-label={`Rerun ${runTriggerLabel(r.trigger)} with latest source`}

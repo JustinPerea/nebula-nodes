@@ -248,8 +248,11 @@ describe('L-4/L-5: a sync with no origin whose revision moved', () => {
   });
 
   it('revisions not restored: the same canvas, and the held typing goes out under the adopted revision', async () => {
+    // Round 22 (review 21, L-b): only across an actual restart, so the canvas
+    // first syncs with one process (its own revision) and then another.
+    sameCanvasSync({ canvasRevision: getProjectContext()?.canvas, bootId: 'r21-boot-a' });
     type('Mine');
-    sameCanvasSync({ canvasRevisionRestored: false });
+    sameCanvasSync({ canvasRevisionRestored: false, bootId: 'r21-boot-b' });
     await vi.waitFor(() => expect(graphWrites.sent.some((write) => write.method === 'PUT' && write.path === '/api/graph/node/n1'))
       .toBe(true), { timeout: 2000 });
     const put = graphWrites.sent.find((write) => write.method === 'PUT' && write.path === '/api/graph/node/n1');

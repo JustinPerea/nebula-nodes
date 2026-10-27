@@ -13,7 +13,7 @@ import { useProposalNotReady } from '../../hooks/useProposalReadiness';
 import { useCanvasProposalsStore, type ProposalEntry } from '../../store/canvasProposalsStore';
 import { InNoticeRegion } from '../InNoticeRegion';
 import '../../styles/canvasProposals.css';
-import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { useCanvasLock } from '../../lib/canvasLock';
 
 /** How long Accept/Reject ignore clicks after the shown proposal changes on its own. */
 const SWITCH_GUARD_MS = 600;
@@ -71,9 +71,10 @@ export function ProposalBar() {
   const focusedId = useCanvasProposalsStore((s) => s.focusedId);
   const accept = useCanvasProposalsStore((s) => s.accept);
   const reject = useCanvasProposalsStore((s) => s.reject);
-  // Offline is read-only (round 15 of PR #114): Accept and Reject are
-  // disabled and look it; Show still works.
-  const offline = useBackendOffline();
+  // Offline is read-only (round 15 of PR #114), and so is following an
+  // agent's switch (GM round 22, A: one state, lib/canvasLock): Accept and
+  // Reject are disabled and look it; Show still works.
+  const lock = useCanvasLock();
   const pruneExpired = useCanvasProposalsStore((s) => s.pruneExpired);
   const { fitBounds, getInternalNode } = useReactFlow();
   // Track the shown proposal by id, never by position: a proposal that
@@ -293,8 +294,7 @@ export function ProposalBar() {
           <button
             type="button"
             className="proposal-bar__button"
-            disabled={Boolean(pending[current.view.id]) || offline}
-            {...offlineMark(offline)}
+            {...lock.act({ disabled: Boolean(pending[current.view.id]) })}
             onClick={() => {
               if (settled()) void reject(current.view.id);
             }}
@@ -305,8 +305,7 @@ export function ProposalBar() {
           <button
             type="button"
             className="proposal-bar__button proposal-bar__button--primary"
-            disabled={Boolean(pending[current.view.id]) || offline}
-            {...offlineMark(offline)}
+            {...lock.act({ disabled: Boolean(pending[current.view.id]) })}
             onClick={() => {
               if (settled()) void accept(current.view.id);
             }}

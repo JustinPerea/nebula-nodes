@@ -27,9 +27,13 @@ export interface CutOffSave {
 export type CutOffEnding = { kind: 'switch' } | { kind: 'import' }
   | { kind: 'agent'; agent: string | null; copy?: { id: string; name: string } | null }
   /** An agent's clear (round 20): agentClearedLine, no project. */
-  | { kind: 'agentClear'; agent: string | null };
+  | { kind: 'agentClear'; agent: string | null }
+  /** Round 22 (review 21, L-a): a sync with no edit found another canvas (a
+   * restart, a missed change): changesNotSavedLine, no project. */
+  | { kind: 'reconnect' };
 
 function ending(how: CutOffEnding): string {
+  if (how.kind === 'reconnect') return '';
   if (how.kind === 'switch') return 'It was still saving when you switched.';
   if (how.kind === 'import') return 'It was still saving when the import replaced the canvas.';
   return `It was still saving when ${how.agent || 'an agent'} switched projects.`;
@@ -120,4 +124,28 @@ export function agentClearedLine(saves: CutOffSave[], agent: string | null): str
       + `for “${settings[0].node}”. ${tail}`;
   }
   return `${who} cleared the canvas while you were editing ${settings.length} settings. Those changes weren't saved.`;
+}
+
+/**
+ * Round 22 (review 21, L-a: "never lose it with no line"): typing Nebula
+ * didn't keep because the canvas it was for is no longer the one Nebula
+ * holds, found by a sync with no edit (a restart that lost Nebula's canvas
+ * revisions, then showed another canvas). Not an agent's clear, so not its
+ * line (GM follow-up 4); GM's failed-save line from PR #114 instead, in its
+ * form with nothing put back:
+ *   One: "Couldn't save “<setting>” for “<node>”."
+ *   Two on one node: "Couldn't save “<a>” and “<b>” for “<node>”."
+ *   3+ on one node: "Couldn't save <N> settings for “<node>”."
+ *   Across nodes (derived, for GM): "Couldn't save <N> settings."
+ *   None it can name: "Couldn't save your last change."
+ */
+export function changesNotSavedLine(saves: CutOffSave[]): string | null {
+  if (saves.length === 0) return null;
+  const settings = distinctSaves(saves.filter((save) => save.node && save.setting));
+  if (settings.length === 0) return "Couldn't save your last change.";
+  const nodes = new Set(settings.map(nodeKey));
+  if (nodes.size > 1) return `Couldn't save ${settings.length} settings.`;
+  const what = settings.length === 1 ? `“${settings[0].setting}”`
+    : settings.length === 2 ? `“${settings[0].setting}” and “${settings[1].setting}”` : `${settings.length} settings`;
+  return `Couldn't save ${what} for “${settings[0].node}”.`;
 }

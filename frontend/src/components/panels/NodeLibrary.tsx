@@ -17,7 +17,8 @@ import { ScrollFade } from '../ScrollFade';
 import '../../styles/panels.css';
 import '../../styles/node-library.css';
 import { refuseEditWhileOffline } from '../../lib/backendConnection';
-import { useBackendOffline } from '../../lib/useBackendOffline';
+import { useCanvasLock } from '../../lib/canvasLock';
+import { waitToOpenTooltip } from '../../lib/canvasFollow';
 
 // Initial collapsed state — all categories start collapsed on first render so
 // the user sees a scannable list of category headers, not a long node wall.
@@ -28,7 +29,9 @@ const PRIMARY_CATEGORIES: Partial<Record<NodeBrowseType, string>> = {
 };
 
 export function NodeLibrary() {
-  const readOnly = useBackendOffline();
+  // Offline or following an agent's switch: one read-only state (GM round 22, A).
+  const lock = useCanvasLock();
+  const readOnly = lock.locked;
   const visible = useUIStore((s) => s.panels.library.visible);
   const search = useUIStore((s) => s.librarySearch);
   const setSearch = useUIStore((s) => s.setLibrarySearch);
@@ -304,7 +307,8 @@ export function NodeLibrary() {
           </label>}
           {!isHome && <p className="node-library__count" aria-live="polite">{resultCount} node{resultCount === 1 ? '' : 's'} · {
             // GM, round 16 of PR #114: offline the count line says why nothing adds.
-            readOnly ? 'Adding is paused while offline' : 'Choose a node to add'}</p>}
+            lock.following ? waitToOpenTooltip(lock.following.projectName)
+              : readOnly ? 'Adding is paused while offline' : 'Choose a node to add'}</p>}
         </div>
         <ScrollFade className="node-library__browser" key={isHome ? 'types' : (browseType ?? 'all')}>
           {isHome ? <div className="node-library__home">

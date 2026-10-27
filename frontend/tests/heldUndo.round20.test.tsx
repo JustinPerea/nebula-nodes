@@ -254,9 +254,12 @@ describe('round 20 (review 19)', () => {
       // Round 21 (review 20, L-4): only when Nebula says it lost its revisions.
       setProjectContext({ id: 'p1', revision: 'r1', canvas: '2' });
       start([textFakeNode('n1'), textFakeNode('n2')]);
+      // Round 22 (review 21, L-b): a restart is a sync from another process.
+      sync('2', { bootId: 'rst-boot-a' });
+      await settle();
       type('n2', 'Typed');
       await tick(200);
-      sync('0', { canvasRevisionRestored: false });
+      sync('0', { canvasRevisionRestored: false, bootId: 'rst-boot-b' });
       await settle();
       await tick(6000);
       expect(writes()).toContain('PUT /api/graph/node/n2');
@@ -268,15 +271,19 @@ describe('round 20 (review 19)', () => {
     it("the agent-clear line never fires after a restart, even when the sync's canvas is empty", async () => {
       setProjectContext({ id: 'p1', revision: 'r1', canvas: '2' });
       start([textFakeNode('n1'), textFakeNode('n2')]);
+      sync('2', { bootId: 'rst-boot-c' });
+      await settle();
       type('n2', 'Typed');
       await tick(200);
       nebula().nodes.clear(); nebula().edges = [];
-      sync('0', { canvasRevisionRestored: false });
+      sync('0', { canvasRevisionRestored: false, bootId: 'rst-boot-d' });
       await settle();
       await tick(6000);
       expect(lines().filter((line) => String(line).includes('cleared the canvas'))).toEqual([]);
       // That canvas is gone: its typing never reaches a node that takes its id.
       expect(writes()).not.toContain('PUT /api/graph/node/n2');
+      // Round 22 (review 21, L-a): and it is never lost with no line.
+      expect(lines()).toEqual(["Couldn't save “Text” for “n2”."]);
     });
   });
 

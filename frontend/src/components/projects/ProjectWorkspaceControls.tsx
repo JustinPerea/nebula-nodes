@@ -46,6 +46,9 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
   const label = status === 'saving' ? 'Saving…' : status === 'error' ? 'Save failed' : status === 'unsaved' ? 'Unsaved changes' : 'Saved';
   return (
     <div ref={bar} className={`project-workspace-controls${following ? ' project-workspace-controls--following' : ''}`}
+      // GM round 22 (B): while following, the whole bar names the project
+      // being opened in full (its tooltip and label); the slot may cut it.
+      {...(following ? { role: 'group', title: openingLine(following.projectName), 'aria-label': openingLine(following.projectName) } : {})}
       style={following && lockedWidth ? { width: lockedWidth, maxWidth: lockedWidth } : undefined}>
       <button type="button" className="project-workspace-controls__home" aria-label={homeBusy ? 'Saving…' : 'Back to projects'}
         aria-busy={homeBusy || undefined} title="Projects" disabled={busy}
@@ -98,8 +101,8 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
             onClick={() => void useProjectStore.getState().retrySave()}>Save failed · Retry</button>
         : <span className={`project-workspace-controls__status${status === 'saved' ? ' project-workspace-controls__status--settled' : ''}`}
             role="status">{label}</span>}
-      {/* While following, the count (the canvas that is going) gives its room to the opening line, so the new
-          name shows at the locked width rather than shrinking to nothing (round 21 live check). */}
+      {/* While following, the save state and the count (the canvas that is going) give their room to the
+          opening line, which takes the whole slot at the locked width (GM round 22, B). */}
       {!following && <span className="project-workspace-controls__count">{nodeCount} {nodeCount === 1 ? 'node' : 'nodes'}</span>}
     </div>
   );
