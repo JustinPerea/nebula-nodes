@@ -108,9 +108,10 @@ def test_renaming_moving_and_updating_name_the_node_in_quotes(logged):
     # A params update that names no param: the node, by its label (never its id).
     assert client.put(f"/api/graph/node/{node}", headers=AGENT, json={"params": {}}).status_code == 200
     assert _says(sent)[-1] == "Updated “Hero shots”"
-    # A params update that names params still says which: no node, no quotes.
+    # A params update that names params says which, by the field's label on
+    # the card, in quotes; never the param key (GM, r18 of PR #114).
     assert client.put(f"/api/graph/node/{node}", headers=AGENT, json={"params": {"value": "b"}}).status_code == 200
-    assert _says(sent)[-1] == "Set value"
+    assert _says(sent)[-1] == "Set “Text”"
 
 
 def test_updating_an_unlabeled_node_falls_back_to_its_type_name(logged):

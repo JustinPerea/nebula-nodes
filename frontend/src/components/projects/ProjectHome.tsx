@@ -184,7 +184,10 @@ function recentTimestamp(project: ProjectSummary) {
   return Number.isFinite(updated) ? updated : 0;
 }
 
-function ProjectCard({ project, busy, onOpen, onRename, onDelete, loadCoverChoices, onPinCover }: Pick<ProjectHomeProps, 'busy' | 'onOpen' | 'onRename' | 'onDelete' | 'loadCoverChoices' | 'onPinCover'> & { project: ProjectSummary }) {
+function ProjectCard({ project, busy, offline = false, onOpen, onRename, onDelete, loadCoverChoices, onPinCover }: Pick<ProjectHomeProps, 'busy' | 'onOpen' | 'onRename' | 'onDelete' | 'loadCoverChoices' | 'onPinCover'> & { project: ProjectSummary; offline?: boolean }) {
+  // GM r18: the icons disabled offline carry the offline mark (the
+  // not-allowed cursor, and a press pulses the banner).
+  const off = offlineMark(offline);
   const [editing, setEditing] = useState(false);
   const [choosingCover, setChoosingCover] = useState(false);
   const coverButton = useRef<HTMLButtonElement>(null);
@@ -210,14 +213,14 @@ function ProjectCard({ project, busy, onOpen, onRename, onDelete, loadCoverChoic
           {loadCoverChoices && onPinCover && (
             <button type="button" className="project-home__rename" ref={coverButton} aria-label={`Choose a cover for ${project.name}`}
               title={coverTitle(project)} aria-expanded={choosingCover}
-              disabled={busy || editing} onClick={() => setChoosingCover(!choosingCover)}><ImageIcon aria-hidden="true" /></button>
+              disabled={busy || editing} {...off} onClick={() => setChoosingCover(!choosingCover)}><ImageIcon aria-hidden="true" /></button>
           )}
-          <button type="button" className="project-home__rename" ref={renameButton} aria-label={`Rename ${project.name}`} aria-expanded={editing} disabled={busy} onClick={() => {
+          <button type="button" className="project-home__rename" ref={renameButton} aria-label={`Rename ${project.name}`} aria-expanded={editing} disabled={busy} {...off} onClick={() => {
             if (editing) finishRename();
             else { setName(project.name); setEditing(true); }
           }}><Pencil aria-hidden="true" /></button>
           <button type="button" className="project-home__rename project-home__delete" aria-label={`Delete ${project.name}`}
-            title="Move to Recently deleted" disabled={busy || editing} onClick={() => onDelete(project.id)}><Trash2 aria-hidden="true" /></button>
+            title="Move to Recently deleted" disabled={busy || editing} {...off} onClick={() => onDelete(project.id)}><Trash2 aria-hidden="true" /></button>
         </span>
       </div>
       {/* An agent asking to change the cover the person pinned (Q60 a). */}
@@ -434,7 +437,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
             {projects.length > 0 && <div className="project-home__search"><Search aria-hidden="true" /><label className="project-home__sr-only" htmlFor="project-home-search">Search projects</label><input id="project-home-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search projects" /></div>}
           </div>
           {loading ? <div className="project-home__loading" role="status"><span className="project-home__loading-dot" />Loading your projects…</div>
-            : visibleProjects.length > 0 ? <div className="project-home__grid">{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} busy={locked} onOpen={onOpen} onRename={onRename} onDelete={onDelete} loadCoverChoices={loadCoverChoices} onPinCover={onPinCover} />)}</div>
+            : visibleProjects.length > 0 ? <div className="project-home__grid">{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} busy={locked} offline={offline} onOpen={onOpen} onRename={onRename} onDelete={onDelete} loadCoverChoices={loadCoverChoices} onPinCover={onPinCover} />)}</div>
               : projects.length > 0 ? <div className="project-home__empty" role="status"><Search className="project-home__empty-search" aria-hidden="true" /><h3>No projects match “{query.trim()}”</h3><p>Try another name or clear your search.</p><button type="button" className="project-home__secondary" onClick={() => setQuery('')}>Clear search</button></div>
                 : !error && !unsavedEdits && <div className="project-home__empty"><div className="project-home__empty-graph"><NodeGraphPlaceholder /></div><h3>Your first project starts here.</h3><p>Connect ideas, models and media on a canvas of your own.</p><button type="button" className="project-home__secondary" disabled={locked} {...offlineMark(offline)} onClick={() => onCreate()}><Plus aria-hidden="true" />Create your first project</button></div>}
         </section>

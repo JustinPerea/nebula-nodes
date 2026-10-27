@@ -279,7 +279,8 @@ def test_agent_graph_edits_move_the_cursor_but_browser_edits_do_not(api):
         "Added “Text Input”",
         "Added “GPT Image 2.5”",
         "Connecting “Text Input” to “GPT Image 2.5”",
-        "Set quality",
+        # The field's label on the card, in quotes, never the key (GM, r18 of PR #114).
+        "Set “Quality”",
     ]
     drag = events[2]
     assert drag["action"] == "drag"

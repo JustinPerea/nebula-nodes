@@ -62,9 +62,16 @@ export class ExecutionStartRejectedError extends RequestFailedError {
  * it lasts until Nebula restarts (review 15, extra check 3). The screen's
  * heading names the node ("Couldn't run “<node>”."). Only for that store's
  * 507 (round 17, review 16 L5: the answer's `code`, backend
- * RUN_SAFETY_STORAGE_CODE); the project store's 507 keeps the general line,
- * since a restart doesn't clear it (GM's restart line for it isn't shipped). */
+ * RUN_SAFETY_STORAGE_CODE); the project store's 507 has its own line
+ * (PROJECT_LIST_REASON), since a restart doesn't clear it. */
 export const RUN_SAFEGUARDS_REASON = "Nebula couldn't save its run safeguards, so nothing was started. Restart Nebula, then try again.";
+/** GM - Design, r18 of PR #114 (storage case): a run start Nebula refused
+ * with 507 because it couldn't read or write its project list (the project
+ * store's `code`), before any provider call. A restart doesn't clear it
+ * (review 17 G1); a connected drive with space does. The heading names the
+ * node ("Couldn't run “<node>”.") or the run ("Couldn't start the run."). A
+ * corrupt catalog file is a separate gap (with Justin), not this line. */
+export const PROJECT_LIST_REASON = "Nebula can't read its project list, so nothing was started. Check that the drive Nebula saves to is connected and has space, then try again.";
 /** The backend's codes for a 507 (main.py RUN_SAFETY_STORAGE_CODE, PROJECT_STORE_STORAGE_CODE). */
 export const RUN_SAFETY_STORAGE_CODE = 'run_safeguards';
 export const PROJECT_STORE_STORAGE_CODE = 'project_store';
@@ -79,8 +86,10 @@ async function storageCodeOf(response: Response): Promise<string | null> {
 }
 
 async function executionStartResponseError(heading: string, response: Response): Promise<Error> {
-  const runSafety = response.status === 507 && await storageCodeOf(response) === RUN_SAFETY_STORAGE_CODE;
-  const error = await requestError(heading, response, runSafety ? { reason: RUN_SAFEGUARDS_REASON } : {});
+  const store = response.status === 507 ? await storageCodeOf(response) : null;
+  const reason = store === RUN_SAFETY_STORAGE_CODE ? RUN_SAFEGUARDS_REASON
+    : store === PROJECT_STORE_STORAGE_CODE ? PROJECT_LIST_REASON : null;
+  const error = await requestError(heading, response, reason ? { reason } : {});
   // A gateway/server failure can be returned after the request body was
   // forwarded and the backend scheduled work, so it is not proof of rejection.
   // 507 is Nebula's explicit pre-provider durable-safety rejection.

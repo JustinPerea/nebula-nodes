@@ -66,6 +66,11 @@ class ExecutionRunRegistry:
         # a Stop say the run never started. Bounded and expiring as the
         # tombstones are; a run that registers leaves it.
         self._admitting: OrderedDict[str, float] = OrderedDict()
+        # Run ids stopped while their start was being admitted here (a Stop
+        # with no record for an id in ``_admitting``): only for these may a
+        # refused start say it "was cancelled before it started" (review 17
+        # L4). Bounded and expiring as the tombstones are.
+        self._stopped_admitting: OrderedDict[str, float] = OrderedDict()
         self._clock = clock
         self._max_records = max_records
         self._terminal_callback: Callable[[str, ExecutionRunStatus], None] | None = None
@@ -177,6 +182,29 @@ class ExecutionRunRegistry:
             return False
         return True
 
+    def _note_stopped_admitting(self, run_id: str) -> None:
+        now = self._clock()
+        while self._stopped_admitting:
+            oldest, expires = next(iter(self._stopped_admitting.items()))
+            if expires > now:
+                break
+            self._stopped_admitting.popitem(last=False)
+        self._stopped_admitting.pop(run_id, None)
+        self._stopped_admitting[run_id] = now + self.TOMBSTONE_TTL_SECONDS
+        while len(self._stopped_admitting) > self.MAX_TOMBSTONES:
+            self._stopped_admitting.popitem(last=False)
+
+    def stopped_before_start(self, run_id: str) -> bool:
+        """Whether a Stop reached ``run_id`` while this process was admitting
+        its start, before it registered: that run never started."""
+        expires = self._stopped_admitting.get(run_id)
+        if expires is None:
+            return False
+        if expires <= self._clock():
+            self._stopped_admitting.pop(run_id, None)
+            return False
+        return True
+
     def tombstone_count(self) -> int:
         self._expire_tombstones()
         return len(self._tombstones)
@@ -234,6 +262,8 @@ class ExecutionRunRegistry:
             raise ValueError("runId must be between 1 and 128 characters")
         record = self._records.get(run_id)
         if record is None:
+            if self.start_seen(run_id):
+                self._note_stopped_admitting(run_id)
             # The tombstone first: it only ever prevents, so it holds even
             # when the exact record below is out of room.
             self._add_tombstone(run_id)
@@ -263,6 +293,7 @@ class ExecutionRunRegistry:
         self._cancel_before_start.clear()
         self._tombstones.clear()
         self._admitting.clear()
+        self._stopped_admitting.clear()
 
     def _finish(self, run_id: str, task: asyncio.Task[None]) -> None:
         record = self._records.get(run_id)

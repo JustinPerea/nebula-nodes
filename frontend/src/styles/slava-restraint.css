@@ -1786,9 +1786,10 @@ body.app-slava-restraint .toolbar__button--executing .toolbar__icon {
   opacity: 0;
 }
 
-/* GM r17 (A): the dots sit in the icon's own slot, a fixed 14px box left of
-   the label (the run icon's size), so "Stop" never moves and is never
-   covered. The 19px matrix is scaled to the slot. */
+/* GM r17 (A): the dots sit in the icon's own slot, a fixed box left of the
+   label, so "Stop" never moves and is never covered. GM r18 (G4): the slot
+   is Run's 16px, so the label doesn't shift when Run and Stop swap. The 19px
+   matrix is scaled to 14px and centred in it: (16 - 14) / 2 on each side. */
 body.app-slava-restraint .toolbar__icon-slot {
   position: relative;
   z-index: 1;
@@ -1796,15 +1797,15 @@ body.app-slava-restraint .toolbar__icon-slot {
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
 body.app-slava-restraint .toolbar__button--executing .toolbar__icon-slot::before {
   content: '';
   position: absolute;
-  left: 0;
-  top: 0;
+  left: 1px;
+  top: 1px;
   width: 4px;
   height: 4px;
   border-radius: 50%;
@@ -4385,8 +4386,8 @@ body.app-slava-restraint .editor-transport__icon {
 }
 
 body.app-slava-restraint .editor-transport__btn:hover:not(:disabled),
-body.app-slava-restraint .editor-transport__tool:hover,
-body.app-slava-restraint .editor-transport__preset:hover {
+body.app-slava-restraint .editor-transport__tool:hover:not(:disabled),
+body.app-slava-restraint .editor-transport__preset:hover:not(:disabled) {
   color: var(--sr-ink-bold);
   background: var(--sr-surface-control-hover);
 }
@@ -4540,6 +4541,28 @@ body.app-slava-restraint .editor-transport__range:focus-visible {
 
 body.app-slava-restraint .editor-transport__btn:disabled,
 body.app-slava-restraint .editor-transport__range:disabled {
+  opacity: var(--sr-disabled-opacity);
+}
+
+/* GM r18: offline (or with no clips) Trim, Speed, Cut and Vol and the clip
+   presets read as disabled, like the transport's other buttons. */
+body.app-slava-restraint .editor-transport__tool:disabled,
+body.app-slava-restraint .editor-transport__preset:disabled {
+  opacity: var(--sr-disabled-opacity);
+  cursor: not-allowed;
+}
+
+/* GM r18: a disabled Render Preview or Export is the neutral disabled style,
+   with no accent outline. Orange only ever means "you can press this". */
+body.app-slava-restraint .editor-transport__btn--render:disabled {
+  border-color: var(--sr-edge);
+  background: var(--sr-surface-control);
+}
+
+body.app-slava-restraint .editor-transport__btn--export:disabled {
+  border-color: var(--sr-edge);
+  background: var(--sr-surface-control);
+  cursor: not-allowed;
   opacity: var(--sr-disabled-opacity);
 }
 

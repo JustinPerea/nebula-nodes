@@ -28,7 +28,7 @@ import { BOTTOM_BAR_ATTR, BOTTOM_BAR_PANEL } from '../../lib/bottomBar';
 import { useBottomBarClearance } from '../../hooks/useBottomBarClearance';
 import { CANVAS_FIT_DURATION, CANVAS_ZOOM_DURATION, computeCanvasFitPadding } from '../../lib/canvasFit';
 import { displayKey } from '../../lib/keyboardShortcuts';
-import { describeRunScope, runChipLabel, summarizeRunScope } from '../../lib/runScope';
+import { describeRunScope, runChipLabel, runChipTitle, summarizeRunScope } from '../../lib/runScope';
 import { usePricingStore } from '../../store/pricingStore';
 import { useInputSizeStore } from '../../store/inputSizeStore';
 import type { NodeData } from '../../types';
@@ -285,7 +285,7 @@ export function Toolbar() {
           <ToolbarIcon name="run" />
           <span className="toolbar__label">Run</span>
           {runChip && (
-            <span className="toolbar__run-paid" aria-hidden="true">{runChip}</span>
+            <span className="toolbar__run-paid" aria-hidden="true" title={runChipTitle(runScope)}>{runChip}</span>
           )}
         </button>
       )}

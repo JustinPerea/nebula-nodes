@@ -66,6 +66,14 @@ a {
   top: 81px;
 }
 
+/* GM r18: in the video editor the banner sits right under its header (61px,
+   measured at 1280 and 1440) with the same 8px gap, not at the canvas's
+   place, which is over the preview there. It clears the preview's timecode
+   (110px). */
+.backend-connection[data-placement='editor'] {
+  top: 69px;
+}
+
 /* A blocked edit nudges the banner once (GM, round 14): it springs from a
    slightly larger scale back to rest, on an underdamped spring (zeta 0.5,
    2.4 Hz) sampled into linear(). */

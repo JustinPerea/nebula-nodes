@@ -13,13 +13,16 @@ const pretty = (value: string) => value === 'n_a' ? 'Not applicable' : value.rep
 const emptyLabels = (): EvaluationLabels => ({ tags: {}, axes: {}, palette_roles: {}, keywords: [], no_keywords: false, flagged: false });
 
 /** Round 17 of PR #114 (rename-style lines for a label draft dropped on
- * reconnect; builder's wording, GM to confirm). */
+ * reconnect; GM r18: confirmed, with "changed" for the accents too). */
 export const LABELS_CHANGED_ELSEWHERE = "You changed this reference's labels in another window while Nebula was offline, so your changes here weren't saved.";
-export const ACCENTS_CHANGED_ELSEWHERE = "You saved this reference's accents in another window while Nebula was offline, so your changes here weren't saved.";
+export const ACCENTS_CHANGED_ELSEWHERE = "You changed this reference's accents in another window while Nebula was offline, so your changes here weren't saved.";
 
-/** What a reference has saved: a draft is based on it. */
-const savedStateOf = (item: EvaluationItem) => JSON.stringify([item.accent_locked ?? false, item.accents ?? null,
-  item.no_accents ?? false, item.labels ?? null]);
+/** What a reference has saved: a draft is based on it. The image and the
+ * batch it is in come first (review 17 L3): saves go by position, so after a
+ * batch closed and a new one was prepared in another window, the same
+ * position can hold another image with the same (empty) saved state. */
+const savedStateOf = (item: EvaluationItem, batch: EvaluationBatch) => JSON.stringify([batch.manifest_hash,
+  item.image_sha256, item.accent_locked ?? false, item.accents ?? null, item.no_accents ?? false, item.labels ?? null]);
 
 /** The open reference's draft: its own save and discard, for the Commons' leave popover. */
 type DraftActions = { save: () => Promise<SaveResult>; discard: () => void };
@@ -136,7 +139,7 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
       if (!now.dirty || !fresh) { setBatch(fresh); return; }
       const before = now.batch.items[now.index];
       const after = fresh.items[now.index];
-      if (before && after && savedStateOf(before) === savedStateOf(after)) { setBatch(fresh, true); return; }
+      if (before && after && savedStateOf(before, now.batch) === savedStateOf(after, fresh)) { setBatch(fresh, true); return; }
       setBatch(fresh);
       setDirty(false);
       setNotice(before?.accent_locked ? LABELS_CHANGED_ELSEWHERE : ACCENTS_CHANGED_ELSEWHERE);

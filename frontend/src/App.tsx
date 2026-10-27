@@ -253,6 +253,8 @@ export default function App() {
   const isMoodboard = viewMode === 'moodboard-editor';
   const isCreate = viewMode === 'create';
   const isBrandShowcase = viewMode === 'brand-showcase';
+  // The video editor (the view's last branch below).
+  const isEditor = !isHome && viewMode === 'editor';
   const homeSettings = useHomeSettingsDock(isHome);
 
   let mainView;
@@ -290,7 +292,7 @@ export default function App() {
 
   return (
     <ReactFlowProvider>
-      <BackendConnectionStatus placement={isHome ? 'home' : 'workspace'} />
+      <BackendConnectionStatus placement={isHome ? 'home' : isEditor ? 'editor' : 'workspace'} />
       <PersonRequiredBanner />
       <ProviderRecoveryStatus />
       <ProjectCoordinator />

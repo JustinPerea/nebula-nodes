@@ -271,7 +271,7 @@ export function rebaseAcceptedOnRunOutput(step: OwnAdd, before: Node<NodeData>, 
 
 /**
  * What the canvas says when Undo of an accepted proposal left changes made
- * after Accept (GM - Design, rounds 16 and 17 of PR #114, verbatim; the
+ * after Accept (GM - Design, rounds 16, 17 and 18 of PR #114, verbatim; the
  * forms GM didn't word are marked).
  *
  * `kept`: per node, the settings that changed, and whether it is a node the
@@ -279,35 +279,37 @@ export function rebaseAcceptedOnRunOutput(step: OwnAdd, before: Node<NodeData>, 
  * who changed them all; any mix, or a change with no known source, drops the
  * actor (GM: "Never guess "An agent"").
  *
- * - One node, 1-3 settings: named, "for “<node>”" (that form only when they
- *   are all on one node). Nothing undone says the same names.
- * - One kept node, something else undone: "Undid the proposal except
- *   “<node>”. <who> changed it after you accepted."
- * - Otherwise counted: "<N> settings <agent> changed" (settings only),
- *   "<N> changes <agent> made" (kept nodes in the count); with nothing
- *   undone, "every setting in the proposal".
+ * GM r18, "never count 1": a single item is always named. Items are the
+ * settings (a rename is the setting "Name") and the kept nodes. They are
+ * counted from 2 when kept nodes and settings are mixed, and from 4
+ * otherwise; fewer are named. G2: the count says "settings" when every
+ * counted item is a setting (on one node or several), "changes" only when
+ * kept nodes and settings are mixed.
+ *
+ * - Named: "Undid the proposal except “<s>” for “<node>”. <Who> changed
+ *   it/them after you accepted." ("for “<node>”" per node; a kept node is
+ *   its name alone). Unknown: "… It was / They were changed after you
+ *   accepted."
+ * - Counted: "<N> settings <who> changed", "<N> changes <who> made"; unknown
+ *   drops the actor ("<N> settings changed", "<N> changes made").
+ * - Nothing undone: one node's 1-3 settings named, else "every setting in the
+ *   proposal".
  * - "You": the person's other window, "… in another window after you
- *   accepted." Unknown: "Undid the proposal except <N> changes made after you
- *   accepted." / "Nothing was undone. “<s>” for “<node>” was changed after you
  *   accepted."
  */
 export function acceptUndoLine(kept: { node: string; settings: string[]; wholeNode?: boolean }[],
   source: ChangeSource, nothingUndone: boolean): string {
-  const total = kept.reduce((count, item) => count + (item.wholeNode && !nothingUndone ? 1 : item.settings.length), 0);
-  const one = kept.length === 1 ? kept[0] : null;
   const quote = (text: string) => `\u201c${text}\u201d`;
-  const names = (settings: string[]) => {
-    const quoted = settings.map(quote);
-    return quoted.length === 1 ? quoted[0] : `${quoted.slice(0, -1).join(', ')} and ${quoted[quoted.length - 1]}`;
-  };
+  const andList = (items: string[]) =>
+    items.length <= 1 ? items[0] ?? '' : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+  const names = (settings: string[]) => andList(settings.map(quote));
   const agent = source.kind === 'agent' ? source.name ?? 'An agent' : null;
   const agentInner = source.kind === 'agent' ? source.name ?? 'an agent' : null;
   const where = source.kind === 'you' ? ' in another window' : '';
   const lead = agent ?? 'You';
-  // One node whose 1-3 settings are named ("for “<node>”").
-  const named = one && one.settings.length >= 1 && one.settings.length <= 3 && (nothingUndone || !one.wholeNode);
   if (nothingUndone) {
-    if (named) {
+    const one = kept.length === 1 ? kept[0] : null;
+    if (one && one.settings.length >= 1 && one.settings.length <= 3) {
       if (source.kind === 'unknown') {
         return `Nothing was undone. ${names(one.settings)} for ${quote(one.node)} ${one.settings.length === 1 ? 'was' : 'were'} changed after you accepted.`;
       }
@@ -317,20 +319,28 @@ export function acceptUndoLine(kept: { node: string; settings: string[]; wholeNo
     if (source.kind === 'unknown') return 'Nothing was undone. Every setting in the proposal was changed after you accepted.';
     return `Nothing was undone. ${lead} changed every setting in the proposal${where} after you accepted.`;
   }
-  if (source.kind === 'unknown') {
-    return `Undid the proposal except ${total} ${total === 1 ? 'change' : 'changes'} made after you accepted.`;
+  const wholeNodes = kept.filter((item) => item.wholeNode);
+  const settingNodes = kept.filter((item) => !item.wholeNode && item.settings.length > 0);
+  const total = wholeNodes.length + settingNodes.reduce((count, item) => count + item.settings.length, 0);
+  const mixed = wholeNodes.length > 0 && settingNodes.length > 0;
+  if (total < (mixed ? 2 : 4)) {
+    // Named: each node's settings "for" it, or a kept node by its name.
+    const groups = kept.filter((item) => item.wholeNode || item.settings.length > 0).map((item) =>
+      (item.wholeNode ? quote(item.node) : `${names(item.settings)} for ${quote(item.node)}`));
+    // Groups that hold their own "and" are set apart with a comma.
+    const nested = groups.length > 1 && groups.some((group) => group.includes(' and '));
+    const list = nested ? `${groups.slice(0, -1).join(', ')}, and ${groups[groups.length - 1]}` : andList(groups);
+    if (source.kind === 'unknown') {
+      return `Undid the proposal except ${list}. ${total === 1 ? 'It was' : 'They were'} changed after you accepted.`;
+    }
+    return `Undid the proposal except ${list}. ${lead} changed ${total === 1 ? 'it' : 'them'}${where} after you accepted.`;
   }
-  if (one?.wholeNode) {
-    return `Undid the proposal except ${quote(one.node)}. ${lead} changed it${where} after you accepted.`;
-  }
-  if (named) {
-    return `Undid the proposal except ${names(one.settings)} for ${quote(one.node)}. ${lead} changed ${one.settings.length === 1 ? 'it' : 'them'}${where} after you accepted.`;
-  }
-  const who = agentInner ?? 'you';
-  if (kept.some((item) => item.wholeNode)) {
-    return `Undid the proposal except ${total} changes ${who} made${where} after you accepted.`;
-  }
-  return `Undid the proposal except ${total} settings ${who} changed${where} after you accepted.`;
+  // Counted. Kept nodes alone (4 or more, no setting) are "nodes": builder's
+  // form, GM worded settings and the mixed count.
+  const word = mixed ? 'changes' : wholeNodes.length > 0 ? 'nodes' : 'settings';
+  const verb = mixed ? 'made' : 'changed';
+  if (source.kind === 'unknown') return `Undid the proposal except ${total} ${word} ${verb} after you accepted.`;
+  return `Undid the proposal except ${total} ${word} ${agentInner ?? 'you'} ${verb}${where} after you accepted.`;
 }
 
 /** GM's lines (round 16 follow-up, round 17) for a rename draft dropped on

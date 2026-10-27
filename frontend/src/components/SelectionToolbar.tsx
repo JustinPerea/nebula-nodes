@@ -13,7 +13,7 @@ import { useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
 import { useCanvasPinsStore } from '../store/canvasPinsStore';
 import { isBackendNodeId } from '../lib/canvasPins';
-import { describeRunScope, runChipLabel, summarizeRunScope } from '../lib/runScope';
+import { describeRunScope, runChipLabel, runChipTitle, summarizeRunScope } from '../lib/runScope';
 import { usePricingStore } from '../store/pricingStore';
 import { useInputSizeStore } from '../store/inputSizeStore';
 import { setSelectionActionSlot } from '../lib/selectionActionSlot';
@@ -158,7 +158,7 @@ export function SelectionToolbar() {
         <Play size={17} fill="currentColor" aria-hidden="true" />
         <span>Run</span>
         {runChip && (
-          <span className="selection-toolbar__paid" aria-hidden="true">{runChip}</span>
+          <span className="selection-toolbar__paid" aria-hidden="true" title={runChipTitle(runScope)}>{runChip}</span>
         )}
       </button>
       <span id={runScopeId} className="toolbar__sr-only">{describeRunScope(runScope)}</span>

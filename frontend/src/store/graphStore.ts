@@ -65,6 +65,7 @@ import {
   getExecutionStatus as apiGetExecutionStatus,
   ExecutionStartRejectedError,
   RUN_SAFEGUARDS_REASON,
+  PROJECT_LIST_REASON,
   type ExecutionValidationError,
   type ExecutionStatusResult,
   type ExecutionCancellationResult,
@@ -674,19 +675,24 @@ function settleFailedStart(runId: string, err: unknown): void {
   if (!(err instanceof ExecutionStartRejectedError)) return;
   refusedStartRunIds.add(runId);
   if (refusedStartRunIds.size > 1000) refusedStartRunIds.delete(refusedStartRunIds.values().next().value!);
-  if (err.status === 507 && err.reason === RUN_SAFEGUARDS_REASON) noteRunSafeguardsRefusal(runId);
+  if (err.status === 507 && (err.reason === RUN_SAFEGUARDS_REASON || err.reason === PROJECT_LIST_REASON)) {
+    noteStorageRefusal(runId, err.reason);
+  }
 }
 
-/** GM's locked 507 line (round 16 of PR #114): "Couldn't run “<node>”.
- * Nebula couldn't save its run safeguards, so nothing was started. Restart
- * Nebula, then try again." It lasts until a restart, so it is said where the
- * person looks, besides each card's own line. A run with no single node
- * (the bottom Run) keeps its own heading. */
-function noteRunSafeguardsRefusal(runId: string): void {
+/** GM's 507 lines: the run safeguards (locked, round 16 of PR #114:
+ * "Couldn't run “<node>”. Nebula couldn't save its run safeguards, so nothing
+ * was started. Restart Nebula, then try again.") and the project list (r18,
+ * storage case: "… Nebula can't read its project list, so nothing was
+ * started. Check that the drive Nebula saves to is connected and has space,
+ * then try again."). Each lasts until its cause is fixed, so it is said
+ * where the person looks, besides each card's own line. A run with no
+ * single node (the bottom Run) keeps its own heading. */
+function noteStorageRefusal(runId: string, reason: string): void {
   const state = useGraphStore.getState();
   const target = state.runHistory.find((record) => record.id === runId)?.targetNodeId;
   const label = target ? cardTitle(state.nodes, target) : null;
-  state.notify(`${label ? `Couldn't run \u201c${label}\u201d.` : "Couldn't start the run."} ${RUN_SAFEGUARDS_REASON}`);
+  state.notify(`${label ? `Couldn't run \u201c${label}\u201d.` : "Couldn't start the run."} ${reason}`);
 }
 
 /** Run records that never ran: refused starts and, with `includePending`,

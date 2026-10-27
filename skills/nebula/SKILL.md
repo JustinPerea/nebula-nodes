@@ -238,7 +238,10 @@ yet. Nebula won't start it now, so nothing runs and nothing is spent." That
 id is stopped for good: a start still on its way is refused, so nothing ran
 and nothing was spent. `nebula result` on it prints "Run <id> was stopped
 before it started, so nothing ran and nothing was spent." To run the same
-nodes again, start a new run.
+nodes again, start a new run. A run id that was stopped can never start
+again, whether or not it ran: a request re-sent with that id is refused
+(409) with a line saying so, such as "run '<id>' was already stopped, so
+this id can't start again. Start a new run with a new id."
 
 If Nebula has no record of the id at all (it may have run before Nebula
 restarted, or the id is wrong), both commands print "Nebula has no record

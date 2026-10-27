@@ -8930,12 +8930,35 @@ def _validate_cinema_base_models(nodes: list[GraphNode]) -> None:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+# A start refused because a Stop was recorded for its run id (review 17 L4):
+# worded by what this process knows about the id, never more. The registry
+# and the durable guard know only that a Stop was recorded.
+RUN_ID_STOPPED = "run '{id}' was already stopped, so this id can't start again. Start a new run with a new id."
+RUN_ID_RAN = "run '{id}' already ran, so this id can't start again. Start a new run with a new id."
+RUN_ID_STOP_RECORDED = "run '{id}' was stopped, so this id can't start again. Start a new run with a new id."
+RUN_ID_STOPPED_BEFORE_START = "run '{id}' was cancelled before it started"
+
+
+def _stopped_id_refusal(run_id: str) -> str:
+    """Why a start under ``run_id`` is refused when a Stop was recorded for
+    it: the run registered here and was stopped, or ran and ended, or was
+    stopped while this process was admitting its start (it never started).
+    Anything else (a run from before a restart, a pruned record, a Stop for an
+    id never seen) says only that it was stopped."""
+    record = execution_runs.get(run_id)
+    if record is not None:
+        return (RUN_ID_STOPPED if record.status in {"cancelling", "cancelled"} else RUN_ID_RAN).format(id=run_id)
+    if execution_runs.stopped_before_start(run_id):
+        return RUN_ID_STOPPED_BEFORE_START.format(id=run_id)
+    return RUN_ID_STOP_RECORDED.format(id=run_id)
+
+
 def _assert_execution_admissible(run_id: str) -> None:
     """Honor both durable cross-process and local pre-admission Stop intents."""
     try:
         provider_start_guard.assert_run_admissible(run_id)
     except ProviderStartCancelledError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail=_stopped_id_refusal(run_id)) from exc
     except ProviderStartCancellationCapacityError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ProviderStartPersistenceError as exc:
@@ -8948,7 +8971,7 @@ def _assert_execution_admissible(run_id: str) -> None:
     try:
         execution_runs.assert_admissible(run_id)
     except ExecutionCancelledBeforeStartError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail=_stopped_id_refusal(run_id)) from exc
     except ExecutionCancellationCapacityError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
@@ -9271,7 +9294,7 @@ async def execute(request: ExecuteRequest) -> dict:
         await _release_paid_worldlabs_starts(run_id)
         _return_hold(run_id)
         canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail=_stopped_id_refusal(run_id)) from exc
     except ExecutionCancellationCapacityError as exc:
         if task is None:
             run_coroutine.close()
@@ -9413,7 +9436,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
         await _release_paid_worldlabs_starts(run_id)
         _return_hold(run_id)
         canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail=_stopped_id_refusal(run_id)) from exc
     except ExecutionCancellationCapacityError as exc:
         await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
@@ -10104,7 +10127,9 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
                         terminal_fields=terminal_fields,
                         run_id=run_id,
                     )
-                await _broadcast_graph_sync()
+                # The shot's merge is this run's own write-back into the
+                # scene's params: run output, not anyone's edit (review 17 L2).
+                await _broadcast_graph_sync(run_params=run_id)
             finally:
                 await _release_paid_worldlabs_starts(run_id)
                 _settle_hold(run_id)
@@ -10127,7 +10152,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
         _return_hold(run_id)
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail=_stopped_id_refusal(run_id)) from exc
     except ExecutionCancellationCapacityError as exc:
         if task is None:
             run_coroutine.close()
@@ -10338,9 +10363,10 @@ async def _broadcast_graph_sync(
 
     `run_params` (a run id) marks a run's own param write-back
     (_sync_params_to_cli_graph: a handler that enriches params, such as
-    video-edit). It carries ``runParams`` and no ``edit``: the canvas treats
-    those values as run output, not anyone's edit (round 17 of PR #114,
-    review 16 L3).
+    video-edit; a Cinema shot's merge into its scene; a World Labs recovery
+    checkpoint or start ambiguity). It carries ``runParams`` and no
+    ``edit``: the canvas treats those values as run output, not anyone's
+    edit (round 17 of PR #114, review 16 L3; review 17 L2).
 
     `cleared` marks the sync of a Clear (DELETE /api/graph): node ids start
     again at n1 in the same project, so a canvas treats it as a replacement
@@ -10556,7 +10582,8 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
         if not _run_canvas_moved(run_id, "start-ambiguity event"):
             await manager.broadcast(event)
         if run_id is not None:
-            await _broadcast_graph_sync()
+            # The run's own write-back (review 17 L2), as below.
+            await _broadcast_graph_sync(run_params=run_id)
         return
 
     if isinstance(event, ProviderRecoveryEvent):
@@ -10580,7 +10607,10 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
         if not _run_canvas_moved(event.run_id or execution_run_id.get(), "recovery event"):
             await manager.broadcast(event)
         if changed or safety_hold_changed:
-            await _broadcast_graph_sync()
+            # The checkpoint is the run's own write-back into the node's
+            # params (resume_operation_id, existing_world_id): run output,
+            # not anyone's edit (review 17 L2).
+            await _broadcast_graph_sync(run_params=event.run_id or execution_run_id.get())
         return
 
     run_id = event.run_id or execution_run_id.get()
@@ -11611,10 +11641,28 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
     updated = copy.deepcopy(cli_graph.nodes[node_id])
     await _broadcast_graph_sync(edit=True)
     publish_action(f"Updated {node_id} params")
-    changed = ", ".join(sorted(str(key) for key in params)[:4])
-    await _show_agent({"nodeId": node_id}, say=f"Set {changed}" if changed else f"Updated {_quoted(_node_label(node_id))}",
-                      did=_did("Changed", node_id))
+    await _show_agent({"nodeId": node_id}, say=_set_params_bubble(node_id, params) if params
+                      else f"Updated {_quoted(_node_label(node_id))}", did=_did("Changed", node_id))
     return updated
+
+
+def _set_params_bubble(node_id: str, params: Mapping[str, Any]) -> str:
+    """The cursor bubble for an agent's param change: each field's label as
+    the card shows it, in quotes ("Set “Text”"), in the order the agent gave
+    them; nothing when no field has a label (a universal node's provider
+    params). Never a param key (GM, r18 of PR #114: Codex's bubble read
+    "Set value")."""
+    from execution.person_line import and_list
+
+    node = cli_graph.nodes.get(node_id) or {}
+    definition = node_registry.get_all().get(str(node.get("definitionId") or "")) or {}
+    labels: list[str] = []
+    for key in params:
+        param = node_route.param_definition(definition, str(key)) if definition else None
+        label = str((param or {}).get("label") or "").strip()
+        if label and label not in labels:
+            labels.append(label)
+    return f"Set {and_list(_quoted(label) for label in labels)}" if labels else ""
 
 
 def _universal_request(body: Any, definition_id: str | None = None) -> tuple[str, str]:

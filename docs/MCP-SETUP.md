@@ -529,7 +529,9 @@ Every one of these actions is also listed in the canvas's **Agent log**
 own eye-off button or Settings > Preferences > "Agent log"): the agent's
 name in its cursor colour, the cursor's words ("Added “Moodboard”", "Running
 “Krea 2”", "Connecting “Prompt” to “Krea 2”", "Accepted"; a node by its name in
-curly quotes, else its type's name), and the time. Moodboard writes are listed there too
+curly quotes, else its type's name; a param change by each field's label on
+the card, "Set “Text”", never the param key, and no words at all for a field
+with no label, such as a universal node's provider params), and the time. Moodboard writes are listed there too
 (your edit batch's `say`, else the journal's words: "Set aside #1 on board
 Dusk"; "Analyzed board Dusk"), and so is a run of the
 whole canvas ("Running 4 nodes"); neither has one place on the canvas, so
@@ -977,7 +979,18 @@ and shot runs (`/api/cinema/generate-shot`) check both at their first check
 and again at the last one before the run is registered, with nothing
 awaited in between, so a start that began before the Stop landed is refused
 with 409 "run '<id>' was cancelled before it started" and nothing is sent or
-spent. What each surface says:
+spent. A start under an id a Stop was recorded for is always refused the
+same way (409); its `detail` says only what this process knows (review 17
+L4): "run '<id>' was already stopped, so this id can't start again. Start a
+new run with a new id." for a run that registered here and was stopped;
+"run '<id>' already ran, so this id can't start again. …" for one that
+ended before its Stop; "… was cancelled before it started" only when the
+Stop reached the id while this process was admitting its start; otherwise
+(a run from before a restart, a Stop for an id never seen) "run '<id>' was
+stopped, so this id can't start again. Start a new run with a new id."
+Agents and the CLI never pick a run id (`run_nodes`, `/api/graph/run` and
+`nebula run` make one), so they meet this only by re-sending a request a
+script built; start a new run instead. What each surface says:
 
 - `DELETE /api/executions/{runId}` and `GET /api/executions/{runId}` answer
   `{"status": "cancelled", "pendingAdmission": true}`.
@@ -1018,9 +1031,12 @@ recovery journal, durable Stop state), and the canvas says "Couldn't start
 the run. Nebula couldn't save its run safeguards, so nothing was started.
 Restart Nebula, then try again." `project_store` is the project catalog
 (an unreadable `catalog.json` or a storage error): nothing was started
-either (the project is read before the run exists), but a restart doesn't
-clear it, so the canvas gives its general line. Repairing the catalog or
-the storage does, and the same start then works. Don't parse `detail`.
+either (the project is read before the run exists), and a restart doesn't
+clear it, so the canvas says "Couldn't run “<node>”." (or "Couldn't start
+the run." for more than one node) and then "Nebula can't read its project
+list, so nothing was started. Check that the drive Nebula saves to is
+connected and has space, then try again." Repairing the catalog or the
+storage clears it, and the same start then works. Don't parse `detail`.
 
 Every process the backend starts (agents, the Commons reader, ffmpeg, the
 Remotion renderer, git, `open`, `ps`, `sips`, `brctl`) gets the backend's

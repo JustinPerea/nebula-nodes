@@ -26,8 +26,9 @@ export const OFFLINE_LINE = 'Nebula is offline. Editing is paused until it recon
  */
 export function BackendConnectionStatus({ placement = 'workspace' }: {
   /** GM r17 (C): on the home screen the banner sits right under its top bar
-   * (the workspace's place, below both bars, covered the heading there). */
-  placement?: 'workspace' | 'home';
+   * (the workspace's place, below both bars, covered the heading there).
+   * GM r18: in the video editor, right under the editor's header. */
+  placement?: 'workspace' | 'home' | 'editor';
 } = {}) {
   const offline = useBackendOffline();
   const banner = useRef<HTMLDivElement>(null);

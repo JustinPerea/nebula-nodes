@@ -332,6 +332,16 @@ export function runChipLabel({ paid, cost }: RunScopeSummary): string | null {
   return exact ? `~${amount}` : amount;
 }
 
+/** The Run chip's tooltip for its prefix (GM - Design, r18 of PR #114):
+ * "~$X" is "Estimated cost"; "$X+" is "At least $X. Some costs aren't known
+ * yet.", with X the low end of the estimate. A plain range and "N paid" have
+ * none (the button's own title has the details). */
+export function runChipTitle({ paid, cost }: RunScopeSummary): string | undefined {
+  if (paid.length === 0 || !cost || cost.lines.length === 0) return undefined;
+  if (cost.unpriced.length > 0 || cost.plus.length > 0) return `At least ${formatUsd(cost.low)}. Some costs aren't known yet.`;
+  return formatUsd(cost.low) === formatUsd(cost.high) ? 'Estimated cost' : undefined;
+}
+
 const AWAITING = 'Priced when its input is known:';
 const UNREADABLE = "Nebula can't read the size of its input (a file on another host is never downloaded to price it):";
 

@@ -1203,11 +1203,18 @@ function savedCopyHolds(saved: ProjectSnapshot, held: ProjectSnapshot): boolean 
   return !held.createDraft || sameValue(copy.createDraft, held.createDraft);
 }
 
-async function projectAlreadyHolds(projectId: string, held: ProjectSnapshot): Promise<boolean> {
+/** Whether nothing in `held` would be lost by dropping it: the project's
+ * saved copy already holds it, or, when that copy can't be read (an agent
+ * deleted the project while Nebula was offline: review 17 L1), what this tab
+ * last saved or loaded for that project does. The view isn't work either
+ * way, so a pan alone never makes a recovered copy. */
+async function projectAlreadyHolds(projectId: string, held: ProjectSnapshot, lastSavedThere: string): Promise<boolean> {
   try {
     return savedCopyHolds((await api.getProject(projectId)).snapshot, held);
   } catch {
-    return false;
+    let saved: ProjectSnapshot | null = null;
+    try { saved = lastSavedThere ? JSON.parse(lastSavedThere) as ProjectSnapshot : null; } catch { saved = null; }
+    return saved ? savedCopyHolds(saved, held) : false;
   }
 }
 
@@ -1233,6 +1240,8 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
   const following = { notices: [notice] };
   followingSwitch = following;
   const latest = () => following.notices[following.notices.length - 1];
+  // What this tab last saved or loaded for the project it is leaving.
+  const lastSavedThere = lastSaved;
   let keptCopy = false;
   try {
     await saveQueue.catch(() => {});
@@ -1257,7 +1266,7 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
       } catch {
         // Refused (that project was opened again since, say): a copy only
         // when its saved copy lacks something this tab holds (round 17).
-        if (!(await projectAlreadyHolds(context.id, snapshot))) {
+        if (!(await projectAlreadyHolds(context.id, snapshot, lastSavedThere))) {
           pendingRecovery = pendingRecoveryOf(context.id, snapshot);
           await whenSent(() => recoverPendingWork());
           keptCopy = true;
@@ -1277,12 +1286,15 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
     const landed = [...following.notices].reverse().find((item) => item.projectId === loaded?.id) ?? latest();
     const left = notice.previousProjectId;
     const reopened = (loaded?.id ?? landed.projectId) === left;
-    useProjectStore.setState({ switchNotice: {
+    // The way back only to a project the listing loadWorkspace just read
+    // still has (review 17 L1): offline, an agent's delete of it arrived
+    // before this notice existed, so no relist could drop it.
+    useProjectStore.setState((state) => ({ switchNotice: wayBackIn({
       actorName: agentNameOf(landed), created: landed.created === true && landed.projectId === (loaded?.id ?? landed.projectId),
       projectName: loaded?.name ?? landed.projectName,
       previousProjectId: reopened ? null : left,
       previousProjectName: reopened ? null : notice.previousProjectName, keptCopy,
-    } });
+    }, state.projects) }));
   } catch (error) {
     // Refused for good: the held edits' screen says it (holdRefusedEdits).
     if (error instanceof EditsRefused) { noteAgentOpening(latest(), alreadyHeld); return; }
@@ -1368,6 +1380,13 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
   switchBack: async () => {
     const back = get().switchNotice?.previousProjectId;
     if (!back) return;
+    // Gone since the toast came up (deleted, or in Recently deleted): the
+    // toast closes quietly rather than send an open that can't work (review
+    // 17 L1).
+    if (!get().projects.some((project) => project.id === back)) {
+      set({ switchNotice: null });
+      return;
+    }
     await get().open(back);
     if (get().activeProject?.id === back) set({ switchNotice: null });
   },
