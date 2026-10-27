@@ -193,3 +193,18 @@ body.app-slava-restraint :is(.node-library__type, .node-library__all, .node-libr
     margin-bottom: 6px;
   }
 }
+
+/* Offline is read-only (GM, round 14 of PR #114): items browse but show as
+   disabled; a press pulses the offline banner instead of adding. */
+.panel__item.panel__item--read-only,
+.node-library__entry--read-only,
+.node-library__entry--read-only .provider-readiness {
+  cursor: not-allowed;
+}
+
+/* The dimming sits on the children: the item's own opacity runs the library's
+   reveal (slava-restraint.css .panel__items--expanded .panel__item), which
+   outranks a rule here and would undo it. */
+.panel__item.panel__item--read-only > * {
+  opacity: 0.5;
+}

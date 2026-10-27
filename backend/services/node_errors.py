@@ -116,6 +116,21 @@ class NodeErrors:
     def projects(self) -> list[str]:
         return sorted(self._projects)
 
+    def adopt(self, old_project_id: str | None, new_project_id: str | None) -> None:
+        """The canvas of ``old_project_id`` is now filed as ``new_project_id``,
+        the same live graph and ids (GET /api/projects making "Recovered
+        canvas" of the unfiled canvas): its nodes' errors move with it, and
+        the store points at it if it pointed at the old one."""
+        old, new = _project_key(old_project_id), _project_key(new_project_id)
+        if old == new:
+            return
+        moved = self._projects.pop(old, None)
+        if self._project == old:
+            self._project = new
+        if moved:
+            self._projects[new] = {**moved, **self._projects.get(new, {})}
+            self._save()
+
     def keep_projects(self, project_ids: Container[str]) -> None:
         """Forget projects that no longer exist (deleted for good, trash emptied)."""
         gone = [key for key in self._projects if key and key not in project_ids]

@@ -429,7 +429,11 @@ And these canvas tools:
   changes the canvas, then returns what changed and who did it. It skips
   your own edits. When the person undoes your edit with Cmd+Z, the events
   say so: each has `edit.undoes` (your `undo.editId`) and `edit.of` (you),
-  and an `edit.undone` event follows. If you also use the `nebula` CLI, set `NEBULA_AGENT_NAME`
+  and an `edit.undone` event follows (a `proposal.reopened` the undo brought
+  back can come after it, since its fit check finishes later; a later
+  `edit.undone` of that undo lists them in its `events`: every pin and
+  proposal event, and at most 50 others, with `eventsTruncated: true` and
+  `eventsTotal` when it left some out). If you also use the `nebula` CLI, set `NEBULA_AGENT_NAME`
   so both share one name; otherwise your CLI edits arrive as `anonymous`
   (the result then carries a `note`). Pass the returned `cursor` back as `since`; see
   [Watching for changes](#watching-for-changes). The wait holds only its own
@@ -567,13 +571,13 @@ your own edits; `--as NAME` sets your name for that filtering.
 
 | Kind | When | Data |
 |---|---|---|
-| `node.added` / `node.removed` | create, cluster, connect-and-create / delete | definition, name |
-| `node.params` | a param changed (only keys whose value changed) | `keys`, redacted `values` |
+| `node.added` / `node.removed` | create, cluster, connect-and-create / delete | definition, name; `proposalId` when an accepted proposal added it |
+| `node.params` | a param changed (only keys whose value changed) | `keys`, redacted `values`; `proposalId` when an accepted proposal set it |
 | `node.moved` | a drag ended, auto-layout or paste moved nodes 8 px or more | `nodeIds`, `count` |
 | `node.renamed` | a node got a new name on the canvas (or went back to its model name) | `from`, `to` |
-| `edge.added` / `edge.removed` | connected / disconnected | source, target and handles |
+| `edge.added` / `edge.removed` | connected / disconnected | source, target and handles; `proposalId` when an accepted proposal wired it |
 | `selection.changed` | the selected set changed | `nodeIds`, `count` |
-| `run.started` / `run.finished` / `run.failed` | per node, attributed to whoever started the run | `runId`, `error` |
+| `run.started` / `run.finished` / `run.failed` | per node, attributed to whoever started the run | `runId`, `error`; `proposalId` on the run the canvas starts for an accepted proposal |
 | `run.cancelled` | a run stopped, attributed to whoever pressed Stop or called `cancel_run` (the starter when another backend took the Stop) | `runId`, `startedBy` (`kind`, `name`) |
 | `run.skipped` | a gate upstream (Jev Decide's On Pass / On Fail) withheld the node's input, so it never ran | `runId`, `reason`, `gateNodeId` |
 | `canvas.replaced` | import, project opened or created; node ids restart | `reason` |
@@ -594,7 +598,7 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `project.created` / `project.deleted` / `project.restored` | anyone made a project (new, or a stale tab's recovered copy), moved one to Recently deleted, or brought one back | `projectId`, `name`; `wasOpen` on a delete; `createdBy` when an agent made it |
 | `project.renamed` | a project's name changed (saving the same name again isn't journaled) | `projectId`, `from`, `to` |
 | `provider.hold` | a paid start was held (a World Labs recovery checkpoint, or a start Nebula couldn't confirm) or cleared, attributed to whoever started the run or cleared it | `hold` (`recovery` or `startAmbiguity`), `change` (`held` or `cleared`), `runId`, `kind`, `durable` |
-| `edit.undone` / `edit.redone` | a whole edit was undone (an agent's `undo_canvas_edit`, or the person's Cmd+Z of a step the canvas knew the edit of) or redone; after the node and connection events it made | `editId` (the edit reverted), `of` (whose), `editKind`, `events` (that edit's event cursors), `undid` (for an undo of an undo), `counts`, `skipped` |
+| `edit.undone` / `edit.redone` | a whole edit was undone (an agent's `undo_canvas_edit`, or the person's Cmd+Z of a step the canvas knew the edit of) or redone; after the node and connection events it made and the pins it put back (`pin.reattached`), and before any `proposal.reopened` of the same undo, which can follow it | `editId` (the edit reverted), `of` (whose), `editKind`, `events` (that edit's event cursors, oldest first: every event journaled under it but its own `edit.undone`, its `pin.*` and `proposal.*` ones always, and at most 50 of the rest), `eventsTruncated: true` and `eventsTotal` (how many it had) when that cut some, `undid` (for an undo of an undo), `counts`, `skipped` |
 | `note.posted` | an agent posted an update to the person (Updates, `post_note`) | `surface` (canvas or board), `noteId`, `about`, `refs` (up to 12), `text`; `boardId`, `boardName` on a board |
 | `style.created` / `style.updated` / `style.deleted` / `style.restored` / `style.purged` | a Style was saved, changed, moved to Recently deleted, restored from it, or deleted for good, by the person (Create, the Assets panel) or an agent (`style_*`, `nebula style`) | `styleId`, `styleName`, `scope` (`global` or the project id); `fields` (what an update changed: `name`, `category`, `prompt`, `params`, `modelId`, `refImages`, `thumbnail`); never a prompt or a setting's value |
 
@@ -617,8 +621,244 @@ answers at once when newer events exist, otherwise waits. Resume with
 your own edits never wake you. `gap: true` means the 500-event buffer
 overwrote events you hadn't read, and `reset: true` means the backend
 restarted; run `nebula look` in both cases. Every event carries the project
-id it happened in. Param values go through the same redaction as the
+id it happened in, which can be one closed since (an Update saved as the
+person opened another project); the answer's own `projectId` is the project
+open now. Param values go through the same redaction as the
 snapshot, and outputs never appear.
+
+### Claude Code channels (experiment)
+
+With `--channel`, Nebula's MCP server pushes into a running Claude Code
+session, so Claude hears your pins and edits without sitting in
+`wait_for_canvas_change`. It is built on [Claude Code
+channels](https://code.claude.com/docs/en/channels-reference), a research
+preview: the flags, the protocol and this section may change, and a Claude
+Code update can break it. The code is `backend/mcp_channel.py` (what to push
+and when) and `serve_channel` in `backend/mcp_server.py` (how it hooks into the server).
+
+It is off unless you start a session with it. Without `--channel` the server
+is exactly the one above: same capabilities, instructions and tools.
+
+**Try it.** Write a session-only MCP config, for example
+`~/.nebula-listen.mcp.json` (mode 600, outside any repo). Copy the command,
+args and env of your saved `nebula` server (`claude mcp get nebula` shows
+them) and add `--channel`; it names your token file, never the token:
+
+```json
+{
+  "mcpServers": {
+    "nebula-listen": {
+      "command": "/path/to/nebula_nodes/backend/.venv/bin/python",
+      "args": ["/path/to/nebula_nodes/backend/mcp_server.py", "--channel"],
+      "env": {
+        "NEBULA_URL": "http://127.0.0.1:8000",
+        "NEBULA_APP_TOKEN_FILE": "/path/to/your/app-token-file"
+      }
+    }
+  }
+}
+```
+
+Then, each time:
+
+```bash
+claude --mcp-config ~/.nebula-listen.mcp.json \
+  --dangerously-load-development-channels server:nebula-listen \
+  --disallowedTools "mcp__nebula__*"
+```
+
+`--disallowedTools "mcp__nebula__*"` takes the saved server's copies of the
+same tools out of the session, so `nebula-listen` serves both the tools and the
+pushes. It has to: the listener learns which proposals and runs are Claude's,
+and when a turn is under way, from the tool calls it serves. Claude
+Code first shows **WARNING: Loading development channels**; choose **I am
+using this for local development**. In the debug log (`claude --debug-file
+<file> ...`) the server then shows `Channel notifications registered`.
+
+**What the development flag does.** It lets the one server you name put text
+in front of Claude, skipping Anthropic's channel allowlist for that entry
+(Nebula isn't on it during the preview). Nebula sends only its own summaries,
+but text anyone can write on the canvas (a pin, a node or board name, another
+agent's rename) can reach Claude through it, marked as data. Use it only with
+a Nebula you run yourself. Anthropic's own warning (channels reference): "Don't
+use it to run channels from untrusted sources." Never add `--channel` to
+your saved `nebula` server: the server can't tell whether the session opted it
+in (Claude Code doesn't acknowledge a push, and the `initialize` request looks
+the same either way), so in an ordinary session it would push into nothing.
+The server doesn't offer Claude Code's permission relay
+(`claude/channel/permission`), so nobody can answer a permission prompt
+through it.
+
+**Requirements** (from Claude Code's channels pages, read 2026-10-20). Claude
+Code 2.1.234 or later (tried with 2.1.304), signed in with claude.ai or a
+Console API key: channels aren't available on Bedrock, Google Cloud or
+Foundry. Channels need an individual account (Pro or Max, which need nothing
+more) or an Owner's org switch: on a claude.ai Team or Enterprise seat an
+Owner must first turn on Organization settings > Claude Code > Channels
+(`channelsEnabled`), which allows channels for every seat in the org. The
+development flag doesn't get past that switch, and until then the server's
+tools work but nothing is pushed. (Nebula's own Team org keeps it off for
+now; the experiment is tried on individual accounts.) It doesn't work with
+`claude -p` or the Agent SDK: Claude Code ignores the flag there.
+
+**What wakes Claude:**
+
+- a pin you add, at once (pins under 1 s apart go together), as long as it
+  is still open when it goes (below);
+- your decision on one of its own proposals (accepted, rejected, expired or
+  invalidated), from `propose_change` or `propose_asset_change`, unless it is
+  already waiting for it in `get_proposal` or withdrew it. One an undo
+  reopens counts again: its next decision wakes it too;
+- the end of a run it started and stopped waiting for (`run_nodes` or
+  `get_run` answered "running"), unless it is collecting it with `get_run`.
+  The run the canvas starts for its accepted proposal counts as its own run:
+  Nebula names the proposal in that run's events. A run you start yourself,
+  even on the nodes the proposal listed, is yours. Reading your run with
+  `get_run` never makes it Claude's;
+- a change you make, 8 s after your last edit and 30 s at most after the
+  first: a node added, removed, edited (its settings) or renamed, a connection
+  made or removed, or a pin deleted;
+- a run you start, once, when it ends (finished, failed or stopped), with its
+  result: its status and how many nodes ran, the outputs being in `get_run`.
+  Its start never wakes it, and a run still going after 5 minutes goes then,
+  as still running. It counts as a change.
+
+A change, or the end of your run, waits too while Claude is mid-turn (a
+Nebula call running, or one in the last 20 s).
+
+Some of your edits don't wake it on their own: a moodboard edit, and a
+replaced or cleared canvas (another project opened, a graph loaded, Clear).
+Each adds a line to the next push, whatever wakes it; a replaced or cleared
+canvas also tells Claude to call `start_here`. A board write that only moved
+cards is left out, like a node move; a card's weight (`board.resized`) is an
+edit.
+
+Selections and moves never wake it, nor do other agents, nor its own edits:
+the listener long-polls `/api/canvas/events` under the tools' own name and
+token, so Nebula leaves those out. The nodes, connections and settings an
+accepted proposal applies are not counted as your edits (Nebula marks them
+with `proposalId`; a node's name can't pass for one), nor is the board write
+of an accepted `propose_asset_change` of Claude's own (turning on a board's
+Send notes to generators, marked the same way). Another agent's accepted
+board proposal still adds a line, since you made it happen. At most 20 wakes an
+hour, 30 s apart; anything past a limit arrives with the next one (`held` says
+how many waited), and past 100 waiting edits (or 100 pins) the push gives a
+count and asks for `look_at_canvas`; a pile of edits never pushes a pin out.
+After 2 hours with no activity from you (selections
+and moves count) it stops listening, and the next Nebula tool result says so;
+in Claude Code, /mcp > nebula-listen > Reconnect starts it again. If the
+listener itself fails, it stops the same way (a stderr line, and the next
+result says so) and the tools keep working. If Nebula keeps failing to answer
+for one of Claude's runs (10 errors in a row, about 6 minutes), the listener
+stops following it and the next result says to read it with `get_run`.
+
+A push arrives as `<channel source="nebula-listen" wake="pin|proposal|run|change"
+count="…" cursor="…" journal="…" project_id="…">`, with `held="…"` and
+`gate="change"` when they apply. The text is written from the same events
+`wait_for_canvas_change` returns: event summaries (redacted param values never
+appear, only which params changed), the pin's text, a proposal's note and the
+reason you gave, a run's status and how many nodes ran. Nothing else is
+fetched, run outputs and errors stay in `get_run`, and moodboard events never
+carry note text. Canvas text has its angle brackets and hidden characters
+replaced, so it can't close or open a tag.
+
+**What a woken turn may do** (plan v2.7 Q42 a and Q51 a). Some pushes are
+gated (`gate="change"`): Claude may look (the read tools), point and say
+something (`point_at`), post an Update (`post_note`), answer a pin and propose
+(`propose_change`, `propose_asset_change` for a cover, a board's notes or the
+Commons, `get_proposal`, `withdraw_proposal`). Edits, runs, project
+switches, board writes and any tool not on that list are refused for that
+turn, so it offers instead of editing under your hands. Which pushes:
+
+- **Never gated:** a push that holds a pin of yours still open (whatever
+  else it carries), and one for your accepting its proposal or for its own
+  run's end. Those act
+  like any turn, and none of them ends a gated turn's window early.
+- **Always gated:** a push for a proposal you rejected, that expired or that
+  was invalidated (it may only offer again), and a push carrying your edits:
+  a change, the end of your run, a moodboard or canvas line, or lost events.
+- **Both at once:** a push that carries your edits and an accept or its own
+  run's end is gated, since the edits are your hands on the canvas.
+
+A gated push goes only when Claude isn't mid-turn, so the gate never lands
+on a turn already running. No push ever closes or shortens a gated turn's
+window: a push that isn't gated (a pin too) waits until the window has
+ended on its own terms, at least 60 s after the gated push and then 20 s
+with no Nebula call and none running. A Nebula call still running (a
+`get_proposal` or `wait_for_canvas_change` wait) keeps the window open,
+however long it waits. The cost: a pin you add during a gated turn's window
+waits for that window's end, at least a minute after the change push and
+longer while that turn keeps calling Nebula. While a pin waits, no other
+gated push goes, unless Nebula can't answer the check (below): a proposal
+you reject meanwhile, and the edits you make meanwhile, go with the pin
+when it does, in one push that isn't gated (it holds a pin). Edits from
+your last 8 s before it goes are the exception: they aren't due yet (the
+8 s quiet time), so they follow in a gated push of their own, at least
+30 s later and once Claude has made no Nebula call for 20 s. So a pin waits
+only for the window it came in, however long you keep editing. Claude
+Code wouldn't give it to the running turn anyway (pushes that arrive while
+Claude is busy are delivered together on its next turn), so sending it
+sooner could only have freed the change turn to edit.
+
+**Only a pin still open lifts the gate.** A pin wake needs a pin of yours
+that is still open when it goes. A pin you delete, one any agent answers
+(Claude's own `resolve_pin` included, even in a gated turn), and the pins
+of a project that is no longer open (anyone's switch, or the open project's
+delete) leave the waiting batch at once. A pin whose node is deleted stays:
+it keeps its place on the canvas. When a push would hold pins, the listener
+first asks Nebula which of them are still open (`GET /api/canvas/pins`), and
+the push carries only the pins Nebula lists open on the project that is
+open. That catches what its event feed can't show: a pin answered with the
+`nebula` CLI under the same agent name (Nebula leaves an agent's own events
+out of its feed), a delete lost while Nebula restarted, or a pin of the
+project you just switched away from. A batch left with no pin goes gated,
+like any batch carrying your edits. The check is a local request that
+answers at once: a push waits for it a second at most, after which an
+accept or the end of Claude's own run goes without the pins, and past 4 s
+the check counts as failed. If Nebula can't answer the check, only the pins wait: it checks
+again (5 s after the failure, doubling up to 60 s), every other push goes
+meanwhile by its own rules, without them, and the server's log says so
+once the check has failed for a minute. Once no pin waits (each was
+answered, deleted or left with its project), a later pin's checks start
+afresh, at 5 s. If Nebula refuses the check
+(an error such as an agent token it no longer accepts), the pins are dropped
+without a wake, and the log says how many. "Still open" means still open
+when Nebula answered: a pin you delete in the moment between that answer and
+the push, or before Claude Code hands the push over, still arrives as a pin
+wake.
+
+The gate lives in this MCP server process, and that has two gaps. Nebula
+can't see where a Claude Code turn ends, so the timing is guessed from when
+Nebula sends the push: the window lasts at least 60 s after it and until
+Nebula has had no call for 20 s. That guess can miss both ways:
+
+- A turn you type can be refused. If you type a request to Claude within
+  that minute, it is refused the same way (in the live check Claude proposed
+  the edit instead).
+- A change turn can go ungated. If Claude is busy with other work (no Nebula
+  call) when a gated push is sent, Claude Code hands it over on the next
+  turn; if that is more than a minute later, the window has already ended
+  and that turn may edit. The same happens when a woken turn, after its
+  first minute, pauses more than 20 s between Nebula calls.
+
+And it covers only this server's tools, not the `nebula` CLI or another
+Nebula MCP server in the same session: Claude is told not to edit through
+them in that turn, but nothing stops it. A later version moves the gate into
+Nebula itself, where it covers every client. "5 minutes per turn" can't be
+enforced either; after 5 minutes a gated turn's tool results say to wrap up.
+
+**Stop** by restarting Claude Code without the flag.
+
+**Nothing arrives?** Start with `claude --debug-file <file> …` and look for
+`Channel notifications registered` or `Channel notifications skipped:
+<reason>`. "blocked by org policy" means the Owner switch above. If the reason
+is "negotiated a modern protocol revision", set
+`MCP_PROTOCOL_NEGOTIATION=legacy`; with Nebula's MCP library (mcp 1.27.0,
+newest revision 2025-11-25) the connection stays on the earlier handshake and
+registers without it. The server writes a line to stderr when it starts
+listening and when it stops. `NEBULA_CHANNEL_TRACE=<file>` appends the
+client's `initialize` request to a file; the `NEBULA_CHANNEL_*` timing
+variables in `mcp_channel.Limits` exist for tests.
 
 ### Who counts as the person
 
@@ -725,6 +965,63 @@ before; one whose `/api/execute` is still being admitted is judged by the
 journal's note of its starter. A run that already ended answers its status
 to anyone, since nothing is left to stop.
 
+Round 16 of PR #114: a Stop for a run ID this backend hasn't started yet
+(the canvas's Stop racing its own `/api/execute`, or `cancel_run` on an id
+whose start is still on its way) is kept, so that start never runs. Besides
+the durable pre-admission intent (the cross-process filter, which a Stop
+for an unknown run may compact at once), the backend keeps the ID in memory
+for an hour (`ExecutionRunRegistry.tombstone`, up to 4,096 IDs, the oldest
+dropped first; it never refuses new work, and it holds even when the
+durable journal couldn't take the Stop). `/api/execute`, `/api/execute-node`
+and shot runs (`/api/cinema/generate-shot`) check both at their first check
+and again at the last one before the run is registered, with nothing
+awaited in between, so a start that began before the Stop landed is refused
+with 409 "run '<id>' was cancelled before it started" and nothing is sent or
+spent. What each surface says:
+
+- `DELETE /api/executions/{runId}` and `GET /api/executions/{runId}` answer
+  `{"status": "cancelled", "pendingAdmission": true}`.
+- `cancel_run` adds `next`: "Nebula hadn't started this run yet. The stop
+  is recorded, and Nebula won't start a run with this id, so nothing runs
+  and nothing is spent."
+- `get_run` (and `GET /api/graph/runs/{runId}`) answers `status: "cancelled"`
+  with `neverStarted: true` and `next`: "Stopped before it started. Nebula
+  won't start a run with this id, so nothing ran and nothing was spent."
+- `nebula cancel` prints "Run <id> hadn't started yet. Nebula won't start
+  it now, so nothing runs and nothing is spent."; `nebula result` on that id
+  prints "Run <id> was stopped before it started, so nothing ran and
+  nothing was spent." (exit code as for any stopped run).
+
+The canvas settles such a run as stopped (if the person pressed Stop) or as
+not started, and it can be run again under a new ID.
+
+Round 17 of PR #114 (review 16 L1): "never started" is said only when this
+backend process saw that run's start begin (`ExecutionRunRegistry`
+notes the ID as `/api/execute`, `/api/execute-node` or
+`/api/cinema/generate-shot` takes it, before anything is awaited). An ID it
+has no record of at all (a run from before Nebula restarted, or a typo) is
+still stopped for good the same way, but the answers say so instead of
+claiming nothing ran:
+
+- `DELETE` and `GET /api/executions/{runId}` add `noRecord: true` beside
+  `pendingAdmission`.
+- `get_run` (and `GET /api/graph/runs/{runId}`) answers `status: "unknown"`
+  with `noRecord: true` (no `neverStarted`), and `cancel_run` and `get_run`
+  give `next`: "Nebula has no record of run <id>. If it started before
+  Nebula restarted, check Run History for what it did."
+- `nebula cancel` and `nebula result` print that same line; `nebula result`
+  exits 1.
+
+A run-admission refusal (507) names which store failed in `code`:
+`run_safeguards` is the run-safety store (the paid-start fence, the
+recovery journal, durable Stop state), and the canvas says "Couldn't start
+the run. Nebula couldn't save its run safeguards, so nothing was started.
+Restart Nebula, then try again." `project_store` is the project catalog
+(an unreadable `catalog.json` or a storage error): nothing was started
+either (the project is read before the run exists), but a restart doesn't
+clear it, so the canvas gives its general line. Repairing the catalog or
+the storage does, and the same start then works. Don't parse `detail`.
+
 Every process the backend starts (agents, the Commons reader, ffmpeg, the
 Remotion renderer, git, `open`, `ps`, `sips`, `brctl`) gets the backend's
 environment minus `NEBULA_PERSON_TOKEN`, `NEBULA_CONNECTOR_ENCRYPTION_KEY`,
@@ -754,16 +1051,40 @@ specific text, and the Commons decides by its actor (its UI session is the
 person). Parse status codes and your detail; don't match the person's lines.
 
 Round 3b added the World Labs refusals to this split, with the same statuses
-and the same checks: "Checked Marble — unlock" (`DELETE
+and the same checks: the status bar's "I've checked Marble" (`DELETE
 /api/provider-start-ambiguities/...`: "Cannot acknowledge a World Labs
 paid-start ambiguity while that provider handshake is still active", "World
-Labs paid-start ambiguity changed; ..."), "Checked Marble — forget" (`DELETE
+Labs paid-start ambiguity changed; ..."), Run History's "Forget ID" (`DELETE
 /api/provider-recoveries/...`: "World Labs recovery checkpoint changed; ..."),
 a run start the paid-start guard refuses (`POST /api/execute`,
 `/api/execute-node`, shot runs: "Fresh paid ... start is safety-locked ...",
 "... already active ...", "... already has a recovery checkpoint ...", the
 journals "at capacity") and a canvas edit that races the recovery journal.
 You still get each text word for word; only the person's line is new.
+
+Round 14 of PR #114 gave one World Labs state its own detail. When the
+backend started, if Nebula couldn't journal a World Labs recovery ID it read
+from the canvas, restoring a graph bundle (`POST /api/outputs/restore`,
+`load_graph_file` or `nebula load` with a `.nebula.zip`) first retries that
+journal write under the paid-start fence, as a run start does, then (since
+round 15) writes the journal for real and reads it back, so the retry
+succeeds only when the journal takes a write now. If it does, the restore
+goes on. If the journal still can't be written, it refuses with 409:
+"Cannot restore a graph bundle: Nebula retried saving its World Labs
+recovery journal and couldn't write it. Restart the Nebula backend, then
+try again." (`load_graph_file` and `nebula load` put the file's path
+first). Retrying won't clear it; the person has to restart Nebula. The
+person's canvas reads "Nebula couldn't save its World Labs safeguards.
+Restart Nebula, then try again." under its own heading. If it's the
+paid-start fence's own storage that can't be read or written, the restore
+answers 507 "Cannot restore a graph bundle because Nebula cannot verify the
+durable World Labs paid-start fence." instead, as any canvas replacement
+does then; that is a different store, and restarting Nebula is the fix
+there too. An edit that takes the fence (a param or model change, a node
+delete, Clear, Accept, a canvas edit or replacement) clears the bootstrap
+state the same way, only after a real journal write. A run start clears it
+only when the run has World Labs work to claim; an ordinary run doesn't
+touch it.
 
 Round 3c gave a node's run error the same split. `error` stays the
 handler's specific text, word for word, wherever agents read it: `get_run`
@@ -2074,6 +2395,65 @@ undo}`, or `{status: "stopped", failedStep, steps, error, applied, idMap,
 undo}` when a step is refused, and refuses a plan whose refs don't add up
 before anything is sent.
 
+A write lands only on the canvas that was open when it was asked. Node ids
+start again in each project and after Clear or a loaded graph, and some
+writes wait on something first (the model catalog for a universal node's
+model, a run's spend check, an upload's file). If the person opens another
+project meanwhile (even if they come back to this one), the write is
+refused with 409 and nothing changes: "The open project changed since this
+started, so nothing was changed. Read the canvas again and send the change
+again if it still fits." After a Clear or a loaded graph
+on the same project the detail starts "The canvas was cleared or replaced
+since". Nebula filing an unfiled canvas as "Recovered canvas" (the same
+graph and ids, when the project list files it) isn't a switch: your change
+and your run carry on.
+This covers `edit_canvas` and `remove_from_canvas` (`nebula
+apply`), `propose_change`, `upload_file` with a node, `load_graph_file`,
+`run_nodes` (`nebula run`), and the routes under them (`PUT
+/api/graph/node/{id}`, `POST /api/graph/node`, the canvas's own Run and a
+Cinema shot). Read the canvas again (`look_at_canvas`) before you retry.
+A run started before such a change writes nothing back either: its outputs,
+params and node errors go only to the canvas it started on, and `get_run`
+still reports them. While a run is going, Clear, a loaded graph, a project
+switch and deleting the open project wait for it. Each refuses with 409 and
+its own `detail`:
+
+| Action | Route | 409 `detail` while a run is going |
+|---|---|---|
+| Clear (`nebula clear --force`) | `DELETE /api/graph` | "Cannot clear the canvas while a run is active. Wait for the run to finish or stop it first." |
+| Load a graph (`load_graph_file`, `nebula load`) | `POST /api/graph/import` | "Cannot replace the graph while a run is active. Stop the run and wait for its terminal state first." |
+| Open or make a project (`open_project`, `new_project`, `nebula project open` / `new`) | `POST /api/projects/{id}/open`, `POST /api/projects` | "Cannot switch projects while a run is active. Wait for the run to finish or stop it first." |
+| Delete the open project (the Projects screen) | `DELETE /api/projects/{id}` | "Cannot delete the open project while a run is active. Wait for the run to finish or stop it first." |
+
+A quick run (`nebula quick`, `POST /api/quick`) doesn't count: its nodes
+are temporary and never on the canvas, so nothing waits for it.
+
+While the person's tab can't reach Nebula, their canvas is read-only: its
+banner says "Nebula is offline. Editing is paused until it reconnects.", and
+their edits are blocked, not queued, because a restarted backend refuses
+replayed writes. That covers everything their tab could change: canvas
+edits, Run (every run entry, so no paid run starts from a tab that only
+thinks Nebula is gone), Create's Generate, proposal Accept and Reject,
+Forget ID and the unlock, chat sends and a chat permission's "Allow once",
+settings, the Commons, and project create, switch, rename and delete. The
+tab sends no write that starts work or changes anything; it saves the
+project once Nebula answers again. Since round 16 a few requests that only
+stop or reduce work still go, so a tab that only thinks Nebula is gone can
+still stop a run that's spending: Stop (`DELETE /api/executions/{runId}`),
+a render's cancel (`DELETE /api/render-jobs/{jobId}`), the Commons worker's
+Stop (`POST /api/commons/worker/stop`), and over the chat socket Deny and
+the chat's Stop (its `cancel` message). The canvas's selection and view
+reports (what `get_selected_nodes` and `look_at_canvas` read) aren't sent while
+offline; the tab sends the current ones once Nebula answers again. You meet the same outage as a connect Nebula never took
+("Nebula isn't running at <url>. Start Nebula, then retry."), and the tool's
+error then adds: "While Nebula is offline the person's canvas is read-only:
+nothing you or they edit is saved or queued. Once it's back, call start_here
+to re-read the canvas before assuming your plan landed." `edit_canvas(steps=...)`
+puts the same sentence in the stopped plan's `error`. The CLI (and `nebula
+apply`'s stop) says it with "run `nebula graph`" in place of "call
+start_here". A request Nebula took and then dropped (a restart mid-request),
+a timeout or a real refusal doesn't add it: Nebula was there.
+
 #### Universal nodes: ports from the model
 
 The OpenRouter, Nous Portal and Replicate nodes have no fixed ports: a
@@ -2633,7 +3013,10 @@ clears anyway, for agents and the person alike. The backend enforces this
 for every caller: `DELETE /api/graph` on a project with nodes returns 409
 unless it has `?force=true` (the canvas's Clear button and chat `/clear`
 send it after the person confirms). It's a check of intent, not of who is
-asking. With the canvas open, a clear is one undo step: Undo (or Cmd-Z)
+asking. A clear also waits while any run is going, as a project switch does
+(409; the exact `detail` of each refused action is in the table under "Building and running over MCP"):
+node ids start again after a clear, and a run writes its outputs back by
+node id. With the canvas open, a clear is one undo step: Undo (or Cmd-Z)
 brings back every node, connection, name and output. With no canvas open there is
 nothing to undo it from, so prefer `nebula project new`.
 

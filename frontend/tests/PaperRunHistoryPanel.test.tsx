@@ -78,7 +78,7 @@ describe('Paper run history inspection and explicit latest-source replay', () =>
     render(<RunHistoryPanel />);
     const action = screen.getByRole('button', { name: 'Rerun Full graph with latest source' });
     expect(action).toBeDisabled();
-    expect(action).toHaveAttribute('title', 'Refresh or reconnect the Paper source before using its latest artwork');
+    expect(action).toHaveAttribute('title', 'Refresh or reconnect the Paper source first.');
     fireEvent.click(action);
     expect(rerunHistoryWithLatestPaperSource).not.toHaveBeenCalled();
   });

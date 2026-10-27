@@ -62,11 +62,14 @@ class ProviderStartConflictError(RuntimeError):
     default_reason = "active"
 
     def __init__(self, message: str = "", *, reason: str | None = None, limit: int | None = None,
-                 fields: str | None = None) -> None:
+                 fields: Any = None, node: str | None = None) -> None:
         super().__init__(message)
         self.reason = reason or self.default_reason
         self.limit = limit
+        # The labels of the ID fields that hold an ID (a list), for "params".
         self.fields = fields
+        # The held node's card title, for the person's line (round 13).
+        self.node = node
 
 
 class ProviderStartPersistenceError(RuntimeError):

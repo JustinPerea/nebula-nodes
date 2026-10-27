@@ -959,8 +959,10 @@ export const graphFileLinksForTests = {
   validatedRestoreMapping,
 };
 
-/** GM's heading for the bundle restore (error-copy round 2). */
-const RESTORE_ASSETS = "Couldn't restore the asset.";
+/* Round 16 (GM: "lead with what the person pressed"): the bundle restore
+ * runs only as part of Load graph, so its refusal uses Load graph's own
+ * heading ("Couldn't load the graph."), not "Couldn't restore the asset.",
+ * which belongs to a Restore control on an asset. */
 
 /** What Load graph hands the canvas. */
 export interface LoadedGraph {
@@ -986,7 +988,7 @@ export async function readGraphSelection(selection: GraphFileSelection): Promise
     // The backend owns bounded ZIP preflight, graph.json inflation, graph
     // validation, and atomic extraction. Do not pass this buffer to JSZip:
     // compressed member sizes are not a trustworthy browser-memory bound.
-    const resp = await apiRequest(RESTORE_ASSETS, '/api/outputs/restore', {
+    const resp = await apiRequest(LOAD_GRAPH, '/api/outputs/restore', {
       method: 'POST',
       headers: { 'Content-Type': 'application/zip' },
       body: selection.file,

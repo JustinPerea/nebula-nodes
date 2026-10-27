@@ -93,7 +93,8 @@ describe('connected next-step preparation', () => {
     expect(state.edges).toEqual([priorEdge, canonicalEdge]);
     expect(state.runHistory).toBe(before.runHistory);
     expect(state.undoStack).toHaveLength(1);
-    expect(state.undoStack[0].nodes.map((item) => item.id)).toEqual(['n1', 'n2']);
+    // Round 14 of PR #114: the step owns the node it added, not a snapshot.
+    expect(state.undoStack[0]).toMatchObject({ kind: 'own-add', nodeIds: ['n3'] });
     expect(transport.fetch).toHaveBeenCalledTimes(1);
     expect(transport.fetch).toHaveBeenCalledWith('/api/graph/node-and-connect', expect.objectContaining({ method: 'POST' }));
     expect(transport.fetch.mock.calls.some(([path]) => String(path).includes('execute') || String(path).includes('generate'))).toBe(false);

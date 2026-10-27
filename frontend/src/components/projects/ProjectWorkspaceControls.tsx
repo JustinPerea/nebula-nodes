@@ -4,6 +4,8 @@ import { useProjectStore } from '../../store/projectStore';
 import { useGraphStore } from '../../store/graphStore';
 import { shortLine } from '../../lib/errorCopy';
 import { HEADER_TOOLTIP, headerLine } from '../../lib/savePausedCopy';
+import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { isBackendOffline, refuseEditWhileOffline } from '../../lib/backendConnection';
 import './ProjectWorkspaceControls.css';
 
 /** `onHome`: the screen's own way to Projects (the Commons asks first); `homeBusy`: it waits on a save. */
@@ -16,6 +18,9 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
   const pausedBytes = useProjectStore((state) => state.savePaused?.bytes ?? null);
   const panelOpen = useProjectStore((state) => state.sizePanelOpen);
   const nodeCount = useGraphStore((state) => state.nodes.length);
+  // GM, round 14 of PR #114: while offline "Save failed · Retry" hides (the
+  // banner says it); a retry couldn't reach Nebula anyway.
+  const offline = useBackendOffline();
   const [draft, setDraft] = useState<string | null>(null);
   if (!project || screen !== 'workspace') return null;
   const finishRename = (save: boolean) => {
@@ -35,16 +40,21 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
       {draft !== null
         ? <input className="project-workspace-controls__name project-workspace-controls__name-input" aria-label="Project name"
             autoFocus maxLength={120} value={draft} onFocus={(event) => event.target.select()}
-            onChange={(event) => setDraft(event.target.value)} onBlur={() => finishRename(true)}
+            // Offline (round 15 of PR #114): disabled with its draft kept, as a node's rename.
+            disabled={offline} {...offlineMark(offline)}
+            onChange={(event) => setDraft(event.target.value)} onBlur={() => { if (!isBackendOffline()) finishRename(true); }}
             onKeyDown={(event) => {
               if (event.key === 'Enter') { event.preventDefault(); finishRename(true); }
               else if (event.key === 'Escape') { event.preventDefault(); finishRename(false); }
             }} />
         : <button type="button" className="project-workspace-controls__name" title={`${project.name} · double-click to rename`}
             aria-label={`Rename project ${project.name}`} disabled={busy}
-            onDoubleClick={() => setDraft(project.name)}
+            onDoubleClick={() => { if (!refuseEditWhileOffline()) setDraft(project.name); }}
             onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === 'F2') { event.preventDefault(); setDraft(project.name); }
+              if (event.key === 'Enter' || event.key === 'F2') {
+                event.preventDefault();
+                if (!refuseEditWhileOffline()) setDraft(project.name);
+              }
             }}>{project.name}</button>}
       {status === 'paused' && pausedBytes !== null
         // Q118 (GM): the persistent state, where "Saved" usually is, in Save
@@ -52,6 +62,7 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
         ? <button type="button" className="project-workspace-controls__retry project-workspace-controls__paused"
             data-size-status="" title={HEADER_TOOLTIP} aria-haspopup="dialog" aria-expanded={panelOpen}
             onClick={() => useProjectStore.getState().openSizePanel()}>{headerLine(pausedBytes)}</button>
+        : status === 'error' && offline ? null
         : status === 'error'
         // Round 3b: this Retry saves, so its tooltip is the save's own failure
         // (short: the button is the retry), never another action's.

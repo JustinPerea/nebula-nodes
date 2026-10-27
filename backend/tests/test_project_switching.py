@@ -108,7 +108,7 @@ def test_the_persons_own_switch_carries_no_notice(workspace, person):
     broadcast.reset_mock()
     _create(client, "Second", first["workspaceRevision"], headers=person.headers)
     assert "projectSwitch" not in _syncs(broadcast)[-1]
-    assert "handoff" not in store.read()
+    assert "handoff" not in store.read() and "handoffs" not in store.read()
 
 
 def test_the_tab_an_agent_switched_away_saves_its_last_changes_until_the_next_switch(workspace, person):

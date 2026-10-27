@@ -327,6 +327,18 @@ describe('Canvas toolbar hierarchy', () => {
     expect(mocks.graph!.getState().nodes).toHaveLength(1);
   });
 
+  it('round 11 (GM): a clear refused while a run is going reads GM\'s line, word for word', async () => {
+    // The backend's person line (main.CLEAR_DURING_RUN_PERSON) under the
+    // canvas's heading; agents keep "Cannot clear the canvas while a run is active. ...".
+    mocks.fetch.mockResolvedValue({ ok: false, status: 409,
+      json: async () => ({ detail: 'A run is still going. Wait for it to finish or stop it first.' }) });
+    render(<Toolbar />);
+    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Clear canvas…' }));
+    await waitFor(() => expect(notices).toHaveBeenCalledWith(
+      "Couldn't clear the canvas. A run is still going. Wait for it to finish or stop it first."));
+    expect(mocks.clear).not.toHaveBeenCalled();
+  });
+
   it('error-copy round 2: a refused clear with no reason says GM\'s line, never the status', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     mocks.fetch.mockResolvedValue({ ok: false, status: 409, json: async () => ({}) });
@@ -442,5 +454,32 @@ describe('Canvas toolbar hierarchy', () => {
     } finally {
       window.removeEventListener('nebula:layout-reset', resetEvent);
     }
+  });
+
+  // Round 15 of PR #114 (GM): offline is read-only and looks it. The bottom
+  // Run is disabled (nothing queues, no Stop starts); Load graph, Import CLI,
+  // Clear and Arrange are disabled with the offline mark; Save graph (a
+  // download), zoom and Reset panels stay.
+  it('offline: Run and the canvas-changing actions are disabled; Save graph and Reset panels stay', async () => {
+    const { noteBackendConnection, resetBackendConnectionForTests } = await import('../../src/lib/backendConnection');
+    resetBackendConnectionForTests();
+    render(<Toolbar />);
+    act(() => noteBackendConnection('offline'));
+    const run = screen.getByRole('button', { name: 'Run' });
+    expect(run).toBeDisabled();
+    expect(run).toHaveAttribute('data-offline-disabled');
+    fireEvent.click(run);
+    expect(mocks.execute).not.toHaveBeenCalled();
+    const { panel } = openActions();
+    const named = (label: RegExp) => within(panel).getByRole('button', { name: label });
+    expect(named(/^Load graph/)).toBeDisabled();
+    expect(named(/^Import CLI graph/)).toBeDisabled();
+    expect(named(/^Clear canvas/)).toBeDisabled();
+    expect(named(/^Arrange nodes/)).toBeDisabled();
+    expect(named(/^Save graph/)).toBeEnabled();
+    expect(named(/^Reset panels/)).toBeEnabled();
+    act(() => noteBackendConnection('online'));
+    expect(screen.getByRole('button', { name: 'Run' })).toBeEnabled();
+    resetBackendConnectionForTests();
   });
 });

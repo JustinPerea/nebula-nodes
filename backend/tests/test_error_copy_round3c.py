@@ -45,7 +45,7 @@ API_KEYS = {"WORLDLABS_API_KEY": "worldlabs-test-key"}
 CLAUDE = {"X-Nebula-Agent": "Claude Code"}
 
 LOCKED = ("World Labs didn't answer this run, so Nebula locked the node to avoid paying twice. "
-          "Check the job in Marble, then use “Checked Marble — unlock” before you run it again.")
+          "Check the job in Marble, then use “I've checked Marble” before you run it again.")  # button renamed in round 13 (GM)
 PLY_LOST = "World Labs didn't answer this export. PLY exports are free, so you can run the node again."
 KEY_REJECTED = "World Labs didn't accept your API key. Check it in Settings, then run the node again."
 NO_CREDITS = "Your World Labs account is out of API credits. Add credits, then run the node again."

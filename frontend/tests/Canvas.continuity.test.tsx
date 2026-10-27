@@ -293,3 +293,29 @@ describe('Canvas workspace continuity', () => {
     expect(flow.fitView).not.toHaveBeenCalled();
   });
 });
+
+// Round 16 (review 15, L1): selecting while offline is local view state;
+// nothing is sent (and nothing pulses), and the selection in hand goes out
+// once Nebula answers again, so agents see what the person selected.
+describe('the selection report across an offline spell', () => {
+  it('sends nothing offline and the current selection on reconnect', async () => {
+    const { publishCanvasSelection } = await import('../src/lib/canvasSelection');
+    const publish = vi.mocked(publishCanvasSelection);
+    const { noteBackendConnection, resetBackendConnectionForTests } = await import('../src/lib/backendConnection');
+    resetBackendConnectionForTests();
+    render(<Canvas />);
+    act(() => { vi.advanceTimersByTime(100); });
+    publish.mockClear();
+    act(() => noteBackendConnection('offline'));
+    act(() => {
+      useGraphStore.setState((state) => ({ nodes: state.nodes.map((item) => ({ ...item, selected: item.id === 'sibling' })) }));
+    });
+    act(() => { vi.advanceTimersByTime(100); });
+    expect(publish).not.toHaveBeenCalled();
+    act(() => noteBackendConnection('online'));
+    act(() => { vi.advanceTimersByTime(100); });
+    expect(publish).toHaveBeenCalledTimes(1);
+    expect(publish.mock.calls[0][0]).toEqual(['sibling']);
+    resetBackendConnectionForTests();
+  });
+});

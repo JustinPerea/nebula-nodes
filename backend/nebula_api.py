@@ -57,6 +57,24 @@ def dropped_mid_request(exc: BaseException) -> bool:
                         httpx.ReadTimeout, httpx.WriteTimeout))
 
 
+def never_reached(exc: BaseException) -> bool:
+    """Whether Nebula couldn't be reached at all: a connect it never took (not
+    running, or nothing behind the address file), not a request it took and
+    dropped, a timeout or a real answer."""
+    return (isinstance(exc, NebulaAPIError) and exc.status is None and exc.kind == "connect"
+            and not dropped_mid_request(exc))
+
+
+def offline_read_only(reread: str) -> str:
+    """What an unreachable Nebula means for the person's canvas (round 14 of
+    PR #114): the tab is read-only until Nebula reconnects, and blocks edits
+    rather than queueing them (a restarted backend refuses replayed writes).
+    `reread` is the caller's way to read the canvas again ("call start_here",
+    "run `nebula graph`")."""
+    return ("While Nebula is offline the person's canvas is read-only: nothing you or they edit is saved or "
+            f"queued. Once it's back, {reread} to re-read the canvas before assuming your plan landed.")
+
+
 def next_backoff(previous: float | None) -> float:
     """The next pause before retrying: RETRY_FIRST_SECONDS, then doubling up to RETRY_MAX_SECONDS."""
     if previous is None:

@@ -402,3 +402,40 @@ describe('ConnectionPopup next-step preparation', () => {
     expect(screen.queryByRole('button', { name: 'Use in video' })).toBeNull();
   });
 });
+
+// Round 16 (review 15, L3): adding a step is an edit. Offline the picker's
+// items are disabled with the offline mark, a press only pulses the banner,
+// and a popup open when the tab goes offline never shows an error line.
+describe('ConnectionPopup while offline (round 16)', () => {
+  it('its items are disabled with the mark and a press adds nothing and says nothing', async () => {
+    const { noteBackendConnection, resetBackendConnectionForTests } = await import('../src/lib/backendConnection');
+    resetBackendConnectionForTests();
+    openPopup();
+    act(() => noteBackendConnection('offline'));
+    const item = searchFor('veo-3');
+    expect(item).toBeDisabled();
+    expect(item).toHaveAttribute('data-offline-disabled');
+    await act(async () => { fireEvent.click(item); });
+    expect(addConnected).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alert')).toBeNull();
+    act(() => noteBackendConnection('online'));
+    expect(searchFor('veo-3')).toBeEnabled();
+    expect(searchFor('veo-3')).not.toHaveAttribute('data-offline-disabled');
+    resetBackendConnectionForTests();
+  });
+
+  it('an add the store refused because the tab went offline on the way shows no error line', async () => {
+    const { noteBackendConnection, resetBackendConnectionForTests } = await import('../src/lib/backendConnection');
+    resetBackendConnectionForTests();
+    const pending = deferred();
+    addConnected.mockReturnValueOnce(pending.promise);
+    openPopup();
+    fireEvent.click(searchFor('veo-3'));
+    expect(addConnected).toHaveBeenCalledTimes(1);
+    act(() => noteBackendConnection('offline'));
+    await act(async () => { pending.resolve(null); });
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByText("Couldn't confirm the connected step. Check the canvas before trying again.")).toBeNull();
+    resetBackendConnectionForTests();
+  });
+});

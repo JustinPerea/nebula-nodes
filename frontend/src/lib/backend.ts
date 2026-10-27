@@ -1,4 +1,5 @@
 import { getProjectContext } from './projectContext';
+import { refuseWriteWhileOffline } from './backendConnection';
 import { BACKEND_NOT_RUNNING_COPY, ConnectionLostError, isConnectionFailure } from './errorCopy';
 import { TAB_HEADER, TAB_ID } from './tabId';
 import { noteParamsOutdated, PARAMS_VERSION_HEADER } from './paramsOutdated';
@@ -395,6 +396,9 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
   // Capture at admission, before discovery can await a later project switch.
   const project = getProjectContext();
   const method = String(init?.method ?? 'GET').toUpperCase();
+  // Offline is read-only (round 15 of PR #114): a write is refused here,
+  // before anything is sent, whichever path asked for it.
+  refuseWriteWhileOffline(method, path);
   const baseUrl = await getBackendBaseUrl();
   const requestUrl = joinBackendPath(baseUrl, path);
   // Every request says which params version this bundle was built for, so the

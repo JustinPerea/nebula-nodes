@@ -95,11 +95,11 @@ describe('CanvasUndoNotice', () => {
 
   // Error copy round 3b (live check): a refusal line ("Couldn't delete the node. This node is still
   // waiting on World Labs. …") was cut to one line with an ellipsis, so the step it names ("use
-  // “Checked Marble — forget” in Run History") never showed, and it left after 6 seconds, before
+  // “Checked Marble — forget” in Run History", now "Forget ID") never showed, and it left after 6 seconds, before
   // it could be read. A notice with no button wraps and stays up for its reading time.
   it('a refusal line wraps (no one-line ellipsis) and stays up long enough to read', () => {
     vi.useFakeTimers();
-    const text = "Couldn't delete the node. This node is still waiting on World Labs. Check the job in Marble, then use “Checked Marble — forget” in Run History before you delete it.";
+    const text = "Couldn't delete the node. “World Labs Environment” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run History.";
     render(<CanvasUndoNotice />);
     act(() => useGraphStore.setState({ undoNotice: { id: 9001, text, offer: null } }));
     expect(screen.getByRole('status')).toHaveTextContent(text);

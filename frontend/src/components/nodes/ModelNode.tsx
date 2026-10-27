@@ -47,6 +47,7 @@ import { isJevNode, jevBrandStyle, parseJevOutputs, JEV_BOX, JEV_BRAND, JEV_DECI
 import { JEV_CARD_FIELDS, jevCardText, jevResultKey, upstreamPortValues } from '../../lib/jevView';
 import { failureMessage } from '../../lib/errorCopy';
 import { showNotice } from '../../lib/canvasNotice';
+import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 
 // Input cards that name the file they hold, under the picture for an image.
 const INPUT_FILE_CARDS = new Set(['image-input', 'video-input', 'audio-input', 'document-input']);
@@ -87,6 +88,7 @@ function portLabels(definition: { outputPorts: Array<{ id: string; label: string
 
 function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as unknown as NodeData;
+  const readOnly = useBackendOffline();
   const batchPreview = useBatchPreview(id, nodeData);
   const actionSlot = useSelectionActionSlot(id);
   const previewOutputs = batchPreview.outputs;
@@ -385,12 +387,13 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         {hasMediaPreview && <button type="button"
           className={inToolbar ? 'selection-toolbar__button nodrag' : 'model-node__next-step nodrag'}
           data-next-step-anchor={id}
-          disabled={!nextStepSource || isExecuting || !/^n\d+$/.test(id)}
+          disabled={!nextStepSource || isExecuting || !/^n\d+$/.test(id) || readOnly}
+          {...offlineMark(readOnly)}
           title={nextStepTitle}
           onMouseDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
-            if (!nextStepSource) return;
+            if (!nextStepSource || readOnly) return;
             const bounds = event.currentTarget.getBoundingClientRect();
             useUIStore.getState().showConnectionPopup({
               position: { x: bounds.left, y: bounds.bottom + 8 },
@@ -574,6 +577,8 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
           <textarea
             className="model-node__textarea nodrag nowheel"
             value={inlineTextValue}
+            disabled={readOnly}
+            {...offlineMark(readOnly)}
             onChange={handleInlineTextChange}
             onMouseDown={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
@@ -585,6 +590,8 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
             <button
               type="button"
               className="model-node__enhance nodrag"
+              disabled={readOnly}
+              {...offlineMark(readOnly)}
               onClick={(e) => {
                 e.stopPropagation();
                 handleEnhance();

@@ -39,13 +39,18 @@ describe('Krea authoring and saved billing choice', () => {
 
   it('freezes the current default in a new Canvas node without executing it', async () => {
     const execute = vi.spyOn(api, 'executeNode');
-    const id = await useGraphStore.getState().addNode(modelId, { x: 0, y: 0 });
-    const node = useGraphStore.getState().nodes.find((n) => n.id === id);
-    expect(node?.data.params._kreaAuth).toBe('mcp');
-    expect(node?.data.keyStatus).toBeUndefined();
+    // Round 13 of PR #114: an add always goes through the backend, so the
+    // frozen choice is what the create sends.
+    apiFetchMock.mockImplementation(async (url: string) => (url === '/api/graph/export'
+      ? { ok: true, json: async () => ({ empty: true }) }
+      : { ok: true, json: async () => ({ id: 'n1' }) }));
+    await useGraphStore.getState().addNode(modelId, { x: 0, y: 0 });
+    const create = apiFetchMock.mock.calls.find(([url]) => url === '/api/graph/node');
+    const sent = JSON.parse(create?.[1].body).params;
+    expect(sent._kreaAuth).toBe('mcp');
     useUIStore.getState().setKreaConnectionMode('api-token');
     useUIStore.getState().setKreaConnection({ status: 'disconnected' });
-    expect(useGraphStore.getState().nodes.find((n) => n.id === id)?.data.params._kreaAuth).toBe('mcp');
+    expect(sent._kreaAuth).toBe('mcp');
     expect(execute).not.toHaveBeenCalled();
     expect(useGraphStore.getState().runHistory).toEqual([]);
   });

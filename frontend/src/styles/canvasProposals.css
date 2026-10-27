@@ -638,3 +638,9 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 .canvas-undo-notice--message .canvas-undo-notice__text {
   white-space: pre-line;
 }
+
+/* A model id in a failed model change's line (GM, round 15 of PR #114). */
+.canvas-undo-notice__mono {
+  font-family: var(--sr-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.95em;
+}

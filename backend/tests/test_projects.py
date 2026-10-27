@@ -355,6 +355,8 @@ async def test_delayed_execution_event_keeps_its_admitted_project_revision(works
 @pytest.mark.asyncio
 @pytest.mark.parametrize("endpoint", ["graph", "quick"])
 async def test_synchronous_runs_block_project_switch_until_settled(workspace, monkeypatch, endpoint):
+    """An agent's run blocks a switch until it ends. A quick run doesn't (round
+    12 of PR #114): its nodes are temporary and nothing writes back by node id."""
     import asyncio
     from starlette.requests import Request
     client, graph, _, _ = workspace
@@ -371,13 +373,17 @@ async def test_synchronous_runs_block_project_switch_until_settled(workspace, mo
         task = asyncio.create_task(main_module.quick_execute({"definitionId": "text-input", "params": {"value": "quick"}}))
     await started.wait()
     try:
-        with pytest.raises(main_module.HTTPException) as rejected:
-            await main_module.create_saved_project({"name": "blocked"})
-        assert rejected.value.status_code == 409
+        if endpoint == "graph":
+            with pytest.raises(main_module.HTTPException) as rejected:
+                await main_module.create_saved_project({"name": "blocked"})
+            assert rejected.value.status_code == 409
+        else:
+            made = await main_module.create_saved_project({"name": "during the quick run"})
+            assert made["project"]["name"] == "during the quick run"
     finally:
         finish.set()
         await task
-    assert not main_module._synchronous_workspace_runs
+    assert not main_module.execution_runs.has_active()
     assert (await main_module.create_saved_project({"name": "allowed"}))["project"]["name"] == "allowed"
 
 

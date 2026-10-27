@@ -15,6 +15,8 @@ import { matchesModelSearch } from '../lib/modelDiscovery';
 import { ProviderReadinessBadge } from './ProviderReadinessBadge';
 import { ScrollFade } from './ScrollFade';
 import { floatingBottomLimit } from '../lib/bottomBar';
+import { isBackendOffline, isOfflineRefusal, refuseEditWhileOffline } from '../lib/backendConnection';
+import { offlineMark, useBackendOffline } from '../lib/useBackendOffline';
 import '../styles/canvas-next-steps.css';
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -42,6 +44,7 @@ export function ConnectionPopup() {
   const hideConnectionPopup = useUIStore((s) => s.hideConnectionPopup);
   const addNode = useGraphStore((s) => s.addNode);
   const addNodeAndConnect = useGraphStore((s) => s.addNodeAndConnect);
+  const readOnly = useBackendOffline();
   const onConnect = useGraphStore((s) => s.onConnect);
   const nodes = useGraphStore((s) => s.nodes);
   const { screenToFlowPosition } = useReactFlow();
@@ -184,6 +187,9 @@ export function ConnectionPopup() {
   }, [visible, position]);
 
   const handleSelect = async (node: CompatibleNode) => {
+    // Round 16 (L3): adding a step is an edit, so offline the items are
+    // disabled and a press only pulses the banner, never an error line.
+    if (refuseEditWhileOffline()) return;
     if (busy.current || useGraphStore.getState().isExecuting || useGraphStore.getState().isImportingGraph) return;
     const graph = useGraphStore.getState();
     const source = graph.nodes.find((item) => item.id === nodeId);
@@ -220,13 +226,17 @@ export function ConnectionPopup() {
           : edge.source === newId && edge.target === nodeId && edge.sourceHandle === node.matchingPortId)) newId = null;
       }
       if (useUIStore.getState().connectionPopup !== popup) return;
+      // A tab that went offline while the add was on its way: the store
+      // refused it, and the banner already says why.
+      if (!newId && isBackendOffline()) return;
       if (!newId) { setError("Couldn't confirm the connected step. Check the canvas before trying again."); return; }
       hideConnectionPopup();
       if (nextStep) {
         const ui = useUIStore.getState();
         ui.requestCanvasNodeFocus(newId); ui.setLeftDock(null); ui.setInspectorVisible(true);
       }
-    } catch {
+    } catch (error) {
+      if (isOfflineRefusal(error) || isBackendOffline()) return;
       if (useUIStore.getState().connectionPopup === popup) setError("Couldn't add the step. Check the canvas before trying again.");
     } finally { busy.current = false; setPending(false); }
   };
@@ -327,7 +337,8 @@ export function ConnectionPopup() {
               </button>
               {isOpen && nodes.map((node) => (
                 <div key={node.definition.id} className="next-step-choice">
-                <button type="button" disabled={pending}
+                <button type="button" disabled={pending || readOnly}
+                  {...offlineMark(readOnly)}
                   className="connection-popup__item"
                   onClick={() => handleSelect(node)}
                 >

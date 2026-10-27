@@ -774,13 +774,14 @@ describe('graph import memory ceiling', () => {
   });
 
   it.each([
-    // error-copy round 2 (GM): "Couldn't restore the asset." then the reason,
-    // never "(HTTP 503)"; on 1fc3d846 this said "Failed to load graph: Asset
-    // restore failed (HTTP 503)".
-    [new Response('', { status: 503 }), "Couldn't restore the asset. Nebula didn't respond. Try again."],
-    [new Response('', { status: 400 }), "Couldn't restore the asset. Try again, or reload if it keeps happening."],
+    // Round 16 (GM: lead with what the person pressed): Load graph's own
+    // heading, then the reason, never "(HTTP 503)"; on 1fc3d846 this said
+    // "Failed to load graph: Asset restore failed (HTTP 503)", and on fc906cb6
+    // "Couldn't restore the asset.".
+    [new Response('', { status: 503 }), "Couldn't load the graph. Nebula didn't respond. Try again."],
+    [new Response('', { status: 400 }), "Couldn't load the graph. Try again, or reload if it keeps happening."],
     [new Response(JSON.stringify({ detail: 'That bundle has too many files.' }), { status: 422, headers: { 'Content-Type': 'application/json' } }),
-      "Couldn't restore the asset. That bundle has too many files."],
+      "Couldn't load the graph. That bundle has too many files."],
   ])('a refused restore names the action and the reason (%#)', async (answer, line) => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});

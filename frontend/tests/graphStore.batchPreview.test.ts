@@ -16,6 +16,8 @@ vi.mock('../src/lib/api', () => ({ executeGraph: boundary.execute, executeNode: 
 vi.mock('../src/lib/backend', () => ({ apiFetch: boundary.apiFetch,
   getCachedBackendBaseUrl: () => 'http://synthetic.invalid',
   rewriteBackendAssetUrls: <T,>(value: T) => value,
+  // Round 17 (review 16 M2): undo compares values through this.
+  canonicalBackendAssetUrls: <T,>(value: T) => value,
   rewriteExecutionAssetUrls: <T,>(value: T) => value }));
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: boundary.subscribe } }));
 vi.mock('../src/lib/jobNotifications', () => ({ notifyJobComplete: vi.fn() }));

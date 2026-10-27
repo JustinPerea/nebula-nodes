@@ -1173,3 +1173,24 @@ body.app-slava-restraint .commons-analysis-failure__details .error-details__raw 
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* Round 16 (L4): offline a reference's writes sit in one disabled fieldset
+   (CommonsDetail). It lays out as if it weren't there, and its own offline
+   mark doesn't dim: each disabled control dims once, with the not-allowed
+   cursor. */
+.commons-fieldset {
+  display: contents;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+
+.commons-fieldset[data-offline-disabled] {
+  opacity: 1;
+}
+
+.commons-fieldset:disabled :is(button, input, select, textarea):disabled {
+  opacity: var(--sr-disabled-opacity, 0.48);
+  cursor: not-allowed;
+}

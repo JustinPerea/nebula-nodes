@@ -7,11 +7,20 @@ from urllib.parse import quote
 
 import httpx
 
-from nebula_api import NebulaAPI, NebulaAPIError
+from nebula_api import NebulaAPI, NebulaAPIError, never_reached, offline_read_only
 from services.agent_params import internal_keys, internal_refusal
 
 
 DEFAULT_BASE = "http://localhost:8000"
+# What an unreachable Nebula means for the person's canvas (nebula_api.offline_read_only).
+CLI_OFFLINE_NOTE = offline_read_only("run `nebula graph`")
+
+
+def connect_failure(base_url: str, exc: NebulaAPIError) -> str:
+    """The CLI's line for a connect error; for a Nebula it never reached, plus
+    what that means for the person's canvas (round 14 of PR #114)."""
+    message = f"cannot connect to Nebula backend at {base_url} — is the server running?"
+    return f"{message} {CLI_OFFLINE_NOTE}" if never_reached(exc) else message
 
 
 class NebulaClient:
@@ -39,7 +48,7 @@ class NebulaClient:
 
     def _fail(self, exc: NebulaAPIError, what: str) -> None:
         if exc.kind == "connect":
-            message = f"cannot connect to Nebula backend at {self.base_url} — is the server running?"
+            message = connect_failure(self.base_url, exc)
         elif exc.kind == "timeout":
             message = (f"Nebula didn't answer {what} in time. A run keeps going on the "
                        "backend; `nebula graph` shows what finished.")
@@ -293,9 +302,7 @@ class NebulaClient:
                                     headers=self._identity_headers())
         except NebulaAPIError as exc:
             if exc.kind == "connect":
-                raise RuntimeError(
-                    f"cannot connect to Nebula backend at {self.base_url} — is the server running?"
-                ) from exc
+                raise RuntimeError(connect_failure(self.base_url, exc)) from exc
             raise RuntimeError(exc.detail) from exc
 
     def clear_graph(self, force: bool = False) -> dict[str, Any]:

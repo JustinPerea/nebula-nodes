@@ -206,7 +206,8 @@ describe('Personal agents in the chat panel', () => {
     expect(socket.sent[2]).toEqual({ type: 'close_session', sessionId: 'host-2', personToken: TOKEN });
     // Typing /clear is the person's confirmation, so it sends force (the
     // backend refuses to clear a project with nodes without it).
-    expect(apiMocks.apiFetch).toHaveBeenCalledWith('/api/graph?force=true', { method: 'DELETE' });
+    expect(apiMocks.apiFetch).toHaveBeenCalledWith('/api/graph?force=true',
+      expect.objectContaining({ method: 'DELETE', signal: expect.any(AbortSignal) }));
   });
 });
 

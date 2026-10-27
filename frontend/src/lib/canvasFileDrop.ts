@@ -18,6 +18,7 @@
 import { apiRequest } from './apiRequest';
 import { failureCopy, failureMessage } from './errorCopy';
 import { useGraphStore } from '../store/graphStore';
+import { refuseEditWhileOffline } from './backendConnection';
 
 export const DROP_TYPES_LINE = 'Nebula takes images, video, audio, PDFs and text files.';
 
@@ -167,9 +168,12 @@ export function fileDropInFlight(): boolean {
 }
 
 /** Upload a drop's files at `origin` (flow coordinates). One undo step per
- * accepted file, given back if its upload fails. Resolves when every upload
+ * file that made a node, owning only that node. Resolves when every upload
  * has settled. */
 export async function addDroppedFiles(files: readonly File[], origin: { x: number; y: number }): Promise<void> {
+  // Offline is read-only (GM, round 14 of PR #114): nothing uploads, no
+  // notice; the banner pulses (review 13, L6: a drop still sent).
+  if (refuseEditWhileOffline()) return;
   // Failures by their place in the drop, so the notice names files in the
   // order they were dropped.
   const failed = new Map<number, DropFailure>();
@@ -196,13 +200,16 @@ export async function addDroppedFiles(files: readonly File[], origin: { x: numbe
     form.append('create_node', 'true');
     form.append('x', String(spot.x));
     form.append('y', String(spot.y));
-    // One undo step per dropped file, taken before its graphSync lands.
-    const undoStep = useGraphStore.getState().beginUndoStep();
     const heading = `Couldn't upload ${quoted(file.name)}.`;
     try {
-      await apiRequest(heading, '/api/uploads', { method: 'POST', body: form });
+      const response = await apiRequest(heading, '/api/uploads', { method: 'POST', body: form });
+      // One undo step per dropped file, owning only the node it made (round
+      // 14 of PR #114): a snapshot taken before the upload held none of the
+      // backend's nodes its echo brought into an empty tab, so Undo deleted
+      // an agent's node with it (review 13, Q5).
+      const answer = await response.json().catch(() => ({})) as { nodeId?: unknown };
+      if (typeof answer.nodeId === 'string' && answer.nodeId) useGraphStore.getState().noteOwnAdd([answer.nodeId]);
     } catch (error) {
-      useGraphStore.getState().cancelUndoStep(undoStep);
       failed.set(at, { kind: 'upload', name: file.name, line: failureMessage(error, heading),
         reason: failureCopy(error, { heading }).reason });
     }

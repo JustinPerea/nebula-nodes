@@ -2,6 +2,8 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { commonsEvaluationApi } from '../../lib/commonsApi';
 import type { EvaluationBatch } from '../../lib/commonsEvaluationTypes';
 import { failureMessage } from '../../lib/errorCopy';
+import { isOfflineRefusal } from '../../lib/backendConnection';
+import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 
 /**
  * Ends the held-out batch without sealing it. Irreversible, so it always asks
@@ -18,18 +20,23 @@ export function CommonsCloseBatch({ revision, assisted, reviewed, total, disable
   const [error, setError] = useState('');
   const cancel = useRef<HTMLButtonElement>(null);
   const titleId = useId();
+  // Round 16 (L4): closing the batch is a write, so offline it's disabled.
+  const readOnly = useBackendOffline();
   useEffect(() => { if (confirming) cancel.current?.focus(); }, [confirming]);
   const label = assisted ? 'Close review & resume library analysis' : 'Close without sealing';
   async function close() {
     setClosing(true); setError('');
     let closed: EvaluationBatch;
     try { closed = await commonsEvaluationApi.close(revision); }
-    catch (e) { setError(failureMessage(e, "Couldn't close the review.")); setClosing(false); return; }
+    catch (e) {
+      if (!isOfflineRefusal(e)) setError(failureMessage(e, "Couldn't close the review."));
+      setClosing(false); return;
+    }
     setClosing(false); setConfirming(false);
     onClosed(closed);
   }
   if (!confirming) {
-    return <button type="button" className="commons-button" disabled={disabled} onClick={() => setConfirming(true)}>{label}…</button>;
+    return <button type="button" className="commons-button" disabled={disabled || readOnly} {...offlineMark(readOnly)} onClick={() => setConfirming(true)}>{label}…</button>;
   }
   return <div className="evaluation-close" role="alertdialog" aria-labelledby={titleId}>
     <h3 id={titleId}>{assisted ? 'Close these references as assisted review?' : 'Close this batch without sealing?'}</h3>
@@ -41,7 +48,7 @@ export function CommonsCloseBatch({ revision, assisted, reviewed, total, disable
     </ul>
     {error && <p role="alert" className="commons-notice commons-notice--error">{error}</p>}
     <div className="review-actions">
-      <button type="button" className="commons-button commons-button--primary" disabled={closing || disabled} onClick={() => void close()}>
+      <button type="button" className="commons-button commons-button--primary" disabled={closing || disabled || readOnly} {...offlineMark(readOnly)} onClick={() => void close()}>
         {closing ? 'Closing…' : assisted ? 'Close as assisted review' : 'Close without sealing'}</button>
       <button type="button" ref={cancel} className="commons-button" disabled={closing} onClick={() => { setConfirming(false); setError(''); }}>Cancel</button>
     </div>

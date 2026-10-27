@@ -1786,24 +1786,37 @@ body.app-slava-restraint .toolbar__button--executing .toolbar__icon {
   opacity: 0;
 }
 
-body.app-slava-restraint .toolbar__button--executing::before {
+/* GM r17 (A): the dots sit in the icon's own slot, a fixed 14px box left of
+   the label (the run icon's size), so "Stop" never moves and is never
+   covered. The 19px matrix is scaled to the slot. */
+body.app-slava-restraint .toolbar__icon-slot {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+}
+
+body.app-slava-restraint .toolbar__button--executing .toolbar__icon-slot::before {
   content: '';
   position: absolute;
-  z-index: 1;
-  left: 50%;
-  top: 50%;
+  left: 0;
+  top: 0;
   width: 4px;
   height: 4px;
-  margin-left: -9.5px;
-  margin-top: -9.5px;
   border-radius: 50%;
   background-color: rgba(255, 255, 255, 0.92);
+  transform: scale(0.7368);
+  transform-origin: 0 0;
   animation: slava-dot-matrix-beam 960ms steps(4, end) infinite;
 }
 
 body.app-slava-restraint .model-node__loading-spinner::before,
 body.app-slava-restraint .chat-panel__chip-spinner::before,
-body.app-slava-restraint .toolbar__button--executing::before {
+body.app-slava-restraint .toolbar__button--executing .toolbar__icon-slot::before {
   box-shadow:
     5px 0 rgba(255, 255, 255, 0.48),
     10px 0 rgba(255, 255, 255, 0.22),
@@ -1825,7 +1838,7 @@ body.app-slava-restraint .toolbar__button--executing::before {
 @media (prefers-reduced-motion: reduce) {
   body.app-slava-restraint .model-node__loading-spinner::before,
   body.app-slava-restraint .chat-panel__chip-spinner::before,
-  body.app-slava-restraint .toolbar__button--executing::before {
+  body.app-slava-restraint .toolbar__button--executing .toolbar__icon-slot::before {
     animation: none;
   }
 }

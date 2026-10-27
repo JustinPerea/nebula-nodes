@@ -21,7 +21,7 @@ import type { SavedProject, TrashedProject } from '../src/lib/projects';
 import * as execution from '../src/lib/api';
 import { ConnectionLostError } from '../src/lib/errorCopy';
 import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
-import { SOME_NODE_WAITING_UNLOCK } from '../src/lib/worldLabsWaiting';
+import { WORLD_LABS_NEEDS_CHECK } from '../src/lib/worldLabsWaiting';
 
 vi.mock('../src/lib/personSession', async (original) => ({
   ...await original<typeof import('../src/lib/personSession')>(),
@@ -49,7 +49,8 @@ const summary = (id: string) => { const { snapshot: _s, ...rest } = project(id);
 const trashed = (id: string): TrashedProject => ({ ...summary(id), deletedAt: '2026-10-10T10:00:00Z', purgeAt: '2026-11-09T10:00:00Z' });
 const unavailable = (heading: string) => new projects.ProjectRequestError("Nebula didn't respond. Try again.", 503, { heading });
 const refused = (heading: string, reason: string, status = 409) => new projects.ProjectRequestError(reason, status, { heading });
-const WORLD_LABS_OPEN = 'A node is still waiting on World Labs. Check the job in Marble, then use “Checked Marble — forget” in Run History before you try again.';
+// The backend's refusal of an open over an unconfirmed World Labs run (GM, round 13 of PR #114).
+const WORLD_LABS_OPEN = 'A World Labs run needs your check first. Use the notice at the top of the screen.';
 
 function listing(overrides: Partial<projects.ProjectList> = {}): projects.ProjectList {
   return { projects: [summary('alpha'), summary('beta')], trash: [], activeProjectId: 'alpha',
@@ -298,7 +299,11 @@ describe('Projects: Try again redoes the failed action', () => {
 describe('Projects: review fixes', () => {
   const ambiguity = { runId: 'run-wl', nodeId: 'n-wl', kind: 'worldlabs-environment' as const,
     message: 'held', durable: true };
-  const holdLine = (heading: string) => `${heading} ${SOME_NODE_WAITING_UNLOCK}`;
+  const holdLine = (heading: string) => `${heading} ${WORLD_LABS_NEEDS_CHECK}`;
+  it("the Projects screen's own check says GM's round 13 line, word for word", () => {
+    expect(holdLine("Couldn't open the project.")).toBe(
+      "Couldn't open the project. A World Labs run needs your check first. Use the notice at the top of the screen.");
+  });
 
   it('a startup load refused for good (the active project went away): Try again reloads, with the whole line, and recovers', async () => {
     useProjectStore.setState(initial, true);
@@ -500,5 +505,26 @@ describe("round 3e: every Projects action reads a plain Error through GM's mappi
     vi.mocked(projects.renameProject).mockRejectedValueOnce(unavailable("Couldn't rename the project."));
     await useProjectStore.getState().rename('alpha', 'New name');
     expect(useProjectStore.getState().error).toBe("Couldn't rename the project. Nebula didn't respond. Try again.");
+  });
+});
+
+// Round 15 of PR #114: offline is read-only, and an autosave is held, not
+// failed. Nothing is sent, the header keeps "Unsaved changes" (no "Save
+// failed · Retry", no toast), and the save goes by itself once Nebula answers.
+describe('Projects: an autosave while offline', () => {
+  it('is held (not sent, not an error) and saves on reconnect', async () => {
+    const { noteBackendConnection, resetBackendConnectionForTests } = await import('../src/lib/backendConnection');
+    resetBackendConnectionForTests();
+    await useProjectStore.getState().open('alpha');
+    vi.mocked(projects.saveProject).mockClear();
+    noteBackendConnection('offline');
+    useGraphStore.setState({ nodes: [{ ...project().snapshot.nodes[0], data: { ...project().snapshot.nodes[0].data, params: { value: 'edited before the drop' } } }] });
+    await useProjectStore.getState().flush();
+    expect(projects.saveProject).not.toHaveBeenCalled();
+    expect(useProjectStore.getState()).toMatchObject({ dirty: true, saveStatus: 'unsaved', saveError: null, error: null });
+    noteBackendConnection('online');
+    await vi.waitFor(() => expect(useProjectStore.getState().saveStatus).toBe('saved'));
+    expect(projects.saveProject).toHaveBeenCalledTimes(1);
+    resetBackendConnectionForTests();
   });
 });

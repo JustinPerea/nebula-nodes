@@ -38,7 +38,7 @@ from services.agent_questions import (
     update_outcome,
     update_text,
 )
-from tests.conftest import FORGED_ORIGIN, PERSON, PERSON_HELLO
+from tests.conftest import FORGED_ORIGIN, PERSON, PERSON_HELLO, asgi_get
 from tests.test_canvas_proposals import CLAUDE, CODEX, KEY, Clock, api  # noqa: F401 - api is a fixture
 
 ME = AgentIdentity(id="ext:claude-code", name="Claude Code", color="#3FC1A5", verified=False)
@@ -482,6 +482,31 @@ def test_a_wait_returns_as_soon_as_the_person_answers(asked):
     assert view["status"] == "answered"
     assert [a["answered"] for a in view["answers"]] == [True, True]
     assert took < 3.0, f"the wait ran {took:.1f} s: the answer didn't wake it"
+
+
+def test_an_abandoned_answers_wait_frees_its_waiter_slot(asked):
+    # Review 1 of PR #114 (M2): the waits share /api/canvas/events' 32 slots,
+    # and a client that went away held one for the rest of its wait.
+    from services.canvas_events import MAX_WAITERS
+
+    set_id = _ask(asked).json()["questions"]["id"]
+
+    async def scenario():
+        gone = asyncio.Event()
+        waits = [asyncio.create_task(asgi_get(asked.main.app, f"/api/canvas/questions/{set_id}", "wait=25", CLAUDE,
+                                              gone)) for _ in range(MAX_WAITERS)]
+        for _ in range(500):
+            if asked.journal.waiting == MAX_WAITERS:
+                break
+            await asyncio.sleep(0.01)
+        full = asked.journal.waiting
+        gone.set()
+        ended = await asyncio.wait_for(asyncio.gather(*waits), 2.0)
+        return full, ended, asked.journal.waiting
+
+    full, ended, freed = asyncio.run(scenario())
+    assert full == MAX_WAITERS and freed == 0
+    assert {answer["status"] for answer in ended} == {499}
 
 
 def test_the_persons_socket_gets_the_open_sets_with_keys_on_hello(asked):

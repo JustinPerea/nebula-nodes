@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { wsClient, type CanvasPinsEvent, type Pin } from '../lib/wsClient';
 import { createPin, deletePin, fetchPins, MAX_PIN_TEXT } from '../lib/canvasPins';
 import { failureMessage } from '../lib/errorCopy';
+import { refuseEditWhileOffline } from '../lib/backendConnection';
 
 /** Where the person is about to leave a note: on a node, or at a flow-space spot. */
 export type PinComposerTarget = { nodeId: string } | { position: { x: number; y: number } };
@@ -96,6 +97,9 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
       set({ composer: null });
       return false;
     }
+    // Offline is read-only (round 15 of PR #114): nothing is sent; the note
+    // stays open and the banner pulses.
+    if (refuseEditWhileOffline()) return false;
     try {
       const pin = sanitize(await createPin(trimmed.slice(0, MAX_PIN_TEXT), target));
       set((state) => ({
@@ -110,6 +114,7 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
     }
   },
   remove: async (id) => {
+    if (refuseEditWhileOffline()) return;
     const previous = get().pins;
     set((state) => ({
       pins: state.pins.filter((pin) => pin.id !== id),

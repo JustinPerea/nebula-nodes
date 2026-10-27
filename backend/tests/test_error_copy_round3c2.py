@@ -507,8 +507,8 @@ def test_provider_text_keeps_gms_design() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_failed_shot_keeps_the_agents_text_and_carries_the_cards_fields(monkeypatch) -> None:
-    from main import _run_single_shot_task, cli_graph
+async def test_a_failed_shot_keeps_the_agents_text_and_carries_the_cards_fields(monkeypatch, run_shot_task) -> None:
+    from main import cli_graph
 
     cli_graph.nodes["n1"] = {"id": "n1", "definitionId": "cinema-scene", "outputs": {},
                              "params": {"scene": {"shots": [{"id": "b", "output": {"status": "done"}}]}}}
@@ -526,10 +526,8 @@ async def test_a_failed_shot_keeps_the_agents_text_and_carries_the_cards_fields(
     monkeypatch.setattr("main._emit_and_sync", nothing)
     monkeypatch.setattr("main._broadcast_graph_sync", nothing)
     try:
-        await _run_single_shot_task(node_id="n1", shot_id="b",
-                                    sub_nodes=[GraphNode(id="n1", definitionId="cinema-scene",
-                                                         params={"scene": {"shots": [{"id": "b"}]}})],
-                                    sub_edges=[], api_keys={})
+        await run_shot_task(GraphNode(id="n1", definitionId="cinema-scene",
+                                      params={"scene": {"shots": [{"id": "b"}]}}), "b")
         [shot] = cli_graph.nodes["n1"]["params"]["scene"]["shots"]
         assert shot["output"]["error"] == "No mask painted yet — open the Mask Painter node and paint one"
         assert shot["output"]["errorPerson"] == "No mask painted yet — open the Mask Painter node and paint one"
@@ -539,8 +537,8 @@ async def test_a_failed_shot_keeps_the_agents_text_and_carries_the_cards_fields(
 
 
 @pytest.mark.asyncio
-async def test_a_shot_that_failed_on_an_unknown_provider_error_keeps_the_raw_text_for_details(monkeypatch) -> None:
-    from main import _run_single_shot_task, cli_graph
+async def test_a_shot_that_failed_on_an_unknown_provider_error_keeps_the_raw_text_for_details(monkeypatch, run_shot_task) -> None:
+    from main import cli_graph
 
     raw = "FAL submit failed (500): " + "x" * 300
     cli_graph.nodes["n1"] = {"id": "n1", "definitionId": "cinema-scene", "outputs": {},
@@ -558,10 +556,8 @@ async def test_a_shot_that_failed_on_an_unknown_provider_error_keeps_the_raw_tex
     monkeypatch.setattr("main._emit_and_sync", nothing)
     monkeypatch.setattr("main._broadcast_graph_sync", nothing)
     try:
-        await _run_single_shot_task(node_id="n1", shot_id="b",
-                                    sub_nodes=[GraphNode(id="n1", definitionId="cinema-scene",
-                                                         params={"scene": {"shots": [{"id": "b"}]}})],
-                                    sub_edges=[], api_keys={})
+        await run_shot_task(GraphNode(id="n1", definitionId="cinema-scene",
+                                      params={"scene": {"shots": [{"id": "b"}]}}), "b")
         [shot] = cli_graph.nodes["n1"]["params"]["scene"]["shots"]
         output = shot["output"]
         # Agents read what they read before, word for word (the classifier's cut).

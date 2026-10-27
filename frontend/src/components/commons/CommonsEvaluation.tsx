@@ -7,9 +7,19 @@ import { saveFailure, type LabelingWork, type SaveResult } from './commonsLeave'
 import { SectionEyebrow } from './CommonsSectionEyebrow';
 import '../../styles/commons-evaluation.css';
 import { failureMessage } from '../../lib/errorCopy';
+import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 
 const pretty = (value: string) => value === 'n_a' ? 'Not applicable' : value.replaceAll('_', ' ');
 const emptyLabels = (): EvaluationLabels => ({ tags: {}, axes: {}, palette_roles: {}, keywords: [], no_keywords: false, flagged: false });
+
+/** Round 17 of PR #114 (rename-style lines for a label draft dropped on
+ * reconnect; builder's wording, GM to confirm). */
+export const LABELS_CHANGED_ELSEWHERE = "You changed this reference's labels in another window while Nebula was offline, so your changes here weren't saved.";
+export const ACCENTS_CHANGED_ELSEWHERE = "You saved this reference's accents in another window while Nebula was offline, so your changes here weren't saved.";
+
+/** What a reference has saved: a draft is based on it. */
+const savedStateOf = (item: EvaluationItem) => JSON.stringify([item.accent_locked ?? false, item.accents ?? null,
+  item.no_accents ?? false, item.labels ?? null]);
 
 /** The open reference's draft: its own save and discard, for the Commons' leave popover. */
 type DraftActions = { save: () => Promise<SaveResult>; discard: () => void };
@@ -42,7 +52,19 @@ function followScan(pending: Scan, live: () => boolean, show: (outcome: ScanOutc
  * sections, and it reloads the batch on coming back unless a draft is open.
  */
 export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: LabelingWork | null) => void; active?: boolean }) {
-  const [batch, setBatch] = useState<EvaluationBatch | null>(null);
+  // Round 16 (L4): offline the saves are disabled; a draft stays editable
+  // and unsaved until Nebula answers.
+  const readOnly = useBackendOffline();
+  const [batch, setBatchState] = useState<EvaluationBatch | null>(null);
+  /** The open reference's form remounts (from the saved item) whenever the
+   * batch is replaced, except on reconnect when the item it drafts from is
+   * unchanged: the draft survives and saves at the new revision. */
+  const [formEpoch, setFormEpoch] = useState(0);
+  const setBatch = useCallback((value: EvaluationBatch | null, keepDraft = false) => {
+    setBatchState(value);
+    if (!keepDraft) setFormEpoch((epoch) => epoch + 1);
+  }, []);
+  const [notice, setNotice] = useState('');
   const headingId = useId();
   /** A scan still running (or settled unseen) when this panel mounted. */
   const [resumed] = useState(() => scan);
@@ -64,7 +86,7 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
   const showScan = useCallback((outcome: ScanOutcome) => {
     setBusy(false);
     if ('batch' in outcome) setBatch(outcome.batch); else setError(outcome.error);
-  }, []);
+  }, [setBatch]);
   useEffect(() => {
     let cancelled = false;
     if (resumed) {
@@ -74,7 +96,7 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
     api.get().then((value) => { if (!cancelled) setBatch(value); }, (e: unknown) => { if (!cancelled) setError(failureMessage(e, "Couldn't load the review.")); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [resumed, showScan]);
+  }, [resumed, showScan, setBatch]);
   useEffect(() => {
     onWork?.({ unsaved: dirty, saving, running: false,
       save: () => draft.current?.save() ?? Promise.resolve({ ok: true }),
@@ -93,7 +115,34 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
     let cancelled = false;
     api.get().then((value) => { if (!cancelled && idle.current) setBatch(value); }, () => undefined);
     return () => { cancelled = true; };
-  }, [active]);
+  }, [active, setBatch]);
+  // Back online (round 17 of PR #114; GM: label drafts follow the rename-
+  // draft rules). The batch is read again: a draft survives, and saves at the
+  // new revision, unless its reference was changed meanwhile. Labels are the
+  // person's alone to write (the routes need the person's session), so such
+  // a change came from their other window: the draft is dropped, so it can't
+  // overwrite it, and the line says so.
+  const latest = useRef({ batch, index, dirty, busy });
+  useEffect(() => { latest.current = { batch, index, dirty, busy }; });
+  const wasOffline = useRef(readOnly);
+  useEffect(() => {
+    const reconnected = wasOffline.current && !readOnly;
+    wasOffline.current = readOnly;
+    if (!reconnected || !latest.current.batch) return;
+    let cancelled = false;
+    api.get().then((fresh) => {
+      const now = latest.current;
+      if (cancelled || !now.batch || now.busy) return;
+      if (!now.dirty || !fresh) { setBatch(fresh); return; }
+      const before = now.batch.items[now.index];
+      const after = fresh.items[now.index];
+      if (before && after && savedStateOf(before) === savedStateOf(after)) { setBatch(fresh, true); return; }
+      setBatch(fresh);
+      setDirty(false);
+      setNotice(before?.accent_locked ? LABELS_CHANGED_ELSEWHERE : ACCENTS_CHANGED_ELSEWHERE);
+    }, () => undefined);
+    return () => { cancelled = true; };
+  }, [readOnly, setBatch]);
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => { if (dirty) e.preventDefault(); };
     window.addEventListener('beforeunload', warn);
@@ -103,7 +152,7 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
   function run(action: () => Promise<EvaluationBatch>): Promise<SaveResult> {
     setBusy(true); setError('');
     const attempt = (async (): Promise<SaveResult> => {
-      try { setBatch(await action()); setDirty(false); return { ok: true }; }
+      try { setBatch(await action()); setDirty(false); setNotice(''); return { ok: true }; }
       catch (e) { const failure = saveFailure(e); setError(failure.message); return failure; }
       finally { setBusy(false); }
     })();
@@ -129,6 +178,7 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
         {review ? 'Keep labeling' : `Review batch · ${count} / 15`}</button>}
     </header>
     {error && <p role="alert" className="commons-notice commons-notice--error">{error}</p>}
+    {notice && <p role="status" className="commons-notice">{notice}</p>}
     {!batch ? <form className="evaluation-setup" onSubmit={(e) => {
       e.preventDefault();
       const started: Scan = { path, result: api.prepare(path) };
@@ -141,7 +191,7 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
       <p>Scan a local folder before you import it. Nebula picks 15 references to label and 30 to tune with, choosing references that look different from each other and spreading them across subfolders. It never uses the 15, or anything that looks like them, as examples.</p>
       <p>Files in iCloud download before they are read. This scans and snapshots media; it does not import references or run the model. The set cannot be regenerated here.</p>
       <label>Folder path<input value={path} onChange={(e) => setPath(e.target.value)} placeholder="Absolute path to the reference folder" required disabled={busy} /></label>
-      <button className="commons-button commons-button--primary" disabled={busy || !path.trim()}>{busy ? 'Downloading and scanning…' : 'Prepare 15 held-out references'}</button>
+      <button className="commons-button commons-button--primary" disabled={busy || !path.trim() || readOnly} {...offlineMark(readOnly)}>{busy ? 'Downloading and scanning…' : 'Prepare 15 held-out references'}</button>
     </form> : <>
       {batch.sealed && <p className="commons-notice" role="status">Human labels sealed. The fixed denominator is 150 fields.</p>}
       {batch.state === 'closed' && <p className="commons-notice" role="status">Closed without sealing: an assisted review record, not blind ground truth. Blind drafts are read only. SHA-256: {batch.close_hash}</p>}
@@ -154,7 +204,7 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
         <p>{batch.tuning_count} separate tuning references reserved. {batch.excluded_count} unsupported non-media files excluded from the scan.</p>
         {batch.state === 'open' ? <>{batch.assisted_reviews > 0
           ? <p className="commons-notice" role="status">The agent graded these references before blind labels were sealed, so they can no longer be sealed as blind labels. Close them as assisted review to resume library analysis.</p>
-          : <button className="commons-button commons-button--primary" disabled={busy || count !== 15} onClick={() => void run(() => api.seal(batch.revision))}>Seal all 15 labels</button>}
+          : <button className="commons-button commons-button--primary" disabled={busy || count !== 15 || readOnly} {...offlineMark(readOnly)} onClick={() => void run(() => api.seal(batch.revision))}>Seal all 15 labels</button>}
           <CommonsCloseBatch revision={batch.revision} assisted={batch.assisted_reviews > 0} disabled={busy || dirty} onClosed={(value) => { setBatch(value); setDirty(false); }} /></>
           : batch.state === 'closed' ? <p className="evaluation-hash">Closed · SHA-256: {batch.close_hash}</p>
           : <><p className="evaluation-hash">SHA-256: {batch.seal_hash}</p><button className="commons-button" onClick={() => {
@@ -165,7 +215,7 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
       </div> : <div className="evaluation-workspace">
         <nav aria-label="Held-out references">{batch.items.map((item, n) => <button key={item.position} disabled={busy || dirty} aria-current={index === n ? 'true' : undefined}
           onClick={() => setIndex(n)}>Reference {String(n + 1).padStart(2, '0')} <span>{evaluationComplete(item, batch) ? '✓' : item.labels?.flagged ? '⚑' : ''}</span></button>)}</nav>
-        <ReferenceForm key={`${index}:${batch.revision}`} batch={batch} item={batch.items[index]} busy={busy} dirty={dirty} onDirty={setDirty} run={run} draftRef={draft} />
+        <ReferenceForm key={`${index}:${formEpoch}`} batch={batch} item={batch.items[index]} busy={busy} dirty={dirty} onDirty={setDirty} run={run} draftRef={draft} />
       </div>}
     </>}
   </section>;
@@ -185,6 +235,7 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef }: {
   const [crosshair, setCrosshair] = useState<AccentPoint>({ x: 0.5, y: 0.5 });
   const canvas = useRef<HTMLCanvasElement>(null);
   const readonly = batch.state !== 'open' || busy;
+  const offline = useBackendOffline();
   useEffect(() => {
     const controller = new AbortController(); let objectUrl = '';
     api.image(item.position, controller.signal).then((blob) => {
@@ -242,7 +293,7 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef }: {
         {points.map((point, n) => <div className="evaluation-point" key={n}>Accent {n + 1} · {Math.round(point.x * 100)}%, {Math.round(point.y * 100)}%
           <button className="commons-button" disabled={readonly} onClick={() => { setPoints(points.filter((_, i) => i !== n)); onDirty(true); }}>Remove accent {n + 1}</button></div>)}
         <label><input type="checkbox" checked={noAccents} disabled={readonly || !url} onChange={(e) => { setNoAccents(e.target.checked); setPoints([]); onDirty(true); }} /> I don’t see any accent colors</label>
-        <div className="evaluation-save"><button className="commons-button commons-button--primary" disabled={readonly || !url || (!points.length && !noAccents)}
+        <div className="evaluation-save"><button className="commons-button commons-button--primary" disabled={readonly || !url || (!points.length && !noAccents) || offline} {...offlineMark(offline)}
           onClick={() => void saveAccents()}>Save accents & reveal labels</button>{unsavedMark}</div>
       </> : <fieldset disabled={readonly}>
         <small>C1 · STRUCTURE & CHARACTER</small><h3 className="evaluation-step">Describe the visual language.</h3>
@@ -268,7 +319,7 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef }: {
           <button className="commons-button" key={word} disabled={labels.keywords.length >= 12} onClick={() => { change({ keywords: [...labels.keywords, word], no_keywords: false }); setQuery(''); }}>{pretty(word)}</button>)}</div>
         <label><input type="checkbox" checked={labels.no_keywords} onChange={(e) => change({ no_keywords: e.target.checked, keywords: [] })} /> No applicable keywords</label>
         <label><input type="checkbox" checked={labels.flagged} onChange={(e) => change({ flagged: e.target.checked })} /> I need to revisit this reference</label>
-        <div className="evaluation-save"><button className="commons-button commons-button--primary" disabled={!dirty} onClick={() => void saveLabels()}>Save labels</button>{unsavedMark}</div>
+        <div className="evaluation-save"><button className="commons-button commons-button--primary" disabled={!dirty || offline} {...offlineMark(offline)} onClick={() => void saveLabels()}>Save labels</button>{unsavedMark}</div>
       </fieldset>}
       {dirty && !busy && <button className="commons-button" onClick={discard}>Discard unsaved changes</button>}
       <p role="status">{batch.sealed ? 'Sealed · read only' : batch.state === 'closed' ? 'Closed · read only' : busy ? 'Saving…' : dirty ? 'Save before changing reference' : 'Saved on this computer'}</p>

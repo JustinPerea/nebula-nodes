@@ -32,6 +32,15 @@ def _report(result: dict[str, Any]) -> int:
             # Each node's message (also on its card), and what the rest made.
             print(format_run_results({**result, "duration": result.get("duration")}))
         return 1
+    if result.get("noRecord"):
+        # Round 17 of PR #114: no record here; it may have run before a restart.
+        print(f"Nebula has no record of run {run_id}. If it started before Nebula restarted, "
+              "check Run History for what it did.")
+        return 1
+    if status == "cancelled" and result.get("neverStarted"):
+        # Round 16 of PR #114: the stop beat the start, which Nebula refused.
+        print(f"Run {run_id} was stopped before it started, so nothing ran and nothing was spent.")
+        return EXIT_CANCELLED
     if status == "cancelled":
         made = format_run_results({**result, "duration": None})
         print(f"Run {run_id} was stopped." + (f" Finished before the stop:\n{made}" if result.get("nodesExecuted") else ""))
@@ -55,7 +64,14 @@ def run_result(client: NebulaClient, run_id: str, wait: float = 0) -> int:
 def run_cancel(client: NebulaClient, run_id: str) -> int:
     result = client.cancel_run(run_id)
     status = result.get("status")
-    if status in ("cancelled", "cancelling"):
+    if result.get("pendingAdmission") and result.get("noRecord"):
+        print(f"Nebula has no record of run {run_id}. If it started before Nebula restarted, "
+              "check Run History for what it did.")
+    elif result.get("pendingAdmission"):
+        # The stop beat the run's start (round 16 of PR #114): Nebula refuses
+        # that run id from now on.
+        print(f"Run {run_id} hadn't started yet. Nebula won't start it now, so nothing runs and nothing is spent.")
+    elif status in ("cancelled", "cancelling"):
         print(f"Stopping run {run_id}. `nebula result {run_id}` shows what finished first.")
     elif status in ("completed", "failed"):
         print(f"Run {run_id} had already ended ({status}).")

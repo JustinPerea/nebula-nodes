@@ -43,6 +43,7 @@ import type { NodeData } from '../types';
 import { NODE_RENAME_EVENT } from '../lib/keyboardShortcuts';
 import { publishCanvasSelection, selectedNodeIds } from '../lib/canvasSelection';
 import '../styles/canvas.css';
+import { useBackendOffline } from '../lib/useBackendOffline';
 
 const nodeTypes = CANVAS_NODE_TYPES;
 const edgeTypes = CANVAS_EDGE_TYPES;
@@ -258,6 +259,8 @@ export function Canvas() {
   const storeOnConnect = useGraphStore((s) => s.onConnect);
   const executeGraph = useGraphStore((s) => s.executeGraph);
   const isExecuting = useGraphStore((s) => s.isExecuting);
+  // Offline is read-only (GM, round 14 of PR #114).
+  const readOnly = useBackendOffline();
   const isValidConnection = useIsValidConnection();
   const skin = useUIStore((s) => s.skin);
   const canvasPerfMode = useUIStore((s) => s.canvasPerfMode);
@@ -336,7 +339,10 @@ export function Canvas() {
   // Publish only IDs. The backend resolves authoritative node data on read,
   // keeping transient selection out of saved graph files and stale handles out
   // of CLI/MCP context. Debounce marquee churn while preserving the final set.
+  // Round 16 (L1): selecting while offline is local view state; nothing is
+  // sent then, and the selection in hand goes out once Nebula answers again.
   useEffect(() => {
+    if (readOnly) return undefined;
     const controller = new AbortController();
     const timeout = window.setTimeout(() => {
       publishCanvasSelection(liveSelectedNodeIds, controller.signal).catch((error) => {
@@ -348,7 +354,7 @@ export function Canvas() {
       window.clearTimeout(timeout);
       controller.abort();
     };
-  }, [liveSelectionKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [liveSelectionKey, readOnly]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const reactFlow = useReactFlow();
   const { fitView, screenToFlowPosition, zoomIn, zoomOut, zoomTo } = reactFlow;
@@ -719,7 +725,8 @@ export function Canvas() {
   return (
     <div
       ref={wrapperRef}
-      className={`canvas-wrapper${isSlavaSkin ? ' canvas-wrapper--slava' : ''}${isSlavaSkin && nodes.length === 0 ? ' canvas-wrapper--slava-empty' : ''}`}
+      className={`canvas-wrapper${isSlavaSkin ? ' canvas-wrapper--slava' : ''}${isSlavaSkin && nodes.length === 0 ? ' canvas-wrapper--slava-empty' : ''}${readOnly ? ' canvas--read-only' : ''}`}
+      data-read-only={readOnly || undefined}
       data-dock-open={leftDock !== null}
       tabIndex={0}
       onDrop={onDrop}
@@ -752,6 +759,8 @@ export function Canvas() {
         deleteKeyCode={isExecuting ? null : ['Backspace', 'Delete']}
         onBeforeDelete={onBeforeDelete}
         {...CANVAS_INTERACTION_PROPS}
+        nodesDraggable={!readOnly}
+        nodesConnectable={!readOnly}
         onlyRenderVisibleElements={canvasPerfMode && !arrangeMeasuring}
       >
         <Background
