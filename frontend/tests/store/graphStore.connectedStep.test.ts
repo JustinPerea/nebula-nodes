@@ -51,6 +51,13 @@ function graphSync(nodes: Node<NodeData>[], edges: Edge[], graphReplaced = false
   transport.sync?.({ type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, nodes, edges, empty: nodes.length === 0, graphReplaced });
 }
 
+/** One step, taken before the add (n3 isn't in it), waiting for n3's echo. */
+function expectStepOwnsN3(): void {
+  const { undoStack } = useGraphStore.getState();
+  expect(undoStack).toHaveLength(1);
+  expect((undoStack[0] as { nodes: Node<NodeData>[] }).nodes.map((item) => item.id)).not.toContain('n3');
+}
+
 function dispatchedNode(id = 'n3'): Node<NodeData> {
   const request = transport.fetch.mock.calls.find(([url]) => url === '/api/graph/node-and-connect')!;
   const body = JSON.parse(request[1].body);
@@ -197,7 +204,9 @@ describe('connected next-step preparation', () => {
     expect(await pending).toBeNull();
     expect(useGraphStore.getState().nodes).toHaveLength(2);
     expect(useGraphStore.getState().edges).toEqual([]);
-    expect(useGraphStore.getState().undoStack).toHaveLength(0);
+    // Round 17 (M1): Nebula said it made n3, so the add's step owns it and
+    // waits for its echo; undoing the step takes n3 off.
+    expectStepOwnsN3();
   });
 
   it('blocks a second click while the backend request is pending', async () => {
@@ -221,7 +230,11 @@ describe('connected next-step preparation', () => {
     expect(await useGraphStore.getState().addNodeAndConnect('veo-3', position, connect)).toBeNull();
     expect(useGraphStore.getState().nodes).toHaveLength(2);
     expect(useGraphStore.getState().edges).toEqual([priorEdge]);
-    expect(useGraphStore.getState().undoStack).toHaveLength(0);
+    // Round 17 (M1): an answer naming a new node (n3) means Nebula made it:
+    // the add's step owns it. An invalid one (a node the canvas has, another
+    // kind of node) leaves it uncertain, with no step.
+    if (body.id === 'n3' && (!('definitionId' in body) || body.definitionId === 'veo-3')) expectStepOwnsN3();
+    else expect(useGraphStore.getState().undoStack).toHaveLength(0);
     expect(alert).toHaveBeenCalled();
   });
 

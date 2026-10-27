@@ -624,6 +624,7 @@ body:not(.app-slava-restraint) .agent-log__time {
 
 .agent-log__time {
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 body:not(.app-slava-restraint) .agent-log__source {

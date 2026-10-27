@@ -149,7 +149,9 @@ describe('a late restore count', () => {
     await restoreWithAnswerHeld();
     useGraphStore.getState().deleteNode('n2');
     await settle();
-    expect(notice()).toMatchObject({ text: 'Deleted the node.', offer: 'undo' });
+    // Round 17: the delete reaches Nebula after the restore (the order the
+    // person made them), so its line comes once the restore has answered.
+    expect(useGraphStore.getState().nodes.map((node) => node.id)).toContain('n2');
     await release();
     // The newer notice keeps its Undo, and the count is not lost.
     expect(notice()).toMatchObject({ text: 'Deleted the node.', offer: 'undo' });

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { PlaceholderRunDialog } from '../src/components/PlaceholderRunDialog';
 import type { PlaceholderRunConfirm } from '../src/lib/placeholderRunConfirm';
 
@@ -29,10 +29,12 @@ describe('the replay sentence in the dialog', () => {
     expect(lines.slice(0, 5)).toEqual([model.intro, SAVED, model.leftLine, 'This run changed since you last reviewed it.', 'rows']);
   });
 
-  it('a change to it alone counts as a change in place (Run is held, the changed line shows)', () => {
-    const view = render(<PlaceholderRunDialog model={{ ...model, savedLine: null }} onDone={() => {}} />);
-    expect(screen.queryByText('This run changed since you last reviewed it.')).toBeNull();
-    view.rerender(<PlaceholderRunDialog model={model} onDone={() => {}} />);
-    expect(screen.getAllByText('This run changed since you last reviewed it.').length).toBeGreaterThan(0);
+  it('a change to it alone counts as a change in place: Run is held; no changed line, since no node moved (GM round 17)', () => {
+    const answers: boolean[] = [];
+    const view = render(<PlaceholderRunDialog model={{ ...model, savedLine: null }} onDone={(ok) => answers.push(ok)} />);
+    view.rerender(<PlaceholderRunDialog model={model} onDone={(ok) => answers.push(ok)} />);
+    expect(document.querySelector('.placeholder-run__changed')).toBeNull();
+    fireEvent.click(screen.getByText('Run for $0.13'));
+    expect(answers).toEqual([]);
   });
 });

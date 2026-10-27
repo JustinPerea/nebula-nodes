@@ -466,14 +466,31 @@ export function modelNotChosenText(nodes: Node<NodeData>[], names?: Readonly<Rec
  * was open." It names only the nodes whose route or price moved between
  * what the person was shown (`shown`) and the rows now (`now`): the model a
  * row runs on its route, its setting, or its price. Null when none moved.
+ * Each node is named as its row reads now (review 16, L-1: the person
+ * matches the line to the row under it). GM round 17 (1): the dialog says
+ * the same line when it updates in place (movedNodesLine).
  */
 export function changedNodesLine(shown: PlaceholderRunConfirm, now: PlaceholderRunConfirm): string | null {
+  return movedNodesLine(now.rows, movedRowIds(shown, now));
+}
+
+/** The rows of `now` whose route or price moved since `shown`, in row order:
+ * the model a row runs on its route, its setting, or its price. A row that
+ * joined or left the run isn't one (the dialog's other lines cover it). */
+export function movedRowIds(shown: PlaceholderRunConfirm, now: PlaceholderRunConfirm): string[] {
   const before = new Map(shown.rows.map((row) => [row.nodeId, row]));
-  const moved = now.rows.filter((row) => {
+  return now.rows.filter((row) => {
     const was = before.get(row.nodeId);
     return was !== undefined && (was.modelKey !== row.modelKey || (was.setting ?? '') !== (row.setting ?? '')
       || was.price !== row.price);
-  }).map((row) => before.get(row.nodeId)!.name);
+  }).map((row) => row.nodeId);
+}
+
+/** GM's line for the nodes `ids` names, by `rows`' names and in their order;
+ * null when none of them is a row (any more). */
+export function movedNodesLine(rows: PlaceholderRunRow[], ids: Iterable<string>): string | null {
+  const wanted = new Set(ids);
+  const moved = rows.filter((row) => wanted.has(row.nodeId)).map((row) => row.name);
   if (moved.length === 0) return null;
   const who = moved.length >= 4 ? `${moved.length} nodes`
     : moved.length === 1 ? moved[0] : `${moved.slice(0, -1).join(', ')} and ${moved[moved.length - 1]}`;
@@ -845,6 +862,44 @@ export function withRunEstimate(summary: RunScopeSummary, estimate: RunEstimate,
     ...(Object.keys(unavailable).length ? { unavailable } : {}),
   };
   return { ...summary, cost };
+}
+
+/**
+ * Review 16, M2: a 409 re-ask asked again because a row's route moved while
+ * it was open. Nebula's estimate (`refused`) was for the routes the refused
+ * run had: a row still on its route keeps those numbers (what Nebula holds
+ * the run to), and a row on a new route (`moved`) takes the canvas's own
+ * route-aware numbers for it (`canvas`, summarizeRunScope's cost), as
+ * Nebula's estimate for that route would read. low and high are the sums of
+ * the lines, null with none (as Nebula's are).
+ */
+export function mergeRunEstimates(refused: RunEstimate, canvas: RunCost | undefined, moved: ReadonlySet<string>): RunEstimate {
+  const keep = (id: string) => !moved.has(id);
+  const nodes = Object.fromEntries(Object.entries(refused.nodes).filter(([id]) => keep(id)));
+  const unpriced = refused.unpriced.filter(keep);
+  const plan = refused.plan.filter(keep);
+  const awaitingInput = refused.awaitingInput.filter(keep);
+  const unavailable = Object.fromEntries(Object.entries(refused.unavailable).filter(([id]) => keep(id)));
+  for (const line of canvas?.lines ?? []) {
+    if (line.nodeId && moved.has(line.nodeId)) nodes[line.nodeId] = { low: line.low, high: line.high };
+  }
+  const ids = canvas?.ids;
+  for (const id of moved) {
+    if (ids?.unpriced.includes(id)) unpriced.push(id);
+    if (ids?.plan.includes(id)) plan.push(id);
+    if (ids?.awaitingInput.includes(id)) awaitingInput.push(id);
+    const why = ids?.unavailable?.[id];
+    if (why) unavailable[id] = why;
+  }
+  const lines = Object.values(nodes);
+  const sum = (pick: (line: { low: number; high: number }) => number) => lines.reduce((total, line) => total + pick(line), 0);
+  return {
+    low: lines.length ? sum((line) => line.low) : null,
+    high: lines.length ? sum((line) => line.high) : null,
+    nodes, unpriced, plan,
+    plus: [...new Set([...refused.plus, ...(moved.size ? canvas?.plus ?? [] : [])])],
+    unavailable, awaitingInput,
+  };
 }
 
 /** The run's nodes with the placeholders Nebula's refusal names (`refusal`):

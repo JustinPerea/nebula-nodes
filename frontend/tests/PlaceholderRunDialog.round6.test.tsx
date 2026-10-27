@@ -44,21 +44,24 @@ describe('GM round 6, item 3: the muted row', () => {
   });
 });
 
-describe('GM round 6, note 2: the changed line for in-place updates', () => {
-  it('shows once a row or price changes after the dialog first shows, and stays', () => {
+// GM round 17 (1) replaced note 2's line with the nodes that moved, named
+// (PlaceholderRunDialog.round17); these keep what still holds of it.
+describe('GM round 6, note 2, as round 17 rules it: in-place updates', () => {
+  it('a price that moves names its node, and the line stays', () => {
     const { rerender } = render(<PlaceholderRunDialog model={model('price not listed', '$0.07')} onDone={() => {}} />);
     expect(changedLine()).toBeNull();
     rerender(<PlaceholderRunDialog model={model('$9.95', '$10.02')} onDone={() => {}} />);
-    expect(changedLine()).toBe(CHANGED);
+    expect(changedLine()).toBe('“Hero still” changed while this was open.');
     rerender(<PlaceholderRunDialog model={model('price not listed', '$0.07')} onDone={() => {}} />);
-    expect(changedLine()).toBe(CHANGED);
+    expect(changedLine()).toBe('“Hero still” changed while this was open.');
+    expect(screen.queryByText(CHANGED)).toBeNull();
   });
 
-  it('a new heading counts as a change too (H1: no placeholder left)', () => {
+  it('a new heading alone holds Run, with no changed line (no node moved; H1: no placeholder left)', () => {
     const answers: boolean[] = [];
     const { rerender } = render(<PlaceholderRunDialog model={model('$0.03', '$0.10')} onDone={(ok) => answers.push(ok)} />);
     rerender(<PlaceholderRunDialog model={model('$0.03', '$0.10', "Run with Codex's changes?")} onDone={(ok) => answers.push(ok)} />);
-    expect(changedLine()).toBe(CHANGED);
+    expect(changedLine()).toBeNull();
     fireEvent.click(screen.getByText('Run for $0.10'));
     expect(answers).toEqual([]); // held for 500 ms
   });
@@ -70,9 +73,9 @@ describe('GM round 6, note 2: the changed line for in-place updates', () => {
     expect(live.textContent).toBe('');
     rerender(<PlaceholderRunDialog model={model('$9.95', '$10.02')} onDone={() => {}} />);
     const first = live.textContent;
-    expect(first?.trim()).toBe(CHANGED);
+    expect(first?.trim()).toBe('“Hero still” changed while this was open.');
     rerender(<PlaceholderRunDialog model={model('$12.00', '$12.07')} onDone={() => {}} />);
-    expect(live.textContent?.trim()).toBe(CHANGED);
+    expect(live.textContent?.trim()).toBe('“Hero still” changed while this was open.');
     expect(live.textContent).not.toBe(first); // a fresh announcement, not the same text left in place
   });
 });

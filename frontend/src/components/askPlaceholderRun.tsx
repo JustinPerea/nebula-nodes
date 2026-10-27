@@ -6,9 +6,9 @@ import { PlaceholderRunDialog } from './PlaceholderRunDialog';
 export interface AskPlaceholderRunOptions {
   /** Asked again because the run changed since the person last saw it (GM, round 5). */
   changed?: boolean;
-  /** Asked again because a route or price moved: which nodes, in GM's words
-   * (round 16 (a): changedNodesLine), in place of the round-5 line. */
-  movedLine?: string | null;
+  /** Asked again because a route or price moved: which nodes (round 16 (a):
+   * movedRowIds), named in GM's line in place of the round-5 line. */
+  moved?: readonly string[];
   /** Called once as the dialog opens with a function that shows newer words
    * (a measured input's price, the keys read again); returns its stop. The
    * dialog stops watching the moment it is answered. */
@@ -35,7 +35,7 @@ export function askPlaceholderRun(model: PlaceholderRunConfirm, options: AskPlac
       resolve(ok ? shown : null);
     };
     const draw = (shown: PlaceholderRunConfirm) =>
-      root.render(<PlaceholderRunDialog model={shown} changed={options.changed} movedLine={options.movedLine} onDone={done} />);
+      root.render(<PlaceholderRunDialog model={shown} changed={options.changed} moved={options.moved} onDone={done} />);
     draw(model);
     const stop = options.watch?.((next) => {
       if (!settled) flushSync(() => draw(next));

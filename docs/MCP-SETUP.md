@@ -229,7 +229,14 @@ The server exposes these tools for building and running (see
   you added meanwhile stays). A clear the person issues after a Cmd+Z that
   is still waiting supersedes it: the Cmd+Z is dropped and the canvas ends
   cleared; an undo takes off only the nodes its own step added (a node you,
-  another agent or the person added while that step was on its way stays);
+  another agent or the person added while that step was on its way stays),
+  and always the ones it did add, even after a delete of one and its undo
+  brought it back (adding a node from the library, a drop, the command
+  palette, a Character or Moodboard drop and Creator's inserts are each
+  their own step too); while an undo or redo is still on its way to
+  Nebula, the person's next edits (typing, a delete, an added node) reach
+  Nebula after it, in the order the person made them, so the graph you
+  read never shows a later edit undone by an earlier Cmd+Z;
   a Cmd+Z never does nothing without a word: a step that ended up changing
   nothing is passed over (the press undoes the step below it), and a press
   whose step was taken back meanwhile (a refused delete) counts in the
@@ -584,8 +591,9 @@ fields by the labels the card shows them under, in the card's order: "Set
 “Aspect ratio”", "Set “Aspect ratio” and “Resolution”", "Set 3 settings" for
 three or more. A field the card shows no label for is left out of the bubble
 and its count (with none labelled the cursor moves without words), and the
-Agent log names it by its key instead ("Set “Aspect ratio” and seed_mode",
-"Set seed_mode"). Moodboard writes are listed there too
+Agent log names it by its key instead, after the labelled fields ("Set
+“Aspect ratio”, “Seed” and seed_mode", "Set seed_mode"), up to four names
+and then a count ("Set “Aspect ratio”, “Seed”, seed_mode, cfg and 2 more"). Moodboard writes are listed there too
 (your edit batch's `say`, else the journal's words: "Set aside #1 on board
 Dusk"; "Analyzed board Dusk"), and so is a run of the
 whole canvas ("Running 4 nodes"); neither has one place on the canvas, so
@@ -1134,9 +1142,11 @@ on an xAI key: `xai`, priced at xAI's price, never Krea's; its `label` is
 confirm rows name the same route ("Grok Imagine 2.0 via xAI · $0.06"; a row
 on Krea's own gateway keeps the card's name, "Grok Imagine 2.0 (Krea)"). If
 a route or price has moved by the time the person says yes, the confirm asks
-again and says which node moved ("“Alt still” changed while this was open.";
-two or three by name, "4 nodes changed while this was open." past that), and
-its Run ignores clicks for half a second.
+again and says which node moved, named as its row reads now ("“Alt still”
+changed while this was open."; two or three by name, "4 nodes changed while
+this was open." past that), and its Run ignores clicks for half a second. Its
+rows price the nodes whose route moved at the canvas's own route-aware
+numbers, and the rest at the refusal's `estimate`.
 Upstream nodes that have no outputs yet
 are counted too, and then the count reads "up to", because the run cache may
 skip some of them. `cost.estimate` adds up list prices in USD from
@@ -1511,10 +1521,14 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   the dialog (a Tab stop when they do), and the heading, total, footnote
   and buttons stay on screen; focus starts on Cancel. Cancel changes nothing. A price read from an input file (FLUX
   Video Upscale, SeedVR2) is measured while the dialog is open, and the
-  row updates in place. Whenever a row, a price or the heading changes
-  after the dialog first shows, it says "This run changed since you last
-  reviewed it." above the rows (a screen reader hears it), and Run takes
-  no click for 500 ms. Once it has shown, the dialog stays in charge of
+  row updates in place. When a node's route or price changes after the
+  dialog first shows, it names the node above the rows, as its row reads
+  now ("“Alt still” changed while this was open."; two or three by name,
+  "4 nodes changed while this was open." past that), and the line stays;
+  a node joining or leaving the run adds no such line (the line for
+  placeholders that left the run covers it). A screen reader hears each
+  change, and after any change in place (a row, a price, the heading) Run
+  takes no click for 500 ms. Once it has shown, the dialog stays in charge of
   that run until it is sent or cancelled. It follows only that run's
   placeholders (another agent's elsewhere on the canvas never changes it):
   if their agents finish them while it is open, it reads "Run with Codex's

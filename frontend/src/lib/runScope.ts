@@ -36,7 +36,7 @@ export interface RunCost {
   /** `unpriced`, `plan` and `awaitingInput` by node id, for a reader that
    * needs each node's own (two nodes can share a name): the placeholder
    * dialog's rows (lib/placeholderRunConfirm.ts). */
-  ids?: { unpriced: string[]; plan: string[]; awaitingInput: string[] };
+  ids?: { unpriced: string[]; plan: string[]; awaitingInput: string[]; unavailable?: Record<string, string> };
 }
 
 export interface RunScopeSummary {
@@ -355,6 +355,7 @@ export function summarizeRunScope(
         cost.unpriced.push(name);
         ids.unpriced.push(node.id);
         cost.unavailable = { ...cost.unavailable, [name]: missing.message };
+        ids.unavailable = { ...ids.unavailable, [node.id]: missing.message };
         continue;
       }
       priceKey = routePriceKey(definition, selectRoute(definition, routed, costContext.apiKeys));

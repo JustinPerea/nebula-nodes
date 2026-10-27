@@ -2700,7 +2700,8 @@ body.app-slava-restraint .agent-log__empty-status {
 body.app-slava-restraint .agent-log__entry {
   --agent-log-source-color: var(--sr-ink-meta);
   display: grid;
-  grid-template-columns: 8px 64px 70px 1fr;
+  /* The time's column is as wide as its text: "03:46:22 PM" never wraps (GM, round 17). */
+  grid-template-columns: 8px max-content 70px 1fr;
   gap: 8px;
   align-items: baseline;
   padding: 7px 0;
@@ -2735,6 +2736,7 @@ body.app-slava-restraint .agent-log__entry-marker {
 body.app-slava-restraint .agent-log__time {
   color: var(--sr-ink-faint);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 body.app-slava-restraint .agent-log__source {

@@ -14,6 +14,9 @@ import { resolve } from 'node:path';
  *   the run waits for it within the same 4 s.
  * L-4: a 409 re-ask that asks again after a route change prices at the
  *   409 answer's own estimate, so the confirmation it sends passes.
+ *   Review 16, M2 (round 17): only the rows whose route did not move; a
+ *   moved row is priced at the canvas's numbers for its new route (the
+ *   409's estimate was for the old one).
  * GM - Design round 16 (a): the re-ask after a route change says which
  *   nodes changed, and Run ignores clicks for its first 500 ms.
  */
@@ -232,7 +235,7 @@ describe('L-3: the Krea sign-in still connecting is waited for', () => {
   });
 });
 
-describe("L-4 and GM (a): a 409 re-ask after a route change prices at Nebula's own numbers and says what changed", () => {
+describe("L-4, M2 and GM (a): a 409 re-ask after a route change prices each row on its own route and says what changed", () => {
   const initialCache = useUIStore.getState().settingsCache;
   let sends: Array<{ placeholders?: string[]; cost?: number }>;
   beforeEach(() => {
@@ -252,7 +255,7 @@ describe("L-4 and GM (a): a 409 re-ask after a route change prices at Nebula's o
     vi.restoreAllMocks();
   });
 
-  it('the second re-ask carries the 409 estimate and the send carries its amount', async () => {
+  it('M2: xAI to Krea while it is open: the moved row is priced on Krea (no list price), not at the 409\'s xAI price', async () => {
     setCanvas(node('n2', 'Alt still', GROK, { aspect_ratio: '1:1', resolution: '1K' }, { pending: codex }));
     const message = 'Nothing ran. This run costs more than you confirmed.';
     vi.spyOn(api, 'executeNode').mockImplementation((async (...args: unknown[]) => {
@@ -274,14 +277,17 @@ describe("L-4 and GM (a): a 409 re-ask after a route change prices at Nebula's o
     await useGraphStore.getState().executeNode('n2');
     expect(askMock).toHaveBeenCalledTimes(3);
     const third = askMock.mock.calls[2][0] as PlaceholderRunConfirm;
-    expect(third.rows.find((row) => row.nodeId === 'n2')?.price).toBe('$0.07');
-    expect(third.confirmCost).toBe(0.07);
-    expect(askMock.mock.calls[2][1]).toMatchObject({ changed: true, movedLine: '“Alt still” changed while this was open.' });
+    // Review 16, M2: "$0.07" here was the 409's price for the xAI route.
+    expect(third.rows.find((row) => row.nodeId === 'n2')?.model).toContain('Grok Imagine 2.0 (Krea)');
+    expect(third.rows.find((row) => row.nodeId === 'n2')?.price).toBe('price not listed');
+    // Nothing in it has a list price: the yes confirms $0, as any unpriced run's does.
+    expect(third.confirmCost).toBe(0);
+    expect(askMock.mock.calls[2][1]).toMatchObject({ changed: true, moved: ['n2'] });
     expect(sends).toHaveLength(2);
-    expect(sends[1].cost).toBe(0.07);
+    expect(sends[1].cost).toBe(0);
   });
 
-  it('the other way: the 409 re-ask on Krea, an xAI key added meanwhile: asked again via xAI at the estimate', async () => {
+  it('M2, the other way: the 409 re-ask on Krea, an xAI key added meanwhile: asked again via xAI at xAI\'s price', async () => {
     useUIStore.setState({ settingsCache: { apiKeys: { KREA_API_TOKEN: 'k' }, loaded: true } } as never);
     setCanvas(node('n2', 'Alt still', GROK, { aspect_ratio: '1:1', resolution: '1K' }, { pending: codex }));
     const message = 'Nothing ran. This run costs more than you confirmed.';
@@ -290,7 +296,8 @@ describe("L-4 and GM (a): a 409 re-ask after a route change prices at Nebula's o
       if (sends.length === 1) {
         throw new api.ExecutionStartRejectedError(message, 409, { detail: {
           code: 'placeholder_confirm_required', message, placeholders: ['n2'], agents: { n2: codex.agent },
-          estimate: { low: 0.06, high: 0.06, nodes: { n2: { low: 0.06, high: 0.06 } }, unpriced: [], plan: [], plus: [], unavailable: {}, awaitingInput: [] },
+          // Nebula's numbers for the Krea route: no list price.
+          estimate: { low: null, high: null, nodes: {}, unpriced: ['n2'], plan: [], plus: [], unavailable: {}, awaitingInput: [] },
         } });
       }
       return { status: 'started' };
@@ -304,7 +311,30 @@ describe("L-4 and GM (a): a 409 re-ask after a route change prices at Nebula's o
     const third = askMock.mock.calls[2][0] as PlaceholderRunConfirm;
     expect(third.rows.find((row) => row.nodeId === 'n2')?.model).toContain('Grok Imagine 2.0 via xAI');
     expect(third.rows.find((row) => row.nodeId === 'n2')?.price).toBe('$0.06');
-    expect(askMock.mock.calls[2][1]).toMatchObject({ changed: true, movedLine: '“Alt still” changed while this was open.' });
+    expect(third.confirmCost).toBe(0.06);
+    expect(askMock.mock.calls[2][1]).toMatchObject({ changed: true, moved: ['n2'] });
+    expect(sends[1].cost).toBe(0.06);
+  });
+
+  it('M2: a row whose route did not move keeps the 409\'s price', async () => {
+    setCanvas(node('n2', 'Alt still', GROK, { aspect_ratio: '1:1', resolution: '1K' }, { pending: codex }));
+    const message = 'Nothing ran. This run costs more than you confirmed.';
+    vi.spyOn(api, 'executeNode').mockImplementation((async (...args: unknown[]) => {
+      sends.push({ placeholders: args[6] as string[] | undefined, cost: args[7] as number | undefined });
+      if (sends.length === 1) {
+        throw new api.ExecutionStartRejectedError(message, 409, { detail: {
+          code: 'placeholder_confirm_required', message, placeholders: ['n2'], agents: { n2: codex.agent },
+          estimate: { low: 0.07, high: 0.07, nodes: { n2: { low: 0.07, high: 0.07 } }, unpriced: [], plan: [], plus: [], unavailable: {}, awaitingInput: [] },
+        } });
+      }
+      return { status: 'started' };
+    }) as never);
+    askMock.mockImplementation(async (model: unknown) => model);
+    await useGraphStore.getState().executeNode('n2');
+    expect(askMock).toHaveBeenCalledTimes(2);
+    const second = askMock.mock.calls[1][0] as PlaceholderRunConfirm;
+    expect(second.rows.find((row) => row.nodeId === 'n2')?.price).toBe('$0.07');
+    expect(sends[1].cost).toBe(0.07);
   });
 
   it("the dialog's own re-ask after a route change names the node", async () => {
@@ -314,6 +344,6 @@ describe("L-4 and GM (a): a 409 re-ask after a route change prices at Nebula's o
       .mockImplementationOnce(async (model: unknown) => model);
     await useGraphStore.getState().executeNode('n2');
     expect(askMock).toHaveBeenCalledTimes(2);
-    expect(askMock.mock.calls[1][1]).toMatchObject({ changed: true, movedLine: '“Alt still” changed while this was open.' });
+    expect(askMock.mock.calls[1][1]).toMatchObject({ changed: true, moved: ['n2'] });
   });
 });

@@ -98,8 +98,8 @@ import { useUIStore } from './uiStore';
 import { usePricingStore } from './pricingStore';
 import { useInputSizeStore } from './inputSizeStore';
 import { useStoredAssetsStore } from './storedAssetsStore';
-import { nodesThatRun, repeatRun, runCostConfirmMessage, shouldConfirmRunCost, summarizeRunScope, type RunScope } from '../lib/runScope';
-import { PRICE_DEPENDS_ON_INPUT, PRICE_NOT_LISTED, changedNodesLine, mayBeRefused, modelNotChosenText, planDecidesRefusal, placeholderRefusalOf, placeholderRunConfirm, runPlaceholders, withRefusalFlags, withRunEstimate, type PlaceholderRunConfirm, type PlaceholderRunOptions, type RunEstimate } from '../lib/placeholderRunConfirm';
+import { nodesThatRun, repeatRun, runCostConfirmMessage, shouldConfirmRunCost, summarizeRunScope, type RunScope, type RunScopeSummary } from '../lib/runScope';
+import { PRICE_DEPENDS_ON_INPUT, PRICE_NOT_LISTED, mayBeRefused, mergeRunEstimates, movedRowIds, modelNotChosenText, planDecidesRefusal, placeholderRefusalOf, placeholderRunConfirm, runPlaceholders, withRefusalFlags, withRunEstimate, type PlaceholderRunConfirm, type PlaceholderRunOptions, type RunEstimate } from '../lib/placeholderRunConfirm';
 import { placeholderRunDialogModule } from '../lib/placeholderRunDialogModule';
 import { useCreateDraftStore } from './createDraftStore';
 import { getCinemaUploadIssue, useCinemaUploadStore } from './cinemaUploadStore';
@@ -1436,8 +1436,29 @@ const PARAM_PUSH_DEBOUNCE_MS = 250;
  * these keys as the canvas has them, so it can't wipe what the person is
  * typing; the rest of the node follows the backend. Cleared once no write
  * for the node is waiting or in flight.
+ *
+ * Review 16, L-3 (round 17): a write Nebula took (its PUT answered OK) is
+ * kept too until a sync shows it (`sent`: the values that write carried).
+ * Nebula sends the write's own echo before it answers, but a sync it sent
+ * earlier (a run's outputs, a reconnect's graph) can still reach the tab
+ * after the answer. Taking that sync's older value showed the typing undone
+ * and left its undo step with nothing to change, so it was dropped; the
+ * echo then brought the value back with no step to undo it. Nothing was
+ * lost in Nebula. If no sync shows the write within PARAM_ECHO_WAIT_MS, the
+ * syncs win again. A write that failed is let go at once, as before.
  */
-const unsavedParamEdits = new Map<string, { keys: Set<string>; inFlight: number }>();
+interface UnsavedParamEdit {
+  keys: Set<string>;
+  inFlight: number;
+  /** What the last write carried for each key (stableJson), until a sync shows it. */
+  sent?: Map<string, string>;
+  /** A sync showed `sent`. */
+  echoed?: boolean;
+  /** Lets the edit go if no sync shows it in time. */
+  linger?: ReturnType<typeof setTimeout>;
+}
+const unsavedParamEdits = new Map<string, UnsavedParamEdit>();
+const PARAM_ECHO_WAIT_MS = 5_000;
 
 function noteParamEdit(nodeId: string, before: Record<string, unknown>, after: Record<string, unknown>): void {
   const keys = [...new Set([...Object.keys(before), ...Object.keys(after)])]
@@ -1448,10 +1469,51 @@ function noteParamEdit(nodeId: string, before: Record<string, unknown>, after: R
   unsavedParamEdits.set(nodeId, entry);
 }
 
-function settleParamEdit(nodeId: string, entry: { keys: Set<string>; inFlight: number }): void {
+function forgetParamEdit(nodeId: string, entry: UnsavedParamEdit): void {
+  if (entry.linger !== undefined) clearTimeout(entry.linger);
+  if (unsavedParamEdits.get(nodeId) === entry) unsavedParamEdits.delete(nodeId);
+}
+
+function settleParamEdit(nodeId: string, entry: UnsavedParamEdit, ok: boolean): void {
   if (unsavedParamEdits.get(nodeId) !== entry) return;
   entry.inFlight = Math.max(0, entry.inFlight - 1);
-  if (entry.inFlight === 0 && paramPushTimers[nodeId] === undefined) unsavedParamEdits.delete(nodeId);
+  if (entry.inFlight > 0 || paramPushTimers[nodeId] !== undefined) return;
+  if (!ok || entry.echoed || !entry.sent) {
+    forgetParamEdit(nodeId, entry);
+    return;
+  }
+  // Nebula has it; a sync from before it may still be on its way (L-3).
+  if (entry.linger !== undefined) clearTimeout(entry.linger);
+  entry.linger = setTimeout(() => {
+    if (entry.inFlight === 0 && paramPushTimers[nodeId] === undefined) forgetParamEdit(nodeId, entry);
+  }, PARAM_ECHO_WAIT_MS);
+}
+
+/** A sync carries a node's params: if they show what the person's last write
+ * sent, Nebula's later syncs are newer than it, and the edit goes once
+ * nothing else is waiting. */
+function noteParamEcho(nodeId: string, incoming: Record<string, unknown>): void {
+  const entry = unsavedParamEdits.get(nodeId);
+  if (!entry?.sent || entry.echoed) return;
+  for (const [key, value] of entry.sent) if (stableJson(incoming[key]) !== value) return;
+  entry.echoed = true;
+  if (entry.inFlight === 0 && paramPushTimers[nodeId] === undefined) forgetParamEdit(nodeId, entry);
+}
+
+/** An undo or redo set this node's params (sent with its restore): while an
+ * earlier write's echo is still on its way, that echo must not show the
+ * value the undo just took back (L-3, A11b). */
+function noteRestoredParams(nodeId: string, params: Record<string, unknown>): void {
+  const entry = unsavedParamEdits.get(nodeId);
+  if (!entry?.sent) return;
+  entry.sent = new Map([...entry.keys].map((key) => [key, stableJson(params[key])]));
+  entry.echoed = false;
+  if (entry.inFlight === 0 && paramPushTimers[nodeId] === undefined) {
+    if (entry.linger !== undefined) clearTimeout(entry.linger);
+    entry.linger = setTimeout(() => {
+      if (entry.inFlight === 0 && paramPushTimers[nodeId] === undefined) forgetParamEdit(nodeId, entry);
+    }, PARAM_ECHO_WAIT_MS);
+  }
 }
 
 /** The backend's params for a node, with the keys the person hasn't saved yet kept as the canvas has them. */
@@ -1478,8 +1540,20 @@ function withGraphMutationLifetime<Args extends unknown[], Result>(operation: (.
 }
 
 /** Even fire-and-forget layout/edge/param writes hold project navigation until
- * their backend request settles. Admission happens before invoking fetch. */
+ * their backend request settles. Admission happens before invoking fetch.
+ * While an undo or redo waits to reach Nebula, the person's other graph
+ * writes go after it, so Nebula applies them in the order the person made
+ * them (round 17's property test, seeds 147 and 1624): a write sent ahead
+ * would be undone by the restore behind it, and its echo would take the
+ * undo back off the canvas. */
 function graphMutationFetch(path: string, init?: RequestInit): Promise<Response> {
+  if (restoresPending > 0 && path !== '/api/graph/restore') {
+    const after = restoreQueue;
+    return trackGraphMutation(async () => {
+      await after;
+      return apiFetch(path, init);
+    });
+  }
   return trackGraphMutation(() => apiFetch(path, init));
 }
 
@@ -1503,14 +1577,23 @@ function pushNodeParams(nodeId: string): Promise<void> {
     return Promise.resolve();
   }
   const edits = unsavedParamEdits.get(nodeId);
-  if (edits) edits.inFlight += 1;
+  if (edits) {
+    edits.inFlight += 1;
+    // What this write carries, until a sync shows it (review 16, L-3).
+    const params = node.data.params as Record<string, unknown>;
+    edits.sent = new Map([...edits.keys].map((key) => [key, stableJson(params[key])]));
+    edits.echoed = false;
+    if (edits.linger !== undefined) clearTimeout(edits.linger);
+    edits.linger = undefined;
+  }
+  let ok = false;
   return graphMutationFetch(`/api/graph/node/${nodeId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ params: node.data.params }),
-  }).then(() => undefined).catch((err) => {
+  }).then((response) => { ok = response.ok; }).catch((err) => {
     console.warn(`[nebula] Param sync for ${nodeId} failed:`, err);
-  }).finally(() => { if (edits) settleParamEdit(nodeId, edits); });
+  }).finally(() => { if (edits) settleParamEdit(nodeId, edits, ok); });
 }
 
 /** Send a node's debounced params now, if any are waiting. */
@@ -1526,6 +1609,11 @@ function clearAllParamPushTimers(): void {
     window.clearTimeout(paramPushTimers[id]);
     delete paramPushTimers[id];
   }
+  clearUnsavedParamEdits();
+}
+
+function clearUnsavedParamEdits(): void {
+  for (const entry of unsavedParamEdits.values()) if (entry.linger !== undefined) clearTimeout(entry.linger);
   unsavedParamEdits.clear();
 }
 
@@ -1752,6 +1840,11 @@ const layoutWritesInFlight = new Map<string, number>();
 // sync that disagrees leave the wire as this tab has it.
 type WireWrite = { want: boolean; sending: number; agreed?: boolean; grace?: boolean };
 const wireWrites = new Map<string, WireWrite>();
+// The same for backend nodes an undo or redo puts back (`want`) or takes off,
+// by node id, while its restore is on its way (round 17's property test, seed
+// 266): an echo Nebula sent before the restore reached it still shows the
+// node as it was, and must not undo the undo on the canvas.
+const nodeWrites = new Map<string, WireWrite>();
 
 /**
  * A written line on the canvas (review 7, L3): the canvas notice, except
@@ -1810,12 +1903,35 @@ function holdWire(edge: Edge | { source: string; sourceHandle: string; target: s
 
 /** What this sync must leave as this tab has it: connection -> want. */
 function heldWires(cliEdges: Edge[]): Map<string, boolean> {
-  const keys = new Set(cliEdges.map(edgeKey));
+  return heldWrites(wireWrites, new Set(cliEdges.map(edgeKey)));
+}
+
+/** Hold a node an undo or redo puts back (`want`) or takes off, until its
+ * restore answers. Nebula sends the restore's own echo before that answer,
+ * and the stale echoes before it, so unlike a wire the hold ends there. */
+function holdNode(id: string, want: boolean): (took: boolean) => void {
+  const write = nodeWrites.get(id) ?? { want, sending: 0 };
+  Object.assign(write, { want, sending: write.sending + 1 });
+  nodeWrites.set(id, write);
+  return () => {
+    write.sending -= 1;
+    if (nodeWrites.get(id) === write && !write.sending) nodeWrites.delete(id);
+  };
+}
+
+/** What this sync must leave as this tab has it: node id -> want. Until
+ * the restore answers, whatever the sync says: one that shows the node
+ * there may still carry its params from before the undo (seed 914). */
+function heldNodes(): Map<string, boolean> {
+  return new Map([...nodeWrites].map(([id, write]) => [id, write.want]));
+}
+
+function heldWrites(writes: Map<string, WireWrite>, present: Set<string>): Map<string, boolean> {
   const held = new Map<string, boolean>();
-  for (const [key, write] of wireWrites) {
+  for (const [key, write] of writes) {
     // Once a sync agreed the backend has taken it: a later one that differs is newer.
-    write.agreed ||= keys.has(key) === write.want;
-    if (!write.sending && (write.agreed || write.grace)) wireWrites.delete(key);
+    write.agreed ||= present.has(key) === write.want;
+    if (!write.sending && (write.agreed || write.grace)) writes.delete(key);
     else if (!write.agreed) held.set(key, write.want);
     if (!write.sending) write.grace = true;
   }
@@ -1895,12 +2011,18 @@ type GraphGet = () => GraphState;
  * goes after all.
  */
 function changeCanvasNodes(
-  changes: NodeChange[],
+  pressed: NodeChange[],
   set: GraphSet,
   get: GraphGet,
   shared?: { step: UndoSnapshot; keep: boolean },
 ): void {
-  if (get().isExecuting && changes.some((change) => change.type === 'remove')) return;
+  if (get().isExecuting && pressed.some((change) => change.type === 'remove')) return;
+  // A node stays on the canvas until Nebula answers its delete. Deleting it
+  // again meanwhile leaves it to the delete on its way: a second step would
+  // claim the same delete, and once one of them is undone the other's Cmd+Z
+  // would do nothing (round 17's property test, seed 320).
+  const changes = pressed.filter((change) => change.type !== 'remove' || !deletesInFlight.has(change.id));
+  if (changes.length === 0) return;
   const removedIds = changes.filter((c): c is NodeChange & { type: 'remove' } => c.type === 'remove').map((c) => c.id);
   if (refuseHeldNodeDelete(get(), removedIds, set)) return;
   const cliRemovedIds = removedIds.filter((nodeId) => CLI_ID_RE.test(nodeId));
@@ -2952,6 +3074,13 @@ type ConnectedNodeCreationAttempt = NodeCreationAttempt & {
   };
 };
 let pendingConnectedNodeCreationAttempt: ConnectedNodeCreationAttempt | null = null;
+/** An add-and-connect's answer is in: its attempt ends, unless the answer
+ * left open whether Nebula made the node (it stays, uncertain). */
+function settleConnectedAttempt(attempt: ConnectedNodeCreationAttempt, definiteOutcome: boolean): void {
+  if (pendingConnectedNodeCreationAttempt !== attempt) return;
+  if (definiteOutcome || attempt.observedNodeId) pendingConnectedNodeCreationAttempt = null;
+  else attempt.phase = 'uncertain';
+}
 let canvasReplacementRevision = 0;
 
 function nodeMatchesCreationAttempt(
@@ -3286,30 +3415,103 @@ function markDeleteStep(step: UndoEntry): void {
   if (!stepAdds.has(step)) stepAdds.set(step, new Set());
 }
 
-/** Nodes that came onto the canvas from anywhere but `except`'s own change:
- * every settled step on either stack whose additions are read off the
- * canvas no longer counts them as its own. */
-function noteArrivedElsewhere(ids: Iterable<string>, get: GraphGet, except?: UndoEntry): void {
+/*
+ * Review 16, H1 (round 17; the coordinator's decision): "arrived from
+ * elsewhere" is relative to time. A step owns what its own change added, and
+ * keeps owning it whatever happens to those nodes later: a delete and its
+ * undo, a stale echo taking a node off and the next one bringing it back.
+ * Round 16 counted every node an undo put back as someone else's for every
+ * step, so undoing a paste, a duplicate, a connect or an upload after
+ * deleting its node and undoing that delete took nothing off, and the step
+ * was dropped as dead (A2, A3, A4, U1, A10).
+ *
+ * - A step's additions are fixed once its change is complete (`fixAdds`):
+ *   for the person's own snapshot step, when a newer step lands above it
+ *   (read off the canvas just before that step, less what arrived from
+ *   elsewhere meanwhile); for a step whose request was on its way, when it
+ *   settles: exactly the nodes its answer named (`ownArrivals`), or none.
+ * - Until then (the newest step, while it is on top), what reaches the
+ *   canvas from elsewhere is noted against it (`arrivedAfter`): a sync's
+ *   nodes (X3, X4), and the nodes an undo or redo puts back only for the
+ *   steps taken after the change it undoes (above it, or jumped over by its
+ *   re-pushed delete: P1, P7). An older step is never told.
+ */
+function fixAdds(entry: UndoEntry, nodes: Node<NodeData>[]): void {
+  if (isForeignEdit(entry) || stepAdds.has(entry) || stepsInFlight.has(entry)) return;
+  const held = new Set(entry.nodes.map((node) => node.id));
+  const elsewhere = arrivedAfter.get(entry);
+  stepAdds.set(entry, new Set(nodes.map((node) => node.id).filter((id) => !held.has(id) && !elsewhere?.has(id))));
+}
+
+/** Store listener: a newer step landed above a step (pushed, or a delete's
+ * step re-pushed above it): that step's change is complete, on the canvas as
+ * it was just before. */
+function fixAddsBelowNewSteps(state: GraphState, previous: GraphState): void {
+  if (state.undoStack === previous.undoStack) return;
+  const before = new Set(previous.undoStack);
+  let newerAbove = false;
+  for (let index = state.undoStack.length - 1; index >= 0; index -= 1) {
+    const entry = state.undoStack[index];
+    if (!before.has(entry)) newerAbove = true;
+    else if (newerAbove) fixAdds(entry, previous.nodes);
+  }
+}
+
+/** Nodes that came onto the canvas from anywhere but a step's own change, for
+ * `steps` (default: every step whose additions aren't fixed yet). */
+function noteArrivedElsewhere(ids: Iterable<string>, get: GraphGet, steps?: Iterable<UndoEntry>): void {
   const arrived = [...ids];
   if (arrived.length === 0) return;
   const { undoStack, redoStack } = get();
-  for (const entry of [...undoStack, ...redoStack]) {
-    if (entry === except || isForeignEdit(entry) || stepAdds.has(entry) || stepsInFlight.has(entry)) continue;
+  for (const entry of steps ?? [...undoStack, ...redoStack]) {
+    if (isForeignEdit(entry) || stepAdds.has(entry) || stepsInFlight.has(entry)) continue;
     const seen = arrivedAfter.get(entry) ?? new Set<string>();
     for (const id of arrived) seen.add(id);
     arrivedAfter.set(entry, seen);
   }
 }
 
-/** A step whose request was on its way has settled: what arrived meanwhile
- * that its answer doesn't name as its own came from elsewhere. */
+/** A step whose request was on its way has settled: it added exactly what its
+ * answer named as its own (an upload's node, an accepted proposal's, an added
+ * node). */
 function settleArrivals(step: UndoEntry): void {
+  if (stepAdds.has(step) || isForeignEdit(step)) return;
   const own = ownArrivals.get(step);
-  const during = arrivedSince.get(step);
-  if (!own || !during || stepAdds.has(step) || isForeignEdit(step)) return;
-  const seen = arrivedAfter.get(step) ?? new Set<string>();
-  for (const id of during) if (!own.has(id)) seen.add(id);
-  arrivedAfter.set(step, seen);
+  // An answer that named none: what it added is read off the canvas, as for
+  // any step, until a newer step lands above it.
+  if (own) stepAdds.set(step, new Set(own));
+}
+
+/** `step` added `ids` (its answer names them): never someone else's for it. */
+function claimAdds(step: UndoEntry, ids: string[], replaces?: string): void {
+  const known = stepAdds.get(step);
+  if (known) {
+    if (replaces) known.delete(replaces);
+    for (const id of ids) known.add(id);
+  }
+  const elsewhere = arrivedAfter.get(step);
+  if (elsewhere) for (const id of ids) elsewhere.delete(id);
+}
+
+/**
+ * Round 17's property test: a held press passes over a step that changes
+ * nothing now because a step above it took its nodes off (an upload, then a
+ * delete of its node before the answers). The step leaves the stack, and the
+ * step just above it, whose snapshot holds those nodes, takes them as its
+ * own: undoing the delete brings them back, and undoing that step takes them
+ * off again, so no node is left that no undo takes off.
+ */
+function handAddsUp(dead: UndoEntry, above: UndoEntry, nodes: Node<NodeData>[]): void {
+  if (isForeignEdit(dead) || isForeignEdit(above)) return;
+  const adds = stepAdds.get(dead) ?? ownArrivals.get(dead) ?? takenOffBy(dead, nodes);
+  const moved = new Set([...adds].filter((id) => above.nodes.some((node) => node.id === id)));
+  if (moved.size === 0) return;
+  above.nodes = above.nodes.filter((node) => !moved.has(node.id));
+  above.edges = above.edges.filter((edge) => !moved.has(edge.source) && !moved.has(edge.target));
+  const known = stepAdds.get(above);
+  if (known) for (const id of moved) known.add(id);
+  else if (stepsInFlight.has(above)) ownArrivals.set(above, new Set([...(ownArrivals.get(above) ?? []), ...moved]));
+  else claimAdds(above, [...moved]);
 }
 
 /** The nodes undoing (or redoing) `entry` may take off the canvas: only those its step added. */
@@ -3547,7 +3749,10 @@ function renewWithArrivals(step: UndoEntry, nodes: Node<NodeData>[], edges: Edge
 function settleStep(step: UndoEntry, set: GraphSet, get: GraphGet): void {
   // And the step it became, if its echo re-pushed it (placeEchoedDeletes).
   for (let current: UndoEntry | undefined = step; current; current = stepSuccessors.get(current)) {
-    if (stepsInFlight.has(current)) settleArrivals(current);
+    if (stepsInFlight.has(current)) {
+      settleArrivals(current);
+      stripOwnArrivalsBelow(current, get);
+    }
     stepsInFlight.delete(current);
     if (stepSuccessors.get(current) === current) break;
   }
@@ -3559,12 +3764,32 @@ function settleStep(step: UndoEntry, set: GraphSet, get: GraphGet): void {
   runHeldPresses(set, get);
 }
 
+/**
+ * Round 17's property test: a step below `step` on the stack is a canvas
+ * from before `step`'s change, so it never holds a node `step` added. One
+ * can, when it was taken while `step` was on its way and its node had come
+ * with its echo (a delete's step re-pushed beneath it: placeDeleteStep);
+ * undoing it after undoing `step` would bring that node back.
+ */
+function stripOwnArrivalsBelow(step: UndoEntry, get: GraphGet): void {
+  const own = ownArrivals.get(step);
+  if (!own || own.size === 0) return;
+  const { undoStack } = get();
+  const at = undoStack.indexOf(step);
+  for (const entry of undoStack.slice(0, Math.max(0, at))) {
+    if (isForeignEdit(entry) || ![...own].some((id) => entry.nodes.some((node) => node.id === id))) continue;
+    entry.nodes = entry.nodes.filter((node) => !own.has(node.id));
+    entry.edges = entry.edges.filter((edge) => !own.has(edge.source) && !own.has(edge.target));
+  }
+}
+
 /** The step's answer is in, and the nodes it adds (`ids`) come with its echo. */
 function awaitArrival(step: UndoEntry, ids: string[], set: GraphSet): void {
   // A change that never arrives releases the step after the limit; a press
   // bound to it is dropped, never applied to a step that changed nothing.
   const timer = setTimeout(() => {
     awaitingArrival.delete(step);
+    if (stepsInFlight.has(step)) settleArrivals(step);
     stepsInFlight.delete(step);
     if (heldFor === step) announceDrop(set, dropHeldPresses());
   }, HOLD_LIMIT_MS);
@@ -3778,7 +4003,8 @@ function runHeldPresses(set: GraphSet, get: GraphGet): void {
         // Nothing it changed is left to change (review 15, L-2): the step
         // goes, and the press goes to the step below it, unless a later
         // press is already bound to that one; then it counts as skipped.
-        // Never silent.
+        // Never silent. Its nodes a step above holds go to that step (handAddsUp).
+        if (press.action === 'undo' && at + 1 < stack.length) handAddsUp(entry, stack[at + 1], state.nodes);
         set(press.action === 'undo' ? { undoStack: stack.filter((step) => step !== entry) }
           : { redoStack: stack.filter((step) => step !== entry) });
         const below = at > 0 ? stack[at - 1] : undefined;
@@ -3883,6 +4109,14 @@ function applyHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet, tar
   }
   if (above.length > 0) next = withoutRemovedAbove(next, nodes, above);
   const nextNodes = withFreshKeyStatus(next.nodes, nodes);
+  // A param this puts back while an earlier write's echo is on its way (L-3).
+  for (const id of unsavedParamEdits.keys()) {
+    const now = nextNodes.find((node) => node.id === id);
+    const was = nodes.find((node) => node.id === id);
+    if (now && was && stableJson(now.data.params) !== stableJson(was.data.params)) {
+      noteRestoredParams(id, now.data.params as Record<string, unknown>);
+    }
+  }
   breakUndoDebounce();
   // The person's own step that brings nodes back says "Restored the node.",
   // one that deletes them again "Deleted the node." (GM, 2026-10-23). The
@@ -3914,6 +4148,19 @@ function applyHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet, tar
       step.nodes = moved.nodes;
       step.edges = moved.edges;
     }
+    // Round 17's property test (P-5): the nodes its step added that a step
+    // above already took off (an upload's node, deleted before the answers)
+    // aren't in the change, and the steps above still hold them. Undone, the
+    // step never added them: no undo of a step above brings them back.
+    const adds = action === 'undo' && !isForeignEdit(entry) ? stepAdds.get(entry) : undefined;
+    const gone = new Set([...(adds ?? [])].filter((id) => !before.has(id)));
+    if (gone.size > 0) {
+      for (const step of above) {
+        if (isForeignEdit(step)) continue;
+        step.nodes = step.nodes.filter((node) => !gone.has(node.id));
+        step.edges = step.edges.filter((edge) => !gone.has(edge.source) && !gone.has(edge.target));
+      }
+    }
   }
   const rest = [...from.slice(0, at), ...above];
   set({
@@ -3928,7 +4175,10 @@ function applyHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet, tar
     } } : ownLine && !(ownLine.kind === 'restored' && waitsForBackend)
       ? { undoNotice: ownStepNotice(noticeId, ownLine, NOTHING_MISSED, action, inverse) } : {}),
   });
-  noteArrivedElsewhere(back.map((node) => node.id), get, inverse);
+  // Someone else's only for the steps taken after the change it undoes (or
+  // redoes): those above it, and those its re-pushed delete went above. An
+  // older step keeps owning what it added (review 16, H1).
+  noteArrivedElsewhere(back.map((node) => node.id), get, [...above, ...(jumpedOver.get(entry) ?? [])]);
   void sendRestore(action, nodes, edges, nextNodes, next.edges, entry, inverse, set,
     { noticeId, ownLine: ownLine?.kind === 'restored' && waitsForBackend ? ownLine : null });
   return { inverse, noticeId };
@@ -4058,6 +4308,9 @@ function removalsFor(entry: UndoEntry, body: RestoreBody): RemovalRecord[] {
 // Undo and redo reach the backend one at a time, in the order the person
 // pressed them.
 let restoreQueue: Promise<void> = Promise.resolve();
+/** Restores queued and not yet answered: the person's other writes wait
+ * behind them while there are any (graphMutationFetch). */
+let restoresPending = 0;
 
 /**
  * Make the backend graph match the canvas after an undo or redo: one POST
@@ -4084,8 +4337,11 @@ function sendRestore(
     return restoreQueue;
   }
   if (isForeignEdit(entry) && entry.editId) body.edit = entry.editId;
-  // The wires it puts back or takes off stay so until it lands (heldWires).
-  const holds = [...body.wire.map((w) => holdWire(w, true)), ...body.unwire.map((w) => holdWire(w, false))];
+  // The wires and nodes it puts back or takes off stay so until it lands
+  // (heldWires, heldNodes).
+  const holds = [...body.wire.map((w) => holdWire(w, true)), ...body.unwire.map((w) => holdWire(w, false)),
+    ...body.nodes.filter((item) => CLI_ID_RE.test(item.id)).map((item) => holdNode(item.id, true)),
+    ...body.remove.map((id) => holdNode(id, false))];
   // Shown once the backend answers, unless another notice came since, or a
   // new step has landed since: its Redo (or Undo) would no longer apply, so
   // the line stays away (withLiveNotice; GM - Design, 2026-10-23). What it
@@ -4117,6 +4373,7 @@ function sendRestore(
     }
     return lateCount(state, missed);
   });
+  restoresPending += 1;
   const task = restoreQueue.then(async () => {
     const replacementRevision = canvasReplacementRevision;
     // Read now, not when the step was taken: the answer to the delete (or to
@@ -4185,7 +4442,7 @@ function sendRestore(
       };
     });
   });
-  restoreQueue = task.catch(() => {});
+  restoreQueue = task.catch(() => {}).finally(() => { restoresPending -= 1; });
   return task;
 }
 
@@ -4241,7 +4498,8 @@ wsClient.subscribe((event) => {
       replacedPresses = forgetStepsInFlight();
       pendingConnectedNodeCreationAttempt = null;
       wireWrites.clear();
-      unsavedParamEdits.clear();
+      nodeWrites.clear();
+      clearUnsavedParamEdits();
       // The committed import can arrive before, or instead of, its HTTP ack.
       // Revoke old same-ID uploads/writes and suspended drafts before merging.
       clearCinemaScenePersistence();
@@ -4277,6 +4535,11 @@ wsClient.subscribe((event) => {
 
     const state = useGraphStore.getState();
     const held = heldWires(cliEdges ?? []);
+    const heldNodeIds = heldNodes();
+    // Backend nodes this tab's undo or redo put back, still on their way
+    // there: the sync leaves them on the canvas (heldNodes).
+    const keptBack = graphReplaced ? [] : state.nodes.filter((node) => heldNodeIds.get(node.id) === true
+      && !(cliNodes as Array<{ id: string }>).some((incoming) => incoming.id === node.id));
     for (const seen of syncWatchers) {
       for (const node of cliNodes) seen.add(node.id);
       for (const edge of cliEdges ?? []) seen.add(edgeKey(edge));
@@ -4284,7 +4547,7 @@ wsClient.subscribe((event) => {
 
     if (empty) {
       // cli_graph was cleared — drop only cli-origin nodes/edges; keep frontend work.
-      const remainingNodes = graphReplaced ? [] : state.nodes.filter((n) => !CLI_ID_RE.test(n.id));
+      const remainingNodes = graphReplaced ? [] : state.nodes.filter((n) => !CLI_ID_RE.test(n.id) || keptBack.includes(n));
       const remainingIds = new Set(remainingNodes.map((n) => n.id));
       const remainingEdges = state.edges.filter(
         (e) => remainingIds.has(e.source) && remainingIds.has(e.target),
@@ -4322,8 +4585,15 @@ wsClient.subscribe((event) => {
     const keyStatusFor = (definitionId: string, params: Record<string, unknown>): 'missing' | undefined =>
       nodeKeyStatus(NODE_DEFINITIONS[definitionId], params, settingsCache);
 
-    const cliMerged = (cliNodes as Node<NodeData>[]).map((incoming) => {
+    // A node this tab's undo or redo took off stays off until that lands.
+    const cliMerged = (cliNodes as Node<NodeData>[]).filter((incoming) => heldNodeIds.get(incoming.id) !== false).map((incoming) => {
       const existing = existingById.get(incoming.id);
+      // A node this tab's undo or redo puts back or sets stays as that
+      // restore will write it until it lands: an older echo's params don't
+      // take the undo back (round 17's property test, seed 914).
+      if (existing && heldNodeIds.get(incoming.id) === true) return existing;
+      // A sync that shows the person's last write lets it go (review 16, L-3).
+      if (existing) noteParamEcho(incoming.id, (incoming.data?.params ?? {}) as Record<string, unknown>);
       // Keys the person typed and the backend doesn't have yet stay as typed.
       const cliNode = existing && unsavedParamEdits.has(incoming.id)
         ? { ...incoming, data: { ...incoming.data,
@@ -4445,7 +4715,7 @@ wsClient.subscribe((event) => {
     // the same array when nothing changed), so React Flow re-renders only
     // the cards that changed (tests/canvasRenderScope.test.tsx).
     const merged = shareUnchanged(graphReplaced ? [] : state.nodes, nodesWithProviderRecoveries(
-      [...frontendOnlyNodes, ...cliMerged],
+      [...frontendOnlyNodes, ...cliMerged, ...keptBack],
       useGraphStore.getState().providerRecoveries,
     ));
     const mergedIds = new Set(merged.map((n) => n.id));
@@ -4472,7 +4742,9 @@ wsClient.subscribe((event) => {
       ...frontendOnlyEdges,
       // A selected wire stays selected (React Flow keeps `selected` on the
       // edge, `false` once deselected, which is kept too so the wire is unchanged).
-      ...(cliEdges as Edge[]).filter((edge) => held.get(edgeKey(edge)) !== false).map((edge) => {
+      ...(cliEdges as Edge[]).filter((edge) => held.get(edgeKey(edge)) !== false
+        // Not on a node held off the canvas (heldNodes).
+        && heldNodeIds.get(edge.source) !== false && heldNodeIds.get(edge.target) !== false).map((edge) => {
         const selected = existingEdges.get(edgeIdentity(edge))?.selected;
         return typeof selected === 'boolean' ? { ...edge, selected } : edge;
       }),
@@ -4713,16 +4985,23 @@ function directRunConfirm(
   options: PlaceholderRunOptions = {},
 ): PlaceholderRunConfirm | null {
   if (typeof window === 'undefined') return null;
+  let summary = canvasRunSummary(nodes, edges, nodeId, passes);
+  if (estimate) summary = withRunEstimate(summary, estimate, nodes);
+  return placeholderRunConfirm(nodes, edges, nodeId, summary, options);
+}
+
+/** The direct run of `nodeId` as the canvas prices it: each node on the
+ * route it takes with the keys this tab read, `passes` times. */
+function canvasRunSummary(nodes: Node<NodeData>[], edges: Edge[], nodeId: string, passes: number): RunScopeSummary {
   const pricing = usePricingStore.getState().table;
   const { settingsCache } = useUIStore.getState();
   // The keys go in even before the price table loads: each row names the
   // route its run takes (GM - Design, round 15, item 3).
-  let summary = repeatRun(summarizeRunScope(nodes, edges, { kind: 'node', nodeId },
+  const summary = repeatRun(summarizeRunScope(nodes, edges, { kind: 'node', nodeId },
     { pricing: pricing ?? null, apiKeys: settingsCache.apiKeys, sizes: useInputSizeStore.getState().sizes }), passes);
   const sizeRefs = summary.cost?.sizeRefs;
   if (sizeRefs?.length) useInputSizeStore.getState().request(sizeRefs);
-  if (estimate) summary = withRunEstimate(summary, estimate, nodes);
-  return placeholderRunConfirm(nodes, edges, nodeId, summary, options);
+  return summary;
 }
 
 function sameConfirm(a: PlaceholderRunConfirm, b: PlaceholderRunConfirm): boolean {
@@ -4761,7 +5040,7 @@ function refreshSettingsCache(): void {
  */
 async function askDirectRun(
   model: PlaceholderRunConfirm, changed: boolean, recompute?: () => PlaceholderRunConfirm | null,
-  movedLine?: string | null,
+  moved?: readonly string[],
 ): Promise<PlaceholderRunConfirm | null> {
   let pushed = model;
   try {
@@ -4773,7 +5052,7 @@ async function askDirectRun(
         show(next);
       }
     }));
-    return await dialog.askPlaceholderRun(model, { changed, watch, ...(movedLine ? { movedLine } : {}) });
+    return await dialog.askPlaceholderRun(model, { changed, watch, ...(moved?.length ? { moved } : {}) });
   } catch (error) {
     console.error("Couldn't open the run confirmation:", error);
     return null;
@@ -4899,9 +5178,9 @@ async function askUntilSettled(
   };
   let asked = first;
   let changed = false;
-  let movedLine: string | null = null;
+  let moved: string[] = [];
   for (;;) {
-    const answer = await askDirectRun(asked, changed, recompute, movedLine);
+    const answer = await askDirectRun(asked, changed, recompute, moved);
     if (!answer) return null;
     const graph = read();
     if (!graph) {
@@ -4925,7 +5204,7 @@ async function askUntilSettled(
     asked = now;
     changed = true;
     // GM - Design, round 16 (a): which nodes' route or price moved, if any.
-    movedLine = changedNodesLine(answer, now);
+    moved = movedRowIds(answer, now);
   }
 }
 
@@ -5012,23 +5291,34 @@ async function sendDirectRun<T>(
       const confirmIds = [...refusal.placeholders].sort();
       let asked: PlaceholderRunConfirm = { ...model, confirmIds };
       let again = placeholders !== undefined;
-      let movedLine: string | null = null;
+      let moved: string[] = [];
       let shown: PlaceholderRunConfirm | null;
+      // The route each row had when Nebula refused: its estimate is for those.
+      const refusedRoutes = new Map(model.rows.map((row) => [row.nodeId, routeKey(row)]));
       for (;;) {
-        shown = await askDirectRun(asked, again, undefined, movedLine);
+        shown = await askDirectRun(asked, again, undefined, moved);
         if (!shown) return DECLINED;
         // Review 14, M-B: checked again on yes; a route that moved while the
         // dialog was open asks again with its new rows (their names and prices).
         if (refuseUnchosenModel(nodes, agreed.edges, { kind: 'node', nodeId }, wording.names)) return DECLINED;
         // Review 15, L-4: priced at this refusal's own estimate, the numbers
-        // Nebula holds the run to, so the yes it sends passes (never a third 409).
-        const now = directRunConfirm(nodes, agreed.edges, nodeId, passes, refusal.estimate,
-          { ...wording, shown: agreed.shown, gone: agreed.gone, changed: agreed.changed });
+        // Nebula holds the run to, so the yes it sends passes (never a third
+        // 409). Review 16, M2: only for the rows still on the route it was
+        // for; a row whose route moved takes the canvas's numbers for its new
+        // route, as Nebula's estimate for it reads.
+        const options = { ...wording, shown: agreed.shown, gone: agreed.gone, changed: agreed.changed };
+        const onRoutes = directRunConfirm(nodes, agreed.edges, nodeId, passes, refusal.estimate, options);
+        const movedRoutes = new Set((onRoutes?.rows ?? []).filter((row) => refusedRoutes.has(row.nodeId)
+          && refusedRoutes.get(row.nodeId) !== routeKey(row)).map((row) => row.nodeId));
+        const now = movedRoutes.size > 0 && refusal.estimate
+          ? directRunConfirm(nodes, agreed.edges, nodeId, passes,
+            mergeRunEstimates(refusal.estimate, canvasRunSummary(nodes, agreed.edges, nodeId, passes).cost, movedRoutes), options)
+          : onRoutes;
         if (!now || sameRoutes(shown, now)) break;
         asked = { ...now, confirmIds };
         again = true;
         // GM - Design, round 16 (a): which nodes' route or price moved.
-        movedLine = changedNodesLine(shown, asked);
+        moved = movedRowIds(shown, asked);
       }
       if (!begin()) {
         // The person said yes but another run started first (or an import
@@ -5046,9 +5336,14 @@ async function sendDirectRun<T>(
 /** Whether each row names the same model on the same route in both (rowSeen
  * without the price: Nebula's estimate and the canvas's can price a row apart). */
 function sameRoutes(shown: PlaceholderRunConfirm, now: PlaceholderRunConfirm): boolean {
-  const key = (row: PlaceholderRunConfirm['rows'][number]) => `${row.nodeId}\u0000${row.modelKey}\u0000${row.setting ?? ''}`;
+  const key = (row: PlaceholderRunConfirm['rows'][number]) => `${row.nodeId}\u0000${routeKey(row)}`;
   const seen = new Set(shown.rows.map(key));
   return now.rows.length === shown.rows.length && now.rows.every((row) => seen.has(key(row)));
+}
+
+/** A row's model on its route, and its setting: what its price is for. */
+function routeKey(row: PlaceholderRunConfirm['rows'][number]): string {
+  return `${row.modelKey}\u0000${row.setting ?? ''}`;
 }
 
 /** The records in `before` that `after` no longer has: what a new record pushed past the cap. */
@@ -5215,10 +5510,14 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     // An upload's node comes with its echo, which can land after the answer
     // (review 11, L-2): the step settles once that node is on the canvas.
     const ids = (options?.arrives ?? []).filter((id) => typeof id === 'string' && id.length > 0);
-    if (options?.arrives) ownArrivals.set(entry, new Set(ids));
+    // With any a dead step below handed it (handAddsUp).
+    if (options?.arrives) ownArrivals.set(entry, new Set([...(ownArrivals.get(entry) ?? []), ...ids]));
     const present = new Set(get().nodes.map((node) => node.id));
+    // A node that came and was taken off again (a delete while the answer
+    // was on its way) has arrived: nothing to wait for (round 17's property test).
+    const arrived = arrivedSince.get(entry);
     if (ids.length > 0 && stepsInFlight.has(entry) && !awaitingArrival.has(entry)
-      && get().undoStack.includes(entry) && ids.some((id) => !present.has(id))) {
+      && get().undoStack.includes(entry) && ids.some((id) => !present.has(id) && !arrived?.has(id))) {
       awaitArrival(entry, ids, set);
       return;
     }
@@ -5538,42 +5837,57 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       return reportNodeCreationFailure(definition.displayName, reason);
     };
 
-    let res: Response;
+    // Review 16, M1: the add is its own undo step, taken before the request
+    // (its echo can land before the answer, and a Cmd+Z meanwhile waits for
+    // it), owning exactly the node the answer names (endUndoStep's `arrives`).
+    const step = get().beginUndoStep();
+    let added: string | null = null;
     try {
-      res = await graphMutationFetch('/api/graph/node', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ definitionId, params: defaults, position }),
-      });
-    } catch {
-      return reconcileDispatchedCreate(
-        'The backend response was lost after the node-create request was sent. Nebula did not add a local copy because the backend may already have committed it. Wait for canvas sync or reload before trying again.',
-      );
+      added = await send();
+      return added;
+    } finally {
+      if (added) get().endUndoStep(step, { arrives: [added] });
+      else get().cancelUndoStep(step);
     }
 
-    if (!res.ok) {
+    async function send(): Promise<string | null> {
+      let res: Response;
+      try {
+        res = await graphMutationFetch('/api/graph/node', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ definitionId, params: defaults, position }),
+        });
+      } catch {
+        return reconcileDispatchedCreate(
+          'The backend response was lost after the node-create request was sent. Nebula did not add a local copy because the backend may already have committed it. Wait for canvas sync or reload before trying again.',
+        );
+      }
+
+      if (!res.ok) {
+        if (pendingNodeCreationAttempt === attempt) pendingNodeCreationAttempt = null;
+        return reportNodeCreationFailure(
+          definition.displayName,
+          await backendRejectionReason(res, `Couldn't add ${definition.displayName}.`),
+        );
+      }
+
+      let node: { id?: unknown };
+      try {
+        node = (await res.json()) as { id?: unknown };
+      } catch {
+        return reconcileDispatchedCreate(
+          'Backend returned an invalid response after node creation. Nebula did not add a local copy because the backend may already have committed it. Wait for canvas sync or reload before trying again.',
+        );
+      }
+      if (typeof node.id !== 'string' || !node.id) {
+        return reconcileDispatchedCreate(
+          'Backend returned no node id after node creation. Nebula did not add a local copy because the backend may already have committed it. Wait for canvas sync or reload before trying again.',
+        );
+      }
       if (pendingNodeCreationAttempt === attempt) pendingNodeCreationAttempt = null;
-      return reportNodeCreationFailure(
-        definition.displayName,
-        await backendRejectionReason(res, `Couldn't add ${definition.displayName}.`),
-      );
+      return node.id;
     }
-
-    let node: { id?: unknown };
-    try {
-      node = (await res.json()) as { id?: unknown };
-    } catch {
-      return reconcileDispatchedCreate(
-        'Backend returned an invalid response after node creation. Nebula did not add a local copy because the backend may already have committed it. Wait for canvas sync or reload before trying again.',
-      );
-    }
-    if (typeof node.id !== 'string' || !node.id) {
-      return reconcileDispatchedCreate(
-        'Backend returned no node id after node creation. Nebula did not add a local copy because the backend may already have committed it. Wait for canvas sync or reload before trying again.',
-      );
-    }
-    if (pendingNodeCreationAttempt === attempt) pendingNodeCreationAttempt = null;
-    return node.id;
   },
 
   addLocalCinemaMotionNode: (nodeId, shotId) => {
@@ -5622,10 +5936,6 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       return fail('These ports cannot be connected. Choose a compatible node.');
     }
 
-    // Capture before dispatch: the backend broadcasts the committed graph
-    // before returning its HTTP acknowledgement, so a later snapshot would
-    // contain the very node/edge this undo step must remove.
-    const undoSnapshot = createSnapshot(before.nodes, before.edges);
     const knownIds = new Set(before.nodes.map((node) => node.id));
     const replacementRevision = canvasReplacementRevision;
     let originRevoked = false;
@@ -5647,6 +5957,14 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     pendingConnectedNodeCreationAttempt = attempt;
     const synced = watchGraphSyncs();
     let definiteOutcome = false;
+    // The add is its own undo step, taken before the request (the backend
+    // broadcasts the committed graph before it answers, and a Cmd+Z meanwhile
+    // waits for it), owning exactly the node the answer names. A node Nebula
+    // made stays this step's to take off even when the canvas changed while
+    // the answer was on its way (round 17's property test: the person deleted
+    // the origin, the node stayed, and no step owned it).
+    const step = get().beginUndoStep();
+    let committed: string | null = null;
     try {
       const res = await graphMutationFetch('/api/graph/node-and-connect', {
         method: 'POST',
@@ -5663,7 +5981,11 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
         || (node.definitionId !== undefined && node.definitionId !== definitionId)) {
         return fail('The backend returned an invalid node acknowledgement. The request may have committed; check canvas sync before trying again.');
       }
+      committed = node.id;
       if (originRevoked || replacementRevision !== canvasReplacementRevision) {
+        // Nebula said what it made: nothing is left unresolved (a later
+        // add-and-connect isn't refused for it: round 17's P-2).
+        definiteOutcome = true;
         return fail('The canvas changed while this request was pending. Check the current graph before trying again.');
       }
 
@@ -5700,8 +6022,6 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
         nodes: synced.seen.has(nodeId) || state.nodes.some((item) => item.id === nodeId) ? state.nodes : [...state.nodes, newNode],
         edges: synced.seen.has(edgeKey(edge)) || state.edges.some((item) => edgeKey(item) === edgeKey(edge))
           ? state.edges : [...state.edges, edge],
-        undoStack: [...state.undoStack, undoSnapshot].slice(-UNDO_CAP),
-        redoStack: [],
       }));
       definiteOutcome = true;
       return nodeId;
@@ -5709,12 +6029,11 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       console.warn('[nebula] addNodeAndConnect backend push failed:', err);
       return fail('The backend response was lost or invalid. This request may have committed; check canvas sync before trying again.');
     } finally {
-      if (pendingConnectedNodeCreationAttempt === attempt) {
-        if (definiteOutcome || attempt.observedNodeId) pendingConnectedNodeCreationAttempt = null;
-        else attempt.phase = 'uncertain';
-      }
+      settleConnectedAttempt(attempt, definiteOutcome);
       synced.stop();
       unsubscribe();
+      if (committed) get().endUndoStep(step, { arrives: [committed] });
+      else get().cancelUndoStep(step);
     }
   },
 
@@ -5723,7 +6042,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     const definition = NODE_DEFINITIONS[definitionId];
     if (!definition) return null;
 
-    pushUndo(set, get);
+    const step = pushUndo(set, get);
 
     const defaults: Record<string, unknown> = {};
     for (const param of definition.params) {
@@ -5776,6 +6095,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       .then((body: { id?: string }) => {
         const shortId = body.id;
         if (!shortId) return;
+        // The node its step added, under its new id (review 16, M1).
+        claimAdds(step, [shortId], tempId);
         // Remap edges too so any connections drawn during the race window
         // keep pointing at the renamed node.
         const drawn = new Set(get().edges.filter((e) => e.source === tempId || e.target === tempId).map((e) => e.id));
@@ -7236,51 +7557,60 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     let idMap: Record<string, string> = {};
     let rfNodes: Node<NodeData>[] = [];
     let rfEdges: Edge[] = [];
-    const synced = watchGraphSyncs();
+    // Review 16, M1: one undo step for the cluster, taken before the request
+    // (its echo can bring the nodes before the answer), owning what it added.
+    const step = get().beginUndoStep();
+    let arrived: string[] | null = null;
     try {
-      const res = await graphMutationFetch('/api/graph/cluster', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nodes: specNodes, edges: specEdges }),
+      const synced = watchGraphSyncs();
+      try {
+        const res = await graphMutationFetch('/api/graph/cluster', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nodes: specNodes, edges: specEdges }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as { idMap: Record<string, string>; nodes: Node<NodeData>[]; edges: Edge[] };
+        idMap = data.idMap; rfNodes = data.nodes ?? []; rfEdges = data.edges ?? [];
+      } catch (err) {
+        console.error('[nebula] authorGenerationCluster persist failed:', err);
+        return { modelNodeIds: [], allNodeIds: [] };
+      } finally {
+        synced.stop();
+      }
+
+      const origin: CreateOriginTag = { sessionId: request.sessionId, genId: request.genId, ts: Date.now(), prompt: request.prompt };
+      const modelIds = new Set(modelTemps.map((t) => idMap[t]).filter(Boolean));
+      const taggedNodes = rfNodes.map((n) =>
+        modelIds.has(n.id) ? { ...n, data: { ...n.data, _createOrigin: origin,
+          keyStatus: nodeKeyStatus(def, n.data.params, useUIStore.getState().settingsCache),
+        } } : n,
+      );
+
+      set((state) => {
+        const taggedById = new Map(taggedNodes.map((n) => [n.id, n]));
+        const existingIds = new Set(state.nodes.map((n) => n.id));
+        const mergedNodes = state.nodes.map((n) => {
+          const incoming = taggedById.get(n.id);
+          return incoming?.data._createOrigin
+            ? { ...n, data: { ...n.data, _createOrigin: incoming.data._createOrigin } }
+            : n;
+        });
+        const newNodes = taggedNodes.filter((n) => !existingIds.has(n.id) && !synced.seen.has(n.id));
+        const existingEdgeIds = new Set(state.edges.map((e) => e.id));
+        return {
+          nodes: [...mergedNodes, ...newNodes],
+          edges: [...state.edges, ...rfEdges.filter((e) => !existingEdgeIds.has(e.id) && !synced.seen.has(edgeKey(e)))],
+        };
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as { idMap: Record<string, string>; nodes: Node<NodeData>[]; edges: Edge[] };
-      idMap = data.idMap; rfNodes = data.nodes ?? []; rfEdges = data.edges ?? [];
-    } catch (err) {
-      console.error('[nebula] authorGenerationCluster persist failed:', err);
-      return { modelNodeIds: [], allNodeIds: [] };
+
+      const modelNodeIds = modelTemps.map((t) => idMap[t]).filter(Boolean);
+      const allNodeIds = [...modelTemps, ...(textTemp ? [textTemp] : []), ...imageTemps].map((t) => idMap[t]).filter(Boolean);
+      arrived = allNodeIds;
+      return { modelNodeIds, allNodeIds };
     } finally {
-      synced.stop();
+      if (arrived) get().endUndoStep(step, { arrives: arrived });
+      else get().cancelUndoStep(step);
     }
-
-    const origin: CreateOriginTag = { sessionId: request.sessionId, genId: request.genId, ts: Date.now(), prompt: request.prompt };
-    const modelIds = new Set(modelTemps.map((t) => idMap[t]).filter(Boolean));
-    const taggedNodes = rfNodes.map((n) =>
-      modelIds.has(n.id) ? { ...n, data: { ...n.data, _createOrigin: origin,
-        keyStatus: nodeKeyStatus(def, n.data.params, useUIStore.getState().settingsCache),
-      } } : n,
-    );
-
-    pushUndo(set, get);
-    set((state) => {
-      const taggedById = new Map(taggedNodes.map((n) => [n.id, n]));
-      const existingIds = new Set(state.nodes.map((n) => n.id));
-      const mergedNodes = state.nodes.map((n) => {
-        const incoming = taggedById.get(n.id);
-        return incoming?.data._createOrigin
-          ? { ...n, data: { ...n.data, _createOrigin: incoming.data._createOrigin } }
-          : n;
-      });
-      const newNodes = taggedNodes.filter((n) => !existingIds.has(n.id) && !synced.seen.has(n.id));
-      const existingEdgeIds = new Set(state.edges.map((e) => e.id));
-      return {
-        nodes: [...mergedNodes, ...newNodes],
-        edges: [...state.edges, ...rfEdges.filter((e) => !existingEdgeIds.has(e.id) && !synced.seen.has(edgeKey(e)))],
-      };
-    });
-
-    const modelNodeIds = modelTemps.map((t) => idMap[t]).filter(Boolean);
-    const allNodeIds = [...modelTemps, ...(textTemp ? [textTemp] : []), ...imageTemps].map((t) => idMap[t]).filter(Boolean);
-    return { modelNodeIds, allNodeIds };
   },
 
   adoptAcceptedProposal: ({ nodes: incoming, edges: incomingEdges, updatedNodes }, options) => {
@@ -7621,14 +7951,23 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       const backendFresh = await ensureBackendFreshForLocalCanvas(localCanvasWasEmpty, set, get);
       if (!backendFresh) throw new Error('Backend fresh-start guard failed');
 
-      const res = await graphMutationFetch('/api/graph/node', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ definitionId: 'character', params, position }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const node = (await res.json()) as { id?: string };
-      return node.id ?? null;
+      // Review 16, M1: its own undo step, owning the node the answer names.
+      const step = get().beginUndoStep();
+      let added: string | null = null;
+      try {
+        const res = await graphMutationFetch('/api/graph/node', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ definitionId: 'character', params, position }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const node = (await res.json()) as { id?: string };
+        added = node.id ?? null;
+        return added;
+      } finally {
+        if (added) get().endUndoStep(step, { arrives: [added] });
+        else get().cancelUndoStep(step);
+      }
     } catch (err) {
       console.warn('[nebula] addCharacterNode backend push failed — adding locally only:', err);
       pushUndo(set, get);
@@ -7673,14 +8012,23 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       const backendFresh = await ensureBackendFreshForLocalCanvas(localCanvasWasEmpty, set, get);
       if (!backendFresh) throw new Error('Backend fresh-start guard failed');
 
-      const res = await graphMutationFetch('/api/graph/node', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ definitionId: 'nebula-moodboard', params, position }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const node = (await res.json()) as { id?: string };
-      return node.id ?? null;
+      // Review 16, M1: its own undo step, owning the node the answer names.
+      const step = get().beginUndoStep();
+      let added: string | null = null;
+      try {
+        const res = await graphMutationFetch('/api/graph/node', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ definitionId: 'nebula-moodboard', params, position }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const node = (await res.json()) as { id?: string };
+        added = node.id ?? null;
+        return added;
+      } finally {
+        if (added) get().endUndoStep(step, { arrives: [added] });
+        else get().cancelUndoStep(step);
+      }
     } catch (err) {
       console.warn('[nebula] addMoodboardNode backend push failed — adding locally only:', err);
       pushUndo(set, get);
@@ -8448,6 +8796,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
 
   dismissProviderRecoveryWarning: () => set({ providerRecoveryWarning: null }),
 })));
+
+// Review 16, H1: a step's additions are fixed once a newer step lands above it.
+useGraphStore.subscribe(fixAddsBelowNewSteps);
 
 // A line from a module that doesn't import this store (lib/canvasNotice.ts,
 // round 3f) becomes the canvas notice.

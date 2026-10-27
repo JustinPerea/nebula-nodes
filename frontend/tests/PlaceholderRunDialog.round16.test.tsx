@@ -62,7 +62,7 @@ describe('the re-asked dialog after a route change', () => {
   const shown = model([row('a', 'Hero still', 'Grok Imagine 2.0 (Krea)', 'price not listed')]);
 
   it('says which node changed in one line at the top of the body, above the rows, keeping the heading', () => {
-    render(<PlaceholderRunDialog model={shown} changed movedLine={line} onDone={() => {}} />);
+    render(<PlaceholderRunDialog model={shown} changed moved={['a']} onDone={() => {}} />);
     const body = document.querySelector('.placeholder-run__body')!;
     expect(body.firstElementChild?.textContent).toBe(line);
     expect(screen.getByRole('heading').textContent).toBe(shown.heading);
@@ -71,7 +71,7 @@ describe('the re-asked dialog after a route change', () => {
 
   it('focus stays on Cancel, and Run ignores clicks for its first 500 ms', () => {
     const answers: boolean[] = [];
-    render(<PlaceholderRunDialog model={shown} changed movedLine={line} onDone={(ok) => answers.push(ok)} />);
+    render(<PlaceholderRunDialog model={shown} changed moved={['a']} onDone={(ok) => answers.push(ok)} />);
     expect(document.activeElement?.textContent).toBe('Cancel');
     const run = document.querySelector<HTMLButtonElement>('.prompt-dialog__confirm')!;
     fireEvent.click(run);
@@ -84,7 +84,5 @@ describe('the re-asked dialog after a route change', () => {
   });
 });
 
-// Not built: naming the moved nodes when the open dialog updates in place.
-// GM - Design's round-6 note 2 rules that line verbatim ("This run changed
-// since you last reviewed it."; PlaceholderRunDialog.round6), and round 16 (a)
-// speaks of the re-ask only. Left for GM (round 16 notes, open items).
+// Naming the moved nodes when the open dialog updates in place: GM round 17
+// (1), PlaceholderRunDialog.round17.

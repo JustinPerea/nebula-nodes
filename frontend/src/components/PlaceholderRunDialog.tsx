@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent, type RefObject } from 'react';
-import { rowSegments, type PlaceholderRunConfirm, type PlaceholderRunRow } from '../lib/placeholderRunConfirm';
+import { movedNodesLine, movedRowIds, rowSegments, type PlaceholderRunConfirm, type PlaceholderRunRow } from '../lib/placeholderRunConfirm';
 import { returnFocusOnSlip } from '../lib/modalFocus';
 import '../styles/prompt-dialog.css';
 import '../styles/placeholder-run-dialog.css';
@@ -43,6 +43,13 @@ import { ModalPortal } from './ModalPortal';
  * scrolling hand focus to Cancel; a slip to the page comes back to Cancel),
  * and no canvas shortcut acts behind it (lib/canvasShortcutScope.ts
  * isModalDialogOpen: it is aria-modal).
+ *
+ * GM - Design, round 17 (1): an update in place names the nodes whose route
+ * or price moved, in the re-ask's form ("“Alt still” changed while this was
+ * open."), in place of round 6's line, and keeps every node that moved since
+ * it opened (as it reads now). A node joining or leaving the run adds no
+ * changed line: the other lines cover it. A re-ask's own moved nodes
+ * (`moved`) are in the same line; a re-ask with none keeps round 5's line.
  */
 export const CHANGED_LINE = 'This run changed since you last reviewed it.';
 /** How long Run ignores clicks after the dialog's numbers change (GM: "~500 ms"). */
@@ -96,15 +103,16 @@ function RowSegments({ row }: { row: PlaceholderRunRow }) {
   );
 }
 
-export function PlaceholderRunDialog({ model, changed = false, movedLine = null, onDone }: {
+export function PlaceholderRunDialog({ model, changed = false, moved, onDone }: {
   model: PlaceholderRunConfirm;
   /** Asked again because the run changed since the person last saw it. */
   changed?: boolean;
   /** GM - Design, round 16 (a): asked again because a route or price moved:
-   * "“Hero still” changed while this was open.", one line at the top of the
-   * body, in place of the round-5 line. Run is held for its first 500 ms
-   * (`changed`) and focus stays on Cancel, as for any re-ask. */
-  movedLine?: string | null;
+   * these nodes, named in one line at the top of the body ("“Hero still”
+   * changed while this was open."), in place of the round-5 line. Run is
+   * held for its first 500 ms (`changed`) and focus stays on Cancel, as for
+   * any re-ask. */
+  moved?: readonly string[];
   /** `shown`: the words on screen when Run or Cancel was clicked. */
   onDone: (ok: boolean, shown: PlaceholderRunConfirm) => void;
 }) {
@@ -117,11 +125,22 @@ export function PlaceholderRunDialog({ model, changed = false, movedLine = null,
   const shown = useRef<string | null>(null);
   const heldUntil = useRef(0);
   const current = signature(model);
-  // How many times its words changed in place since it first showed: the
-  // changed line stays from the first, and each one is announced afresh.
-  const [track, setTrack] = useState({ last: current, changes: 0 });
-  if (track.last !== current) setTrack({ last: current, changes: track.changes + 1 });
-  const changes = track.last !== current ? track.changes + 1 : track.changes;
+  // What changed in place since it first showed: how many times (each one is
+  // announced afresh), the nodes that moved (named until they leave the run),
+  // and what the last change has to say.
+  const [track, setTrack] = useState({ last: current, model, changes: 0, moved: [] as string[], says: '' });
+  let seen = track;
+  if (track.last !== current) {
+    const movedNow = movedRowIds(track.model, model);
+    const all = [...new Set([...track.moved, ...movedNow])];
+    // A node joining or leaving: the left line says so, else the total.
+    const says = (movedNow.length > 0 ? movedNodesLine(model.rows, all) : null)
+      ?? (model.leftLine !== track.model.leftLine ? model.leftLine : null) ?? model.totalLine ?? '';
+    seen = { last: current, model, changes: track.changes + 1, moved: all, says };
+    setTrack(seen);
+  }
+  const { changes } = seen;
+  const movedLine = movedNodesLine(model.rows, [...(moved ?? []), ...seen.moved]);
   // Before any click can land: a layout effect runs in the same task as the commit.
   useLayoutEffect(() => {
     if (current === shown.current) return;
@@ -134,7 +153,7 @@ export function PlaceholderRunDialog({ model, changed = false, movedLine = null,
     onDone(true, model);
   };
   // A no-break space on every other change makes the region's text differ, so it is read again.
-  const announced = changes > 0 ? `${CHANGED_LINE}${changes % 2 === 0 ? '\u00a0' : ''}` : '';
+  const announced = changes > 0 && seen.says ? `${seen.says}${changes % 2 === 0 ? '\u00a0' : ''}` : '';
   useEffect(() => {
     const previous = document.activeElement;
     cancel.current?.focus();
@@ -186,7 +205,7 @@ export function PlaceholderRunDialog({ model, changed = false, movedLine = null,
           <p className="prompt-dialog__line">{model.intro}</p>
           {model.savedLine && <p className="prompt-dialog__line placeholder-run__saved">{model.savedLine}</p>}
           {model.leftLine && <p className="prompt-dialog__line placeholder-run__left">{model.leftLine}</p>}
-          {((changed && !movedLine) || changes > 0) && <p className="prompt-dialog__line placeholder-run__changed">{CHANGED_LINE}</p>}
+          {changed && !movedLine && <p className="prompt-dialog__line placeholder-run__changed">{CHANGED_LINE}</p>}
           <ul ref={list} className="placeholder-run__rows"
             {...(scrolls ? { tabIndex: 0, 'aria-labelledby': headingId } : {})}>
             {model.rows.map((row) => (

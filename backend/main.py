@@ -11523,8 +11523,10 @@ def _set_words(node_id: str, keys: list[str]) -> tuple[str, str]:
     “Aspect ratio” and “Seed”", "Set 3 settings" for three or more. A field
     with no card label is left out of the list and the count; with none
     labelled the bubble says nothing ("") and the cursor still moves. The
-    Agent log keeps the change: it names an unlabelled field by its key.
-    Returns (say, log), in the card's field order."""
+    Agent log keeps the change: it names an unlabelled field by its key,
+    labelled fields first in the card's order, then the raw keys (GM, round
+    17: "Set “Aspect ratio”, “Seed” and seed_mode"; four names, then "and N
+    more"). Returns (say, log)."""
     node = cli_graph.nodes.get(node_id) or {}
     definition = node_registry.get(str(node.get("definitionId") or ""))
     order = {str(param.get("key")): index
@@ -11533,7 +11535,7 @@ def _set_words(node_id: str, keys: list[str]) -> tuple[str, str]:
     labels = {key: _card_label(definition, node, key) for key in ordered}
     named = [f"“{labels[key]}”" for key in ordered if labels[key]]
     say = f"Set {_set_list(named)}" if named else ""
-    logged = [f"“{labels[key]}”" if labels[key] else key for key in ordered]
+    logged = named + [key for key in ordered if not labels[key]]
     log = f"Set {_set_list(logged, cap=4)}"
     return say, log
 

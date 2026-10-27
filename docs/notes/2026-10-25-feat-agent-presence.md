@@ -1557,3 +1557,136 @@ Branch feat/agent-presence, base main (head f4c6f719 before this round).
 - tsc: clean.
 - Lint: clean (the inline-style and Slava-scope guards passed).
 - Build budget: 392,924 bytes raw / 118,309 gzip (limit 512,000).
+
+## Round 17: review 16 and GM - Design's round-17 rulings (2026-10-26)
+
+### What changed
+
+- **H1: a node an undo puts back stays its adding step's** (`graphStore.ts`). Round 16 marked every node an undo put back as "arrived from elsewhere" for every step, so the paste, duplicate, connect or upload that made it lost it and was dropped as dead. Following the coordinator's decision, "elsewhere" is now relative to time:
+  - A step's additions are fixed once its change is complete (`fixAdds`, run by the store listener `fixAddsBelowNewSteps` when a newer step lands above it). A step whose request was on its way fixes them when it settles: exactly what its answer named (`ownArrivals`).
+  - A node an undo or redo puts back counts as arrived elsewhere only for the steps above the undone one and the steps its re-pushed delete jumped over. An older step is never told.
+- **M1: every path that adds nodes is its own undo step.** Each takes `beginUndoStep()` before its request and ends it with `endUndoStep(step, { arrives: [ids] })` in a `finally`, or `cancelUndoStep` when nothing was made. The paths swept:
+  - `addNode`: the node library, a canvas drop and the command palette;
+  - `addNodeAndConnect`;
+  - `addDynamicNode` (its step follows the node's renumbered id);
+  - `addCharacterNode` and `addMoodboardNode` (drops);
+  - `authorGenerationCluster` (Creator's inserts, one step for the cluster).
+  Paste, duplicate, file drops, chat uploads and accepted proposals already had their own steps. An import or template replaces the graph and stays a clear-type step.
+  - When an add-and-connect's answer names the node Nebula made, the step owns it even if the canvas refuses the answer (the origin was deleted meanwhile, or the pair isn't confirmed). Nebula made the node, so its undo must take it off. An answer that is itself invalid (an id the canvas has, another node kind) leaves the outcome uncertain, with no step, as before.
+- **M2: the re-ask prices each row on its own route.** Rows still on the route Nebula refused take the 409's `estimate`. Rows whose route moved since take the canvas's route-aware numbers (`mergeRunEstimates`, `routeKey`, `canvasRunSummary`). An unpriced move shows "price not listed" and sends cost 0; a move onto a priced route shows the canvas's price. `runWait.round16`'s L-4 tests now expect this.
+- **L-1 / GM (1): the in-place dialog line names the nodes that moved**, as their rows read now.
+  - The dialog tracks which rows' route or price moved since it opened (`movedRowIds`; a node that moves back still counts) and shows `movedNodesLine` with GM's wording, in place of round 6's line.
+  - A node joining or leaving adds no changed line; the left line covers it.
+  - The live region announces each change. The 500 ms guard holds whenever Run's price changes in place.
+  - A re-ask passes its moved ids in (`moved`), and nodes that move in place join them.
+- **GM (2): the Agent log's words for mixed fields** (`main._set_words`). Labelled fields come first in card order, then raw keys, with no serial comma. At most four names, then "and N more". The cursor bubble is unchanged.
+  - The log time never wraps: `white-space: nowrap`, and the Slava grid's time column is `max-content`. Checked at 1280 and 1440.
+- **L-2: accepted runs deferred during a run or wait queue in order** (`canvasProposalsStore.deferredQueue`). None is dropped, and each runs once. A graph replacement releases every held approval.
+- **L-3, investigated: the value isn't lost.** Nebula has the write. A sync it sent before the PUT's answer reached the tab after it and showed the old value, so the typing's step changed nothing and was dropped; the echo then brought the value back with no step.
+  - Now a write Nebula took is kept until a sync shows it (`sent`, `noteParamEcho`), for up to `PARAM_ECHO_WAIT_MS` (5 s), so the step survives.
+  - An undo that sets the param meanwhile updates what is awaited (`noteRestoredParams`, A11b).
+- **New this round, found by the property test: the person's writes reach Nebula in the order made** (`graphMutationFetch`). Before, an undo's restore queued behind a slow one while the person's next write (typing, a delete, an added node) went out at once. The write could then reach a node the queued restore hadn't put back yet (a 404), be overwritten by the restore, or have its echo take the undo back off the canvas.
+  - Now, while any restore is queued (`restoresPending`), every other graph write waits for `restoreQueue`.
+  - This replaced a narrower fix from earlier in the round, which dropped from a queued restore any node deleted after it was queued (`deletedAt`). That fix could make a later delete of a re-created node miss.
+  - The waiting write counts as a graph mutation, so a project switch still waits for it.
+  - Tradeoff: a restore that never answers holds the person's later writes too (undo and redo already waited the same way). With the local backend this is milliseconds. A delete's line now comes after the restore it waited for (`lateRestoreCount` updated).
+- **Also found by the property test: a waiting undo's nodes hold on the canvas** (`holdNode`, `heldNodes`, the node counterpart of `holdWire`/`heldWires`). An echo Nebula sent before a queued restore reached it still shows the nodes that restore puts back or takes off as they were. Before, that echo undid the undo on the canvas, and a step taken in that moment kept the node (seed 266: a node no undo took off).
+  - Now, until every restore naming a node has answered, a sync leaves that node as this tab has it: off, or there with this tab's copy (params included). The wires on a node held off stay off too.
+  - Unlike a wire, the hold ends at the answer and doesn't wait for a sync that agrees. Nebula sends the restore's own echo, and every older one, before answering.
+  - Two earlier versions failed:
+    - The wire rule (hold until a sync agrees, or one more sync) left holds behind when a restore was answered with no echo, as in earlier rounds' test harnesses, and those held the next test's syncs.
+    - Counting "the node is there" as agreement let an older echo's params through (seed 914, P-11).
+  - A graph replacement clears the holds.
+- **Also found by the property test: deleting a node again while its delete is on its way does nothing for that node** (`changeCanvasNodes`). The node stays on the canvas until Nebula answers its delete, so the person could delete it again. This is pre-existing: it fails on the store from before this round's fixes.
+  - Two steps then claimed the same delete. Undoing either brought the node back, and the other's Cmd+Z did nothing, without a word (seed 320).
+  - Now the second press leaves the node to the delete on its way.
+- MCP/docs:
+  - `docs/MCP-SETUP.md`: the Agent log wording; the in-place dialog line; re-ask pricing on moved routes; an undo always takes off what its step added (the add paths are each a step); writes after a waiting undo reach Nebula after it.
+  - `skills/nebula/SKILL.md` quotes none of these, so it is unchanged.
+
+### Property test (`tests/heldUndo.property.round17.test.tsx`)
+
+- Each seed runs a random sequence over a fake Nebula that applies every request (`tests/helpers/undoFakeBackend.ts`), with echoes and answers held, released or reordered at random. The operations are:
+  - add from the library, add and connect, paste, duplicate, upload;
+  - delete, type, undo, redo.
+- Invariant: undoing to the start restores the start, canvas = Nebula, and no Cmd+Z is silent while the stack has steps.
+- Failures found and fixed (each now a deterministic test in `heldUndo.round17`, written failing first):
+  - Seeds 5, 11, 20, 40, 52, 55, 77, 88, 91, 107 and 118 (P-1): the add-and-connect step was taken only on success, so a node made from an origin deleted before the answer was left with no step.
+  - A leaked pending attempt refused the next add ("Another node-create request…") (P-2).
+  - Seeds 16 and 118 (P-2, P-2b): a silent Cmd+Z. `endUndoStep` waited for a node that had come and been deleted.
+  - Seed 50 (P-3): a delete step placed beneath an in-flight add took in its node (`stripOwnArrivalsBelow`).
+  - Seed 16, upload (P-5, sized and unsized cards): a dead step was dropped while a step above held its node (`handAddsUp`, plus the strip in `applyHistory`).
+  - Seed 31 (P-4): a restore waiting behind a delete brought back a node deleted after the undo.
+  - Seeds 147, 1624 and 1728 (P-6, P-7, P-8): out-of-order writes, above.
+  - Seeds 266, 315 and 355 (P-9): an echo from before a waiting undo brought back the node that undo took off. These seeds fail on the store from before ordering too.
+  - Seed 320 (P-10): a second delete of a node whose delete was on its way.
+  - Seed 914 (P-11): an older echo's param overwrote a waiting undo's value on the canvas. It fails on the old store too.
+  - Seed 492 failed once, in a block whose other chunk timed out under load. It passes alone and in its block after these fixes.
+- The property test's per-chunk limit went from 120 s to 300 s. A 30-seed chunk takes about 3 s alone, but when three streams ran beside the live check and pytest, one chunk passed 120 s, and the chunks after it in that process failed with it.
+- Test-clock fix: fake `Date` restarted at real time in each test, so it ran backwards across tests. `maybePushUndo` (`now - lastUndoPush < 500`) then merged a new test's typing into the last one's. Both round-17 files now move the clock forward per test or block.
+- **Final run, on the final store: 3,000 seeds (1-3000, blocks of 250, two serial streams). 2,993 pass. The 7 that fail (637, 1000, 1259, 2220, 2276, 2563, 2572) are all the one class left open below:** the person types into, or undoes typing on, a node whose delete is still on its way. Each one's log shows "delete nX" followed by typing on nX while that delete waits.
+- Earlier runs on intermediate stores found the fixed classes above. Seeds 147, 266, 315, 320, 355, 492, 914, 1624 and 1728 now pass.
+
+### Tests written first, and how they failed
+
+- `heldUndo.round17.test.tsx`, 32 tests. The first 16 all failed:
+  - A2, A3 and A10 kept the pasted or duplicated node;
+  - A4 and U1 sent no restore;
+  - A1 and A1b: the library add had no step;
+  - the Character, Moodboard and Creator tests: no step;
+  - A11 and A11b: the step was dropped.
+  - P-1 to P-11 each failed before their fix. P-11 read 'A' instead of 'n1' on both earlier stores. On the pre-ordering store, P-6 kept 'n1' instead of 'C', P-7's second restore was missing, and P-8 kept 'n3'. P-9 showed n3 back on the canvas after the stale echo. P-10's second Cmd+Z changed nothing, on both stores.
+- `PlaceholderRunDialog.round17.test.tsx`, 11 tests. 9 failed first. The 500 ms in-place guard and the round-5 re-ask line already passed. Round 6, 9 and 16 dialog tests were updated to GM's ruling.
+- `runWait.round16.test.ts` (M2): on the old store, xAI to Krea read '$0.07' instead of 'price not listed', and Krea to xAI read 'price not listed' instead of '$0.06'. A new control (an unmoved row keeps $0.07) passes on both.
+- `mergeRunEstimates.round17.test.ts`, 5 tests (the helper didn't exist).
+- `backend/tests/test_round17_log_words.py`, 7 tests. 5 failed first.
+- `agentLogTimeCss.round17.test.ts`, 2 tests. Both failed first.
+- `deferredRunQueue.round17.test.ts`, 4 tests. All failed first.
+- Updated to M1:
+  - `store/graphStore.connectedStep.test.ts`: four cases expected no step when Nebula's answer names a new node the canvas refused. Now the step owns n3.
+  - `undoStepEnds.round11`: the attempt cleanup moved into `settleConnectedAttempt` so the `finally` ends the step.
+- Updated to the ordering:
+  - `heldUndo.round17` P-4 now expects the later delete to reach Nebula after the restore, with restore bodies `[n2=n2]`, then DELETE n2, and its undo.
+  - `lateRestoreCount`'s quick-delete case now expects the delete's line after the restore answers.
+
+### Live check (8795/5795, isolated, `scratchpad/agent-presence/r17/live/live-r17.mjs`): 22 of 22, rerun on the final code
+
+- Same isolation as round 16:
+  - temp HOME, every `NEBULA_*` root under scratch, and every key, token, `NEBULA_*` and `VITE_*` variable dropped, behind a dead proxy;
+  - keys only as a stubbed `GET /api/settings` answer inside the page;
+  - every run request answered in the page, so no paid call.
+- **GM (1):** Codex's Grok placeholder "Alt still". The dialog opened on the Krea row ("price not listed"). The page's settings stub then gained an xAI key, and in place the row read "“Alt still” · Grok Imagine 2.0 via xAI · $0.06" with "“Alt still” changed while this was open." above it. The live region said the same line, a click right after the change did nothing, and Cancel sent no run.
+- **L-1 three strings:** an unnamed Grok node, read the same way (open item below).
+- **GM (2):** Codex PUTs on a Meshy node.
+  - The Agent log read "Set “Topology”", "Set “AI Model”, “Topology” and symmetry_mode" and "Set “AI Model”, “Remesh”, “Topology”, “Polycount” and 2 more".
+  - Every time is one line (height 17 = line-height) at 1440 and 1280.
+- **H1/M1:** the store's addNode, then Delete, then Cmd+Z twice. Canvas and Nebula ended at the start state.
+- **Blocked requests:** 2, both the canaries; none toward 8000-8010 or 5173.
+
+### Open items (round 17)
+
+- **Not fixed, needs a decision: edits to a node whose delete is on its way** (seed 1000; it fails on the old store too, with a silent Cmd+Z). A node stays visible and editable until Nebula answers its delete, which now can wait behind a slow restore. Typing into it, or undoing that typing, sends writes that reach Nebula after the delete: an undo's restore re-creates the node, and a typed value sent with it no longer matches the canvas. Options:
+  - lock a node while its delete is on its way (a visible "deleting" state);
+  - ignore edits to it, as a second Delete is now ignored (P-10);
+  - drop queued writes to it when its delete lands.
+  This is GM's call (the first two change what the person sees).
+
+- **For GM: what an unnamed Grok node is called in three places.** The node is on Krea, then xAI appears in place. They differ, and no winner is picked:
+  - changed line: "“Grok Imagine 2.0 via xAI” changed while this was open."
+  - dialog row: "“Grok Imagine 2.0 via xAI” · $0.06" (before the move: "“Grok Imagine 2.0 (Krea)” · price not listed")
+  - card title on the canvas: "Grok Imagine 2.0 (Krea)" (`data.label`; hover: "Double-click to rename")
+- `maybePushUndo` merges typing when the clock runs backwards (a system clock change). This is pre-existing and only fixed in the tests.
+- The skipped-press line can be covered by a later delete's "Deleted the node." (pre-existing).
+- The live check's apply notes ("name", "mesh") show as Agent log rows. They are the script's own edit-batch notes, as in round 16.
+
+### Gates (round 17, on the final code)
+
+- Backend full suite (iso.sh): 11,163 passed and 71 skipped (12 min 56 s).
+  - An earlier `-x` run under heavy load stopped on `test_iterator_execution.py::test_cancelled_batch_cancels_active_handler_and_keeps_completed_items` (an asyncio timeout). It passed alone and in this full run.
+- Vitest full suite: 513 files and 6,463 tests. 503 files passed and 10 failed (20 tests: 15 "Test timed out in 5000ms" and 2 focus waits, under load).
+  - Those 10 files rerun alone with `--no-file-parallelism`: 182 tests passed.
+- Undo-related files (75 files, 1,122 tests) and the round-16 probes (15 tests, canvas = Nebula in all 92 snapshots): passed.
+- errorCopy ratchets: 15 files and 192 tests passed.
+- tsc: clean.
+- Lint: clean (the inline-style and Slava-scope guards passed).
+- Build budget: 393,248 bytes raw / 118,372 gzip (limit 512,000).
