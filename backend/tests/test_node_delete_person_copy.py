@@ -36,7 +36,7 @@ DESKTOP = {"Sec-Fetch-Site": "same-site", **CANVAS_PARAMS_VERSION}
 # Round 3 (GM): "'settle' and 'start' are internal." These nodes' start is
 # still in flight (has_active_node), so the line says to let the run finish;
 # tests/test_error_copy_round3.py has the line for each other record.
-PAID_PERSON = "This node is still waiting on World Labs. Let its run finish, then delete it."
+PAID_PERSON = "A World Labs run is still starting. Try again in a moment."  # GM, round 13 of PR #114
 GONE_PERSON = "That node isn't on the canvas anymore."
 
 

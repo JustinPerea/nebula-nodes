@@ -32,6 +32,7 @@ import { useGraphStore } from '../../src/store/graphStore';
 import { wsClient, type ExecutionEvent } from '../../src/lib/wsClient';
 import { GRAPH_PARAMS_VERSION } from '../../src/lib/savedParamsUpgrades';
 import { noticeSpy } from '../helpers/noticeSpy';
+import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
 
 function mockResponse(body: unknown, ok = true, status = 200) {
   return {
@@ -58,10 +59,22 @@ function resetStore() {
   });
 }
 
+/** A frontend-only node with its own undo step, as the add made one in a tab
+ * with no backend until round 13 of PR #114 (GM: local-only adds are now
+ * refused; the store's add path has its own tests below and in
+ * graphStore.addSync.test.ts). These tests are about what happens to nodes
+ * once they're on the canvas. */
+let localNodeSeq = 0;
 async function addNode(definitionId: string, position: { x: number; y: number }) {
-  const nodeId = await useGraphStore.getState().addNode(definitionId, position);
-  expect(nodeId).toBeTruthy();
-  return nodeId as string;
+  const definition = NODE_DEFINITIONS[definitionId];
+  useGraphStore.getState().beginUndoStep();
+  const id = `local-${++localNodeSeq}`;
+  const params: Record<string, unknown> = {};
+  for (const param of definition.params) if (param.default !== undefined) params[param.key] = param.default;
+  useGraphStore.setState((state) => ({ nodes: [...state.nodes, {
+    id, type: 'model-node', position, data: { label: definition.displayName, definitionId, params, state: 'idle', outputs: {} },
+  } as Node<NodeData>] }));
+  return id;
 }
 
 beforeEach(() => {
@@ -530,7 +543,17 @@ describe('graphStore', () => {
   });
 
   it('adds a node', async () => {
-    await addNode('gpt-image-1-generate', { x: 100, y: 200 });
+    backendDiscovery.baseUrl = 'http://localhost:8000';
+    fetchMock
+      .mockResolvedValueOnce(mockResponse({ empty: true, nodes: [], edges: [] }))
+      .mockResolvedValueOnce(mockResponse({ id: 'n1' }));
+    expect(await useGraphStore.getState().addNode('gpt-image-1-generate', { x: 100, y: 200 })).toBe('n1');
+    // Its graphSync brings it in with the backend's id.
+    const subscribed = vi.mocked(wsClient.subscribe).mock.calls[0]?.[0] as (event: ExecutionEvent) => void;
+    subscribed({ type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, empty: false, edges: [], nodes: [{
+      id: 'n1', type: 'model-node', position: { x: 100, y: 200 },
+      data: { label: 'GPT Image 1', definitionId: 'gpt-image-1-generate', params: {}, state: 'idle', outputs: {} } }],
+    } as ExecutionEvent);
 
     const { nodes } = useGraphStore.getState();
     expect(nodes).toHaveLength(1);
@@ -597,7 +620,7 @@ describe('graphStore', () => {
     // error-copy round 2 (GM): a 5xx says Nebula didn't respond, whatever its
     // body said; the backend's text stays in the console.
     expect(alertMock).toHaveBeenCalledWith(
-      "Couldn't add World Labs Environment. Nebula didn't respond. Try again.",
+      "Couldn't add “World Labs Environment”. Nebula didn't respond. Try again.",
     );
   });
 
@@ -652,15 +675,18 @@ describe('graphStore', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:8000/api/graph/node');
   });
 
-  it('keeps the first empty-canvas node local when no backend was discovered', async () => {
+  // Round 13 of PR #114 (GM): "Local-only adds are refused." Until then the
+  // node stayed in this tab only.
+  it('refuses the first empty-canvas node when no backend was discovered', async () => {
     backendDiscovery.baseUrl = null;
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
 
     const nodeId = await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 });
 
-    expect(nodeId).toBeTruthy();
+    expect(nodeId).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(useGraphStore.getState().nodes).toHaveLength(1);
+    expect(useGraphStore.getState().nodes).toHaveLength(0);
+    expect(alertMock).toHaveBeenCalledWith("Couldn't add “Text Input”. Nebula isn't connected yet. Try again once it is.");
     expect(useGraphStore.getState().backendFreshStartPending).toBe(true);
   });
 
@@ -744,11 +770,11 @@ describe('graphStore', () => {
 
     expect(nodeId).toBeNull();
     expect(useGraphStore.getState().nodes).toHaveLength(0);
-    // Round 12 (GM): a failed sync of the backend's graph into the tab reads
-    // only "Couldn't add “<label>”."; the reason goes to the Agent log. It
-    // said "Couldn't add Text Input. Nebula lost contact with its backend, so
-    // the node wasn't added. Reconnect, then add it again." before.
-    expect(alertMock).toHaveBeenCalledWith("Couldn't add \u201cText Input\u201d.");
+    // Round 13 (GM): the backend this tab had found doesn't answer, so the
+    // person reads the offline line; the reason goes to the Agent log. Round
+    // 12 said "Couldn't add “Text Input”." and before that "Couldn't add Text
+    // Input. Nebula lost contact with its backend, ...".
+    expect(alertMock).toHaveBeenCalledWith("Couldn't add \u201cText Input\u201d while Nebula is offline.");
   });
 
   it('removes a node and cleans up connected edges', async () => {

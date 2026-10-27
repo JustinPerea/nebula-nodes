@@ -6,6 +6,8 @@ import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { PaperRunInspection } from './PaperRunInspection';
 import { BatchRunInspection } from './BatchRunInspection';
 import { ScrollFade } from '../ScrollFade';
+import { ForgetRecoveryConfirm } from './ForgetRecoveryConfirm';
+import { FORGET_LABEL, cardTitle } from '../../lib/worldLabsWaiting';
 import { FORGET_RECOVERY_HEADING } from '../../lib/api';
 import { failureMessage } from '../../lib/errorCopy';
 import { showNotice } from '../../lib/canvasNotice';
@@ -53,14 +55,10 @@ export function RunHistoryPanel() {
 
   const [now, setNow] = useState(() => Date.now());
   const [clearingRecovery, setClearingRecovery] = useState<string | null>(null);
+  // "Forget ID" asks first, in the app's own dialog (GM, round 13 of PR #114).
+  const [confirmingForget, setConfirmingForget] = useState<{ runId: string; nodeId: string } | null>(null);
 
   const forgetRecovery = async (runId: string, nodeId: string) => {
-    const confirmed = window.confirm(
-      `Forget the World Labs recovery safeguard for ${nodeId}?\n\n`
-      + 'Only continue after checking Marble. This removes the saved recovery ID '
-      + 'and allows a future fresh paid request for this node.',
-    );
-    if (!confirmed) return;
     const key = `${runId}:${nodeId}`;
     setClearingRecovery(key);
     try {
@@ -148,7 +146,7 @@ export function RunHistoryPanel() {
                 const recoveryId = checkpoint.existingWorldId ?? checkpoint.resumeOperationId;
                 return (
                   <li key={key}>
-                    <span title={`${checkpoint.nodeId} · ${recoveryId ?? ''}`}>
+                    <span id={`run-history-recovery-${key}`} title={`${checkpoint.nodeId} · ${recoveryId ?? ''}`}>
                       {checkpoint.nodeId} · {checkpoint.existingWorldId ? 'world' : 'operation'}{' '}
                       <code>{recoveryId}</code>
                       {checkpoint.durable === false && ' · volatile; keep this tab open'}
@@ -156,13 +154,14 @@ export function RunHistoryPanel() {
                     {checkpoint.durable !== false && (
                       <button
                         type="button"
-                        onClick={() => void forgetRecovery(checkpoint.runId, checkpoint.nodeId)}
+                        onClick={() => setConfirmingForget({ runId: checkpoint.runId, nodeId: checkpoint.nodeId })}
                         disabled={isExecuting || clearingRecovery === key}
-                        aria-label={`Checked Marble; forget recovery for ${checkpoint.nodeId}`}
+                        // Its row (node and ID) describes which one it forgets.
+                        aria-describedby={`run-history-recovery-${key}`}
                         title="Check Marble first; forgetting permits a future fresh paid request"
                       >
                         <ShieldCheck size={11} aria-hidden="true" />
-                        {clearingRecovery === key ? 'Clearing…' : 'Checked Marble — forget'}
+                        {clearingRecovery === key ? 'Clearing…' : FORGET_LABEL}
                       </button>
                     )}
                   </li>
@@ -281,6 +280,17 @@ export function RunHistoryPanel() {
           </ScrollFade>
         )}
       </ScrollFade>
+      {confirmingForget && (
+        <ForgetRecoveryConfirm
+          node={cardTitle(nodes, confirmingForget.nodeId)}
+          onCancel={() => setConfirmingForget(null)}
+          onConfirm={() => {
+            const { runId, nodeId } = confirmingForget;
+            setConfirmingForget(null);
+            void forgetRecovery(runId, nodeId);
+          }}
+        />
+      )}
     </div>
   );
 }

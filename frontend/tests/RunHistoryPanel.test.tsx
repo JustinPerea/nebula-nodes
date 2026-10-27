@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { RunHistoryPanel } from '../src/components/panels/RunHistoryPanel';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
@@ -220,10 +220,12 @@ describe('RunHistoryPanel replay actions', () => {
     expect(screen.getByTitle('world-export · world-complete')).toBeInTheDocument();
   });
 
-  it('requires explicit Marble confirmation before deleting an exact recovery', () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  it('"Forget ID" asks in the app\'s own dialog first; Cancel forgets nothing (GM, round 13 of PR #114)', () => {
+    const confirm = vi.spyOn(window, 'confirm');
     const deleteProviderRecovery = vi.fn(async () => undefined);
     useGraphStore.setState({
+      nodes: [{ id: 'world-node', type: 'model-node', position: { x: 0, y: 0 },
+        data: { label: 'Harbor world', definitionId: 'worldlabs-environment', params: {}, state: 'idle', outputs: {} } }] as never,
       providerRecoveries: [{
         runId: 'paid-run',
         nodeId: 'world-node',
@@ -235,20 +237,45 @@ describe('RunHistoryPanel replay actions', () => {
     });
 
     render(<RunHistoryPanel />);
-    fireEvent.click(screen.getByRole('button', {
-      name: 'Checked Marble; forget recovery for world-node',
-    }));
+    const row = screen.getByRole('button', { name: 'Forget ID' });
+    expect(row).toHaveAccessibleDescription('world-node · operation operation-saved');
+    fireEvent.click(row);
 
-    expect(confirm).toHaveBeenCalledOnce();
-    expect(confirm.mock.calls[0][0]).toContain('world-node');
-    expect(confirm.mock.calls[0][0]).toContain('Only continue after checking Marble');
-    expect(confirm.mock.calls[0][0]).toContain('future fresh paid request');
+    const dialog = screen.getByRole('alertdialog', { name: 'Forget the recovery ID for “Harbor world”?' });
+    expect(dialog).toHaveAccessibleDescription(
+      "Only do this after you've checked the run in Marble. Without the ID, Nebula can't stop you from paying for the same run twice.");
+    expect(dialog.parentElement?.parentElement).toBe(document.body);
+    expect(within(dialog).getAllByRole('button').map((button) => button.textContent)).toEqual(['Forget ID', 'Cancel']);
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus();
+    expect(confirm).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(deleteProviderRecovery).not.toHaveBeenCalled();
     expect(screen.getByTitle('world-node · operation-saved')).toBeInTheDocument();
   });
 
+  it('Escape is Cancel, and Tab stays inside the dialog', () => {
+    const deleteProviderRecovery = vi.fn(async () => undefined);
+    useGraphStore.setState({
+      providerRecoveries: [{ runId: 'paid-run', nodeId: 'world-node', resumeOperationId: 'operation-saved',
+        existingWorldId: null, durable: true }],
+      deleteProviderRecovery,
+    });
+    render(<RunHistoryPanel />);
+    fireEvent.click(screen.getByRole('button', { name: 'Forget ID' }));
+    // Not on the canvas: the node goes by its id.
+    const dialog = screen.getByRole('alertdialog', { name: 'Forget the recovery ID for “world-node”?' });
+    const [forgetButton, cancel] = within(dialog).getAllByRole('button');
+    fireEvent.keyDown(cancel, { key: 'Tab' });
+    expect(forgetButton).toHaveFocus();
+    fireEvent.keyDown(forgetButton, { key: 'Tab', shiftKey: true });
+    expect(cancel).toHaveFocus();
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(deleteProviderRecovery).not.toHaveBeenCalled();
+  });
+
   it('deletes only the confirmed recovery row through the exact store action', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     const retained = {
       runId: 'other-run',
       nodeId: 'other-world',
@@ -275,9 +302,8 @@ describe('RunHistoryPanel replay actions', () => {
     });
 
     render(<RunHistoryPanel />);
-    fireEvent.click(screen.getByRole('button', {
-      name: 'Checked Marble; forget recovery for world-node',
-    }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Forget ID' })[0]);
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Forget ID' }));
 
     await waitFor(() => expect(deleteProviderRecovery).toHaveBeenCalledWith(
       'paid-run',
@@ -290,7 +316,6 @@ describe('RunHistoryPanel replay actions', () => {
   });
 
   it('keeps a recovery visible and reports the failure when exact deletion fails', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     const alert = noticeSpy();
     const deleteProviderRecovery = vi.fn().mockRejectedValue(
       new Error('Backend still has an active provider task.'),
@@ -307,9 +332,8 @@ describe('RunHistoryPanel replay actions', () => {
     });
 
     render(<RunHistoryPanel />);
-    fireEvent.click(screen.getByRole('button', {
-      name: 'Checked Marble; forget recovery for world-node',
-    }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Forget ID' })[0]);
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Forget ID' }));
 
     // Error copy round 3b: an error that isn't a request's never shows its
     // own message; it says GM's general line under the button's heading.
@@ -317,9 +341,7 @@ describe('RunHistoryPanel replay actions', () => {
       "Couldn't forget the recovery safeguard. Try again, or reload if it keeps happening.",
     ));
     expect(screen.getByTitle('world-node · operation-saved')).toBeInTheDocument();
-    expect(screen.getByRole('button', {
-      name: 'Checked Marble; forget recovery for world-node',
-    })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Forget ID' })).toBeEnabled();
   });
 
   it('shows the World Labs local-only cancellation caveat in the run record', () => {

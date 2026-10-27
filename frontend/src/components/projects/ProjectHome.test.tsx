@@ -216,7 +216,7 @@ describe('ProjectHome', () => {
     expect(screen.getByRole('alert').querySelector('span')?.textContent).toBe("Couldn't open the project. Nebula didn't respond.");
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
     // A refusal the same request would get again: no Try again, the whole line.
-    const refusal = "Couldn't open the project. A World Labs start needs checking. Open Run History and choose “Check Marble”.";
+    const refusal = "Couldn't open the project. A World Labs run needs your check first. Use the notice at the top of the screen.";
     rerender(<ProjectHome {...props({ error: refusal, retry: 'none' })} />);
     expect(screen.getByRole('alert').textContent).toBe(refusal);
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();

@@ -994,10 +994,10 @@ specific text, and the Commons decides by its actor (its UI session is the
 person). Parse status codes and your detail; don't match the person's lines.
 
 Round 3b added the World Labs refusals to this split, with the same statuses
-and the same checks: "Checked Marble — unlock" (`DELETE
+and the same checks: the status bar's "I've checked Marble" (`DELETE
 /api/provider-start-ambiguities/...`: "Cannot acknowledge a World Labs
 paid-start ambiguity while that provider handshake is still active", "World
-Labs paid-start ambiguity changed; ..."), "Checked Marble — forget" (`DELETE
+Labs paid-start ambiguity changed; ..."), Run History's "Forget ID" (`DELETE
 /api/provider-recoveries/...`: "World Labs recovery checkpoint changed; ..."),
 a run start the paid-start guard refuses (`POST /api/execute`,
 `/api/execute-node`, shot runs: "Fresh paid ... start is safety-locked ...",

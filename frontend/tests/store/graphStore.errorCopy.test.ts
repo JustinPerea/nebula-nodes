@@ -49,7 +49,7 @@ describe('adding a node', () => {
     useGraphStore.setState({ nodes: [textNode('n7')] as never });
     fetchMock.mockResolvedValueOnce(new Response('', { status: 400 }));
     expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
-    expect(alerted()).toBe(`Couldn't add Text Input. ${REFUSED}`);
+    expect(alerted()).toBe(`Couldn't add “Text Input”. ${REFUSED}`);
     expect(alerted()).not.toMatch(/HTTP|400/);
     // The status stays in the console.
     expect(warn.mock.calls.flat().join(' ')).toMatch(/HTTP 400/);
@@ -59,7 +59,7 @@ describe('adding a node', () => {
     useGraphStore.setState({ nodes: [textNode('n7')] as never });
     fetchMock.mockResolvedValueOnce(json({ detail: 'Paid-start safety journal unavailable' }, 503));
     expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
-    expect(alerted()).toBe(`Couldn't add Text Input. ${NO_ANSWER}`);
+    expect(alerted()).toBe(`Couldn't add “Text Input”. ${NO_ANSWER}`);
   });
 
   // Round 12 of PR #114 (GM approved): the first add on an empty tab no
@@ -90,7 +90,7 @@ describe("a person-only refusal (code person_required, GM Q116 a)", () => {
     fetchMock.mockResolvedValueOnce(json({ detail: 'krea-2-generate: propose the change instead with propose_change',
       code: 'person_required' }, 403));
     expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
-    expect(alerted()).toBe("Couldn't add Text Input. This change needs your OK, and this tab isn't connected as you. Open the link Nebula printed when it started, then try again.");
+    expect(alerted()).toBe("Couldn't add “Text Input”. This change needs your OK, and this tab isn't connected as you. Open the link Nebula printed when it started, then try again.");
   });
 });
 

@@ -74,6 +74,7 @@ import {
   rewriteBackendAssetUrls,
   rewriteExecutionAssetUrls,
 } from '../lib/backend';
+import { isBackendOffline } from '../lib/backendConnection';
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 import { WORLD_LABS_STATUS_UNCERTAIN_WARNING, deleteRefusalText, heldDeleteText } from '../lib/worldLabsWaiting';
 import {
@@ -2533,12 +2534,37 @@ async function executeHistoricalRun(
  * the Agent log; the person reads only "Couldn't add “<label>”." (GM). */
 class TabSyncFailure extends Error {
   readonly raw: string;
-  constructor(raw: string) {
+  /** The backend this tab had found couldn't be reached at all: the person
+   * reads GM's offline line (round 13 of PR #114). */
+  readonly offline: boolean;
+  constructor(raw: string, offline = false) {
     super(raw);
     this.name = 'TabSyncFailure';
     this.raw = raw;
+    this.offline = offline;
   }
 }
+
+/** GM - Design, round 13 of PR #114, verbatim: an add that never reached the
+ * backend because the tab never found one, and one made while Nebula is
+ * offline (the banner showing, or the backend this tab had found not
+ * answering at all). */
+export function addNotConnectedLine(label: string): string {
+  return `Couldn't add \u201c${label}\u201d. Nebula isn't connected yet. Try again once it is.`;
+}
+export function addOfflineLine(label: string): string {
+  return `Couldn't add \u201c${label}\u201d while Nebula is offline.`;
+}
+/** Every add path's heading (GM's quoted form; round 13 made the refused
+ * create's unquoted "Couldn't add <label>." match it). */
+function addHeading(label: string): string {
+  return `Couldn't add \u201c${label}\u201d.`;
+}
+
+/** How many graphSyncs this tab has applied (applyGraphSync), so an add's
+ * own read of the backend's graph can tell a newer socket sync landed while
+ * it was out (review 12, R12-A/B). */
+let appliedGraphSyncs = 0;
 
 /**
  * Before the first add on an empty tab: if the backend's canvas has nodes this
@@ -2559,17 +2585,19 @@ async function bringBackendGraphIntoEmptyTab(
   if (!localCanvasWasEmpty && !get().backendFreshStartPending) return true;
 
   const backendWasDiscovered = getCachedBackendBaseUrl() !== null;
+  // A socket sync applied after this point is newer than the export below.
+  const syncsBefore = appliedGraphSyncs;
   let exportRes: Response;
   try {
     exportRes = await apiFetch('/api/graph/export');
   } catch (err) {
     // Asked again on the next add, until a sync brings the graph in.
     set({ backendFreshStartPending: true });
-    // No backend found at all, before or now: the tab works on its own, as
-    // before round 12 (false: the caller adds the node in this tab only).
-    // There is no backend graph for it to disagree with.
+    // No backend found at all, before or now (false): the caller refuses
+    // the add (GM, round 13 of PR #114: local-only adds are refused).
     if (!backendWasDiscovered && getCachedBackendBaseUrl() === null) return false;
-    throw new TabSyncFailure(err instanceof Error ? err.message : String(err));
+    // The backend this tab had found doesn't answer: Nebula is offline.
+    throw new TabSyncFailure(err instanceof Error ? err.message : String(err), true);
   }
   if (!exportRes.ok) {
     set({ backendFreshStartPending: true });
@@ -2594,7 +2622,11 @@ async function bringBackendGraphIntoEmptyTab(
       set({ backendFreshStartPending: true });
       throw new TabSyncFailure(notForThisTab);
     }
-    applyGraphSync(exported);
+    // A socket sync landed while the export was out (an agent's Clear or
+    // delete): it is the newer state of the same canvas, so the export is
+    // never applied over it (review 12, R12-A/B). The tab has the backend's
+    // graph already, by that sync.
+    if (appliedGraphSyncs === syncsBefore) applyGraphSync(exported);
   }
   set({ backendFreshStartPending: false });
   return true;
@@ -2684,7 +2716,7 @@ function observePendingConnectedNodeCreation(nodes: Node<NodeData>[], edges: Edg
  * round 12 of PR #114); anything else reads under "Couldn't add {node}.". */
 function reportNodeCreationError(displayName: string, err: unknown): null {
   if (err instanceof TabSyncFailure) {
-    const heading = `Couldn't add \u201c${displayName}\u201d.`;
+    const heading = err.offline ? addOfflineLine(displayName) : addHeading(displayName);
     console.warn(`[nebula] ${heading} ${err.raw}`);
     // The Agent log takes any component's line as this event (agentLogStore,
     // loaded with the app).
@@ -2699,53 +2731,25 @@ function reportNodeCreationError(displayName: string, err: unknown): null {
 }
 
 function reportNodeCreationFailure(displayName: string, reason: string): null {
-  const message = `Couldn't add ${displayName}. ${reason}`;
+  const message = `${addHeading(displayName)} ${reason}`;
   console.warn(`[nebula] ${message}`);
   useGraphStore.getState().notify(message);
   return null;
 }
 
-/** No backend was ever found (bringBackendGraphIntoEmptyTab answered false):
- * the tab works on its own and the node is this tab's only (a UUID id).
- * Unchanged by round 12 apart from Character and Moodboard nodes now taking
- * this same path, and only this one. */
-function addOnlyInThisTab(
-  set: GraphSet,
-  get: GraphGet,
-  definitionId: string,
-  params: Record<string, unknown>,
-  position: { x: number; y: number },
-): string {
-  const definition = NODE_DEFINITIONS[definitionId];
-  console.warn('[nebula] no backend found: adding the node in this tab only');
-  pushUndo(set, get);
-  const nodeType =
-    definitionId === 'reroute'
-      ? 'reroute-node'
-      : definitionId === 'batch'
-        ? 'batchNode'
-      : definitionId === 'camera-rig'
-        ? 'cameraRigNode'
-        : definitionId === 'paper-source'
-          ? 'paperSourceNode'
-        : definitionId === 'reference-set'
-          ? 'referenceSetNode'
-          : definitionId.startsWith('qc-')
-            ? 'videoQcNode'
-          : definitionId === 'nebula-moodboard'
-            ? 'moodboardNode'
-          : definitionId === 'character'
-            ? 'characterNode'
-            : 'model-node';
-  const keyStatus = nodeKeyStatus(definition, params, useUIStore.getState().settingsCache);
-  const newNode: Node<NodeData> = {
-    id: uuidv4(),
-    type: nodeType,
-    position,
-    data: { label: definition.displayName, definitionId, params, state: 'idle', outputs: {}, keyStatus },
-  };
-  set((state) => ({ nodes: [...state.nodes, newNode] }));
-  return newNode.id;
+/** The line for an add made while the banner says Nebula is offline: GM's
+ * "isn't connected yet" when this tab never found a backend at all, else
+ * the offline line (round 13 of PR #114). */
+function offlineAddLine(label: string): string {
+  return getCachedBackendBaseUrl() === null ? addNotConnectedLine(label) : addOfflineLine(label);
+}
+
+/** An add Nebula can't make right now, said before or instead of sending
+ * anything: GM's line (round 13 of PR #114), once, as a notice. */
+function refuseAdd(line: string): null {
+  console.warn(`[nebula] ${line}`);
+  useGraphStore.getState().notify(line);
+  return null;
 }
 
 /**
@@ -2753,8 +2757,10 @@ function addOnlyInThisTab(
  * it into the canvas with its backend id. Used by every static add (addNode,
  * addCharacterNode, addMoodboardNode: round 12 of PR #114 gave the last two
  * this same path, where they had added the node locally on any failure).
- * A failure says why and adds nothing, not even in this tab; only a tab that
- * never found a backend at all keeps its nodes to itself (addOnlyInThisTab).
+ * A failure says why and adds nothing, not even in this tab. Round 13 of
+ * PR #114 (GM): a tab that never found a backend refuses the add too ("Nebula
+ * isn't connected yet"; until round 12 it kept the node to itself), and a
+ * tab whose banner says Nebula is offline refuses before sending anything.
  */
 async function createNodeOnBackend(
   set: GraphSet,
@@ -2765,6 +2771,7 @@ async function createNodeOnBackend(
 ): Promise<string | null> {
   const definition = NODE_DEFINITIONS[definitionId];
   if (!definition) return null;
+  if (isBackendOffline()) return refuseAdd(offlineAddLine(definition.displayName));
   if (pendingNodeCreationAttempt) {
     const previousAttempt = pendingNodeCreationAttempt;
     if (previousAttempt.phase === 'sending') {
@@ -2798,7 +2805,7 @@ async function createNodeOnBackend(
   } catch (err) {
     return reportNodeCreationError(definition.displayName, err);
   }
-  if (!backendFound) return addOnlyInThisTab(set, get, definitionId, params, position);
+  if (!backendFound) return refuseAdd(addNotConnectedLine(definition.displayName));
 
   const attempt: NodeCreationAttempt = {
     definitionId,
@@ -2837,7 +2844,7 @@ async function createNodeOnBackend(
     if (pendingNodeCreationAttempt === attempt) pendingNodeCreationAttempt = null;
     return reportNodeCreationFailure(
       definition.displayName,
-      await backendRejectionReason(res, `Couldn't add ${definition.displayName}.`),
+      await backendRejectionReason(res, addHeading(definition.displayName)),
     );
   }
 
@@ -3259,6 +3266,7 @@ function applyGraphSync(event: ExecutionEvent): boolean {
   if (graphNotForThisTab(event as ExecutionEvent & { workspaceRevision?: unknown; paramsVersion?: unknown })) {
     return false;
   }
+  appliedGraphSyncs += 1;
   useCinemaMotionStore.getState().observeGraphSync();
   // Real-time sync: MERGE cli_graph into the canvas. Key invariant: frontend-only
   // nodes (library drags, undo'd results, etc.) must survive graphSync — only
@@ -3956,7 +3964,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       });
       if (!res.ok) {
         definiteOutcome = res.status >= 400 && res.status < 500;
-        return fail(await backendRejectionReason(res, `Couldn't add ${definition.displayName}.`));
+        return fail(await backendRejectionReason(res, addHeading(definition.displayName)));
       }
       const node = (await res.json()) as { id?: unknown; definitionId?: unknown; params?: Record<string, unknown>;
         connected?: boolean; edge?: Edge };
@@ -4023,6 +4031,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     if (get().isImportingGraph) return null;
     const definition = NODE_DEFINITIONS[definitionId];
     if (!definition) return null;
+    // GM, round 13 of PR #114: no card at all while the banner says offline.
+    if (isBackendOffline()) return refuseAdd(offlineAddLine(definition.displayName));
 
     pushUndo(set, get);
 
@@ -4082,11 +4092,25 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     pendingGraphMutationCount += 1;
     void (async () => {
       try {
-        // No backend found at all: the node stays this tab's only, as before.
-        if (!await bringBackendGraphIntoEmptyTab(localCanvasWasEmpty, set, get)) return null;
+        // No backend found at all: refused, the card comes off (GM, round 13).
+        if (!await bringBackendGraphIntoEmptyTab(localCanvasWasEmpty, set, get)) {
+          takeBack();
+          return refuseAdd(addNotConnectedLine(definition.displayName));
+        }
       } catch (err) {
         takeBack();
         return reportNodeCreationError(definition.displayName, err);
+      }
+      // The step was taken before the sync brought the backend's nodes in
+      // (an empty tab): it owns only this card, so its snapshot is the
+      // canvas as it is now without the card (review 12, R12-C). Otherwise
+      // Undo would take the agent's nodes away with it. Steps are kept by
+      // identity, so it is rebased in place, and only while it is the top.
+      if (localCanvasWasEmpty && undoStep && get().undoStack[get().undoStack.length - 1] === undoStep) {
+        const now = get();
+        const rebased = createSnapshot(now.nodes.filter((n) => n.id !== tempId),
+          now.edges.filter((e) => e.source !== tempId && e.target !== tempId));
+        Object.assign(undoStep, { nodes: rebased.nodes, edges: rebased.edges });
       }
       let res: Response;
       try {
@@ -4102,7 +4126,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
           'The backend response was lost after the node-create request was sent. Nebula did not add a local copy because the backend may already have committed it. Wait for canvas sync or reload before trying again.');
       }
       if (!res.ok) {
-        const reason = await backendRejectionReason(res, `Couldn't add ${definition.displayName}.`);
+        const reason = await backendRejectionReason(res, addHeading(definition.displayName));
         takeBack();
         return reportNodeCreationFailure(definition.displayName, reason);
       }

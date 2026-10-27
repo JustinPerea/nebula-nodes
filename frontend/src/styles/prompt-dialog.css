@@ -69,3 +69,11 @@
   outline: var(--sr-focus-outline, 2px solid #9ab8ff);
   outline-offset: var(--sr-focus-offset, 2px);
 }
+
+/* A confirm's own heading (Run History's "Forget ID", round 13 of PR #114). */
+.prompt-dialog__heading {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+}

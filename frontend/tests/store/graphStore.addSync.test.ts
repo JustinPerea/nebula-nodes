@@ -16,9 +16,13 @@ import { noticeSpy } from '../helpers/noticeSpy';
  * added the node locally on any failure, with only a console line.
  */
 
+// The socket's handlers, so a test can land a graphSync while an add is out.
+const transport = vi.hoisted(() => ({ handlers: [] as ((event: unknown) => void)[] }));
 vi.mock('../../src/lib/wsClient', () => ({
-  wsClient: { connect: vi.fn(), subscribe: vi.fn(), disconnect: vi.fn() },
+  wsClient: { connect: vi.fn(), subscribe: vi.fn((handler: (event: unknown) => void) => { transport.handlers.push(handler); }),
+    disconnect: vi.fn() },
 }));
+const socketSends = (event: Record<string, unknown>) => { for (const handler of transport.handlers) handler(event); };
 const backendDiscovery = vi.hoisted(() => ({ baseUrl: 'http://localhost:8000' as string | null }));
 vi.mock('../../src/lib/backend', async (importOriginal) => ({
   ...await importOriginal<typeof import('../../src/lib/backend')>(),
@@ -36,6 +40,8 @@ const { useAgentLogStore } = await import('../../src/store/agentLogStore');
 const { GRAPH_PARAMS_VERSION } = await import('../../src/lib/savedParamsUpgrades');
 const { NODE_DEFINITIONS } = await import('../../src/constants/nodeDefinitions');
 const { setProjectContext } = await import('../../src/lib/projectContext');
+const { TAB_ID } = await import('../../src/lib/tabId');
+const { noteBackendConnection } = await import('../../src/lib/backendConnection');
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status, headers: { 'content-type': 'application/json' } });
@@ -57,6 +63,7 @@ beforeEach(() => {
   fetchMock.mockReset();
   alertMock.mockClear();
   backendDiscovery.baseUrl = 'http://localhost:8000';
+  noteBackendConnection('online');
   setProjectContext({ id: 'A', revision: 'a' });
   useAgentLogStore.getState().clear();
   useGraphStore.getState().resetExecution();
@@ -107,9 +114,6 @@ describe('the first add on an empty tab syncs the backend\'s nodes in and never 
 });
 
 const SYNC_FAILURES: [string, () => void, RegExp][] = [
-  // apiFetch's own error for an unreachable backend, as it comes.
-  ['the backend can\'t be reached', () => fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch')),
-    /Failed to fetch|Nebula's/],
   ['the export is refused', () => fetchMock.mockResolvedValueOnce(json({ detail: 'export broke' }, 500)), /export broke/],
   ['the export can\'t be read', () => fetchMock.mockResolvedValueOnce(new Response('<html>', { status: 200 })),
     /JSON|Unexpected/],
@@ -134,23 +138,40 @@ describe('a sync that fails: nothing is added, the person reads GM\'s line, the 
   }
 
   it('a dynamic node is taken off the tab again', async () => {
-    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    fetchMock.mockResolvedValueOnce(json({ detail: 'export broke' }, 500));
     useGraphStore.getState().addDynamicNode('openrouter-universal', { x: 10, y: 20 });
     await vi.waitFor(() => expect(alerted()).toEqual([couldntAdd('openrouter-universal')]));
     expect(useGraphStore.getState().nodes).toEqual([]);
     expect(useGraphStore.getState().undoStack).toEqual([]);
-    expect(logged()[0]).toMatch(/Failed to fetch|Nebula's/);
+    expect(logged()[0]).toMatch(/export broke/);
   });
 
-  it('with no backend found at all, the tab still works on its own, as before round 12', async () => {
+  it('with no backend found at all, nothing is added and GM\'s line says so (round 13, GM: local-only adds are refused)', async () => {
     backendDiscovery.baseUrl = null;
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
-    const id = await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 });
-    expect(id).toBeTruthy();
-    expect(useGraphStore.getState().nodes.map((node) => node.id)).toEqual([id]);
-    expect(alerted()).toEqual([]);
+    expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
+    expect(useGraphStore.getState().nodes).toEqual([]);
+    expect(alerted()).toEqual(["Couldn't add “Text Input”. Nebula isn't connected yet. Try again once it is."]);
     // The next add on the tab asks again.
     expect(useGraphStore.getState().backendFreshStartPending).toBe(true);
+  });
+
+  it.each(ADDS)('%s with no backend found at all: refused the same way, nothing in this tab', async (_name, definitionId, add) => {
+    backendDiscovery.baseUrl = null;
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    expect(await add({ x: 10, y: 20 })).toBeNull();
+    expect(useGraphStore.getState().nodes).toEqual([]);
+    expect(alerted()).toEqual([`Couldn't add “${label(definitionId)}”. Nebula isn't connected yet. Try again once it is.`]);
+  });
+
+  it('a dynamic node with no backend found at all: its card comes off again', async () => {
+    backendDiscovery.baseUrl = null;
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    useGraphStore.getState().addDynamicNode('openrouter-universal', { x: 10, y: 20 });
+    await vi.waitFor(() => expect(alerted()).toEqual([
+      `Couldn't add “${label('openrouter-universal')}”. Nebula isn't connected yet. Try again once it is.`]));
+    expect(useGraphStore.getState().nodes).toEqual([]);
+    expect(useGraphStore.getState().undoStack).toEqual([]);
   });
 });
 
@@ -160,7 +181,8 @@ describe('a refused create after the sync: the add path\'s own line, and nothing
       .mockResolvedValueOnce(json({ detail: 'Graph has protected provider state' }, 409));
     expect(await add({ x: 10, y: 20 })).toBeNull();
     expect(useGraphStore.getState().nodes).toEqual([]);
-    expect(alerted()).toEqual([`Couldn't add ${label(definitionId)}. Graph has protected provider state`]);
+    // Round 13 (review 12 item 5): GM's quoted heading on every add path.
+    expect(alerted()).toEqual([`Couldn't add “${label(definitionId)}”. Graph has protected provider state`]);
   });
 
   it('a dynamic node is taken off the tab again', async () => {
@@ -168,7 +190,144 @@ describe('a refused create after the sync: the add path\'s own line, and nothing
       .mockResolvedValueOnce(json({ detail: 'Graph has protected provider state' }, 409));
     useGraphStore.getState().addDynamicNode('openrouter-universal', { x: 10, y: 20 });
     await vi.waitFor(() => expect(alerted()).toEqual([
-      `Couldn't add ${label('openrouter-universal')}. Graph has protected provider state`]));
+      `Couldn't add “${label('openrouter-universal')}”. Graph has protected provider state`]));
     expect(useGraphStore.getState().nodes).toEqual([]);
+  });
+});
+
+// Round 13 of PR #114 (GM): "Couldn't add “Text Input” while Nebula is
+// offline." when the add can't reach a backend this tab had found, and
+// before sending anything while the offline banner shows.
+const offlineLine = (definitionId: string) => `Couldn't add “${label(definitionId)}” while Nebula is offline.`;
+describe('an add while Nebula is offline', () => {
+  it.each(ADDS)('%s: the backend can\'t be reached during the sync', async (_name, definitionId, add) => {
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    expect(await add({ x: 10, y: 20 })).toBeNull();
+    expect(useGraphStore.getState().nodes).toEqual([]);
+    expect(alerted()).toEqual([offlineLine(definitionId)]);
+    // The reason still goes to the Agent log, under GM's line.
+    expect(logged()[0]).toMatch(/Failed to fetch|Nebula's/);
+  });
+
+  it.each(ADDS)('%s: the banner shows offline, so nothing is sent at all', async (_name, definitionId, add) => {
+    useGraphStore.setState({ nodes: [{ ...agentsNode }] as never });
+    noteBackendConnection('offline');
+    expect(await add({ x: 10, y: 20 })).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(alerted()).toEqual([offlineLine(definitionId)]);
+    expect(useGraphStore.getState().nodes.map((node) => node.id)).toEqual(['n1']);
+  });
+
+  it('a tab that never found a backend reads "isn\'t connected yet" even while the banner says offline', async () => {
+    backendDiscovery.baseUrl = null;
+    noteBackendConnection('offline');
+    expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(alerted()).toEqual(["Couldn't add “Text Input”. Nebula isn't connected yet. Try again once it is."]);
+  });
+
+  it('a dynamic node while offline: no card, no step, the same line', async () => {
+    noteBackendConnection('offline');
+    expect(useGraphStore.getState().addDynamicNode('openrouter-universal', { x: 10, y: 20 })).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(useGraphStore.getState().nodes).toEqual([]);
+    expect(useGraphStore.getState().undoStack).toEqual([]);
+    expect(alerted()).toEqual([offlineLine('openrouter-universal')]);
+  });
+});
+
+// Review 12 (R12-A/B): the add's own read of the backend's graph must never
+// overwrite a newer socket sync that landed while that read was out.
+const base = { activeProjectId: 'A', workspaceRevision: 'a', paramsVersion: GRAPH_PARAMS_VERSION };
+const textNode = (id: string, value: string, position: { x: number; y: number }, outputs = {}) => ({
+  id, type: 'model-node', position,
+  data: { label: 'Text Input', definitionId: 'text-input', params: { value }, state: Object.keys(outputs).length ? 'complete' : 'idle', outputs } });
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => { resolve = res; });
+  return { promise, resolve };
+}
+
+describe('a socket sync that lands while the add\'s export is out wins (R12-A/B)', () => {
+  it("R12-A: an agent's Clear lands first; the stale export brings nothing back", async () => {
+    const exported = deferred<Response>();
+    const created = deferred<Response>();
+    fetchMock.mockReturnValueOnce(exported.promise).mockReturnValueOnce(created.promise);
+    const adding = useGraphStore.getState().addNode('text-input', { x: 10, y: 20 });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    socketSends({ type: 'graphSync', ...base, empty: true, cleared: true, nodes: [], edges: [] });
+    exported.resolve(json({ ...base, empty: false, edges: [],
+      nodes: [textNode('n1', 'old', { x: 400, y: 300 }, { text: { type: 'Text', value: 'OLD OUTPUT' } }),
+        textNode('n2', 'old two', { x: 400, y: 500 })] }));
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(useGraphStore.getState().nodes).toEqual([]);
+    socketSends({ type: 'graphSync', ...base, empty: false, edges: [], nodes: [textNode('n1', '', { x: 10, y: 20 })] });
+    created.resolve(json({ id: 'n1' }));
+    expect(await adding).toBe('n1');
+    const n1 = useGraphStore.getState().nodes.find((node) => node.id === 'n1')!;
+    expect(n1.position).toEqual({ x: 10, y: 20 });
+    expect(n1.data.outputs).toEqual({});
+  });
+
+  it("R12-B: an agent's delete lands first, then the create is refused; the deleted node stays gone", async () => {
+    const exported = deferred<Response>();
+    fetchMock.mockReturnValueOnce(exported.promise).mockResolvedValueOnce(json({ detail: 'nope' }, 409));
+    const adding = useGraphStore.getState().addNode('text-input', { x: 10, y: 20 });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    socketSends({ type: 'graphSync', ...base, empty: false, edges: [], nodes: [textNode('n1', 'a', { x: 0, y: 0 })] });
+    exported.resolve(json({ ...base, empty: false, edges: [],
+      nodes: [textNode('n1', 'a', { x: 0, y: 0 }), textNode('n2', 'b', { x: 0, y: 200 })] }));
+    expect(await adding).toBeNull();
+    expect(useGraphStore.getState().nodes.map((node) => node.id)).toEqual(['n1']);
+  });
+
+  it('a sync that is not this tab\'s (another project) doesn\'t count: the export still applies', async () => {
+    const exported = deferred<Response>();
+    fetchMock.mockReturnValueOnce(exported.promise).mockResolvedValueOnce(json({ id: 'n2' }));
+    const adding = useGraphStore.getState().addNode('text-input', { x: 10, y: 20 });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    socketSends({ type: 'graphSync', ...base, workspaceRevision: 'other', empty: true, nodes: [], edges: [] });
+    exported.resolve(backendHas());
+    expect(await adding).toBe('n2');
+    expect(useGraphStore.getState().nodes.map((node) => node.id)).toEqual(['n1']);
+  });
+});
+
+// Review 12 (R12-C): an add's undo step owns only the node it added. On an
+// empty tab the add brings the backend's nodes in first; Undo must not take
+// those away.
+describe('Undo after the first add on an empty tab removes only the new node (R12-C)', () => {
+  it('addDynamicNode', async () => {
+    fetchMock.mockResolvedValueOnce(backendHas());
+    const created = deferred<Response>();
+    fetchMock.mockReturnValueOnce(created.promise);
+    useGraphStore.getState().addDynamicNode('openrouter-universal', { x: 10, y: 20 });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    created.resolve(json({ id: 'n2' }));
+    await vi.waitFor(() => expect(useGraphStore.getState().nodes.some((node) => node.id === 'n2')).toBe(true));
+    const made = { id: 'n2', type: 'dynamic-node', position: { x: 10, y: 20 },
+      data: { label: 'x', definitionId: 'openrouter-universal', params: {}, state: 'idle', outputs: {} } };
+    socketSends({ type: 'graphSync', ...base, empty: false, edges: [], nodes: [agentsNode, made],
+      edit: { tab: TAB_ID, actor: { kind: 'person' } } });
+    expect(useGraphStore.getState().undoStack).toHaveLength(1);
+    fetchMock.mockResolvedValue(json({}));
+    useGraphStore.getState().undo();
+    await vi.waitFor(() => expect(paths()).toContain('POST /api/graph/restore'));
+    const restore = fetchMock.mock.calls.find(([url]) => String(url).includes('/api/graph/restore'))!;
+    const body = JSON.parse(String((restore[1] as RequestInit).body));
+    expect(body.remove).toEqual(['n2']);
+    expect(useGraphStore.getState().nodes.map((node) => node.id)).toEqual(['n1']);
+  });
+});
+
+// Review 12 item 6 (GM: the settling line is fine on other writes as long as
+// each leads with its own "Couldn't <action>."): an add refused while a World
+// Labs run is still starting.
+describe('the World Labs starting line on an add leads with the add\'s own heading', () => {
+  it('addNode', async () => {
+    useGraphStore.setState({ nodes: [{ ...agentsNode }] as never });
+    fetchMock.mockResolvedValueOnce(json({ detail: 'A World Labs run is still starting. Try again in a moment.' }, 409));
+    expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
+    expect(alerted()).toEqual(["Couldn't add “Text Input”. A World Labs run is still starting. Try again in a moment."]);
   });
 });

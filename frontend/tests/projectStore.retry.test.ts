@@ -21,7 +21,7 @@ import type { SavedProject, TrashedProject } from '../src/lib/projects';
 import * as execution from '../src/lib/api';
 import { ConnectionLostError } from '../src/lib/errorCopy';
 import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
-import { WORLD_LABS_START_NEEDS_CHECK } from '../src/lib/worldLabsWaiting';
+import { WORLD_LABS_NEEDS_CHECK } from '../src/lib/worldLabsWaiting';
 
 vi.mock('../src/lib/personSession', async (original) => ({
   ...await original<typeof import('../src/lib/personSession')>(),
@@ -49,8 +49,8 @@ const summary = (id: string) => { const { snapshot: _s, ...rest } = project(id);
 const trashed = (id: string): TrashedProject => ({ ...summary(id), deletedAt: '2026-10-10T10:00:00Z', purgeAt: '2026-11-09T10:00:00Z' });
 const unavailable = (heading: string) => new projects.ProjectRequestError("Nebula didn't respond. Try again.", 503, { heading });
 const refused = (heading: string, reason: string, status = 409) => new projects.ProjectRequestError(reason, status, { heading });
-// The backend's refusal of an open over a World Labs record (GM, round 12 of PR #114).
-const WORLD_LABS_OPEN = 'A World Labs start needs checking. Open Run History and choose “Check Marble”.';
+// The backend's refusal of an open over an unconfirmed World Labs run (GM, round 13 of PR #114).
+const WORLD_LABS_OPEN = 'A World Labs run needs your check first. Use the notice at the top of the screen.';
 
 function listing(overrides: Partial<projects.ProjectList> = {}): projects.ProjectList {
   return { projects: [summary('alpha'), summary('beta')], trash: [], activeProjectId: 'alpha',
@@ -299,7 +299,11 @@ describe('Projects: Try again redoes the failed action', () => {
 describe('Projects: review fixes', () => {
   const ambiguity = { runId: 'run-wl', nodeId: 'n-wl', kind: 'worldlabs-environment' as const,
     message: 'held', durable: true };
-  const holdLine = (heading: string) => `${heading} ${WORLD_LABS_START_NEEDS_CHECK}`;
+  const holdLine = (heading: string) => `${heading} ${WORLD_LABS_NEEDS_CHECK}`;
+  it("the Projects screen's own check says GM's round 13 line, word for word", () => {
+    expect(holdLine("Couldn't open the project.")).toBe(
+      "Couldn't open the project. A World Labs run needs your check first. Use the notice at the top of the screen.");
+  });
 
   it('a startup load refused for good (the active project went away): Try again reloads, with the whole line, and recovers', async () => {
     useProjectStore.setState(initial, true);

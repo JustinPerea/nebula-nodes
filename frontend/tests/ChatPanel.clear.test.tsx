@@ -25,6 +25,7 @@ vi.mock('../src/lib/backend', async (original) => ({
 }));
 import { ChatPanel } from '../src/components/panels/ChatPanel';
 import { useUIStore } from '../src/store/uiStore';
+import { useGraphStore } from '../src/store/graphStore';
 const initialUI = useUIStore.getState();
 
 class ChatSocket extends WebSocket {
@@ -141,5 +142,55 @@ describe('/clear while the canvas clear is out (round 12)', () => {
     const text = chatText();
     expect(text).toContain('HELLO AFTER CLEAR');
     expect(text.indexOf('HELLO AFTER CLEAR')).toBeLessThan(text.indexOf(CONFIRMED));
+  });
+});
+
+// Round 13 of PR #114 (review 12, item 4): with no answer or a 5xx the clear
+// may have happened, so its undo step stays. Undo is harmless either way:
+// it puts back a canvas the clear emptied, and when the clear didn't happen
+// it changes nothing and duplicates nothing.
+describe('/clear with no answer or a 5xx keeps its undo step (round 13)', () => {
+  const n1 = { id: 'n1', type: 'model-node', position: { x: 0, y: 0 },
+    data: { label: 'Text Input', definitionId: 'text-input', params: { value: 'kept' }, state: 'idle', outputs: {} } };
+  const restores = () => apiMocks.apiFetch.mock.calls.filter(([path]) => String(path).includes('/api/graph/restore'));
+  beforeEach(() => {
+    useGraphStore.setState({ nodes: [structuredClone(n1)], edges: [], undoStack: [], redoStack: [] } as never);
+  });
+
+  for (const [what, answer] of [
+    ['a 5xx', async () => new Response(JSON.stringify({ detail: 'boom' }), { status: 500 })],
+    ['no answer', () => new Promise<Response>(() => {})],
+  ] as const) {
+    it(`${what}, and the clear did happen: Undo brings the canvas back`, async () => {
+      clearAnswer = answer;
+      await typeClear();
+      expect(await screen.findByText(UNCONFIRMED, undefined, { timeout: 2000 })).toBeTruthy();
+      expect(useGraphStore.getState().undoStack).toHaveLength(1);
+      // The clear's sync emptied the canvas (it happened after all).
+      act(() => useGraphStore.setState({ nodes: [], edges: [] }));
+      act(() => useGraphStore.getState().undo());
+      expect(useGraphStore.getState().nodes.map((node) => node.id)).toEqual(['n1']);
+      await waitFor(() => expect(restores()).toHaveLength(1));
+    });
+
+    it(`${what}, and the clear didn't happen: Undo is harmless, nothing doubles`, async () => {
+      clearAnswer = answer;
+      await typeClear();
+      expect(await screen.findByText(UNCONFIRMED, undefined, { timeout: 2000 })).toBeTruthy();
+      expect(useGraphStore.getState().undoStack).toHaveLength(1);
+      act(() => useGraphStore.getState().undo());
+      expect(useGraphStore.getState().nodes.map((node) => node.id)).toEqual(['n1']);
+      expect(useGraphStore.getState().nodes[0].data.params.value).toBe('kept');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(restores()).toHaveLength(0);
+    });
+  }
+
+  it('a refusal (4xx) still takes the step back: the clear surely didn\'t happen', async () => {
+    clearAnswer = async () => new Response(JSON.stringify({ detail: 'A run is still going.' }),
+      { status: 409, headers: { 'content-type': 'application/json' } });
+    await typeClear();
+    expect(await screen.findByText(REFUSED)).toBeTruthy();
+    expect(useGraphStore.getState().undoStack).toHaveLength(0);
   });
 });

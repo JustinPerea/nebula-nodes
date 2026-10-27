@@ -1,22 +1,40 @@
 /**
- * The backend's words when it refuses a delete or a run because a node holds
- * World Labs state (backend/main.py _paid_state_person, GM - Design, error
- * copy round 3: "This node is still waiting on World Labs. Check the job in
- * Marble, then {the node's actual button label} before you delete it."),
- * pinned equal by backend/tests/test_error_copy_round3b.py (round 3b). The
- * backend says them to the person (agents get the specific text), and they
- * stay word for word: the canvas reads the two delete lines
- * to know a refusal is one GM trimmed (deleteRefusalText).
+ * The backend's words when it refuses because a node holds World Labs state
+ * (backend/main.py _paid_state_person), GM - Design's wording for round 13
+ * of PR #114, verbatim, each under the screen's own "Couldn't <action>."
+ * heading. Pinned equal to the backend by
+ * backend/tests/test_error_copy_round3b.py. The canvas reads the
+ * needs-check line and the recovery line's tail to know a delete refusal is
+ * one GM trimmed (deleteRefusalText).
  */
-export const NODE_WAITING_UNLOCK = "This node is still waiting on World Labs. Check the job in Marble, then use “Checked Marble — unlock” before you delete it.";
-export const NODE_WAITING_FORGET = "This node is still waiting on World Labs. Check the job in Marble, then use “Checked Marble — forget” in Run History before you delete it.";
-/** GM (round 12 of PR #114): the backend's person line when it refuses to
- * replace the canvas (clear, switch, load a graph, delete the open project)
- * over an unresolved World Labs record (main.py GRAPH_PAID_CHECK_PERSON),
- * under the action's own "Couldn't <action>." heading. The project screen's
- * own gate says it too (projectStore worldLabsHold). It was the
- * "A node is still waiting on World Labs. …" line before round 12. */
-export const WORLD_LABS_START_NEEDS_CHECK = "A World Labs start needs checking. Open Run History and choose “Check Marble”.";
+/** A start still in flight. */
+export const WORLD_LABS_STARTING = "A World Labs run is still starting. Try again in a moment.";
+/** An unconfirmed start, or a run this tab couldn't confirm: the status
+ * bar's "I've checked Marble". The Projects screen's own check says it too
+ * (projectStore worldLabsHold). */
+export const WORLD_LABS_NEEDS_CHECK = "A World Labs run needs your check first. Use the notice at the top of the screen.";
+/** A saved recovery ID: "“<node>”" and then this (Run History's "Forget ID"). */
+export const RECOVERY_ID_SAVED_TAIL = " has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run History.";
+
+/** The status bar's button and Run History's (GM, round 13 of PR #114). */
+export const UNLOCK_LABEL = "I've checked Marble";
+export const FORGET_LABEL = 'Forget ID';
+/** The status bar button's accessible name for a held node. */
+export function unlockAriaLabel(node: string): string {
+  return `I've checked Marble. Unlock \u201c${node}\u201d.`;
+}
+/** "Forget ID"'s confirm, in the app's own dialog (GM, round 13). */
+export function forgetHeading(node: string): string {
+  return `Forget the recovery ID for \u201c${node}\u201d?`;
+}
+export const FORGET_BODY = "Only do this after you've checked the run in Marble. Without the ID, Nebula can't stop you from paying for the same run twice.";
+
+/** A node's card title, as the canvas shows it (its label), for GM's lines;
+ * its id when it isn't on the canvas. */
+export function cardTitle(nodes: readonly { id: string; data?: { label?: unknown } }[], nodeId: string): string {
+  const label = nodes.find((node) => node.id === nodeId)?.data?.label;
+  return typeof label === 'string' && label.trim() ? label : nodeId;
+}
 
 /**
  * What the canvas notice says when it keeps nodes because one holds World
@@ -44,9 +62,8 @@ export const WORLD_LABS_START_NEEDS_CHECK = "A World Labs start needs checking. 
  * - every one held, forget (GM, 2026-10-24): "Couldn't delete them. They're
  *   waiting on World Labs. Check Marble and Run History."
  *
- * `unlock`: a held node has an unconfirmed start (the status bar's "Checked
- * Marble — unlock"); else a recovery record (Run History's "Checked Marble —
- * forget"). `held` is how many of the `count` nodes hold World Labs state.
+ * `unlock`: a held node has an unconfirmed start (the status bar's "I've
+ * checked Marble"); else a recovery record (Run History's "Forget ID"). `held` is how many of the `count` nodes hold World Labs state.
  */
 export function heldDeleteText(count: number, unlock: boolean, held = 1): string {
   if (count === 1) {
@@ -61,7 +78,9 @@ export function heldDeleteText(count: number, unlock: boolean, held = 1): string
   return `Couldn't delete them. ${waiting} waiting on World Labs. Check Marble, then ${then}`;
 }
 
-const isHeldReason = (reason: string) => reason === NODE_WAITING_UNLOCK || reason === NODE_WAITING_FORGET;
+const isUnlockReason = (reason: string) => reason === WORLD_LABS_NEEDS_CHECK;
+const isForgetReason = (reason: string) => reason.startsWith('\u201c') && reason.endsWith(RECOVERY_ID_SAVED_TAIL);
+const isHeldReason = (reason: string) => isUnlockReason(reason) || isForgetReason(reason);
 
 /**
  * The canvas notice for deletes the backend refused, from the reasons it gave
@@ -83,7 +102,7 @@ export function deleteRefusalText(heading: string, count: number, reasons: reado
   const unique = [...new Set(reasons)];
   const held = unique.filter(isHeldReason);
   if (held.length === 0) return `${heading} ${unique.join(' ')}`;
-  const unlock = held.includes(NODE_WAITING_UNLOCK);
+  const unlock = held.some(isUnlockReason);
   const others = unique.filter((reason) => !isHeldReason(reason));
   return [heldDeleteText(count, unlock, heldCount), ...others].join(' ');
 }

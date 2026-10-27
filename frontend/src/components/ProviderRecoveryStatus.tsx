@@ -3,7 +3,9 @@ import { ShieldCheck, X } from 'lucide-react';
 import { useGraphStore } from '../store/graphStore';
 import { UNLOCK_NODE_HEADING } from '../lib/api';
 import { failureMessage } from '../lib/errorCopy';
-import { WORLD_LABS_RUN_NEEDS_CHECK, WORLD_LABS_RUN_STATUS_UNKNOWN, moreNodesNeedCheck } from '../lib/worldLabsWaiting';
+import {
+  UNLOCK_LABEL, WORLD_LABS_RUN_NEEDS_CHECK, WORLD_LABS_RUN_STATUS_UNKNOWN, cardTitle, moreNodesNeedCheck, unlockAriaLabel,
+} from '../lib/worldLabsWaiting';
 
 /** Persistent paid-provider safety status. Recovery-journal write warnings may
  * be dismissed; an ambiguous paid start remains until the user explicitly says
@@ -13,6 +15,12 @@ export function ProviderRecoveryStatus() {
   const warning = useGraphStore((state) => state.providerRecoveryWarning);
   const uncertainRunId = useGraphStore((state) => state.uncertainWorldLabsRunId);
   const ambiguities = useGraphStore((state) => state.providerStartAmbiguities);
+  // The first held node's card title (a string, so a canvas edit elsewhere
+  // doesn't re-render the bar).
+  const heldTitle = useGraphStore((state) => {
+    const held = state.providerStartAmbiguities[0];
+    return held ? cardTitle(state.nodes, held.nodeId) : null;
+  });
   const acknowledge = useGraphStore((state) => state.acknowledgeProviderStartAmbiguity);
   const acknowledgeUncertainRun = useGraphStore(
     (state) => state.acknowledgeUncertainWorldLabsRun,
@@ -61,22 +69,24 @@ export function ProviderRecoveryStatus() {
           className="provider-recovery-status__ack"
           onClick={() => void unlock()}
           disabled={unlocking === ambiguityKey}
-          aria-label={`I checked Marble; unlock node ${ambiguity.nodeId}`}
+          // GM, round 13 of PR #114: the node by its card title. No confirm.
+          aria-label={unlockAriaLabel(heldTitle ?? ambiguity.nodeId)}
           title="Only unlock after checking Marble for an accepted operation"
         >
           <ShieldCheck size={15} strokeWidth={1.8} aria-hidden="true" />
-          {unlocking === ambiguityKey ? 'Unlocking…' : 'Checked Marble — unlock'}
+          {unlocking === ambiguityKey ? 'Unlocking…' : UNLOCK_LABEL}
         </button>
       ) : uncertainRunId ? (
         <button
           type="button"
           className="provider-recovery-status__ack"
           onClick={acknowledgeUncertainRun}
-          aria-label="I checked Marble; unlock the unconfirmed run"
+          // No node to name (GM wrote the node form only): the accessible
+          // name is the label itself until GM words one (round 13).
           title="Only unlock after checking Marble for an accepted operation"
         >
           <ShieldCheck size={15} strokeWidth={1.8} aria-hidden="true" />
-          Checked Marble — unlock
+          {UNLOCK_LABEL}
         </button>
       ) : (
         <button

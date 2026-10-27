@@ -48,10 +48,11 @@ const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
 
 const { useGraphStore } = await import('../../src/store/graphStore');
 
-// The backend's lines for the person, word for word (lib/worldLabsWaiting.ts).
-const BACKEND_UNLOCK = 'This node is still waiting on World Labs. Check the job in Marble, then use “Checked Marble — unlock” before you delete it.';
-const BACKEND_FORGET = 'This node is still waiting on World Labs. Check the job in Marble, then use “Checked Marble — forget” in Run History before you delete it.';
-const BACKEND_ACTIVE = 'This node is still waiting on World Labs. Let its run finish, then delete it.';
+// The backend's lines for the person, word for word (lib/worldLabsWaiting.ts;
+// GM's round 13 wording of PR #114).
+const BACKEND_UNLOCK = 'A World Labs run needs your check first. Use the notice at the top of the screen.';
+const BACKEND_FORGET = '“World Labs Environment” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run History.';
+const BACKEND_ACTIVE = 'A World Labs run is still starting. Try again in a moment.';
 // GM's lines (round 4, and round 4b for several nodes).
 const ONE_UNLOCK = "Couldn't delete the node. It's waiting on World Labs. Check Marble, then unlock it.";
 const ONE_FORGET = "Couldn't delete it. It's waiting on World Labs. Check Marble, then forget it in Run History.";

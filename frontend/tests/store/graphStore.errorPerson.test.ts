@@ -20,7 +20,7 @@ import { RUNTIME_FIELDS } from '../../src/lib/canvasUndo';
 
 const SPECIFIC = 'World Labs export start response was not received. Nebula safety-locked this node …';
 const PERSON = 'World Labs didn\'t answer this run, so Nebula locked the node to avoid paying twice. Check the job in '
-  + 'Marble, then use “Checked Marble — unlock” before you run it again.';
+  + 'Marble, then use “I\'ve checked Marble” before you run it again.';
 
 const node = (id: string, extra: Partial<NodeData> = {}): Node<NodeData> => ({
   id, type: 'model-node', position: { x: 0, y: 0 },

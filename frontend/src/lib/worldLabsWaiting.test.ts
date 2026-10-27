@@ -5,7 +5,11 @@
  * They're waiting on World Labs. Check Marble and Run History.").
  */
 import { describe, expect, it } from 'vitest';
-import { NODE_WAITING_FORGET, NODE_WAITING_UNLOCK, deleteRefusalText, heldDeleteText } from './worldLabsWaiting';
+import { RECOVERY_ID_SAVED_TAIL, WORLD_LABS_NEEDS_CHECK, deleteRefusalText, heldDeleteText } from './worldLabsWaiting';
+
+// The backend's round 13 lines (GM): an unconfirmed start, and a saved recovery ID.
+const NODE_WAITING_UNLOCK = WORLD_LABS_NEEDS_CHECK;
+const NODE_WAITING_FORGET = `“World Labs Environment”${RECOVERY_ID_SAVED_TAIL}`;
 
 describe('heldDeleteText', () => {
   it("every node held, forget: GM's 2026-10-24 line", () => {
@@ -31,5 +35,26 @@ describe('heldDeleteText', () => {
     // An unconfirmed start among them is the unlock form, unchanged.
     expect(deleteRefusalText("Couldn't delete 2 nodes.", 2, [NODE_WAITING_FORGET, NODE_WAITING_UNLOCK]))
       .toBe("Couldn't delete them. They're waiting on World Labs. Check Marble, then unlock them.");
+  });
+});
+
+describe("GM's World Labs wording (round 13 of PR #114), exact", () => {
+  it('the lines, labels and dialog', async () => {
+    const wl = await import('./worldLabsWaiting');
+    expect(wl.WORLD_LABS_STARTING).toBe('A World Labs run is still starting. Try again in a moment.');
+    expect(wl.WORLD_LABS_NEEDS_CHECK).toBe('A World Labs run needs your check first. Use the notice at the top of the screen.');
+    expect(`“Harbor world”${wl.RECOVERY_ID_SAVED_TAIL}`).toBe(
+      '“Harbor world” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run History.');
+    expect(wl.UNLOCK_LABEL).toBe("I've checked Marble");
+    expect(wl.unlockAriaLabel('Harbor world')).toBe("I've checked Marble. Unlock “Harbor world”.");
+    expect(wl.FORGET_LABEL).toBe('Forget ID');
+    expect(wl.forgetHeading('Harbor world')).toBe('Forget the recovery ID for “Harbor world”?');
+    expect(wl.FORGET_BODY).toBe(
+      "Only do this after you've checked the run in Marble. Without the ID, Nebula can't stop you from paying for the same run twice.");
+  });
+
+  it('a renamed node still reads as a held delete refusal (its card title differs)', () => {
+    expect(deleteRefusalText("Couldn't delete the node.", 1, [`“Harbor world”${RECOVERY_ID_SAVED_TAIL}`]))
+      .toBe("Couldn't delete it. It's waiting on World Labs. Check Marble, then forget it in Run History.");
   });
 });

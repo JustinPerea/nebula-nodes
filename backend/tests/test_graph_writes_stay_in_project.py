@@ -902,3 +902,110 @@ def test_mcp_setup_quotes_every_refusal_a_run_causes_word_for_word(race, monkeyp
         detail = answer.json()["detail"]
         assert "while a run is active" in detail, detail
         assert f'"{detail}"' in doc, detail
+
+
+# -- Round 13 of PR #114 (review 12's H1/H2): filing the unfiled canvas is a
+# rename, not a move. GET /api/projects on an empty catalog files the live
+# unfiled canvas as "Recovered canvas" (same graph, same ids) under a new
+# workspace revision. A write fenced on the unfiled canvas before the filing
+# must still land, and a run admitted on it must stamp its node events and
+# executionStatus with the revision the listing handed the tab.
+
+FILING_WRITES = ["apply", "put", "proposal", "run", "upload_agent", "upload_person", "create_node"]
+
+
+@pytest.mark.parametrize("write", FILING_WRITES)
+def test_a_write_fenced_on_the_unfiled_canvas_lands_once_the_project_list_files_it(race, monkeypatch, write):
+    main = race.main
+    _empty_catalog(race)
+    a1 = race.graph.add_node("openrouter-universal", {"model": "openai/gpt-4o"}, position={"x": 0, "y": 0})
+    t1 = race.graph.add_node("text-input", {"value": "hello"}, position={"x": 0, "y": 200})
+    state: dict[str, Any] = {}
+
+    async def file_the_canvas_once():
+        if "started" not in state:
+            state["started"] = True
+            async with _ac(main) as c:
+                listed = await c.get("/api/projects", headers=PERSON)
+                state["filed"] = listed.json().get("migratedProjectId")
+
+    if write in ("apply", "put", "proposal", "create_node"):
+        async def look(wanted):
+            await file_the_canvas_once()
+            return {key: "no catalog (test)" for key in wanted}
+        monkeypatch.setattr(main, "_look_up_models", look)
+    elif write == "run":
+        real = main._measure_run_inputs
+
+        async def measure(*a, **k):
+            await file_the_canvas_once()
+            return await real(*a, **k)
+        monkeypatch.setattr(main, "_measure_run_inputs", measure)
+    else:
+        from starlette.datastructures import UploadFile
+        realread = UploadFile.read
+
+        async def read(self, *args):
+            await file_the_canvas_once()
+            return await realread(self, *args)
+        monkeypatch.setattr(UploadFile, "read", read)
+
+    if write == "apply":
+        r = race.client.post("/api/graph/apply", headers=AGENT,
+                             json={"params": [{"nodeId": a1, "params": {"model": "openai/gpt-5"}}]})
+    elif write == "put":
+        r = race.client.put(f"/api/graph/node/{a1}", headers=AGENT, json={"params": {"model": "openai/gpt-5"}})
+    elif write == "proposal":
+        r = race.client.post("/api/canvas/proposals", headers=AGENT, json={
+            "note": "m", "params": [{"nodeId": a1, "params": {"model": "openai/gpt-5"}}]})
+    elif write == "create_node":
+        r = race.client.post("/api/graph/node", headers=AGENT, json={
+            "definitionId": "openrouter-universal", "params": {"model": "openai/gpt-5"}, "position": {"x": 9, "y": 9}})
+    elif write == "run":
+        r = race.client.post("/api/graph/run", headers=AGENT, json={"targetNodeId": t1, "wait": 5})
+    else:
+        r = race.client.post("/api/uploads", headers=AGENT if write == "upload_agent" else PERSON,
+                             data={"create_node": "true"}, files={"file": ("red.png", _png(), "image/png")})
+    assert state.get("filed"), "the listing filed the unfiled canvas while the write was in flight"
+    assert r.status_code < 400, r.text
+
+
+def test_a_write_fenced_on_the_unfiled_canvas_still_refuses_once_it_was_cleared_after_the_filing(race, monkeypatch):
+    main = race.main
+    _empty_catalog(race)
+    a1 = race.graph.add_node("openrouter-universal", {"model": "openai/gpt-4o"}, position={"x": 0, "y": 0})
+
+    async def look(wanted):
+        async with _ac(main) as c:
+            await c.get("/api/projects", headers=PERSON)
+            await c.delete("/api/graph?force=true", headers=PERSON)
+        return {key: "no catalog (test)" for key in wanted}
+    monkeypatch.setattr(main, "_look_up_models", look)
+    r = race.client.put(f"/api/graph/node/{a1}", headers=AGENT, json={"params": {"model": "openai/gpt-5"}})
+    assert r.status_code == 409
+    assert r.json()["detail"] == main.GRAPH_RESTARTED_DETAIL
+
+
+@pytest.mark.parametrize("route", ["agent", "canvas"])
+def test_a_run_adopted_by_the_filing_stamps_its_events_with_the_listings_revision(race, monkeypatch, route):
+    main = race.main
+    _empty_catalog(race)
+    t1 = race.graph.add_node("text-input", {"value": "old"}, position={"x": 0, "y": 0})
+    race.graph.add_node("text-input", {"value": "old two"}, position={"x": 0, "y": 100})
+    gate = _held_run(race, monkeypatch, _old_run_events)
+
+    async def go():
+        async with _ac(main) as c:
+            run_id = await _start(c, race, route, t1)
+            await _until(lambda: "ev" in gate)
+            listed = await c.get("/api/projects", headers=PERSON)
+            mark = len(race.sent)
+            await _finish(c, race, gate, run_id)
+            return listed.json(), mark
+
+    listing, mark = asyncio.run(go())
+    late = race.sent[mark:]
+    events = [m for m in late if m.get("type") in ("executing", "executed", "error", "executionStatus")]
+    assert events, "the run's late events were broadcast"
+    assert {m.get("workspaceRevision") for m in events} == {listing["workspaceRevision"]}
+    assert {m.get("activeProjectId") for m in events} == {listing["migratedProjectId"]}

@@ -82,8 +82,9 @@ export async function cancelExecution(runId: string): Promise<ExecutionCancellat
   return response.json();
 }
 
-/** The headings for the two "Checked Marble" buttons (round 3, GM: named
- * after the button the person clicked); the store and the screens use these. */
+/** The headings for the status bar's "I've checked Marble" and Run
+ * History's "Forget ID" (round 3, GM: named after what the button does);
+ * the store and the screens use these. */
 export const UNLOCK_NODE_HEADING = "Couldn't unlock the node.";
 export const FORGET_RECOVERY_HEADING = "Couldn't forget the recovery safeguard.";
 
@@ -92,8 +93,8 @@ export async function acknowledgeProviderStartAmbiguity(
   nodeId: string,
   runId: string,
 ): Promise<void> {
-  // Round 3 (GM): the label the person clicked. The status bar's "Checked
-  // Marble — unlock" unlocks one node (its label: "unlock node n1").
+  // Round 3 (GM): what the person clicked. The status bar's "I've checked
+  // Marble" unlocks one node.
   await apiRequest(UNLOCK_NODE_HEADING,
     `/api/provider-start-ambiguities/${encodeURIComponent(kind)}/${encodeURIComponent(nodeId)}/${encodeURIComponent(runId)}`,
     { method: 'DELETE' },
@@ -115,7 +116,7 @@ export async function deleteProviderRecovery(
   if ([...query.keys()].length !== 1) {
     throw new Error('Provider recovery deletion requires exactly one recovery ID.');
   }
-  // Run History's "Checked Marble — forget" forgets a "World Labs recovery safeguard".
+  // Run History's "Forget ID" forgets a "World Labs recovery safeguard".
   await apiRequest(FORGET_RECOVERY_HEADING,
     `/api/provider-recoveries/${encodeURIComponent(runId)}/${encodeURIComponent(nodeId)}?${query.toString()}`,
     { method: 'DELETE' },

@@ -32,7 +32,7 @@ import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
 from pathlib import PurePosixPath
-from typing import Any, BinaryIO, Callable, Iterable, Mapping, NoReturn
+from typing import Any, BinaryIO, Callable, Iterable, Mapping, NoReturn, Sequence
 from urllib.parse import quote, urlsplit
 
 from uuid import uuid4
@@ -387,34 +387,59 @@ provider_start_guard = ProviderStartGuard(
 )
 
 
-# A node's World Labs paid state, in the person's words (GM - Design, error-copy
-# round 3: "'settle' and 'start' are internal. Write it as: 'This node is still
-# waiting on World Labs. Check the job in Marble, then {the node's actual button
-# label} before you delete it.'"). Each state names the control that clears it:
-# the status bar's "Checked Marble — unlock" (an ambiguous start), Run History's
-# "Checked Marble — forget" (a recovery record), the node's own ID fields (an ID
-# in its params, named by their labels), or, while a start is still in flight,
-# no button: the run has to finish. `subject` is "This node is" for a node's own
-# refusal, "A node is" for one about the whole canvas; `then` ends the line
-# ("delete it", "try again"). Agents keep the specific text, unchanged.
-WORLD_LABS_WAITING = "still waiting on World Labs."
-_RECOVERY_FIELDS_FALLBACK = "Resume Operation ID and Existing World ID"
+# A node's World Labs paid state, in the person's words. GM - Design's
+# wording for round 13 of PR #114 (verbatim, each line under the screen's own
+# "Couldn't <action>." heading; node names are card titles in curly quotes):
+# - active (a start still in flight): "A World Labs run is still starting.
+#   Try again in a moment."
+# - ambiguity (and the browser's own unconfirmed run): "A World Labs run
+#   needs your check first. Use the notice at the top of the screen." (the
+#   status bar's "I've checked Marble")
+# - recovery: "“<node>” has a saved World Labs recovery ID. Check the run in
+#   Marble, then forget the ID in Run History." (Run History's "Forget ID")
+# - params: "“<node>” has a World Labs ID in its settings. Check it in
+#   Marble, then clear “Resume Operation ID”.", naming the field that
+#   actually holds the ID.
+# The wording only: which states refuse is unchanged. Agents keep the
+# specific text.
+WORLD_LABS_STARTING_PERSON = "A World Labs run is still starting. Try again in a moment."
+WORLD_LABS_NEEDS_CHECK_PERSON = "A World Labs run needs your check first. Use the notice at the top of the screen."
+# Nebula couldn't journal a recovery it read from the canvas at boot. GM's
+# line for it ("… Reload the page and try again.") holds only if a reload
+# re-runs that bootstrap, and it doesn't (it runs once, when the backend
+# starts; the notes for round 13 give the mechanism), so this state reads
+# the canvas's general refusal line (errorCopy.ts REFUSED_FALLBACK_COPY)
+# until GM words it.
+WORLD_LABS_BOOTSTRAP_PERSON = "Try again, or reload if it keeps happening."
+_RECOVERY_FIELDS_FALLBACK = ("Resume Operation ID", "Existing World ID")
 
 
-def _paid_state_person(state: str, *, subject: str, then: str, fields: str = _RECOVERY_FIELDS_FALLBACK) -> str:
-    waiting = f"{subject} {WORLD_LABS_WAITING}"
+def _quoted_fields(fields: Sequence[str]) -> str:
+    """“A”, or “A” and “B”: the ID fields, as the node labels them."""
+    quoted = [f"\u201c{field}\u201d" for field in fields] or [f"\u201c{_RECOVERY_FIELDS_FALLBACK[0]}\u201d"]
+    return quoted[0] if len(quoted) == 1 else ", ".join(quoted[:-1]) + " and " + quoted[-1]
+
+
+def _paid_state_person(state: str, *, node: str | None = None, fields: Sequence[str] = ()) -> str:
+    """GM's line for a World Labs `state`. `node` is the held node's card
+    title (recovery, params); `fields` the labels of the ID fields that hold
+    an ID (params)."""
     if state == "active":
-        return f"{waiting} Let its run finish, then {then}."
+        return WORLD_LABS_STARTING_PERSON
     if state == "ambiguity":
-        return f"{waiting} Check the job in Marble, then use \u201cChecked Marble \u2014 unlock\u201d before you {then}."
+        return WORLD_LABS_NEEDS_CHECK_PERSON
+    if state == "bootstrap":
+        return WORLD_LABS_BOOTSTRAP_PERSON
+    name = f"\u201c{node}\u201d" if node else "\u201cWorld Labs Environment\u201d"
     if state == "recovery":
-        return (f"{waiting} Check the job in Marble, then use \u201cChecked Marble \u2014 forget\u201d "
-                f"in Run History before you {then}.")
-    return f"{waiting} Check the job in Marble, then clear the node's {fields} before you {then}."
+        return (f"{name} has a saved World Labs recovery ID. "
+                "Check the run in Marble, then forget the ID in Run History.")
+    return f"{name} has a World Labs ID in its settings. Check it in Marble, then clear {_quoted_fields(fields)}."
 
 
-UNLOCK_BUTTON = "\u201cChecked Marble \u2014 unlock\u201d"
-FORGET_BUTTON = "\u201cChecked Marble \u2014 forget\u201d"
+# The two buttons, by GM's round 13 labels.
+UNLOCK_BUTTON = "\u201cI've checked Marble\u201d"
+FORGET_BUTTON = "\u201cForget ID\u201d"
 # Round 3b: a canvas edit that raced a change to the shared recovery journal.
 CANVAS_JOB_CHANGED_PERSON = "A node's World Labs job changed while Nebula saved the canvas. Reload, then try again."
 
@@ -443,7 +468,7 @@ def _start_refusal(exc: ProviderStartConflictError, *, own_node: bool = False) -
     raised with (ProviderStartConflictError.reason, never its text): the
     person reads _paid_state_person's line for the state that holds the
     canvas, agents the exact text. `own_node`: the request names the node
-    whose start is in flight ("Checked Marble — unlock" on that node)."""
+    whose start is in flight (the status bar's "I've checked Marble")."""
     reason = getattr(exc, "reason", "active")
     if reason == "cancelled":
         # A Stop that beat the run's admission: it names no World Labs state
@@ -455,13 +480,13 @@ def _start_refusal(exc: ProviderStartConflictError, *, own_node: bool = False) -
         person = _paid_job_changed_person(UNLOCK_BUTTON)
     else:
         state = "active" if reason in {"active", "busy"} else reason
-        subject = "This node is" if own_node and reason == "active" else "A node is"
-        person = _paid_state_person(state, subject=subject, then="try again",
-                                    fields=getattr(exc, "fields", None) or _RECOVERY_FIELDS_FALLBACK)
+        fields = getattr(exc, "fields", None)
+        person = _paid_state_person(state, node=getattr(exc, "node", None),
+                                    fields=[fields] if isinstance(fields, str) else fields or ())
     return refusal_copy.refusal(409, str(exc), person, route="run")
 
 
-def _recovery_field_labels(nodes: list[dict[str, Any]]) -> str:
+def _recovery_field_labels(nodes: list[dict[str, Any]]) -> list[str]:
     """The labels (node_definitions.json) of the recovery ID fields `nodes`
     hold, in policy order: a World node's "Resume Operation ID" and "Existing
     World ID", a World export node's "Resume Export Operation ID"."""
@@ -479,30 +504,16 @@ def _recovery_field_labels(nodes: list[dict[str, Any]]) -> str:
             label = names.get(key) if key and value else None
             if isinstance(label, str) and label and label not in labels:
                 labels.append(label)
-    if not labels:
-        return _RECOVERY_FIELDS_FALLBACK
-    return labels[0] if len(labels) == 1 else ", ".join(labels[:-1]) + " and " + labels[-1]
+    return labels
 
 
-# GM (round 12 of PR #114), wherever _reject_graph_replacement_during_paid_start
-# refuses (clear, switch, import, delete of the open project, a bundle
-# restore), under the screen's own "Couldn't <action>." heading: "Couldn't
-# <action>. A World Labs start needs checking. Open Run History and choose
-# “Check Marble”." for an unresolved record, and "Couldn't <action>. A World
-# Labs start is still settling. Try again in a moment." while a start settles.
-# Agents keep the specific text.
-GRAPH_PAID_CHECK_PERSON = "A World Labs start needs checking. Open Run History and choose \u201cCheck Marble\u201d."
-GRAPH_PAID_SETTLING_PERSON = "A World Labs start is still settling. Try again in a moment."
-
-
-def _graph_paid_refusal(specific: str, state: str) -> HTTPException:
+def _graph_paid_refusal(specific: str, state: str, *, node: str | None = None,
+                        fields: Sequence[str] = ()) -> HTTPException:
     """409 for replacing the whole canvas (clear it, open or make a project,
     replace the graph, restore a bundle) while World Labs state holds a node.
-    The person's line leaves the action out: the screen's own heading
-    ("Couldn't clear the canvas.") names it. ``state`` "active" is a start
-    still settling; any other is an unresolved record."""
-    person = GRAPH_PAID_SETTLING_PERSON if state == "active" else GRAPH_PAID_CHECK_PERSON
-    return refusal_copy.refusal(409, specific, person, route="canvas")
+    The person's line (GM, round 13: _paid_state_person) leaves the action
+    out: the screen's own heading ("Couldn't clear the canvas.") names it."""
+    return refusal_copy.refusal(409, specific, _paid_state_person(state, node=node, fields=fields), route="canvas")
 
 
 def _graph_settling_specific(action: str) -> str:
@@ -515,23 +526,29 @@ def _reject_graph_replacement_during_paid_start(action: str) -> None:
         raise _graph_paid_refusal(_graph_settling_specific(action), "active")
     nodes = list(cli_graph.nodes.values())
     canonical_checkpoints = _graph_worldlabs_recovery_checkpoints(nodes)
+    node: str | None = None
+    fields: list[str] = []
+    records = provider_recovery_store.list() if not provider_start_guard.list() else []
     if provider_start_guard.list():
         state = "ambiguity"
-    elif provider_recovery_store.list():
+    elif records:
         state = "recovery"
+        node = _node_label(str(records[0].get("nodeId") or ""))
     elif canonical_checkpoints:
         state = "params"
+        held = cli_graph.nodes.get(canonical_checkpoints[0][0]) or {}
+        node = _node_label(canonical_checkpoints[0][0])
+        fields = _recovery_field_labels([held])
     elif _graph_recovery_bootstrap_error is not None:
-        # Nebula couldn't journal a recovery it read from the canvas. Rare,
-        # with no record to name, so the person reads the recovery line
-        # (listed for GM).
-        state = "recovery"
+        # Nebula couldn't journal a recovery it read from the canvas at boot
+        # (see WORLD_LABS_BOOTSTRAP_PERSON).
+        state = "bootstrap"
     else:
         return
     raise _graph_paid_refusal(
         f"Cannot {action} while unresolved World Labs paid state exists. "
         "Check Marble and resolve the exact recovery/ambiguity record first.",
-        state,
+        state, node=node, fields=fields,
     )
 
 
@@ -763,8 +780,19 @@ CANVAS_OUT_OF_DATE = "This canvas is out of date. Open the current project befor
 
 def _check_workspace_revision(revision: str | None = None) -> None:
     supplied = revision if revision is not None else _request_workspace_revision.get()
-    if supplied is not None and supplied != _workspace_context()["workspaceRevision"]:
-        raise HTTPException(status_code=409, detail=CANVAS_OUT_OF_DATE)
+    if supplied is None:
+        return
+    current = _workspace_context()
+    if supplied == current["workspaceRevision"]:
+        return
+    # A tab still on the unfiled canvas's revision is on the same canvas, if
+    # nothing replaced it since its filing (round 13, H1).
+    filed = _filed_canvases.get(supplied)
+    if (filed is not None and filed[1]["workspaceRevision"] == current["workspaceRevision"]
+            and filed[1]["activeProjectId"] == current["activeProjectId"]
+            and filed[2] == canvas_undo_book.epoch(current["activeProjectId"])):
+        return
+    raise HTTPException(status_code=409, detail=CANVAS_OUT_OF_DATE)
 
 
 # A write that awaits lands only on the canvas that was open when it was asked
@@ -791,11 +819,58 @@ def _graph_fence() -> tuple[str, str | None, int]:
     return workspace["workspaceRevision"], project_id, canvas_undo_book.epoch(project_id)
 
 
+# Filing the unfiled canvas is a rename, not a move (round 13 of PR #114,
+# review 12's H1/H2). GET /api/projects on an empty catalog files the live
+# unfiled canvas as "Recovered canvas": the same graph and ids under a new
+# project id and workspace revision. Each filing notes, in the step that
+# commits it, the unfiled canvas's (revision, id epoch) and what it became,
+# so a write fenced on the unfiled canvas, a tab request carrying its
+# revision, and a run admitted on it all read as the filed project. Only that
+# exact canvas translates: a clear or a switch after the filing moves the new
+# project's revision or epoch, and the comparison then refuses as before.
+_FILED_CANVASES_KEPT = 64
+_filed_canvases: OrderedDict[str, tuple[int, dict[str, Any], int]] = OrderedDict()
+
+
+def _note_canvas_filed(old_revision: str, old_epoch: int, new_context: dict[str, Any]) -> None:
+    """Record that the unfiled canvas at ``old_revision``/``old_epoch`` is now
+    ``new_context`` (its _workspace_context). Call it in the filing's step."""
+    project_id = new_context["activeProjectId"]
+    _filed_canvases[old_revision] = (old_epoch, dict(new_context), canvas_undo_book.epoch(project_id))
+    while len(_filed_canvases) > _FILED_CANVASES_KEPT:
+        _filed_canvases.popitem(last=False)
+
+
+def _filed_as(revision: Any, project_id: Any) -> tuple[int, dict[str, Any], int] | None:
+    """What the unfiled canvas at ``revision`` was filed as, if it was."""
+    if project_id is not None or not isinstance(revision, str):
+        return None
+    return _filed_canvases.get(revision)
+
+
+def _filed_context(context: dict[str, Any] | None) -> dict[str, Any] | None:
+    """A captured workspace context (a run's admission), read through a
+    filing: the unfiled canvas's context becomes the filed project's, so
+    the run's late events carry the revision the tab now holds."""
+    if not context:
+        return context
+    filed = _filed_as(context.get("workspaceRevision"), context.get("activeProjectId"))
+    return {**context, **filed[1]} if filed else context
+
+
+def _filed_fence(fence: tuple[str, str | None, int]) -> tuple[str, str | None, int]:
+    filed = _filed_as(fence[0], fence[1])
+    if filed is None or filed[0] != fence[2]:
+        return fence
+    return filed[1]["workspaceRevision"], filed[1]["activeProjectId"], filed[2]
+
+
 def _refuse_if_graph_moved(fence: tuple[str, str | None, int]) -> None:
     """409 when the live canvas is no longer the one ``fence`` noted. The
     person reads the canvas's own out-of-date line (a tab that sent its
     revision gets it from _check_workspace_revision); agents the detail."""
     _check_workspace_revision()
+    fence = _filed_fence(fence)
     revision, project_id, epoch = _graph_fence()
     if (revision, project_id) != fence[:2]:
         raise refusal_copy.refusal(409, GRAPH_MOVED_DETAIL, CANVAS_OUT_OF_DATE, route="canvas")
@@ -3255,7 +3330,7 @@ class ConnectionManager:
 
     async def broadcast(self, event: ExecutionEvent) -> None:
         data = _event_to_camel(event)
-        data.update(_execution_workspace_context.get() or _workspace_context())
+        data.update(_filed_context(_execution_workspace_context.get()) or _workspace_context())
         await self.broadcast_raw(data)
 
     async def broadcast_raw(self, data: dict[str, Any]) -> None:
@@ -3336,7 +3411,7 @@ def _publish_terminal_execution_status(run_id: str, status: str) -> None:
             await _broadcast_graph_sync()
         await manager.broadcast_raw(
             {
-                **(_execution_workspace_context.get() or _workspace_context()),
+                **(_filed_context(_execution_workspace_context.get()) or _workspace_context()),
                 "type": "executionStatus",
                 "runId": run_id,
                 "status": status,
@@ -4920,7 +4995,7 @@ def _note_node_ran(event: Any, run_id: str | None) -> None:
     if not isinstance(event, ExecutingEvent) or not isinstance(node_id, str) or node_id not in cli_graph.nodes:
         return
     try:
-        project_id = (_execution_workspace_context.get() or _workspace_context())["activeProjectId"]
+        project_id = (_filed_context(_execution_workspace_context.get()) or _workspace_context())["activeProjectId"]
         canvas_undo_book.node_ran(run_id, node_id, actor=canvas_events.run_actor(run_id), project_id=project_id)
     except Exception:  # noqa: BLE001 - never break execution over undo bookkeeping
         pass
@@ -4929,7 +5004,7 @@ def _note_node_ran(event: Any, run_id: str | None) -> None:
 def _run_project() -> str | None | Any:
     """The project a run was admitted in (_capture_execution_workspace), for
     its journal events; ``...`` (the open project) outside a run's context."""
-    captured = _execution_workspace_context.get()
+    captured = _filed_context(_execution_workspace_context.get())
     return captured["activeProjectId"] if captured else ...
 
 
@@ -8828,6 +8903,9 @@ def _claim_fresh_paid_worldlabs_starts(
             # The person's line names what clears it (round 3b): Run History's
             # forget for a record, else the node's own ID fields.
             journaled = any(node_id in recovered_node_ids for node_id in stale_nodes)
+            # The node GM's line names (its card title): the first with a
+            # record when any has one, else the first with an ID in params.
+            held_node = next((node_id for node_id in stale_nodes if node_id in recovered_node_ids), stale_nodes[0])
             raise ProviderStartConflictError(
                 "Fresh World Labs start blocked because Nebula already has a "
                 "recovery checkpoint for node(s): "
@@ -8835,8 +8913,9 @@ def _claim_fresh_paid_worldlabs_starts(
                 + ". Restore or explicitly delete the checkpoint before starting "
                 "new paid work.",
                 reason="recovery" if journaled else "params",
+                node=_run_node_name(held_node, {node.id: node for node in nodes}),
                 fields=None if journaled else _recovery_field_labels(
-                    [cli_graph.nodes[node_id] for node_id in stale_nodes if node_id in cli_graph.nodes]),
+                    [cli_graph.nodes[held_node]] if held_node in cli_graph.nodes else []),
             )
         provider_recovery_store.reserve(
             run_id=run_id,
@@ -11697,13 +11776,13 @@ async def delete_provider_recovery(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if active:
-            # Run History's "Checked Marble — forget": the same "still
+            # Run History's "Forget ID": the same "still
             # waiting" line as the node's own refusal (round 3 review).
             raise refusal_copy.refusal(
                 409,
                 "Cannot delete a World Labs recovery checkpoint while that "
                 "node's paid start is still settling",
-                _paid_state_person("active", subject="This node is", then="try again"),
+                _paid_state_person("active"),
                 route="canvas",
             )
         try:
@@ -11780,7 +11859,7 @@ async def acknowledge_provider_start_ambiguity(
             run_id=run_id,
         )
     except ProviderStartConflictError as exc:
-        # "Checked Marble — unlock" (round 3b): the person reads the line for
+        # The status bar's "I've checked Marble" (round 3b): the person reads the line for
         # why it can't unlock yet; agents keep the exact text.
         raise _start_refusal(exc, own_node=True) from exc
     except ValueError as exc:
@@ -11851,9 +11930,8 @@ def _ensure_node_deletable(node_id: str, node: dict[str, Any]) -> None:
             f"Cannot delete {node_id}: it has unresolved World Labs paid state. "
             "Check Marble, then resolve its exact recovery/ambiguity record "
             "first.",
-            _paid_state_person(state, subject="This node is", then="delete it",
-                               fields=_recovery_field_labels([node]) if state == "params"
-                               else _RECOVERY_FIELDS_FALLBACK),
+            _paid_state_person(state, node=_node_label(node_id),
+                               fields=_recovery_field_labels([node]) if state == "params" else ()),
         )
 
 
@@ -14275,7 +14353,9 @@ async def list_projects() -> dict[str, Any]:
     with project_store.transaction() as catalog:
         changed = False
         adopted: str | None = None
+        filed_from: tuple[str, int] | None = None
         if not catalog["projects"] and cli_graph.nodes:
+            filed_from = (catalog["workspaceRevision"], canvas_undo_book.epoch(None))
             snapshot = {**empty_snapshot(), "nodes": exported["nodes"], "edges": exported["edges"]}
             project = make_project("Recovered canvas", snapshot)
             _overlay_live_project(project, exported)
@@ -14298,6 +14378,8 @@ async def list_projects() -> dict[str, Any]:
         if adopted is not None:
             # In the commit's step: the same live graph, now this project's.
             _adopt_run_canvases(adopted)
+            if filed_from is not None:
+                _note_canvas_filed(*filed_from, _workspace_context())
         listing = {
             "projects": sorted((project_metadata(project) for project in catalog["projects"].values()), key=lambda project: project["updatedAt"], reverse=True),
             "trash": _trash_listing(catalog),

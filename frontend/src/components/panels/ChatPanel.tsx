@@ -1489,14 +1489,19 @@ export function ChatPanel() {
         said(CHAT_CLEARED_CANVAS);
         return;
       }
-      useGraphStore.getState().cancelUndoStep(undoStep);
       if (response === null || response.status >= 500) {
         // No answer, or the backend failed partway: Clear empties the canvas
-        // in one step, so it may have happened. Don't say either way.
+        // in one step, so it may have happened. Don't say either way. The
+        // undo step stays (round 13 of PR #114, review 12 item 4): if it
+        // happened, Undo brings the canvas back; if not, Undo finds nothing
+        // changed and sends nothing (sendRestore sends only what differs,
+        // and the backend's restore replaces a node it has, never adds one).
         if (response) warnFailure(CLEAR_CANVAS, response.status, await readDetail(response));
         said(CHAT_CLEARED_CANVAS_UNCONFIRMED);
         return;
       }
+      // Refused (4xx): the clear surely didn't happen.
+      useGraphStore.getState().cancelUndoStep(undoStep);
       // GM: "Session cleared. Next message starts a fresh conversation. The
       // canvas wasn't cleared.", and the refusal itself under Clear's heading.
       said(CHAT_CLEARED_CANVAS_KEPT);
