@@ -19,6 +19,7 @@ import { apiRequest } from './apiRequest';
 import { refuseEditWhileFollowing } from './canvasFollow';
 import { failureCopy, failureMessage } from './errorCopy';
 import { useGraphStore } from '../store/graphStore';
+import { refuseEditWhileOffline } from './backendConnection';
 
 export const DROP_TYPES_LINE = 'Nebula takes images, video, audio, PDFs and text files.';
 
@@ -168,11 +169,14 @@ export function fileDropInFlight(): boolean {
 }
 
 /** Upload a drop's files at `origin` (flow coordinates). One undo step per
- * accepted file, given back if its upload fails. Resolves when every upload
+ * file that made a node, owning only that node. Resolves when every upload
  * has settled. */
 export async function addDroppedFiles(files: readonly File[], origin: { x: number; y: number }): Promise<void> {
   // Round 20 (M1): nothing lands on a canvas that's about to go away.
   if (refuseEditWhileFollowing()) return;
+  // Offline is read-only (GM, round 14 of PR #114): nothing uploads, no
+  // notice; the banner pulses (review 13, L6: a drop still sent).
+  if (refuseEditWhileOffline()) return;
   // Failures by their place in the drop, so the notice names files in the
   // order they were dropped.
   const failed = new Map<number, DropFailure>();
@@ -206,8 +210,11 @@ export async function addDroppedFiles(files: readonly File[], origin: { x: numbe
     let arrives: string[] = [];
     try {
       const response = await apiRequest(heading, '/api/uploads', { method: 'POST', body: form });
+      // The step owns only the node the upload made (round 14 of PR #114,
+      // review 13 Q5): an agent's node its echo brings into an empty tab
+      // isn't this step's, and its Undo leaves it (#195's `arrives`).
       const body = await response.json().catch(() => null) as { nodeId?: unknown } | null;
-      if (typeof body?.nodeId === 'string') arrives = [body.nodeId];
+      if (typeof body?.nodeId === 'string' && body.nodeId) arrives = [body.nodeId];
     } catch (error) {
       useGraphStore.getState().cancelUndoStep(undoStep);
       failed.set(at, { kind: 'upload', name: file.name, line: failureMessage(error, heading),

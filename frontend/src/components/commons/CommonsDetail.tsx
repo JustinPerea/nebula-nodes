@@ -14,6 +14,8 @@ import { FailureLines } from '../failure/FailureLines';
 import { ErrorDetails } from '../failure/ErrorDetails';
 import { ANALYSIS_FAILED, analysisFailureReason } from '../../lib/commonsAnalysisCopy';
 import { failureMessage } from '../../lib/errorCopy';
+import { isBackendOffline, isOfflineRefusal } from '../../lib/backendConnection';
+import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 
 interface Props {
   assetId: string;
@@ -100,6 +102,9 @@ function Membership({ assetId, membership, run }: {
             defaultValue={membership.why ?? ''}
             placeholder="Why this belongs here"
             onBlur={(event) => {
+              // Going offline disables the field, which blurs it: not the person
+              // leaving it. The text stays, and the next blur online saves it.
+              if (isBackendOffline()) return;
               const why = event.target.value.trim();
               if (why !== (membership.why ?? '')) void run(() => commonsApi.patchMembership(membership.id, { why }));
             }}
@@ -164,6 +169,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
   const [frameIndex, setFrameIndex] = useState(0);
   const dragStart = useRef<[number, number] | null>(null);
   const [ask, promptElement] = useCommonsPrompt();
+  const readOnly = useBackendOffline();
 
   const load = useCallback(async () => {
     try {
@@ -207,7 +213,8 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
       onChanged();
       return true;
     } catch (e) {
-      setError(failureMessage(e, "Couldn't save the change."));
+      // Refused offline before it was sent: the banner says why (round 16, L4).
+      if (!isOfflineRefusal(e)) setError(failureMessage(e, "Couldn't save the change."));
       return false;
     }
   }, [load, onChanged]);
@@ -249,7 +256,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
     Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]),
   ];
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
+    if (event.button !== 0 || readOnly) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     dragStart.current = pointFrom(event);
     setDraftBox([dragStart.current[0], dragStart.current[1], 0, 0]);
@@ -284,7 +291,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
       await commonsApi.purge(assetId);
       onDeleted();
     } catch (e) {
-      setError(failureMessage(e, "Couldn't delete the reference."));
+      if (!isOfflineRefusal(e)) setError(failureMessage(e, "Couldn't delete the reference."));
     }
   };
 
@@ -305,6 +312,10 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
 
       {error && <p className="commons-notice commons-notice--error" role="alert">{error}</p>}
 
+      {/* Round 16 (L4): offline the reference is read-only like the canvas.
+          Everything below Close is a write, so one fieldset disables it all;
+          Close and reading stay. */}
+      <fieldset className="commons-fieldset" disabled={readOnly} {...offlineMark(readOnly)}>
       <ProposalsFor kind="commons" targetId={assetId} names={proposalNames} />
 
       {asset.analysis_state === 'analysis_failed' && (
@@ -412,6 +423,9 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
               rows={key === 'summary' ? 3 : 2}
               defaultValue={fields[key]?.value ?? ''}
               onBlur={(event) => {
+                // Going offline disables the field, which blurs it: not the person
+                // leaving it. The text stays, and the next blur online saves it.
+                if (isBackendOffline()) return;
                 const value = event.target.value.trim();
                 if (value !== (fields[key]?.value ?? '')) void correct(`${key}.value`, 'set', value);
               }}
@@ -451,6 +465,9 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
                     type="number" min={-1} max={1} step={0.05}
                     defaultValue={value ?? ''}
                     onBlur={(event) => {
+                      // Going offline disables the field, which blurs it: not the person
+                      // leaving it. The text stays, and the next blur online saves it.
+                      if (isBackendOffline()) return;
                       if (event.target.value === '') return;
                       const next = Number(event.target.value);
                       if (!Number.isFinite(next) || next < -1 || next > 1 || next === value) return;
@@ -523,6 +540,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
         <button type="button" className="commons-button" onClick={() => run(() => commonsApi.reanalyze(assetId))}>Re-analyze</button>
         <button type="button" className="commons-button commons-button--danger" onClick={() => void purge()}>Delete and purge</button>
       </div>
+      </fieldset>
       {promptElement}
     </aside>
   );

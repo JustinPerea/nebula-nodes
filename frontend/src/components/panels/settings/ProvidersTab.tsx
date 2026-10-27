@@ -8,6 +8,7 @@ import { PROVIDER_KEYS, providerMatches, unlockCount } from '../../../lib/provid
 import { useSettingsDraftStore, type SettingsDraft } from '../../../store/settingsDraftStore';
 import { useUIStore } from '../../../store/uiStore';
 import { useProviderReadinessStore } from '../../../store/providerReadinessStore';
+import { offlineMark, useBackendOffline } from '../../../lib/useBackendOffline';
 import { KeyRow } from './KeyRow';
 import { KreaSignInRow } from './KreaSignInRow';
 import { NousRow } from './NousRow';
@@ -43,6 +44,9 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
   const krea = useKreaConnection();
   const setupTarget = useUIStore((s) => s.settingsProviderTarget);
   const root = useRef<HTMLDivElement>(null);
+  // Offline (GM, round 16 of PR #114): the search stays usable; everything
+  // that edits sits in the disabled fieldset below it.
+  const offline = useBackendOffline();
   const handledTarget = useRef<typeof setupTarget>(null);
   const desktop = typeof window !== 'undefined' ? window.nebulaDesktop : undefined;
   const plaintextWarning = desktop?.credentials ? (desktop.plaintextKeyWarning ?? []) : [];
@@ -124,6 +128,7 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
           spellCheck={false}
         />
       </label>
+      <fieldset className="settings__fieldset settings__fieldset--providers" disabled={offline} {...offlineMark(offline)}>
 
       {connected.length > 0 && (
         <section aria-labelledby="settings-connected-heading">
@@ -156,6 +161,7 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
           <p className="settings-hint">fal.ai, Replicate and OpenRouter have universal nodes that reach models not listed here.</p>
         </div>
       )}
+      </fieldset>
       <span className="settings-sr" role="status">{q ? `${plural(visible.length, 'provider')} match` : ''}</span>
     </div>
   );

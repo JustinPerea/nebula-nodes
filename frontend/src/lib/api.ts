@@ -42,6 +42,9 @@ export interface ExecutionCancellationResult {
 export interface ExecutionStatusResult {
   runId: string;
   status: 'running' | 'cancelling' | 'cancelled' | 'completed' | 'failed';
+  /** A Stop reached the backend before this run did: it never started, and
+   * the backend refuses to start it (round 16 of PR #114). */
+  pendingAdmission?: boolean;
 }
 
 /** A received non-2xx response proves the start request reached a backend and
@@ -57,8 +60,31 @@ export class ExecutionStartRejectedError extends RequestFailedError {
 
 /** A refused start, named by its call: GM's line for the status, or the
  * backend's written reason. */
+/** GM - Design, round 16 of PR #114 (locked): a run start Nebula refused
+ * with 507 because a run-safety store (the paid-start fence, the recovery
+ * journal, durable Stop state) couldn't be saved, before any provider call;
+ * it lasts until Nebula restarts (review 15, extra check 3). The screen's
+ * heading names the node ("Couldn't run “<node>”."). Only for that store's
+ * 507 (round 17, review 16 L5: the answer's `code`, backend
+ * RUN_SAFETY_STORAGE_CODE); the project store's 507 keeps the general line,
+ * since a restart doesn't clear it (GM's restart line for it isn't shipped). */
+export const RUN_SAFEGUARDS_REASON = "Nebula couldn't save its run safeguards, so nothing was started. Restart Nebula, then try again.";
+/** The backend's codes for a 507 (main.py RUN_SAFETY_STORAGE_CODE, PROJECT_STORE_STORAGE_CODE). */
+export const RUN_SAFETY_STORAGE_CODE = 'run_safeguards';
+export const PROJECT_STORE_STORAGE_CODE = 'project_store';
+
+async function storageCodeOf(response: Response): Promise<string | null> {
+  try {
+    const body = await response.clone().json() as { code?: unknown } | null;
+    return typeof body?.code === 'string' ? body.code : null;
+  } catch {
+    return null;
+  }
+}
+
 async function executionStartResponseError(heading: string, response: Response): Promise<Error> {
-  const error = await requestError(heading, response);
+  const runSafety = response.status === 507 && await storageCodeOf(response) === RUN_SAFETY_STORAGE_CODE;
+  const error = await requestError(heading, response, runSafety ? { reason: RUN_SAFEGUARDS_REASON } : {});
   // A gateway/server failure can be returned after the request body was
   // forwarded and the backend scheduled work, so it is not proof of rejection.
   // 507 is Nebula's explicit pre-provider durable-safety rejection.
@@ -79,15 +105,16 @@ export async function getExecutionStatus(runId: string): Promise<ExecutionStatus
   return response.json();
 }
 
-export async function cancelExecution(runId: string): Promise<ExecutionCancellationResult> {
+export async function cancelExecution(runId: string, signal?: AbortSignal): Promise<ExecutionCancellationResult> {
   const response = await apiRequest("Couldn't cancel the run.", `/api/executions/${encodeURIComponent(runId)}`, {
-    method: 'DELETE',
+    method: 'DELETE', ...(signal ? { signal } : {}),
   });
   return response.json();
 }
 
-/** The headings for the two "Checked Marble" buttons (round 3, GM: named
- * after the button the person clicked); the store and the screens use these. */
+/** The headings for the status bar's "I've checked Marble" and Run
+ * History's "Forget ID" (round 3, GM: named after what the button does);
+ * the store and the screens use these. */
 export const UNLOCK_NODE_HEADING = "Couldn't unlock the node.";
 export const FORGET_RECOVERY_HEADING = "Couldn't forget the recovery safeguard.";
 
@@ -96,8 +123,8 @@ export async function acknowledgeProviderStartAmbiguity(
   nodeId: string,
   runId: string,
 ): Promise<void> {
-  // Round 3 (GM): the label the person clicked. The status bar's "Checked
-  // Marble — unlock" unlocks one node (its label: "unlock node n1").
+  // Round 3 (GM): what the person clicked. The status bar's "I've checked
+  // Marble" unlocks one node.
   await apiRequest(UNLOCK_NODE_HEADING,
     `/api/provider-start-ambiguities/${encodeURIComponent(kind)}/${encodeURIComponent(nodeId)}/${encodeURIComponent(runId)}`,
     { method: 'DELETE' },
@@ -119,7 +146,7 @@ export async function deleteProviderRecovery(
   if ([...query.keys()].length !== 1) {
     throw new Error('Provider recovery deletion requires exactly one recovery ID.');
   }
-  // Run History's "Checked Marble — forget" forgets a "World Labs recovery safeguard".
+  // Run History's "Forget ID" forgets a "World Labs recovery safeguard".
   await apiRequest(FORGET_RECOVERY_HEADING,
     `/api/provider-recoveries/${encodeURIComponent(runId)}/${encodeURIComponent(nodeId)}?${query.toString()}`,
     { method: 'DELETE' },

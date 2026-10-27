@@ -390,6 +390,42 @@ class ProviderRecoveryStore:
         with self._lock:
             return self._storage_error is None
 
+    def verify_writable(self) -> None:
+        """Prove the journal takes a real write now (round 15 of PR #114,
+        review 14's M4): under the journal lock, reload, write the current
+        records back with a one-off probe mark (write, fsync, rename, folder
+        fsync: the same path every save takes), then read the file back and
+        check the mark and the records. It never consults the sticky health
+        flag: it sets the flag on failure (and raises
+        ProviderRecoveryPersistenceError) and clears it only on success. The
+        loader ignores the mark, and the next save drops it."""
+        with self._lock:
+            try:
+                with self._journal_lock():
+                    self._reload_locked()
+                    expected = [dict(record) for record in self._records.values()]
+                    probe = uuid4().hex
+                    self._persist(probe=probe)
+                    path = self._path
+                    try:
+                        if path is None:
+                            raise OSError("provider recovery persistence is unavailable")
+                        payload = json.loads(path.read_text(encoding="utf-8"))
+                    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+                        raise ProviderRecoveryPersistenceError(
+                            "provider recovery journal write failed: read back failed"
+                        ) from exc
+                    if (not isinstance(payload, dict) or payload.get("probe") != probe
+                            or payload.get("records") != expected):
+                        raise ProviderRecoveryPersistenceError(
+                            "provider recovery journal write failed: read back differs"
+                        )
+                    self._reload_locked()
+            except ProviderRecoveryPersistenceError as exc:
+                self._storage_error = str(exc)
+                raise
+            self._storage_error = None
+
     def delete(
         self,
         *,
@@ -568,7 +604,7 @@ class ProviderRecoveryStore:
                     pass
                 os.close(fd)
 
-    def _persist(self) -> None:
+    def _persist(self, *, probe: str | None = None) -> None:
         path = self._path
         if path is None:
             raise ProviderRecoveryPersistenceError(
@@ -577,10 +613,12 @@ class ProviderRecoveryStore:
         temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            payload = {
+            payload: dict[str, Any] = {
                 "version": RECOVERY_STORE_VERSION,
                 "records": [dict(record) for record in self._records.values()],
             }
+            if probe is not None:
+                payload["probe"] = probe
             with temporary.open("w", encoding="utf-8") as output:
                 output.write(
                     json.dumps(payload, ensure_ascii=False, separators=(",", ":"))

@@ -3,7 +3,10 @@ import { ShieldCheck, X } from 'lucide-react';
 import { useGraphStore } from '../store/graphStore';
 import { UNLOCK_NODE_HEADING } from '../lib/api';
 import { failureMessage } from '../lib/errorCopy';
-import { WORLD_LABS_RUN_NEEDS_CHECK, WORLD_LABS_RUN_STATUS_UNKNOWN, moreNodesNeedCheck } from '../lib/worldLabsWaiting';
+import {
+  UNLOCK_LABEL, UNLOCK_TITLE, WORLD_LABS_RUN_NEEDS_CHECK, WORLD_LABS_RUN_STATUS_UNKNOWN, moreNodesNeedCheck, recordNodeName, unlockAriaLabel, UNLOCK_RUN_ARIA,
+} from '../lib/worldLabsWaiting';
+import { offlineMark, useBackendOffline } from '../lib/useBackendOffline';
 
 /** Persistent paid-provider safety status. Recovery-journal write warnings may
  * be dismissed; an ambiguous paid start remains until the user explicitly says
@@ -13,11 +16,19 @@ export function ProviderRecoveryStatus() {
   const warning = useGraphStore((state) => state.providerRecoveryWarning);
   const uncertainRunId = useGraphStore((state) => state.uncertainWorldLabsRunId);
   const ambiguities = useGraphStore((state) => state.providerStartAmbiguities);
+  // The first held node's card title (a string, so a canvas edit elsewhere
+  // doesn't re-render the bar).
+  const heldTitle = useGraphStore((state) => {
+    const held = state.providerStartAmbiguities[0];
+    return held ? recordNodeName(state.nodes, held.nodeId, true) : null;
+  });
   const acknowledge = useGraphStore((state) => state.acknowledgeProviderStartAmbiguity);
   const acknowledgeUncertainRun = useGraphStore(
     (state) => state.acknowledgeUncertainWorldLabsRun,
   );
   const dismiss = useGraphStore((state) => state.dismissProviderRecoveryWarning);
+  // Offline is read-only (round 15 of PR #114): the unlock is disabled.
+  const offline = useBackendOffline();
   const [unlocking, setUnlocking] = useState<string | null>(null);
   const [unlockError, setUnlockError] = useState<string | null>(null);
   const ambiguity = ambiguities[0];
@@ -60,23 +71,28 @@ export function ProviderRecoveryStatus() {
           type="button"
           className="provider-recovery-status__ack"
           onClick={() => void unlock()}
-          disabled={unlocking === ambiguityKey}
-          aria-label={`I checked Marble; unlock node ${ambiguity.nodeId}`}
-          title="Only unlock after checking Marble for an accepted operation"
+          disabled={unlocking === ambiguityKey || offline}
+          {...offlineMark(offline)}
+          // GM, round 13 of PR #114: the node by its card title. No confirm.
+          aria-label={unlockAriaLabel(heldTitle ?? recordNodeName([], ambiguity.nodeId, true))}
+          title={UNLOCK_TITLE}
         >
           <ShieldCheck size={15} strokeWidth={1.8} aria-hidden="true" />
-          {unlocking === ambiguityKey ? 'Unlocking…' : 'Checked Marble — unlock'}
+          {unlocking === ambiguityKey ? 'Unlocking…' : UNLOCK_LABEL}
         </button>
       ) : uncertainRunId ? (
         <button
           type="button"
           className="provider-recovery-status__ack"
           onClick={acknowledgeUncertainRun}
-          aria-label="I checked Marble; unlock the unconfirmed run"
-          title="Only unlock after checking Marble for an accepted operation"
+          disabled={offline}
+          {...offlineMark(offline)}
+          // No node to name: GM's line (round 14 of PR #114).
+          aria-label={UNLOCK_RUN_ARIA}
+          title={UNLOCK_TITLE}
         >
           <ShieldCheck size={15} strokeWidth={1.8} aria-hidden="true" />
-          Checked Marble — unlock
+          {UNLOCK_LABEL}
         </button>
       ) : (
         <button

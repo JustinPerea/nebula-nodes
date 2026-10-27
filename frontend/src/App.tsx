@@ -294,7 +294,7 @@ export default function App() {
 
   return (
     <ReactFlowProvider>
-      <BackendConnectionStatus />
+      <BackendConnectionStatus placement={isHome ? 'home' : 'workspace'} />
       <PersonRequiredBanner />
       <ProviderRecoveryStatus />
       <ProjectCoordinator />

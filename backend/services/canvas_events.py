@@ -312,11 +312,15 @@ class CanvasEventJournal:
         self._seq = 0
         self._project_id: str | None = None
         self._project_known = False
+        # Where the open project comes from (follow): the catalog, in main.
+        self._project_source: Callable[[], str | None] | None = None
         # One (loop, Event) per open long-poll. Each waiter owns its Event so
         # waiters on different loops never share a loop-bound primitive.
         self._waiters: set[tuple[asyncio.AbstractEventLoop, asyncio.Event]] = set()
         self._run_actors: OrderedDict[str, dict[str, Any]] = OrderedDict()
         self._run_seen: OrderedDict[str, set[tuple[str, str]]] = OrderedDict()
+        # A run the person approved by accepting a proposal: run id -> proposal id.
+        self._run_proposals: OrderedDict[str, str] = OrderedDict()
 
     # -- project ----------------------------------------------------------
     @property
@@ -330,6 +334,32 @@ class CanvasEventJournal:
     def set_project(self, project_id: str | None) -> None:
         self._project_id = project_id
         self._project_known = True
+
+    @property
+    def following(self) -> bool:
+        return self._project_source is not None
+
+    def follow(self, source: Callable[[], str | None]) -> None:
+        """Take the open project from ``source`` (main: the catalog's
+        projection, ProjectStore.projection) each time an event is published
+        or the journal is read, instead of from set_project. The tag then
+        changes where the open project is committed, by any route or process:
+        a "Recovered canvas" filed by GET /api/projects (no graph broadcast)
+        was never tagged before, and a pin the person added between a
+        switch's commit and its broadcast was tagged with the project left
+        (review 5 of PR #114, M1)."""
+        self._project_source = source
+        self._project_known = True
+
+    def _current_project(self) -> str | None:
+        """The open project now; the last one known when the source can't say
+        (an unreadable catalog): the journal never fails over its tag."""
+        if self._project_source is not None:
+            try:
+                self._project_id = self._project_source()
+            except Exception:  # noqa: BLE001 - see above
+                pass
+        return self._project_id
 
     # -- publish ----------------------------------------------------------
     @property
@@ -350,19 +380,23 @@ class CanvasEventJournal:
         data: Mapping[str, Any] | None = None,
         summary: str = "",
         edit: Mapping[str, Any] | None = None,
+        project_id: str | None | object = ...,
     ) -> dict[str, Any]:
         """``edit`` names the canvas edit behind the event (services/canvas_undo.py):
         ``{id}`` for an agent's edit, plus ``undoes`` or ``redoes`` (the edit id it
-        reverts or applies again) and ``of`` (whose edit that was) for an undo."""
+        reverts or applies again) and ``of`` (whose edit that was) for an undo.
+        ``project_id``: the project the change was made in, when the caller
+        knows it (a pin's own project); otherwise the project open now."""
         if kind not in EVENT_KINDS:
             raise ValueError(f"unknown canvas event kind '{kind}'")
+        tag = self._current_project() if project_id is ... else project_id
         self._seq += 1
         event: dict[str, Any] = {
             "seq": self._seq,
             "at": int(self._clock() * 1000),
             "kind": kind,
             "actor": dict(actor or ANONYMOUS),
-            "projectId": self._project_id,
+            "projectId": tag,
             "data": _bound_data(data),
             "summary": " ".join(str(summary or "").split())[:MAX_SUMMARY_CHARS],
         }
@@ -435,7 +469,7 @@ class CanvasEventJournal:
             "reset": reset,
             "more": more,
             "timedOut": False,
-            "projectId": self._project_id,
+            "projectId": self._current_project(),
             "events": events,
         }
 
@@ -462,7 +496,8 @@ class CanvasEventJournal:
         while True:
             remaining = deadline - loop.time()
             if remaining <= 0:
-                return {**result, "timedOut": True}
+                # The project open now: one opened during the wait without an event (a recovery) counts.
+                return {**result, "timedOut": True, "projectId": self._current_project()}
             signal = asyncio.Event()
             entry = (loop, signal)
             self._waiters.add(entry)
@@ -479,9 +514,15 @@ class CanvasEventJournal:
             if result["events"] or result["gap"]:
                 return result
 
-    def seqs_of_edit(self, edit_id: str) -> list[int]:
-        """The buffered events of one canvas edit (``edit.id``), oldest first."""
-        return [event["seq"] for event in self._events if (event.get("edit") or {}).get("id") == edit_id]
+    def seqs_of_edit(self, edit_id: str, *, skip_kinds: frozenset[str] = frozenset()) -> list[int]:
+        """The buffered events of one canvas edit (``edit.id``), oldest first,
+        but those of a kind in ``skip_kinds``."""
+        return [seq for seq, _kind in self.events_of_edit(edit_id, skip_kinds=skip_kinds)]
+
+    def events_of_edit(self, edit_id: str, *, skip_kinds: frozenset[str] = frozenset()) -> list[tuple[int, str]]:
+        """``seqs_of_edit`` with each event's kind: (seq, kind)."""
+        return [(event["seq"], str(event.get("kind"))) for event in self._events
+                if (event.get("edit") or {}).get("id") == edit_id and event.get("kind") not in skip_kinds]
 
     @property
     def waiting(self) -> int:
@@ -496,6 +537,18 @@ class CanvasEventJournal:
         self._run_actors.move_to_end(run_id)
         while len(self._run_actors) > MAX_TRACKED_RUNS:
             self._run_actors.popitem(last=False)
+
+    def note_run_proposal(self, run_id: str | None, proposal_id: str) -> None:
+        """This run is the one an Accept approved: its run events name the proposal."""
+        if not run_id or not proposal_id:
+            return
+        self._run_proposals[run_id] = proposal_id
+        self._run_proposals.move_to_end(run_id)
+        while len(self._run_proposals) > MAX_TRACKED_RUNS:
+            self._run_proposals.popitem(last=False)
+
+    def run_proposal(self, run_id: str | None) -> str | None:
+        return self._run_proposals.get(run_id) if run_id else None
 
     def run_actor(self, run_id: str | None) -> dict[str, Any]:
         if run_id and run_id in self._run_actors:
@@ -520,6 +573,7 @@ class CanvasEventJournal:
     def forget_run(self, run_id: str | None) -> None:
         if run_id:
             self._run_seen.pop(run_id, None)
+            self._run_proposals.pop(run_id, None)
 
 
 canvas_events = CanvasEventJournal()

@@ -69,3 +69,29 @@
   outline: var(--sr-focus-outline, 2px solid #9ab8ff);
   outline-offset: var(--sr-focus-offset, 2px);
 }
+
+/* A confirm's own heading (Run History's "Forget ID", round 13 of PR #114). */
+.prompt-dialog__heading {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* A destructive action that isn't the app's run/go (GM, round 14 of PR
+   #114): the secondary button with the selection toolbar trash's red text
+   (canvas.css .selection-toolbar__button--danger), never orange primary. */
+.prompt-dialog__actions .prompt-dialog__destructive {
+  font-weight: 600;
+  color: rgba(255, 132, 118, 0.88);
+}
+
+.prompt-dialog__actions .prompt-dialog__destructive:hover:not(:disabled) {
+  background: rgba(255, 70, 60, 0.14);
+  color: #ff8f82;
+}
+
+.prompt-dialog__actions button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}

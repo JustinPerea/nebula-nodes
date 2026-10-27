@@ -240,8 +240,9 @@ describe('Settings shell', () => {
   // reason ("the button is the retry"); on 1fc3d846 this always said
   // "Settings couldn't load. Check that the Nebula backend is running."
   it.each([
+    // Round 16 (GM): with no answer, the unified line in full.
     [new ConnectionLostError(new TypeError('Failed to fetch'), { heading: "Couldn't load your API keys." }),
-      "Nebula's server isn't answering. Make sure it's running."],
+      "Nebula isn't answering. Make sure it's running, then try again."],
     [new RequestFailedError("Couldn't load your API keys.", 503), "Nebula didn't respond."],
     [new RequestFailedError("Couldn't load your API keys.", 400), "Try again, or reload if it keeps happening."],
   ])('a failed first load says the heading and the short reason (%#)', async (error, reason) => {
@@ -1066,5 +1067,49 @@ describe('Settings — storage', () => {
     fireEvent.click(screen.getByRole('button', { name: /Show onboarding again/ }));
     expect(useUIStore.getState().panels.settings.visible).toBe(false);
     expect(useUIStore.getState().onboardingActive).toBe(true);
+  });
+});
+
+// Round 15 of PR #114 (GM): "Settings stays enabled so the panel opens, but
+// its fields come up disabled." It shows the last values it loaded; with none
+// loaded, its first-load error and Try again (a read, so it still works).
+describe('Settings while Nebula is offline', () => {
+  it('opens with every field disabled, the tabs still move, and reconnecting enables them', async () => {
+    const { noteBackendConnection, resetBackendConnectionForTests } = await import('../src/lib/backendConnection');
+    resetBackendConnectionForTests();
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    act(() => noteBackendConnection('offline'));
+    const panel = screen.getByRole('tabpanel');
+    // Round 16 (review 15 nit): on Providers the search sits outside the
+    // disabled fieldset and stays usable; everything after it is disabled.
+    const fieldset = panel.querySelector('fieldset.settings__fieldset--providers')!;
+    expect(fieldset).toBeDisabled();
+    expect(fieldset).toHaveAttribute('data-offline-disabled');
+    const search = screen.getByRole('searchbox', { name: 'Search providers and models' });
+    expect(search).toBeEnabled();
+    expect(fieldset.contains(search)).toBe(false);
+    fireEvent.change(search, { target: { value: 'open' } });
+    expect(search).toHaveValue('open');
+    fireEvent.change(search, { target: { value: '' } });
+    expect(screen.getByRole('button', { name: 'Manage OpenAI' })).toBeDisabled();
+    openTab('Preferences');
+    expect(screen.getByRole('tab', { name: 'Preferences' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tabpanel').querySelector('fieldset')).toBeDisabled();
+    act(() => noteBackendConnection('online'));
+    expect(screen.getByRole('tabpanel').querySelector('fieldset')).not.toBeDisabled();
+    resetBackendConnectionForTests();
+  });
+
+  it('never loaded: its first-load error and Try again', async () => {
+    const { noteBackendConnection, resetBackendConnectionForTests } = await import('../src/lib/backendConnection');
+    noteBackendConnection('offline');
+    getSettingsMock.mockRejectedValueOnce(new ConnectionLostError(new TypeError('Failed to fetch'), { heading: "Couldn't load your API keys." }));
+    render(<Settings />);
+    const alert = await screen.findByRole('alert');
+    expect(alert.querySelector('.failure-lines__heading')?.textContent).toBe("Couldn't load your API keys.");
+    // GM, round 16: the unified line in full, beside Try again.
+    expect(alert.querySelector('.failure-lines__reason')?.textContent).toBe("Nebula isn't answering. Make sure it's running, then try again.");
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeEnabled();
+    resetBackendConnectionForTests();
   });
 });

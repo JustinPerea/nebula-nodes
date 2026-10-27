@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { RunHistoryPanel } from '../src/components/panels/RunHistoryPanel';
+import { ForgetRecoveryConfirm } from '../src/components/panels/ForgetRecoveryConfirm';
+import { forgetNodeLabelsForTests } from '../src/lib/lastNodeLabels';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { clampRunHistoryPosition } from '../src/lib/panelPosition';
@@ -11,6 +13,7 @@ import {
   type RunRecord,
 } from '../src/lib/runHistory';
 import { noticeSpy } from './helpers/noticeSpy';
+import { noteBackendConnection, resetBackendConnectionForTests } from '../src/lib/backendConnection';
 
 const INITIAL_GRAPH_STATE = { ...useGraphStore.getState() };
 const INITIAL_UI_STATE = { ...useUIStore.getState() };
@@ -31,6 +34,7 @@ function record(id: string, status: RunRecord['status'], targetNodeId?: string):
 
 describe('RunHistoryPanel replay actions', () => {
   beforeEach(() => {
+    forgetNodeLabelsForTests();
     useGraphStore.setState(INITIAL_GRAPH_STATE, true);
     useUIStore.setState(INITIAL_UI_STATE, true);
     useUIStore.setState((state) => ({
@@ -88,10 +92,10 @@ describe('RunHistoryPanel replay actions', () => {
 
     render(<RunHistoryPanel />);
 
-    const stop = screen.getByRole('button', { name: 'Cancel running execution' });
+    const stop = screen.getByRole('button', { name: 'Stop the run' });
     expect(stop).toBeDisabled();
     expect(stop).toHaveAttribute('aria-busy', 'true');
-    expect(stop).toHaveAttribute('title', 'Waiting for execution to stop safely');
+    expect(stop).toHaveAttribute('title', 'Stopping the run…');
     fireEvent.click(stop);
     expect(cancelExecution).not.toHaveBeenCalled();
   });
@@ -140,7 +144,7 @@ describe('RunHistoryPanel replay actions', () => {
     {
       label: 'an active execution',
       state: { isExecuting: true },
-      title: 'Wait for the active run to finish',
+      title: 'Wait for the run to finish first.',
     },
     {
       label: 'a saved provider recovery',
@@ -153,7 +157,7 @@ describe('RunHistoryPanel replay actions', () => {
           durable: true,
         }],
       },
-      title: 'Resolve World Labs safety records before clearing history',
+      title: "Can't clear while a World Labs recovery ID is saved.",
     },
     {
       label: 'an ambiguous provider start',
@@ -166,7 +170,7 @@ describe('RunHistoryPanel replay actions', () => {
           durable: true,
         }],
       },
-      title: 'Resolve World Labs safety records before clearing history',
+      title: "Can't clear while a World Labs recovery ID is saved.",
     },
   ])('disables Clear while $label owns safety state', ({ state, title }) => {
     const clearRunHistory = vi.fn();
@@ -214,16 +218,21 @@ describe('RunHistoryPanel replay actions', () => {
     });
     // Error copy round 3c (GM): "World Labs run" where it said "paid start".
     expect(safeguards).toHaveTextContent('These IDs prevent an accidental second World Labs run.');
-    expect(safeguards).toHaveTextContent('world-environment · operation operation-accepted');
-    expect(safeguards).toHaveTextContent('world-export · world world-complete');
-    expect(screen.getByTitle('world-environment · operation-accepted')).toBeInTheDocument();
-    expect(screen.getByTitle('world-export · world-complete')).toBeInTheDocument();
+    // GM, round 14 of PR #114: rows are named by node, "Operation ID" /
+    // "World ID", the ID in mono. Neither node is on the canvas or was seen.
+    expect(safeguards).toHaveTextContent('A removed World Labs node · Operation ID operation-accepted');
+    expect(safeguards).toHaveTextContent('A removed World Labs node · World ID world-complete');
+    expect(within(safeguards).getByText('operation-accepted').tagName).toBe('CODE');
+    expect(screen.getByTitle('A removed World Labs node · Operation ID operation-accepted')).toBeInTheDocument();
+    expect(screen.getByTitle('A removed World Labs node · World ID world-complete')).toBeInTheDocument();
   });
 
-  it('requires explicit Marble confirmation before deleting an exact recovery', () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  it('"Forget ID" asks in the app\'s own dialog first; Cancel forgets nothing (GM, round 13 of PR #114)', () => {
+    const confirm = vi.spyOn(window, 'confirm');
     const deleteProviderRecovery = vi.fn(async () => undefined);
     useGraphStore.setState({
+      nodes: [{ id: 'world-node', type: 'model-node', position: { x: 0, y: 0 },
+        data: { label: 'Harbor world', definitionId: 'worldlabs-environment', params: {}, state: 'idle', outputs: {} } }] as never,
       providerRecoveries: [{
         runId: 'paid-run',
         nodeId: 'world-node',
@@ -235,20 +244,53 @@ describe('RunHistoryPanel replay actions', () => {
     });
 
     render(<RunHistoryPanel />);
-    fireEvent.click(screen.getByRole('button', {
-      name: 'Checked Marble; forget recovery for world-node',
-    }));
+    // GM, round 14: the button's name says which ID it forgets; the row
+    // ("“Harbor world” · Operation ID operation-saved") stays its description.
+    const row = screen.getByRole('button', { name: 'Forget the recovery ID for “Harbor world”' });
+    expect(row.textContent).toBe('Forget ID');
+    expect(row).toHaveAccessibleDescription('“Harbor world” · Operation ID operation-saved');
+    fireEvent.click(row);
 
-    expect(confirm).toHaveBeenCalledOnce();
-    expect(confirm.mock.calls[0][0]).toContain('world-node');
-    expect(confirm.mock.calls[0][0]).toContain('Only continue after checking Marble');
-    expect(confirm.mock.calls[0][0]).toContain('future fresh paid request');
+    const dialog = screen.getByRole('alertdialog', { name: 'Forget the recovery ID for “Harbor world”?' });
+    expect(dialog).toHaveAccessibleDescription(
+      "Only do this after you've checked the run in Marble. Without the ID, Nebula can't stop you from paying for the same run twice.");
+    // On the page body, through ModalPortal (the round 21 merge with #195).
+    expect(dialog.closest('.modal-portal')?.parentElement).toBe(document.body);
+    // GM, round 14: Cancel on the left, the action on the right, in the
+    // destructive style (the trash's red text, never orange primary).
+    expect(within(dialog).getAllByRole('button').map((button) => button.textContent)).toEqual(['Cancel', 'Forget ID']);
+    expect(within(dialog).getByRole('button', { name: 'Forget ID' })).toHaveClass('prompt-dialog__destructive');
+    expect(within(dialog).getByRole('button', { name: 'Forget ID' })).not.toHaveClass('prompt-dialog__danger');
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus();
+    expect(confirm).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(deleteProviderRecovery).not.toHaveBeenCalled();
-    expect(screen.getByTitle('world-node · operation-saved')).toBeInTheDocument();
+    expect(screen.getByTitle('“Harbor world” · Operation ID operation-saved')).toBeInTheDocument();
+  });
+
+  it('Escape is Cancel, and Tab stays inside the dialog', () => {
+    const deleteProviderRecovery = vi.fn(async () => undefined);
+    useGraphStore.setState({
+      providerRecoveries: [{ runId: 'paid-run', nodeId: 'world-node', resumeOperationId: 'operation-saved',
+        existingWorldId: null, durable: true }],
+      deleteProviderRecovery,
+    });
+    render(<RunHistoryPanel />);
+    fireEvent.click(screen.getByRole('button', { name: 'Forget the recovery ID for a removed World Labs node' }));
+    // Not on the canvas and never seen with a label (GM, round 14).
+    const dialog = screen.getByRole('alertdialog', { name: 'Forget the recovery ID for a removed World Labs node?' });
+    const [cancel, forgetButton] = within(dialog).getAllByRole('button');
+    fireEvent.keyDown(cancel, { key: 'Tab', shiftKey: true });
+    expect(forgetButton).toHaveFocus();
+    fireEvent.keyDown(forgetButton, { key: 'Tab' });
+    expect(cancel).toHaveFocus();
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(deleteProviderRecovery).not.toHaveBeenCalled();
   });
 
   it('deletes only the confirmed recovery row through the exact store action', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     const retained = {
       runId: 'other-run',
       nodeId: 'other-world',
@@ -275,22 +317,20 @@ describe('RunHistoryPanel replay actions', () => {
     });
 
     render(<RunHistoryPanel />);
-    fireEvent.click(screen.getByRole('button', {
-      name: 'Checked Marble; forget recovery for world-node',
-    }));
+    fireEvent.click(screen.getAllByRole('button', { name: /^Forget the recovery ID for / })[0]);
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Forget ID' }));
 
     await waitFor(() => expect(deleteProviderRecovery).toHaveBeenCalledWith(
       'paid-run',
       'world-node',
     ));
     await waitFor(() => {
-      expect(screen.queryByTitle('world-node · operation-saved')).not.toBeInTheDocument();
+      expect(screen.queryByTitle('A removed World Labs node · Operation ID operation-saved')).not.toBeInTheDocument();
     });
-    expect(screen.getByTitle('other-world · world-retained')).toBeInTheDocument();
+    expect(screen.getByTitle('A removed World Labs node · World ID world-retained')).toBeInTheDocument();
   });
 
   it('keeps a recovery visible and reports the failure when exact deletion fails', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     const alert = noticeSpy();
     const deleteProviderRecovery = vi.fn().mockRejectedValue(
       new Error('Backend still has an active provider task.'),
@@ -307,19 +347,96 @@ describe('RunHistoryPanel replay actions', () => {
     });
 
     render(<RunHistoryPanel />);
-    fireEvent.click(screen.getByRole('button', {
-      name: 'Checked Marble; forget recovery for world-node',
-    }));
+    fireEvent.click(screen.getAllByRole('button', { name: /^Forget the recovery ID for / })[0]);
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Forget ID' }));
 
     // Error copy round 3b: an error that isn't a request's never shows its
     // own message; it says GM's general line under the button's heading.
     await waitFor(() => expect(alert).toHaveBeenCalledWith(
       "Couldn't forget the recovery safeguard. Try again, or reload if it keeps happening.",
     ));
-    expect(screen.getByTitle('world-node · operation-saved')).toBeInTheDocument();
-    expect(screen.getByRole('button', {
-      name: 'Checked Marble; forget recovery for world-node',
-    })).toBeEnabled();
+    expect(screen.getByTitle('A removed World Labs node · Operation ID operation-saved')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Forget the recovery ID for a removed World Labs node' })).toBeEnabled();
+  });
+
+  it('a node that left the canvas goes by its last label (GM, round 14)', () => {
+    const world = { id: 'world-node', type: 'model-node', position: { x: 0, y: 0 },
+      data: { label: 'Harbor world', definitionId: 'worldlabs-environment', params: {}, state: 'idle', outputs: {} } };
+    useGraphStore.setState({ nodes: [world] as never });
+    useGraphStore.setState({ nodes: [] as never,
+      providerRecoveries: [{ runId: 'paid-run', nodeId: 'world-node', resumeOperationId: 'op-1', existingWorldId: null, durable: true }] });
+    render(<RunHistoryPanel />);
+    const row = screen.getByRole('button', { name: 'Forget the recovery ID for “Harbor world”, no longer on the canvas' });
+    expect(row).toHaveAccessibleDescription('“Harbor world”, no longer on the canvas · Operation ID op-1');
+    fireEvent.click(row);
+    expect(screen.getByRole('alertdialog', { name: 'Forget the recovery ID for “Harbor world”, no longer on the canvas?' })).toBeTruthy();
+  });
+
+  // Review 13, L5 (live L8, probes U2/U3).
+  it('the dialog owns Escape however focus got there (a backdrop click), and Run History stays open', () => {
+    const deleteProviderRecovery = vi.fn(async () => undefined);
+    useGraphStore.setState({ providerRecoveries: [{ runId: 'paid-run', nodeId: 'world-node',
+      resumeOperationId: 'op-1', existingWorldId: null, durable: true }], deleteProviderRecovery });
+    render(<RunHistoryPanel />);
+    fireEvent.click(screen.getByRole('button', { name: /^Forget the recovery ID for / }));
+    const backdrop = screen.getByRole('alertdialog').parentElement!;
+    // The backdrop keeps focus in the dialog.
+    expect(fireEvent.mouseDown(backdrop)).toBe(false);
+    (document.activeElement as HTMLElement | null)?.blur();
+    expect(document.activeElement).toBe(document.body);
+    const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    act(() => { document.body.dispatchEvent(escape); });
+    expect(escape.defaultPrevented).toBe(true);
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(useUIStore.getState().panels.history.visible).toBe(true);
+    expect(deleteProviderRecovery).not.toHaveBeenCalled();
+  });
+
+  it('Tab from outside the card brings focus back into it', () => {
+    useGraphStore.setState({ providerRecoveries: [{ runId: 'paid-run', nodeId: 'world-node',
+      resumeOperationId: 'op-1', existingWorldId: null, durable: true }] });
+    render(<RunHistoryPanel />);
+    fireEvent.click(screen.getByRole('button', { name: /^Forget the recovery ID for / }));
+    (document.activeElement as HTMLElement | null)?.blur();
+    const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    act(() => { document.body.dispatchEvent(tab); });
+    expect(tab.defaultPrevented).toBe(true);
+    expect(document.activeElement?.textContent).toBe('Cancel');
+  });
+
+  it('closing Run History cancels the dialog; it does not come back on reopen, and nothing is forgotten', () => {
+    vi.useFakeTimers();
+    const deleteProviderRecovery = vi.fn(async () => undefined);
+    useGraphStore.setState({ providerRecoveries: [{ runId: 'paid-run', nodeId: 'world-node',
+      resumeOperationId: 'op-1', existingWorldId: null, durable: true }], deleteProviderRecovery });
+    const setVisible = (visible: boolean) => useUIStore.setState((state) => ({
+      panels: { ...state.panels, history: { ...state.panels.history, visible } } }));
+    render(<RunHistoryPanel />);
+    fireEvent.click(screen.getByRole('button', { name: /^Forget the recovery ID for / }));
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    act(() => setVisible(false));
+    // Gone at once, during the panel's exit too: nothing there can forget.
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    act(() => { vi.advanceTimersByTime(600); });
+    act(() => setVisible(true));
+    act(() => { vi.advanceTimersByTime(50); });
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(deleteProviderRecovery).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('offline, the dialog\'s Forget ID is disabled and Cancel still closes it (round 15)', () => {
+    const onCancel = vi.fn();
+    const onConfirm = vi.fn();
+    noteBackendConnection('offline');
+    render(<ForgetRecoveryConfirm name="“Harbor world”" onCancel={onCancel} onConfirm={onConfirm} />);
+    const dialog = within(screen.getByRole('alertdialog'));
+    expect(dialog.getByRole('button', { name: 'Forget ID' })).toBeDisabled();
+    fireEvent.click(dialog.getByRole('button', { name: 'Forget ID' }));
+    expect(onConfirm).not.toHaveBeenCalled();
+    fireEvent.click(dialog.getByRole('button', { name: 'Cancel' }));
+    expect(onCancel).toHaveBeenCalled();
+    resetBackendConnectionForTests();
   });
 
   it('shows the World Labs local-only cancellation caveat in the run record', () => {

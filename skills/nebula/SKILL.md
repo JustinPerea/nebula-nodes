@@ -60,7 +60,7 @@ their Projects screen too), names you, and offers them a button back.
 Their canvas is read-only until the new one loads ("Opening “<project>”…").
 **Never run `nebula clear` to make room**: a new project keeps their work.
 `nebula clear` refuses on a canvas with nodes, and `--force` clears it
-anyway. With their canvas open that is one undo step for them; with none
+anyway (not while a run is going: it waits for runs, as a project switch does). With their canvas open that is one undo step for them; with none
 open it can't be undone yet. A setting they were still editing is lost, and
 their canvas says you cleared it while they were editing. `nebula selection` is what they have selected.
 `nebula project rename <id> "<name>"` (or `current`) renames one, prints the
@@ -289,6 +289,19 @@ video stream, or an image with more than one frame or size, isn't measured
 started from the canvas is theirs to stop: the CLI refuses it, so tell them
 to press Stop in Nebula.
 
+A cancel for a run that hadn't started yet prints "Run <id> hadn't started
+yet. Nebula won't start it now, so nothing runs and nothing is spent." That
+id is stopped for good: a start still on its way is refused, so nothing ran
+and nothing was spent. `nebula result` on it prints "Run <id> was stopped
+before it started, so nothing ran and nothing was spent." To run the same
+nodes again, start a new run.
+
+If Nebula has no record of the id at all (it may have run before Nebula
+restarted, or the id is wrong), both commands print "Nebula has no record
+of run <id>. If it started before Nebula restarted, check Run History for
+what it did." Don't tell the person nothing ran: ask them to check Run
+History in Nebula.
+
 A run where any node failed exits 1 and prints each node's error (a missing
 key refuses the whole run before anything is called or spent, as does a
 Krea node with a required field nobody chose: Krea 2's Aspect ratio and
@@ -368,9 +381,9 @@ and `last_error_kind` (`unavailable`, `unreadable` or `other`) in
 
 Refusals give you the specific text (an id, the field, the command to run);
 the person's canvas gets a written line instead. Read `detail`, not the
-person's wording. That includes the World Labs holds: a run start, "Checked
-Marble — unlock" and "Checked Marble — forget" refused while a job is still
-waiting keep their exact text for you. A node's run error works the same way:
+person's wording. That includes the World Labs holds: a run start, the
+person's "I've checked Marble" (the status bar) and "Forget ID" (Run History)
+refused while a job is still waiting keep their exact text for you. A node's run error works the same way:
 `error` (in `nebula result`, `nebula look` and the run record) is the specific
 text, ids and parameter names included; the card shows a written line (the
 graph's `errorPerson`, when the node's handler wrote one, or a line for the
@@ -837,3 +850,25 @@ Connections must match types; `Any` connects to anything.
    their limits and propose anything bigger.
 5. Canvas edits can be undone, so when the person gives you room, use it.
    Ask before anything that can't be undone.
+6. A 409 "The open project changed since this started" (or "The canvas was
+   cleared or replaced since") means the person switched or cleared the
+   canvas while your change was on its way: nothing changed. Read the
+   canvas again before you retry, since node ids start again in each project.
+   Nebula filing an unfiled canvas as "Recovered canvas" (the same graph and
+   ids) is not a switch: your change and your run carry on.
+7. "Nebula isn't running at <url>" (and `cannot connect to Nebula backend`)
+   means the person's canvas is read-only too: their tab blocks edits, runs,
+   proposal Accept/Reject, a chat "Allow once" and every other write that
+   starts or changes something until Nebula is back, and nothing you or they
+   edit meanwhile is saved or queued. Only stops still go (a run's Stop, a
+   render's cancel, the Commons worker's Stop, chat Deny), so the person can
+   still stop a run that's spending.
+   Once it's back, read the canvas again (`nebula graph`, MCP `start_here`)
+   before you assume your plan landed.
+8. A bundle load refused with "Nebula retried saving its World Labs recovery
+   journal and couldn't write it. Restart the Nebula backend, then try
+   again." won't clear by retrying (the retry already wrote the journal for
+   real and it failed): ask the person to restart Nebula. Their canvas reads
+   "Nebula couldn't save its World Labs safeguards. Restart Nebula, then try
+   again." A 507 that says Nebula "cannot verify the durable World Labs
+   paid-start fence" is the paid-start store instead; the same fix applies.

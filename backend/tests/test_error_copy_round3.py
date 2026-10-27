@@ -41,7 +41,19 @@ def gone(thing: str, things: str) -> str:
 
 
 NODE_GONE = "That node isn't on the canvas anymore."
-WAITING = "This node is still waiting on World Labs."
+WAITING = "This node is still waiting on World Labs."  # before round 13 of PR #114
+# GM - Design's World Labs lines for round 13 of PR #114, verbatim (each under
+# the screen's own "Couldn't <action>." heading; node names are card titles).
+STARTING = "A World Labs run is still starting. Try again in a moment."
+NEEDS_CHECK = "A World Labs run needs your check first. Use the notice at the top of the screen."
+
+
+def RECOVERY(node: str) -> str:
+    return f"“{node}” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run History."
+
+
+def PARAMS(node: str, fields: str) -> str:
+    return f"“{node}” has a World Labs ID in its settings. Check it in Marble, then clear {fields}."
 
 
 # -- 1. World Labs: the node's real button, per state ----------------------------
@@ -107,7 +119,7 @@ def test_a_start_in_flight_says_to_let_the_run_finish(canvas, monkeypatch):
     monkeypatch.setattr(canvas.guard, "has_active_node", lambda node_id: node_id == node)
     response = _delete(canvas, node)
     assert response.status_code == 409
-    assert response.json()["detail"] == f"{WAITING} Let its run finish, then delete it."
+    assert response.json()["detail"] == STARTING
 
 
 def test_an_ambiguous_start_names_the_unlock_button(canvas, monkeypatch):
@@ -115,8 +127,7 @@ def test_an_ambiguous_start_names_the_unlock_button(canvas, monkeypatch):
     monkeypatch.setattr(canvas.guard, "list", lambda: [{"nodeId": node, "runId": "r1", "kind": "worldlabs"}])
     response = _delete(canvas, node)
     assert response.status_code == 409
-    assert response.json()["detail"] == (
-        f"{WAITING} Check the job in Marble, then use “Checked Marble — unlock” before you delete it.")
+    assert response.json()["detail"] == NEEDS_CHECK
 
 
 def test_a_recovery_record_names_the_forget_button_in_run_history(canvas, monkeypatch):
@@ -124,9 +135,7 @@ def test_a_recovery_record_names_the_forget_button_in_run_history(canvas, monkey
     monkeypatch.setattr(canvas.recoveries, "list", lambda: [{"nodeId": node, "runId": "r1"}])
     response = _delete(canvas, node)
     assert response.status_code == 409
-    assert response.json()["detail"] == (
-        f"{WAITING} Check the job in Marble, then use “Checked Marble — forget” in Run History "
-        "before you delete it.")
+    assert response.json()["detail"] == RECOVERY("Text Input")
 
 
 def test_a_recovery_id_in_the_node_names_its_fields(canvas, monkeypatch):
@@ -136,9 +145,8 @@ def test_a_recovery_id_in_the_node_names_its_fields(canvas, monkeypatch):
     monkeypatch.setattr(main_module, "has_recovery_identity", lambda definition_id, params: True)
     response = _delete(canvas, node)
     assert response.status_code == 409
-    assert response.json()["detail"] == (
-        f"{WAITING} Check the job in Marble, then clear the node's Resume Operation ID and Existing World ID "
-        "before you delete it.")
+    # A node whose fields can't be read (stubbed here) names the World node's first.
+    assert response.json()["detail"] == PARAMS("Text Input", "“Resume Operation ID”")
 
 
 @pytest.mark.parametrize("headers", [AGENT, CLI, {}], ids=["agent", "cli", "script"])
@@ -166,14 +174,13 @@ def test_no_line_the_person_reads_says_settle_or_start(canvas, monkeypatch):
 def test_a_world_export_node_names_its_own_recovery_field(canvas, monkeypatch):
     import main as main_module
 
-    # "Checked Marble — forget" cleared the record; the ID is still in the node.
+    # "Forget ID" cleared the record; the ID is still in the node.
     monkeypatch.setattr(main_module, "_seed_shared_graph_recoveries_for_api", lambda nodes, *, source: [])
     node = canvas.graph.add_node("worldlabs-world-export", {"resume_operation_id": "op-export-1"},
                                  position={"x": 0, "y": 0})
     response = _delete(canvas, node)
     assert response.status_code == 409
-    assert response.json()["detail"] == (
-        f"{WAITING} Check the job in Marble, then clear the node's Resume Export Operation ID before you delete it.")
+    assert response.json()["detail"] == PARAMS("World Labs Export", "“Resume Export Operation ID”")
 
 
 def test_a_world_node_names_only_the_fields_it_holds(canvas, monkeypatch):
@@ -182,13 +189,14 @@ def test_a_world_node_names_only_the_fields_it_holds(canvas, monkeypatch):
     monkeypatch.setattr(main_module, "_seed_shared_graph_recoveries_for_api", lambda nodes, *, source: [])
     both = canvas.graph.add_node("worldlabs-environment", {"resume_operation_id": "op-1", "existing_world_id": "w-1"},
                                  position={"x": 0, "y": 0})
-    assert _delete(canvas, both).json()["detail"] == (
-        f"{WAITING} Check the job in Marble, then clear the node's Resume Operation ID and Existing World ID "
-        "before you delete it.")
+    assert _delete(canvas, both).json()["detail"] == PARAMS(
+        "World Labs Environment", "“Resume Operation ID” and “Existing World ID”")
     world_only = canvas.graph.add_node("worldlabs-environment", {"existing_world_id": "w-2"},
                                        position={"x": 0, "y": 0})
-    assert _delete(canvas, world_only).json()["detail"] == (
-        f"{WAITING} Check the job in Marble, then clear the node's Existing World ID before you delete it.")
+    assert _delete(canvas, world_only).json()["detail"] == PARAMS("World Labs Environment", "“Existing World ID”")
+    # A renamed node goes by its card title.
+    canvas.graph.set_label(world_only, "Harbor world")
+    assert _delete(canvas, world_only).json()["detail"] == PARAMS("Harbor world", "“Existing World ID”")
 
 
 # Review of round 3: Clear canvas, opening a project, replacing the graph and
@@ -197,12 +205,19 @@ def test_a_world_node_names_only_the_fields_it_holds(canvas, monkeypatch):
 # (GM: "'settle' and 'start' are internal."). The person's line leaves the
 # action out: the screen's own heading ("Couldn't clear the canvas.") names it.
 A_NODE_WAITING = "A node is still waiting on World Labs."
+# Round 12 of PR #114 (GM), wherever _reject_graph_replacement_during_paid_start
+# refuses: "Couldn't <action>. A World Labs start needs checking. Open Run
+# History and choose “Check Marble”." (an unresolved record) and "Couldn't
+# <action>. A World Labs start is still settling. Try again in a moment." (a
+# start settling); the screen's heading says "Couldn't <action>.". Before
+# round 12 these were the node lines ("A node is still waiting on World Labs.
+# Let its run finish, then try again." and the "Checked Marble — …" ones).
+# Round 13 (GM): the state's own line, as for a node (STARTING, NEEDS_CHECK,
+# RECOVERY with the held node's card title).
 GRAPH_PAID_STATE_PERSON = {
-    "active": f"{A_NODE_WAITING} Let its run finish, then try again.",
-    "ambiguity": (f"{A_NODE_WAITING} Check the job in Marble, then use “Checked Marble — unlock” "
-                  "before you try again."),
-    "recovery": (f"{A_NODE_WAITING} Check the job in Marble, then use “Checked Marble — forget” in Run History "
-                 "before you try again."),
+    "active": STARTING,
+    "ambiguity": NEEDS_CHECK,
+    "recovery": RECOVERY("Text Input"),
 }
 
 
@@ -235,8 +250,22 @@ def _open(canvas, headers):
     return canvas.client.post(f"/api/projects/{_other_project(canvas)}/open", json={}, headers=headers)
 
 
+def _import(canvas, headers):
+    return canvas.client.post("/api/graph/import", headers=headers, json={
+        "nodes": [{"id": "a", "definitionId": "text-input", "params": {"value": "x"}}], "edges": []})
+
+
+def _delete_open(canvas, headers):
+    import main as main_module
+
+    catalog = main_module.project_store.read()
+    return canvas.client.request("DELETE", f"/api/projects/{catalog['activeProjectId']}", headers=headers,
+                                 json={"workspaceRevision": catalog["workspaceRevision"]})
+
+
 @pytest.mark.parametrize("state", list(GRAPH_PAID_STATE_PERSON))
-@pytest.mark.parametrize("call", [_clear, _open], ids=["clear-canvas", "open-project"])
+@pytest.mark.parametrize("call", [_clear, _open, _import, _delete_open],
+                         ids=["clear-canvas", "open-project", "load-graph", "delete-open-project"])
 def test_replacing_the_canvas_tells_the_person_what_holds_it(canvas, monkeypatch, state, call):
     node = _node(canvas)
     _hold(canvas, monkeypatch, state, node)
@@ -255,8 +284,9 @@ def test_replacing_the_canvas_tells_the_person_what_holds_it(canvas, monkeypatch
     ("recovery", "Cannot {action} while unresolved World Labs paid state exists. "
                  "Check Marble and resolve the exact recovery/ambiguity record first."),
 ])
-@pytest.mark.parametrize("call,action", [(_clear, "clear the canvas"), (_open, "switch projects")],
-                         ids=["clear-canvas", "open-project"])
+@pytest.mark.parametrize("call,action", [(_clear, "clear the canvas"), (_open, "switch projects"),
+                                         (_import, "replace the graph"), (_delete_open, "delete the open project")],
+                         ids=["clear-canvas", "open-project", "load-graph", "delete-open-project"])
 @pytest.mark.parametrize("headers", [AGENT, CLI, {}], ids=["agent", "cli", "script"])
 def test_agents_keep_the_specific_canvas_replacement_detail(canvas, monkeypatch, state, specific, call, action,
                                                             headers):
@@ -287,26 +317,24 @@ def test_a_start_settling_inside_the_lifecycle_fence_says_the_same_line(canvas, 
 
 
 def test_forgetting_a_recovery_while_its_start_runs_says_to_let_it_finish(canvas, monkeypatch):
-    """Run History's "Checked Marble — forget" refuses for a start still in
-    flight; its line said "settling" too."""
+    """Run History's "Forget ID" refuses for a start still in flight; its
+    line said "settling" too."""
     node = _node(canvas)
     monkeypatch.setattr(canvas.guard, "has_active_node", lambda node_id: node_id == node)
     path = f"/api/provider-recoveries/r1/{node}?resume_operation_id=op-1"
     person = canvas.client.delete(path, headers=PERSON)
     assert person.status_code == 409
-    assert person.json()["detail"] == f"{WAITING} Let its run finish, then try again."
+    assert person.json()["detail"] == STARTING
     agent = canvas.client.delete(path, headers=AGENT)
     assert agent.json()["detail"] == ("Cannot delete a World Labs recovery checkpoint while that "
                                       "node's paid start is still settling")
 
 
-def test_restoring_a_bundle_names_the_recovery_fields_the_canvas_holds(canvas, monkeypatch):
+def test_restoring_a_bundle_over_recovery_ids_says_a_start_needs_checking(canvas, monkeypatch):
     canvas.graph.add_node("worldlabs-world-export", {"resume_operation_id": "op-export-1"}, position={"x": 0, "y": 0})
     response = canvas.client.post("/api/outputs/restore", content=b"", headers=PERSON)
     assert response.status_code == 409
-    assert response.json()["detail"] == (
-        f"{A_NODE_WAITING} Check the job in Marble, then clear the node's Resume Export Operation ID "
-        "before you try again.")
+    assert response.json()["detail"] == PARAMS("World Labs Export", "“Resume Export Operation ID”")
     agent = canvas.client.post("/api/outputs/restore", content=b"", headers=AGENT)
     assert agent.json()["detail"] == (
         "Cannot restore a graph bundle while unresolved World Labs paid state exists. "
@@ -600,3 +628,38 @@ def test_a_broken_clients_labels_get_the_fallback_line_and_keep_the_detail_for_t
         evaluation.validate_labels({"tags": {}}, [], vocabulary=[])
     assert _shown(bad.value) == person_copy.FALLBACK
     assert str(bad.value) == "Invalid ground-truth label fields."
+
+
+# Round 13 of PR #114 (GM): the params line names the field that holds the ID.
+@pytest.mark.parametrize("params,fields", [
+    ({"resume_operation_id": "op-1"}, "“Resume Operation ID”"),
+    ({"existing_world_id": "w-1"}, "“Existing World ID”"),
+])
+def test_restoring_a_bundle_names_the_field_that_holds_the_id(canvas, params, fields):
+    canvas.graph.add_node("worldlabs-environment", params, position={"x": 0, "y": 0})
+    response = canvas.client.post("/api/outputs/restore", content=b"", headers=PERSON)
+    assert response.status_code == 409
+    assert response.json()["detail"] == PARAMS("World Labs Environment", fields)
+
+
+def test_restoring_a_bundle_names_a_recovery_records_node_by_its_card_title(canvas, monkeypatch):
+    node = canvas.graph.add_node("worldlabs-environment", {}, position={"x": 0, "y": 0})
+    canvas.graph.set_label(node, "Harbor world")
+    monkeypatch.setattr(canvas.recoveries, "list", lambda: [{"nodeId": node, "runId": "r1"}])
+    response = canvas.client.post("/api/outputs/restore", content=b"", headers=PERSON)
+    assert response.json()["detail"] == RECOVERY("Harbor world")
+
+
+def test_a_bootstrap_error_reads_gms_restart_line(canvas, monkeypatch):
+    """GM, round 15 of PR #114 (item 5): "Couldn't <action>. Nebula couldn't
+    save its World Labs safeguards. Restart Nebula, then try again." The
+    screen's heading names the action; a reload doesn't re-run the boot
+    seeding (round 13 notes), so the line says restart."""
+    import main as main_module
+
+    monkeypatch.setattr(main_module, "_graph_recovery_bootstrap_error", "journal unavailable")
+    monkeypatch.setattr(main_module, "_retry_graph_recovery_bootstrap", lambda _action: False)
+    response = canvas.client.post("/api/outputs/restore", content=b"", headers=PERSON)
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "Nebula couldn't save its World Labs safeguards. Restart Nebula, then try again.")

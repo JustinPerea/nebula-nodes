@@ -25,6 +25,7 @@ import type { Edge, Node } from '@xyflow/react';
 import type { CinemaSceneSpec, NodeData } from '../types';
 import type { RemovalRecord } from './deleteNotice';
 import { cleanPending, type PendingFlag } from './pendingNodes';
+import { canonicalBackendAssetUrls } from './backend';
 
 /** Backend (cli_graph) node ids: n1, n2, ... Everything else is frontend-only. */
 export const CLI_NODE_ID_RE = /^n\d+$/;
@@ -74,6 +75,293 @@ export interface ForeignEdit {
   at: number;
   before: GraphSlice;
   after: GraphSlice;
+}
+
+/**
+ * One of the person's own adds in this tab (round 14 of PR #114, review 13
+ * M1 + M3): it owns exactly the ids that add created, never a whole-canvas
+ * snapshot. Undo removes those nodes (their wires go with them) and nothing
+ * else; Redo puts them back. A sync that brings the backend's nodes into the
+ * tab (an empty tab's first add, a reconnect), another add racing this one,
+ * or an agent's edit landing meanwhile never widens it, so Undo never sends
+ * an id the add didn't make. `after` is filled from the canvas as the step is
+ * undone (captureOwnAdd), so Redo brings the nodes back as they were then.
+ */
+export interface OwnAdd {
+  kind: 'own-add';
+  nodeIds: string[];
+  /** Param keys the step changed on nodes it didn't add (an accepted
+   * proposal's `updatedNodes`, round 15 of PR #114, review 14 M5): the
+   * values before, and the keys that weren't set before. Undo puts back only
+   * these keys; every other key keeps its value as the canvas has it then. */
+  params?: OwnParamChange[];
+  before: GraphSlice;
+  after: GraphSlice;
+  /** What its undo's restore removed, so Redo names them (as ForeignEdit). */
+  removals?: RemovalRecord[];
+  /** An accepted proposal's step (round 16 of PR #114, review 15 M5): its
+   * nodes as Accept added them. Undo removes one only while nobody edited it
+   * since; one an agent changed is kept, as the agent left it. */
+  accepted?: Record<string, Node<NodeData>>;
+}
+
+export interface OwnParamChange {
+  nodeId: string;
+  before: Record<string, unknown>;
+  absent: string[];
+  /** What the step set each key to (an accepted proposal's value). Undo puts
+   * a key back only while it still holds this: a key an agent changed since
+   * is left as the agent set it (round 16 of PR #114, review 15 M5). */
+  set?: Record<string, unknown>;
+}
+
+/** What an undo of an accepted proposal left alone, per node: the settings
+ * that changed since Accept (a node it added and an agent then edited is
+ * kept whole, named by the settings that changed). */
+export interface KeptAfterAccept {
+  nodeId: string;
+  keys: string[];
+  /** A node Accept added, kept whole because it changed since (GM, round 17:
+   * named as one item). False for settings kept on a node it didn't add. */
+  wholeNode: boolean;
+}
+
+/** Who made a change this tab saw arrive (round 17 of PR #114, review 16 L3;
+ * GM's follow-up): an agent (its presence name, or null for an unnamed one),
+ * the person in another window ("You"), or nobody this tab can name. A
+ * change with no source on it counts as unknown: never guessed. */
+export type ChangeSource = { kind: 'agent'; name: string | null } | { kind: 'you' } | { kind: 'unknown' };
+
+export function isOwnAdd(entry: unknown): entry is OwnAdd {
+  return Boolean(entry) && (entry as { kind?: unknown }).kind === 'own-add';
+}
+
+/** A step undone and redone by its slices (applySlice), its own inverse. */
+export function isSliceStep(entry: unknown): entry is ForeignEdit | OwnAdd {
+  return isForeignEdit(entry) || isOwnAdd(entry);
+}
+
+export function ownAddStep(nodeIds: Iterable<string>, params: OwnParamChange[] = [],
+  accepted?: Node<NodeData>[]): OwnAdd {
+  const ids = [...new Set(nodeIds)];
+  return {
+    kind: 'own-add',
+    nodeIds: ids,
+    ...(params.length > 0 ? { params } : {}),
+    ...(accepted ? { accepted: Object.fromEntries(accepted.map((node) => [node.id, keep(node)])) } : {}),
+    before: { nodes: Object.fromEntries(ids.map((id) => [id, null])), edges: {} },
+    after: { nodes: {}, edges: {} },
+  };
+}
+
+/** A dynamic add's card got its backend id: the step owns the new id now. */
+export function renameOwnedNode(step: OwnAdd, from: string, to: string): void {
+  step.nodeIds = step.nodeIds.map((id) => (id === from ? to : id));
+  for (const slice of [step.before, step.after]) {
+    if (from in slice.nodes) {
+      const node = slice.nodes[from];
+      delete slice.nodes[from];
+      slice.nodes[to] = node ? { ...node, id: to } : node;
+    }
+  }
+}
+
+/** Before an own add is undone: what it owns as the canvas has it now (its
+ * nodes, and the wires that touch them), so Redo brings that back. Returns
+ * what an accepted proposal's undo leaves alone because it changed since
+ * Accept (round 16 of PR #114, review 15 M5); empty for every other add. */
+export function captureOwnAdd(step: OwnAdd, nodes: Node<NodeData>[], edges: Edge[]): KeptAfterAccept[] {
+  const kept: KeptAfterAccept[] = [];
+  // A node Accept added that someone edited since stays, as they left it.
+  const editedSince = new Set<string>();
+  for (const id of step.nodeIds) {
+    const added = step.accepted?.[id];
+    const node = nodes.find((candidate) => candidate.id === id);
+    if (!added || !node || acceptedKey(added) === acceptedKey(node)) continue;
+    editedSince.add(id);
+    kept.push({ nodeId: id, keys: changedSettings(added, node), wholeNode: true });
+  }
+  const owned = new Set(step.nodeIds.filter((id) => !editedSince.has(id)));
+  step.before = { nodes: Object.fromEntries([...owned].map((id) => [id, null])), edges: {} };
+  step.after = { nodes: {}, edges: {} };
+  for (const node of nodes) if (owned.has(node.id)) step.after.nodes[node.id] = keep(node);
+  for (const edge of edges) {
+    if (!owned.has(edge.source) && !owned.has(edge.target)) continue;
+    step.before.edges[edgeKey(edge)] = null;
+    step.after.edges[edgeKey(edge)] = { ...edge, selected: false };
+  }
+  // Param keys it changed on a node it didn't add: the node as it is now,
+  // with only those keys put back (a key that wasn't set is unset again),
+  // and only while each still holds what the step set.
+  for (const change of step.params ?? []) {
+    const node = nodes.find((candidate) => candidate.id === change.nodeId);
+    if (!node || step.nodeIds.includes(node.id)) continue;
+    const current = node.data.params ?? {};
+    const stillSet = (key: string) => !change.set || sameValue(current[key], change.set[key]);
+    const restore = Object.keys(change.before).filter(stillSet);
+    const unset = change.absent.filter(stillSet);
+    const changed = [...Object.keys(change.before), ...change.absent].filter((key) => !stillSet(key));
+    if (changed.length > 0) kept.push({ nodeId: node.id, keys: changed, wholeNode: false });
+    if (restore.length === 0 && unset.length === 0) continue;
+    const now = keep(node);
+    const params: Record<string, unknown> = { ...node.data.params };
+    for (const key of restore) params[key] = change.before[key];
+    for (const key of unset) delete params[key];
+    step.before.nodes[node.id] = { ...now, data: { ...now.data, params } };
+    step.after.nodes[node.id] = now;
+  }
+  return kept;
+}
+
+/** Whether a captured own add would change nothing on undo (an accepted
+ * proposal whose every change was changed again since). */
+export function ownAddIsEmpty(step: OwnAdd): boolean {
+  return Object.keys(step.before.nodes).length === 0 && Object.keys(step.before.edges).length === 0
+    && Object.keys(step.after.nodes).length === 0;
+}
+
+/** The settings (param keys, and the name as "label") that differ. */
+function changedSettings(was: Node<NodeData>, now: Node<NodeData>): string[] {
+  const before = authoredParams(was);
+  const after = authoredParams(now);
+  const keys = [...new Set([...Object.keys(before), ...Object.keys(after)])]
+    .filter((key) => !sameValue(before[key], after[key]));
+  if (was.data.label !== now.data.label) keys.unshift('label');
+  return keys;
+}
+
+/** Two values the same as saved JSON (key order ignored), with this
+ * backend's asset links compared as the backend gave them (round 17 of PR
+ * #114, review 16 M2): the canvas shows them absolute (a sync's
+ * rewriteBackendAssetUrls), an Accept reply sends them relative, and both
+ * name the same file. */
+export function sameValue(a: unknown, b: unknown): boolean {
+  return stableJson(canonicalBackendAssetUrls(a)) === stableJson(canonicalBackendAssetUrls(b));
+}
+
+/** An accepted node's authoring (name and params), asset links canonical. */
+function acceptedKey(node: Node<NodeData>): string {
+  return stableJson(canonicalBackendAssetUrls({ definitionId: node.data.definitionId, label: node.data.label,
+    params: authoredParams(node) }));
+}
+
+/**
+ * A run's own param write-back reached the canvas (a sync with `runParams`,
+ * round 17 of PR #114, review 16 L3): those values are the run's output,
+ * nobody's edit. An accepted proposal's step takes them as what Accept left,
+ * so Undo still puts its keys back and still removes a node it added.
+ */
+export function rebaseAcceptedOnRunOutput(step: OwnAdd, before: Node<NodeData>, after: Node<NodeData>): void {
+  const was = before.data.params ?? {};
+  const now = after.data.params ?? {};
+  const keys = [...new Set([...Object.keys(was), ...Object.keys(now)])].filter((key) => !sameValue(was[key], now[key]));
+  if (keys.length === 0) return;
+  const added = step.accepted?.[after.id];
+  if (added) {
+    const params: Record<string, unknown> = { ...added.data.params };
+    for (const key of keys) {
+      if (key in now) params[key] = now[key]; else delete params[key];
+    }
+    step.accepted![after.id] = { ...added, data: { ...added.data, params } };
+  }
+  for (const change of step.params ?? []) {
+    if (change.nodeId !== after.id || !change.set) continue;
+    for (const key of keys) if (key in change.set) change.set[key] = now[key];
+  }
+}
+
+/**
+ * What the canvas says when Undo of an accepted proposal left changes made
+ * after Accept (GM - Design, rounds 16 and 17 of PR #114, verbatim; the
+ * forms GM didn't word are marked).
+ *
+ * `kept`: per node, the settings that changed, and whether it is a node the
+ * proposal added, kept whole (named as one item: "except “<node>”"). `source`:
+ * who changed them all; any mix, or a change with no known source, drops the
+ * actor (GM: "Never guess "An agent"").
+ *
+ * - One node, 1-3 settings: named, "for “<node>”" (that form only when they
+ *   are all on one node). Nothing undone says the same names.
+ * - One kept node, something else undone: "Undid the proposal except
+ *   “<node>”. <who> changed it after you accepted."
+ * - Otherwise counted: "<N> settings <agent> changed" (settings only),
+ *   "<N> changes <agent> made" (kept nodes in the count); with nothing
+ *   undone, "every setting in the proposal".
+ * - "You": the person's other window, "… in another window after you
+ *   accepted." Unknown: "Undid the proposal except <N> changes made after you
+ *   accepted." / "Nothing was undone. “<s>” for “<node>” was changed after you
+ *   accepted."
+ */
+export function acceptUndoLine(kept: { node: string; settings: string[]; wholeNode?: boolean }[],
+  source: ChangeSource, nothingUndone: boolean): string {
+  const total = kept.reduce((count, item) => count + (item.wholeNode && !nothingUndone ? 1 : item.settings.length), 0);
+  const one = kept.length === 1 ? kept[0] : null;
+  const quote = (text: string) => `\u201c${text}\u201d`;
+  const names = (settings: string[]) => {
+    const quoted = settings.map(quote);
+    return quoted.length === 1 ? quoted[0] : `${quoted.slice(0, -1).join(', ')} and ${quoted[quoted.length - 1]}`;
+  };
+  const agent = source.kind === 'agent' ? source.name ?? 'An agent' : null;
+  const agentInner = source.kind === 'agent' ? source.name ?? 'an agent' : null;
+  const where = source.kind === 'you' ? ' in another window' : '';
+  const lead = agent ?? 'You';
+  // One node whose 1-3 settings are named ("for “<node>”").
+  const named = one && one.settings.length >= 1 && one.settings.length <= 3 && (nothingUndone || !one.wholeNode);
+  if (nothingUndone) {
+    if (named) {
+      if (source.kind === 'unknown') {
+        return `Nothing was undone. ${names(one.settings)} for ${quote(one.node)} ${one.settings.length === 1 ? 'was' : 'were'} changed after you accepted.`;
+      }
+      return `Nothing was undone. ${lead} changed ${names(one.settings)} for ${quote(one.node)}${where} after you accepted.`;
+    }
+    // Builder's forms for "You" and unknown (GM worded the agent's).
+    if (source.kind === 'unknown') return 'Nothing was undone. Every setting in the proposal was changed after you accepted.';
+    return `Nothing was undone. ${lead} changed every setting in the proposal${where} after you accepted.`;
+  }
+  if (source.kind === 'unknown') {
+    return `Undid the proposal except ${total} ${total === 1 ? 'change' : 'changes'} made after you accepted.`;
+  }
+  if (one?.wholeNode) {
+    return `Undid the proposal except ${quote(one.node)}. ${lead} changed it${where} after you accepted.`;
+  }
+  if (named) {
+    return `Undid the proposal except ${names(one.settings)} for ${quote(one.node)}. ${lead} changed ${one.settings.length === 1 ? 'it' : 'them'}${where} after you accepted.`;
+  }
+  const who = agentInner ?? 'you';
+  if (kept.some((item) => item.wholeNode)) {
+    return `Undid the proposal except ${total} changes ${who} made${where} after you accepted.`;
+  }
+  return `Undid the proposal except ${total} settings ${who} changed${where} after you accepted.`;
+}
+
+/** GM's lines (round 16 follow-up, round 17) for a rename draft dropped on
+ * reconnect because the node was renamed while Nebula was offline, by who
+ * renamed it: an agent, the person in another window, or unknown. */
+export function droppedRenameLine(source: ChangeSource, newName: string, draft: string): string {
+  if (source.kind === 'you') {
+    return `You renamed this node \u201c${newName}\u201d in another window while Nebula was offline, so your rename to \u201c${draft}\u201d here wasn't saved.`;
+  }
+  if (source.kind === 'unknown') {
+    return `This node was renamed \u201c${newName}\u201d while Nebula was offline, so your rename to \u201c${draft}\u201d wasn't saved.`;
+  }
+  return `${source.name ?? 'An agent'} renamed this node \u201c${newName}\u201d while Nebula was offline, so your rename to \u201c${draft}\u201d wasn't saved.`;
+}
+
+/** The param keys `updated` sets to a value other than `was` has, with the
+ * values `was` had (an accepted proposal's updates against the canvas before
+ * Accept). Null when nothing changed. */
+export function paramChange(was: Node<NodeData>, updated: Node<NodeData>): OwnParamChange | null {
+  const before: Record<string, unknown> = {};
+  const absent: string[] = [];
+  const set: Record<string, unknown> = {};
+  const old = was.data.params ?? {};
+  for (const [key, value] of Object.entries(updated.data.params ?? {})) {
+    if (stableJson(old[key]) === stableJson(value)) continue;
+    if (Object.prototype.hasOwnProperty.call(old, key)) before[key] = old[key];
+    else absent.push(key);
+    set[key] = value;
+  }
+  return Object.keys(before).length > 0 || absent.length > 0 ? { nodeId: was.id, before, absent, set } : null;
 }
 
 export function edgeKey(edge: Pick<Edge, 'source' | 'target' | 'sourceHandle' | 'targetHandle'>): string {
@@ -420,7 +708,7 @@ interface CanvasSnapshot {
   edges: Edge[];
 }
 
-function addedBy(entry: ForeignEdit | CanvasSnapshot, id: string): entry is ForeignEdit {
+function addedBy(entry: ForeignEdit | OwnAdd | CanvasSnapshot, id: string): entry is ForeignEdit {
   return isForeignEdit(entry) && entry.before.nodes[id] === null && Boolean(entry.after.nodes[id]);
 }
 
@@ -443,7 +731,7 @@ function addedBy(entry: ForeignEdit | CanvasSnapshot, id: string): entry is Fore
  * restore find their step by identity.
  */
 export function foldArrange(
-  history: Array<ForeignEdit | CanvasSnapshot>,
+  history: Array<ForeignEdit | OwnAdd | CanvasSnapshot>,
   positions: Record<string, Point>,
   shown: Record<string, Point | undefined>,
 ): void {
@@ -470,7 +758,7 @@ export function foldArrange(
     }
   }
   for (const entry of history.slice(start + 1)) {
-    if (isForeignEdit(entry)) {
+    if (isSliceStep(entry)) {
       for (const slice of [entry.before, entry.after]) {
         for (const id of ids) {
           const node = slice.nodes[id];

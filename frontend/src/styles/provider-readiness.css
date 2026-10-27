@@ -28,7 +28,18 @@ body.app-slava-restraint .provider-readiness__setup {
   cursor: pointer;
 }
 
-body.app-slava-restraint .provider-readiness__setup:hover { border-color: var(--sr-accent); }
+body.app-slava-restraint .provider-readiness__setup:hover:not(:disabled) { border-color: var(--sr-accent); }
+/* Offline (GM, round 15 of PR #114): clearly dimmed, not-allowed (App.css). */
+body.app-slava-restraint .provider-readiness__setup:disabled { opacity: 0.45; cursor: not-allowed; }
+/* Offline (GM, round 16 of PR #114): every readiness line is the neutral
+   disabled grey, and "Set up" is a disabled button (no accent on hover). */
+body.app-slava-restraint .provider-readiness--offline .provider-readiness__label,
+body.app-slava-restraint .provider-readiness--offline.provider-readiness--warning .provider-readiness__label,
+body.app-slava-restraint .provider-readiness--offline.provider-readiness--success .provider-readiness__label { color: var(--sr-ink-meta); }
+body.app-slava-restraint .provider-readiness--offline .provider-readiness__setup:disabled {
+  border-color: var(--sr-edge);
+  color: var(--sr-ink-meta);
+}
 body.app-slava-restraint .provider-readiness__setup:focus-visible { outline: var(--sr-focus-outline); outline-offset: var(--sr-focus-offset); }
 body.app-slava-restraint .create-composer > .provider-readiness { padding: 0 0 8px; justify-content: flex-start; }
 body.app-slava-restraint .create-composer > .provider-readiness .provider-readiness__setup { margin-left: 0; }

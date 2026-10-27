@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { act } from 'react';
 import { WorkspaceRail } from '../src/components/WorkspaceRail';
 import { ChatLauncher } from '../src/components/ChatLauncher';
 import { WorkspaceModeNavigation } from '../src/components/CanvasTabs';
@@ -102,5 +103,21 @@ describe('WorkspaceRail', () => {
 
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(useUIStore.getState().leftDock).toBeNull();
+  });
+
+  // Review 13, L5: an open alertdialog or any aria-modal dialog holds Escape
+  // (the rail skipped only role="dialog"), so it never closes the dock behind it.
+  it.each([
+    ['alertdialog', { role: 'alertdialog' }],
+    ['aria-modal', { 'aria-modal': 'true' }],
+  ])('Escape leaves the drawer open while a modal %s is open', (_name, attributes) => {
+    render(<WorkspaceRail />);
+    act(() => useUIStore.getState().setLeftDock('history'));
+    const modal = document.createElement('div');
+    for (const [key, value] of Object.entries(attributes)) modal.setAttribute(key, value);
+    document.body.appendChild(modal);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(useUIStore.getState().leftDock).toBe('history');
+    modal.remove();
   });
 });

@@ -38,7 +38,7 @@ vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe:
 import { useGraphStore } from '../src/store/graphStore';
 import {
   MISSING_KEY_FAILURE, MODEL_SETTINGS_FAILURE, MODEL_SETTINGS_FAILURE_HEADER,
-  modelKeyMissingText, modelSettingsFailedText, modelSetupFailedText,
+  modelKeyMissingText, modelSettingsFailedText,
 } from '../src/lib/failureLines';
 
 const initialGraph = useGraphStore.getState();
@@ -84,13 +84,15 @@ describe('the model picker names the failure (L-5)', () => {
         expect(shown()).not.toContain(modelSettingsFailedText('Writer'));
         expect(store().nodes[0].data.params).toEqual(params);
       });
-      it(`${name} (${id}): no header (a malformed id): "Couldn't set up"`, async () => {
+      it(`${name} (${id}): no header (a malformed id): "Couldn't change the model"`, async () => {
         set(id, definitionId, params);
         net.reply = (path) => /model$|universal\/ports$/.test(path)
           ? json(400, { detail: 'A Replicate model_id is owner/name.' }) : json(200, {});
         await configure(id);
         await settle();
-        expect(shown()).toContain(modelSetupFailedText('Writer'));
+        // Round 21 (the #114 merge): #114's GM line for a failed model change
+        // (channel round 14) where neither of #195's two lines applies.
+        expect(shown().join('\n')).toContain("Couldn't change the model for “Writer”.");
       });
       it(`${name} (${id}): a failed read: "Couldn't load the model settings"`, async () => {
         set(id, definitionId, params);

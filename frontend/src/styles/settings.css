@@ -812,3 +812,22 @@ body.app-slava-restraint .settings-notice__undo:focus-visible { outline: var(--s
   body.app-slava-restraint .settings-pref--link svg { transition: none; }
   body.app-slava-restraint .settings-row__dot--busy { animation: none; border-top-color: var(--sr-ink-light); opacity: 0.6; }
 }
+
+/* Round 15 of PR #114: the tab's controls sit in one fieldset, disabled while
+   Nebula is offline. No box of its own. */
+.settings__fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* Offline (GM, round 16 of PR #114): one level of dimming, on the controls
+   themselves, never the fieldset's on top of theirs. */
+.settings__fieldset[data-offline-disabled] {
+  opacity: 1;
+}
+.settings__fieldset:disabled :disabled {
+  opacity: var(--sr-disabled-opacity, 0.48);
+  cursor: not-allowed;
+}

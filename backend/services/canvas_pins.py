@@ -141,7 +141,6 @@ class CanvasPins:
         # A getter lets main.py follow `main.project_store` when tests swap it.
         self._store_source = store
         self._clock = clock
-        self._cache: tuple[str | None, list[dict[str, Any]]] | None = None
 
     @property
     def store(self) -> ProjectStore:
@@ -149,18 +148,24 @@ class CanvasPins:
         return source if isinstance(source, ProjectStore) else source()
 
     def forget_cache(self) -> None:
-        self._cache = None
+        """Nothing is kept here: the store's projection follows catalog.json."""
 
     # -- reading ---------------------------------------------------------
     def _active(self) -> tuple[str | None, list[dict[str, Any]]]:
-        if self._cache is None:
-            catalog = self.store.read()
-            project_id = catalog.get("activeProjectId")
-            project = catalog["projects"].get(project_id) if project_id else None
-            pins = [pin for pin in (project or {}).get("pins") or [] if isinstance(pin, dict)]
-            self._cache = (project_id, pins)
-        project_id, pins = self._cache
-        return project_id, copy.deepcopy(pins)
+        """The open project and its pins, as catalog.json holds them now
+        (a copy: callers may change it).
+
+        From ProjectStore.projection, which follows the file itself (every
+        commit replaces catalog.json, whichever route or process makes it),
+        so nothing has to remember to clear anything. Clearing a cache only
+        after a project switch's broadcast let a listing taken meanwhile
+        answer with the project open before (review 4 of PR #114, H1); and
+        re-reading the whole catalog after every unrelated commit (an
+        autosave) cost a parse, an upgrade and a deep copy per listing
+        (review 5, M2). The store shares one projection per file with the
+        workspace and the journal's project tag."""
+        view = self.store.projection()
+        return view.project_id, copy.deepcopy(list(view.pins))
 
     @staticmethod
     def _ordered(pins: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -197,7 +202,6 @@ class CanvasPins:
                project: str | None | object = _ANY_PROJECT) -> tuple[str, Any]:
         """Run ``mutate(pins)`` on the active project's list inside one catalog
         transaction. With ``project``, only while that project is the open one."""
-        self._cache = None
         store = self.store
         with store.transaction() as catalog:
             project_id = catalog.get("activeProjectId")
@@ -213,9 +217,12 @@ class CanvasPins:
             result = mutate(pins)
             if pins != before:
                 store.commit(catalog)
-        self._cache = None
         return project_id, result
 
+    # add, remove and resolve answer the pin; their ``*_in`` twins answer
+    # (project_id, pin): the project the write itself went to, for the
+    # route's journal tag. A second read of the catalog after the write could
+    # name a project opened since (review 6 of PR #114, LOW-1).
     def add(
         self,
         text: Any,
@@ -224,6 +231,16 @@ class CanvasPins:
         position: Any = None,
         graph_nodes: Mapping[str, Any],
     ) -> dict[str, Any]:
+        return self.add_in(text, node_id=node_id, position=position, graph_nodes=graph_nodes)[1]
+
+    def add_in(
+        self,
+        text: Any,
+        *,
+        node_id: str | None = None,
+        position: Any = None,
+        graph_nodes: Mapping[str, Any],
+    ) -> tuple[str, dict[str, Any]]:
         clean = clean_text(text, limit=MAX_PIN_TEXT)
         if (node_id is None) == (position is None):
             raise PinError(422, "Pin a note to a node (nodeId) or to a canvas spot (position), not both")
@@ -259,18 +276,24 @@ class CanvasPins:
                 pins.remove(oldest)
             return public_pin(pin)
 
-        return self._write(mutate)[1]
+        return self._write(mutate)
 
     def remove(self, pin_id: str) -> dict[str, Any]:
+        return self.remove_in(pin_id)[1]
+
+    def remove_in(self, pin_id: str) -> tuple[str, dict[str, Any]]:
         def mutate(pins: list[dict[str, Any]]) -> dict[str, Any]:
             for index, pin in enumerate(pins):
                 if pin.get("id") == pin_id:
                     return public_pin(pins.pop(index))
             raise PinError(404, "That note isn't there anymore. Reload to get the latest notes.")
 
-        return self._write(mutate)[1]
+        return self._write(mutate)
 
     def resolve(self, pin_id: str, reply: Any, identity: AgentIdentity) -> dict[str, Any]:
+        return self.resolve_in(pin_id, reply, identity)[1]
+
+    def resolve_in(self, pin_id: str, reply: Any, identity: AgentIdentity) -> tuple[str, dict[str, Any]]:
         text = clean_text(reply, limit=MAX_REPLY, label="Reply")
 
         def mutate(pins: list[dict[str, Any]]) -> dict[str, Any]:
@@ -282,7 +305,7 @@ class CanvasPins:
                     return public_pin(pin)
             raise PinError(404, f"No note {pin_id[:40]} on this canvas")
 
-        return self._write(mutate)[1]
+        return self._write(mutate)
 
     def _detach(self, pins: list[dict[str, Any]], node_ids: Callable[[str], bool],
                 positions: Mapping[str, Any], removals: Mapping[str, Mapping[str, Any]] | None = None,

@@ -53,6 +53,11 @@ const ALLOWED: Record<string, { count: number; why: string }> = {
   // `${err.message}` under `err instanceof GraphBundleImportTooLargeError`:
   // a FailureNotice whose reason is a written size line.
   // lib/graphFile.ts left the list in round 3f: its size notice reads failureMessage, not err.message.
+  // GM (round 12 of PR #114): when an add can't read the backend's graph into
+  // an empty tab, the person reads "Couldn't add “<label>”." and the raw
+  // reason goes to the Agent log (TabSyncFailure: the fetch's and the JSON
+  // parse's own messages), never to the notice.
+  'store/graphStore.ts': { count: 2, why: "an add's failed sync: the raw reason for the Agent log only (GM)" },
 };
 
 function files(dir: string): string[] {

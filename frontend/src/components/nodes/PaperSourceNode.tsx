@@ -22,6 +22,7 @@ import { pendingAttr } from '../../lib/pendingNodes';
 import { ErrorDetails } from '../failure/ErrorDetails';
 import '../../styles/paper-source-node.css';
 import { failureCopy, failureMessage, oneLine, REFUSED_FALLBACK_COPY } from '../../lib/errorCopy';
+import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 
 function refreshLabel(value?: string): string {
   if (!value) return 'Never refreshed';
@@ -37,6 +38,7 @@ export function PaperSourceNode({ id, data, selected }: NodeProps) {
   const source = nodeData.params._paperSource as PaperSourceRecord | undefined;
   const applyPaperSource = useGraphStore((state) => state.applyPaperSource);
   const [busy, setBusy] = useState<'selection' | 'export' | null>(null);
+  const readOnly = useBackendOffline();
   const [selection, setSelection] = useState<PaperSelection | null>(null);
   const [objectId, setObjectId] = useState('');
   const [scale, setScale] = useState<'1x' | '2x'>('2x');
@@ -199,16 +201,16 @@ export function PaperSourceNode({ id, data, selected }: NodeProps) {
           {sourceLinks && <a className="paper-source-node__action-link" href={sourceLinks.desktop} onClick={(event) => open(event, 'desktop')}>
             <ExternalLink size={12} aria-hidden="true" /> Open in Paper
           </a>}
-          <button type="button" disabled={Boolean(busy)} onClick={() => void refresh()}><RefreshCw size={12} aria-hidden="true" /> Refresh source</button>
+          <button type="button" disabled={Boolean(busy) || readOnly} {...offlineMark(readOnly)} onClick={() => void refresh()}><RefreshCw size={12} aria-hidden="true" /> Refresh source</button>
         </>}
-        <button type="button" disabled={Boolean(busy)} onClick={() => void readSelection()}>{source ? 'Reconnect object' : 'Link selected object'}</button>
-        <button type="button" disabled={Boolean(busy)} onClick={chooseManual}>{source ? 'Reconnect by ID' : 'Link object by ID'}</button>
+        <button type="button" disabled={Boolean(busy) || readOnly} {...offlineMark(readOnly)} onClick={() => void readSelection()}>{source ? 'Reconnect object' : 'Link selected object'}</button>
+        <button type="button" disabled={Boolean(busy) || readOnly} {...offlineMark(readOnly)} onClick={chooseManual}>{source ? 'Reconnect by ID' : 'Link object by ID'}</button>
       </div>
       {sourceLinks && <p className="paper-source-node__note nodrag nopan"><a href={sourceLinks.web} target="_blank" rel="noopener noreferrer" onClick={(event) => open(event, 'web')}>Open source link</a> · This editable object in Paper.</p>}
       {source && !sourceLinks && <p className="paper-source-node__note">Source links unavailable. Reconnect with the exact Paper file, page and object IDs.</p>}
       {manual && <div className="paper-source-node__link-form nodrag nopan" role="group" aria-label="Choose exact Paper identity">
         {(['fileId', 'pageId', 'objectId'] as const).map((field) => <label key={field}>{field === 'fileId' ? 'File ID' : field === 'pageId' ? 'Page ID' : 'Object ID'}
-          <input aria-label={`Paper ${field}`} value={manualIds[field]} disabled={Boolean(busy)} onChange={(event) => {
+          <input aria-label={`Paper ${field}`} value={manualIds[field]} disabled={Boolean(busy) || readOnly} {...offlineMark(readOnly)} onChange={(event) => {
             setManualIds({ ...manualIds, [field]: event.target.value });
             setSelection(null);
           }} />
@@ -222,19 +224,19 @@ export function PaperSourceNode({ id, data, selected }: NodeProps) {
           <span>{selection.file.name} · {selection.pageName}</span>
           {selection.selection.length > 0 ? <>
             <label>Object
-              <select aria-label="Paper object" value={objectId} onChange={(event) => setObjectId(event.target.value)} disabled={Boolean(busy)}>
+              <select aria-label="Paper object" value={objectId} onChange={(event) => setObjectId(event.target.value)} disabled={Boolean(busy) || readOnly} {...offlineMark(readOnly)}>
                 <option value="">Choose one object</option>
                 {selection.selection.map((object) => <option key={object.id} value={object.id}>{object.name} ({object.id})</option>)}
               </select>
             </label>
             {candidate && <span>Object bounds: {candidate.width} × {candidate.height} · {candidate.id}</span>}
             <label>Export resolution
-              <select aria-label="Export resolution" value={scale} onChange={(event) => setScale(event.target.value as '1x' | '2x')} disabled={Boolean(busy)}>
+              <select aria-label="Export resolution" value={scale} onChange={(event) => setScale(event.target.value as '1x' | '2x')} disabled={Boolean(busy) || readOnly} {...offlineMark(readOnly)}>
                 <option value="1x">1×</option><option value="2x">2×</option>
               </select>
             </label>
             <span>PNG · chosen object bounds · Paper artwork transparency</span>
-            <button type="button" disabled={!candidate || Boolean(busy)} onClick={() => void confirmLink()}>{source ? 'Export and reconnect' : 'Export and link'}</button>
+            <button type="button" disabled={!candidate || Boolean(busy) || readOnly} {...offlineMark(readOnly)} onClick={() => void confirmLink()}>{source ? 'Export and reconnect' : 'Export and link'}</button>
           </> : <p>No object selected. Select the logo in Paper and read the selection again.</p>}
           <button type="button" disabled={Boolean(busy)} onClick={() => { setSelection(null); setManual(false); }}>Cancel</button>
         </div>

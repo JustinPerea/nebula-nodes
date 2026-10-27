@@ -266,7 +266,7 @@ async def test_save_and_its_handoff_still_refuse_a_protected_reference(workspace
         # An agent switches away: the tab's last save lands as a handoff, checked the same way.
         await client.post("/api/projects", json={"name": "Agent's", "workspaceRevision": first["workspaceRevision"]},
                           headers=AGENT)
-        assert store.read()["handoff"]["projectId"] == first_id
+        assert first_id in store.read()["handoffs"]
         before = store.path.read_bytes()
         response = await client.put(f"/api/projects/{first_id}", json={
             "workspaceRevision": first["workspaceRevision"], "snapshot": _snapshot(_secret())})
@@ -305,7 +305,7 @@ async def test_an_open_that_will_be_refused_does_not_wait_for_the_check(workspac
         big = _seed(store, "Big", _snapshot(SLOW, "a dune"))
         revision = "stale" if refusal == "stale" else current["workspaceRevision"]
         if refusal == "run-active":
-            monkeypatch.setattr(main_module, "_synchronous_workspace_runs", {"run-1"})
+            monkeypatch.setattr(main_module.execution_runs, "has_active", lambda: True)
         started = time.monotonic()
         response = await client.post(f"/api/projects/{big}/open", json={"workspaceRevision": revision})
         took = time.monotonic() - started
@@ -325,7 +325,7 @@ async def test_an_open_refused_ahead_but_then_allowed_is_still_checked(workspace
         current = (await client.post("/api/projects", json={"name": "Current"})).json()
         bad = _seed(store, "Bad", _snapshot(_secret()))
         runs = {"run-1"}
-        monkeypatch.setattr(main_module, "_synchronous_workspace_runs", runs)
+        monkeypatch.setattr(main_module.execution_runs, "has_active", lambda: bool(runs))
         real = main_module._projects_live_export
 
         async def run_ends_then_export():

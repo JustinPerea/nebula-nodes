@@ -16,6 +16,8 @@ import { ProviderReadinessBadge } from '../ProviderReadinessBadge';
 import { ScrollFade } from '../ScrollFade';
 import '../../styles/panels.css';
 import '../../styles/node-library.css';
+import { refuseEditWhileOffline } from '../../lib/backendConnection';
+import { useBackendOffline } from '../../lib/useBackendOffline';
 
 // Initial collapsed state — all categories start collapsed on first render so
 // the user sees a scannable list of category headers, not a long node wall.
@@ -26,6 +28,7 @@ const PRIMARY_CATEGORIES: Partial<Record<NodeBrowseType, string>> = {
 };
 
 export function NodeLibrary() {
+  const readOnly = useBackendOffline();
   const visible = useUIStore((s) => s.panels.library.visible);
   const search = useUIStore((s) => s.librarySearch);
   const setSearch = useUIStore((s) => s.setLibrarySearch);
@@ -219,6 +222,8 @@ export function NodeLibrary() {
   }
 
   function addNodeAtViewportCenter(definitionId: string) {
+    // Offline is read-only (GM, round 14 of PR #114): the banner pulses.
+    if (refuseEditWhileOffline()) return;
     const preferred = screenToFlowPosition({
       x: typeof window !== 'undefined' ? window.innerWidth / 2 : 640,
       y: typeof window !== 'undefined' ? window.innerHeight / 2 : 360,
@@ -297,7 +302,9 @@ export function NodeLibrary() {
               {providers.map((item) => <option key={item} value={item}>{providerLabel(item)}</option>)}
             </select>
           </label>}
-          {!isHome && <p className="node-library__count" aria-live="polite">{resultCount} node{resultCount === 1 ? '' : 's'} · Choose a node to add</p>}
+          {!isHome && <p className="node-library__count" aria-live="polite">{resultCount} node{resultCount === 1 ? '' : 's'} · {
+            // GM, round 16 of PR #114: offline the count line says why nothing adds.
+            readOnly ? 'Adding is paused while offline' : 'Choose a node to add'}</p>}
         </div>
         <ScrollFade className="node-library__browser" key={isHome ? 'types' : (browseType ?? 'all')}>
           {isHome ? <div className="node-library__home">
@@ -338,11 +345,14 @@ export function NodeLibrary() {
               ? filteredCollapse.context === filterContext && !!filteredCollapse.categories[category]
               : (collapsed[category] ?? true);
             const items = defs.map((def) => (
-              <div key={def.id} className="node-library__entry">
+              <div key={def.id} className={`node-library__entry${readOnly ? ' node-library__entry--read-only' : ''}`}>
                 <button
                   type="button"
-                  className="panel__item"
-                  draggable
+                  className={`panel__item${readOnly ? ' panel__item--read-only' : ''}`}
+                  // Offline (GM, round 14): the library still opens for
+                  // browsing, its items show as disabled and don't drag.
+                  aria-disabled={readOnly || undefined}
+                  draggable={!readOnly}
                   tabIndex={isCollapsed ? -1 : 0}
                   onDragStart={(e) => onDragStart(e, def.id, def.displayName, category)}
                   onDrag={onDrag}

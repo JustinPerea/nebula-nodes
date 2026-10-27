@@ -57,7 +57,8 @@ def _run_steps(client: NebulaClient, steps: list[dict[str, Any]], args: argparse
 
     outcome = apply_steps.run_steps(
         steps, lambda step: client.apply_step(step, agent_name=args.agent_name),
-        reason=lambda exc: apply_steps.stop_reason(exc, client.base_url), on_applied=progress)
+        reason=lambda exc: apply_steps.stop_reason(exc, client.base_url, reread="run `nebula graph`"),
+        on_applied=progress)
     if args.json:
         print(json.dumps(outcome.as_json(), ensure_ascii=False, indent=2), file=out)
     if outcome.failed_step is not None:

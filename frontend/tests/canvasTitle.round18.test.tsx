@@ -123,16 +123,18 @@ describe('card title (NodeLabel)', () => {
 });
 
 describe('a node added after the change is saved with the stripped title and reads as unnamed', () => {
-  it('addNode (local fallback)', async () => {
+  // Round 21 (the #114 merge): addNode keeps no local copy (a failure adds
+  // nothing) and sends no label, so the backend's own title names the node,
+  // and its sync brings it in unnamed.
+  it('addNode: no local fallback, and no label of its own', async () => {
     apiFetchMock.mockReset().mockRejectedValue(new TypeError('Offline fixture'));
-    const id = await useGraphStore.getState().addNode(GROK, { x: 0, y: 0 });
-    const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === id)!;
-    expect(node.data.label).toBe('Grok Imagine 2.0');
+    const before = useGraphStore.getState().nodes.length;
+    await useGraphStore.getState().addNode(GROK, { x: 0, y: 0 });
+    expect(useGraphStore.getState().nodes).toHaveLength(before);
+    const posted = apiFetchMock.mock.calls.find(([path, init]) => path === '/api/graph/node' && init?.method === 'POST');
+    if (posted) expect(JSON.parse(String(posted[1].body))).not.toHaveProperty('label');
+    const node = { id: 'n9', data: { definitionId: GROK, label: canvasTitle(NODE_DEFINITIONS[GROK]), params: {} } } as Node<NodeData>;
     expect(isDefaultTitle(NODE_DEFINITIONS[GROK], node.data.label)).toBe(true);
-    render(<NodeLabel nodeId={node.id} label={node.data.label} displayName={NODE_DEFINITIONS[GROK].displayName}
-      defaultTitle={canvasTitle(NODE_DEFINITIONS[GROK])} />);
-    expect(shownTitle().getAttribute('title')).toBe('Double-click to rename');
-    // And the run names it by its route, as any unnamed node (not as a name of its own).
     expect(runNodeName(node, 'xai')).toBe('Grok Imagine 2.0 via xAI');
   });
   it('addNodeAndConnect', async () => {

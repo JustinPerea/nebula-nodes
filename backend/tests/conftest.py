@@ -24,6 +24,7 @@ import os
 import shutil
 import tempfile
 from collections.abc import Mapping
+import uuid
 from pathlib import Path
 
 _TEST_ROOT = Path(tempfile.mkdtemp(prefix="nebula-test-"))
@@ -152,6 +153,33 @@ def spending_limits_off(monkeypatch):
                                           "models": {}})
 
 
+@pytest.fixture
+def run_shot_task(monkeypatch, spending_limits_off):
+    """Run one Cinema shot through POST /api/cinema/generate-shot's own task
+    (main.generate_cinema_shot) and wait for it to end.
+
+    For tests about what that task writes back (the shot's output, its
+    terminal error); what comes before the task (validation, base models,
+    spend) is tested elsewhere and is waved through here. The tests patch
+    execute_graph; ``scene`` is the scene node as the canvas sends it."""
+    import main
+    from models.graph import GenerateShotRequest
+
+    monkeypatch.setattr(main, "validate_graph", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(main, "_validate_cinema_base_models", lambda *_args: None)
+
+    async def run(scene, shot_id: str) -> None:
+        run_id = f"test-shot-{uuid.uuid4().hex}"
+        response = await main.generate_cinema_shot(GenerateShotRequest(
+            nodes=[scene], edges=[], nodeId=scene.id, shotId=shot_id, runId=run_id))
+        assert response["status"] == "started", response
+        record = main.execution_runs.get(run_id)
+        assert record is not None
+        await record.task
+
+    return run
+
+
 # The person's launch token in tests (services/person_session.py). The
 # `person` fixture installs it; without that fixture it verifies as nothing.
 PERSON_TOKEN = "test-person-token-" + "0" * 25
@@ -242,3 +270,43 @@ def stored_image_urls(count: int = 3, *, name: str = "view") -> list[str]:
             path.write_bytes(b"\x89PNG\r\n\x1a\n" + bytes([index % 256]) * 16)
         urls.append(f"/api/outputs/chat-uploads/{path.name}")
     return urls
+
+
+async def asgi_get(app, path: str, query: str = "", headers: dict | None = None, gone=None) -> dict:
+    """GET `path` straight through the ASGI app, as a client that hangs up
+    when `gone` (an asyncio.Event) is set; until then it stays connected, as
+    uvicorn's receive does (it answers http.disconnect only once the client
+    closes the connection). Returns {"status": int | None, "body": bytes}.
+
+    TestClient and httpx's ASGITransport can't do this: their receive only
+    says disconnect after the response is complete, and cancelling the client
+    cancels the app with it, so a long-poll whose client went away is never
+    seen by the route."""
+    import asyncio
+
+    sent_request = False
+    answer: dict = {"status": None, "body": b""}
+
+    async def receive() -> dict:
+        nonlocal sent_request
+        if not sent_request:
+            sent_request = True
+            return {"type": "http.request", "body": b"", "more_body": False}
+        if gone is None:
+            await asyncio.Event().wait()  # never: a client that stays
+        await gone.wait()
+        return {"type": "http.disconnect"}
+
+    async def send(message: dict) -> None:
+        if message["type"] == "http.response.start":
+            answer["status"] = message["status"]
+        elif message["type"] == "http.response.body":
+            answer["body"] += message.get("body", b"")
+
+    raw = [(b"host", b"testserver")] + [(k.lower().encode(), v.encode()) for k, v in (headers or {}).items()]
+    scope = {"type": "http", "asgi": {"version": "3.0", "spec_version": "2.3"}, "http_version": "1.1",
+             "method": "GET", "scheme": "http", "path": path, "raw_path": path.encode(), "root_path": "",
+             "query_string": query.encode(), "headers": raw, "client": ("testclient", 50000),
+             "server": ("testserver", 80)}
+    await app(scope, receive, send)
+    return answer

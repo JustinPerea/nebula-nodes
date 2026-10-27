@@ -206,7 +206,8 @@ describe('Personal agents in the chat panel', () => {
     expect(socket.sent[2]).toEqual({ type: 'close_session', sessionId: 'host-2', personToken: TOKEN });
     // Typing /clear is the person's confirmation, so it sends force (the
     // backend refuses to clear a project with nodes without it).
-    expect(apiMocks.apiFetch).toHaveBeenCalledWith('/api/graph?force=true', { method: 'DELETE' });
+    expect(apiMocks.apiFetch).toHaveBeenCalledWith('/api/graph?force=true',
+      expect.objectContaining({ method: 'DELETE', signal: expect.any(AbortSignal) }));
   });
 });
 
@@ -371,17 +372,17 @@ describe('Chat /clear: the system line says what happened to the canvas', () => 
     expect(screen.queryByText(/with an empty canvas/)).toBeNull();
   });
 
-  it('a server error: it may be partly cleared', async () => {
+  it('a server error: it may have cleared (the round 21 merge: #114\'s line)', async () => {
     await connected();
     apiMocks.apiFetch.mockResolvedValue(new Response('{}', { status: 500 }));
     await sendText('/clear');
-    expect(await systemLine('Session cleared. Next message starts a fresh conversation. The canvas may not be fully cleared.')).toBeInTheDocument();
+    expect(await systemLine("Session cleared. Next message starts a fresh conversation. Nebula didn't confirm the canvas was cleared.")).toBeInTheDocument();
   });
 
   it('no answer: the same', async () => {
     await connected();
     apiMocks.apiFetch.mockRejectedValue(new TypeError('Failed to fetch'));
     await sendText('/clear');
-    expect(await systemLine('Session cleared. Next message starts a fresh conversation. The canvas may not be fully cleared.')).toBeInTheDocument();
+    expect(await systemLine("Session cleared. Next message starts a fresh conversation. Nebula didn't confirm the canvas was cleared.")).toBeInTheDocument();
   });
 });

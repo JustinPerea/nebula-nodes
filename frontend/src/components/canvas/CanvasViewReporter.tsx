@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useStore, useStoreApi, type Node } from '@xyflow/react';
 import type { NodeData } from '../../types';
 import { buildCanvasViewReport, publishCanvasView } from '../../lib/canvasView';
+import { useBackendOffline } from '../../lib/useBackendOffline';
 
 /** At most one report per interval; the latest state always goes out. */
 const REPORT_INTERVAL_MS = 300;
@@ -17,6 +18,10 @@ export function CanvasViewReporter() {
   const transform = useStore((s) => s.transform);
   const width = useStore((s) => s.width);
   const height = useStore((s) => s.height);
+  // Round 16 (L1): zoom and pan while offline are local view state; nothing
+  // is sent then, and the view in hand goes out once Nebula answers again,
+  // so agents read the canvas the person is looking at.
+  const offline = useBackendOffline();
   const lastSent = useRef(0);
   const inFlight = useRef<AbortController | null>(null);
 
@@ -32,6 +37,7 @@ export function CanvasViewReporter() {
   }, []);
 
   useEffect(() => {
+    if (offline) return undefined;
     // Throttle rather than debounce: a node streaming progress changes `nodes`
     // every few hundred ms, and a debounce would never let a report through.
     const wait = Math.max(0, REPORT_INTERVAL_MS - (Date.now() - lastSent.current));
@@ -47,7 +53,7 @@ export function CanvasViewReporter() {
       });
     }, wait);
     return () => window.clearTimeout(timeout);
-  }, [store, nodes, transform, width, height]);
+  }, [store, nodes, transform, width, height, offline]);
 
   return null;
 }

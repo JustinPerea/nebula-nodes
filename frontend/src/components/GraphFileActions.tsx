@@ -20,6 +20,7 @@ import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { projectNameForFile } from '../lib/projectSize';
 import type { LoadedGraph } from '../lib/graphFile';
 import type { NodeData } from '../types';
+import { refuseEditWhileOffline } from '../lib/backendConnection';
 
 /** The Toolbar's "Load graph" (GM's heading pattern, error-copy round 2). */
 const LOAD_GRAPH = "Couldn't load the graph.";
@@ -66,7 +67,8 @@ export function GraphFileActions() {
    * `asNewProject`: the project was just made for it, which its line says. */
   const importGraph = useCallback(async (result: LoadedGraph, refuseOverLimit = false,
     asNewProject = false): Promise<'over' | void> => {
-    if (refuseEditWhileFollowing() || !canLoadGraph(useGraphStore.getState())) return;
+    // Offline is read-only (GM, round 14 of PR #114): nothing is sent.
+    if (refuseEditWhileFollowing() || refuseEditWhileOffline() || !canLoadGraph(useGraphStore.getState())) return;
     let importReserved = false;
     // Round 19 (GM): new graph writes wait from here; those on their way go
     // first (15 s at most, "Saving…" on the project bar), so none can land
@@ -173,8 +175,9 @@ export function GraphFileActions() {
   }, [fitView]);
 
   const load = useCallback(async () => {
-    // Round 20 (M1): not while the tab follows an agent's switch.
-    if (refuseEditWhileFollowing()) return;
+    // Round 20 (M1): not while the tab follows an agent's switch. Offline is
+    // read-only (GM, round 14 of PR #114): nothing is sent.
+    if (refuseEditWhileFollowing() || refuseEditWhileOffline()) return;
     if (actionInFlight.current || !canLoadGraph(useGraphStore.getState())) return;
     actionInFlight.current = true;
     try {

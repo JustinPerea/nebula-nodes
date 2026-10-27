@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { useAnchoredPopover } from '../asset-move/anchoredPopover';
 import { springCssVars } from '../../lib/springs';
 import type { LeaveAsking, LeaveChoice } from './commonsLeave';
+import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 
 /**
  * The Commons' leave popover (commons-leave). GM - Design's copy, verbatim:
@@ -25,6 +26,9 @@ export function CommonsLeavePopover({ asking, unsaved, running, onChoose, onStay
   onStay: (returnFocus: boolean) => void;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
+  // Round 16 (L4): offline Save and leave is disabled (it would be refused),
+  // and focus starts on Stay; Discard and leave stays, since it sends nothing.
+  const readOnly = useBackendOffline();
   const anchorRef = useMemo(() => ({ current: asking.anchor }), [asking.anchor]);
   const lineId = useId();
   const reasonId = useId();
@@ -45,7 +49,7 @@ export function CommonsLeavePopover({ asking, unsaved, running, onChoose, onStay
   // choice: the primary, or Stay when saving again can't work.
   useEffect(() => {
     if (position) panelRef.current?.querySelector<HTMLElement>('[data-leave-first]')?.focus();
-  }, [position, asking.seq]);
+  }, [position, asking.seq, readOnly]);
 
   const failed = asking.failure !== null;
   // GM: a conflict (or another refusal saving again would get) drops Save and
@@ -92,7 +96,8 @@ export function CommonsLeavePopover({ asking, unsaved, running, onChoose, onStay
         {labels ? (
           <>
             {!settled && (
-              <button type="button" className="commons-button commons-button--primary" data-leave-first="" aria-busy={saving || undefined}
+              <button type="button" className="commons-button commons-button--primary" data-leave-first={readOnly ? undefined : ''}
+                aria-busy={saving || undefined} disabled={readOnly} {...offlineMark(readOnly)}
                 onClick={() => choose('save')}>{saving ? 'Saving…' : 'Save and leave'}</button>
             )}
             <button type="button" className="commons-button" onClick={() => choose('discard')}>Discard and leave</button>
@@ -100,7 +105,7 @@ export function CommonsLeavePopover({ asking, unsaved, running, onChoose, onStay
         ) : (
           <button type="button" className="commons-button commons-button--primary" data-leave-first="" onClick={() => choose('stop')}>Stop and leave</button>
         )}
-        <button type="button" className="commons-button" data-leave-first={settled ? '' : undefined}
+        <button type="button" className="commons-button" data-leave-first={settled || (labels && readOnly) ? '' : undefined}
           onClick={() => onStay(true)}>Stay</button>
       </div>
     </div>,

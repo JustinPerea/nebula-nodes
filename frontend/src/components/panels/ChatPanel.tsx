@@ -33,14 +33,17 @@ import { PERSONAL_AGENTS_CHANGED_EVENT } from '../../lib/personalAgentsEvents';
 import { CHAT_SEND_EVENT, type ChatSendDetail } from '../../lib/chatSend';
 import { claimIntent } from '../../lib/heldIntents';
 import { clearCanvasFromChat } from '../../lib/chatCanvasClear';
-import { chatClearLine } from '../../lib/failureLines';
 import '../../styles/personal-agents.css';
 import { apiFetch, backendAssetUrlSync, backendWebSocketUrl, personTokenForSocket } from '../../lib/backend';
 import { DEFAULT_BACKEND_PORT, devProxyPort } from '../../lib/devBackendPort';
-import { CONNECTION_LOST_COPY, NO_ANSWER_STATUS, PERSON_REQUIRED_CODE, isBackendUnreachable, personRequiredCopy, readDetail, warnFailure, failureMessage, failureCopy, oneLine } from '../../lib/errorCopy';
+import { CONNECTION_LOST_COPY, NO_ANSWER_STATUS, PERSON_REQUIRED_CODE, isBackendUnreachable, personRequiredCopy, readDetail, requestError, warnFailure, failureMessage, failureCopy, oneLine } from '../../lib/errorCopy';
 import { ErrorDetails } from '../failure/ErrorDetails';
 import { chatUploadChipError } from '../../lib/chatUploadCopy';
+import { refuseEditWhileOffline } from '../../lib/backendConnection';
 import { chatAuthority } from '../../lib/commonsChatAuthority';
+import {
+  CHAT_CLEARED_CANVAS, CHAT_CLEARED_CANVAS_KEPT, CHAT_CLEARED_CANVAS_UNCONFIRMED,
+} from '../../lib/chatClear';
 import { onPersonConnected, reportPersonRequired } from '../../lib/personSession';
 import { normalizeAgentEventSource } from '../../lib/agentEvents';
 import {
@@ -50,11 +53,15 @@ import {
   type ChatCancellationEvent,
   type ChatCancellationState,
 } from '../../lib/chatCancellation';
+import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 
 type ChatAgent = ChatAgentId;
 type ModelSelection = { model: string | null; effort: string | null };
 const NO_MODEL: ModelSelection = { model: null, effort: null };
 const PERSONAL_AGENT_RE = /^personal:[a-z0-9-]{1,32}$/;
+// /clear's canvas clear refused (a run going): GM's line, with the refusal
+// under Clear's heading as the notice (lib/chatClear.ts has the lines).
+const CLEAR_CANVAS = "Couldn't clear the canvas.";
 type ChatSelection = { agent: ChatAgent; claude: ModelSelection; codex: ModelSelection };
 const CHAT_SELECTION_KEY = 'nebula:chat-selection';
 
@@ -422,6 +429,8 @@ function insertAtCaret(target: HTMLTextAreaElement, token: string): void {
 }
 
 export function ChatPanel() {
+  // Offline is read-only (round 15 of PR #114): Send is disabled.
+  const offline = useBackendOffline();
   const commonsEnabled = useUIStore((s) => s.commonsEnabled);
   const visible = useUIStore((s) => s.panels.chat.visible);
   const { shouldRender, exiting } = useDelayedUnmount(visible, 500);
@@ -852,15 +861,20 @@ export function ChatPanel() {
       const form = new FormData();
       form.append('file', file);
       form.append('create_node', 'true');
+      // Offline is read-only (GM, round 14 of PR #114): nothing is sent.
+      if (refuseEditWhileOffline()) {
+        setPendingImages((prev) => prev.filter((p) => p.id !== chipId));
+        return;
+      }
       // The upload adds a node to the canvas: one undo step, taken before the
-      // backend's graphSync can add it.
+      // backend's graphSync can add it, owning only that node (round 14 of PR
+      // #114: an agent's node its echo brings isn't this step's).
       const undoStep = useGraphStore.getState().beginUndoStep();
       // The node the upload adds, which comes with its echo (review 11, L-2).
       let arrives: string[] = [];
       try {
         const resp = await apiFetch('/api/uploads', { method: 'POST', body: form });
         if (!resp.ok) {
-          useGraphStore.getState().cancelUndoStep(undoStep);
           const detail = await readDetail(resp);
           warnFailure("Couldn't upload the image.", resp.status, detail);
           const errMsg = chatUploadChipError(resp.status, detail);
@@ -885,7 +899,7 @@ export function ChatPanel() {
           thumbUrl: string;
           filename: string;
         };
-        if (typeof body.nodeId === 'string') arrives = [body.nodeId];
+        if (typeof body.nodeId === 'string' && body.nodeId) arrives = [body.nodeId];
         setPendingImages((prev) => {
           const prior = prev.find((p) => p.id === chipId);
           // URL.revokeObjectURL is idempotent — safe inside a StrictMode-
@@ -914,7 +928,6 @@ export function ChatPanel() {
         const textarea = document.querySelector<HTMLTextAreaElement>('.chat-panel__textarea');
         if (textarea) insertAtCaret(textarea, `@${body.nodeId}`);
       } catch {
-        useGraphStore.getState().cancelUndoStep(undoStep);
         setPendingImages((prev) => {
           const prior = prev.find((p) => p.id === chipId);
           // URL.revokeObjectURL is idempotent — safe inside a StrictMode-
@@ -1466,27 +1479,35 @@ export function ChatPanel() {
       setInput('');
       return;
     }
+    // Offline is read-only (round 15 of PR #114): a message isn't sent (its
+    // turn would edit the canvas); it stays typed and the banner pulses.
+    if (refuseEditWhileOffline()) return;
     if (raw === '/clear') {
+      // Offline is read-only (GM, round 14 of PR #114): the clear is refused
+      // whole, chat and canvas, and the banner pulses; the command stays typed.
+      if (refuseEditWhileOffline()) return;
       if (personal && sessionId) closePersonalSessionRef.current(sessionId);
       setSessionId(null);
-      // Also wipe Nebula's graph, under one undo step; a failure says so
-      // (lib/chatCanvasClear.ts), and so does this line once it is known
-      // (GM - Design, round 14, item 2).
-      const lineId = newId();
-      void clearCanvasFromChat().then((outcome) => {
-        if (outcome === 'cleared') return;
-        setMessages((current) => current.map((message) => message.id !== lineId ? message
-          : { ...message, parts: [{ kind: 'system', text: chatClearLine(outcome) }] }));
-      });
-      setMessages([
-        {
-          role: 'assistant',
-          id: lineId,
-          streaming: false,
-          parts: [{ kind: 'system', text: chatClearLine('cleared') }],
-        },
+      // Also wipe Nebula's graph, under one undo step (lib/chatCanvasClear.ts).
+      // The chat clears now, as before; the line comes with the canvas
+      // clear's answer, appended, so a message sent meanwhile stays (round
+      // 12 of PR #114: it used to replace the list when the answer came).
+      setMessages([]);
+      const said = (text: string) => setMessages((prev) => [
+        ...prev, { role: 'assistant', id: newId(), streaming: false, parts: [{ kind: 'system', text }] },
       ]);
       setInput('');
+      // The session is this tab's own and always clears; the canvas clear is
+      // the backend's and can be refused (a run going: round 11 of PR #114)
+      // or go unanswered (bounded), so the line says only what is known (GM).
+      // A refusal also shows under Clear's heading.
+      const outcome = await clearCanvasFromChat({
+        onRefused: async (response) => {
+          setNotice(failureMessage(await requestError(CLEAR_CANVAS, response), CLEAR_CANVAS));
+        },
+      });
+      said(outcome === 'cleared' ? CHAT_CLEARED_CANVAS
+        : outcome === 'refused' ? CHAT_CLEARED_CANVAS_KEPT : CHAT_CLEARED_CANVAS_UNCONFIRMED);
       return;
     }
 
@@ -1568,6 +1589,9 @@ export function ChatPanel() {
   }, [send]);
 
   const choosePersonalOption = useCallback((configId: string, value: string) => {
+    // Round 16 (L5): an agent option (its model or mode) changes what the
+    // agent may do, so offline it's refused like an edit (the banner pulses).
+    if (refuseEditWhileOffline()) return;
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN || !sessionId) return;
     setPersonalOptions((current) => current.map((option) => option.id === configId ? { ...option, current: value } : option));
@@ -1579,6 +1603,10 @@ export function ChatPanel() {
   }, [sessionId]);
 
   const answerPermission = useCallback((requestId: string, decision: 'allow' | 'deny') => {
+    // Round 16 (L5): "Allow once" lets the agent act while the person's own
+    // edits are blocked, so offline it's refused and the request stays
+    // pending until Nebula answers. Deny only reduces, so it always goes.
+    if (decision === 'allow' && refuseEditWhileOffline()) return;
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     upsertAssistant((msg) => ({
@@ -1894,7 +1922,7 @@ export function ChatPanel() {
             <div className="chat-panel__personal-options" onMouseDown={(e) => e.stopPropagation()}>
               {personalOptions.map((option) => (
                 <select key={option.id} className="chat-panel__personal-option" value={option.current ?? ''}
-                  aria-label={`${option.name} for this conversation`} disabled={busy}
+                  aria-label={`${option.name} for this conversation`} disabled={busy || offline} {...offlineMark(offline)}
                   title={`${option.name}: ${agentDisplayName} offers these for this conversation`}
                   onChange={(event) => choosePersonalOption(option.id, event.target.value)}>
                   {option.current === null && <option value="" disabled>{option.name}</option>}
@@ -2254,8 +2282,9 @@ export function ChatPanel() {
               onClick={send}
               aria-label="Send message"
               title={selectionIssue || (catalogLoading ? 'Models are loading.' : 'Send message')}
+              {...offlineMark(offline)}
               disabled={
-                !connected || authorizing || (!personal && catalogLoading) || Boolean(selectionIssue) ||
+                offline || !connected || authorizing || (!personal && catalogLoading) || Boolean(selectionIssue) ||
                 !input.trim() ||
                 pendingImages.some((p) => p.status === 'uploading')
               }

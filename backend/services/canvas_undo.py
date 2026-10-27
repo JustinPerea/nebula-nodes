@@ -62,7 +62,11 @@ MAX_EDIT_BYTES = 16 * 1024 * 1024
 MAX_TOTAL_BYTES = 64 * 1024 * 1024
 MAX_LINKS = 500
 MAX_GONE = 500
+# A link keeps at most this many of its bulk events (node.*, edge.*, ...),
+# oldest first. Its pin.* and proposal.* events are always kept: they are few
+# and agents act on them. A cut link says so (EditLink.truncated, .total).
 MAX_LINK_EVENTS = 50
+LINK_KEPT_KINDS = ("pin.", "proposal.")
 MAX_TRACKED_RUNS = 256
 MAX_RUN_NODES = 2000
 
@@ -602,6 +606,18 @@ class EditLink:
     actor: dict[str, Any]
     target: str | None = None  # for an undo or redo: the edit id it acts on
     events: list[int] = field(default_factory=list)
+    # Every event noted under it (``events`` may hold fewer), and whether any was cut.
+    total: int = 0
+    truncated: bool = False
+    kinds: dict[int, str] = field(default_factory=dict)  # of ``events``, for a later merge
+
+    def events_view(self) -> dict[str, Any]:
+        """``events`` for an edit.undone / edit.redone, with ``eventsTruncated``
+        and ``eventsTotal`` when the link was cut."""
+        view: dict[str, Any] = {"events": list(self.events)}
+        if self.truncated:
+            view.update(eventsTruncated=True, eventsTotal=self.total)
+        return view
 
 
 @dataclass
@@ -652,13 +668,26 @@ def _actor_key(actor: Mapping[str, Any]) -> str:
 
 
 class CanvasUndoBook:
-    def __init__(self, clock: Callable[[], float] = time.time, *, persist_path: Path | None = None) -> None:
+    def __init__(self, clock: Callable[[], float] = time.time, *, persist_path: Path | None = None,
+                 unrestored_base: int | None = None, prior_state: bool = False) -> None:
         self._clock = clock
         # Where the per-project id epochs are kept across restarts (round 20
         # of PR #195, review 19 M2): the canvas revision a tab holds is this
         # epoch, so a restart that started it again at 0 read as an agent's
         # clear. None (tests, a state dir that can't be made): memory only.
         self.persist_path = persist_path
+        # Round 21 (the #114 merge, with review 20 L-4/L-5): when the epochs
+        # can't be restored (the file unreadable, missing while a canvas was
+        # saved before, or no file at all: memory only), every project's
+        # epoch starts at ``unrestored_base`` (main passes a boot-unique
+        # one, larger than any epoch a tab from before the restart can
+        # hold), never at 0: a tab's old revision then never matches the
+        # new canvas. ``restored`` says which, for the sync
+        # (canvasRevisionRestored). Without a base (tests): 0, as before.
+        self._unrestored_base = unrestored_base
+        self._prior_state = prior_state
+        self._base = 0
+        self.restored = True
         self._records: OrderedDict[str, EditRecord] = OrderedDict()  # by token, oldest first
         self._by_edit: dict[str, str] = {}
         self._links: OrderedDict[str, EditLink] = OrderedDict()
@@ -668,6 +697,9 @@ class CanvasUndoBook:
         # so an edit that was still finishing then keeps no token. Kept in
         # ``persist_path`` (records and tokens stay memory-only).
         self._epochs: dict[str | None, int] = self._load_epochs()
+        if not self.restored and self.persist_path is not None:
+            # The base is kept, so the next restart restores it.
+            self._save_epochs(self._epochs)
         # Runs, for "ran since": a clock that only goes up (``mark``), each
         # run's start, and per node the latest run each run-er started.
         self._tick = 0
@@ -690,10 +722,23 @@ class CanvasUndoBook:
     def link_of(self, edit_id: str | None) -> EditLink | None:
         return self._links.get(edit_id) if edit_id else None
 
-    def note_events(self, edit_id: str, seqs: list[int]) -> None:
+    def note_events(self, edit_id: str, events: list[tuple[int, str]], *, merge: bool = False) -> None:
+        """The link's events, from (seq, kind) pairs: every pin.* and proposal.*
+        one, and the oldest MAX_LINK_EVENTS of the rest. ``merge`` adds them to
+        what it kept before (events that left the journal's buffer since stay,
+        and still count in ``total``)."""
         entry = self._links.get(edit_id)
-        if entry is not None:
-            entry.events = list(seqs)[:MAX_LINK_EVENTS]
+        if entry is None:
+            return
+        found = {**(entry.kinds if merge else {}), **dict(events)}
+        total = max(entry.total, len(found)) if merge else len(found)
+        ordered = sorted(found.items())
+        kept = sorted([pair for pair in ordered if pair[1].startswith(LINK_KEPT_KINDS)]
+                      + [pair for pair in ordered if not pair[1].startswith(LINK_KEPT_KINDS)][:MAX_LINK_EVENTS])
+        entry.events = [seq for seq, _kind in kept]
+        entry.kinds = dict(kept)
+        entry.total = total
+        entry.truncated = len(kept) < total
 
     # -- runs
     def mark(self) -> int:
@@ -753,7 +798,7 @@ class CanvasUndoBook:
     # -- records
     def epoch(self, project_id: str | None) -> int:
         """Pass it to ``keep`` from when the edit committed."""
-        return self._epochs.get(project_id, 0)
+        return self._epochs.get(project_id, self._base)
 
     def keep(self, *, edit_id: str, actor: Mapping[str, Any], agent_id: str, project_id: str | None,
              project_name: str, inverse: dict[str, Any], epoch: int | None = None,
@@ -864,21 +909,33 @@ class CanvasUndoBook:
         for token in [token for token, record in self._records.items() if record.project_id == project_id]:
             self._drop(token, why)
 
-    # -- the epochs on disk: {"version": 1, "projects": {id: n}, "unfiled": n}
+    def _start_unrestored(self) -> dict[str | None, int]:
+        """No epochs to restore: from the boot-unique base, if main gave one."""
+        if self._unrestored_base is not None:
+            self.restored = False
+            self._base = int(self._unrestored_base)
+        return {}
+
+    # -- the epochs on disk: {"version": 1, "projects": {id: n}, "unfiled": n,
+    #    and "base": n when they started from an unrestored base}
     def _load_epochs(self) -> dict[str | None, int]:
         if self.persist_path is None:
-            return {}
+            return self._start_unrestored()
         try:
             raw = json.loads(self.persist_path.read_text(encoding="utf-8"))
         except FileNotFoundError:
-            return {}
+            # A first run has nothing a tab could hold; a canvas saved before
+            # without the file (deleted, or from before round 20) has.
+            return self._start_unrestored() if self._prior_state else {}
         except (OSError, ValueError) as exc:
-            print(f"[canvas_undo] could not read {self.persist_path}: {exc}; canvas revisions start at 0",
+            print(f"[canvas_undo] could not read {self.persist_path}: {exc}; canvas revisions start again",
                   flush=True)
-            return {}
+            return self._start_unrestored()
         epochs: dict[str | None, int] = {}
         if not isinstance(raw, dict):
-            return epochs
+            return self._start_unrestored()
+        if _counter(raw.get("base")):
+            self._base = raw["base"]
         projects = raw.get("projects")
         for project_id, value in (projects.items() if isinstance(projects, dict) else ()):
             if isinstance(project_id, str) and project_id and _counter(value):
@@ -891,10 +948,12 @@ class CanvasUndoBook:
         """Atomically (a temporary file, fsync, rename), best effort."""
         if self.persist_path is None:
             return
-        data = {"version": 1,
+        data: dict[str, Any] = {"version": 1,
                 "projects": {key: value for key, value in sorted(epochs.items(), key=lambda item: str(item[0]))
-                             if key is not None and value},
-                "unfiled": int(epochs.get(None, 0))}
+                             if key is not None and value != self._base},
+                "unfiled": int(epochs.get(None, self._base))}
+        if self._base:
+            data["base"] = self._base
         temporary = self.persist_path.with_name(f".{self.persist_path.name}.{os.getpid()}.{secrets.token_hex(4)}.tmp")
         try:
             self.persist_path.parent.mkdir(parents=True, exist_ok=True)

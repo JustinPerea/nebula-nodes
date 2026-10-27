@@ -1,12 +1,12 @@
 /**
  * Error copy round 3b, item 3 (GM - Design: "Never show raw error.message
- * strings in UI."). Run History's "Checked Marble — forget" and the status
- * bar's "Checked Marble — unlock" say written copy for every failure: a
+ * strings in UI."). Run History's "Forget ID" and the status bar's "I've
+ * checked Marble" (round 13 of PR #114 labels) say written copy for every failure: a
  * request's own line, the store's own written refusals, and GM's general line
  * for an error that isn't a request's (no request was made).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { RunHistoryPanel } from '../src/components/panels/RunHistoryPanel';
 import { ProviderRecoveryStatus } from '../src/components/ProviderRecoveryStatus';
 import { useGraphStore } from '../src/store/graphStore';
@@ -22,18 +22,19 @@ const checkpoint = { runId: 'paid-run', nodeId: 'world-node', resumeOperationId:
 
 function forget() {
   render(<RunHistoryPanel />);
-  fireEvent.click(screen.getByRole('button', { name: 'Checked Marble; forget recovery for world-node' }));
+  // Round 14 (GM): the row's button is named for the ID it forgets.
+  fireEvent.click(screen.getByRole('button', { name: /^Forget the recovery ID for / }));
+  fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Forget ID' }));
 }
 
 beforeEach(() => {
   useGraphStore.setState(INITIAL_GRAPH_STATE, true);
   useUIStore.setState(INITIAL_UI_STATE, true);
   useUIStore.setState((state) => ({ panels: { ...state.panels, history: { ...state.panels.history, visible: true } } }));
-  vi.spyOn(window, 'confirm').mockReturnValue(true);
 });
 afterEach(() => { vi.restoreAllMocks(); });
 
-describe('Checked Marble — forget never shows a raw message', () => {
+describe('Forget ID never shows a raw message', () => {
   it('an error that is not a request says GM\'s general line under the heading', async () => {
     const alert = noticeSpy();
     useGraphStore.setState({ providerRecoveries: [checkpoint],
@@ -44,7 +45,7 @@ describe('Checked Marble — forget never shows a raw message', () => {
 
   it('a request\'s failure says its own line', async () => {
     const alert = noticeSpy();
-    const line = 'This node is still waiting on World Labs. Let its run finish, then try again.';
+    const line = 'A World Labs run is still starting. Try again in a moment.';
     useGraphStore.setState({ providerRecoveries: [checkpoint],
       deleteProviderRecovery: vi.fn().mockRejectedValue(new RequestFailedError(FORGET, 409, { detail: line })) });
     forget();
@@ -70,14 +71,14 @@ describe('Checked Marble — forget never shows a raw message', () => {
   });
 });
 
-describe('Checked Marble — unlock never shows a raw message', () => {
+describe('I\'ve checked Marble never shows a raw message', () => {
   it('an error that is not a request says GM\'s general line under the heading', async () => {
     useGraphStore.setState({
       providerStartAmbiguities: [{ runId: 'r1', nodeId: 'world-node', kind: 'worldlabs-world', message: 'Check Marble.', durable: true }] as never,
       acknowledgeProviderStartAmbiguity: vi.fn().mockRejectedValue(new Error('internal: lifecycle fd closed')),
     });
     render(<ProviderRecoveryStatus />);
-    fireEvent.click(screen.getByRole('button', { name: 'I checked Marble; unlock node world-node' }));
+    fireEvent.click(screen.getByRole('button', { name: /^I've checked Marble\. Unlock / }));
     await waitFor(() => expect(screen.getByText(`Couldn't unlock the node. ${GENERAL}`)).toBeTruthy());
     expect(screen.queryByText(/lifecycle fd/)).toBeNull();
   });

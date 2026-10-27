@@ -8,6 +8,7 @@ import { NodeRunError } from './NodeError';
 import { PlaceholderLine } from './PlaceholderLine';
 import { pendingAttr } from '../../lib/pendingNodes';
 import '../../styles/camera-rig-node.css';
+import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 
 // The CameraRigNode is the canvas card for the camera-rig utility node. It
 // renders entirely from the React Flow node `data.params` it already receives
@@ -188,6 +189,7 @@ function FrameView({ rig }: { rig: CameraRigBundle }) {
 
 export function CameraRigNode({ id, data, selected }: NodeProps) {
   const updateNodeData = useGraphStore((s) => s.updateNodeData);
+  const readOnly = useBackendOffline();
   const params = (data as CameraRigNodeData).params ?? {};
   const rig = readRig(params);
 
@@ -243,6 +245,8 @@ export function CameraRigNode({ id, data, selected }: NodeProps) {
                 max={max}
                 step={step}
                 value={rig[field]}
+                disabled={readOnly}
+                {...offlineMark(readOnly)}
                 onChange={handleChange(field)}
               />
             </label>

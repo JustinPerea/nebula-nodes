@@ -100,7 +100,10 @@ describe('connected next-step preparation', () => {
     expect(state.edges).toEqual([priorEdge, canonicalEdge]);
     expect(state.runHistory).toBe(before.runHistory);
     expect(state.undoStack).toHaveLength(1);
-    expect(state.undoStack[0].nodes.map((item) => item.id)).toEqual(['n1', 'n2']);
+    // Round 14 of PR #114: the step owns the node it added. Round 21 (the
+    // #195 merge): #195's step taken before the request, owning the node
+    // its answer named; the canvas it holds is from before the add.
+    expect((state.undoStack[0] as { nodes?: { id: string }[] }).nodes?.map((node) => node.id)).toEqual(['n1', 'n2']);
     expect(transport.fetch).toHaveBeenCalledTimes(1);
     expect(transport.fetch).toHaveBeenCalledWith('/api/graph/node-and-connect', expect.objectContaining({ method: 'POST' }));
     expect(transport.fetch.mock.calls.some(([path]) => String(path).includes('execute') || String(path).includes('generate'))).toBe(false);

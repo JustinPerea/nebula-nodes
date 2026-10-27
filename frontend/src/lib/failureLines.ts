@@ -16,18 +16,12 @@ export const CLEAR_REFUSED_TEXT = "Couldn't clear the canvas. Nothing was remove
  * sentence only if it is true"). */
 export const CLEAR_FAILED_TEXT = "Couldn't clear the canvas.";
 
-/** What chat /clear's request did to the canvas (lib/chatCanvasClear.ts). */
-export type ChatClearOutcome = 'cleared' | 'refused' | 'failed';
-
-/** The chat's system line after /clear (GM - Design, round 14, item 2,
- * verbatim; review 13, L-7). It stays after the notice is gone, so it says
- * what happened to the canvas. The session itself always clears: its id is
- * reset here, so the next message starts a fresh conversation. */
-export function chatClearLine(outcome: ChatClearOutcome): string {
-  if (outcome === 'refused') return "Session cleared. Next message starts a fresh conversation. The canvas wasn't cleared.";
-  if (outcome === 'failed') return 'Session cleared. Next message starts a fresh conversation. The canvas may not be fully cleared.';
-  return 'Session cleared. Next message starts a fresh conversation with an empty canvas.';
-}
+/** What chat /clear's request did to the canvas (lib/chatCanvasClear.ts):
+ * cleared, refused (nothing was removed), or not confirmed (a server error
+ * or no answer: it may have cleared). Its line is lib/chatClear.ts's (GM,
+ * round 12 of PR #114; the round 21 merge took it over #195's round 14 line,
+ * since a clear is all or nothing). */
+export type ChatClearOutcome = 'cleared' | 'refused' | 'unconfirmed';
 
 /** The model pickers (OpenRouter, Nous Portal, Replicate): reading the
  * provider's settings for the model failed (the backend marks that answer

@@ -13,6 +13,7 @@ import { UnsavedEditsNotice } from './UnsavedEditsNotice';
 import { editsSavedLine } from './unsavedEditsCopy';
 import type { SavedEditsFile } from '../../lib/graphFileShared';
 import '../../styles/project-home.css';
+import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 
 export interface ProjectSummary {
   id: string;
@@ -383,6 +384,11 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
   settingsOpen = false, onToggleSettings, loadCoverChoices, onPinCover,
   unsavedEdits = null, editsSavedAs = null, onDownloadEdits = noop, onContinueWithoutEdits = noop }: ProjectHomeProps) {
   const [query, setQuery] = useState('');
+  // Offline is read-only (round 15 of PR #114): create, open, rename,
+  // delete, restore and covers are disabled as while busy; search and
+  // "Try again" (a read) still work.
+  const offline = useBackendOffline();
+  const locked = busy || offline;
   const savedLine = useRef<HTMLDivElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   useFocusAfterHeldEdits(Boolean(unsavedEdits), savedLine, heading);
@@ -405,14 +411,14 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
       <main className="project-home__main" aria-busy={loading || busy}>
         <section className="project-home__welcome" aria-labelledby="project-home-title">
           <div><p className="project-home__eyebrow">Your workspace</p><h1 id="project-home-title" ref={heading} tabIndex={-1}>A place for your next idea.</h1><p className="project-home__intro">Start a new canvas or pick up where you left off.</p></div>
-          <button className="project-home__new" type="button" disabled={loading || busy || Boolean(unsavedEdits)} onClick={() => onCreate()}><Plus aria-hidden="true" />New project</button>
+          <button className="project-home__new" type="button" disabled={loading || locked || Boolean(unsavedEdits)} {...offlineMark(offline)} onClick={() => onCreate()}><Plus aria-hidden="true" />New project</button>
         </section>
 
         {/* GM's WRAP rule: where "Try again" redoes the failure it is the retry, so the
             reason drops its own; where it only reloads, or can't help, the line stays whole. */}
         {unsavedEdits ? <UnsavedEditsNotice reason={unsavedEdits.reason} downloadFailed={unsavedEdits.downloadFailed}
           downloadTooBig={unsavedEdits.downloadTooBig}
-          keptIn={unsavedEdits.keptIn} agentOpening={unsavedEdits.agentOpening} busy={busy}
+          keptIn={unsavedEdits.keptIn} agentOpening={unsavedEdits.agentOpening} busy={locked}
           onDownload={onDownloadEdits} onContinue={onContinueWithoutEdits} />
           : editsSavedAs && <div ref={savedLine} tabIndex={-1} className="project-home__notice" role="status">
             {editsSavedLine(editsSavedAs.name)}</div>}
@@ -428,13 +434,13 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
             {projects.length > 0 && <div className="project-home__search"><Search aria-hidden="true" /><label className="project-home__sr-only" htmlFor="project-home-search">Search projects</label><input id="project-home-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search projects" /></div>}
           </div>
           {loading ? <div className="project-home__loading" role="status"><span className="project-home__loading-dot" />Loading your projects…</div>
-            : visibleProjects.length > 0 ? <div className="project-home__grid">{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} busy={busy} onOpen={onOpen} onRename={onRename} onDelete={onDelete} loadCoverChoices={loadCoverChoices} onPinCover={onPinCover} />)}</div>
+            : visibleProjects.length > 0 ? <div className="project-home__grid">{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} busy={locked} onOpen={onOpen} onRename={onRename} onDelete={onDelete} loadCoverChoices={loadCoverChoices} onPinCover={onPinCover} />)}</div>
               : projects.length > 0 ? <div className="project-home__empty" role="status"><Search className="project-home__empty-search" aria-hidden="true" /><h3>No projects match “{query.trim()}”</h3><p>Try another name or clear your search.</p><button type="button" className="project-home__secondary" onClick={() => setQuery('')}>Clear search</button></div>
-                : !error && !unsavedEdits && <div className="project-home__empty"><div className="project-home__empty-graph"><NodeGraphPlaceholder /></div><h3>Your first project starts here.</h3><p>Connect ideas, models and media on a canvas of your own.</p><button type="button" className="project-home__secondary" disabled={busy} onClick={() => onCreate()}><Plus aria-hidden="true" />Create your first project</button></div>}
+                : !error && !unsavedEdits && <div className="project-home__empty"><div className="project-home__empty-graph"><NodeGraphPlaceholder /></div><h3>Your first project starts here.</h3><p>Connect ideas, models and media on a canvas of your own.</p><button type="button" className="project-home__secondary" disabled={locked} {...offlineMark(offline)} onClick={() => onCreate()}><Plus aria-hidden="true" />Create your first project</button></div>}
         </section>
-        {!loading && trash.length > 0 && <RecentlyDeleted trash={trash} busy={busy} onRestore={onRestore} onPurge={onPurge} onEmptyTrash={onEmptyTrash} />}
+        {!loading && trash.length > 0 && <RecentlyDeleted trash={trash} busy={locked} onRestore={onRestore} onPurge={onPurge} onEmptyTrash={onEmptyTrash} />}
       </main>
-      {lastDeleted && <UndoToast key={lastDeleted.id} project={lastDeleted} busy={busy}
+      {lastDeleted && <UndoToast key={lastDeleted.id} project={lastDeleted} busy={locked}
         onUndo={() => onRestore(lastDeleted.id)} onDismiss={onDismissUndo} />}
     </div>
   );

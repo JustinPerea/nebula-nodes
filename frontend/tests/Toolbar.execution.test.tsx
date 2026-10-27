@@ -68,7 +68,7 @@ describe('Toolbar execution lifecycle', () => {
     const stopping = screen.getByRole('button', { name: 'Stopping…' });
     expect(stopping).toBeDisabled();
     expect(stopping).toHaveAttribute('aria-busy', 'true');
-    expect(stopping).toHaveAttribute('title', 'Waiting for execution to stop safely');
+    expect(stopping).toHaveAttribute('title', 'Stopping the run…');
     fireEvent.click(stopping);
     expect(cancelExecution).not.toHaveBeenCalled();
   });

@@ -505,6 +505,8 @@ export const useUIStore = create<UIState>(holdCommonsExits(holdCommons, (set, ge
 
   enterEditor: (sourceNodeId) => {
     const editNodeId = useGraphStore.getState().getOrCreateEditNodeDownstream(sourceNodeId);
+    // '' when none could be made (offline is read-only, round 15 of PR #114).
+    if (!editNodeId) return;
     set({
       viewMode: 'editor',
       editorTargetNodeId: editNodeId,

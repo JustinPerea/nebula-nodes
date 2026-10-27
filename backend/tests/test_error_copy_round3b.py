@@ -42,10 +42,11 @@ SCRIPT: dict[str, str] = {}
 ENVIRONMENT = "worldlabs-environment"
 EXPORT = "worldlabs-world-export"
 
-UNLOCK = "“Checked Marble — unlock”"
-FORGET = "“Checked Marble — forget”"
-A_NODE = "A node is still waiting on World Labs."
-THIS_NODE = "This node is still waiting on World Labs."
+# Round 13 of PR #114 (GM): the buttons' labels and the state lines, verbatim.
+UNLOCK = "“I've checked Marble”"
+FORGET = "“Forget ID”"
+STARTING = "A World Labs run is still starting. Try again in a moment."
+NEEDS_CHECK = "A World Labs run needs your check first. Use the notice at the top of the screen."
 
 
 @contextmanager
@@ -101,7 +102,7 @@ def test_a_start_held_for_an_unlock_names_the_unlock_button(isolated_paid_state)
     guard, _ = isolated_paid_state
     guard.mark_ambiguous(run_id="uncertain", node_id="world-old", kind=ENVIRONMENT)
     person = _claim_refusal(PERSON, [_world("world-new")])
-    assert person.detail == f"{A_NODE} Check the job in Marble, then use {UNLOCK} before you try again."
+    assert person.detail == NEEDS_CHECK
     for headers in (AGENT, CLI, SCRIPT):
         agent = _claim_refusal(headers, [_world("world-new")])
         assert agent.detail == (f"Fresh paid {ENVIRONMENT} start is safety-locked after an ambiguous provider "
@@ -113,7 +114,7 @@ def test_a_start_already_in_flight_says_to_let_it_finish(isolated_paid_state):
     guard.claim(run_id="running", claims=[(ENVIRONMENT, "world-a")])
     try:
         person = _claim_refusal(PERSON, [_world("world-b")])
-        assert person.detail == f"{A_NODE} Let its run finish, then try again."
+        assert person.detail == STARTING
         agent = _claim_refusal(AGENT, [_world("world-b")])
         assert agent.detail == f"Fresh paid {ENVIRONMENT} start is already active for node 'world-a' in run 'running'"
     finally:
@@ -124,7 +125,9 @@ def test_a_recovery_record_for_the_node_names_forget_in_run_history(isolated_pai
     _, recoveries = isolated_paid_state
     recoveries.set(run_id="accepted", node_id="world-node", resume_operation_id="op-1", existing_world_id=None)
     person = _claim_refusal(PERSON, [_world()])
-    assert person.detail == f"{A_NODE} Check the job in Marble, then use {FORGET} in Run History before you try again."
+    # Not on the open canvas: the run's own node, by its type's name.
+    assert person.detail == ("“World Labs Environment” has a saved World Labs recovery ID. "
+                             "Check the run in Marble, then forget the ID in Run History.")
     agent = _claim_refusal(CLI, [_world()])
     assert agent.detail == ("Fresh World Labs start blocked because Nebula already has a recovery checkpoint for "
                             "node(s): world-node. Restore or explicitly delete the checkpoint before starting new "
@@ -175,7 +178,7 @@ def test_the_codes_are_raised_where_the_refusal_is_made(tmp_path):
     assert journal.value.limit == 1
 
 
-# -- "Checked Marble — unlock" ---------------------------------------------------
+# -- "I've checked Marble" (was "Checked Marble — unlock") ---------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_unlock_while_that_nodes_start_is_in_flight(isolated_paid_state):
@@ -184,7 +187,7 @@ async def test_unlock_while_that_nodes_start_is_in_flight(isolated_paid_state):
     guard.mark_ambiguous(run_id="active", node_id="world-node", kind=ENVIRONMENT)
     try:
         person = await _ack_refusal(PERSON, ENVIRONMENT, "world-node", "active")
-        assert person.detail == f"{THIS_NODE} Let its run finish, then try again."
+        assert person.detail == STARTING
         agent = await _ack_refusal(AGENT, ENVIRONMENT, "world-node", "active")
         assert agent.detail == ("Cannot acknowledge a World Labs paid-start ambiguity while that provider "
                                 "handshake is still active")
@@ -212,12 +215,12 @@ async def test_unlock_while_another_start_holds_the_lifecycle(isolated_paid_stat
     monkeypatch.setattr(guard, "_lifecycle_fd", -1)
     monkeypatch.setattr(guard, "_lifecycle_run_id", "other-run")
     person = await _ack_refusal(PERSON, ENVIRONMENT, "world-node", "held")
-    assert person.detail == f"{A_NODE} Let its run finish, then try again."
+    assert person.detail == STARTING
     agent = await _ack_refusal(AGENT, ENVIRONMENT, "world-node", "held")
     assert agent.detail == "Fresh paid World Labs start is already active in run 'other-run'"
 
 
-# -- "Checked Marble — forget" ---------------------------------------------------
+# -- "Forget ID" (was "Checked Marble — forget") ---------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_forget_of_a_record_that_changed_says_to_reload_and_check_the_newer_job(isolated_paid_state):
@@ -270,8 +273,7 @@ def test_the_canvas_delete_notice_says_the_backends_words():
     backend's line. lib/worldLabsWaiting.ts writes the same lines; pin them
     equal so neither drifts."""
     ts = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "lib" / "worldLabsWaiting.ts").read_text()
-    person = main_module._paid_state_person
-    assert f'NODE_WAITING_UNLOCK = "{person("ambiguity", subject="This node is", then="delete it")}"' in ts
-    assert f'NODE_WAITING_FORGET = "{person("recovery", subject="This node is", then="delete it")}"' in ts
-    assert f'SOME_NODE_WAITING_UNLOCK = "{person("ambiguity", subject="A node is", then="try again")}"' in ts
-    assert f'SOME_NODE_WAITING_FORGET = "{person("recovery", subject="A node is", then="try again")}"' in ts
+    # Round 13 of PR #114 (GM): one line per state, the same on both sides.
+    assert f'WORLD_LABS_STARTING = "{main_module.WORLD_LABS_STARTING_PERSON}"' in ts
+    assert f'WORLD_LABS_NEEDS_CHECK = "{main_module.WORLD_LABS_NEEDS_CHECK_PERSON}"' in ts
+    assert f'RECOVERY_ID_SAVED_TAIL = "{main_module._paid_state_person("recovery", node="X")[len("“X”"):]}"' in ts

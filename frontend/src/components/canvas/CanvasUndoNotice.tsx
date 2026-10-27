@@ -60,7 +60,7 @@ export function CanvasUndoNotice({ messagesOnly = false }: { messagesOnly?: bool
       {...holdHandlers}
     >
       {notice.agentColor && <span className="canvas-undo-notice__dot" aria-hidden="true" />}
-      <span className="canvas-undo-notice__text">{notice.text}</span>
+      <span className="canvas-undo-notice__text">{noticeText(notice.text, notice.mono)}</span>
       {actionable && (
         <button type="button" className="canvas-undo-notice__action" onClick={act}
           aria-keyshortcuts={notice.offer === 'undo' ? 'Meta+Z Control+Z' : 'Meta+Shift+Z Control+Shift+Z'}>
@@ -73,4 +73,11 @@ export function CanvasUndoNotice({ messagesOnly = false }: { messagesOnly?: bool
       </button>
     </div>
   );
+}
+
+/** The line, with `mono` (a model id) set in mono where it appears. */
+function noticeText(text: string, mono: string | undefined) {
+  const at = mono ? text.lastIndexOf(mono) : -1;
+  if (!mono || at < 0) return text;
+  return <>{text.slice(0, at)}<code className="canvas-undo-notice__mono">{mono}</code>{text.slice(at + mono.length)}</>;
 }

@@ -737,9 +737,28 @@ def run_gate(api, monkeypatch):
 
 
 async def _agent_clears_and_adds(api) -> str:
+    """An agent's Clear while the run is registered: PR #114 refuses it
+    (_project_replacement_guard, round 11), so nothing replaces the canvas
+    under the run and its write-back lands on the node it ran."""
     import main
 
-    await main.clear_graph(force=True)
+    with pytest.raises(main.HTTPException) as refused:
+        await main.clear_graph(force=True)
+    assert refused.value.status_code == 409
+    assert "while a run is active" in str(refused.value.detail)
+    return "n1"
+
+
+def _canvas_replaced_under_the_run(api) -> str:
+    """The canvas cleared under a registered run anyway (the guard above
+    refuses every route that does it; a damaged state or a later path might
+    not): the epoch moves and n1 is a new node. The run's write-backs check
+    the canvas it registered on (_register_run(canvas=), _run_canvas_moved)
+    and drop themselves."""
+    import main
+
+    main._forget_canvas_undo("test: the canvas was cleared under the run")
+    api.graph.clear()
     new = api.graph.add_node("text-input", {"value": "AG"}, position={"x": 0, "y": 0})
     assert new == "n1"
     return new
@@ -757,19 +776,35 @@ async def _finish(api, gate, run_id: str) -> None:
     await asyncio.wait_for(asyncio.gather(record.task, return_exceptions=True), timeout=10)
 
 
+def _start(main, route):
+    if route == "execute":
+        return main.execute(ExecuteRequest(nodes=_node_body(), edges=[]))
+    return main.execute_node(ExecuteNodeRequest(nodes=_node_body(), edges=[], targetNodeId="n1"))
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("route", ["execute", "execute-node"])
-async def test_L3_a_canvas_run_admitted_before_a_clear_leaves_the_new_node_alone(api, run_gate, route):
+async def test_L3_a_canvas_run_registers_its_canvas_and_a_clear_waits_for_it(api, run_gate, route):
+    import main
+
+    node = api.graph.add_node("text-input", {"value": "a"}, position={"x": 0, "y": 0})
+    started = await asyncio.create_task(_start(main, route))
+    await asyncio.wait_for(run_gate["started"].wait(), timeout=10)
+    assert main.execution_runs.get(started["runId"]).canvas == main._run_canvas_now()
+    await _agent_clears_and_adds(api)
+    await _finish(api, run_gate, started["runId"])
+    assert api.graph.nodes[node]["params"]["value"] == "changed by the old run"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route", ["execute", "execute-node"])
+async def test_L3_a_canvas_run_whose_canvas_is_replaced_under_it_leaves_the_new_node_alone(api, run_gate, route):
     import main
 
     api.graph.add_node("text-input", {"value": "a"}, position={"x": 0, "y": 0})
-    if route == "execute":
-        call = main.execute(ExecuteRequest(nodes=_node_body(), edges=[]))
-    else:
-        call = main.execute_node(ExecuteNodeRequest(nodes=_node_body(), edges=[], targetNodeId="n1"))
-    started = await asyncio.create_task(call)
+    started = await asyncio.create_task(_start(main, route))
     await asyncio.wait_for(run_gate["started"].wait(), timeout=10)
-    new = await _agent_clears_and_adds(api)
+    new = _canvas_replaced_under_the_run(api)
     await _finish(api, run_gate, started["runId"])
     assert api.graph.nodes[new]["params"] == {"value": "AG"}
     assert api.graph.nodes[new]["outputs"] == {}
@@ -781,11 +816,7 @@ async def test_L3_without_a_clear_the_run_still_writes_back(api, run_gate, route
     import main
 
     node = api.graph.add_node("text-input", {"value": "a"}, position={"x": 0, "y": 0})
-    if route == "execute":
-        call = main.execute(ExecuteRequest(nodes=_node_body(), edges=[]))
-    else:
-        call = main.execute_node(ExecuteNodeRequest(nodes=_node_body(), edges=[], targetNodeId="n1"))
-    started = await asyncio.create_task(call)
+    started = await asyncio.create_task(_start(main, route))
     await asyncio.wait_for(run_gate["started"].wait(), timeout=10)
     await _finish(api, run_gate, started["runId"])
     assert api.graph.nodes[node]["params"]["value"] == "changed by the old run"
@@ -793,7 +824,7 @@ async def test_L3_without_a_clear_the_run_still_writes_back(api, run_gate, route
 
 
 @pytest.mark.asyncio
-async def test_L3_an_agents_graph_run_admitted_before_a_clear_leaves_the_new_node_alone(api, run_gate):
+async def test_L3_an_agents_graph_run_leaves_a_node_made_on_a_canvas_replaced_under_it_alone(api, run_gate):
     import main
     from starlette.requests import Request
 
@@ -801,7 +832,8 @@ async def test_L3_an_agents_graph_run_admitted_before_a_clear_leaves_the_new_nod
     request = Request({"type": "http", "method": "POST", "path": "/api/graph/run", "headers": []})
     run = asyncio.create_task(main.run_graph(request, {}))
     await asyncio.wait_for(run_gate["started"].wait(), timeout=10)
-    new = await _agent_clears_and_adds(api)
+    await _agent_clears_and_adds(api)  # refused while it runs
+    new = _canvas_replaced_under_the_run(api)
     run_gate["go"].set()
     await asyncio.wait_for(asyncio.gather(run, return_exceptions=True), timeout=10)
     assert api.graph.nodes[new]["params"] == {"value": "AG"}
@@ -809,7 +841,7 @@ async def test_L3_an_agents_graph_run_admitted_before_a_clear_leaves_the_new_nod
 
 
 @pytest.mark.asyncio
-async def test_L3_a_stopped_run_admitted_before_a_clear_leaves_the_new_node_alone(api, monkeypatch):
+async def test_L3_a_stopped_run_whose_canvas_was_replaced_leaves_the_new_node_alone(api, monkeypatch):
     import main
 
     started = asyncio.Event()
@@ -825,7 +857,8 @@ async def test_L3_a_stopped_run_admitted_before_a_clear_leaves_the_new_node_alon
     api.graph.add_node("text-input", {"value": "a"}, position={"x": 0, "y": 0})
     reply = await asyncio.create_task(main.execute(ExecuteRequest(nodes=_node_body(), edges=[])))
     await asyncio.wait_for(started.wait(), timeout=10)
-    new = await _agent_clears_and_adds(api)
+    await _agent_clears_and_adds(api)  # refused while it runs
+    new = _canvas_replaced_under_the_run(api)
     record = main.execution_runs.get(reply["runId"])
     record.task.cancel()
     await asyncio.wait_for(asyncio.gather(record.task, return_exceptions=True), timeout=10)
@@ -836,14 +869,17 @@ async def test_L3_a_stopped_run_admitted_before_a_clear_leaves_the_new_node_alon
 async def test_L3_cinema_merges_and_recovery_params_check_the_runs_canvas(api):
     import main
 
-    async def in_a_run():
-        main._capture_execution_workspace()
-        await _agent_clears_and_adds(api)
+    api.graph.add_node("text-input", {"value": "a"}, position={"x": 0, "y": 0})
+    holder = asyncio.create_task(asyncio.Event().wait())
+    main._register_run("cinema-run", holder, main._run_canvas_now())
+    try:
+        _canvas_replaced_under_the_run(api)
         api.graph.nodes["n1"]["definitionId"] = "cinema-scene"
         api.graph.nodes["n1"]["params"] = {"scene": {"shots": [{"id": "s1", "output": {"status": "AG"}}]}}
-        await main._merge_shot_result("n1", "s1", None, {}, terminal_error="old run failed")
-        await main._merge_shot_variations("n1", "s1", [{"url": "/old.png", "seed": 1}])
-
-    await asyncio.create_task(in_a_run())
+        await main._merge_shot_result("n1", "s1", None, {}, terminal_error="old run failed", run_id="cinema-run")
+        await main._merge_shot_variations("n1", "s1", [{"url": "/old.png", "seed": 1}], run_id="cinema-run")
+    finally:
+        holder.cancel()
+        await asyncio.gather(holder, return_exceptions=True)
     assert api.graph.nodes["n1"]["params"]["scene"]["shots"][0] == {"id": "s1", "output": {"status": "AG"}}
     assert api.graph.nodes["n1"]["outputs"] == {}

@@ -3,6 +3,7 @@ import { ArrowRight } from 'lucide-react';
 import { useSettingsDraftStore, type SettingsDraft } from '../../../store/settingsDraftStore';
 import { useUIStore } from '../../../store/uiStore';
 import { saveField } from '../../../lib/settingsWrites';
+import { isBackendOffline } from '../../../lib/backendConnection';
 import { SwitchRow } from './Switch';
 
 type FolderField = 'outputPath' | 'exportFolder';
@@ -38,6 +39,10 @@ function FolderField({ field, label, saved, placeholder, hint }: {
   });
   const commit = () => {
     if (draft === undefined) return;
+    // Round 16 (L3): going offline disables the field, which blurs it. That
+    // blur isn't the person leaving the field, so nothing is sent and the
+    // draft stays for when Nebula answers again.
+    if (isBackendOffline()) return;
     if (draft.trim() === saved.trim()) { setDraft(undefined); return; }
     void saveField(field, draft);
   };

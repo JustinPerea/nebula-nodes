@@ -6,6 +6,8 @@ import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { PaperRunInspection } from './PaperRunInspection';
 import { BatchRunInspection } from './BatchRunInspection';
 import { ScrollFade } from '../ScrollFade';
+import { ForgetRecoveryConfirm } from './ForgetRecoveryConfirm';
+import { FORGET_LABEL, FORGET_TITLE, forgetAriaLabel, recordNodeName, recoveryIdLabel } from '../../lib/worldLabsWaiting';
 import { FORGET_RECOVERY_HEADING } from '../../lib/api';
 import { failureMessage } from '../../lib/errorCopy';
 import { showNotice } from '../../lib/canvasNotice';
@@ -20,6 +22,7 @@ import {
 } from '../../lib/runHistory';
 import '../../styles/panels.css';
 import '../../styles/run-history.css';
+import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 
 const STATUS_LABEL: Record<RunRecord['status'], string> = {
   running: 'Running',
@@ -50,17 +53,17 @@ export function RunHistoryPanel() {
   const isExecuting = useGraphStore((s) => s.isExecuting);
   const isCancelling = useGraphStore((s) => s.isCancelling);
   const cancelExecution = useGraphStore((s) => s.cancelExecution);
+  // Offline is read-only (round 15 of PR #114): Stop, Rerun, Retry, Recover
+  // and Forget ID are disabled and look it.
+  const offline = useBackendOffline();
+  const off = offlineMark(offline);
 
   const [now, setNow] = useState(() => Date.now());
   const [clearingRecovery, setClearingRecovery] = useState<string | null>(null);
+  // "Forget ID" asks first, in the app's own dialog (GM, round 13 of PR #114).
+  const [confirmingForget, setConfirmingForget] = useState<{ runId: string; nodeId: string } | null>(null);
 
   const forgetRecovery = async (runId: string, nodeId: string) => {
-    const confirmed = window.confirm(
-      `Forget the World Labs recovery safeguard for ${nodeId}?\n\n`
-      + 'Only continue after checking Marble. This removes the saved recovery ID '
-      + 'and allows a future fresh paid request for this node.',
-    );
-    if (!confirmed) return;
     const key = `${runId}:${nodeId}`;
     setClearingRecovery(key);
     try {
@@ -82,6 +85,12 @@ export function RunHistoryPanel() {
     return () => window.clearInterval(id);
   }, [visible]);
 
+  // Closing Run History cancels a confirm that's open (review 13, L5: it
+  // stayed open behind the closing panel and came back when it reopened).
+  useEffect(() => {
+    if (!visible) setConfirmingForget(null);
+  }, [visible]);
+
   const { shouldRender, exiting } = useDelayedUnmount(visible, 500);
   if (!shouldRender) return null;
 
@@ -94,14 +103,16 @@ export function RunHistoryPanel() {
         <div className="run-history__header-actions">
           <button
             type="button"
-            className="panel__header-action run-history__action"
+            className="panel__header-action run-history__action run-history__stop"
             onClick={() => void cancelExecution()}
+            // Stop only reduces spend, so it stays enabled offline and goes
+            // through the network gate (round 16 of PR #114, M1).
             disabled={!isExecuting || isCancelling}
             aria-busy={isCancelling}
-            aria-label="Cancel running execution"
-            title={isCancelling
-              ? 'Waiting for execution to stop safely'
-              : isExecuting ? 'Cancel running execution' : 'Nothing running'}
+            aria-label="Stop the run"
+            // GM, round 16: a label names the action (no period); a reason
+            // it's disabled is a sentence.
+            title={isCancelling ? 'Stopping the run…' : isExecuting ? 'Stop the run' : 'Nothing is running.'}
           >
             <Square size={13} strokeWidth={2} aria-hidden="true" focusable="false" />
           </button>
@@ -115,10 +126,10 @@ export function RunHistoryPanel() {
               || providerStartAmbiguities.length > 0}
             aria-label="Clear run history"
             title={isExecuting
-              ? 'Wait for the active run to finish'
+              ? 'Wait for the run to finish first.'
               : providerRecoveries.length > 0 || providerStartAmbiguities.length > 0
-                ? 'Resolve World Labs safety records before clearing history'
-                : 'Clear run history'}
+                ? "Can't clear while a World Labs recovery ID is saved."
+                : 'Clear Run History'}
           >
             <Trash2 size={13} strokeWidth={1.85} aria-hidden="true" focusable="false" />
           </button>
@@ -146,23 +157,32 @@ export function RunHistoryPanel() {
               {providerRecoveries.map((checkpoint) => {
                 const key = `${checkpoint.runId}:${checkpoint.nodeId}`;
                 const recoveryId = checkpoint.existingWorldId ?? checkpoint.resumeOperationId;
+                // GM, round 14 of PR #114: named by node, then "Operation ID"
+                // or "World ID", the ID in mono (was "n2 · operation op-…").
+                const name = recordNodeName(nodes, checkpoint.nodeId);
+                const idLabel = recoveryIdLabel(checkpoint.existingWorldId);
                 return (
                   <li key={key}>
-                    <span title={`${checkpoint.nodeId} · ${recoveryId ?? ''}`}>
-                      {checkpoint.nodeId} · {checkpoint.existingWorldId ? 'world' : 'operation'}{' '}
+                    <span id={`run-history-recovery-${key}`} title={`${name} · ${idLabel} ${recoveryId ?? ''}`}>
+                      {name} · {idLabel}{' '}
                       <code>{recoveryId}</code>
                       {checkpoint.durable === false && ' · volatile; keep this tab open'}
                     </span>
                     {checkpoint.durable !== false && (
                       <button
                         type="button"
-                        onClick={() => void forgetRecovery(checkpoint.runId, checkpoint.nodeId)}
-                        disabled={isExecuting || clearingRecovery === key}
-                        aria-label={`Checked Marble; forget recovery for ${checkpoint.nodeId}`}
-                        title="Check Marble first; forgetting permits a future fresh paid request"
+                        onClick={() => setConfirmingForget({ runId: checkpoint.runId, nodeId: checkpoint.nodeId })}
+                        disabled={isExecuting || clearingRecovery === key || offline}
+                        {...off}
+                        // GM, round 14: its name says which ID it forgets;
+                        // its row (node and ID) stays its description.
+                        aria-label={forgetAriaLabel(recordNodeName(nodes, checkpoint.nodeId, true))}
+                        aria-describedby={`run-history-recovery-${key}`}
+                        // GM, round 15 of PR #114.
+                        title={FORGET_TITLE}
                       >
                         <ShieldCheck size={11} aria-hidden="true" />
-                        {clearingRecovery === key ? 'Clearing…' : 'Checked Marble — forget'}
+                        {clearingRecovery === key ? 'Clearing…' : FORGET_LABEL}
                       </button>
                     )}
                   </li>
@@ -240,17 +260,18 @@ export function RunHistoryPanel() {
                           if (r.status === 'failed') void retryFailedRun(r.id);
                           else void rerunHistoryRecord(r.id);
                         }}
-                        disabled={isExecuting}
+                        disabled={isExecuting || offline}
+                        {...off}
                         aria-label={recoveryReplayReady
                           ? `Recover ${runTriggerLabel(r.trigger)} run`
                           : r.status === 'failed'
                           ? `Retry failed ${runTriggerLabel(r.trigger)} run`
                           : `Rerun ${runTriggerLabel(r.trigger)}`}
                         title={isExecuting
-                          ? 'Wait for the active run to finish'
+                          ? 'Wait for the run to finish first.'
                           : recoveryReplayReady
-                            ? 'Resume the exact saved provider checkpoint'
-                            : 'Run the exact saved graph snapshot'}
+                            ? 'Resume this run from its saved checkpoint'
+                            : 'Run this again with the same nodes and settings'}
                       >
                         <RotateCcw size={11} strokeWidth={2} aria-hidden="true" focusable="false" />
                         {recoveryReplayReady ? 'Recover' : r.status === 'failed' ? 'Retry failed' : 'Rerun'}
@@ -259,12 +280,15 @@ export function RunHistoryPanel() {
                         <button
                           type="button"
                           className="run-history__replay"
-                          disabled={isExecuting || !latestSourceReady}
+                          disabled={isExecuting || !latestSourceReady || offline}
+                          {...off}
                           onClick={() => void rerunHistoryWithLatestPaperSource(r.id)}
                           aria-label={`Rerun ${runTriggerLabel(r.trigger)} with latest source`}
-                          title={latestSourceReady
-                            ? 'Reuse saved recipe settings and connections with the latest exported Paper input'
-                            : 'Refresh or reconnect the Paper source before using its latest artwork'}
+                          title={isExecuting
+                            ? 'Wait for the run to finish first.'
+                            : latestSourceReady
+                              ? 'Run again with the same settings and the latest artwork from Paper'
+                              : 'Refresh or reconnect the Paper source first.'}
                         >Rerun with latest source</button>
                       )}
                     </span>
@@ -281,6 +305,17 @@ export function RunHistoryPanel() {
           </ScrollFade>
         )}
       </ScrollFade>
+      {confirmingForget && visible && (
+        <ForgetRecoveryConfirm
+          name={recordNodeName(nodes, confirmingForget.nodeId, true)}
+          onCancel={() => setConfirmingForget(null)}
+          onConfirm={() => {
+            const { runId, nodeId } = confirmingForget;
+            setConfirmingForget(null);
+            void forgetRecovery(runId, nodeId);
+          }}
+        />
+      )}
     </div>
   );
 }

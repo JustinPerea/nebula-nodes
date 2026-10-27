@@ -3,6 +3,8 @@ import { commonsApi } from '../../lib/commonsApi';
 import type { CommonsStatus, FolderLink } from '../../lib/commonsTypes';
 import { saveBlob } from '../../lib/commonsFiles';
 import { failureMessage } from '../../lib/errorCopy';
+import { isBackendOffline, isOfflineRefusal } from '../../lib/backendConnection';
+import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 
 interface Props {
   status: CommonsStatus | null;
@@ -38,6 +40,9 @@ function FolderRow({ link, run }: { link: FolderLink; run: (work: () => Promise<
           key={link.ignores.join(',')}
           defaultValue={link.ignores.join(', ')}
           onBlur={(event) => {
+            // Going offline disables the field, which blurs it: not the person
+            // leaving it. The text stays, and the next blur online saves it.
+            if (isBackendOffline()) return;
             const ignores = event.target.value.split(',').map((s) => s.trim()).filter(Boolean);
             if (ignores.join(',') !== link.ignores.join(',')) void run(() => commonsApi.setIgnores(link.id, ignores));
           }}
@@ -103,7 +108,8 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
       onChanged();
       return true;
     } catch (e) {
-      setError(failureMessage(e, "Couldn't save the settings."));
+      // Refused offline before it was sent: the banner says why (round 16, L4).
+      if (!isOfflineRefusal(e)) setError(failureMessage(e, "Couldn't save the settings."));
       // The write may have committed even if its read-back failed. Preserve
       // the error without inviting the user to submit that write again.
       if (committed) onChanged();
@@ -123,6 +129,9 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
   // The panel's name, at every width (GM review of p157: folded into More,
   // the panel had no title anywhere). Under the page's h1, "Commons".
   const headingId = useId();
+  // Round 16 (L4): offline the Commons is read-only like the canvas. Its
+  // writes sit in disabled fieldsets; reading and Export zip stay.
+  const readOnly = useBackendOffline();
   return (
     <section className="commons-settings" aria-labelledby={headingId}>
       <h2 id={headingId} className="commons-heading commons-panel-title">Settings</h2>
@@ -131,6 +140,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
 
       <section className="commons-detail__section" aria-label="Linked folders">
         <h3 className="commons-heading">Linked folders</h3>
+        <fieldset className="commons-fieldset" disabled={readOnly} {...offlineMark(readOnly)}>
         <ul className="commons-folders">
           {folders.map((link) => <FolderRow key={link.id} link={link} run={run} />)}
         </ul>
@@ -158,6 +168,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
           </label>
           <button type="submit" className="commons-button" disabled={linking || !linkPath.trim()}>Link folder</button>
         </form>
+        </fieldset>
       </section>
 
       <section className="commons-detail__section" aria-label="Meter">
@@ -169,6 +180,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
             {' · '}resets {new Date(status.meter.resets_at).toLocaleString()}
           </p>
         )}
+        <fieldset className="commons-fieldset" disabled={readOnly} {...offlineMark(readOnly)}>
         <form
           className="commons-detail__grid"
           onSubmit={(event) => {
@@ -193,6 +205,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
           ))}
           <button type="submit" className="commons-button">Save</button>
         </form>
+        </fieldset>
       </section>
 
       <section className="commons-detail__section" aria-label="Vocabulary candidates">
@@ -218,7 +231,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
         <h3 className="commons-heading">Maintenance</h3>
         <div className="commons-detail__actions">
           <button
-            type="button" className="commons-button"
+            type="button" className="commons-button" disabled={readOnly} {...offlineMark(readOnly)}
             onClick={() => run(async () => {
               const r = await commonsApi.reanalyzeStale();
               setMessage(`Queued ${r.queued} stale item${r.queued === 1 ? '' : 's'} for re-analysis.`);
@@ -227,7 +240,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
             Re-analyze stale
           </button>
           <button
-            type="button" className="commons-button"
+            type="button" className="commons-button" disabled={readOnly} {...offlineMark(readOnly)}
             onClick={() => run(async () => {
               const r = await commonsApi.importMoodboards();
               setMessage(`Imported ${r.added} from ${r.collections} moodboard${r.collections === 1 ? '' : 's'}; skipped ${r.skipped.length}.`);

@@ -49,7 +49,7 @@ describe('adding a node', () => {
     useGraphStore.setState({ nodes: [textNode('n7')] as never });
     fetchMock.mockResolvedValueOnce(new Response('', { status: 400 }));
     expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
-    expect(alerted()).toBe(`Couldn't add Text Input. ${REFUSED}`);
+    expect(alerted()).toBe(`Couldn't add “Text Input”. ${REFUSED}`);
     expect(alerted()).not.toMatch(/HTTP|400/);
     // The status stays in the console.
     expect(warn.mock.calls.flat().join(' ')).toMatch(/HTTP 400/);
@@ -59,30 +59,28 @@ describe('adding a node', () => {
     useGraphStore.setState({ nodes: [textNode('n7')] as never });
     fetchMock.mockResolvedValueOnce(json({ detail: 'Paid-start safety journal unavailable' }, 503));
     expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
-    expect(alerted()).toBe(`Couldn't add Text Input. ${NO_ANSWER}`);
+    expect(alerted()).toBe(`Couldn't add “Text Input”. ${NO_ANSWER}`);
   });
 
-  it('a refused fresh-canvas clear keeps the backend\'s reason, without the status', async () => {
-    fetchMock
-      .mockResolvedValueOnce(json({ empty: false, nodes: [{ id: 'n9' }], edges: [] }))
-      .mockResolvedValueOnce(json({ detail: 'Graph has protected provider state' }, 409));
-    expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
-    expect(alerted()).toBe("Couldn't add Text Input. Graph has protected provider state");
-  });
-
-  // Round 3e (GM): the store's own lines were written for developers
-  // ("Backend returned an invalid graph export response.").
-  it('an export answer Nebula can\'t read says so in words', async () => {
+  // Round 12 of PR #114 (GM approved): the first add on an empty tab no
+  // longer clears the backend's canvas, so no "Couldn't clear the canvas."
+  // here any more (round 11 said "Couldn't clear the canvas. Graph has
+  // protected provider state" and GM's run line). When the backend's graph
+  // can't be read into the tab, the person reads GM's "Couldn't add “Text
+  // Input”." with no detail (round 3e's written reasons said "Nebula couldn't
+  // read the backend's answer, ..." and GM's REFUSED line); the raw reason
+  // goes to the Agent log (tests/store/graphStore.addSync.test.ts).
+  it('an export answer Nebula can\'t read: GM\'s line, nothing more', async () => {
     fetchMock.mockResolvedValueOnce(new Response('<html>', { status: 200 }));
     expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
-    expect(alerted()).toBe("Couldn't add Text Input. Nebula couldn't read the backend's answer, so the node wasn't added. "
-      + 'Reload, then add it again.');
+    expect(alerted()).toBe('Couldn\'t add \u201cText Input\u201d.');
   });
 
-  it('a refused graph export with no reason: GM\'s line', async () => {
+  it('a refused graph export with no reason: GM\'s line, without the status', async () => {
     fetchMock.mockResolvedValueOnce(new Response('', { status: 404 }));
     expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
-    expect(alerted()).toBe(`Couldn't add Text Input. ${REFUSED}`);
+    expect(alerted()).toBe('Couldn\'t add \u201cText Input\u201d.');
+    expect(alerted()).not.toMatch(/HTTP|404/);
   });
 });
 
@@ -92,7 +90,7 @@ describe("a person-only refusal (code person_required, GM Q116 a)", () => {
     fetchMock.mockResolvedValueOnce(json({ detail: 'krea-2-generate: propose the change instead with propose_change',
       code: 'person_required' }, 403));
     expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
-    expect(alerted()).toBe("Couldn't add Text Input. This change needs your OK, and this tab isn't connected as you. Open the link Nebula printed when it started, then try again.");
+    expect(alerted()).toBe("Couldn't add “Text Input”. This change needs your OK, and this tab isn't connected as you. Open the link Nebula printed when it started, then try again.");
   });
 });
 

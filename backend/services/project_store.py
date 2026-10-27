@@ -13,7 +13,7 @@ import re
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, NamedTuple
 from uuid import uuid4
 
 from services import project_cover
@@ -175,17 +175,68 @@ def make_project(name: str, snapshot: dict[str, Any] | None = None) -> dict[str,
     return project
 
 
+class Projection(NamedTuple):
+    """The open project as catalog.json holds it, for readers that need only
+    that (ProjectStore.projection): which project is open, the workspace
+    revision, the open project's name and its pins. Shared, not copied:
+    read it, never change it (CanvasPins copies the pins it hands out)."""
+    signature: tuple[int, int, int] | None  # the catalog file it describes
+    project_id: str | None
+    revision: str
+    name: str                               # "" with no project open
+    pins: tuple[dict[str, Any], ...]        # the open project's pins, as stored
+
+
+def _projection(catalog: dict[str, Any], signature: tuple[int, int, int] | None) -> Projection:
+    project_id = catalog.get("activeProjectId")
+    project = catalog["projects"].get(project_id) if project_id else None
+    pins = tuple(pin for pin in (project or {}).get("pins") or [] if isinstance(pin, dict))
+    return Projection(signature, project_id, catalog["workspaceRevision"], str((project or {}).get("name") or ""), pins)
+
+
 class ProjectStore:
     def __init__(self, root: Path) -> None:
         self.root = root
         self.path = root / "catalog.json"
         self._initial_revision = uuid4().hex
+        # The projection of the catalog file last read or committed here, and
+        # the one a prepared commit will make (see projection()).
+        self._projection: Projection | None = None
+        self._prepared: tuple[Path, Projection] | None = None
 
     def _ensure_root(self) -> None:
         if self.root.is_symlink():
             raise ProjectStoreError("Project storage cannot be a symbolic link")
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
         os.chmod(self.root, 0o700)
+
+    @staticmethod
+    def _check(result: Any, *, fill: bool = True) -> None:
+        """Raise ValueError unless ``result`` is a catalog _read accepts.
+        ``fill`` adds the empty trash a catalog from before the trash lacks
+        (_read); without it nothing is changed (a commit's own catalog)."""
+        if not isinstance(result, dict) or result.get("version") != 1 or not isinstance(result.get("projects"), dict):
+            raise ValueError("Invalid catalog")
+        if not isinstance(result.get("workspaceRevision"), str):
+            raise ValueError("Invalid workspace revision")
+        for project_id, project in result["projects"].items():
+            validate_project_id(project_id)
+            if not isinstance(project, dict) or project.get("id") != project_id or not isinstance(project.get("snapshot"), dict):
+                raise ValueError("Invalid project document")
+        trash = result.setdefault("trash", {}) if fill else result.get("trash", {})
+        if not isinstance(trash, dict):
+            raise ValueError("Invalid trash")
+        for project_id, entry in trash.items():
+            validate_project_id(project_id)
+            if (not isinstance(entry, dict) or entry.get("id") != project_id
+                    or not isinstance(entry.get("snapshot"), dict) or project_id in result["projects"]):
+                raise ValueError("Invalid trashed project")
+            deleted_at = entry.get("deletedAt")
+            if not isinstance(deleted_at, str) or datetime.fromisoformat(deleted_at).tzinfo is None:
+                raise ValueError("Invalid trashed project")
+        active = result.get("activeProjectId")
+        if active is not None and active not in result["projects"]:
+            raise ValueError("Invalid active project")
 
     def _read(self, *, upgrade: bool = True) -> dict[str, Any]:
         if not self.path.exists():
@@ -194,28 +245,7 @@ class ProjectStore:
             raise ProjectStoreError("Project catalog cannot be read safely")
         try:
             result = json.loads(self.path.read_text(encoding="utf-8"))
-            if not isinstance(result, dict) or result.get("version") != 1 or not isinstance(result.get("projects"), dict):
-                raise ValueError("Invalid catalog")
-            if not isinstance(result.get("workspaceRevision"), str):
-                raise ValueError("Invalid workspace revision")
-            for project_id, project in result["projects"].items():
-                validate_project_id(project_id)
-                if not isinstance(project, dict) or project.get("id") != project_id or not isinstance(project.get("snapshot"), dict):
-                    raise ValueError("Invalid project document")
-            trash = result.setdefault("trash", {})
-            if not isinstance(trash, dict):
-                raise ValueError("Invalid trash")
-            for project_id, entry in trash.items():
-                validate_project_id(project_id)
-                if (not isinstance(entry, dict) or entry.get("id") != project_id
-                        or not isinstance(entry.get("snapshot"), dict) or project_id in result["projects"]):
-                    raise ValueError("Invalid trashed project")
-                deleted_at = entry.get("deletedAt")
-                if not isinstance(deleted_at, str) or datetime.fromisoformat(deleted_at).tzinfo is None:
-                    raise ValueError("Invalid trashed project")
-            active = result.get("activeProjectId")
-            if active is not None and active not in result["projects"]:
-                raise ValueError("Invalid active project")
+            self._check(result)
             # Every reader gets upgraded params (services/saved_graph_upgrades.py).
             # The version marker is set with them, so the first commit stores
             # both and a value set after that is never upgraded again.
@@ -258,28 +288,46 @@ class ProjectStore:
 
         Every canvas event carries these two (main._workspace_context). read()
         parses, upgrades and deep-copies every project's snapshot and run
-        history, which on the event loop held up runs as projects grew. The
-        answer is kept until catalog.json changes: commits replace the file
-        (os.replace), so its inode, mtime and size say when, whichever
-        process wrote it."""
+        history, which on the event loop held up runs as projects grew. They
+        come from projection()."""
+        view = self.projection()
+        return {"activeProjectId": view.project_id, "workspaceRevision": view.revision}
+
+    def projection(self) -> Projection:
+        """The open project as catalog.json holds it now: its id, the
+        workspace revision, its name and its pins (Projection).
+
+        One projection per catalog file, shared by every reader that needs
+        only these: the workspace (every canvas event), the pins listing
+        (services/canvas_pins), the journal's project tag
+        (services/canvas_events) and the open project's name. It is kept until
+        catalog.json changes: every commit replaces the file (os.replace), so
+        its (inode, mtime, size) signature says when, whichever route or
+        process wrote it. A commit made here keeps the projection of what it
+        wrote, so nothing is read back (review 5 of PR #114, M2: an autosave
+        every 600 ms made the next pins listing parse, upgrade and deep-copy
+        the whole catalog). A file written elsewhere is parsed once, without
+        upgrading or copying it. No lock: a commit replaces the file whole,
+        so a read sees one complete version; the signature is taken before
+        and after it, and a projection is kept only when both agree (a commit
+        between them makes a new inode). A writer that rewrote catalog.json in
+        place keeping its size and mtime would not be seen; Nebula never
+        writes it in place (commit_prepared)."""
         signature = self._signature()
-        cached = getattr(self, "_workspace_cache", None)
-        if signature is not None and cached is not None and cached[0] == signature:
-            return dict(cached[1])
+        cached = self._projection
+        if signature is not None and cached is not None and cached.signature == signature:
+            return cached
         try:
             self._ensure_root()
-            fd = os.open(self.root / ".lock", os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
-            with os.fdopen(fd, "a+") as handle:
-                os.fchmod(handle.fileno(), 0o600)
-                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-                signature = self._signature()
-                catalog = self._read(upgrade=False)
         except OSError as exc:
             raise ProjectStoreError("Project storage is unavailable; the canvas was preserved") from exc
-        answer = {"activeProjectId": catalog.get("activeProjectId"), "workspaceRevision": catalog["workspaceRevision"]}
-        if signature is not None:
-            self._workspace_cache = (signature, dict(answer))
-        return answer
+        before = self._signature()
+        catalog = self._read(upgrade=False)
+        after = self._signature()
+        view = _projection(catalog, after if after == before else None)
+        if view.signature is not None:
+            self._projection = view
+        return view
 
     def signature(self) -> tuple[int, int, int] | None:
         """catalog.json's (inode, mtime, size): it changes on every commit, so a
@@ -330,17 +378,47 @@ class ProjectStore:
                 handle.write(encoded)
                 handle.flush()
                 os.fsync(handle.fileno())
-            return temporary
         except Exception:
             temporary.unlink(missing_ok=True)
             raise
+        self._prepared = None
+        try:
+            # What projection() would read back from this file, for
+            # commit_prepared to keep. Only for a catalog _read accepts (one
+            # it would refuse is read, and refused, as before); the pins go
+            # through JSON as they are stored, so the caller can't change them.
+            self._check(catalog, fill=False)
+            view = _projection(catalog, None)
+            stored = json.loads(json.dumps(view.pins, ensure_ascii=False, allow_nan=False))
+            self._prepared = (temporary, view._replace(pins=tuple(stored)))
+        except (ValueError, TypeError, KeyError):
+            pass
+        return temporary
 
     def commit_prepared(self, temporary: Path) -> None:
+        prepared, self._prepared = self._prepared, None
+        written = None
+        if prepared is not None and prepared[0] == temporary:
+            try:
+                written = os.stat(temporary)
+            except OSError:
+                pass  # the rename below says what is wrong
         fd = os.open(self.root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
         # A successful atomic rename is the commit point. A post-commit
         # directory fsync warning must not report a failed, unadopted canvas.
         try:
             os.replace(temporary, self.path)
+            if written is not None and prepared is not None:
+                # The projection of what was just written, under the file's
+                # signature (a rename keeps its inode, mtime and size), so
+                # the next reader doesn't parse it back (projection()). Never
+                # fails the commit: without it the next reader reads the file.
+                try:
+                    landed = self._signature()
+                except ProjectStoreError:
+                    landed = None
+                if landed is not None and landed[0] == written.st_ino and landed[2] == written.st_size:
+                    self._projection = prepared[1]._replace(signature=landed)
             try:
                 os.fsync(fd)
             except OSError as exc:

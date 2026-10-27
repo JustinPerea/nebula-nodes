@@ -27,6 +27,8 @@ import { CommonsLeavePopover } from './CommonsLeavePopover';
 import '../../styles/commons.css';
 import { failureMessage } from '../../lib/errorCopy';
 import { clockTime } from '../../lib/clockTime';
+import { isOfflineRefusal, refuseEditWhileOffline } from '../../lib/backendConnection';
+import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 
 type Tab = 'all' | 'inbox' | 'settings' | 'labeling' | 'review';
 type PageResult = Extract<UrlAddResult, { kind: 'page' }>;
@@ -176,7 +178,10 @@ function StatusText({ text, title }: { text: string; title: string }) {
 
 const plural = (count: number, one: string, many: string) => (count === 1 ? one : many);
 
+/** Round 16 (L4): offline the Commons is read-only like the canvas. Start
+ * is disabled with the offline mark; Stop stays, since it only ends work. */
 export function StatusLine({ status, onStart, onStop }: { status: CommonsStatus | null; onStart: () => void; onStop: () => void }) {
+  const readOnly = useBackendOffline();
   if (!status) {
     return <span className="commons-status"><StatusText text="Connecting…" title="Connecting to library analysis…" /></span>;
   }
@@ -209,7 +214,7 @@ export function StatusLine({ status, onStart, onStop }: { status: CommonsStatus 
           title={`Library analysis is paused: the agent graded these references before the blind labels were sealed, so they can no longer be sealed as blind labels. Close them as an assisted review (in Agent review or Blind labeling)${after}`} />
       : <StatusText text={text}
           title={`Library analysis is paused while blind labeling is open, so it can't sway your reference labels. Seal the labels, or close the batch without sealing, in Blind labeling${after}`} />}
-      {!running && <button type="button" className="commons-button commons-button--primary" onClick={onStart}>Start</button>}
+      {!running && <button type="button" className="commons-button commons-button--primary" disabled={readOnly} {...offlineMark(readOnly)} onClick={onStart}>Start</button>}
     </span>;
   }
   const waiting = status.queue.queued ?? 0;
@@ -226,7 +231,7 @@ export function StatusLine({ status, onStart, onStop }: { status: CommonsStatus 
       <span className="commons-status commons-status--stopped">
         <StatusText text={`Stopped${waiting ? ` · ${waiting} queued` : ''}${tail}`}
           title={`Library analysis is stopped.${queued}${heldNote} Start runs it while Nebula is open.`} />
-        <button type="button" className="commons-button commons-button--primary" onClick={onStart}>Start</button>
+        <button type="button" className="commons-button commons-button--primary" disabled={readOnly} {...offlineMark(readOnly)} onClick={onStart}>Start</button>
       </span>
     );
   }
@@ -268,6 +273,7 @@ export function StatusLine({ status, onStart, onStop }: { status: CommonsStatus 
 }
 
 export function CommonsView() {
+  const readOnly = useBackendOffline();
   const returnView = useUIStore((s) => s.commonsReturnView);
   const restoreWorkspace = useUIStore((s) => s.exitCommons);
   const exitCommons = () => {
@@ -337,7 +343,8 @@ export function CommonsView() {
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
-  const fail = (e: unknown) => setError(failureMessage(e, "Couldn't update the library."));
+  // Refused offline before it was sent: the banner says why (round 16, L4).
+  const fail = (e: unknown) => { if (!isOfflineRefusal(e)) setError(failureMessage(e, "Couldn't update the library.")); };
 
   const loadCollections = useCallback(async () => {
     const list = (await commonsApi.collections()).filter((c) => c.kind !== 'system');
@@ -401,6 +408,8 @@ export function CommonsView() {
       setTarget(value);
       return;
     }
+    // A new collection is a write: offline the choice only pulses the banner.
+    if (refuseEditWhileOffline()) return;
     const name = await ask('New collection name');
     if (!name || !name.trim()) return;
     try {
@@ -419,6 +428,8 @@ export function CommonsView() {
   };
 
   const upload = async (files: File[]) => {
+    // A drop onto the grid offline is an edit: it only pulses the banner.
+    if (refuseEditWhileOffline()) return;
     const collectionId = requireTarget();
     if (!collectionId || files.length === 0) return;
     setUploadFailures([]);
@@ -538,12 +549,13 @@ export function CommonsView() {
         </label>
         <div className="commons-add">
           <button
-            type="button" className="commons-button commons-button--primary" aria-expanded={addOpen}
+            type="button" className="commons-button commons-button--primary" aria-expanded={addOpen && !readOnly}
+            disabled={readOnly} {...offlineMark(readOnly)}
             onClick={() => setAddOpen((open) => !open)}
           >
             Add
           </button>
-          {addOpen && (
+          {addOpen && !readOnly && (
             <div className="commons-add__menu" role="menu">
               <button
                 type="button" role="menuitem" className="commons-button"
@@ -608,7 +620,8 @@ export function CommonsView() {
           </div>
           <div className="commons-candidates__list">
             {page.candidates.map((c) => (
-              <button key={c.url} type="button" className="commons-candidate" onClick={() => void addUrl(c.url, page)}>
+              <button key={c.url} type="button" className="commons-candidate" disabled={readOnly} {...offlineMark(readOnly)}
+                onClick={() => void addUrl(c.url, page)}>
                 <img src={c.url} alt="" loading="lazy" referrerPolicy="no-referrer" />
                 <span className="commons-meta">{c.width && c.height ? `${c.width}×${c.height}` : 'size unknown'}</span>
               </button>

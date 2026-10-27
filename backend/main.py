@@ -27,13 +27,12 @@ import unicodedata
 import zipfile
 from collections import OrderedDict, deque
 from contextlib import ExitStack, aclosing, contextmanager, nullcontext
-from contextvars import ContextVar
+from contextvars import Context, ContextVar
 import dataclasses
 from dataclasses import dataclass
-from functools import wraps
 from pathlib import Path
 from pathlib import PurePosixPath
-from typing import Any, BinaryIO, Callable, Iterable, Mapping, NoReturn
+from typing import Any, BinaryIO, Callable, Iterable, Mapping, NoReturn, Sequence
 from urllib.parse import quote, urlsplit
 
 from uuid import uuid4
@@ -284,10 +283,39 @@ except Exception as exc:
 else:
     _STATE_PATH = _STATE_DIR / "state.json"
 
+# Whether a canvas was saved before this boot (round 21): a missing
+# canvas-revisions.json then can't be a first run, so the canvas revisions
+# start from a boot-unique base (CanvasUndoBook), never at 0.
+_STATE_EXISTED_AT_BOOT = bool(_STATE_PATH is not None and (
+    _STATE_PATH.exists() or (_STATE_DIR / "projects").exists()))
+
 cli_graph = CLIGraph(persist_path=_STATE_PATH)
 project_store = ProjectStore(_STATE_DIR / "projects")
 # Pins follow `main.project_store` through the getter (tests swap the store).
 canvas_pins = CanvasPins(lambda: project_store)
+
+
+def _open_project_id() -> str | None:
+    """The project catalog.json has open now (ProjectStore.projection: no
+    catalog copy, read again only once the file changes)."""
+    return project_store.projection().project_id
+
+
+def _journal_project() -> str | None:
+    """The journal's project tag: the open project as every canvas event
+    names it (_workspace_context, from ProjectStore.projection)."""
+    return _workspace_context()["activeProjectId"]
+
+
+def _events_journal():
+    """The canvas event journal, tagging events and answers with the project
+    the catalog has open (CanvasEventJournal.follow). Through here so a
+    journal a test swaps in follows it too."""
+    if not canvas_events.following:
+        canvas_events.follow(_journal_project)
+    return canvas_events
+
+
 # Which delete of which node each removal record undoes (services/node_removals.py).
 node_removals = RemovalLedger()
 # Updates (plan section 5.9): the agent's and the reader's notices, kept with
@@ -315,10 +343,6 @@ _request_canvas_revision: ContextVar[str | None] = ContextVar("canvas_revision",
 _execution_workspace_context: ContextVar[dict[str, Any] | None] = ContextVar("execution_workspace", default=None)
 # A fenced route's request came from a canvas tab (X-Nebula-Tab), round 20.
 _request_from_tab: ContextVar[bool] = ContextVar("request_from_tab", default=False)
-# The canvas a run was admitted on, (open project, its id epoch), round 20 L3:
-# set by _capture_execution_workspace, inherited by the run's tasks.
-_execution_canvas: ContextVar[tuple[str | None, int] | None] = ContextVar("execution_canvas", default=None)
-_synchronous_workspace_runs: set[str] = set()
 _live_graph_load_failed = False
 if _STATE_PATH is not None and _STATE_PATH.exists():
     try:
@@ -381,34 +405,60 @@ provider_start_guard = ProviderStartGuard(
 )
 
 
-# A node's World Labs paid state, in the person's words (GM - Design, error-copy
-# round 3: "'settle' and 'start' are internal. Write it as: 'This node is still
-# waiting on World Labs. Check the job in Marble, then {the node's actual button
-# label} before you delete it.'"). Each state names the control that clears it:
-# the status bar's "Checked Marble — unlock" (an ambiguous start), Run History's
-# "Checked Marble — forget" (a recovery record), the node's own ID fields (an ID
-# in its params, named by their labels), or, while a start is still in flight,
-# no button: the run has to finish. `subject` is "This node is" for a node's own
-# refusal, "A node is" for one about the whole canvas; `then` ends the line
-# ("delete it", "try again"). Agents keep the specific text, unchanged.
-WORLD_LABS_WAITING = "still waiting on World Labs."
-_RECOVERY_FIELDS_FALLBACK = "Resume Operation ID and Existing World ID"
+# A node's World Labs paid state, in the person's words. GM - Design's
+# wording for round 13 of PR #114 (verbatim, each line under the screen's own
+# "Couldn't <action>." heading; node names are card titles in curly quotes):
+# - active (a start still in flight): "A World Labs run is still starting.
+#   Try again in a moment."
+# - ambiguity (and the browser's own unconfirmed run): "A World Labs run
+#   needs your check first. Use the notice at the top of the screen." (the
+#   status bar's "I've checked Marble")
+# - recovery: "“<node>” has a saved World Labs recovery ID. Check the run in
+#   Marble, then forget the ID in Run History." (Run History's "Forget ID")
+# - params: "“<node>” has a World Labs ID in its settings. Check it in
+#   Marble, then clear “Resume Operation ID”.", naming the field that
+#   actually holds the ID.
+# The wording only: which states refuse is unchanged. Agents keep the
+# specific text.
+WORLD_LABS_STARTING_PERSON = "A World Labs run is still starting. Try again in a moment."
+WORLD_LABS_NEEDS_CHECK_PERSON = "A World Labs run needs your check first. Use the notice at the top of the screen."
+# Nebula couldn't journal a recovery it read from the canvas at boot, and the
+# retry's real journal write just failed too. A reload doesn't re-run that
+# bootstrap (it runs once, when the backend starts; the notes for round 13
+# give the mechanism), so the line says restart. GM, round 15 of PR #114
+# (item 5): "Couldn't <action>. Nebula couldn't save its World Labs
+# safeguards. Restart Nebula, then try again." The screen's own heading
+# supplies "Couldn't <action>.".
+WORLD_LABS_BOOTSTRAP_PERSON = "Nebula couldn't save its World Labs safeguards. Restart Nebula, then try again."
+_RECOVERY_FIELDS_FALLBACK = ("Resume Operation ID", "Existing World ID")
 
 
-def _paid_state_person(state: str, *, subject: str, then: str, fields: str = _RECOVERY_FIELDS_FALLBACK) -> str:
-    waiting = f"{subject} {WORLD_LABS_WAITING}"
+def _quoted_fields(fields: Sequence[str]) -> str:
+    """“A”, or “A” and “B”: the ID fields, as the node labels them."""
+    quoted = [f"\u201c{field}\u201d" for field in fields] or [f"\u201c{_RECOVERY_FIELDS_FALLBACK[0]}\u201d"]
+    return quoted[0] if len(quoted) == 1 else ", ".join(quoted[:-1]) + " and " + quoted[-1]
+
+
+def _paid_state_person(state: str, *, node: str | None = None, fields: Sequence[str] = ()) -> str:
+    """GM's line for a World Labs `state`. `node` is the held node's card
+    title (recovery, params); `fields` the labels of the ID fields that hold
+    an ID (params)."""
     if state == "active":
-        return f"{waiting} Let its run finish, then {then}."
+        return WORLD_LABS_STARTING_PERSON
     if state == "ambiguity":
-        return f"{waiting} Check the job in Marble, then use \u201cChecked Marble \u2014 unlock\u201d before you {then}."
+        return WORLD_LABS_NEEDS_CHECK_PERSON
+    if state == "bootstrap":
+        return WORLD_LABS_BOOTSTRAP_PERSON
+    name = f"\u201c{node}\u201d" if node else "\u201cWorld Labs Environment\u201d"
     if state == "recovery":
-        return (f"{waiting} Check the job in Marble, then use \u201cChecked Marble \u2014 forget\u201d "
-                f"in Run History before you {then}.")
-    return f"{waiting} Check the job in Marble, then clear the node's {fields} before you {then}."
+        return (f"{name} has a saved World Labs recovery ID. "
+                "Check the run in Marble, then forget the ID in Run History.")
+    return f"{name} has a World Labs ID in its settings. Check it in Marble, then clear {_quoted_fields(fields)}."
 
 
-UNLOCK_BUTTON = "\u201cChecked Marble \u2014 unlock\u201d"
-FORGET_BUTTON = "\u201cChecked Marble \u2014 forget\u201d"
+# The two buttons, by GM's round 13 labels.
+UNLOCK_BUTTON = "\u201cI've checked Marble\u201d"
+FORGET_BUTTON = "\u201cForget ID\u201d"
 # Round 3b: a canvas edit that raced a change to the shared recovery journal.
 CANVAS_JOB_CHANGED_PERSON = "A node's World Labs job changed while Nebula saved the canvas. Reload, then try again."
 
@@ -437,7 +487,7 @@ def _start_refusal(exc: ProviderStartConflictError, *, own_node: bool = False) -
     raised with (ProviderStartConflictError.reason, never its text): the
     person reads _paid_state_person's line for the state that holds the
     canvas, agents the exact text. `own_node`: the request names the node
-    whose start is in flight ("Checked Marble — unlock" on that node)."""
+    whose start is in flight (the status bar's "I've checked Marble")."""
     reason = getattr(exc, "reason", "active")
     if reason == "cancelled":
         # A Stop that beat the run's admission: it names no World Labs state
@@ -449,13 +499,13 @@ def _start_refusal(exc: ProviderStartConflictError, *, own_node: bool = False) -
         person = _paid_job_changed_person(UNLOCK_BUTTON)
     else:
         state = "active" if reason in {"active", "busy"} else reason
-        subject = "This node is" if own_node and reason == "active" else "A node is"
-        person = _paid_state_person(state, subject=subject, then="try again",
-                                    fields=getattr(exc, "fields", None) or _RECOVERY_FIELDS_FALLBACK)
+        fields = getattr(exc, "fields", None)
+        person = _paid_state_person(state, node=getattr(exc, "node", None),
+                                    fields=[fields] if isinstance(fields, str) else fields or ())
     return refusal_copy.refusal(409, str(exc), person, route="run")
 
 
-def _recovery_field_labels(nodes: list[dict[str, Any]]) -> str:
+def _recovery_field_labels(nodes: list[dict[str, Any]]) -> list[str]:
     """The labels (node_definitions.json) of the recovery ID fields `nodes`
     hold, in policy order: a World node's "Resume Operation ID" and "Existing
     World ID", a World export node's "Resume Export Operation ID"."""
@@ -473,18 +523,16 @@ def _recovery_field_labels(nodes: list[dict[str, Any]]) -> str:
             label = names.get(key) if key and value else None
             if isinstance(label, str) and label and label not in labels:
                 labels.append(label)
-    if not labels:
-        return _RECOVERY_FIELDS_FALLBACK
-    return labels[0] if len(labels) == 1 else ", ".join(labels[:-1]) + " and " + labels[-1]
+    return labels
 
 
-def _graph_paid_refusal(specific: str, state: str, fields: str = _RECOVERY_FIELDS_FALLBACK) -> HTTPException:
+def _graph_paid_refusal(specific: str, state: str, *, node: str | None = None,
+                        fields: Sequence[str] = ()) -> HTTPException:
     """409 for replacing the whole canvas (clear it, open or make a project,
     replace the graph, restore a bundle) while World Labs state holds a node.
-    The person's line leaves the action out: the screen's own heading
-    ("Couldn't clear the canvas.") names it."""
-    return refusal_copy.refusal(409, specific, _paid_state_person(state, subject="A node is", then="try again",
-                                                                  fields=fields), route="canvas")
+    The person's line (GM, round 13: _paid_state_person) leaves the action
+    out: the screen's own heading ("Couldn't clear the canvas.") names it."""
+    return refusal_copy.refusal(409, specific, _paid_state_person(state, node=node, fields=fields), route="canvas")
 
 
 def _graph_settling_specific(action: str) -> str:
@@ -497,31 +545,114 @@ def _reject_graph_replacement_during_paid_start(action: str) -> None:
         raise _graph_paid_refusal(_graph_settling_specific(action), "active")
     nodes = list(cli_graph.nodes.values())
     canonical_checkpoints = _graph_worldlabs_recovery_checkpoints(nodes)
-    if provider_start_guard.list():
+    node: str | None = None
+    fields: list[str] = []
+    # One read of the ambiguity list (review 13, nit 7): the rule is
+    # literally b2b1529e's, never an ambiguity seen by one read and not the next.
+    ambiguities = provider_start_guard.list()
+    records = provider_recovery_store.list() if not ambiguities else []
+    if ambiguities:
         state = "ambiguity"
-    elif provider_recovery_store.list():
+    elif records:
         state = "recovery"
+        node = _node_label(str(records[0].get("nodeId") or ""))
     elif canonical_checkpoints:
         state = "params"
-    elif _graph_recovery_bootstrap_error is not None:
-        # Nebula couldn't journal a recovery it read from the canvas. Rare,
-        # with no record to name, so the person reads the recovery line
-        # (listed for GM).
-        state = "recovery"
+        held = cli_graph.nodes.get(canonical_checkpoints[0][0]) or {}
+        node = _node_label(canonical_checkpoints[0][0])
+        fields = _recovery_field_labels([held])
+    elif _graph_recovery_bootstrap_error is not None and not _retry_graph_recovery_bootstrap(action):
+        # Nebula couldn't journal a recovery it read from the canvas at boot
+        # (see WORLD_LABS_BOOTSTRAP_PERSON), and retrying that just now failed.
+        raise _graph_paid_refusal(_graph_bootstrap_specific(action), "bootstrap")
     else:
         return
     raise _graph_paid_refusal(
         f"Cannot {action} while unresolved World Labs paid state exists. "
         "Check Marble and resolve the exact recovery/ambiguity record first.",
-        state,
-        _recovery_field_labels(nodes) if state == "params" else _RECOVERY_FIELDS_FALLBACK,
+        state, node=node, fields=fields,
     )
+
+
+def _graph_bootstrap_specific(action: str) -> str:
+    """Agents' detail for the bootstrap state (round 14 of PR #114): the
+    retry was made, the journal still can't be written, and only a backend
+    restart helps. The person reads WORLD_LABS_BOOTSTRAP_PERSON."""
+    return (f"Cannot {action}: Nebula retried saving its World Labs recovery journal and "
+            "couldn't write it. Restart the Nebula backend, then try again.")
+
+
+def _retry_graph_recovery_bootstrap(action: str) -> bool:
+    """The bootstrap retry path (round 14 of PR #114). Before the bootstrap
+    state refuses, re-run the re-seed a run start does
+    (_claim_fresh_paid_worldlabs_starts' prepare_recovery_journal) under the
+    lifecycle fence a canvas replacement takes (_paid_graph_mutation), then
+    prove the journal takes a real write (round 15, review 14's M4:
+    ProviderRecoveryStore.verify_writable; the store's sticky health flag
+    isn't asked, and a re-seed with no IDs to seed writes nothing). True
+    (and the error cleared) only when that write held; False (the error
+    kept) when it still can't be written. Reached only where the error is
+    set, outside the fence: the bundle restore's pre-check and the open's
+    ahead-of-time check (_open_ingress_verdict_off_loop).
+
+    The paid-start fence's own storage failing (review 14's L7) is that
+    store's error, not the journal's: it answers the 507 a canvas
+    replacement answers for it and leaves the bootstrap error as it was."""
+    global _graph_recovery_bootstrap_error
+    try:
+        with provider_start_guard.exclusive_lifecycle():
+            _ensure_shared_graph_recoveries(list(cli_graph.nodes.values()), source="bootstrap-retry")
+            provider_recovery_store.verify_writable()
+    except ProviderStartConflictError as exc:
+        # A start began since has_active() was read: the settling refusal, as
+        # _paid_graph_mutation answers it.
+        raise _graph_paid_refusal(_graph_settling_specific(action), "active") from exc
+    except ProviderStartPersistenceError as exc:
+        raise _paid_fence_unverifiable(action) from exc
+    except (
+        ProviderRecoveryCapacityError,
+        ProviderRecoveryConflictError,
+        ProviderRecoveryPersistenceError,
+        ValueError,
+    ) as exc:
+        _graph_recovery_bootstrap_error = str(exc)
+        return False
+    _graph_recovery_bootstrap_error = None
+    return True
+
+
+def _paid_fence_unverifiable(action: str) -> HTTPException:
+    """507: the cross-process paid-start fence's storage can't be read or
+    written, so nothing that needs the fence goes on."""
+    return RunSafetyStorageRefusal(
+        detail=(
+            f"Cannot {action} because Nebula cannot verify the durable "
+            "World Labs paid-start fence."
+        ),
+    )
+
+
+def _clear_bootstrap_error_after_real_write() -> None:
+    """Under the lifecycle fence, with the bootstrap error set: clear it only
+    when the recovery journal takes a real write now (verify_writable), else
+    keep it, with the store's latest reason. Never refuses by itself, so an
+    ordinary edit that takes the fence isn't refused for this state (round
+    15: which states refuse is unchanged); it only stops clearing it on a
+    seed that wrote nothing."""
+    global _graph_recovery_bootstrap_error
+    if _graph_recovery_bootstrap_error is None:
+        return
+    try:
+        provider_recovery_store.verify_writable()
+    except ProviderRecoveryPersistenceError as exc:
+        _graph_recovery_bootstrap_error = str(exc)
+        return
+    _graph_recovery_bootstrap_error = None
 
 
 @contextmanager
 def _paid_graph_mutation(action: str):
     """Hold the cross-process paid lifecycle fence through a graph commit."""
-    global _graph_recovery_bootstrap_error
     _check_workspace_revision()
     try:
         with provider_start_guard.exclusive_lifecycle():
@@ -532,18 +663,14 @@ def _paid_graph_mutation(action: str):
             _seed_shared_graph_recoveries_for_api(
                 list(cli_graph.nodes.values()), source="mutation-preflight"
             )
-            _graph_recovery_bootstrap_error = None
+            # Round 15: the seed may have written nothing (no IDs on the
+            # canvas), so it alone can't clear the bootstrap error.
+            _clear_bootstrap_error_after_real_write()
             yield
     except ProviderStartConflictError as exc:
         raise _graph_paid_refusal(_graph_settling_specific(action), "active") from exc
     except ProviderStartPersistenceError as exc:
-        raise HTTPException(
-            status_code=507,
-            detail=(
-                f"Cannot {action} because Nebula cannot verify the durable "
-                "World Labs paid-start fence."
-            ),
-        ) from exc
+        raise _paid_fence_unverifiable(action) from exc
 
 
 def _graph_worldlabs_recovery_checkpoints(
@@ -595,8 +722,7 @@ def _seed_shared_graph_recoveries_for_api(
     except ProviderRecoveryConflictError as exc:
         raise refusal_copy.refusal(409, str(exc), CANVAS_JOB_CHANGED_PERSON, route="canvas") from exc
     except ProviderRecoveryPersistenceError as exc:
-        raise HTTPException(
-            status_code=507,
+        raise RunSafetyStorageRefusal(
             detail=(
                 "Cannot commit graph-carried World Labs recovery state because "
                 "Nebula could not save the shared recovery journal"
@@ -633,8 +759,7 @@ def _commit_graph_candidate_with_recoveries(
             ProviderRecoveryPersistenceError,
             ValueError,
         ) as rollback_error:
-            raise HTTPException(
-                status_code=507,
+            raise RunSafetyStorageRefusal(
                 detail=(
                     "Graph storage rejected the candidate and Nebula could not "
                     "roll back its newly seeded provider recovery records; "
@@ -673,6 +798,8 @@ if _bootstrap_checkpoints:
             flush=True,
         )
 app = FastAPI(title="Nebula Node Backend", version="0.1.0")
+# This backend process's id, new on every start (the socket's first graphSync).
+BACKEND_BOOT_ID = uuid4().hex
 
 
 _DISK_FULL_ERRNOS = {errno.ENOSPC, getattr(errno, "EDQUOT", errno.ENOSPC)}
@@ -703,9 +830,33 @@ def _storage_error_body(exc: ProjectStoreError) -> dict[str, Any]:
             **({"limit": exc.limit} if isinstance(exc, ProjectLimitError) else {})}
 
 
+# Which store a 507 came from (round 17 of PR #114, review 16 L5), so the
+# canvas words a refused run start by its cause: the project store (catalog
+# or project storage unreadable) or the run-safety stores (the paid-start
+# fence, the recovery journal, durable Stop state). Additive, beside detail.
+PROJECT_STORE_STORAGE_CODE = "project_store"
+RUN_SAFETY_STORAGE_CODE = "run_safeguards"
+
+
 @app.exception_handler(ProjectStoreError)
 async def project_storage_error(request, exc: ProjectStoreError):
-    return JSONResponse(status_code=413 if isinstance(exc, ProjectLimitError) else 507, content=_storage_error_body(exc))
+    if isinstance(exc, ProjectLimitError):
+        return JSONResponse(status_code=413, content=_storage_error_body(exc))
+    return JSONResponse(status_code=507, content={**_storage_error_body(exc), "code": PROJECT_STORE_STORAGE_CODE})
+
+
+class RunSafetyStorageRefusal(HTTPException):
+    """507: a run-safety store (the paid-start fence, the World Labs recovery
+    journal, durable Stop state) couldn't be read or written, before any
+    provider call. Answers ``code: "run_safeguards"`` beside ``detail``."""
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(status_code=507, detail=detail)
+
+
+@app.exception_handler(RunSafetyStorageRefusal)
+async def run_safety_storage_refusal(request, exc: RunSafetyStorageRefusal):
+    return JSONResponse(status_code=507, content={"detail": exc.detail, "code": RUN_SAFETY_STORAGE_CODE})
 
 
 class ProjectSizeRefusal(HTTPException):
@@ -759,46 +910,153 @@ def _canvas_revision() -> str:
 
 def _check_workspace_revision(revision: str | None = None) -> None:
     supplied = revision if revision is not None else _request_workspace_revision.get()
-    if supplied is not None and supplied != _workspace_context()["workspaceRevision"]:
-        raise HTTPException(status_code=409, detail=CANVAS_OUT_OF_DATE)
-    # A tab's write made for a canvas cleared or replaced since (round 19):
-    # its node ids may name new nodes now.
+    current = _workspace_context()
+    # The canvas a tab's request names (X-Nebula-Canvas-Revision, round 19 of
+    # PR #195): a write made for a canvas cleared or replaced since may name
+    # new nodes by its ids. Compared below with the open canvas, or, for a tab
+    # still on the unfiled canvas's revision, with that canvas's epoch when it
+    # was filed.
+    expected_canvas = _canvas_revision()
+    if supplied is not None and supplied != current["workspaceRevision"]:
+        # A tab still on the unfiled canvas's revision is on the same canvas,
+        # if nothing replaced it since its filing (round 13 of PR #114, H1).
+        filed = _filed_canvases.get(supplied)
+        if not (filed is not None and filed[1]["workspaceRevision"] == current["workspaceRevision"]
+                and filed[1]["activeProjectId"] == current["activeProjectId"]
+                and filed[2] == canvas_undo_book.epoch(current["activeProjectId"])):
+            raise HTTPException(status_code=409, detail=CANVAS_OUT_OF_DATE)
+        expected_canvas = str(filed[0])
     canvas = _request_canvas_revision.get()
-    if canvas is not None and canvas != _canvas_revision():
+    if canvas is not None and canvas != expected_canvas:
         raise HTTPException(status_code=409, detail=CANVAS_OUT_OF_DATE)
 
 
-def _capture_execution_workspace() -> None:
-    # asyncio tasks inherit this immutable admission identity; late events
-    # never borrow whichever project happens to be active when broadcast.
-    _execution_workspace_context.set(_workspace_context())
-    # And the canvas it was admitted on, for its write-backs (round 20, L3).
-    _execution_canvas.set(_run_canvas_now())
+# A write that awaits lands only on the canvas that was open when it was asked
+# (review 9 of PR #114). Node ids restart per project and after a clear or an
+# import, and agents send no workspace revision, so a route that awaits (the
+# model catalog, a spend check, a file read) and then writes by node id would
+# otherwise write the project opened meanwhile. Such a route takes
+# _graph_fence() before its first await and calls _refuse_if_graph_moved()
+# right before it writes; the notes for round 10 list every route.
+# "changed since", not "another project is open": true after a switch away
+# and back to the same project too (round 11).
+GRAPH_MOVED_DETAIL = ("The open project changed since this started, so nothing was changed. Read the canvas again "
+                      "and send the change again if it still fits.")
+GRAPH_RESTARTED_DETAIL = ("The canvas was cleared or replaced since, so nothing was changed. Read the canvas again "
+                          "and send the change again if it still fits.")
 
 
-# A run writes back only onto the canvas it was admitted on (round 20 of PR
-# #195, review 19 L3). Node ids start again after a clear (and an import, which
-# refuses while a run is active), so a run admitted before an agent's clear
-# would write its handler-changed params and its outputs onto the agent's new
-# node with the same id. Each run route notes (open project, id epoch) at
-# admission (_capture_execution_workspace, a ContextVar its tasks inherit), and
-# the write-backs (_sync_params_to_cli_graph, _sync_outputs_to_cli_graph, the
-# Cinema shot merges, a recovery's params) are dropped when it moved. PR #114
-# has the same rule keyed by run id (_register_run(canvas=), _run_canvas_moved),
-# with the same (project, epoch) pair (_run_canvas_now): at merge, use #114's.
+def _graph_fence() -> tuple[str, str | None, int]:
+    """Which canvas is live: the workspace revision (new on every open,
+    create and delete of a project, so a switch away and back counts), the
+    open project, and its id epoch (new on a clear or an import)."""
+    workspace = _workspace_context()
+    project_id = workspace["activeProjectId"]
+    return workspace["workspaceRevision"], project_id, canvas_undo_book.epoch(project_id)
+
+
+# Filing the unfiled canvas is a rename, not a move (round 13 of PR #114,
+# review 12's H1/H2). GET /api/projects on an empty catalog files the live
+# unfiled canvas as "Recovered canvas": the same graph and ids under a new
+# project id and workspace revision. Each filing notes, in the step that
+# commits it, the unfiled canvas's (revision, id epoch) and what it became,
+# so a write fenced on the unfiled canvas, a tab request carrying its
+# revision, and a run admitted on it all read as the filed project. Only that
+# exact canvas translates: a clear or a switch after the filing moves the new
+# project's revision or epoch, and the comparison then refuses as before.
+_FILED_CANVASES_KEPT = 64
+_filed_canvases: OrderedDict[str, tuple[int, dict[str, Any], int]] = OrderedDict()
+
+
+def _note_canvas_filed(old_revision: str, old_epoch: int, new_context: dict[str, Any]) -> None:
+    """Record that the unfiled canvas at ``old_revision``/``old_epoch`` is now
+    ``new_context`` (its _workspace_context). Call it in the filing's step."""
+    project_id = new_context["activeProjectId"]
+    _filed_canvases[old_revision] = (old_epoch, dict(new_context), canvas_undo_book.epoch(project_id))
+    while len(_filed_canvases) > _FILED_CANVASES_KEPT:
+        _filed_canvases.popitem(last=False)
+
+
+def _filed_as(revision: Any, project_id: Any) -> tuple[int, dict[str, Any], int] | None:
+    """What the unfiled canvas at ``revision`` was filed as, if it was."""
+    if project_id is not None or not isinstance(revision, str):
+        return None
+    return _filed_canvases.get(revision)
+
+
+def _filed_context(context: dict[str, Any] | None) -> dict[str, Any] | None:
+    """A captured workspace context (a run's admission), read through a
+    filing: the unfiled canvas's context becomes the filed project's, so
+    the run's late events carry the revision the tab now holds."""
+    if not context:
+        return context
+    filed = _filed_as(context.get("workspaceRevision"), context.get("activeProjectId"))
+    return {**context, **filed[1]} if filed else context
+
+
+def _filed_fence(fence: tuple[str, str | None, int]) -> tuple[str, str | None, int]:
+    filed = _filed_as(fence[0], fence[1])
+    if filed is None or filed[0] != fence[2]:
+        return fence
+    return filed[1]["workspaceRevision"], filed[1]["activeProjectId"], filed[2]
+
+
+def _refuse_if_graph_moved(fence: tuple[str, str | None, int]) -> None:
+    """409 when the live canvas is no longer the one ``fence`` noted. The
+    person reads the canvas's own out-of-date line (a tab that sent its
+    revision gets it from _check_workspace_revision); agents the detail."""
+    _check_workspace_revision()
+    fence = _filed_fence(fence)
+    revision, project_id, epoch = _graph_fence()
+    if (revision, project_id) != fence[:2]:
+        raise refusal_copy.refusal(409, GRAPH_MOVED_DETAIL, CANVAS_OUT_OF_DATE, route="canvas")
+    if epoch != fence[2]:
+        raise refusal_copy.refusal(409, GRAPH_RESTARTED_DETAIL, CANVAS_OUT_OF_DATE, route="canvas")
+
+
+# A run writes back only to the canvas it registered on (round 11 of PR #114,
+# review 10's F4). Node ids restart after a clear or an import and per
+# project, and a run's outputs, params, node errors, node events and Cinema
+# merges land by node id, so each checks the canvas the run noted at
+# registration (_register_run) and drops itself if the open project or its
+# id epoch moved. Nothing is journaled for a write that didn't happen.
+# Normally unreachable: a registered run blocks a clear, an import, a switch
+# and a delete of the open project (_project_replacement_guard).
 def _run_canvas_now() -> tuple[str | None, int]:
     project_id = _workspace_context()["activeProjectId"]
     return project_id, canvas_undo_book.epoch(project_id)
 
 
+def _register_run(run_id: str, task: asyncio.Task[Any], canvas: tuple[str | None, int]) -> Any:
+    """execution_runs.register, noting the canvas the run starts on
+    (``canvas``, _run_canvas_now()). Callers read it, and check
+    _refuse_if_graph_moved, before the task exists, with no await between:
+    nothing that reads storage can fail once the task is made."""
+    return execution_runs.register(run_id, task, canvas=canvas)
+
+
+def _adopt_run_canvases(new_project_id: str) -> None:
+    """The unfiled canvas becomes project ``new_project_id`` with the same
+    live graph and ids (GET /api/projects or POST /api/projects filing it as
+    "Recovered canvas"): nothing was replaced, so the runs noted on it, and
+    its nodes' last errors, move to the new project. Call it in the step
+    that commits the catalog, before any await (round 12 of PR #114, G1m).
+    Only runs noted on the unfiled canvas as it is now move: one noted on an
+    older unfiled canvas (its epoch moved since) stays dropped."""
+    execution_runs.adopt_canvas((None, canvas_undo_book.epoch(None)),
+                                (new_project_id, canvas_undo_book.epoch(new_project_id)))
+    node_errors.adopt(None, new_project_id)
+
+
 _runs_told_moved: OrderedDict[str, None] = OrderedDict()
 
 
-def _admitted_canvas_moved(what: str) -> bool:
-    """Whether a write-back (``what``) of the run in this context must be
-    dropped: the canvas it was admitted on is no longer the open one. Outside
-    a run (nothing noted) it writes as before. Logged once per run."""
-    noted = _execution_canvas.get()
+def _run_canvas_moved(run_id: str | None, what: str) -> bool:
+    """Whether a write-back (``what``) from run ``run_id`` must be dropped:
+    the canvas it registered on is no longer the open one. Logged once per
+    run. An unknown run, or one registered without a canvas, writes as before."""
+    record = execution_runs.get(run_id) if run_id else None
+    noted = getattr(record, "canvas", None)
     if noted is None:
         return False
     try:
@@ -806,7 +1064,6 @@ def _admitted_canvas_moved(what: str) -> bool:
             return False
     except ProjectStoreError:
         pass  # which canvas is open can't be read: don't write by node id
-    run_id = execution_run_id.get() or "?"
     if run_id not in _runs_told_moved:
         _runs_told_moved[run_id] = None
         while len(_runs_told_moved) > 256:
@@ -816,18 +1073,10 @@ def _admitted_canvas_moved(what: str) -> bool:
     return True
 
 
-def _track_synchronous_project_run(handler):
-    """Fence project replacement for CLI and quick runs that own HTTP tasks."""
-    @wraps(handler)
-    async def tracked(*args, **kwargs):
-        _check_workspace_revision()
-        identity = uuid4().hex
-        _synchronous_workspace_runs.add(identity)
-        try:
-            return await handler(*args, **kwargs)
-        finally:
-            _synchronous_workspace_runs.discard(identity)
-    return tracked
+def _capture_execution_workspace() -> None:
+    # asyncio tasks inherit this immutable admission identity; late events
+    # never borrow whichever project happens to be active when broadcast.
+    _execution_workspace_context.set(_workspace_context())
 
 
 # Routes where a tab's request stores or runs params. A tab whose bundle was
@@ -976,7 +1225,6 @@ async def project_workspace_fence(request: Request, call_next):
     canvas_token = _request_canvas_revision.set(request.headers.get("x-nebula-canvas-revision") if guarded else None)
     tab_token = _request_from_tab.set(from_tab and guarded)
     execution_token = _execution_workspace_context.set(None)
-    run_canvas_token = _execution_canvas.set(None)
     try:
         if fence == FENCE_BEFORE_ROUTE:
             try:
@@ -984,10 +1232,9 @@ async def project_workspace_fence(request: Request, call_next):
             except HTTPException as exc:
                 return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
             except ProjectStoreError as exc:
-                return JSONResponse(status_code=507, content=_storage_error_body(exc))
+                return JSONResponse(status_code=507, content={**_storage_error_body(exc), "code": PROJECT_STORE_STORAGE_CODE})
         return await call_next(request)
     finally:
-        _execution_canvas.reset(run_canvas_token)
         _execution_workspace_context.reset(execution_token)
         _request_from_tab.reset(tab_token)
         _request_canvas_revision.reset(canvas_token)
@@ -2328,21 +2575,32 @@ def _settle_hold(run_id: str) -> None:
 
 async def _require_run_spend_approval(
     run_id: str, nodes: list[GraphNode], edges: list[GraphEdge], *, approval_id: str | None = None,
-    approval_scope: tuple[list[GraphNode], list[GraphEdge]] | None = None, **kwargs: Any,
+    approval_scope: tuple[list[GraphNode], list[GraphEdge]] | None = None,
+    fence: tuple[str, str | None, int] | None = None, **kwargs: Any,
 ) -> None:
     """The approval and spend checks for a run already noted for its actor: a
     refusal forgets the note. The inputs a price reads are measured first,
     off the event loop (_measure_run_inputs); the approval is taken and the
     limits checked after that, with no await between them. ``approval_scope``:
     what the run was asked to run, when placeholders were skipped from it
-    (the approval matches the request; only ``nodes`` are priced)."""
+    (the approval matches the request; only ``nodes`` are priced). ``fence``
+    (_graph_fence, taken before the route's first await) is checked right
+    after the measure, before the approval is used up or anything counts
+    (round 11 of PR #114, as run_graph does)."""
     try:
         measured = await _measure_run_inputs(nodes, edges)
-        _check_run_approval(approval_id, *(approval_scope or (nodes, edges)))
+        if fence is not None:
+            _refuse_if_graph_moved(fence)
+        approval = _check_run_approval(approval_id, *(approval_scope or (nodes, edges)))
         _require_spend_approval(nodes, edges, run_id=run_id, measured=measured, **kwargs)
     except (HTTPException, PersonGateError):
         canvas_events.forget_run(run_id)
         raise
+    if approval is not None:
+        # The run an Accept approved: its run events name the proposal, so
+        # its agent knows the run as its own (nebula-mcp --channel), and a
+        # run the person starts by hand on the same nodes stays theirs.
+        canvas_events.note_run_proposal(run_id, approval.proposal_id)
 
 
 # What the person's Accept clicks approved, waiting for the canvas to run it.
@@ -2354,12 +2612,13 @@ def _approval_shape(graph: CLIGraph, run_ids: list[str]) -> dict[str, list[Any]]
     return approvals.shape(graph.nodes, graph.edges, approvals.run_scope(graph.edges, run_ids))
 
 
-def _check_run_approval(approval_id: str | None, nodes: list[GraphNode], edges: list[GraphEdge]) -> None:
+def _check_run_approval(approval_id: str | None, nodes: list[GraphNode], edges: list[GraphEdge]) -> Any:
     """A run that says it is the one the person approved on Accept must be
     exactly that run: the person's, the approved nodes and wires, and the
-    live graph still holding the approved values. It uses the approval up."""
+    live graph still holding the approved values. It uses the approval up,
+    and returns it (None for a run that carries none)."""
     if approval_id is None:
-        return
+        return None
     if not _is_person_request():
         raise _person_only_refusal(
             "Only the person's canvas starts a run they approved. Agents run through "
@@ -2384,6 +2643,7 @@ def _check_run_approval(approval_id: str | None, nodes: list[GraphNode], edges: 
         raise HTTPException(status_code=409, detail=(
             f"{_listed(names, 4)} changed since you accepted {approval.agent_name}'s proposal, so nothing ran. "
             "Look over the nodes, then click Run on them yourself."))
+    return approval
 
 
 def _refuse_agent_change_to_approved_runs(candidate: CLIGraph) -> None:
@@ -2924,6 +3184,61 @@ def _upload_position(x: str | None, y: str | None) -> dict[str, float] | None:
     return spot
 
 
+def _is_upload_node(definition_id: Any, params: Any, node_type: str, file_name: str) -> bool:
+    """A node holding the file an upload just stored (by its content-hash name)."""
+    if definition_id != node_type or not isinstance(params, dict):
+        return False
+    return any(isinstance(params.get(key), str) and Path(params[key]).name == file_name
+               for key in ("filePath", "_previewUrl", "file"))
+
+
+def _roll_back_upload_node(project_id: str | None, epoch: int, node_id: str, node_type: str,
+                           file_name: str) -> bool:
+    """Take back the node an upload added to ``project_id`` when its sync
+    failed. Node ids restart per project, so the id alone says nothing once
+    another project opened during the sync (review 8 of PR #114: the
+    rollback removed the other project's n1). Still open: from the live
+    graph, as before. Closed since: from its stored snapshot, where the
+    switch saved it with the node. Either way only while the project's ids
+    are the ones the upload saw (no clear or import since: its undo epoch)
+    and the id still holds this upload's node; otherwise nothing is
+    touched. True when it came off the live graph: the caller syncs the
+    open canvas, which may have been sent it (a switch away and back
+    during the sync reopened the project with the node in it)."""
+    if canvas_undo_book.epoch(project_id) != epoch:
+        return False
+    if _open_project_id() == project_id:
+        node = cli_graph.nodes.get(node_id)
+        if node is not None and _is_upload_node(node.get("definitionId"), node.get("params"), node_type, file_name):
+            cli_graph.remove_node(node_id)
+            return True
+        return False
+    if project_id is None:
+        return False
+    with project_store.transaction() as catalog:
+        project = catalog["projects"].get(project_id)
+        if project is None or catalog["activeProjectId"] == project_id:
+            return False  # deleted since, or opened again in between (the live branch above reads it)
+        snapshot = project["snapshot"]
+        node = next((item for item in snapshot.get("nodes") or [] if item.get("id") == node_id), None)
+        data = node.get("data") if isinstance(node, dict) else None
+        if not isinstance(data, dict) or not _is_upload_node(data.get("definitionId"), data.get("params"),
+                                                              node_type, file_name):
+            return False
+        edges = [edge for edge in snapshot.get("edges") or []
+                 if edge.get("source") == node_id or edge.get("target") == node_id]
+        gone_edges = {edge.get("id") for edge in edges}
+        project["snapshot"] = {**snapshot,
+                               "nodes": [item for item in snapshot["nodes"] if item.get("id") != node_id],
+                               "edges": [edge for edge in snapshot.get("edges") or [] if edge not in edges]}
+        project["_backendNodeIds"] = [item for item in project.get("_backendNodeIds") or [] if item != node_id]
+        project["_backendEdgeIds"] = [item for item in project.get("_backendEdgeIds") or []
+                                      if item not in gone_edges]
+        refresh_metadata(project)
+        project_store.commit(catalog)
+    return False
+
+
 @app.post("/api/uploads")
 @graph_write(checks_in_route=True)
 async def upload_file_consolidated(
@@ -2961,6 +3276,9 @@ async def upload_file_consolidated(
     """
     requested_position = _upload_position(x, y)
     wants_node = create_node.strip().lower() in ("true", "1", "yes")
+    # Only an upload that adds a node reads which canvas is open (a plain
+    # upload still works with the project catalog unreadable).
+    fence = None
     if wants_node:
         # Fenced in the route (graph_write(checks_in_route=True), round 20 of
         # PR #195, review 19 H2): only an upload that adds a node writes the
@@ -2969,6 +3287,7 @@ async def upload_file_consolidated(
         # the step that adds the node, after the file read and the probe.
         _refuse_tab_write_without_revision()
         _check_workspace_revision()
+        fence = _graph_fence()
     content = await file.read()
     # Reject anything that cannot possibly be an accepted file before sniffing.
     # Images are capped at MAX_CHAT_UPLOAD_BYTES; videos at MAX_VIDEO_UPLOAD_BYTES.
@@ -3043,7 +3362,7 @@ async def upload_file_consolidated(
 
     # Opt-in node creation: parse create_node laxly so any reasonable truthy
     # string works (supports callers composing forms in different tools).
-    if wants_node:
+    if wants_node and fence is not None:
         if requested_position is not None:
             new_position = requested_position
         else:
@@ -3095,9 +3414,18 @@ async def upload_file_consolidated(
         if kept_name is not None:
             node_params[INPUT_FILE_NAME_PARAM] = kept_name
         # The same step as the add, after every await: an agent's switch or
-        # clear while the file was read or probed refuses the drop.
-        _check_workspace_revision()
+        # clear while the file was read or probed refuses the drop. The file
+        # stays stored either way (content-addressed), but the node goes only
+        # to the canvas it was dropped on (review 9 of PR #114; it checks the
+        # tab's revisions first, round 20 of PR #195).
+        _refuse_if_graph_moved(fence)
         node_id = cli_graph.add_node(node_type, node_params, position=new_position)
+        # The event as the write made it, and the project it went to: it is
+        # published only once the sync went out (a failed one rolls the node
+        # back), which may be after a switch (round 8 of PR #114).
+        added_event = _node_added_event(node_id)
+        written_to = _open_project_id()
+        written_epoch = canvas_undo_book.epoch(written_to)
         try:
             await _broadcast_graph_sync(edit=True)
         except Exception as exc:
@@ -3106,11 +3434,27 @@ async def upload_file_consolidated(
             # even if it errors, the caller still gets an error response with
             # no success fields. The uploaded file stays on disk (it is a
             # valid, content-addressed artifact, same as a create_node=false
-            # upload); only the graph mutation is rolled back.
+            # upload); only the graph mutation is rolled back, in the project
+            # it was made in, never in one opened during the sync (review 8).
             try:
-                cli_graph.remove_node(node_id)
+                live = _roll_back_upload_node(written_to, written_epoch, node_id, node_type, saved_path.name)
             except Exception:
-                pass
+                live = False
+            if live:
+                # The stored project too, at once: a switch away and back
+                # during the sync saved the node into it, and a crash before
+                # the next save would bring it back (round 10).
+                try:
+                    await _save_live_project(written_to)
+                except Exception:
+                    pass
+                # Canvas = backend: the sync any server-side removal sends
+                # (round 10). Best-effort, like the rollback: the socket that
+                # failed may fail again, and the 500 below still stands.
+                try:
+                    await _broadcast_graph_sync()
+                except Exception:
+                    pass
             raise HTTPException(
                 status_code=500,
                 detail=f"Upload succeeded but graph sync failed: {exc}",
@@ -3119,7 +3463,7 @@ async def upload_file_consolidated(
         # and the chat's action line credit the node to whoever uploaded it
         # (an agent's `nebula upload` / upload_file, or the person's drop).
         publish_action(f"Added {node_type} ({node_id})")
-        _journal_node_added(node_id)
+        _journal("node.added", project_id=written_to, **added_event)
         await _show_agent({"nodeId": node_id}, say=f"Added {_quoted(_node_label(node_id))}", did=_did("Added", node_id))
         response["nodeId"] = node_id
         if node_type == "image-input":
@@ -3216,7 +3560,7 @@ class ConnectionManager:
 
     async def broadcast(self, event: ExecutionEvent) -> None:
         data = _event_to_camel(event)
-        data.update(_execution_workspace_context.get() or _workspace_context())
+        data.update(_filed_context(_execution_workspace_context.get()) or _workspace_context())
         await self.broadcast_raw(data)
 
     async def broadcast_raw(self, data: dict[str, Any]) -> None:
@@ -3297,7 +3641,7 @@ def _publish_terminal_execution_status(run_id: str, status: str) -> None:
             await _broadcast_graph_sync()
         await manager.broadcast_raw(
             {
-                **(_execution_workspace_context.get() or _workspace_context()),
+                **(_filed_context(_execution_workspace_context.get()) or _workspace_context()),
                 "type": "executionStatus",
                 "runId": run_id,
                 "status": status,
@@ -3401,11 +3745,12 @@ async def _announce_validation_errors(errors: list[ValidationErrorDetail], run_i
     looks on the canvas like the person's refused click on Run.
     """
     node_errors.record_validation(errors)
-    await manager.broadcast(ValidationErrorEvent(errors=errors, run_id=run_id))
+    # Journaled before the broadcast's await (round 8 of PR #114).
     for node_id, message in _validation_messages(errors).items():
         if node_id:
             _journal_execution_event(ErrorEvent(node_id=node_id, error=message, run_id=run_id), run_id)
     canvas_events.forget_run(run_id)
+    await manager.broadcast(ValidationErrorEvent(errors=errors, run_id=run_id))
 
 
 # ---------- WebSocket endpoint ----------
@@ -3432,7 +3777,11 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         # Reconnect therefore starts with an authoritative graph, provider
         # safety journal, and retained execution-status snapshot.
         export = await export_graph_for_frontend()
-        await websocket.send_text(json.dumps({"type": "graphSync", **export}))
+        # bootId: which backend process this is (round 15 of PR #114). A tab
+        # holding a create whose answer was lost releases it only when the
+        # backend restarted (a new bootId); after a mere reconnect the create
+        # may still land, and a later sync shows it.
+        await websocket.send_text(json.dumps({"type": "graphSync", **export, "bootId": BACKEND_BOOT_ID}))
         await websocket.send_text(json.dumps(_pins_message()))
         await _settle_proposal_updates()
         await websocket.send_text(json.dumps(_canvas_notes_message()))
@@ -4701,7 +5050,11 @@ async def health() -> dict:
     # paramsVersion: the desktop app compares it with its built frontend's
     # stamp (nebula-build.json) at launch and refuses to open a bundle built
     # for another version (desktop/frontend-build.mjs). Not a secret.
-    return {"status": "ok", "app": "nebula", "version": "0.1.0", "paramsVersion": PARAMS_VERSION}
+    # bootId: which backend process answers (round 16 of PR #114, M4). A tab
+    # notes it from every health probe and socket hello, with or without a
+    # project open, and a new one means the backend restarted. Not a secret.
+    return {"status": "ok", "app": "nebula", "version": "0.1.0", "paramsVersion": PARAMS_VERSION,
+            "bootId": BACKEND_BOOT_ID}
 
 
 @app.get("/api/capabilities/worldlabs")
@@ -4814,23 +5167,25 @@ def _journal(
     data: dict[str, Any] | None = None,
     summary: str = "",
     actor: dict[str, Any] | None = None,
+    project_id: str | None | Any = ...,
 ) -> None:
     """Record a canvas change for `nebula watch`; never fails the route that called it.
 
     The actor defaults to whoever sent the current request (agent, person or
     anonymous). Like presence, the journal is decoration on top of an edit
-    that already succeeded.
+    that already succeeded. The event names the project the catalog has open
+    as it is journaled (_events_journal), or ``project_id`` when the caller
+    knows where the change was made (a pin's own project).
     """
     try:
-        if not canvas_events.project_known:
-            canvas_events.set_project(_workspace_context()["activeProjectId"])
-        canvas_events.publish(
+        _events_journal().publish(
             kind,
             actor=actor or actor_for_headers(current_request_headers()),
             node_id=node_id,
             data=data,
             summary=summary,
             edit=_canvas_edit_link.get(),
+            **({"project_id": project_id} if project_id is not ... else {}),
         )
     except Exception:  # noqa: BLE001 - the journal is decoration, like presence
         pass
@@ -4884,14 +5239,22 @@ def _note_node_ran(event: Any, run_id: str | None) -> None:
     if not isinstance(event, ExecutingEvent) or not isinstance(node_id, str) or node_id not in cli_graph.nodes:
         return
     try:
-        project_id = (_execution_workspace_context.get() or _workspace_context())["activeProjectId"]
+        project_id = (_filed_context(_execution_workspace_context.get()) or _workspace_context())["activeProjectId"]
         canvas_undo_book.node_ran(run_id, node_id, actor=canvas_events.run_actor(run_id), project_id=project_id)
     except Exception:  # noqa: BLE001 - never break execution over undo bookkeeping
         pass
 
 
+def _run_project() -> str | None | Any:
+    """The project a run was admitted in (_capture_execution_workspace), for
+    its journal events; ``...`` (the open project) outside a run's context."""
+    captured = _filed_context(_execution_workspace_context.get())
+    return captured["activeProjectId"] if captured else ...
+
+
 def _journal_execution_event(event: Any, run_id: str | None) -> None:
-    """Journal one node's run start/finish/failure, attributed to whoever started the run."""
+    """Journal one node's run start/finish/failure, attributed to whoever
+    started the run, tagged with the project the run was admitted in."""
     try:
         kind = _RUN_EVENT_KINDS.get(type(event))
         if kind is None:
@@ -4903,6 +5266,9 @@ def _journal_execution_event(event: Any, run_id: str | None) -> None:
         if not canvas_events.first_run_event(run_id, node_id, kind):
             return
         data: dict[str, Any] = {"runId": run_id}
+        proposal_id = canvas_events.run_proposal(run_id)
+        if proposal_id:
+            data["proposalId"] = proposal_id  # the run an Accept approved (_require_run_spend_approval)
         # Agents read these (wait_for_canvas_change, `nebula watch`): hide a key
         # a provider quoted (services/key_echoes.py) before cutting to 200, so
         # a key cut short can't slip under the 8-character run check.
@@ -4920,6 +5286,7 @@ def _journal_execution_event(event: Any, run_id: str | None) -> None:
             data=data,
             summary=f"{_node_label(node_id)} ({node_id}) {_RUN_EVENT_VERBS[kind]}",
             actor=canvas_events.run_actor(run_id),
+            project_id=_run_project(),
         )
     except Exception:  # noqa: BLE001 - never break execution for the journal
         pass
@@ -5111,7 +5478,9 @@ def _schedule_status_expiry() -> None:
         loop = asyncio.get_running_loop()
     except RuntimeError:  # no running loop (a script): the next roster read sweeps
         return
-    _status_expiry = loop.call_later(max(0.0, deadline - agent_status.now()) + 0.5, _start_status_sweep)
+    # A fresh context, as in _call_later: armed by whatever request set a status.
+    _status_expiry = loop.call_later(max(0.0, deadline - agent_status.now()) + 0.5, _start_status_sweep,
+                                     context=Context())
 
 
 def _start_status_sweep() -> None:
@@ -5345,7 +5714,7 @@ def _journal_provider_hold(hold: str, change: str, *, run_id: str | None, node_i
     what = "a paid start Nebula couldn't confirm" if hold == "startAmbiguity" else "a recovery checkpoint"
     summary = (f"{_node_label(node_id)} ({node_id}) is held: {what}" if change == "held"
                else f"{what} on {_node_label(node_id)} ({node_id}) was cleared")
-    _journal("provider.hold", node_id=node_id, data=data, summary=summary, actor=actor)
+    _journal("provider.hold", node_id=node_id, data=data, summary=summary, actor=actor, project_id=_run_project())
 
 
 def _start_node_notes(rows: list[dict[str, Any]], context: Mapping[str, Any], via: str) -> list[str]:
@@ -5403,7 +5772,7 @@ async def agent_start_here(request: Request, via: str = "mcp") -> dict[str, Any]
     caller = identify_agent(headers)
     selected = selection_context.snapshot(cli_graph, node_registry).get("selectedNodeIds", [])
     snapshot = agent_presence.snapshot(cli_graph, node_registry, selected_ids=selected)
-    catalog = project_store.read()
+    catalog = project_store.read()  # every project's name, for the boards part
     active_id = catalog.get("activeProjectId")
     projects = catalog.get("projects") or {}
     active = projects.get(active_id) if active_id else None
@@ -5453,6 +5822,58 @@ def _query_number(raw: str | None, name: str, *, integer: bool, low: float, high
     return value
 
 
+class _ClientGone(Exception):
+    """The client of a journal long-poll hung up (see _journal_wait)."""
+
+
+@app.exception_handler(_ClientGone)
+async def _client_gone(request, exc: _ClientGone):
+    # Nobody reads it: the connection is closed. 499 is the usual name for it.
+    return JSONResponse(status_code=499, content={"detail": "The client closed the request."})
+
+
+async def _until_disconnected(request: Request) -> None:
+    """Returns when the client hangs up. These routes are GETs with no body,
+    so after the (empty) request message the server's next message is the
+    disconnect (uvicorn sends it when the connection closes; test clients
+    once the response is complete)."""
+    while True:
+        message = await request.receive()
+        if message.get("type") == "http.disconnect":
+            return
+
+
+async def _journal_wait(request: Request, **kwargs: Any) -> dict[str, Any]:
+    """canvas_events.wait for a route's client, ended when that client hangs up.
+
+    Every long-poll on the journal holds one of its MAX_WAITERS (32) slots.
+    Without this, a client that gave up (an MCP client cancelling its poll,
+    a closed terminal) held its slot for the rest of the wait, up to 25 s, and
+    33 of them made every watcher's next poll a 429 (review 1 of PR #114).
+    Now the wait stops and frees the slot at once (_ClientGone, a 499 nobody
+    reads). A connected client sees no difference."""
+    journal = _events_journal()
+    if not kwargs.get("wait"):
+        return await journal.wait(**kwargs)
+    waiting = asyncio.ensure_future(journal.wait(**kwargs))
+    gone = asyncio.ensure_future(_until_disconnected(request))
+    try:
+        await asyncio.wait({waiting, gone}, return_when=asyncio.FIRST_COMPLETED)
+        if not waiting.done() and gone.exception() is not None:
+            await asyncio.wait({waiting})  # the server's receive failed: wait it out as before
+    finally:
+        if gone.done() and not gone.cancelled():
+            gone.exception()  # a receive that failed as the wait ended: read it, nothing more (review 2)
+        gone.cancel()
+        abandoned = not waiting.done()
+        if abandoned:
+            waiting.cancel()
+    if abandoned:
+        await asyncio.wait({waiting})  # let its cancellation run: that frees the slot
+        raise _ClientGone()
+    return waiting.result()
+
+
 @app.get("/api/canvas/events")
 async def get_canvas_events(request: Request) -> dict[str, Any]:
     """Long-poll the canvas change journal (see services/canvas_events.py).
@@ -5484,7 +5905,8 @@ async def get_canvas_events(request: Request) -> dict[str, Any]:
     identity = identify_agent(current_request_headers())
     exclude = identity.id if identity is not None and include_self in {"0", "false"} else None
     try:
-        return await canvas_events.wait(
+        return await _journal_wait(
+            request,
             after=int(after) if after is not None else None,
             journal=journal,
             wait=wait,
@@ -5514,11 +5936,12 @@ async def _broadcast_pins() -> None:
         pass
 
 
-async def _journal_detached_pins(pins: list[dict[str, Any]], reason: str) -> None:
-    """Broadcast and journal pins that just lost their node."""
-    if not pins:
-        return
-    await _broadcast_pins()
+def _journal_detached(pins: list[dict[str, Any]], reason: str) -> None:
+    """Journal pins that just lost their node. In the same step as the write
+    that detached them, before any await (round 8 of PR #114): the event then
+    names the project the pins are in, and lands before any switch that
+    follows (a late one named the project opened next, and the --channel
+    listener read A's change as B's)."""
     for pin in pins[:50]:
         node_id = pin.get("detachedFrom")
         _journal(
@@ -5540,10 +5963,11 @@ async def _journal_detached_pins(pins: list[dict[str, Any]], reason: str) -> Non
 # replaces?, pins, proposals}: the delete's answer carries it, so does the
 # edit's graphSync (edit.removals, for a canvas that didn't send it) and an
 # agent's undo record. The restore that brings the node back names it
-# (``removals``), and _undo_removals re-checks each pin and proposal rather
-# than trusting the list: a pin goes back only if this very removal detached
-# it from a node of this model (it keeps the id, persisted with the project,
-# canvas_pins.reattach), a proposal reopens only if this (removal, node) pair
+# (``removals``), and _reattach_removed_pins / _reopen_removed_proposals
+# re-check each pin and proposal rather than trusting the list: a pin goes
+# back only if this very removal detached it from a node of this model (it
+# keeps the id, persisted with the project, canvas_pins.reattach), a
+# proposal reopens only if this (removal, node) pair
 # closed it and the accept checks still pass (_proposal_reopen_misfit).
 #
 # Node ids are not unique over time (an import or a clear restarts the
@@ -5614,23 +6038,35 @@ def _renew_kept_removals(removals: list[dict[str, Any]]) -> None:
         pass
 
 
-async def _announce_removed_nodes(entries: list[dict[str, Any]], *, note: str, pin_reason: Callable[[dict[str, Any]], str],
-                                  journal_removed: bool = True) -> None:
-    """After the delete's graphSync: node.removed, then its pins (pin.detached)
-    and the proposals it closed (proposal.invalidated), node by node, as before."""
+def _journal_removed_nodes(entries: list[dict[str, Any]], *, note: str,
+                           pin_reason: Callable[[dict[str, Any]], str]) -> None:
+    """node.removed, then its pins (pin.detached) and the proposals it closed
+    (proposal.invalidated), node by node. Right after _remove_side_effects,
+    before the delete's graphSync: in the step that made the delete, so each
+    event names the project the node was deleted from (round 8 of PR #114)."""
     for entry in entries:
         gone = entry["gone"]
-        if journal_removed:
-            _journal(
-                "node.removed",
-                node_id=gone["id"],
-                data={"name": gone["name"], "definitionId": gone["definitionId"]},
-                summary=f"removed {gone['name']} ({gone['id']}){note}",
-            )
-        await _journal_detached_pins(entry["detached"], pin_reason(gone))
-        await _announce_closed_proposals(entry["closed"])
-        agent_presence.forget_node(gone["id"])
-        await _forget_status_anchors(node_id=gone["id"])
+        _journal(
+            "node.removed",
+            node_id=gone["id"],
+            data={"name": gone["name"], "definitionId": gone["definitionId"]},
+            summary=f"removed {gone['name']} ({gone['id']}){note}",
+        )
+        _journal_detached(entry["detached"], pin_reason(gone))
+        _journal_closed_proposals(entry["closed"])
+
+
+async def _announce_removed_nodes(entries: list[dict[str, Any]]) -> None:
+    """After the delete's graphSync (its events journaled before it,
+    _journal_removed_nodes): the pins and closed proposals to the open
+    canvases, and the deleted nodes' cursors and status anchors let go."""
+    if any(entry["detached"] for entry in entries):
+        await _broadcast_pins()
+    for entry in entries:
+        await _broadcast_closed_proposals(entry["closed"])
+    for entry in entries:
+        agent_presence.forget_node(entry["gone"]["id"])
+        await _forget_status_anchors(node_id=entry["gone"]["id"])
 
 
 def _restore_removals(raw: Any) -> list[dict[str, Any]]:
@@ -5691,6 +6127,10 @@ async def _proposal_reopen_misfit(proposal: Proposal) -> str | None:
     if proposal.expires_at <= canvas_proposals.now():
         return "it expired"
     models = await _look_up_models(_spec_models_wanted(proposal.spec))
+    if proposal.project_id != _workspace_context()["activeProjectId"]:
+        # Another project opened during the lookup (review 8): the live graph
+        # is that project's now, so the checks below would read the wrong one.
+        return ANOTHER_PROJECT
     try:
         _refuse_overwriting_later_edits(proposal)
         candidate, id_map, _edge_ids, run_ids = _stage_proposal(proposal.spec, positions=proposal.positions,
@@ -5723,7 +6163,7 @@ async def _reopen_update(ref: Mapping[str, Any] | None, proposal_id: str) -> Non
         result = await asyncio.to_thread(agent_notes.reopen_proposal, ref["projectId"], ref["id"], proposal_id)
     except (NoteError, ProjectStoreError):
         return
-    if result is not None and result["projectId"] == project_store.read().get("activeProjectId"):
+    if result is not None and result["projectId"] == _open_project_id():
         await _broadcast_raw_quietly(_notes_message("canvas", "changed", project_id=result["projectId"],
                                                     ids=[ref["id"]], note=result["note"], unread=result["unread"]))
 
@@ -5756,18 +6196,18 @@ def _note_restored(project_id: str | None, back: Mapping[str, str], consumed: Ma
         node_removals.restored(project_id, node_id, consumed.get(node_id))
 
 
-async def _undo_removals(records: list[dict[str, Any]], back: Mapping[str, str],
-                         project_id: str | None) -> dict[str, list[Any]]:
+def _reattach_removed_pins(records: list[dict[str, Any]], back: Mapping[str, str],
+                           project_id: str | None) -> dict[str, Any]:
     """The restore brought ``back`` these nodes (node id -> model) in
-    ``project_id``: undo what their deletes removed. Only records bound to
-    those very nodes count (_bound_removals), and only pins and proposals
-    those removals detached or closed: a pin by its ``detachedBy`` and
-    model, a proposal by a (removal, node) pair in its ``closed_by``. Returns
-    the restore's ``reattached`` (pin ids), ``pinsLeft`` ({id, reason, code}),
-    ``reopened`` (proposal ids) and ``notReopened`` ({id, reason}): a
-    proposal the delete closed that doesn't fit the restored graph, expired,
-    lost its tag to a clear, an import or a project switch, or that Nebula
-    no longer has (a restart; proposals live in memory)."""
+    ``project_id``: undo what their deletes removed, first half. Only
+    records bound to those very nodes count (_bound_removals), and only pins
+    and proposals those removals detached or closed: a pin by its
+    ``detachedBy`` and model, a proposal by a (removal, node) pair in its
+    ``closed_by``. Synchronous, in the restore's own step, before the
+    caller's edit.undone (review 8 of PR #114): the pins go back and are
+    journaled (pin.reattached) here. Returns what the second half
+    (_reopen_removed_proposals, after the sync) needs, with the restore's
+    ``reattached`` (pin ids) and ``pinsLeft`` ({id, reason, code}) so far."""
     out: dict[str, list[Any]] = {"reattached": [], "pinsLeft": [], "reopened": [], "notReopened": []}
     bound = _bound_removals(records, back, project_id)
     # Pins check their own persisted binding (detachedBy, detachedFrom,
@@ -5776,20 +6216,11 @@ async def _undo_removals(records: list[dict[str, Any]], back: Mapping[str, str],
     # the records not known to be another delete's.
     for_pins = [record for record, _verdict in bound]
     relevant = [record for record, verdict in bound if verdict is not False]
-    if _workspace_context()["activeProjectId"] != project_id:
-        # Another project opened while the restore was on its way: its pins
-        # and proposals aren't these; say so rather than touch them.
-        out["pinsLeft"] = [pin_left(pin_id, ANOTHER_PROJECT)
-                           for pin_id in dict.fromkeys(p for r in for_pins for p in r.get("pins") or [])]
-        out["notReopened"] = [{"id": proposal_id, "reason": ANOTHER_PROJECT}
-                              for proposal_id in dict.fromkeys(p for r in relevant for p in r.get("proposals") or [])]
-        return out
+    plan: dict[str, Any] = {"out": out, "relevant": relevant, "pins_back": False}
     consumed = {record["nodeId"]: record["id"] for record, verdict in bound if verdict}
     if not for_pins:
         _note_restored(project_id, back, consumed)
-        return out
-    pairs = {(record["id"], record["nodeId"]) for record in relevant}
-
+        return plan
     try:
         pins = canvas_pins.reattach(for_pins, back, project_id)
     except (PinError, ProjectStoreError):
@@ -5802,16 +6233,52 @@ async def _undo_removals(records: list[dict[str, Any]], back: Mapping[str, str],
         if verdict is None and any(by_pin.get(str(pin_id)) == record["nodeId"] for pin_id in record.get("pins") or []):
             consumed.setdefault(record["nodeId"], record["id"])
     _note_restored(project_id, back, consumed)
-    if pins["reattached"]:
+    # Journaled in the step that put them back, broadcast after the sync (round 8 of PR #114).
+    for pin in pins["reattached"][:50]:
+        node_id = (pin.get("anchor") or {}).get("nodeId")
+        _journal(
+            "pin.reattached",
+            node_id=node_id if isinstance(node_id, str) else None,
+            data={"pinId": pin.get("id"), "text": pin.get("text"), "anchor": pin.get("anchor")},
+            summary=f"note {pin.get('id')} is back on {node_id}: the undo put its node back",
+            project_id=project_id,
+        )
+    plan["pins_back"] = bool(pins["reattached"])
+    return plan
+
+
+def _note_reopen_in_link() -> None:
+    """Right after a proposal.reopened: the restore's link (if it has one)
+    lists it at once. A later proposal's fit check awaits, and the person's
+    Cmd+Z of this undo landing then reads the link (review 9 of PR #114)."""
+    link = _canvas_edit_link.get()
+    if link is not None:
+        _note_link_events(link["id"])
+
+
+async def _reopen_removed_proposals(plan: dict[str, Any], project_id: str | None) -> dict[str, list[Any]]:
+    """Second half, after the restore's sync: the pins put back
+    (_reattach_removed_pins) go to the canvases, and the proposals the
+    deletes closed reopen where they still fit. Returns the restore's
+    ``reattached``, ``pinsLeft``, ``reopened`` (proposal ids) and
+    ``notReopened`` ({id, reason}): a proposal the delete closed that
+    doesn't fit the restored graph, expired, lost its tag to a clear, an
+    import or a project switch, or that Nebula no longer has (a restart;
+    proposals live in memory). A proposal is reopened (and journaled) only
+    while its project is still the one open (review 8)."""
+    out: dict[str, list[Any]] = plan["out"]
+    relevant: list[dict[str, Any]] = plan["relevant"]
+    if plan["pins_back"]:
         await _broadcast_pins()
-        for pin in pins["reattached"][:50]:
-            node_id = (pin.get("anchor") or {}).get("nodeId")
-            _journal(
-                "pin.reattached",
-                node_id=node_id if isinstance(node_id, str) else None,
-                data={"pinId": pin.get("id"), "text": pin.get("text"), "anchor": pin.get("anchor")},
-                summary=f"note {pin.get('id')} is back on {node_id}: the undo put its node back",
-            )
+    if not relevant:
+        return out
+    if _workspace_context()["activeProjectId"] != project_id:
+        # Another project opened while the restore was on its way: its
+        # proposals aren't these; say so rather than touch them.
+        out["notReopened"] = [{"id": proposal_id, "reason": ANOTHER_PROJECT}
+                              for proposal_id in dict.fromkeys(p for r in relevant for p in r.get("proposals") or [])]
+        return out
+    pairs = {(record["id"], record["nodeId"]) for record in relevant}
 
     named = {proposal_id for record in relevant for proposal_id in record.get("proposals") or []}
     found = sorted(canvas_proposals.closed_by_pairs(pairs, project_id), key=lambda p: p.created_at)
@@ -5826,6 +6293,9 @@ async def _undo_removals(records: list[dict[str, Any]], back: Mapping[str, str],
             # bring them back: it waits for that, closed, and isn't counted.
             continue
         reason = await _proposal_reopen_misfit(proposal)
+        if reason is None and proposal.project_id != _workspace_context()["activeProjectId"]:
+            # Another project opened during the check's await (review 8): no reopen, no event.
+            reason = ANOTHER_PROJECT
         if reason is None:
             try:
                 canvas_proposals.reopen(proposal.id)
@@ -5833,6 +6303,15 @@ async def _undo_removals(records: list[dict[str, Any]], back: Mapping[str, str],
                 reason = exc.detail
         if reason is None:
             reopened.append(proposal)
+            # In the step that reopened it, tagged with its project (round 8 of PR #114).
+            _journal(
+                "proposal.reopened",
+                node_id=next(iter(sorted(proposal.references, key=_node_order)), None),
+                data={"proposalId": proposal.id, "agentId": proposal.agent.id, "note": proposal.spec.note},
+                summary=f"reopened {proposal.agent.name}'s proposal {proposal.id}: the undo put back the node it needs",
+                project_id=proposal.project_id,
+            )
+            _note_reopen_in_link()
         else:
             out["notReopened"].append({"id": proposal.id, "reason": reason})
     assets = [p for p in asset_proposals.closed_by_pairs(pairs, project_id) if isinstance(p, AssetProposal)]
@@ -5850,12 +6329,10 @@ async def _undo_removals(records: list[dict[str, Any]], back: Mapping[str, str],
         # delete's) isn't this undo's: it stays as it is and isn't counted.
     for proposal in reopened:
         out["reopened"].append(proposal.id)
-        _journal(
-            "proposal.reopened",
-            node_id=next(iter(sorted(proposal.references, key=_node_order)), None),
-            data={"proposalId": proposal.id, "agentId": proposal.agent.id, "note": proposal.spec.note},
-            summary=f"reopened {proposal.agent.name}'s proposal {proposal.id}: the undo put back the node it needs",
-        )
+        if not proposal.is_open or proposal.project_id != _workspace_context()["activeProjectId"]:
+            # A switch after it reopened closed it again (the canvas was
+            # replaced): no ghost bar on the project open now.
+            continue
         try:
             await manager.broadcast_browser({
                 "type": "proposalOpened",
@@ -5885,14 +6362,15 @@ async def _undo_removals(records: list[dict[str, Any]], back: Mapping[str, str],
         if reason is None:
             reopened_assets.append(proposal)
             out["reopened"].append(proposal.id)
+            _journal(
+                "proposal.reopened",
+                data=_asset_journal_data(proposal),
+                summary=f"reopened {proposal.agent.name}'s proposal {proposal.id}: the undo put back the image it needs",
+            )
+            _note_reopen_in_link()
         else:
             out["notReopened"].append({"id": proposal.id, "reason": reason})
     for proposal in reopened_assets:
-        _journal(
-            "proposal.reopened",
-            data=_asset_journal_data(proposal),
-            summary=f"reopened {proposal.agent.name}'s proposal {proposal.id}: the undo put back the image it needs",
-        )
         await _reopen_update(proposal.update, proposal.id)
         _schedule_asset_expiry(proposal)
     if reopened_assets:
@@ -5947,7 +6425,7 @@ async def create_canvas_pin(body: dict[str, Any]) -> dict[str, Any]:
     """
     require_person(current_request_headers())
     try:
-        pin = canvas_pins.add(
+        project_id, pin = canvas_pins.add_in(
             body.get("text"),
             node_id=body.get("nodeId"),
             position=body.get("position"),
@@ -5955,14 +6433,20 @@ async def create_canvas_pin(body: dict[str, Any]) -> dict[str, Any]:
         )
     except PinError as exc:
         raise _pin_http_error(exc) from exc
-    await _broadcast_pins()
+    # Journaled at once, before any await, tagged with the project the write
+    # went to: a switch (and a pin on the project it opens) journaled during
+    # an await here would come first, and this event, naming the project
+    # left, would then make the --channel listener drop the open project's
+    # pin (review 6 of PR #114, LOW-1). The same in delete and resolve.
     anchor = pin.get("anchor") or {}
     _journal(
         "pin.added",
         node_id=anchor.get("nodeId"),
         data={"pinId": pin["id"], "text": pin["text"], "anchor": anchor},
         summary=pin_summary(pin),
+        project_id=project_id,
     )
+    await _broadcast_pins()
     return {"pin": pin}
 
 
@@ -5971,16 +6455,17 @@ async def delete_canvas_pin(pin_id: str) -> dict[str, Any]:
     """Delete a note. Only the person can do this."""
     require_person(current_request_headers())
     try:
-        pin = canvas_pins.remove(pin_id)
+        project_id, pin = canvas_pins.remove_in(pin_id)
     except PinError as exc:
         raise _pin_http_error(exc) from exc
-    await _broadcast_pins()
-    _journal(
+    _journal(  # before any await, tagged with the write's project (see create_canvas_pin)
         "pin.removed",
         node_id=(pin.get("anchor") or {}).get("nodeId"),
         data={"pinId": pin_id, "text": pin.get("text")},
         summary=f"deleted the note {pin_id}",
+        project_id=project_id,
     )
+    await _broadcast_pins()
     return {"status": "deleted"}
 
 
@@ -5991,18 +6476,19 @@ async def resolve_canvas_pin(pin_id: str, body: dict[str, Any]) -> dict[str, Any
     if identity is None:
         raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
     try:
-        pin = canvas_pins.resolve(pin_id, body.get("reply"), identity)
+        project_id, pin = canvas_pins.resolve_in(pin_id, body.get("reply"), identity)
     except PinError as exc:
         raise _pin_http_error(exc) from exc
-    await _broadcast_pins()
     reply = (pin.get("reply") or {}).get("text", "")
     anchor = pin.get("anchor") or {}
-    _journal(
+    _journal(  # before any await, tagged with the write's project (see create_canvas_pin)
         "pin.resolved",
         node_id=anchor.get("nodeId"),
         data={"pinId": pin_id, "text": pin.get("text"), "reply": reply},
         summary=f'answered the note {pin_id} ("{str(pin.get("text"))[:40]}"): {reply}',
+        project_id=project_id,
     )
+    await _broadcast_pins()
     try:
         target = anchor if anchor.get("nodeId") in cli_graph.nodes else (
             pin.get("position") or {"x": anchor.get("x", 0.0), "y": anchor.get("y", 0.0)}
@@ -6088,13 +6574,15 @@ async def _broadcast_raw_quietly(message: dict[str, Any]) -> None:
 
 
 def _journal_note(note: dict[str, Any], surface: str, *, board: dict[str, Any] | None = None,
-                  actor: dict[str, Any] | None = None) -> None:
+                  actor: dict[str, Any] | None = None, project_id: str | None | Any = ...) -> None:
+    """note.posted. ``project_id``: the project the Update was saved in, when
+    a worker thread saved it (the open project may have changed since)."""
     data: dict[str, Any] = {"surface": surface, "noteId": note.get("id"), "about": note.get("about"),
                             "refs": list(note.get("refs") or [])[:12], "text": note.get("text")}
     if board is not None:
         data["boardId"] = board.get("id")
         data["boardName"] = board.get("name")
-    _journal("note.posted", data=data, summary=note_summary(note), actor=actor)
+    _journal("note.posted", data=data, summary=note_summary(note), actor=actor, project_id=project_id)
 
 
 def _note_author() -> AgentIdentity:
@@ -6126,10 +6614,10 @@ async def post_canvas_agent_note(body: AgentNoteBody) -> Any:
                                          graph_nodes=cli_graph.nodes)
     except NoteError as exc:
         return _raise_note_error(exc)
+    _journal_note(result["note"], "canvas")  # before any await (round 8 of PR #114)
     await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"],
                                                 note=result["note"], unread=result["unread"],
                                                 removed=result["removed"]))
-    _journal_note(result["note"], "canvas")
     return result
 
 
@@ -6196,9 +6684,9 @@ async def post_board_agent_note(moodboard_id: str, body: AgentNoteBody) -> Any:
                                          body.model_dump(exclude_unset=True))
     except NoteError as exc:
         return _raise_note_error(exc)
+    _journal_note(result["note"], "board", board=board)
     await _broadcast_raw_quietly(_notes_message("board", "added", board_id=board["id"], note=result["note"],
                                                 unread=result["unread"], removed=result["removed"]))
-    _journal_note(result["note"], "board", board=board)
     return result
 
 
@@ -6277,7 +6765,15 @@ async def _announce_closed_proposals(
     *,
     actor: dict[str, Any] | None = None,
 ) -> None:
-    """Journal and broadcast proposals that just closed (expired, invalidated, ...)."""
+    """Journal and broadcast proposals that just closed (expired, invalidated, ...):
+    every journal event first, before any await (_journal_closed_proposals)."""
+    _journal_closed_proposals(proposals, actor=actor)
+    await _broadcast_closed_proposals(proposals, actor=actor)
+
+
+def _journal_closed_proposals(proposals: list[Proposal], *, actor: dict[str, Any] | None = None) -> None:
+    """In the step that closed them (round 8 of PR #114), each tagged with
+    the project it was made in."""
     for proposal in proposals:
         kind = f"proposal.{proposal.status}"
         reason = f": {proposal.reason}" if proposal.reason else ""
@@ -6288,7 +6784,13 @@ async def _announce_closed_proposals(
                   "note": proposal.spec.note, "reason": proposal.reason},
             summary=f"{proposal.status} {proposal.agent.name}'s proposal {proposal.id}{reason}",
             actor=actor,
+            project_id=proposal.project_id,
         )
+
+
+async def _broadcast_closed_proposals(proposals: list[Proposal], *, actor: dict[str, Any] | None = None) -> None:
+    """The open canvases hear of proposals already journaled as closed, and each one's Update settles."""
+    for proposal in proposals:
         try:
             await manager.broadcast_raw(_proposal_closed_message(proposal))
         except Exception:  # noqa: BLE001 - the canvas also hides expired proposals locally
@@ -6779,6 +7281,7 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
         if is_person(headers):
             raise HTTPException(status_code=403, detail="The person doesn't need to propose; edit directly")
         raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
+    fence = _graph_fence()
     await _sweep_proposals()
     _validate_graph_ingress_complexity(body)
     try:
@@ -6798,6 +7301,7 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
         _check_asset_refs(str(current.get("definitionId") or ""), change.params, change.node_id,
                           before=current.get("params") or {}, must_exist=True)
     models = await _look_up_models(_spec_models_wanted(spec))
+    _refuse_if_graph_moved(fence)  # staged on, and made for, the canvas the agent read
     try:
         candidate, id_map, _edge_ids, run_ids = _stage_proposal(spec, models=models)
     except HTTPException as exc:
@@ -6807,6 +7311,7 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
     known, visible_area = _proposal_layout_hints()
     positions = place_new_nodes(spec, known, visible_area)
     measured = await _measure_proposal_inputs(candidate, run_ids)
+    _refuse_if_graph_moved(fence)
     cost = _proposal_cost(candidate, id_map, run_ids, measured=measured)
     run_fingerprint = _proposal_run_fingerprint(candidate, id_map, run_ids)
     existing = {
@@ -6830,13 +7335,8 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
         raise _proposal_http_error(exc) from exc
     # Which node it reads under each id, so only a delete of that very node tags it (second review).
     proposal.lineage = {node_id: node_removals.lineage(proposal.project_id, node_id) for node_id in spec.references}
-    await _post_canvas_update(proposal)  # Q112 a: the person hears of it on every screen
-    view = _proposal_view(proposal)
-    # The agent's other open proposals here that can't run: Justin (Q109)
-    # keeps them, and the agent is told to withdraw one this replaces.
-    still_open = [{"id": p.id, "note": p.spec.note} for p in canvas_proposals.open_unrunnable(proposal)]
     first_reference = next(iter(sorted(proposal.references, key=_node_order)), None)
-    _journal(
+    _journal(  # in the step that made it, before any await (round 8 of PR #114)
         "proposal.created",
         node_id=first_reference,
         data={
@@ -6850,6 +7350,11 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
         },
         summary=f'proposed {proposal.id}: "{spec.note}"',
     )
+    await _post_canvas_update(proposal)  # Q112 a: the person hears of it on every screen
+    view = _proposal_view(proposal)
+    # The agent's other open proposals here that can't run: Justin (Q109)
+    # keeps them, and the agent is told to withdraw one this replaces.
+    still_open = [{"id": p.id, "note": p.spec.note} for p in canvas_proposals.open_unrunnable(proposal)]
     if not proposal.is_open:
         # It closed while its Update was being written (see
         # _post_canvas_update): the canvas already heard proposalClosed, so
@@ -6906,7 +7411,7 @@ async def get_canvas_proposal(proposal_id: str, request: Request) -> dict[str, A
     await _sweep_proposals()
     proposal = canvas_proposals.get(proposal_id)
     if proposal is None and asset_proposals.get(proposal_id) is not None:
-        return await _get_asset_proposal(proposal_id, wait)  # a project's or a board's (U16)
+        return await _get_asset_proposal(proposal_id, wait, request)  # a project's or a board's (U16)
     if proposal is None:
         raise refusal_copy.not_found(_gone_proposal_detail(proposal_id), "proposal", "proposals")
     loop = asyncio.get_running_loop()
@@ -6918,8 +7423,8 @@ async def get_canvas_proposal(proposal_id: str, request: Request) -> dict[str, A
         if remaining <= 0:
             break
         try:
-            result = await canvas_events.wait(after=cursor, journal=canvas_events.journal_id,
-                                              wait=remaining, kinds={"proposal"})
+            result = await _journal_wait(request, after=cursor, journal=canvas_events.journal_id,
+                                         wait=remaining, kinds={"proposal"})
         except TooManyWaiters as exc:
             raise HTTPException(status_code=429, detail=str(exc)) from exc
         cursor = result.get("cursor", cursor)
@@ -7036,6 +7541,7 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
     itself after this returns, through its normal guarded run path; the
     Accept click is the person's approval for those runs.
     """
+    fence = _graph_fence()
     proposal = await _decidable_proposal(proposal_id)
     _check_workspace_revision()
     body = await _proposal_body(request)
@@ -7046,6 +7552,7 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
     # Check again here. From this line to close() below nothing awaits, so no
     # other request can decide this proposal while it is being applied.
     _ensure_still_decidable(proposal)
+    _refuse_if_graph_moved(fence)  # the person's canvas, as they saw it (a switch away and back too)
     try:
         dragged = clean_positions(body.get("positions"), proposal.spec.refs)
     except ProposalError as exc:
@@ -7091,8 +7598,8 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
         fingerprint=approvals.fingerprint(cli_graph.nodes, cli_graph.edges, run_ids),
         shape=_approval_shape(cli_graph, run_ids),
     ) if run_ids else None
-    await _broadcast_graph_sync(edit=True)
-    publish_action(f"Accepted {proposal.agent.name}'s proposal ({len(id_map)} nodes)")
+    # Journaled here, before any await (round 8 of PR #114): each event names
+    # the project the accept changed and reads the canvas as it left it.
     person = dict(_PERSON_ACTOR)
     _journal(
         "proposal.accepted",
@@ -7104,7 +7611,9 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
         actor=person,
     )
     note = f" (accepted from {proposal.agent.name})"
-    _journal_cluster(list(id_map.values()), edge_ids, actor=person, note=note)
+    # Each names the proposal in data: nebula-mcp --channel leaves these out
+    # of the person's edits by that field, never by the summary's note.
+    _journal_cluster(list(id_map.values()), edge_ids, actor=person, note=note, proposal_id=proposal.id)
     for change in proposal.spec.params:
         before = (proposal.existing.get(change.node_id) or {}).get("params") or {}
         changes = param_changes(before, (cli_graph.nodes.get(change.node_id) or {}).get("params") or {})
@@ -7112,10 +7621,19 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
             _journal(
                 "node.params",
                 node_id=change.node_id,
-                data=changes,
+                data={**changes, "proposalId": proposal.id},
                 summary=f"set {_listed(changes['keys'], 4)} on {_node_label(change.node_id)} ({change.node_id}){note}",
                 actor=person,
             )
+    all_defs = node_registry.get_all()
+    updated = [
+        _cli_node_to_rf(cli_graph.nodes[node_id], cli_graph.nodes[node_id].get("position") or {"x": 0.0, "y": 0.0}, all_defs)
+        for node_id in [change.node_id for change in proposal.spec.params]
+        if node_id in cli_graph.nodes
+    ]
+    created = _rf_created(list(id_map.values()), edge_ids)
+    await _broadcast_graph_sync(edit=True)
+    publish_action(f"Accepted {proposal.agent.name}'s proposal ({len(id_map)} nodes)")
     try:
         await manager.broadcast_raw(_proposal_closed_message(proposal))
     except Exception:  # noqa: BLE001
@@ -7129,12 +7647,6 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
             await manager.broadcast_raw(event)
         except Exception:  # noqa: BLE001 - the cursor is decoration on a committed change
             pass
-    all_defs = node_registry.get_all()
-    updated = [
-        _cli_node_to_rf(cli_graph.nodes[node_id], cli_graph.nodes[node_id].get("position") or {"x": 0.0, "y": 0.0}, all_defs)
-        for node_id in [change.node_id for change in proposal.spec.params]
-        if node_id in cli_graph.nodes
-    ]
     return {
         "status": "accepted",
         "proposalId": proposal.id,
@@ -7142,7 +7654,7 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
         "runNodeIds": run_ids,
         # Only the person's canvas gets this; it sends it with the run it starts.
         "approvalId": approval.id if approval is not None else None,
-        **_rf_created(list(id_map.values()), edge_ids),
+        **created,
         "updatedNodes": updated,
     }
 
@@ -7213,6 +7725,7 @@ async def _send_questions_sync(websocket: WebSocket) -> None:
 
 
 def _journal_question(question_set: QuestionSet, *, actor: dict[str, Any] | None = None) -> None:
+    # Tagged with the project the set is kept on (round 8 of PR #114).
     """One journal event per step. Never the questions' text nor the
     answers: every agent on the canvas reads the journal."""
     kind = "asked" if question_set.is_open else question_set.status
@@ -7226,7 +7739,7 @@ def _journal_question(question_set: QuestionSet, *, actor: dict[str, Any] | None
     }
     _journal(f"question.{kind}", node_id=next(iter(question_set.spec.node_ids), None),
              data={"questionId": question_set.id, "agentId": question_set.agent.id, "count": count},
-             summary=summaries[kind], actor=actor)
+             summary=summaries[kind], actor=actor, project_id=question_set.project_id)
 
 
 def _gone_question_detail(set_id: str) -> str:
@@ -7267,9 +7780,12 @@ async def _post_question_update(question_set: QuestionSet) -> bool:
         question_set.update = None  # never committed: no later save may keep it
         return False
     note = result["note"]
+    # Saved by a worker thread: tagged with the project it went to, journaled
+    # before the broadcast's await (round 8 of PR #114).
+    _journal_note(note, "canvas", project_id=result["projectId"])
+    _journal_question(question_set)  # asked: with its Update, before the broadcast's await
     await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"], note=note,
                                                 unread=result["unread"], removed=result["removed"]))
-    _journal_note(note, "canvas")
     return True
 
 
@@ -7293,16 +7809,18 @@ async def _follow_question_updates(sets: list[QuestionSet]) -> None:
             continue
         if result is None:
             continue
-        if result["projectId"] == project_store.read().get("activeProjectId"):
+        if result["projectId"] == _open_project_id():
             await _broadcast_raw_quietly(_notes_message("canvas", "resolved", project_id=result["projectId"],
                                                         ids=[ref["id"]], note=result["note"], unread=result["unread"]))
 
 
 async def _announce_closed_questions(sets: list[QuestionSet], *, actor: dict[str, Any] | None = None) -> None:
     """Journal each, tell the person's sockets (only theirs: the message
-    carries their answers back to them), then settle each one's Update."""
+    carries their answers back to them), then settle each one's Update.
+    Every event first, before any await (round 8 of PR #114)."""
     for question_set in sets:
         _journal_question(question_set, actor=actor)
+    for question_set in sets:
         try:
             await manager.broadcast_browser({"type": "questionsClosed", "questionId": question_set.id,
                                              "status": question_set.status, "agentId": question_set.agent.id,
@@ -7351,7 +7869,6 @@ async def create_agent_questions(body: dict[str, Any]) -> Any:
         agent_questions.drop(question_set.id)
         raise HTTPException(status_code=409, detail=(
             "Couldn't post the questions' Update on the open project, so nothing was asked; try again"))
-    _journal_question(question_set)
     if not question_set.is_open:
         # Withdrawn while its Update was being written: settle that now.
         await _follow_question_updates([question_set])
@@ -7378,8 +7895,8 @@ async def get_agent_questions(set_id: str, request: Request) -> dict[str, Any]:
         if remaining <= 0:
             break
         try:
-            result = await canvas_events.wait(after=cursor, journal=canvas_events.journal_id,
-                                              wait=remaining, kinds={"question"})
+            result = await _journal_wait(request, after=cursor, journal=canvas_events.journal_id,
+                                         wait=remaining, kinds={"question"})
         except TooManyWaiters as exc:
             raise HTTPException(status_code=429, detail=str(exc)) from exc
         cursor = result.get("cursor", cursor)
@@ -7496,7 +8013,8 @@ def _asset_journal_data(proposal: AssetProposal) -> dict[str, Any]:
 
 async def _announce_closed_asset_proposals(proposals: list[AssetProposal], *,
                                            actor: dict[str, Any] | None = None) -> None:
-    """Journal and broadcast asset proposals that just closed."""
+    """Journal and broadcast asset proposals that just closed: every event
+    first, before any await (round 8 of PR #114)."""
     for proposal in proposals:
         reason = f": {proposal.reason}" if proposal.reason and proposal.kind != "commons" else ""
         _journal(
@@ -7505,6 +8023,7 @@ async def _announce_closed_asset_proposals(proposals: list[AssetProposal], *,
             summary=f"{proposal.status} {proposal.agent.name}'s proposal {proposal.id}{reason}",
             actor=actor,
         )
+    for proposal in proposals:
         try:
             await manager.broadcast_raw(_asset_proposal_closed_message(proposal))
         except Exception:  # noqa: BLE001 - the screens also hide expired proposals locally
@@ -7538,9 +8057,11 @@ async def _post_asset_update(proposal: AssetProposal) -> None:
         if isinstance(other, AssetProposal) and _same_asker(other, proposal):
             other.update = dict(ref)
     proposal.update = dict(ref)
+    # Saved by a worker thread: tagged with the project it went to, journaled
+    # before the broadcast's await (round 8 of PR #114).
+    _journal_note(note, "canvas", project_id=result["projectId"])
     await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"], note=note,
                                                 unread=result["unread"], removed=result["removed"]))
-    _journal_note(note, "canvas")
 
 
 def _same_asker(one: AssetProposal, other: AssetProposal) -> bool:
@@ -7574,7 +8095,7 @@ async def _follow_asset_updates(proposals: list[AssetProposal]) -> None:
             continue
         # Only the open project's list is on the person's screen; another
         # project's reloads with it when they open it.
-        if result["projectId"] == project_store.read().get("activeProjectId"):
+        if result["projectId"] == _open_project_id():
             await _broadcast_raw_quietly(_notes_message("canvas", op, project_id=result["projectId"],
                                                         ids=[ref["id"]], note=result["note"], **extra))
 
@@ -7658,7 +8179,12 @@ _asset_expiry_tasks: set[asyncio.Task[Any]] = set()
 
 
 def _call_later(delay: float, callback: Callable[..., Any], *args: Any) -> None:
-    asyncio.get_running_loop().call_later(delay, callback, *args)
+    """A timer that outlives the request arming it runs in a fresh context:
+    loop.call_later would copy the request's (its _canvas_edit_link, the
+    caller's headers), and an expiry armed inside an undo then journaled
+    proposal.expired under that undo's edit tag, for every proposal its sweep
+    closed (review 9 of PR #114). The task it starts inherits the fresh one."""
+    asyncio.get_running_loop().call_later(delay, callback, *args, context=Context())
 
 
 def _schedule_asset_expiry(proposal: AssetProposal) -> None:
@@ -7789,9 +8315,11 @@ async def _post_canvas_update(proposal: Proposal) -> None:
         return
     note = result["note"]
     proposal.update = {"id": note["id"], "projectId": result["projectId"]}
+    # Saved by a worker thread: tagged with the project it went to, journaled
+    # before the broadcast's await (round 8 of PR #114).
+    _journal_note(note, "canvas", project_id=result["projectId"])
     await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"], note=note,
                                                 unread=result["unread"], removed=result["removed"]))
-    _journal_note(note, "canvas")
     if not proposal.is_open:
         # It closed while the Update was being written (a node it needs
         # deleted, the canvas cleared, another project opened, withdrawn):
@@ -7829,7 +8357,7 @@ async def _follow_canvas_updates(proposals: list[Proposal], *, actor: Mapping[st
             continue
         # Only the open project's list is on the person's screen; another
         # project's reloads with it when they open it.
-        if result["projectId"] == project_store.read().get("activeProjectId"):
+        if result["projectId"] == _open_project_id():
             await _broadcast_raw_quietly(_notes_message("canvas", "resolved", project_id=result["projectId"],
                                                         ids=[ref["id"]], note=result["note"], unread=result["unread"]))
 
@@ -8006,14 +8534,15 @@ async def create_asset_proposal(body: dict[str, Any]) -> dict[str, Any]:
         raise _proposal_http_error(exc) from exc
     proposal.lost_pin = lost
     proposal.auto_cover = auto
+    said = asset_proposal_summary(proposal)
+    # In the step that made it, before any await (round 8 of PR #114).
+    _journal("proposal.created", data={**_asset_journal_data(proposal), "change": sorted(spec.change)},
+             summary=(f"proposed {proposal.id} ({said})" if spec.kind == "commons"
+                      else f'proposed {proposal.id}: "{spec.note}" ({said})'))
     # The Update in the corner (Q92 a), before the view so the answer names it.
     await _post_asset_update(proposal)
     _schedule_asset_expiry(proposal)
     view = _asset_proposal_view(proposal)
-    said = asset_proposal_summary(proposal)
-    _journal("proposal.created", data={**_asset_journal_data(proposal), "change": sorted(spec.change)},
-             summary=(f"proposed {proposal.id} ({said})" if spec.kind == "commons"
-                      else f'proposed {proposal.id}: "{spec.note}" ({said})'))
     try:
         # The accept key goes only to the person's canvas sockets.
         await manager.broadcast_browser({"type": "assetProposalOpened",
@@ -8036,7 +8565,7 @@ async def list_asset_proposals(kind: str | None = None, id: str | None = None) -
                           if await _commons_proposal_visible(p, headers)]}
 
 
-async def _get_asset_proposal(proposal_id: str, wait: float) -> dict[str, Any]:
+async def _get_asset_proposal(proposal_id: str, wait: float, request: Request) -> dict[str, Any]:
     """``GET /api/canvas/proposals/{id}`` for an asset proposal: with ``wait``
     (≤25 s), wait for the decision, or for its target to move on."""
     await _sweep_asset_proposals()
@@ -8051,8 +8580,8 @@ async def _get_asset_proposal(proposal_id: str, wait: float) -> dict[str, Any]:
         if remaining <= 0:
             break
         try:
-            result = await canvas_events.wait(after=cursor, journal=canvas_events.journal_id,
-                                              wait=remaining, kinds=set(_ASSET_WAIT_KINDS))
+            result = await _journal_wait(request, after=cursor, journal=canvas_events.journal_id,
+                                         wait=remaining, kinds=set(_ASSET_WAIT_KINDS))
         except TooManyWaiters as exc:
             raise HTTPException(status_code=429, detail=str(exc)) from exc
         cursor = result.get("cursor", cursor)
@@ -8111,7 +8640,8 @@ async def _apply_asset_proposal(proposal: AssetProposal) -> dict[str, Any]:
     # clicked Accept reads the board again like every other open one.
     headers = {k: v for k, v in (current_request_headers() or {}).items() if k.lower() != "x-nebula-tab"}
     with request_headers_scope(headers):
-        answer = await update_moodboard(proposal.target_id, MoodboardUpdate(sendNotes=True))
+        # Its board.* events name the proposal, as a canvas accept's do.
+        answer = await _update_moodboard(proposal.target_id, MoodboardUpdate(sendNotes=True), proposal_id=proposal.id)
     if isinstance(answer, Response):
         detail = ""
         try:
@@ -8337,12 +8867,10 @@ async def current_project() -> dict[str, str]:
     """The project open on the canvas, ``{id, name}``: what "this project"
     means for project-scoped Characters, Moodboards and Styles, in the app,
     the CLI and MCP alike. 404 when no project is open."""
-    catalog = project_store.read()
-    active = catalog.get("activeProjectId")
-    project = catalog["projects"].get(active) if active else None
-    if project is None:
+    view = project_store.projection()  # no catalog copy
+    if view.project_id is None:
         raise HTTPException(status_code=404, detail="No project is open.")
-    return {"id": active, "name": str(project.get("name") or "")}
+    return {"id": view.project_id, "name": view.name}
 
 
 @app.get("/api/health/providers")
@@ -8571,17 +9099,21 @@ async def _finalize_cancelled_execution(
     nodes: list[GraphNode], run_id: str, *, preserve_graph_params: bool = False,
     submitted: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> None:
-    """Sync late live-run params, preserve replay canvas params, then emit Stop."""
-    if not preserve_graph_params and _sync_params_to_cli_graph(nodes, submitted=submitted):
-        await _broadcast_graph_sync()
-    await manager.broadcast(GraphCancelledEvent(run_id=run_id))
+    """Sync late live-run params, preserve replay canvas params, then emit Stop.
+    run.cancelled is journaled first, before any await, with the run's own
+    project (_run_project; round 8 of PR #114)."""
+    synced = not preserve_graph_params and _sync_params_to_cli_graph(nodes, submitted=submitted, run_id=run_id)
     stopped_by, started_by = _run_cancelled_actor(run_id)
     _journal(
         "run.cancelled",
         data={"runId": run_id, "startedBy": started_by},
         summary="run stopped",
         actor=stopped_by,
+        project_id=_run_project(),
     )
+    if synced:
+        await _broadcast_graph_sync(run_params=run_id)
+    await manager.broadcast(GraphCancelledEvent(run_id=run_id))
 
 
 def _fresh_paid_worldlabs_claims(
@@ -8653,8 +9185,7 @@ def _assert_execution_admissible(run_id: str) -> None:
     except ProviderStartCancellationCapacityError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ProviderStartPersistenceError as exc:
-        raise HTTPException(
-            status_code=507,
+        raise RunSafetyStorageRefusal(
             detail=(
                 "Nebula cannot verify durable pre-admission Stop state; no "
                 "provider request was sent"
@@ -8686,6 +9217,10 @@ def _claim_fresh_paid_worldlabs_starts(
                 _ensure_shared_graph_recoveries(
                     list(cli_graph.nodes.values()), source="bootstrap-retry"
                 )
+                # Round 15 (review 14, M4): a re-seed with no IDs to seed
+                # writes nothing, so prove the journal takes a real write
+                # before the error clears.
+                provider_recovery_store.verify_writable()
             except (
                 ProviderRecoveryCapacityError,
                 ProviderRecoveryConflictError,
@@ -8726,6 +9261,9 @@ def _claim_fresh_paid_worldlabs_starts(
             # The person's line names what clears it (round 3b): Run History's
             # forget for a record, else the node's own ID fields.
             journaled = any(node_id in recovered_node_ids for node_id in stale_nodes)
+            # The node GM's line names (its card title): the first with a
+            # record when any has one, else the first with an ID in params.
+            held_node = next((node_id for node_id in stale_nodes if node_id in recovered_node_ids), stale_nodes[0])
             raise ProviderStartConflictError(
                 "Fresh World Labs start blocked because Nebula already has a "
                 "recovery checkpoint for node(s): "
@@ -8733,8 +9271,9 @@ def _claim_fresh_paid_worldlabs_starts(
                 + ". Restore or explicitly delete the checkpoint before starting "
                 "new paid work.",
                 reason="recovery" if journaled else "params",
+                node=_run_node_name(held_node, {node.id: node for node in nodes}),
                 fields=None if journaled else _recovery_field_labels(
-                    [cli_graph.nodes[node_id] for node_id in stale_nodes if node_id in cli_graph.nodes]),
+                    [cli_graph.nodes[held_node]] if held_node in cli_graph.nodes else []),
             )
         provider_recovery_store.reserve(
             run_id=run_id,
@@ -8773,8 +9312,7 @@ def _claim_fresh_paid_worldlabs_starts(
                                    route="run") from exc
     except ProviderRecoveryPersistenceError as exc:
         provider_recovery_store.release_reservations(run_id)
-        raise HTTPException(
-            status_code=507,
+        raise RunSafetyStorageRefusal(
             detail=(
                 "Nebula cannot durably register the supplied World Labs recovery "
                 "ID; no provider request was sent"
@@ -8788,8 +9326,7 @@ def _claim_fresh_paid_worldlabs_starts(
         raise _start_refusal(exc) from exc
     except ProviderStartPersistenceError as exc:
         provider_recovery_store.release_reservations(run_id)
-        raise HTTPException(
-            status_code=507,
+        raise RunSafetyStorageRefusal(
             detail=(
                 "Nebula cannot verify durable paid-start safety storage; no "
                 "World Labs request was sent"
@@ -9084,6 +9621,19 @@ async def _make_ready(node_ids: Iterable[str]) -> None:
         await _broadcast_graph_sync()
 
 
+def _admit_registered_run(run_id: str, ready: Iterable[str], nodes: list[GraphNode], edges: list[GraphEdge]) -> bool:
+    """A run that just registered (_register_run, after the last
+    _refuse_if_graph_moved and _run_canvas_now with no await between, PR
+    #114's round 11): the placeholders it runs turn normal and an agent's run
+    is kept (its marks and done card). Synchronous, so the run's task hasn't
+    had a turn yet; a run refused before this leaves the placeholders and
+    the agent-run record as they were (round 21, the #114 merge). True when a
+    placeholder changed: the caller then broadcasts the graph."""
+    cleared = bool(_clear_pending(ready))
+    _start_agent_run(run_id, nodes, edges)
+    return cleared
+
+
 async def _announce_skips(run_id: str, skips: Mapping[str, Mapping[str, Any]]) -> None:
     for node_id, info in skips.items():
         await _emit_and_sync(SkippedEvent(node_id=node_id, reason=info["reason"], run_id=run_id))
@@ -9104,10 +9654,14 @@ def _skip_reply(skips: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
 async def execute(request: ExecuteRequest) -> dict:
     _check_workspace_revision()
     _capture_execution_workspace()
+    fence = _graph_fence()
     run_id = request.run_id or str(uuid4())
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
         raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
+    # This process saw the start begin (round 17, review 16 L1): a Stop that
+    # finds no record of it may say it never started.
+    execution_runs.note_start_begun(run_id)
     _note_run(run_id)
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
@@ -9142,17 +9696,31 @@ async def execute(request: ExecuteRequest) -> dict:
 
     # After validation, so a graph that can't run reports why, not its cost.
     # The approval matches what the person accepted; only what runs is priced.
+    # The placeholders it runs turn normal, and an agent's run is kept, only
+    # once it registered (_admit_registered_run): a run refused at the last
+    # fence leaves both as they were (round 21, the #114 merge).
     await _require_run_spend_approval(run_id, nodes, edges, approval_id=request.approval_id,
                                       approval_scope=(requested_nodes, requested_edges),
-                                      run_ids=_end_node_ids(nodes, edges), settings=settings)
-    await _make_ready(ready)  # admitted: the placeholders it runs turn normal
-    _start_agent_run(run_id, nodes, edges)
+                                      run_ids=_end_node_ids(nodes, edges), settings=settings, fence=fence)
 
     handler_registry = get_handler_registry(emit=_emit_and_sync)
     try:
+        # The run's outputs land by node id on the live graph: start it only
+        # on the canvas it was asked on. Checked after the measure too (in
+        # _require_run_spend_approval); again here, the last check before it
+        # registers, with no await between (round 11).
+        _refuse_if_graph_moved(fence)
+        # A Stop that arrived while this start awaited (round 16, M2: the tab
+        # stops a run whose status check answered 404) refuses it here.
+        _assert_execution_admissible(run_id)
+        # The canvas the run registers on, read now (round 17, review 16 L5):
+        # a project-store read that fails after the task exists could leave
+        # a started run behind a 507 that says nothing was started.
+        run_canvas = _run_canvas_now()
         _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=nodes)
     except BaseException:
         _return_hold(run_id)
+        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
         raise
 
     async def _run() -> None:
@@ -9175,12 +9743,13 @@ async def execute(request: ExecuteRequest) -> dict:
             # authoritative terminal state.
             if _execution_is_cancelling(run_id):
                 raise asyncio.CancelledError
-            if not request.preserve_graph_params and _sync_params_to_cli_graph(nodes, submitted=submitted):
+            if not request.preserve_graph_params and _sync_params_to_cli_graph(nodes, submitted=submitted,
+                                                                                run_id=run_id):
                 # ExecutedEvent carries outputs, but handlers such as
                 # video-edit also enrich params. Without a final graphSync the
                 # backend persisted those edits while the live Canvas stayed
                 # stale until reload.
-                await _broadcast_graph_sync()
+                await _broadcast_graph_sync(run_params=run_id)
             print("[exec] _run completed successfully", file=sys.stderr, flush=True)
         except asyncio.CancelledError:
             await _finalize_cancelled_execution(nodes, run_id, preserve_graph_params=request.preserve_graph_params,
@@ -9206,8 +9775,9 @@ async def execute(request: ExecuteRequest) -> dict:
     run_coroutine = _run()
     try:
         task = asyncio.create_task(run_coroutine)
-        execution_runs.register(run_id, task)
+        _register_run(run_id, task, run_canvas)
         _watch_for_cross_process_stop(run_id, task)
+        placeholders_changed = _admit_registered_run(run_id, ready, nodes, edges)
     except ExecutionCancelledBeforeStartError as exc:
         if task is None:
             run_coroutine.close()
@@ -9215,6 +9785,7 @@ async def execute(request: ExecuteRequest) -> dict:
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
         _return_hold(run_id)
+        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ExecutionCancellationCapacityError as exc:
         if task is None:
@@ -9223,6 +9794,7 @@ async def execute(request: ExecuteRequest) -> dict:
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
         _return_hold(run_id)
+        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         if task is None:
@@ -9232,6 +9804,7 @@ async def execute(request: ExecuteRequest) -> dict:
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
         _return_hold(run_id)
+        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception:
         if task is None:
@@ -9240,8 +9813,12 @@ async def execute(request: ExecuteRequest) -> dict:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
+        _return_hold(run_id)  # it never had a turn (round 17, review 16 L5)
+        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
         raise
 
+    if placeholders_changed:
+        await _broadcast_graph_sync()
     return {"status": "started", "runId": run_id, **_skip_reply(skips)}
 
 
@@ -9251,10 +9828,14 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     """Execute only the subgraph feeding into a specific target node."""
     _check_workspace_revision()
     _capture_execution_workspace()
+    fence = _graph_fence()
     run_id = request.run_id or str(uuid4())
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
         raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
+    # This process saw the start begin (round 17, review 16 L1): a Stop that
+    # finds no record of it may say it never started.
+    execution_runs.note_start_begun(run_id)
     _note_run(run_id)
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
@@ -9308,15 +9889,19 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     await _require_run_spend_approval(run_id, sub_nodes, sub_edges, approval_id=request.approval_id,
                                       approval_scope=(requested_nodes, requested_edges),
                                       run_ids=[request.target_node_id] if not skips else _end_node_ids(sub_nodes, sub_edges),
-                                      settings=settings)
-    await _make_ready(ready)  # admitted: the placeholders it runs turn normal
-    _start_agent_run(run_id, sub_nodes, sub_edges)
+                                      settings=settings, fence=fence)
+    # Placeholders turn normal and an agent's run is kept once it registered
+    # (_admit_registered_run, as in execute).
 
     handler_registry = get_handler_registry(emit=_emit_and_sync)
     try:
+        _refuse_if_graph_moved(fence)  # as in execute
+        _assert_execution_admissible(run_id)  # as in execute
+        run_canvas = _run_canvas_now()  # as in execute
         _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=sub_nodes)
     except BaseException:
         _return_hold(run_id)
+        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
         raise
 
     async def _run() -> None:
@@ -9333,8 +9918,9 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
             )
             if _execution_is_cancelling(run_id):
                 raise asyncio.CancelledError
-            if not request.preserve_graph_params and _sync_params_to_cli_graph(sub_nodes, submitted=submitted):
-                await _broadcast_graph_sync()
+            if not request.preserve_graph_params and _sync_params_to_cli_graph(sub_nodes, submitted=submitted,
+                                                                                run_id=run_id):
+                await _broadcast_graph_sync(run_params=run_id)
         except asyncio.CancelledError:
             await _finalize_cancelled_execution(sub_nodes, run_id, preserve_graph_params=request.preserve_graph_params,
                                                 submitted=submitted)
@@ -9353,28 +9939,40 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
 
     try:
         task = asyncio.create_task(_run())
-        execution_runs.register(run_id, task)
+        _register_run(run_id, task, run_canvas)
         _watch_for_cross_process_stop(run_id, task)
+        placeholders_changed = _admit_registered_run(run_id, ready, sub_nodes, sub_edges)
     except ExecutionCancelledBeforeStartError as exc:
         await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
         _return_hold(run_id)
+        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ExecutionCancellationCapacityError as exc:
         await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
         _return_hold(run_id)
+        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
         _return_hold(run_id)
+        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception:
+        # The task never had a turn (nothing awaited since it was made): it
+        # never starts, so its hold goes back (round 17, review 16 L5).
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
+        _return_hold(run_id)
+        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
         raise
 
+    if placeholders_changed:
+        await _broadcast_graph_sync()
     return {"status": "started", "nodeCount": len(sub_nodes), "runId": run_id, **_skip_reply(skips)}
 
 
@@ -9427,10 +10025,26 @@ def _run_cancelled_actor(run_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
     return stopped_by, {key: started_by[key] for key in ("kind", "name") if started_by.get(key)}
 
 
+def _tombstoned_answer(run_id: str) -> dict[str, Any]:
+    """A Stop's answer for a run id with no record here: cancelled, and the id
+    can't start here from now on (``pendingAdmission``, which the canvas
+    settles by). ``noRecord`` when this process never saw that run's start
+    begin (round 17 of PR #114, review 16 L1): it may have run before a
+    restart, been pruned, or never arrived, so nobody may say it never ran."""
+    answer: dict[str, Any] = {"runId": run_id, "status": "cancelled", "pendingAdmission": True}
+    if not execution_runs.start_seen(run_id):
+        answer["noRecord"] = True
+    return answer
+
+
 @app.get("/api/executions/{run_id}")
 async def get_execution_status(run_id: str) -> dict:
     record = execution_runs.get(run_id)
     if record is None:
+        # A Stop arrived before this run did (round 16 of PR #114, M2): the id
+        # is tombstoned and can't start here, so it reads as cancelled.
+        if execution_runs.tombstoned(run_id):
+            return _tombstoned_answer(run_id)
         raise refusal_copy.not_found(f"run '{run_id}' not found", "run", "runs")
     return {"runId": run_id, "status": record.status}
 
@@ -9450,12 +10064,15 @@ async def cancel_execution(run_id: str) -> dict:
     except ProviderStartCancellationCapacityError as exc:
         if existing is not None:
             execution_runs.cancel(run_id)
+        else:
+            execution_runs.tombstone(run_id)  # still refused here if it arrives
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ProviderStartPersistenceError as exc:
         if existing is not None:
             execution_runs.cancel(run_id)
-        raise HTTPException(
-            status_code=507,
+        else:
+            execution_runs.tombstone(run_id)
+        raise RunSafetyStorageRefusal(
             detail="Could not durably record the pre-admission Stop intent",
         ) from exc
     except ValueError as exc:
@@ -9472,7 +10089,7 @@ async def cancel_execution(run_id: str) -> dict:
         # delayed POST while bounded exact-journal capacity is recovered.
         if _try_compact_execution_cancellation(run_id):
             await _broadcast_graph_sync()
-        return {"runId": run_id, "status": "cancelled", "pendingAdmission": True}
+        return _tombstoned_answer(run_id)
     # Yield once so a cooperative task can process CancelledError and the
     # registry can report the terminal state in this acknowledgement.
     await asyncio.sleep(0)
@@ -9505,8 +10122,7 @@ async def acknowledge_execution_cancellation(run_id: str) -> dict:
             detail="Wait for all World Labs paid work to become terminal first",
         ) from exc
     except ProviderStartPersistenceError as exc:
-        raise HTTPException(
-            status_code=507,
+        raise RunSafetyStorageRefusal(
             detail="Could not durably compact the execution cancellation",
         ) from exc
     except ValueError as exc:
@@ -9543,6 +10159,7 @@ async def _merge_shot_result(
     *,
     terminal_error: str | None = None,
     terminal_fields: dict[str, str] | None = None,
+    run_id: str | None = None,
 ) -> dict[str, Any] | None:
     """Merge a single-shot regeneration into the canonical cli_graph node WITHOUT
     clobbering sibling shots.
@@ -9564,6 +10181,9 @@ async def _merge_shot_result(
     a node card does (error copy round 3c-2): ``errorCategory``,
     ``errorFriendly``, ``errorPerson`` and ``errorRaw`` (_shot_failure_fields).
     ``error`` stays the text agents read, word for word.
+
+    ``run_id``: the shot's run. Nothing is merged if the canvas it registered
+    on was cleared or replaced since (_run_canvas_moved, round 11).
     """
     new_output: dict[str, Any] | None = None
     if terminal_error is None and executed_node is not None:
@@ -9577,7 +10197,7 @@ async def _merge_shot_result(
 
     async with _shot_merge_lock(node_id):
         node = cli_graph.nodes.get(node_id)
-        if node is None or _admitted_canvas_moved("shot result"):
+        if node is None or _run_canvas_moved(run_id, "shot result"):
             return result_output
 
         # Patch ONLY the target shot's output on the live scene; siblings (incl.
@@ -9717,65 +10337,23 @@ async def _execute_single_shot_pass(
     return executed_node, captured.get("outputs") or {}
 
 
-async def _run_single_shot_task(
-    *,
-    node_id: str,
-    shot_id: str,
-    sub_nodes: list[GraphNode],
-    sub_edges: list[GraphEdge],
-    api_keys: dict[str, str],
-) -> None:
-    """Execute and persist one per-shot task, including terminal failures."""
-    import traceback
-
-    try:
-        executed_node, outputs = await _execute_single_shot_pass(
-            node_id=node_id,
-            sub_nodes=sub_nodes,
-            sub_edges=sub_edges,
-            api_keys=api_keys,
-            use_cache=True,
-        )
-    except _ShotPassError as exc:
-        await _merge_shot_result(
-            node_id,
-            shot_id,
-            None,
-            {},
-            terminal_error=_shot_task_error_message(exc),
-            terminal_fields=_shot_failure_fields(exc),
-        )
-    except Exception as exc:
-        traceback.print_exc()
-        await _merge_shot_result(
-            node_id,
-            shot_id,
-            None,
-            {},
-            terminal_error=_shot_task_error_message(exc),
-            terminal_fields=_shot_failure_fields(exc),
-        )
-    else:
-        await _merge_shot_result(node_id, shot_id, executed_node, outputs)
-    finally:
-        await _broadcast_graph_sync()
-
-
 async def _merge_shot_variations(
     node_id: str,
     shot_id: str,
     variations: list[dict[str, Any]],
+    *,
+    run_id: str | None = None,
 ) -> dict[str, Any] | None:
     """Store a batch of variations on the live cli_graph scene and promote the
     first as canonical (output + the one shot port). Sibling shots are untouched;
     lock-serialized like _merge_shot_result. Returns the canonical output, or None
-    when the batch produced no images."""
+    when the batch produced no images. ``run_id`` as in _merge_shot_result."""
     if not variations:
         return None
     canonical = {"imageUrl": variations[0]["url"], "status": "done"}
     async with _shot_merge_lock(node_id):
         node = cli_graph.nodes.get(node_id)
-        if node is None or _admitted_canvas_moved("shot variations"):
+        if node is None or _run_canvas_moved(run_id, "shot variations"):
             return canonical
         params = dict(node.get("params") or {})
         scene = params.get("scene")
@@ -9887,10 +10465,14 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     via the same subgraph mechanism as /api/execute-node."""
     _check_workspace_revision()
     _capture_execution_workspace()
+    fence = _graph_fence()
     run_id = request.run_id or f"cinema-shot-{uuid4().hex}"
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
         raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
+    # This process saw the start begin (round 17, review 16 L1): a Stop that
+    # finds no record of it may say it never started.
+    execution_runs.note_start_begun(run_id)
     _note_run(run_id)
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
@@ -9982,8 +10564,8 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     spend_nodes = [node for node in spend_nodes if node.id not in skips]
     spend_edges = [edge for edge in spend_edges if edge.source not in skips and edge.target not in skips]
     await _require_run_spend_approval(run_id, spend_nodes, spend_edges, run_ids=[request.node_id], passes=count,
-                                settings=settings)
-    await _make_ready(ready)  # admitted: the placeholders it runs turn normal
+                                settings=settings, fence=fence)
+    # The placeholders it runs turn normal once it registered (below).
 
     # A per-shot run does not acquire the frontend's Canvas-wide ``isExecuting``
     # gate, so sibling work remains available. It does register its background
@@ -9993,6 +10575,9 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     # ancestor that is still polling, then admit a stale blank payload as a
     # fresh paid start.
     try:
+        _refuse_if_graph_moved(fence)  # as in execute
+        _assert_execution_admissible(run_id)  # as in execute
+        run_canvas = _run_canvas_now()  # as in execute
         _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=sub_nodes)
     except BaseException:
         _return_hold(run_id)
@@ -10038,7 +10623,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
                         failures.append(f"Variation seed {seed_i} returned no image.")
                         last_fields = {}
                 if variations:
-                    await _merge_shot_variations(request.node_id, request.shot_id, variations)
+                    await _merge_shot_variations(request.node_id, request.shot_id, variations, run_id=run_id)
                 else:
                     last_failure = failures[-1] if failures else "No variation returned an image."
                     terminal_error = f"All {count} variation passes failed. {last_failure}"
@@ -10054,7 +10639,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
                     run_id=run_id,
                 )
                 await _merge_shot_result(
-                    request.node_id, request.shot_id, executed_node, outputs
+                    request.node_id, request.shot_id, executed_node, outputs, run_id=run_id,
                 )
         except _ShotPassError as exc:
             terminal_error = _shot_task_error_message(exc)
@@ -10073,6 +10658,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
                         {},
                         terminal_error=terminal_error,
                         terminal_fields=terminal_fields,
+                        run_id=run_id,
                     )
                 await _broadcast_graph_sync()
             finally:
@@ -10088,8 +10674,11 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
         # is cancelled after create_task succeeds but before _run receives its
         # first event-loop turn (in which case the coroutine's finally never
         # executes).
-        execution_runs.register(run_id, task)
+        _register_run(run_id, task, run_canvas)
         _watch_for_cross_process_stop(run_id, task)
+        # Admitted: the placeholders it runs turn normal, in this step (no
+        # await since the last fence; round 21, the #114 merge).
+        placeholders_changed = bool(_clear_pending(ready))
     except ExecutionCancelledBeforeStartError as exc:
         if task is None:
             run_coroutine.close()
@@ -10122,8 +10711,11 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
+        _return_hold(run_id)  # it never had a turn (round 17, review 16 L5)
         raise
 
+    if placeholders_changed:
+        await _broadcast_graph_sync()
     return {
         "status": "started",
         "shotId": request.shot_id,
@@ -10293,7 +10885,7 @@ def _graph_edit_origin() -> dict[str, Any]:
         origin.update({key: link[key] for key in ("id", "undoes", "redoes") if key in link})
     # The nodes this edit deleted, with the pins and proposals each delete
     # removed: a canvas that didn't send the edit keeps them in its undo step,
-    # so its Cmd+Z puts them back too (_undo_removals).
+    # so its Cmd+Z puts them back too (_reattach_removed_pins).
     removals = _removals_ctx.get()
     if removals:
         origin["removals"] = copy.deepcopy(removals)
@@ -10303,8 +10895,20 @@ def _graph_edit_origin() -> dict[str, Any]:
 async def _broadcast_graph_sync(
     *, graph_replaced: bool = False, reason: str = "import", moved: Iterable[str] = (), edit: bool = False,
     project_switch: dict[str, Any] | None = None, arranged: dict[str, Any] | None = None,
+    cleared: bool = False, run_params: str | None = None,
 ) -> dict[str, Any]:
     """Push the current CLI graph to all connected frontends via WebSocket.
+
+    `run_params` (a run id) marks a run's own param write-back
+    (_sync_params_to_cli_graph: a handler that enriches params, such as
+    video-edit). It carries ``runParams`` and no ``edit``: the canvas treats
+    those values as run output, not anyone's edit (round 17 of PR #114,
+    review 16 L3).
+
+    `cleared` marks the sync of a Clear (DELETE /api/graph): node ids start
+    again at n1 in the same project, so a canvas treats it as a replacement
+    for its runs (round 12 of PR #114) while keeping its own frontend-only
+    work and the clear's undo step.
 
     `reason` (import, project-open, project-create) only matters when the
     graph was replaced: watchers are told node ids restarted, and why.
@@ -10332,8 +10936,38 @@ async def _broadcast_graph_sync(
         # their errors go.
         canvas_arrange.clear()
         if reason == "import":
-            # Its undo tokens and canvas revision went with the commit (import_graph).
+            # Its undo tokens and canvas revision went with the commit
+            # (import_graph moved the id epoch itself).
             node_errors.forget_canvas()
+        # Journaled here, in the step that replaced the canvas (a switch's
+        # commit, an import's), before any await (round 8 of PR #114): the
+        # event names the project it opened or loaded into, and lands before
+        # a switch that follows. Late, it named whatever project was open
+        # then, and the --channel listener dropped that project's pins.
+        safe_reason = reason if reason in _REPLACE_REASONS else "import"
+        data: dict[str, Any] = {"reason": safe_reason}
+        summary = f"replaced the canvas ({safe_reason})"
+        if project_switch:
+            data.update({key: project_switch[key] for key in ("projectId", "projectName", "previousProjectId",
+                                                               "previousProjectName") if key in project_switch})
+            verb = "made and opened" if safe_reason == "project-create" else "opened"
+            summary = f"{verb} project “{project_switch.get('projectName', '')}”"
+            if project_switch.get("previousProjectName"):
+                summary += f" (was “{project_switch['previousProjectName']}”)"
+        _journal("canvas.replaced", data=data, summary=summary)
+        # Pins belong to the project record. A project open or create brings
+        # that project's pins; an import into the same project detaches pins
+        # whose nodes did not survive: that project's, so here too.
+        detached: list[dict[str, Any]] = []
+        if safe_reason == "import":
+            try:
+                detached = canvas_pins.reanchor_missing(set(cli_graph.nodes))
+            except (PinError, ProjectStoreError):
+                detached = []
+        _journal_detached(detached, "the canvas was replaced")
+        # Proposals point at node ids that just restarted: none of them still fit.
+        closed = canvas_proposals.invalidate_all("the canvas was replaced")
+        _journal_closed_proposals(closed)
     export = await export_graph_for_frontend()
     # A cover proposal's view follows the live canvas (a pin's image deleted
     # or back). Before the sync goes out: one a delete closes is named in the
@@ -10348,54 +10982,41 @@ async def _broadcast_graph_sync(
     _schedule_pending_expiry()
     await manager.broadcast_raw({"type": "graphSync", **export,
                                  **({"graphReplaced": True} if graph_replaced else {}),
+                                 **({"cleared": True} if cleared and not graph_replaced else {}),
                                  **({"moved": moved_ids} if moved_ids and not graph_replaced else {}),
                                  **({"projectSwitch": project_switch} if project_switch and graph_replaced else {}),
                                  **({"arranged": arranged} if arranged and not graph_replaced else {}),
+                                 **({"runParams": run_params} if run_params and not graph_replaced else {}),
                                  **({"edit": _graph_edit_origin()}
                                     if edit and (not graph_replaced or reason == "import") else {})})
     if graph_replaced:
-        # Tag, don't reset: seq stays monotonic, and the new project id rides
-        # on this event and every one after it.
-        try:
-            canvas_events.set_project(_workspace_context()["activeProjectId"])
-        except Exception:  # noqa: BLE001 - the journal must not break a project switch
-            pass
-        safe_reason = reason if reason in _REPLACE_REASONS else "import"
-        data: dict[str, Any] = {"reason": safe_reason}
-        summary = f"replaced the canvas ({safe_reason})"
-        if project_switch:
-            data.update({key: project_switch[key] for key in ("projectId", "projectName", "previousProjectId",
-                                                               "previousProjectName") if key in project_switch})
-            verb = "made and opened" if safe_reason == "project-create" else "opened"
-            summary = f"{verb} project “{project_switch.get('projectName', '')}”"
-            if project_switch.get("previousProjectName"):
-                summary += f" (was “{project_switch['previousProjectName']}”)"
-        _journal("canvas.replaced", data=data, summary=summary)
-        # Pins belong to the project record. A project open or create brings
-        # that project's pins; an import into the same project detaches pins
-        # whose nodes did not survive.
-        canvas_pins.forget_cache()
-        detached: list[dict[str, Any]] = []
-        if safe_reason == "import":
-            try:
-                detached = canvas_pins.reanchor_missing(set(cli_graph.nodes))
-            except (PinError, ProjectStoreError):
-                detached = []
+        # Its events went to the journal above, before any await. (The pins
+        # listing follows catalog.json, so one taken between the commit and
+        # here names the project open now: ProjectStore.projection.)
         await _broadcast_pins()
         # Updates belong to the project record too: an open or create brings
         # that project's list; an import keeps the project, and its list.
         if safe_reason != "import":
             await _settle_proposal_updates()
             await _broadcast_raw_quietly(_canvas_notes_message())
-        await _journal_detached_pins(detached, "the canvas was replaced")
-        # Proposals point at node ids that just restarted: none of them still fit.
-        # Nor do runs approved on Accept that haven't started.
+        # Runs approved on Accept that haven't started don't fit either.
         run_approvals.clear()
-        await _announce_closed_proposals(canvas_proposals.invalidate_all("the canvas was replaced"))
+        await _broadcast_closed_proposals(closed)
         # Node ids started again, or another project's are live: no earlier
         # delete's undo may reopen a cover proposal by its node id either.
         asset_proposals.drop_removal_tags("the canvas was replaced")
     return export
+
+
+def _normalized_event_outputs(outputs: Any) -> dict[str, Any]:
+    """An ExecutedEvent's outputs in the shape cli_graph stores and browsers get."""
+    if not isinstance(outputs, dict):
+        return {}
+    shaped_outputs = {
+        k: v if isinstance(v, dict) else {"type": "Any", "value": v}
+        for k, v in outputs.items()
+    }
+    return _normalize_outputs_for_storage(shaped_outputs)
 
 
 def _sync_outputs_to_cli_graph(
@@ -10411,18 +11032,9 @@ def _sync_outputs_to_cli_graph(
     Source previews and Cinema shot ports may preserve newer canonical state
     instead of storing every output from an older recipe.
     """
-    if not isinstance(outputs, dict):
-        normalized_outputs: dict[str, Any] = {}
-    else:
-        shaped_outputs = {
-            k: v if isinstance(v, dict) else {"type": "Any", "value": v}
-            for k, v in outputs.items()
-        }
-        normalized_outputs = _normalize_outputs_for_storage(shaped_outputs)
+    normalized_outputs = _normalized_event_outputs(outputs)
 
-    if node_id not in cli_graph.nodes or _admitted_canvas_moved("outputs"):
-        # The event still carries them; the canvas node with this id is
-        # another node when the run's canvas was cleared since (round 20, L3).
+    if node_id not in cli_graph.nodes:
         return normalized_outputs
 
     # A running recipe can still be consuming source A after explicit refresh
@@ -10502,9 +11114,14 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
                     "durable": bool(record["durable"]),
                 }
             )
-        await manager.broadcast(event)
         _journal_provider_hold("startAmbiguity", "held", run_id=run_id, node_id=event.node_id, kind=event.kind,
                                durable=event.durable, actor=canvas_events.run_actor(run_id))
+        # The hold above is kept; the canvas puts the event on its node by id,
+        # so not from a run whose canvas was cleared or replaced since (round
+        # 12, as the recovery event below; unreachable while Clear, import and
+        # a switch wait for runs).
+        if not _run_canvas_moved(run_id, "start-ambiguity event"):
+            await manager.broadcast(event)
         if run_id is not None:
             await _broadcast_graph_sync()
         return
@@ -10520,10 +11137,15 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
             event = event.model_copy(
                 update={"durable": False, "warning": durability_warning}
             )
-        await manager.broadcast(event)
         _journal_provider_hold("recovery", "held", run_id=event.run_id or execution_run_id.get(),
                                node_id=event.node_id, durable=event.durable,
                                actor=canvas_events.run_actor(event.run_id or execution_run_id.get()))
+        # The checkpoint above is kept (run and node); the canvas puts the
+        # event on its node by id, so not from a run whose canvas was cleared
+        # or replaced since (round 11; unreachable while Clear, import and a
+        # switch wait for runs).
+        if not _run_canvas_moved(event.run_id or execution_run_id.get(), "recovery event"):
+            await manager.broadcast(event)
         if changed or safety_hold_changed:
             await _broadcast_graph_sync()
         return
@@ -10533,9 +11155,15 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
     record = execution_runs.get(run_id) if run_id else None
     if record is not None and record.status in {"cancelling", "cancelled"}:
         return
-    _journal_execution_event(event, run_id)
-    _note_node_ran(event, run_id)
-    node_errors.observe(event)
+    # A node's event from a run whose canvas was cleared or replaced since
+    # names a node id that is now another node (round 11): it writes nothing
+    # there (outputs, error, the canvas's card, the journal). The run's own
+    # record and its report (get_run) still get it.
+    moved = isinstance(getattr(event, "node_id", None), str) and _run_canvas_moved(run_id, "node events")
+    if not moved:
+        _journal_execution_event(event, run_id)
+        _note_node_ran(event, run_id)
+        node_errors.observe(event)
     if isinstance(event, ErrorEvent) and run_id is not None:
         # The engine reports per-node failures as events and then returns
         # normally after GraphComplete. Preserve that semantic failure in the
@@ -10546,7 +11174,8 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
         # handlers intentionally use absolute paths while composing a run, but
         # those paths are not browser-loadable and may live under a relocated
         # output root whose directory name is not literally ``output``.
-        normalized_outputs = _sync_outputs_to_cli_graph(event.node_id, event.outputs)
+        normalized_outputs = (_normalized_event_outputs(event.outputs) if moved
+                              else _sync_outputs_to_cli_graph(event.node_id, event.outputs))
         updates: dict[str, Any] = {"outputs": normalized_outputs}
         if event.batch_outputs is not None:
             updates["batch_outputs"] = [
@@ -10556,6 +11185,9 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
         event = event.model_copy(update=updates)
     # What get_run reports for the run (services/run_reports.py).
     _run_reports().observe(event, run_id)
+    if moved:
+        # The canvas would put it on its node with that id (graphStore).
+        return
     await manager.broadcast(event)
     await _observe_agent_run(event, run_id)
 
@@ -10744,8 +11376,8 @@ def _sync_provider_recovery_to_cli_graph(
     if current is None:
         return False, durability_warning, safety_hold_changed
     # The checkpoint above is kept by run and node (the paid-state record);
-    # the node's params only on the canvas the run was admitted on (round 20, L3).
-    if _admitted_canvas_moved("recovery params"):
+    # the node's params only on the canvas the run started on (round 11).
+    if _run_canvas_moved(run_id, "recovery params"):
         return False, durability_warning, safety_hold_changed
 
     params = copy.deepcopy(current.get("params") or {})
@@ -10765,6 +11397,7 @@ def _sync_provider_recovery_to_cli_graph(
 
 def _sync_params_to_cli_graph(
     nodes: list[GraphNode], *, submitted: Mapping[str, Mapping[str, Any]] | None = None,
+    run_id: str | None = None,
 ) -> bool:
     """Mirror handler-mutated params from in-memory GraphNode instances back
     to cli_graph. Pydantic deep-copies params at model_validate time, so any
@@ -10781,9 +11414,9 @@ def _sync_params_to_cli_graph(
     the canvas by running a node with the canvas node's id; edits go through
     the edit routes and their checks.
 
-    Nothing is written when the canvas the run was admitted on was cleared
-    or replaced since (_admitted_canvas_moved, round 20 L3)."""
-    if _admitted_canvas_moved("params"):
+    ``run_id``: the run they came from. Nothing is written if the canvas it
+    registered on was cleared or replaced since (_run_canvas_moved)."""
+    if _run_canvas_moved(run_id, "params"):
         return False
     persisted = False
     for node in nodes:
@@ -11079,7 +11712,13 @@ def _validate_params(definition_id: str, params: dict[str, Any]) -> None:
         )
 
 
-def _journal_node_added(node_id: str, *, actor: dict[str, Any] | None = None, note: str = "") -> None:
+def _journal_node_added(node_id: str, *, actor: dict[str, Any] | None = None, note: str = "",
+                        proposal_id: str | None = None) -> None:
+    _journal("node.added", actor=actor, **_node_added_event(node_id, note=note, proposal_id=proposal_id))
+
+
+def _node_added_event(node_id: str, *, note: str = "", proposal_id: str | None = None) -> dict[str, Any]:
+    """node.added's node_id, data and summary, read from the canvas now."""
     node = cli_graph.nodes.get(node_id) or {}
     data: dict[str, Any] = {
         "definitionId": str(node.get("definitionId") or ""),
@@ -11087,17 +11726,16 @@ def _journal_node_added(node_id: str, *, actor: dict[str, Any] | None = None, no
     }
     if isinstance(node.get("position"), dict):
         data["position"] = node["position"]
-    _journal(
-        "node.added",
-        node_id=node_id,
-        data=data,
-        summary=f"added {data['name']} ({node_id}){note}",
-        actor=actor,
-    )
+    if proposal_id:
+        data["proposalId"] = proposal_id
+    return {"node_id": node_id, "data": data, "summary": f"added {data['name']} ({node_id}){note}"}
 
 
-def _journal_edge(kind: str, edge: dict[str, Any], *, actor: dict[str, Any] | None = None, note: str = "") -> None:
+def _journal_edge(kind: str, edge: dict[str, Any], *, actor: dict[str, Any] | None = None, note: str = "",
+                  proposal_id: str | None = None) -> None:
     data = _edge_data(edge)
+    if proposal_id:
+        data["proposalId"] = proposal_id
     verb = "connected" if kind == "edge.added" else "disconnected"
     _journal(
         kind,
@@ -11117,21 +11755,27 @@ def _journal_cluster(
     *,
     actor: dict[str, Any] | None = None,
     note: str = "",
+    proposal_id: str | None = None,
 ) -> None:
-    """One node.added per node and edge.added per wire, each capped at 50."""
+    """One node.added per node and edge.added per wire, each capped at 50.
+    With `proposal_id` (an accepted proposal's), each names it in data, so a
+    reader can tell what the accept applied from the person's own edits."""
     for node_id in node_ids[:50]:
-        _journal_node_added(node_id, actor=actor, note=note)
+        _journal_node_added(node_id, actor=actor, note=note, proposal_id=proposal_id)
     if len(node_ids) > 50:
         rest = node_ids[50:]
+        data: dict[str, Any] = {"count": len(rest), "nodeIds": rest[:50]}
+        if proposal_id:
+            data["proposalId"] = proposal_id
         _journal(
             "node.added",
-            data={"count": len(rest), "nodeIds": rest[:50]},
+            data=data,
             summary=f"added {len(rest)} more nodes{note}",
             actor=actor,
         )
     wanted = set(edge_ids)
     for edge in [edge for edge in cli_graph.edges if edge.get("id") in wanted][:50]:
-        _journal_edge("edge.added", edge, actor=actor, note=note)
+        _journal_edge("edge.added", edge, actor=actor, note=note, proposal_id=proposal_id)
 
 
 def _moved_far_enough(before: Any, after: dict[str, float]) -> bool:
@@ -11149,6 +11793,7 @@ def _moved_far_enough(before: Any, after: dict[str, float]) -> bool:
 @graph_write
 async def create_graph_node(body: dict[str, Any]) -> dict:
     _check_workspace_revision()
+    fence = _graph_fence()
     _validate_graph_ingress_complexity(body)
     definition_id = body.get("definitionId", "")
     if message := retired_message(str(definition_id)):
@@ -11168,6 +11813,7 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
         # Anyone but the person (an agent, the unnamed CLI) gets the node
         # configured for its model, as the picker would.
         models = await _look_up_models([(str(definition_id), universal_ports.model_of(str(definition_id), params))])
+        _refuse_if_graph_moved(fence)
         params, _reason = universal_ports.agent_update(str(definition_id), {}, params, models)
     _check_asset_refs(str(definition_id), params, str(definition_id))
     _refuse_agent_billing_change([(str(definition_id), str(definition_id), None, params)])
@@ -11190,11 +11836,14 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
             [candidate.nodes[short_id]],
             source="create",
         )
+    # Journaled before any await, so it names the project the node went to
+    # (round 8 of PR #114); the reply is the node as it was made.
+    _journal_node_added(short_id)
+    created = copy.deepcopy(cli_graph.nodes[short_id])
     await _broadcast_graph_sync(edit=True)
     publish_action(f"Added {definition_id} ({short_id})")
-    _journal_node_added(short_id)
     await _show_agent({"nodeId": short_id}, say=f"Added {_quoted(_node_label(short_id))}", did=_did("Added", short_id))
-    return cli_graph.nodes[short_id]
+    return created
 
 
 @app.post("/api/graph/connect")
@@ -11222,12 +11871,12 @@ async def connect_graph_nodes(body: dict[str, Any]) -> dict:
         raise HTTPException(status_code=400, detail=str(e))
     # The person wiring a placeholder edits it: it turns normal (Q125 item 3).
     _person_touched([edge["source"], edge["target"]])
+    _journal_edge("edge.added", edge)  # before any await (round 8 of PR #114)
     await _broadcast_graph_sync(edit=True)
     publish_action(
         f"Connected {edge['source']}:{edge['sourceHandle']} → "
         f"{edge['target']}:{edge['targetHandle']}"
     )
-    _journal_edge("edge.added", edge)
     await _show_agent(
         {"nodeId": edge["target"], "handle": edge["targetHandle"]},
         origin={"nodeId": edge["source"], "handle": edge["sourceHandle"]},
@@ -11345,11 +11994,13 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
     response = {**copy.deepcopy(candidate.nodes[short_id]), "connected": edge is not None, "edge": rf_edge}
     if edge is not None:
         _person_touched([src, dst])
-    await _broadcast_graph_sync(edit=True)
-    publish_action(f"Added {definition_id} ({short_id})")
+    # Before any await (round 8 of PR #114).
     _journal_node_added(short_id)
     if edge is not None:
         _journal_edge("edge.added", edge)
+    await _broadcast_graph_sync(edit=True)
+    publish_action(f"Added {definition_id} ({short_id})")
+    if edge is not None:
         publish_action(
             f"Connected {src}:{connect_spec.get('sourceHandle', '')} → "
             f"{dst}:{connect_spec.get('targetHandle', '')}"
@@ -11587,6 +12238,7 @@ def _keep_recovery_checkpoint(node: dict[str, Any], params: dict[str, Any]) -> b
 @graph_write
 async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]) -> dict:
     _check_workspace_revision()
+    fence = _graph_fence()
     _validate_graph_ingress_complexity(body)
     # Anyone but the person (an agent, the unnamed CLI) who sets a universal
     # node's model reconfigures it (its ports follow the model): when the model
@@ -11605,6 +12257,7 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
         if (model != universal_ports.model_of(current_definition, current_params)
                 or universal_ports.needs_configuring(current_definition, current_params)):
             models = await _look_up_models([(current_definition, model)])
+    _refuse_if_graph_moved(fence)  # another project may have opened during the lookup
     with _paid_graph_mutation("update graph node parameters"):
         node = cli_graph.nodes.get(node_id)
         if not node:
@@ -11657,12 +12310,12 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
                     cli_graph.update_params(node_id, params)
                 except ValueError:
                     raise _node_gone(node_id)
+    # Journaled before any await, so it names the project the change was made
+    # in (round 8 of PR #114); the reply is the node as the change left it.
     changes = param_changes(params_before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
     if changes:
         # The person changing a placeholder's settings edits it: it turns normal (Q125 item 3).
         _person_touched([node_id])
-    await _broadcast_graph_sync(edit=True)
-    publish_action(f"Updated {node_id} params")
     if changes:
         _journal(
             "node.params",
@@ -11670,6 +12323,9 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
             data=changes,
             summary=f"set {_listed(changes['keys'], 4)} on {_node_label(node_id)} ({node_id})",
         )
+    updated = copy.deepcopy(cli_graph.nodes[node_id])
+    await _broadcast_graph_sync(edit=True)
+    publish_action(f"Updated {node_id} params")
     # What changed, as the card names it (GM - Design, round 16): never the raw keys.
     # The fields the agent sent (that changed, when any did), not ones a default filled in after.
     sent = [str(key) for key in params]
@@ -11679,7 +12335,7 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
         await _show_agent({"nodeId": node_id}, say=say, log=log, did=_did("Changed", node_id))
     else:
         await _show_agent({"nodeId": node_id}, say=f"Updated {_quoted(_node_label(node_id))}", did=_did("Changed", node_id))
-    return cli_graph.nodes[node_id]
+    return updated
 
 
 def _card_label(definition: Mapping[str, Any] | None, node: Mapping[str, Any] | None, key: str) -> str | None:
@@ -11809,11 +12465,13 @@ async def configure_universal_node(node_id: str, body: dict[str, Any]) -> dict[s
         "Set a universal node's model with an edit (edit_canvas or `nebula apply`, params {model: ...}) "
         "or PUT /api/graph/node/{id}: its ports follow the model."))
     _check_workspace_revision()
+    fence = _graph_fence()
     node = cli_graph.nodes.get(node_id)
     if node is None:
         raise _node_gone(node_id)
     definition_id, model = _universal_request(body, str(node.get("definitionId") or ""))
     data = await _universal_data(definition_id, model)
+    _refuse_if_graph_moved(fence)
     with _paid_graph_mutation("set a node's model"):
         node = cli_graph.nodes.get(node_id)
         if node is None or node.get("definitionId") != definition_id:
@@ -11830,16 +12488,17 @@ async def configure_universal_node(node_id: str, body: dict[str, Any]) -> dict[s
         _commit_graph_candidate_with_recoveries(candidate, [candidate.nodes[node_id]], source="update")
     # The person picking a placeholder's model edits it, even to the same
     # model: it turns normal (Q125 item 3, GM: "on any edit by the person").
-    # Before the sync, so the canvas gets the node without the flag.
+    # Before the sync, so the canvas gets the node without the flag; and
+    # before any await (round 8 of PR #114).
     _person_touched([node_id])
-    await _broadcast_graph_sync(edit=True)
-    publish_action(f"Set {node_id}'s model to {model}")
     changes = param_changes(params_before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
     if changes:
         _journal("node.params", node_id=node_id, data=changes,
                  summary=f"set {_listed(changes['keys'], 4)} on {_node_label(node_id)} ({node_id})")
     for edge in removed:
         _journal_edge("edge.removed", edge)
+    await _broadcast_graph_sync(edit=True)
+    publish_action(f"Set {node_id}'s model to {model}")
     return {
         "params": configured.params,
         "dynamicInputPorts": configured.inputs,
@@ -11871,15 +12530,16 @@ async def rename_graph_node(node_id: str, body: dict[str, Any]) -> dict:
     if current != previous:
         # The person renaming a placeholder edits it: it turns normal (Q125 item 3).
         _person_touched([node_id])
-    await _broadcast_graph_sync(edit=True)
     if current != previous:
-        publish_action(f"Renamed {node_id}")
-        _journal(
+        _journal(  # before any await (round 8 of PR #114)
             "node.renamed",
             node_id=node_id,
             data={"from": previous, "to": current},
             summary=f"renamed {previous} ({node_id}) to {current}",
         )
+    await _broadcast_graph_sync(edit=True)
+    if current != previous:
+        publish_action(f"Renamed {node_id}")
         # An agent's rename is an action like any edit (the Agents panel's
         # line, Q125 item 2); a no-op for the person's own.
         await _show_agent({"nodeId": node_id}, say=f"Renamed {_quoted(current)}", did=_did("Renamed", node_id))
@@ -11960,19 +12620,8 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
         # canvas finishing an agent's arrange.
         _person_touched([node_id for node_id, position in normalized.items()
                          if _moved_far_enough(previous.get(node_id), position)])
-    if arrange is not None and is_person(current_request_headers()):
-        # The person's canvas laying out an agent's new nodes finishes that
-        # agent's edit; it is not a new one. No `edit`, so no tab makes it a
-        # step of its own; `arranged` tells each tab to fold these positions
-        # into the step that added the nodes, so its redo puts them here.
-        # Anyone else's write (an agent or script can read the arrangeId off
-        # a graphSync) stays a normal edit, credited to it, as before.
-        await _broadcast_graph_sync(moved=normalized, arranged={"id": arrange.id, "nodeIds": sorted(normalized)})
-    else:
-        await _broadcast_graph_sync(edit=True, moved=normalized)
-    publish_action(f"Updated layout for {len(normalized)} node(s)")
     # This route is the authoritative move signal (drag end, auto-layout,
-    # paste).
+    # paste). Journaled before any await (round 8 of PR #114).
     moved = [
         node_id
         for node_id, position in normalized.items()
@@ -11989,6 +12638,18 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
             # itself, so it can't put its positions under another agent's name.
             actor=arrange.actor if arrange is not None and not has_agent_marker(current_request_headers()) else None,
         )
+    if arrange is not None and is_person(current_request_headers()):
+        # The person's canvas laying out an agent's new nodes finishes that
+        # agent's edit; it is not a new one. No `edit`, so no tab makes it a
+        # step of its own; `arranged` tells each tab to fold these positions
+        # into the step that added the nodes, so its redo puts them here.
+        # Anyone else's write (an agent or script can read the arrangeId off
+        # a graphSync) stays a normal edit, credited to it, as before.
+        await _broadcast_graph_sync(moved=normalized, arranged={"id": arrange.id, "nodeIds": sorted(normalized)})
+    else:
+        await _broadcast_graph_sync(edit=True, moved=normalized)
+    publish_action(f"Updated layout for {len(normalized)} node(s)")
+    if moved:
         if arrange is None:
             # An agent's move (`nebula move`) is an action too (the Agents
             # panel's line, Q125 item 2); a no-op for the person's drags.
@@ -12029,29 +12690,42 @@ async def clear_graph(force: bool = False) -> dict:
     _check_workspace_revision()
     _require_clear_intent(force)
     with _paid_graph_mutation("clear the canvas"):
-        _reject_graph_replacement_during_paid_start("clear the canvas")
+        # As a switch, an import and a delete of the open project (round 11 of
+        # PR #114): a registered run writes back by node id, and ids start
+        # again after a clear. Its paid-start fence and the run fence.
+        _project_replacement_guard("clear the canvas", person=CLEAR_DURING_RUN_PERSON)
         # With the clear, before any await: a tab's write made for the old
-        # canvas is refused from now on (_canvas_revision, round 19). Before
-        # the canvas changes, and on disk first (round 20, M2): a crash in
-        # between leaves a moved revision over the old canvas, never the
-        # cleared canvas under the old revision.
+        # canvas is refused from now on (_canvas_revision, round 19 of PR
+        # #195), and so is a write an agent fenced before it (_graph_fence,
+        # review 10's F6 of PR #114). Before the canvas changes, and on disk
+        # first (round 20, M2): a crash in between leaves a moved revision
+        # over the old canvas, never the cleared canvas under the old
+        # revision. The epoch moves once per clear.
         _forget_canvas_undo("the canvas was cleared since")
         cli_graph.clear()
         run_approvals.clear()
         # Ids start again at n1: no node now is one a restore brought back.
         node_removals.forget_project(_workspace_context()["activeProjectId"])
-    agent_presence.forget_graph()
-    await _forget_status_anchors()
-    await _broadcast_graph_sync(edit=True)
-    publish_action("Cleared the canvas")
+    # In the step that cleared it, before any await (round 8 of PR #114): the
+    # pins that lost their nodes are this project's (after an await another
+    # project may be open, and its pins would be detached instead), and every
+    # event names the project cleared.
     _journal("canvas.cleared", summary="cleared the canvas")
     try:
         detached = canvas_pins.reanchor_missing(set())
     except (PinError, ProjectStoreError):
         detached = []
-    await _journal_detached_pins(detached, "the canvas was cleared")
-    await _announce_closed_proposals(canvas_proposals.invalidate_all("the canvas was cleared"))
+    _journal_detached(detached, "the canvas was cleared")
+    closed = canvas_proposals.invalidate_all("the canvas was cleared")
+    _journal_closed_proposals(closed)
     asset_proposals.drop_removal_tags("the canvas was cleared")
+    agent_presence.forget_graph()
+    await _forget_status_anchors()
+    await _broadcast_graph_sync(edit=True, cleared=True)
+    publish_action("Cleared the canvas")
+    if detached:
+        await _broadcast_pins()
+    await _broadcast_closed_proposals(closed)
     return {"status": "cleared", "canvasRevision": _canvas_revision()}
 
 
@@ -12070,13 +12744,13 @@ async def delete_provider_recovery(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if active:
-            # Run History's "Checked Marble — forget": the same "still
+            # Run History's "Forget ID": the same "still
             # waiting" line as the node's own refusal (round 3 review).
             raise refusal_copy.refusal(
                 409,
                 "Cannot delete a World Labs recovery checkpoint while that "
                 "node's paid start is still settling",
-                _paid_state_person("active", subject="This node is", then="try again"),
+                _paid_state_person("active"),
                 route="canvas",
             )
         try:
@@ -12092,8 +12766,7 @@ async def delete_provider_recovery(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except ProviderRecoveryPersistenceError as exc:
-            raise HTTPException(
-                status_code=507,
+            raise RunSafetyStorageRefusal(
                 detail="Could not durably delete provider recovery checkpoint",
             ) from exc
         current = cli_graph.nodes.get(node_id)
@@ -12128,9 +12801,9 @@ async def delete_provider_recovery(
                     params.pop(param_key, None)
                 current["params"] = params
                 cli_graph._maybe_persist()
-    await _broadcast_graph_sync()
     if removed:
-        _journal_provider_hold("recovery", "cleared", run_id=run_id, node_id=node_id)
+        _journal_provider_hold("recovery", "cleared", run_id=run_id, node_id=node_id)  # before any await
+    await _broadcast_graph_sync()
     return {
         "status": "deleted",
         "runId": run_id,
@@ -12153,19 +12826,18 @@ async def acknowledge_provider_start_ambiguity(
             run_id=run_id,
         )
     except ProviderStartConflictError as exc:
-        # "Checked Marble — unlock" (round 3b): the person reads the line for
+        # The status bar's "I've checked Marble" (round 3b): the person reads the line for
         # why it can't unlock yet; agents keep the exact text.
         raise _start_refusal(exc, own_node=True) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ProviderStartPersistenceError as exc:
-        raise HTTPException(
-            status_code=507,
+        raise RunSafetyStorageRefusal(
             detail="Could not durably acknowledge World Labs paid-start hold",
         ) from exc
-    await _broadcast_graph_sync()
     if removed:
-        _journal_provider_hold("startAmbiguity", "cleared", run_id=run_id, node_id=node_id, kind=kind)
+        _journal_provider_hold("startAmbiguity", "cleared", run_id=run_id, node_id=node_id, kind=kind)  # before any await
+    await _broadcast_graph_sync()
     return {
         "status": "acknowledged",
         "kind": kind,
@@ -12224,9 +12896,8 @@ def _ensure_node_deletable(node_id: str, node: dict[str, Any]) -> None:
             f"Cannot delete {node_id}: it has unresolved World Labs paid state. "
             "Check Marble, then resolve its exact recovery/ambiguity record "
             "first.",
-            _paid_state_person(state, subject="This node is", then="delete it",
-                               fields=_recovery_field_labels([node]) if state == "params"
-                               else _RECOVERY_FIELDS_FALLBACK),
+            _paid_state_person(state, node=_node_label(node_id),
+                               fields=_recovery_field_labels([node]) if state == "params" else ()),
         )
 
 
@@ -12251,6 +12922,7 @@ async def delete_graph_node(node_id: str) -> dict:
     entries = _remove_side_effects(
         [{"id": node_id, "name": label, "definitionId": removed_definition, "position": removed_position}],
         lambda gone: f"{gone['name']} ({gone['id']}) was deleted")
+    _journal_removed_nodes(entries, note="", pin_reason=lambda gone: f"{gone['name']} was deleted")
     removals = _removal_records(entries)
     token = _removals_ctx.set(removals)
     try:
@@ -12260,7 +12932,7 @@ async def delete_graph_node(node_id: str) -> dict:
     _renew_kept_removals(removals)
     publish_action(f"Removed {node_id}")
     last_point = agent_presence.last_point(node_id)
-    await _announce_removed_nodes(entries, note="", pin_reason=lambda gone: f"{gone['name']} was deleted")
+    await _announce_removed_nodes(entries)
     if last_point is not None:
         await _show_agent(last_point, say=f"Removed {_quoted(label)}", did={"verb": "Removed", "nodeId": None, "label": label})
     # What the delete removed, for its undo (POST /api/graph/restore `removals`).
@@ -12477,6 +13149,7 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         if is_person(headers):
             raise HTTPException(status_code=403, detail="This route is for agents; the canvas edits directly")
         raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
+    fence = _graph_fence()
     _validate_graph_ingress_complexity(body)
     try:
         spec: EditSpec = parse_edit(body, ports=_wire_end_ports)
@@ -12501,6 +13174,8 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
            for change in additions.params])
 
     models = await _look_up_models(_spec_models_wanted(additions))
+    # From here to the commit nothing awaits: the canvas checked above is the one written.
+    _refuse_if_graph_moved(fence)
     model_report: dict[str, dict[str, Any]] = {}
     positions: dict[str, dict[str, float]] = {}
     if additions.nodes:
@@ -12593,20 +13268,13 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         arrange = canvas_arrange.add(id_map.values(), direction=spec.arrange.direction, gap=spec.arrange.gap,
                                      actor=actor_for_headers(headers))
     entries = _remove_side_effects(removed, lambda gone: f"{gone['name']} ({gone['id']}) was deleted")
-    removals = _removal_records(entries)
-    removals_token = _removals_ctx.set(removals)
-    try:
-        await _broadcast_graph_sync(edit=True, moved=moves)
-    finally:
-        _removals_ctx.reset(removals_token)
-    # Its undo puts back the pins and proposals these deletes removed (after
-    # the sync, which adds the cover proposals it closed).
-    undo_after["removals"] = copy.deepcopy(removals)
-    _renew_kept_removals(removals)
+    # Every event of the edit is journaled here, before any await (round 8
+    # of PR #114): it names the project the edit was made in and reads the
+    # canvas as the edit left it, and it lands before any switch that follows.
     note = f" ({additions.note})" if additions.note != "edit" else ""
     for edge in spec.unwire:
         _journal_edge("edge.removed", edge.as_dict())
-    await _announce_removed_nodes(entries, note=note, pin_reason=lambda gone: f"{gone['name']} was deleted")
+    _journal_removed_nodes(entries, note=note, pin_reason=lambda gone: f"{gone['name']} was deleted")
     _journal_cluster(list(id_map.values()), edge_ids, note=note)
     changed: list[str] = []
     for node_id, before in params_before.items():
@@ -12638,8 +13306,25 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
             data={"nodeIds": moved[:50], "count": len(moved)},
             summary=f"moved {_listed(moved)}",
         )
-
     added = list(id_map.values())
+    # The reply's view of what it added and wired, as the edit left them.
+    added_rows = [{"id": node_id, "definitionId": cli_graph.nodes[node_id].get("definitionId"),
+                   "name": _node_label(node_id)} for node_id in added]
+    wanted = set(edge_ids)
+    wired_rows = [{"id": edge["id"], **_edge_data(edge)} for edge in cli_graph.edges if edge.get("id") in wanted]
+
+    removals = _removal_records(entries)
+    removals_token = _removals_ctx.set(removals)
+    try:
+        await _broadcast_graph_sync(edit=True, moved=moves)
+    finally:
+        _removals_ctx.reset(removals_token)
+    # Its undo puts back the pins and proposals these deletes removed (after
+    # the sync, which adds the cover proposals it closed).
+    undo_after["removals"] = copy.deepcopy(removals)
+    _renew_kept_removals(removals)
+    await _announce_removed_nodes(entries)
+
     parts = [
         f"added {len(added)}" if added else "",
         f"connected {len(edge_ids)}" if edge_ids else "",
@@ -12660,16 +13345,14 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         verb = ("Added" if focus in added else "Changed" if focus in (changed or ())
                 else "Renamed" if focus in renamed else "Moved")
         await _show_agent({"nodeId": focus}, say=additions.note if note else summary, did=_did(verb, focus))
-    wanted = set(edge_ids)
     undo = _canvas_undo_keep(identity, undo_after)
     _canvas_edit_link.reset(edit_link)
     return {
         "status": "applied",
         "summary": summary,
         "idMap": id_map,
-        "added": [{"id": node_id, "definitionId": cli_graph.nodes[node_id].get("definitionId"),
-                   "name": _node_label(node_id)} for node_id in added],
-        "wired": [{"id": edge["id"], **_edge_data(edge)} for edge in cli_graph.edges if edge.get("id") in wanted],
+        "added": added_rows,
+        "wired": wired_rows,
         "changed": changed,
         "renamed": renamed,
         "moved": list(moves),
@@ -12779,12 +13462,36 @@ async def restore_graph_state(body: dict[str, Any]) -> dict[str, Any]:
     if link is None:
         return await _restore_graph(body)
     token = _canvas_edit_link.set(link)
-    try:
-        result = await _restore_graph(body)
+    closed: list[bool] = []
+
+    def journal_done(_done: dict[str, list[Any]]) -> None:
         _journal_restored_edit(link, body.get("action", "undo"))
+        closed.append(True)
+
+    try:
+        result = await _restore_graph(body, journal_done=journal_done)
     finally:
         _canvas_edit_link.reset(token)
+        if closed:
+            # The proposals it reopened are journaled after its edit.undone
+            # (their fit check awaits): the link lists them too (review 8).
+            _note_link_events(link["id"])
     return result
+
+
+def _note_link_events(link_id: str) -> None:
+    """Every event journaled under an undo's (or redo's) link but its own
+    closing edit.undone / edit.redone, kept with the link: what a later
+    edit.undone of that undo lists as its ``events``. Taken again once the
+    restore returns, since proposal.reopened can follow edit.undone (review
+    8 of PR #114); merged with what was taken before, in case those events
+    have left the journal's buffer since."""
+    link = canvas_undo_book.link_of(link_id)
+    if link is None:
+        return
+    canvas_undo_book.note_events(
+        link_id, canvas_events.events_of_edit(link_id, skip_kinds=frozenset({"edit.undone", "edit.redone"})),
+        merge=True)
 
 
 async def _restore_graph(
@@ -12792,13 +13499,22 @@ async def _restore_graph(
     *,
     trusted: frozenset[str] = frozenset(),
     skipped_wires: list[dict[str, Any]] | None = None,
+    journal_done: Callable[[dict[str, list[Any]]], None] | None = None,
 ) -> dict[str, Any]:
     """The restore itself, for POST /api/graph/restore and an agent's undo
     (POST /api/graph/apply/undo). ``trusted`` are node ids whose items the
     server wrote (an edit's kept inverse): they may carry ``_`` params, a
     billing choice the node had, and a moodboard or character that is gone
     since, as the node had them. With ``skipped_wires`` a wire that can't go
-    back is listed there instead of refusing the whole restore."""
+    back is listed there instead of refusing the whole restore.
+    ``journal_done`` journals the caller's own closing event (edit.undone,
+    edit.redone) with what changed ({added, removed, changed, renamed, moved,
+    wired, unwired}), right after the restore's own events and before any
+    await, so it too names the project the restore was made in (round 8 of
+    PR #114). The pins put back (pin.reattached) come before it; the
+    proposals reopened (proposal.reopened) can follow it, since their fit
+    check awaits, so a caller with a link takes its events again once this
+    returns (_note_link_events, review 8)."""
     _check_workspace_revision()
     _validate_graph_ingress_complexity(body)
     action = body.get("action", "undo")
@@ -12972,16 +13688,11 @@ async def _restore_graph(
     # A redo of a delete (or an undo of an add) deletes like any delete: its
     # own removal records, which the canvas keeps for the next undo.
     entries = _remove_side_effects(removed, lambda gone: f"{gone['name']} ({gone['id']}) was removed{note}")
-    removals = _removal_records(entries)
-    removals_token = _removals_ctx.set(removals)
-    try:
-        await _broadcast_graph_sync(edit=True, moved=moved)
-    finally:
-        _removals_ctx.reset(removals_token)
-    _renew_kept_removals(removals)
+    # Every event of the restore is journaled here, before any await (round
+    # 8 of PR #114): it names the project the restore was made in.
     for edge in unwired:
         _journal_edge("edge.removed", edge, note=note)
-    await _announce_removed_nodes(entries, note=note, pin_reason=lambda gone: f"{gone['name']} was removed{note}")
+    _journal_removed_nodes(entries, note=note, pin_reason=lambda gone: f"{gone['name']} was removed{note}")
     for node_id in added:
         _journal_node_added(node_id, note=note)
     for node_id, before in changed.items():
@@ -13013,16 +13724,32 @@ async def _restore_graph(
         )
     for edge in wired:
         _journal_edge("edge.added", edge, note=note)
-    publish_action(f"{action.capitalize()} on the canvas: {len(added)} back, {len(removed)} removed, "
-                   f"{len(changed)} changed, {len(wired)} connected, {len(unwired)} disconnected")
-    # The nodes it brought back: their pins on them again, and the proposals
-    # their deletes closed open again where they still fit (GM, 2026-10-23).
-    # A swapped id (in ``remove`` too) holds another node now, not the one deleted.
+    # The nodes it brought back: their pins on them again, in this step, so
+    # pin.reattached comes before the caller's edit.undone (review 8 of PR
+    # #114). The proposals their deletes closed reopen after the sync
+    # (_reopen_removed_proposals). A swapped id (in ``remove`` too) holds
+    # another node now, not the one deleted.
     swapped = {gone["id"] for gone in removed}
-    undone = await _undo_removals(named_removals, {node_id: added_models[node_id] for node_id in added
-                                                   if node_id not in swapped}, project_id)
+    putting_back = _reattach_removed_pins(named_removals, {node_id: added_models[node_id] for node_id in added
+                                                           if node_id not in swapped}, project_id)
     for node_id in swapped & set(added):
         node_removals.restored(project_id, node_id, None)
+    if journal_done is not None:
+        journal_done({"added": added, "removed": [gone["id"] for gone in removed], "changed": sorted(changed),
+                      "renamed": sorted(renamed), "moved": moved, "wired": [_edge_data(edge) for edge in wired],
+                      "unwired": unwired, "placeholders": sorted(made_pending)})
+    removals = _removal_records(entries)
+    removals_token = _removals_ctx.set(removals)
+    try:
+        await _broadcast_graph_sync(edit=True, moved=moved)
+    finally:
+        _removals_ctx.reset(removals_token)
+    _renew_kept_removals(removals)
+    await _announce_removed_nodes(entries)
+    publish_action(f"{action.capitalize()} on the canvas: {len(added)} back, {len(removed)} removed, "
+                   f"{len(changed)} changed, {len(wired)} connected, {len(unwired)} disconnected")
+    # The proposals their deletes closed open again where they still fit (GM, 2026-10-23).
+    undone = await _reopen_removed_proposals(putting_back, project_id)
     return {
         "status": "restored",
         "action": action,
@@ -13050,8 +13777,12 @@ async def _restore_graph(
 # Its per-project id epochs are the canvas revision (_canvas_revision), kept in
 # the state dir so a restart doesn't start them again at 0 (round 20 of PR
 # #195, review 19 M2); no state dir, memory only, as the other stores.
+# Round 21: revisions that can't be restored start above any a tab from
+# before this boot can hold (milliseconds since 1970: every epoch before was
+# a count of clears from this same base or from 0).
 canvas_undo_book = CanvasUndoBook(
-    persist_path=_STATE_DIR / "canvas-revisions.json" if _STATE_PATH is not None else None)
+    persist_path=_STATE_DIR / "canvas-revisions.json" if _STATE_PATH is not None else None,
+    unrestored_base=int(_time_module.time() * 1000), prior_state=_STATE_EXISTED_AT_BOOT)
 
 
 def _advance_canvas_revision_after_a_failed_load() -> None:
@@ -13072,10 +13803,8 @@ _canvas_edit_link: ContextVar[dict[str, Any] | None] = ContextVar("canvas_edit_l
 
 
 def _open_project_brief() -> tuple[str | None, str]:
-    catalog = project_store.read()
-    active = catalog.get("activeProjectId")
-    project = catalog["projects"].get(active) if active else None
-    return active, str((project or {}).get("name") or "")
+    view = project_store.projection()  # no catalog copy
+    return view.project_id, view.name
 
 
 def _canvas_undo_before(spec: EditSpec, shown: Mapping[str, Any]) -> dict[str, Any]:
@@ -13108,19 +13837,23 @@ def _canvas_undo_keep(identity: Any, after: dict[str, Any]) -> dict[str, Any] | 
         return None
     actor = actor_for_headers(current_request_headers())
     canvas_undo_book.link(edit_id, kind="edit", actor=actor)
-    canvas_undo_book.note_events(edit_id, canvas_events.seqs_of_edit(edit_id))
+    canvas_undo_book.note_events(edit_id, canvas_events.events_of_edit(edit_id))
     return canvas_undo_book.keep(edit_id=edit_id, actor=actor, agent_id=identity.id, project_id=after["projectId"],
                                  project_name=after["projectName"], inverse=after["inverse"], epoch=after["epoch"],
                                  mark=after.get("mark"), removals=after.get("removals"))
 
 
-def _forget_canvas_undo(why: str, *, advance: bool = True) -> None:
+def _forget_canvas_undo(why: str, *, project_id: Any = ..., advance: bool = True) -> None:
     """The open project's node ids start again: its undo tokens end, and its
-    canvas revision moves (unless the caller moved it already, ``advance``),
+    canvas revision (the id epoch: _canvas_revision, _graph_fence,
+    _run_canvas_now) moves, unless the caller moved it already (``advance``),
     on disk before memory (CanvasUndoBook.advance_epoch). Call it before the
-    canvas changes, in the same synchronous step."""
+    canvas changes, in the same synchronous step. ``project_id``: that
+    project, when the caller knows it (inside a catalog transaction)."""
     try:
-        canvas_undo_book.forget_project(_workspace_context()["activeProjectId"], why, advance=advance)
+        if project_id is ...:
+            project_id = _workspace_context()["activeProjectId"]
+        canvas_undo_book.forget_project(project_id, why, advance=advance)
     except Exception:  # noqa: BLE001 - never break a clear or a load over undo bookkeeping
         pass
 
@@ -13176,12 +13909,12 @@ def _journal_restored_edit(link: dict[str, Any], action: str) -> None:
     event, and the agent's undo token learns where its edit stands."""
     target_id = str(link.get("undoes") or link.get("redoes"))
     target = canvas_undo_book.link_of(target_id)
-    canvas_undo_book.note_events(link["id"], canvas_events.seqs_of_edit(link["id"]))
+    canvas_undo_book.note_events(link["id"], canvas_events.events_of_edit(link["id"]))
     by = actor_for_headers(current_request_headers())
     data: dict[str, Any] = {"editId": target_id, f"{action}Id": link["id"]}
     noun = "edit"
     if target is not None:
-        data.update({"of": target.actor, "editKind": target.kind, "events": target.events})
+        data.update({"of": target.actor, "editKind": target.kind, **target.events_view()})
         if target.kind == "undo" and target.target:
             data["undid"] = target.target
             noun = "undo"
@@ -13249,8 +13982,12 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     token still works, say after the person puts a changed part back, but a
     node someone ran since stays for good, and the message says which); or
     ``already-undone`` (by this agent, or by the person on the canvas) with
-    ``undoneBy``. The journal tags each event ``edit: {id, undoes, of}`` and
-    ends with ``edit.undone``.
+    ``undoneBy``. The journal tags each event ``edit: {id, undoes, of}``;
+    ``edit.undone`` comes after the node, wire and pin events, and only a
+    ``proposal.reopened`` this undo brought back can follow it (its fit
+    check awaits). ``edit.undone``'s ``events`` lists the edit's events:
+    every pin.* and proposal.* one, and at most MAX_LINK_EVENTS of the rest
+    (``eventsTruncated`` and ``eventsTotal`` say when it was cut).
     """
     headers = current_request_headers()
     identity = identify_agent(headers)
@@ -13295,11 +14032,10 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     link = {"id": undo_id, "undoes": record.edit_id, "of": owner}
     canvas_undo_book.link(undo_id, kind="undo", actor=actor, target=record.edit_id)
     wire_skips: list[dict[str, Any]] = []
-    context = _canvas_edit_link.set(link)
-    try:
-        # The pins and proposals the edit's deletes removed go back with the nodes.
-        restore = {**plan.restore, **({"removals": record.removals} if record.removals else {})}
-        result = await _restore_graph(restore, trusted=plan.trusted, skipped_wires=wire_skips)
+    said: dict[str, Any] = {}
+
+    def journal_undone(changed: dict[str, list[Any]]) -> None:
+        # With the restore's own events, before any await (round 8 of PR #114).
         skipped = plan.skipped + [{
             "part": "wire", "nodeId": wire["target"], "reason": "can't be wired now",
             "wire": {key: wire[key] for key in ("source", "sourceHandle", "target", "targetHandle")},
@@ -13307,18 +14043,32 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
                         f"can't come back: {wire['reason']}")} for wire in wire_skips]
         record.state, record.undone_by, record.undo_id = "undone", actor_record(actor), undo_id
         record.last_skipped = skipped
-        canvas_undo_book.note_events(undo_id, canvas_events.seqs_of_edit(undo_id))
+        canvas_undo_book.note_events(undo_id, canvas_events.events_of_edit(undo_id))
         link_entry = canvas_undo_book.link_of(record.edit_id)
-        counts = {key: len(result.get(key) or []) for key in (
+        counts = {key: len(changed.get(key) or []) for key in (
             "added", "removed", "changed", "renamed", "moved", "wired", "unwired", "placeholders")}
         done = ", ".join(f"{verb} {counts[key]}" for key, verb in UNDONE_VERBS if counts[key])
         left = f"; left {len(skipped)} part{'s' if len(skipped) != 1 else ''} as is" if skipped else ""
         _journal("edit.undone", data={
             "editId": record.edit_id, "undoId": undo_id, "of": owner, "editKind": "edit",
-            "events": link_entry.events if link_entry else [], "counts": counts, "skipped": len(skipped)},
+            **(link_entry.events_view() if link_entry else {"events": []}), "counts": counts,
+            "skipped": len(skipped)},
             summary=f"undid {_undo_owner_text(owner, by=actor)} ({done or 'no change'}){left}")
+        said.update(skipped=skipped, done=done, left=left)
+
+    context = _canvas_edit_link.set(link)
+    try:
+        # The pins and proposals the edit's deletes removed go back with the nodes.
+        restore = {**plan.restore, **({"removals": record.removals} if record.removals else {})}
+        result = await _restore_graph(restore, trusted=plan.trusted, skipped_wires=wire_skips,
+                                      journal_done=journal_undone)
+        skipped, done, left = said["skipped"], said["done"], said["left"]
     finally:
         _canvas_edit_link.reset(context)
+        if said:
+            # The proposals it reopened are journaled after its edit.undone
+            # (their fit check awaits): the link lists them too (review 8).
+            _note_link_events(undo_id)
     stays = [item["nodeId"] for item in skipped if item.get("reason") == "ran since"]
     publish_action(f"{identity.name} undid its edit: {done or 'no change'}{left}"
                    + (f" ({_listed(stays)} ran since, so {'it stays' if len(stays) == 1 else 'they stay'})"
@@ -13511,8 +14261,8 @@ async def delete_graph_edge(body: dict[str, Any]) -> dict:
     if removed:
         # The person unwiring a placeholder edits it: it turns normal (Q125 item 3).
         _person_touched([str(body.get("source") or ""), str(body.get("target") or "")])
+        _journal_edge("edge.removed", body)  # before any await (round 8 of PR #114)
         await _broadcast_graph_sync(edit=True)
-        _journal_edge("edge.removed", body)
         publish_action(
             f"Disconnected {body.get('source', '')}:{body.get('sourceHandle', '')} → "
             f"{body.get('target', '')}:{body.get('targetHandle', '')}"
@@ -13860,8 +14610,9 @@ async def import_graph(body: dict[str, Any]) -> dict:
     """
     # A whole graph file: checked in a worker thread (_IngressVerdict). The
     # rest stays synchronous from the revision check to the commit, as before.
+    fence = _graph_fence()
     verdict = await _ingress_verdict_off_loop(body)
-    _check_workspace_revision()
+    _refuse_if_graph_moved(fence)
     verdict.require(body)
     candidate = CLIGraph()
     raw_nodes = _graph_ingress_items(body, "nodes")
@@ -13901,7 +14652,7 @@ async def import_graph(body: dict[str, Any]) -> dict:
         _refuse_agent_growth_past_save_limit(candidate)
     with _paid_graph_mutation("replace the graph"):
         _reject_graph_replacement_during_paid_start("replace the graph")
-        if execution_runs.has_active() or _synchronous_workspace_runs:
+        if execution_runs.has_active():
             raise HTTPException(
                 status_code=409,
                 detail=(
@@ -14030,11 +14781,12 @@ async def add_graph_cluster(body: dict[str, Any]) -> dict:
             [candidate.nodes[node_id] for node_id in id_map.values()],
             source="cluster",
         )
+    _journal_cluster(list(id_map.values()), created_edge_ids)  # before any await (round 8 of PR #114)
+    created = _rf_created(list(id_map.values()), created_edge_ids)
     await _broadcast_graph_sync(edit=True)
     publish_action(f"Created cluster ({len(id_map)} nodes)")
-    _journal_cluster(list(id_map.values()), created_edge_ids)
 
-    return {"idMap": id_map, **_rf_created(list(id_map.values()), created_edge_ids)}
+    return {"idMap": id_map, **created}
 
 
 def _rewrite_output_paths(outputs: dict[str, Any]) -> dict[str, Any]:
@@ -14432,6 +15184,20 @@ def _refuse_agent_billing_in_project(candidate: CLIGraph, *before: Mapping[str, 
     _refuse_agent_billing_change(changes)
 
 
+async def _save_live_project(project_id: str | None) -> None:
+    """Write the live graph into the open project's stored snapshot now, the
+    way a listing or a project read saves it (_overlay_live_project): only
+    while ``project_id`` is still the one open, and only when it changed."""
+    if project_id is None:
+        return
+    exported = await _projects_live_export()
+    with project_store.transaction() as catalog:
+        project = catalog["projects"].get(project_id)
+        if project is not None and catalog["activeProjectId"] == project_id \
+                and _overlay_live_project(project, exported):
+            project_store.commit(catalog)
+
+
 def _overlay_live_project(project: dict[str, Any], exported: dict[str, Any]) -> bool:
     """Overlay CLI changes while retaining frontend-only data and run recipes."""
     previous = project["snapshot"]
@@ -14603,10 +15369,23 @@ async def _projects_live_export() -> dict[str, Any]:
     return await export_graph_for_frontend()
 
 
-def _project_replacement_guard(action: str = "switch projects") -> None:
+def _project_replacement_guard(action: str = "switch projects", *, person: str | None = None) -> None:
+    """409 while a paid start settles or a run is registered. ``person``: the
+    person's own line for the run refusal (refusal_copy), where GM wrote one
+    (Clear, round 11); agents keep the specific text either way."""
     _reject_graph_replacement_during_paid_start(action)
-    if execution_runs.has_active() or _synchronous_workspace_runs:
-        raise HTTPException(status_code=409, detail=f"Cannot {action} while a run is active. Wait for the run to finish or stop it first.")
+    if execution_runs.has_active():
+        specific = f"Cannot {action} while a run is active. Wait for the run to finish or stop it first."
+        if person is None:
+            raise HTTPException(status_code=409, detail=specific)
+        raise refusal_copy.refusal(409, specific, person, route="canvas")
+
+
+# GM (round 11 of PR #114), under the canvas's "Couldn't clear the canvas."
+# heading: "Couldn't clear the canvas. A run is still going. Wait for it to
+# finish or stop it first." The reason replaces "Nothing was removed.", which
+# stays for refusals that give no reason.
+CLEAR_DURING_RUN_PERSON = "A run is still going. Wait for it to finish or stop it first."
 
 
 def _commit_project_workspace(catalog: dict[str, Any], candidate: CLIGraph) -> None:
@@ -14645,7 +15424,10 @@ async def list_projects() -> dict[str, Any]:
     exported = await _projects_live_export()
     with project_store.transaction() as catalog:
         changed = False
+        adopted: str | None = None
+        filed_from: tuple[str, int] | None = None
         if not catalog["projects"] and cli_graph.nodes:
+            filed_from = (catalog["workspaceRevision"], canvas_undo_book.epoch(None))
             snapshot = {**empty_snapshot(), "nodes": exported["nodes"], "edges": exported["edges"]}
             project = make_project("Recovered canvas", snapshot)
             _overlay_live_project(project, exported)
@@ -14654,6 +15436,7 @@ async def list_projects() -> dict[str, Any]:
             catalog["workspaceRevision"] = uuid4().hex
             catalog["migratedProjectId"] = project["id"]
             changed = True
+            adopted = project["id"]
         elif active := catalog["activeProjectId"]:
             changed = _overlay_live_project(catalog["projects"][active], exported)
         for project in catalog["projects"].values():
@@ -14664,6 +15447,11 @@ async def list_projects() -> dict[str, Any]:
         changed = expired or changed
         if changed:
             project_store.commit(catalog)
+        if adopted is not None:
+            # In the commit's step: the same live graph, now this project's.
+            _adopt_run_canvases(adopted)
+            if filed_from is not None:
+                _note_canvas_filed(*filed_from, _workspace_context())
         listing = {
             "projects": sorted((project_metadata(project) for project in catalog["projects"].values()), key=lambda project: project["updatedAt"], reverse=True),
             "trash": _trash_listing(catalog),
@@ -14823,8 +15611,8 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
         catalog["projects"][recovery_id] = project
         project_store.commit(catalog)
         result = {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"]}
+    _journal_project_change("project.created", result["project"])  # before any await (round 8 of PR #114)
     await _broadcast_projects_changed("created", recovery_id)
-    _journal_project_change("project.created", result["project"])
     return result
 
 
@@ -14841,20 +15629,54 @@ def _switch_actor() -> dict[str, Any] | None:
     return {key: actor[key] for key in ("kind", "name", "color") if actor.get(key)}
 
 
-def _begin_switch(catalog: dict[str, Any], actor: dict[str, Any] | None) -> dict[str, Any] | None:
+# How many projects an agent's switches left that a tab may still save into
+# (round 17 of PR #114, review 16 M1). A tab follows a switch within moments
+# online; offline it waits, and an agent may switch again (or back) meanwhile.
+_MAX_SWITCH_HANDOFFS = 32
+
+
+def _switch_handoffs(catalog: dict[str, Any]) -> dict[str, str]:
+    """{projectId: the workspace revision the canvas had when an agent's
+    switch left that project}. A catalog written before round 17 kept one
+    ``handoff`` ({projectId, revision}); it reads as one of these."""
+    handoffs = {key: value for key, value in (catalog.get("handoffs") or {}).items()
+                if isinstance(key, str) and isinstance(value, str)} if isinstance(catalog.get("handoffs"), dict) else {}
+    legacy = catalog.get("handoff")
+    if isinstance(legacy, dict) and isinstance(legacy.get("projectId"), str) and isinstance(legacy.get("revision"), str):
+        handoffs.setdefault(legacy["projectId"], legacy["revision"])
+    return handoffs
+
+
+def _begin_switch(catalog: dict[str, Any], actor: dict[str, Any] | None,
+                  opening: str | None = None) -> dict[str, Any] | None:
     """Note what was open before a switch. For a switch the person didn't
     make, their open tab may still hold a few unsaved changes (a pan, a run
-    record) for the project it was showing: `handoff` lets that tab save them
-    into it (save_project), with the revision it had, until the next switch."""
+    record) for the project it was showing: a handoff lets that tab save them
+    into it (save_project), with the revision it had.
+
+    One handoff per project an agent's switches left (round 17 of PR #114,
+    review 16 M1): a tab that was offline through two switches (A to B to C)
+    still saves into A. A project's handoff ends when that project is opened
+    again (``opening``; reopening the open project takes a fresh one, as
+    before) and every one ends at the person's own switch."""
     previous_id = catalog.get("activeProjectId")
     previous = catalog["projects"].get(previous_id) if previous_id else None
+    handoffs = _switch_handoffs(catalog)
+    catalog.pop("handoff", None)
     if actor is None:
-        catalog.pop("handoff", None)
+        catalog.pop("handoffs", None)
         return None
+    if opening is not None:
+        handoffs.pop(opening, None)
     if previous is not None:
-        catalog["handoff"] = {"projectId": previous_id, "revision": catalog["workspaceRevision"]}
+        handoffs.pop(previous_id, None)
+        handoffs[previous_id] = catalog["workspaceRevision"]
+    while len(handoffs) > _MAX_SWITCH_HANDOFFS:
+        handoffs.pop(next(iter(handoffs)))
+    if handoffs:
+        catalog["handoffs"] = handoffs
     else:
-        catalog.pop("handoff", None)
+        catalog.pop("handoffs", None)
     return {
         "actor": actor,
         "previousProjectId": previous_id if previous is not None else None,
@@ -14926,6 +15748,9 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
             catalog["projects"][recovered["id"]] = recovered
             catalog["activeProjectId"] = recovered["id"]
             catalog["migratedProjectId"] = recovered["id"]
+            # Unreachable with a run registered (the guard above refuses), but
+            # the same filing as list_projects', so the same bookkeeping.
+            _adopt_run_canvases(recovered["id"])
         if active := catalog["activeProjectId"]:
             _overlay_live_project(catalog["projects"][active], exported)
         try:
@@ -14940,10 +15765,12 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
         catalog["workspaceRevision"] = uuid4().hex
         _commit_project_workspace(catalog, CLIGraph())
         revision = catalog["workspaceRevision"]
+    # In the step that made it, before any await (round 8 of PR #114); its
+    # canvas.replaced follows (_broadcast_graph_sync journals it first thing).
+    _journal_project_change("project.created", project)
     await _broadcast_graph_sync(graph_replaced=True, reason="project-create",
                                 project_switch=_switch_notice(start, project, created=True))
     await _broadcast_projects_changed("created", project["id"])
-    _journal_project_change("project.created", project)
     # A bundle built for another version doesn't load it (projectStore.ts activate).
     return {"project": public_project(project), "workspaceRevision": revision, "canvasRevision": _canvas_revision(),
             "paramsVersion": PARAMS_VERSION}
@@ -15020,7 +15847,7 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
                                                                  ingress=verdict, size_checked=False)
         candidate._counter = max(candidate._counter, project.get("_nodeCounter", 0))
         project["lastOpenedAt"] = project_now()
-        start = _begin_switch(catalog, actor)
+        start = _begin_switch(catalog, actor, opening=project_id)
         catalog["activeProjectId"] = project_id
         catalog["workspaceRevision"] = uuid4().hex
         _commit_project_workspace(catalog, candidate)
@@ -15048,10 +15875,11 @@ async def save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
         # Its refusal comes where the check ran before (_IngressVerdict).
         verdict = await _ingress_verdict_off_loop(body["snapshot"])
     result = _save_project(project_id, body, ingress=verdict)
+    if "previousName" in result and result["previousName"] != result["project"]["name"]:
+        # Before any await (round 8 of PR #114).
+        _journal_project_change("project.renamed", result["project"], previous_name=result["previousName"])
     # A save moves the card up and can change its picture and node count.
     await _broadcast_projects_changed("renamed" if "name" in body else "saved", project_id)
-    if "previousName" in result and result["previousName"] != result["project"]["name"]:
-        _journal_project_change("project.renamed", result["project"], previous_name=result["previousName"])
     return result
 
 
@@ -15060,14 +15888,14 @@ def _save_project(project_id: str, body: dict[str, Any], *, ingress: _IngressVer
     worker thread, by the route)."""
     with project_store.transaction() as catalog:
         project = _project_id_or_404(project_id, catalog)
-        handoff = catalog.get("handoff") or {}
-        if ("snapshot" in body and handoff.get("projectId") == project_id
-                and body.get("workspaceRevision") == handoff.get("revision")):
+        handoff = _switch_handoffs(catalog).get(project_id)
+        if ("snapshot" in body and handoff is not None and body.get("workspaceRevision") == handoff):
             # Not once: an autosave already in flight at the switch lands
             # first, and the tab's own last save must still land after it.
-            # The next switch (anyone's) ends the handoff. The project may
-            # be the open one again: an agent reopened the project the tab
-            # was showing, which reloads it from what was saved.
+            # It ends when this project is opened again or the person
+            # switches (_begin_switch). The project may be the open one
+            # again: an agent reopened the project the tab was showing,
+            # which reloads it from what was saved.
             _save_handoff(project, body["snapshot"], ingress=ingress,
                           pending_params=body.get("pendingParams"), pending_labels=body.get("pendingLabels"))
             refresh_metadata(project)
@@ -15383,9 +16211,23 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
         if deleting_active:
             catalog["activeProjectId"] = None
             catalog["workspaceRevision"] = uuid4().hex
-            _commit_project_workspace(catalog, CLIGraph())
-            # The canvas is now the unfiled one, empty, its ids starting again at n1.
+            # The canvas becomes the unfiled one, empty, its ids starting again
+            # at n1, so the unfiled canvas's id epoch moves, in this step
+            # (round 11 of PR #114): a write or run noted on an earlier
+            # unfiled canvas isn't this one. Before the commit, on disk first,
+            # and back if the commit fails (round 20 of PR #195, M2, as a
+            # clear and an import): a crash in between leaves a moved
+            # revision over the old canvas, never the new canvas under an old
+            # revision.
+            previous_epoch = canvas_undo_book.advance_epoch(None)
+            try:
+                _commit_project_workspace(catalog, CLIGraph())
+            except BaseException:
+                canvas_undo_book.restore_epoch(None, previous_epoch)
+                raise
             node_removals.forget_project(None)
+            _forget_canvas_undo("the open project was deleted since, so the canvas started again", project_id=None,
+                                advance=False)
         else:
             project_store.commit(catalog)
         result = {
@@ -15394,10 +16236,11 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
             "activeProjectId": catalog["activeProjectId"],
             "workspaceRevision": catalog["workspaceRevision"],
         }
+    # Before any await (round 8 of PR #114).
+    _journal_project_change("project.deleted", result["trashedProject"], was_open=deleting_active)
     if deleting_active:
         await _broadcast_graph_sync(graph_replaced=True, reason="project-delete")
     await _broadcast_projects_changed("deleted", project_id)
-    _journal_project_change("project.deleted", result["trashedProject"], was_open=deleting_active)
     return result
 
 
@@ -15430,8 +16273,8 @@ async def restore_saved_project(project_id: str) -> dict[str, Any]:
         kept = set(catalog["projects"]) | set(catalog.get("trash") or {})
     if expired:
         agent_questions.keep_projects(kept)
+    _journal_project_change("project.restored", result["project"])  # before any await (round 8 of PR #114)
     await _broadcast_projects_changed("restored", project_id)
-    _journal_project_change("project.restored", result["project"])
     return result
 
 
@@ -15531,6 +16374,11 @@ async def export_graph_for_frontend() -> dict:
     state = cli_graph.get_state()
     # Which canvas this is too (round 19): a tab sends it back on its writes.
     workspace = {**_workspace_context(), "canvasRevision": _canvas_revision()}
+    # Round 21: the revisions didn't survive the restart (the file was lost
+    # or unreadable, or nothing is kept): a tab's older revision says nothing
+    # about this canvas, and it adopts this one (review 20, L-4/L-5).
+    if not canvas_undo_book.restored:
+        workspace["canvasRevisionRestored"] = False
     # The open project's nodes' last errors (ids restart in each project).
     node_errors.use_project(workspace["activeProjectId"])
     if not state["nodes"]:
@@ -15627,6 +16475,7 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     message, as it does for its own runs."""
     _check_workspace_revision()
     _capture_execution_workspace()
+    fence = _graph_fence()
     if not cli_graph.nodes:
         raise HTTPException(status_code=400, detail="Graph is empty")
 
@@ -15672,21 +16521,22 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
 
     # Checked last: a request refused for anything else must not count.
     measured = await _measure_run_inputs(sub_nodes, sub_edges)
+    # Its nodes were read from the live graph before that await, and its
+    # outputs land there by node id: only on the canvas it was asked on.
+    _refuse_if_graph_moved(fence)
     _require_spend_approval(sub_nodes, sub_edges, run_id=run_id, settings=settings, measured=measured,
                             run_ids=[target] if target else _end_node_ids(sub_nodes, sub_edges))
     _note_run(run_id)
     _note_run_nodes(run_id, sub_nodes)
-    await _make_ready(ready)  # admitted: the caller's own placeholders turn normal
-    await _announce_skips(run_id, pending_skips)
-    _start_agent_run(run_id, sub_nodes, sub_edges)
-    publish_action(
-        f"Running {target}..." if target else f"Running {len(sub_nodes)} node(s)..."
-    )
-    if target:
-        await _show_agent({"nodeId": target}, say=f"Running {_quoted(_node_label(target))}", did=_did("Ran", target))
-    else:
-        # The whole canvas has no one node to point at: the Agent log only.
-        await _say_agent_action(f"Running {len(sub_nodes)} node{'' if len(sub_nodes) == 1 else 's'}")
+    try:
+        # Right before it registers, with no await between (round 11): the
+        # run notes this canvas as the one its write-backs go to.
+        _refuse_if_graph_moved(fence)
+        run_canvas = _run_canvas_now()  # as in execute
+    except (HTTPException, ProjectStoreError):
+        _return_hold(run_id)
+        canvas_events.forget_run(run_id)
+        raise
 
     # Skipped placeholders are reported as a gate's skips are: node id -> reason.
     outcome: dict[str, Any] = {"results": {}, "errors": {},
@@ -15696,7 +16546,7 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     # Registered like canvas runs: it fences project switching until it ends,
     # and DELETE /api/executions/{runId} (`nebula cancel`) stops it.
     try:
-        execution_runs.register(run_id, task)
+        _register_run(run_id, task, run_canvas)
     except (ExecutionCancelledBeforeStartError, ExecutionCancellationCapacityError, ValueError) as exc:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
@@ -15705,6 +16555,31 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     _watch_for_cross_process_stop(run_id, task)
     _cli_runs.start(run_id, task, target, outcome)
+    # Registered, with no await since the last fence: the caller's own
+    # placeholders turn normal and its run is kept (_admit_registered_run).
+    # Only now, so a run refused above leaves both as they were (round 21,
+    # the #114 merge: these used to await before the fence).
+    try:
+        placeholders_changed = _admit_registered_run(run_id, ready, sub_nodes, sub_edges)
+    except BaseException:
+        task.cancel()  # it never had a turn
+        await asyncio.gather(task, return_exceptions=True)
+        await _release_paid_worldlabs_starts(run_id)
+        _return_hold(run_id)
+        raise
+    if placeholders_changed:
+        await _broadcast_graph_sync()
+    await _announce_skips(run_id, pending_skips)
+    # The canvas says "Running X" / "Ran X" only for a run that started
+    # (review 10's F3: one its fence refused still said it ran).
+    publish_action(
+        f"Running {target}..." if target else f"Running {len(sub_nodes)} node(s)..."
+    )
+    if target:
+        await _show_agent({"nodeId": target}, say=f"Running {_quoted(_node_label(target))}", did=_did("Ran", target))
+    else:
+        # The whole canvas has no one node to point at: the Agent log only.
+        await _say_agent_action(f"Running {len(sub_nodes)} node{'' if len(sub_nodes) == 1 else 's'}")
     return _hide_run_key_echoes(await _cli_run_response(run_id, None if wait is None else float(wait)))
 
 
@@ -15816,10 +16691,10 @@ async def _execute_cli_run(
         canvas_events.forget_run(run_id)
     duration = _time_module.time() - start
 
-    _sync_params_to_cli_graph(sub_nodes)
+    _sync_params_to_cli_graph(sub_nodes, run_id=run_id)
 
     # Sync outputs to frontend canvas
-    await _broadcast_graph_sync()
+    await _broadcast_graph_sync(run_params=run_id)
 
     skipped_note = f", {len(gated)} skipped by a gate" if gated else ""
     # Agents' placeholders the run skipped, in GM's skip line (Q125 item 3).
@@ -15922,6 +16797,15 @@ async def get_graph_run(run_id: str, wait: float = 0) -> dict[str, Any]:
     answers exactly as its start did."""
     wait = max(0.0, min(float(wait), 300.0))
     reports = _run_reports()
+    if (_cli_runs.get(run_id) is None and execution_runs.get(run_id) is None and not reports.known(run_id)
+            and execution_runs.tombstoned(run_id)):
+        # A Stop beat this run's start (round 16 of PR #114, M2): the id can't
+        # start here, so nothing ran and nothing was spent. Only when this
+        # process saw that start begin (round 17, review 16 L1); otherwise it
+        # has no record of the run, which may have run before a restart.
+        if not execution_runs.start_seen(run_id):
+            return {"runId": run_id, "status": "unknown", "source": "canvas", "noRecord": True}
+        return {"runId": run_id, "status": "cancelled", "source": "canvas", "neverStarted": True}
     if _cli_runs.get(run_id) is None and (execution_runs.get(run_id) is not None or reports.known(run_id)):
         response = await _canvas_run_response(run_id, wait)
         return _hide_run_key_echoes({**response, "startedBy": actor_record(canvas_events.run_actor(run_id)),
@@ -16101,9 +16985,14 @@ async def _quick_multi_image_input_handler(
 
 @app.post("/api/quick")
 @graph_write
-@_track_synchronous_project_run
 async def quick_execute(body: dict[str, Any]) -> dict:
-    """One-shot: create a temp node, execute, return output."""
+    """One-shot: create a temp node, execute, return output.
+
+    Its nodes are temporary (``_quick_*``), never on the canvas, and its
+    events go to this request's own dicts, so nothing is written back by node
+    id: a quick run in flight doesn't hold up a Clear, a project switch, an
+    import or a delete of the open project (round 12 of PR #114; it did
+    through _track_synchronous_project_run, now gone)."""
     _check_workspace_revision()
     _capture_execution_workspace()
     definition_id = body.get("definitionId", "")
@@ -16957,7 +17846,8 @@ def _moodboard_conflict(exc: Any) -> JSONResponse:
     })
 
 
-def _journal_board_change(before: dict, after: dict, changes: dict, *, say: str = "") -> None:
+def _journal_board_change(before: dict, after: dict, changes: dict, *, say: str = "",
+                          proposal_id: str | None = None) -> None:
     """The journal events for a board write (plan section 5.2): an edit
     batch or a PUT. One ``board.*`` event for its images, cards and frames,
     and one ``board.fields`` event naming the board fields it changed
@@ -16965,7 +17855,9 @@ def _journal_board_change(before: dict, after: dict, changes: dict, *, say: str 
     the CLI, an undo's ``restore``, an accepted proposal's PUT), so none is
     missed. Tagged with the open canvas project; the board's own scope is in
     ``data`` (a Global board is in every project). Never any note text, and
-    never a field's value."""
+    never a field's value. ``proposal_id``: the accepted asset proposal that
+    made the write (only _apply_asset_proposal passes it, as canvas accepts
+    name theirs), so nebula-mcp --channel tells it from the person's edits."""
     from services.moodboard_edits import journal_entries
 
     for entry in journal_entries(changes, before, after):
@@ -16977,6 +17869,8 @@ def _journal_board_change(before: dict, after: dict, changes: dict, *, say: str 
             data.update({"refs": entry["refs"], "kinds": entry["kinds"]})
         if say:
             data["say"] = say
+        if proposal_id:
+            data["proposalId"] = proposal_id
         _journal(entry["kind"], data=data, summary=entry["summary"])
 
 
@@ -17002,6 +17896,12 @@ def _base_version(raw: Any) -> int | None:
 
 @app.put("/api/moodboards/{moodboard_id}")
 async def update_moodboard(moodboard_id: str, body: MoodboardUpdate) -> dict:
+    return await _update_moodboard(moodboard_id, body)
+
+
+async def _update_moodboard(moodboard_id: str, body: MoodboardUpdate, *, proposal_id: str | None = None) -> dict:
+    """The PUT itself. ``proposal_id`` is for an accepted asset proposal's
+    write only (_apply_asset_proposal); the route never takes one."""
     _refuse_moodboard_layout(body)
     store = _moodboard_store()
     base_version = _base_version(body.baseVersion)
@@ -17038,7 +17938,7 @@ async def update_moodboard(moodboard_id: str, body: MoodboardUpdate) -> dict:
         raise HTTPException(status_code=422, detail=str(exc))
     # An older client edits images through PUT: its edits are journaled too.
     changes = diff(before, moodboard)
-    _journal_board_change(before, moodboard, changes)
+    _journal_board_change(before, moodboard, changes, proposal_id=proposal_id)
     await _broadcast_stored_asset("moodboard", moodboard, edit={"touched": changes["touched"], "undo": None})
     await _say_agent_board_change(before, moodboard, changes)
     # The answer is the board plus `undo`, the `restore` that takes this
@@ -17622,9 +18522,9 @@ async def purge_trashed(kind: str, item_id: str) -> dict[str, Any]:
     except KeyError:
         raise refusal_copy.refusal(404, f"{_asset_noun(kind)} '{item_id}' isn't in Recently deleted", refusal_copy.gone_from_trash(_person_noun(kind)))
     # A card that showed it "in Recently deleted" now says it's gone.
-    await _broadcast_stored_asset(kind, None, item_id, deleted=True)
     if kind == "style":
-        _journal_style("purged", record, style_id=item_id)
+        _journal_style("purged", record, style_id=item_id)  # before any await (round 8 of PR #114)
+    await _broadcast_stored_asset(kind, None, item_id, deleted=True)
     return {"purged": kind, "id": item_id}
 
 
@@ -17654,9 +18554,9 @@ async def empty_trash(kind: str | None = None, scope: str | None = None,
                 except KeyError:
                     continue
                 purged += 1
-                await _broadcast_stored_asset(asset_kind, None, record["id"], deleted=True)
                 if asset_kind == "style":
-                    _journal_style("purged", record, style_id=record["id"])
+                    _journal_style("purged", record, style_id=record["id"])  # before any await
+                await _broadcast_stored_asset(asset_kind, None, record["id"], deleted=True)
     if kind in (None, "project") and scope is None:
         with project_store.transaction() as catalog:
             trash = catalog.get("trash") or {}

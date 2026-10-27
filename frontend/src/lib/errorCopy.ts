@@ -23,6 +23,7 @@
  * site (warnFailure), lost connections aren't.
  */
 
+import { isOfflineRefusal } from './backendConnection';
 import { inDesktopShell, personUnavailableReason } from './personSession';
 
 /** No answer at all: the connection dropped, or the backend isn't there.
@@ -83,6 +84,10 @@ const isPersonRequiredCopy = (line: string) =>
  * the reason line drops its 'try again'. The button is the retry." Only
  * failureCopy({ short: true }) picks these. */
 export const CONNECTION_LOST_SHORT_COPY = "Nebula's server isn't answering. Make sure it's running.";
+/** GM - Design, round 16 of PR #114: the one line for "no answer" wherever
+ * #114 owns it (Settings never loaded, Create's cluster), whole even beside
+ * Try again. */
+export const NEBULA_NOT_ANSWERING_COPY = "Nebula isn't answering. Make sure it's running, then try again.";
 export const NO_RESPONSE_SHORT_COPY = "Nebula didn't respond.";
 /** A plain browser tab that found no backend on its ports (GM, round 2).
  * The ports it tried stay on the error for the console. */
@@ -349,6 +354,7 @@ export function failureDetails(error: unknown): string | null {
  * ConnectionLostError, never any TypeError), else GM's general line, never
  * the error's own message. */
 export function copyForError(error: unknown, signal?: AbortSignal | null): string {
+  if (isOfflineRefusal(error)) return '';
   return isNoAnswer(error, signal) ? CONNECTION_LOST_COPY : REFUSED_FALLBACK_COPY;
 }
 
@@ -428,6 +434,9 @@ export function shortLine(line: string): string {
  * in when the request's error has none.
  */
 export function failureCopy(error: unknown, options: { heading?: string; short?: boolean } = {}): FailureCopy {
+  // A write refused while offline (round 15 of PR #114) says nothing: the
+  // banner already pulsed. Every one-line form below is empty for it too.
+  if (isOfflineRefusal(error)) return { heading: '', reason: '' };
   const parts = partsOf(error) ?? { heading: '', reason: copyForError(error) };
   const standalone = error instanceof FailureNotice && error.standalone;
   const heading = standalone ? '' : parts.heading || options.heading || '';
@@ -444,6 +453,7 @@ export function failureMessage(error: unknown, heading: string): string {
  * CLI graph reads the canvas: "Couldn't import the CLI graph." over the
  * reason, not "Couldn't load the canvas."). Round 3e. */
 export function failureUnder(error: unknown, heading: string): string {
+  if (isOfflineRefusal(error)) return '';
   return oneLine({ heading, reason: failureCopy(error).reason });
 }
 

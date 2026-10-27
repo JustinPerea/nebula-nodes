@@ -72,29 +72,32 @@ describe('chat /clear that fails says so (L-4)', () => {
   });
   afterEach(() => { vi.restoreAllMocks(); useGraphStore.setState(initialGraph, true); });
 
-  it('refused before clearing (409, a run is going): both sentences; the canvas and the steps are as they were', async () => {
+  // Round 21 (the #114 merge): the outcome is the chat's line (lib/chatClear.ts,
+  // #114's GM lines); the chat says it, and a refusal's reason shows under
+  // Clear's heading in the chat (ChatPanel.clear.test.tsx), not on the canvas.
+  it('refused before clearing (409, a run is going): the canvas and the steps are as they were', async () => {
     net.reply = () => json(409, { detail: 'Stop the run first.' });
-    await clearCanvasFromChat();
+    const refused: Response[] = [];
+    expect(await clearCanvasFromChat({ onRefused: (response) => { refused.push(response); } })).toBe('refused');
     await settle();
     expect(net.calls.some((call) => call.method === 'DELETE' && call.path === '/api/graph?force=true')).toBe(true);
-    expect(shown()).toContain(CLEAR_REFUSED_TEXT);
+    expect(refused.map((response) => response.status)).toEqual([409]);
     expect(store().nodes.map((node) => node.id)).toEqual(['n1', 'n2']);
     expect(store().undoStack).toHaveLength(0);
   });
 
-  it('a server error (the graph may be cleared before its save failed): only the first sentence', async () => {
+  it('a server error (the graph may be cleared before its save failed): not confirmed, and the step stays', async () => {
     net.reply = () => json(500, { detail: 'disk full' });
-    await clearCanvasFromChat();
+    expect(await clearCanvasFromChat()).toBe('unconfirmed');
     await settle();
-    expect(shown()).toContain(CLEAR_FAILED_TEXT);
     expect(shown()).not.toContain(CLEAR_REFUSED_TEXT);
+    expect(store().undoStack).toHaveLength(1);
   });
 
-  it('no answer at all: only the first sentence', async () => {
+  it('no answer at all: not confirmed', async () => {
     net.reply = () => { throw new TypeError('Failed to fetch'); };
-    await clearCanvasFromChat();
+    expect(await clearCanvasFromChat()).toBe('unconfirmed');
     await settle();
-    expect(shown()).toContain(CLEAR_FAILED_TEXT);
     expect(shown()).not.toContain(CLEAR_REFUSED_TEXT);
   });
 
@@ -111,7 +114,7 @@ describe('chat /clear that fails says so (L-4)', () => {
     const { readFileSync } = await import('node:fs');
     const { join } = await import('node:path');
     const text = readFileSync(join(__dirname, '..', 'src', 'components', 'panels', 'ChatPanel.tsx'), 'utf8');
-    expect(text).toMatch(/clearCanvasFromChat\(\)/);
+    expect(text).toMatch(/clearCanvasFromChat\(/);
     expect(text).not.toMatch(/api\/graph\?force=true/);
   });
 });
@@ -151,16 +154,18 @@ describe('a model picker that fails says so, and the node keeps its settings (L-
         expect(store().undoStack).toHaveLength(0);
       });
 
-      it(`${name}, ${where}: anything else: "Couldn't set up"`, async () => {
+      it(`${name}, ${where}: anything else: "Couldn't change the model"`, async () => {
         set();
         net.reply = (path) => /model$|universal\/ports$/.test(path) ? json(409, { detail: 'It is running.' }) : json(200, {});
         await configure(id);
         await settle();
-        expect(shown()).toContain(modelSetupFailedText('Writer'));
+        // Round 21 (the #114 merge): #114's GM line for a failed model change
+        // (channel round 14) where neither of #195's two lines applies.
+        expect(shown().join('\n')).toContain("Couldn't change the model for “Writer”.");
         expect(store().nodes[0].data.params).toEqual(params);
       });
 
-      it(`${name}, ${where}: no answer: "Couldn't set up"`, async () => {
+      it(`${name}, ${where}: no answer: "Couldn't change the model"`, async () => {
         set();
         net.reply = (path) => {
           if (/model$|universal\/ports$/.test(path)) throw new TypeError('Failed to fetch');
@@ -168,7 +173,9 @@ describe('a model picker that fails says so, and the node keeps its settings (L-
         };
         await configure(id);
         await settle();
-        expect(shown()).toContain(modelSetupFailedText('Writer'));
+        // Round 21 (the #114 merge): #114's GM line for a failed model change
+        // (channel round 14) where neither of #195's two lines applies.
+        expect(shown().join('\n')).toContain("Couldn't change the model for “Writer”.");
         expect(store().nodes[0].data.params).toEqual(params);
       });
     }

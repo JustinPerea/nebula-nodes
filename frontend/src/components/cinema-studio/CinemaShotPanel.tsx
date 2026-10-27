@@ -11,6 +11,7 @@ import type { CinemaLook, CinemaPalette } from '../../lib/cinemaArtDirection';
 import type { CinemaSceneSpec, CinemaShot } from '../../types';
 import { shortLine } from '../../lib/errorCopy';
 import { NodeError } from '../nodes/NodeError';
+import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 
 interface CinemaShotPanelProps {
   cinemaNodeId: string;
@@ -27,6 +28,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
   const executeShot = useGraphStore((s) => s.executeShot);
   const promoteShotVariation = useGraphStore((s) => s.promoteShotVariation);
   const isImportingGraph = useGraphStore((s) => s.isImportingGraph);
+  const readOnly = useBackendOffline();
   const activeRuns = useGraphStore((s) => s.activeRuns);
   const cancelRun = useGraphStore((s) => s.cancelRun);
   const shotRun = activeRuns.find((run) => run.kind === 'cinema-shot' && run.nodeId === cinemaNodeId && run.shotId === shot.id);
@@ -240,7 +242,8 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
             onClick={() => motionHandoff?.status === 'ready'
               ? viewCinemaMotionNode(cinemaNodeId, shot.id) : void sendCinemaShotToMotion(cinemaNodeId, shot.id)}
             disabled={isImportingGraph || motionHandoff?.status === 'pending'
-              || (motionHandoff?.status !== 'ready' && (shotRunning || status !== 'done' || !previewUrl))}
+              || (motionHandoff?.status !== 'ready' && (shotRunning || status !== 'done' || !previewUrl || readOnly))}
+            {...offlineMark(readOnly && motionHandoff?.status !== 'ready')}
             aria-busy={motionHandoff?.status === 'pending' || undefined}>
             {motionHandoff?.status === 'ready' ? 'View video node'
               : motionHandoff?.status === 'pending' ? 'Connecting video node…'

@@ -23,6 +23,7 @@ import {
   selectedNodeIds,
 } from '../lib/canvasSelection';
 import { failureMessage } from '../lib/errorCopy';
+import { offlineMark, useBackendOffline } from '../lib/useBackendOffline';
 
 
 export function SelectionToolbar() {
@@ -31,6 +32,11 @@ export function SelectionToolbar() {
   const isExecuting = useGraphStore((state) => state.isExecuting);
   // A run waiting for its inputs counts as starting (review 15, M-B).
   const runStarting = useGraphStore((state) => state.runStarting);
+  // Offline is read-only (GM, round 15 of PR #114): Run, Ask, Note,
+  // Duplicate, Arrange and Delete are disabled and look it; Copy and
+  // Download stay.
+  const offline = useBackendOffline();
+  const off = offlineMark(offline);
   const executeNode = useGraphStore((state) => state.executeNode);
   const executeCluster = useGraphStore((state) => state.executeCluster);
   const copySelected = useGraphStore((state) => state.copySelected);
@@ -122,7 +128,8 @@ export function SelectionToolbar() {
         {ids.length} selected
       </span>
       <span className="selection-toolbar__divider" aria-hidden="true" />
-      <button type="button" className="selection-toolbar__button" onClick={openAgent} title="Ask agent about selection">
+      <button type="button" className="selection-toolbar__button" onClick={openAgent} title="Ask agent about selection"
+        disabled={offline} {...off}>
         <MessageCircle size={17} aria-hidden="true" />
         <span>Ask</span>
       </button>
@@ -131,6 +138,8 @@ export function SelectionToolbar() {
           type="button"
           className="selection-toolbar__button"
           onClick={() => composeNote({ nodeId: ids[0] })}
+          disabled={offline}
+          {...off}
           title="Note for agents"
           aria-label="Note for agents"
         >
@@ -142,7 +151,8 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button selection-toolbar__button--primary"
         onClick={runSelection}
-        disabled={isExecuting || runStarting}
+        disabled={isExecuting || runStarting || offline}
+        {...off}
         aria-label="Run selected nodes"
         aria-describedby={runScopeId}
         title={`Run selected nodes. ${describeRunScope(runScope)}`}
@@ -167,7 +177,8 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button"
         onClick={duplicateSelected}
-        disabled={isExecuting}
+        disabled={isExecuting || offline}
+        {...off}
         title={isExecuting ? 'Wait for the active run to finish' : 'Duplicate selected nodes'}
       >
         <Files size={17} aria-hidden="true" />
@@ -177,7 +188,8 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button"
         onClick={autoLayoutSelected}
-        disabled={ids.length < 2 || isExecuting}
+        disabled={ids.length < 2 || isExecuting || offline}
+        {...off}
         title="Arrange selected nodes"
       >
         <LayoutGrid size={17} aria-hidden="true" />
@@ -205,7 +217,8 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button selection-toolbar__button--danger"
         onClick={removeSelection}
-        disabled={isExecuting}
+        disabled={isExecuting || offline}
+        {...off}
         title={isExecuting ? 'Wait for the active run to finish' : 'Delete selected nodes'}
         aria-label="Delete selected nodes"
       >

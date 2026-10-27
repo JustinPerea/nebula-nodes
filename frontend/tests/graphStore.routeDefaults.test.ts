@@ -44,10 +44,15 @@ describe('route-table node defaults', () => {
     vi.restoreAllMocks();
   });
 
-  it('addNode saves the provider choice and each route\'s defaults', async () => {
-    apiFetchMock.mockReset().mockRejectedValue(new TypeError('Offline fixture'));
-    const id = await useGraphStore.getState().addNode(definition.id, { x: 0, y: 0 });
-    expect(useGraphStore.getState().nodes.find((node) => node.id === id)?.data.params).toEqual(expected);
+  it('addNode sends the provider choice and each route\'s defaults', async () => {
+    // Round 13 of PR #114: an add always goes through the backend (a tab
+    // with no backend refuses it), so the defaults are what the create sends.
+    apiFetchMock.mockReset().mockImplementation(async (url: string) => (url === '/api/graph/export'
+      ? { ok: true, json: async () => ({ empty: true }) }
+      : { ok: true, json: async () => ({ id: 'n1' }) }));
+    await useGraphStore.getState().addNode(definition.id, { x: 0, y: 0 });
+    const create = apiFetchMock.mock.calls.find(([url]) => url === '/api/graph/node');
+    expect(JSON.parse(create?.[1].body).params).toEqual(expected);
   });
 
   it('addNodeAndConnect sends the same defaults', async () => {

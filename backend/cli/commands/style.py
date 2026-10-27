@@ -20,7 +20,7 @@ from moodboard_client import MoodboardError
 from nebula_api import NebulaAPIError
 from style_client import StyleError
 
-from ..client import NebulaClient
+from ..client import NebulaClient, connect_failure
 
 style_help = "Style id or exact name (`nebula style list`)"
 
@@ -150,7 +150,7 @@ def run(client: NebulaClient, args) -> None:
         _fail(f"can't read --restore: {exc}")
     except NebulaAPIError as exc:
         if exc.kind == "connect":
-            _fail(f"cannot connect to Nebula backend at {client.base_url} — is the server running?")
+            _fail(connect_failure(client.base_url, exc))
         _fail(exc.detail)
 
 

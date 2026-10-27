@@ -347,3 +347,29 @@ describe('ProposalBar', () => {
     client.mockRestore();
   });
 });
+
+// Round 15 of PR #114 (review 14, M2): offline, Accept and Reject are
+// disabled with the offline mark, and the store refuses them before sending.
+describe('ProposalBar while Nebula is offline', () => {
+  it('Accept and Reject are disabled and send nothing', async () => {
+    const { noteBackendConnection, resetBackendConnectionForTests } = await import('../src/lib/backendConnection');
+    resetBackendConnectionForTests();
+    open(proposal('p_a'));
+    render(<ProposalBar />);
+    act(() => noteBackendConnection('offline'));
+    const accept = screen.getByRole('button', { name: 'Accept & run (1 paid)' });
+    const reject = screen.getByRole('button', { name: /^Reject/ });
+    for (const button of [accept, reject]) {
+      expect(button).toBeDisabled();
+      expect(button).toHaveAttribute('data-offline-disabled');
+    }
+    await act(async () => {
+      await useCanvasProposalsStore.getState().accept('p_a');
+      await useCanvasProposalsStore.getState().reject('p_a');
+    });
+    expect(net.apiFetch).not.toHaveBeenCalled();
+    act(() => noteBackendConnection('online'));
+    expect(screen.getByRole('button', { name: 'Accept & run (1 paid)' })).toBeEnabled();
+    resetBackendConnectionForTests();
+  });
+});

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ShieldAlert } from 'lucide-react';
 import '../../styles/personal-agents.css';
+import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 
 export type PermissionStatus = 'pending' | 'sent' | 'allowed' | 'denied' | 'timed_out' | 'cancelled';
 
@@ -43,6 +44,8 @@ export function PermissionCard({ part, agentName, onDecision }: {
   onDecision: (requestId: string, decision: 'allow' | 'deny') => void;
 }) {
   const open = part.status === 'pending';
+  // Round 16 (L5): offline Allow once is disabled; Deny stays.
+  const readOnly = useBackendOffline();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!open) return;
@@ -70,7 +73,8 @@ export function PermissionCard({ part, agentName, onDecision }: {
       {open || part.status === 'sent' ? (
         <div className="permission-card__actions">
           {part.canAllow && (
-            <button type="button" className="permission-card__allow" disabled={!open}
+            <button type="button" className="permission-card__allow" disabled={!open || readOnly}
+              {...offlineMark(readOnly && open)}
               onClick={() => onDecision(part.requestId, 'allow')}>Allow once</button>
           )}
           <button type="button" className="permission-card__deny" disabled={!open}
