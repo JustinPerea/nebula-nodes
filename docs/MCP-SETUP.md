@@ -995,6 +995,33 @@ spent. What each surface says:
 The canvas settles such a run as stopped (if the person pressed Stop) or as
 not started, and it can be run again under a new ID.
 
+Round 17 of PR #114 (review 16 L1): "never started" is said only when this
+backend process saw that run's start begin (`ExecutionRunRegistry`
+notes the ID as `/api/execute`, `/api/execute-node` or
+`/api/cinema/generate-shot` takes it, before anything is awaited). An ID it
+has no record of at all (a run from before Nebula restarted, or a typo) is
+still stopped for good the same way, but the answers say so instead of
+claiming nothing ran:
+
+- `DELETE` and `GET /api/executions/{runId}` add `noRecord: true` beside
+  `pendingAdmission`.
+- `get_run` (and `GET /api/graph/runs/{runId}`) answers `status: "unknown"`
+  with `noRecord: true` (no `neverStarted`), and `cancel_run` and `get_run`
+  give `next`: "Nebula has no record of run <id>. If it started before
+  Nebula restarted, check Run History for what it did."
+- `nebula cancel` and `nebula result` print that same line; `nebula result`
+  exits 1.
+
+A run-admission refusal (507) names which store failed in `code`:
+`run_safeguards` is the run-safety store (the paid-start fence, the
+recovery journal, durable Stop state), and the canvas says "Couldn't start
+the run. Nebula couldn't save its run safeguards, so nothing was started.
+Restart Nebula, then try again." `project_store` is the project catalog
+(an unreadable `catalog.json` or a storage error): nothing was started
+either (the project is read before the run exists), but a restart doesn't
+clear it, so the canvas gives its general line. Repairing the catalog or
+the storage does, and the same start then works. Don't parse `detail`.
+
 Every process the backend starts (agents, the Commons reader, ffmpeg, the
 Remotion renderer, git, `open`, `ps`, `sips`, `brctl`) gets the backend's
 environment minus `NEBULA_PERSON_TOKEN`, `NEBULA_CONNECTOR_ENCRYPTION_KEY`,

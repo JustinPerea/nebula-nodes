@@ -1459,12 +1459,19 @@ CANCEL_BEFORE_START_NEXT = ("Nebula hadn't started this run yet. The stop is rec
                             "won't start a run with this id, so nothing runs and nothing is spent.")
 
 
+def run_no_record_next(run_id: Any) -> str:
+    """A run id Nebula has no record of (round 17 of PR #114, review 16 L1):
+    it may have run before Nebula restarted, so nothing is said about spend."""
+    return (f"Nebula has no record of run {run_id}. If it started before Nebula restarted, "
+            "check Run History for what it did.")
+
+
 def _run_result(payload: dict[str, Any], ctx: Context | None) -> list:
     """The run as agents need it: status, outputs per node, errors, and previews."""
     status = payload.get("status")
     shown: dict[str, Any] = {key: payload[key] for key in ("status", "runId", "targetNodeId", "elapsed",
                                                             "duration", "nodesExecuted", "error",
-                                                            "source", "startedBy", "nodes", "neverStarted")
+                                                            "source", "startedBy", "nodes", "neverStarted", "noRecord")
              if key in payload}
     if payload.get("results"):
         shown["outputs"] = {node: _brief_outputs(outputs) for node, outputs in payload["results"].items()}
@@ -1480,6 +1487,8 @@ def _run_result(payload: dict[str, Any], ctx: Context | None) -> list:
     if status == "running":
         shown["next"] = (f"Still running. get_run('{payload.get('runId')}', wait_seconds=...) collects it; "
                          "cancel_run stops it.")
+    elif payload.get("noRecord"):
+        shown["next"] = run_no_record_next(payload.get("runId"))
     elif status == "cancelled" and payload.get("neverStarted"):
         shown["next"] = RUN_STOPPED_BEFORE_START
     elif status == "cancelled":
@@ -1542,7 +1551,9 @@ async def get_run(run_id: str, wait_seconds: float = DEFAULT_RUN_WAIT, ctx: Cont
     It also reads a run the person started on the canvas (the `runId` of its
     run.started events): that result has `source` "canvas" and `startedBy`.
     A run still going has `nodes`: each node's state, latest `progress` (0
-    to 1), the text it has streamed so far (`partialText`) and `error`."""
+    to 1), the text it has streamed so far (`partialText`) and `error`.
+    An id Nebula has no record of (it may have run before Nebula restarted)
+    answers status "unknown" with `noRecord` and a `next` line."""
     from urllib.parse import quote
 
     wait = max(0.0, min(float(wait_seconds), MAX_RUN_WAIT))
@@ -1565,10 +1576,14 @@ def cancel_run(run_id: str, ctx: Context | None = None) -> dict[str, Any]:
     A run id Nebula hasn't started yet (its start still on the way) answers
     `pendingAdmission: true`: the stop is recorded and Nebula refuses to
     start a run with that id, so it never runs; get_run then reads it as
-    cancelled with `neverStarted`."""
+    cancelled with `neverStarted`. A run id Nebula has no record of at all
+    (it may have run before Nebula restarted) adds `noRecord: true`: nothing
+    is known about what it did or spent."""
     from urllib.parse import quote
 
     answer = _canvas_call("DELETE", f"/api/executions/{quote(run_id, safe='')}", ctx)
+    if isinstance(answer, dict) and answer.get("pendingAdmission") and answer.get("noRecord"):
+        return {**answer, "next": run_no_record_next(answer.get("runId", run_id))}
     if isinstance(answer, dict) and answer.get("pendingAdmission"):
         return {**answer, "next": CANCEL_BEFORE_START_NEXT}
     return answer

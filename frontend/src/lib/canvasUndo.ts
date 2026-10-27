@@ -24,6 +24,7 @@
 import type { Edge, Node } from '@xyflow/react';
 import type { CinemaSceneSpec, NodeData } from '../types';
 import type { RemovalRecord } from './deleteNotice';
+import { canonicalBackendAssetUrls } from './backend';
 
 /** Backend (cli_graph) node ids: n1, n2, ... Everything else is frontend-only. */
 export const CLI_NODE_ID_RE = /^n\d+$/;
@@ -119,7 +120,16 @@ export interface OwnParamChange {
 export interface KeptAfterAccept {
   nodeId: string;
   keys: string[];
+  /** A node Accept added, kept whole because it changed since (GM, round 17:
+   * named as one item). False for settings kept on a node it didn't add. */
+  wholeNode: boolean;
 }
+
+/** Who made a change this tab saw arrive (round 17 of PR #114, review 16 L3;
+ * GM's follow-up): an agent (its presence name, or null for an unnamed one),
+ * the person in another window ("You"), or nobody this tab can name. A
+ * change with no source on it counts as unknown: never guessed. */
+export type ChangeSource = { kind: 'agent'; name: string | null } | { kind: 'you' } | { kind: 'unknown' };
 
 export function isOwnAdd(entry: unknown): entry is OwnAdd {
   return Boolean(entry) && (entry as { kind?: unknown }).kind === 'own-add';
@@ -166,9 +176,9 @@ export function captureOwnAdd(step: OwnAdd, nodes: Node<NodeData>[], edges: Edge
   for (const id of step.nodeIds) {
     const added = step.accepted?.[id];
     const node = nodes.find((candidate) => candidate.id === id);
-    if (!added || !node || authoringKey(added) === authoringKey(node)) continue;
+    if (!added || !node || acceptedKey(added) === acceptedKey(node)) continue;
     editedSince.add(id);
-    kept.push({ nodeId: id, keys: changedSettings(added, node) });
+    kept.push({ nodeId: id, keys: changedSettings(added, node), wholeNode: true });
   }
   const owned = new Set(step.nodeIds.filter((id) => !editedSince.has(id)));
   step.before = { nodes: Object.fromEntries([...owned].map((id) => [id, null])), edges: {} };
@@ -190,7 +200,7 @@ export function captureOwnAdd(step: OwnAdd, nodes: Node<NodeData>[], edges: Edge
     const restore = Object.keys(change.before).filter(stillSet);
     const unset = change.absent.filter(stillSet);
     const changed = [...Object.keys(change.before), ...change.absent].filter((key) => !stillSet(key));
-    if (changed.length > 0) kept.push({ nodeId: node.id, keys: changed });
+    if (changed.length > 0) kept.push({ nodeId: node.id, keys: changed, wholeNode: false });
     if (restore.length === 0 && unset.length === 0) continue;
     const now = keep(node);
     const params: Record<string, unknown> = { ...node.data.params };
@@ -219,44 +229,121 @@ function changedSettings(was: Node<NodeData>, now: Node<NodeData>): string[] {
   return keys;
 }
 
-/** Two values the same as saved JSON (key order ignored). */
+/** Two values the same as saved JSON (key order ignored), with this
+ * backend's asset links compared as the backend gave them (round 17 of PR
+ * #114, review 16 M2): the canvas shows them absolute (a sync's
+ * rewriteBackendAssetUrls), an Accept reply sends them relative, and both
+ * name the same file. */
 export function sameValue(a: unknown, b: unknown): boolean {
-  return stableJson(a) === stableJson(b);
+  return stableJson(canonicalBackendAssetUrls(a)) === stableJson(canonicalBackendAssetUrls(b));
+}
+
+/** An accepted node's authoring (name and params), asset links canonical. */
+function acceptedKey(node: Node<NodeData>): string {
+  return stableJson(canonicalBackendAssetUrls({ definitionId: node.data.definitionId, label: node.data.label,
+    params: authoredParams(node) }));
 }
 
 /**
- * What the canvas says when Undo of an accepted proposal left settings an
- * agent changed after Accept (GM - Design, round 16 of PR #114, verbatim).
- * `agent` is the presence name, or null: "An agent" opening a sentence, "an
- * agent" inside one. One node with one to three settings names them (three
- * as "“a”, “b” and “c”", GM to confirm); four or more, or settings on more
- * than one node, are counted. `nothingUndone`: the step changed nothing.
+ * A run's own param write-back reached the canvas (a sync with `runParams`,
+ * round 17 of PR #114, review 16 L3): those values are the run's output,
+ * nobody's edit. An accepted proposal's step takes them as what Accept left,
+ * so Undo still puts its keys back and still removes a node it added.
  */
-export function acceptUndoLine(kept: { node: string; settings: string[] }[], agent: string | null,
-  nothingUndone: boolean): string {
-  const lead = agent ?? 'An agent';
-  const inner = agent ?? 'an agent';
-  const total = kept.reduce((count, item) => count + item.settings.length, 0);
-  const named = kept.length === 1 && total >= 1 && total <= 3;
-  if (named) {
-    const quoted = kept[0].settings.map((setting) => `\u201c${setting}\u201d`);
-    const names = quoted.length === 1 ? quoted[0]
-      : `${quoted.slice(0, -1).join(', ')} and ${quoted[quoted.length - 1]}`;
-    const node = `\u201c${kept[0].node}\u201d`;
-    return nothingUndone
-      ? `Nothing was undone. ${lead} changed ${names} for ${node} after you accepted.`
-      : `Undid the proposal except ${names} for ${node}. ${lead} changed ${total === 1 ? 'it' : 'them'} after you accepted.`;
+export function rebaseAcceptedOnRunOutput(step: OwnAdd, before: Node<NodeData>, after: Node<NodeData>): void {
+  const was = before.data.params ?? {};
+  const now = after.data.params ?? {};
+  const keys = [...new Set([...Object.keys(was), ...Object.keys(now)])].filter((key) => !sameValue(was[key], now[key]));
+  if (keys.length === 0) return;
+  const added = step.accepted?.[after.id];
+  if (added) {
+    const params: Record<string, unknown> = { ...added.data.params };
+    for (const key of keys) {
+      if (key in now) params[key] = now[key]; else delete params[key];
+    }
+    step.accepted![after.id] = { ...added, data: { ...added.data, params } };
   }
-  return nothingUndone
-    ? `Nothing was undone. ${lead} changed every setting in the proposal after you accepted.`
-    : `Undid the proposal except ${total} settings ${inner} changed after you accepted.`;
+  for (const change of step.params ?? []) {
+    if (change.nodeId !== after.id || !change.set) continue;
+    for (const key of keys) if (key in change.set) change.set[key] = now[key];
+  }
 }
 
-/** GM's line (round 16 follow-up) for a rename draft dropped on reconnect
- * because an agent renamed the node while Nebula was offline. `agent` is the
- * presence name, or null when unknown. */
-export function droppedRenameLine(agent: string | null, newName: string, draft: string): string {
-  return `${agent ?? 'An agent'} renamed this node \u201c${newName}\u201d while Nebula was offline, so your rename to \u201c${draft}\u201d wasn't saved.`;
+/**
+ * What the canvas says when Undo of an accepted proposal left changes made
+ * after Accept (GM - Design, rounds 16 and 17 of PR #114, verbatim; the
+ * forms GM didn't word are marked).
+ *
+ * `kept`: per node, the settings that changed, and whether it is a node the
+ * proposal added, kept whole (named as one item: "except “<node>”"). `source`:
+ * who changed them all; any mix, or a change with no known source, drops the
+ * actor (GM: "Never guess "An agent"").
+ *
+ * - One node, 1-3 settings: named, "for “<node>”" (that form only when they
+ *   are all on one node). Nothing undone says the same names.
+ * - One kept node, something else undone: "Undid the proposal except
+ *   “<node>”. <who> changed it after you accepted."
+ * - Otherwise counted: "<N> settings <agent> changed" (settings only),
+ *   "<N> changes <agent> made" (kept nodes in the count); with nothing
+ *   undone, "every setting in the proposal".
+ * - "You": the person's other window, "… in another window after you
+ *   accepted." Unknown: "Undid the proposal except <N> changes made after you
+ *   accepted." / "Nothing was undone. “<s>” for “<node>” was changed after you
+ *   accepted."
+ */
+export function acceptUndoLine(kept: { node: string; settings: string[]; wholeNode?: boolean }[],
+  source: ChangeSource, nothingUndone: boolean): string {
+  const total = kept.reduce((count, item) => count + (item.wholeNode && !nothingUndone ? 1 : item.settings.length), 0);
+  const one = kept.length === 1 ? kept[0] : null;
+  const quote = (text: string) => `\u201c${text}\u201d`;
+  const names = (settings: string[]) => {
+    const quoted = settings.map(quote);
+    return quoted.length === 1 ? quoted[0] : `${quoted.slice(0, -1).join(', ')} and ${quoted[quoted.length - 1]}`;
+  };
+  const agent = source.kind === 'agent' ? source.name ?? 'An agent' : null;
+  const agentInner = source.kind === 'agent' ? source.name ?? 'an agent' : null;
+  const where = source.kind === 'you' ? ' in another window' : '';
+  const lead = agent ?? 'You';
+  // One node whose 1-3 settings are named ("for “<node>”").
+  const named = one && one.settings.length >= 1 && one.settings.length <= 3 && (nothingUndone || !one.wholeNode);
+  if (nothingUndone) {
+    if (named) {
+      if (source.kind === 'unknown') {
+        return `Nothing was undone. ${names(one.settings)} for ${quote(one.node)} ${one.settings.length === 1 ? 'was' : 'were'} changed after you accepted.`;
+      }
+      return `Nothing was undone. ${lead} changed ${names(one.settings)} for ${quote(one.node)}${where} after you accepted.`;
+    }
+    // Builder's forms for "You" and unknown (GM worded the agent's).
+    if (source.kind === 'unknown') return 'Nothing was undone. Every setting in the proposal was changed after you accepted.';
+    return `Nothing was undone. ${lead} changed every setting in the proposal${where} after you accepted.`;
+  }
+  if (source.kind === 'unknown') {
+    return `Undid the proposal except ${total} ${total === 1 ? 'change' : 'changes'} made after you accepted.`;
+  }
+  if (one?.wholeNode) {
+    return `Undid the proposal except ${quote(one.node)}. ${lead} changed it${where} after you accepted.`;
+  }
+  if (named) {
+    return `Undid the proposal except ${names(one.settings)} for ${quote(one.node)}. ${lead} changed ${one.settings.length === 1 ? 'it' : 'them'}${where} after you accepted.`;
+  }
+  const who = agentInner ?? 'you';
+  if (kept.some((item) => item.wholeNode)) {
+    return `Undid the proposal except ${total} changes ${who} made${where} after you accepted.`;
+  }
+  return `Undid the proposal except ${total} settings ${who} changed${where} after you accepted.`;
+}
+
+/** GM's lines (round 16 follow-up, round 17) for a rename draft dropped on
+ * reconnect because the node was renamed while Nebula was offline, by who
+ * renamed it: an agent, the person in another window, or unknown. */
+export function droppedRenameLine(source: ChangeSource, newName: string, draft: string): string {
+  if (source.kind === 'you') {
+    return `You renamed this node \u201c${newName}\u201d in another window while Nebula was offline, so your rename to \u201c${draft}\u201d here wasn't saved.`;
+  }
+  if (source.kind === 'unknown') {
+    return `This node was renamed \u201c${newName}\u201d while Nebula was offline, so your rename to \u201c${draft}\u201d wasn't saved.`;
+  }
+  return `${source.name ?? 'An agent'} renamed this node \u201c${newName}\u201d while Nebula was offline, so your rename to \u201c${draft}\u201d wasn't saved.`;
 }
 
 /** The param keys `updated` sets to a value other than `was` has, with the

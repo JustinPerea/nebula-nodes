@@ -266,7 +266,7 @@ async def test_save_and_its_handoff_still_refuse_a_protected_reference(workspace
         # An agent switches away: the tab's last save lands as a handoff, checked the same way.
         await client.post("/api/projects", json={"name": "Agent's", "workspaceRevision": first["workspaceRevision"]},
                           headers=AGENT)
-        assert store.read()["handoff"]["projectId"] == first_id
+        assert first_id in store.read()["handoffs"]
         before = store.path.read_bytes()
         response = await client.put(f"/api/projects/{first_id}", json={
             "workspaceRevision": first["workspaceRevision"], "snapshot": _snapshot(_secret())})

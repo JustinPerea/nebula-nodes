@@ -59,6 +59,13 @@ a {
   pointer-events: none;
 }
 
+/* GM r17 (C): the home screen has one bar (72px, project-home.css) and no
+   selection toolbar: the banner sits right under it with the same 8px gap,
+   above the welcome heading instead of over it. */
+.backend-connection[data-placement='home'] {
+  top: 81px;
+}
+
 /* A blocked edit nudges the banner once (GM, round 14): it springs from a
    slightly larger scale back to rest, on an underdamped spring (zeta 0.5,
    2.4 Hz) sampled into linear(). */

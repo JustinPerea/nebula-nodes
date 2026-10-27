@@ -103,13 +103,13 @@ export const RECOVERY_ID_FORGET_TAIL = " has a saved World Labs recovery ID. Che
  * is how many of the `count` nodes hold World Labs state; `name` the one
  * node's card title in quotes (recordNodeName).
  */
-export function heldDeleteText(count: number, unlock: boolean, held = 1, name?: string, blocker?: string): string {
+export function heldDeleteText(count: number, unlock: boolean, held = 1, name?: string): string {
   if (count === 1) {
     const heading = name ? `Couldn't delete ${name}.` : "Couldn't delete the node.";
-    // GM, round 16: the reason says "It" when the node holding the ID is the
-    // one being deleted, and names the other node when it isn't.
-    const holder = blocker && blocker !== name ? blocker : 'It';
-    return unlock ? `${heading} ${WORLD_LABS_NEEDS_CHECK}` : `${heading} ${holder}${RECOVERY_ID_FORGET_TAIL}`;
+    // GM, round 16: the reason says "It": a single node's delete is only ever
+    // refused for that node's own World Labs state (round 17 removed the
+    // never-passed parameter for naming another node).
+    return unlock ? `${heading} ${WORLD_LABS_NEEDS_CHECK}` : `${heading} It${RECOVERY_ID_FORGET_TAIL}`;
   }
   if (!unlock && held >= count) {
     return "Couldn't delete them. They're waiting on World Labs. Check Marble and Run History.";

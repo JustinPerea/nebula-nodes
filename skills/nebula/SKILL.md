@@ -240,6 +240,12 @@ and nothing was spent. `nebula result` on it prints "Run <id> was stopped
 before it started, so nothing ran and nothing was spent." To run the same
 nodes again, start a new run.
 
+If Nebula has no record of the id at all (it may have run before Nebula
+restarted, or the id is wrong), both commands print "Nebula has no record
+of run <id>. If it started before Nebula restarted, check Run History for
+what it did." Don't tell the person nothing ran: ask them to check Run
+History in Nebula.
+
 A run where any node failed exits 1 and prints each node's error (a missing
 key refuses the whole run before anything is called or spent). The card on
 the canvas shows the same error. `nebula look` prints a failed node's error

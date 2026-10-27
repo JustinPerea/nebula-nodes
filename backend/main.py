@@ -606,8 +606,7 @@ def _retry_graph_recovery_bootstrap(action: str) -> bool:
 def _paid_fence_unverifiable(action: str) -> HTTPException:
     """507: the cross-process paid-start fence's storage can't be read or
     written, so nothing that needs the fence goes on."""
-    return HTTPException(
-        status_code=507,
+    return RunSafetyStorageRefusal(
         detail=(
             f"Cannot {action} because Nebula cannot verify the durable "
             "World Labs paid-start fence."
@@ -705,8 +704,7 @@ def _seed_shared_graph_recoveries_for_api(
     except ProviderRecoveryConflictError as exc:
         raise refusal_copy.refusal(409, str(exc), CANVAS_JOB_CHANGED_PERSON, route="canvas") from exc
     except ProviderRecoveryPersistenceError as exc:
-        raise HTTPException(
-            status_code=507,
+        raise RunSafetyStorageRefusal(
             detail=(
                 "Cannot commit graph-carried World Labs recovery state because "
                 "Nebula could not save the shared recovery journal"
@@ -743,8 +741,7 @@ def _commit_graph_candidate_with_recoveries(
             ProviderRecoveryPersistenceError,
             ValueError,
         ) as rollback_error:
-            raise HTTPException(
-                status_code=507,
+            raise RunSafetyStorageRefusal(
                 detail=(
                     "Graph storage rejected the candidate and Nebula could not "
                     "roll back its newly seeded provider recovery records; "
@@ -815,9 +812,33 @@ def _storage_error_body(exc: ProjectStoreError) -> dict[str, Any]:
             **({"limit": exc.limit} if isinstance(exc, ProjectLimitError) else {})}
 
 
+# Which store a 507 came from (round 17 of PR #114, review 16 L5), so the
+# canvas words a refused run start by its cause: the project store (catalog
+# or project storage unreadable) or the run-safety stores (the paid-start
+# fence, the recovery journal, durable Stop state). Additive, beside detail.
+PROJECT_STORE_STORAGE_CODE = "project_store"
+RUN_SAFETY_STORAGE_CODE = "run_safeguards"
+
+
 @app.exception_handler(ProjectStoreError)
 async def project_storage_error(request, exc: ProjectStoreError):
-    return JSONResponse(status_code=413 if isinstance(exc, ProjectLimitError) else 507, content=_storage_error_body(exc))
+    if isinstance(exc, ProjectLimitError):
+        return JSONResponse(status_code=413, content=_storage_error_body(exc))
+    return JSONResponse(status_code=507, content={**_storage_error_body(exc), "code": PROJECT_STORE_STORAGE_CODE})
+
+
+class RunSafetyStorageRefusal(HTTPException):
+    """507: a run-safety store (the paid-start fence, the World Labs recovery
+    journal, durable Stop state) couldn't be read or written, before any
+    provider call. Answers ``code: "run_safeguards"`` beside ``detail``."""
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(status_code=507, detail=detail)
+
+
+@app.exception_handler(RunSafetyStorageRefusal)
+async def run_safety_storage_refusal(request, exc: RunSafetyStorageRefusal):
+    return JSONResponse(status_code=507, content={"detail": exc.detail, "code": RUN_SAFETY_STORAGE_CODE})
 
 
 class ProjectSizeRefusal(HTTPException):
@@ -969,10 +990,12 @@ def _run_canvas_now() -> tuple[str | None, int]:
     return project_id, canvas_undo_book.epoch(project_id)
 
 
-def _register_run(run_id: str, task: asyncio.Task[Any]) -> Any:
-    """execution_runs.register, noting the canvas the run starts on. Callers
-    check _refuse_if_graph_moved right before, with no await between."""
-    return execution_runs.register(run_id, task, canvas=_run_canvas_now())
+def _register_run(run_id: str, task: asyncio.Task[Any], canvas: tuple[str | None, int]) -> Any:
+    """execution_runs.register, noting the canvas the run starts on
+    (``canvas``, _run_canvas_now()). Callers read it, and check
+    _refuse_if_graph_moved, before the task exists, with no await between:
+    nothing that reads storage can fail once the task is made."""
+    return execution_runs.register(run_id, task, canvas=canvas)
 
 
 def _adopt_run_canvases(new_project_id: str) -> None:
@@ -1100,7 +1123,7 @@ async def project_workspace_fence(request: Request, call_next):
         except HTTPException as exc:
             return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
         except ProjectStoreError as exc:
-            return JSONResponse(status_code=507, content=_storage_error_body(exc))
+            return JSONResponse(status_code=507, content={**_storage_error_body(exc), "code": PROJECT_STORE_STORAGE_CODE})
         return await call_next(request)
     finally:
         _execution_workspace_context.reset(execution_token)
@@ -8843,7 +8866,7 @@ async def _finalize_cancelled_execution(
         project_id=_run_project(),
     )
     if synced:
-        await _broadcast_graph_sync()
+        await _broadcast_graph_sync(run_params=run_id)
     await manager.broadcast(GraphCancelledEvent(run_id=run_id))
 
 
@@ -8916,8 +8939,7 @@ def _assert_execution_admissible(run_id: str) -> None:
     except ProviderStartCancellationCapacityError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ProviderStartPersistenceError as exc:
-        raise HTTPException(
-            status_code=507,
+        raise RunSafetyStorageRefusal(
             detail=(
                 "Nebula cannot verify durable pre-admission Stop state; no "
                 "provider request was sent"
@@ -9044,8 +9066,7 @@ def _claim_fresh_paid_worldlabs_starts(
                                    route="run") from exc
     except ProviderRecoveryPersistenceError as exc:
         provider_recovery_store.release_reservations(run_id)
-        raise HTTPException(
-            status_code=507,
+        raise RunSafetyStorageRefusal(
             detail=(
                 "Nebula cannot durably register the supplied World Labs recovery "
                 "ID; no provider request was sent"
@@ -9059,8 +9080,7 @@ def _claim_fresh_paid_worldlabs_starts(
         raise _start_refusal(exc) from exc
     except ProviderStartPersistenceError as exc:
         provider_recovery_store.release_reservations(run_id)
-        raise HTTPException(
-            status_code=507,
+        raise RunSafetyStorageRefusal(
             detail=(
                 "Nebula cannot verify durable paid-start safety storage; no "
                 "World Labs request was sent"
@@ -9133,6 +9153,9 @@ async def execute(request: ExecuteRequest) -> dict:
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
         raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
+    # This process saw the start begin (round 17, review 16 L1): a Stop that
+    # finds no record of it may say it never started.
+    execution_runs.note_start_begun(run_id)
     _note_run(run_id)
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
@@ -9177,6 +9200,10 @@ async def execute(request: ExecuteRequest) -> dict:
         # A Stop that arrived while this start awaited (round 16, M2: the tab
         # stops a run whose status check answered 404) refuses it here.
         _assert_execution_admissible(run_id)
+        # The canvas the run registers on, read now (round 17, review 16 L5):
+        # a project-store read that fails after the task exists could leave
+        # a started run behind a 507 that says nothing was started.
+        run_canvas = _run_canvas_now()
         _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=nodes)
     except BaseException:
         _return_hold(run_id)
@@ -9209,7 +9236,7 @@ async def execute(request: ExecuteRequest) -> dict:
                 # video-edit also enrich params. Without a final graphSync the
                 # backend persisted those edits while the live Canvas stayed
                 # stale until reload.
-                await _broadcast_graph_sync()
+                await _broadcast_graph_sync(run_params=run_id)
             print("[exec] _run completed successfully", file=sys.stderr, flush=True)
         except asyncio.CancelledError:
             await _finalize_cancelled_execution(nodes, run_id, preserve_graph_params=request.preserve_graph_params,
@@ -9234,7 +9261,7 @@ async def execute(request: ExecuteRequest) -> dict:
     run_coroutine = _run()
     try:
         task = asyncio.create_task(run_coroutine)
-        _register_run(run_id, task)
+        _register_run(run_id, task, run_canvas)
         _watch_for_cross_process_stop(run_id, task)
     except ExecutionCancelledBeforeStartError as exc:
         if task is None:
@@ -9271,6 +9298,7 @@ async def execute(request: ExecuteRequest) -> dict:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
+        _return_hold(run_id)  # it never had a turn (round 17, review 16 L5)
         canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
         raise
 
@@ -9287,6 +9315,9 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
         raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
+    # This process saw the start begin (round 17, review 16 L1): a Stop that
+    # finds no record of it may say it never started.
+    execution_runs.note_start_begun(run_id)
     _note_run(run_id)
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
@@ -9334,6 +9365,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     try:
         _refuse_if_graph_moved(fence)  # as in execute
         _assert_execution_admissible(run_id)  # as in execute
+        run_canvas = _run_canvas_now()  # as in execute
         _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=sub_nodes)
     except BaseException:
         _return_hold(run_id)
@@ -9356,7 +9388,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
                 raise asyncio.CancelledError
             if not request.preserve_graph_params and _sync_params_to_cli_graph(sub_nodes, submitted=submitted,
                                                                                 run_id=run_id):
-                await _broadcast_graph_sync()
+                await _broadcast_graph_sync(run_params=run_id)
         except asyncio.CancelledError:
             await _finalize_cancelled_execution(sub_nodes, run_id, preserve_graph_params=request.preserve_graph_params,
                                                 submitted=submitted)
@@ -9374,7 +9406,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
 
     try:
         task = asyncio.create_task(_run())
-        _register_run(run_id, task)
+        _register_run(run_id, task, run_canvas)
         _watch_for_cross_process_stop(run_id, task)
     except ExecutionCancelledBeforeStartError as exc:
         await asyncio.gather(task, return_exceptions=True)
@@ -9396,7 +9428,12 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
         canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception:
+        # The task never had a turn (nothing awaited since it was made): it
+        # never starts, so its hold goes back (round 17, review 16 L5).
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
+        _return_hold(run_id)
         canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
         raise
 
@@ -9452,6 +9489,18 @@ def _run_cancelled_actor(run_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
     return stopped_by, {key: started_by[key] for key in ("kind", "name") if started_by.get(key)}
 
 
+def _tombstoned_answer(run_id: str) -> dict[str, Any]:
+    """A Stop's answer for a run id with no record here: cancelled, and the id
+    can't start here from now on (``pendingAdmission``, which the canvas
+    settles by). ``noRecord`` when this process never saw that run's start
+    begin (round 17 of PR #114, review 16 L1): it may have run before a
+    restart, been pruned, or never arrived, so nobody may say it never ran."""
+    answer: dict[str, Any] = {"runId": run_id, "status": "cancelled", "pendingAdmission": True}
+    if not execution_runs.start_seen(run_id):
+        answer["noRecord"] = True
+    return answer
+
+
 @app.get("/api/executions/{run_id}")
 async def get_execution_status(run_id: str) -> dict:
     record = execution_runs.get(run_id)
@@ -9459,7 +9508,7 @@ async def get_execution_status(run_id: str) -> dict:
         # A Stop arrived before this run did (round 16 of PR #114, M2): the id
         # is tombstoned and can't start here, so it reads as cancelled.
         if execution_runs.tombstoned(run_id):
-            return {"runId": run_id, "status": "cancelled", "pendingAdmission": True}
+            return _tombstoned_answer(run_id)
         raise refusal_copy.not_found(f"run '{run_id}' not found", "run", "runs")
     return {"runId": run_id, "status": record.status}
 
@@ -9487,8 +9536,7 @@ async def cancel_execution(run_id: str) -> dict:
             execution_runs.cancel(run_id)
         else:
             execution_runs.tombstone(run_id)
-        raise HTTPException(
-            status_code=507,
+        raise RunSafetyStorageRefusal(
             detail="Could not durably record the pre-admission Stop intent",
         ) from exc
     except ValueError as exc:
@@ -9505,7 +9553,7 @@ async def cancel_execution(run_id: str) -> dict:
         # delayed POST while bounded exact-journal capacity is recovered.
         if _try_compact_execution_cancellation(run_id):
             await _broadcast_graph_sync()
-        return {"runId": run_id, "status": "cancelled", "pendingAdmission": True}
+        return _tombstoned_answer(run_id)
     # Yield once so a cooperative task can process CancelledError and the
     # registry can report the terminal state in this acknowledgement.
     await asyncio.sleep(0)
@@ -9538,8 +9586,7 @@ async def acknowledge_execution_cancellation(run_id: str) -> dict:
             detail="Wait for all World Labs paid work to become terminal first",
         ) from exc
     except ProviderStartPersistenceError as exc:
-        raise HTTPException(
-            status_code=507,
+        raise RunSafetyStorageRefusal(
             detail="Could not durably compact the execution cancellation",
         ) from exc
     except ValueError as exc:
@@ -9885,6 +9932,9 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
         raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
+    # This process saw the start begin (round 17, review 16 L1): a Stop that
+    # finds no record of it may say it never started.
+    execution_runs.note_start_begun(run_id)
     _note_run(run_id)
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
@@ -9971,6 +10021,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     try:
         _refuse_if_graph_moved(fence)  # as in execute
         _assert_execution_admissible(run_id)  # as in execute
+        run_canvas = _run_canvas_now()  # as in execute
         _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=sub_nodes)
     except BaseException:
         _return_hold(run_id)
@@ -10067,7 +10118,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
         # is cancelled after create_task succeeds but before _run receives its
         # first event-loop turn (in which case the coroutine's finally never
         # executes).
-        _register_run(run_id, task)
+        _register_run(run_id, task, run_canvas)
         _watch_for_cross_process_stop(run_id, task)
     except ExecutionCancelledBeforeStartError as exc:
         if task is None:
@@ -10101,6 +10152,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
+        _return_hold(run_id)  # it never had a turn (round 17, review 16 L5)
         raise
 
     return {
@@ -10280,9 +10332,15 @@ def _graph_edit_origin() -> dict[str, Any]:
 async def _broadcast_graph_sync(
     *, graph_replaced: bool = False, reason: str = "import", moved: Iterable[str] = (), edit: bool = False,
     project_switch: dict[str, Any] | None = None, arranged: dict[str, Any] | None = None,
-    cleared: bool = False,
+    cleared: bool = False, run_params: str | None = None,
 ) -> dict[str, Any]:
     """Push the current CLI graph to all connected frontends via WebSocket.
+
+    `run_params` (a run id) marks a run's own param write-back
+    (_sync_params_to_cli_graph: a handler that enriches params, such as
+    video-edit). It carries ``runParams`` and no ``edit``: the canvas treats
+    those values as run output, not anyone's edit (round 17 of PR #114,
+    review 16 L3).
 
     `cleared` marks the sync of a Clear (DELETE /api/graph): node ids start
     again at n1 in the same project, so a canvas treats it as a replacement
@@ -10361,6 +10419,7 @@ async def _broadcast_graph_sync(
                                  **({"moved": moved_ids} if moved_ids and not graph_replaced else {}),
                                  **({"projectSwitch": project_switch} if project_switch and graph_replaced else {}),
                                  **({"arranged": arranged} if arranged and not graph_replaced else {}),
+                                 **({"runParams": run_params} if run_params and not graph_replaced else {}),
                                  **({"edit": _graph_edit_origin()}
                                     if edit and (not graph_replaced or reason == "import") else {})})
     if graph_replaced:
@@ -11901,8 +11960,7 @@ async def delete_provider_recovery(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except ProviderRecoveryPersistenceError as exc:
-            raise HTTPException(
-                status_code=507,
+            raise RunSafetyStorageRefusal(
                 detail="Could not durably delete provider recovery checkpoint",
             ) from exc
         current = cli_graph.nodes.get(node_id)
@@ -11968,8 +12026,7 @@ async def acknowledge_provider_start_ambiguity(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ProviderStartPersistenceError as exc:
-        raise HTTPException(
-            status_code=507,
+        raise RunSafetyStorageRefusal(
             detail="Could not durably acknowledge World Labs paid-start hold",
         ) from exc
     if removed:
@@ -14659,20 +14716,54 @@ def _switch_actor() -> dict[str, Any] | None:
     return {key: actor[key] for key in ("kind", "name", "color") if actor.get(key)}
 
 
-def _begin_switch(catalog: dict[str, Any], actor: dict[str, Any] | None) -> dict[str, Any] | None:
+# How many projects an agent's switches left that a tab may still save into
+# (round 17 of PR #114, review 16 M1). A tab follows a switch within moments
+# online; offline it waits, and an agent may switch again (or back) meanwhile.
+_MAX_SWITCH_HANDOFFS = 32
+
+
+def _switch_handoffs(catalog: dict[str, Any]) -> dict[str, str]:
+    """{projectId: the workspace revision the canvas had when an agent's
+    switch left that project}. A catalog written before round 17 kept one
+    ``handoff`` ({projectId, revision}); it reads as one of these."""
+    handoffs = {key: value for key, value in (catalog.get("handoffs") or {}).items()
+                if isinstance(key, str) and isinstance(value, str)} if isinstance(catalog.get("handoffs"), dict) else {}
+    legacy = catalog.get("handoff")
+    if isinstance(legacy, dict) and isinstance(legacy.get("projectId"), str) and isinstance(legacy.get("revision"), str):
+        handoffs.setdefault(legacy["projectId"], legacy["revision"])
+    return handoffs
+
+
+def _begin_switch(catalog: dict[str, Any], actor: dict[str, Any] | None,
+                  opening: str | None = None) -> dict[str, Any] | None:
     """Note what was open before a switch. For a switch the person didn't
     make, their open tab may still hold a few unsaved changes (a pan, a run
-    record) for the project it was showing: `handoff` lets that tab save them
-    into it (save_project), with the revision it had, until the next switch."""
+    record) for the project it was showing: a handoff lets that tab save them
+    into it (save_project), with the revision it had.
+
+    One handoff per project an agent's switches left (round 17 of PR #114,
+    review 16 M1): a tab that was offline through two switches (A to B to C)
+    still saves into A. A project's handoff ends when that project is opened
+    again (``opening``; reopening the open project takes a fresh one, as
+    before) and every one ends at the person's own switch."""
     previous_id = catalog.get("activeProjectId")
     previous = catalog["projects"].get(previous_id) if previous_id else None
+    handoffs = _switch_handoffs(catalog)
+    catalog.pop("handoff", None)
     if actor is None:
-        catalog.pop("handoff", None)
+        catalog.pop("handoffs", None)
         return None
+    if opening is not None:
+        handoffs.pop(opening, None)
     if previous is not None:
-        catalog["handoff"] = {"projectId": previous_id, "revision": catalog["workspaceRevision"]}
+        handoffs.pop(previous_id, None)
+        handoffs[previous_id] = catalog["workspaceRevision"]
+    while len(handoffs) > _MAX_SWITCH_HANDOFFS:
+        handoffs.pop(next(iter(handoffs)))
+    if handoffs:
+        catalog["handoffs"] = handoffs
     else:
-        catalog.pop("handoff", None)
+        catalog.pop("handoffs", None)
     return {
         "actor": actor,
         "previousProjectId": previous_id if previous is not None else None,
@@ -14842,7 +14933,7 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
                                                                  ingress=verdict, size_checked=False)
         candidate._counter = max(candidate._counter, project.get("_nodeCounter", 0))
         project["lastOpenedAt"] = project_now()
-        start = _begin_switch(catalog, actor)
+        start = _begin_switch(catalog, actor, opening=project_id)
         catalog["activeProjectId"] = project_id
         catalog["workspaceRevision"] = uuid4().hex
         _commit_project_workspace(catalog, candidate)
@@ -14882,14 +14973,14 @@ def _save_project(project_id: str, body: dict[str, Any], *, ingress: _IngressVer
     worker thread, by the route)."""
     with project_store.transaction() as catalog:
         project = _project_id_or_404(project_id, catalog)
-        handoff = catalog.get("handoff") or {}
-        if ("snapshot" in body and handoff.get("projectId") == project_id
-                and body.get("workspaceRevision") == handoff.get("revision")):
+        handoff = _switch_handoffs(catalog).get(project_id)
+        if ("snapshot" in body and handoff is not None and body.get("workspaceRevision") == handoff):
             # Not once: an autosave already in flight at the switch lands
             # first, and the tab's own last save must still land after it.
-            # The next switch (anyone's) ends the handoff. The project may
-            # be the open one again: an agent reopened the project the tab
-            # was showing, which reloads it from what was saved.
+            # It ends when this project is opened again or the person
+            # switches (_begin_switch). The project may be the open one
+            # again: an agent reopened the project the tab was showing,
+            # which reloads it from what was saved.
             _save_handoff(project, body["snapshot"], ingress=ingress)
             refresh_metadata(project)
             project_store.commit(catalog)
@@ -15411,7 +15502,8 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
         # Right before it registers, with no await between (round 11): the
         # run notes this canvas as the one its write-backs go to.
         _refuse_if_graph_moved(fence)
-    except HTTPException:
+        run_canvas = _run_canvas_now()  # as in execute
+    except (HTTPException, ProjectStoreError):
         _return_hold(run_id)
         canvas_events.forget_run(run_id)
         raise
@@ -15421,7 +15513,7 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     # Registered like canvas runs: it fences project switching until it ends,
     # and DELETE /api/executions/{runId} (`nebula cancel`) stops it.
     try:
-        _register_run(run_id, task)
+        _register_run(run_id, task, run_canvas)
     except (ExecutionCancelledBeforeStartError, ExecutionCancellationCapacityError, ValueError) as exc:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
@@ -15546,7 +15638,7 @@ async def _execute_cli_run(
     _sync_params_to_cli_graph(sub_nodes, run_id=run_id)
 
     # Sync outputs to frontend canvas
-    await _broadcast_graph_sync()
+    await _broadcast_graph_sync(run_params=run_id)
 
     skipped_note = f", {len(skipped)} skipped by a gate" if skipped else ""
     if errors:
@@ -15649,7 +15741,11 @@ async def get_graph_run(run_id: str, wait: float = 0) -> dict[str, Any]:
     if (_cli_runs.get(run_id) is None and execution_runs.get(run_id) is None and not reports.known(run_id)
             and execution_runs.tombstoned(run_id)):
         # A Stop beat this run's start (round 16 of PR #114, M2): the id can't
-        # start here, so nothing ran and nothing was spent.
+        # start here, so nothing ran and nothing was spent. Only when this
+        # process saw that start begin (round 17, review 16 L1); otherwise it
+        # has no record of the run, which may have run before a restart.
+        if not execution_runs.start_seen(run_id):
+            return {"runId": run_id, "status": "unknown", "source": "canvas", "noRecord": True}
         return {"runId": run_id, "status": "cancelled", "source": "canvas", "neverStarted": True}
     if _cli_runs.get(run_id) is None and (execution_runs.get(run_id) is not None or reports.known(run_id)):
         response = await _canvas_run_response(run_id, wait)

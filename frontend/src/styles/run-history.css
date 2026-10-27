@@ -252,6 +252,12 @@ body.app-slava-restraint .run-history__action:disabled {
   opacity: 0.35;
   cursor: default;
 }
+/* GM r17 (B): while a run is going, Stop is at full opacity like the
+   toolbar's Stop, not dimmed like the idle header icons (0.62). */
+body.app-slava-restraint .run-history__stop:not(:disabled) {
+  opacity: 1;
+  color: var(--sr-ink, rgba(255, 255, 255, 0.92));
+}
 
 /* ---- legacy (non-Slava) visual treatment ---- */
 body:not(.app-slava-restraint) .run-history__item {

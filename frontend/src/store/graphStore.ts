@@ -94,7 +94,7 @@ import { NOTHING_RAN_LINE, OTHER_NODE_LINE, SHOT_NOT_STARTED_LINE, validationRea
 import {
   RUNTIME_FIELDS, applySlice, captureOwnAdd, diffCanvas, edgeKey, editArrivedText, foldArrange, foreignSource, isForeignEdit,
   isOwnAdd, isOwnEcho, isSliceStep, ownAddStep, paramChange, renameOwnedNode, restoreRequest, undoNoticeText,
-  acceptUndoLine, ownAddIsEmpty, sameValue, type KeptAfterAccept,
+  acceptUndoLine, ownAddIsEmpty, rebaseAcceptedOnRunOutput, sameValue, type ChangeSource, type KeptAfterAccept,
   type EditOrigin, type ForeignEdit, type OwnAdd, type OwnParamChange, type RestoreBody,
 } from '../lib/canvasUndo';
 import { TAB_ID } from '../lib/tabId';
@@ -2252,6 +2252,13 @@ async function reconcileWorldLabsExecutionStatus(
     if (!paidStart && error instanceof RequestFailedError && error.status === 404) {
       return fenceUnknownRun(runId, set, get);
     }
+    // A paid World Labs start gets the same Stop (round 17, review 16 L4), so
+    // a start still on its way can't register later and send events to a run
+    // the person was told is uncertain. It keeps the uncertain state and its
+    // unlock: only Marble can say whether the provider call went out.
+    if (paidStart && error instanceof RequestFailedError && error.status === 404) {
+      fencePaidUnknownRun(runId, set, get);
+    }
     updateRunPhase(runId, cancellationRequestedRunIds.has(runId) ? 'cancelling' : 'uncertain', set);
     set((state) => ({
       ...ownershipState(),
@@ -2285,16 +2292,42 @@ async function reconcileWorldLabsExecutionStatus(
   return 'terminal';
 }
 
+/** How long the 404 rule's Stop waits for an answer (round 17 of PR #114,
+ * review 16 L2), as long as other answers the tab waits on (chatClear). */
+export const STOP_ANSWER_MS = 15_000;
+
+/** DELETE the run id, giving up after STOP_ANSWER_MS: a backend that took
+ * the connection but stalls (a journal lock another process holds) never
+ * keeps the tab on the run. Rejects with `timedOut` set when it gave up. */
+async function cancelWithinTimeLimit(runId: string): Promise<ExecutionCancellationResult> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), STOP_ANSWER_MS);
+  try {
+    return await apiCancelExecution(runId, controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) throw Object.assign(new Error('The Stop got no answer in time.'), { timedOut: true, cause: error });
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** The 404 rule's Stop (round 16 of PR #114, M2): DELETE the run id first,
- * then settle by its answer. */
+ * then settle by its answer. An unanswered Stop keeps the run uncertain
+ * ("may still be going") and is sent again on the next check; one that got
+ * no answer in time says GM's Stop line once (round 17, review 16 L2). */
 async function fenceUnknownRun(runId: string, set: GraphSet, get: GraphGet): Promise<'terminal' | 'active' | 'unknown' | 'stale'> {
   let result: ExecutionCancellationResult;
   try {
-    result = await apiCancelExecution(runId);
+    result = await cancelWithinTimeLimit(runId);
   } catch (error) {
     console.warn('[nebula] Stop for a run the backend has no record of failed:', error);
     if (!ownsRun(runId)) return 'stale';
     updateRunPhase(runId, cancellationRequestedRunIds.has(runId) ? 'cancelling' : 'uncertain', set);
+    if (((error as { timedOut?: boolean }).timedOut || isBackendOffline()) && !stopFailureNoted.has(runId)) {
+      stopFailureNoted.add(runId);
+      get().notify(STOP_FAILED_OFFLINE_LINE);
+    }
     scheduleWorldLabsStatusReconciliation(runId, set, get);
     return 'unknown';
   }
@@ -2313,6 +2346,28 @@ async function fenceUnknownRun(runId: string, set: GraphSet, get: GraphGet): Pro
   }
   settleTrackedExecutionStatus(result.status, runId, set, get);
   return 'terminal';
+}
+
+/** Paid World Labs starts whose 404 Stop was sent, once each. */
+const paidFenceSent = new Set<string>();
+
+/** The 404 rule's Stop for a paid World Labs start (review 16 L4): sent once,
+ * never settling the run (its uncertain state and unlock stay). If the start
+ * registered meanwhile, the Stop reached it and the run is tracked to its end. */
+function fencePaidUnknownRun(runId: string, set: GraphSet, get: GraphGet): void {
+  if (paidFenceSent.has(runId)) return;
+  paidFenceSent.add(runId);
+  if (paidFenceSent.size > 1000) paidFenceSent.delete(paidFenceSent.values().next().value!);
+  void cancelWithinTimeLimit(runId).then((result) => {
+    if (!ownsRun(runId) || result.pendingAdmission) return;
+    if (result.status === 'cancelling') {
+      updateRunPhase(runId, 'cancelling', set);
+      scheduleWorldLabsStatusReconciliation(runId, set, get);
+    }
+  }, (error: unknown) => {
+    // Stop stays on the run; the person's own Stop sends it again.
+    console.warn('[nebula] Stop for an uncertain World Labs run failed:', error);
+  });
 }
 
 function scheduleWorldLabsStatusReconciliation(
@@ -3230,41 +3285,102 @@ async function reconcilePendingNodeCreation(
  * empties both stacks: their steps describe a graph that is gone, and undoing
  * one would now write that graph into this one.
  */
-/** Who last changed each node from outside this tab (an agent's presence
- * name, or null for another window or an outside app), for the line an
- * accepted proposal's partial undo says (round 16 of PR #114, M5). */
-const foreignTouches = new Map<string, string | null>();
-function noteForeignTouches(nodeIds: string[], agent: string | null): void {
-  for (const id of nodeIds) {
-    foreignTouches.delete(id);
-    foreignTouches.set(id, agent);
+/** Who last changed each setting of each node from outside this tab, by
+ * node then key ("label" for its name), for the lines an accepted proposal's
+ * partial undo and a dropped rename say (rounds 16 and 17 of PR #114, M5 and
+ * review 16 L3). An agent's edit names it; another window of the person's is
+ * "you"; a change with no source on it (an outside app, the sync a reconnect
+ * starts with) is unknown, so it is never put on an agent. */
+const foreignTouches = new Map<string, Map<string, ChangeSource>>();
+
+/** The settings (param keys, and "label" for the name) that differ. */
+function touchedKeys(was: Node<NodeData>, now: Node<NodeData>): string[] {
+  const before = was.data.params ?? {};
+  const after = now.data.params ?? {};
+  const keys = [...new Set([...Object.keys(before), ...Object.keys(after)])]
+    .filter((key) => !sameValue(before[key], after[key]));
+  if (was.data.label !== now.data.label) keys.push('label');
+  return keys;
+}
+
+/** Note who changed what on each node a sync changed (nodes it kept as they
+ * were are the same objects, so they are skipped cheaply). */
+function noteForeignTouches(previous: Node<NodeData>[], next: Node<NodeData>[], source: ChangeSource): void {
+  const before = new Map(previous.map((node) => [node.id, node]));
+  for (const node of next) {
+    const was = before.get(node.id);
+    if (!was || was === node) continue;
+    const keys = touchedKeys(was, node);
+    if (keys.length === 0) continue;
+    const touches = foreignTouches.get(node.id) ?? new Map<string, ChangeSource>();
+    foreignTouches.delete(node.id);
+    for (const key of keys) touches.set(key, source);
+    foreignTouches.set(node.id, touches);
   }
   while (foreignTouches.size > 2000) foreignTouches.delete(foreignTouches.keys().next().value!);
 }
 
-/** The agent whose edit last touched `nodeId` in this tab, by presence
- * name; null when unknown (or the edit came from a window with no name). */
-export function lastForeignToucher(nodeId: string): string | null {
-  return foreignTouches.get(nodeId) ?? null;
+/** Who last changed `key` ("label" for the name) of `nodeId` from outside
+ * this tab; unknown when nobody this tab can name did. */
+export function lastForeignToucher(nodeId: string, key = 'label'): ChangeSource {
+  return foreignTouches.get(nodeId)?.get(key) ?? { kind: 'unknown' };
+}
+
+function sourceOf(origin: EditOrigin): ChangeSource {
+  const source = foreignSource(origin);
+  if (source === 'agent') return { kind: 'agent', name: origin.actor?.name ?? null };
+  if (source === 'window') return { kind: 'you' };
+  return { kind: 'unknown' };
+}
+
+/** One source for every change an undo kept, or unknown when they differ
+ * (two agents, an agent and another window) or any one has no source. */
+function keptSource(kept: KeptAfterAccept[]): ChangeSource {
+  let found: ChangeSource | null = null;
+  for (const item of kept) {
+    const keys = item.keys.length > 0 ? item.keys : ['*'];
+    for (const key of keys) {
+      const source = foreignTouches.get(item.nodeId)?.get(key) ?? { kind: 'unknown' as const };
+      if (source.kind === 'unknown') return source;
+      if (!found) { found = source; continue; }
+      const same = found.kind === source.kind && (found.kind !== 'agent'
+        || (source.kind === 'agent' && found.name === source.name));
+      if (!same) return { kind: 'unknown' };
+    }
+  }
+  return found ?? { kind: 'unknown' };
 }
 
 /** GM's partial-undo line for an accepted proposal, from what the undo kept,
  * also written to the Agent log. */
 function acceptUndoNoticeText(kept: KeptAfterAccept[], nodes: Node<NodeData>[], nothingUndone: boolean): string {
-  const names = new Set(kept.map((item) => foreignTouches.get(item.nodeId) ?? null));
-  const agent = names.size === 1 ? [...names][0] : null;
   const line = acceptUndoLine(kept.map((item) => {
     const node = nodes.find((candidate) => candidate.id === item.nodeId);
     return {
       node: node?.data.label ?? item.nodeId,
       settings: item.keys.length === 0 ? ['settings'] : item.keys.map((key) => key === 'label' ? 'Name'
         : node ? paramLabel(node, key) : key),
+      wholeNode: item.wholeNode,
     };
-  }), agent, nothingUndone);
+  }), keptSource(kept), nothingUndone);
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', { detail: { source: 'system', message: line } }));
   }
   return line;
+}
+
+/** A run's own param write-back (round 17 of PR #114, review 16 L3): the
+ * accepted proposals' steps take its values as their own, so Undo still
+ * reverts them as run output and still removes a node Accept added. */
+function rebaseAcceptedSteps(state: GraphState, nextNodes: Node<NodeData>[]): void {
+  const steps = state.undoStack.filter((entry): entry is OwnAdd => isOwnAdd(entry) && Boolean(entry.accepted || entry.params));
+  if (steps.length === 0) return;
+  const before = new Map(state.nodes.map((node) => [node.id, node]));
+  for (const node of nextNodes) {
+    const was = before.get(node.id);
+    if (!was || was === node) continue;
+    for (const step of steps) rebaseAcceptedOnRunOutput(step, was, node);
+  }
 }
 
 function foreignEditStep(
@@ -3274,9 +3390,18 @@ function foreignEditStep(
   origin: EditOrigin | undefined,
   graphReplaced: boolean,
   moved: string[],
+  runParams = false,
 ): Partial<GraphState> {
   if (origin && isOwnEcho(origin, TAB_ID)) return {};
-  if (!origin) return graphReplaced ? { undoStack: [], redoStack: [] } : {};
+  if (!origin) {
+    if (graphReplaced) return { undoStack: [], redoStack: [] };
+    // A run's param write-back is its output; any other change with no
+    // source (the sync a reconnect starts with) is nobody's this tab can name.
+    if (runParams) rebaseAcceptedSteps(state, nextNodes);
+    else noteForeignTouches(state.nodes, nextNodes, { kind: 'unknown' });
+    return {};
+  }
+  noteForeignTouches(state.nodes, nextNodes, sourceOf(origin));
   // Its deletes are now the live removals of those nodes, for every step here.
   if (!graphReplaced) renewStackedRemovals(state, cleanRemovals(origin.removals));
   // A replacement puts every node where the new graph has it.
@@ -3286,8 +3411,6 @@ function foreignEditStep(
   const change = diffCanvas(state.nodes, state.edges, nextNodes, nextEdges, movedIds);
   if (!change) return {};
   const source = foreignSource(origin);
-  noteForeignTouches(Object.keys(change.after.nodes),
-    source === 'agent' ? origin.actor?.name ?? null : null);
   const entry: ForeignEdit = {
     kind: 'foreign',
     agentName: source === 'agent' ? origin.actor?.name ?? 'An agent' : null,
@@ -3675,6 +3798,7 @@ function applyGraphSync(event: ExecutionEvent): boolean {
     providerStartAmbiguities = [],
     executionStatuses,
     edit: origin,
+    runParams,
   } = event as {
     type: 'graphSync';
     nodes: Node<NodeData>[];
@@ -3689,6 +3813,8 @@ function applyGraphSync(event: ExecutionEvent): boolean {
     arranged?: unknown;
     /** Set when a graph edit caused this sync: who made it, and which tab sent it. */
     edit?: EditOrigin;
+    /** A run's own param write-back (its run id; round 17 of PR #114). Not an edit. */
+    runParams?: string;
     providerRecoveries?: ProviderRecoveryCheckpoint[];
     providerStartAmbiguities?: ProviderStartAmbiguity[];
     executionStatuses?: ExecutionStatusResult[];
@@ -3764,7 +3890,7 @@ function applyGraphSync(event: ExecutionEvent): boolean {
       nodes: remainingNodes,
       edges: remainingEdges,
       backendFreshStartPending: false,
-      ...foreignEditStep(state, remainingNodes, remainingEdges, origin, graphReplaced, moved),
+      ...foreignEditStep(state, remainingNodes, remainingEdges, origin, graphReplaced, moved, Boolean(runParams)),
     });
     useCinemaUploadStore.getState().reconcileTargets(remainingNodes);
     useArrangeStore.getState().setPending([]);
@@ -3943,7 +4069,7 @@ function applyGraphSync(event: ExecutionEvent): boolean {
     nodes: merged,
     edges: mergedEdges,
     backendFreshStartPending: false,
-    ...foreignEditStep(state, merged, mergedEdges, origin, graphReplaced, moved),
+    ...foreignEditStep(state, merged, mergedEdges, origin, graphReplaced, moved, Boolean(runParams)),
   });
   useCinemaUploadStore.getState().reconcileTargets(merged);
   // After the merge, so the nodes an arrange names are already on the canvas.
@@ -6035,7 +6161,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     return { modelNodeIds, allNodeIds };
   },
 
-  adoptAcceptedProposal: ({ nodes: incoming, edges: incomingEdges, updatedNodes }, options) => {
+  adoptAcceptedProposal: ({ nodes: incoming, edges: incomingEdges, updatedNodes: replyUpdates }, options) => {
     // The backend already committed these (and broadcast a graphSync); adding
     // them here too means the nodes exist locally before the canvas runs them.
     // Round 15 of PR #114 (review 14, M5): Accept's undo step owns only what
@@ -6048,6 +6174,10 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     // Undo undoes the Accept, and never removes an agent's node.
     const snapshot = options?.undoStep as UndoSnapshot | undefined;
     const beforeById = new Map((snapshot?.nodes ?? get().nodes).map((node) => [node.id, node]));
+    // The reply's values as a sync writes them (absolute asset links), so a
+    // value Accept set compares equal to the same value on the canvas
+    // (round 17 of PR #114, review 16 M2).
+    const updatedNodes = rewriteBackendAssetUrls(replyUpdates);
     const changes: OwnParamChange[] = [];
     for (const update of updatedNodes) {
       const was = beforeById.get(update.id);

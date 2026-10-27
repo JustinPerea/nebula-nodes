@@ -261,31 +261,32 @@ describe('M5 (probe X5): Undo of an accepted proposal an agent changed since', (
     await sleep(30);
     expect(useGraphStore.getState().nodes.map((node) => node.id)).toEqual(['n1', 'n2']);
     expect(useGraphStore.getState().undoNotice?.text)
-      .toBe('Undid the proposal except “Text” for “Kept”. Claude Code changed it after you accepted.');
+      // Round 17 (GM): a node the Accept added and the agent changed is kept whole.
+      .toBe('Undid the proposal except “Kept”. Claude Code changed it after you accepted.');
   });
 
   it('GM\'s forms, exactly', () => {
-    expect(acceptUndoLine([{ node: 'Hero', settings: ['Prompt'] }], 'Codex', false))
+    expect(acceptUndoLine([{ node: 'Hero', settings: ['Prompt'] }], { kind: 'agent', name: 'Codex' }, false))
       .toBe('Undid the proposal except “Prompt” for “Hero”. Codex changed it after you accepted.');
-    expect(acceptUndoLine([{ node: 'Hero', settings: ['Prompt', 'Seed'] }], 'Codex', false))
+    expect(acceptUndoLine([{ node: 'Hero', settings: ['Prompt', 'Seed'] }], { kind: 'agent', name: 'Codex' }, false))
       .toBe('Undid the proposal except “Prompt” and “Seed” for “Hero”. Codex changed them after you accepted.');
-    expect(acceptUndoLine([{ node: 'Hero', settings: ['Prompt', 'Seed', 'Steps'] }], 'Codex', false))
+    expect(acceptUndoLine([{ node: 'Hero', settings: ['Prompt', 'Seed', 'Steps'] }], { kind: 'agent', name: 'Codex' }, false))
       .toBe('Undid the proposal except “Prompt”, “Seed” and “Steps” for “Hero”. Codex changed them after you accepted.');
-    expect(acceptUndoLine([{ node: 'Hero', settings: ['A', 'B', 'C', 'D'] }], 'Codex', false))
+    expect(acceptUndoLine([{ node: 'Hero', settings: ['A', 'B', 'C', 'D'] }], { kind: 'agent', name: 'Codex' }, false))
       .toBe('Undid the proposal except 4 settings Codex changed after you accepted.');
-    expect(acceptUndoLine([{ node: 'Hero', settings: ['A'] }, { node: 'Logo', settings: ['B'] }], 'Codex', false))
+    expect(acceptUndoLine([{ node: 'Hero', settings: ['A'] }, { node: 'Logo', settings: ['B'] }], { kind: 'agent', name: 'Codex' }, false))
       .toBe('Undid the proposal except 2 settings Codex changed after you accepted.');
-    expect(acceptUndoLine([{ node: 'Hero', settings: ['A'] }, { node: 'Logo', settings: ['B'] }], null, false))
+    expect(acceptUndoLine([{ node: 'Hero', settings: ['A'] }, { node: 'Logo', settings: ['B'] }], { kind: 'agent', name: null }, false))
       .toBe('Undid the proposal except 2 settings an agent changed after you accepted.');
-    expect(acceptUndoLine([{ node: 'Hero', settings: ['Prompt'] }], null, false))
+    expect(acceptUndoLine([{ node: 'Hero', settings: ['Prompt'] }], { kind: 'agent', name: null }, false))
       .toBe('Undid the proposal except “Prompt” for “Hero”. An agent changed it after you accepted.');
-    expect(acceptUndoLine([{ node: 'Hero', settings: ['Prompt'] }], 'Codex', true))
+    expect(acceptUndoLine([{ node: 'Hero', settings: ['Prompt'] }], { kind: 'agent', name: 'Codex' }, true))
       .toBe('Nothing was undone. Codex changed “Prompt” for “Hero” after you accepted.');
-    expect(acceptUndoLine([{ node: 'Hero', settings: ['Prompt', 'Seed'] }], null, true))
+    expect(acceptUndoLine([{ node: 'Hero', settings: ['Prompt', 'Seed'] }], { kind: 'agent', name: null }, true))
       .toBe('Nothing was undone. An agent changed “Prompt” and “Seed” for “Hero” after you accepted.');
-    expect(acceptUndoLine([{ node: 'Hero', settings: ['A', 'B', 'C', 'D'] }], 'Codex', true))
+    expect(acceptUndoLine([{ node: 'Hero', settings: ['A', 'B', 'C', 'D'] }], { kind: 'agent', name: 'Codex' }, true))
       .toBe('Nothing was undone. Codex changed every setting in the proposal after you accepted.');
-    expect(acceptUndoLine([{ node: 'Hero', settings: ['A'] }, { node: 'Logo', settings: ['B'] }], null, true))
+    expect(acceptUndoLine([{ node: 'Hero', settings: ['A'] }, { node: 'Logo', settings: ['B'] }], { kind: 'agent', name: null }, true))
       .toBe('Nothing was undone. An agent changed every setting in the proposal after you accepted.');
   });
 });
@@ -334,8 +335,10 @@ describe('the 507 run line (GM, locked)', () => {
   it('names the node and says nothing was started', async () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (init?.method === 'POST' && String(url).includes('/api/execute-node')) {
-        // The agents' words; the person reads GM's line for any run start's 507.
-        return json({ detail: 'Nebula cannot verify durable pre-admission Stop state; no provider request was sent' }, 507);
+        // The agents' words; the person reads GM's line for a run-safety
+        // store's 507 (round 17: the answer's code says which store).
+        return json({ detail: 'Nebula cannot verify durable pre-admission Stop state; no provider request was sent',
+          code: 'run_safeguards' }, 507);
       }
       return json({});
     });
@@ -352,12 +355,6 @@ describe('held-delete reason lines (GM, round 16)', () => {
     const { heldDeleteText } = await import('../../src/lib/worldLabsWaiting');
     expect(heldDeleteText(1, false, 1, '“Lighthouse world”')).toBe(
       "Couldn't delete “Lighthouse world”. It has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in Run History.");
-  });
-
-  it('another node holds it: that node is named', async () => {
-    const { heldDeleteText } = await import('../../src/lib/worldLabsWaiting');
-    expect(heldDeleteText(1, false, 1, '“Brief”', '“Harbor world”')).toBe(
-      "Couldn't delete “Brief”. “Harbor world” has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in Run History.");
   });
 
   it("the backend's own refusal of a node is that node's: \"It\"", async () => {

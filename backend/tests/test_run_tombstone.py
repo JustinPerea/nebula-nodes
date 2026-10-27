@@ -129,9 +129,11 @@ async def test_cinema_shot_refuses_a_start_stopped_while_it_was_being_admitted(m
 
 @pytest.mark.asyncio
 async def test_status_of_a_tombstoned_run_reads_cancelled_not_unknown() -> None:
+    # Round 17 (review 16 L1): an id whose start this process never saw also
+    # says it has no record of it, so nobody calls it never-started.
     await main_module.cancel_execution("never-arrived")
     assert await main_module.get_execution_status("never-arrived") == {
-        "runId": "never-arrived", "status": "cancelled", "pendingAdmission": True}
+        "runId": "never-arrived", "status": "cancelled", "pendingAdmission": True, "noRecord": True}
 
 
 @pytest.mark.asyncio
@@ -213,6 +215,8 @@ STOPPED_BEFORE_START = ("Stopped before it started. Nebula won't start a run wit
 
 @pytest.mark.asyncio
 async def test_get_run_reads_a_tombstoned_run_as_stopped_before_it_started() -> None:
+    # Its start reached this process (round 17: only then is it "never started").
+    main_module.execution_runs.note_start_begun("ghost-run")
     await main_module.cancel_execution("ghost-run")
     answer = await main_module.get_graph_run("ghost-run")
     assert answer["status"] == "cancelled"

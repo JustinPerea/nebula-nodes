@@ -267,7 +267,9 @@ export function Toolbar() {
           aria-busy={isCancelling}
           title={isCancelling ? 'Stopping the run…' : 'Stop the run'}
         >
-          <ToolbarIcon name="stop" />
+          {/* GM r17 (A): the running dots take the icon's slot, a fixed box
+              left of the label, so "Stop" never moves and is never covered. */}
+          <span className="toolbar__icon-slot" aria-hidden="true"><ToolbarIcon name="stop" /></span>
           <span className="toolbar__label">{isCancelling ? 'Stopping…' : 'Stop'}</span>
         </button>
       ) : (

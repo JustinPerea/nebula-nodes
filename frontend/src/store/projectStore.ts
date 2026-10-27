@@ -19,7 +19,7 @@ import { clearPersistedRunHistory, loadRunHistory } from '../lib/runHistory';
 import * as api from '../lib/projects';
 import { wsClient } from '../lib/wsClient';
 import type { ProjectSwitch } from '../lib/wsClient';
-import { isOwnEcho, type EditOrigin } from '../lib/canvasUndo';
+import { isOwnEcho, sameValue, type EditOrigin } from '../lib/canvasUndo';
 import { TAB_ID } from '../lib/tabId';
 import { holdCommonsExits, holdProjects, refuseWhileCommonsUnsaved } from '../lib/commonsUnsaved';
 import { showNotice } from '../lib/canvasNotice';
@@ -703,6 +703,7 @@ async function recoverPendingWork(): Promise<boolean> {
  * each test starts from this. A handling of a params-version change still in
  * flight from an earlier test is superseded, so its late answer writes nothing. */
 export function resetProjectStoreForTests(): void {
+  followingSwitch = null;
   initializing = null;
   saveQueue = Promise.resolve();
   cancelPendingSaves();
@@ -1163,6 +1164,53 @@ function switchedAwayFrom(notice: ProjectSwitch | undefined, context: { id: stri
     && notice.previousRevision === context.revision && notice.previousProjectId === context.id);
 }
 
+/** The agent switch this tab is following, with every switch notice that
+ * arrived while it waited (round 17 of PR #114, review 16 M1): offline, an
+ * agent may switch again, or back, before the tab can follow. */
+let followingSwitch: { notices: ProjectSwitch[] } | null = null;
+
+function isSwitchNotice(notice: ProjectSwitch | undefined): notice is ProjectSwitch {
+  return Boolean(notice && typeof notice.projectId === 'string' && typeof notice.projectName === 'string');
+}
+
+const agentNameOf = (notice: ProjectSwitch) =>
+  (notice.actor?.kind === 'agent' && typeof notice.actor.name === 'string' ? notice.actor.name : null);
+
+/** Whether the project's saved copy already holds everything in `held`, a
+ * snapshot whose save into it was refused (round 17, review 16 M1: an agent
+ * opened that project again, so its handoff ended). Every node with the same
+ * kind, place, name and settings (a key only the saved copy has is the
+ * backend's own), every wire, every run record and the Create draft; the
+ * view isn't work. Anything missing means work only this tab has. */
+function savedCopyHolds(saved: ProjectSnapshot, held: ProjectSnapshot): boolean {
+  const copy = canonicalBackendAssetUrls(saved);
+  const nodes = new Map(copy.nodes.map((node) => [node.id, node]));
+  for (const node of held.nodes) {
+    const other = nodes.get(node.id);
+    if (!other || other.type !== node.type || other.data.definitionId !== node.data.definitionId
+      || other.data.label !== node.data.label || !sameValue(other.position, node.position)) return false;
+    const params = (other.data.params ?? {}) as Record<string, unknown>;
+    for (const [key, value] of Object.entries(node.data.params ?? {})) {
+      if (!sameValue(params[key], value)) return false;
+    }
+  }
+  const wire = (edge: ProjectSnapshot['edges'][number]) =>
+    `${edge.source}:${edge.sourceHandle ?? ''}->${edge.target}:${edge.targetHandle ?? ''}`;
+  const wires = new Set(copy.edges.map(wire));
+  if (held.edges.some((edge) => !wires.has(wire(edge)))) return false;
+  const runs = new Map((copy.runHistory ?? []).map((record) => [record.id, record]));
+  if ((held.runHistory ?? []).some((record) => !sameValue(runs.get(record.id), record))) return false;
+  return !held.createDraft || sameValue(copy.createDraft, held.createDraft);
+}
+
+async function projectAlreadyHolds(projectId: string, held: ProjectSnapshot): Promise<boolean> {
+  try {
+    return savedCopyHolds((await api.getProject(projectId)).snapshot, held);
+  } catch {
+    return false;
+  }
+}
+
 /** Follow an agent's project switch instead of stopping the tab as if
  * another window took over (D4). `snapshot` was captured before the graph
  * store replaced the canvas; if it has changes the backend never saw (a pan,
@@ -1182,6 +1230,9 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
   // its cause: this switch adds no agent line to it.
   const alreadyHeld = Boolean(useProjectStore.getState().unsavedEdits);
   useProjectStore.setState({ busy: true, error: null, errorRetry: null });
+  const following = { notices: [notice] };
+  followingSwitch = following;
+  const latest = () => following.notices[following.notices.length - 1];
   let keptCopy = false;
   try {
     await saveQueue.catch(() => {});
@@ -1195,17 +1246,22 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
     if (unsaved && context && snapshot && projectSizeBytes(snapshot) + sizeOffset > PROJECT_SAVE_LIMIT_BYTES) {
       // The backend's switch already kept its live canvas in the project left.
       holdOverLimitEdits(context.id, snapshot, true);
-      noteAgentOpening(notice, alreadyHeld);
+      noteAgentOpening(latest(), alreadyHeld);
       return;
     }
     if (unsaved && context && snapshot) {
       try {
-        // Still addressed to the project it came from (the backend's handoff).
+        // Still addressed to the project it came from (the backend keeps a
+        // handoff for each project an agent's switches left).
         await whenSent(() => api.saveProject(context.id, snapshot, context.revision));
       } catch {
-        pendingRecovery = pendingRecoveryOf(context.id, snapshot);
-        await whenSent(() => recoverPendingWork());
-        keptCopy = true;
+        // Refused (that project was opened again since, say): a copy only
+        // when its saved copy lacks something this tab holds (round 17).
+        if (!(await projectAlreadyHolds(context.id, snapshot))) {
+          pendingRecovery = pendingRecoveryOf(context.id, snapshot);
+          await whenSent(() => recoverPendingWork());
+          keptCopy = true;
+        }
       }
     }
     lastSaved = '';
@@ -1213,25 +1269,32 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
     await whenSent(() => loadWorkspace(), { waitOnNoAnswer: true });
     // Loaded unless the backend is on another params version (that reloads).
     if (getProjectContext()) useProjectStore.setState({ screen: 'workspace' });
-    const actor = notice.actor?.kind === 'agent' && typeof notice.actor.name === 'string' ? notice.actor.name : null;
-    // An agent that reopened the project this tab was showing reloaded it
-    // from what was saved: there's no other project to go back to.
-    const reopened = notice.previousProjectId === notice.projectId;
+    // The toast names the project the tab landed on (round 17, review 16
+    // M1), from the newest switch to it; the way back is the project this
+    // tab was showing. An agent that reopened that project reloaded it from
+    // what was saved: there's no other project to go back to.
+    const loaded = useProjectStore.getState().activeProject;
+    const landed = [...following.notices].reverse().find((item) => item.projectId === loaded?.id) ?? latest();
+    const left = notice.previousProjectId;
+    const reopened = (loaded?.id ?? landed.projectId) === left;
     useProjectStore.setState({ switchNotice: {
-      actorName: actor, created: notice.created === true, projectName: notice.projectName,
-      previousProjectId: reopened ? null : notice.previousProjectId,
+      actorName: agentNameOf(landed), created: landed.created === true && landed.projectId === (loaded?.id ?? landed.projectId),
+      projectName: loaded?.name ?? landed.projectName,
+      previousProjectId: reopened ? null : left,
       previousProjectName: reopened ? null : notice.previousProjectName, keptCopy,
     } });
   } catch (error) {
     // Refused for good: the held edits' screen says it (holdRefusedEdits).
-    if (error instanceof EditsRefused) { noteAgentOpening(notice, alreadyHeld); return; }
-    const who = notice.actor?.name ?? 'Another app';
+    if (error instanceof EditsRefused) { noteAgentOpening(latest(), alreadyHeld); return; }
+    const newest = latest();
+    const who = newest.actor?.name ?? 'Another app';
     // Try again loads what is open now (initialize), as the line says.
-    const line = sentences(`${who} opened “${notice.projectName}”, but this window couldn't follow it.`,
+    const line = sentences(`${who} opened “${newest.projectName}”, but this window couldn't follow it.`,
       reasonSentence(error, true));
     useProjectStore.setState({ screen: 'home', initialized: false, dirty: Boolean(pendingRecovery),
       error: line, errorDetails: detailsFor(line, error), errorRetry: { action: 'load' } });
   } finally {
+    if (followingSwitch === following) followingSwitch = null;
     useProjectStore.setState({ busy: false });
   }
 }
@@ -1715,7 +1778,13 @@ export function subscribeProjectAutosave(): () => void {
     const revision = (event as unknown as { workspaceRevision?: string }).workspaceRevision;
     const context = getProjectContext();
     const state = useProjectStore.getState();
-    if (!revision || state.busy) return;
+    if (!revision) return;
+    if (state.busy) {
+      // Another switch while this tab follows the last one (offline, the
+      // follow waits for Nebula): kept, so the follow names where it lands.
+      if (followingSwitch && isSwitchNotice(event.projectSwitch)) followingSwitch.notices.push(event.projectSwitch);
+      return;
+    }
     if (!context) {
       // Projects with no project open (a first run, or the open one was
       // deleted): an agent's new_project or open_project from the workspace

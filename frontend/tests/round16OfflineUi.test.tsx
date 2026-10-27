@@ -168,7 +168,7 @@ describe('a rename draft after reconnect (review 15 nit, GM follow-up)', () => {
     elsewhere.remove();
   });
 
-  it('is dropped, with GM\'s line and no refocus, when an agent renamed the node while offline', () => {
+  it('is dropped, with GM\'s line and no refocus, when the node was renamed while offline (no source: no actor, round 17)', () => {
     const renameNode = vi.fn();
     const notify = vi.fn();
     useGraphStore.setState({ renameNode, notify });
@@ -182,7 +182,7 @@ describe('a rename draft after reconnect (review 15 nit, GM follow-up)', () => {
     expect(screen.getByText('Hero shot')).toBeInTheDocument();
     expect(renameNode).not.toHaveBeenCalled();
     expect(notify).toHaveBeenCalledWith(
-      'An agent renamed this node “Hero shot” while Nebula was offline, so your rename to “Brief draft” wasn\'t saved.',
+      'This node was renamed “Hero shot” while Nebula was offline, so your rename to “Brief draft” wasn\'t saved.',
       'info');
   });
 
@@ -190,7 +190,7 @@ describe('a rename draft after reconnect (review 15 nit, GM follow-up)', () => {
     ['Codex', 'Codex renamed this node “Hero shot” while Nebula was offline, so your rename to “Brief draft” wasn\'t saved.'],
     [null, 'An agent renamed this node “Hero shot” while Nebula was offline, so your rename to “Brief draft” wasn\'t saved.'],
   ])('GM\'s exact line (agent %s)', (agent, line) => {
-    expect(droppedRenameLine(agent, 'Hero shot', 'Brief draft')).toBe(line);
+    expect(droppedRenameLine({ kind: 'agent', name: agent }, 'Hero shot', 'Brief draft')).toBe(line);
   });
 });
 

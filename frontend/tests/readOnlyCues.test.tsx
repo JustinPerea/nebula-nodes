@@ -300,9 +300,11 @@ describe('the banner (GM, round 15 item 1)', () => {
     const rule = /\.backend-connection\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(rule).toMatch(/position:\s*fixed/);
     expect(rule).toMatch(/top:\s*150px/);
-    // No other rule sets its top (no toolbar-dependent offset).
+    // No other rule sets its top (no toolbar-dependent offset), except the
+    // home screen's own place under its top bar (GM, round 17 C).
     const others = [...css.matchAll(/([^{}]*\.backend-connection[^{}]*)\{([^}]*)\}/g)]
-      .filter(([, selector]) => selector.trim().split(/\s*\n\s*/).at(-1) !== '.backend-connection');
+      .filter(([, selector]) => selector.trim().split(/\s*\n\s*/).at(-1) !== '.backend-connection')
+      .filter(([, selector]) => selector.trim() !== ".backend-connection[data-placement='home']");
     for (const [, selector, body] of others) expect(body, selector).not.toMatch(/(^|;|\s)top:/);
   });
 });

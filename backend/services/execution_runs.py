@@ -61,6 +61,11 @@ class ExecutionRunRegistry:
         self._records: dict[str, ExecutionRunRecord] = {}
         self._cancel_before_start: dict[str, None] = {}
         self._tombstones: OrderedDict[str, float] = OrderedDict()
+        # Run ids whose start this process saw begin and that haven't
+        # registered (round 17 of PR #114, review 16 L1): only for these may
+        # a Stop say the run never started. Bounded and expiring as the
+        # tombstones are; a run that registers leaves it.
+        self._admitting: OrderedDict[str, float] = OrderedDict()
         self._clock = clock
         self._max_records = max_records
         self._terminal_callback: Callable[[str, ExecutionRunStatus], None] | None = None
@@ -94,6 +99,7 @@ class ExecutionRunRegistry:
         record = ExecutionRunRecord(run_id=run_id, task=task,
                                     started_by=dict(started_by or ANONYMOUS_STARTER), canvas=canvas)
         self._records[run_id] = record
+        self._admitting.pop(run_id, None)
         task.add_done_callback(lambda completed, rid=run_id: self._finish(rid, completed))
         return record
 
@@ -138,6 +144,36 @@ class ExecutionRunRegistry:
             return False
         if expires <= self._clock():
             self._tombstones.pop(run_id, None)
+            return False
+        return True
+
+    def note_start_begun(self, run_id: str) -> None:
+        """A start under ``run_id`` reached this process (its route's first
+        step). Kept until it registers, so a Stop for an id with no record can
+        tell a start still being admitted (or refused before it registered)
+        from a run this process never saw: one that ran before a restart, was
+        pruned, or never arrived."""
+        if not run_id or len(run_id) > 128 or run_id in self._records:
+            return
+        now = self._clock()
+        while self._admitting:
+            oldest, expires = next(iter(self._admitting.items()))
+            if expires > now:
+                break
+            self._admitting.popitem(last=False)
+        self._admitting.pop(run_id, None)
+        self._admitting[run_id] = now + self.TOMBSTONE_TTL_SECONDS
+        while len(self._admitting) > self.MAX_TOMBSTONES:
+            self._admitting.popitem(last=False)
+
+    def start_seen(self, run_id: str) -> bool:
+        """Whether this process saw ``run_id``'s start begin and it never
+        registered (note_start_begun)."""
+        expires = self._admitting.get(run_id)
+        if expires is None:
+            return False
+        if expires <= self._clock():
+            self._admitting.pop(run_id, None)
             return False
         return True
 
@@ -226,6 +262,7 @@ class ExecutionRunRegistry:
         self._records.clear()
         self._cancel_before_start.clear()
         self._tombstones.clear()
+        self._admitting.clear()
 
     def _finish(self, run_id: str, task: asyncio.Task[None]) -> None:
         record = self._records.get(run_id)

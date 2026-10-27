@@ -57,15 +57,30 @@ export class ExecutionStartRejectedError extends RequestFailedError {
 /** A refused start, named by its call: GM's line for the status, or the
  * backend's written reason. */
 /** GM - Design, round 16 of PR #114 (locked): a run start Nebula refused
- * with 507. Every run start's 507 comes from its run-safety store (the
- * paid-start fence or the recovery journal) before any provider call, and it
- * lasts until Nebula restarts (review 15, extra check 3). The screen's
- * heading names the node ("Couldn't run “<node>”."). */
+ * with 507 because a run-safety store (the paid-start fence, the recovery
+ * journal, durable Stop state) couldn't be saved, before any provider call;
+ * it lasts until Nebula restarts (review 15, extra check 3). The screen's
+ * heading names the node ("Couldn't run “<node>”."). Only for that store's
+ * 507 (round 17, review 16 L5: the answer's `code`, backend
+ * RUN_SAFETY_STORAGE_CODE); the project store's 507 keeps the general line,
+ * since a restart doesn't clear it (GM's restart line for it isn't shipped). */
 export const RUN_SAFEGUARDS_REASON = "Nebula couldn't save its run safeguards, so nothing was started. Restart Nebula, then try again.";
+/** The backend's codes for a 507 (main.py RUN_SAFETY_STORAGE_CODE, PROJECT_STORE_STORAGE_CODE). */
+export const RUN_SAFETY_STORAGE_CODE = 'run_safeguards';
+export const PROJECT_STORE_STORAGE_CODE = 'project_store';
+
+async function storageCodeOf(response: Response): Promise<string | null> {
+  try {
+    const body = await response.clone().json() as { code?: unknown } | null;
+    return typeof body?.code === 'string' ? body.code : null;
+  } catch {
+    return null;
+  }
+}
 
 async function executionStartResponseError(heading: string, response: Response): Promise<Error> {
-  const error = await requestError(heading, response,
-    response.status === 507 ? { reason: RUN_SAFEGUARDS_REASON } : {});
+  const runSafety = response.status === 507 && await storageCodeOf(response) === RUN_SAFETY_STORAGE_CODE;
+  const error = await requestError(heading, response, runSafety ? { reason: RUN_SAFEGUARDS_REASON } : {});
   // A gateway/server failure can be returned after the request body was
   // forwarded and the backend scheduled work, so it is not proof of rejection.
   // 507 is Nebula's explicit pre-provider durable-safety rejection.
@@ -86,9 +101,9 @@ export async function getExecutionStatus(runId: string): Promise<ExecutionStatus
   return response.json();
 }
 
-export async function cancelExecution(runId: string): Promise<ExecutionCancellationResult> {
+export async function cancelExecution(runId: string, signal?: AbortSignal): Promise<ExecutionCancellationResult> {
   const response = await apiRequest("Couldn't cancel the run.", `/api/executions/${encodeURIComponent(runId)}`, {
-    method: 'DELETE',
+    method: 'DELETE', ...(signal ? { signal } : {}),
   });
   return response.json();
 }

@@ -24,7 +24,11 @@ export const OFFLINE_LINE = 'Nebula is offline. Editing is paused until it recon
  * Each health probe is numbered as it starts and an answer older than the
  * newest one applied is ignored (review 13, L4).
  */
-export function BackendConnectionStatus() {
+export function BackendConnectionStatus({ placement = 'workspace' }: {
+  /** GM r17 (C): on the home screen the banner sits right under its top bar
+   * (the workspace's place, below both bars, covered the heading there). */
+  placement?: 'workspace' | 'home';
+} = {}) {
   const offline = useBackendOffline();
   const banner = useRef<HTMLDivElement>(null);
   const [pulse, setPulse] = useState<{ seq: number; kind: 'spring' | 'flash' } | null>(null);
@@ -96,6 +100,7 @@ export function BackendConnectionStatus() {
     <div
       ref={banner}
       className="backend-connection backend-connection--offline"
+      data-placement={placement}
       role="status"
       aria-live="polite"
       data-pulse-seq={pulse?.seq}

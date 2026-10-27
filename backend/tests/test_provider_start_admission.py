@@ -106,10 +106,13 @@ def test_paid_claim_classification_excludes_recovery_and_free_ply() -> None:
 @pytest.mark.asyncio
 async def test_stop_arriving_before_execute_admission_blocks_paid_start() -> None:
     run_id = "cancel-before-paid-admission"
+    # Round 17 (review 16 L1): this process never saw the run start, so the
+    # answer also says it has no record of it (the Stop holds the same way).
     assert await main_module.cancel_execution(run_id) == {
         "runId": run_id,
         "status": "cancelled",
         "pendingAdmission": True,
+        "noRecord": True,
     }
 
     with pytest.raises(HTTPException) as exc_info:
@@ -251,6 +254,7 @@ async def test_cancel_compaction_recovers_capacity_but_old_run_stays_denied(
         "runId": "new-stop",
         "status": "cancelled",
         "pendingAdmission": True,
+        "noRecord": True,
     }
 
 

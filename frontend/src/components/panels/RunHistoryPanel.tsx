@@ -103,7 +103,7 @@ export function RunHistoryPanel() {
         <div className="run-history__header-actions">
           <button
             type="button"
-            className="panel__header-action run-history__action"
+            className="panel__header-action run-history__action run-history__stop"
             onClick={() => void cancelExecution()}
             // Stop only reduces spend, so it stays enabled offline and goes
             // through the network gate (round 16 of PR #114, M1).
