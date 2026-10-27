@@ -1601,6 +1601,9 @@ export function ChatPanel() {
   }, [send]);
 
   const choosePersonalOption = useCallback((configId: string, value: string) => {
+    // Round 16 (L5): an agent option (its model or mode) changes what the
+    // agent may do, so offline it's refused like an edit (the banner pulses).
+    if (refuseEditWhileOffline()) return;
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN || !sessionId) return;
     setPersonalOptions((current) => current.map((option) => option.id === configId ? { ...option, current: value } : option));
@@ -1612,6 +1615,10 @@ export function ChatPanel() {
   }, [sessionId]);
 
   const answerPermission = useCallback((requestId: string, decision: 'allow' | 'deny') => {
+    // Round 16 (L5): "Allow once" lets the agent act while the person's own
+    // edits are blocked, so offline it's refused and the request stays
+    // pending until Nebula answers. Deny only reduces, so it always goes.
+    if (decision === 'allow' && refuseEditWhileOffline()) return;
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     upsertAssistant((msg) => ({
@@ -1927,7 +1934,7 @@ export function ChatPanel() {
             <div className="chat-panel__personal-options" onMouseDown={(e) => e.stopPropagation()}>
               {personalOptions.map((option) => (
                 <select key={option.id} className="chat-panel__personal-option" value={option.current ?? ''}
-                  aria-label={`${option.name} for this conversation`} disabled={busy}
+                  aria-label={`${option.name} for this conversation`} disabled={busy || offline} {...offlineMark(offline)}
                   title={`${option.name}: ${agentDisplayName} offers these for this conversation`}
                   onChange={(event) => choosePersonalOption(option.id, event.target.value)}>
                   {option.current === null && <option value="" disabled>{option.name}</option>}

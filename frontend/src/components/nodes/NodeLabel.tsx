@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { useGraphStore } from '../../store/graphStore';
+import { lastForeignToucher, useGraphStore } from '../../store/graphStore';
+import { droppedRenameLine } from '../../lib/canvasUndo';
 import { NODE_RENAME_EVENT } from '../../lib/keyboardShortcuts';
 import { isBackendOffline, refuseEditWhileOffline } from '../../lib/backendConnection';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
@@ -18,18 +19,42 @@ interface NodeLabelProps {
  * its text and shows the same disabled styling as other fields"): a rename
  * can't start, and one being typed when the connection drops stays open with
  * its draft, disabled, until reconnect. Losing focus then doesn't save or
- * drop it; after reconnect Enter saves it and Escape cancels it. */
+ * drop it; after reconnect Enter saves it and Escape cancels it.
+ *
+ * Round 16 (review 15 nit): on reconnect the draft gets focus back, unless an
+ * agent renamed the node meanwhile. Then the draft is dropped, so the
+ * agent's name isn't overwritten, and GM's toast says so (no refocus). */
 export function NodeLabel({ nodeId, label, displayName }: NodeLabelProps) {
   const renameNode = useGraphStore((state) => state.renameNode);
   const readOnly = useBackendOffline();
   const [draft, setDraft] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  /** The name when this rename started: a different one on reconnect means
+   * someone else renamed the node while the tab was offline. */
+  const startedFrom = useRef(label);
+  const wasReadOnly = useRef(readOnly);
+  const begin = () => { startedFrom.current = label; setDraft(label); };
+
+  useEffect(() => {
+    const reconnected = wasReadOnly.current && !readOnly;
+    wasReadOnly.current = readOnly;
+    if (!reconnected || draft === null) return;
+    if (label !== startedFrom.current) {
+      useGraphStore.getState().notify(droppedRenameLine(lastForeignToucher(nodeId), label, draft), 'info');
+      setDraft(null);
+      return;
+    }
+    inputRef.current?.focus();
+    // Only on the offline-to-online flip; the draft and label are read then.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readOnly]);
 
   // F2 on the canvas asks the selected node to start renaming.
   useEffect(() => {
     const onRename = (event: Event) => {
       if ((event as CustomEvent<{ nodeId?: string }>).detail?.nodeId !== nodeId) return;
       if (refuseEditWhileOffline()) return;
+      startedFrom.current = label;
       setDraft(label);
     };
     window.addEventListener(NODE_RENAME_EVENT, onRename);
@@ -81,7 +106,7 @@ export function NodeLabel({ nodeId, label, displayName }: NodeLabelProps) {
       onDoubleClick={(event) => {
         event.stopPropagation();
         if (refuseEditWhileOffline()) return;
-        setDraft(label);
+        begin();
       }}
     >
       {label}

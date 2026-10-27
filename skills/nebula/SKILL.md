@@ -233,6 +233,13 @@ video stream, or an image with more than one frame or size, isn't measured
 started from the canvas is theirs to stop: the CLI refuses it, so tell them
 to press Stop in Nebula.
 
+A cancel for a run that hadn't started yet prints "Run <id> hadn't started
+yet. Nebula won't start it now, so nothing runs and nothing is spent." That
+id is stopped for good: a start still on its way is refused, so nothing ran
+and nothing was spent. `nebula result` on it prints "Run <id> was stopped
+before it started, so nothing ran and nothing was spent." To run the same
+nodes again, start a new run.
+
 A run where any node failed exits 1 and prints each node's error (a missing
 key refuses the whole run before anything is called or spent). The card on
 the canvas shows the same error. `nebula look` prints a failed node's error
@@ -766,8 +773,11 @@ Connections must match types; `Any` connects to anything.
    ids) is not a switch: your change and your run carry on.
 7. "Nebula isn't running at <url>" (and `cannot connect to Nebula backend`)
    means the person's canvas is read-only too: their tab blocks edits, runs,
-   proposal Accept/Reject and every other write until Nebula is back, and
-   nothing you or they edit meanwhile is saved or queued.
+   proposal Accept/Reject, a chat "Allow once" and every other write that
+   starts or changes something until Nebula is back, and nothing you or they
+   edit meanwhile is saved or queued. Only stops still go (a run's Stop, a
+   render's cancel, the Commons worker's Stop, chat Deny), so the person can
+   still stop a run that's spending.
    Once it's back, read the canvas again (`nebula graph`, MCP `start_here`)
    before you assume your plan landed.
 8. A bundle load refused with "Nebula retried saving its World Labs recovery

@@ -26,11 +26,11 @@ describe('heldDeleteText', () => {
     expect(heldDeleteText(1, true, 1, '“Harbor world”')).toBe(
       "Couldn't delete “Harbor world”. A World Labs run needs your check first. Use the notice at the top of the screen.");
     expect(heldDeleteText(1, false, 1, '“Harbor world”')).toBe(
-      "Couldn't delete “Harbor world”. “Harbor world” has a saved World Labs recovery ID. Check the run in Marble, then use Forget ID in Run History.");
+      "Couldn't delete “Harbor world”. It has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in Run History.");
     expect(heldDeleteText(1, true)).toBe(
       "Couldn't delete the node. A World Labs run needs your check first. Use the notice at the top of the screen.");
     expect(heldDeleteText(1, false)).toBe(
-      "Couldn't delete the node. It has a saved World Labs recovery ID. Check the run in Marble, then use Forget ID in Run History.");
+      "Couldn't delete the node. It has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in Run History.");
   });
 
   it('the several-node forms are unchanged', () => {
@@ -84,6 +84,6 @@ describe("GM's World Labs wording (round 13 of PR #114), exact", () => {
 
   it('a renamed node still reads as a held delete refusal (its card title differs)', () => {
     expect(deleteRefusalText("Couldn't delete the node.", 1, [`“Harbor world”${RECOVERY_ID_SAVED_TAIL}`]))
-      .toBe("Couldn't delete “Harbor world”. “Harbor world” has a saved World Labs recovery ID. Check the run in Marble, then use Forget ID in Run History.");
+      .toBe("Couldn't delete “Harbor world”. It has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in Run History.");
   });
 });

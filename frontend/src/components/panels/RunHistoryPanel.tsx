@@ -105,13 +105,14 @@ export function RunHistoryPanel() {
             type="button"
             className="panel__header-action run-history__action"
             onClick={() => void cancelExecution()}
-            disabled={!isExecuting || isCancelling || offline}
-            {...off}
+            // Stop only reduces spend, so it stays enabled offline and goes
+            // through the network gate (round 16 of PR #114, M1).
+            disabled={!isExecuting || isCancelling}
             aria-busy={isCancelling}
-            aria-label="Cancel running execution"
-            title={isCancelling
-              ? 'Waiting for execution to stop safely'
-              : isExecuting ? 'Cancel running execution' : 'Nothing running'}
+            aria-label="Stop the run"
+            // GM, round 16: a label names the action (no period); a reason
+            // it's disabled is a sentence.
+            title={isCancelling ? 'Stopping the run…' : isExecuting ? 'Stop the run' : 'Nothing is running.'}
           >
             <Square size={13} strokeWidth={2} aria-hidden="true" focusable="false" />
           </button>
@@ -125,10 +126,10 @@ export function RunHistoryPanel() {
               || providerStartAmbiguities.length > 0}
             aria-label="Clear run history"
             title={isExecuting
-              ? 'Wait for the active run to finish'
+              ? 'Wait for the run to finish first.'
               : providerRecoveries.length > 0 || providerStartAmbiguities.length > 0
-                ? 'Resolve World Labs safety records before clearing history'
-                : 'Clear run history'}
+                ? "Can't clear while a World Labs recovery ID is saved."
+                : 'Clear Run History'}
           >
             <Trash2 size={13} strokeWidth={1.85} aria-hidden="true" focusable="false" />
           </button>
@@ -267,10 +268,10 @@ export function RunHistoryPanel() {
                           ? `Retry failed ${runTriggerLabel(r.trigger)} run`
                           : `Rerun ${runTriggerLabel(r.trigger)}`}
                         title={isExecuting
-                          ? 'Wait for the active run to finish'
+                          ? 'Wait for the run to finish first.'
                           : recoveryReplayReady
-                            ? 'Resume the exact saved provider checkpoint'
-                            : 'Run the exact saved graph snapshot'}
+                            ? 'Resume this run from its saved checkpoint'
+                            : 'Run this again with the same nodes and settings'}
                       >
                         <RotateCcw size={11} strokeWidth={2} aria-hidden="true" focusable="false" />
                         {recoveryReplayReady ? 'Recover' : r.status === 'failed' ? 'Retry failed' : 'Rerun'}
@@ -283,9 +284,11 @@ export function RunHistoryPanel() {
                           {...off}
                           onClick={() => void rerunHistoryWithLatestPaperSource(r.id)}
                           aria-label={`Rerun ${runTriggerLabel(r.trigger)} with latest source`}
-                          title={latestSourceReady
-                            ? 'Reuse saved recipe settings and connections with the latest exported Paper input'
-                            : 'Refresh or reconnect the Paper source before using its latest artwork'}
+                          title={isExecuting
+                            ? 'Wait for the run to finish first.'
+                            : latestSourceReady
+                              ? 'Run again with the same settings and the latest artwork from Paper'
+                              : 'Refresh or reconnect the Paper source first.'}
                         >Rerun with latest source</button>
                       )}
                     </span>

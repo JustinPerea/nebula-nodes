@@ -173,9 +173,14 @@ describe('an unresolved add-and-connect is released only by a restarted backend'
       [expect.stringContaining('/api/graph/node-and-connect')]);
   });
 
-  it('a sync before the reconnect (the old socket) does not release it', async () => {
+  // Round 16 (review 15, M4): the bootId is noted at the connection level
+  // from every hello, health answer and sync, so a new one proves a restart
+  // whichever message brings it (round 15 waited for socketReconnected, and
+  // this case sent a new bootId on the old socket, which can't happen). The
+  // old socket's sync carries the same process's bootId: no release.
+  it('a sync before the reconnect (the old socket, same bootId) does not release it', async () => {
     await loseAnAnswer();
-    socketSends({ type: 'graphSync', ...base, empty: false, edges: [], nodes: [banana], bootId: 'boot-3' });
+    socketSends({ type: 'graphSync', ...base, empty: false, edges: [], nodes: [banana], bootId: 'boot-1' });
     fetchMock.mockReset();
     await useGraphStore.getState().addNodeAndConnect('veo-3', { x: 400, y: 0 }, connect);
     expect(fetchMock).not.toHaveBeenCalled();

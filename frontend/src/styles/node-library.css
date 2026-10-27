@@ -196,7 +196,9 @@ body.app-slava-restraint :is(.node-library__type, .node-library__all, .node-libr
 
 /* Offline is read-only (GM, round 14 of PR #114): items browse but show as
    disabled; a press pulses the offline banner instead of adding. */
-.panel__item.panel__item--read-only {
+.panel__item.panel__item--read-only,
+.node-library__entry--read-only,
+.node-library__entry--read-only .provider-readiness {
   cursor: not-allowed;
 }
 

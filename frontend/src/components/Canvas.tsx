@@ -339,7 +339,10 @@ export function Canvas() {
   // Publish only IDs. The backend resolves authoritative node data on read,
   // keeping transient selection out of saved graph files and stale handles out
   // of CLI/MCP context. Debounce marquee churn while preserving the final set.
+  // Round 16 (L1): selecting while offline is local view state; nothing is
+  // sent then, and the selection in hand goes out once Nebula answers again.
   useEffect(() => {
+    if (readOnly) return undefined;
     const controller = new AbortController();
     const timeout = window.setTimeout(() => {
       publishCanvasSelection(liveSelectedNodeIds, controller.signal).catch((error) => {
@@ -351,7 +354,7 @@ export function Canvas() {
       window.clearTimeout(timeout);
       controller.abort();
     };
-  }, [liveSelectionKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [liveSelectionKey, readOnly]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const reactFlow = useReactFlow();
   const { fitView, screenToFlowPosition, zoomIn, zoomOut, zoomTo } = reactFlow;

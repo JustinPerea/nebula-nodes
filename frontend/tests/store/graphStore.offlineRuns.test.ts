@@ -143,6 +143,11 @@ describe('a start whose answer was lost, for a run the backend does not know', (
   it('ends (not stuck on Stop) when the status check answers 404', async () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (init?.method === 'POST' && String(url).endsWith('/api/execute')) throw new TypeError('Failed to fetch');
+      // Round 16 (review 15, M2): the 404 is fenced with a Stop first; the
+      // backend tombstones an unknown run id and says it hadn't started.
+      if (init?.method === 'DELETE' && String(url).includes('/api/executions/')) {
+        return json({ runId: String(url).split('/').pop(), status: 'cancelled', pendingAdmission: true });
+      }
       if (String(url).includes('/api/executions/')) return json({ detail: 'Unknown run' }, 404);
       return json({});
     });

@@ -115,11 +115,65 @@ export function isWriteMethod(method: string | undefined): boolean {
   return upper !== 'GET' && upper !== 'HEAD';
 }
 
+interface GateRule {
+  method: string;
+  /** Matched against the whole path apiFetch was given (query included). */
+  pattern: RegExp;
+  what: string;
+}
+
+/** A run, render or worker id as Nebula makes them (uuid, `cinema-shot-…`,
+ * a job id): no dots or slashes, so no path segment can walk elsewhere. */
+const ID = '[A-Za-z0-9_-]{1,128}';
+
+/**
+ * The writes sent while offline (round 16 of PR #114, M1): each one only
+ * reduces work or spend, so a false offline never traps a run the person
+ * wants stopped. Nothing that starts work, spends or lowers a safeguard is
+ * here: the unlock, Forget ID, proposal Accept and Reject stay refused.
+ * tests/lib/offlineCancelAllowlist.test.ts pins it, request by request.
+ */
+export const OFFLINE_CANCEL_ALLOWLIST: readonly GateRule[] = [
+  // The bottom Stop, Run History's Cancel, Create's "Stop N" and Cinema's
+  // Stop scene / Stop shot (graphStore cancelExecution / cancelRun).
+  { method: 'DELETE', pattern: new RegExp(`^\\/api\\/executions\\/${ID}$`), what: 'Stop a run' },
+  // The video editor's render Cancel (hooks/useRenderJob.ts).
+  { method: 'DELETE', pattern: new RegExp(`^\\/api\\/render-jobs\\/${ID}$`), what: 'Cancel a render' },
+  // The Commons status line's Stop.
+  { method: 'POST', pattern: /^\/api\/commons\/worker\/stop$/, what: "Stop the Commons worker" },
+];
+
+/**
+ * Background reports that aren't edits (L1): the selection and view agents
+ * read, a price's input-size ask and the zoom manifest. Offline they are held
+ * back without the banner's pulse (only an edit pulses); the selection and
+ * view are sent again on reconnect (Canvas, CanvasViewReporter).
+ */
+export const OFFLINE_QUIET_WRITES: readonly GateRule[] = [
+  { method: 'POST', pattern: /^\/api\/canvas\/selection$/, what: 'the selection agents read' },
+  { method: 'POST', pattern: /^\/api\/canvas\/view$/, what: 'the view agents read' },
+  { method: 'POST', pattern: /^\/api\/pricing\/input-sizes$/, what: "a price's input sizes" },
+  { method: 'POST', pattern: /^\/api\/zoom-manifest\/(?:init|entry)$/, what: 'the zoom manifest' },
+];
+
+function matches(rules: readonly GateRule[], method: string | undefined, path: string): boolean {
+  const upper = String(method ?? 'GET').toUpperCase();
+  return rules.some((rule) => rule.method === upper && rule.pattern.test(path));
+}
+
+/** Whether a write is on the cancel allowlist (sent while offline). */
+export function isOfflineCancel(method: string | undefined, path: string): boolean {
+  return matches(OFFLINE_CANCEL_ALLOWLIST, method, path);
+}
+
 /** The network gate: throws an OfflineRefusal (after the banner's pulse) for
- * a write while offline. The health probe is a GET, so it always goes. */
+ * a write while offline. The health probe is a GET, so it always goes, and
+ * so does a cancel on the allowlist. A view-state report is refused without
+ * the pulse. */
 export function refuseWriteWhileOffline(method: string | undefined, path: string): void {
   if (!isWriteMethod(method) || !isBackendOffline()) return;
-  refuseEditWhileOffline();
+  if (isOfflineCancel(method, path)) return;
+  if (!matches(OFFLINE_QUIET_WRITES, method, path)) refuseEditWhileOffline();
   throw new OfflineRefusal(String(method).toUpperCase(), path);
 }
 
@@ -129,11 +183,69 @@ export function subscribeBlockedEdits(listener: () => void): () => void {
   return () => { blockedListeners.delete(listener); };
 }
 
+/** Resolves once Nebula is online (at once when it already is). */
+export function waitUntilOnline(): Promise<void> {
+  if (!isBackendOffline()) return Promise.resolve();
+  return new Promise((resolve) => {
+    const stop = subscribeBackendConnection(() => {
+      if (isBackendOffline()) return;
+      stop();
+      resolve();
+    });
+  });
+}
+
+// -- which backend process this tab talks to -----------------------------------
+
+/**
+ * The backend process's id (main.py BACKEND_BOOT_ID), noted from every
+ * socket hello and health answer whether or not a project is open (round 16
+ * of PR #114, review 15 M4: the first hello arrives before the tab has a
+ * project, and a graph-level note dropped it). A different id later means
+ * the backend restarted: anything it held in memory is gone.
+ */
+let knownBootId: string | null = null;
+const restartListeners = new Set<() => void>();
+
+export function noteBackendBootId(bootId: unknown): void {
+  if (typeof bootId !== 'string' || !bootId) return;
+  const previous = knownBootId;
+  knownBootId = bootId;
+  if (previous !== null && previous !== bootId) for (const listener of [...restartListeners]) listener();
+}
+
+export function backendBootId(): string | null {
+  return knownBootId;
+}
+
+/** Called when a new boot id shows the backend restarted. */
+export function subscribeBackendRestart(listener: () => void): () => void {
+  restartListeners.add(listener);
+  return () => { restartListeners.delete(listener); };
+}
+
+// -- asking for a health probe now --------------------------------------------
+
+const probeRequestListeners = new Set<() => void>();
+
+/** A reopened socket's first message proves the backend answers (review 15,
+ * M3): the banner probes at once instead of up to 3 s later, so writes aren't
+ * refused while the socket is visibly connected. */
+export function requestHealthProbe(): void {
+  for (const listener of [...probeRequestListeners]) listener();
+}
+
+export function subscribeHealthProbeRequests(listener: () => void): () => void {
+  probeRequestListeners.add(listener);
+  return () => { probeRequestListeners.delete(listener); };
+}
+
 /** Test seam: back to a fresh tab's state. */
 export function resetBackendConnectionForTests(): void {
   connection = 'online';
   probesStarted = 0;
   newestApplied = 0;
   lastPulseAt = Number.NEGATIVE_INFINITY;
+  knownBootId = null;
   for (const listener of [...listeners]) listener();
 }

@@ -261,10 +261,11 @@ export function Toolbar() {
           type="button"
           className="toolbar__button toolbar__button--primary toolbar__button--executing"
           onClick={() => void cancelExecution()}
-          disabled={isCancelling || offline}
-          {...off}
+          // Stop only reduces spend: enabled and normal-looking offline, and
+          // it goes through the network gate (round 16 of PR #114, M1).
+          disabled={isCancelling}
           aria-busy={isCancelling}
-          title={isCancelling ? 'Waiting for execution to stop safely' : 'Cancel execution'}
+          title={isCancelling ? 'Stopping the run…' : 'Stop the run'}
         >
           <ToolbarIcon name="stop" />
           <span className="toolbar__label">{isCancelling ? 'Stopping…' : 'Stop'}</span>

@@ -302,7 +302,9 @@ export function NodeLibrary() {
               {providers.map((item) => <option key={item} value={item}>{providerLabel(item)}</option>)}
             </select>
           </label>}
-          {!isHome && <p className="node-library__count" aria-live="polite">{resultCount} node{resultCount === 1 ? '' : 's'} · Choose a node to add</p>}
+          {!isHome && <p className="node-library__count" aria-live="polite">{resultCount} node{resultCount === 1 ? '' : 's'} · {
+            // GM, round 16 of PR #114: offline the count line says why nothing adds.
+            readOnly ? 'Adding is paused while offline' : 'Choose a node to add'}</p>}
         </div>
         <ScrollFade className="node-library__browser" key={isHome ? 'types' : (browseType ?? 'all')}>
           {isHome ? <div className="node-library__home">
@@ -343,7 +345,7 @@ export function NodeLibrary() {
               ? filteredCollapse.context === filterContext && !!filteredCollapse.categories[category]
               : (collapsed[category] ?? true);
             const items = defs.map((def) => (
-              <div key={def.id} className="node-library__entry">
+              <div key={def.id} className={`node-library__entry${readOnly ? ' node-library__entry--read-only' : ''}`}>
                 <button
                   type="button"
                   className={`panel__item${readOnly ? ' panel__item--read-only' : ''}`}

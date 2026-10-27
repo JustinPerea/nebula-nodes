@@ -92,10 +92,10 @@ describe('RunHistoryPanel replay actions', () => {
 
     render(<RunHistoryPanel />);
 
-    const stop = screen.getByRole('button', { name: 'Cancel running execution' });
+    const stop = screen.getByRole('button', { name: 'Stop the run' });
     expect(stop).toBeDisabled();
     expect(stop).toHaveAttribute('aria-busy', 'true');
-    expect(stop).toHaveAttribute('title', 'Waiting for execution to stop safely');
+    expect(stop).toHaveAttribute('title', 'Stopping the run…');
     fireEvent.click(stop);
     expect(cancelExecution).not.toHaveBeenCalled();
   });
@@ -144,7 +144,7 @@ describe('RunHistoryPanel replay actions', () => {
     {
       label: 'an active execution',
       state: { isExecuting: true },
-      title: 'Wait for the active run to finish',
+      title: 'Wait for the run to finish first.',
     },
     {
       label: 'a saved provider recovery',
@@ -157,7 +157,7 @@ describe('RunHistoryPanel replay actions', () => {
           durable: true,
         }],
       },
-      title: 'Resolve World Labs safety records before clearing history',
+      title: "Can't clear while a World Labs recovery ID is saved.",
     },
     {
       label: 'an ambiguous provider start',
@@ -170,7 +170,7 @@ describe('RunHistoryPanel replay actions', () => {
           durable: true,
         }],
       },
-      title: 'Resolve World Labs safety records before clearing history',
+      title: "Can't clear while a World Labs recovery ID is saved.",
     },
   ])('disables Clear while $label owns safety state', ({ state, title }) => {
     const clearRunHistory = vi.fn();

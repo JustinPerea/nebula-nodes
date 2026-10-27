@@ -181,6 +181,14 @@ body.app-slava-restraint .react-flow__minimap {
   background: var(--sr-accent-hover, #ff7040);
 }
 
+/* GM, round 16 of PR #114: a disabled Run is neutral, like the disabled
+   bottom Run. Orange only ever means "you can press this". */
+.selection-toolbar__button--primary:disabled {
+  background: var(--sr-surface-control-active, rgba(255, 255, 255, 0.09));
+  color: var(--sr-ink-bold, #fff);
+  opacity: 0.45;
+}
+
 .selection-toolbar__button--danger {
   color: rgba(255, 132, 118, 0.88);
 }

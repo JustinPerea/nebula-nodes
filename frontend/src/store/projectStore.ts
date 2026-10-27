@@ -23,10 +23,10 @@ import { isOwnEcho, type EditOrigin } from '../lib/canvasUndo';
 import { TAB_ID } from '../lib/tabId';
 import { holdCommonsExits, holdProjects, refuseWhileCommonsUnsaved } from '../lib/commonsUnsaved';
 import { showNotice } from '../lib/canvasNotice';
-import { isBackendOffline, isOfflineRefusal, subscribeBackendConnection } from '../lib/backendConnection';
+import { isBackendOffline, isOfflineRefusal, subscribeBackendConnection, waitUntilOnline } from '../lib/backendConnection';
 import {
   FailureNotice, PERSON_REQUIRED_CODE, REFUSED_FALLBACK_COPY, RequestFailedError, canTryAgain, failureCopy, failureDetails,
-  failureMessage, oneLine, shortReason,
+  failureMessage, isNoAnswer, oneLine, shortReason,
 } from '../lib/errorCopy';
 import { WORLD_LABS_NEEDS_CHECK } from '../lib/worldLabsWaiting';
 import type { ProjectSnapshot, ProjectSummary, SavedProject, TrashedProject } from '../lib/projects';
@@ -1185,6 +1185,11 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
   let keptCopy = false;
   try {
     await saveQueue.catch(() => {});
+    // Offline (round 16 of PR #114, review 15 M3): the switch is followed
+    // once Nebula answers again, as an online switch is. Nothing is sent
+    // meanwhile, nothing fails, and no recovered copy is made for a write
+    // that wasn't sent.
+    await waitUntilOnline();
     // Edits over the save limit (Q118) can't go into the project they came
     // from, nor into a recovered copy: held for the person's choice, unsent.
     if (unsaved && context && snapshot && projectSizeBytes(snapshot) + sizeOffset > PROJECT_SAVE_LIMIT_BYTES) {
@@ -1195,15 +1200,17 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
     }
     if (unsaved && context && snapshot) {
       try {
-        await api.saveProject(context.id, snapshot, context.revision);
+        // Still addressed to the project it came from (the backend's handoff).
+        await whenSent(() => api.saveProject(context.id, snapshot, context.revision));
       } catch {
         pendingRecovery = pendingRecoveryOf(context.id, snapshot);
-        await recoverPendingWork();
+        await whenSent(() => recoverPendingWork());
         keptCopy = true;
       }
     }
     lastSaved = '';
-    await loadWorkspace();
+    // Reads go while offline; one that found no answer waits for Nebula.
+    await whenSent(() => loadWorkspace(), { waitOnNoAnswer: true });
     // Loaded unless the backend is on another params version (that reloads).
     if (getProjectContext()) useProjectStore.setState({ screen: 'workspace' });
     const actor = notice.actor?.kind === 'agent' && typeof notice.actor.name === 'string' ? notice.actor.name : null;
@@ -1226,6 +1233,21 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
       error: line, errorDetails: detailsFor(line, error), errorRetry: { action: 'load' } });
   } finally {
     useProjectStore.setState({ busy: false });
+  }
+}
+
+/** `send`, again once Nebula is back whenever the offline gate refused it
+ * (it was never sent). With `waitOnNoAnswer`, a request that found no
+ * answer while the tab is offline waits too (a read in a real outage). */
+async function whenSent<T>(send: () => Promise<T>, options: { waitOnNoAnswer?: boolean } = {}): Promise<T> {
+  for (;;) {
+    try {
+      return await send();
+    } catch (error) {
+      const unsent = isOfflineRefusal(error) || (options.waitOnNoAnswer && isBackendOffline() && isNoAnswer(error));
+      if (!unsent) throw error;
+      await waitUntilOnline();
+    }
   }
 }
 

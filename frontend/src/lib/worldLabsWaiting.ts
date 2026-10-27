@@ -67,7 +67,7 @@ export function cardTitle(nodes: readonly { id: string; data?: { label?: unknown
 /** The recovery line as the canvas's held-delete notice says it (GM, round
  * 15 of PR #114: "Name the button if the line points to one (e.g. 'Forget
  * ID')"). The backend's own line (RECOVERY_ID_SAVED_TAIL) is unchanged. */
-export const RECOVERY_ID_FORGET_TAIL = " has a saved World Labs recovery ID. Check the run in Marble, then use Forget ID in Run History.";
+export const RECOVERY_ID_FORGET_TAIL = " has a saved World Labs recovery ID. Check the run in Marble, then use \u201cForget ID\u201d in Run History.";
 
 /**
  * What the canvas notice says when it keeps nodes because one holds World
@@ -78,11 +78,12 @@ export const RECOVERY_ID_FORGET_TAIL = " has a saved World Labs recovery ID. Che
  * shared World Labs line:
  * - unlock: "Couldn't delete “<node>”. A World Labs run needs your check
  *   first. Use the notice at the top of the screen."
- * - forget: "Couldn't delete “<node>”. “<node>” has a saved World Labs
- *   recovery ID. Check the run in Marble, then use Forget ID in Run
- *   History."
- * With no name known it reads "Couldn't delete the node." and, for forget,
- * "It has a saved …".
+ * - forget (GM, round 16: "It" when the node holding the ID is the one
+ *   being deleted, its name when it's another; curly quotes on the button):
+ *   "Couldn't delete “<node>”. It has a saved World Labs recovery ID. Check
+ *   the run in Marble, then use “Forget ID” in Run History."
+ * With no name known it reads "Couldn't delete the node." and "It has a
+ * saved …".
  *
  * Several nodes (round 4b, unchanged), every line headed "Couldn't delete
  * them.":
@@ -102,10 +103,13 @@ export const RECOVERY_ID_FORGET_TAIL = " has a saved World Labs recovery ID. Che
  * is how many of the `count` nodes hold World Labs state; `name` the one
  * node's card title in quotes (recordNodeName).
  */
-export function heldDeleteText(count: number, unlock: boolean, held = 1, name?: string): string {
+export function heldDeleteText(count: number, unlock: boolean, held = 1, name?: string, blocker?: string): string {
   if (count === 1) {
     const heading = name ? `Couldn't delete ${name}.` : "Couldn't delete the node.";
-    return unlock ? `${heading} ${WORLD_LABS_NEEDS_CHECK}` : `${heading} ${name ?? 'It'}${RECOVERY_ID_FORGET_TAIL}`;
+    // GM, round 16: the reason says "It" when the node holding the ID is the
+    // one being deleted, and names the other node when it isn't.
+    const holder = blocker && blocker !== name ? blocker : 'It';
+    return unlock ? `${heading} ${WORLD_LABS_NEEDS_CHECK}` : `${heading} ${holder}${RECOVERY_ID_FORGET_TAIL}`;
   }
   if (!unlock && held >= count) {
     return "Couldn't delete them. They're waiting on World Labs. Check Marble and Run History.";
@@ -143,6 +147,9 @@ export function deleteRefusalText(heading: string, count: number, reasons: reado
   const others = unique.filter((reason) => !isHeldReason(reason));
   // One node: its name, from the caller or from the backend's recovery line.
   const forget = held.find(isForgetReason);
+  // A node's delete is refused for that node's own state, so its line says
+  // "It" (GM, round 16), whatever name the backend's line used (a renamed
+  // card, or the definition's name).
   const named = name ?? (forget ? forget.slice(0, -RECOVERY_ID_SAVED_TAIL.length) : undefined);
   return [heldDeleteText(count, unlock, heldCount, named), ...others].join(' ');
 }

@@ -219,13 +219,13 @@ describe('held-delete lines (GM, round 15: "Couldn\'t delete “<node>”. <reas
     expect(heldDeleteText(1, true, 1, '“Harbor world”')).toBe(
       "Couldn't delete “Harbor world”. A World Labs run needs your check first. Use the notice at the top of the screen.");
     expect(heldDeleteText(1, false, 1, '“Harbor world”')).toBe(
-      "Couldn't delete “Harbor world”. “Harbor world” has a saved World Labs recovery ID. Check the run in Marble, then use Forget ID in Run History.");
+      "Couldn't delete “Harbor world”. It has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in Run History.");
   });
 
   it('the backend\'s recovery refusal is named from its own line', () => {
     expect(deleteRefusalText("Couldn't delete the node.", 1,
       ['“Harbor world” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run History.'])).toBe(
-      "Couldn't delete “Harbor world”. “Harbor world” has a saved World Labs recovery ID. Check the run in Marble, then use Forget ID in Run History.");
+      "Couldn't delete “Harbor world”. It has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in Run History.");
   });
 
   it('the canvas refuses a held node with its name', () => {

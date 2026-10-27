@@ -38,6 +38,9 @@ export interface ExecutionCancellationResult {
 export interface ExecutionStatusResult {
   runId: string;
   status: 'running' | 'cancelling' | 'cancelled' | 'completed' | 'failed';
+  /** A Stop reached the backend before this run did: it never started, and
+   * the backend refuses to start it (round 16 of PR #114). */
+  pendingAdmission?: boolean;
 }
 
 /** A received non-2xx response proves the start request reached a backend and
@@ -53,8 +56,16 @@ export class ExecutionStartRejectedError extends RequestFailedError {
 
 /** A refused start, named by its call: GM's line for the status, or the
  * backend's written reason. */
+/** GM - Design, round 16 of PR #114 (locked): a run start Nebula refused
+ * with 507. Every run start's 507 comes from its run-safety store (the
+ * paid-start fence or the recovery journal) before any provider call, and it
+ * lasts until Nebula restarts (review 15, extra check 3). The screen's
+ * heading names the node ("Couldn't run “<node>”."). */
+export const RUN_SAFEGUARDS_REASON = "Nebula couldn't save its run safeguards, so nothing was started. Restart Nebula, then try again.";
+
 async function executionStartResponseError(heading: string, response: Response): Promise<Error> {
-  const error = await requestError(heading, response);
+  const error = await requestError(heading, response,
+    response.status === 507 ? { reason: RUN_SAFEGUARDS_REASON } : {});
   // A gateway/server failure can be returned after the request body was
   // forwarded and the backend scheduled work, so it is not proof of rejection.
   // 507 is Nebula's explicit pre-provider durable-safety rejection.

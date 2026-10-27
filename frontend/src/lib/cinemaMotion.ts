@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { Edge, Node } from '@xyflow/react';
 import { apiFetch, rewriteBackendAssetUrls } from './backend';
+import { isOfflineRefusal, refuseEditWhileOffline } from './backendConnection';
 import { nodeKeyStatus } from './kreaConnection';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { shotPortId } from '../constants/ports';
@@ -59,6 +60,9 @@ function validatedResponse(value: unknown, handoff: CinemaMotionHandoff): { node
 export async function sendCinemaShotToMotion(nodeId: string, shotId: string): Promise<void> {
   const graph = useGraphStore.getState();
   if (graph.isImportingGraph) return;
+  // Round 16 (L3): connecting a video node is an edit. Offline the button is
+  // disabled; a press that gets here only pulses the banner.
+  if (refuseEditWhileOffline()) return;
   const previous = useCinemaMotionStore.getState().handoffs.find((item) => item.nodeId === nodeId && item.shotId === shotId);
   if (previous?.status === 'pending') return;
   const source = cinemaMotionSource(graph.nodes, nodeId, shotId);
@@ -119,6 +123,14 @@ export async function sendCinemaShotToMotion(nodeId: string, shotId: string): Pr
     replace({ ...handoff, status: 'ready', targetId });
   } catch (error) {
     if (!owns(handoff)) return;
+    if (isOfflineRefusal(error)) {
+      // Refused before it was sent (the tab went offline on the way): nothing
+      // changed, so the shot goes back to what it showed, with no error line.
+      useCinemaMotionStore.getState().setHandoffs((items) => [
+        ...items.filter((item) => item.attempt !== handoff.attempt), ...(previous ? [previous] : []),
+      ]);
+      return;
+    }
     replace({ ...handoff, status: 'error', error: error instanceof HandoffError ? error.message
       // GM, round 3f: "don't stack two "Couldn't"s, and Nebula is local, so →
       // "Couldn't confirm the video connection. Nebula didn't respond."".

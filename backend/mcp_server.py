@@ -1451,12 +1451,21 @@ def _preview_with_error(node_id: str, port: str | None, size: str, ctx: Context 
             unquote(failed) if failed else None)
 
 
+# A Stop that reached Nebula before the run's start did (round 16 of PR
+# #114): the run id is refused from then on, so it never runs.
+RUN_STOPPED_BEFORE_START = ("Stopped before it started. Nebula won't start a run with this id, "
+                            "so nothing ran and nothing was spent.")
+CANCEL_BEFORE_START_NEXT = ("Nebula hadn't started this run yet. The stop is recorded, and Nebula "
+                            "won't start a run with this id, so nothing runs and nothing is spent.")
+
+
 def _run_result(payload: dict[str, Any], ctx: Context | None) -> list:
     """The run as agents need it: status, outputs per node, errors, and previews."""
     status = payload.get("status")
     shown: dict[str, Any] = {key: payload[key] for key in ("status", "runId", "targetNodeId", "elapsed",
                                                             "duration", "nodesExecuted", "error",
-                                                            "source", "startedBy", "nodes") if key in payload}
+                                                            "source", "startedBy", "nodes", "neverStarted")
+             if key in payload}
     if payload.get("results"):
         shown["outputs"] = {node: _brief_outputs(outputs) for node, outputs in payload["results"].items()}
     if payload.get("errors"):
@@ -1471,6 +1480,8 @@ def _run_result(payload: dict[str, Any], ctx: Context | None) -> list:
     if status == "running":
         shown["next"] = (f"Still running. get_run('{payload.get('runId')}', wait_seconds=...) collects it; "
                          "cancel_run stops it.")
+    elif status == "cancelled" and payload.get("neverStarted"):
+        shown["next"] = RUN_STOPPED_BEFORE_START
     elif status == "cancelled":
         shown["next"] = "Stopped. Outputs that finished before the stop are kept."
     parts: list = [_json.dumps(shown)]
@@ -1549,10 +1560,18 @@ def cancel_run(run_id: str, ctx: Context | None = None) -> dict[str, Any]:
 
     A run the person started is theirs to stop and is refused (403). If they
     ask you to stop it, tell them to press Stop in Nebula (the toolbar, or
-    the run in Run history)."""
+    the run in Run history).
+
+    A run id Nebula hasn't started yet (its start still on the way) answers
+    `pendingAdmission: true`: the stop is recorded and Nebula refuses to
+    start a run with that id, so it never runs; get_run then reads it as
+    cancelled with `neverStarted`."""
     from urllib.parse import quote
 
-    return _canvas_call("DELETE", f"/api/executions/{quote(run_id, safe='')}", ctx)
+    answer = _canvas_call("DELETE", f"/api/executions/{quote(run_id, safe='')}", ctx)
+    if isinstance(answer, dict) and answer.get("pendingAdmission"):
+        return {**answer, "next": CANCEL_BEFORE_START_NEXT}
+    return answer
 
 
 @_tool(annotations=_READ)

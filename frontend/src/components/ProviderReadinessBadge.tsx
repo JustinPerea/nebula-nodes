@@ -26,7 +26,9 @@ export function ProviderReadinessBadge({ definition, params, onSetup }: {
     params ?? withNewKreaMode(definition, defaults, cache.kreaConnectionMode), cache, health);
   const manage = readiness.tone === 'success' || readiness.label.startsWith('Configured') || readiness.label === 'Krea signed in';
   return (
-    <div className={`provider-readiness provider-readiness--${readiness.tone}`}>
+    // Offline (GM, round 16 of PR #114): the line goes neutral grey, since
+    // orange would say "set this up now" while nothing can be set up.
+    <div className={`provider-readiness provider-readiness--${readiness.tone}${offline ? ' provider-readiness--offline' : ''}`}>
       <span className="provider-readiness__label" title={readiness.detail}>
         {readiness.connectionLabel && <span className="provider-readiness__route">{readiness.connectionLabel} · </span>}
         <span>{readiness.label}</span>

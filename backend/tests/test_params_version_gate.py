@@ -354,7 +354,15 @@ def test_health_reports_the_params_version_and_keeps_its_identity():
     # another version (desktop/frontend-build.mjs). Health stays open: no
     # person token, no params header.
     body = TestClient(main_module.app).get("/api/health").json()
-    assert body == {"status": "ok", "app": "nebula", "version": "0.1.0", "paramsVersion": PARAMS_VERSION}
+    assert body == {"status": "ok", "app": "nebula", "version": "0.1.0", "paramsVersion": PARAMS_VERSION,
+                    "bootId": main_module.BACKEND_BOOT_ID}
+
+
+def test_health_names_the_backend_process():
+    # Round 16 of PR #114, M4: the tab notes the backend's process id from
+    # every health probe, so a restart is seen even with no project open.
+    body = TestClient(main_module.app).get("/api/health").json()
+    assert isinstance(body["bootId"], str) and body["bootId"] == main_module.BACKEND_BOOT_ID
 
 
 def test_desktop_renderer_may_send_the_params_version_header():

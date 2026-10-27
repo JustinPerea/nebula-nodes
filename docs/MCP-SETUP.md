@@ -965,6 +965,36 @@ before; one whose `/api/execute` is still being admitted is judged by the
 journal's note of its starter. A run that already ended answers its status
 to anyone, since nothing is left to stop.
 
+Round 16 of PR #114: a Stop for a run ID this backend hasn't started yet
+(the canvas's Stop racing its own `/api/execute`, or `cancel_run` on an id
+whose start is still on its way) is kept, so that start never runs. Besides
+the durable pre-admission intent (the cross-process filter, which a Stop
+for an unknown run may compact at once), the backend keeps the ID in memory
+for an hour (`ExecutionRunRegistry.tombstone`, up to 4,096 IDs, the oldest
+dropped first; it never refuses new work, and it holds even when the
+durable journal couldn't take the Stop). `/api/execute`, `/api/execute-node`
+and shot runs (`/api/cinema/generate-shot`) check both at their first check
+and again at the last one before the run is registered, with nothing
+awaited in between, so a start that began before the Stop landed is refused
+with 409 "run '<id>' was cancelled before it started" and nothing is sent or
+spent. What each surface says:
+
+- `DELETE /api/executions/{runId}` and `GET /api/executions/{runId}` answer
+  `{"status": "cancelled", "pendingAdmission": true}`.
+- `cancel_run` adds `next`: "Nebula hadn't started this run yet. The stop
+  is recorded, and Nebula won't start a run with this id, so nothing runs
+  and nothing is spent."
+- `get_run` (and `GET /api/graph/runs/{runId}`) answers `status: "cancelled"`
+  with `neverStarted: true` and `next`: "Stopped before it started. Nebula
+  won't start a run with this id, so nothing ran and nothing was spent."
+- `nebula cancel` prints "Run <id> hadn't started yet. Nebula won't start
+  it now, so nothing runs and nothing is spent."; `nebula result` on that id
+  prints "Run <id> was stopped before it started, so nothing ran and
+  nothing was spent." (exit code as for any stopped run).
+
+The canvas settles such a run as stopped (if the person pressed Stop) or as
+not started, and it can be run again under a new ID.
+
 Every process the backend starts (agents, the Commons reader, ffmpeg, the
 Remotion renderer, git, `open`, `ps`, `sips`, `brctl`) gets the backend's
 environment minus `NEBULA_PERSON_TOKEN`, `NEBULA_CONNECTOR_ENCRYPTION_KEY`,
@@ -1023,8 +1053,11 @@ paid-start fence's own storage that can't be read or written, the restore
 answers 507 "Cannot restore a graph bundle because Nebula cannot verify the
 durable World Labs paid-start fence." instead, as any canvas replacement
 does then; that is a different store, and restarting Nebula is the fix
-there too. Ordinary edits and run starts that pass through the fence clear
-the bootstrap state the same way, only after a real journal write.
+there too. An edit that takes the fence (a param or model change, a node
+delete, Clear, Accept, a canvas edit or replacement) clears the bootstrap
+state the same way, only after a real journal write. A run start clears it
+only when the run has World Labs work to claim; an ordinary run doesn't
+touch it.
 
 Round 3c gave a node's run error the same split. `error` stays the
 handler's specific text, word for word, wherever agents read it: `get_run`
@@ -2374,9 +2407,17 @@ their edits are blocked, not queued, because a restarted backend refuses
 replayed writes. That covers everything their tab could change: canvas
 edits, Run (every run entry, so no paid run starts from a tab that only
 thinks Nebula is gone), Create's Generate, proposal Accept and Reject,
-Forget ID and the unlock, chat sends, settings, and project create, switch,
-rename and delete; the tab sends no write at all (only reads) and saves the
-project once Nebula answers again. You meet the same outage as a connect Nebula never took
+Forget ID and the unlock, chat sends and a chat permission's "Allow once",
+settings, the Commons, and project create, switch, rename and delete. The
+tab sends no write that starts work or changes anything; it saves the
+project once Nebula answers again. Since round 16 a few requests that only
+stop or reduce work still go, so a tab that only thinks Nebula is gone can
+still stop a run that's spending: Stop (`DELETE /api/executions/{runId}`),
+a render's cancel (`DELETE /api/render-jobs/{jobId}`), the Commons worker's
+Stop (`POST /api/commons/worker/stop`), and over the chat socket Deny and
+the chat's Stop (its `cancel` message). The canvas's selection and view
+reports (what `get_selected_nodes` and `look_at_canvas` read) aren't sent while
+offline; the tab sends the current ones once Nebula answers again. You meet the same outage as a connect Nebula never took
 ("Nebula isn't running at <url>. Start Nebula, then retry."), and the tool's
 error then adds: "While Nebula is offline the person's canvas is read-only:
 nothing you or they edit is saved or queued. Once it's back, call start_here

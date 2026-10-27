@@ -4898,7 +4898,11 @@ async def health() -> dict:
     # paramsVersion: the desktop app compares it with its built frontend's
     # stamp (nebula-build.json) at launch and refuses to open a bundle built
     # for another version (desktop/frontend-build.mjs). Not a secret.
-    return {"status": "ok", "app": "nebula", "version": "0.1.0", "paramsVersion": PARAMS_VERSION}
+    # bootId: which backend process answers (round 16 of PR #114, M4). A tab
+    # notes it from every health probe and socket hello, with or without a
+    # project open, and a new one means the backend restarted. Not a secret.
+    return {"status": "ok", "app": "nebula", "version": "0.1.0", "paramsVersion": PARAMS_VERSION,
+            "bootId": BACKEND_BOOT_ID}
 
 
 @app.get("/api/capabilities/worldlabs")
@@ -9170,6 +9174,9 @@ async def execute(request: ExecuteRequest) -> dict:
         # _require_run_spend_approval); again here, the last check before it
         # registers, with no await between (round 11).
         _refuse_if_graph_moved(fence)
+        # A Stop that arrived while this start awaited (round 16, M2: the tab
+        # stops a run whose status check answered 404) refuses it here.
+        _assert_execution_admissible(run_id)
         _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=nodes)
     except BaseException:
         _return_hold(run_id)
@@ -9326,6 +9333,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     handler_registry = get_handler_registry(emit=_emit_and_sync)
     try:
         _refuse_if_graph_moved(fence)  # as in execute
+        _assert_execution_admissible(run_id)  # as in execute
         _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=sub_nodes)
     except BaseException:
         _return_hold(run_id)
@@ -9448,6 +9456,10 @@ def _run_cancelled_actor(run_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
 async def get_execution_status(run_id: str) -> dict:
     record = execution_runs.get(run_id)
     if record is None:
+        # A Stop arrived before this run did (round 16 of PR #114, M2): the id
+        # is tombstoned and can't start here, so it reads as cancelled.
+        if execution_runs.tombstoned(run_id):
+            return {"runId": run_id, "status": "cancelled", "pendingAdmission": True}
         raise refusal_copy.not_found(f"run '{run_id}' not found", "run", "runs")
     return {"runId": run_id, "status": record.status}
 
@@ -9467,10 +9479,14 @@ async def cancel_execution(run_id: str) -> dict:
     except ProviderStartCancellationCapacityError as exc:
         if existing is not None:
             execution_runs.cancel(run_id)
+        else:
+            execution_runs.tombstone(run_id)  # still refused here if it arrives
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ProviderStartPersistenceError as exc:
         if existing is not None:
             execution_runs.cancel(run_id)
+        else:
+            execution_runs.tombstone(run_id)
         raise HTTPException(
             status_code=507,
             detail="Could not durably record the pre-admission Stop intent",
@@ -9954,6 +9970,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     # fresh paid start.
     try:
         _refuse_if_graph_moved(fence)  # as in execute
+        _assert_execution_admissible(run_id)  # as in execute
         _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=sub_nodes)
     except BaseException:
         _return_hold(run_id)
@@ -15629,6 +15646,11 @@ async def get_graph_run(run_id: str, wait: float = 0) -> dict[str, Any]:
     answers exactly as its start did."""
     wait = max(0.0, min(float(wait), 300.0))
     reports = _run_reports()
+    if (_cli_runs.get(run_id) is None and execution_runs.get(run_id) is None and not reports.known(run_id)
+            and execution_runs.tombstoned(run_id)):
+        # A Stop beat this run's start (round 16 of PR #114, M2): the id can't
+        # start here, so nothing ran and nothing was spent.
+        return {"runId": run_id, "status": "cancelled", "source": "canvas", "neverStarted": True}
     if _cli_runs.get(run_id) is None and (execution_runs.get(run_id) is not None or reports.known(run_id)):
         response = await _canvas_run_response(run_id, wait)
         return _hide_run_key_echoes({**response, "startedBy": actor_record(canvas_events.run_actor(run_id)),

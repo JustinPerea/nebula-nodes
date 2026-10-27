@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiFetch } from '../lib/backend';
-import { noteProbeAnswer, refuseEditWhileOffline, startHealthProbe, subscribeOfflinePulse } from '../lib/backendConnection';
+import {
+  noteBackendBootId, noteProbeAnswer, refuseEditWhileOffline, startHealthProbe, subscribeHealthProbeRequests, subscribeOfflinePulse,
+} from '../lib/backendConnection';
 import { OFFLINE_MARK, useBackendOffline } from '../lib/useBackendOffline';
 
 export const BACKEND_PROBE_INTERVAL_MS = 3_000;
@@ -34,16 +36,27 @@ export function BackendConnectionStatus() {
       try {
         const response = await apiFetch('/api/health', { cache: 'no-store' });
         if (!response.ok) throw new Error(`Backend health failed: ${response.status}`);
-        if (!cancelled) noteProbeAnswer(seq, 'online');
+        // Which backend process answered (round 16, M4): a new one restarted.
+        // The answer alone means online; a body that can't be read only
+        // leaves the boot id unknown.
+        let body: { bootId?: unknown } | null = null;
+        try { body = await response.json() as { bootId?: unknown } | null; } catch { body = null; }
+        if (!cancelled) {
+          noteBackendBootId(body?.bootId);
+          noteProbeAnswer(seq, 'online');
+        }
       } catch {
         if (!cancelled) noteProbeAnswer(seq, 'offline');
       }
     };
     void probe();
     const interval = window.setInterval(() => void probe(), BACKEND_PROBE_INTERVAL_MS);
+    // A reopened socket asks for one now (requestHealthProbe).
+    const stopRequests = subscribeHealthProbeRequests(() => void probe());
     return () => {
       cancelled = true;
       window.clearInterval(interval);
+      stopRequests();
     };
   }, []);
 

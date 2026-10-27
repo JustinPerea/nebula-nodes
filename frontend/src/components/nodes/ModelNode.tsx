@@ -387,12 +387,13 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         {hasMediaPreview && <button type="button"
           className={inToolbar ? 'selection-toolbar__button nodrag' : 'model-node__next-step nodrag'}
           data-next-step-anchor={id}
-          disabled={!nextStepSource || isExecuting || !/^n\d+$/.test(id)}
+          disabled={!nextStepSource || isExecuting || !/^n\d+$/.test(id) || readOnly}
+          {...offlineMark(readOnly)}
           title={nextStepTitle}
           onMouseDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
-            if (!nextStepSource) return;
+            if (!nextStepSource || readOnly) return;
             const bounds = event.currentTarget.getBoundingClientRect();
             useUIStore.getState().showConnectionPopup({
               position: { x: bounds.left, y: bounds.bottom + 8 },

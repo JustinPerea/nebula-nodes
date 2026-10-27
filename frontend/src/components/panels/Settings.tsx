@@ -2,7 +2,7 @@ import { Component, lazy, Suspense, useEffect, useRef, useState, type ReactNode 
 import { X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { getSettings } from '../../lib/api';
-import { failureCopy, type FailureCopy } from '../../lib/errorCopy';
+import { NEBULA_NOT_ANSWERING_COPY, failureCopy, isNoAnswer, type FailureCopy } from '../../lib/errorCopy';
 import { FailureLines } from '../failure/FailureLines';
 import { applySavedRunCostConfirm } from '../../lib/runCostConfirm';
 import { useSettingsDraftStore, readSettingsDraft, settingsWriteInFlight, type SettingsTab } from '../../store/settingsDraftStore';
@@ -100,7 +100,11 @@ export function Settings() {
     }).catch((error: unknown) => {
       if (cancelled || request !== loadRequest.current) return;
       // Keep showing what we last confirmed; only a first load with nothing to show is an error.
-      setLoadFailure(failureCopy(error, { heading: "Couldn't load your API keys.", short: true }));
+      // GM, round 16 of PR #114: with no answer, the unified line in full
+      // ("…, then try again."), beside Try again.
+      setLoadFailure(isNoAnswer(error)
+        ? { heading: "Couldn't load your API keys.", reason: NEBULA_NOT_ANSWERING_COPY }
+        : failureCopy(error, { heading: "Couldn't load your API keys.", short: true }));
       setLoadState(useSettingsDraftStore.getState().saved ? 'ready' : 'error');
     });
     return () => { cancelled = true; };
@@ -155,8 +159,10 @@ export function Settings() {
         ) : (
           <div role="tabpanel" id={`settings-panel-${tab}`} aria-labelledby={`settings-tab-${tab}`} className="settings__tabpanel" key={tab}>
             {/* A disabled fieldset disables every control in the tab at once,
-                from React state: reconnect simply re-renders it. */}
-            <fieldset className="settings__fieldset" disabled={offline} {...offlineMark(offline)}>
+                from React state: reconnect simply re-renders it. Providers
+                has its own, below its search, which stays usable (GM, r16). */}
+            <fieldset className="settings__fieldset" disabled={offline && tab !== 'providers'}
+              {...offlineMark(offline && tab !== 'providers')}>
               <TabLoadBoundary>
                 <Suspense fallback={<div className="settings__loading" role="status">Loading settings…</div>}>
                   {tab === 'providers' && <ProvidersTab saved={saved} />}

@@ -64,8 +64,10 @@ import {
   promoteCinemaShotVariation as apiPromoteShotVariation,
   getExecutionStatus as apiGetExecutionStatus,
   ExecutionStartRejectedError,
+  RUN_SAFEGUARDS_REASON,
   type ExecutionValidationError,
   type ExecutionStatusResult,
+  type ExecutionCancellationResult,
   type OpenRouterModel,
 } from '../lib/api';
 import {
@@ -74,13 +76,16 @@ import {
   rewriteBackendAssetUrls,
   rewriteExecutionAssetUrls,
 } from '../lib/backend';
-import { isBackendOffline, isOfflineRefusal, OfflineRefusal, refuseEditWhileOffline, subscribeBackendConnection } from '../lib/backendConnection';
+import {
+  isBackendOffline, isOfflineRefusal, noteBackendBootId, OfflineRefusal, refuseEditWhileOffline, requestHealthProbe,
+  subscribeBackendConnection, subscribeBackendRestart,
+} from '../lib/backendConnection';
 import { AGENT_CURSOR_SPRING, isAtRest, stepSpring, type SpringState } from '../lib/agentCursorMotion';
 import { noteNodeLabels } from '../lib/lastNodeLabels';
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
-import { WORLD_LABS_STATUS_UNCERTAIN_WARNING, deleteRefusalText, heldDeleteText } from '../lib/worldLabsWaiting';
+import { WORLD_LABS_STATUS_UNCERTAIN_WARNING, cardTitle, deleteRefusalText, heldDeleteText } from '../lib/worldLabsWaiting';
 import {
-  CONNECTION_LOST_COPY, ConnectionLostError, FailureNotice, REFUSED_FALLBACK_COPY, RequestFailedError, copyForAnswer, detailText, failureKind, failureCopy, failureDetails, failureMessage, readRefusal, requestError,
+  NEBULA_NOT_ANSWERING_COPY, ConnectionLostError, FailureNotice, REFUSED_FALLBACK_COPY, RequestFailedError, copyForAnswer, detailText, failureKind, failureCopy, failureDetails, failureMessage, readRefusal, requestError,
   warnFailure,
 } from '../lib/errorCopy';
 import { CANVAS_NOTICE_EVENT, type CanvasNoticeDetail } from '../lib/canvasNotice';
@@ -89,6 +94,7 @@ import { NOTHING_RAN_LINE, OTHER_NODE_LINE, SHOT_NOT_STARTED_LINE, validationRea
 import {
   RUNTIME_FIELDS, applySlice, captureOwnAdd, diffCanvas, edgeKey, editArrivedText, foldArrange, foreignSource, isForeignEdit,
   isOwnAdd, isOwnEcho, isSliceStep, ownAddStep, paramChange, renameOwnedNode, restoreRequest, undoNoticeText,
+  acceptUndoLine, ownAddIsEmpty, sameValue, type KeptAfterAccept,
   type EditOrigin, type ForeignEdit, type OwnAdd, type OwnParamChange, type RestoreBody,
 } from '../lib/canvasUndo';
 import { TAB_ID } from '../lib/tabId';
@@ -611,8 +617,8 @@ function pushUndo(
  * known; a later step depends on nothing it holds, so it may land above
  * steps taken while the add was out. */
 function pushOwnAdd(set: GraphSet, get: GraphGet, nodeIds: Iterable<string>,
-  params: OwnParamChange[] = []): OwnAdd | null {
-  const step = ownAddStep(nodeIds, params);
+  params: OwnParamChange[] = [], accepted?: Node<NodeData>[]): OwnAdd | null {
+  const step = ownAddStep(nodeIds, params, accepted);
   if (step.nodeIds.length === 0 && !step.params) return null;
   breakUndoDebounce();
   const undoStack = [...get().undoStack, step];
@@ -668,6 +674,19 @@ function settleFailedStart(runId: string, err: unknown): void {
   if (!(err instanceof ExecutionStartRejectedError)) return;
   refusedStartRunIds.add(runId);
   if (refusedStartRunIds.size > 1000) refusedStartRunIds.delete(refusedStartRunIds.values().next().value!);
+  if (err.status === 507 && err.reason === RUN_SAFEGUARDS_REASON) noteRunSafeguardsRefusal(runId);
+}
+
+/** GM's locked 507 line (round 16 of PR #114): "Couldn't run “<node>”.
+ * Nebula couldn't save its run safeguards, so nothing was started. Restart
+ * Nebula, then try again." It lasts until a restart, so it is said where the
+ * person looks, besides each card's own line. A run with no single node
+ * (the bottom Run) keeps its own heading. */
+function noteRunSafeguardsRefusal(runId: string): void {
+  const state = useGraphStore.getState();
+  const target = state.runHistory.find((record) => record.id === runId)?.targetNodeId;
+  const label = target ? cardTitle(state.nodes, target) : null;
+  state.notify(`${label ? `Couldn't run \u201c${label}\u201d.` : "Couldn't start the run."} ${RUN_SAFEGUARDS_REASON}`);
 }
 
 /** Run records that never ran: refused starts and, with `includePending`,
@@ -767,6 +786,7 @@ function closeTrackedRun(set: GraphSet, runId: string, patch: Parameters<typeof 
   if (currentRunId === runId) currentRunId = null;
   pendingStartRunIds.delete(runId);
   cancellationRequestedRunIds.delete(runId);
+  stopFailureNoted.delete(runId);
   const timer = statusReconciliationTimers.get(runId);
   if (timer !== undefined) clearTimeout(timer);
   statusReconciliationTimers.delete(runId);
@@ -1230,7 +1250,8 @@ function configuredModel(node: Node<NodeData> | undefined): string {
 export const GENERATE_HEADING = "Couldn't start the generation.";
 export const CLUSTER_NOT_ADDED = "Its nodes weren't added to the canvas.";
 export function clusterFailureReason(error: unknown): string {
-  if (error instanceof ConnectionLostError) return CONNECTION_LOST_COPY;
+  // GM, round 16: the unified line wherever #114 owns it.
+  if (error instanceof ConnectionLostError) return NEBULA_NOT_ANSWERING_COPY;
   if (error instanceof RequestFailedError && failureKind(error.status) === 'refused'
     && (detailText(error.detail) || error.code)) return error.reason;
   return 'Try again.';
@@ -1616,8 +1637,10 @@ function pushNodeParams(nodeId: string): Promise<void> {
     if (pushes) paramPushesOut.set(nodeId, pushes.filter((entry) => entry !== push));
   }).catch((err) => {
     console.warn(`[nebula] Param sync for ${nodeId} failed:`, err);
-    // Refused while offline (round 15): nothing was sent, and nothing is said.
-    if (isOfflineRefusal(err)) return;
+    // Refused while offline: typed just before the connection dropped (its
+    // field is disabled offline), so it is an edit in flight. GM's failed-save
+    // line and the revert, never lost without a word (round 16 of PR #114,
+    // review 15 L2; round 15 said nothing here).
     paramSaveFailed(nodeId, push);
   }).finally(() => { if (edits) settleParamEdit(nodeId, edits); });
 }
@@ -2161,9 +2184,21 @@ async function requestTrackedCancellation(
     // start request. Preserve the cancellation intent and retry via status
     // reconciliation instead of silently allowing that later start to run.
     updateRunPhase(runId, 'cancelling', set);
+    // Stop is sent while offline (round 16 of PR #114, M1: it only reduces
+    // spend). If it doesn't get through then, GM's line says the run may
+    // still be going, once per run; the store keeps the intent and sends it
+    // again (the status check retries, and reconnect sends it).
+    if (isBackendOffline() && !stopFailureNoted.has(runId)) {
+      stopFailureNoted.add(runId);
+      get().notify(STOP_FAILED_OFFLINE_LINE);
+    }
     scheduleWorldLabsStatusReconciliation(runId, set, get);
   }
 }
+
+/** GM - Design, round 16 of PR #114: a Stop that failed while offline. */
+export const STOP_FAILED_OFFLINE_LINE = "Couldn't stop the run. Nebula isn't answering, so it may still be going.";
+const stopFailureNoted = new Set<string>();
 
 async function honorCancellationAfterStart(
   runId: string,
@@ -2205,13 +2240,17 @@ async function reconcileWorldLabsExecutionStatus(
     if (!ownsRun(runId)) return 'stale';
     const paidStart = trackedRunHasFreshPaidWorldLabs(runId, get);
     // The backend has no such run (404): the start whose answer was lost
-    // never reached it, or a restart lost it. Without a paid World Labs
-    // start there is nothing to check in Marble, so the run ends and its
-    // "Queued" marks go (review 14, M1: the tab stayed on "Stop" after
-    // reconnect). A paid start keeps the uncertain state and its unlock.
+    // never reached it, a restart lost it, or it is still being admitted
+    // (review 15, M2: the backend registers a run only after its input
+    // measurement). Without a paid World Labs start there is nothing to
+    // check in Marble, so the run ends and its "Queued" marks go (review 14,
+    // M1) — but only after its Stop is answered: the backend tombstones the
+    // id and refuses a start still on its way, so it can never run untracked
+    // or be run twice. A Stop that isn't answered keeps the run uncertain
+    // and is sent again on the next check. A paid start keeps the uncertain
+    // state and its unlock, as before.
     if (!paidStart && error instanceof RequestFailedError && error.status === 404) {
-      settleTrackedExecutionStatus('failed', runId, set, get);
-      return 'terminal';
+      return fenceUnknownRun(runId, set, get);
     }
     updateRunPhase(runId, cancellationRequestedRunIds.has(runId) ? 'cancelling' : 'uncertain', set);
     set((state) => ({
@@ -2236,6 +2275,39 @@ async function reconcileWorldLabsExecutionStatus(
     }
     updateRunPhase(runId, result.status === 'cancelling' ? 'cancelling' : 'running', set);
     set({ uncertainWorldLabsRunId: null });
+    scheduleWorldLabsStatusReconciliation(runId, set, get);
+    return 'active';
+  }
+  // Tombstoned before it started (the 404 rule's Stop, sent earlier): it
+  // failed to start, unless the person pressed Stop.
+  const neverStarted = result.status === 'cancelled' && result.pendingAdmission && !cancellationRequestedRunIds.has(runId);
+  settleTrackedExecutionStatus(neverStarted ? 'failed' : result.status, runId, set, get);
+  return 'terminal';
+}
+
+/** The 404 rule's Stop (round 16 of PR #114, M2): DELETE the run id first,
+ * then settle by its answer. */
+async function fenceUnknownRun(runId: string, set: GraphSet, get: GraphGet): Promise<'terminal' | 'active' | 'unknown' | 'stale'> {
+  let result: ExecutionCancellationResult;
+  try {
+    result = await apiCancelExecution(runId);
+  } catch (error) {
+    console.warn('[nebula] Stop for a run the backend has no record of failed:', error);
+    if (!ownsRun(runId)) return 'stale';
+    updateRunPhase(runId, cancellationRequestedRunIds.has(runId) ? 'cancelling' : 'uncertain', set);
+    scheduleWorldLabsStatusReconciliation(runId, set, get);
+    return 'unknown';
+  }
+  if (!ownsRun(runId)) return 'stale';
+  if (result.pendingAdmission) {
+    // Never started, and now it never will: it failed to start (the person
+    // didn't press Stop, unless they did).
+    settleTrackedExecutionStatus(cancellationRequestedRunIds.has(runId) ? 'cancelled' : 'failed', runId, set, get);
+    return 'terminal';
+  }
+  if (result.status === 'cancelling') {
+    // It registered meanwhile: the Stop reached it. Track it to its end.
+    updateRunPhase(runId, 'cancelling', set);
     scheduleWorldLabsStatusReconciliation(runId, set, get);
     return 'active';
   }
@@ -3158,6 +3230,43 @@ async function reconcilePendingNodeCreation(
  * empties both stacks: their steps describe a graph that is gone, and undoing
  * one would now write that graph into this one.
  */
+/** Who last changed each node from outside this tab (an agent's presence
+ * name, or null for another window or an outside app), for the line an
+ * accepted proposal's partial undo says (round 16 of PR #114, M5). */
+const foreignTouches = new Map<string, string | null>();
+function noteForeignTouches(nodeIds: string[], agent: string | null): void {
+  for (const id of nodeIds) {
+    foreignTouches.delete(id);
+    foreignTouches.set(id, agent);
+  }
+  while (foreignTouches.size > 2000) foreignTouches.delete(foreignTouches.keys().next().value!);
+}
+
+/** The agent whose edit last touched `nodeId` in this tab, by presence
+ * name; null when unknown (or the edit came from a window with no name). */
+export function lastForeignToucher(nodeId: string): string | null {
+  return foreignTouches.get(nodeId) ?? null;
+}
+
+/** GM's partial-undo line for an accepted proposal, from what the undo kept,
+ * also written to the Agent log. */
+function acceptUndoNoticeText(kept: KeptAfterAccept[], nodes: Node<NodeData>[], nothingUndone: boolean): string {
+  const names = new Set(kept.map((item) => foreignTouches.get(item.nodeId) ?? null));
+  const agent = names.size === 1 ? [...names][0] : null;
+  const line = acceptUndoLine(kept.map((item) => {
+    const node = nodes.find((candidate) => candidate.id === item.nodeId);
+    return {
+      node: node?.data.label ?? item.nodeId,
+      settings: item.keys.length === 0 ? ['settings'] : item.keys.map((key) => key === 'label' ? 'Name'
+        : node ? paramLabel(node, key) : key),
+    };
+  }), agent, nothingUndone);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', { detail: { source: 'system', message: line } }));
+  }
+  return line;
+}
+
 function foreignEditStep(
   state: GraphState,
   nextNodes: Node<NodeData>[],
@@ -3177,6 +3286,8 @@ function foreignEditStep(
   const change = diffCanvas(state.nodes, state.edges, nextNodes, nextEdges, movedIds);
   if (!change) return {};
   const source = foreignSource(origin);
+  noteForeignTouches(Object.keys(change.after.nodes),
+    source === 'agent' ? origin.actor?.name ?? null : null);
   const entry: ForeignEdit = {
     kind: 'foreign',
     agentName: source === 'agent' ? origin.actor?.name ?? 'An agent' : null,
@@ -3248,10 +3359,26 @@ function stepHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet): voi
   const { nodes, edges } = state;
   let next: { nodes: Node<NodeData>[]; edges: Edge[] };
   let inverse: UndoEntry;
+  let keptLine: string | null = null;
   if (isSliceStep(entry)) {
     // An own add is read from the canvas as it is undone, so Redo brings its
     // nodes back as they are now (lib/canvasUndo.ts captureOwnAdd).
-    if (action === 'undo' && isOwnAdd(entry)) captureOwnAdd(entry, nodes, edges);
+    if (action === 'undo' && isOwnAdd(entry)) {
+      const kept = captureOwnAdd(entry, nodes, edges);
+      if (kept.length > 0) {
+        // An accepted proposal an agent changed since (round 16, M5): what
+        // it changed stays, and GM's line says so. Nothing left to undo:
+        // the step goes (Redo would have nothing to do) with the line.
+        const nothing = ownAddIsEmpty(entry);
+        keptLine = acceptUndoNoticeText(kept, nodes, nothing);
+        if (nothing) {
+          breakUndoDebounce();
+          set({ undoStack: from.slice(0, -1),
+            undoNotice: { id: ++undoNoticeSeq, text: keptLine, offer: null } });
+          return;
+        }
+      }
+    }
     next = action === 'undo'
       ? applySlice(nodes, edges, entry.before, entry.after)
       : applySlice(nodes, edges, entry.after, entry.before);
@@ -3284,7 +3411,8 @@ function stepHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet): voi
     ...(isForeignEdit(entry) ? { undoNotice: {
       id: noticeId, text: undoNoticeText(action, entry), agentColor: entry.agentColor,
       offer: action === 'undo' ? 'redo' as const : 'undo' as const, entry,
-    } } : ownLine && !(ownLine.kind === 'restored' && waitsForBackend)
+    } } : keptLine ? { undoNotice: { id: noticeId, text: keptLine, offer: 'redo' as const, entry: inverse } }
+      : ownLine && !(ownLine.kind === 'restored' && waitsForBackend)
       ? { undoNotice: ownStepNotice(noticeId, ownLine, NOTHING_MISSED, action, inverse) } : {}),
   });
   void sendRestore(action, nodes, edges, nextNodes, next.edges, entry, inverse, set,
@@ -3472,9 +3600,12 @@ wsClient.connect();
  * applyGraphSync. */
 let firstSyncAfterReconnect = false;
 
-/** The backend process the socket last said it was (its first graphSync's
- * `bootId`, main.py BACKEND_BOOT_ID). */
-let knownBackendBootId: string | null = null;
+/** Set when a new boot id showed the backend restarted (backendConnection,
+ * from any hello or health answer, with or without a project open: review
+ * 15, M4). The next graphSync applied here releases the creates whose
+ * answer was lost, after it has looked for them (observePending…). */
+let backendRestartSeen = false;
+subscribeBackendRestart(() => { backendRestartSeen = true; });
 
 /**
  * A create whose answer was lost stays "uncertain" (it may have landed), and
@@ -3498,6 +3629,17 @@ function releaseUnresolvedCreates(): void {
 
 wsClient.subscribe((event) => {
   if (event.type === 'socketReconnected') firstSyncAfterReconnect = true;
+  if (event.type === 'graphSync') {
+    // Before any check of whose graph it is: the hello arrives before this
+    // tab has a project (review 15, M4).
+    noteBackendBootId((event as { bootId?: unknown }).bootId);
+    if (firstSyncAfterReconnect) {
+      // A reopened socket's first message proves the backend answers
+      // (review 15, M3): probe now rather than up to 3 s later.
+      firstSyncAfterReconnect = false;
+      requestHealthProbe();
+    }
+  }
   const revision = (event as ExecutionEvent & { workspaceRevision?: string }).workspaceRevision;
   const context = getProjectContext();
   if (revision !== undefined && revision !== context?.revision) return;
@@ -3599,14 +3741,10 @@ function applyGraphSync(event: ExecutionEvent): boolean {
   });
   const observedPendingNodeId = observePendingNodeCreation(cliNodes as Node<NodeData>[]);
   observePendingConnectedNodeCreation(cliNodes as Node<NodeData>[], cliEdges as Edge[]);
-  const bootId = (event as { bootId?: unknown }).bootId;
-  if (firstSyncAfterReconnect) {
-    firstSyncAfterReconnect = false;
-    if (typeof bootId === 'string' && knownBackendBootId !== null && bootId !== knownBackendBootId) {
-      releaseUnresolvedCreates();
-    }
+  if (backendRestartSeen) {
+    backendRestartSeen = false;
+    releaseUnresolvedCreates();
   }
-  if (typeof bootId === 'string' && bootId) knownBackendBootId = bootId;
 
   const state = useGraphStore.getState();
   const held = heldWires(cliEdges ?? []);
@@ -5920,14 +6058,23 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       set((state) => (state.undoStack.includes(snapshot)
         ? { undoStack: state.undoStack.filter((entry) => entry !== snapshot) } : {}));
     }
-    pushOwnAdd(set, get, incoming.map((node) => node.id), changes);
+    // The nodes as Accept added them, written as a sync writes them (asset
+    // URLs), so Undo can tell whether someone edited one since.
+    pushOwnAdd(set, get, incoming.map((node) => node.id), changes, rewriteBackendAssetUrls(incoming));
     set((state) => {
       const updates = new Map(updatedNodes.map((node) => [node.id, node]));
       const merged = state.nodes.map((node) => {
         const update = updates.get(node.id);
-        return update
-          ? { ...node, data: { ...node.data, params: { ...node.data.params, ...update.data.params } } }
-          : node;
+        if (!update) return node;
+        // A key a sync changed since Accept began (an agent's edit landing
+        // during Accept, or the proposal's own echo) keeps the sync's value:
+        // the reply is older (round 16 of PR #114, review 15 M5).
+        const was = beforeById.get(node.id)?.data.params ?? {};
+        const params = { ...node.data.params };
+        for (const [key, value] of Object.entries(update.data.params ?? {})) {
+          if (sameValue(params[key], was[key])) params[key] = value;
+        }
+        return { ...node, data: { ...node.data, params } };
       });
       const existingIds = new Set(state.nodes.map((node) => node.id));
       const existingEdgeIds = new Set(state.edges.map((edge) => edge.id));
@@ -6376,8 +6523,16 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       contextMenu: { visible: false, position: { x: 0, y: 0 }, nodeId: null, flowPosition: null },
       connectionPopup: { visible: false, position: { x: 0, y: 0 }, nodeId: '', handleId: '', handleType: 'source' },
     });
+    // Review 15, L7: a saved project's nodes carry no missing-key warning, and
+    // App only recomputes it when the credential cache changes. Compute it
+    // here, so a freshly opened project shows its ⚠ at once.
+    const { settingsCache } = useUIStore.getState();
+    const withKeyStatus = nodes.map((node) => {
+      const keyStatus = nodeKeyStatus(NODE_DEFINITIONS[node.data.definitionId], node.data.params, settingsCache);
+      return node.data.keyStatus === keyStatus ? node : { ...node, data: { ...node.data, keyStatus } };
+    });
     set({
-      nodes, edges, runHistory: persistedRunHistory(restoredHistory),
+      nodes: withKeyStatus, edges, runHistory: persistedRunHistory(restoredHistory),
       ...ownershipState(), createLaunchingIds: [], createCancelledLaunchIds: [],
       // The clipboard stays, so nodes copy across projects; the bumped load
       // makes it paste with its copy-time params (see CanvasClipboard).
@@ -7059,7 +7214,7 @@ const EDIT_GATES: Partial<Record<keyof GraphState, EditGate>> = {
  * one pulses the banner once. Selection and measured sizes pass. A move of a
  * drag that was already put back (springDragsBack) is refused silently. */
 function readOnlyChanges<C extends { type: string }>(changes: C[]): C[] {
-  if (!isBackendOffline()) return changes;
+  if (!isBackendOffline()) return revertedDrags.size > 0 ? withoutRevertedMoves(changes) : changes;
   const kept = changes.filter((change) => change.type === 'select' || change.type === 'dimensions');
   const refused = changes.filter((change) => change.type !== 'select' && change.type !== 'dimensions');
   for (const change of refused) {
@@ -7076,6 +7231,19 @@ function readOnlyChanges<C extends { type: string }>(changes: C[]): C[] {
   if (dragOrigins.size > 0) springDragsBack();
   else if (refused.length > 0 && !quiet) refuseEditWhileOffline();
   return kept;
+}
+
+/** Round 16 (review 15 nit): a drag that was put back stays ended until the
+ * pointer is released, even if Nebula answers again while the mouse is still
+ * down. Its moves, its drop included, are dropped silently (online too), so
+ * the node doesn't jump back under the cursor and the drop doesn't save. */
+function withoutRevertedMoves<C extends { type: string }>(changes: C[]): C[] {
+  return changes.filter((change) => {
+    const move = change as unknown as { type: string; id?: string; dragging?: boolean };
+    if (move.type !== 'position' || !move.id || !revertedDrags.has(move.id)) return true;
+    if (move.dragging === false) revertedDrags.delete(move.id);
+    return false;
+  });
 }
 
 /**
@@ -7115,6 +7283,7 @@ function springDragsBack(): void {
   const targets = new Map(dragOrigins);
   dragOrigins.clear();
   for (const id of targets.keys()) revertedDrags.add(id);
+  forgetRevertedDragsOnRelease();
   refuseEditWhileOffline();
   const place = (positions: Map<string, { x: number; y: number }>) => useGraphStore.setState((state) => ({
     nodes: state.nodes.map((node) => {
@@ -7147,11 +7316,27 @@ function springDragsBack(): void {
   window.requestAnimationFrame(frame);
 }
 
+/** The pointer's release ends every put-back drag, after the drop's own
+ * change (if React Flow sends one) has been dropped. Not reconnecting: that
+ * can happen with the mouse still down (review 15 nit). */
+let releaseListening = false;
+function forgetRevertedDragsOnRelease(): void {
+  if (releaseListening || typeof window === 'undefined') return;
+  releaseListening = true;
+  const release = () => {
+    window.removeEventListener('pointerup', release, true);
+    window.removeEventListener('pointercancel', release, true);
+    releaseListening = false;
+    window.setTimeout(() => revertedDrags.clear(), 0);
+  };
+  window.addEventListener('pointerup', release, true);
+  window.addEventListener('pointercancel', release, true);
+}
+
 // The connection dropping during a drag puts its nodes back at once (the
-// drag may send no further move); reconnecting forgets the put-back drags.
+// drag may send no further move).
 subscribeBackendConnection(() => {
   if (isBackendOffline()) springDragsBack();
-  else revertedDrags.clear();
 });
 
 {

@@ -84,6 +84,10 @@ const isPersonRequiredCopy = (line: string) =>
  * the reason line drops its 'try again'. The button is the retry." Only
  * failureCopy({ short: true }) picks these. */
 export const CONNECTION_LOST_SHORT_COPY = "Nebula's server isn't answering. Make sure it's running.";
+/** GM - Design, round 16 of PR #114: the one line for "no answer" wherever
+ * #114 owns it (Settings never loaded, Create's cluster), whole even beside
+ * Try again. */
+export const NEBULA_NOT_ANSWERING_COPY = "Nebula isn't answering. Make sure it's running, then try again.";
 export const NO_RESPONSE_SHORT_COPY = "Nebula didn't respond.";
 /** A plain browser tab that found no backend on its ports (GM, round 2).
  * The ports it tried stay on the error for the console. */

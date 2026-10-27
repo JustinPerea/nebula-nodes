@@ -1,3 +1,4 @@
+import { isOfflineRefusal, refuseEditWhileOffline } from './backendConnection';
 import { deleteSettingsApiKey, updateCredential, updateSettings } from './api';
 import { PROVIDER_KEY_SPECS } from './providerCatalog';
 import { RUN_COST_CONFIRM_SETTING } from './runCostConfirm';
@@ -37,7 +38,10 @@ function setPending(id: string, on: boolean) {
   });
 }
 
-function fail(id: string, message: string) {
+function fail(id: string, message: string, error?: unknown) {
+  // Round 16 (L3): a write the offline gate refused was never sent, and the
+  // banner already says why, so it gets no line of its own. The draft stays.
+  if (isOfflineRefusal(error)) return;
   useSettingsDraftStore.setState((state) => ({ errors: { ...state.errors, [id]: message } }));
 }
 
@@ -84,6 +88,9 @@ export function saveKey(key: string, raw: string): Promise<boolean> {
   setPending(key, true);
   return enqueue(async () => {
     const wasConfigured = !!useSettingsDraftStore.getState().saved?.apiKeys[key]?.trim();
+    // Offline, not even the Keychain is written: the backend couldn't hear
+    // about it, and the two would disagree. The text stays in the field.
+    if (refuseEditWhileOffline()) { setPending(key, false); return false; }
     try {
       const bridge = desktopCredentials();
       if (bridge) {
@@ -93,9 +100,9 @@ export function saveKey(key: string, raw: string): Promise<boolean> {
       } else {
         await updateSettings({ apiKeys: { [key]: value } });
       }
-    } catch {
+    } catch (error) {
       setPending(key, false);
-      fail(key, "The key couldn't be saved. Your text is still here; try again.");
+      fail(key, "The key couldn't be saved. Your text is still here; try again.", error);
       return false;
     }
     const { saved, keyDrafts, openRow } = useSettingsDraftStore.getState();
@@ -115,6 +122,7 @@ export function saveKey(key: string, raw: string): Promise<boolean> {
 export function removeKey(key: string): Promise<boolean> {
   setPending(key, true);
   return enqueue(async () => {
+    if (refuseEditWhileOffline()) { setPending(key, false); return false; }
     try {
       const bridge = desktopCredentials();
       if (bridge) {
@@ -124,9 +132,9 @@ export function removeKey(key: string): Promise<boolean> {
       } else {
         await deleteSettingsApiKey(key);
       }
-    } catch {
+    } catch (error) {
       setPending(key, false);
-      fail(key, "The key couldn't be removed. Try again.");
+      fail(key, "The key couldn't be removed. Try again.", error);
       return false;
     }
     const { saved, openRow } = useSettingsDraftStore.getState();
@@ -155,9 +163,9 @@ export function saveField<F extends SettingsField>(field: F, value: SettingsDraf
     const body = (field === 'outputPath' || field === 'exportFolder') ? { [field]: (value as string).trim() || null } : { [field]: value };
     try {
       await updateSettings(body);
-    } catch {
+    } catch (error) {
       setPending(field, false);
-      fail(field, "Couldn't save. Try again.");
+      fail(field, "Couldn't save. Try again.", error);
       return false;
     }
     if (field === 'outputPath' || field === 'exportFolder') {
@@ -184,10 +192,10 @@ export function saveRunCostConfirm(value: number | null): Promise<boolean> {
   return enqueue(async () => {
     try {
       await updateSettings({ [id]: chosen });
-    } catch {
+    } catch (error) {
       if (useUIStore.getState().runCostConfirmUsd === chosen) useUIStore.getState().setRunCostConfirmUsd(previous);
       setPending(id, false);
-      fail(id, "Couldn't save. Try again.");
+      fail(id, "Couldn't save. Try again.", error);
       return false;
     }
     setPending(id, false);

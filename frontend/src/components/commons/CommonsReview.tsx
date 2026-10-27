@@ -8,6 +8,7 @@ import { SectionEyebrow } from './CommonsSectionEyebrow';
 import '../../styles/commons-evaluation.css';
 import '../../styles/commons-review.css';
 import { failureMessage } from '../../lib/errorCopy';
+import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 
 const pretty = (text: string) => text === 'n_a' ? 'Not applicable' : text.replaceAll('_', ' ');
 
@@ -22,6 +23,9 @@ type DraftActions = { save: () => Promise<SaveResult>; discard: () => void };
  * sections (`active` false), where it skips the poll.
  */
 export function CommonsReview({ onWork, active = true }: { onWork?: (work: LabelingWork | null) => void; active?: boolean }) {
+  // Round 16 (L4): offline grading and saves are disabled; corrections stay
+  // editable and unsaved until Nebula answers.
+  const readOnly = useBackendOffline();
   const [batch, setBatch] = useState<ReviewBatch | null>(null);
   const headingId = useId();
   const [loading, setLoading] = useState(true);
@@ -144,7 +148,7 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
     </div><div className="review-progress"><strong>{reviewed} / {batch?.items.length ?? 15} reviewed</strong>
       <p>{ready} grades ready{running ? ' · Grading in progress…' : ''}</p>
       {batch?.state === 'open' && !running && batch.attempts < batch.call_budget && batch.items.some((i) => i.status === 'pending') &&
-        <button className="commons-button" disabled={dirty || !!saving} onClick={() => void generate()}>Generate remaining grades</button>}
+        <button className="commons-button" disabled={dirty || !!saving || readOnly} {...offlineMark(readOnly)} onClick={() => void generate()}>Generate remaining grades</button>}
     </div></header>
     {error && <p role="alert" className="commons-notice commons-notice--error">{error}</p>}
     {!batch && <p>Prepare the reference set in Blind labeling first.</p>}
@@ -204,6 +208,7 @@ function ReviewForm({ batch, item, dirty, saving, generating, onDirty, onAccept,
   const [editing, setEditing] = useState(false);
   const [query, setQuery] = useState('');
   const disabled = saving || generating;
+  const offline = useBackendOffline();
   const discard = () => { if (baseline) setLabels(structuredClone(baseline)); onDirty(false); };
   // The corrections' own save and discard, for the Commons' leave popover.
   useEffect(() => { draftRef.current = labels ? { save: () => onAccept(labels), discard } : null; });
@@ -213,7 +218,7 @@ function ReviewForm({ batch, item, dirty, saving, generating, onDirty, onAccept,
   const change = (patch: Partial<EvaluationLabels>) => { setLabels({ ...labels, ...patch }); onDirty(true); };
   const fields = item.proposal.fields;
   const reason = (key: string) => (fields[key] as { why?: string } | undefined)?.why;
-  const agreement = <><button className="commons-button commons-button--primary" disabled={disabled}
+  const agreement = <><button className="commons-button commons-button--primary" disabled={disabled || offline} {...offlineMark(offline)}
     onClick={() => void onAccept(labels)}>{saving ? 'Saving…' : dirty ? 'Save corrections & next' : item.reviewed_at ? 'Keep this review & next' : 'Agree & next'}</button>
     {dirty && !saving && <span className="commons-unsaved">Unsaved</span>}</>;
   return <div className="evaluation-form">
