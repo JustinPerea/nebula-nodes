@@ -16,6 +16,10 @@ const emptyLabels = (): EvaluationLabels => ({ tags: {}, axes: {}, palette_roles
  * reconnect; GM r18: confirmed, with "changed" for the accents too). */
 export const LABELS_CHANGED_ELSEWHERE = "You changed this reference's labels in another window while Nebula was offline, so your changes here weren't saved.";
 export const ACCENTS_CHANGED_ELSEWHERE = "You changed this reference's accents in another window while Nebula was offline, so your changes here weren't saved.";
+/** GM, PR #198 r1 item 4: the image at this position, or the whole batch,
+ * was replaced in another window (review 17 L3's case), not relabeled. */
+export const IMAGE_REPLACED_ELSEWHERE = "You replaced this reference's image in another window while Nebula was offline, so your changes here weren't saved.";
+export const BATCH_REPLACED_ELSEWHERE = "You replaced this batch in another window while Nebula was offline, so your changes here weren't saved.";
 
 /** What a reference has saved: a draft is based on it. The image and the
  * batch it is in come first (review 17 L3): saves go by position, so after a
@@ -142,7 +146,9 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
       if (before && after && savedStateOf(before, now.batch) === savedStateOf(after, fresh)) { setBatch(fresh, true); return; }
       setBatch(fresh);
       setDirty(false);
-      setNotice(before?.accent_locked ? LABELS_CHANGED_ELSEWHERE : ACCENTS_CHANGED_ELSEWHERE);
+      setNotice(fresh.manifest_hash !== now.batch.manifest_hash ? BATCH_REPLACED_ELSEWHERE
+        : before && after && before.image_sha256 !== after.image_sha256 ? IMAGE_REPLACED_ELSEWHERE
+          : before?.accent_locked ? LABELS_CHANGED_ELSEWHERE : ACCENTS_CHANGED_ELSEWHERE);
     }, () => undefined);
     return () => { cancelled = true; };
   }, [readOnly, setBatch]);

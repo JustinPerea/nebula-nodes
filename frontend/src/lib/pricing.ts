@@ -367,6 +367,35 @@ export function formatUsdRange(low: number, high: number): string {
   return `${formatUsd(low)}–${formatUsd(high).slice(1)}`;
 }
 
+/** What was spent, to the cent ("$3.40", "$0.00" for nothing). A non-zero
+ * amount that would round to "$0.00" is "<$0.01": "$0" only ever means
+ * nothing (GM, PR #198 r1 item 6). */
+export function formatSpentUsd(amount: number): string {
+  return amount > 0 && amount < 0.005 ? '<$0.01' : `$${amount.toFixed(2)}`;
+}
+
+/** A chip's smallest amount (GM, PR #198 r1 item 6): "$0" only ever means
+ * free, so a non-zero amount under a cent reads "<$0.01" on a chip, and its
+ * tooltip says "less than $0.01". Detail lines keep formatUsd's figures. */
+export const CHIP_FLOOR_USD = 0.01;
+export const CHIP_UNDER_FLOOR = '<$0.01';
+export const CHIP_UNDER_FLOOR_WORDS = 'less than $0.01';
+
+/** A chip's amount: formatUsd, with a non-zero amount under a cent "<$0.01". */
+export function formatChipUsd(amount: number): string {
+  return amount > 0 && amount < CHIP_FLOOR_USD ? CHIP_UNDER_FLOOR : formatUsd(amount);
+}
+
+/** A chip's estimate: "~$0.04", "<$0.01", "$0.0047–0.43" as "<$0.01–0.43",
+ * with "+" when part of it has no list price (`open`). Shared by the Run
+ * chips (runScope) and the proposal card (canvasProposals). */
+export function formatChipEstimate(low: number, high: number, open: boolean): string {
+  const exact = formatChipUsd(low) === formatChipUsd(high) || high < CHIP_FLOOR_USD;
+  const amount = exact ? formatChipUsd(high) : `${formatChipUsd(low)}–${formatUsd(high).slice(1)}`;
+  if (open) return `${amount}+`;
+  return exact && amount !== CHIP_UNDER_FLOOR ? `~${amount}` : amount;
+}
+
 /** {route id: the estimate on that route, or null} for a route-table node:
  * what each row of the provider switcher shows at these params. Null when
  * the route can't take the run (routeBlock) or has no list price. Keys don't

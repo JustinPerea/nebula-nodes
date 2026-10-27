@@ -66,12 +66,16 @@ a {
   top: 81px;
 }
 
-/* GM r18: in the video editor the banner sits right under its header (61px,
-   measured at 1280 and 1440) with the same 8px gap, not at the canvas's
-   place, which is over the preview there. It clears the preview's timecode
-   (110px). */
-.backend-connection[data-placement='editor'] {
-  top: 69px;
+/* GM, PR #198 r1 item 5: one rule, the banner sits right under the topmost
+   header of whatever screen shows. The canvas keeps its place above; every
+   other screen (Cinema, Character, Moodboard, Create, Remotion, the video
+   editor, the Commons) is a studio, with its WorkspaceHeader on top: the
+   banner is 8px under where that header ends, as the header publishes it
+   (WorkspaceHeader.tsx, HEADER_BOTTOM_VAR), so a header that wraps taller
+   moves it too. 61px is the header's height at 1280 and 1440 before it has
+   published. */
+.backend-connection[data-placement='studio'] {
+  top: calc(var(--workspace-header-bottom, 61px) + 8px);
 }
 
 /* A blocked edit nudges the banner once (GM, round 14): it springs from a

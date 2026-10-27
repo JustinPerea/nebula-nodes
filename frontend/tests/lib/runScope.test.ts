@@ -407,7 +407,8 @@ describe('a run priced from its input file (cases shared with the backend)', () 
       { ...context, sizes: { '/out/a.png': { width: 1000, height: 1000 } } });
     expect(summary.cost!.sizeRefs).toEqual([]);
     expect(summary.cost!.lines).toEqual([{ name: 'Upscale', low: 0.004, high: 0.004, runs: [1, 1] }]);
-    expect(runChipLabel(summary)).toBe('~$0.004');
+    // GM, PR #198 r1: a chip never shows a sub-cent figure; the detail lines do.
+    expect(runChipLabel(summary)).toBe('<$0.01');
   });
 
   it('never measures an input made in the same run', () => {

@@ -47,7 +47,9 @@ vi.mock('../src/lib/commonsApi', async (importOriginal) => ({
 import { BackendConnectionStatus } from '../src/components/BackendConnectionStatus';
 import { EditorTransport } from '../src/components/editor/EditorTransport';
 import { ProjectHome } from '../src/components/projects/ProjectHome';
-import { ACCENTS_CHANGED_ELSEWHERE, CommonsEvaluation, LABELS_CHANGED_ELSEWHERE } from '../src/components/commons/CommonsEvaluation';
+import {
+  ACCENTS_CHANGED_ELSEWHERE, BATCH_REPLACED_ELSEWHERE, CommonsEvaluation, IMAGE_REPLACED_ELSEWHERE, LABELS_CHANGED_ELSEWHERE,
+} from '../src/components/commons/CommonsEvaluation';
 import { noteBackendConnection, resetBackendConnectionForTests } from '../src/lib/backendConnection';
 import { runChipLabel, runChipTitle, type RunScopeSummary } from '../src/lib/runScope';
 import { useGraphStore } from '../src/store/graphStore';
@@ -97,12 +99,15 @@ describe('the video editor offline', () => {
     data: { definitionId: 'video-edit', label: 'Edit', params: { clips: [clip], sourceFps: 30 }, state: 'idle', outputs: {} } } as unknown as Node<NodeData>;
 
   it('the banner sits right under the editor header, not at the canvas\'s place', () => {
+    // GM, PR #198 r1 item 5: the editor is a studio like the others; the
+    // banner is 8px under its header's published bottom (61px, so 69px).
     noteBackendConnection('offline');
-    render(<BackendConnectionStatus placement="editor" />);
-    expect(document.querySelector('.backend-connection')).toHaveAttribute('data-placement', 'editor');
-    expect(rule(css('App.css'), ".backend-connection[data-placement='editor']")).toMatch(/top:\s*69px/);
+    render(<BackendConnectionStatus placement="studio" />);
+    expect(document.querySelector('.backend-connection')).toHaveAttribute('data-placement', 'studio');
+    expect(rule(css('App.css'), ".backend-connection[data-placement='studio']"))
+      .toMatch(/top:\s*calc\(var\(--workspace-header-bottom,\s*61px\)\s*\+\s*8px\)/);
     const app = readFileSync(join(__dirname, '../src/App.tsx'), 'utf8');
-    expect(app).toMatch(/placement=\{isHome \? 'home' : isEditor \? 'editor' : 'workspace'\}/);
+    expect(app).toMatch(/placement=\{isHome \? 'home' : isCanvas \? 'workspace' : 'studio'\}/);
   });
 
   it('Trim, Speed, Cut and Vol, Render Preview and Export are disabled with the offline mark; Play and the edit points stay', () => {
@@ -189,11 +194,11 @@ describe('the price chip\'s tooltips (GM)', () => {
     expect(runChipTitle(summary({ unpriced: ['Kling'] }))).toBe("At least $0.067. Some costs aren't known yet.");
     expect(runChipTitle(summary({ plus: ['input images'] }))).toBe("At least $0.067. Some costs aren't known yet.");
     // A range with a "+": the least it can be is the low end.
-    expect(runChipTitle(summary({ low: 0.0047, high: 0.43, unpriced: ['Kling'] }))).toBe("At least $0.0047. Some costs aren't known yet.");
+    expect(runChipTitle(summary({ low: 0.05, high: 0.43, unpriced: ['Kling'] }))).toBe("At least $0.05. Some costs aren't known yet.");
   });
 
   it('no tooltip for a plain range or "N paid"', () => {
-    expect(runChipTitle(summary({ low: 0.0047, high: 0.43 }))).toBeUndefined();
+    expect(runChipTitle(summary({ low: 0.05, high: 0.43 }))).toBeUndefined();
     expect(runChipTitle({ total: 1, paid: ['X'] })).toBeUndefined();
   });
 
@@ -240,13 +245,14 @@ describe('Commons label drafts (GM line; review 17 L3)', () => {
 
   it('another image at the same position (same unlabeled state): the draft is dropped, with the line', async () => {
     await draftThenReconnectTo(batch(5, { image: 'image-b' }));
-    expect(await screen.findByText(LABELS_CHANGED_ELSEWHERE)).toHaveAttribute('role', 'status');
+    // GM, PR #198 r1 item 4: its own line (tests/pr198Fix1Ui.test.tsx).
+    expect(await screen.findByText(IMAGE_REPLACED_ELSEWHERE)).toHaveAttribute('role', 'status');
     expect(screen.getByLabelText('quiet loud').getAttribute('aria-valuetext')).not.toBe('0');
   });
 
   it('another batch (a new manifest): the draft is dropped, with the line', async () => {
     await draftThenReconnectTo(batch(5, { manifest: 'manifest-2' }));
-    expect(await screen.findByText(LABELS_CHANGED_ELSEWHERE)).toHaveAttribute('role', 'status');
+    expect(await screen.findByText(BATCH_REPLACED_ELSEWHERE)).toHaveAttribute('role', 'status');
   });
 
   it('the same image in the same batch: the draft survives', async () => {

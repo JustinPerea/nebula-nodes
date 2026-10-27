@@ -111,11 +111,11 @@ describe('GM: never count 1 (and G2\'s settings-or-changes rule)', () => {
       .toBe('Undid the proposal except “Kept”. It was changed after you accepted.');
   });
 
-  it('settings across nodes: named up to 3, counted from 4, "settings"', () => {
+  it('settings across nodes: counted from 2 (GM pr198 r1), "settings"', () => {
     expect(acceptUndoLine([{ node: 'Hero', settings: ['A'] }, { node: 'Logo', settings: ['B'] }], agent, false))
-      .toBe('Undid the proposal except “A” for “Hero” and “B” for “Logo”. Codex changed them after you accepted.');
+      .toBe('Undid the proposal except 2 settings Codex changed after you accepted.');
     expect(acceptUndoLine([{ node: 'Hero', settings: ['A', 'B'] }, { node: 'Logo', settings: ['C'] }], unknown, false))
-      .toBe('Undid the proposal except “A” and “B” for “Hero”, and “C” for “Logo”. They were changed after you accepted.');
+      .toBe('Undid the proposal except 3 settings changed after you accepted.');
     expect(acceptUndoLine([{ node: 'Hero', settings: ['A', 'B'] }, { node: 'Logo', settings: ['C', 'D'] }], agent, false))
       .toBe('Undid the proposal except 4 settings Codex changed after you accepted.');
     expect(acceptUndoLine([{ node: 'Hero', settings: ['A', 'B'] }, { node: 'Logo', settings: ['C', 'D'] }], unknown, false))

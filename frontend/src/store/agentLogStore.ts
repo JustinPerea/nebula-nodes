@@ -36,14 +36,17 @@ export const useAgentLogStore = create<AgentLogState>((set) => ({
 /**
  * One agent action as a log entry, from the event that also moves its cursor
  * (agentPresenceStore): the same name, colour and words ("Added “Moodboard”",
- * "Running “Krea 2”", "Accepted"). A moodboard write comes without a target, so
- * it moves no cursor and is listed here only. Null for an event with nothing
- * to say, such as a bare cursor move.
+ * "Running “Krea 2”", "Accepted"), or the event's own `log` line when the
+ * bubble says nothing (PR #198 r1: "Changed a setting on “Hero still”"), so
+ * no action is left out. A moodboard write comes without a target, so it
+ * moves no cursor and is listed here only. Null for an event with nothing to
+ * say or log, such as a bare cursor move.
  */
 export function agentActionEntry(event: AgentPresenceEvent, now = Date.now()): Omit<AgentLogEntry, 'id'> | null {
   const agent = event.agent;
   if (!agent || typeof agent.id !== 'string' || typeof agent.name !== 'string') return null;
-  const message = typeof event.say === 'string' ? event.say.trim() : '';
+  const said = typeof event.say === 'string' ? event.say.trim() : '';
+  const message = (typeof event.log === 'string' ? event.log.trim() : '') || said;
   if (!message) return null;
   return {
     ts: Number.isFinite(event.at) && event.at > 0 ? event.at : now,

@@ -1,4 +1,5 @@
 import type { ReactNode, Ref } from 'react';
+import { usePublishedHeaderBottom } from '../lib/publishedHeaderBottom';
 import { ArrowLeft } from 'lucide-react';
 import { ProjectWorkspaceControls } from './projects/ProjectWorkspaceControls';
 import { UpdatesSlot } from './agent-notes/UpdatesSlot';
@@ -26,8 +27,9 @@ interface WorkspaceHeaderProps {
 /** One current workspace identity, with its actual return destination. */
 export function WorkspaceHeader({ title, onBack, backLabel = 'Canvas', backDisabled = false, backRef, backBusy = false,
   onHome, homeBusy, className = '', navigation, children, updatesSlot = true }: WorkspaceHeaderProps) {
+  const header = usePublishedHeaderBottom();
   return (
-    <header className={`workspace-header${updatesSlot ? ' workspace-header--updates-slot' : ''} ${className}`} aria-label="Workspace">
+    <header ref={header} className={`workspace-header${updatesSlot ? ' workspace-header--updates-slot' : ''} ${className}`} aria-label="Workspace">
       <div className="workspace-header__identity">
         <ProjectWorkspaceControls onHome={onHome} homeBusy={homeBusy} />
         {onBack && <button ref={backRef} type="button" className={`workspace-header__back${navigation ? ' workspace-header__back--navigation' : ''}`} onClick={onBack}

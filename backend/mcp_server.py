@@ -2439,7 +2439,9 @@ def model_schema(provider: str, model_id: str, ctx: Context | None = None) -> di
 
     "replicate" with `model_id` "owner/name": also the model's latest
     `versionId`, `params` (its other inputs, set as params of the same name:
-    key, type, required, default, options, min, max) and the raw
+    key, label, type, required, default, options, min, max; the label is the
+    key in sentence case, "Guidance scale", as the Inspector and the
+    person's view of your cursor name it) and the raw
     `inputSchema` and `outputSchema`. Set the node's `model_id` to the
     owner/name with edit_canvas.
 

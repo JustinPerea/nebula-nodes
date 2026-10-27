@@ -6,7 +6,10 @@ import { hasRoutes, routePriceKey, routeUnavailable, selectRoute, withWiredBlock
 import { usesKreaAccount } from './kreaConnection';
 import { runRouteProvider } from './modelDiscovery';
 import { cinemaSceneBase, isLocalRun } from './nodeKeys';
-import { awaitsInput, entryForRoute, estimateNode, formatUsd, formatUsdRange, sizingPorts, type InputSize, type PricingTable } from './pricing';
+import {
+  awaitsInput, CHIP_FLOOR_USD, CHIP_UNDER_FLOOR_WORDS, entryForRoute, estimateNode, formatChipEstimate, formatChipUsd, formatUsd,
+  formatUsdRange, sizingPorts, type InputSize, type PricingTable,
+} from './pricing';
 
 /** What a run would cost, from the curated list prices. Only USD is summed. */
 export interface RunCost {
@@ -320,26 +323,44 @@ export function summarizeRunScope(
   return summary;
 }
 
-/** The Run chip: "~$0.04", "$0.0047–0.43", "$0.04+" when part of the run
- * has no list price, "N paid" when none of it does. Null when nothing is paid. */
+/** The Run chip: "~$0.04", "$0.04–0.43", "$0.04+" when part of the run has
+ * no list price, "<$0.01" for a non-zero amount under a cent (GM, PR #198
+ * r1: "$0" only ever means free), "N paid" when none of it has a list
+ * price. Null when nothing is paid. */
 export function runChipLabel({ paid, cost }: RunScopeSummary): string | null {
   if (paid.length === 0) return null;
   if (!cost || cost.lines.length === 0) return `${paid.length} paid`;
-  const exact = formatUsd(cost.low) === formatUsd(cost.high);
-  const amount = exact ? formatUsd(cost.high) : formatUsdRange(cost.low, cost.high);
   // "+" when part of the run has no list price, so the real total can be higher.
-  if (cost.unpriced.length > 0 || cost.plus.length > 0) return `${amount}+`;
-  return exact ? `~${amount}` : amount;
+  return formatChipEstimate(cost.low, cost.high, cost.unpriced.length > 0 || cost.plus.length > 0);
 }
 
-/** The Run chip's tooltip for its prefix (GM - Design, r18 of PR #114):
- * "~$X" is "Estimated cost"; "$X+" is "At least $X. Some costs aren't known
- * yet.", with X the low end of the estimate. A plain range and "N paid" have
- * none (the button's own title has the details). */
+/** The Run chip's tooltip (GM - Design, r18 of PR #114 and r1 of PR #198):
+ * - "~$X": "Estimated cost"; "$X+": "At least $X. Some costs aren't known
+ *   yet.", with X the low end;
+ * - "$0+", the known part really $0: "Some costs aren't known yet.";
+ * - a range from $0: "Between $0 and $Y, plus costs that aren't known yet.",
+ *   or "Between $0 and $Y." without the +;
+ * - under a cent ("<$0.01"), the amount is "less than $0.01": builder's
+ *   sentences around GM's words, marked below, for GM to confirm.
+ * A plain range from more than $0 and "N paid" have none (the button's own
+ * title has the details). */
 export function runChipTitle({ paid, cost }: RunScopeSummary): string | undefined {
   if (paid.length === 0 || !cost || cost.lines.length === 0) return undefined;
-  if (cost.unpriced.length > 0 || cost.plus.length > 0) return `At least ${formatUsd(cost.low)}. Some costs aren't known yet.`;
-  return formatUsd(cost.low) === formatUsd(cost.high) ? 'Estimated cost' : undefined;
+  const open = cost.unpriced.length > 0 || cost.plus.length > 0;
+  const unknown = "Some costs aren't known yet.";
+  const plusUnknown = ", plus costs that aren't known yet.";
+  const exact = formatChipUsd(cost.low) === formatChipUsd(cost.high) || cost.high < CHIP_FLOOR_USD;
+  if (exact && cost.high <= 0) return open ? unknown : 'Estimated cost';
+  if (exact && cost.high < CHIP_FLOOR_USD) {
+    // Builder's sentences (GM's words: "less than $0.01").
+    return open ? `Less than $0.01${plusUnknown}` : `Estimated cost: ${CHIP_UNDER_FLOOR_WORDS}.`;
+  }
+  if (exact) return open ? `At least ${formatUsd(cost.low)}. ${unknown}` : 'Estimated cost';
+  const high = formatUsd(cost.high);
+  if (cost.low <= 0) return `Between $0 and ${high}${open ? plusUnknown : '.'}`;
+  // Builder's sentence (GM's words: "less than $0.01").
+  if (cost.low < CHIP_FLOOR_USD) return `Between ${CHIP_UNDER_FLOOR_WORDS} and ${high}${open ? plusUnknown : '.'}`;
+  return open ? `At least ${formatUsd(cost.low)}. ${unknown}` : undefined;
 }
 
 const AWAITING = 'Priced when its input is known:';

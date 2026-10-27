@@ -144,11 +144,21 @@ def _backend_result(case: dict) -> dict:
     }
 
 
+def _with_setting_labels(expected: dict) -> dict:
+    """The one change every Replicate case shares (GM, PR #198 r1 item 7): a
+    model's settings are labeled by their key in sentence case
+    ("Guidance scale"), where the old picker wrote Title Case. Ports keep it."""
+    if "dynamicParams" not in expected:
+        return expected
+    return {**expected, "dynamicParams": [{**param, "label": universal_ports.setting_label(param["key"])}
+                                          for param in expected["dynamicParams"]]}
+
+
 @pytest.mark.parametrize("case", PICKER["cases"], ids=[case["name"] for case in PICKER["cases"]])
 def test_the_rules_are_the_pickers_rules(case):
     expected = {**case["expected"], **{key: value for key, value in PICKER["backendChanges"].get(case["name"], {}).items()
                                        if key != "why"}}
-    assert _backend_result(case) == expected
+    assert _backend_result(case) == _with_setting_labels(expected)
 
 
 def test_a_configured_node_keeps_its_ports_for_its_model_only():
@@ -474,7 +484,7 @@ def test_the_picker_route_for_replicate_returns_the_inspectors_controls(api):
     assert response.status_code == 200, response.text
     body = response.json()
     case = next(case for case in PICKER["cases"] if case["name"] == "replicate image edit")
-    assert body["dynamicParams"] == case["expected"]["dynamicParams"]
+    assert body["dynamicParams"] == _with_setting_labels(case["expected"])["dynamicParams"]
     assert body["providerMeta"] == {"version_id": "v-kontext", "description": "Edit images with text"}
 
     missing = api.client.post(f"/api/graph/node/{node}/model", headers=PERSON, json={"model": "nobody/uncached"})

@@ -21,6 +21,7 @@ import { JevResultDetails } from './JevResultDetails';
 import { StructuredOutputs } from '../nodes/StructuredValuePreview';
 import { structuredOutputEntries } from '../../lib/structuredValue';
 import { isJevNode, parseJevOutputs } from '../../lib/jev';
+import { universalSettingLabel } from '../../lib/universalSettingLabel';
 import { allParamDefinitions, paramDefinitionsForRun, providerLabel, routeById, routeSwitch, selectRoute, shownRouteId, visibleParams as visibleParamsFor, withWiredBlockers } from '../../lib/directRoute';
 import { definitionSnap, definitionStartShapeNote, sizeNote } from '../../lib/makerSizes';
 import { paramDefaultFor, snapParamDefaults, type DefaultSnapNote } from '../../lib/paramDefaults';
@@ -1155,7 +1156,10 @@ export function Inspector({ embedded = false }: InspectorProps) {
           const dynData = nodeData as unknown as DynamicNodeData;
           const hasDynamicParams = dynData?.isDynamic && dynData.dynamicParams?.length > 0;
           if (!hasDynamicParams) return null;
-          return dynData.dynamicParams.map((param) => renderParamSection(param, 'dynamic'));
+          // A provider setting's label is its key in sentence case (GM, PR
+          // #198 r1 item 7), as the agent's cursor names it; a node saved
+          // before that keeps a Title Case label in its data.
+          return dynData.dynamicParams.map((param) => renderParamSection({ ...param, label: universalSettingLabel(param.key) }, 'dynamic'));
         })()}
 
         <div className="inspector__section inspector__section--separated">

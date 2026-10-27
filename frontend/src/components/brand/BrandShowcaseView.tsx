@@ -5,6 +5,7 @@ import { CrabMarkAnimated } from './CrabMarkAnimated';
 import { HelixMark } from './HelixMark';
 import { MARK_MODES, MARK_MODE_KEYS, type MarkMode } from './crabModes';
 import { useUIStore } from '../../store/uiStore';
+import { usePublishedHeaderBottom } from '../../lib/publishedHeaderBottom';
 import './BrandShowcase.css';
 
 /**
@@ -129,9 +130,11 @@ export function BrandShowcaseView() {
     exitBrandShowcase();
   };
 
+  // The offline banner sits under this bar, as under a studio's header.
+  const bar = usePublishedHeaderBottom();
   return (
     <div className="nn-bs">
-      <header className="nn-bs__bar">
+      <header ref={bar} className="nn-bs__bar">
         <div className="nn-bs__brand">
           <span>NEBULA·NODES</span>
           <span className="nn-bs__brand-dot" />

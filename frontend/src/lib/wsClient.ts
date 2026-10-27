@@ -48,6 +48,11 @@ export interface AgentPresenceEvent {
   from?: AgentCursorAnchor;
   action: 'move' | 'click' | 'drag' | 'look';
   say: string;
+  /** The Agent log's words when they differ from the bubble's (PR #198 r1,
+   * GM item 7): an action whose bubble says nothing (a universal node's
+   * setting with no label) still has its line there. Absent for a bare
+   * cursor move. */
+  log?: string;
   /** Backend wall-clock milliseconds. */
   at: number;
   /** The project open when it happened (the Agents panel lists it only there). */

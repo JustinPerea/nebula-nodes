@@ -464,7 +464,7 @@ def _paid_job_changed_person(button: str) -> str:
     return f"This node is waiting on a newer World Labs job. Reload to see it, check it in Marble, then use {button}."
 
 
-def _start_refusal(exc: ProviderStartConflictError, *, own_node: bool = False) -> HTTPException:
+def _start_refusal(exc: ProviderStartConflictError, *, own_node: bool = False, run_id: str | None = None) -> HTTPException:
     """409 for a paid start the guard refused, worded by the code it was
     raised with (ProviderStartConflictError.reason, never its text): the
     person reads _paid_state_person's line for the state that holds the
@@ -473,8 +473,9 @@ def _start_refusal(exc: ProviderStartConflictError, *, own_node: bool = False) -
     reason = getattr(exc, "reason", "active")
     if reason == "cancelled":
         # A Stop that beat the run's admission: it names no World Labs state
-        # (listed for GM, round 3b).
-        return HTTPException(status_code=409, detail=str(exc))
+        # (listed for GM, round 3b), and says what every reused-id refusal
+        # says (_stopped_id_refusal; PR #198 review 1, N1).
+        return HTTPException(status_code=409, detail=_stopped_id_refusal(run_id) if run_id else str(exc))
     if reason == "capacity":
         person = _paid_capacity_person(getattr(exc, "limit", None))
     elif reason == "changed":
@@ -4991,18 +4992,31 @@ async def _show_agent(
     say: str = "",
     origin: dict[str, Any] | None = None,
     did: dict[str, Any] | None = None,
+    log: str = "",
+    words: Callable[[], tuple[str, str]] | None = None,
 ) -> None:
     """Move the calling agent's cursor; a no-op for the browser's own requests.
 
-    ``did`` (_did) is what the action was, for the Agents panel. Never fails
-    the route that called it: presence is decoration on top of an edit that
-    already succeeded.
+    ``did`` (_did) is what the action was, for the Agents panel. ``log`` is
+    the Agent log's line when the bubble's ``say`` is empty or differs; an
+    action with neither is logged in the Agents panel's words ("Changed
+    “Hero”"), so no action is left out of the log (MCP-SETUP.md, PR #198
+    r1). ``words`` computes (say, log) inside the guard (_set_params_bubble).
+    Never fails the route that called it: presence is decoration on top of
+    an edit that already succeeded.
     """
     identity = identify_agent(current_request_headers())
     if identity is None:
         return
     try:
-        event = _point(identity, target=target, origin=origin, action=action, say=say, did=did)
+        if words is not None:
+            try:
+                say, log = words()
+            except Exception:  # noqa: BLE001 - the action is still logged, in the panel's words
+                say, log = "", ""
+        if not say and not log and did is not None and did.get("verb"):
+            log = f"{did['verb']} {_quoted(str(did.get('label') or ''))}" if did.get("label") else str(did["verb"])
+        event = _point(identity, target=target, origin=origin, action=action, say=say, did=did, log=log)
         await manager.broadcast_raw(event)
     except Exception:  # noqa: BLE001 - decoration must not break graph edits
         pass
@@ -9100,7 +9114,7 @@ def _claim_fresh_paid_worldlabs_starts(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ProviderStartConflictError as exc:
         provider_recovery_store.release_reservations(run_id)
-        raise _start_refusal(exc) from exc
+        raise _start_refusal(exc, run_id=run_id) from exc
     except ProviderStartPersistenceError as exc:
         provider_recovery_store.release_reservations(run_id)
         raise RunSafetyStorageRefusal(
@@ -11473,12 +11487,19 @@ async def get_graph() -> dict:
     return cli_graph.get_state()
 
 
-def _author_cinema_scene(graph: CLIGraph, node_id: str, node: dict[str, Any], params: dict[str, Any]) -> None:
+def _author_cinema_scene(graph: CLIGraph, node_id: str, node: dict[str, Any], params: dict[str, Any], *,
+                         returning_media: bool = False) -> None:
     """Keep a Cinema scene's runtime media when a write sets its authoring.
 
     Shared by PUT /api/graph/node/{id} and POST /api/graph/restore. Changes
     ``params["scene"]`` in place, and drops the node's outputs and the wires
-    of shots the new scene no longer has (on ``graph``)."""
+    of shots the new scene no longer has (on ``graph``).
+
+    ``returning_media``: the write is an undo the server can trust with media
+    (the person's restore, or an inverse the server kept). A shot the scene
+    doesn't have now comes back with the media it carries, and its port, so
+    undoing a delete (an accepted proposal's, say) never drops an image a run
+    made (PR #198 review 1, M1). Anyone else's returning shot starts idle."""
     if node.get("definitionId") != "cinema-scene" or "scene" not in params:
         return
     # Studio/Inspector PUTs carry authoring snapshots captured before
@@ -11500,8 +11521,19 @@ def _author_cinema_scene(graph: CLIGraph, node_id: str, node: dict[str, Any], pa
         if isinstance(shot, dict) and isinstance(shot.get("id"), str)
     }
     authored_scene = copy.deepcopy(incoming_scene)
+    returned_ports: dict[str, Any] = {}
     for shot in authored_scene["shots"]:
         canonical = current_shots.get(shot["id"])
+        if canonical is None and returning_media and isinstance(shot.get("output"), dict):
+            # Back as the undo had it: its media, and its port when it has an image.
+            if not isinstance(shot.get("variations"), list):
+                shot.pop("variations", None)
+            if not isinstance(shot.get("selectedVariation"), int):
+                shot.pop("selectedVariation", None)
+            image = shot["output"].get("imageUrl")
+            if shot["output"].get("status") == "done" and isinstance(image, str) and image:
+                returned_ports[f"shot_{shot['id']}"] = {"type": "Image", "value": image}
+            continue
         for field in ("output", "variations", "selectedVariation"):
             shot.pop(field, None)
             if canonical is not None and field in canonical:
@@ -11513,8 +11545,9 @@ def _author_cinema_scene(graph: CLIGraph, node_id: str, node: dict[str, Any], pa
     # generation/promotion routes retain their separate media contract.
     valid_ports = {f"shot_{shot['id']}" for shot in authored_scene["shots"]}
     node["outputs"] = {
-        port: output for port, output in (node.get("outputs") or {}).items()
-        if not port.startswith("shot_") or port in valid_ports
+        **{port: output for port, output in (node.get("outputs") or {}).items()
+           if not port.startswith("shot_") or port in valid_ports},
+        **_normalize_outputs_for_storage(returned_ports),
     }
     graph.edges = [edge for edge in graph.edges
                    if edge.get("source") != node_id
@@ -11641,28 +11674,48 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
     updated = copy.deepcopy(cli_graph.nodes[node_id])
     await _broadcast_graph_sync(edit=True)
     publish_action(f"Updated {node_id} params")
-    await _show_agent({"nodeId": node_id}, say=_set_params_bubble(node_id, params) if params
-                      else f"Updated {_quoted(_node_label(node_id))}", did=_did("Changed", node_id))
+    # The bubble's words are worked out inside _show_agent's guard (review 1
+    # N2): a failure there never turns this saved PUT into a 500.
+    await _show_agent({"nodeId": node_id}, words=(lambda: _set_params_bubble(node_id, params)) if params else None,
+                      say="" if params else f"Updated {_quoted(_node_label(node_id))}", did=_did("Changed", node_id))
     return updated
 
 
-def _set_params_bubble(node_id: str, params: Mapping[str, Any]) -> str:
-    """The cursor bubble for an agent's param change: each field's label as
-    the card shows it, in quotes ("Set “Text”"), in the order the agent gave
-    them; nothing when no field has a label (a universal node's provider
-    params). Never a param key (GM, r18 of PR #114: Codex's bubble read
-    "Set value")."""
+def _set_params_bubble(node_id: str, params: Mapping[str, Any]) -> tuple[str, str]:
+    """The cursor bubble and the Agent log line for an agent's param change.
+
+    The bubble names each field by its label as the Inspector shows it, in
+    quotes ("Set “Text”"), in the order the agent gave them: the card's
+    label, or for a universal node whose model the picker read (Replicate)
+    the provider setting's key in sentence case, as the Inspector shows it
+    (universal_ports.setting_label; GM, PR #198 r1 item 7: "Set “Guidance
+    scale”"). Never a param key (GM, r18 of PR #114: Codex's bubble read
+    "Set value"). With no label at all the bubble says nothing, and the log
+    line counts what changed: "Changed a setting on “<node>”", "Changed 3
+    settings on “<node>”" (GM item 7). Otherwise the log line is the
+    bubble's."""
     from execution.person_line import and_list
 
     node = cli_graph.nodes.get(node_id) or {}
-    definition = node_registry.get_all().get(str(node.get("definitionId") or "")) or {}
+    definition_id = str(node.get("definitionId") or "")
+    definition = node_registry.get_all().get(definition_id) or {}
+    # Replicate's model inputs are the Inspector's dynamic settings; the
+    # other universal nodes have none (their extra params show nowhere).
+    dynamic = definition_id == "replicate-universal"
     labels: list[str] = []
     for key in params:
         param = node_route.param_definition(definition, str(key)) if definition else None
         label = str((param or {}).get("label") or "").strip()
+        if not label and param is None and dynamic and not str(key).startswith("_"):
+            label = universal_ports.setting_label(str(key))
         if label and label not in labels:
             labels.append(label)
-    return f"Set {and_list(_quoted(label) for label in labels)}" if labels else ""
+    if labels:
+        say = f"Set {and_list(_quoted(label) for label in labels)}"
+        return say, say
+    count = len(params)
+    what = "a setting" if count == 1 else f"{count} settings"
+    return "", f"Changed {what} on {_quoted(_node_label(node_id))}"
 
 
 def _universal_request(body: Any, definition_id: str | None = None) -> tuple[str, str]:
@@ -12825,7 +12878,8 @@ async def _restore_graph(
                     kept = _kept_paper_source(params_before, params)
                     if kept is not None:
                         params["_paperSource"] = kept
-                _author_cinema_scene(candidate, node_id, current, params)
+                _author_cinema_scene(candidate, node_id, current, params,
+                                     returning_media=node_id in trusted or _is_person_request())
                 _keep_recovery_checkpoint(current, params)
                 if node_id not in trusted:
                     billing.append((node_id, definition_id, params_before, params))

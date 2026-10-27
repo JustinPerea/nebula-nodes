@@ -275,10 +275,10 @@ describe('M5 (probe X5): Undo of an accepted proposal an agent changed since', (
     expect(acceptUndoLine([{ node: 'Hero', settings: ['A', 'B', 'C', 'D'] }], { kind: 'agent', name: 'Codex' }, false))
       .toBe('Undid the proposal except 4 settings Codex changed after you accepted.');
     expect(acceptUndoLine([{ node: 'Hero', settings: ['A'] }, { node: 'Logo', settings: ['B'] }], { kind: 'agent', name: 'Codex' }, false))
-      // GM r18: settings are counted from 4; two are named, each for its node.
-      .toBe('Undid the proposal except “A” for “Hero” and “B” for “Logo”. Codex changed them after you accepted.');
+      // GM pr198 r1: settings across nodes are counted, from 2.
+      .toBe('Undid the proposal except 2 settings Codex changed after you accepted.');
     expect(acceptUndoLine([{ node: 'Hero', settings: ['A'] }, { node: 'Logo', settings: ['B'] }], { kind: 'agent', name: null }, false))
-      .toBe('Undid the proposal except “A” for “Hero” and “B” for “Logo”. An agent changed them after you accepted.');
+      .toBe('Undid the proposal except 2 settings an agent changed after you accepted.');
     expect(acceptUndoLine([{ node: 'Hero', settings: ['Prompt'] }], { kind: 'agent', name: null }, false))
       .toBe('Undid the proposal except “Prompt” for “Hero”. An agent changed it after you accepted.');
     expect(acceptUndoLine([{ node: 'Hero', settings: ['Prompt'] }], { kind: 'agent', name: 'Codex' }, true))

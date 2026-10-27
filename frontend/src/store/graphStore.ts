@@ -110,6 +110,7 @@ import { getCinemaUploadIssue, useCinemaUploadStore } from './cinemaUploadStore'
 import { cinemaMotionSource, cinemaMotionTarget, useCinemaMotionStore } from './cinemaMotionStore';
 import { nodeKeyStatus, withNewKreaMode } from '../lib/kreaConnection';
 import { allParamDefinitions } from '../lib/directRoute';
+import { universalSettingLabel } from '../lib/universalSettingLabel';
 import { clipSpeed, type EditClip } from '../lib/editor/virtualPlayback';
 import type { KeyframeData, VideoGraphManifest, TrackItem } from '../types/video';
 import { createEmptyManifest, DEFAULT_FPS } from '../types/video';
@@ -1510,11 +1511,16 @@ function settleParamEdit(nodeId: string, entry: { keys: Set<string>; inFlight: n
   }
 }
 
-/** A param's label as the node's settings show it, else its key. */
+/** A param's label as the node's settings show it (the Inspector's lookup:
+ * every param a routed node declares, lib/directRoute allParamDefinitions;
+ * PR #198 review 1, L1), a universal node's provider setting in sentence
+ * case (GM r1 item 7), else its key. */
 function paramLabel(node: Node<NodeData>, key: string): string {
-  const dynamic = (node.data as Partial<DynamicNodeData>).dynamicParams?.find((param) => param.key === key)?.label;
-  const defined = NODE_DEFINITIONS[node.data.definitionId]?.params.find((param) => param.key === key)?.label;
-  return dynamic || defined || key;
+  const definition = NODE_DEFINITIONS[node.data.definitionId];
+  const defined = definition ? allParamDefinitions(definition).find((param) => param.key === key)?.label : undefined;
+  if (defined) return defined;
+  const dynamic = (node.data as Partial<DynamicNodeData>).dynamicParams?.some((param) => param.key === key);
+  return dynamic ? universalSettingLabel(key) : key;
 }
 
 /** GM - Design, rounds 14 and 15 of PR #114, verbatim: one setting, two,

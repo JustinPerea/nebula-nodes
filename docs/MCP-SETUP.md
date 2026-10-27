@@ -529,9 +529,15 @@ Every one of these actions is also listed in the canvas's **Agent log**
 own eye-off button or Settings > Preferences > "Agent log"): the agent's
 name in its cursor colour, the cursor's words ("Added “Moodboard”", "Running
 “Krea 2”", "Connecting “Prompt” to “Krea 2”", "Accepted"; a node by its name in
-curly quotes, else its type's name; a param change by each field's label on
-the card, "Set “Text”", never the param key, and no words at all for a field
-with no label, such as a universal node's provider params), and the time. Moodboard writes are listed there too
+curly quotes, else its type's name; a param change by each field's label as
+the Inspector shows it, "Set “Text”", never the param key: a Replicate
+model's own settings by their key in sentence case, "Set “Guidance scale”";
+a setting with no label anywhere, such as an extra param on the FAL node,
+draws no bubble, and the log says "Changed a setting on “<node>”" or
+"Changed 3 settings on “<node>”"), and the time. No action is left out:
+the presence event carries `log` when the log's line isn't the bubble's,
+and an action with no words at all is listed in the Agents panel's words
+("Changed “Hero”"). Moodboard writes are listed there too
 (your edit batch's `say`, else the journal's words: "Set aside #1 on board
 Dusk"; "Analyzed board Dusk"), and so is a run of the
 whole canvas ("Running 4 nodes"); neither has one place on the canvas, so
@@ -988,6 +994,8 @@ ended before its Stop; "… was cancelled before it started" only when the
 Stop reached the id while this process was admitting its start; otherwise
 (a run from before a restart, a Stop for an id never seen) "run '<id>' was
 stopped, so this id can't start again. Start a new run with a new id."
+A Stop that lands at a World Labs node's paid-start claim, the last step
+before the run registers, is refused in the same words (PR #198 review 1).
 Agents and the CLI never pick a run id (`run_nodes`, `/api/graph/run` and
 `nebula run` make one), so they meet this only by re-sending a request a
 script built; start a new run instead. What each surface says:
@@ -2035,7 +2043,10 @@ How it works (`backend/services/agent_spend.py`):
   change from anyone without the person token.
 
 `nebula spend` (or `GET /api/agent/spend`) shows an agent its limits and what
-its session has used. `budget` is `chat`, `shared` or `app`; outside callers
+its session has used, to the cent; an amount under half a cent that isn't
+nothing reads "<$0.01" (Settings shows spend the same way, and a Run or
+proposal chip shows any amount under a cent as "<$0.01": "$0" only ever
+means free). `budget` is `chat`, `shared` or `app`; outside callers
 also get `outsideSpent`, the shared 24-hour total.
 
 ### Personal agents' session tokens
@@ -2528,6 +2539,9 @@ model's file inputs are its ports. One backend module has the rules
   model's ports from the same function.
 - `POST /api/universal/ports {definitionId, model, params?}` returns a
   model's ports without a node (and, for Replicate, its params and version).
+  A Replicate param's `label` is its key in sentence case ("Guidance
+  scale"), as the Inspector and your cursor's bubble show it; a port's
+  label stays in Title Case ("Input Image").
 - The canvas export, the connection checks (`port_contracts.node_ports`) and the
   run check read `_model_ports`, so the canvas draws the ports and connections an
   agent made without a reload. A node saved before 2026-10-20 has no

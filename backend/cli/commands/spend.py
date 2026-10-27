@@ -6,7 +6,11 @@ from ..client import NebulaClient
 
 
 def _usd(value: Any) -> str:
-    return f"${value:.2f}" if isinstance(value, (int, float)) else "no limit"
+    """To the cent, as Settings shows it. A non-zero amount that would round
+    to "$0.00" is "<$0.01": "$0" only ever means nothing (GM, PR #198 r1)."""
+    if not isinstance(value, (int, float)):
+        return "no limit"
+    return "<$0.01" if 0 < value < 0.005 else f"${value:.2f}"
 
 
 def run(client: NebulaClient) -> None:

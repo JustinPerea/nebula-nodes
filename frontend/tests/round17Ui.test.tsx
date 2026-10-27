@@ -123,8 +123,8 @@ describe('C: on the home screen the offline banner sits under the top bar', () =
 
   it('App passes the home placement on the home screen', () => {
     const app = readFileSync(join(__dirname, '../src/App.tsx'), 'utf8');
-    // GM r18 added the video editor's own place (tests/channelFollowupsUi.test.tsx).
-    expect(app).toMatch(/<BackendConnectionStatus placement=\{isHome \? 'home' : isEditor \? 'editor' : 'workspace'\} \/>/);
+    // GM, PR #198 r1: every screen but the canvas and home is a studio (tests/pr198Fix1Ui.test.tsx).
+    expect(app).toMatch(/<BackendConnectionStatus placement=\{isHome \? 'home' : isCanvas \? 'workspace' : 'studio'\} \/>/);
   });
 });
 

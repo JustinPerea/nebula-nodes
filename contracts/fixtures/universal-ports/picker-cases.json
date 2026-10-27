@@ -1,5 +1,5 @@
 {
- "about": "The model pickers' ports, params and wire pruning on main 23f11b8e (frontend/tests/universalPorts.pickerParity.test.ts writes `expected` from a verbatim copy of graphStore's configureOpenRouterModel and fetchReplicateSchemaAndConfigure). backend/tests/test_universal_ports.py checks services/universal_ports.py against the same cases. `backendChanges` lists where the backend now differs on purpose.",
+ "about": "The model pickers' ports, params and wire pruning on main 23f11b8e (frontend/tests/universalPorts.pickerParity.test.ts writes `expected` from a verbatim copy of graphStore's configureOpenRouterModel and fetchReplicateSchemaAndConfigure). backend/tests/test_universal_ports.py checks services/universal_ports.py against the same cases. `backendChanges` lists where the backend now differs on purpose. Every Replicate model setting's label is also its key in sentence case on the backend (GM, PR #198 r1: \"Guidance scale\"); the backend test applies that to `expected` (_with_setting_labels).",
  "backendChanges": {
   "replicate list of plain strings": {
    "dynamicOutputPorts": [

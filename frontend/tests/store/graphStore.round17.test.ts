@@ -157,7 +157,7 @@ describe('L3: who changed it (probes Y6, Y7e; GM r17)', () => {
     expect(notice).toBe('Undid the proposal except “x” for “Brief”. You changed it in another window after you accepted.');
   });
 
-  it('an agent and the other window: mixed, so the actor goes (two settings: named, GM r18 counts from 4)', async () => {
+  it('an agent and the other window: mixed, so the actor goes (two settings on two nodes: counted, GM pr198 r1)', async () => {
     useGraphStore.setState({ nodes: [node('n1', { value: 'a' }, 'Brief'), node('n3', { value: 'a', y: 1 }, 'Other')] } as never);
     await acceptWith({ nodes: [], edges: [], updatedNodes: [node('n1', { value: 'b' }, 'Brief'), node('n3', { value: 'b', y: 2 }, 'Other')],
       runNodeIds: [], idMap: {} }, () => {
@@ -167,7 +167,7 @@ describe('L3: who changed it (probes Y6, Y7e; GM r17)', () => {
     });
     await sleep(10);
     const { notice } = await undoAndRead();
-    expect(notice).toBe('Undid the proposal except “Text” for “Brief” and “y” for “Other”. They were changed after you accepted.');
+    expect(notice).toBe('Undid the proposal except 2 settings changed after you accepted.');
   });
 
   it('a kept node is named as one item', async () => {
@@ -231,7 +231,7 @@ describe("GM's partial-undo lines, every form (exact)", () => {
     // GM r18: never count 1; settings are counted from 4.
     expect(acceptUndoLine(one(['Text']), unknown, false)).toBe('Undid the proposal except “Text” for “Brief”. It was changed after you accepted.');
     expect(acceptUndoLine([{ node: 'A', settings: ['x'] }, { node: 'B', settings: ['y'] }], unknown, false))
-      .toBe('Undid the proposal except “x” for “A” and “y” for “B”. They were changed after you accepted.');
+      .toBe('Undid the proposal except 2 settings changed after you accepted.');
     expect(acceptUndoLine(one(['Text']), unknown, true)).toBe('Nothing was undone. “Text” for “Brief” was changed after you accepted.');
     expect(acceptUndoLine(one(['a', 'b']), unknown, true)).toBe('Nothing was undone. “a” and “b” for “Brief” were changed after you accepted.');
     expect(acceptUndoLine([{ node: 'A', settings: ['x'] }, { node: 'B', settings: ['y'] }], unknown, true))
