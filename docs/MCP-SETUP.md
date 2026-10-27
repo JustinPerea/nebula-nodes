@@ -2849,36 +2849,92 @@ comes from the `run.started` journal events (`wait_for_canvas_change`).
 
 ### Cinema scenes over MCP
 
-A `cinema-scene` node's `scene` is filled in on every write that sets it:
-`edit_canvas` and `nebula apply` adding the node, a proposal and its Accept,
-import and `load_graph_file`, `PUT /api/graph/node/{id}` (`nebula set`), an
-undo or redo (`/api/graph/restore`) and a project's load
-(`backend/services/cinema_scene_spec.py`, PR #198 review 2, M2). Only
+A `cinema-scene` node's `scene` is filled in on every write that sets it
+(`backend/services/cinema_scene_spec.py`, PR #198 reviews 2 and 3). Only
 `shots` is needed; a missing `version` is 1, a missing or empty `base` (or
 `base.model`) is `{"model": "seedream-4-5"}`, a missing or empty
-`aspectRatio` is "16:9", a shot without `prompt` gets "". A scene that
-can't be filled in is refused with 400 and a `detail` naming the field
-(`scene.shots must be a list of shots`, `scene.shots[1].id 's1' is used
-twice`, `scene.base must be an object like {"model": "seedream-4-5"}`) and an
-example of the shape. A saved project is never refused on load: what can be
-filled in is, and Cinema shows a scene it still can't open as "Couldn't open
-“<node>”. …" with Back to canvas, and the Agent log says which field is
-missing.
+`aspectRatio` is "16:9", a shot without `prompt` gets "". A scene sent as JSON
+text (`nebula add cinema-scene --param scene='{…}'`, since the CLI sends every
+`--param` as text) is read as the object it spells.
+
+What happens to a scene that can't be filled in depends on who wrote it:
+
+- **An agent-authored write is refused** with 400 and a `detail` naming the
+  field (`scene.shots must be a list of shots`, `scene.shots[1].id 's1' is
+  used twice`, `scene.base must be an object like {"model": "seedream-4-5"}`,
+  `scene.shots[0].prompt must be text`, `scene.version must be a whole
+  number`) and an example of the shape, so you can fix the call. These are
+  strict: `edit_canvas` and `nebula apply` adding the node, `propose_change`
+  (and its Accept), `POST /api/graph/node` (`nebula add`) and `PUT
+  /api/graph/node/{id}` (`nebula set`) from an agent, the CLI or a script,
+  and a cluster an agent adds.
+- **Everything else converts it and never refuses**: a project's open, every
+  project save and autosave, the handoff save after a switch, a recovered
+  copy, `/api/graph/import` and `load_graph_file`, a `.nebula` file, the
+  saved `state.json`, the person's own create and edits in Cinema, and every
+  undo or redo (`/api/graph/restore`). A saved project always opens and
+  saves, so the results it holds stay reachable. The conversion: a `base`
+  written as a model name becomes `{"model": "<name>"}`; a `version` that
+  isn't a whole number becomes 1; a prompt that is a number becomes its text
+  and any other non-text prompt becomes ""; a shot with no id, or with an id
+  an earlier shot has, gets a new one no shot in the scene has ("s1", "s2",
+  …; the first shot with an id keeps it, with its port and wires); a shot
+  that is only text becomes a shot with that prompt; anything else that
+  can't be read (a `shots` that isn't a list, a shot that isn't an object, an
+  `aspectRatio` that isn't text, a `base.params` that isn't an object) takes
+  the default. The same scene always converts the same way, so the ids an
+  open gives are the ones the next save keeps.
+
+Cinema reads a scene through the same defaults. A scene the canvas card
+still can't draw shows a contained line on its card instead of blanking the
+canvas, and Cinema shows "Couldn't open “<node>”. …" under its header with
+Back to canvas; the Agent log says which field it couldn't read.
 
 A shot's stored `output.status` is never `running`: a run writes `done` or
 `error`, so a `running` (or `queued`) a write or a saved file carries is
 settled to `done` when the shot has an image, else `idle`. An undo that
 brings a removed shot back keeps its image only when it was `done` or
 `error`; when a run put a newer image on the shot's port after it left, the
-shot takes that image and the port keeps it.
+shot takes that image and the port keeps it, with the variation batch that
+image came from (when Nebula still has it) or, for a single image, its old
+variations with none selected unless the image is one of them.
 
-A write that would remove a shot a live run is rendering (its own shot run,
-or a run of the whole scene) is refused with 409 and changes nothing: "Shot 2
-(s2) of “Opening” (n4) is still rendering (run <id>), so it can't be
-removed. Stop the run first (cancel_run, or `nebula cancel <id>`; a run the
-person started is theirs to stop) or wait for it to finish, then try again.
-Nothing changed." The canvas blocks the same thing: the shot's × is
-disabled, titled "Stop the run first." or "Wait for “Shot 2” to finish.".
+A run protects what it renders, from the moment its start reaches Nebula
+(before its spending check) until the engine is done with it:
+
+- a shot run, only its own shot, until the run ends;
+- a run that includes a scene (Run on the canvas, `nebula run`, a run of a
+  node the scene feeds), every shot of that scene until the scene's own node
+  finishes, fails or is skipped (a cached scene frees at once); a downstream
+  video's render doesn't hold it. A run that includes several scenes
+  protects each one.
+
+While protected:
+
+- a write that would remove a rendering shot is refused with 409 and changes
+  nothing: "Shot 2 (s2) of “Opening” (n4) is still rendering (run <id>), so
+  it can't be removed. Stop the run first (cancel_run, or `nebula cancel
+  <id>`; a run the person started is theirs to stop) or wait for it to
+  finish, then try again. Nothing changed." The person reads GM's line
+  instead: an undo or redo reads "Couldn't undo. It would remove “Shot 2”,
+  which is still running. Stop the run first." ("Couldn't redo. …"; "…Wait
+  for it to finish." while the run is still being admitted), and the canvas
+  refuses that undo itself before sending it;
+- deleting the scene (`remove_from_canvas`, `edit_canvas` `remove`, `DELETE
+  /api/graph/node/{id}`, an undo of its add) is refused with 409: "Couldn't
+  delete “Scene”, node n4. “Shot 2” is still running, run <id>." (two or
+  three shots are named, four or more counted: "4 shots are still
+  running"). The Agent log shows the same line under the agent's name. The
+  person reads "Couldn't delete “Scene”. “Shot 2” is still running. Stop
+  the run first." ("…Wait for it to finish." with no Stop for it).
+
+The canvas blocks the same things: the shot's × is disabled, titled "Stop
+the run first." or "Wait for “Shot 2” to finish."; the scene's Delete (the
+context menu, the Inspector, and the selection toolbar when only rendering
+scenes are selected) is disabled, titled "Stop the run first." or "Wait for
+“Scene” to finish.". The Delete key over a selection deletes the rest and
+keeps the scene and its wires: "Deleted 3 nodes. “Scene” wasn't deleted
+because “Shot 2” is still running."
 
 ### Universal nodes over MCP
 

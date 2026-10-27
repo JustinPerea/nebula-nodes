@@ -114,11 +114,26 @@ body.app-slava-restraint .cinema-studio-view.cinema-studio-view {
   grid-template-rows: auto auto minmax(0, 1fr);
   grid-template-areas: "toolbar" "offline" "body";
 }
+/* Composition's toolbar is a row of its own under the offline row (GM, PR
+   #198 r3 a: the banner sits right under the top header, above the
+   toolbar, as on every other screen). */
 body.app-slava-restraint .remotion-editor-view.remotion-editor-view {
-  grid-template-rows: auto auto minmax(0, 1fr) 320px;
-  grid-template-areas: "header header" "offline offline" "player panel" "timeline panel";
+  grid-template-rows: auto auto auto minmax(0, 1fr) 320px;
+  grid-template-areas: "header header" "offline offline" "toolbar toolbar" "player panel" "timeline panel";
 }
-body.app-slava-restraint .remotion-editor-view__empty-state.remotion-editor-view__empty-state { grid-row: 3 / -1; }
+body.app-slava-restraint .remotion-editor-view__toolbar {
+  grid-area: toolbar;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 16px;
+  min-width: 0;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--sr-edge-strong);
+  background: var(--sr-glass);
+}
+body.app-slava-restraint .remotion-editor-view__empty-state.remotion-editor-view__empty-state { grid-row: 4 / -1; }
 body.app-slava-restraint .commons-view.commons-view {
   grid-template-rows: auto auto auto auto minmax(0, 1fr);
   grid-template-areas: "toolbar toolbar toolbar" "offline offline offline" "messages messages messages"
@@ -151,8 +166,8 @@ body.app-slava-restraint .editor-view--empty > .studio-offline-row[data-open='tr
 body.app-slava-restraint .create-view > .create-view__topbar { grid-area: header; }
 body.app-slava-restraint .create-view > .create-view__stage { grid-area: stage; }
 body.app-slava-restraint .create-view > .create-view__composer-area { grid-area: composer; }
-body.app-slava-restraint .workspace-header .remotion-editor-toolbar,
-body.app-slava-restraint .workspace-header .remotion-editor-toolbar__group {
+body.app-slava-restraint .remotion-editor-view__toolbar .remotion-editor-toolbar,
+body.app-slava-restraint .remotion-editor-view__toolbar .remotion-editor-toolbar__group {
   flex-wrap: wrap;
   min-width: 0;
   max-width: 100%;
@@ -184,18 +199,25 @@ body.app-slava-restraint.agent-notes-shown .workspace-header.workspace-header--u
   right: var(--workspace-header-pad-x);
 }
 
-/* A studio that couldn't render (components/StudioBoundary.tsx): GM's line
- * and Back to canvas, over the studio's own place. */
+/* A studio that couldn't render (components/StudioBoundary.tsx): its header
+   and offline row stay (GM, PR #198 r3 b), and the line takes the body. */
 body.app-slava-restraint .studio-boundary {
   position: fixed;
   inset: 0;
   z-index: var(--sr-layer-workspace, 50);
   display: grid;
-  place-items: center;
-  padding: 24px;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-areas: "header" "offline" "body";
   background: var(--sr-canvas);
   color: var(--sr-ink);
   font-family: var(--sr-ui);
+}
+body.app-slava-restraint .studio-boundary > .studio-boundary__header { grid-area: header; }
+body.app-slava-restraint .studio-boundary__body {
+  grid-area: body;
+  display: grid;
+  place-items: center;
+  padding: 24px;
 }
 body.app-slava-restraint .studio-boundary__card {
   display: grid;

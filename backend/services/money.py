@@ -19,6 +19,10 @@ the only way to get below zero is float noise from a subtraction (a limit
 minus what was used), where "nothing left" is the true reading. A refund
 would need its own words, not a minus sign ("$-0.00").
 
+An amount under a millionth of a dollar is "<$0.000001" (review 3, L5): two
+significant figures of a float denormal would be 324 decimals, past what a
+float can scale to, and no price Nebula shows is that small.
+
 Rounding is spelled out (half up on the binary value) instead of left to
 each language's formatter, so Python and JavaScript agree on every amount.
 """
@@ -28,6 +32,9 @@ import math
 from typing import Any
 
 UNDER_A_CENT = "<$0.01"
+# The smallest amount usd_amount writes in figures.
+TINY_USD = 0.000001
+UNDER_TINY = "<$0.000001"
 
 
 def _clamped(amount: Any) -> float:
@@ -74,6 +81,8 @@ def usd_amount(amount: Any) -> str:
     value = _clamped(amount)
     if value == 0:
         return "$0"
+    if value < TINY_USD:
+        return UNDER_TINY
     if value < 0.1:
         rounded, decimals = _two_figures(value)
         if rounded < 0.1:

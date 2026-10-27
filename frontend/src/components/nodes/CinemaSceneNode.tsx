@@ -4,13 +4,14 @@ import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { PORT_COLORS } from '../../lib/portCompatibility';
 import { shotPortId } from '../../constants/ports';
 import { missingKeyTitle } from '../../lib/nodeKeys';
-import type { CinemaSceneSpec, CinemaShot, NodeData } from '../../types';
+import type { NodeData } from '../../types';
+import { sceneCardView } from '../../lib/cinemaScene';
 import { NodeRunError } from './NodeError';
 import '../../styles/cinema-node.css';
 
 interface CinemaSceneNodeData {
   params?: {
-    scene?: CinemaSceneSpec;
+    scene?: unknown;
   };
   /** Set by the store (kreaConnection.nodeKeyStatus) from the scene's base model. */
   keyStatus?: 'ok' | 'missing';
@@ -19,21 +20,18 @@ interface CinemaSceneNodeData {
 export function CinemaSceneNode({ id, data, selected }: NodeProps) {
   const enterCinemaEditor = useUIStore((s) => s.enterCinemaEditor);
   const { params, keyStatus } = data as CinemaSceneNodeData;
-  const scene = params?.scene;
-  const shots: CinemaShot[] = scene?.shots ?? [];
+  // Read through a guard (PR #198 review 3, L4): a scene whose data is
+  // damaged still draws its card.
+  const { shots, sheetUrl, refCount } = sceneCardView(params?.scene);
   const shotCount = shots.length;
   const inputPorts = NODE_DEFINITIONS['cinema-scene'].inputPorts;
 
   // Contact-sheet thumbnail: first shot with a finished image, else placeholder.
-  const thumbUrl =
-    scene?.character?.sheetUrl ??
-    shots.find((s) => s.output?.imageUrl)?.output?.imageUrl ??
-    null;
+  const thumbUrl = sheetUrl ?? shots.find((s) => s.imageUrl)?.imageUrl ?? null;
 
   // Uploaded character refs (those wired in on the canvas already show as the
   // edge into character_refs). Surfacing the count keeps the card in sync with
   // refs added inside the Studio.
-  const refCount = scene?.character?.refImageUrls?.length ?? 0;
   const summary = [
     shotCount === 0 ? 'no shots yet' : `${shotCount} shot${shotCount === 1 ? '' : 's'}`,
     refCount > 0 ? `${refCount} ref${refCount === 1 ? '' : 's'}` : null,
@@ -47,7 +45,7 @@ export function CinemaSceneNode({ id, data, selected }: NodeProps) {
         <span>⛭ Cinema Scene</span>
         {keyStatus === 'missing' && (
           <span className="model-node__badge model-node__badge--warning cinema-scene-node__badge"
-            title={missingKeyTitle(NODE_DEFINITIONS['cinema-scene'], params ?? {})}>&#x26A0;</span>
+            title={missingKeyTitle(NODE_DEFINITIONS['cinema-scene'], (params ?? {}) as Record<string, unknown>)}>&#x26A0;</span>
         )}
       </div>
 
@@ -100,7 +98,7 @@ export function CinemaSceneNode({ id, data, selected }: NodeProps) {
             <div key={shot.id} className="cinema-scene-node__shot-port-row">
               <span className="cinema-scene-node__shot-label">
                 {idx + 1}
-                {shot.output?.status === 'error' ? ' ⚠' : ''}
+                {shot.failed ? ' ⚠' : ''}
               </span>
               <Handle
                 type="source"

@@ -121,3 +121,89 @@ Justin: "I want to do complete fixes as soon as we run into them"; "implement th
 - **Gates.** Backend, full suite: 11,323 passed, 71 skipped, 0 failed (22:46). `tsc -b` clean; lint clean (inline-style guard, Slava CSS scope guard, eslint); vite build OK, budget 398,584 bytes raw / 120,495 gzip (limit 512,000). Vitest, full run at a machine load around 40: 99 failed and 5,991 passed (6,090) in 34 files, 89 of them timeouts; those 34 files rerun alone with 4 workers: 744 passed, 0 failed.
 - **Live check** (8797/5797, 1280 and 1440, isolated state, nothing paid): 57/57 on the last run, 0 blocked attempts after the canary (the canary to 8001 was refused). Earlier runs: 54/57 (the two late fixes above), then two runs lost to page loads timing out under the machine's load (the script now reloads until the project list shows). The harness had no person link, so every screenshot shows "This tab isn't connected as you." That's the harness, not the build. Screenshots: `fix2-*.png` in the scratchpad (M2 bare scene and boundary, M1 blocked ×, the two-shot undo on the canvas and in Cinema, the Agent log, and the offline row on every screen).
 - **Two-shot undo, for GM.** A full undo says nothing by design, so the reshoot has no undo toast to show. The state is undo 1, redo 1, with no notice; the screenshot shows the board after the undo.
+
+## Fix round 3 (PR #198 review 3, GM's r3 rulings and answers)
+
+- **H1: only agents' scene writes are refused.** `normalize_scene(scene, strict=…)` (services/cinema_scene_spec.py). Lenient never raises. It converts:
+  - a base string → `{"model": …}`;
+  - a bad version → 1;
+  - a bad aspect → 16:9;
+  - a non-text prompt → text (`""` for a non-scalar);
+  - missing or duplicate shot ids → new unique ids (`s1`, `s2`, … past every id in the scene; the first shot with an id keeps it);
+  - a non-dict shot is dropped, and so are a broken `output`, a non-list `variations` and a non-int `selectedVariation`;
+  - anything else → defaults.
+
+  JSON text is read as the object in both modes (N4: `--param scene='<json>'`). Who is strict comes from `_scene_writes_strict()` = not `refusal_copy.person_reads()`, never the token, so a stale token never refuses the person.
+  - **Strict (400 naming the field):**
+    - `POST /api/graph/node`, create-and-connect, `PUT /api/graph/node/{id}` and `POST /api/graph/cluster`, each when an agent sends it;
+    - `_stage_proposal`: `edit_canvas` / `nebula apply` (`apply_graph_edit`), `propose_change` (`create_canvas_proposal`), Accept and the reopen check.
+  - **Lenient:**
+    - `_stage_project_snapshot`: project open, every save and autosave (`_save_project`), the handoff save (`_save_handoff`), `recover_project_copy`;
+    - import (for everyone: it is saved data);
+    - the restore (undo/redo, the person's and an agent's);
+    - `_validate_restore_graph`;
+    - `CLIGraph.load` and `CLIGraph.add_node`'s backstop;
+    - the person's create, PUT and cluster.
+  - **Canvas:** a refused scene PUT keeps the entry, so the typing stays, and says "Couldn't save “Scene” for “<node>”." (`paramSaveFailedLine`). The next sync that brings back the scene the backend still had keeps the typing. A sync with any other scene (an agent's or another window's newer edit) wins and releases it. The person was already told, and that keeps `graphStore.cinemaPersistence`'s "releases failed persistence to external updates" true. `backendScenes` remembers the backend's scene per node, from every sync and every save it took.
+- **M1.** `_cinema_renders: OrderedDict[run_id, set[(node, shot|None)]]`; `_note_scene_renders` notes every scene in a run. A test covers two scenes in one run.
+- **L1.** `@_admits_cinema_renders` on `/api/execute`, `/api/execute-node`, `/api/cinema/generate-shot` and `/api/graph/run`. A ContextVar plus `_cinema_admitting` (a 600 s deadline) protect a run's scenes from the start of admission (spend approval included). `_render_state` returns "running", "admitting" or None. A removal while a run is still admitting reads "…Wait for it to finish."
+- **L2.** Each scene is released when its own node is done (`_scene_event_done` in `_emit_and_sync`: Executed, Error, Skipped), not when the run ends. A fan-out scene (several executions of one node) is held until the run ends. On the canvas, `shotRemovalBlock` counts a graph run only while the scene's node is undefined, queued or executing. The rail, `removeShot`, the undo check and the delete check all pass the node's state.
+- **M2 / GM 3.** `stepHistory` refuses, before sending, an undo or redo that would remove a rendering shot or its scene (`renderingRemoval`), with GM's line: "Couldn't undo. It would remove “Shot 2”, which is still running. Stop the run first." ("Couldn't redo. …"; "…Wait for it to finish." with no Stop). It never includes the run id.
+  - The backend's 409 has the same person form (`_removal_person_line`); the agent detail is unchanged.
+  - A restore the backend refuses anyway shows its person line as is and keeps every rendering shot's spinner (`withLiveRenders`: running in the canvas before or now, or a shot run of this tab, including one that started while the undo was on its way).
+  - Builder's: several shots, "“Shot 2” and “Shot 3”, which are still running", and from four "4 shots that are still running".
+- **L3.** A batch that lands on a shot that is gone is stashed (`_late_shot_results`, in memory, bounded at 256). A shot an undo brings back adopts the image together with its variations and a matching `selectedVariation`. After a restart, the adopted shot keeps the image alone.
+- **L4.** CinemaSceneNode reads through `sceneCardView`; RemotionNode and EditNode guard their timeline and clip reads. Every card in `CANVAS_NODE_TYPES` sits in its own `NodeCardBoundary` (`withNodeCardBoundary`, memoized; `CANVAS_CARDS` is the raw map).
+  - A card that throws shows GM's boundary line at card size: "Couldn't open “X”. Some of its data is missing or damaged, so Nebula can't show it." ("this node" with no label).
+  - It keeps its handles (from the definition, the dynamic ports and the shot ports), so wires stay drawn. It logs to the Agent log and tries again when its data changes.
+  - canvasRenderScope's counter now wraps the raw card inside the boundary.
+- **L5.** `usd_amount` / `formatUsd`: under $0.000001 reads "<$0.000001" (5e-324 used to raise). A non-finite high end gives the low end with "+" (never "~$0"). The table and property tests are extended.
+- **L6.** The Commons boundary's way back sets `viewMode: 'canvas'`.
+- **GM r3 (a).** Composition's toolbar is its own grid row (`.remotion-editor-view__toolbar`) under the offline row.
+- **GM r3 (b).** StudioBoundary renders the studio's WorkspaceHeader (project bar, back to Canvas, Updates, and the offline row under it) and replaces only the body.
+- **GM r3 items 2, 5, 6, 7.**
+  - Item 2: "You reordered them in another window after you accepted." ("the shots" in the Nothing-was-undone form, which has nothing to point back to).
+  - Item 5: the unknown-actor reorder lines.
+  - Item 6: "Up to $Y." / "Up to $Y, plus costs that aren't known yet."
+  - Item 7: unnamed settings, also on a whole node an Accept added.
+- **G1 / GM 1: deleting a scene while a shot renders.**
+  - Backend: `_refuse_deleting_rendering_scene` (in `_ensure_node_deletable`, so DELETE, `edit_canvas` / `nebula apply` remove, an undo or redo that deletes it).
+    - Agents get 409 "Couldn't delete “Scene”, node n4. “Shot 2” is still running, run <id>.", and the Agent log shows the same line under the agent's name (`_log_agent_refusal` → `_say_agent_action`).
+    - The person reads "Couldn't delete “Scene”. “Shot 2” is still running. Stop the run first."
+  - Canvas: the context menu, the Inspector and the selection toolbar (only when every selected node is such a scene) disable Delete with "Stop the run first." or "Wait for “Scene” to finish." (`sceneDeleteDisabledTitle`).
+    - The Delete key and `deleteSelected` delete the rest and keep the scene and its wires (`withoutRenderingScenes`; Canvas `onBeforeDelete` drops the scene's edges): "Deleted 3 nodes. “Scene” wasn't deleted because “Shot 2” is still running." The scene alone gets the single toast.
+    - The strings live in `lib/cinemaScene.ts`.
+  - Builder's: two or more kept scenes ("“A” and “B” weren't deleted because their shots are still running."); the multi-scene tooltip ("Wait for them to finish."); the PUT 409 person line ("Couldn't remove “Shot 2”. It's still running. Stop the run first.").
+- **Nits.**
+  - N1: `useOfflineHiddenNotice` runs the check from the connection's own change, so what it clears lands in the same update as "online" and nothing flashes.
+  - N2: "At least" says the low end ("$0.0099").
+  - N3: two significant figures per end ("$0.0099–0.010"). This mixes decimals only across a power of ten, as "$9.50–12" does at $10; the property test allows only that.
+  - N4: as above.
+- **Agent support.**
+  - MCP-SETUP.md "Cinema scenes over MCP": the strict and lenient paths, the conversions, the timing, the person lines, G1 and the canvas blocking.
+  - SKILL.md: the 400 examples, `--param scene='<json>'`, and the 409s.
+  - mcp_server.py: the `edit_canvas`, `cancel_run` and `remove_from_canvas` docstrings.
+  - The CLI prints the 409 detail as it does every refusal.
+- **Tests that failed first, on 537af979.**
+  - Backend, `test_pr198_fix3.py`: 122 failed and 11 errored (the mechanisms the M1/L1/L2/G1/M2 tests call didn't exist); the run kept only the failure list, not the pass count.
+  - Frontend, the new store and money files plus the changed fix2 money file: 32 failed and 63 passed. The new UI file failed to import (no `withNodeCardBoundary` on the base). Run with a stub in its place, 14 of its 26 failed.
+  - What passed on the base:
+    - some malformed scene shapes, the Remotion and editor cards with damaged params, and the L2 "still on the scene" rows;
+    - the H1 test "a newer edit from someone else still wins" (added after the fix, a guard).
+- **Gates.**
+  - Backend, full suite: 11,480 passed, 71 skipped, 0 failed (6:01).
+  - Vitest, full: the first run had 2 real failures (the persistence test above; a kept whole node's unnamed setting), both fixed. The rerun had 464 files and 6,159 passed, 0 failed, with no timeouts to rerun.
+  - The errorCopy ratchets: 15 files, 192 passed.
+  - `tsc -b` clean.
+  - Lint clean: the inline-style guard, the Slava CSS scope guard and eslint.
+  - Vite build OK; budget 401,668 bytes raw / 121,496 gzip (limit 512,000).
+- **Live check** (8797/5797, 1280 and 1440, isolated state, nothing paid; the rendering shot was a client-side stub): 19/20, 0 blocked attempts after the canary.
+  - **What passed:**
+    - The project with all 12 malformed scene shapes opens (200) and autosaves (PUT 200). Every scene is converted, and every card draws.
+    - Damaged cards on the live canvas never blank it. A card that throws shows the boundary line at card size and keeps its handle. A text node with `params: null` also hit the boundary: ModelNode can't draw it, and only a client-side write can make one.
+    - The Cinema boundary keeps the header (project bar, Canvas, Cinema, Updates). The vehicle was a shot whose `variations` isn't a list, which only a client-side write can make; the backend drops one. Back to canvas lands on a drawn canvas.
+    - Composition: the header, then the offline row, then the toolbar.
+    - Undo is refused for a rendering shot, with GM's line and nothing sent.
+    - G1: the toast, and the context menu's disabled Delete.
+  - **The one failure:** the multi-select delete removed the other node and kept the scene, but no line showed. In this harness a plain delete shows no "Deleted …" line either (the control check). The tab has no person link, so the delete's sync takes the step off the top before the answer. The kept line is covered by the store test.
+  - Screenshots: `fix3-*.png` in the scratchpad.

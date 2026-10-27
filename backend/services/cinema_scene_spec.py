@@ -1,12 +1,26 @@
-"""A Cinema scene's shape, filled in on every write (PR #198 review 2, M2).
+"""A Cinema scene's shape, filled in on every write (PR #198 reviews 2 and 3).
 
 A scene an agent wrote with only ``{"shots": [...]}`` (no ``base``) opened
 in Cinema as a white screen: the studio reads ``scene.base.model``. Every
-path that writes a cinema-scene node's ``scene`` (create, edit_canvas,
-proposals and their Accept, PUT, restore, import, a project's load) fills
-what's missing with the defaults the canvas uses for a new scene
-(frontend graphStore ``createDefaultScene``), and refuses only what can't be
-filled, naming the field.
+path that writes a cinema-scene node's ``scene`` fills what's missing with
+the defaults the canvas uses for a new scene (frontend graphStore
+``createDefaultScene``).
+
+Two readings (review 3, H1: a strict read on a project's open and save
+locked a saved project, and every paid result in it, out of the UI):
+
+- ``strict``: an agent-authored write (create, edit_canvas, a proposal, an
+  agent's PUT). What can't be filled is refused with the field named, so the
+  agent learns the shape. Only one thing is converted: a scene sent as JSON
+  text, which is how the CLI sends every ``--param``.
+- lenient: everything else (a project's open, every save and autosave, the
+  handoff save, a recovered copy, import, the person's own PUT and create,
+  the person's undo, ``state.json``). Nothing is refused: what can be
+  converted is (a base written as a model name, a version that isn't a whole
+  number, a prompt that isn't text, a shot without an id or with one used
+  twice), and the rest becomes the defaults. The same input always converts
+  to the same scene, so the ids an open gives are the ones the next save
+  keeps.
 
 A shot's ``running`` status is the canvas's optimistic mark while a run is
 on its way. Nothing the backend stores is ever rendering (a run writes
@@ -17,6 +31,7 @@ shot showed "Generating…" for good after a reload).
 from __future__ import annotations
 
 import copy
+import json
 from typing import Any
 
 DEFAULT_BASE_MODEL = "seedream-4-5"
@@ -47,22 +62,147 @@ def settled_output(output: Any) -> Any:
     return {"status": "idle"}
 
 
+def _blank(value: Any) -> bool:
+    return value is None or (isinstance(value, str) and not value.strip())
+
+
+def _scalar_text(value: Any) -> str | None:
+    """A prompt that isn't text, as text when it has one (a number); None
+    for anything else."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return str(value)
+    return None
+
+
+def _from_json_text(scene: Any) -> Any:
+    """A scene sent as JSON text (the CLI sends every ``--param`` as text),
+    as the object it spells; anything else as it is."""
+    if not isinstance(scene, str):
+        return scene
+    try:
+        parsed = json.loads(scene)
+    except ValueError:
+        return scene
+    return parsed if isinstance(parsed, dict) else scene
+
+
+def _shot_id(value: Any) -> str | None:
+    """A shot's id as text: text as it is, a whole number as its digits."""
+    if isinstance(value, str) and value:
+        return value
+    if isinstance(value, int) and not isinstance(value, bool):
+        return str(value)
+    return None
+
+
+def _clean_runtime(shot: dict[str, Any]) -> None:
+    """A shot's runtime fields kept only when they have their shape (in
+    place): ``output`` an object (settled), ``variations`` a list,
+    ``selectedVariation`` a whole number."""
+    if "output" in shot:
+        if isinstance(shot["output"], dict):
+            shot["output"] = settled_output(shot["output"])
+        else:
+            shot.pop("output")
+    if "variations" in shot and not isinstance(shot["variations"], list):
+        shot.pop("variations")
+    selected = shot.get("selectedVariation")
+    if "selectedVariation" in shot and (isinstance(selected, bool) or not isinstance(selected, int)):
+        shot.pop("selectedVariation")
+
+
+def _new_ids(count: int, taken: set[str]) -> list[str]:
+    """``count`` shot ids none of ``taken`` has: "s1", "s2", … in order, the
+    same every time for the same scene."""
+    ids: list[str] = []
+    number = 0
+    while len(ids) < count:
+        number += 1
+        candidate = f"s{number}"
+        if candidate not in taken:
+            taken.add(candidate)
+            ids.append(candidate)
+    return ids
+
+
+def _lenient_shots(shots: Any) -> list[dict[str, Any]]:
+    """Every shot that can be read, each with a unique text id and a text
+    prompt. A shot that is only text is that prompt; anything else that
+    isn't an object is dropped (it holds nothing to keep)."""
+    if not isinstance(shots, list):
+        return []
+    kept: list[dict[str, Any]] = []
+    for shot in shots:
+        if isinstance(shot, str):
+            kept.append({"prompt": shot})
+        elif isinstance(shot, dict):
+            kept.append(shot)
+    # The first shot with an id keeps it (its port and wires are its own);
+    # a shot with none, or with one an earlier shot has, gets a new one that
+    # no shot in the scene has.
+    seen: set[str] = set()
+    needs: list[int] = []
+    for index, shot in enumerate(kept):
+        shot_id = _shot_id(shot.get("id"))
+        if shot_id is None or shot_id in seen:
+            needs.append(index)
+            continue
+        shot["id"] = shot_id
+        seen.add(shot_id)
+    taken = seen | {text for shot in kept if (text := _shot_id(shot.get("id")))}
+    for index, shot_id in zip(needs, _new_ids(len(needs), taken)):
+        kept[index]["id"] = shot_id
+    for shot in kept:
+        prompt = shot.get("prompt")
+        if not isinstance(prompt, str):
+            shot["prompt"] = _scalar_text(prompt) or ""
+        _clean_runtime(shot)
+    # The id first, as the canvas writes a shot.
+    return [{"id": shot["id"], **{key: value for key, value in shot.items() if key != "id"}} for shot in kept]
+
+
+def _lenient(scene: Any) -> dict[str, Any]:
+    out = copy.deepcopy(scene) if isinstance(scene, dict) else {}
+    version = out.get("version")
+    if isinstance(version, bool) or not isinstance(version, int) or version < 1:
+        out["version"] = SCENE_VERSION
+    base = out.get("base")
+    if isinstance(base, str) and base.strip():
+        out["base"] = {"model": base.strip()}
+    elif isinstance(base, dict):
+        model = base.get("model")
+        fixed = dict(base)
+        if not isinstance(model, str) or not model.strip():
+            fixed["model"] = DEFAULT_BASE_MODEL
+        if "params" in fixed and not isinstance(fixed["params"], dict):
+            fixed.pop("params")
+        out["base"] = fixed
+    else:
+        out["base"] = {"model": DEFAULT_BASE_MODEL}
+    aspect = out.get("aspectRatio")
+    if not isinstance(aspect, str) or not aspect.strip():
+        out["aspectRatio"] = DEFAULT_ASPECT_RATIO
+    out["shots"] = _lenient_shots(out.get("shots"))
+    return out
+
+
 def normalize_scene(scene: Any, *, strict: bool = True) -> Any:
     """``scene`` with its missing fields filled and transient statuses
-    settled (a copy). ``strict``: raise SceneSpecError for what can't be
-    filled; otherwise leave that part as it is (a saved project still opens,
-    and the studio's own guard shows what's wrong)."""
-    if scene is None and not strict:
-        scene = {}
+    settled (a copy). ``strict`` (an agent-authored write): raise
+    SceneSpecError for what can't be filled. Otherwise convert what can be
+    and fill the rest with the defaults; never raises (see the module doc)."""
+    scene = _from_json_text(scene)
+    if not strict:
+        return _lenient(scene)
     if not isinstance(scene, dict):
-        if strict:
-            raise _refuse("scene", "must be an object")
-        return scene
+        raise _refuse("scene", "must be an object")
     out = copy.deepcopy(scene)
     version = out.get("version")
     if version is None:
         out["version"] = SCENE_VERSION
-    elif strict and (isinstance(version, bool) or not isinstance(version, int)):
+    elif isinstance(version, bool) or not isinstance(version, int):
         raise _refuse("scene.version", "must be a whole number")
     base = out.get("base")
     if base is None:
@@ -71,45 +211,36 @@ def normalize_scene(scene: Any, *, strict: bool = True) -> Any:
         model = base.get("model")
         if model is None or (isinstance(model, str) and not model.strip()):
             out["base"] = {**base, "model": DEFAULT_BASE_MODEL}
-        elif strict and not isinstance(model, str):
+        elif not isinstance(model, str):
             raise _refuse("scene.base.model", "must be text")
-    elif strict:
+        if "params" in base and not isinstance(base["params"], dict):
+            raise _refuse("scene.base.params", "must be an object")
+    else:
         raise _refuse("scene.base", 'must be an object like {"model": "seedream-4-5"}')
     aspect = out.get("aspectRatio")
-    if aspect is None or (isinstance(aspect, str) and not aspect.strip()):
+    if _blank(aspect):
         out["aspectRatio"] = DEFAULT_ASPECT_RATIO
-    elif strict and not isinstance(aspect, str):
+    elif not isinstance(aspect, str):
         raise _refuse("scene.aspectRatio", 'must be text like "16:9"')
     shots = out.get("shots")
-    if shots is None and not strict:
-        # A write always says which shots the scene has (an empty or missing
-        # list would wipe them); a saved scene without any has none.
-        out["shots"] = shots = []
     if not isinstance(shots, list):
-        if strict:
-            raise _refuse("scene.shots", "must be a list of shots")
-        return out
+        raise _refuse("scene.shots", "must be a list of shots")
     seen: set[str] = set()
     for index, shot in enumerate(shots):
         if not isinstance(shot, dict):
-            if strict:
-                raise _refuse(f"scene.shots[{index}]", "must be an object")
-            continue
+            raise _refuse(f"scene.shots[{index}]", "must be an object")
         shot_id = shot.get("id")
         if not isinstance(shot_id, str) or not shot_id:
-            if strict:
-                raise _refuse(f"scene.shots[{index}].id", "must be non-empty text")
-            continue
-        if strict and shot_id in seen:
+            raise _refuse(f"scene.shots[{index}].id", "must be non-empty text")
+        if shot_id in seen:
             raise _refuse(f"scene.shots[{index}].id", f"'{shot_id}' is used twice; shot ids must be unique")
         seen.add(shot_id)
         prompt = shot.get("prompt")
         if prompt is None:
             shot["prompt"] = ""
-        elif strict and not isinstance(prompt, str):
+        elif not isinstance(prompt, str):
             raise _refuse(f"scene.shots[{index}].prompt", "must be text")
-        if "output" in shot:
-            shot["output"] = settled_output(shot["output"])
+        _clean_runtime(shot)
     return out
 
 

@@ -599,9 +599,14 @@ function rebaseHeld(held: Value, was: Value, now: Value, path: Path, definitionI
  * - A setting with no readable name (null: a provider setting the Inspector
  *   shows only by its key) is "a setting on “<node>”" (GM, PR #198 r2 ask
  *   3); more than one setting with one of them unnamed is counted.
- * - A list both reordered (`order`, GM's follow-up for PR #198 r2): "Undid the
- *   proposal except the shot order in “<scene>”. You reordered the shots
- *   after you accepted.", or "Nothing was undone. …" when that was all.
+ * - A list both reordered (`order`, GM's follow-up for PR #198 r2 and r3
+ *   items 2 and 5): "Undid the proposal except the shot order in “<scene>”.
+ *   You reordered them in another window after you accepted." ("The shots
+ *   were reordered after you accepted." for an unknown source), or "Nothing
+ *   was undone. …" when that was all.
+ * - Nothing undone with an unnamed setting (GM r3 item 7): "a setting on
+ *   “<node>”", "3 settings on “<node>”", "settings on “A” and “B”", "settings
+ *   on 4 nodes".
  */
 export function acceptUndoLine(
   kept: { node: string; settings: (string | null)[]; wholeNode?: boolean; order?: 'shots' | 'clips' }[],
@@ -618,12 +623,17 @@ export function acceptUndoLine(
   if (orders.length > 0) {
     if (orders.length === 1 && kept.length === 1) {
       const { order, node } = orders[0];
-      const who = source.kind === 'agent' ? `${agent} reordered the ${order} after you accepted.`
-        : source.kind === 'you' ? `You reordered the ${order} in another window after you accepted.`
-          // Builder's form for an unknown source (GM worded the actors').
-          : `The ${order} were reordered after you accepted.`;
-      if (nothingUndone) return `Nothing was undone. ${who}`;
-      return `Undid the proposal except the ${order === 'shots' ? 'shot' : 'clip'} order in ${quote(node)}. ${who}`;
+      // GM, PR #198 r3 item 5 (unknown) and item 2 ("You … them"): "Undid
+      // the proposal except the shot order in “X”. The shots were reordered
+      // after you accepted." / "… You reordered them in another window after
+      // you accepted." "Nothing was undone." has no order to point back to,
+      // so its "You" line names the list.
+      const who = (pointsBack: boolean) => (source.kind === 'agent' ? `${agent} reordered the ${order} after you accepted.`
+        : source.kind === 'you'
+          ? `You reordered ${pointsBack ? 'them' : `the ${order}`} in another window after you accepted.`
+          : `The ${order} were reordered after you accepted.`);
+      if (nothingUndone) return `Nothing was undone. ${who(false)}`;
+      return `Undid the proposal except the ${order === 'shots' ? 'shot' : 'clip'} order in ${quote(node)}. ${who(true)}`;
     }
     // An order kept with other changes: counted, as kept nodes and settings
     // mixed are (builder's, after GM's counted forms).
@@ -637,12 +647,23 @@ export function acceptUndoLine(
   }
   if (nothingUndone) {
     const one = kept.length === 1 ? kept[0] : null;
-    if (one && one.settings.length >= 1 && one.settings.length <= 3 && one.settings.includes(null)) {
-      // GM r2 ask 3: never a raw key. One unnamed setting is "a setting on";
-      // more are counted (builder's forms around GM's words).
-      const what = one.settings.length === 1 ? `a setting on ${quote(one.node)}` : `${one.settings.length} settings for ${quote(one.node)}`;
+    // GM, PR #198 r3 item 7: a setting with no readable name is never named.
+    // One: "Nothing was undone. Codex changed a setting on “Hero still” after
+    // you accepted."; several on one node: "…changed 3 settings on “Hero
+    // still”…"; across nodes: "…changed settings on “A” and “B”…" or "…on 4
+    // nodes…". The unknown source's forms are builder's, on GM's pattern.
+    const settingsOnly = kept.every((item) => !item.order && item.settings.length > 0);
+    if (settingsOnly && kept.some((item) => item.settings.includes(null))) {
+      let what: string;
+      let several = true;
+      if (one) {
+        several = one.settings.length > 1;
+        what = several ? `${one.settings.length} settings on ${quote(one.node)}` : `a setting on ${quote(one.node)}`;
+      } else {
+        what = kept.length >= 4 ? `settings on ${kept.length} nodes` : `settings on ${andList(kept.map((item) => quote(item.node)))}`;
+      }
       if (source.kind === 'unknown') {
-        return `Nothing was undone. ${what[0].toUpperCase()}${what.slice(1)} ${one.settings.length === 1 ? 'was' : 'were'} changed after you accepted.`;
+        return `Nothing was undone. ${what[0].toUpperCase()}${what.slice(1)} ${several ? 'were' : 'was'} changed after you accepted.`;
       }
       return `Nothing was undone. ${lead} changed ${what}${where} after you accepted.`;
     }

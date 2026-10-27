@@ -9,7 +9,7 @@ import {
   StickyNote,
   Trash2,
 } from 'lucide-react';
-import { useGraphStore } from '../store/graphStore';
+import { sceneDeleteDisabledTitle, useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
 import { useCanvasPinsStore } from '../store/canvasPinsStore';
 import { isBackendNodeId } from '../lib/canvasPins';
@@ -49,6 +49,9 @@ export function SelectionToolbar() {
 
   const selectedNodes = useMemo(() => nodes.filter((node) => node.selected), [nodes]);
   const ids = useMemo(() => selectedNodeIds(nodes), [nodes]);
+  // Every selected node a scene with a shot rendering: nothing to delete yet
+  // (GM, PR #198 r3 item 1). With others selected, Delete takes the rest.
+  const sceneHeld = useGraphStore((state) => sceneDeleteDisabledTitle(state, ids));
   const outputCount = useMemo(
     () => collectDownloadableOutputs(selectedNodes).length,
     [selectedNodes],
@@ -215,9 +218,9 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button selection-toolbar__button--danger"
         onClick={removeSelection}
-        disabled={isExecuting || offline}
+        disabled={isExecuting || offline || sceneHeld !== null}
         {...off}
-        title={isExecuting ? 'Wait for the active run to finish' : 'Delete selected nodes'}
+        title={isExecuting ? 'Wait for the active run to finish' : sceneHeld ?? 'Delete selected nodes'}
         aria-label="Delete selected nodes"
       >
         <Trash2 size={17} aria-hidden="true" />

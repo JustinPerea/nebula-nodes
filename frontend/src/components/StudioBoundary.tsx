@@ -1,19 +1,33 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { useUIStore } from '../store/uiStore';
 import { studioBoundaryLine, studioBoundaryLogLine, type StudioScreen } from '../lib/studioBoundary';
+import { WorkspaceHeader } from './WorkspaceHeader';
 
-/** Each studio's own way back (uiStore). The Commons goes back where it was
- * opened from; every other studio goes to the canvas. */
-const EXIT: Record<StudioScreen, 'exitCinemaEditor' | 'exitEditor' | 'exitRemotionEditor' | 'exitCharacterEditor'
-  | 'exitMoodboardEditor' | 'exitCreateView' | 'exitCommons' | 'exitBrandShowcase'> = {
-  'cinema-editor': 'exitCinemaEditor',
-  editor: 'exitEditor',
-  'remotion-editor': 'exitRemotionEditor',
-  'character-editor': 'exitCharacterEditor',
-  'moodboard-editor': 'exitMoodboardEditor',
-  create: 'exitCreateView',
-  commons: 'exitCommons',
-  'brand-showcase': 'exitBrandShowcase',
+/** Each studio's own way back to the canvas (uiStore). The Commons' own exit
+ * goes back where it was opened from (Create, a studio), which may be the
+ * screen that failed, so its boundary goes to the canvas itself (PR #198
+ * review 3, L6): "Back to canvas" always lands on the canvas. */
+const EXIT: Record<StudioScreen, () => void> = {
+  'cinema-editor': () => useUIStore.getState().exitCinemaEditor(),
+  editor: () => useUIStore.getState().exitEditor(),
+  'remotion-editor': () => useUIStore.getState().exitRemotionEditor(),
+  'character-editor': () => useUIStore.getState().exitCharacterEditor(),
+  'moodboard-editor': () => useUIStore.getState().exitMoodboardEditor(),
+  create: () => useUIStore.getState().exitCreateView(),
+  commons: () => useUIStore.setState({ viewMode: 'canvas' }),
+  'brand-showcase': () => useUIStore.getState().exitBrandShowcase(),
+};
+
+/** The title each studio's header shows (its WorkspaceHeader's). */
+const TITLE: Record<StudioScreen, string> = {
+  'cinema-editor': 'Cinema',
+  editor: 'Video editor',
+  'remotion-editor': 'Composition',
+  'character-editor': 'Character',
+  'moodboard-editor': 'Moodboard',
+  create: 'Creator Studio',
+  commons: 'Commons',
+  'brand-showcase': 'Showcase',
 };
 
 interface StudioBoundaryProps {
@@ -30,9 +44,11 @@ interface StudioBoundaryProps {
  * A studio that throws while it renders (a scene an older Nebula saved
  * without `base`, data an outside app damaged) shows GM's contained line
  * with Back to canvas, instead of taking the whole app down to a white
- * screen (PR #198 review 2, M2). The Agent log gets the node and the field;
- * neither line names who wrote the data. App keys it by screen and node, so
- * opening another one starts clean.
+ * screen (PR #198 review 2, M2). GM, r3 (b): the studio's header stays
+ * (project bar, back to Canvas, Updates, and the offline row under it); only
+ * the body is replaced. The Agent log gets the node and the field; neither
+ * line names who wrote the data. App keys it by screen and node, so opening
+ * another one starts clean.
  */
 export class StudioBoundary extends Component<StudioBoundaryProps, { failed: boolean }> {
   state = { failed: false };
@@ -55,13 +71,17 @@ export class StudioBoundary extends Component<StudioBoundaryProps, { failed: boo
   render(): ReactNode {
     if (!this.state.failed) return this.props.children;
     const { studio, node } = this.props;
+    const exit = EXIT[studio];
     return (
       <div className="studio-boundary">
-        <div className="studio-boundary__card" role="alert">
-          <p className="studio-boundary__line">{studioBoundaryLine(studio, node?.label || null)}</p>
-          <button type="button" className="studio-boundary__back" onClick={() => useUIStore.getState()[EXIT[studio]]()}>
-            Back to canvas
-          </button>
+        <WorkspaceHeader title={TITLE[studio]} onBack={exit} className="studio-boundary__header" />
+        <div className="studio-boundary__body">
+          <div className="studio-boundary__card" role="alert">
+            <p className="studio-boundary__line">{studioBoundaryLine(studio, node?.label || null)}</p>
+            <button type="button" className="studio-boundary__back" onClick={exit}>
+              Back to canvas
+            </button>
+          </div>
         </div>
       </div>
     );

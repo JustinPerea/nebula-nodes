@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useUIStore } from '../store/uiStore';
-import { useGraphStore } from '../store/graphStore';
+import { sceneDeleteDisabledTitle, useGraphStore } from '../store/graphStore';
 import { useCanvasPinsStore } from '../store/canvasPinsStore';
 import { isBackendNodeId } from '../lib/canvasPins';
 import { floatingBottomLimit } from '../lib/bottomBar';
@@ -15,6 +15,8 @@ interface MenuItem {
   shortcut?: string;
   danger?: boolean;
   disabled?: boolean;
+  /** Why it is disabled, when that isn't offline. */
+  title?: string;
   action: () => void;
 }
 
@@ -26,6 +28,8 @@ export function ContextMenu() {
   const duplicateNode = useGraphStore((s) => s.duplicateNode);
   const deleteNode = useGraphStore((s) => s.deleteNode);
   const isExecuting = useGraphStore((s) => s.isExecuting);
+  // A scene with a shot rendering can't be deleted yet (GM, PR #198 r3 item 1).
+  const sceneHeld = useGraphStore((s) => (nodeId ? sceneDeleteDisabledTitle(s, [nodeId]) : null));
   // Offline is read-only (round 15 of PR #114): every item here edits, so
   // each is disabled and looks it.
   const offline = useBackendOffline();
@@ -132,7 +136,8 @@ export function ContextMenu() {
       label: 'Delete',
       shortcut: 'Del',
       danger: true,
-      disabled: offline,
+      disabled: offline || sceneHeld !== null,
+      title: sceneHeld ?? undefined,
       action: () => {
         // A World Labs hold refuses, with its notice; otherwise it deletes at
         // once and says "Deleted the node." with Undo (GM, 2026-10-23).
@@ -154,6 +159,7 @@ export function ContextMenu() {
           className={`context-menu__item ${item.danger ? 'context-menu__item--danger' : ''}`}
           onClick={item.action}
           disabled={item.disabled}
+          title={item.title}
           {...offlineMark(offline)}
         >
           <span>{item.label}</span>

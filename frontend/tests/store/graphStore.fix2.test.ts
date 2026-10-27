@@ -216,7 +216,7 @@ describe('L3: both sides reordered the same list: Undo says so', () => {
     expect(acceptUndoLine(order, { kind: 'agent', name: 'Codex' }, false))
       .toBe('Undid the proposal except the shot order in “Opening”. Codex reordered the shots after you accepted.');
     expect(acceptUndoLine([{ node: 'Cut', settings: [], order: 'clips' as const }], { kind: 'you' }, false))
-      .toBe('Undid the proposal except the clip order in “Cut”. You reordered the clips in another window after you accepted.');
+      .toBe('Undid the proposal except the clip order in “Cut”. You reordered them in another window after you accepted.');
     expect(acceptUndoLine([{ node: 'Cut', settings: [], order: 'clips' as const }], { kind: 'unknown' }, false))
       .toBe('Undid the proposal except the clip order in “Cut”. The clips were reordered after you accepted.');
   });

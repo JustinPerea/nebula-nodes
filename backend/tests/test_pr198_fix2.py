@@ -176,7 +176,9 @@ def test_a_whole_scene_run_blocks_removing_any_of_its_shots(api, rendering, pers
     # The person's own undo (a restore) is refused too: nothing orphans a paid run.
     response = _restore(client, node, [{"id": "s2", "prompt": "b"}])
     assert response.status_code == 409, response.text
-    assert "Shot 1 (s1)" in response.json()["detail"]
+    # The person reads GM's line (fix round 3, M2); agents keep "Shot 1 (s1)" and the run.
+    assert response.json()["detail"] == (
+        "Couldn't undo. It would remove \u201cShot 1\u201d, which is still running. Stop the run first.")
 
 
 # -- M2: a Cinema scene missing a field --------------------------------------------

@@ -380,6 +380,12 @@ function centsText(cents: number): string {
  * under $10, whole dollars from $10). */
 interface RoundedUsd { value: number; decimals: number }
 
+/** The smallest amount formatUsd writes in figures: below it, "<$0.000001"
+ * (money.py TINY_USD; PR #198 review 3, L5: two significant figures of a
+ * float denormal are 324 decimals, past what toFixed can write). */
+const TINY_USD = 0.000001;
+const UNDER_TINY = '<$0.000001';
+
 function roundUsd(amount: number): RoundedUsd {
   const value = clampUsd(amount);
   if (value === 0) return { value: 0, decimals: 0 };
@@ -411,18 +417,30 @@ function roundedText({ value, decimals }: RoundedUsd): string {
  * $10, whole dollars from $10, picked from the rounded value ($0.0995 is
  * "$0.10", $9.996 is "$10"). "$0" only for nothing (money.py usd_amount). */
 export function formatUsd(amount: number): string {
+  const value = clampUsd(amount);
+  if (value > 0 && value < TINY_USD) return UNDER_TINY;
   return roundedText(roundUsd(amount));
 }
 
+/** How many decimals two significant figures of `value` (under a dime) take. */
+function twoFigureDecimals(value: number): number {
+  return Math.max(0, 1 - Math.floor(Math.log10(value)));
+}
+
 /** Two rounded ends, the same number of decimals when both are under a dime
- * ("$0.010–0.015", never "$0.01–0.015"); null when they read the same. */
+ * ("$0.010–0.015", never "$0.01–0.015"), but never more than two
+ * significant figures on either ("$0.0099–0.010", never "$0.0099–0.0100";
+ * review 3, N3); null when they read the same. An end under TINY_USD reads
+ * as formatUsd writes it. */
 function rangeEnds(low: number, high: number): [string, string] | null {
+  if (clampUsd(low) > 0 && clampUsd(low) < TINY_USD) return clampUsd(high) < TINY_USD ? null : [UNDER_TINY, formatUsd(high)];
   const from = roundUsd(low);
   const to = roundUsd(high);
   if (from.value === to.value) return null;
   if (from.value > 0 && from.value < 0.1 && to.value < 0.1) {
     const decimals = Math.max(from.decimals, to.decimals);
-    return [`$${from.value.toFixed(decimals)}`, `$${to.value.toFixed(decimals)}`];
+    return [`$${from.value.toFixed(Math.min(decimals, twoFigureDecimals(from.value)))}`,
+      `$${to.value.toFixed(Math.min(decimals, twoFigureDecimals(to.value)))}`];
   }
   return [roundedText(from), roundedText(to)];
 }
@@ -430,7 +448,7 @@ function rangeEnds(low: number, high: number): [string, string] | null {
 /** "$0.04" for an exact price, "$0.0047–0.43" for a range. */
 export function formatUsdRange(low: number, high: number): string {
   const ends = rangeEnds(low, high);
-  return ends ? `${ends[0]}–${ends[1].slice(1)}` : formatUsd(high);
+  return ends ? `${ends[0]}–${ends[1].replace(/^\$/, '')}` : formatUsd(high);
 }
 
 /** What was spent, to the cent ("$3.40", "$1,234.50", "$0.00" for nothing).
@@ -449,33 +467,41 @@ export function formatSpentUsd(amount: number): string {
  * formatUsd's figures. */
 export const CHIP_FLOOR_USD = 0.01;
 export const CHIP_UNDER_FLOOR = '<$0.01';
-export const CHIP_UNDER_FLOOR_WORDS = 'less than $0.01';
 
 /** What a chip shows, worked out once for its label and its tooltip:
  * - `free`: "~$0" ($0 known; "$0+" when open);
  * - `under`: a non-zero amount under a cent, "<$0.01";
- * - `exact`: one figure, "~$0.04" ("$0.04+" when open);
+ * - `exact`: one figure, "~$0.04" ("$0.04+" when open); `least`, when open,
+ *   the low end as formatUsd writes it, for its tooltip ("At least $X");
  * - `range`: two figures, "$0.05–0.43", "<$0.01–0.43", "$0–0.43". A range
  *   whose ends read the same is one figure ("<$0.01–0.01" is "~$0.01").
  * `open`: part of it has no list price, so the real total can be higher. */
 export type ChipEstimate =
   | { kind: 'free' | 'under'; open: boolean }
-  | { kind: 'exact'; amount: string; open: boolean }
+  | { kind: 'exact'; amount: string; open: boolean; least?: string }
   | { kind: 'range'; low: string; high: string; lowUnder: boolean; open: boolean };
 
 export function chipEstimate(low: number, high: number, open: boolean): ChipEstimate {
+  // A high end that isn't a number (NaN, Infinity) has no price: the chip
+  // reads its low end with the rest unknown, never "~$0" (review 3, L5:
+  // "$0" only ever means free).
+  if (typeof high !== 'number' || !Number.isFinite(high)) {
+    return chipEstimate(low, clampUsd(low), true);
+  }
   const top = clampUsd(high);
   const bottom = Math.min(clampUsd(low), top);
   if (top === 0) return { kind: 'free', open };
   if (top < CHIP_FLOOR_USD) return { kind: 'under', open };
   if (bottom > 0 && bottom < CHIP_FLOOR_USD) {
     const amount = formatUsd(top);
-    // "<$0.01–0.01" would say the same thing twice: one figure.
-    if (roundUsd(top).value <= CHIP_FLOOR_USD) return { kind: 'exact', amount, open };
+    // "<$0.01–0.01" would say the same thing twice: one figure. Open, its
+    // tooltip says the low end as it is (review 3, N2: never "At least
+    // $0.01" for $0.0099).
+    if (roundUsd(top).value <= CHIP_FLOOR_USD) return { kind: 'exact', amount, open, ...(open ? { least: formatUsd(bottom) } : {}) };
     return { kind: 'range', low: CHIP_UNDER_FLOOR, high: amount, lowUnder: true, open };
   }
   const ends = rangeEnds(bottom, top);
-  if (!ends) return { kind: 'exact', amount: formatUsd(top), open };
+  if (!ends) return { kind: 'exact', amount: formatUsd(top), open, ...(open ? { least: formatUsd(bottom) } : {}) };
   return { kind: 'range', low: ends[0], high: ends[1], lowUnder: false, open };
 }
 
@@ -492,7 +518,7 @@ export function chipLabel(chip: ChipEstimate): string {
     case 'free': return chip.open ? '$0+' : '~$0';
     case 'under': return `${CHIP_UNDER_FLOOR}${plus}`;
     case 'exact': return chip.open ? `${chip.amount}+` : `~${chip.amount}`;
-    case 'range': return `${chip.low}–${chip.high.slice(1)}${plus}`;
+    case 'range': return `${chip.low}–${chip.high.replace(/^\$/, '')}${plus}`;
   }
 }
 
@@ -502,17 +528,20 @@ const UNKNOWN_COSTS = "Some costs aren't known yet.";
  * - "~$0" and "~$X": "Estimated cost"; "$0+": "Some costs aren't known yet.";
  * - "<$0.01": "Estimated cost under $0.01"; "<$0.01+": "Under $0.01 so far.
  *   Some costs aren't known yet.";
- * - a single "$X+": "At least $X. Some costs aren't known yet.";
- * - every range: "Between $X and $Y." or "Between $X and $Y, plus costs that
- *   aren't known yet." ("less than $0.01" for a "<$0.01" low end). */
+ * - a single "$X+": "At least $X. Some costs aren't known yet." ($X is the
+ *   low end as formatUsd writes it);
+ * - a range: "Between $X and $Y." or "Between $X and $Y, plus costs that
+ *   aren't known yet.";
+ * - a range from under a cent, "<$0.01–Y" (GM, PR #198 r3 item 6): "Up to
+ *   $Y." or "Up to $Y, plus costs that aren't known yet." */
 export function chipTitle(chip: ChipEstimate): string {
   switch (chip.kind) {
     case 'free': return chip.open ? UNKNOWN_COSTS : 'Estimated cost';
     case 'under': return chip.open ? `Under $0.01 so far. ${UNKNOWN_COSTS}` : 'Estimated cost under $0.01';
-    case 'exact': return chip.open ? `At least ${chip.amount}. ${UNKNOWN_COSTS}` : 'Estimated cost';
+    case 'exact': return chip.open ? `At least ${chip.least ?? chip.amount}. ${UNKNOWN_COSTS}` : 'Estimated cost';
     case 'range': {
-      const from = chip.lowUnder ? CHIP_UNDER_FLOOR_WORDS : chip.low;
-      return `Between ${from} and ${chip.high}${chip.open ? ", plus costs that aren't known yet." : '.'}`;
+      const more = chip.open ? ", plus costs that aren't known yet." : '.';
+      return chip.lowUnder ? `Up to ${chip.high}${more}` : `Between ${chip.low} and ${chip.high}${more}`;
     }
   }
 }

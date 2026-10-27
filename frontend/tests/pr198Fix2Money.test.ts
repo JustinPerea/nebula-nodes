@@ -39,10 +39,12 @@ const CHIPS: [number, number, boolean, string, string | undefined][] = [
   [0.0047, 0.0047, true, '<$0.01+', "Under $0.01 so far. Some costs aren't known yet."],
   [0, 0.43, false, '$0–0.43', 'Between $0 and $0.43.'],
   [0, 0.43, true, '$0–0.43+', "Between $0 and $0.43, plus costs that aren't known yet."],
-  [0.0047, 0.43, false, '<$0.01–0.43', 'Between less than $0.01 and $0.43.'],
-  [0.0047, 0.43, true, '<$0.01–0.43+', "Between less than $0.01 and $0.43, plus costs that aren't known yet."],
+  // GM, PR #198 r3 item 6: a range from under a cent reads "Up to $Y."
+  [0.0047, 0.43, false, '<$0.01–0.43', 'Up to $0.43.'],
+  [0.0047, 0.43, true, '<$0.01–0.43+', "Up to $0.43, plus costs that aren't known yet."],
   [0.0099, 0.0101, false, '~$0.01', 'Estimated cost'],
-  [0.0099, 0.0101, true, '$0.01+', "At least $0.01. Some costs aren't known yet."],
+  // Review 3, N2: "At least" says the low end as it is.
+  [0.0099, 0.0101, true, '$0.01+', "At least $0.0099. Some costs aren't known yet."],
   [0.009, 0.0104, false, '~$0.01', 'Estimated cost'],
   [0.01, 0.0149, false, '$0.010–0.015', 'Between $0.010 and $0.015.'],
   [0.02, 0.43, true, '$0.02–0.43+', "Between $0.02 and $0.43, plus costs that aren't known yet."],
@@ -69,10 +71,10 @@ describe('the chips and their tooltips (GM asks 1 and 2)', () => {
     }
   });
 
-  it('"At least" only for a single-number "$X+" chip; a range always says "Between"', () => {
+  it('"At least" only for a single-number "$X+" chip; a range says "Between", or "Up to" from under a cent', () => {
     for (const [low, high, open, chip, title] of CHIPS) {
       const range = chip.includes('–');
-      if (range) expect(title, chip).toMatch(/^Between /);
+      if (range) expect(title, chip).toMatch(chip.startsWith('<') ? /^Up to / : /^Between /);
       if (title?.startsWith('At least')) expect(chip, chip).toMatch(/^\$[\d.]+\+$/);
       void low; void high; void open;
     }
@@ -114,7 +116,14 @@ describe('the formatter, as properties (L4)', () => {
         expect(from.replace('$', ''), where).not.toBe(to);
         const decimals = (text: string) => text.split('.')[1]?.length ?? 0;
         const value = (text: string) => Number(text.replace(/[<$,]/g, ''));
-        if (!from.startsWith('<') && value(from) > 0 && value(from) < 0.1 && value(to) < 0.1) expect(decimals(from), where).toBe(decimals(to));
+        // The same decimals below $0.10, unless that would give an end a
+        // third figure (review 3, N3: "$0.0099–0.010", as "$9.50–12"
+        // changes at $10).
+        const figures = (text: string) => text.replace(/[<$,.]/g, '').replace(/^0+/, '').length;
+        if (!from.startsWith('<') && value(from) > 0 && value(from) < 0.1 && value(to) < 0.1 && decimals(from) !== decimals(to)) {
+          expect(Math.min(figures(from), figures(to)), where).toBe(2);
+          expect(Math.max(figures(from), figures(to)), where).toBeLessThanOrEqual(2);
+        }
         // "$0.10–0.10" and "$10.00–10" collapse to one figure.
         expect(value(from), where).not.toBe(value(to));
       }

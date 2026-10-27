@@ -3,7 +3,7 @@ import { Brush, Copy, Info, Play, Plus, RefreshCw, Star, Trash2, Upload, X } fro
 import { useUIStore } from '../../store/uiStore';
 import { storedAssetId } from '../../store/storedAssetsStore';
 import { StoredAssetPicker } from './StoredAssetPicker';
-import { useGraphStore } from '../../store/graphStore';
+import { sceneDeleteDisabledTitle, useGraphStore } from '../../store/graphStore';
 import { usesKreaAccount } from '../../lib/kreaConnection';
 import { keysNeeded } from '../../lib/nodeKeys';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
@@ -140,6 +140,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
   const settingsCache = useUIStore((s) => s.settingsCache);
   const nodeParams = nodeData?.params;
   const renderNodeId = renderNode?.id;
+  // A scene with a shot rendering can't be deleted yet (GM, PR #198 r3 item 1).
+  const sceneHeld = useGraphStore((s) => (renderNodeId ? sceneDeleteDisabledTitle(s, [renderNodeId]) : null));
   const wiredKey = useMemo(() => (renderNodeId ? nodeWiredPorts(renderNodeId, edges).join('\n') : ''), [renderNodeId, edges]);
   const resolvedParams: ParamDefinition[] = useMemo(() => {
     if (!definition) return [];
@@ -1209,13 +1211,13 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button inspector__action-button--danger"
-            disabled={readOnly} {...offlineMark(readOnly)}
+            disabled={readOnly || sceneHeld !== null} {...offlineMark(readOnly)}
             onClick={() => {
               // A World Labs hold refuses, with its notice; otherwise it deletes at
               // once and says "Deleted the node." with Undo (GM, 2026-10-23).
               if (useGraphStore.getState().allowCanvasDelete([renderNode.id])) deleteNode(renderNode.id);
             }}
-            title="Delete this node"
+            title={sceneHeld ?? 'Delete this node'}
           >
             <Trash2
               className="inspector__action-icon"

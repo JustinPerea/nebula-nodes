@@ -33,6 +33,13 @@ export function studioBoundaryLine(studio: StudioScreen, label: string | null): 
   return `Couldn't open ${subject}. ${DAMAGED}`;
 }
 
+/** GM's boundary line at a canvas card's size (PR #198 review 3, L4): the
+ * same words, "Couldn't open “<node>”. Some of its data is missing or
+ * damaged, so Nebula can't show it.", "this node" with no name. */
+export function nodeCardBoundaryLine(label: string | null): string {
+  return `Couldn't open ${label ? `“${label}”` : 'this node'}. ${DAMAGED}`;
+}
+
 /** GM: the Agent log's line, "Couldn't open “<node>”, node n4. <field> is
  * missing." Never names the agent. With no field found, builder's: "Its
  * data couldn't be read." */

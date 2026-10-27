@@ -1251,8 +1251,10 @@ def edit_canvas(
       tokens, so you can fix that step and send the rest, or undo what landed.
     A new cinema-scene node needs only {"scene": {"shots": [{"id": "s1",
     "prompt": "..."}]}}: its version, base model and aspect ratio are filled
-    in, and a 400 names any field that can't be (an existing scene is edited
-    in Cinema, not here).
+    in, and a 400 names any field that can't be (`base` written as a model
+    name, a prompt that isn't text, a shot id used twice). An existing scene
+    is edited in Cinema, not here. A scene that is rendering a shot can't be
+    removed (409 naming the shots and the run).
     Who bills a run is the person's call: Krea billing (`_kreaAuth`: API token
     or the Krea plan) and a multi-provider node's route (`_provider`: a route id
     or auto; describe_node lists them and the values each takes). Send a change
@@ -1356,7 +1358,10 @@ def remove_from_canvas(node_ids: list[str] | None = None, wires: list[dict] | No
 
     `wires` are [{"source", "sourceHandle", "target", "targetHandle"}] as
     look_at_canvas lists them. Their outputs stay in Nebula's output folder.
-    Ask first before deleting the person's own work. Deleting a node detaches
+    Ask first before deleting the person's own work. A Cinema scene one of
+    whose shots is rendering can't be deleted: 409 "Couldn't delete “Scene”,
+    node n4. “Shot 2” is still running, run <id>." (stop it with cancel_run,
+    or wait). Deleting a node detaches
     the person's pins on it and closes the proposals that read it; `removals`
     lists them per node (with its `projectId`, `definitionId` and, when it
     supersedes an earlier delete of the same node, `replaces`), and
@@ -1575,9 +1580,9 @@ def cancel_run(run_id: str, ctx: Context | None = None) -> dict[str, Any]:
 
     A run the person started is theirs to stop and is refused (403). If they
     ask you to stop it, tell them to press Stop in Nebula (the toolbar, or
-    the run in Run history). A shot can't be removed from a Cinema scene
-    while a run renders it (409 naming the run): stop that run here first,
-    or wait for it to finish.
+    the run in Run history). A shot can't be removed from a Cinema scene,
+    nor the scene deleted, while a run renders it (409 naming the run): stop
+    that run here first, or wait for it to finish.
 
     A run id Nebula hasn't started yet (its start still on the way) answers
     `pendingAdmission: true`: the stop is recorded and Nebula refuses to

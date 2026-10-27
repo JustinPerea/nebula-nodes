@@ -12,9 +12,10 @@ import {
   type OnConnectStart,
   type Viewport,
   type Node,
+  type Edge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { useGraphStore } from '../store/graphStore';
+import { renderingScenes, useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
 import { useIsValidConnection } from '../hooks/useIsValidConnection';
 import { CANVAS_EDGE_TYPES, CANVAS_NODE_TYPES } from './canvasTypes';
@@ -465,9 +466,16 @@ export function Canvas() {
   // anything, so its wires stay too; one notice per press. Otherwise it
   // deletes at once, and the store says "Deleted the node." with Undo: undo
   // puts back everything a delete removed (GM, 2026-10-23, lib/deleteNotice.ts).
-  const onBeforeDelete = useCallback(async ({ nodes: doomed }: { nodes: { id: string }[] }) => (
-    doomed.length === 0 || useGraphStore.getState().allowCanvasDelete(doomed.map((node) => node.id))
-  ), []);
+  // A Cinema scene with a shot rendering stays, and so do its wires: the
+  // store keeps it out of the delete and says so (GM, PR #198 r3 item 1).
+  const onBeforeDelete = useCallback(async ({ nodes: doomed, edges }: { nodes: Node[]; edges: Edge[] }) => {
+    if (doomed.length === 0) return true;
+    const state = useGraphStore.getState();
+    if (!state.allowCanvasDelete(doomed.map((node) => node.id))) return false;
+    const held = new Set(renderingScenes(state, doomed.map((node) => node.id)).map((scene) => scene.id));
+    if (held.size === 0) return true;
+    return { nodes: doomed, edges: edges.filter((edge) => !held.has(edge.source) && !held.has(edge.target)) };
+  }, []);
 
   const onConnectStart: OnConnectStart = useCallback((_event, params) => {
     connectionSucceededRef.current = false;

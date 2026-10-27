@@ -1,0 +1,28 @@
+/* A canvas card that couldn't draw (components/nodes/NodeCardBoundary.tsx,
+ * PR #198 review 3, L4): GM's boundary line at card size, in the card's own
+ * frame, so the rest of the canvas keeps working. Its handles stay so the
+ * wires into it stay drawn. */
+body.app-slava-restraint .node-card-boundary {
+  width: 200px;
+  padding: 12px 14px;
+  background: var(--sr-glass);
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-node, 6px);
+  color: var(--sr-ink);
+  cursor: default;
+}
+
+body.app-slava-restraint .node-card-boundary--selected {
+  border-color: var(--sr-accent);
+}
+
+body.app-slava-restraint .node-card-boundary__line {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--sr-ink);
+}
+
+body.app-slava-restraint .node-card-boundary__handle {
+  background: var(--sr-ink-light);
+}

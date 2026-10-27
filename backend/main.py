@@ -11,6 +11,7 @@ _env_check.run_startup_checks()
 import asyncio
 import copy
 import errno
+import functools
 import hashlib
 import json
 import logging
@@ -32,7 +33,7 @@ import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
 from pathlib import PurePosixPath
-from typing import Any, BinaryIO, Callable, Iterable, Mapping, NoReturn, Sequence
+from typing import Any, Awaitable, BinaryIO, Callable, Iterable, Iterator, Mapping, NoReturn, Sequence
 from urllib.parse import quote, urlsplit
 
 from uuid import uuid4
@@ -2322,6 +2323,17 @@ def _is_person_request() -> bool:
     """The person: no agent marker and this launch's person token (see
     services/person_gate.py). Not an agent, the CLI, curl, or a forged Origin."""
     return is_person(current_request_headers())
+
+
+def _scene_writes_strict() -> bool:
+    """Whether this request's Cinema scene is refused when it can't be filled
+    in (services/cinema_scene_spec.py): an agent-authored write (an agent's
+    marker, the CLI, a script). The person's canvas tab, with or without
+    this launch's person token, gets its scene converted instead (PR #198
+    review 3, H1): a tab whose token predates a restart must never have the
+    person's typing refused. It picks words and shapes, never authority, so
+    it reads the request as refusal_copy does."""
+    return not refusal_copy.person_reads()
 
 
 def _person_only_refusal(detail: str) -> HTTPException | PersonGateError:
@@ -5091,6 +5103,283 @@ _RUN_EVENT_VERBS = {"run.started": "started", "run.finished": "finished", "run.f
                     "run.skipped": "skipped"}
 
 
+# Which Cinema shots a live run is rendering (GM, PR #198 r2: a shot that is
+# rendering can't be removed; r3: nor can its scene be deleted): run id -> a
+# set of (node id, shot id), shot None when the run renders the whole scene.
+# A set, so a run that renders several scenes protects every one (review 3,
+# M1). A run counts while the registry holds it as running or cancelling
+# (_run_is_active), and from the start of its admission before that (L1:
+# _cinema_admission_scope). A whole-scene entry goes once the engine is done
+# with that scene (_scene_render_done, L2), so a downstream video's long
+# render doesn't hold the scene that fed it. An entry for a run that ended
+# is dropped the next time anyone looks.
+_cinema_renders: OrderedDict[str, set[tuple[str, str | None]]] = OrderedDict()
+# Runs being admitted (noted, not registered yet): run id -> monotonic deadline.
+_cinema_admitting: dict[str, float] = {}
+_cinema_admission: ContextVar[list[str] | None] = ContextVar("cinema_admission", default=None)
+# A bound on an admission nobody closed (a route without the scope); a route
+# with it closes its own the moment it returns.
+CINEMA_ADMISSION_SECONDS = 600.0
+
+
+@contextmanager
+def _cinema_admission_scope() -> Iterator[None]:
+    """A run route's admission (PR #198 review 3, L1): a render it notes counts
+    as live from that moment, through validation and the spending check's
+    awaits, until the route returns. By then the run has registered (the
+    registry decides from there) or was refused (the render is dropped)."""
+    noted: list[str] = []
+    token = _cinema_admission.set(noted)
+    try:
+        yield
+    finally:
+        _cinema_admission.reset(token)
+        for run_id in noted:
+            _cinema_admitting.pop(run_id, None)
+
+
+def _admits_cinema_renders(route: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:
+    """Run ``route`` inside _cinema_admission_scope."""
+    @functools.wraps(route)
+    async def admitted(*args: Any, **kwargs: Any) -> Any:
+        with _cinema_admission_scope():
+            return await route(*args, **kwargs)
+    return admitted
+
+
+def _note_cinema_render(run_id: str, node_id: str, shot_id: str | None) -> None:
+    renders = _cinema_renders.pop(run_id, set())
+    renders.add((node_id, shot_id))
+    _cinema_renders[run_id] = renders
+    while len(_cinema_renders) > 512:
+        _cinema_renders.popitem(last=False)
+    noted = _cinema_admission.get()
+    if noted is not None and execution_runs.get(run_id) is None:
+        noted.append(run_id)
+        _cinema_admitting[run_id] = _time_module.monotonic() + CINEMA_ADMISSION_SECONDS
+
+
+def _note_scene_renders(run_id: str, nodes: Iterable[Any], *, shot: tuple[str, str] | None = None) -> None:
+    """The Cinema renders a run sets out to make: every scene among ``nodes``
+    whole, except ``shot``'s scene, of which a shot run renders only that
+    shot (review 3, L2)."""
+    for node in nodes:
+        if node.definition_id == "cinema-scene" and (shot is None or node.id != shot[0]):
+            _note_cinema_render(run_id, node.id, None)
+    if shot is not None:
+        _note_cinema_render(run_id, shot[0], shot[1])
+
+
+def _scene_render_done(run_id: str | None, node_id: str) -> None:
+    """The engine is done with a scene a run rendered whole (its node finished,
+    failed or was skipped, a cached one included): its shots are free again.
+    A shot run's own shot stays until the run ends (its result merges then)."""
+    renders = _cinema_renders.get(run_id or "")
+    if renders is None:
+        return
+    renders.discard((node_id, None))
+    if not renders:
+        _cinema_renders.pop(run_id or "", None)
+
+
+def _scene_event_done(event: Any, run_id: str | None) -> None:
+    node_id = getattr(event, "node_id", None)
+    if not isinstance(node_id, str):
+        return
+    # A fan-out invokes a node once per item: only its last invocation is
+    # the scene's end, so a scene in one stays held until the run ends.
+    if isinstance(event, ExecutedEvent) and getattr(event, "variant", None) is None:
+        _scene_render_done(run_id, node_id)
+    elif isinstance(event, (ErrorEvent, SkippedEvent)):
+        _scene_render_done(run_id, node_id)
+
+
+def _render_state(run_id: str) -> str | None:
+    """"running" for a registered live run (its Stop works), "admitting" for
+    one being admitted, None for one that isn't live."""
+    if _run_is_active(run_id):
+        return "running"
+    if execution_runs.get(run_id) is not None:
+        return None
+    deadline = _cinema_admitting.get(run_id)
+    if deadline is not None and deadline > _time_module.monotonic():
+        return "admitting"
+    _cinema_admitting.pop(run_id, None)
+    return None
+
+
+def _rendering_runs(node_id: str) -> list[tuple[str, str | None, str]]:
+    """(run id, shot id or None for the whole scene, its _render_state) of
+    every live run rendering ``node_id``."""
+    found: list[tuple[str, str | None, str]] = []
+    for run_id, renders in list(_cinema_renders.items()):
+        state = _render_state(run_id)
+        if state is None:
+            _cinema_renders.pop(run_id, None)
+            continue
+        found.extend((run_id, shot_id, state) for rendered, shot_id in sorted(renders, key=str)
+                     if rendered == node_id)
+    return found
+
+
+def _rendering_shots(node_id: str, order: list[str]) -> tuple[list[str], list[str], bool]:
+    """The shots of ``node_id`` (in ``order``, its shot ids) a live run is
+    rendering, the runs, and whether any of them can be stopped (registered;
+    one still being admitted can only be waited for)."""
+    runs = _rendering_runs(node_id)
+    shots: list[str] = []
+    run_ids: list[str] = []
+    stoppable = False
+    for shot_id in order:
+        for run_id, rendered, state in runs:
+            if rendered is None or rendered == shot_id:
+                shots.append(shot_id)
+                if run_id not in run_ids:
+                    run_ids.append(run_id)
+                stoppable = stoppable or state == "running"
+                break
+    return shots, run_ids, stoppable
+
+
+def _shot_names(numbers: list[int]) -> tuple[str, bool]:
+    """“Shot 2”, “Shot 2” and “Shot 3”, or "4 shots" (GM, PR #198 r3), and
+    whether it is more than one."""
+    names = [f"\u201cShot {number}\u201d" for number in numbers]
+    if len(names) >= 4:
+        return f"{len(names)} shots", True
+    text = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+    return text, len(names) > 1
+
+
+def _scene_shot_ids(node: Mapping[str, Any]) -> list[str]:
+    scene = (node.get("params") or {}).get("scene")
+    shots = scene.get("shots") if isinstance(scene, dict) else None
+    return [shot["id"] for shot in shots if isinstance(shot, dict) and isinstance(shot.get("id"), str)] \
+        if isinstance(shots, list) else []
+
+
+def _removal_person_line(action: str | None, numbers: list[int], stoppable: bool) -> str:
+    """The person's line for a write that would remove a rendering shot.
+    GM, PR #198 r3 item 3, an undo or redo: "Couldn't undo. It would remove
+    “Shot 2”, which is still running. Stop the run first." ("…Wait for it to
+    finish." when there's no Stop for it). Several shots, and a studio edit
+    that isn't an undo, are builder's forms on GM's pattern."""
+    what, several = _shot_names(numbers)
+    end = "Stop the run first." if stoppable else "Wait for it to finish."
+    if action in RESTORE_ACTIONS:
+        if len(numbers) >= 4:
+            return f"Couldn't {action}. It would remove {what} that are still running. {end}"
+        return f"Couldn't {action}. It would remove {what}, which {'are' if several else 'is'} still running. {end}"
+    return f"Couldn't remove {what}. {'They' if several else 'It'}{chr(39)}{'re' if several else 's'} still running. {end}"
+
+
+def _refuse_removing_rendering_shots(node_id: str, node: dict[str, Any], current: Mapping[str, Any],
+                                     kept: set[str], *, action: str | None = None) -> None:
+    """409 when a write would remove a shot a live run is rendering, with
+    what to do: stop the run or wait for it. Agents read the shot, the run
+    and how to stop it; the person reads GM's line (``action``: the undo or
+    redo this write is)."""
+    removed = [shot_id for shot_id in current if shot_id not in kept]
+    if not removed:
+        return
+    shots, run_ids, stoppable = _rendering_shots(node_id, removed)
+    if not shots:
+        return
+    order = list(current)
+    shot_id = shots[0]
+    run_id = run_ids[0]
+    name = _quoted(_node_label(node_id)) if node_id in cli_graph.nodes else _quoted(str(node.get("label") or "Cinema Scene"))
+    raise _node_refusal(409, (
+        f"Shot {order.index(shot_id) + 1} ({shot_id}) of {name} ({node_id}) is still rendering (run {run_id}), "
+        f"so it can't be removed. Stop the run first (cancel_run, or `nebula cancel {run_id}`; a run the "
+        "person started is theirs to stop) or wait for it to finish, then try again. Nothing changed."),
+        _removal_person_line(action, [order.index(shot) + 1 for shot in shots], stoppable))
+
+
+def _refuse_deleting_rendering_scene(node_id: str, node: Mapping[str, Any], *, action: str | None = None) -> None:
+    """409 for deleting a Cinema scene while one of its shots renders (GM,
+    PR #198 r3 item 1: "refuse for agents and the person"). Agents: "Couldn't
+    delete “Scene”, node n4. “Shot 2” is still running, run <id>." The
+    person: "Couldn't delete “Scene”. “Shot 2” is still running. Stop the run
+    first." ("Wait for it to finish." with no Stop); an undo or redo that
+    would delete it reads the undo line (_removal_person_line)."""
+    if node.get("definitionId") != "cinema-scene":
+        return
+    order = _scene_shot_ids(node)
+    shots, run_ids, stoppable = _rendering_shots(node_id, order)
+    if not shots:
+        return
+    numbers = [order.index(shot) + 1 for shot in shots]
+    what, several = _shot_names(numbers)
+    verb = "are" if several else "is"
+    name = _quoted(_node_label(node_id)) if node_id in cli_graph.nodes else _quoted(str(node.get("label") or "Cinema Scene"))
+    runs = f"run {run_ids[0]}" if len(run_ids) == 1 else "runs " + ", ".join(run_ids[:-1]) + " and " + run_ids[-1]
+    specific = f"Couldn't delete {name}, node {node_id}. {what} {verb} still running, {runs}."
+    if action in RESTORE_ACTIONS:
+        person = _removal_person_line(action, numbers, stoppable)
+    else:
+        end = "Stop the run first." if stoppable else "Wait for it to finish."
+        person = f"Couldn't delete {name}. {what} {verb} still running. {end}"
+    # The Agent log says it too, under the agent's name (GM: "Agent log +
+    # agent refusal"); a no-op for the person's own request.
+    _log_agent_refusal(specific)
+    raise _node_refusal(409, specific, person)
+
+
+_agent_log_tasks: set[asyncio.Task[None]] = set()
+
+
+def _log_agent_refusal(line: str) -> None:
+    """Put a refusal an agent got in the Agent log (_say_agent_action), from
+    a sync check inside an async route; never fails the refusal itself."""
+    if refusal_copy.person_reads():
+        return
+    try:
+        task = asyncio.get_running_loop().create_task(_say_agent_action(line))
+    except RuntimeError:
+        return
+    _agent_log_tasks.add(task)
+    task.add_done_callback(_agent_log_tasks.discard)
+
+
+# A late result for a shot that wasn't there when it landed (only its port
+# kept it): (node id, shot id) -> {url, variations}. A shot an undo brings
+# back adopts it with the variations it came with (review 3, L3). In memory
+# and bounded: after a restart the adopted shot keeps the image alone.
+_late_shot_results: OrderedDict[tuple[str, str], dict[str, Any]] = OrderedDict()
+
+
+def _note_late_shot(node_id: str, shot_id: str, url: str, variations: list[dict[str, Any]] | None) -> None:
+    _late_shot_results.pop((node_id, shot_id), None)
+    _late_shot_results[(node_id, shot_id)] = {"url": url, "variations": copy.deepcopy(variations)}
+    while len(_late_shot_results) > 256:
+        _late_shot_results.popitem(last=False)
+
+
+def _adopt_late_image(node_id: str, shot: dict[str, Any], newer: str) -> None:
+    """A returning shot takes the newer image its port holds, with a
+    variations list and selection that agree with it (in place): the late
+    batch it came from when known; else the variations it had, with the
+    image selected when it is one of them and nothing selected otherwise."""
+    shot["output"] = {"imageUrl": newer, "status": "done"}
+    late = _late_shot_results.pop((node_id, shot["id"]), None)
+    if late is not None and late.get("url") == newer and isinstance(late.get("variations"), list) and late["variations"]:
+        shot["variations"] = late["variations"]
+        urls = [variation.get("url") if isinstance(variation, dict) else None for variation in late["variations"]]
+        shot["selectedVariation"] = urls.index(newer) if newer in urls else 0
+        return
+    variations = shot.get("variations")
+    if not isinstance(variations, list):
+        shot.pop("variations", None)
+        shot.pop("selectedVariation", None)
+        return
+    urls = [variation.get("url") if isinstance(variation, dict) else None for variation in variations]
+    if newer in urls:
+        shot["selectedVariation"] = urls.index(newer)
+    else:
+        shot.pop("selectedVariation", None)
+
+
 def _note_run(run_id: str) -> None:
     """Who asked for a run, and when: the journal credits its node events to
     them, and an agent's undo (POST /api/graph/apply/undo) leaves a node
@@ -5105,13 +5394,9 @@ def _note_run(run_id: str) -> None:
 
 def _note_run_nodes(run_id: str, nodes: list[GraphNode]) -> None:
     """The canvas nodes a run set out to run: while it is going they count as
-    run for an agent's undo, before the engine reaches them. A Cinema scene
-    in it is rendering every shot (_cinema_renders); a shot run notes its
-    own shot after this."""
+    run for an agent's undo, before the engine reaches them. The Cinema
+    renders it makes are noted on their own (_note_scene_renders)."""
     canvas_undo_book.run_nodes(run_id, [node.id for node in nodes])
-    for node in nodes:
-        if node.definition_id == "cinema-scene":
-            _note_cinema_render(run_id, node.id, None)
 
 
 def _run_is_active(run_id: str) -> bool:
@@ -9189,6 +9474,7 @@ def _watch_for_cross_process_stop(
 
 
 @app.post("/api/execute")
+@_admits_cinema_renders
 async def execute(request: ExecuteRequest) -> dict:
     _check_workspace_revision()
     _capture_execution_workspace()
@@ -9205,6 +9491,7 @@ async def execute(request: ExecuteRequest) -> dict:
     api_keys = settings.get("apiKeys", {})
     nodes = _normalize_execute_nodes(request.nodes)
     _note_run_nodes(run_id, nodes)
+    _note_scene_renders(run_id, nodes)
     submitted = _submitted_params(nodes)
     _validate_cinema_base_models(nodes)
 
@@ -9350,6 +9637,7 @@ async def execute(request: ExecuteRequest) -> dict:
 
 
 @app.post("/api/execute-node")
+@_admits_cinema_renders
 async def execute_node(request: ExecuteNodeRequest) -> dict:
     """Execute only the subgraph feeding into a specific target node."""
     _check_workspace_revision()
@@ -9376,6 +9664,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     if not sub_nodes:
         raise _node_gone(request.target_node_id, f"Node '{request.target_node_id}' not found in graph")
     _note_run_nodes(run_id, sub_nodes)
+    _note_scene_renders(run_id, sub_nodes)
 
     _validate_cinema_base_models(sub_nodes)
 
@@ -9865,15 +10154,21 @@ async def _merge_shot_variations(
             return canonical
         params = dict(node.get("params") or {})
         scene = params.get("scene")
+        found = False
         if isinstance(scene, dict):
             for shot in scene.get("shots") or []:
                 if isinstance(shot, dict) and str(shot.get("id")) == shot_id:
                     shot["variations"] = variations
                     shot["selectedVariation"] = 0
                     shot["output"] = dict(canonical)
+                    found = True
                     break
             params["scene"] = scene
             node["params"] = params
+        if not found:
+            # Only its port keeps it: an undo that brings the shot back
+            # adopts it with this batch (_adopt_late_image).
+            _note_late_shot(node_id, shot_id, variations[0]["url"], variations)
         existing = dict(node.get("outputs") or {})
         existing[f"shot_{shot_id}"] = {"type": "Image", "value": variations[0]["url"]}
         node["outputs"] = existing
@@ -9962,6 +10257,7 @@ async def promote_cinema_shot_variation(
 
 
 @app.post("/api/cinema/generate-shot")
+@_admits_cinema_renders
 async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     """Regenerate ONLY the named shot of a cinema-scene node.
 
@@ -10014,7 +10310,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     if not sub_nodes:
         raise _node_gone(request.node_id, f"Node '{request.node_id}' not found in graph")
     _note_run_nodes(run_id, sub_nodes)
-    _note_cinema_render(run_id, request.node_id, request.shot_id)
+    _note_scene_renders(run_id, sub_nodes, shot=(request.node_id, request.shot_id))
     fresh_paid_ancestors = _fresh_paid_worldlabs_claims(sub_nodes)
     if fresh_paid_ancestors:
         blocked_ids = ", ".join(node_id for _kind, node_id in fresh_paid_ancestors)
@@ -10668,6 +10964,8 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
                 for snapshot in event.batch_outputs
             ]
         event = event.model_copy(update=updates)
+    # A scene the engine is done with is free again (review 3, L2).
+    _scene_event_done(event, run_id)
     # What get_run reports for the run (services/run_reports.py).
     _run_reports().observe(event, run_id)
     if moved:
@@ -10987,9 +11285,11 @@ def _coerce_params(definition_id: str, params: dict[str, Any], *, strict_scenes:
 
     A cinema-scene's ``scene`` is filled in here too (services/
     cinema_scene_spec.py, PR #198 review 2 M2): every write path coerces,
-    so a scene without ``base`` never reaches the graph. What can't be
-    filled is refused with the field named (400); ``strict_scenes=False``
-    (a saved project opening) keeps that part as it was instead.
+    so a scene without ``base`` never reaches the graph. ``strict_scenes``
+    only for an agent-authored write (_scene_writes_strict): what can't be
+    filled is refused with the field named (400). Every other path (a
+    saved project, an import, the person's own edits and undo) passes
+    False, and the scene is converted instead, never refused (review 3, H1).
 
     The CLI sends every `--param k=v` as a string, and some providers (Meshy,
     for one) reject string values where booleans or ints are expected. Normalise
@@ -11165,7 +11465,8 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
     _validate_params(definition_id, params)
     _refuse_agent_internal_params(params, str(definition_id))
     _check_provider(str(definition_id), params, str(definition_id))
-    params = migrate_params(definition_id, _coerce_params(definition_id, params))
+    params = migrate_params(definition_id, _coerce_params(definition_id, params,
+                                                          strict_scenes=_scene_writes_strict()))
     if (not _is_person_request() and universal_ports.is_universal(str(definition_id))
             and universal_ports.model_of(str(definition_id), params)):
         # Anyone but the person (an agent, the unnamed CLI) gets the node
@@ -11281,7 +11582,8 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
     _validate_params(definition_id, params)
     _refuse_agent_internal_params(params, str(definition_id))
     _check_provider(str(definition_id), params, str(definition_id))
-    params = migrate_params(definition_id, _coerce_params(definition_id, params))
+    params = migrate_params(definition_id, _coerce_params(definition_id, params,
+                                                          strict_scenes=_scene_writes_strict()))
     _check_asset_refs(str(definition_id), params, str(definition_id))
     _refuse_agent_billing_change([(str(definition_id), str(definition_id), None, params)])
     carries_recovery = bool(
@@ -11505,59 +11807,8 @@ async def get_graph() -> dict:
     return cli_graph.get_state()
 
 
-# Which Cinema shots a live run is rendering (GM, PR #198 r2: a shot that is
-# rendering can't be removed): run id -> (node id, shot id), or None for the
-# shot when the run renders the whole scene. A run counts while the registry
-# holds it as running or cancelling (_run_is_active); an entry for a run that
-# ended is dropped the next time anyone looks.
-_cinema_renders: OrderedDict[str, tuple[str, str | None]] = OrderedDict()
-
-
-def _note_cinema_render(run_id: str, node_id: str, shot_id: str | None) -> None:
-    _cinema_renders.pop(run_id, None)
-    _cinema_renders[run_id] = (node_id, shot_id)
-    while len(_cinema_renders) > 512:
-        _cinema_renders.popitem(last=False)
-
-
-def _rendering_runs(node_id: str) -> list[tuple[str, str | None]]:
-    """(run id, shot id or None for the whole scene) of every live run
-    rendering ``node_id``."""
-    found: list[tuple[str, str | None]] = []
-    for run_id, (rendered, shot_id) in list(_cinema_renders.items()):
-        record = execution_runs.get(run_id)
-        if record is not None and not _run_is_active(run_id):
-            _cinema_renders.pop(run_id, None)
-            continue
-        if rendered == node_id and _run_is_active(run_id):
-            found.append((run_id, shot_id))
-    return found
-
-
-def _refuse_removing_rendering_shots(node_id: str, node: dict[str, Any], current: Mapping[str, Any],
-                                     kept: set[str]) -> None:
-    """409 when a write would remove a shot a live run is rendering, with
-    what to do: stop the run or wait for it."""
-    removed = [shot_id for shot_id in current if shot_id not in kept]
-    if not removed:
-        return
-    runs = _rendering_runs(node_id)
-    if not runs:
-        return
-    order = list(current)
-    for shot_id in removed:
-        run_id = next((run for run, shot in runs if shot is None or shot == shot_id), None)
-        if run_id is None:
-            continue
-        name = _quoted(_node_label(node_id)) if node_id in cli_graph.nodes else _quoted(str(node.get("label") or "Cinema Scene"))
-        raise HTTPException(status_code=409, detail=(
-            f"Shot {order.index(shot_id) + 1} ({shot_id}) of {name} ({node_id}) is still rendering (run {run_id}), "
-            f"so it can't be removed. Stop the run first (cancel_run, or `nebula cancel {run_id}`; a run the "
-            "person started is theirs to stop) or wait for it to finish, then try again. Nothing changed."))
-
-
 def _author_cinema_scene(graph: CLIGraph, node_id: str, node: dict[str, Any], params: dict[str, Any], *,
-                         returning_media: bool = False) -> None:
+                         returning_media: bool = False, action: str | None = None) -> None:
     """Keep a Cinema scene's runtime media when a write sets its authoring.
 
     Shared by PUT /api/graph/node/{id} and POST /api/graph/restore. Changes
@@ -11576,7 +11827,8 @@ def _author_cinema_scene(graph: CLIGraph, node_id: str, node: dict[str, Any], pa
     and the shot takes that image as its own.
 
     A shot that is rendering can't be removed (GM, PR #198 r2: "block it"):
-    the write is refused (409) so nobody's edit orphans a paid run."""
+    the write is refused (409) so nobody's edit orphans a paid run. ``action``:
+    the undo or redo this write is, for the person's line."""
     if node.get("definitionId") != "cinema-scene" or "scene" not in params:
         return
     # Studio/Inspector PUTs carry authoring snapshots captured before
@@ -11597,7 +11849,7 @@ def _author_cinema_scene(graph: CLIGraph, node_id: str, node: dict[str, Any], pa
         shot["id"]: shot for shot in (stored_shots if isinstance(stored_shots, list) else [])
         if isinstance(shot, dict) and isinstance(shot.get("id"), str)
     }
-    _refuse_removing_rendering_shots(node_id, node, current_shots, {shot["id"] for shot in shots})
+    _refuse_removing_rendering_shots(node_id, node, current_shots, {shot["id"] for shot in shots}, action=action)
     authored_scene = copy.deepcopy(incoming_scene)
     returned_ports: dict[str, Any] = {}
     live_ports = node.get("outputs") or {}
@@ -11609,10 +11861,7 @@ def _author_cinema_scene(graph: CLIGraph, node_id: str, node: dict[str, Any], pa
             if isinstance(newer, str) and newer:
                 # A run landed after the shot left: its image is the newest
                 # result, the port stays, and the shot shows that image.
-                shot["output"] = {"imageUrl": newer, "status": "done"}
-                shot.pop("selectedVariation", None)
-                if not isinstance(shot.get("variations"), list):
-                    shot.pop("variations", None)
+                _adopt_late_image(node_id, shot, newer)
                 continue
             if shot["output"].get("status") in ("done", "error"):
                 # Back as the undo had it: its media, and its port when it has an image.
@@ -11715,7 +11964,8 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
         _refuse_agent_internal_params(params, node_id)
         _check_provider(str(node.get("definitionId") or ""), params, node_id)
         params = migrate_param_update(node.get("definitionId", ""), params_before,
-                                      _coerce_params(node.get("definitionId", ""), params))
+                                      _coerce_params(node.get("definitionId", ""), params,
+                                                     strict_scenes=_scene_writes_strict()))
         _check_asset_refs(str(node.get("definitionId") or ""), params, node_id, before=params_before)
         _refuse_agent_billing_change([(node_id, str(node.get("definitionId") or ""), params_before,
                                             {**params_before, **params})])
@@ -12256,13 +12506,15 @@ def _node_gone(node_id: str, specific: str | None = None) -> HTTPException:
     return _node_refusal(404, specific or f"Node '{node_id}' not found", NODE_GONE_PERSON)
 
 
-def _ensure_node_deletable(node_id: str, node: dict[str, Any]) -> None:
-    """Refuse (409) to delete a node that still carries World Labs paid state.
+def _ensure_node_deletable(node_id: str, node: dict[str, Any], *, action: str | None = None) -> None:
+    """Refuse (409) to delete a node that still carries World Labs paid state,
+    or a Cinema scene one of whose shots is rendering (GM, PR #198 r3).
 
     Call inside _paid_graph_mutation so no paid start can land in between.
     The person reads _paid_state_person for the record that holds it; an
-    agent reads the node's id.
+    agent reads the node's id. ``action``: the undo or redo deleting it.
     """
+    _refuse_deleting_rendering_scene(node_id, node, action=action)
     try:
         active = provider_start_guard.has_active_node(node_id)
     except ValueError as exc:
@@ -12926,7 +13178,7 @@ async def _restore_graph(
             node = candidate.nodes.get(node_id)
             if node is None:
                 continue
-            _ensure_node_deletable(node_id, node)
+            _ensure_node_deletable(node_id, node, action=action)
             removed.append({
                 "id": node_id,
                 "name": _node_label(node_id),
@@ -12938,8 +13190,10 @@ async def _restore_graph(
         for index, raw in enumerate(raw_nodes):
             node_id = raw["id"]
             current = candidate.nodes.get(node_id)
+            # An undo puts back what the canvas held: a scene is converted,
+            # never refused (PR #198 review 3, H1).
             definition_id, params, position, outputs, label = _validated_ingress_node(
-                raw, index, include_outputs=current is None,
+                raw, index, include_outputs=current is None, strict_scenes=False,
             )
             if node_id not in trusted:
                 _refuse_agent_internal_params(params, node_id)
@@ -12974,7 +13228,7 @@ async def _restore_graph(
                     if kept is not None:
                         params["_paperSource"] = kept
                 _author_cinema_scene(candidate, node_id, current, params,
-                                     returning_media=node_id in trusted or _is_person_request())
+                                     returning_media=node_id in trusted or _is_person_request(), action=action)
                 _keep_recovery_checkpoint(current, params)
                 if node_id not in trusted:
                     billing.append((node_id, definition_id, params_before, params))
@@ -13820,8 +14074,9 @@ def _stage_graph_nodes(
     strict_scenes: bool = True,
 ) -> dict[str, str]:
     """Validate and add ingress nodes to a persistence-free candidate graph.
-    ``strict_scenes=False`` for a saved project's own file (it still opens
-    with a scene that can't be filled in; services/cinema_scene_spec.py)."""
+    ``strict_scenes`` only for an agent-authored write (a proposal, edit_canvas,
+    an agent's cluster); saved data (a project, a graph file, an import) is
+    converted instead (services/cinema_scene_spec.py, PR #198 review 3 H1)."""
     id_map: dict[str, str] = {}
     for index, raw in enumerate(raw_nodes):
         reference = raw.get(reference_key)
@@ -13950,11 +14205,14 @@ async def import_graph(body: dict[str, Any]) -> dict:
     raw_nodes, raw_edges, warnings, folded = _migrate_ingress(raw_nodes, raw_edges, reference_key="id")
     if version is not None:
         upgrade_flat_nodes(raw_nodes, version)
+    # A graph file is saved data: its scenes are converted, never refused
+    # (PR #198 review 3, H1).
     id_map = _stage_graph_nodes(
         candidate,
         raw_nodes,
         reference_key="id",
         include_outputs=True,
+        strict_scenes=False,
     )
     _refuse_agent_billing_change(
         (node_id, str(candidate.nodes[node_id].get("definitionId") or ""), _folded_billing_baseline(ref, folded),
@@ -14079,6 +14337,7 @@ async def add_graph_cluster(body: dict[str, Any]) -> dict:
             raw_nodes,
             reference_key="tempId",
             include_outputs=False,
+            strict_scenes=_scene_writes_strict(),
         )
         _refuse_agent_billing_change(
             (node_id, str(candidate.nodes[node_id].get("definitionId") or ""), _folded_billing_baseline(ref, folded),
@@ -14389,7 +14648,8 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
             staged = _stage_graph_nodes(isolated, [{
                 "id": node_id, "definitionId": definition_id, "params": params,
                 "outputs": outputs, "position": position, "label": data.get("label"),
-            }], reference_key="id", include_outputs=True, normalize_image_inputs=False)
+            }], reference_key="id", include_outputs=True, normalize_image_inputs=False,
+                strict_scenes=False)
             staged_node = isolated.nodes[staged[node_id]]
             known.add(node_id)
         elif (historical or {}).get(node_id) == definition_id:
@@ -15633,6 +15893,7 @@ async def export_graph_for_frontend() -> dict:
 # ---------- CLI: Synchronous execution ----------
 
 @app.post("/api/graph/run")
+@_admits_cinema_renders
 async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dict:
     """Run the CLI graph (or one node and what feeds it) and return the results.
 
@@ -15680,6 +15941,8 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
         raise HTTPException(status_code=400, detail="wait must be a number of seconds")
 
     run_id = str(uuid4())
+    # Protected from here (PR #198 review 3, L1), through the spending check.
+    _note_scene_renders(run_id, sub_nodes)
     # The canvas Run's own pre-call check (/api/execute): a node that can't
     # run as set up (no key, a required input unwired) stops the run here,
     # before the spending check and any provider call, and shows on its card.

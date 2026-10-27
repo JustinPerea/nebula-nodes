@@ -39,6 +39,8 @@ export function CinemaShotsRail({
   const addRef = useRef<HTMLButtonElement>(null);
   const pendingFocus = useRef<{ shotId: string | null; removedId?: string } | null>(null);
   const activeRuns = useGraphStore((state) => state.activeRuns);
+  // A run of the graph holds the shots only while it is on this scene (L2).
+  const sceneState = useGraphStore((state) => state.nodes.find((node) => node.id === cinemaNodeId)?.data.state);
   const offline = useBackendOffline();
   const tabStopId = scene.shots.some((shot) => shot.id === selectedShotId)
     ? selectedShotId : scene.shots[0]?.id;
@@ -123,7 +125,7 @@ export function CinemaShotsRail({
         const thumb = shot.output?.imageUrl ?? null;
         // A shot that is rendering can't be removed (GM, PR #198 r2): × is
         // disabled and says why; the store and the backend refuse it too.
-        const block = shotRemovalBlock(activeRuns, cinemaNodeId, shot);
+        const block = shotRemovalBlock(activeRuns, cinemaNodeId, shot, sceneState);
         return (
           <div
             key={shot.id}

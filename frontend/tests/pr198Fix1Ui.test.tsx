@@ -166,8 +166,9 @@ describe('GM (6): the price chip, "$0" only ever means free', () => {
     expect(runChipLabel(summary({ low: 0.0001, high: 0.0049 }))).toBe('<$0.01');
     for (const shape of [summary({ low: 0.0047, high: 0.43, unpriced: ['Kling'] }), summary({ low: 0.0047, high: 0.0047 }),
       summary({ low: 0.0047, high: 0.0047, unpriced: ['Kling'] })]) {
-      // GM, PR #198 r2 ask 1: "under $0.01" on its own, "less than $0.01" as a range's low end.
-      expect(runChipTitle(shape)).toMatch(/[Uu]nder \$0\.01|less than \$0\.01/);
+      // GM, PR #198 r2 ask 1: "under $0.01" on its own; r3 item 6: a range
+      // from under a cent is "Up to $Y.".
+      expect(runChipTitle(shape)).toMatch(/[Uu]nder \$0\.01|^Up to \$0\.43/);
       expect(runChipTitle(shape)).not.toMatch(/\$0(?![.\d])/);
     }
   });
