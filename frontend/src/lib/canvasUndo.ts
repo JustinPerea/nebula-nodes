@@ -88,10 +88,21 @@ export interface ForeignEdit {
 export interface OwnAdd {
   kind: 'own-add';
   nodeIds: string[];
+  /** Param keys the step changed on nodes it didn't add (an accepted
+   * proposal's `updatedNodes`, round 15 of PR #114, review 14 M5): the
+   * values before, and the keys that weren't set before. Undo puts back only
+   * these keys; every other key keeps its value as the canvas has it then. */
+  params?: OwnParamChange[];
   before: GraphSlice;
   after: GraphSlice;
   /** What its undo's restore removed, so Redo names them (as ForeignEdit). */
   removals?: RemovalRecord[];
+}
+
+export interface OwnParamChange {
+  nodeId: string;
+  before: Record<string, unknown>;
+  absent: string[];
 }
 
 export function isOwnAdd(entry: unknown): entry is OwnAdd {
@@ -103,11 +114,12 @@ export function isSliceStep(entry: unknown): entry is ForeignEdit | OwnAdd {
   return isForeignEdit(entry) || isOwnAdd(entry);
 }
 
-export function ownAddStep(nodeIds: Iterable<string>): OwnAdd {
+export function ownAddStep(nodeIds: Iterable<string>, params: OwnParamChange[] = []): OwnAdd {
   const ids = [...new Set(nodeIds)];
   return {
     kind: 'own-add',
     nodeIds: ids,
+    ...(params.length > 0 ? { params } : {}),
     before: { nodes: Object.fromEntries(ids.map((id) => [id, null])), edges: {} },
     after: { nodes: {}, edges: {} },
   };
@@ -137,6 +149,32 @@ export function captureOwnAdd(step: OwnAdd, nodes: Node<NodeData>[], edges: Edge
     step.before.edges[edgeKey(edge)] = null;
     step.after.edges[edgeKey(edge)] = { ...edge, selected: false };
   }
+  // Param keys it changed on a node it didn't add: the node as it is now,
+  // with only those keys put back (a key that wasn't set is unset again).
+  for (const change of step.params ?? []) {
+    const node = nodes.find((candidate) => candidate.id === change.nodeId);
+    if (!node || owned.has(node.id)) continue;
+    const now = keep(node);
+    const params: Record<string, unknown> = { ...node.data.params, ...change.before };
+    for (const key of change.absent) delete params[key];
+    step.before.nodes[node.id] = { ...now, data: { ...now.data, params } };
+    step.after.nodes[node.id] = now;
+  }
+}
+
+/** The param keys `updated` sets to a value other than `was` has, with the
+ * values `was` had (an accepted proposal's updates against the canvas before
+ * Accept). Null when nothing changed. */
+export function paramChange(was: Node<NodeData>, updated: Node<NodeData>): OwnParamChange | null {
+  const before: Record<string, unknown> = {};
+  const absent: string[] = [];
+  const old = was.data.params ?? {};
+  for (const [key, value] of Object.entries(updated.data.params ?? {})) {
+    if (stableJson(old[key]) === stableJson(value)) continue;
+    if (Object.prototype.hasOwnProperty.call(old, key)) before[key] = old[key];
+    else absent.push(key);
+  }
+  return Object.keys(before).length > 0 || absent.length > 0 ? { nodeId: was.id, before, absent } : null;
 }
 
 export function edgeKey(edge: Pick<Edge, 'source' | 'target' | 'sourceHandle' | 'targetHandle'>): string {

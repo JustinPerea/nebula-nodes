@@ -133,12 +133,15 @@ describe('while Nebula is offline, every edit entry point is blocked', () => {
 
 // Review 13, M2's second half: an add-and-connect whose answer was lost was
 // left "uncertain", and every later add-and-connect was refused until a
-// reload, even after the reconnect's sync showed the pair never landed.
-describe('an unresolved add-and-connect is released by the reconnect\'s sync', () => {
-  it('after the socket reconnects and its sync lacks the pair, add-and-connect sends again', async () => {
+// reload. Review 14, nit 3: a reconnect to the same backend process doesn't
+// release it (the create may still commit); a restarted backend (a new
+// bootId on the socket's first sync) does, when its graph lacks the pair.
+describe('an unresolved add-and-connect is released only by a restarted backend', () => {
+  const connect = { source: 'n3', sourceHandle: 'image', target: '', targetHandle: 'image', newNodeIs: 'target' as const };
+  async function loseAnAnswer() {
     noteBackendConnection('online');
     useGraphStore.setState({ nodes: [banana], edges: [] } as never);
-    const connect = { source: 'n3', sourceHandle: 'image', target: '', targetHandle: 'image', newNodeIs: 'target' as const };
+    socketSends({ type: 'graphSync', ...base, empty: false, edges: [], nodes: [banana], bootId: 'boot-1' });
     fetchMock.mockReset();
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     expect(await useGraphStore.getState().addNodeAndConnect('veo-3', { x: 400, y: 0 }, connect)).toBeNull();
@@ -146,9 +149,24 @@ describe('an unresolved add-and-connect is released by the reconnect\'s sync', (
     fetchMock.mockReset();
     expect(await useGraphStore.getState().addNodeAndConnect('veo-3', { x: 400, y: 0 }, connect)).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
-    // The socket comes back; the backend's first sync has no such pair.
+  }
+
+  it('the socket reconnects to the same backend: the create still holds', async () => {
+    await loseAnAnswer();
     socketSends({ type: 'socketReconnected' });
-    socketSends({ type: 'graphSync', ...base, empty: false, edges: [], nodes: [banana] });
+    socketSends({ type: 'graphSync', ...base, empty: false, edges: [], nodes: [banana], bootId: 'boot-1' });
+    fetchMock.mockReset();
+    await useGraphStore.getState().addNodeAndConnect('veo-3', { x: 400, y: 0 }, connect);
+    expect(fetchMock).not.toHaveBeenCalled();
+    // Clean up for later tests: a restarted backend releases it.
+    socketSends({ type: 'socketReconnected' });
+    socketSends({ type: 'graphSync', ...base, empty: false, edges: [], nodes: [banana], bootId: 'boot-cleanup' });
+  });
+
+  it('the backend restarted (a new bootId) and its graph lacks the pair: add-and-connect sends again', async () => {
+    await loseAnAnswer();
+    socketSends({ type: 'socketReconnected' });
+    socketSends({ type: 'graphSync', ...base, empty: false, edges: [], nodes: [banana], bootId: 'boot-2' });
     fetchMock.mockResolvedValueOnce(json({ detail: 'nope' }, 409));
     await useGraphStore.getState().addNodeAndConnect('veo-3', { x: 400, y: 0 }, connect);
     expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual(
@@ -156,18 +174,12 @@ describe('an unresolved add-and-connect is released by the reconnect\'s sync', (
   });
 
   it('a sync before the reconnect (the old socket) does not release it', async () => {
-    noteBackendConnection('online');
-    useGraphStore.setState({ nodes: [banana], edges: [] } as never);
-    const connect = { source: 'n3', sourceHandle: 'image', target: '', targetHandle: 'image', newNodeIs: 'target' as const };
-    fetchMock.mockReset();
-    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
-    await useGraphStore.getState().addNodeAndConnect('veo-3', { x: 400, y: 0 }, connect);
-    socketSends({ type: 'graphSync', ...base, empty: false, edges: [], nodes: [banana] });
+    await loseAnAnswer();
+    socketSends({ type: 'graphSync', ...base, empty: false, edges: [], nodes: [banana], bootId: 'boot-3' });
     fetchMock.mockReset();
     await useGraphStore.getState().addNodeAndConnect('veo-3', { x: 400, y: 0 }, connect);
     expect(fetchMock).not.toHaveBeenCalled();
-    // Clean up for later tests: the reconnect releases it.
     socketSends({ type: 'socketReconnected' });
-    socketSends({ type: 'graphSync', ...base, empty: false, edges: [], nodes: [banana] });
+    socketSends({ type: 'graphSync', ...base, empty: false, edges: [], nodes: [banana], bootId: 'boot-cleanup-2' });
   });
 });

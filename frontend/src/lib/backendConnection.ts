@@ -84,6 +84,45 @@ export function refuseEditWhileOffline(): boolean {
 
 const blockedListeners = new Set<() => void>();
 
+/**
+ * A write apiFetch refused to send because Nebula is offline (round 15 of
+ * PR #114: one gate at the network layer). Every method but GET and HEAD is a
+ * write; nothing is sent, the banner pulses (refuseEditWhileOffline) and the
+ * caller treats it as blocked: no toast, no line (errorCopy gives it no
+ * copy). It catches every path a per-action gate can miss: autosave,
+ * proposals, Forget ID, Create, chat, project writes, the unlock and runs.
+ */
+export class OfflineRefusal extends Error {
+  readonly kind = 'offline' as const;
+  readonly method: string;
+  readonly path: string;
+
+  constructor(method: string, path: string) {
+    super(`Nebula is offline: ${method} ${path} was not sent.`);
+    this.name = 'OfflineRefusal';
+    this.method = method;
+    this.path = path;
+  }
+}
+
+export function isOfflineRefusal(error: unknown): error is OfflineRefusal {
+  return error instanceof OfflineRefusal;
+}
+
+/** Whether a request with `method` changes anything (all but GET and HEAD). */
+export function isWriteMethod(method: string | undefined): boolean {
+  const upper = String(method ?? 'GET').toUpperCase();
+  return upper !== 'GET' && upper !== 'HEAD';
+}
+
+/** The network gate: throws an OfflineRefusal (after the banner's pulse) for
+ * a write while offline. The health probe is a GET, so it always goes. */
+export function refuseWriteWhileOffline(method: string | undefined, path: string): void {
+  if (!isWriteMethod(method) || !isBackendOffline()) return;
+  refuseEditWhileOffline();
+  throw new OfflineRefusal(String(method).toUpperCase(), path);
+}
+
 /** Every blocked edit, unthrottled (tests, and anything counting them). */
 export function subscribeBlockedEdits(listener: () => void): () => void {
   blockedListeners.add(listener);

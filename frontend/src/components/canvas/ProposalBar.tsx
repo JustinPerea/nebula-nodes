@@ -13,6 +13,7 @@ import { useProposalNotReady } from '../../hooks/useProposalReadiness';
 import { useCanvasProposalsStore, type ProposalEntry } from '../../store/canvasProposalsStore';
 import { InNoticeRegion } from '../InNoticeRegion';
 import '../../styles/canvasProposals.css';
+import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 
 /** How long Accept/Reject ignore clicks after the shown proposal changes on its own. */
 const SWITCH_GUARD_MS = 600;
@@ -70,6 +71,9 @@ export function ProposalBar() {
   const focusedId = useCanvasProposalsStore((s) => s.focusedId);
   const accept = useCanvasProposalsStore((s) => s.accept);
   const reject = useCanvasProposalsStore((s) => s.reject);
+  // Offline is read-only (round 15 of PR #114): Accept and Reject are
+  // disabled and look it; Show still works.
+  const offline = useBackendOffline();
   const pruneExpired = useCanvasProposalsStore((s) => s.pruneExpired);
   const { fitBounds, getInternalNode } = useReactFlow();
   // Track the shown proposal by id, never by position: a proposal that
@@ -289,7 +293,8 @@ export function ProposalBar() {
           <button
             type="button"
             className="proposal-bar__button"
-            disabled={Boolean(pending[current.view.id])}
+            disabled={Boolean(pending[current.view.id]) || offline}
+            {...offlineMark(offline)}
             onClick={() => {
               if (settled()) void reject(current.view.id);
             }}
@@ -300,7 +305,8 @@ export function ProposalBar() {
           <button
             type="button"
             className="proposal-bar__button proposal-bar__button--primary"
-            disabled={Boolean(pending[current.view.id])}
+            disabled={Boolean(pending[current.view.id]) || offline}
+            {...offlineMark(offline)}
             onClick={() => {
               if (settled()) void accept(current.view.id);
             }}

@@ -148,6 +148,8 @@ export function GraphFileActions() {
   }, [fitView]);
 
   const load = useCallback(async () => {
+    // Offline is read-only (round 15 of PR #114): no picker, nothing read.
+    if (refuseEditWhileOffline()) return;
     if (actionInFlight.current || !canLoadGraph(useGraphStore.getState())) return;
     actionInFlight.current = true;
     try {

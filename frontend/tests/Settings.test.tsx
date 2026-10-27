@@ -1068,3 +1068,38 @@ describe('Settings — storage', () => {
     expect(useUIStore.getState().onboardingActive).toBe(true);
   });
 });
+
+// Round 15 of PR #114 (GM): "Settings stays enabled so the panel opens, but
+// its fields come up disabled." It shows the last values it loaded; with none
+// loaded, its first-load error and Try again (a read, so it still works).
+describe('Settings while Nebula is offline', () => {
+  it('opens with every field disabled, the tabs still move, and reconnecting enables them', async () => {
+    const { noteBackendConnection, resetBackendConnectionForTests } = await import('../src/lib/backendConnection');
+    resetBackendConnectionForTests();
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    act(() => noteBackendConnection('offline'));
+    const panel = screen.getByRole('tabpanel');
+    const fieldset = panel.querySelector('fieldset')!;
+    expect(fieldset).toBeDisabled();
+    expect(fieldset).toHaveAttribute('data-offline-disabled');
+    expect(screen.getByRole('button', { name: 'Manage OpenAI' })).toBeDisabled();
+    openTab('Preferences');
+    expect(screen.getByRole('tab', { name: 'Preferences' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tabpanel').querySelector('fieldset')).toBeDisabled();
+    act(() => noteBackendConnection('online'));
+    expect(screen.getByRole('tabpanel').querySelector('fieldset')).not.toBeDisabled();
+    resetBackendConnectionForTests();
+  });
+
+  it('never loaded: its first-load error and Try again', async () => {
+    const { noteBackendConnection, resetBackendConnectionForTests } = await import('../src/lib/backendConnection');
+    noteBackendConnection('offline');
+    getSettingsMock.mockRejectedValueOnce(new ConnectionLostError(new TypeError('Failed to fetch'), { heading: "Couldn't load your API keys." }));
+    render(<Settings />);
+    const alert = await screen.findByRole('alert');
+    expect(alert.querySelector('.failure-lines__heading')?.textContent).toBe("Couldn't load your API keys.");
+    expect(alert.querySelector('.failure-lines__reason')?.textContent).toBe("Nebula's server isn't answering. Make sure it's running.");
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeEnabled();
+    resetBackendConnectionForTests();
+  });
+});

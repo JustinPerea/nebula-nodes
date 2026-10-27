@@ -4,6 +4,7 @@ import { useUIStore } from '../store/uiStore';
 import { useProviderReadinessStore } from '../store/providerReadinessStore';
 import { modelReadiness } from '../lib/providerReadiness';
 import { withNewKreaMode } from '../lib/kreaConnection';
+import { offlineMark, useBackendOffline } from '../lib/useBackendOffline';
 import '../styles/provider-readiness.css';
 
 /** Connection feedback never changes model selection, recipe parameters or jobs. */
@@ -14,6 +15,9 @@ export function ProviderReadinessBadge({ definition, params, onSetup }: {
 }) {
   const cache = useUIStore((state) => state.settingsCache);
   const health = useProviderReadinessStore();
+  // Offline is read-only (GM, round 15 of PR #114): "Set up" (and
+  // "Settings") is dimmed with a not-allowed cursor, and doesn't open.
+  const offline = useBackendOffline();
   // Catalog rows describe the defaults addNode will save, while existing
   // recipes always use their actual params (including missing legacy fields).
   const defaults = Object.fromEntries(allParamDefinitions(definition).filter((param) => param.default !== undefined)
@@ -30,6 +34,8 @@ export function ProviderReadinessBadge({ definition, params, onSetup }: {
       {readiness.setupTarget && <button type="button" className="provider-readiness__setup"
         title={readiness.detail}
         aria-label={`Connection settings for ${definition.displayName}`}
+        disabled={offline}
+        {...offlineMark(offline)}
         onClick={() => {
           onSetup?.();
           useUIStore.getState().openProviderSetup(readiness.setupTarget!);

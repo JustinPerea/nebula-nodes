@@ -18,6 +18,7 @@ export interface CanvasNoticeDetail {
 }
 
 export function showNotice(text: string, tone: 'error' | 'info' = 'error'): void {
-  if (typeof window === 'undefined') return;
+  // Empty: a write refused while offline, which says nothing (round 15).
+  if (typeof window === 'undefined' || !text) return;
   window.dispatchEvent(new CustomEvent<CanvasNoticeDetail>(CANVAS_NOTICE_EVENT, { detail: { text, tone } }));
 }

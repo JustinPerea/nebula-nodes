@@ -404,13 +404,14 @@ provider_start_guard = ProviderStartGuard(
 # specific text.
 WORLD_LABS_STARTING_PERSON = "A World Labs run is still starting. Try again in a moment."
 WORLD_LABS_NEEDS_CHECK_PERSON = "A World Labs run needs your check first. Use the notice at the top of the screen."
-# Nebula couldn't journal a recovery it read from the canvas at boot. GM's
-# line for it ("… Reload the page and try again.") holds only if a reload
-# re-runs that bootstrap, and it doesn't (it runs once, when the backend
-# starts; the notes for round 13 give the mechanism), so this state reads
-# the canvas's general refusal line (errorCopy.ts REFUSED_FALLBACK_COPY)
-# until GM words it.
-WORLD_LABS_BOOTSTRAP_PERSON = "Try again, or reload if it keeps happening."
+# Nebula couldn't journal a recovery it read from the canvas at boot, and the
+# retry's real journal write just failed too. A reload doesn't re-run that
+# bootstrap (it runs once, when the backend starts; the notes for round 13
+# give the mechanism), so the line says restart. GM, round 15 of PR #114
+# (item 5): "Couldn't <action>. Nebula couldn't save its World Labs
+# safeguards. Restart Nebula, then try again." The screen's own heading
+# supplies "Couldn't <action>.".
+WORLD_LABS_BOOTSTRAP_PERSON = "Nebula couldn't save its World Labs safeguards. Restart Nebula, then try again."
 _RECOVERY_FIELDS_FALLBACK = ("Resume Operation ID", "Existing World ID")
 
 
@@ -567,27 +568,33 @@ def _retry_graph_recovery_bootstrap(action: str) -> bool:
     """The bootstrap retry path (round 14 of PR #114). Before the bootstrap
     state refuses, re-run the re-seed a run start does
     (_claim_fresh_paid_worldlabs_starts' prepare_recovery_journal) under the
-    lifecycle fence a canvas replacement takes (_paid_graph_mutation), and
-    require the journal to be healthy after it. True (and the error cleared)
-    when it held; False (the error kept) when it still can't be written.
-    Reached only where the error is set, which the fence's own preflight
-    clears, so only outside it: the bundle restore's pre-check and the open's
-    ahead-of-time check (_open_ingress_verdict_off_loop)."""
+    lifecycle fence a canvas replacement takes (_paid_graph_mutation), then
+    prove the journal takes a real write (round 15, review 14's M4:
+    ProviderRecoveryStore.verify_writable; the store's sticky health flag
+    isn't asked, and a re-seed with no IDs to seed writes nothing). True
+    (and the error cleared) only when that write held; False (the error
+    kept) when it still can't be written. Reached only where the error is
+    set, outside the fence: the bundle restore's pre-check and the open's
+    ahead-of-time check (_open_ingress_verdict_off_loop).
+
+    The paid-start fence's own storage failing (review 14's L7) is that
+    store's error, not the journal's: it answers the 507 a canvas
+    replacement answers for it and leaves the bootstrap error as it was."""
     global _graph_recovery_bootstrap_error
     try:
         with provider_start_guard.exclusive_lifecycle():
             _ensure_shared_graph_recoveries(list(cli_graph.nodes.values()), source="bootstrap-retry")
-            if not provider_recovery_store.is_healthy():
-                raise ProviderRecoveryPersistenceError("provider recovery storage is unhealthy")
+            provider_recovery_store.verify_writable()
     except ProviderStartConflictError as exc:
         # A start began since has_active() was read: the settling refusal, as
         # _paid_graph_mutation answers it.
         raise _graph_paid_refusal(_graph_settling_specific(action), "active") from exc
+    except ProviderStartPersistenceError as exc:
+        raise _paid_fence_unverifiable(action) from exc
     except (
         ProviderRecoveryCapacityError,
         ProviderRecoveryConflictError,
         ProviderRecoveryPersistenceError,
-        ProviderStartPersistenceError,
         ValueError,
     ) as exc:
         _graph_recovery_bootstrap_error = str(exc)
@@ -596,10 +603,39 @@ def _retry_graph_recovery_bootstrap(action: str) -> bool:
     return True
 
 
+def _paid_fence_unverifiable(action: str) -> HTTPException:
+    """507: the cross-process paid-start fence's storage can't be read or
+    written, so nothing that needs the fence goes on."""
+    return HTTPException(
+        status_code=507,
+        detail=(
+            f"Cannot {action} because Nebula cannot verify the durable "
+            "World Labs paid-start fence."
+        ),
+    )
+
+
+def _clear_bootstrap_error_after_real_write() -> None:
+    """Under the lifecycle fence, with the bootstrap error set: clear it only
+    when the recovery journal takes a real write now (verify_writable), else
+    keep it, with the store's latest reason. Never refuses by itself, so an
+    ordinary edit that takes the fence isn't refused for this state (round
+    15: which states refuse is unchanged); it only stops clearing it on a
+    seed that wrote nothing."""
+    global _graph_recovery_bootstrap_error
+    if _graph_recovery_bootstrap_error is None:
+        return
+    try:
+        provider_recovery_store.verify_writable()
+    except ProviderRecoveryPersistenceError as exc:
+        _graph_recovery_bootstrap_error = str(exc)
+        return
+    _graph_recovery_bootstrap_error = None
+
+
 @contextmanager
 def _paid_graph_mutation(action: str):
     """Hold the cross-process paid lifecycle fence through a graph commit."""
-    global _graph_recovery_bootstrap_error
     _check_workspace_revision()
     try:
         with provider_start_guard.exclusive_lifecycle():
@@ -610,18 +646,14 @@ def _paid_graph_mutation(action: str):
             _seed_shared_graph_recoveries_for_api(
                 list(cli_graph.nodes.values()), source="mutation-preflight"
             )
-            _graph_recovery_bootstrap_error = None
+            # Round 15: the seed may have written nothing (no IDs on the
+            # canvas), so it alone can't clear the bootstrap error.
+            _clear_bootstrap_error_after_real_write()
             yield
     except ProviderStartConflictError as exc:
         raise _graph_paid_refusal(_graph_settling_specific(action), "active") from exc
     except ProviderStartPersistenceError as exc:
-        raise HTTPException(
-            status_code=507,
-            detail=(
-                f"Cannot {action} because Nebula cannot verify the durable "
-                "World Labs paid-start fence."
-            ),
-        ) from exc
+        raise _paid_fence_unverifiable(action) from exc
 
 
 def _graph_worldlabs_recovery_checkpoints(
@@ -751,6 +783,8 @@ if _bootstrap_checkpoints:
             flush=True,
         )
 app = FastAPI(title="Nebula Node Backend", version="0.1.0")
+# This backend process's id, new on every start (the socket's first graphSync).
+BACKEND_BOOT_ID = uuid4().hex
 
 
 _DISK_FULL_ERRNOS = {errno.ENOSPC, getattr(errno, "EDQUOT", errno.ENOSPC)}
@@ -3591,7 +3625,11 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         # Reconnect therefore starts with an authoritative graph, provider
         # safety journal, and retained execution-status snapshot.
         export = await export_graph_for_frontend()
-        await websocket.send_text(json.dumps({"type": "graphSync", **export}))
+        # bootId: which backend process this is (round 15 of PR #114). A tab
+        # holding a create whose answer was lost releases it only when the
+        # backend restarted (a new bootId); after a mere reconnect the create
+        # may still land, and a later sync shows it.
+        await websocket.send_text(json.dumps({"type": "graphSync", **export, "bootId": BACKEND_BOOT_ID}))
         await websocket.send_text(json.dumps(_pins_message()))
         await _settle_proposal_updates()
         await websocket.send_text(json.dumps(_canvas_notes_message()))
@@ -8907,6 +8945,10 @@ def _claim_fresh_paid_worldlabs_starts(
                 _ensure_shared_graph_recoveries(
                     list(cli_graph.nodes.values()), source="bootstrap-retry"
                 )
+                # Round 15 (review 14, M4): a re-seed with no IDs to seed
+                # writes nothing, so prove the journal takes a real write
+                # before the error clears.
+                provider_recovery_store.verify_writable()
             except (
                 ProviderRecoveryCapacityError,
                 ProviderRecoveryConflictError,

@@ -29,7 +29,12 @@ from fastapi.testclient import TestClient
 from tests.conftest import PERSON
 
 AGENT = {"X-Nebula-Agent": "Claude Code"}
-GENERAL_LINE = "Try again, or reload if it keeps happening."
+# GM, round 15 of PR #114 (item 5): under the screen's own "Couldn't <action>." heading.
+BOOTSTRAP_PERSON = "Nebula couldn't save its World Labs safeguards. Restart Nebula, then try again."
+GENERAL_LINE = BOOTSTRAP_PERSON  # the name the round 14 probes import
+FENCE_UNVERIFIABLE = (
+    "Cannot restore a graph bundle because Nebula cannot verify the durable World Labs paid-start fence."
+)
 BOOTSTRAP_AGENT_DETAIL = (
     "Cannot restore a graph bundle: Nebula retried saving its World Labs recovery journal and "
     "couldn't write it. Restart the Nebula backend, then try again."
@@ -138,11 +143,17 @@ def test_an_ambiguity_that_goes_between_reads_still_refuses_while_a_record_exist
 # -- 2. the bootstrap retry -------------------------------------------------------------
 
 def test_a_restore_retries_the_bootstrap_and_goes_on_when_the_journal_takes_it(canvas, monkeypatch):
-    _use_recovery_store(canvas, monkeypatch, canvas.tmp / "state")
+    """Round 15 (review 14, M4): the retry makes a real journal write, so the
+    journal file exists after it although the canvas holds no IDs to seed."""
+    store = _use_recovery_store(canvas, monkeypatch, canvas.tmp / "state")
+    journal = canvas.tmp / "state" / "provider-recoveries.json"
+    assert not journal.exists()
     monkeypatch.setattr(canvas.main, "_graph_recovery_bootstrap_error", "journal unavailable")
     response = _restore(canvas, AGENT)
     assert response.status_code == 200, response.text
     assert canvas.main._graph_recovery_bootstrap_error is None
+    assert journal.is_file() and json.loads(journal.read_text())["records"] == []
+    assert store.is_healthy()
     # A second restore isn't held up either.
     assert _restore(canvas, PERSON).status_code == 200
 
@@ -198,7 +209,7 @@ def test_a_retry_that_still_cant_write_the_journal_refuses_and_keeps_the_error(c
 
     person = _restore(canvas, PERSON)
     assert person.status_code == 409
-    assert person.json()["detail"] == GENERAL_LINE
+    assert person.json()["detail"] == BOOTSTRAP_PERSON
     agent = _restore(canvas, AGENT)
     assert agent.status_code == 409
     assert agent.json()["detail"] == BOOTSTRAP_AGENT_DETAIL
@@ -221,7 +232,7 @@ def test_a_journal_that_raises_on_the_reseed_refuses_with_the_same_lines(canvas,
         raise ProviderRecoveryPersistenceError("provider recovery journal write failed")
 
     monkeypatch.setattr(canvas.main, "_ensure_shared_graph_recoveries", fail)
-    assert _restore(canvas, PERSON).json()["detail"] == GENERAL_LINE
+    assert _restore(canvas, PERSON).json()["detail"] == BOOTSTRAP_PERSON
     agent = _restore(canvas, AGENT)
     assert agent.status_code == 409 and agent.json()["detail"] == BOOTSTRAP_AGENT_DETAIL
     assert canvas.main._graph_recovery_bootstrap_error is not None
@@ -265,3 +276,176 @@ def test_load_graph_file_hands_the_agent_the_bootstrap_detail(canvas, monkeypatc
         asyncio.run(mcp_server.mcp.call_tool("load_graph_file", {"path": str(bundle)}))
     assert str(refused.value) == f"Error executing tool load_graph_file: {bundle}: {BOOTSTRAP_AGENT_DETAIL}"
     assert "read-only" not in str(refused.value)
+
+
+# -- 4. round 15 (review 14, M4 + L7): the retry proves the journal takes a real write -------
+
+def _boot_failure(canvas, monkeypatch, directory):
+    """A real boot failure: the journal's folder is read-only, so the seed of
+    the canvas's IDs raises and the store goes unhealthy."""
+    from services.provider_recovery import ProviderRecoveryPersistenceError
+
+    store = _use_recovery_store(canvas, monkeypatch, directory)
+    os.chmod(directory, stat.S_IRUSR | stat.S_IXUSR)
+    with pytest.raises(ProviderRecoveryPersistenceError) as boot:
+        store.ensure_many(run_id="graph-bootstrap-test", checkpoints=[("world-node", "accepted-operation", None)])
+    monkeypatch.setattr(canvas.main, "_graph_recovery_bootstrap_error", str(boot.value))
+    return store
+
+
+def test_b1_a_journal_fixed_after_a_real_boot_failure_lets_the_restore_go_on(canvas, monkeypatch, unwritable):
+    """Review 14's B1: once the folder can be written again, the next restore's
+    retry writes the journal, clears the error and goes on."""
+    store = _boot_failure(canvas, monkeypatch, unwritable)
+    assert _restore(canvas, AGENT).status_code == 409
+    os.chmod(unwritable, stat.S_IRWXU)  # the person fixes the folder
+    response = _restore(canvas, AGENT)
+    assert response.status_code == 200, response.text
+    assert canvas.main._graph_recovery_bootstrap_error is None
+    assert store.is_healthy()
+    assert (unwritable / "provider-recoveries.json").is_file()
+
+
+def test_b4_a_healthy_flag_over_an_unwritable_journal_still_refuses(canvas, monkeypatch, unwritable):
+    """Review 14's B4: the store's last operation succeeded (its flag says
+    healthy), then the folder went read-only. The canvas holds no IDs, so the
+    re-seed writes nothing; the retry's own write fails, so it refuses and the
+    error stays."""
+    store = _use_recovery_store(canvas, monkeypatch, unwritable)
+    store.list()  # healthy, and the lock file exists
+    os.chmod(unwritable, stat.S_IRUSR | stat.S_IXUSR)
+    monkeypatch.setattr(canvas.main, "_graph_recovery_bootstrap_error", "journal unavailable")
+    before = json.dumps([canvas.graph.nodes, canvas.graph.edges], sort_keys=True, default=str)
+    agent = _restore(canvas, AGENT)
+    assert agent.status_code == 409 and agent.json()["detail"] == BOOTSTRAP_AGENT_DETAIL
+    person = _restore(canvas, PERSON)
+    assert person.status_code == 409 and person.json()["detail"] == BOOTSTRAP_PERSON
+    assert canvas.main._graph_recovery_bootstrap_error is not None
+    assert not store.is_healthy()
+    assert json.dumps([canvas.graph.nodes, canvas.graph.edges], sort_keys=True, default=str) == before
+
+
+def test_l7_an_unhealthy_paid_start_store_answers_its_own_507_and_keeps_the_bootstrap_error(canvas, monkeypatch):
+    """Review 14's L7: the retry can't take the paid-start fence because that
+    store is unhealthy. It answers what a canvas replacement answers for it
+    (507), blames that store, and leaves the bootstrap error as it was."""
+    _use_recovery_store(canvas, monkeypatch, canvas.tmp / "state")
+    monkeypatch.setattr(canvas.main, "_graph_recovery_bootstrap_error", "journal unavailable")
+    monkeypatch.setattr(canvas.main.provider_start_guard, "_storage_error", "provider-starts.json is invalid")
+    before = json.dumps([canvas.graph.nodes, canvas.graph.edges], sort_keys=True, default=str)
+    response = _restore(canvas, AGENT)
+    assert response.status_code == 507
+    assert response.json()["detail"] == FENCE_UNVERIFIABLE
+    assert canvas.main._graph_recovery_bootstrap_error == "journal unavailable"
+    assert json.dumps([canvas.graph.nodes, canvas.graph.edges], sort_keys=True, default=str) == before
+
+
+def test_verify_writable_is_a_real_write_and_read_back(tmp_path):
+    from services.provider_recovery import ProviderRecoveryPersistenceError, ProviderRecoveryStore
+
+    directory = tmp_path / "journal"
+    directory.mkdir()
+    store = ProviderRecoveryStore(directory / "provider-recoveries.json")
+    store.set(run_id="r1", node_id="n1", resume_operation_id="op-1", existing_world_id=None)
+    store.verify_writable()
+    payload = json.loads((directory / "provider-recoveries.json").read_text())
+    assert [record["nodeId"] for record in payload["records"]] == ["n1"]
+    # Another reader still loads it (the probe mark is ignored).
+    assert [record["nodeId"] for record in ProviderRecoveryStore(directory / "provider-recoveries.json").list()] == ["n1"]
+    os.chmod(directory, stat.S_IRUSR | stat.S_IXUSR)
+    try:
+        assert store.is_healthy()
+        with pytest.raises(ProviderRecoveryPersistenceError):
+            store.verify_writable()
+        assert not store.is_healthy()
+    finally:
+        os.chmod(directory, stat.S_IRWXU)
+    # Fixed: the next probe succeeds and clears the flag; the records are intact.
+    store.verify_writable()
+    assert store.is_healthy()
+    assert [record["nodeId"] for record in store.list()] == ["n1"]
+
+
+# -- 5. every other place that clears the bootstrap error needs the same real write ----------
+
+def _make_node(canvas, headers=PERSON):
+    """An ordinary edit that takes the paid-start fence: a param change
+    (`_paid_graph_mutation("update graph node parameters")`)."""
+    node = canvas.graph.add_node("text-input", {"value": "a"}, position={"x": 0, "y": 0})
+    return canvas.client.put(f"/api/graph/node/{node}", headers=headers, json={"params": {"value": "b"}})
+
+
+def test_an_ordinary_edit_clears_the_bootstrap_error_only_after_a_real_write(canvas, monkeypatch):
+    """`_paid_graph_mutation`'s preflight cleared the error after a seed that
+    wrote nothing (no IDs on the canvas). It now proves the journal first."""
+    _use_recovery_store(canvas, monkeypatch, canvas.tmp / "state")
+    journal = canvas.tmp / "state" / "provider-recoveries.json"
+    monkeypatch.setattr(canvas.main, "_graph_recovery_bootstrap_error", "journal unavailable")
+    made = _make_node(canvas)
+    assert made.status_code == 200, made.text
+    assert canvas.main._graph_recovery_bootstrap_error is None
+    assert journal.is_file()
+
+
+def test_an_ordinary_edit_over_an_unwritable_journal_goes_on_and_keeps_the_error(canvas, monkeypatch, unwritable):
+    """Which states refuse is unchanged: a node add isn't refused for the
+    bootstrap state, but it no longer clears it either."""
+    store = _use_recovery_store(canvas, monkeypatch, unwritable)
+    store.list()
+    os.chmod(unwritable, stat.S_IRUSR | stat.S_IXUSR)
+    monkeypatch.setattr(canvas.main, "_graph_recovery_bootstrap_error", "journal unavailable")
+    made = _make_node(canvas)
+    assert made.status_code == 200, made.text
+    assert canvas.main._graph_recovery_bootstrap_error is not None
+    assert _restore(canvas, AGENT).json()["detail"] == BOOTSTRAP_AGENT_DETAIL
+
+
+def test_an_ordinary_edit_without_the_error_makes_no_extra_journal_write(canvas, monkeypatch):
+    store = _use_recovery_store(canvas, monkeypatch, canvas.tmp / "state")
+    monkeypatch.setattr(store, "verify_writable", lambda: pytest.fail("verified with no bootstrap error"))
+    assert _make_node(canvas).status_code == 200
+
+
+def _world():
+    from models import GraphNode
+
+    return GraphNode(id="world-node", definitionId="worldlabs-environment", params={}, outputs={})
+
+
+def test_a_paid_start_clears_the_bootstrap_error_only_after_a_real_write(canvas, monkeypatch):
+    _use_recovery_store(canvas, monkeypatch, canvas.tmp / "state")
+    journal = canvas.tmp / "state" / "provider-recoveries.json"
+    monkeypatch.setattr(canvas.main, "_graph_recovery_bootstrap_error", "journal unavailable")
+    canvas.main._claim_fresh_paid_worldlabs_starts(run_id="fresh-run", nodes=[_world()])
+    try:
+        assert canvas.main._graph_recovery_bootstrap_error is None
+        assert journal.is_file()
+    finally:
+        canvas.main.provider_start_guard.release_run("fresh-run")
+
+
+def test_a_paid_start_over_an_unwritable_journal_is_refused_and_keeps_the_error(canvas, monkeypatch, unwritable):
+    store = _use_recovery_store(canvas, monkeypatch, unwritable)
+    store.list()
+    os.chmod(unwritable, stat.S_IRUSR | stat.S_IXUSR)
+    monkeypatch.setattr(canvas.main, "_graph_recovery_bootstrap_error", "journal unavailable")
+    with pytest.raises(HTTPException) as refused:
+        canvas.main._claim_fresh_paid_worldlabs_starts(run_id="fresh-run", nodes=[_world()])
+    assert refused.value.status_code == 507
+    assert canvas.main._graph_recovery_bootstrap_error is not None
+    assert canvas.main.provider_start_guard.has_active() is False
+
+
+# -- 6. round 15 (review 14, nit 3): the socket says which backend process it is ------------
+
+def test_the_first_ws_message_carries_this_processes_boot_id(canvas):
+    """A tab releases a create whose answer was lost only after a backend
+    restart (a new bootId), not on a mere socket reconnect."""
+    seen = []
+    for _ in range(2):
+        with canvas.client.websocket_connect("/ws") as socket:
+            first = json.loads(socket.receive_text())
+        assert first["type"] == "graphSync"
+        assert isinstance(first.get("bootId"), str) and first["bootId"]
+        seen.append(first["bootId"])
+    assert seen[0] == seen[1] == canvas.main.BACKEND_BOOT_ID

@@ -2,6 +2,7 @@ import { useId } from 'react';
 import type { ModelNodeDefinition } from '../../types';
 import { useGraphStore } from '../../store/graphStore';
 import type { JevCardField as JevCardFieldSpec } from '../../lib/jevView';
+import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 
 interface JevCardFieldProps {
   nodeId: string;
@@ -24,6 +25,7 @@ const stop = (event: React.SyntheticEvent) => event.stopPropagation();
  * path the Inspector uses, so the two always show the same value. */
 export function JevCardField({ nodeId, definition, field, params, portWired = false, portLabel }: JevCardFieldProps) {
   const updateNodeData = useGraphStore((s) => s.updateNodeData);
+  const readOnly = useBackendOffline();
   const inputId = useId();
   const param = definition.params.find((p) => p.key === field.key);
   const value = typeof params[field.key] === 'string' ? (params[field.key] as string) : '';
@@ -37,6 +39,8 @@ export function JevCardField({ nodeId, definition, field, params, portWired = fa
   const shared = {
     id: inputId,
     value,
+    disabled: readOnly,
+    ...offlineMark(readOnly),
     onChange,
     onKeyDown: stop,
     onMouseDown: stop,

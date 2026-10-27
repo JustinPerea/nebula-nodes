@@ -51,6 +51,7 @@ import {
   type ChatCancellationEvent,
   type ChatCancellationState,
 } from '../../lib/chatCancellation';
+import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 
 type ChatAgent = ChatAgentId;
 type ModelSelection = { model: string | null; effort: string | null };
@@ -426,6 +427,8 @@ function insertAtCaret(target: HTMLTextAreaElement, token: string): void {
 }
 
 export function ChatPanel() {
+  // Offline is read-only (round 15 of PR #114): Send is disabled.
+  const offline = useBackendOffline();
   const commonsEnabled = useUIStore((s) => s.commonsEnabled);
   const visible = useUIStore((s) => s.panels.chat.visible);
   const { shouldRender, exiting } = useDelayedUnmount(visible, 500);
@@ -1457,6 +1460,9 @@ export function ChatPanel() {
       setInput('');
       return;
     }
+    // Offline is read-only (round 15 of PR #114): a message isn't sent (its
+    // turn would edit the canvas); it stays typed and the banner pulses.
+    if (refuseEditWhileOffline()) return;
     if (raw === '/clear') {
       // Offline is read-only (GM, round 14 of PR #114): the clear is refused
       // whole, chat and canvas, and the banner pulses; the command stays typed.
@@ -2281,8 +2287,9 @@ export function ChatPanel() {
               onClick={send}
               aria-label="Send message"
               title={selectionIssue || (catalogLoading ? 'Models are loading.' : 'Send message')}
+              {...offlineMark(offline)}
               disabled={
-                !connected || authorizing || (!personal && catalogLoading) || Boolean(selectionIssue) ||
+                offline || !connected || authorizing || (!personal && catalogLoading) || Boolean(selectionIssue) ||
                 !input.trim() ||
                 pendingImages.some((p) => p.status === 'uploading')
               }

@@ -19,9 +19,21 @@ describe('heldDeleteText', () => {
       .toBe("Couldn't delete them. They're waiting on World Labs. Check Marble and Run History.");
   });
 
-  it('the other forms are unchanged', () => {
-    expect(heldDeleteText(1, true)).toBe("Couldn't delete the node. It's waiting on World Labs. Check Marble, then unlock it.");
-    expect(heldDeleteText(1, false)).toBe("Couldn't delete it. It's waiting on World Labs. Check Marble, then forget it in Run History.");
+  // GM, round 15 of PR #114: the one-node lines get back what round 4's
+  // trim dropped, "Couldn't delete “<node>”. <reason line>", with the shared
+  // World Labs reason and the button named.
+  it("one node: GM's round 15 line, named; 'the node' with no name", () => {
+    expect(heldDeleteText(1, true, 1, '“Harbor world”')).toBe(
+      "Couldn't delete “Harbor world”. A World Labs run needs your check first. Use the notice at the top of the screen.");
+    expect(heldDeleteText(1, false, 1, '“Harbor world”')).toBe(
+      "Couldn't delete “Harbor world”. “Harbor world” has a saved World Labs recovery ID. Check the run in Marble, then use Forget ID in Run History.");
+    expect(heldDeleteText(1, true)).toBe(
+      "Couldn't delete the node. A World Labs run needs your check first. Use the notice at the top of the screen.");
+    expect(heldDeleteText(1, false)).toBe(
+      "Couldn't delete the node. It has a saved World Labs recovery ID. Check the run in Marble, then use Forget ID in Run History.");
+  });
+
+  it('the several-node forms are unchanged', () => {
     expect(heldDeleteText(2, true, 2)).toBe("Couldn't delete them. They're waiting on World Labs. Check Marble, then unlock them.");
     expect(heldDeleteText(3, true, 2)).toBe("Couldn't delete them. 2 are waiting on World Labs. Check Marble, then unlock them.");
     expect(heldDeleteText(3, true, 1)).toBe("Couldn't delete them. One is waiting on World Labs. Check Marble, then unlock it.");
@@ -72,6 +84,6 @@ describe("GM's World Labs wording (round 13 of PR #114), exact", () => {
 
   it('a renamed node still reads as a held delete refusal (its card title differs)', () => {
     expect(deleteRefusalText("Couldn't delete the node.", 1, [`“Harbor world”${RECOVERY_ID_SAVED_TAIL}`]))
-      .toBe("Couldn't delete it. It's waiting on World Labs. Check Marble, then forget it in Run History.");
+      .toBe("Couldn't delete “Harbor world”. “Harbor world” has a saved World Labs recovery ID. Check the run in Marble, then use Forget ID in Run History.");
   });
 });

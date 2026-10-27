@@ -29,6 +29,7 @@ import type { AttachedRef } from './ReferenceTray';
 import '../../styles/create-studio.css';
 import '../../styles/create-gallery.css';
 import { FailureNotice, failureMessage } from '../../lib/errorCopy';
+import { isOfflineRefusal } from '../../lib/backendConnection';
 
 const MAX_CONCURRENT = 2;
 /** A Generate that didn't start, named by its button (error copy round 3e). */
@@ -294,6 +295,8 @@ export function CreateView() {
       // creates the history/Stop owner. This survives leaving Create mid-launch.
       await store.executeClusterConcurrent(allNodeIds, { genId, prompt: currentDraft.prompt, ts, sessionId, modelNodeIds, allNodeIds });
     } catch (error) {
+      // Offline is read-only (round 15 of PR #114): a refused Generate says nothing.
+      if (isOfflineRefusal(error)) return;
       if (mounted.current && !useGraphStore.getState().createCancelledLaunchIds.includes(genId)) {
         setGenerationError(failureMessage(error, GENERATE_HEADING));
       }

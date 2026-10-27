@@ -4,6 +4,7 @@ import { useGraphStore } from '../store/graphStore';
 import { useCanvasPinsStore } from '../store/canvasPinsStore';
 import { isBackendNodeId } from '../lib/canvasPins';
 import { floatingBottomLimit } from '../lib/bottomBar';
+import { offlineMark, useBackendOffline } from '../lib/useBackendOffline';
 import '../styles/panels.css';
 
 /** How close the menu may come to the window's edges. */
@@ -25,6 +26,9 @@ export function ContextMenu() {
   const duplicateNode = useGraphStore((s) => s.duplicateNode);
   const deleteNode = useGraphStore((s) => s.deleteNode);
   const isExecuting = useGraphStore((s) => s.isExecuting);
+  // Offline is read-only (round 15 of PR #114): every item here edits, so
+  // each is disabled and looks it.
+  const offline = useBackendOffline();
   const menuRef = useRef<HTMLDivElement>(null);
   const [place, setPlace] = useState<{ left: number; top: number } | null>(null);
 
@@ -84,6 +88,8 @@ export function ContextMenu() {
       <div ref={menuRef} className="context-menu" style={style}>
         <button
           className="context-menu__item"
+          disabled={offline}
+          {...offlineMark(offline)}
           onClick={() => {
             composeNote({ position: flowPosition });
             hideContextMenu();
@@ -98,7 +104,7 @@ export function ContextMenu() {
   const items: MenuItem[] = [
     {
       label: 'Run This Node',
-      disabled: isExecuting,
+      disabled: isExecuting || offline,
       action: () => {
         executeNode(nodeId);
         hideContextMenu();
@@ -107,7 +113,7 @@ export function ContextMenu() {
     {
       label: 'Leave a note for agents…',
       // Agents only see nodes the backend knows (ids like n4).
-      disabled: !isBackendNodeId(nodeId),
+      disabled: !isBackendNodeId(nodeId) || offline,
       action: () => {
         composeNote({ nodeId });
         hideContextMenu();
@@ -116,6 +122,7 @@ export function ContextMenu() {
     {
       label: 'Duplicate',
       shortcut: 'Ctrl+D',
+      disabled: offline,
       action: () => {
         duplicateNode(nodeId);
         hideContextMenu();
@@ -125,6 +132,7 @@ export function ContextMenu() {
       label: 'Delete',
       shortcut: 'Del',
       danger: true,
+      disabled: offline,
       action: () => {
         // A World Labs hold refuses, with its notice; otherwise it deletes at
         // once and says "Deleted the node." with Undo (GM, 2026-10-23).
@@ -146,6 +154,7 @@ export function ContextMenu() {
           className={`context-menu__item ${item.danger ? 'context-menu__item--danger' : ''}`}
           onClick={item.action}
           disabled={item.disabled}
+          {...offlineMark(offline)}
         >
           <span>{item.label}</span>
           {item.shortcut && <span className="context-menu__shortcut">{item.shortcut}</span>}

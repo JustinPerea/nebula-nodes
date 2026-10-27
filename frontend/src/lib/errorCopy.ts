@@ -23,6 +23,7 @@
  * site (warnFailure), lost connections aren't.
  */
 
+import { isOfflineRefusal } from './backendConnection';
 import { inDesktopShell, personUnavailableReason } from './personSession';
 
 /** No answer at all: the connection dropped, or the backend isn't there.
@@ -349,6 +350,7 @@ export function failureDetails(error: unknown): string | null {
  * ConnectionLostError, never any TypeError), else GM's general line, never
  * the error's own message. */
 export function copyForError(error: unknown, signal?: AbortSignal | null): string {
+  if (isOfflineRefusal(error)) return '';
   return isNoAnswer(error, signal) ? CONNECTION_LOST_COPY : REFUSED_FALLBACK_COPY;
 }
 
@@ -428,6 +430,9 @@ export function shortLine(line: string): string {
  * in when the request's error has none.
  */
 export function failureCopy(error: unknown, options: { heading?: string; short?: boolean } = {}): FailureCopy {
+  // A write refused while offline (round 15 of PR #114) says nothing: the
+  // banner already pulsed. Every one-line form below is empty for it too.
+  if (isOfflineRefusal(error)) return { heading: '', reason: '' };
   const parts = partsOf(error) ?? { heading: '', reason: copyForError(error) };
   const standalone = error instanceof FailureNotice && error.standalone;
   const heading = standalone ? '' : parts.heading || options.heading || '';
@@ -444,6 +449,7 @@ export function failureMessage(error: unknown, heading: string): string {
  * CLI graph reads the canvas: "Couldn't import the CLI graph." over the
  * reason, not "Couldn't load the canvas."). Round 3e. */
 export function failureUnder(error: unknown, heading: string): string {
+  if (isOfflineRefusal(error)) return '';
   return oneLine({ heading, reason: failureCopy(error).reason });
 }
 

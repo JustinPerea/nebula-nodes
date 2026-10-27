@@ -74,12 +74,13 @@ import {
   rewriteBackendAssetUrls,
   rewriteExecutionAssetUrls,
 } from '../lib/backend';
-import { isBackendOffline, refuseEditWhileOffline } from '../lib/backendConnection';
+import { isBackendOffline, isOfflineRefusal, OfflineRefusal, refuseEditWhileOffline, subscribeBackendConnection } from '../lib/backendConnection';
+import { AGENT_CURSOR_SPRING, isAtRest, stepSpring, type SpringState } from '../lib/agentCursorMotion';
 import { noteNodeLabels } from '../lib/lastNodeLabels';
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 import { WORLD_LABS_STATUS_UNCERTAIN_WARNING, deleteRefusalText, heldDeleteText } from '../lib/worldLabsWaiting';
 import {
-  FailureNotice, REFUSED_FALLBACK_COPY, copyForAnswer, failureCopy, failureDetails, failureMessage, readRefusal, requestError,
+  CONNECTION_LOST_COPY, ConnectionLostError, FailureNotice, REFUSED_FALLBACK_COPY, RequestFailedError, copyForAnswer, detailText, failureKind, failureCopy, failureDetails, failureMessage, readRefusal, requestError,
   warnFailure,
 } from '../lib/errorCopy';
 import { CANVAS_NOTICE_EVENT, type CanvasNoticeDetail } from '../lib/canvasNotice';
@@ -87,8 +88,8 @@ import { cleanRemovals, deletedNoticeText, lateRestoreText, mergeRemovals, notRe
 import { NOTHING_RAN_LINE, OTHER_NODE_LINE, SHOT_NOT_STARTED_LINE, validationReadings, writtenReading, type ValidationReading } from '../lib/validationCopy';
 import {
   RUNTIME_FIELDS, applySlice, captureOwnAdd, diffCanvas, edgeKey, editArrivedText, foldArrange, foreignSource, isForeignEdit,
-  isOwnAdd, isOwnEcho, isSliceStep, ownAddStep, renameOwnedNode, restoreRequest, undoNoticeText,
-  type EditOrigin, type ForeignEdit, type OwnAdd, type RestoreBody,
+  isOwnAdd, isOwnEcho, isSliceStep, ownAddStep, paramChange, renameOwnedNode, restoreRequest, undoNoticeText,
+  type EditOrigin, type ForeignEdit, type OwnAdd, type OwnParamChange, type RestoreBody,
 } from '../lib/canvasUndo';
 import { TAB_ID } from '../lib/tabId';
 import { notifyJobComplete } from '../lib/jobNotifications';
@@ -472,6 +473,8 @@ export interface UndoNotice {
   /** 'error': a failure that used to be a window.alert (round 3f, GM: "Every
    * error alert becomes a canvas notice"), announced as role="alert". */
   tone?: 'error' | 'info';
+  /** A part of `text` shown in mono (a model id, GM round 15 of PR #114). */
+  mono?: string;
 }
 
 let undoNoticeSeq = 0;
@@ -607,9 +610,10 @@ function pushUndo(
  * 14 of PR #114; lib/canvasUndo.ts OwnAdd). Pushed when the add's ids are
  * known; a later step depends on nothing it holds, so it may land above
  * steps taken while the add was out. */
-function pushOwnAdd(set: GraphSet, get: GraphGet, nodeIds: Iterable<string>): OwnAdd | null {
-  const step = ownAddStep(nodeIds);
-  if (step.nodeIds.length === 0) return null;
+function pushOwnAdd(set: GraphSet, get: GraphGet, nodeIds: Iterable<string>,
+  params: OwnParamChange[] = []): OwnAdd | null {
+  const step = ownAddStep(nodeIds, params);
+  if (step.nodeIds.length === 0 && !step.params) return null;
   breakUndoDebounce();
   const undoStack = [...get().undoStack, step];
   if (undoStack.length > UNDO_CAP) undoStack.shift();
@@ -857,7 +861,7 @@ interface GraphState {
   /** Show a written line as the canvas notice, non-blocking and dismissable,
    * where a native alert used to stop the canvas (round 3f). 'error' by
    * default; 'info' for a note such as an import's warnings. */
-  notify: (text: string, tone?: 'error' | 'info') => void;
+  notify: (text: string, tone?: 'error' | 'info', options?: { mono?: string }) => void;
 
   // Clipboard
   clipboard: CanvasClipboard | null;
@@ -1203,15 +1207,45 @@ function withEditsSinceRequest(nodeId: string, definitionId: string, configured:
   return params;
 }
 
+/** The model the backend has configured a universal node for, read before
+ * a model change is sent (review 14, L3): the model its ports are stamped
+ * with (`_model_ports.model`, backend services/universal_ports.py). Without
+ * a stamp, OpenRouter's and Nous's model param (their picker changes it only
+ * once the backend answers); a Replicate node's Model ID field holds what
+ * the person typed, so without a stamp there is no model to name. */
+function configuredModel(node: Node<NodeData> | undefined): string {
+  if (!node) return '';
+  const stamp = (node.data.params._model_ports as { model?: unknown } | undefined)?.model;
+  if (typeof stamp === 'string' && stamp.trim()) return stamp.trim();
+  if (node.data.definitionId === 'replicate-universal') return '';
+  const param = node.data.params[UNIVERSAL_MODEL_PARAM[node.data.definitionId] ?? 'model'];
+  return typeof param === 'string' ? param.trim() : '';
+}
+
+/** Create's heading and its cluster line (GM, round 3f and round 15 of PR
+ * #114): "Couldn't start the generation. Its nodes weren't added to the
+ * canvas." then the backend's reason where it gave a person line (a World
+ * Labs state, a run, an access refusal), the connection line when Nebula
+ * didn't answer, and "Try again." for a bare HTTP failure. */
+export const GENERATE_HEADING = "Couldn't start the generation.";
+export const CLUSTER_NOT_ADDED = "Its nodes weren't added to the canvas.";
+export function clusterFailureReason(error: unknown): string {
+  if (error instanceof ConnectionLostError) return CONNECTION_LOST_COPY;
+  if (error instanceof RequestFailedError && failureKind(error.status) === 'refused'
+    && (detailText(error.detail) || error.code)) return error.reason;
+  return 'Try again.';
+}
+
 /** A model change that didn't happen: GM's line (round 14 of PR #114) with
- * the model the node is still on (its route, as its card's badge shows it);
- * the reason stays in the console. */
-function reportModelChangeFailed(nodeId: string): void {
+ * the model the node is still on, read before the request (`still`). GM,
+ * round 15: the line shows what the model picker shows. The picker's own
+ * label for it isn't kept outside the Inspector, and the card's badge shows
+ * the id, so it is the id, in mono. The reason stays in the console. */
+function reportModelChangeFailed(nodeId: string, still: string): void {
   const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
   if (!node) return;
-  const current = node.data.params[UNIVERSAL_MODEL_PARAM[node.data.definitionId] ?? 'model'];
-  useGraphStore.getState().notify(modelChangeFailedLine(node.data.label,
-    typeof current === 'string' ? current.trim() : ''));
+  useGraphStore.getState().notify(modelChangeFailedLine(node.data.label, still), 'error',
+    still ? { mono: still } : undefined);
 }
 
 /** Whether a wire keeps its ends on the node's new ports (a wire leaving the
@@ -1399,10 +1433,38 @@ const unsavedParamEdits = new Map<string, { keys: Set<string>; inFlight: number 
 const savedParamValues = new Map<string, Map<string, unknown>>();
 const ABSENT_PARAM = Symbol('absent');
 
+/**
+ * Each param save owns the keys edited since the node's previous save was
+ * sent (review 14, L2: a failure named the first unsaved key, which an older
+ * save had already sent, and put nothing back while an older save was out).
+ * Edits are numbered per node (`editGen`); each key remembers the edit that
+ * last touched it; each save, the edit number it was sent at, its keys and
+ * what it sent. A failed save names its own keys and puts back only those no
+ * later edit touched: to the value an older save still on its way sent (that
+ * save owns the key from then on), else to the last saved value.
+ */
+interface ParamPush { gen: number; keys: string[]; sent: Record<string, unknown> }
+const paramEditGen = new Map<string, number>();
+const paramKeyGen = new Map<string, Map<string, number>>();
+const paramPushesOut = new Map<string, ParamPush[]>();
+const lastPushGen = new Map<string, number>();
+
+function forgetParamPushes(nodeId: string): void {
+  paramEditGen.delete(nodeId);
+  paramKeyGen.delete(nodeId);
+  paramPushesOut.delete(nodeId);
+  lastPushGen.delete(nodeId);
+}
+
 function noteParamEdit(nodeId: string, before: Record<string, unknown>, after: Record<string, unknown>): void {
   const keys = [...new Set([...Object.keys(before), ...Object.keys(after)])]
     .filter((key) => before[key] !== after[key]);
   if (keys.length === 0) return;
+  const gen = (paramEditGen.get(nodeId) ?? 0) + 1;
+  paramEditGen.set(nodeId, gen);
+  const keyGen = paramKeyGen.get(nodeId) ?? new Map<string, number>();
+  for (const key of keys) keyGen.set(key, gen);
+  paramKeyGen.set(nodeId, keyGen);
   const entry = unsavedParamEdits.get(nodeId) ?? { keys: new Set<string>(), inFlight: 0 };
   for (const key of keys) entry.keys.add(key);
   unsavedParamEdits.set(nodeId, entry);
@@ -1417,6 +1479,7 @@ function settleParamEdit(nodeId: string, entry: { keys: Set<string>; inFlight: n
   if (entry.inFlight === 0 && paramPushTimers[nodeId] === undefined) {
     unsavedParamEdits.delete(nodeId);
     savedParamValues.delete(nodeId);
+    forgetParamPushes(nodeId);
   }
 }
 
@@ -1427,31 +1490,46 @@ function paramLabel(node: Node<NodeData>, key: string): string {
   return dynamic || defined || key;
 }
 
-/** GM - Design, round 14 of PR #114, verbatim. */
-export function paramSaveFailedLine(param: string, node: string, reverted: boolean): string {
-  return `Couldn't save \u201c${param}\u201d for \u201c${node}\u201d.${reverted ? " It's back to its last saved value." : ''}`;
+/** GM - Design, rounds 14 and 15 of PR #114, verbatim: one setting, two,
+ * or three or more. The second sentence only when every one went back. */
+export function paramSaveFailedLine(params: string | string[], node: string, reverted: boolean): string {
+  const names = typeof params === 'string' ? [params] : params;
+  if (names.length <= 1) {
+    return `Couldn't save \u201c${names[0] ?? ''}\u201d for \u201c${node}\u201d.${reverted ? " It's back to its last saved value." : ''}`;
+  }
+  const what = names.length === 2 ? `\u201c${names[0]}\u201d and \u201c${names[1]}\u201d` : `${names.length} settings`;
+  return `Couldn't save ${what} for \u201c${node}\u201d.${reverted ? " They're back to their last saved values." : ''}`;
 }
 export function modelChangeFailedLine(node: string, currentModel: string): string {
   return `Couldn't change the model for \u201c${node}\u201d.${currentModel ? ` It's still on ${currentModel}.` : ''}`;
 }
 
-/** A param save the backend didn't take (no answer, or a refusal): the
- * field goes back to the value the backend last took and the person reads
- * GM's line. When a newer edit to the node is still on its way, nothing is
- * put back (that edit decides) and the second sentence goes (GM). */
-function paramSaveFailed(nodeId: string, edits: { inFlight: number } | undefined): void {
+/** A param save the backend didn't take (no answer, or a refusal): its own
+ * keys go back (ParamPush) and the person reads GM's line naming them. A key
+ * a later edit touched keeps that edit's value (it decides), and then the
+ * second sentence goes (GM). */
+function paramSaveFailed(nodeId: string, push: ParamPush): void {
+  const pushes = paramPushesOut.get(nodeId);
+  if (pushes) paramPushesOut.set(nodeId, pushes.filter((entry) => entry !== push));
   const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
   const saved = savedParamValues.get(nodeId);
-  if (!node || !saved || saved.size === 0) return;
-  const newer = paramPushTimers[nodeId] !== undefined || (edits?.inFlight ?? 1) > 1;
-  const label = paramLabel(node, [...saved.keys()][0]);
-  if (!newer) {
-    const params = { ...node.data.params };
-    for (const [key, previous] of saved) {
-      if (previous === ABSENT_PARAM) delete params[key];
-      else params[key] = previous;
-    }
-    savedParamValues.delete(nodeId);
+  if (!node || !saved || push.keys.length === 0) return;
+  const keyGen = paramKeyGen.get(nodeId);
+  const params = { ...node.data.params };
+  let reverted = 0;
+  for (const key of push.keys) {
+    if ((keyGen?.get(key) ?? 0) > push.gen) continue;
+    // An older save still on its way sent this key: its value, and the key is its.
+    const older = (paramPushesOut.get(nodeId) ?? []).filter((entry) => entry.gen < push.gen)
+      .sort((a, b) => b.gen - a.gen)[0];
+    const previous = older ? (key in older.sent ? older.sent[key] : ABSENT_PARAM)
+      : saved.has(key) ? saved.get(key) : (key in push.sent ? push.sent[key] : ABSENT_PARAM);
+    if (older) keyGen?.set(key, older.gen);
+    if (previous === ABSENT_PARAM) delete params[key];
+    else params[key] = previous;
+    reverted += 1;
+  }
+  if (reverted > 0) {
     useGraphStore.setState((state) => ({
       nodes: state.nodes.map((candidate) => candidate.id !== nodeId ? candidate : { ...candidate, data: {
         ...candidate.data, params,
@@ -1459,7 +1537,8 @@ function paramSaveFailed(nodeId: string, edits: { inFlight: number } | undefined
       } }),
     }));
   }
-  useGraphStore.getState().notify(paramSaveFailedLine(label, node.data.label, !newer));
+  useGraphStore.getState().notify(paramSaveFailedLine(push.keys.map((key) => paramLabel(node, key)), node.data.label,
+    reverted === push.keys.length));
 }
 
 /** The backend's params for a node, with the keys the person hasn't saved yet kept as the canvas has them. */
@@ -1509,11 +1588,20 @@ function pushNodeParams(nodeId: string): Promise<void> {
   if (!node) {
     unsavedParamEdits.delete(nodeId);
     savedParamValues.delete(nodeId);
+    forgetParamPushes(nodeId);
     return Promise.resolve();
   }
   const edits = unsavedParamEdits.get(nodeId);
   if (edits) edits.inFlight += 1;
   const sent = node.data.params;
+  // This save's own keys: those edited since the previous save was sent.
+  const gen = paramEditGen.get(nodeId) ?? 0;
+  const since = lastPushGen.get(nodeId) ?? 0;
+  lastPushGen.set(nodeId, gen);
+  const keys = [...(paramKeyGen.get(nodeId) ?? new Map<string, number>())]
+    .filter(([, keyGen]) => keyGen > since).map(([key]) => key);
+  const push: ParamPush = { gen, keys, sent };
+  paramPushesOut.set(nodeId, [...(paramPushesOut.get(nodeId) ?? []), push]);
   return graphMutationFetch(`/api/graph/node/${nodeId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -1524,9 +1612,13 @@ function pushNodeParams(nodeId: string): Promise<void> {
     // The backend took these: they are the last saved values now.
     const saved = savedParamValues.get(nodeId);
     if (saved) for (const key of saved.keys()) saved.set(key, key in sent ? sent[key] : ABSENT_PARAM);
+    const pushes = paramPushesOut.get(nodeId);
+    if (pushes) paramPushesOut.set(nodeId, pushes.filter((entry) => entry !== push));
   }).catch((err) => {
     console.warn(`[nebula] Param sync for ${nodeId} failed:`, err);
-    paramSaveFailed(nodeId, edits);
+    // Refused while offline (round 15): nothing was sent, and nothing is said.
+    if (isOfflineRefusal(err)) return;
+    paramSaveFailed(nodeId, push);
   }).finally(() => { if (edits) settleParamEdit(nodeId, edits); });
 }
 
@@ -1545,6 +1637,10 @@ function clearAllParamPushTimers(): void {
   }
   unsavedParamEdits.clear();
   savedParamValues.clear();
+  paramEditGen.clear();
+  paramKeyGen.clear();
+  paramPushesOut.clear();
+  lastPushGen.clear();
 }
 
 interface CinemaScenePersistence {
@@ -1980,8 +2076,8 @@ function deletionHeading(count: number): string {
  * 4b, lib/worldLabsWaiting.ts deleteRefusalText: with a held node the line
  * starts with GM's own, "Couldn't delete them. …" for several); every other
  * reason as given, after `deletionHeading` when no node is held. */
-function reportNodeDeletionFailure(reasons: string[], count: number): void {
-  const message = deleteRefusalText(deletionHeading(count), count, reasons);
+function reportNodeDeletionFailure(reasons: string[], count: number, name?: string): void {
+  const message = deleteRefusalText(deletionHeading(count), count, reasons, name);
   console.warn(`[nebula] ${message}`);
   useGraphStore.getState().notify(message);
 }
@@ -2093,13 +2189,30 @@ async function reconcileWorldLabsExecutionStatus(
   runId: string,
   set: GraphSet,
   get: GraphGet,
+  startError?: unknown,
 ): Promise<'active' | 'terminal' | 'unknown' | 'stale'> {
+  // A start refused while offline was never sent (round 15 of PR #114):
+  // nothing started, so the run ends here with its "Queued" marks.
+  if (isOfflineRefusal(startError)) {
+    if (!ownsRun(runId)) return 'stale';
+    settleTrackedExecutionStatus('failed', runId, set, get);
+    return 'terminal';
+  }
   let result;
   try {
     result = await apiGetExecutionStatus(runId);
-  } catch {
+  } catch (error) {
     if (!ownsRun(runId)) return 'stale';
     const paidStart = trackedRunHasFreshPaidWorldLabs(runId, get);
+    // The backend has no such run (404): the start whose answer was lost
+    // never reached it, or a restart lost it. Without a paid World Labs
+    // start there is nothing to check in Marble, so the run ends and its
+    // "Queued" marks go (review 14, M1: the tab stayed on "Stop" after
+    // reconnect). A paid start keeps the uncertain state and its unlock.
+    if (!paidStart && error instanceof RequestFailedError && error.status === 404) {
+      settleTrackedExecutionStatus('failed', runId, set, get);
+      return 'terminal';
+    }
     updateRunPhase(runId, cancellationRequestedRunIds.has(runId) ? 'cancelling' : 'uncertain', set);
     set((state) => ({
       ...ownershipState(),
@@ -2270,6 +2383,13 @@ function warnBlockedProviderStart(ambiguity: ProviderStartAmbiguity): void {
   );
 }
 
+/** A node's card title in quotes while it is on the canvas (GM's held-delete
+ * line), else nothing: the line then says "the node". */
+function namedOnCanvas(nodes: readonly Node<NodeData>[], nodeId: string): string | undefined {
+  const label = nodes.find((node) => node.id === nodeId)?.data?.label;
+  return typeof label === 'string' && label.trim() ? `\u201c${label}\u201d` : undefined;
+}
+
 function nodeHasProviderSafety(state: GraphState, nodeId: string): boolean {
   return state.providerRecoveries.some((checkpoint) => checkpoint.nodeId === nodeId)
     || state.providerStartAmbiguities.some((ambiguity) => ambiguity.nodeId === nodeId);
@@ -2279,9 +2399,8 @@ function nodeHasProviderSafety(state: GraphState, nodeId: string): boolean {
  * The person asked to delete `ids` and the canvas keeps them, because one
  * holds World Labs state (error copy round 3b: a refusal that says nothing
  * is the worst kind). True when it refused: it says why once, in the
- * canvas's short notice (GM's one line, round 4: "Couldn't delete the node.
- * It's waiting on World Labs. Check Marble, then unlock it.", and its forms,
- * round 4b's for several nodes among them: lib/worldLabsWaiting
+ * canvas's short notice (GM, round 15: "Couldn't delete “<node>”. <reason
+ * line>" for one node; round 4b's forms for several: lib/worldLabsWaiting
  * heldDeleteText), and sends nothing. An agent's delete
  * goes through the backend, which refuses it with its own text.
  */
@@ -2290,7 +2409,8 @@ function refuseHeldNodeDelete(state: GraphState, ids: string[], set: GraphSet): 
   if (held.length === 0) return false;
   // The backend's order: an unconfirmed start before a recovery record.
   const unlock = held.some((nodeId) => state.providerStartAmbiguities.some((ambiguity) => ambiguity.nodeId === nodeId));
-  set({ undoNotice: { id: ++undoNoticeSeq, text: heldDeleteText(ids.length, unlock, held.length), offer: null } });
+  const name = ids.length === 1 ? namedOnCanvas(state.nodes, ids[0]) : undefined;
+  set({ undoNotice: { id: ++undoNoticeSeq, text: heldDeleteText(ids.length, unlock, held.length, name), offer: null } });
   return true;
 }
 
@@ -2612,7 +2732,7 @@ async function executeHistoricalRun(
     // still closes, but marks nothing on the new graph (round 11).
     if (currentRunId !== runId && !ownsRun(runId)) return;
     if (!(err instanceof ExecutionStartRejectedError)) {
-      await reconcileWorldLabsExecutionStatus(runId, set, get);
+      await reconcileWorldLabsExecutionStatus(runId, set, get, err);
       return;
     }
     const onItsCanvas = runOnItsCanvas(runId);
@@ -3352,14 +3472,20 @@ wsClient.connect();
  * applyGraphSync. */
 let firstSyncAfterReconnect = false;
 
+/** The backend process the socket last said it was (its first graphSync's
+ * `bootId`, main.py BACKEND_BOOT_ID). */
+let knownBackendBootId: string | null = null;
+
 /**
  * A create whose answer was lost stays "uncertain" (it may have landed), and
- * holds the next create until a sync shows it. The first sync on a socket
- * that reconnected since is the backend's whole graph after that request: a
- * create it doesn't show never landed, so it stops holding the next one
- * (review 13, M2: add-and-connect stayed refused, "Another node-create
- * request is still unresolved", until a reload). A create still being sent
- * keeps its hold until its answer.
+ * holds the next create until a sync shows it (review 13, M2: add-and-connect
+ * stayed refused, "Another node-create request is still unresolved", until a
+ * reload). Released here only when the backend restarted: the reconnected
+ * socket's first sync carries a new `bootId`, and a create the new process's
+ * graph doesn't show never landed. A reconnect to the same process doesn't
+ * release it (review 14, nit 3): that create may still commit, and a later
+ * sync that shows it resolves it. A create still being sent keeps its hold
+ * until its answer.
  */
 function releaseUnresolvedCreates(): void {
   if (pendingConnectedNodeCreationAttempt?.phase === 'uncertain' && !pendingConnectedNodeCreationAttempt.observedNodeId) {
@@ -3437,6 +3563,10 @@ function applyGraphSync(event: ExecutionEvent): boolean {
     wireWrites.clear();
     unsavedParamEdits.clear();
     savedParamValues.clear();
+    paramEditGen.clear();
+    paramKeyGen.clear();
+    paramPushesOut.clear();
+    lastPushGen.clear();
     // The committed import can arrive before, or instead of, its HTTP ack.
     // Revoke old same-ID uploads/writes and suspended drafts before merging.
     clearCinemaScenePersistence();
@@ -3469,10 +3599,14 @@ function applyGraphSync(event: ExecutionEvent): boolean {
   });
   const observedPendingNodeId = observePendingNodeCreation(cliNodes as Node<NodeData>[]);
   observePendingConnectedNodeCreation(cliNodes as Node<NodeData>[], cliEdges as Edge[]);
+  const bootId = (event as { bootId?: unknown }).bootId;
   if (firstSyncAfterReconnect) {
     firstSyncAfterReconnect = false;
-    releaseUnresolvedCreates();
+    if (typeof bootId === 'string' && knownBackendBootId !== null && bootId !== knownBackendBootId) {
+      releaseUnresolvedCreates();
+    }
   }
+  if (typeof bootId === 'string' && bootId) knownBackendBootId = bootId;
 
   const state = useGraphStore.getState();
   const held = heldWires(cliEdges ?? []);
@@ -3793,7 +3927,11 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   dismissUndoNotice: () => set({ undoNotice: null }),
   lateNotice: null,
   dismissLateNotice: () => set({ lateNotice: null }),
-  notify: (text, tone = 'error') => set({ undoNotice: { id: ++undoNoticeSeq, text, offer: null, tone } }),
+  // Empty: a write refused while offline says nothing (round 15 of PR #114).
+  notify: (text, tone = 'error', options) => {
+    if (!text) return;
+    set({ undoNotice: { id: ++undoNoticeSeq, text, offer: null, tone, ...(options?.mono ? { mono: options.mono } : {}) } });
+  },
 
   // ---------------------------------------------------------------------------
   // Clipboard: copy/paste with UUID regeneration
@@ -4321,20 +4459,26 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     const deleting = Promise.allSettled(cliRemovedIds.map(deleteCLIOriginNode)).then((results) => {
       const confirmed = new Set<string>();
       const failures: string[] = [];
+      const failedIds: string[] = [];
       const removals: RemovalRecord[] = [];
       results.forEach((result, index) => {
         if (result.status === 'fulfilled') {
           confirmed.add(cliRemovedIds[index]);
           if (result.value) removals.push(result.value);
-        } else failures.push(failureCopy(result.reason).reason);
+        } else {
+          failures.push(failureCopy(result.reason).reason);
+          failedIds.push(cliRemovedIds[index]);
+        }
       });
+      // GM, round 15: one kept node is named ("Couldn't delete “<node>”.").
+      const failedName = failedIds.length === 1 ? namedOnCanvas(get().nodes, failedIds[0]) : undefined;
       // Undoing this step names what each delete removed (GM, 2026-10-23).
       if (removals.length > 0) undoStep.removals = mergeRemovals(undoStep.removals, removals);
       if (replacementRevision !== canvasReplacementRevision) {
         // Nothing here is that graph's any more: no node to take off, no
         // step to renew, no notice. The step keeps its records, for an undo
         // that comes back to that graph (an import undone).
-        if (failures.length > 0) reportNodeDeletionFailure(failures, failures.length);
+        if (failures.length > 0) reportNodeDeletionFailure(failures, failures.length, failedName);
         return;
       }
       if (removals.length > 0) {
@@ -4356,7 +4500,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       // Its Undo applies only while this step is next in line: after a newer
       // step, the line would offer a button that does nothing (withLiveNotice).
       if (deleted > 0 && get().undoStack.at(-1) === undoStep) set(deletedNotice(deleted, undoStep));
-      if (failures.length > 0) reportNodeDeletionFailure(failures, failures.length);
+      if (failures.length > 0) reportNodeDeletionFailure(failures, failures.length, failedName);
     });
     // An undo pressed while the deletes are on their way waits for their
     // answers, so its restore can name what they removed.
@@ -5245,7 +5389,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       console.error('Failed to start execution:', err);
       if (currentRunId !== runId && !ownsRun(runId)) return;  // see the replay's catch
       if (!(err instanceof ExecutionStartRejectedError)) {
-        await reconcileWorldLabsExecutionStatus(runId, set, get);
+        await reconcileWorldLabsExecutionStatus(runId, set, get, err);
         return;
       }
       const onItsCanvas = runOnItsCanvas(runId);
@@ -5324,7 +5468,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       console.error('Failed to start node execution:', err);
       if (currentRunId !== runId && !ownsRun(runId)) return;  // see the replay's catch
       if (!(err instanceof ExecutionStartRejectedError)) {
-        await reconcileWorldLabsExecutionStatus(runId, set, get);
+        await reconcileWorldLabsExecutionStatus(runId, set, get, err);
         return;
       }
       const onItsCanvas = runOnItsCanvas(runId);
@@ -5443,7 +5587,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       if (err instanceof ExecutionStartRejectedError) {
         failShot(failureMessage(err, "Couldn't start the shot."));
         settleTrackedExecutionStatus('failed', runId, set, get);
-      } else await reconcileWorldLabsExecutionStatus(runId, set, get);
+      } else await reconcileWorldLabsExecutionStatus(runId, set, get, err);
     }
   },
 
@@ -5562,7 +5706,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       console.error('Failed to start generation:', err);
       if (currentRunId !== runId && !ownsRun(runId)) return;  // see the replay's catch
       if (!(err instanceof ExecutionStartRejectedError)) {
-        await reconcileWorldLabsExecutionStatus(runId, set, get);
+        await reconcileWorldLabsExecutionStatus(runId, set, get, err);
         return;
       }
       const onItsCanvas = runOnItsCanvas(runId);
@@ -5630,7 +5774,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       // A lost HTTP acknowledgement can follow an accepted start. Query the
       // client-owned ID before releasing ownership and permitting duplicate work.
       if (!(error instanceof ExecutionStartRejectedError)) {
-        await reconcileWorldLabsExecutionStatus(runId, set, get);
+        await reconcileWorldLabsExecutionStatus(runId, set, get, error);
         return;
       }
       const onItsCanvas = runOnItsCanvas(runId);
@@ -5708,12 +5852,14 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nodes: specNodes, edges: specEdges }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) throw await requestError(GENERATE_HEADING, res);
       const data = (await res.json()) as { idMap: Record<string, string>; nodes: Node<NodeData>[]; edges: Edge[] };
       idMap = data.idMap; rfNodes = data.nodes ?? []; rfEdges = data.edges ?? [];
     } catch (err) {
       console.error('[nebula] authorGenerationCluster persist failed:', err);
-      return { modelNodeIds: [], allNodeIds: [] };
+      // Refused while offline: nothing was sent, and Create says nothing.
+      if (isOfflineRefusal(err)) throw err;
+      throw new FailureNotice(GENERATE_HEADING, `${CLUSTER_NOT_ADDED} ${clusterFailureReason(err)}`);
     } finally {
       synced.stop();
     }
@@ -5754,11 +5900,27 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   adoptAcceptedProposal: ({ nodes: incoming, edges: incomingEdges, updatedNodes }, options) => {
     // The backend already committed these (and broadcast a graphSync); adding
     // them here too means the nodes exist locally before the canvas runs them.
-    // Like authorGenerationCluster's merge: one undo step, ids never duplicated.
-    // The step is usually the one Accept took before sending (its graphSync
-    // can land before this reply); without one, take it now.
-    const stack = get().undoStack;
-    if (options?.undoStep === undefined || stack[stack.length - 1] !== options.undoStep) pushUndo(set, get);
+    // Round 15 of PR #114 (review 14, M5): Accept's undo step owns only what
+    // it changed, the ids it added and the param keys it set, as an add's
+    // does (OwnAdd), never a whole-canvas snapshot. The snapshot Accept took
+    // before sending is only read for the values before (its graphSync can
+    // land before this reply, so the canvas now may hold them already) and
+    // leaves the stack. The step owns nothing anyone else made, so it goes
+    // on top even when an agent's edit landed meanwhile: the person's next
+    // Undo undoes the Accept, and never removes an agent's node.
+    const snapshot = options?.undoStep as UndoSnapshot | undefined;
+    const beforeById = new Map((snapshot?.nodes ?? get().nodes).map((node) => [node.id, node]));
+    const changes: OwnParamChange[] = [];
+    for (const update of updatedNodes) {
+      const was = beforeById.get(update.id);
+      const change = was ? paramChange(was, update) : null;
+      if (change) changes.push(change);
+    }
+    if (snapshot) {
+      set((state) => (state.undoStack.includes(snapshot)
+        ? { undoStack: state.undoStack.filter((entry) => entry !== snapshot) } : {}));
+    }
+    pushOwnAdd(set, get, incoming.map((node) => node.id), changes);
     set((state) => {
       const updates = new Map(updatedNodes.map((node) => [node.id, node]));
       const merged = state.nodes.map((node) => {
@@ -6317,6 +6479,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   // rules for the canvas, the wire checks and agents' edits. The backend also
   // drops wires on ports the new model doesn't have and syncs the canvas.
   configureOpenRouterModel: async (nodeId, modelId) => {
+    const still = configuredModel(get().nodes.find((node) => node.id === nodeId));
     const step = get().beginUndoStep();
     try {
       const result = await requestUniversalModel(nodeId, modelId);
@@ -6351,11 +6514,12 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     } catch (err) {
       get().cancelUndoStep(step);
       console.error('Failed to set the model:', err);
-      reportModelChangeFailed(nodeId);
+      if (!isOfflineRefusal(err)) reportModelChangeFailed(nodeId, still);
     }
   },
 
   fetchReplicateSchemaAndConfigure: async (nodeId, owner, name) => {
+    const still = configuredModel(get().nodes.find((node) => node.id === nodeId));
     const step = get().beginUndoStep();
     try {
       const result = await requestUniversalModel(nodeId, `${owner}/${name}`);
@@ -6385,7 +6549,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     } catch (err) {
       get().cancelUndoStep(step);
       console.error('Failed to fetch Replicate schema:', err);
-      reportModelChangeFailed(nodeId);
+      if (!isOfflineRefusal(err)) reportModelChangeFailed(nodeId, still);
     }
   },
 
@@ -6874,18 +7038,121 @@ const EDIT_GATES: Partial<Record<keyof GraphState, EditGate>> = {
   removeEditNodeClip: REFUSED_VOID, removeShot: REFUSED_VOID, updateScene: REFUSED_VOID,
   configureOpenRouterModel: REFUSED_ASYNC, fetchReplicateSchemaAndConfigure: REFUSED_ASYNC,
   promoteShotVariation: REFUSED_ASYNC,
+  // Round 15 (review 14, M1/M2): runs are the paid path, so every run entry
+  // is refused before anything is marked: no "Queued", no Stop, no request.
+  executeGraph: REFUSED_ASYNC, executeNode: REFUSED_ASYNC, executeCluster: REFUSED_ASYNC,
+  executeClusterConcurrent: REFUSED_ASYNC, executeShot: REFUSED_ASYNC, rerunHistoryRecord: REFUSED_ASYNC,
+  rerunHistoryWithLatestPaperSource: REFUSED_ASYNC, retryFailedRun: REFUSED_ASYNC,
+  // And the other writes the store makes: Create's cluster (refused as an
+  // OfflineRefusal, which Create says nothing for), the video edit node (a
+  // local add: '' means none was made), Forget ID, the two unlocks and an
+  // accepted proposal's merge.
+  authorGenerationCluster: { refused: () => Promise.reject(new OfflineRefusal('POST', '/api/graph/cluster')) },
+  getOrCreateEditNodeDownstream: { refused: () => '' },
+  deleteProviderRecovery: REFUSED_ASYNC, acknowledgeProviderStartAmbiguity: REFUSED_ASYNC,
+  acknowledgeUncertainWorldLabsRun: REFUSED_VOID,
   // A param edit is an edit; a run's state or outputs are not.
   updateNodeData: { ...REFUSED_VOID, blocks: ((_nodeId: string, data: Partial<NodeData>) => 'params' in data) as EditGate['blocks'] },
 };
 
 /** React Flow's changes minus the edits (moves, removals, adds); a refused
- * one pulses the banner once. Selection and measured sizes pass. */
+ * one pulses the banner once. Selection and measured sizes pass. A move of a
+ * drag that was already put back (springDragsBack) is refused silently. */
 function readOnlyChanges<C extends { type: string }>(changes: C[]): C[] {
   if (!isBackendOffline()) return changes;
   const kept = changes.filter((change) => change.type === 'select' || change.type === 'dimensions');
-  if (kept.length < changes.length) refuseEditWhileOffline();
+  const refused = changes.filter((change) => change.type !== 'select' && change.type !== 'dimensions');
+  for (const change of refused) {
+    const move = change as unknown as { type: string; id?: string; dragging?: boolean };
+    if (move.type === 'position' && move.id && revertedDrags.has(move.id) && move.dragging === false) {
+      revertedDrags.delete(move.id);
+    }
+  }
+  const quiet = refused.every((change) => {
+    const move = change as unknown as { type: string; id?: string };
+    return move.type === 'position' && move.id !== undefined && revertedDrags.has(move.id);
+  });
+  // A drag that was under way when the connection dropped goes back now.
+  if (dragOrigins.size > 0) springDragsBack();
+  else if (refused.length > 0 && !quiet) refuseEditWhileOffline();
   return kept;
 }
+
+/**
+ * Review 14, L1 (GM, round 15: "no line. The node springs back to its last
+ * saved spot on the canvas's tuned spring, not a jump, and the banner pulses
+ * once"; reduced motion: an instant move and the banner's colour flash).
+ * Where each node a drag is moving started (the spot it last saved), while
+ * online; the drop's save clears it. When the connection drops mid-drag,
+ * the nodes go back there and the rest of that drag's moves are refused
+ * without another pulse, until its drop.
+ */
+const dragOrigins = new Map<string, { x: number; y: number }>();
+const revertedDrags = new Set<string>();
+
+function noteDragOrigins(changes: NodeChange[]): void {
+  const nodes = useGraphStore.getState().nodes;
+  for (const change of changes) {
+    if (change.type !== 'position') continue;
+    if (change.dragging === false) { dragOrigins.delete(change.id); continue; }
+    if (change.dragging && !dragOrigins.has(change.id)) {
+      const node = nodes.find((candidate) => candidate.id === change.id);
+      if (node) dragOrigins.set(change.id, { ...node.position });
+    }
+  }
+}
+
+function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+/** Put every node a drag is moving back where the drag started, on the
+ * canvas's tuned spring (AGENT_CURSOR_SPRING, as agent cursors and the
+ * camera move), and pulse the banner once. Local only: nothing is saved. */
+function springDragsBack(): void {
+  if (dragOrigins.size === 0) return;
+  const targets = new Map(dragOrigins);
+  dragOrigins.clear();
+  for (const id of targets.keys()) revertedDrags.add(id);
+  refuseEditWhileOffline();
+  const place = (positions: Map<string, { x: number; y: number }>) => useGraphStore.setState((state) => ({
+    nodes: state.nodes.map((node) => {
+      const at = positions.get(node.id);
+      return at ? { ...node, position: { x: at.x, y: at.y }, dragging: false } : node;
+    }),
+  }));
+  if (prefersReducedMotion() || typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+    place(targets);
+    return;
+  }
+  const springs = new Map<string, SpringState>();
+  for (const node of useGraphStore.getState().nodes) {
+    if (targets.has(node.id)) springs.set(node.id, { x: node.position.x, y: node.position.y, vx: 0, vy: 0 });
+  }
+  let last = performance.now();
+  const frame = (now: number) => {
+    const dt = Math.min(0.064, Math.max(0, (now - last) / 1000));
+    last = now;
+    let moving = false;
+    for (const [id, state] of springs) {
+      const target = targets.get(id)!;
+      const next = stepSpring(state, target, dt, AGENT_CURSOR_SPRING);
+      if (isAtRest(next, target)) springs.set(id, { ...target, vx: 0, vy: 0 });
+      else { springs.set(id, next); moving = true; }
+    }
+    place(new Map([...springs].map(([id, state]) => [id, { x: state.x, y: state.y }])));
+    if (moving) window.requestAnimationFrame(frame);
+  };
+  window.requestAnimationFrame(frame);
+}
+
+// The connection dropping during a drag puts its nodes back at once (the
+// drag may send no further move); reconnecting forgets the put-back drags.
+subscribeBackendConnection(() => {
+  if (isBackendOffline()) springDragsBack();
+  else revertedDrags.clear();
+});
 
 {
   const ungated = useGraphStore.getState();
@@ -6900,6 +7167,7 @@ function readOnlyChanges<C extends { type: string }>(changes: C[]): C[] {
     };
   }
   gated.onNodesChange = (changes) => {
+    if (!isBackendOffline()) noteDragOrigins(changes);
     const kept = readOnlyChanges(changes);
     if (kept.length > 0) ungated.onNodesChange(kept);
   };

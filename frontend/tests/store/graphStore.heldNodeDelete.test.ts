@@ -54,8 +54,10 @@ const BACKEND_UNLOCK = 'A World Labs run needs your check first. Use the notice 
 const BACKEND_FORGET = '“World Labs Environment” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run History.';
 const BACKEND_ACTIVE = 'A World Labs run is still starting. Try again in a moment.';
 // GM's lines (round 4, and round 4b for several nodes).
-const ONE_UNLOCK = "Couldn't delete the node. It's waiting on World Labs. Check Marble, then unlock it.";
-const ONE_FORGET = "Couldn't delete it. It's waiting on World Labs. Check Marble, then forget it in Run History.";
+// GM, round 15 of PR #114: one node reads "Couldn't delete “<node>”. <reason
+// line>", the shared World Labs reason with the button named.
+const ONE_UNLOCK = "Couldn't delete “World”. A World Labs run needs your check first. Use the notice at the top of the screen.";
+const ONE_FORGET = "Couldn't delete “World”. “World” has a saved World Labs recovery ID. Check the run in Marble, then use Forget ID in Run History.";
 const SOME_UNLOCK = "Couldn't delete them. One is waiting on World Labs. Check Marble, then unlock it.";
 const SOME_FORGET = "Couldn't delete them. One is waiting on World Labs. Check Marble, then use Run History.";
 const ALL_UNLOCK = "Couldn't delete them. They're waiting on World Labs. Check Marble, then unlock them.";

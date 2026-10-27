@@ -44,7 +44,6 @@ import { NODE_RENAME_EVENT } from '../lib/keyboardShortcuts';
 import { publishCanvasSelection, selectedNodeIds } from '../lib/canvasSelection';
 import '../styles/canvas.css';
 import { useBackendOffline } from '../lib/useBackendOffline';
-import { useReadOnlyFields } from '../hooks/useReadOnlyFields';
 
 const nodeTypes = CANVAS_NODE_TYPES;
 const edgeTypes = CANVAS_EDGE_TYPES;
@@ -320,7 +319,6 @@ export function Canvas() {
     initialFit.current = false;
   }, [rememberViewport]);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
-  useReadOnlyFields(wrapperRef, readOnly);
   const showContextMenu = useUIStore((s) => s.showContextMenu);
   const hideContextMenu = useUIStore((s) => s.hideContextMenu);
   const showConnectionPopup = useUIStore((s) => s.showConnectionPopup);

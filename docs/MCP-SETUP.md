@@ -1009,14 +1009,22 @@ Round 14 of PR #114 gave one World Labs state its own detail. When the
 backend started, if Nebula couldn't journal a World Labs recovery ID it read
 from the canvas, restoring a graph bundle (`POST /api/outputs/restore`,
 `load_graph_file` or `nebula load` with a `.nebula.zip`) first retries that
-journal write under the paid-start fence, as a run start does. If the retry
-works, the restore goes on. If the journal still can't be written, it
-refuses with 409: "Cannot restore a graph bundle: Nebula retried saving its
-World Labs recovery journal and couldn't write it. Restart the Nebula
-backend, then try again." (`load_graph_file` and `nebula load` put the
-file's path first). Retrying won't clear it; the person has to restart
-Nebula. The person's canvas reads the general line, "Try again, or reload if
-it keeps happening.", for now.
+journal write under the paid-start fence, as a run start does, then (since
+round 15) writes the journal for real and reads it back, so the retry
+succeeds only when the journal takes a write now. If it does, the restore
+goes on. If the journal still can't be written, it refuses with 409:
+"Cannot restore a graph bundle: Nebula retried saving its World Labs
+recovery journal and couldn't write it. Restart the Nebula backend, then
+try again." (`load_graph_file` and `nebula load` put the file's path
+first). Retrying won't clear it; the person has to restart Nebula. The
+person's canvas reads "Nebula couldn't save its World Labs safeguards.
+Restart Nebula, then try again." under its own heading. If it's the
+paid-start fence's own storage that can't be read or written, the restore
+answers 507 "Cannot restore a graph bundle because Nebula cannot verify the
+durable World Labs paid-start fence." instead, as any canvas replacement
+does then; that is a different store, and restarting Nebula is the fix
+there too. Ordinary edits and run starts that pass through the fence clear
+the bootstrap state the same way, only after a real journal write.
 
 Round 3c gave a node's run error the same split. `error` stays the
 handler's specific text, word for word, wherever agents read it: `get_run`
@@ -2363,7 +2371,12 @@ are temporary and never on the canvas, so nothing waits for it.
 While the person's tab can't reach Nebula, their canvas is read-only: its
 banner says "Nebula is offline. Editing is paused until it reconnects.", and
 their edits are blocked, not queued, because a restarted backend refuses
-replayed writes. You meet the same outage as a connect Nebula never took
+replayed writes. That covers everything their tab could change: canvas
+edits, Run (every run entry, so no paid run starts from a tab that only
+thinks Nebula is gone), Create's Generate, proposal Accept and Reject,
+Forget ID and the unlock, chat sends, settings, and project create, switch,
+rename and delete; the tab sends no write at all (only reads) and saves the
+project once Nebula answers again. You meet the same outage as a connect Nebula never took
 ("Nebula isn't running at <url>. Start Nebula, then retry."), and the tool's
 error then adds: "While Nebula is offline the person's canvas is read-only:
 nothing you or they edit is saved or queued. Once it's back, call start_here

@@ -37,6 +37,7 @@ import type { Edge, Node } from '@xyflow/react';
 import '../../styles/panels.css';
 import '../../styles/canvas-toolbar.css';
 import { refuseEditWhileOffline } from '../../lib/backendConnection';
+import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 
 const CLEAR_CANVAS = "Couldn't clear the canvas.";
 
@@ -54,6 +55,11 @@ export function Toolbar() {
   const isExecuting = useGraphStore((s) => s.isExecuting);
   const isImportingGraph = useGraphStore((s) => s.isImportingGraph);
   const isCancelling = useGraphStore((s) => s.isCancelling);
+  // Offline is read-only (GM, round 15 of PR #114): Run (and Stop) and the
+  // canvas actions that edit are disabled and look it; Save graph (a
+  // download), zoom and Reset panels stay.
+  const offline = useBackendOffline();
+  const off = offlineMark(offline);
   const canSave = useGraphStore(canSaveGraph);
   const canLoad = useGraphStore(canLoadGraph);
   const isPreparing = useGraphStore((s) => s.createLaunchingIds.length > 0);
@@ -255,7 +261,8 @@ export function Toolbar() {
           type="button"
           className="toolbar__button toolbar__button--primary toolbar__button--executing"
           onClick={() => void cancelExecution()}
-          disabled={isCancelling}
+          disabled={isCancelling || offline}
+          {...off}
           aria-busy={isCancelling}
           title={isCancelling ? 'Waiting for execution to stop safely' : 'Cancel execution'}
         >
@@ -267,7 +274,8 @@ export function Toolbar() {
           type="button"
           className="toolbar__button toolbar__button--primary"
           onClick={() => executeGraph()}
-          disabled={nodeCount === 0 || isImportingGraph}
+          disabled={nodeCount === 0 || isImportingGraph || offline}
+          {...off}
           aria-describedby={nodeCount > 0 ? runScopeId : undefined}
           title={isImportingGraph ? 'Wait for the graph import to finish' : `Run graph. ${describeRunScope(runScope)} (${displayKey('Mod')}${displayKey('Enter')})`}
         >
@@ -303,19 +311,19 @@ export function Toolbar() {
                 aria-keyshortcuts="Control+s Meta+s" onClick={() => runSecondaryAction(requestGraphSave)}>
                 <ToolbarIcon name="save" /><span>Save graph</span><kbd aria-hidden="true">Ctrl / ⌘ S</kbd>
               </button>
-              <button type="button" className="toolbar__action" disabled={!canLoad}
+              <button type="button" className="toolbar__action" disabled={!canLoad || offline} {...off}
                 aria-describedby={!canLoad ? blockedId : undefined}
                 title={!canLoad ? loadBlockedReason : 'Load graph (Ctrl+O or ⌘O)'}
                 aria-keyshortcuts="Control+o Meta+o" onClick={() => runSecondaryAction(requestGraphLoad)}>
                 <ToolbarIcon name="load" /><span>Load graph</span><kbd aria-hidden="true">Ctrl / ⌘ O</kbd>
               </button>
-              <button type="button" className="toolbar__action" disabled={!canLoad}
+              <button type="button" className="toolbar__action" disabled={!canLoad || offline} {...off}
                 aria-describedby={!canLoad ? blockedId : undefined}
                 title={!canLoad ? loadBlockedReason : 'Import graph built by Nebula CLI'}
                 onClick={() => runSecondaryAction(() => void handleImportCLI())}>
                 <ToolbarIcon name="cli" /><span>Import CLI graph</span>
               </button>
-              <button type="button" className="toolbar__action toolbar__action--danger" disabled={!canLoad}
+              <button type="button" className="toolbar__action toolbar__action--danger" disabled={!canLoad || offline} {...off}
                 aria-describedby={!canLoad ? blockedId : undefined}
                 title={!canLoad ? loadBlockedReason : 'Clear canvas — asks for confirmation'}
                 onClick={() => runSecondaryAction(() => void handleClear())}>
@@ -324,7 +332,7 @@ export function Toolbar() {
             </div>
             <div className="toolbar__action-group" role="group" aria-label="Canvas layout">
               <h2 className="toolbar__action-heading">Layout</h2>
-              <button type="button" className="toolbar__action" disabled={nodeCount === 0}
+              <button type="button" className="toolbar__action" disabled={nodeCount === 0 || offline} {...off}
                 title="Arrange nodes by dependency" onClick={() => runSecondaryAction(autoLayout)}>
                 <ToolbarIcon name="layout" /><span>Arrange nodes</span>
               </button>

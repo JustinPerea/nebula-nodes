@@ -765,10 +765,15 @@ Connections must match types; `Any` connects to anything.
    Nebula filing an unfiled canvas as "Recovered canvas" (the same graph and
    ids) is not a switch: your change and your run carry on.
 7. "Nebula isn't running at <url>" (and `cannot connect to Nebula backend`)
-   means the person's canvas is read-only too: their tab blocks edits until
-   Nebula is back, and nothing you or they edit meanwhile is saved or queued.
+   means the person's canvas is read-only too: their tab blocks edits, runs,
+   proposal Accept/Reject and every other write until Nebula is back, and
+   nothing you or they edit meanwhile is saved or queued.
    Once it's back, read the canvas again (`nebula graph`, MCP `start_here`)
    before you assume your plan landed.
 8. A bundle load refused with "Nebula retried saving its World Labs recovery
    journal and couldn't write it. Restart the Nebula backend, then try
-   again." won't clear by retrying: ask the person to restart Nebula.
+   again." won't clear by retrying (the retry already wrote the journal for
+   real and it failed): ask the person to restart Nebula. Their canvas reads
+   "Nebula couldn't save its World Labs safeguards. Restart Nebula, then try
+   again." A 507 that says Nebula "cannot verify the durable World Labs
+   paid-start fence" is the paid-start store instead; the same fix applies.

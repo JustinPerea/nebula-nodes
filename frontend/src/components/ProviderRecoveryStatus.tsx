@@ -4,8 +4,9 @@ import { useGraphStore } from '../store/graphStore';
 import { UNLOCK_NODE_HEADING } from '../lib/api';
 import { failureMessage } from '../lib/errorCopy';
 import {
-  UNLOCK_LABEL, WORLD_LABS_RUN_NEEDS_CHECK, WORLD_LABS_RUN_STATUS_UNKNOWN, moreNodesNeedCheck, recordNodeName, unlockAriaLabel, UNLOCK_RUN_ARIA,
+  UNLOCK_LABEL, UNLOCK_TITLE, WORLD_LABS_RUN_NEEDS_CHECK, WORLD_LABS_RUN_STATUS_UNKNOWN, moreNodesNeedCheck, recordNodeName, unlockAriaLabel, UNLOCK_RUN_ARIA,
 } from '../lib/worldLabsWaiting';
+import { offlineMark, useBackendOffline } from '../lib/useBackendOffline';
 
 /** Persistent paid-provider safety status. Recovery-journal write warnings may
  * be dismissed; an ambiguous paid start remains until the user explicitly says
@@ -26,6 +27,8 @@ export function ProviderRecoveryStatus() {
     (state) => state.acknowledgeUncertainWorldLabsRun,
   );
   const dismiss = useGraphStore((state) => state.dismissProviderRecoveryWarning);
+  // Offline is read-only (round 15 of PR #114): the unlock is disabled.
+  const offline = useBackendOffline();
   const [unlocking, setUnlocking] = useState<string | null>(null);
   const [unlockError, setUnlockError] = useState<string | null>(null);
   const ambiguity = ambiguities[0];
@@ -68,10 +71,11 @@ export function ProviderRecoveryStatus() {
           type="button"
           className="provider-recovery-status__ack"
           onClick={() => void unlock()}
-          disabled={unlocking === ambiguityKey}
+          disabled={unlocking === ambiguityKey || offline}
+          {...offlineMark(offline)}
           // GM, round 13 of PR #114: the node by its card title. No confirm.
           aria-label={unlockAriaLabel(heldTitle ?? recordNodeName([], ambiguity.nodeId, true))}
-          title="Only unlock after checking Marble for an accepted operation"
+          title={UNLOCK_TITLE}
         >
           <ShieldCheck size={15} strokeWidth={1.8} aria-hidden="true" />
           {unlocking === ambiguityKey ? 'Unlocking…' : UNLOCK_LABEL}
@@ -81,9 +85,11 @@ export function ProviderRecoveryStatus() {
           type="button"
           className="provider-recovery-status__ack"
           onClick={acknowledgeUncertainRun}
+          disabled={offline}
+          {...offlineMark(offline)}
           // No node to name: GM's line (round 14 of PR #114).
           aria-label={UNLOCK_RUN_ARIA}
-          title="Only unlock after checking Marble for an accepted operation"
+          title={UNLOCK_TITLE}
         >
           <ShieldCheck size={15} strokeWidth={1.8} aria-hidden="true" />
           {UNLOCK_LABEL}

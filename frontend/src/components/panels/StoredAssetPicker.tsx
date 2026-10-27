@@ -12,12 +12,15 @@ import {
   type StoredAssetKind,
   type StoredAssetSummary,
 } from '../../store/storedAssetsStore';
+import { offlineMark } from '../../lib/useBackendOffline';
 
 interface StoredAssetPickerProps {
   kind: StoredAssetKind;
   label: string;
   value: string;
   onChange: (id: string) => void;
+  /** Offline: the choice is read-only (round 15 of PR #114). */
+  readOnly?: boolean;
 }
 
 const NOUN: Record<StoredAssetKind, string> = { moodboard: 'board', character: 'character' };
@@ -41,7 +44,7 @@ async function listAssets(kind: StoredAssetKind, projectId: string | null): Prom
  * The Inspector control for a `moodboard` or `character` param: which saved
  * asset the node shows. The value is the asset's id, the same one agents set.
  */
-export function StoredAssetPicker({ kind, label, value, onChange }: StoredAssetPickerProps) {
+export function StoredAssetPicker({ kind, label, value, onChange, readOnly = false }: StoredAssetPickerProps) {
   const enterMoodboardEditor = useUIStore((s) => s.enterMoodboardEditor);
   const enterCharacterEditor = useUIStore((s) => s.enterCharacterEditor);
   const current = useStoredAsset(kind, value);
@@ -78,6 +81,8 @@ export function StoredAssetPicker({ kind, label, value, onChange }: StoredAssetP
         className="inspector__field"
         aria-label={label}
         value={value}
+        disabled={readOnly}
+        {...offlineMark(readOnly)}
         onChange={(e) => onChange(e.target.value)}
       >
         {!value && <option value="">{options === null ? 'Loading…' : `Choose a ${NOUN[kind]}…`}</option>}

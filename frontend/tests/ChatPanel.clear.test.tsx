@@ -194,3 +194,27 @@ describe('/clear with no answer or a 5xx keeps its undo step (round 13)', () => 
     expect(useGraphStore.getState().undoStack).toHaveLength(0);
   });
 });
+
+// Round 15 of PR #114 (review 14, M2): a chat message asks an agent to edit
+// the canvas, so while Nebula is offline Send is disabled (with the offline
+// mark) and Enter sends nothing; the typed message stays.
+describe('the chat while Nebula is offline', () => {
+  it('Send is disabled, Enter sends nothing and the message stays typed', async () => {
+    const { noteBackendConnection, resetBackendConnectionForTests } = await import('../src/lib/backendConnection');
+    resetBackendConnectionForTests();
+    render(<ChatPanel />);
+    await waitFor(() => expect(ChatSocket.instances).toHaveLength(1));
+    await act(async () => ChatSocket.instances[0].open());
+    const sent = vi.spyOn(ChatSocket.instances[0], 'send');
+    const input = screen.getByPlaceholderText('Message…');
+    fireEvent.change(input, { target: { value: 'Add a harbor scene' } });
+    act(() => noteBackendConnection('offline'));
+    const send = screen.getByRole('button', { name: /^Send/ });
+    expect(send).toBeDisabled();
+    expect(send).toHaveAttribute('data-offline-disabled');
+    await act(async () => { fireEvent.keyDown(input, { key: 'Enter', shiftKey: false }); });
+    expect(sent).not.toHaveBeenCalled();
+    expect(screen.getByPlaceholderText('Message…')).toHaveValue('Add a harbor scene');
+    resetBackendConnectionForTests();
+  });
+});

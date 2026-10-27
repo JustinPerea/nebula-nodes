@@ -507,3 +507,24 @@ describe("round 3e: every Projects action reads a plain Error through GM's mappi
     expect(useProjectStore.getState().error).toBe("Couldn't rename the project. Nebula didn't respond. Try again.");
   });
 });
+
+// Round 15 of PR #114: offline is read-only, and an autosave is held, not
+// failed. Nothing is sent, the header keeps "Unsaved changes" (no "Save
+// failed · Retry", no toast), and the save goes by itself once Nebula answers.
+describe('Projects: an autosave while offline', () => {
+  it('is held (not sent, not an error) and saves on reconnect', async () => {
+    const { noteBackendConnection, resetBackendConnectionForTests } = await import('../src/lib/backendConnection');
+    resetBackendConnectionForTests();
+    await useProjectStore.getState().open('alpha');
+    vi.mocked(projects.saveProject).mockClear();
+    noteBackendConnection('offline');
+    useGraphStore.setState({ nodes: [{ ...project().snapshot.nodes[0], data: { ...project().snapshot.nodes[0].data, params: { value: 'edited before the drop' } } }] });
+    await useProjectStore.getState().flush();
+    expect(projects.saveProject).not.toHaveBeenCalled();
+    expect(useProjectStore.getState()).toMatchObject({ dirty: true, saveStatus: 'unsaved', saveError: null, error: null });
+    noteBackendConnection('online');
+    await vi.waitFor(() => expect(useProjectStore.getState().saveStatus).toBe('saved'));
+    expect(projects.saveProject).toHaveBeenCalledTimes(1);
+    resetBackendConnectionForTests();
+  });
+});

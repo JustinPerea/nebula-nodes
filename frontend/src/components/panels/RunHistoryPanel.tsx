@@ -7,7 +7,7 @@ import { PaperRunInspection } from './PaperRunInspection';
 import { BatchRunInspection } from './BatchRunInspection';
 import { ScrollFade } from '../ScrollFade';
 import { ForgetRecoveryConfirm } from './ForgetRecoveryConfirm';
-import { FORGET_LABEL, forgetAriaLabel, recordNodeName, recoveryIdLabel } from '../../lib/worldLabsWaiting';
+import { FORGET_LABEL, FORGET_TITLE, forgetAriaLabel, recordNodeName, recoveryIdLabel } from '../../lib/worldLabsWaiting';
 import { FORGET_RECOVERY_HEADING } from '../../lib/api';
 import { failureMessage } from '../../lib/errorCopy';
 import { showNotice } from '../../lib/canvasNotice';
@@ -22,6 +22,7 @@ import {
 } from '../../lib/runHistory';
 import '../../styles/panels.css';
 import '../../styles/run-history.css';
+import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 
 const STATUS_LABEL: Record<RunRecord['status'], string> = {
   running: 'Running',
@@ -52,6 +53,10 @@ export function RunHistoryPanel() {
   const isExecuting = useGraphStore((s) => s.isExecuting);
   const isCancelling = useGraphStore((s) => s.isCancelling);
   const cancelExecution = useGraphStore((s) => s.cancelExecution);
+  // Offline is read-only (round 15 of PR #114): Stop, Rerun, Retry, Recover
+  // and Forget ID are disabled and look it.
+  const offline = useBackendOffline();
+  const off = offlineMark(offline);
 
   const [now, setNow] = useState(() => Date.now());
   const [clearingRecovery, setClearingRecovery] = useState<string | null>(null);
@@ -100,7 +105,8 @@ export function RunHistoryPanel() {
             type="button"
             className="panel__header-action run-history__action"
             onClick={() => void cancelExecution()}
-            disabled={!isExecuting || isCancelling}
+            disabled={!isExecuting || isCancelling || offline}
+            {...off}
             aria-busy={isCancelling}
             aria-label="Cancel running execution"
             title={isCancelling
@@ -165,12 +171,14 @@ export function RunHistoryPanel() {
                       <button
                         type="button"
                         onClick={() => setConfirmingForget({ runId: checkpoint.runId, nodeId: checkpoint.nodeId })}
-                        disabled={isExecuting || clearingRecovery === key}
+                        disabled={isExecuting || clearingRecovery === key || offline}
+                        {...off}
                         // GM, round 14: its name says which ID it forgets;
                         // its row (node and ID) stays its description.
                         aria-label={forgetAriaLabel(recordNodeName(nodes, checkpoint.nodeId, true))}
                         aria-describedby={`run-history-recovery-${key}`}
-                        title="Check Marble first; forgetting permits a future fresh paid request"
+                        // GM, round 15 of PR #114.
+                        title={FORGET_TITLE}
                       >
                         <ShieldCheck size={11} aria-hidden="true" />
                         {clearingRecovery === key ? 'Clearing…' : FORGET_LABEL}
@@ -251,7 +259,8 @@ export function RunHistoryPanel() {
                           if (r.status === 'failed') void retryFailedRun(r.id);
                           else void rerunHistoryRecord(r.id);
                         }}
-                        disabled={isExecuting}
+                        disabled={isExecuting || offline}
+                        {...off}
                         aria-label={recoveryReplayReady
                           ? `Recover ${runTriggerLabel(r.trigger)} run`
                           : r.status === 'failed'
@@ -270,7 +279,8 @@ export function RunHistoryPanel() {
                         <button
                           type="button"
                           className="run-history__replay"
-                          disabled={isExecuting || !latestSourceReady}
+                          disabled={isExecuting || !latestSourceReady || offline}
+                          {...off}
                           onClick={() => void rerunHistoryWithLatestPaperSource(r.id)}
                           aria-label={`Rerun ${runTriggerLabel(r.trigger)} with latest source`}
                           title={latestSourceReady
@@ -295,7 +305,6 @@ export function RunHistoryPanel() {
       {confirmingForget && visible && (
         <ForgetRecoveryConfirm
           name={recordNodeName(nodes, confirmingForget.nodeId, true)}
-          closing={exiting}
           onCancel={() => setConfirmingForget(null)}
           onConfirm={() => {
             const { runId, nodeId } = confirmingForget;

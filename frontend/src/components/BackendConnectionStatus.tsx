@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiFetch } from '../lib/backend';
-import { noteProbeAnswer, startHealthProbe, subscribeOfflinePulse } from '../lib/backendConnection';
-import { useBackendOffline } from '../lib/useBackendOffline';
+import { noteProbeAnswer, refuseEditWhileOffline, startHealthProbe, subscribeOfflinePulse } from '../lib/backendConnection';
+import { OFFLINE_MARK, useBackendOffline } from '../lib/useBackendOffline';
 
 export const BACKEND_PROBE_INTERVAL_MS = 3_000;
 
@@ -46,6 +46,19 @@ export function BackendConnectionStatus() {
       window.clearInterval(interval);
     };
   }, []);
+
+  // A press on a control disabled because Nebula is offline (OFFLINE_MARK),
+  // or on a port of the read-only canvas, pulses the banner. One listener on
+  // the document; nothing watches the DOM (review 14, H1).
+  useEffect(() => {
+    if (!offline) return;
+    const pressed = (event: PointerEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest(`[${OFFLINE_MARK}], .canvas--read-only .react-flow__handle`)) refuseEditWhileOffline();
+    };
+    document.addEventListener('pointerdown', pressed, true);
+    return () => document.removeEventListener('pointerdown', pressed, true);
+  }, [offline]);
 
   useEffect(() => subscribeOfflinePulse(() => {
     const reduce = typeof window.matchMedia === 'function'

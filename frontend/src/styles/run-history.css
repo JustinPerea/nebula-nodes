@@ -226,10 +226,19 @@ body.app-slava-restraint .run-history__safeguards {
   background: color-mix(in srgb, var(--sr-warning, #f5c518) 10%, transparent);
   color: var(--sr-ink, #1a1a1a);
 }
+/* Review 14, L6: --sr-paper is defined nowhere, so its fallback put white
+   text on a 72% white pill and Forget ID looked disabled online. It takes the
+   Rerun button's surface (defined tokens). */
 body.app-slava-restraint .run-history__safeguards button {
-  border: 1px solid var(--sr-edge, rgba(0, 0, 0, 0.14));
-  background: var(--sr-paper, rgba(255, 255, 255, 0.72));
-  color: inherit;
+  border: 1px solid var(--sr-edge-strong, rgba(255, 255, 255, 0.12));
+  background: var(--sr-glass-raised, rgba(28, 28, 31, 0.78));
+  color: var(--sr-ink, rgba(255, 255, 255, 0.92));
+}
+body.app-slava-restraint .run-history__safeguards button:not(:disabled):hover {
+  background: var(--sr-glass-strong, rgba(36, 36, 40, 0.86));
+}
+body.app-slava-restraint .run-history__safeguards button:disabled {
+  opacity: 0.45;
 }
 body.app-slava-restraint .run-history__replay {
   border: 1px solid var(--sr-edge-strong, rgba(255, 255, 255, 0.12));

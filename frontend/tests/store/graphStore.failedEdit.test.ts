@@ -112,12 +112,23 @@ describe('a failed model change', () => {
     expect(useGraphStore.getState().nodes.find((node) => node.id === 'n4')?.data.params.model).toBe('openai/gpt-5');
   });
 
-  it('Replicate: the same line', async () => {
+  // Review 14, L3: the model the backend configured (its ports stamp), not
+  // the id typed in the Model ID field, which may be the new one.
+  it('Replicate: the same line, naming the configured model', async () => {
     useGraphStore.setState((state) => ({ nodes: state.nodes.map((node) => node.id !== 'n4' ? node
-      : { ...node, data: { ...node.data, label: 'Upscaler', definitionId: 'replicate-universal', params: { model_id: 'acme/up' } } }) }));
+      : { ...node, data: { ...node.data, label: 'Upscaler', definitionId: 'replicate-universal',
+        params: { model_id: 'acme/other', _model_ports: { model: 'acme/up' } } } }) }));
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     await useGraphStore.getState().fetchReplicateSchemaAndConfigure('n4', 'acme', 'other');
     expect(alerted()).toEqual(["Couldn't change the model for “Upscaler”. It's still on acme/up."]);
+  });
+
+  it('Replicate never configured: only the first sentence (the typed id is not what it is on)', async () => {
+    useGraphStore.setState((state) => ({ nodes: state.nodes.map((node) => node.id !== 'n4' ? node
+      : { ...node, data: { ...node.data, label: 'Upscaler', definitionId: 'replicate-universal', params: { model_id: 'acme/up' } } }) }));
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await useGraphStore.getState().fetchReplicateSchemaAndConfigure('n4', 'acme', 'up');
+    expect(alerted()).toEqual(["Couldn't change the model for “Upscaler”."]);
   });
 
   it('no model yet: only the first sentence', async () => {

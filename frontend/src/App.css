@@ -85,12 +85,19 @@ a {
   .backend-connection[data-pulse='spring'] { animation: backend-offline-flash 600ms steps(1, end) both; }
 }
 
-/* Offline is read-only (GM, round 14): what would edit shows not-allowed,
-   nodes and handles don't drag, and fields are disabled (ReadOnlyFields). */
+/* Offline is read-only (GM, rounds 14 and 15): what would edit shows
+   not-allowed, nodes and handles don't drag, and every control that edits
+   renders disabled with the offline mark (lib/useBackendOffline.ts). The
+   cursor wins over a control's own disabled cursor (the selection toolbar's
+   is `default`); a control's own disabled dimming, where it has one, wins
+   over the 0.6 here. */
 .canvas--read-only .react-flow__node,
-.canvas--read-only .react-flow__handle,
-[data-offline-disabled] {
+.canvas--read-only .react-flow__handle {
   cursor: not-allowed;
+}
+
+[data-offline-disabled] {
+  cursor: not-allowed !important;
 }
 
 [data-offline-disabled] {

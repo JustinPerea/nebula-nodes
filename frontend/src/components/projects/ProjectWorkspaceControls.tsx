@@ -4,7 +4,8 @@ import { useProjectStore } from '../../store/projectStore';
 import { useGraphStore } from '../../store/graphStore';
 import { shortLine } from '../../lib/errorCopy';
 import { HEADER_TOOLTIP, headerLine } from '../../lib/savePausedCopy';
-import { useBackendOffline } from '../../lib/useBackendOffline';
+import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { isBackendOffline, refuseEditWhileOffline } from '../../lib/backendConnection';
 import './ProjectWorkspaceControls.css';
 
 /** `onHome`: the screen's own way to Projects (the Commons asks first); `homeBusy`: it waits on a save. */
@@ -39,16 +40,21 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
       {draft !== null
         ? <input className="project-workspace-controls__name project-workspace-controls__name-input" aria-label="Project name"
             autoFocus maxLength={120} value={draft} onFocus={(event) => event.target.select()}
-            onChange={(event) => setDraft(event.target.value)} onBlur={() => finishRename(true)}
+            // Offline (round 15 of PR #114): disabled with its draft kept, as a node's rename.
+            disabled={offline} {...offlineMark(offline)}
+            onChange={(event) => setDraft(event.target.value)} onBlur={() => { if (!isBackendOffline()) finishRename(true); }}
             onKeyDown={(event) => {
               if (event.key === 'Enter') { event.preventDefault(); finishRename(true); }
               else if (event.key === 'Escape') { event.preventDefault(); finishRename(false); }
             }} />
         : <button type="button" className="project-workspace-controls__name" title={`${project.name} · double-click to rename`}
             aria-label={`Rename project ${project.name}`} disabled={busy}
-            onDoubleClick={() => setDraft(project.name)}
+            onDoubleClick={() => { if (!refuseEditWhileOffline()) setDraft(project.name); }}
             onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === 'F2') { event.preventDefault(); setDraft(project.name); }
+              if (event.key === 'Enter' || event.key === 'F2') {
+                event.preventDefault();
+                if (!refuseEditWhileOffline()) setDraft(project.name);
+              }
             }}>{project.name}</button>}
       {status === 'paused' && pausedBytes !== null
         // Q118 (GM): the persistent state, where "Saved" usually is, in Save

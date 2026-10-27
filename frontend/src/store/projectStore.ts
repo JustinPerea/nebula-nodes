@@ -23,6 +23,7 @@ import { isOwnEcho, type EditOrigin } from '../lib/canvasUndo';
 import { TAB_ID } from '../lib/tabId';
 import { holdCommonsExits, holdProjects, refuseWhileCommonsUnsaved } from '../lib/commonsUnsaved';
 import { showNotice } from '../lib/canvasNotice';
+import { isBackendOffline, isOfflineRefusal, subscribeBackendConnection } from '../lib/backendConnection';
 import {
   FailureNotice, PERSON_REQUIRED_CODE, REFUSED_FALLBACK_COPY, RequestFailedError, canTryAgain, failureCopy, failureDetails,
   failureMessage, oneLine, shortReason,
@@ -528,6 +529,9 @@ const RETRY_HEADINGS: Record<ProjectRetry['action'], string> = {
  * round 3e): a written failure keeps its heading and reason, anything else
  * reads the action's heading over GM's general line, never its own message. */
 function showError(error: unknown, retry: ProjectRetry | null = null): void {
+  // Refused while offline (round 15): nothing was sent and nothing is said;
+  // the banner pulsed.
+  if (isOfflineRefusal(error)) return;
   const line = failureMessage(error, RETRY_HEADINGS[retry?.action ?? 'save']);
   useProjectStore.setState({ error: line, errorDetails: detailsFor(line, error),
     errorRetry: refusedForGood(error) ? null : retry });
@@ -1465,6 +1469,12 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
         if (wasPaused) resumeSaving(bytes);
         return false;
       }
+      // Offline: held, not sent and not a refused edit (no pulse); it goes
+      // when Nebula answers again (the subscriber at the end of this file).
+      if (isBackendOffline()) {
+        set({ dirty: true, saveStatus: state.savePaused ? 'paused' : 'unsaved' });
+        return false;
+      }
       const captured = { person: personChanges, foreign: foreignEdits };
       // Only the canvas's own changes since the last save (saveCanvasChange):
       // "Saved" stays as it is while they go.
@@ -1503,6 +1513,12 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
         set({ dirty: true, saveStatus: 'saved' });
         return canvasTimer === null;
       } catch (error) {
+        // Offline (round 15): nothing was sent. Not a failed save: it stays
+        // "Unsaved changes" and saves by itself once Nebula answers again.
+        if (isOfflineRefusal(error)) {
+          set({ dirty: true, saveStatus: state.savePaused ? 'paused' : 'unsaved' });
+          return false;
+        }
         // The backend counted it over the limit (Q118): paused on its number,
         // not a failed save.
         if (error instanceof RequestFailedError && error.overSaveLimit
@@ -1735,3 +1751,10 @@ export function subscribeProjectAutosave(): () => void {
     cancelPendingSaves();
   };
 }
+
+// Back online (round 15): a save the offline gate held goes now.
+subscribeBackendConnection(() => {
+  const project = useProjectStore.getState();
+  if (isBackendOffline() || !project.dirty || project.saveStatus === 'error') return;
+  void project.flush().catch(() => { /* Visible retry state. */ });
+});

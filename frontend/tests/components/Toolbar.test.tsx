@@ -455,4 +455,31 @@ describe('Canvas toolbar hierarchy', () => {
       window.removeEventListener('nebula:layout-reset', resetEvent);
     }
   });
+
+  // Round 15 of PR #114 (GM): offline is read-only and looks it. The bottom
+  // Run is disabled (nothing queues, no Stop starts); Load graph, Import CLI,
+  // Clear and Arrange are disabled with the offline mark; Save graph (a
+  // download), zoom and Reset panels stay.
+  it('offline: Run and the canvas-changing actions are disabled; Save graph and Reset panels stay', async () => {
+    const { noteBackendConnection, resetBackendConnectionForTests } = await import('../../src/lib/backendConnection');
+    resetBackendConnectionForTests();
+    render(<Toolbar />);
+    act(() => noteBackendConnection('offline'));
+    const run = screen.getByRole('button', { name: 'Run' });
+    expect(run).toBeDisabled();
+    expect(run).toHaveAttribute('data-offline-disabled');
+    fireEvent.click(run);
+    expect(mocks.execute).not.toHaveBeenCalled();
+    const { panel } = openActions();
+    const named = (label: RegExp) => within(panel).getByRole('button', { name: label });
+    expect(named(/^Load graph/)).toBeDisabled();
+    expect(named(/^Import CLI graph/)).toBeDisabled();
+    expect(named(/^Clear canvas/)).toBeDisabled();
+    expect(named(/^Arrange nodes/)).toBeDisabled();
+    expect(named(/^Save graph/)).toBeEnabled();
+    expect(named(/^Reset panels/)).toBeEnabled();
+    act(() => noteBackendConnection('online'));
+    expect(screen.getByRole('button', { name: 'Run' })).toBeEnabled();
+    resetBackendConnectionForTests();
+  });
 });

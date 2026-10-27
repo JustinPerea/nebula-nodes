@@ -13,6 +13,7 @@ import {
   type RunRecord,
 } from '../src/lib/runHistory';
 import { noticeSpy } from './helpers/noticeSpy';
+import { noteBackendConnection, resetBackendConnectionForTests } from '../src/lib/backendConnection';
 
 const INITIAL_GRAPH_STATE = { ...useGraphStore.getState() };
 const INITIAL_UI_STATE = { ...useUIStore.getState() };
@@ -423,9 +424,18 @@ describe('RunHistoryPanel replay actions', () => {
     vi.useRealTimers();
   });
 
-  it('the dialog\'s buttons are disabled while the panel is closing', () => {
-    render(<ForgetRecoveryConfirm name="“Harbor world”" closing onCancel={() => {}} onConfirm={() => {}} />);
-    for (const button of within(screen.getByRole('alertdialog')).getAllByRole('button')) expect(button).toBeDisabled();
+  it('offline, the dialog\'s Forget ID is disabled and Cancel still closes it (round 15)', () => {
+    const onCancel = vi.fn();
+    const onConfirm = vi.fn();
+    noteBackendConnection('offline');
+    render(<ForgetRecoveryConfirm name="“Harbor world”" onCancel={onCancel} onConfirm={onConfirm} />);
+    const dialog = within(screen.getByRole('alertdialog'));
+    expect(dialog.getByRole('button', { name: 'Forget ID' })).toBeDisabled();
+    fireEvent.click(dialog.getByRole('button', { name: 'Forget ID' }));
+    expect(onConfirm).not.toHaveBeenCalled();
+    fireEvent.click(dialog.getByRole('button', { name: 'Cancel' }));
+    expect(onCancel).toHaveBeenCalled();
+    resetBackendConnectionForTests();
   });
 
   it('shows the World Labs local-only cancellation caveat in the run record', () => {

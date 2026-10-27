@@ -650,12 +650,16 @@ def test_restoring_a_bundle_names_a_recovery_records_node_by_its_card_title(canv
     assert response.json()["detail"] == RECOVERY("Harbor world")
 
 
-def test_a_bootstrap_error_reads_the_general_line_until_gm_words_it(canvas, monkeypatch):
-    """GM's "Reload the page and try again." holds only if a reload re-runs
-    the boot seeding, and it doesn't (round 13 notes)."""
+def test_a_bootstrap_error_reads_gms_restart_line(canvas, monkeypatch):
+    """GM, round 15 of PR #114 (item 5): "Couldn't <action>. Nebula couldn't
+    save its World Labs safeguards. Restart Nebula, then try again." The
+    screen's heading names the action; a reload doesn't re-run the boot
+    seeding (round 13 notes), so the line says restart."""
     import main as main_module
 
     monkeypatch.setattr(main_module, "_graph_recovery_bootstrap_error", "journal unavailable")
+    monkeypatch.setattr(main_module, "_retry_graph_recovery_bootstrap", lambda _action: False)
     response = canvas.client.post("/api/outputs/restore", content=b"", headers=PERSON)
     assert response.status_code == 409
-    assert response.json()["detail"] == "Try again, or reload if it keeps happening."
+    assert response.json()["detail"] == (
+        "Nebula couldn't save its World Labs safeguards. Restart Nebula, then try again.")
