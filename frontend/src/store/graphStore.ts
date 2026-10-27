@@ -79,7 +79,7 @@ import {
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 import { WORLD_LABS_STATUS_UNCERTAIN_WARNING, deleteRefusalText, heldDeleteText } from '../lib/worldLabsWaiting';
 import {
-  CONNECTION_LOST_COPY, FailureNotice, REFUSED_FALLBACK_COPY, copyForAnswer, failureCopy, failureDetails, failureMessage, readRefusal, requestError,
+  CONNECTION_LOST_COPY, FailureNotice, REFUSED_FALLBACK_COPY, copyForAnswer, failureCopy, isBackendUnreachable, failureDetails, failureMessage, readRefusal, requestError,
   warnFailure,
 } from '../lib/errorCopy';
 import { CANVAS_NOTICE_EVENT, showNotice, type CanvasNoticeDetail } from '../lib/canvasNotice';
@@ -113,7 +113,9 @@ import { validateManifest } from '../lib/video/manifestValidator';
 import { componentTypeToCanvasDefId, pruneTrackItemsForDeletedNode } from '../lib/video/mirroring';
 import { isPortCompatible } from '../lib/portCompatibility';
 import { STALE_CANVAS_DETAIL, adoptCanvasRevision, getProjectContext, type ProjectContext } from '../lib/projectContext';
-import { savingCutOffLine, type CutOffEnding, type CutOffSave } from '../lib/savingCutOff';
+import { agentClearedLine, handoffFailedLine, savingCutOffLine, type CutOffEnding, type CutOffSave } from '../lib/savingCutOff';
+import { deleteNoAnswerLine } from '../lib/deleteCopy';
+import { followingSwitch, refuseEditWhileFollowing, runWhileFollowingLine } from '../lib/canvasFollow';
 import { boundingRect, findOpenGroupOffset, UNMEASURED_NODE_SIZE, type NodeRect } from '../lib/nodePlacement';
 import { withParamDefaults } from '../lib/paramDefaults';
 import { replaceChanged, shareUnchanged } from '../lib/structuralShare';
@@ -477,7 +479,12 @@ export interface UndoNotice {
   /** 'error': a failure that used to be a window.alert (round 3f, GM: "Every
    * error alert becomes a canvas notice"), announced as role="alert". */
   tone?: 'error' | 'info';
+  /** GM, round 20: "Open copy" beside the failed handoff's line. */
+  copy?: NoticeCopy;
 }
+
+/** The project a line's "Open copy" opens (the copy a failed handoff saved). */
+export interface NoticeCopy { projectId: string }
 
 let undoNoticeSeq = 0;
 
@@ -515,6 +522,7 @@ export interface MessageNotice {
   id: number;
   text: string;
   tone: 'error' | 'info';
+  copy?: NoticeCopy;
 }
 
 /** Whether a notice's Undo or Redo still applies: its step is next in line on its stack. */
@@ -1037,12 +1045,16 @@ interface GraphState {
    *  saves still on their way, for the handoff's line; `force`: the
    *  handoff must be sent even when the canvas matches what was last saved
    *  (a write or an undo Nebula may not have, so its switch saved without it). */
-  beginAgentSwitch: () => { cutOff: CutOffSave[]; force: boolean };
+  beginAgentSwitch: () => { cutOff: CutOffSave[]; force: boolean; pending: HandoffPending };
   /** The switch or import is done (`report`: the canvas now shown is the new
    *  one, with GM's line when `show`), or didn't happen (null). The writes
-   *  that waited go now, under their own admission. */
+   *  that waited go now, under their own admission. `copy`: the copy a
+   *  failed handoff saved the person's edits to (GM, round 20). */
   finishCanvasReplacement: (report: { kind: 'switch' | 'import' | 'agent'; agent?: string | null; project: string;
-    cutOff: CutOffSave[]; show: boolean } | null) => void;
+    cutOff: CutOffSave[]; show: boolean; copy?: { id: string; name: string } | null } | null) => void;
+  /** Round 20: a node's title field holds a name the person hasn't saved
+   *  (NodeLabel), or no longer does (null). */
+  noteRenameDraft: (nodeId: string, draft: string | null) => void;
   /** The open project's name, for GM's line after an agent's import. */
   setCanvasProjectName: (read: () => string | null) => void;
   loadProjectGraph: (nodes: Node<NodeData>[], edges: Edge[], history: RunRecord[],
@@ -1660,16 +1672,19 @@ class RestoreTimeout extends Error {}
 
 /** A write from its admission to its answer. `save`: what it saves, as the
  * line names it (read at admission, while its node is on the canvas). */
-interface TrackedWrite { graph: number; seq: number; restore: boolean; save: CutOffSave; counted: boolean }
+interface TrackedWrite { graph: number; seq: number; restore: boolean; saves: CutOffSave[]; counted: boolean }
 const liveWrites = new Set<TrackedWrite>();
 
 /** New writes wait here while a switch or an import drains (writeGate). */
 interface WriteGate { fromSeq: number; opened: Promise<void>; open: () => void }
 let writeGate: WriteGate | null = null;
 
-/** The drain under way: the writes it waits for, and those that didn't make it. */
+/** A drain under way: the writes it waits for, and those that didn't make
+ * it. Review 19, L4: each drain keeps its own (Open pressed while Load graph
+ * drains, or the reverse), so a save that landed is never named as cut off
+ * by the first because the second took the slot. */
 interface Drain { watching: Set<TrackedWrite>; cutOff: TrackedWrite[]; changed: () => void }
-let drain: Drain | null = null;
+const drains = new Set<Drain>();
 
 /** The line about saves a replacement cut off: for the canvas now shown. */
 interface ReplacementReport { graph: number; project: string | null; ending: CutOffEnding | null; saves: CutOffSave[]; noticeId: number | null }
@@ -1677,31 +1692,42 @@ let replacementReport: ReplacementReport | null = null;
 /** The open project's name, for that line (projectStore registers it). */
 let canvasProjectName: () => string | null = () => null;
 
-/** What a write saves, as GM's line names it: one setting of one node, or
- * nothing in particular ("your last change"). */
-function describeSave(path: string, init?: RequestInit): CutOffSave {
+/** What a write saves, as GM's lines name it: one entry per setting it
+ * carries (round 20: the agent-clear and handoff lines count settings), or
+ * one unnamed entry for a write that saves nothing in particular ("your last
+ * change"). A key with no label is never shown raw (GM, round 16): unnamed. */
+function describeSaves(path: string, init?: RequestInit): CutOffSave[] {
   const match = /^\/api\/graph\/node\/(n\d+)$/.exec(path);
-  if (!match || String(init?.method ?? 'GET').toUpperCase() !== 'PUT') return { node: null, setting: null };
+  if (!match || String(init?.method ?? 'GET').toUpperCase() !== 'PUT') return [{ node: null, setting: null }];
   const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === match[1]);
-  if (!node) return { node: null, setting: null };
+  if (!node) return [{ node: null, setting: null }];
   const definition = NODE_DEFINITIONS[node.data.definitionId];
   const title = nodeTitle(definition, node.data.label) || null;
   let keys: string[] = [];
   try { keys = Object.keys((JSON.parse(String(init?.body ?? '{}')) as { params?: object }).params ?? {}); } catch { keys = []; }
-  if (keys.length !== 1) return { node: title, setting: null };
-  const param = (definition ? allParamDefinitions(definition) : []).find((candidate) => candidate.key === keys[0])
-    ?? (node.data.dynamicParams as Array<{ key: string; label?: string }> | undefined)?.find((candidate) => candidate.key === keys[0]);
-  // Never a raw key (GM, round 16): with no label the line says "your last change".
-  return { node: title, setting: param?.label || null };
+  if (keys.length === 0) return [{ node: title, setting: null }];
+  return keys.map((key) => {
+    const param = (definition ? allParamDefinitions(definition) : []).find((candidate) => candidate.key === key)
+      ?? (node.data.dynamicParams as Array<{ key: string; label?: string }> | undefined)?.find((candidate) => candidate.key === key);
+    return { node: title, setting: param?.label || null };
+  });
+}
+
+/** A rename: "Name" (GM, round 20), for the node as its card showed it before. */
+function renameSave(node: Node<NodeData>, previous: string | undefined): CutOffSave[] {
+  const title = nodeTitle(NODE_DEFINITIONS[node.data.definitionId], previous ?? node.data.label) || null;
+  return [{ node: title, setting: 'Name' }];
 }
 
 function settleTracked(write: TrackedWrite, ok: boolean): void {
   liveWrites.delete(write);
   if (write.graph !== canvasReplacementRevision) lastCutOffAt = Date.now();
-  if (!drain?.watching.has(write)) return;
-  drain.watching.delete(write);
-  if (!ok) { drain.cutOff.push(write); write.counted = true; }
-  drain.changed();
+  for (const drain of drains) {
+    if (!drain.watching.has(write)) continue;
+    drain.watching.delete(write);
+    if (!ok) { drain.cutOff.push(write); write.counted = true; }
+    drain.changed();
+  }
 }
 
 /** A write made for a canvas that was replaced since (a switch, an import,
@@ -1712,13 +1738,14 @@ function noteCutOff(write: TrackedWrite): void {
   write.counted = true;
   const report = replacementReport;
   if (!report || report.graph !== canvasReplacementRevision) return;
-  report.saves.push(write.save);
+  report.saves.push(...write.saves);
   showReplacementReport();
 }
 
 function showReplacementReport(): void {
   const report = replacementReport;
-  if (!report?.ending || !report.project || report.saves.length === 0) return;
+  if (!report?.ending || report.saves.length === 0 || clearReportWaiting) return;
+  const ending = report.ending;
   const seen = new Set<string>();
   const saves = report.saves.filter((save) => {
     const key = `${save.node}\u0000${save.setting}`;
@@ -1726,16 +1753,30 @@ function showReplacementReport(): void {
     seen.add(key);
     return true;
   });
-  const text = savingCutOffLine(saves, report.project, report.ending);
+  let text: string | null;
+  let copy: NoticeCopy | undefined;
+  if (ending.kind === 'agentClear') {
+    text = agentClearedLine(saves, ending.agent);
+  } else if (!report.project) {
+    text = null;
+  } else if (ending.kind === 'agent' && ending.copy) {
+    // GM (round 20, follow-up 2): one line naming the copy, with Open copy.
+    text = handoffFailedLine(saves, report.project, ending.agent, ending.copy.name);
+    copy = { projectId: ending.copy.id };
+  } else {
+    text = savingCutOffLine(saves, report.project, ending);
+  }
+  if (!text) return;
+  const line = text;
   useGraphStore.setState((state) => {
     // The line already shown for this replacement is updated in place.
     if (report.noticeId !== null && state.undoNotice?.id === report.noticeId) {
-      return { undoNotice: { ...state.undoNotice, text } };
+      return { undoNotice: { ...state.undoNotice, text: line } };
     }
     if (report.noticeId !== null && state.messageNotice?.id === report.noticeId) {
-      return { messageNotice: { ...state.messageNotice, text } };
+      return { messageNotice: { ...state.messageNotice, text: line } };
     }
-    const shown = plainLine(state, text, 'error');
+    const shown = plainLine(state, line, 'error', copy);
     report.noticeId = (shown.undoNotice ?? shown.messageNotice)?.id ?? null;
     return shown;
   });
@@ -1743,19 +1784,32 @@ function showReplacementReport(): void {
 
 /** The canvas was replaced (canvasReplacementRevision moved): the line for
  * saves it cut off belongs to this canvas now. `ending` null: say nothing
- * (a clear: the nodes are gone with their changes; an agent's switch whose
- * handoff save carried them). */
-function startReplacementReport(ending: CutOffEnding | null, project: string | null, saves: CutOffSave[] = []): void {
+ * (the person's own clear: the nodes are gone with their changes; an agent's
+ * switch whose handoff save carried them; a reconnect's sync). */
+function startReplacementReport(ending: CutOffEnding | null, project: string | null, saves: CutOffSave[] = [],
+  options: { later?: boolean } = {}): void {
   replacementReport = { graph: canvasReplacementRevision, project, ending, saves: [...saves], noticeId: null };
+  // An agent's clear says it once its sync is on the canvas (beside the
+  // sync's own "<agent> changed the canvas", never under it): the sync
+  // handler shows it (showClearReport).
+  clearReportWaiting = Boolean(options.later);
+  if (!clearReportWaiting) showReplacementReport();
+}
+let clearReportWaiting = false;
+
+/** The sync that carried an agent's clear is on the canvas: its line now. */
+function showClearReport(): void {
+  if (!clearReportWaiting) return;
+  clearReportWaiting = false;
   showReplacementReport();
 }
 
-/** Typing still in its debounce (or out) on `nodeId`, as GM's line names it. */
-function typingSave(nodeId: string, edits: UnsavedParamEdit): CutOffSave {
+/** Typing still in its debounce (or out) on `nodeId`, as GM's lines name it: one entry per setting. */
+function typingSaves(nodeId: string, edits: UnsavedParamEdit): CutOffSave[] {
   const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
   const params = node?.data.params as Record<string, unknown> | undefined;
   const keys = [...edits.keys].filter((key) => params && key in params);
-  return describeSave(`/api/graph/node/${nodeId}`, { method: 'PUT',
+  return describeSaves(`/api/graph/node/${nodeId}`, { method: 'PUT',
     body: JSON.stringify({ params: Object.fromEntries(keys.map((key) => [key, null])) }) });
 }
 
@@ -1765,16 +1819,51 @@ const typingLost: CutOffSave[] = [];
 function noteTypingLost(): void {
   for (const nodeId of Object.keys(paramPushTimers)) {
     const edits = unsavedParamEdits.get(nodeId);
-    if (edits) typingLost.push(typingSave(nodeId, edits));
+    if (edits) typingLost.push(...typingSaves(nodeId, edits));
   }
+}
+
+/**
+ * Round 20 (GM: "A rename draft counts as "Name""): a node's title field
+ * open with a name the person typed and hasn't saved (NodeLabel reports it).
+ * An agent's clear names it; an agent's switch saves it into the project
+ * left (the handoff), as clicking away would have.
+ */
+const renameDrafts = new Map<string, string>();
+
+/** What the person is editing on the canvas now that nothing has sent yet:
+ * typing in its debounce, and rename drafts. Writes on their way, or held
+ * behind an undo, are named when Nebula refuses them or the tab drops them
+ * (noteCutOff). */
+function editingNow(): CutOffSave[] {
+  const saves: CutOffSave[] = [];
+  for (const nodeId of Object.keys(paramPushTimers)) {
+    const edits = unsavedParamEdits.get(nodeId);
+    if (edits) saves.push(...typingSaves(nodeId, edits));
+  }
+  const nodes = useGraphStore.getState().nodes;
+  for (const [nodeId, draft] of renameDrafts) {
+    const node = nodes.find((candidate) => candidate.id === nodeId);
+    if (node && draft.trim() !== String(node.data.label ?? '').trim()) saves.push(...renameSave(node, undefined));
+  }
+  return saves;
 }
 
 /** Undos and redos on their way, by admission: how each is dropped (beginAgentSwitch). */
 const restoreAbandons = new Map<number, () => void>();
 
 /** A clear emptied the canvas (the person's, an agent's, chat /clear): the
- * held and debounced writes made for its nodes go with them, silently. */
-function replaceCanvasByClear(): void {
+ * held and debounced writes made for its nodes go with them. The person's
+ * own clear says nothing. Round 20 (review 19, L2; GM 3 and follow-up 4): an
+ * agent's clear (`agentClear`) names what the person was editing, read here
+ * while its nodes are still on the canvas, and every write of theirs Nebula
+ * then refuses for the old canvas. M3: the old canvas's deletes still on
+ * their way, and the typing deferred behind them, are another canvas's: a
+ * node that takes one of their ids is never touched by them. Returns the
+ * presses held for the old canvas's steps that an agent's clear dropped
+ * (the caller announces them once the new canvas is on screen). */
+function replaceCanvasByClear(agentClear?: { agent: string | null }): DroppedPresses | null {
+  const editing = agentClear ? editingNow() : [];
   canvasReplacementRevision += 1;
   newWriteQueue();
   // Its nodes are gone: nothing an undo or a write holds on the canvas stays.
@@ -1782,8 +1871,73 @@ function replaceCanvasByClear(): void {
   wireWrites.clear();
   clearAllParamPushTimers();
   deferredParamPushes.clear();
+  deletesInFlight.clear();
   heldCopies.clear();
-  startReplacementReport(null, null);
+  renameDrafts.clear();
+  labelsInFlight.clear();
+  // An agent's clear: undo and redo of the old canvas's steps stop, as an
+  // import's do (forgetStepsInFlight). The person's own clear keeps its step.
+  const dropped = agentClear ? forgetStepsInFlight() : null;
+  startReplacementReport(agentClear ? { kind: 'agentClear', agent: agentClear.agent } : null, null, editing,
+    { later: Boolean(agentClear) });
+  return dropped;
+}
+
+/** A name as Nebula stores it (the backend's rules): whitespace collapsed,
+ * 80 characters at most; blank goes back to the canvas title (GM - Design,
+ * round 18). */
+function cleanNodeLabel(node: Node<NodeData>, label: string): string {
+  const known = NODE_DEFINITIONS[node.data.definitionId];
+  const displayName = known ? canvasTitle(known) : node.data.label;
+  return label.replace(/\s+/g, ' ').trim().slice(0, MAX_NODE_LABEL_LENGTH).trim() || displayName;
+}
+
+/** Renames sent and not yet answered, by node (round 20, H1). */
+const labelsInFlight = new Map<string, string>();
+
+/**
+ * Round 20 (review 19, H1): what an agent's switch hands over beside the
+ * snapshot, so Nebula keeps it in the project left: per backend node, the
+ * settings the person changed that Nebula may not have (typing in its
+ * debounce, on its way, held behind an undo, or landed but not yet seen in
+ * a sync), and renames not yet answered. Nebula merges exactly these keys
+ * onto its own copy of the node (PUT /api/projects/{id}, `pendingParams`
+ * and `pendingLabels`); everything else keeps its copy, so an undo the
+ * switch dropped is never folded in. Values are the canvas's.
+ */
+export interface HandoffPending {
+  params: Record<string, Record<string, unknown>>;
+  labels: Record<string, string>;
+}
+
+function handoffPending(nodes: Node<NodeData>[]): HandoffPending {
+  const params: HandoffPending['params'] = {};
+  const labels: HandoffPending['labels'] = {};
+  for (const [nodeId, edits] of unsavedParamEdits) {
+    const node = nodes.find((candidate) => candidate.id === nodeId);
+    if (!node || !CLI_ID_RE.test(nodeId)) continue;
+    const values = node.data.params as Record<string, unknown>;
+    const keys = [...edits.keys].filter((key) => key in values);
+    if (keys.length > 0) params[nodeId] = Object.fromEntries(keys.map((key) => [key, values[key]]));
+  }
+  for (const nodeId of labelsInFlight.keys()) {
+    const node = nodes.find((candidate) => candidate.id === nodeId);
+    if (node && typeof node.data.label === 'string') labels[nodeId] = node.data.label;
+  }
+  return { params, labels };
+}
+
+/** Whether a sync's backend nodes are the ones on the canvas now: the same
+ * ids, each with the same definition (a delete still on its way counts as
+ * on the canvas). M2: a reconnect after a restart that lost the canvas
+ * revision; any difference reads as another canvas. */
+function sameBackendCanvas(incoming: Node<NodeData>[]): boolean {
+  const shown = new Map(useGraphStore.getState().nodes.filter((node) => CLI_ID_RE.test(node.id))
+    .map((node) => [node.id, node.data.definitionId]));
+  const synced = new Map(incoming.filter((node) => CLI_ID_RE.test(node.id)).map((node) => [node.id, node.data?.definitionId]));
+  for (const id of deletesInFlight.keys()) if (synced.has(id) && !shown.has(id)) shown.set(id, synced.get(id)!);
+  if (shown.size === 0 || shown.size !== synced.size) return false;
+  return [...shown].every(([id, definition]) => synced.get(id) === definition);
 }
 
 /** Writes that waited at the gate go now: under their own admission, so
@@ -1811,9 +1965,9 @@ function closeWriteGate(): void {
  * default: now). `timeoutMs`: a restore's bound (it rejects with
  * RestoreTimeout); `onLate` then gets its answer if one comes. */
 function graphMutationFetch(path: string, init?: RequestInit,
-  options: { admission?: WriteAdmission; timeoutMs?: number; onLate?: (response: Response) => void; save?: CutOffSave } = {}): Promise<Response> {
+  options: { admission?: WriteAdmission; timeoutMs?: number; onLate?: (response: Response) => void; saves?: CutOffSave[] } = {}): Promise<Response> {
   const admission = options.admission ?? admitWrite();
-  const save = options.save ?? describeSave(path, init);
+  const saves = options.saves ?? describeSaves(path, init);
   // Round 19: made after a switch or an import began: it waits until that
   // is done, then goes under its own admission (dropped and named if the
   // canvas was replaced, sent as usual if not).
@@ -1821,13 +1975,14 @@ function graphMutationFetch(path: string, init?: RequestInit,
   if (gate && admission.seq >= gate.fromSeq) {
     return trackGraphMutation(async () => {
       await gate.opened;
-      return graphMutationFetch(path, init, { ...options, admission, save });
+      return graphMutationFetch(path, init, { ...options, admission, saves });
     }, { restoreBound: true });
   }
   const tracked: TrackedWrite = { graph: admission.graph, seq: admission.seq, restore: path === '/api/graph/restore',
-    save, counted: false };
+    saves, counted: false };
   liveWrites.add(tracked);
-  if (drain && writeGate && admission.seq < writeGate.fromSeq) drain.watching.add(tracked);
+  // Every drain under way waits for it (review 19, L4: two at once).
+  if (writeGate && admission.seq < writeGate.fromSeq) for (const drain of drains) drain.watching.add(tracked);
   // A write sent in the turn it was admitted reads the same project as
   // apiFetch does; one that waited names the one read at admission.
   const fetchNow = (request?: RequestInit) => (options.admission || writesWaitingNow() > 0 || restoresPendingNow() > 0
@@ -1940,7 +2095,7 @@ async function drainWrites(): Promise<CutOffSave[]> {
   let wake = () => {};
   const watching = new Set([...liveWrites].filter((write) => write.seq < gateFrom));
   const current: Drain = { watching, cutOff: [], changed: () => wake() };
-  drain = current;
+  drains.add(current);
   const deadline = Date.now() + HOLD_LIMIT_MS;
   try {
     for (;;) {
@@ -1955,13 +2110,13 @@ async function drainWrites(): Promise<CutOffSave[]> {
       });
     }
   } finally {
-    if (drain === current) drain = null;
+    drains.delete(current);
   }
   for (const write of current.watching) {
     write.counted = true;
     current.cutOff.push(write);
   }
-  return current.cutOff.map((write) => write.save);
+  return current.cutOff.flatMap((write) => write.saves);
 }
 
 /** Send a node's params to the backend after the debounce; a node whose
@@ -2289,12 +2444,14 @@ function cutOffAnswersArriving(): boolean {
 let lastCutOffAt = Number.NEGATIVE_INFINITY;
 const CUT_OFF_GRACE_MS = 2_000;
 
-function plainLine(state: Pick<GraphState, 'undoNotice'>, text: string, tone?: 'error' | 'info'): Partial<GraphState> {
+function plainLine(state: Pick<GraphState, 'undoNotice'>, text: string, tone?: 'error' | 'info',
+  copy?: NoticeCopy): Partial<GraphState> {
   const toned = tone ? { tone } : {};
+  const opens = copy ? { copy } : {};
   return state.undoNotice?.offer
     // No tone reads as a status in either place (CanvasUndoNotice's role).
-    ? { messageNotice: { id: ++undoNoticeSeq, text, tone: tone ?? 'info' } }
-    : { undoNotice: { id: ++undoNoticeSeq, text, offer: null, ...toned } };
+    ? { messageNotice: { id: ++undoNoticeSeq, text, tone: tone ?? 'info', ...opens } }
+    : { undoNotice: { id: ++undoNoticeSeq, text, offer: null, ...toned, ...opens } };
 }
 
 /** Send one wire write (after `after`); a refusal puts the canvas back and says why. */
@@ -2581,6 +2738,10 @@ function changeCanvasNodes(
   removedBy.set(undoStep, new Set([...(removedBy.get(undoStep) ?? []), ...cliRemovedIds]));
   markDeleteStep(undoStep);
   for (const nodeId of cliRemovedIds) deletesInFlight.set(nodeId, undoStep);
+  // The node leaves the canvas now: the UI's selection doesn't keep naming it
+  // (review 19, L1), so a failed delete never brings it back selected.
+  const selectedInUi = useUIStore.getState().selectedNodeId;
+  if (selectedInUi && removedIds.includes(selectedInUi)) useUIStore.getState().selectNode(null);
   // Syncs leave them off until their delete answers (heldNodes); the newest
   // copy one carries is what comes back if the delete fails (M-2).
   const holds = new Map(cliRemovedIds.map((nodeId) => [nodeId, holdNode(nodeId, false)]));
@@ -2598,6 +2759,8 @@ function changeCanvasNodes(
   function applyDeleteAnswers(results: PromiseSettledResult<RemovalRecord | null>[]): void {
     const confirmed = new Set<string>();
     const failures: string[] = [];
+    // The ids that failed with no answer from Nebula (GM, round 20, item 1).
+    const unanswered: string[] = [];
     const removals: RemovalRecord[] = [];
     // Review 14, L-E: the echo is the truth. A node a sync of Nebula's graph
     // already took off is deleted there, whatever its answer said (a 500
@@ -2609,25 +2772,31 @@ function changeCanvasNodes(
         if (result.value) removals.push(result.value);
       } else if (goneBySync?.has(cliRemovedIds[index])) {
         confirmed.add(cliRemovedIds[index]);
-      } else failures.push(failureCopy(result.reason).reason);
+      } else {
+        failures.push(failureCopy(result.reason).reason);
+        if (isBackendUnreachable(result.reason)) unanswered.push(cliRemovedIds[index]);
+      }
     });
     const failed = cliRemovedIds.filter((nodeId) => !confirmed.has(nodeId));
     // Undoing this step names what each delete removed (GM, 2026-10-23).
     if (removals.length > 0) undoStep.removals = mergeRemovals(undoStep.removals, removals);
+    if (replacementRevision !== canvasReplacementRevision) {
+      // Nothing here is that graph's any more: no node to put back, no
+      // step to renew, no notice, and no state to touch. Review 19, M3: the
+      // ids are the new canvas's now (a clear or an import reuses n1…), so
+      // this answer never drops the typing, held copy or deferred push of
+      // the node that took one (seeds 84 and 1123 of the clear variant).
+      // The step keeps its records, for an undo that comes back to that
+      // graph (an import undone).
+      for (const done of holds.values()) done(false);
+      if (failures.length > 0) reportNodeDeletionFailure(failures, failures.length);
+      return;
+    }
     // The writes still waiting for a deleted node are dropped (option (c)).
     for (const nodeId of confirmed) {
       deferredParamPushes.delete(nodeId);
       unsavedParamEdits.delete(nodeId);
       heldCopies.delete(nodeId);
-    }
-    if (replacementRevision !== canvasReplacementRevision) {
-      // Nothing here is that graph's any more: no node to put back, no
-      // step to renew, no notice. The step keeps its records, for an undo
-      // that comes back to that graph (an import undone).
-      for (const done of holds.values()) done(false);
-      for (const nodeId of failed) deferredParamPushes.delete(nodeId);
-      if (failures.length > 0) reportNodeDeletionFailure(failures, failures.length);
-      return;
     }
     if (removals.length > 0) {
       set((state) => {
@@ -2651,7 +2820,17 @@ function changeCanvasNodes(
     // step, the line would offer a button that does nothing (withLiveNotice).
     const top = get().undoStack.at(-1);
     if (deleted > 0 && confirmed.size > 0 && top && top === undoStep) set(deletedNotice(deleted, top));
-    if (failures.length > 0) reportNodeDeletionFailure(failures, failures.length);
+    // GM, round 20 (item 1): no answer at all names the nodes; any other
+    // cause keeps its reason.
+    if (failures.length > 0 && unanswered.length === failures.length) {
+      const names = unanswered.map((nodeId) => {
+        const node = onCanvas.find((candidate) => candidate.id === nodeId);
+        return (node && nodeTitle(NODE_DEFINITIONS[node.data.definitionId], node.data.label)) || nodeId;
+      });
+      const message = deleteNoAnswerLine(names);
+      console.warn(`[nebula] ${message}`);
+      get().notify(message);
+    } else if (failures.length > 0) reportNodeDeletionFailure(failures, failures.length);
   }
   /** The nodes whose delete failed come back where they were, with their
    * wires, unselected; the steps taken since hold them again. Nothing was
@@ -2659,6 +2838,10 @@ function changeCanvasNodes(
    * happen is no step), unless it also took wires (deleteCanvasElements). */
   function putBackFailedDeletes(failed: string[]): void {
     const back = new Set(failed);
+    // GM (round 20, B): the node comes back unselected, in the UI's
+    // selection too (the ring and the settings pill read selectedNodeId).
+    const selectedInUi = useUIStore.getState().selectedNodeId;
+    if (selectedInUi && back.has(selectedInUi)) useUIStore.getState().selectNode(null);
     set((state) => {
       const present = new Set(state.nodes.map((node) => node.id));
       // Where it was, as it was; never selected (GM: "Don't select it").
@@ -5391,12 +5574,29 @@ wsClient.subscribe((event) => {
     // an agent's clear by its empty graph.
     const canvasRevision = (event as { canvasRevision?: unknown }).canvasRevision;
     const knownCanvas = getProjectContext()?.canvas;
+    const ownEcho = Boolean(origin && isOwnEcho(origin, TAB_ID));
     const canvasMoved = typeof canvasRevision === 'string' ? knownCanvas !== undefined && canvasRevision !== knownCanvas
-      : empty && Boolean(origin) && !isOwnEcho(origin!, TAB_ID);
+      : empty && Boolean(origin) && !ownEcho;
+    // Round 20 (review 19, M2): Nebula keeps the canvas revision across a
+    // restart, so a reconnect's sync names the same canvas. One with no edit
+    // whose revision moved anyway while it carries the canvas on screen
+    // (every backend node, each with its definition) is that canvas seen
+    // across a restart that lost its revision: the tab takes the revision
+    // and keeps everything, and never reads it as a clear.
+    const sameCanvas = canvasMoved && !origin && !graphReplaced && sameBackendCanvas(rawCliNodes);
     adoptCanvasRevision(revision, canvasRevision);
-    // The tab's own clear moved it already (clearGraph), before its echo.
-    if (canvasMoved && !graphReplaced && !(origin && isOwnEcho(origin, TAB_ID))) replaceCanvasByClear();
     let replacedPresses: DroppedPresses | null = null;
+    // The tab's own clear moved it already (clearGraph), before its echo.
+    if (canvasMoved && !graphReplaced && !ownEcho && !sameCanvas) {
+      // An agent's clear (or a script's: "An agent"), whose line names what
+      // the person was editing (L2, GM). Another window of the person's is
+      // their own clear: no line.
+      // No edit (a reconnect's sync that found another canvas): silent, so
+      // a restart never reads as an agent's clear (GM follow-up 4).
+      const by = origin ? foreignSource(origin) : null;
+      replacedPresses = replaceCanvasByClear(by === 'agent' || by === 'outside'
+        ? { agent: by === 'agent' ? origin?.actor?.name ?? null : null } : undefined);
+    }
     if (graphReplaced) {
       canvasReplacementRevision += 1;
       newWriteQueue();
@@ -5404,6 +5604,8 @@ wsClient.subscribe((event) => {
       // projectStore): GM's line names a save it cut off.
       startReplacementReport({ kind: 'import' }, canvasProjectName());
       replacedPresses = forgetStepsInFlight();
+      renameDrafts.clear();
+      labelsInFlight.clear();
       pendingConnectedNodeCreationAttempt = null;
       wireWrites.clear();
       nodeWrites.clear();
@@ -5484,6 +5686,7 @@ wsClient.subscribe((event) => {
       });
       noteSyncArrivals(state.nodes, remainingNodes, useGraphStore.setState as GraphSet, useGraphStore.getState);
       if (replacedPresses) announceDrop(useGraphStore.setState as GraphSet, replacedPresses);
+      showClearReport();
       useCinemaUploadStore.getState().reconcileTargets(remainingNodes);
       useArrangeStore.getState().setPending([]);
       return;
@@ -5561,6 +5764,7 @@ wsClient.subscribe((event) => {
     // What it brought arrived after any step in flight; an upload waiting for its node settles (review 11, L-2, L-6).
     noteSyncArrivals(graphReplaced ? [] : state.nodes, merged, useGraphStore.setState as GraphSet, useGraphStore.getState);
     if (replacedPresses) announceDrop(useGraphStore.setState as GraphSet, replacedPresses);
+    showClearReport();
     useCinemaUploadStore.getState().reconcileTargets(merged);
     // After the merge, so the nodes an arrange names are already on the canvas.
     useArrangeStore.getState().setPending(arrange);
@@ -7183,25 +7387,26 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   },
 
   renameNode: (nodeId, label) => {
+    renameDrafts.delete(nodeId);
     const node = get().nodes.find((candidate) => candidate.id === nodeId);
     if (!node) return;
-    // An empty name goes back to the canvas title (GM - Design, round 18).
-    const known = NODE_DEFINITIONS[node.data.definitionId];
-    const displayName = known ? canvasTitle(known) : node.data.label;
-    // Same rules as the backend: collapse whitespace, cap at 80 characters.
-    const next = label.replace(/\s+/g, ' ').trim().slice(0, MAX_NODE_LABEL_LENGTH).trim() || displayName;
+    const next = cleanNodeLabel(node, label);
     if (next === node.data.label) return;
     const previous = node.data.label;
     get().updateNodeData(nodeId, { label: next });
     // Local-only nodes keep the name in the frontend graph; backend nodes
     // store it so graphSync, project restore and agents all see it.
     if (!CLI_ID_RE.test(nodeId)) return;
+    // Until Nebula answers, an agent's switch carries it in the handoff (round 20, H1).
+    labelsInFlight.set(nodeId, next);
     graphMutationFetch(`/api/graph/node/${nodeId}/label`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ label: next }),
-    }).then((response) => {
+    }, { saves: renameSave(node, previous) }).then((response) => {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    }).finally(() => {
+      if (labelsInFlight.get(nodeId) === next) labelsInFlight.delete(nodeId);
     }).catch((err) => {
       console.warn(`[nebula] Rename of ${nodeId} failed:`, err);
       const current = get().nodes.find((candidate) => candidate.id === nodeId);
@@ -8931,25 +9136,45 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     // handoff (coordinator, round 19): its change comes back off the canvas.
     const dropped = restoreAbandons.size;
     for (const abandon of [...restoreAbandons.values()]) abandon();
-    const saves: CutOffSave[] = [...liveWrites].filter((write) => !write.restore).map((write) => write.save);
+    const saves: CutOffSave[] = [...liveWrites].filter((write) => !write.restore).flatMap((write) => write.saves);
     // Typing still in its debounce is never sent: the handoff carries it.
     // (Typing already out is one of the writes above.)
     for (const [nodeId, edits] of unsavedParamEdits) {
       if (paramPushTimers[nodeId] === undefined) continue;
       window.clearTimeout(paramPushTimers[nodeId]);
       delete paramPushTimers[nodeId];
-      saves.push(typingSave(nodeId, edits));
+      saves.push(...typingSaves(nodeId, edits));
     }
-    return { cutOff: saves, force: saves.length > 0 || dropped > 0 };
+    // A rename draft open in a title is saved as clicking away would have
+    // (round 20): into the canvas the handoff is captured from.
+    for (const [nodeId, draft] of renameDrafts) {
+      const node = get().nodes.find((candidate) => candidate.id === nodeId);
+      const next = node ? cleanNodeLabel(node, draft) : null;
+      if (!node || next === null || next === node.data.label) continue;
+      saves.push(...renameSave(node, undefined));
+      labelsInFlight.set(nodeId, next);
+      set((state) => ({ nodes: state.nodes.map((candidate) => (candidate.id === nodeId
+        ? { ...candidate, data: { ...candidate.data, label: next } } : candidate)) }));
+    }
+    renameDrafts.clear();
+    const pending = handoffPending(get().nodes);
+    const named = Object.keys(pending.params).length + Object.keys(pending.labels).length;
+    return { cutOff: saves, force: saves.length > 0 || dropped > 0 || named > 0, pending };
   },
 
   finishCanvasReplacement: (report) => {
     if (report) {
-      const ending: CutOffEnding = report.kind === 'agent' ? { kind: 'agent', agent: report.agent ?? null } : { kind: report.kind };
+      const ending: CutOffEnding = report.kind === 'agent'
+        ? { kind: 'agent', agent: report.agent ?? null, copy: report.copy ?? null } : { kind: report.kind };
       startReplacementReport(report.show ? ending : null, report.project, [...report.cutOff, ...typingLost.splice(0)]);
     }
     typingLost.length = 0;
     openWriteGate();
+  },
+
+  noteRenameDraft: (nodeId, draft) => {
+    if (draft === null) renameDrafts.delete(nodeId);
+    else renameDrafts.set(nodeId, draft);
   },
 
   setCanvasProjectName: (read) => { canvasProjectName = read; },
@@ -9809,6 +10034,103 @@ useGraphStore.subscribe((state, previous) => {
     reconcilingPaperFreshness = false;
   }
 });
+
+/**
+ * Round 20 (review 19, M1): the canvas is read-only while it follows an
+ * agent's project switch, from the moment the tab sees it until the new
+ * canvas is loaded (lib/canvasFollow.ts), as offline is in PR #114 (whose
+ * EDIT_GATES this mirrors, so the two gates meet in one table at merge).
+ * Every edit action asks refuseEditWhileFollowing() before it touches the
+ * canvas or sends anything; a refused one changes nothing and says nothing
+ * (the project bar pulses). A run press that gets through anyway (a
+ * keyboard shortcut, a race) says GM's line. Reads, selection and run-state
+ * updates are not edits and pass.
+ */
+type FollowGate = { refused: (...args: never[]) => unknown; blocks?: (...args: never[]) => boolean };
+const FOLLOW_VOID: FollowGate = { refused: () => undefined };
+const FOLLOW_NULL: FollowGate = { refused: () => null };
+const FOLLOW_NULL_ASYNC: FollowGate = { refused: () => Promise.resolve(null) };
+const FOLLOW_ASYNC: FollowGate = { refused: () => Promise.resolve() };
+
+/** GM's line for a run pressed while following; `nodeIds` names it. */
+function refuseRunWhileFollowing(nodeIds: string[]): Promise<void> {
+  const following = followingSwitch();
+  if (!following) return Promise.resolve();
+  const nodes = useGraphStore.getState().nodes;
+  const only = nodeIds.length === 1 ? nodes.find((node) => node.id === nodeIds[0]) : undefined;
+  const name = only ? (nodeTitle(NODE_DEFINITIONS[only.data.definitionId], only.data.label) || null) : null;
+  useGraphStore.getState().notify(runWhileFollowingLine(name, following.agent, following.projectName));
+  return Promise.resolve();
+}
+const FOLLOW_RUN = (ids: (...args: never[]) => string[]): FollowGate => ({
+  refused: ((...args: never[]) => refuseRunWhileFollowing(ids(...args))) as FollowGate['refused'],
+});
+
+const FOLLOW_GATES: Partial<Record<keyof GraphState, FollowGate>> = {
+  addNode: FOLLOW_NULL_ASYNC, addCharacterNode: FOLLOW_NULL_ASYNC, addMoodboardNode: FOLLOW_NULL_ASYNC,
+  addNodeAndConnect: FOLLOW_NULL_ASYNC, addDynamicNode: FOLLOW_NULL, addLocalCinemaMotionNode: FOLLOW_NULL,
+  addShot: FOLLOW_NULL, pasteClipboard: { refused: () => [] },
+  duplicateSelected: FOLLOW_VOID, duplicateNode: FOLLOW_VOID, deleteSelected: FOLLOW_VOID, deleteNode: FOLLOW_VOID,
+  deleteGeneration: FOLLOW_VOID, onConnect: FOLLOW_VOID, renameNode: FOLLOW_VOID, applyPaperSource: FOLLOW_VOID,
+  updateRemotionManifest: FOLLOW_VOID, addTrackItemWithCanvasMirror: FOLLOW_VOID, deleteTrackItem: FOLLOW_VOID,
+  duplicateTrackItemAtPlayhead: FOLLOW_VOID, updateTrackItemProps: FOLLOW_VOID, updateTrackItemTime: FOLLOW_VOID,
+  updateTrackItemSpatial: FOLLOW_VOID, reorderTrackItem: FOLLOW_VOID, addOrUpdateKeyframe: FOLLOW_VOID,
+  updateKeyframe: FOLLOW_VOID, deleteKeyframe: FOLLOW_VOID, autoLayoutSelected: FOLLOW_VOID, autoLayout: FOLLOW_VOID,
+  loadSampleGraph: FOLLOW_VOID, clearGraph: FOLLOW_VOID, undo: FOLLOW_VOID, redo: FOLLOW_VOID,
+  removeEmptyEditNode: FOLLOW_VOID, updateEditNodeClip: FOLLOW_VOID, cutEditNodeAtSource: FOLLOW_VOID,
+  removeEditNodeClip: FOLLOW_VOID, removeShot: FOLLOW_VOID, updateScene: FOLLOW_VOID,
+  configureOpenRouterModel: FOLLOW_ASYNC, fetchReplicateSchemaAndConfigure: FOLLOW_ASYNC,
+  promoteShotVariation: FOLLOW_ASYNC,
+  executeGraph: FOLLOW_RUN(() => []),
+  executeNode: FOLLOW_RUN(((nodeId: string) => [nodeId]) as never),
+  executeShot: FOLLOW_RUN(((nodeId: string) => [nodeId]) as never),
+  executeCluster: FOLLOW_RUN(((nodeIds: string[]) => nodeIds) as never),
+  executeClusterConcurrent: FOLLOW_RUN(((nodeIds: string[]) => (Array.isArray(nodeIds) ? nodeIds : [])) as never),
+  rerunHistoryRecord: FOLLOW_RUN(() => []), rerunHistoryWithLatestPaperSource: FOLLOW_RUN(() => []),
+  retryFailedRun: FOLLOW_RUN(() => []),
+  authorGenerationCluster: { refused: () => Promise.reject(new Error('Nebula is opening another project.')) },
+  getOrCreateEditNodeDownstream: { refused: () => '' },
+  deleteProviderRecovery: FOLLOW_ASYNC, acknowledgeProviderStartAmbiguity: FOLLOW_ASYNC,
+  acknowledgeUncertainWorldLabsRun: FOLLOW_VOID,
+  // A param or name edit is an edit; a run's state or outputs are not.
+  updateNodeData: { ...FOLLOW_VOID, blocks: ((_nodeId: string, data: Partial<NodeData>) => 'params' in data || 'label' in data) as FollowGate['blocks'] },
+};
+
+/** React Flow's changes minus the edits while following: selection and
+ * measured sizes pass; a move, removal or add is refused (one pulse). */
+function followingChanges<C extends { type: string }>(changes: C[]): C[] {
+  if (!followingSwitch()) return changes;
+  const kept = changes.filter((change) => change.type === 'select' || change.type === 'dimensions');
+  if (kept.length < changes.length) refuseEditWhileFollowing();
+  return kept;
+}
+
+{
+  const ungated = useGraphStore.getState();
+  const gated: Partial<GraphState> = {};
+  for (const [name, gate] of Object.entries(FOLLOW_GATES) as [keyof GraphState, FollowGate][]) {
+    const action = ungated[name] as unknown as (...args: unknown[]) => unknown;
+    if (typeof action !== 'function') continue;
+    const isRun = String(name).startsWith('execute') || String(name).startsWith('rerun') || name === 'retryFailedRun';
+    (gated as Record<string, unknown>)[name] = (...args: unknown[]) => {
+      if (followingSwitch() && (!gate.blocks || (gate.blocks as (...a: unknown[]) => boolean)(...args))) {
+        // A run says GM's line; an edit pulses the bar.
+        if (!isRun) refuseEditWhileFollowing();
+        return (gate.refused as (...a: unknown[]) => unknown)(...args);
+      }
+      return action(...args);
+    };
+  }
+  gated.onNodesChange = (changes) => {
+    const kept = followingChanges(changes);
+    if (kept.length > 0) ungated.onNodesChange(kept);
+  };
+  gated.onEdgesChange = (changes) => {
+    const kept = followingChanges(changes);
+    if (kept.length > 0) ungated.onEdgesChange(kept);
+  };
+  useGraphStore.setState(gated);
+}
 
 // Dev-only window bridge so scripted UI capture (the nebula-nodes-visuals
 // skill's capture template) can call clearGraph() between runs.

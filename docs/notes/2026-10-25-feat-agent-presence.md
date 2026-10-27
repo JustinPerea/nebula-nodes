@@ -1841,3 +1841,112 @@ A write built for one project but sent after a switch through `apiFetch` outside
 - Tests first: tests/test_round19_node_names.py (9 tests, all 9 failed first: `node_name` missing, and "Grok Imagine 2.0 (Krea)" / "paid · krea" where the canvas title and "via Krea" were due). Parity across all 308 definitions for the helper, `_node_label` and `_run_node_name`. Updated to GM's ruling: test_round16_labels (gateway "(Krea)" → "via Krea", no route → "Grok Imagine 2.0").
 - Docs: MCP-SETUP.md (which names agents see; the proposal entry's unnamed `name`; cost wording on Krea's gateway) and SKILL.md (one paragraph after the single-edit commands).
 - Open: `node_route.route_unavailable_message`/`_line` still say the catalog name, because their frontend twin (directRoute.ts routeUnavailableMessage) does too; `get_selected_nodes`' `displayName` field is the type's catalog name by design. (tests/test_canvas_undo.py's 11 failures from the fence work were fixed in the main lane: its tab requests now send the revision, TabHeaders.)
+
+## Round 20: review 19 and GM - Design's round-20 rulings (2026-10-27)
+
+### What changed
+
+- **H1, the handoff keeps the typing.** When an agent switches projects, the tab's handoff save (`PUT /api/projects/{id}`) now carries `pendingParams: {nodeId: {key: value}}` and `pendingLabels: {nodeId: name | null}`. These come from `graphStore.handoffPending`, which reads the debounced typing, typing still on its way, renames on their way, and rename drafts (`NodeLabel` reports its draft through `noteRenameDraft`; `beginAgentSwitch` commits the drafts into the store first).
+  - Nebula merges exactly those top-level keys onto its own copy of the node, taking the values from the saved snapshot (`_save_handoff`, `_merge_handoff_node`). Everything else keeps Nebula's copy.
+  - The whole save is refused with 409 (`HANDOFF_MERGE_REFUSED`) and the tab saves a copy when the merge can't be made: a listed node is missing, a node is another kind, or a list is malformed.
+  - MCP-SETUP's line-975 claim is replaced by the real rule.
+- **H2, a fence by route marker.** `graph_write` marks every route that changes the graph or starts canvas work (24 routes), and `project_workspace_fence` reads the marker of the route the request matches (`_graph_fence_of`), not a path prefix.
+  - Newly fenced: `DELETE /api/provider-recoveries/{run_id}/{node_id}`, and `POST /api/uploads` when it creates a node. The upload checks inside the route, once at the top and again right before `add_node`, after the file read and probe.
+  - `tests/test_round20_fence.py` walks every non-GET route. Each one is either marked or on the commented allowlist (128 entries, each with its reason). A new unmarked route fails the test, and so does a stale or marked allowlist entry. U1 and U2 now get 409.
+- **M1, read-only while following an agent's switch** (`lib/canvasFollow.ts`). The read-only state runs from the socket handler's first sight of the switch until the new canvas is loaded. During it:
+  - `FOLLOW_GATES` (shaped like #114's `EDIT_GATES`) refuses every graph edit and run in the store.
+  - File drop, Load graph, import, the chat's upload, Clear and Run are gated at their entry points.
+  - `useFollowingReadOnly` stops typing, paste and drop in the canvas and inspector (capture phase) and sets `body.nebula-following`, which shows fields as disabled.
+  - Any attempt pulses the project bar, at most once a second, on the k500/c36 spring.
+  - The bar shows GM's "Opening “<project>”…" in place of Saved or Unsaved and keeps its width: the width is measured as the follow starts, and the text ellipsizes.
+  - Run is aria-disabled with "Wait for “<project>” to open.". A press that still gets through says "Couldn't run “<node>”. <agent> is opening “<project>”."
+  - Probe A1: nothing typed during the window lands anywhere.
+- **M2, the revision survives a restart.** `canvas-revisions.json` lives in the state dir (`{"version": 1, "projects": {id: n}, "unfiled": n}`). It is written atomically (temp file, fsync, `os.replace`, mode 0600) before memory or the canvas changes, and loaded at start.
+  - A clear moves the epoch before `cli_graph.clear()`. An import moves it before its commit and puts it back if the commit raises.
+  - A boot whose state.json fails to load moves the open project's epoch.
+  - In the tab, a sync whose revision moved, with no origin and the same backend canvas (`sameBackendCanvas`: same CLI ids and definitionIds), adopts the new revision and keeps everything. That is probe RST as written: the typing lands and no line shows. A different canvas with no origin is replaced silently. The agent-clear line never follows a restart.
+- **M3.** A delete's answer now checks the canvas revision before it touches the debounced typing, unsent edits or held copies. `replaceCanvasByClear` drops the old canvas's in-flight deletes. The property test gained the reviewer's agent-clear variant; seeds 84 and 1123 always run with it.
+- **L1.** A failed delete comes back unselected, and the inspector closes if it showed that node. A delete also clears the inspector when it names a removed node.
+- **L2 and GM 4, the agent-clear line.** `agentClearedLine` takes the settings the person was editing when an agent's clear (or any outside source's) replaced the canvas: typing, renames on their way, and rename drafts ("Name"). The line is shown after the sync's own announcement, so the announcement doesn't replace it. The person's own clear and the agent-switch handoff stay silent, as GM ruled.
+- **L3.** A run notes (project, epoch) at admission. Its write-backs (params, outputs, provider-recovery params, cinema shot merges) are dropped once that canvas was cleared or replaced, with one log line per run.
+- **L4.** Drains are a set: every drain waiting is told when a write settles, and each returns its own saves.
+- **GM A.** The cursor's say-line is a solid dark pill (#18181b) under the name tag: the same 16px line and 2px padding, radius 999px, one line with an ellipsis, and the pill and its text fade together.
+- **GM 1.** A failed delete whose cause is no answer (`isBackendUnreachable`) uses GM's line. Any other cause keeps its reason (a 500 still reads "Couldn't delete the node. Nebula didn't respond. Try again.").
+- **GM follow-up 2.** A failed handoff shows one line plus an "Open copy" button. The copy is a whole new project named "<old project> (recovered)" (`POST /api/projects/recover`, not opened, listed in Projects), and Open copy opens it. The toast says only "<agent> opened “<project>”.".
+
+### Strings (new or changed)
+
+GM's, verbatim:
+- "Opening “<project>”…"
+- "Wait for “<project>” to open."
+- "Couldn't run “<node>”. <agent> is opening “<project>”."
+- "Couldn't save “<setting>” for “<node>” in “<old project>” when <agent> switched projects. Your edits were saved as a copy, “<copy name>”."; several settings: "Couldn't save N changes in “<old project>” when …"
+- "<Agent> cleared the canvas while you were editing “<s>” for “<node>”. That change wasn't saved."; "“a” and “b”" or "“a”, “b” and “c”" with "Those changes weren't saved."; "… editing <N> settings. Those changes weren't saved."; "An agent cleared …"
+- "Couldn't delete “<node>”. Nebula isn't answering. Make sure it's running, then try again."; "“A” and “B”", "“A”, “B” and “C”", "Couldn't delete <N> nodes. …"
+- Button: "Open copy".
+
+Derived (not GM's own):
+- "Couldn't run the canvas. <agent> is opening “<project>”." (a whole-canvas or multi-node run)
+- "Couldn't save your last change in “<old project>” when <agent> switched projects. …" (a change it can't name)
+- "when an agent switched projects" (agent unknown)
+
+Backend:
+- `HANDOFF_MERGE_REFUSED`, "Nebula couldn't keep this save's unsent changes in the project ({why}), so nothing was saved.", with five `{why}` forms.
+- The log line "[run] run {run_id} started on a canvas that was cleared or replaced since; dropped its {what} (and any later write-back)".
+
+### Tests written first
+
+- Backend `tests/test_round20_fence.py`: 32 of 40 failed first (H1 11, H2 6 plus U1/U2/in-route, M2 9 including the two-boot restart, L3 5). The 8 that passed are controls.
+- `tests/heldUndo.round20.test.tsx`: 14 of 19 failed first. `tests/projectSwitchSaves.round20.test.ts`: 6 of 7. `tests/round20Copy.test.ts`: failed at import. Property seeds 84 and 1123: both failed ("seed 84, step 21: canvas n3=v2 vs Nebula n3=v1"). `tests/agentCursorBubble.round20.test.ts`: 2 of 3.
+- `tests/followingControls.round20.test.tsx` (bar text, width lock, Run's state, Open copy) was written after the code and passed at once.
+- Updated: projectSwitchSaves.round19 (three handoff-failure lines to GM's one-line form).
+
+### Where this meets #114
+
+#114 is still open (checked with `git fetch` on 2026-10-27), so nothing was merged. At merge:
+- **Run write-backs:** replace `_admitted_canvas_moved(what)` with #114's `_run_canvas_moved(run_id, what)`, and the ContextVar with `_register_run(canvas=)`. `_run_canvas_now` already has #114's name and meaning.
+- **Fence:** take this PR's marker middleware over #114's prefix list, and keep #114's `_filed_canvases` translation ahead of the canvas check.
+- **Uploads:** #114's `_refuse_if_graph_moved(fence)` can replace the second `_check_workspace_revision()`.
+- **Gates:** `FOLLOW_GATES` and `EDIT_GATES` both wrap the same actions. Keep both, or fold the follow check into #114's gate as a second reason.
+
+### Probes, live check and gates
+
+- Review 19 probes:
+  - RST, SEL and DR pass. CLR1 and CLR2 now get the agent-clear line where they expected `[]`. A1 now gets nothing typed and nothing handed off where it expected the typing in the handoff (M1's ruling).
+  - propclear: seeds 84, 1123 and 1-60 pass.
+  - h1, m2, w5, sw, krea and titles pass. nohdr N1/N2 still fail as written, as in round 19.
+  - Backend: the adapted P1 with `pendingParams` passes (KEPT and LIVE are both "typed"). The original P1 fails by design (no pending list, so the stored copy wins). U1 and U2 get 409, race has no bad values, and titles.py shows 0 diffs.
+- Live check (8795/5795, isolated, scratchpad r20/live/live-r20.mjs): 35 of 35 at 1440x900 and 1280x800.
+  - The pill reads over a long title at 390%.
+  - A refused delete comes back unselected with the inspector closed.
+  - The no-answer delete line shows.
+  - An agent clear shows the line with the PUT on its way and with typing in its debounce, and nothing lands.
+  - The revision is "2" before and after a real backend restart; the PUT held over the restart answered 200 and the typing landed, with no line.
+  - In the switch, typing was handed off and saved in the project left. The bar showed "Opening “Second canvas”…" at the same width (278 px), Run was disabled with GM's tooltip, a typed edit changed nothing, and the run line showed.
+  - A refused handoff showed the one line, and Open copy opened "Round r20 (recovered)".
+  - 2 blocked requests (both canaries) and 0 toward 8000-8010 or 5173.
+
+### Gates (round 20, on the final code)
+
+- **Backend:** the full suite passed 11,240 with 71 skipped (isolated). The docs and MCP docstring edits came after that run, so the 71 test files that read MCP-SETUP, SKILL.md or `mcp_server` were run again: 1,976 passed, 9 skipped.
+- **Frontend:** the full vitest run passed 6,598 of 6,620 under load. The 22 failures were in 12 files, 17 of them 5 s timeouts; those 12 files run alone passed 203 of 203. tsc, lint and both style guards are clean.
+- **Build:** first load is 396,783 bytes raw (119,638 gzip), under 512,000.
+- **Property test:** 160 blocks of 60 seeds, two at a time, with 0 seed failures:
+  - plain 1-6000 (100 blocks);
+  - foreign 1-600 (10);
+  - refused deletes 1-1800 (30);
+  - agent clear 1-1200 (20).
+
+  Two refused-delete blocks (841 and 961) first hit the 300 s limit while the backend suite and live check ran; run again alone, both passed.
+
+### Open items (round 20)
+
+- **For GM:**
+  - An agent's clear shows two notices at once: the sync's "Codex changed the canvas" with Undo, and the agent-clear line.
+  - At the locked width the bar ellipsizes both the project name and "Opening “…”…" (for example "Roun… Opening “Second …").
+  - The derived strings listed above.
+- **Typing while Nebula is down (no hold) is lost silently** when it comes back. The PUT fails with no answer, and the reconnect sync brings Nebula's value. This already happened before round 20. It isn't a clear and no line shows. #114's offline gate (read-only while offline) prevents it.
+- **Fences and admission:**
+  - Pins and selection are on the allowlist, not fenced: they are written by node id onto the project record.
+  - A run whose canvas is cleared during its admission awaits still starts; only its write-backs are dropped. #114's `_refuse_if_graph_moved` before registering is the full fix.
+- **A handoff could be refused by mistake:** if it names a node that `_migrate_rf_graph` folds into a new id, the whole save is refused and the tab saves a copy.

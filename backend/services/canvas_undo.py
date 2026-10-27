@@ -29,7 +29,9 @@ Memory-only and bounded: ``UNDO_TTL_SECONDS``, ``MAX_EDITS``,
 ``MAX_EDIT_BYTES`` and ``MAX_TOTAL_BYTES``. A backend restart forgets every
 inverse (a token then gets 404). Clearing the canvas or loading a graph into
 the open project ends that project's tokens, because its node ids start
-again.
+again. Only the per-project id epochs (``epoch``) are kept across a restart,
+in ``persist_path`` (round 20 of PR #195): they are the canvas revision a tab
+holds, and PR #114's ``_graph_fence`` reads them too.
 
 Links: every edit id handed out (an agent's edit, an agent's undo, the
 person's Cmd+Z of a step the canvas knew the edit of) keeps a small brief
@@ -42,11 +44,13 @@ from __future__ import annotations
 import copy
 import json
 import math
+import os
 import re
 import secrets
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from services import pending_nodes
@@ -634,6 +638,11 @@ class _Run:
     nodes: frozenset[str] = frozenset()
 
 
+def _counter(value: Any) -> bool:
+    """A stored epoch: a positive int (0 is not written)."""
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
 def _actor_key(actor: Mapping[str, Any]) -> str:
     """One run-er: an agent by its id, the person, or nobody we know."""
     kind = str(actor.get("kind") or "anonymous")
@@ -643,16 +652,22 @@ def _actor_key(actor: Mapping[str, Any]) -> str:
 
 
 class CanvasUndoBook:
-    def __init__(self, clock: Callable[[], float] = time.time) -> None:
+    def __init__(self, clock: Callable[[], float] = time.time, *, persist_path: Path | None = None) -> None:
         self._clock = clock
+        # Where the per-project id epochs are kept across restarts (round 20
+        # of PR #195, review 19 M2): the canvas revision a tab holds is this
+        # epoch, so a restart that started it again at 0 read as an agent's
+        # clear. None (tests, a state dir that can't be made): memory only.
+        self.persist_path = persist_path
         self._records: OrderedDict[str, EditRecord] = OrderedDict()  # by token, oldest first
         self._by_edit: dict[str, str] = {}
         self._links: OrderedDict[str, EditLink] = OrderedDict()
         self._gone: OrderedDict[str, str] = OrderedDict()  # token -> why it no longer works
         self._bytes = 0
         # Per project: how many times its node ids started again (forget_project),
-        # so an edit that was still finishing then keeps no token.
-        self._epochs: dict[str | None, int] = {}
+        # so an edit that was still finishing then keeps no token. Kept in
+        # ``persist_path`` (records and tokens stay memory-only).
+        self._epochs: dict[str | None, int] = self._load_epochs()
         # Runs, for "ran since": a clock that only goes up (``mark``), each
         # run's start, and per node the latest run each run-er started.
         self._tick = 0
@@ -818,12 +833,83 @@ class CanvasUndoBook:
         token = self._by_edit.get(edit_id or "")
         return self._records.get(token) if token else None
 
-    def forget_project(self, project_id: str | None, why: str) -> None:
-        self._epochs[project_id] = self.epoch(project_id) + 1
+    def advance_epoch(self, project_id: str | None) -> int:
+        """Move the project's epoch on, on disk first, and return the old one.
+
+        Call it before the canvas changes (a clear, an import), in the same
+        synchronous step: a crash between the two then leaves a moved epoch
+        over the old canvas (a tab reads it as a replacement and reloads),
+        never the new canvas under the old epoch (a held write for an old node
+        would land on the new node with its id). A storage error is printed
+        and the epoch still moves in memory: it never breaks a clear."""
+        previous = self.epoch(project_id)
+        self._save_epochs({**self._epochs, project_id: previous + 1})
+        self._epochs[project_id] = previous + 1
+        return previous
+
+    def restore_epoch(self, project_id: str | None, epoch: int) -> None:
+        """Put back the epoch ``advance_epoch`` returned when the change it
+        was moved for didn't happen (an import whose commit failed), in the
+        same synchronous step, so nothing read the moved one."""
+        self._epochs[project_id] = epoch
+        self._save_epochs(self._epochs)
+
+    def forget_project(self, project_id: str | None, why: str, *, advance: bool = True) -> None:
+        """The project's node ids start again: its epoch moves (unless the
+        caller moved it already, ``advance=False``) and its undo tokens end."""
+        if advance:
+            self.advance_epoch(project_id)
         for key in [key for key in self._node_runs if key[0] == project_id]:
             del self._node_runs[key]
         for token in [token for token, record in self._records.items() if record.project_id == project_id]:
             self._drop(token, why)
+
+    # -- the epochs on disk: {"version": 1, "projects": {id: n}, "unfiled": n}
+    def _load_epochs(self) -> dict[str | None, int]:
+        if self.persist_path is None:
+            return {}
+        try:
+            raw = json.loads(self.persist_path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return {}
+        except (OSError, ValueError) as exc:
+            print(f"[canvas_undo] could not read {self.persist_path}: {exc}; canvas revisions start at 0",
+                  flush=True)
+            return {}
+        epochs: dict[str | None, int] = {}
+        if not isinstance(raw, dict):
+            return epochs
+        projects = raw.get("projects")
+        for project_id, value in (projects.items() if isinstance(projects, dict) else ()):
+            if isinstance(project_id, str) and project_id and _counter(value):
+                epochs[project_id] = value
+        if _counter(raw.get("unfiled")):
+            epochs[None] = raw["unfiled"]
+        return epochs
+
+    def _save_epochs(self, epochs: Mapping[str | None, int]) -> None:
+        """Atomically (a temporary file, fsync, rename), best effort."""
+        if self.persist_path is None:
+            return
+        data = {"version": 1,
+                "projects": {key: value for key, value in sorted(epochs.items(), key=lambda item: str(item[0]))
+                             if key is not None and value},
+                "unfiled": int(epochs.get(None, 0))}
+        temporary = self.persist_path.with_name(f".{self.persist_path.name}.{os.getpid()}.{secrets.token_hex(4)}.tmp")
+        try:
+            self.persist_path.parent.mkdir(parents=True, exist_ok=True)
+            fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(data, handle)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, self.persist_path)
+        except OSError as exc:
+            print(f"[canvas_undo] could not save canvas revisions to {self.persist_path}: {exc}", flush=True)
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
 
     def _expire(self) -> None:
         now = self._clock()

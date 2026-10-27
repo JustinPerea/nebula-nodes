@@ -240,6 +240,7 @@ describe("an agent's switch: the handoff carries what the person typed", () => {
     expect(graphWrites.sent.filter((write) => write.method === 'DELETE')).toEqual([]);
   });
 
+  // Round 20 (GM follow-up 2): one line, naming the copy.
   it('the handoff fails: GM\'s line names the setting, the node, the project and the agent', async () => {
     type('Typed');
     vi.mocked(projects.saveProject).mockRejectedValueOnce(new projects.ProjectRequestError('Nope.', 500, { heading: 'x' } as never));
@@ -247,7 +248,8 @@ describe("an agent's switch: the handoff carries what the person typed", () => {
     agentOpens();
     await vi.waitFor(() => expect(useProjectStore.getState().activeProject?.id).toBe('beta'));
     await vi.waitFor(() => expect(lines()).toContain(
-      "Couldn't save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when Claude Code switched projects."));
+      "Couldn't save “Text” for “Hero prompt” in “Glass campaign” when Claude Code switched projects. "
+      + 'Your edits were saved as a copy, “recovered”.'));
   });
 
   it('the handoff fails and the agent isn\'t known: "an agent"', async () => {
@@ -257,7 +259,8 @@ describe("an agent's switch: the handoff carries what the person typed", () => {
     agentOpens({ kind: 'anonymous' });
     await vi.waitFor(() => expect(useProjectStore.getState().activeProject?.id).toBe('beta'));
     await vi.waitFor(() => expect(lines()).toContain(
-      "Couldn't save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when an agent switched projects."));
+      "Couldn't save “Text” for “Hero prompt” in “Glass campaign” when an agent switched projects. "
+      + 'Your edits were saved as a copy, “recovered”.'));
   });
 
   it('the handoff fails with a delete still out: "your last change"', async () => {
@@ -269,7 +272,8 @@ describe("an agent's switch: the handoff carries what the person typed", () => {
     agentOpens();
     await vi.waitFor(() => expect(useProjectStore.getState().activeProject?.id).toBe('beta'));
     await vi.waitFor(() => expect(lines()).toContain(
-      "Couldn't save your last change in “Glass campaign”. It was still saving when Claude Code switched projects."));
+      "Couldn't save your last change in “Glass campaign” when Claude Code switched projects. "
+      + 'Your edits were saved as a copy, “recovered”.'));
   });
 
   it('an undo still on its way is dropped, not folded into the handoff', async () => {

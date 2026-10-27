@@ -57,10 +57,12 @@ Projects: `nebula projects` lists them; `*` is the one open on the canvas.
 Start new work in a new project (`nebula project new "<name>"`) or open the
 right one (`nebula project open <id>`). The person's canvas follows (from
 their Projects screen too), names you, and offers them a button back.
+Their canvas is read-only until the new one loads ("Opening “<project>”…").
 **Never run `nebula clear` to make room**: a new project keeps their work.
 `nebula clear` refuses on a canvas with nodes, and `--force` clears it
 anyway. With their canvas open that is one undo step for them; with none
-open it can't be undone yet. `nebula selection` is what they have selected.
+open it can't be undone yet. A setting they were still editing is lost, and
+their canvas says you cleared it while they were editing. `nebula selection` is what they have selected.
 `nebula project rename <id> "<name>"` (or `current`) renames one, prints the
 old name and the command that puts it back. `nebula project show <id>` reads
 a saved project without opening it: nodes as `nebula look` shows them, connections,
@@ -151,7 +153,10 @@ including ones the person set. The person's canvas sends only the keys they
 change, so it never writes your other settings back over. The same key from
 both: the later write wins. Your writes need no revision headers; the
 canvas's are refused once a clear, a load or a project switch replaced the
-canvas they were made for (docs/MCP-SETUP.md, "Canvas writes").
+canvas they were made for (docs/MCP-SETUP.md, "Canvas writes"). When you
+switch projects, the person's unsent typing is saved into the project they
+left, on top of your edits to their other settings. A run you start keeps its
+results off the canvas if it is cleared while the run goes.
 
 ### Placeholders while you set nodes up
 

@@ -41,6 +41,7 @@ from uuid import uuid4
 from dotenv import load_dotenv
 from fastapi import Body, FastAPI, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.routing import Match
 from fastapi.responses import FileResponse, Response, JSONResponse
 
 # Load only process-level path/runtime overrides from the optional project
@@ -312,6 +313,11 @@ _request_workspace_revision: ContextVar[str | None] = ContextVar("workspace_revi
 # The canvas a tab's request was made for (X-Nebula-Canvas-Revision), round 19.
 _request_canvas_revision: ContextVar[str | None] = ContextVar("canvas_revision", default=None)
 _execution_workspace_context: ContextVar[dict[str, Any] | None] = ContextVar("execution_workspace", default=None)
+# A fenced route's request came from a canvas tab (X-Nebula-Tab), round 20.
+_request_from_tab: ContextVar[bool] = ContextVar("request_from_tab", default=False)
+# The canvas a run was admitted on, (open project, its id epoch), round 20 L3:
+# set by _capture_execution_workspace, inherited by the run's tasks.
+_execution_canvas: ContextVar[tuple[str | None, int] | None] = ContextVar("execution_canvas", default=None)
 _synchronous_workspace_runs: set[str] = set()
 _live_graph_load_failed = False
 if _STATE_PATH is not None and _STATE_PATH.exists():
@@ -766,6 +772,48 @@ def _capture_execution_workspace() -> None:
     # asyncio tasks inherit this immutable admission identity; late events
     # never borrow whichever project happens to be active when broadcast.
     _execution_workspace_context.set(_workspace_context())
+    # And the canvas it was admitted on, for its write-backs (round 20, L3).
+    _execution_canvas.set(_run_canvas_now())
+
+
+# A run writes back only onto the canvas it was admitted on (round 20 of PR
+# #195, review 19 L3). Node ids start again after a clear (and an import, which
+# refuses while a run is active), so a run admitted before an agent's clear
+# would write its handler-changed params and its outputs onto the agent's new
+# node with the same id. Each run route notes (open project, id epoch) at
+# admission (_capture_execution_workspace, a ContextVar its tasks inherit), and
+# the write-backs (_sync_params_to_cli_graph, _sync_outputs_to_cli_graph, the
+# Cinema shot merges, a recovery's params) are dropped when it moved. PR #114
+# has the same rule keyed by run id (_register_run(canvas=), _run_canvas_moved),
+# with the same (project, epoch) pair (_run_canvas_now): at merge, use #114's.
+def _run_canvas_now() -> tuple[str | None, int]:
+    project_id = _workspace_context()["activeProjectId"]
+    return project_id, canvas_undo_book.epoch(project_id)
+
+
+_runs_told_moved: OrderedDict[str, None] = OrderedDict()
+
+
+def _admitted_canvas_moved(what: str) -> bool:
+    """Whether a write-back (``what``) of the run in this context must be
+    dropped: the canvas it was admitted on is no longer the open one. Outside
+    a run (nothing noted) it writes as before. Logged once per run."""
+    noted = _execution_canvas.get()
+    if noted is None:
+        return False
+    try:
+        if _run_canvas_now() == noted:
+            return False
+    except ProjectStoreError:
+        pass  # which canvas is open can't be read: don't write by node id
+    run_id = execution_run_id.get() or "?"
+    if run_id not in _runs_told_moved:
+        _runs_told_moved[run_id] = None
+        while len(_runs_told_moved) > 256:
+            _runs_told_moved.popitem(last=False)
+        print(f"[run] run {run_id} started on a canvas that was cleared or replaced since; "
+              f"dropped its {what} (and any later write-back)", flush=True)
+    return True
 
 
 def _track_synchronous_project_run(handler):
@@ -844,39 +892,104 @@ def _params_outdated(request: Request) -> bool:
     return supplied.strip() != str(PARAMS_VERSION)
 
 
+# Which routes a canvas tab's write must say its project and canvas for (round
+# 20 of PR #195, review 19 H2): every route that changes the graph or starts
+# work on the canvas carries the marker ``graph_write``, and the fence
+# (project_workspace_fence) reads it from the route the request matches, never
+# from the path. tests/test_round20_fence.py walks every non-GET route: each is
+# marked or on its allowlist, with why it doesn't touch the graph.
+GRAPH_FENCE_ATTR = "__nebula_graph_fence__"
+# The fence refuses a tab request with no workspace revision and checks the
+# revisions before the route runs.
+FENCE_BEFORE_ROUTE = "before-route"
+# The route checks (_refuse_tab_write_without_revision and
+# _check_workspace_revision, in the step that writes): it writes the graph only
+# for some requests (/api/uploads with create_node). The fence still reads the
+# revision headers for it.
+FENCE_IN_ROUTE = "in-route"
+
+
+def graph_write(endpoint: Any = None, *, checks_in_route: bool = False) -> Any:
+    """Mark a route that changes the graph or starts work on the canvas. Put
+    it right under ``@app.post(...)`` (or put, delete): it sets an attribute
+    and returns the same function, so FastAPI reads the signature as before."""
+    def mark(function: Any) -> Any:
+        setattr(function, GRAPH_FENCE_ATTR, FENCE_IN_ROUTE if checks_in_route else FENCE_BEFORE_ROUTE)
+        return function
+    return mark(endpoint) if endpoint is not None else mark
+
+
+_GRAPH_FENCE_CACHE: OrderedDict[tuple[str, str], str | None] = OrderedDict()
+_GRAPH_FENCE_CACHE_SIZE = 1024
+
+
+def _graph_fence_of(method: str, path: str) -> str | None:
+    """The fence marker of the route a ``method`` request to ``path`` runs
+    (the first full match, as the router picks), or None."""
+    if method in {"GET", "HEAD", "OPTIONS"}:
+        return None
+    key = (method, path)
+    if key in _GRAPH_FENCE_CACHE:
+        return _GRAPH_FENCE_CACHE[key]
+    scope = {"type": "http", "method": method, "path": path, "root_path": ""}
+    fence = None
+    for route in app.router.routes:
+        match, _child = route.matches(scope)
+        if match is Match.FULL:
+            fence = getattr(getattr(route, "endpoint", None), GRAPH_FENCE_ATTR, None)
+            break
+    _GRAPH_FENCE_CACHE[key] = fence
+    while len(_GRAPH_FENCE_CACHE) > _GRAPH_FENCE_CACHE_SIZE:
+        _GRAPH_FENCE_CACHE.popitem(last=False)
+    return fence
+
+
+def _refuse_tab_write_without_revision() -> None:
+    """For a FENCE_IN_ROUTE route when this request writes the graph: a canvas
+    tab's write that says no project (sent while the tab held none) is
+    refused, as the fence refuses it before FENCE_BEFORE_ROUTE routes."""
+    if _request_from_tab.get() and _request_workspace_revision.get() is None:
+        raise HTTPException(status_code=409, detail=CANVAS_OUT_OF_DATE)
+
+
 @app.middleware("http")
 async def project_workspace_fence(request: Request, call_next):
     if _params_outdated(request):
         return JSONResponse(status_code=409, content={
             "code": "params_outdated", "detail": PARAMS_OUTDATED_DETAIL, "paramsVersion": PARAMS_VERSION,
         })
-    path = request.url.path
-    guarded = request.method not in {"GET", "HEAD", "OPTIONS"} and path.startswith((
-        "/api/graph", "/api/execute", "/api/cinema", "/api/quick",
-    ))
+    fence = _graph_fence_of(request.method, request.scope.get("path") or request.url.path)
+    guarded = fence is not None
     supplied = request.headers.get("x-nebula-workspace-revision") if guarded else None
+    from_tab = request.headers.get("x-nebula-tab") is not None
     # Round 19 (review 18, H-B): a canvas tab's graph write always says which
     # project it was made in. Every tab request carries X-Nebula-Tab (the
     # canvas's apiFetch) and agents, the CLI and MCP never send one, so the
     # no-header pass stays theirs only. Without it the tab's write is refused
     # with the canvas's out-of-date line: a write sent while the tab had no
     # project (an agent's switch half-followed) never lands in whatever is
-    # open now.
-    if guarded and supplied is None and request.headers.get("x-nebula-tab") is not None:
+    # open now. A FENCE_IN_ROUTE route does this itself, for the requests
+    # that write.
+    if fence == FENCE_BEFORE_ROUTE and supplied is None and from_tab:
         return JSONResponse(status_code=409, content={"detail": CANVAS_OUT_OF_DATE})
     token = _request_workspace_revision.set(supplied)
     canvas_token = _request_canvas_revision.set(request.headers.get("x-nebula-canvas-revision") if guarded else None)
+    tab_token = _request_from_tab.set(from_tab and guarded)
     execution_token = _execution_workspace_context.set(None)
+    run_canvas_token = _execution_canvas.set(None)
     try:
-        try:
-            _check_workspace_revision()
-        except HTTPException as exc:
-            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
-        except ProjectStoreError as exc:
-            return JSONResponse(status_code=507, content=_storage_error_body(exc))
+        if fence == FENCE_BEFORE_ROUTE:
+            try:
+                _check_workspace_revision()
+            except HTTPException as exc:
+                return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+            except ProjectStoreError as exc:
+                return JSONResponse(status_code=507, content=_storage_error_body(exc))
         return await call_next(request)
     finally:
+        _execution_canvas.reset(run_canvas_token)
         _execution_workspace_context.reset(execution_token)
+        _request_from_tab.reset(tab_token)
         _request_canvas_revision.reset(canvas_token)
         _request_workspace_revision.reset(token)
 
@@ -2812,6 +2925,7 @@ def _upload_position(x: str | None, y: str | None) -> dict[str, float] | None:
 
 
 @app.post("/api/uploads")
+@graph_write(checks_in_route=True)
 async def upload_file_consolidated(
     file: UploadFile,
     create_node: str = Form("false"),
@@ -2846,6 +2960,15 @@ async def upload_file_consolidated(
     both shapes of caller can migrate to this one.
     """
     requested_position = _upload_position(x, y)
+    wants_node = create_node.strip().lower() in ("true", "1", "yes")
+    if wants_node:
+        # Fenced in the route (graph_write(checks_in_route=True), round 20 of
+        # PR #195, review 19 H2): only an upload that adds a node writes the
+        # canvas. A tab's drop that says no project, or one made for a
+        # project or canvas that isn't open, is refused here, and again in
+        # the step that adds the node, after the file read and the probe.
+        _refuse_tab_write_without_revision()
+        _check_workspace_revision()
     content = await file.read()
     # Reject anything that cannot possibly be an accepted file before sniffing.
     # Images are capped at MAX_CHAT_UPLOAD_BYTES; videos at MAX_VIDEO_UPLOAD_BYTES.
@@ -2920,7 +3043,7 @@ async def upload_file_consolidated(
 
     # Opt-in node creation: parse create_node laxly so any reasonable truthy
     # string works (supports callers composing forms in different tools).
-    if create_node.strip().lower() in ("true", "1", "yes"):
+    if wants_node:
         if requested_position is not None:
             new_position = requested_position
         else:
@@ -2971,6 +3094,9 @@ async def upload_file_consolidated(
         kept_name = file_name_param(node_params["filePath"], file.filename)
         if kept_name is not None:
             node_params[INPUT_FILE_NAME_PARAM] = kept_name
+        # The same step as the add, after every await: an agent's switch or
+        # clear while the file was read or probed refuses the drop.
+        _check_workspace_revision()
         node_id = cli_graph.add_node(node_type, node_params, position=new_position)
         try:
             await _broadcast_graph_sync(edit=True)
@@ -8974,6 +9100,7 @@ def _skip_reply(skips: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
 
 
 @app.post("/api/execute")
+@graph_write
 async def execute(request: ExecuteRequest) -> dict:
     _check_workspace_revision()
     _capture_execution_workspace()
@@ -9119,6 +9246,7 @@ async def execute(request: ExecuteRequest) -> dict:
 
 
 @app.post("/api/execute-node")
+@graph_write
 async def execute_node(request: ExecuteNodeRequest) -> dict:
     """Execute only the subgraph feeding into a specific target node."""
     _check_workspace_revision()
@@ -9449,7 +9577,7 @@ async def _merge_shot_result(
 
     async with _shot_merge_lock(node_id):
         node = cli_graph.nodes.get(node_id)
-        if node is None:
+        if node is None or _admitted_canvas_moved("shot result"):
             return result_output
 
         # Patch ONLY the target shot's output on the live scene; siblings (incl.
@@ -9647,7 +9775,7 @@ async def _merge_shot_variations(
     canonical = {"imageUrl": variations[0]["url"], "status": "done"}
     async with _shot_merge_lock(node_id):
         node = cli_graph.nodes.get(node_id)
-        if node is None:
+        if node is None or _admitted_canvas_moved("shot variations"):
             return canonical
         params = dict(node.get("params") or {})
         scene = params.get("scene")
@@ -9734,6 +9862,7 @@ async def _promote_shot_variation(
 
 
 @app.post("/api/cinema/promote-shot-variation")
+@graph_write
 async def promote_cinema_shot_variation(
     request: PromoteShotVariationRequest,
 ) -> dict[str, Any]:
@@ -9748,6 +9877,7 @@ async def promote_cinema_shot_variation(
 
 
 @app.post("/api/cinema/generate-shot")
+@graph_write
 async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     """Regenerate ONLY the named shot of a cinema-scene node.
 
@@ -10202,8 +10332,8 @@ async def _broadcast_graph_sync(
         # their errors go.
         canvas_arrange.clear()
         if reason == "import":
+            # Its undo tokens and canvas revision went with the commit (import_graph).
             node_errors.forget_canvas()
-            _forget_canvas_undo("a graph was loaded into the project since, so its node ids started again")
     export = await export_graph_for_frontend()
     # A cover proposal's view follows the live canvas (a pin's image deleted
     # or back). Before the sync goes out: one a delete closes is named in the
@@ -10290,7 +10420,9 @@ def _sync_outputs_to_cli_graph(
         }
         normalized_outputs = _normalize_outputs_for_storage(shaped_outputs)
 
-    if node_id not in cli_graph.nodes:
+    if node_id not in cli_graph.nodes or _admitted_canvas_moved("outputs"):
+        # The event still carries them; the canvas node with this id is
+        # another node when the run's canvas was cleared since (round 20, L3).
         return normalized_outputs
 
     # A running recipe can still be consuming source A after explicit refresh
@@ -10611,6 +10743,10 @@ def _sync_provider_recovery_to_cli_graph(
     current = cli_graph.nodes.get(event.node_id)
     if current is None:
         return False, durability_warning, safety_hold_changed
+    # The checkpoint above is kept by run and node (the paid-state record);
+    # the node's params only on the canvas the run was admitted on (round 20, L3).
+    if _admitted_canvas_moved("recovery params"):
+        return False, durability_warning, safety_hold_changed
 
     params = copy.deepcopy(current.get("params") or {})
     params.pop("resume_operation_id", None)
@@ -10643,7 +10779,12 @@ def _sync_params_to_cli_graph(
     only what the run itself changed is copied, never who bills it
     (``_provider``, ``_kreaAuth``: BILLING_PARAMS), so a request can't edit
     the canvas by running a node with the canvas node's id; edits go through
-    the edit routes and their checks."""
+    the edit routes and their checks.
+
+    Nothing is written when the canvas the run was admitted on was cleared
+    or replaced since (_admitted_canvas_moved, round 20 L3)."""
+    if _admitted_canvas_moved("params"):
+        return False
     persisted = False
     for node in nodes:
         current = cli_graph.nodes.get(node.id, {})
@@ -11005,6 +11146,7 @@ def _moved_far_enough(before: Any, after: dict[str, float]) -> bool:
 
 
 @app.post("/api/graph/node")
+@graph_write
 async def create_graph_node(body: dict[str, Any]) -> dict:
     _check_workspace_revision()
     _validate_graph_ingress_complexity(body)
@@ -11056,6 +11198,7 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
 
 
 @app.post("/api/graph/connect")
+@graph_write
 async def connect_graph_nodes(body: dict[str, Any]) -> dict:
     _check_workspace_revision()
     _validate_connect_handles(
@@ -11096,6 +11239,7 @@ async def connect_graph_nodes(body: dict[str, Any]) -> dict:
 
 
 @app.post("/api/graph/node-and-connect")
+@graph_write
 async def create_node_and_connect(body: dict[str, Any]) -> dict:
     """Create a node and wire it to an existing node in a single atomic call.
 
@@ -11265,6 +11409,7 @@ def _cinema_motion_source_position(node_id: str) -> dict[str, float]:
 
 
 @app.post("/api/cinema/send-to-motion")
+@graph_write
 async def send_cinema_shot_to_motion(body: dict[str, Any]) -> dict:
     """Create or reuse an exact shot-to-Veo connection without running it.
 
@@ -11439,6 +11584,7 @@ def _keep_recovery_checkpoint(node: dict[str, Any], params: dict[str, Any]) -> b
 
 
 @app.put("/api/graph/node/{node_id}")
+@graph_write
 async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]) -> dict:
     _check_workspace_revision()
     _validate_graph_ingress_complexity(body)
@@ -11645,6 +11791,7 @@ async def universal_model_ports(body: dict[str, Any]) -> dict[str, Any]:
 
 
 @app.post("/api/graph/node/{node_id}/model")
+@graph_write
 async def configure_universal_node(node_id: str, body: dict[str, Any]) -> dict[str, Any]:
     """The canvas's model picker: set a universal node's model and the ports,
     params and Inspector controls that come with it (services/universal_ports.py).
@@ -11704,6 +11851,7 @@ async def configure_universal_node(node_id: str, body: dict[str, Any]) -> dict[s
 
 
 @app.put("/api/graph/node/{node_id}/label")
+@graph_write
 async def rename_graph_node(node_id: str, body: dict[str, Any]) -> dict:
     """Rename a node on the canvas. A blank name, or the model's own name,
     clears the custom name. Names don't affect execution, so this stays out of
@@ -11739,6 +11887,7 @@ async def rename_graph_node(node_id: str, body: dict[str, Any]) -> dict:
 
 
 @app.put("/api/graph/layout")
+@graph_write
 async def update_graph_layout(body: dict[str, Any]) -> dict:
     """Persist a complete or partial Canvas layout in one atomic mutation.
 
@@ -11872,6 +12021,7 @@ def _require_clear_intent(force: bool) -> None:
 
 
 @app.delete("/api/graph")
+@graph_write
 async def clear_graph(force: bool = False) -> dict:
     # Clear Canvas is not consent to forget paid-provider state. Resolve each
     # recovery/ambiguity through its exact endpoint first; otherwise recreating
@@ -11880,13 +12030,16 @@ async def clear_graph(force: bool = False) -> dict:
     _require_clear_intent(force)
     with _paid_graph_mutation("clear the canvas"):
         _reject_graph_replacement_during_paid_start("clear the canvas")
+        # With the clear, before any await: a tab's write made for the old
+        # canvas is refused from now on (_canvas_revision, round 19). Before
+        # the canvas changes, and on disk first (round 20, M2): a crash in
+        # between leaves a moved revision over the old canvas, never the
+        # cleared canvas under the old revision.
+        _forget_canvas_undo("the canvas was cleared since")
         cli_graph.clear()
         run_approvals.clear()
         # Ids start again at n1: no node now is one a restore brought back.
         node_removals.forget_project(_workspace_context()["activeProjectId"])
-        # With the clear, before any await: a tab's write made for the old
-        # canvas is refused from now on (_canvas_revision, round 19).
-        _forget_canvas_undo("the canvas was cleared since")
     agent_presence.forget_graph()
     await _forget_status_anchors()
     await _broadcast_graph_sync(edit=True)
@@ -11903,6 +12056,7 @@ async def clear_graph(force: bool = False) -> dict:
 
 
 @app.delete("/api/provider-recoveries/{run_id}/{node_id}")
+@graph_write
 async def delete_provider_recovery(
     run_id: str,
     node_id: str,
@@ -12077,6 +12231,7 @@ def _ensure_node_deletable(node_id: str, node: dict[str, Any]) -> None:
 
 
 @app.delete("/api/graph/node/{node_id}")
+@graph_write
 async def delete_graph_node(node_id: str) -> dict:
     """Remove a node and any edges touching it from cli_graph."""
     _check_workspace_revision()
@@ -12298,6 +12453,7 @@ def _check_provider(definition_id: str, params: dict[str, Any], label: str) -> N
 
 
 @app.post("/api/graph/apply")
+@graph_write
 async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     """An agent edits the canvas directly: everything in the body, or nothing.
 
@@ -12579,6 +12735,7 @@ def _kept_paper_source(current: Mapping[str, Any], incoming: Mapping[str, Any]) 
 
 
 @app.post("/api/graph/restore")
+@graph_write
 async def restore_graph_state(body: dict[str, Any]) -> dict[str, Any]:
     """Put nodes and wires back the way they were: the canvas's undo and redo.
 
@@ -12890,7 +13047,25 @@ async def _restore_graph(
 # restore the canvas's Cmd+Z uses. The journal names the edit an undo reverts
 # (event ``edit``), for that undo and for the person's Cmd+Z of the edit.
 
-canvas_undo_book = CanvasUndoBook()
+# Its per-project id epochs are the canvas revision (_canvas_revision), kept in
+# the state dir so a restart doesn't start them again at 0 (round 20 of PR
+# #195, review 19 M2); no state dir, memory only, as the other stores.
+canvas_undo_book = CanvasUndoBook(
+    persist_path=_STATE_DIR / "canvas-revisions.json" if _STATE_PATH is not None else None)
+
+
+def _advance_canvas_revision_after_a_failed_load() -> None:
+    """Boot: state.json didn't load, so the live canvas starts empty under the
+    open project. That is a replacement: its revision moves, so a tab holding
+    the old one reloads instead of writing to node ids the graph no longer has."""
+    try:
+        canvas_undo_book.advance_epoch(project_store.workspace()["activeProjectId"])
+    except Exception as exc:  # noqa: BLE001 - boot goes on; the graph is already empty
+        print(f"[main] could not move the canvas revision after the failed graph load: {exc}", flush=True)
+
+
+if _live_graph_load_failed:
+    _advance_canvas_revision_after_a_failed_load()
 # The edit the current request makes ({id}, or {id, undoes|redoes, of?}): it
 # tags the request's journal events (_journal) and its graphSync (_graph_edit_origin).
 _canvas_edit_link: ContextVar[dict[str, Any] | None] = ContextVar("canvas_edit_link", default=None)
@@ -12939,10 +13114,13 @@ def _canvas_undo_keep(identity: Any, after: dict[str, Any]) -> dict[str, Any] | 
                                  mark=after.get("mark"), removals=after.get("removals"))
 
 
-def _forget_canvas_undo(why: str) -> None:
-    """The open project's node ids start again: its undo tokens end."""
+def _forget_canvas_undo(why: str, *, advance: bool = True) -> None:
+    """The open project's node ids start again: its undo tokens end, and its
+    canvas revision moves (unless the caller moved it already, ``advance``),
+    on disk before memory (CanvasUndoBook.advance_epoch). Call it before the
+    canvas changes, in the same synchronous step."""
     try:
-        canvas_undo_book.forget_project(_workspace_context()["activeProjectId"], why)
+        canvas_undo_book.forget_project(_workspace_context()["activeProjectId"], why, advance=advance)
     except Exception:  # noqa: BLE001 - never break a clear or a load over undo bookkeeping
         pass
 
@@ -13049,6 +13227,7 @@ def _undo_left_text(skipped: list[dict[str, Any]]) -> str:
 
 
 @app.post("/api/graph/apply/undo")
+@graph_write
 async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     """An agent undoes one of its own edits: ``{token}``, the ``undo.token``
     its POST /api/graph/apply reply carried (MCP undo_canvas_edit, ``nebula undo``).
@@ -13316,6 +13495,7 @@ def _url_to_output_path(value: str) -> Path | None:
 
 
 @app.delete("/api/graph/edge")
+@graph_write
 async def delete_graph_edge(body: dict[str, Any]) -> dict:
     """Remove the edge matching source/sourceHandle/target/targetHandle."""
     _check_workspace_revision()
@@ -13669,6 +13849,7 @@ def _stage_graph_edges(
 
 
 @app.post("/api/graph/import")
+@graph_write
 async def import_graph(body: dict[str, Any]) -> dict:
     """Atomically replace cli_graph from a file-loaded graph.
 
@@ -13730,11 +13911,22 @@ async def import_graph(body: dict[str, Any]) -> dict:
             )
         # Check and commit are synchronous on this event loop. No other graph
         # or Cinema task can be admitted between this fence and replacement.
-        _commit_graph_candidate_with_recoveries(
-            candidate,
-            list(candidate.nodes.values()),
-            source="import",
-        )
+        # The canvas revision moves first, on disk too (round 20, M2: a crash
+        # between leaves a moved revision over the old graph, never the new
+        # graph under the old revision), and back if the commit fails.
+        importing_into = _workspace_context()["activeProjectId"]
+        previous_revision = canvas_undo_book.advance_epoch(importing_into)
+        try:
+            _commit_graph_candidate_with_recoveries(
+                candidate,
+                list(candidate.nodes.values()),
+                source="import",
+            )
+        except BaseException:
+            canvas_undo_book.restore_epoch(importing_into, previous_revision)
+            raise
+        _forget_canvas_undo("a graph was loaded into the project since, so its node ids started again",
+                            advance=False)
         # Ids start again under this project: no node now is one a restore
         # brought back. Here, with the commit, not after the sync's awaits: a
         # delete landing during the sync would name the old node's removal.
@@ -13803,6 +13995,7 @@ def _rf_created(node_ids: list[str], edge_ids: list[str]) -> dict[str, list[dict
 
 
 @app.post("/api/graph/cluster")
+@graph_write
 async def add_graph_cluster(body: dict[str, Any]) -> dict:
     """Additively add a node cluster (e.g. authored from the Create view) to the
     CLI graph and persist it. Mirrors /api/graph/import but does NOT clear the
@@ -14875,7 +15068,8 @@ def _save_project(project_id: str, body: dict[str, Any], *, ingress: _IngressVer
             # The next switch (anyone's) ends the handoff. The project may
             # be the open one again: an agent reopened the project the tab
             # was showing, which reloads it from what was saved.
-            _save_handoff(project, body["snapshot"], ingress=ingress)
+            _save_handoff(project, body["snapshot"], ingress=ingress,
+                          pending_params=body.get("pendingParams"), pending_labels=body.get("pendingLabels"))
             refresh_metadata(project)
             project_store.commit(catalog)
             return {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"],
@@ -14937,16 +15131,74 @@ def _keep_person_viewport(staged: dict[str, Any], stored: dict[str, Any]) -> Non
         staged["viewport"] = copy.deepcopy(stored.get("viewport"))
 
 
-def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict | None = None) -> None:
+HANDOFF_MERGE_REFUSED = "Nebula couldn't keep this save's unsent changes in the project ({why}), so nothing was saved."
+
+
+def _handoff_pending(pending_params: Any, pending_labels: Any) -> tuple[dict[str, list[str]], set[str]]:
+    """The handoff's unsent keys per node and the nodes with an unsent name,
+    or a 409 for a malformed list (round 20, H1). Only names are read here:
+    every value comes from the staged snapshot."""
+    params: dict[str, list[str]] = {}
+    if pending_params is not None:
+        if not isinstance(pending_params, dict):
+            raise HTTPException(status_code=409, detail=HANDOFF_MERGE_REFUSED.format(
+                why="pendingParams must map node ids to their unsent settings"))
+        for node_id, keys in pending_params.items():
+            if not isinstance(keys, dict) or not all(isinstance(key, str) and key for key in keys):
+                raise HTTPException(status_code=409, detail=HANDOFF_MERGE_REFUSED.format(
+                    why=f"the unsent settings for node {node_id} must be an object of settings"))
+            params[node_id] = list(keys)
+    labels: set[str] = set()
+    if pending_labels is not None:
+        if not isinstance(pending_labels, dict) or not all(
+                value is None or isinstance(value, str) for value in pending_labels.values()):
+            raise HTTPException(status_code=409, detail=HANDOFF_MERGE_REFUSED.format(
+                why="pendingLabels must map node ids to a name or null"))
+        labels = set(pending_labels)
+    return params, labels
+
+
+def _merge_handoff_node(stored: dict[str, Any], staged: dict[str, Any], staged_label: str | None,
+                        keys: list[str], label: bool) -> dict[str, Any]:
+    """The stored copy of a node with the tab's unsent keys (top-level, as
+    cli_graph.update_params merges) and name taken from its staged node."""
+    merged = copy.deepcopy(stored)
+    data = merged.setdefault("data", {})
+    params = data.get("params") if isinstance(data.get("params"), dict) else {}
+    data["params"] = params
+    staged_params = (staged.get("data") or {}).get("params") or {}
+    for key in keys:
+        # A key the staged node lacks (dropped by staging) is not merged.
+        if key in staged_params:
+            params[key] = copy.deepcopy(staged_params[key])
+    if label:
+        if staged_label:
+            data["label"] = staged_label
+        else:
+            data.pop("label", None)  # back to the model's name
+    return merged
+
+
+def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict | None = None,
+                  pending_params: Any = None, pending_labels: Any = None) -> None:
     """The last save from a tab whose project an agent switched away from.
 
     The switch already merged the live canvas into this project
     (_overlay_live_project), so nodes and wires the backend had stay as
     saved. The tab adds what only it holds: nodes and wires it never sent to
-    the backend, its viewport, run history and Create draft.
+    the backend, its viewport, run history and Create draft, and (round 20 of
+    PR #195, review 19 H1) the settings and names it hadn't sent for nodes
+    the backend had: ``pending_params`` ({nodeId: {key: value}}) and
+    ``pending_labels`` ({nodeId: name | null}) name them, and each value is
+    taken from the staged snapshot node (checked like every save), merged
+    per top-level key onto the stored copy. Everything else keeps the stored
+    copy, so an undo the tab dropped is still not folded in. A merge that
+    can't be made (a node not in the save, another definition, a malformed
+    list) refuses the whole save with 409, so the tab keeps it as a copy.
     """
     stored = project["snapshot"]
     historical = {node["id"]: node.get("data", {}).get("definitionId") for node in stored["nodes"]}
+    unsent_params, unsent_labels = _handoff_pending(pending_params, pending_labels)
     staged, candidate = _stage_project_snapshot(raw, historical=historical, ingress=ingress)
     _refuse_agent_billing_in_project(candidate, _snapshot_nodes(stored))
     _keep_person_viewport(staged, stored)
@@ -14955,7 +15207,23 @@ def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict
     _live_pending_flags([node for node in staged["nodes"] if node["id"] not in backend_nodes], {})
     backend_edges = set(project.get("_backendEdgeIds") or [])
     stored_nodes = {node["id"]: node for node in stored["nodes"]}
-    nodes = [stored_nodes.get(node["id"], node) if node["id"] in backend_nodes else node for node in staged["nodes"]]
+    staged_nodes = {node["id"]: node for node in staged["nodes"]}
+    merged: dict[str, dict[str, Any]] = {}
+    for node_id in [*unsent_params, *(key for key in unsent_labels if key not in unsent_params)]:
+        tab_node = staged_nodes.get(node_id)
+        if tab_node is None:
+            raise HTTPException(status_code=409, detail=HANDOFF_MERGE_REFUSED.format(
+                why=f"node {node_id} isn't in the save"))
+        if node_id not in backend_nodes or node_id not in stored_nodes:
+            continue  # only the tab had it: it is added with its own values
+        kept = stored_nodes[node_id]
+        if (tab_node.get("data") or {}).get("definitionId") != (kept.get("data") or {}).get("definitionId"):
+            raise HTTPException(status_code=409, detail=HANDOFF_MERGE_REFUSED.format(
+                why=f"node {node_id} is another kind of node in the project"))
+        merged[node_id] = _merge_handoff_node(kept, tab_node, (candidate.nodes.get(node_id) or {}).get("label"),
+                                              unsent_params.get(node_id, []), node_id in unsent_labels)
+    nodes = [merged.get(node["id"]) or stored_nodes.get(node["id"], node) if node["id"] in backend_nodes else node
+             for node in staged["nodes"]]
     listed = {node["id"] for node in nodes}
     nodes += [node for node in stored["nodes"] if node["id"] in backend_nodes and node["id"] not in listed]
     kept = {node["id"] for node in nodes}
@@ -15340,6 +15608,7 @@ async def export_graph_for_frontend() -> dict:
 # ---------- CLI: Synchronous execution ----------
 
 @app.post("/api/graph/run")
+@graph_write
 async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dict:
     """Run the CLI graph (or one node and what feeds it) and return the results.
 
@@ -15831,6 +16100,7 @@ async def _quick_multi_image_input_handler(
 
 
 @app.post("/api/quick")
+@graph_write
 @_track_synchronous_project_run
 async def quick_execute(body: dict[str, Any]) -> dict:
     """One-shot: create a temp node, execute, return output."""

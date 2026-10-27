@@ -86,19 +86,23 @@
 }
 
 .agent-cursor__say {
-  /* The label shrinks to fit (it is absolutely positioned), so give the
-     bubble its own width or it wraps every couple of words. */
-  width: max-content;
+  /* GM - Design, round 20 (A): a solid dark neutral pill just under the name
+     tag, the same height (11px text on a 16px line, 2px above and below) and
+     radius, so it reads over any node title at any zoom (the layer
+     counter-scales it). One line; a long line ends in an ellipsis. The pill
+     and its text fade together: the in and out animations are on the pill. */
   max-width: 260px;
-  padding: 5px 9px;
-  border-radius: 8px;
-  border: 1px solid color-mix(in srgb, var(--agent-color) 45%, transparent);
-  background: rgb(14 14 16 / 0.92);
+  padding: 2px 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #18181b;
   color: #ececee;
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 500;
   line-height: 16px;
-  white-space: normal;
-  box-shadow: 0 4px 14px rgb(0 0 0 / 0.4);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.35);
   animation: agent-cursor-say-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
   transform-origin: 0 0;
 }

@@ -1,0 +1,7 @@
+/* Round 20 (review 19, M1): while the tab follows an agent's switch the
+   canvas is read-only, as offline is (PR #114): its fields show disabled.
+   hooks/useFollowingReadOnly.ts sets the class and refuses the attempts. */
+body.nebula-following :is(.react-flow, .panel--inspector) :is(input, textarea, select, [contenteditable="true"]) {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

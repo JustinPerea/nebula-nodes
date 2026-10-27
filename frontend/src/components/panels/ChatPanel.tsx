@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { refuseEditWhileFollowing } from '../../lib/canvasFollow';
 import { ArrowUp, ChevronDown, ChevronRight, ExternalLink, LogIn, Square, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
@@ -838,6 +839,16 @@ export function ChatPanel() {
 
   const uploadFile = useCallback(
     async (file: File, chipId: string) => {
+      // Round 20 (M1): no node is added to a canvas that's about to go away;
+      // the chip goes, as the drop did nothing.
+      if (refuseEditWhileFollowing()) {
+        setPendingImages((prev) => {
+          const prior = prev.find((p) => p.id === chipId);
+          if (prior && prior.status === 'uploading' && prior.thumbUrl.startsWith('blob:')) URL.revokeObjectURL(prior.thumbUrl);
+          return prev.filter((p) => p.id !== chipId);
+        });
+        return;
+      }
       const form = new FormData();
       form.append('file', file);
       form.append('create_node', 'true');

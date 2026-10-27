@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useFollowingReadOnly } from '../hooks/useFollowingReadOnly';
+import '../styles/canvas-follow.css';
 import {
   ReactFlow,
   Background,
@@ -251,6 +253,8 @@ export function CanvasFocusController() {
 
 export function Canvas() {
   useSlavaHandleMagnetism();
+  // Round 20 (M1): read-only while the tab follows an agent's switch.
+  useFollowingReadOnly();
 
   const nodes = useGraphStore((s) => s.nodes);
   const edges = useGraphStore((s) => s.edges);

@@ -2,6 +2,7 @@ import { useGraphStore } from '../../store/graphStore';
 import { NOTICE_HOLD_MS } from '../../lib/canvasNoticeHold';
 import { isForeignEdit } from '../../lib/canvasUndo';
 import { useNoticeHold } from '../../hooks/useNoticeHold';
+import { OpenCopyButton } from './OpenCopyButton';
 
 /** How long a notice with Undo or Redo stays up. Long enough to reach the button. */
 export const UNDO_NOTICE_MS = NOTICE_HOLD_MS;
@@ -66,6 +67,7 @@ export function CanvasUndoNotice({ messagesOnly = false }: { messagesOnly?: bool
           {notice.offer === 'undo' ? 'Undo' : 'Redo'}
         </button>
       )}
+      {notice.copy && <OpenCopyButton projectId={notice.copy.projectId} onOpen={dismiss} />}
       <button type="button" className="canvas-undo-notice__close" aria-label="Dismiss" onClick={dismiss}>
         ×
       </button>

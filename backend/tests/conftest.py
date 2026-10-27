@@ -169,9 +169,10 @@ PERSON_HELLO = {"type": "hello", "personToken": PERSON_TOKEN}
 class TabHeaders(Mapping):
     """What a canvas tab sends on a graph write: ``base`` (PERSON and
     X-Nebula-Tab) plus the open workspace's revision, read when the request
-    is made. Round 19 of PR #195: Nebula refuses a tab's write on /api/graph,
-    /api/execute, /api/cinema and /api/quick that carries no revision, as the
-    canvas's apiFetch always sends one while a project is open."""
+    is made. Round 19 of PR #195: Nebula refuses a tab's write that carries no
+    revision on a route that writes the graph (marked ``main.graph_write``
+    since round 20), as the canvas's apiFetch always sends one while a
+    project is open."""
 
     def __init__(self, base: Mapping[str, str]) -> None:
         self._base = dict(base)

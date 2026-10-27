@@ -327,13 +327,22 @@ The server exposes these tools for building and running (see
   projects, switch the canvas to one, or start a new, empty one. The project
   that was open is saved as it is. The person's canvas follows (from the
   Projects screen too, which opens the canvas), shows a note naming the
-  agent, and offers a button back to the project they had open. The Projects
+  agent, and offers a button back to the project they had open. Until the
+  new canvas has loaded, their canvas is read-only: the project bar says
+  "Opening “<project>”…" and Run says "Wait for “<project>” to open." What
+  they typed before the switch is saved into the project they left; if that
+  save fails it is kept as a new project, "<project> (recovered)", and a
+  line says so with an Open copy button. The Projects
   screen also lists again whenever anyone makes, renames, deletes or restores
   a project (the `projectsChanged` socket event).
   Start new work in a new project rather than emptying the canvas: it keeps
   the person's work. Clearing a project that has nodes needs an explicit
   force from anyone (`nebula clear --force`, or `DELETE /api/graph?force=true`);
-  on an open canvas the person can undo it. Each `list_projects` row has the
+  on an open canvas the person can undo it. If they were editing when you
+  cleared, that edit is lost and their canvas says so, naming you: "Codex
+  cleared the canvas while you were editing “Text” for “Hero prompt”. That
+  change wasn't saved." (a count from 4 settings, or settings on several
+  nodes). Each `list_projects` row has the
   card's `cover` ({source, images}).
 - `list_project_covers` / `set_project_cover`: the images a project's card
   can show (`images`, `pinned`, `pinnedBy`, `cover`) and setting its cover to
@@ -950,41 +959,74 @@ graph.json: ...").
 
 ### Canvas writes: the project and the canvas they were made for
 
-The person's canvas tab sends two headers with every write to
-`/api/graph…`, `/api/execute…`, `/api/cinema…` and `/api/quick…`:
-`X-Nebula-Workspace-Revision` (the project it holds open) and
-`X-Nebula-Canvas-Revision` (which canvas of that project: a new one after
-every clear and every graph load or import). Nebula refuses the write with
-409 `{"detail": "This canvas is out of date. Open the current project before
-editing or running it."}` when either names something other than what is
-open now, so an edit made for one canvas never lands on the nodes of the
-next (node ids start again at n1 after a clear or a load).
+The person's canvas tab sends two headers with every request that changes
+the graph or starts work on the canvas: `X-Nebula-Workspace-Revision` (the
+project it holds open) and `X-Nebula-Canvas-Revision` (which canvas of that
+project: a new one after every clear and every graph load or import).
+Nebula refuses the write with 409 `{"detail": "This canvas is out of date.
+Open the current project before editing or running it."}` when either names
+something other than what is open now, so an edit made for one canvas never
+lands on the nodes of the next (node ids start again at n1 after a clear or
+a load).
 
-Since round 19 a write that carries `X-Nebula-Tab` (only the canvas sends
-it) must also carry `X-Nebula-Workspace-Revision`; without it, the same 409.
-A tab that has let go of its project (it is following an agent's switch)
-can't write into whatever is open next. Agents, the CLI, MCP and scripts
-send none of these headers and are unchanged: their writes go to the canvas
-open when they land. A script that sends `X-Nebula-Tab` is treated as a
-canvas tab.
+Which routes: since round 20 every route that changes the graph or starts
+work on the canvas is marked in the backend (`graph_write` in
+`backend/main.py`), and the check reads the marker of the route a request
+matches, not its path. That is every write under `/api/graph…`,
+`/api/execute` and `/api/execute-node`, `/api/cinema…` and `/api/quick`,
+plus `DELETE /api/provider-recoveries/{run_id}/{node_id}` and
+`POST /api/uploads` when it adds a node (`create_node`). The upload checks in
+the route, in the same step that adds the node, after the file is read and
+probed: a drop made for a project or canvas that was switched or cleared
+while it uploaded is refused, and no node is added. An upload without
+`create_node` adds nothing and isn't checked. Every other non-GET route is
+on a reviewed list of routes that don't touch the graph
+(`backend/tests/test_round20_fence.py`); Stop (`DELETE /api/executions/…`)
+stays open while the canvas follows an agent's switch.
+
+A write that carries `X-Nebula-Tab` (only the canvas sends it) to one of
+those routes must also carry `X-Nebula-Workspace-Revision`; without it, the
+same 409. A tab that has let go of its project (it is following an agent's
+switch) can't write into whatever is open next. Agents, the CLI, MCP and
+scripts send none of these headers and are unchanged: their writes go to
+the canvas open when they land. A script that sends `X-Nebula-Tab` is
+treated as a canvas tab.
 
 `/api/projects/…` isn't fenced this way. A project save names its project
 by id (`PUT /api/projects/{id}` with the workspace revision in its body),
 so when an agent's `open_project` or `new_project` switches away, the
 person's canvas still saves its last edits into the project it left (the
-handoff), including typing it hadn't sent yet.
+handoff). For nodes Nebula already had, the project keeps Nebula's copy,
+except the settings and names the tab lists as not yet sent
+(`pendingParams: {nodeId: {key: value}}`, `pendingLabels: {nodeId: name or
+null}` beside `snapshot`): those keys, read from the saved snapshot after
+its checks, are merged per top-level setting onto Nebula's copy, so typing
+still in its debounce is kept, and your edit to another setting of the same
+node stays. Nodes only the tab had are added as they are. If a listed node
+isn't in the save, is another kind of node in the project, or the lists are
+malformed, the whole save is refused with 409 and the canvas keeps it as a
+copy (the person sees that it wasn't saved).
 
 The canvas revision is in every graphSync (`canvasRevision`), in
 `GET /api/graph/export`, and in the answers of `DELETE /api/graph`,
 `POST /api/graph/import`, and opening or making a project. It is the same
 per-project counter undo restores use: a restore made for a canvas a clear
-or an import replaced is refused.
+or an import replaced is refused. It is kept in the state dir
+(`canvas-revisions.json`, written before the canvas changes), so a backend
+restart keeps it: after a restart the canvas says the same revision and
+writes the canvas held keep landing.
+
+A run notes its canvas when it starts. If that canvas is cleared while the
+run goes, the run's results and the settings its nodes changed are not
+written back onto the new canvas (whose nodes may reuse the old ids); the
+run's own events still report them.
 
 Param writes merge per key. `PUT /api/graph/node/{id}` with `{"params":
 {...}}` changes only the keys sent; a key not sent keeps its value, whoever
 set it. The canvas sends only the keys the person changed, so your edit to
 another setting of the same node is never written back over. Two writers
-setting the same key: the later write wins. (One exception: an agent that
+setting the same key: the later write wins (per top-level setting: a nested
+object or list is replaced whole). (One exception: an agent that
 changes a universal node's model sets the node's params for that model.)
 
 ### Pins

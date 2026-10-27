@@ -24,11 +24,31 @@ import { FakeNebula, canvasNode, textFakeNode } from './helpers/undoFakeBackend'
 // M-B: a wire made while the delete was out). Seeds:
 // UNDO_PROPERTY_REFUSE_SEEDS (default 30), from UNDO_PROPERTY_REFUSE_FIRST
 // (default 1); UNDO_PROPERTY_SKIP_REFUSE=1 / UNDO_PROPERTY_ONLY_REFUSE=1.
+// Review 19 (round 20, M3): the clear variant (the reviewer's propclear
+// probe). An agent clears once at a random step (about 12% a step) and adds
+// 1-3 nodes that reuse ids n1…; the fake models Nebula's fence (no project or
+// an old canvas: 409, nothing applied). Undo and redo stop after the clear.
+// Checks: canvas = Nebula once everything lands, and no value typed before
+// the clear ends up on a node of the new canvas. Seeds:
+// UNDO_PROPERTY_CLEAR_SEEDS (default 30, plus seeds 84 and 1123), from
+// UNDO_PROPERTY_CLEAR_FIRST (default 1); UNDO_PROPERTY_SKIP_CLEAR=1 /
+// UNDO_PROPERTY_ONLY_CLEAR=1.
 
-const fake = vi.hoisted(() => ({ backend: null as unknown as FakeNebula, refuseDelete: null as null | (() => boolean) }));
+const fake = vi.hoisted(() => ({ backend: null as unknown as FakeNebula, refuseDelete: null as null | (() => boolean),
+  fence: false, canvas: '0', ctx: null as null | { getProjectContext: () => { canvas?: string } | null } }));
 vi.mock('../src/lib/backend', async (importOriginal) => ({
   ...await importOriginal<typeof import('../src/lib/backend')>(),
-  apiFetch: (path: string, init?: RequestInit) => {
+  apiFetch: (path: string, init?: RequestInit, options?: { project?: { canvas?: string } | null }) => {
+    // Review 19's clear variant: Nebula's fence (backend main.py): a tab write with no project, or made for a
+    // canvas cleared since, is refused with the stale line, after Nebula applied nothing.
+    const method0 = String(init?.method ?? 'GET').toUpperCase();
+    if (fake.fence && method0 !== 'GET' && path.startsWith('/api/graph')) {
+      const sent = options && 'project' in options ? options.project : fake.ctx?.getProjectContext();
+      if (!sent || (sent.canvas !== undefined && sent.canvas !== fake.canvas)) {
+        fake.backend.calls.push({ path, method: method0 + ' (fenced ' + JSON.stringify(sent) + ' vs ' + fake.canvas + ' ctx ' + JSON.stringify(fake.ctx?.getProjectContext()) + ')' });
+        return fake.backend.later(`fenced ${path}`, () => new Response(JSON.stringify({ detail: 'This canvas is out of date. Open the current project before editing or running it.' }), { status: 409 }));
+      }
+    }
     // The refusal variant: Nebula refuses this node's delete (it is running).
     if (init?.method === 'DELETE' && /^\/api\/graph\/node\/n\d+$/.test(path) && fake.refuseDelete?.()) {
       fake.backend.calls.push({ path, method: 'DELETE' });
@@ -45,6 +65,10 @@ vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe:
 import type { ExecutionEvent } from '../src/lib/wsClient';
 import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
 
+import * as PC from '../src/lib/projectContext';
+import * as GS from '../src/store/graphStore';
+import { wsClient as WS } from '../src/lib/wsClient';
+const GS_INITIAL = GS.useGraphStore.getState();
 fake.backend = new FakeNebula();
 const nebula = () => fake.backend;
 const CLI = /^n\d+$/;
@@ -54,10 +78,21 @@ type GraphModule = typeof import('../src/store/graphStore');
 let useGraphStore: GraphModule['useGraphStore'];
 let subscribers: () => Array<(event: ExecutionEvent) => void>;
 async function freshStore(): Promise<void> {
+  if (fake.fence) {
+    // The clear variant: one module instance (a reset gave the probe's projectContext another instance).
+    GS.useGraphStore.getState().finishCanvasReplacement?.(null);
+    GS.useGraphStore.setState(GS_INITIAL, true);
+    useGraphStore = GS.useGraphStore;
+    subscribers = () => vi.mocked(WS.subscribe).mock.calls.map(([handler]) => handler as (event: ExecutionEvent) => void);
+    nebula().tab = (await import('../src/lib/tabId')).TAB_ID;
+    fake.ctx = PC;
+    return;
+  }
   vi.resetModules();
   const graph = await import('../src/store/graphStore');
   const ws = await import('../src/lib/wsClient');
   nebula().tab = (await import('../src/lib/tabId')).TAB_ID;
+  fake.ctx = await import('../src/lib/projectContext');
   useGraphStore = graph.useGraphStore;
   subscribers = () => vi.mocked(ws.wsClient.subscribe).mock.calls.map(([handler]) => handler as (event: ExecutionEvent) => void);
 }
@@ -98,17 +133,18 @@ const noticeIds = () => `${store().undoNotice?.id ?? '-'}/${store().messageNotic
 
 interface Failure { seed: number; step: number; what: string; log: string[]; calls: string[] }
 
-type Variant = 'plain' | 'foreign' | 'refuse';
+type Variant = 'plain' | 'foreign' | 'refuse' | 'clear';
 
 async function runSeed(seed: number, variant: Variant = 'plain'): Promise<Failure | null> {
   const refuser = rng(seed + 7_000_000);
   fake.refuseDelete = variant === 'refuse' ? () => refuser() < 0.3 : null;
-  const failure = await runSeedInner(seed, variant === 'foreign');
+  fake.fence = variant === 'clear';
+  const failure = await runSeedInner(seed, variant === 'foreign', variant === 'clear');
   if (failure) failure.calls = nebula().calls.filter((call) => call.method !== 'GET').map((call) => `${call.method} ${call.path} ${call.body ?? ''}`.slice(0, 300));
   return failure;
 }
 
-async function runSeedInner(seed: number, foreign: boolean): Promise<Failure | null> {
+async function runSeedInner(seed: number, foreign: boolean, clearing = false): Promise<Failure | null> {
   await freshStore();
   const random = rng(seed);
   const pick = <T,>(items: T[]): T | undefined => items[Math.floor(random() * items.length)];
@@ -121,6 +157,11 @@ async function runSeedInner(seed: number, foreign: boolean): Promise<Failure | n
   const start = canvasShape();
   const startNebula = nebulaShape();
   const pending: Array<Promise<unknown>> = [];
+  let cleared = false;
+  let letterAtClear = -1;
+  let agentNow = false;
+  const clearRoll = rng(seed + 9_000_000);
+
   const connectingFrom = new Set<string>();
   let letter = 0;
   const quiet = () => nebula().answers.length === 0 && nebula().echoes.length === 0;
@@ -130,7 +171,26 @@ async function runSeedInner(seed: number, foreign: boolean): Promise<Failure | n
   const plainIds: string[] = [];
   // Each seed starts with the fake's own echo delivery (a foreign seed's goes with it).
   delete (nebula() as unknown as { deliverEcho?: unknown }).deliverEcho;
-  if (foreign) {
+  if (clearing) {
+    fake.canvas = '0';
+    (fake.ctx as unknown as { setProjectContext: (v: unknown) => void }).setProjectContext({ id: 'p1', revision: 'r1', canvas: '0' });
+    const fk = nebula() as unknown as { broadcast: () => void; deliverEcho: () => boolean;
+      echoes: Array<{ nodes: unknown[]; edges: unknown[]; request: number; canvas?: string; agent?: boolean }> };
+    fk.broadcast = function broadcast(): void {
+      fk.echoes.push({ nodes: [...nebula().nodes.values()].map((n) => JSON.parse(JSON.stringify(n))), edges: JSON.parse(JSON.stringify(nebula().edges)),
+        request: nebula().request, canvas: fake.canvas, agent: agentNow });
+      if (!nebula().holdEchoes) nebula().deliverEchoes();
+    };
+    fk.deliverEcho = function deliverEcho(): boolean {
+      const graph = fk.echoes.shift();
+      if (!graph) return false;
+      const edit = graph.agent ? { actor: { kind: 'agent', name: 'Codex', id: 'codex' }, id: `ed_ag${graph.request}` }
+        : { actor: { kind: 'person' }, tab: nebula().tab, id: 'ed_own' };
+      nebula().emit({ nodes: FakeNebula.syncNodes(graph as never), edges: graph.edges, empty: graph.nodes.length === 0, edit,
+        canvasRevision: graph.canvas, workspaceRevision: 'r1' });
+      return true;
+    };
+  }  if (foreign) {
     const fake = nebula() as unknown as { deliverEcho: () => boolean; echoes: Array<{ nodes: unknown[]; edges: unknown[]; request: number }> };
     fake.deliverEcho = function deliverEcho(): boolean {
       const graph = fake.echoes.shift();
@@ -193,6 +253,26 @@ async function runSeedInner(seed: number, foreign: boolean): Promise<Failure | n
     if (roll >= 0.06 && roll < 0.80) {
       nebula().catchUp();
       await settle();
+    }
+    if (clearing && !cleared && clearRoll() < 0.12) {
+      cleared = true;
+      letterAtClear = letter;
+      agentNow = true;
+      nebula().request += 1;
+      nebula().nodes.clear(); nebula().edges = []; nebula().next = 1;
+      fake.canvas = '1';
+      nebula().broadcast();
+      const count = 1 + Math.floor(clearRoll() * 3);
+      for (let i = 0; i < count; i += 1) {
+        nebula().request += 1;
+        const id = `n${nebula().next}`; nebula().next += 1;
+        nebula().nodes.set(id, textFakeNode(id, `AG${id}`));
+        nebula().broadcast();
+      }
+      agentNow = false;
+      await settle();
+      log.push(`agent clears and adds ${count} (letter ${letter}) ctx ${JSON.stringify(fake.ctx?.getProjectContext())} echoes ${nebula().echoes.length} subs ${subscribers().length}`);
+      continue;
     }
     const nodes = store().nodes;
     if (foreign && random() < 0.10) {
@@ -269,6 +349,9 @@ async function runSeedInner(seed: number, foreign: boolean): Promise<Failure | n
       store().onNodesChange(doomed.map((node) => ({ id: node.id, type: 'remove' as const })));
       await settle();
       log.push(`delete ${doomed.map((node) => (CLI.test(node.id) ? node.id : 'local')).join(',')}`);
+    } else if (cleared && roll < 0.80) {
+      await tick(100);
+      log.push('(no undo after the clear)');
     } else if (roll < 0.74) {
       const failed = await press('undo', step);
       if (failed) return failed;
@@ -291,6 +374,12 @@ async function runSeedInner(seed: number, foreign: boolean): Promise<Failure | n
   log.push('-- everything delivered');
   if (canvasBackendShape() !== nebulaShape()) {
     return { calls: [], seed, step: OPS, what: `canvas ${canvasBackendShape()} vs Nebula ${nebulaShape()}`, log };
+  }
+  if (clearing) {
+    if (!cleared) return null;
+    const leaked = nebula().ids().filter((id) => { const v = String(nebula().valueOf(id) ?? ''); const m = /^v(\d+)$/.exec(v); return m && Number(m[1]) <= letterAtClear; });
+    if (leaked.length > 0) return { calls: [], seed, step: OPS, what: `pre-clear typing landed on the new canvas: ${leaked.map((id) => `${id}=${nebula().valueOf(id)}`).join(',')} (letter at clear ${letterAtClear})`, log };
+    return null;
   }
   for (let presses = 0; store().undoStack.length > 0 && presses < 120; presses += 1) {
     const failed = await press('undo', OPS + presses);
@@ -343,14 +432,22 @@ describe('round 17 (review 16, H1): random sequences of edits, undos and echoes'
   };
   const ONLY_FOREIGN = process.env.UNDO_PROPERTY_ONLY_FOREIGN === '1';
   const ONLY_REFUSE = process.env.UNDO_PROPERTY_ONLY_REFUSE === '1';
-  const plain = ONLY_FOREIGN || ONLY_REFUSE ? [] : chunksOf(FIRST, SEEDS);
-  const foreign = process.env.UNDO_PROPERTY_SKIP_FOREIGN === '1' || ONLY_REFUSE ? []
+  const ONLY_CLEAR = process.env.UNDO_PROPERTY_ONLY_CLEAR === '1';
+  const plain = ONLY_FOREIGN || ONLY_REFUSE || ONLY_CLEAR ? [] : chunksOf(FIRST, SEEDS);
+  const foreign = process.env.UNDO_PROPERTY_SKIP_FOREIGN === '1' || ONLY_REFUSE || ONLY_CLEAR ? []
     : chunksOf(Number(process.env.UNDO_PROPERTY_FOREIGN_FIRST ?? 1), Number(process.env.UNDO_PROPERTY_FOREIGN_SEEDS ?? 60));
-  const refuse = process.env.UNDO_PROPERTY_SKIP_REFUSE === '1' || ONLY_FOREIGN ? []
+  const refuse = process.env.UNDO_PROPERTY_SKIP_REFUSE === '1' || ONLY_FOREIGN || ONLY_CLEAR ? []
     : chunksOf(Number(process.env.UNDO_PROPERTY_REFUSE_FIRST ?? 1), Number(process.env.UNDO_PROPERTY_REFUSE_SEEDS ?? 30));
+  // Review 19, M3: seeds 84 and 1123 always run (a pre-clear delete's answer
+  // wiped the typing on the new node with its id).
+  const clear = process.env.UNDO_PROPERTY_SKIP_CLEAR === '1' || ONLY_FOREIGN || ONLY_REFUSE ? []
+    : [...chunksOf(Number(process.env.UNDO_PROPERTY_CLEAR_FIRST ?? 1), Number(process.env.UNDO_PROPERTY_CLEAR_SEEDS ?? 30)),
+      ...((process.env.UNDO_PROPERTY_CLEAR_REGRESSION ?? (process.env.UNDO_PROPERTY_CLEAR_SEEDS ? '0' : '1')) === '1'
+        ? [['84, 1123', [84, 1123]] as const] : [])];
   it.each([...plain.map(([range, seeds]) => [range, seeds, 'plain'] as const),
     ...foreign.map(([range, seeds]) => [`${range}, others adding nodes`, seeds, 'foreign'] as const),
-    ...refuse.map(([range, seeds]) => [`${range}, 30% of deletes refused`, seeds, 'refuse'] as const)])('seeds %s', async (_range, seeds, variant) => {
+    ...refuse.map(([range, seeds]) => [`${range}, 30% of deletes refused`, seeds, 'refuse'] as const),
+    ...clear.map(([range, seeds]) => [`${range}, an agent clears`, seeds, 'clear'] as const)])('seeds %s', async (_range, seeds, variant) => {
     const failures: Failure[] = [];
     for (const seed of seeds) {
       const failure = await runSeed(seed, variant);

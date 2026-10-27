@@ -37,6 +37,20 @@ body.app-slava-restraint .toolbar--grouped .toolbar__button:disabled::after {
   opacity: 0;
 }
 
+/* Round 20 (GM follow-up 3): Run while the tab follows an agent's switch:
+   disabled as offline is, with its tooltip ("Wait for “<project>” to open."),
+   so aria-disabled rather than disabled keeps the tooltip and the focus. */
+body.app-slava-restraint .toolbar--grouped .toolbar__button--waiting,
+body.app-slava-restraint .toolbar--grouped .toolbar__button--waiting:hover {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+body.app-slava-restraint .toolbar--grouped .toolbar__button--waiting::after {
+  opacity: 0;
+}
+
 body.app-slava-restraint .toolbar__actions {
   position: static;
 }

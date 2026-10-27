@@ -22,8 +22,18 @@ export function NodeLabel({ nodeId, label, displayName, defaultTitle }: NodeLabe
   const custom = Boolean(displayName) && label !== displayName && label !== fallback;
   const shown = displayName && !custom && fallback ? fallback : label;
   const renameNode = useGraphStore((state) => state.renameNode);
+  const noteRenameDraft = useGraphStore((state) => state.noteRenameDraft);
   const [draft, setDraft] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+
+  // Round 20 (GM: "A rename draft counts as "Name""): the store knows a name
+  // typed here and not yet saved, so an agent's clear names it and an agent's
+  // switch saves it into the project left. A draft that still reads the
+  // shown title is no change.
+  useEffect(() => {
+    noteRenameDraft(nodeId, draft !== null && draft !== shown ? draft : null);
+  }, [nodeId, draft, shown, noteRenameDraft]);
+  useEffect(() => () => noteRenameDraft(nodeId, null), [nodeId, noteRenameDraft]);
 
   // F2 on the canvas asks the selected node to start renaming.
   useEffect(() => {

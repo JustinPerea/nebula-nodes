@@ -20,6 +20,8 @@ import * as api from '../lib/projects';
 import { wsClient } from '../lib/wsClient';
 import type { ProjectSwitch } from '../lib/wsClient';
 import type { CutOffSave } from '../lib/savingCutOff';
+import type { HandoffPending } from './graphStore';
+import { setFollowingSwitch } from '../lib/canvasFollow';
 import { isOwnEcho, type EditOrigin } from '../lib/canvasUndo';
 import { TAB_ID } from '../lib/tabId';
 import { holdCommonsExits, holdProjects, refuseWhileCommonsUnsaved } from '../lib/commonsUnsaved';
@@ -667,6 +669,10 @@ function pendingRecoveryOf(sourceProjectId: string, snapshot: ProjectSnapshot): 
  * params-version stop, following an agent's switch). A refusal a retry can't
  * fix (a 4xx other than 408/429) holds it for the person (holdRefusedEdits)
  * and throws EditsRefused; once held, it is never sent again. */
+/** The copy the last recovery made (a whole new project in Projects): GM's
+ * failed-handoff line names it and opens it (round 20). */
+let lastRecoveredCopy: { id: string; name: string } | null = null;
+
 async function recoverPendingWork(): Promise<boolean> {
   const recovery = pendingRecovery;
   if (!recovery) return false;
@@ -677,7 +683,8 @@ async function recoverPendingWork(): Promise<boolean> {
     throw new EditsRefused();
   }
   try {
-    await api.recoverProject(recovery.sourceProjectId, recovery.snapshot, recovery.recoveryId, recovery.paramsVersion);
+    const copy = await api.recoverProject(recovery.sourceProjectId, recovery.snapshot, recovery.recoveryId, recovery.paramsVersion);
+    lastRecoveredCopy = copy && typeof copy.name === 'string' ? { id: copy.id ?? recovery.recoveryId, name: copy.name } : null;
   } catch (error) {
     if (pendingRecovery === recovery && refusedForGood(error)) {
       holdRefusedEdits(recovery, error);
@@ -710,6 +717,7 @@ export function resetProjectStoreForTests(): void {
   applying = false;
   projectViewport = null;
   pendingRecovery = null;
+  lastRecoveredCopy = null;
   heldEditsReopen = undefined;
   heldEditsCreate = undefined;
   sizeOffset = 0;
@@ -1187,7 +1195,10 @@ function switchedAwayFrom(notice: ProjectSwitch | undefined, context: { id: stri
  * new_project and open_project say the person's canvas follows), and says
  * who switched it. */
 async function followProjectSwitch(notice: ProjectSwitch, context: { id: string; revision: string } | null,
-  snapshot: ProjectSnapshot | null, unsaved: boolean, cutOff: CutOffSave[] = []): Promise<void> {
+  snapshot: ProjectSnapshot | null, unsaved: boolean, cutOff: CutOffSave[] = [], pending?: HandoffPending): Promise<void> {
+  // Round 20 (M1): read-only from the moment the tab sees the switch until
+  // the new canvas is loaded (the caller set it before the snapshot).
+  startFollowing(notice);
   // Round 19 (N1, N2): no graph write goes out from here until the new
   // canvas is loaded (the caller has already stopped them when it captured
   // the snapshot; a tab with no project open stops them here).
@@ -1203,6 +1214,7 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
   const alreadyHeld = Boolean(useProjectStore.getState().unsavedEdits);
   useProjectStore.setState({ busy: true, error: null, errorRetry: null });
   let keptCopy = false;
+  let copy: { id: string; name: string } | null = null;
   try {
     await saveQueue.catch(() => {});
     // Edits over the save limit (Q118) can't go into the project they came
@@ -1217,20 +1229,26 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
       try {
         // The handoff: by the project's id, never the live canvas (Nebula
         // has already switched it), so no canvas header and no fence.
-        await api.saveProject(context.id, snapshot, context.revision);
+        await api.saveProject(context.id, snapshot, context.revision, pending);
       } catch {
         handoffFailed = true;
         pendingRecovery = pendingRecoveryOf(context.id, snapshot);
+        lastRecoveredCopy = null;
         await recoverPendingWork();
         keptCopy = true;
+        copy = lastRecoveredCopy;
       }
     }
     lastSaved = '';
     await loadWorkspace();
     // GM (round 19): the line only when the handoff failed, naming who switched.
     followed = true;
+    const show = handoffFailed && typeof notice.previousProjectName === 'string';
     useGraphStore.getState().finishCanvasReplacement({ kind: 'agent', agent, project: notice.previousProjectName ?? '',
-      cutOff, show: handoffFailed && typeof notice.previousProjectName === 'string' });
+      cutOff, show, copy });
+    // GM (round 20, follow-up 2): "as one line, not two": when the canvas
+    // line names the copy, the toast says only who opened what.
+    if (show && copy && cutOff.length > 0) keptCopy = false;
     // Loaded unless the backend is on another params version (that reloads).
     if (getProjectContext()) useProjectStore.setState({ screen: 'workspace' });
     const actor = agent;
@@ -1253,8 +1271,15 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
       error: line, errorDetails: detailsFor(line, error), errorRetry: { action: 'load' } });
   } finally {
     if (!followed) useGraphStore.getState().finishCanvasReplacement(null);
+    setFollowingSwitch(null);
     useProjectStore.setState({ busy: false });
   }
+}
+
+/** Round 20 (M1): the canvas is read-only while it follows (lib/canvasFollow.ts). */
+function startFollowing(notice: ProjectSwitch): void {
+  const agent = notice.actor?.kind === 'agent' && typeof notice.actor.name === 'string' ? notice.actor.name : null;
+  setFollowingSwitch({ projectName: notice.projectName, agent });
 }
 
 /** List the saved projects now (Try again's own listing): counted with the
@@ -1739,10 +1764,12 @@ export function subscribeProjectAutosave(): () => void {
       // first, so the snapshot is what the person sees. The handoff carries
       // every value typed that Nebula may not have, even when the autosave
       // already saved that canvas (Nebula's switch saved its own, without it).
+      // Round 20 (M1): read-only from here until the new canvas is loaded.
+      startFollowing(event.projectSwitch);
       const stopped = useGraphStore.getState().beginAgentSwitch();
       const snapshot = captureProjectSnapshot();
       const unsaved = JSON.stringify(snapshot) !== lastSaved || stopped.force;
-      void followProjectSwitch(event.projectSwitch, context, snapshot, unsaved, stopped.cutOff);
+      void followProjectSwitch(event.projectSwitch, context, snapshot, unsaved, stopped.cutOff, stopped.pending);
       return;
     }
     const snapshot = captureProjectSnapshot();

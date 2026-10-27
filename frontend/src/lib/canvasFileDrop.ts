@@ -16,6 +16,7 @@
  * differ. Files that went in get no notice of their own.
  */
 import { apiRequest } from './apiRequest';
+import { refuseEditWhileFollowing } from './canvasFollow';
 import { failureCopy, failureMessage } from './errorCopy';
 import { useGraphStore } from '../store/graphStore';
 
@@ -170,6 +171,8 @@ export function fileDropInFlight(): boolean {
  * accepted file, given back if its upload fails. Resolves when every upload
  * has settled. */
 export async function addDroppedFiles(files: readonly File[], origin: { x: number; y: number }): Promise<void> {
+  // Round 20 (M1): nothing lands on a canvas that's about to go away.
+  if (refuseEditWhileFollowing()) return;
   // Failures by their place in the drop, so the notice names files in the
   // order they were dropped.
   const failed = new Map<number, DropFailure>();

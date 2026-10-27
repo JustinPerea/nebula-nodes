@@ -1,5 +1,6 @@
 import { useGraphStore } from '../../store/graphStore';
 import { useNoticeHold } from '../../hooks/useNoticeHold';
+import { OpenCopyButton } from './OpenCopyButton';
 
 const isShownMessage = (id: number) => useGraphStore.getState().messageNotice?.id === id;
 
@@ -26,6 +27,7 @@ export function CanvasMessageNotice() {
       {...holdHandlers}
     >
       <span className="canvas-undo-notice__text">{notice.text}</span>
+      {notice.copy && <OpenCopyButton projectId={notice.copy.projectId} onOpen={dismiss} />}
       <button type="button" className="canvas-undo-notice__close" aria-label="Dismiss" onClick={dismiss}>
         ×
       </button>

@@ -34,6 +34,7 @@ import { useInputSizeStore } from '../../store/inputSizeStore';
 import type { NodeData } from '../../types';
 import { useFitCanvasView } from '../../hooks/useFitCanvasView';
 import { adoptCanvasRevisionFrom } from '../../lib/projectContext';
+import { refuseEditWhileFollowing, useFollowingSwitch, waitToOpenTooltip } from '../../lib/canvasFollow';
 import type { Edge, Node } from '@xyflow/react';
 import '../../styles/panels.css';
 import '../../styles/canvas-toolbar.css';
@@ -50,6 +51,7 @@ export function Toolbar() {
   const maxZoom = useStore((s) => s.maxZoom);
   const zoomPercent = Math.round(zoom * 100);
   const executeGraph = useGraphStore((s) => s.executeGraph);
+  const following = useFollowingSwitch();
   const cancelExecution = useGraphStore((s) => s.cancelExecution);
   const isExecuting = useGraphStore((s) => s.isExecuting);
   // A run waiting for its inputs counts as starting (review 15, M-B).
@@ -172,8 +174,11 @@ export function Toolbar() {
       nodes.length > 0
         ? `Clear the canvas? ${nodes.length} node${nodes.length === 1 ? '' : 's'} will be removed, and the stored canvas used by connected tools will be reset. Save your graph first to keep a copy.`
         : 'Reset the stored canvas used by connected tools? The visible canvas is already empty.';
+    if (refuseEditWhileFollowing()) return;
     if (!window.confirm(msg)) return;
     if (!canLoadGraph(useGraphStore.getState())) return;
+    // Round 20 (M1): an agent's switch seen while the confirm was up.
+    if (refuseEditWhileFollowing()) return;
     // Confirm the backend clear before replacing the local graph. The backend
     // rejects this while any tracked execution owns provider lifecycle state.
     // One undo step for the clear, taken before the backend's graphSync can
@@ -270,11 +275,16 @@ export function Toolbar() {
       ) : (
         <button
           type="button"
-          className="toolbar__button toolbar__button--primary"
-          onClick={() => executeGraph()}
+          className={`toolbar__button toolbar__button--primary${following ? ' toolbar__button--waiting' : ''}`}
+          // Round 20 (GM follow-up 3): disabled while the tab follows an
+          // agent's switch, with its tooltip (aria-disabled keeps the tooltip
+          // and the focus; a click only pulses the project bar).
+          onClick={() => { if (refuseEditWhileFollowing()) return; void executeGraph(); }}
           disabled={nodeCount === 0 || isImportingGraph || runStarting}
+          aria-disabled={following ? true : undefined}
           aria-describedby={nodeCount > 0 ? runScopeId : undefined}
-          title={isImportingGraph ? 'Wait for the graph import to finish' : `Run graph. ${describeRunScope(runScope)} (${displayKey('Mod')}${displayKey('Enter')})`}
+          title={following ? waitToOpenTooltip(following.projectName)
+            : isImportingGraph ? 'Wait for the graph import to finish' : `Run graph. ${describeRunScope(runScope)} (${displayKey('Mod')}${displayKey('Enter')})`}
         >
           <ToolbarIcon name="run" />
           <span className="toolbar__label">Run</span>

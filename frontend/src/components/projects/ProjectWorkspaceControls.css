@@ -113,3 +113,32 @@ body.app-slava-restraint .project-workspace-controls__home[aria-busy="true"] {
   padding: 0 8px;
 }
 body.app-slava-restraint .project-workspace-controls__busy { font-size: 12px; white-space: nowrap; }
+/* Round 20 (GM follow-up 1): following an agent's switch. "Opening “<project>”…"
+   takes the save state's place; the bar keeps the width it had (set inline
+   from its measured width), so the line ellipsizes rather than widen it. */
+body.app-slava-restraint .project-workspace-controls--following { overflow: hidden; }
+body.app-slava-restraint .project-workspace-controls--following .project-workspace-controls__name {
+  flex: 0 1 auto;
+  min-width: 3ch;
+}
+body.app-slava-restraint .project-workspace-controls__opening {
+  flex: 1 1 auto;
+  min-width: 4ch;
+  overflow: hidden;
+  color: var(--sr-ink);
+  font: 11px/1.4 var(--sr-ui);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* A refused edit while it follows: one nudge, on the repo's k 500 / c 36
+   spring sampled as linear() (the same curve as asset-move.css). */
+body.app-slava-restraint .project-workspace-controls__opening--pulse {
+  animation: project-opening-pulse 420ms linear(0, 0.079, 0.247, 0.434, 0.606, 0.744, 0.847, 0.919, 0.965, 0.992, 1.006, 1.013, 1.014, 1.012, 1.01, 1.007, 1);
+}
+@keyframes project-opening-pulse {
+  0% { color: var(--sr-ink-bold, #fff); text-shadow: 0 0 10px rgb(255 255 255 / 0.55); }
+  100% { color: var(--sr-ink); text-shadow: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .project-workspace-controls__opening--pulse { animation-timing-function: steps(1, end); }
+}
