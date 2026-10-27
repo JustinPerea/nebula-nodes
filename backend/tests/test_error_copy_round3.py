@@ -197,12 +197,19 @@ def test_a_world_node_names_only_the_fields_it_holds(canvas, monkeypatch):
 # (GM: "'settle' and 'start' are internal."). The person's line leaves the
 # action out: the screen's own heading ("Couldn't clear the canvas.") names it.
 A_NODE_WAITING = "A node is still waiting on World Labs."
+# Round 12 of PR #114 (GM), wherever _reject_graph_replacement_during_paid_start
+# refuses: "Couldn't <action>. A World Labs start needs checking. Open Run
+# History and choose “Check Marble”." (an unresolved record) and "Couldn't
+# <action>. A World Labs start is still settling. Try again in a moment." (a
+# start settling); the screen's heading says "Couldn't <action>.". Before
+# round 12 these were the node lines ("A node is still waiting on World Labs.
+# Let its run finish, then try again." and the "Checked Marble — …" ones).
+GRAPH_PAID_CHECK = "A World Labs start needs checking. Open Run History and choose “Check Marble”."
+GRAPH_PAID_SETTLING = "A World Labs start is still settling. Try again in a moment."
 GRAPH_PAID_STATE_PERSON = {
-    "active": f"{A_NODE_WAITING} Let its run finish, then try again.",
-    "ambiguity": (f"{A_NODE_WAITING} Check the job in Marble, then use “Checked Marble — unlock” "
-                  "before you try again."),
-    "recovery": (f"{A_NODE_WAITING} Check the job in Marble, then use “Checked Marble — forget” in Run History "
-                 "before you try again."),
+    "active": GRAPH_PAID_SETTLING,
+    "ambiguity": GRAPH_PAID_CHECK,
+    "recovery": GRAPH_PAID_CHECK,
 }
 
 
@@ -235,8 +242,22 @@ def _open(canvas, headers):
     return canvas.client.post(f"/api/projects/{_other_project(canvas)}/open", json={}, headers=headers)
 
 
+def _import(canvas, headers):
+    return canvas.client.post("/api/graph/import", headers=headers, json={
+        "nodes": [{"id": "a", "definitionId": "text-input", "params": {"value": "x"}}], "edges": []})
+
+
+def _delete_open(canvas, headers):
+    import main as main_module
+
+    catalog = main_module.project_store.read()
+    return canvas.client.request("DELETE", f"/api/projects/{catalog['activeProjectId']}", headers=headers,
+                                 json={"workspaceRevision": catalog["workspaceRevision"]})
+
+
 @pytest.mark.parametrize("state", list(GRAPH_PAID_STATE_PERSON))
-@pytest.mark.parametrize("call", [_clear, _open], ids=["clear-canvas", "open-project"])
+@pytest.mark.parametrize("call", [_clear, _open, _import, _delete_open],
+                         ids=["clear-canvas", "open-project", "load-graph", "delete-open-project"])
 def test_replacing_the_canvas_tells_the_person_what_holds_it(canvas, monkeypatch, state, call):
     node = _node(canvas)
     _hold(canvas, monkeypatch, state, node)
@@ -255,8 +276,9 @@ def test_replacing_the_canvas_tells_the_person_what_holds_it(canvas, monkeypatch
     ("recovery", "Cannot {action} while unresolved World Labs paid state exists. "
                  "Check Marble and resolve the exact recovery/ambiguity record first."),
 ])
-@pytest.mark.parametrize("call,action", [(_clear, "clear the canvas"), (_open, "switch projects")],
-                         ids=["clear-canvas", "open-project"])
+@pytest.mark.parametrize("call,action", [(_clear, "clear the canvas"), (_open, "switch projects"),
+                                         (_import, "replace the graph"), (_delete_open, "delete the open project")],
+                         ids=["clear-canvas", "open-project", "load-graph", "delete-open-project"])
 @pytest.mark.parametrize("headers", [AGENT, CLI, {}], ids=["agent", "cli", "script"])
 def test_agents_keep_the_specific_canvas_replacement_detail(canvas, monkeypatch, state, specific, call, action,
                                                             headers):
@@ -300,13 +322,11 @@ def test_forgetting_a_recovery_while_its_start_runs_says_to_let_it_finish(canvas
                                       "node's paid start is still settling")
 
 
-def test_restoring_a_bundle_names_the_recovery_fields_the_canvas_holds(canvas, monkeypatch):
+def test_restoring_a_bundle_over_recovery_ids_says_a_start_needs_checking(canvas, monkeypatch):
     canvas.graph.add_node("worldlabs-world-export", {"resume_operation_id": "op-export-1"}, position={"x": 0, "y": 0})
     response = canvas.client.post("/api/outputs/restore", content=b"", headers=PERSON)
     assert response.status_code == 409
-    assert response.json()["detail"] == (
-        f"{A_NODE_WAITING} Check the job in Marble, then clear the node's Resume Export Operation ID "
-        "before you try again.")
+    assert response.json()["detail"] == GRAPH_PAID_CHECK
     agent = canvas.client.post("/api/outputs/restore", content=b"", headers=AGENT)
     assert agent.json()["detail"] == (
         "Cannot restore a graph bundle while unresolved World Labs paid state exists. "

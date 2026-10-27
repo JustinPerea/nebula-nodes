@@ -2331,8 +2331,18 @@ Cinema shot). Read the canvas again (`look_at_canvas`) before you retry.
 A run started before such a change writes nothing back either: its outputs,
 params and node errors go only to the canvas it started on, and `get_run`
 still reports them. While a run is going, Clear, a loaded graph, a project
-switch and deleting the open project wait for it (409 "Cannot clear the
-canvas while a run is active. Wait for the run to finish or stop it first.").
+switch and deleting the open project wait for it. Each refuses with 409 and
+its own `detail`:
+
+| Action | Route | 409 `detail` while a run is going |
+|---|---|---|
+| Clear (`nebula clear --force`) | `DELETE /api/graph` | "Cannot clear the canvas while a run is active. Wait for the run to finish or stop it first." |
+| Load a graph (`load_graph_file`, `nebula load`) | `POST /api/graph/import` | "Cannot replace the graph while a run is active. Stop the run and wait for its terminal state first." |
+| Open or make a project (`open_project`, `new_project`, `nebula project open` / `new`) | `POST /api/projects/{id}/open`, `POST /api/projects` | "Cannot switch projects while a run is active. Wait for the run to finish or stop it first." |
+| Delete the open project (the Projects screen) | `DELETE /api/projects/{id}` | "Cannot delete the open project while a run is active. Wait for the run to finish or stop it first." |
+
+A quick run (`nebula quick`, `POST /api/quick`) doesn't count: its nodes
+are temporary and never on the canvas, so nothing waits for it.
 
 #### Universal nodes: ports from the model
 
@@ -2894,9 +2904,9 @@ for every caller: `DELETE /api/graph` on a project with nodes returns 409
 unless it has `?force=true` (the canvas's Clear button and chat `/clear`
 send it after the person confirms). It's a check of intent, not of who is
 asking. A clear also waits while any run is going, as a project switch does
-(409 "Cannot clear the canvas while a run is active. Wait for the run to
-finish or stop it first."): node ids start again after a clear, and a run
-writes its outputs back by node id. With the canvas open, a clear is one undo step: Undo (or Cmd-Z)
+(409; the exact `detail` of each refused action is in the table under "Building and running over MCP"):
+node ids start again after a clear, and a run writes its outputs back by
+node id. With the canvas open, a clear is one undo step: Undo (or Cmd-Z)
 brings back every node, connection, name and output. With no canvas open there is
 nothing to undo it from, so prefer `nebula project new`.
 

@@ -30,7 +30,6 @@ from contextlib import ExitStack, aclosing, contextmanager, nullcontext
 from contextvars import Context, ContextVar
 import dataclasses
 from dataclasses import dataclass
-from functools import wraps
 from pathlib import Path
 from pathlib import PurePosixPath
 from typing import Any, BinaryIO, Callable, Iterable, Mapping, NoReturn
@@ -326,7 +325,6 @@ def _agent_sign(identity: AgentIdentity) -> None:
 
 _request_workspace_revision: ContextVar[str | None] = ContextVar("workspace_revision", default=None)
 _execution_workspace_context: ContextVar[dict[str, Any] | None] = ContextVar("execution_workspace", default=None)
-_synchronous_workspace_runs: set[str] = set()
 _live_graph_load_failed = False
 if _STATE_PATH is not None and _STATE_PATH.exists():
     try:
@@ -486,13 +484,25 @@ def _recovery_field_labels(nodes: list[dict[str, Any]]) -> str:
     return labels[0] if len(labels) == 1 else ", ".join(labels[:-1]) + " and " + labels[-1]
 
 
-def _graph_paid_refusal(specific: str, state: str, fields: str = _RECOVERY_FIELDS_FALLBACK) -> HTTPException:
+# GM (round 12 of PR #114), wherever _reject_graph_replacement_during_paid_start
+# refuses (clear, switch, import, delete of the open project, a bundle
+# restore), under the screen's own "Couldn't <action>." heading: "Couldn't
+# <action>. A World Labs start needs checking. Open Run History and choose
+# “Check Marble”." for an unresolved record, and "Couldn't <action>. A World
+# Labs start is still settling. Try again in a moment." while a start settles.
+# Agents keep the specific text.
+GRAPH_PAID_CHECK_PERSON = "A World Labs start needs checking. Open Run History and choose \u201cCheck Marble\u201d."
+GRAPH_PAID_SETTLING_PERSON = "A World Labs start is still settling. Try again in a moment."
+
+
+def _graph_paid_refusal(specific: str, state: str) -> HTTPException:
     """409 for replacing the whole canvas (clear it, open or make a project,
     replace the graph, restore a bundle) while World Labs state holds a node.
     The person's line leaves the action out: the screen's own heading
-    ("Couldn't clear the canvas.") names it."""
-    return refusal_copy.refusal(409, specific, _paid_state_person(state, subject="A node is", then="try again",
-                                                                  fields=fields), route="canvas")
+    ("Couldn't clear the canvas.") names it. ``state`` "active" is a start
+    still settling; any other is an unresolved record."""
+    person = GRAPH_PAID_SETTLING_PERSON if state == "active" else GRAPH_PAID_CHECK_PERSON
+    return refusal_copy.refusal(409, specific, person, route="canvas")
 
 
 def _graph_settling_specific(action: str) -> str:
@@ -522,7 +532,6 @@ def _reject_graph_replacement_during_paid_start(action: str) -> None:
         f"Cannot {action} while unresolved World Labs paid state exists. "
         "Check Marble and resolve the exact recovery/ambiguity record first.",
         state,
-        _recovery_field_labels(nodes) if state == "params" else _RECOVERY_FIELDS_FALLBACK,
     )
 
 
@@ -813,6 +822,19 @@ def _register_run(run_id: str, task: asyncio.Task[Any]) -> Any:
     return execution_runs.register(run_id, task, canvas=_run_canvas_now())
 
 
+def _adopt_run_canvases(new_project_id: str) -> None:
+    """The unfiled canvas becomes project ``new_project_id`` with the same
+    live graph and ids (GET /api/projects or POST /api/projects filing it as
+    "Recovered canvas"): nothing was replaced, so the runs noted on it, and
+    its nodes' last errors, move to the new project. Call it in the step
+    that commits the catalog, before any await (round 12 of PR #114, G1m).
+    Only runs noted on the unfiled canvas as it is now move: one noted on an
+    older unfiled canvas (its epoch moved since) stays dropped."""
+    execution_runs.adopt_canvas((None, canvas_undo_book.epoch(None)),
+                                (new_project_id, canvas_undo_book.epoch(new_project_id)))
+    node_errors.adopt(None, new_project_id)
+
+
 _runs_told_moved: OrderedDict[str, None] = OrderedDict()
 
 
@@ -842,20 +864,6 @@ def _capture_execution_workspace() -> None:
     # asyncio tasks inherit this immutable admission identity; late events
     # never borrow whichever project happens to be active when broadcast.
     _execution_workspace_context.set(_workspace_context())
-
-
-def _track_synchronous_project_run(handler):
-    """Fence project replacement for CLI and quick runs that own HTTP tasks."""
-    @wraps(handler)
-    async def tracked(*args, **kwargs):
-        _check_workspace_revision()
-        identity = uuid4().hex
-        _synchronous_workspace_runs.add(identity)
-        try:
-            return await handler(*args, **kwargs)
-        finally:
-            _synchronous_workspace_runs.discard(identity)
-    return tracked
 
 
 # Routes where a tab's request stores or runs params. A tab whose bundle was
@@ -10090,8 +10098,14 @@ def _graph_edit_origin() -> dict[str, Any]:
 async def _broadcast_graph_sync(
     *, graph_replaced: bool = False, reason: str = "import", moved: Iterable[str] = (), edit: bool = False,
     project_switch: dict[str, Any] | None = None, arranged: dict[str, Any] | None = None,
+    cleared: bool = False,
 ) -> dict[str, Any]:
     """Push the current CLI graph to all connected frontends via WebSocket.
+
+    `cleared` marks the sync of a Clear (DELETE /api/graph): node ids start
+    again at n1 in the same project, so a canvas treats it as a replacement
+    for its runs (round 12 of PR #114) while keeping its own frontend-only
+    work and the clear's undo step.
 
     `reason` (import, project-open, project-create) only matters when the
     graph was replaced: watchers are told node ids restarted, and why.
@@ -10161,6 +10175,7 @@ async def _broadcast_graph_sync(
     moved_ids = sorted({str(node_id) for node_id in moved if node_id in cli_graph.nodes})
     await manager.broadcast_raw({"type": "graphSync", **export,
                                  **({"graphReplaced": True} if graph_replaced else {}),
+                                 **({"cleared": True} if cleared and not graph_replaced else {}),
                                  **({"moved": moved_ids} if moved_ids and not graph_replaced else {}),
                                  **({"projectSwitch": project_switch} if project_switch and graph_replaced else {}),
                                  **({"arranged": arranged} if arranged and not graph_replaced else {}),
@@ -10293,7 +10308,12 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
             )
         _journal_provider_hold("startAmbiguity", "held", run_id=run_id, node_id=event.node_id, kind=event.kind,
                                durable=event.durable, actor=canvas_events.run_actor(run_id))
-        await manager.broadcast(event)
+        # The hold above is kept; the canvas puts the event on its node by id,
+        # so not from a run whose canvas was cleared or replaced since (round
+        # 12, as the recovery event below; unreachable while Clear, import and
+        # a switch wait for runs).
+        if not _run_canvas_moved(run_id, "start-ambiguity event"):
+            await manager.broadcast(event)
         if run_id is not None:
             await _broadcast_graph_sync()
         return
@@ -11655,7 +11675,7 @@ async def clear_graph(force: bool = False) -> dict:
     asset_proposals.drop_removal_tags("the canvas was cleared")
     agent_presence.forget_graph()
     await _forget_status_anchors()
-    await _broadcast_graph_sync(edit=True)
+    await _broadcast_graph_sync(edit=True, cleared=True)
     publish_action("Cleared the canvas")
     if detached:
         await _broadcast_pins()
@@ -13513,7 +13533,7 @@ async def import_graph(body: dict[str, Any]) -> dict:
         _refuse_agent_growth_past_save_limit(candidate)
     with _paid_graph_mutation("replace the graph"):
         _reject_graph_replacement_during_paid_start("replace the graph")
-        if execution_runs.has_active() or _synchronous_workspace_runs:
+        if execution_runs.has_active():
             raise HTTPException(
                 status_code=409,
                 detail=(
@@ -14204,7 +14224,7 @@ def _project_replacement_guard(action: str = "switch projects", *, person: str |
     person's own line for the run refusal (refusal_copy), where GM wrote one
     (Clear, round 11); agents keep the specific text either way."""
     _reject_graph_replacement_during_paid_start(action)
-    if execution_runs.has_active() or _synchronous_workspace_runs:
+    if execution_runs.has_active():
         specific = f"Cannot {action} while a run is active. Wait for the run to finish or stop it first."
         if person is None:
             raise HTTPException(status_code=409, detail=specific)
@@ -14254,6 +14274,7 @@ async def list_projects() -> dict[str, Any]:
     exported = await _projects_live_export()
     with project_store.transaction() as catalog:
         changed = False
+        adopted: str | None = None
         if not catalog["projects"] and cli_graph.nodes:
             snapshot = {**empty_snapshot(), "nodes": exported["nodes"], "edges": exported["edges"]}
             project = make_project("Recovered canvas", snapshot)
@@ -14263,6 +14284,7 @@ async def list_projects() -> dict[str, Any]:
             catalog["workspaceRevision"] = uuid4().hex
             catalog["migratedProjectId"] = project["id"]
             changed = True
+            adopted = project["id"]
         elif active := catalog["activeProjectId"]:
             changed = _overlay_live_project(catalog["projects"][active], exported)
         for project in catalog["projects"].values():
@@ -14273,6 +14295,9 @@ async def list_projects() -> dict[str, Any]:
         changed = expired or changed
         if changed:
             project_store.commit(catalog)
+        if adopted is not None:
+            # In the commit's step: the same live graph, now this project's.
+            _adopt_run_canvases(adopted)
         listing = {
             "projects": sorted((project_metadata(project) for project in catalog["projects"].values()), key=lambda project: project["updatedAt"], reverse=True),
             "trash": _trash_listing(catalog),
@@ -14534,6 +14559,9 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
             catalog["projects"][recovered["id"]] = recovered
             catalog["activeProjectId"] = recovered["id"]
             catalog["migratedProjectId"] = recovered["id"]
+            # Unreachable with a run registered (the guard above refuses), but
+            # the same filing as list_projects', so the same bookkeeping.
+            _adopt_run_canvases(recovered["id"])
         if active := catalog["activeProjectId"]:
             _overlay_live_project(catalog["projects"][active], exported)
         try:
@@ -15611,9 +15639,14 @@ async def _quick_multi_image_input_handler(
 
 
 @app.post("/api/quick")
-@_track_synchronous_project_run
 async def quick_execute(body: dict[str, Any]) -> dict:
-    """One-shot: create a temp node, execute, return output."""
+    """One-shot: create a temp node, execute, return output.
+
+    Its nodes are temporary (``_quick_*``), never on the canvas, and its
+    events go to this request's own dicts, so nothing is written back by node
+    id: a quick run in flight doesn't hold up a Clear, a project switch, an
+    import or a delete of the open project (round 12 of PR #114; it did
+    through _track_synchronous_project_run, now gone)."""
     _check_workspace_revision()
     _capture_execution_workspace()
     definition_id = body.get("definitionId", "")

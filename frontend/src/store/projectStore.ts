@@ -27,7 +27,7 @@ import {
   FailureNotice, PERSON_REQUIRED_CODE, REFUSED_FALLBACK_COPY, RequestFailedError, canTryAgain, failureCopy, failureDetails,
   failureMessage, oneLine, shortReason,
 } from '../lib/errorCopy';
-import { SOME_NODE_WAITING_UNLOCK } from '../lib/worldLabsWaiting';
+import { WORLD_LABS_START_NEEDS_CHECK } from '../lib/worldLabsWaiting';
 import type { ProjectSnapshot, ProjectSummary, SavedProject, TrashedProject } from '../lib/projects';
 
 /** An agent (or a script) opened or made a project and this tab followed it.
@@ -502,10 +502,11 @@ function refusedForGood(error: unknown): boolean {
  * deleting the open project is refused in the browser until they press
  * "Checked Marble — unlock". Redoing it fails the same check, so it offers
  * no Try again, and the line is the backend's refusal for the same state
- * (round 3b review). A run that is only going keeps the busy line and its
- * Try again: that one can succeed once the run ends. */
+ * (round 3b review; GM's line since round 12 of PR #114). A run that is only
+ * going keeps the busy line and its Try again: that one can succeed once the
+ * run ends. */
 class WorldLabsHold extends FailureNotice {
-  constructor(heading: string) { super(heading, SOME_NODE_WAITING_UNLOCK); }
+  constructor(heading: string) { super(heading, WORLD_LABS_START_NEEDS_CHECK); }
 }
 function worldLabsHold(heading: string): WorldLabsHold | null {
   const graph = useGraphStore.getState();

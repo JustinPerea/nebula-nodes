@@ -5,14 +5,18 @@
  * Marble, then {the node's actual button label} before you delete it."),
  * pinned equal by backend/tests/test_error_copy_round3b.py (round 3b). The
  * backend says them to the person (agents get the specific text), and they
- * stay word for word: the project screen still shows the canvas-wide unlock
- * line (projectStore worldLabsHold), and the canvas reads the two delete lines
+ * stay word for word: the canvas reads the two delete lines
  * to know a refusal is one GM trimmed (deleteRefusalText).
  */
 export const NODE_WAITING_UNLOCK = "This node is still waiting on World Labs. Check the job in Marble, then use “Checked Marble — unlock” before you delete it.";
 export const NODE_WAITING_FORGET = "This node is still waiting on World Labs. Check the job in Marble, then use “Checked Marble — forget” in Run History before you delete it.";
-export const SOME_NODE_WAITING_UNLOCK = "A node is still waiting on World Labs. Check the job in Marble, then use “Checked Marble — unlock” before you try again.";
-export const SOME_NODE_WAITING_FORGET = "A node is still waiting on World Labs. Check the job in Marble, then use “Checked Marble — forget” in Run History before you try again.";
+/** GM (round 12 of PR #114): the backend's person line when it refuses to
+ * replace the canvas (clear, switch, load a graph, delete the open project)
+ * over an unresolved World Labs record (main.py GRAPH_PAID_CHECK_PERSON),
+ * under the action's own "Couldn't <action>." heading. The project screen's
+ * own gate says it too (projectStore worldLabsHold). It was the
+ * "A node is still waiting on World Labs. …" line before round 12. */
+export const WORLD_LABS_START_NEEDS_CHECK = "A World Labs start needs checking. Open Run History and choose “Check Marble”.";
 
 /**
  * What the canvas notice says when it keeps nodes because one holds World

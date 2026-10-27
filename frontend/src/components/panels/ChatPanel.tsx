@@ -38,6 +38,9 @@ import { CONNECTION_LOST_COPY, NO_ANSWER_STATUS, PERSON_REQUIRED_CODE, isBackend
 import { ErrorDetails } from '../failure/ErrorDetails';
 import { chatUploadChipError } from '../../lib/chatUploadCopy';
 import { chatAuthority } from '../../lib/commonsChatAuthority';
+import {
+  CHAT_CLEAR_ANSWER_MS, CHAT_CLEARED_CANVAS, CHAT_CLEARED_CANVAS_KEPT, CHAT_CLEARED_CANVAS_UNCONFIRMED,
+} from '../../lib/chatClear';
 import { onPersonConnected, reportPersonRequired } from '../../lib/personSession';
 import { normalizeAgentEventSource } from '../../lib/agentEvents';
 import {
@@ -52,10 +55,8 @@ type ChatAgent = ChatAgentId;
 type ModelSelection = { model: string | null; effort: string | null };
 const NO_MODEL: ModelSelection = { model: null, effort: null };
 const PERSONAL_AGENT_RE = /^personal:[a-z0-9-]{1,32}$/;
-// /clear's lines. The canvas clear can be refused (a run going): GM's line
-// then, with the refusal under Clear's heading as the notice.
-const SESSION_CLEARED = 'Session cleared. Next message starts a fresh conversation with an empty canvas.';
-const SESSION_CLEARED_CANVAS_KEPT = "Session cleared. Next message starts a fresh conversation. The canvas wasn't cleared.";
+// /clear's canvas clear refused (a run going): GM's line, with the refusal
+// under Clear's heading as the notice (lib/chatClear.ts has the lines).
 const CLEAR_CANVAS = "Couldn't clear the canvas.";
 type ChatSelection = { agent: ChatAgent; claude: ModelSelection; codex: ModelSelection };
 const CHAT_SELECTION_KEY = 'nebula:chat-selection';
@@ -1459,31 +1460,46 @@ export function ChatPanel() {
       // frontend side — cli-origin nodes drop out, library-dragged work survives.
       // One undo step, so the person can bring the canvas back.
       const undoStep = useGraphStore.getState().beginUndoStep();
-      // force: typing /clear is the person's confirmation (the backend
-      // refuses a clear of a project with nodes without it).
-      const said = (text: string) => setMessages([
-        { role: 'assistant', id: newId(), streaming: false, parts: [{ kind: 'system', text }] },
+      // The chat clears now, as before; the line comes with the canvas
+      // clear's answer, appended, so a message sent meanwhile stays (round
+      // 12 of PR #114: it used to replace the list when the answer came).
+      setMessages([]);
+      const said = (text: string) => setMessages((prev) => [
+        ...prev, { role: 'assistant', id: newId(), streaming: false, parts: [{ kind: 'system', text }] },
       ]);
       setInput('');
       // The session is this tab's own and always clears; the canvas clear is
-      // the backend's and can be refused (a run going: round 11 of PR #114),
-      // so the line waits for its answer and says only what happened (GM).
-      let response: Response;
+      // the backend's and can be refused (a run going: round 11 of PR #114)
+      // or go unanswered, so the line says only what is known (GM). force:
+      // typing /clear is the person's confirmation (the backend refuses a
+      // clear of a project with nodes without it). Bounded: with no answer
+      // the line still comes.
+      const bound = AbortSignal.timeout(CHAT_CLEAR_ANSWER_MS);
+      const unanswered = new Promise<null>((resolve) => {
+        bound.addEventListener('abort', () => resolve(null), { once: true });
+      });
+      let response: Response | null;
       try {
-        response = await apiFetch('/api/graph?force=true', { method: 'DELETE' });
+        response = await Promise.race([
+          apiFetch('/api/graph?force=true', { method: 'DELETE', signal: bound }), unanswered]);
       } catch {
-        useGraphStore.getState().cancelUndoStep(undoStep);
-        said(SESSION_CLEARED);  // no answer: whether the canvas cleared isn't known
-        return;
+        response = null;
       }
-      if (response.ok) {
-        said(SESSION_CLEARED);
+      if (response?.ok) {
+        said(CHAT_CLEARED_CANVAS);
         return;
       }
       useGraphStore.getState().cancelUndoStep(undoStep);
+      if (response === null || response.status >= 500) {
+        // No answer, or the backend failed partway: Clear empties the canvas
+        // in one step, so it may have happened. Don't say either way.
+        if (response) warnFailure(CLEAR_CANVAS, response.status, await readDetail(response));
+        said(CHAT_CLEARED_CANVAS_UNCONFIRMED);
+        return;
+      }
       // GM: "Session cleared. Next message starts a fresh conversation. The
       // canvas wasn't cleared.", and the refusal itself under Clear's heading.
-      said(SESSION_CLEARED_CANVAS_KEPT);
+      said(CHAT_CLEARED_CANVAS_KEPT);
       setNotice(failureMessage(await requestError(CLEAR_CANVAS, response), CLEAR_CANVAS));
       return;
     }

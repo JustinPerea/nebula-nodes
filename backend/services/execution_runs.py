@@ -80,6 +80,16 @@ class ExecutionRunRegistry:
         task.add_done_callback(lambda completed, rid=run_id: self._finish(rid, completed))
         return record
 
+    def adopt_canvas(self, old: Any, new: Any) -> list[str]:
+        """Re-note every run registered on canvas ``old`` as on ``new``: the
+        same live graph and ids, filed under another name (main.py,
+        _adopt_run_canvases). Runs noted on any other canvas are untouched."""
+        moved = [record.run_id for record in self._records.values()
+                 if record.canvas is not None and record.canvas == old]
+        for run_id in moved:
+            self._records[run_id].canvas = new
+        return moved
+
     def get(self, run_id: str) -> ExecutionRunRecord | None:
         return self._records.get(run_id)
 

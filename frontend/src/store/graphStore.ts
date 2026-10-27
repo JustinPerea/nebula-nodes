@@ -2527,9 +2527,31 @@ async function executeHistoricalRun(
   }
 }
 
-const CLEAR_CANVAS_HEADING = "Couldn't clear the canvas.";
+/** The first add on an empty tab couldn't read the backend's graph into it
+ * (bringBackendGraphIntoEmptyTab). `raw` is the reason as it came (a network
+ * error, the backend's detail or status, a parse error), for the console and
+ * the Agent log; the person reads only "Couldn't add “<label>”." (GM). */
+class TabSyncFailure extends Error {
+  readonly raw: string;
+  constructor(raw: string) {
+    super(raw);
+    this.name = 'TabSyncFailure';
+    this.raw = raw;
+  }
+}
 
-async function ensureBackendFreshForLocalCanvas(
+/**
+ * Before the first add on an empty tab: if the backend's canvas has nodes this
+ * tab doesn't show (an agent's, or ones a dropped socket missed), bring them in
+ * through the normal sync (applyGraphSync), so the add lands beside them. GM
+ * approved (round 12 of PR #114): the add syncs and never clears. Until round
+ * 12 it sent DELETE /api/graph?force=true here, which wiped an agent's work on
+ * the person's first drop and was refused while a run or a World Labs record
+ * held the canvas. No toast. Throws TabSyncFailure when the backend's graph
+ * can't be read into this tab; the caller then adds nothing, not even locally.
+ * The notes for round 12 list how a truly stale stored graph could still arise.
+ */
+async function bringBackendGraphIntoEmptyTab(
   localCanvasWasEmpty: boolean,
   set: GraphSet,
   get: GraphGet,
@@ -2540,43 +2562,40 @@ async function ensureBackendFreshForLocalCanvas(
   let exportRes: Response;
   try {
     exportRes = await apiFetch('/api/graph/export');
-  } catch {
+  } catch (err) {
+    // Asked again on the next add, until a sync brings the graph in.
     set({ backendFreshStartPending: true });
+    // No backend found at all, before or now: the tab works on its own, as
+    // before round 12 (false: the caller adds the node in this tab only).
+    // There is no backend graph for it to disagree with.
     if (!backendWasDiscovered && getCachedBackendBaseUrl() === null) return false;
-    // Written lines under reportNodeCreationFailure's "Couldn't add {node}."
-    // (error copy round 3e).
-    throw new FailureNotice('', "Nebula lost contact with its backend, so the node wasn't added. Reconnect, then add it again.");
+    throw new TabSyncFailure(err instanceof Error ? err.message : String(err));
   }
-
   if (!exportRes.ok) {
-    throw new FailureNotice('', await backendRejectionReason(exportRes, "Couldn't check the canvas."));
+    set({ backendFreshStartPending: true });
+    const { detail } = await readRefusal(exportRes);
+    throw new TabSyncFailure(`HTTP ${exportRes.status}`
+      + (detail ? ` ${typeof detail === 'string' ? detail : JSON.stringify(detail)}` : ''));
   }
-
-  let exported: { empty?: boolean };
+  let exported: ExecutionEvent & { empty?: boolean; workspaceRevision?: unknown; paramsVersion?: unknown };
   try {
-    exported = (await exportRes.json()) as { empty?: boolean };
-  } catch {
-    throw new FailureNotice('', "Nebula couldn't read the backend's answer, so the node wasn't added. Reload, then add it again.");
+    exported = { ...(await exportRes.json()) as object, type: 'graphSync' } as typeof exported;
+  } catch (err) {
+    set({ backendFreshStartPending: true });
+    throw new TabSyncFailure(err instanceof Error ? err.message : String(err));
   }
-
   if (exported.empty === false) {
-    let clearRes: Response;
-    try {
-      // force: the backend refuses a clear of a project with nodes without it.
-      clearRes = await graphMutationFetch('/api/graph?force=true', { method: 'DELETE' });
-    } catch {
+    // Nodes from another project or params version never come into this tab
+    // (the socket drops such a sync too); the create itself would be refused
+    // as out of date. An empty canvas brings nothing in: the create's own
+    // checks apply.
+    const notForThisTab = graphNotForThisTab(exported);
+    if (notForThisTab) {
       set({ backendFreshStartPending: true });
-      throw new FailureNotice('', "Nebula lost the answer to clearing the canvas, so the node wasn't added. "
-        + 'The canvas may be clear already. Reload before you add it again.');
+      throw new TabSyncFailure(notForThisTab);
     }
-    if (!clearRes.ok) {
-      // Round 11 (GM): the refused clear reads under its own heading, the
-      // whole line ("Couldn't clear the canvas. A run is still going. ..."),
-      // not under "Couldn't add {node}." (reportNodeCreationError).
-      throw new FailureNotice(CLEAR_CANVAS_HEADING, await backendRejectionReason(clearRes, CLEAR_CANVAS_HEADING));
-    }
+    applyGraphSync(exported);
   }
-
   set({ backendFreshStartPending: false });
   return true;
 }
@@ -2659,13 +2678,21 @@ function observePendingConnectedNodeCreation(nodes: Node<NodeData>[], edges: Edg
   if (attempt.phase === 'uncertain' && attempt.observedNodeId) pendingConnectedNodeCreationAttempt = null;
 }
 
-/** ensureBackendFreshForLocalCanvas's failure: a line with its own heading
- * (a refused clear) is said whole; the rest read under "Couldn't add {node}.". */
+/** An add that failed before its create was sent. A failed sync of the
+ * backend's graph into the tab (TabSyncFailure) reads GM's line, "Couldn't
+ * add “<label>”.", with the raw reason in the Agent log and the console (GM,
+ * round 12 of PR #114); anything else reads under "Couldn't add {node}.". */
 function reportNodeCreationError(displayName: string, err: unknown): null {
-  if (err instanceof FailureNotice && err.heading) {
-    const message = failureMessage(err, err.heading);
-    console.warn(`[nebula] ${message}`);
-    useGraphStore.getState().notify(message);
+  if (err instanceof TabSyncFailure) {
+    const heading = `Couldn't add \u201c${displayName}\u201d.`;
+    console.warn(`[nebula] ${heading} ${err.raw}`);
+    // The Agent log takes any component's line as this event (agentLogStore,
+    // loaded with the app).
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', {
+        detail: { source: 'system', message: `${heading} ${err.raw}` } }));
+    }
+    useGraphStore.getState().notify(heading);
     return null;
   }
   return reportNodeCreationFailure(displayName, failureCopy(err).reason);
@@ -2676,6 +2703,159 @@ function reportNodeCreationFailure(displayName: string, reason: string): null {
   console.warn(`[nebula] ${message}`);
   useGraphStore.getState().notify(message);
   return null;
+}
+
+/** No backend was ever found (bringBackendGraphIntoEmptyTab answered false):
+ * the tab works on its own and the node is this tab's only (a UUID id).
+ * Unchanged by round 12 apart from Character and Moodboard nodes now taking
+ * this same path, and only this one. */
+function addOnlyInThisTab(
+  set: GraphSet,
+  get: GraphGet,
+  definitionId: string,
+  params: Record<string, unknown>,
+  position: { x: number; y: number },
+): string {
+  const definition = NODE_DEFINITIONS[definitionId];
+  console.warn('[nebula] no backend found: adding the node in this tab only');
+  pushUndo(set, get);
+  const nodeType =
+    definitionId === 'reroute'
+      ? 'reroute-node'
+      : definitionId === 'batch'
+        ? 'batchNode'
+      : definitionId === 'camera-rig'
+        ? 'cameraRigNode'
+        : definitionId === 'paper-source'
+          ? 'paperSourceNode'
+        : definitionId === 'reference-set'
+          ? 'referenceSetNode'
+          : definitionId.startsWith('qc-')
+            ? 'videoQcNode'
+          : definitionId === 'nebula-moodboard'
+            ? 'moodboardNode'
+          : definitionId === 'character'
+            ? 'characterNode'
+            : 'model-node';
+  const keyStatus = nodeKeyStatus(definition, params, useUIStore.getState().settingsCache);
+  const newNode: Node<NodeData> = {
+    id: uuidv4(),
+    type: nodeType,
+    position,
+    data: { label: definition.displayName, definitionId, params, state: 'idle', outputs: {}, keyStatus },
+  };
+  set((state) => ({ nodes: [...state.nodes, newNode] }));
+  return newNode.id;
+}
+
+/**
+ * Create one node on the backend where the person put it; graphSync brings
+ * it into the canvas with its backend id. Used by every static add (addNode,
+ * addCharacterNode, addMoodboardNode: round 12 of PR #114 gave the last two
+ * this same path, where they had added the node locally on any failure).
+ * A failure says why and adds nothing, not even in this tab; only a tab that
+ * never found a backend at all keeps its nodes to itself (addOnlyInThisTab).
+ */
+async function createNodeOnBackend(
+  set: GraphSet,
+  get: GraphGet,
+  definitionId: string,
+  params: Record<string, unknown>,
+  position: { x: number; y: number },
+): Promise<string | null> {
+  const definition = NODE_DEFINITIONS[definitionId];
+  if (!definition) return null;
+  if (pendingNodeCreationAttempt) {
+    const previousAttempt = pendingNodeCreationAttempt;
+    if (previousAttempt.phase === 'sending') {
+      return reportNodeCreationFailure(
+        definition.displayName,
+        'Another backend node-create request is still in progress. Wait for it to finish before adding another node.',
+      );
+    }
+    const reconciledId = await reconcilePendingNodeCreation(set, get);
+    if (reconciledId) {
+      return reportNodeCreationFailure(
+        definition.displayName,
+        `The previous ${previousAttempt.displayName} request was restored as ${reconciledId}. Review that node before adding another.`,
+      );
+    }
+    return reportNodeCreationFailure(
+      definition.displayName,
+      'A previous backend node-create request still has an unknown result. Nebula will not send another create until the canvas syncs; reconnect or reload first.',
+    );
+  }
+
+  const localCanvasWasEmpty = get().nodes.length === 0 && get().edges.length === 0;
+
+  // Push into cli_graph on the backend so `nebula graph` shows the node to
+  // Claude. graphSync will bring it into the canvas with its cli short id.
+  // On an empty tab, the backend's own nodes come in first (never a
+  // clear); if they can't, nothing is added, not even in this tab.
+  let backendFound: boolean;
+  try {
+    backendFound = await bringBackendGraphIntoEmptyTab(localCanvasWasEmpty, set, get);
+  } catch (err) {
+    return reportNodeCreationError(definition.displayName, err);
+  }
+  if (!backendFound) return addOnlyInThisTab(set, get, definitionId, params, position);
+
+  const attempt: NodeCreationAttempt = {
+    definitionId,
+    displayName: definition.displayName,
+    position,
+    knownCliNodeIds: new Set(get().nodes.filter((node) => CLI_ID_RE.test(node.id)).map((node) => node.id)),
+    phase: 'sending',
+  };
+  pendingNodeCreationAttempt = attempt;
+
+  const reconcileDispatchedCreate = async (reason: string): Promise<string | null> => {
+    attempt.phase = 'uncertain';
+    if (attempt.observedNodeId) {
+      if (pendingNodeCreationAttempt === attempt) pendingNodeCreationAttempt = null;
+      return attempt.observedNodeId;
+    }
+    const reconciledId = await reconcilePendingNodeCreation(set, get);
+    if (reconciledId) return reconciledId;
+    return reportNodeCreationFailure(definition.displayName, reason);
+  };
+
+  let res: Response;
+  try {
+    res = await graphMutationFetch('/api/graph/node', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ definitionId, params, position }),
+    });
+  } catch {
+    return reconcileDispatchedCreate(
+      'The backend response was lost after the node-create request was sent. Nebula did not add a local copy because the backend may already have committed it. Wait for canvas sync or reload before trying again.',
+    );
+  }
+
+  if (!res.ok) {
+    if (pendingNodeCreationAttempt === attempt) pendingNodeCreationAttempt = null;
+    return reportNodeCreationFailure(
+      definition.displayName,
+      await backendRejectionReason(res, `Couldn't add ${definition.displayName}.`),
+    );
+  }
+
+  let node: { id?: unknown };
+  try {
+    node = (await res.json()) as { id?: unknown };
+  } catch {
+    return reconcileDispatchedCreate(
+      'Backend returned an invalid response after node creation. Nebula did not add a local copy because the backend may already have committed it. Wait for canvas sync or reload before trying again.',
+    );
+  }
+  if (typeof node.id !== 'string' || !node.id) {
+    return reconcileDispatchedCreate(
+      'Backend returned no node id after node creation. Nebula did not add a local copy because the backend may already have committed it. Wait for canvas sync or reload before trying again.',
+    );
+  }
+  if (pendingNodeCreationAttempt === attempt) pendingNodeCreationAttempt = null;
+  return node.id;
 }
 
 async function reconcilePendingNodeCreation(
@@ -3041,313 +3221,346 @@ function sendRestore(
   return task;
 }
 
+/** Why a graph from the backend isn't for this tab, or null when it is: the
+ * same two checks every socket event and graphSync pass (another project's
+ * revision; another params version, which projectStore reloads the tab for,
+ * paramsOutdated.ts; a sync without a version is from a backend older than
+ * the gate, 0). The reason is the backend's own refusal for the same case
+ * (main.py CANVAS_OUT_OF_DATE, PARAMS_OUTDATED_DETAIL), for the Agent log. */
+function graphNotForThisTab(event: { workspaceRevision?: unknown; paramsVersion?: unknown }): string | null {
+  const revision = event.workspaceRevision;
+  if (revision !== undefined && revision !== getProjectContext()?.revision) {
+    return 'This canvas is out of date. Open the current project before editing or running it.';
+  }
+  if (backendParamsVersion(event.paramsVersion) !== GRAPH_PARAMS_VERSION) {
+    return "Nebula was updated while this tab was open, so this tab can't save or run until it reloads. "
+      + "Reload the tab; your saved work is kept. If this keeps happening after a reload, this window's "
+      + "frontend build doesn't match the backend: rebuild the frontend, or restart the backend.";
+  }
+  return null;
+}
+
 wsClient.connect();
 wsClient.subscribe((event) => {
   const revision = (event as ExecutionEvent & { workspaceRevision?: string }).workspaceRevision;
   const context = getProjectContext();
   if (revision !== undefined && revision !== context?.revision) return;
   if (event.type === 'graphSync') {
-    // A backend at another params version holds values this bundle's rules
-    // don't describe; projectStore reloads the tab instead (paramsOutdated.ts).
-    // A sync without a version is from a backend older than the gate (0).
-    if (backendParamsVersion((event as ExecutionEvent & { paramsVersion?: unknown }).paramsVersion)
-      !== GRAPH_PARAMS_VERSION) return;
-    useCinemaMotionStore.getState().observeGraphSync();
-    // Real-time sync: MERGE cli_graph into the canvas. Key invariant: frontend-only
-    // nodes (library drags, undo'd results, etc.) must survive graphSync — only
-    // cli-origin nodes are authoritative from the server. Same for edges.
-    const {
-      nodes: rawCliNodes,
-      edges: cliEdges,
-      empty,
-      graphReplaced = false,
-      moved = [],
-      arrange = [],
-      arranged,
-      providerRecoveries = [],
-      providerStartAmbiguities = [],
-      executionStatuses,
-      edit: origin,
-    } = event as {
-      type: 'graphSync';
-      nodes: Node<NodeData>[];
-      edges: Edge[];
-      empty: boolean;
-      graphReplaced?: boolean;
-      moved?: string[];
-      arrange?: unknown;
-      /** Set when this sync finishes an agent's arrange: {id, nodeIds}. Not an edit. */
-      arranged?: unknown;
-      /** Set when a graph edit caused this sync: who made it, and which tab sent it. */
-      edit?: EditOrigin;
-      providerRecoveries?: ProviderRecoveryCheckpoint[];
-      providerStartAmbiguities?: ProviderStartAmbiguity[];
-      executionStatuses?: ExecutionStatusResult[];
-    };
-    if (graphReplaced) {
-      canvasReplacementRevision += 1;
-      forgetRunsOfReplacedGraph();
-      pendingConnectedNodeCreationAttempt = null;
-      wireWrites.clear();
-      unsavedParamEdits.clear();
-      // The committed import can arrive before, or instead of, its HTTP ack.
-      // Revoke old same-ID uploads/writes and suspended drafts before merging.
-      clearCinemaScenePersistence();
-      useCinemaUploadStore.getState().clear();
-      useCinemaMotionStore.getState().clear();
-      clearReplacedCanvasFocus();
-    }
-    useGraphStore.getState().hydrateProviderRecoveries(providerRecoveries);
-    useGraphStore.getState().hydrateProviderStartAmbiguities(providerStartAmbiguities);
-    if (executionStatuses !== undefined) {
-      useGraphStore.getState().hydrateExecutionStatuses(executionStatuses);
-    }
-    const cliNodes = rewriteBackendAssetUrls(rawCliNodes).map((raw) => {
-      const node = raw as Node<NodeData>;
-      if (node.data.definitionId !== 'cinema-scene') return node;
-      const scene = node.data.params.scene as CinemaSceneSpec | undefined;
-      if (!scene?.shots) return node;
-      // The backend final graph snapshot can arrive after executionStatus and
-      // still contain its optimistic spinner. Terminal ownership wins over that
-      // spinner; completed media and a newly launched owner remain untouched.
-      return { ...node, data: { ...node.data, params: { ...node.data.params, scene: {
-        ...scene, shots: scene.shots.map((shot) => {
-          const status = settledCinemaRuns.get(`${node.id}\u0000${shot.id}`);
-          const active = [...activeRunOwners.values()].some((owner) => owner.nodeId === node.id && owner.shotId === shot.id);
-          if (!status || active || shot.output?.status !== 'running') return shot;
-          return { ...shot, output: { ...shot.output, status: status === 'failed' ? 'error' as const : 'idle' as const,
-            error: status === 'failed' ? 'Shot generation failed.' : undefined } };
-        }),
-      } } } };
-    });
-    const observedPendingNodeId = observePendingNodeCreation(cliNodes as Node<NodeData>[]);
-    observePendingConnectedNodeCreation(cliNodes as Node<NodeData>[], cliEdges as Edge[]);
-
-    const state = useGraphStore.getState();
-    const held = heldWires(cliEdges ?? []);
-    for (const seen of syncWatchers) {
-      for (const node of cliNodes) seen.add(node.id);
-      for (const edge of cliEdges ?? []) seen.add(edgeKey(edge));
-    }
-
-    if (empty) {
-      // cli_graph was cleared — drop only cli-origin nodes/edges; keep frontend work.
-      const remainingNodes = graphReplaced ? [] : state.nodes.filter((n) => !CLI_ID_RE.test(n.id));
-      const remainingIds = new Set(remainingNodes.map((n) => n.id));
-      const remainingEdges = state.edges.filter(
-        (e) => remainingIds.has(e.source) && remainingIds.has(e.target),
-      );
-      useGraphStore.setState({
-        nodes: remainingNodes,
-        edges: remainingEdges,
-        backendFreshStartPending: false,
-        ...foreignEditStep(state, remainingNodes, remainingEdges, origin, graphReplaced, moved),
-      });
-      useCinemaUploadStore.getState().reconcileTargets(remainingNodes);
-      useArrangeStore.getState().setPending([]);
-      return;
-    }
-
-    const existingById = new Map((graphReplaced ? [] : state.nodes).map((n) => [n.id, n]));
-    const frontendOnlyNodes = graphReplaced ? [] : state.nodes.filter((n) => !CLI_ID_RE.test(n.id));
-    // Nodes the backend put somewhere new (an agent's move, or another tab's
-    // drag). The rest keep the position this canvas has, as do nodes being
-    // dragged here and nodes this tab's own layout write hasn't settled.
-    const takesBackendPosition = (node: Node<NodeData>, existing: Node<NodeData>) =>
-      moved.includes(node.id) && !existing.dragging && !layoutWritesInFlight.has(node.id) && Boolean(node.position);
-
-    // Compute keyStatus for a node given its definition. Used for both new and
-    // existing cli nodes so the "missing API key" badge shows up consistently.
-    const { settingsCache } = useUIStore.getState();
-    const keyStatusFor = (definitionId: string, params: Record<string, unknown>): 'missing' | undefined =>
-      nodeKeyStatus(NODE_DEFINITIONS[definitionId], params, settingsCache);
-
-    const cliMerged = (cliNodes as Node<NodeData>[]).map((incoming) => {
-      const existing = existingById.get(incoming.id);
-      // Keys the person typed and the backend doesn't have yet stay as typed.
-      const cliNode = existing && unsavedParamEdits.has(incoming.id)
-        ? { ...incoming, data: { ...incoming.data,
-          params: withUnsavedParams(incoming.id, incoming.data.params, existing.data.params) } }
-        : incoming;
-      const keyStatus = keyStatusFor(cliNode.data.definitionId, cliNode.data.params);
-      if (existing) {
-        // Preserve position (unless the backend moved the node; see
-        // takesBackendPosition) and existing outputs when the CLI side doesn't
-        // have newer ones. Spread existing.data FIRST so
-        // frontend-only fields (dynamicInputPorts, dynamicParams, providerMeta,
-        // modelId on universal nodes) survive the merge — cliNode.data then
-        // overrides common keys like label/definitionId/params.
-        const cliOutputs = cliNode.data?.outputs ?? {};
-        const hasCliOutputs = Object.keys(cliOutputs).length > 0;
-        const changedOutput = hasCliOutputs && !sameExecutionOutputs(cliOutputs, existing.data.outputs);
-        const isPaperSource = cliNode.data.definitionId === 'paper-source';
-        const previousSource = existing.data.params._paperSource as PaperSourceRecord | undefined;
-        const incomingSource = cliNode.data.params._paperSource as PaperSourceRecord | undefined;
-        const paperSource = isPaperSource && previousSource
-          && (!incomingSource || (previousSource.id === incomingSource.id
-            && previousSource.sequence >= incomingSource.sequence))
-          ? previousSource : incomingSource;
-        const localScene = existing.data.params.scene as CinemaSceneSpec | undefined;
-        const incomingScene = cliNode.data.params.scene as CinemaSceneSpec | undefined;
-        const cinemaScene = cliNode.data.definitionId === 'cinema-scene'
-          && cinemaScenePersistence.has(cliNode.id) && localScene?.shots && incomingScene?.shots
-          ? mergePendingCinemaScene(cliNode.id, localScene, incomingScene) : null;
-        const cinemaOutputs = cinemaScene ? Object.fromEntries(
-          Object.entries(hasCliOutputs ? cliOutputs : existing.data.outputs).filter(([port]) =>
-            !port.startsWith('shot_') || cinemaScene.shots.some((shot) => shotPortId(shot.id) === port)),
-        ) : null;
-        if (cinemaScene && cinemaOutputs) {
-          for (const shot of cinemaScene.shots) {
-            if (shot.output?.imageUrl) cinemaOutputs[shotPortId(shot.id)] = {
-              type: 'Image', value: shot.output.imageUrl,
-            };
-          }
-        }
-        return {
-          ...cliNode,
-          // What React Flow keeps on the node (its measured size, whether it
-          // is selected or being dragged) isn't the backend's: keep this
-          // canvas's. Dropping `measured` had React Flow measure every node
-          // again after each sync (a second update of every card), and
-          // dropping `selected` cleared the person's selection whenever an
-          // agent or a run synced the graph.
-          ...canvasOwnFields(existing),
-          type: isPaperSource ? 'paperSourceNode' : cliNode.data.definitionId === 'batch'
-            ? 'batchNode' : existing.type ?? cliNode.type,
-          position: takesBackendPosition(cliNode, existing) ? cliNode.position : existing.position,
-          data: {
-            ...existing.data,
-            ...cliNode.data,
-            ...keptUniversalFields(existing, cliNode),
-            outputs: hasCliOutputs ? cliOutputs : keptOutputs(existing, cliNode),
-            // The sync says "complete" for any node with outputs. Over the
-            // same outputs it must not hide what a run's events said since:
-            // a failure (an agent's run ends with a sync), a skip, or a run
-            // still going. New outputs do replace it.
-            // The backend's "error" is the node's last run failing
-            // (services/node_errors.py): a tab that missed that run's events
-            // shows it, unless it has started the node again since.
-            state: cliNode.data.state === 'error'
-              ? (existing.data.state === 'queued' || existing.data.state === 'executing' ? existing.data.state : 'error')
-              : !hasCliOutputs ? existing.data.state
-                : changedOutput || !RUN_HELD_STATES.has(existing.data.state) ? cliNode.data.state
-                  : existing.data.state,
-            // That error comes whole: an older run's friendly line or
-            // category must not sit beside a newer message.
-            ...(cliNode.data.state === 'error' ? {
-              errorFriendly: cliNode.data.errorFriendly, errorCategory: cliNode.data.errorCategory,
-              errorPerson: cliNode.data.errorPerson, errorProviderText: cliNode.data.errorProviderText,
-              errorProvider: cliNode.data.errorProvider,
-            } : {}),
-            keyStatus,
-            ...(changedOutput ? clearBatchPreview() : {}),
-            ...(isPaperSource && paperSource ? {
-              params: { ...cliNode.data.params, _paperSource: paperSource },
-              outputs: paperSource.snapshot
-                ? { image: { type: 'Image' as const, value: paperSource.snapshot.filePath } }
-                : existing.data.outputs,
-              // The backend's 'error' (a run that couldn't read the pinned
-              // snapshot) stands, as worked out above; the snapshot decides
-              // the state only when there is none (error copy round 3e).
-              ...(cliNode.data.state === 'error' ? {}
-                : { state: paperSource.snapshot ? 'complete' as const : 'idle' as const }),
-            } : {}),
-            ...(cinemaScene ? {
-              params: { ...cliNode.data.params, scene: cinemaScene },
-              dynamicOutputPorts: shotOutputPorts(cinemaScene),
-              outputs: cinemaOutputs!,
-            } : {}),
-          },
-        };
-      }
-      // New cli node: trust the position the backend sent. It already handles
-      // auto-layout for nodes without a stored position (Claude's `nebula
-      // create`) and round-trips user-saved positions for imported graphs.
-      return {
-        ...cliNode,
-        type: cliNode.data.definitionId === 'paper-source' ? 'paperSourceNode'
-          : cliNode.data.definitionId === 'batch' ? 'batchNode' : cliNode.type,
-        position: {
-          x: cliNode.position?.x ?? 0,
-          y: cliNode.position?.y ?? 100,
-        },
-        data: {
-          ...cliNode.data,
-          keyStatus,
-        },
-      };
-    });
-
-    // A node the sync didn't change stays the same object (and the array
-    // the same array when nothing changed), so React Flow re-renders only
-    // the cards that changed (tests/canvasRenderScope.test.tsx).
-    const merged = shareUnchanged(graphReplaced ? [] : state.nodes, nodesWithProviderRecoveries(
-      [...frontendOnlyNodes, ...cliMerged],
-      useGraphStore.getState().providerRecoveries,
-    ));
-    const mergedIds = new Set(merged.map((n) => n.id));
-
-    // A wire between two backend nodes is the backend's: one this sync lacks
-    // is gone (an agent's unwire or undo, a re-typed node's pruning), unless
-    // it is this tab's own connect on its way (heldWires). Wires on nodes only
-    // this tab has stay while both ends do. Matched by connection, not id:
-    // onConnect's optimistic wire has a UUID, the backend's copy an e-id.
-    const cliEdgeKeys = new Set((cliEdges as Edge[]).map(edgeKey));
-    const mergedById = new Map(merged.map((n) => [n.id, n]));
-    const frontendOnlyEdges = graphReplaced ? [] : state.edges.filter(
-      (e) => !cliEdgeKeys.has(edgeKey(e)) && mergedIds.has(e.source) && mergedIds.has(e.target)
-        && (!CLI_ID_RE.test(e.source) || !CLI_ID_RE.test(e.target) || held.get(edgeKey(e)) === true)
-        // A universal node whose model changed (the picker's route, which drops
-        // these wires itself) no longer has the port: the wire can't stay.
-        && universalPortsHold(e, mergedById),
-    );
-    // Edges are matched by id and connection: the backend can hand two
-    // edges the same id (cli_graph.connect numbers by count after a removal).
-    const edgeIdentity = (edge: Edge) => `${edge.id}\u0000${edgeKey(edge)}`;
-    const existingEdges = new Map((graphReplaced ? [] : state.edges).map((edge) => [edgeIdentity(edge), edge]));
-    const mergedEdges = shareUnchanged(graphReplaced ? [] : state.edges, [
-      ...frontendOnlyEdges,
-      // A selected wire stays selected (React Flow keeps `selected` on the
-      // edge, `false` once deselected, which is kept too so the wire is unchanged).
-      ...(cliEdges as Edge[]).filter((edge) => held.get(edgeKey(edge)) !== false).map((edge) => {
-        const selected = existingEdges.get(edgeIdentity(edge))?.selected;
-        return typeof selected === 'boolean' ? { ...edge, selected } : edge;
-      }),
-    ], edgeIdentity);
-
-    if (!origin && !graphReplaced) foldFinishedArrange(state, arranged, cliNodes as Node<NodeData>[]);
-    useGraphStore.setState({
-      nodes: merged,
-      edges: mergedEdges,
-      backendFreshStartPending: false,
-      ...foreignEditStep(state, merged, mergedEdges, origin, graphReplaced, moved),
-    });
-    useCinemaUploadStore.getState().reconcileTargets(merged);
-    // After the merge, so the nodes an arrange names are already on the canvas.
-    useArrangeStore.getState().setPending(arrange);
-    if (
-      observedPendingNodeId
-      && pendingNodeCreationAttempt?.phase === 'uncertain'
-      && pendingNodeCreationAttempt.observedNodeId === observedPendingNodeId
-    ) {
-      pendingNodeCreationAttempt = null;
-    }
-
-    // Only fire the auto-fit event when cli_graph actually added nodes we didn't
-    // already have — otherwise every graphSync (including output updates) would
-    // re-fit and steal the user's viewport.
-    const newCliCount = cliMerged.filter((n) => !existingById.has(n.id)).length;
-    if (newCliCount > 0) {
-      window.dispatchEvent(
-        new CustomEvent('nebula:graph-nodes-added', {
-          detail: { addedCount: newCliCount, totalCount: merged.length },
-        }),
-      );
-    }
+    applyGraphSync(event);
     return;
   }
   useGraphStore.getState().handleExecutionEvent(event);
 });
+
+/** Merge a graphSync into the canvas: the socket's, and an add's own read
+ * of the backend's graph on an empty tab (bringBackendGraphIntoEmptyTab).
+ * Returns false when it isn't for this tab (graphNotForThisTab). */
+function applyGraphSync(event: ExecutionEvent): boolean {
+  if (graphNotForThisTab(event as ExecutionEvent & { workspaceRevision?: unknown; paramsVersion?: unknown })) {
+    return false;
+  }
+  useCinemaMotionStore.getState().observeGraphSync();
+  // Real-time sync: MERGE cli_graph into the canvas. Key invariant: frontend-only
+  // nodes (library drags, undo'd results, etc.) must survive graphSync — only
+  // cli-origin nodes are authoritative from the server. Same for edges.
+  const {
+    nodes: rawCliNodes,
+    edges: cliEdges,
+    empty,
+    graphReplaced = false,
+    cleared = false,
+    moved = [],
+    arrange = [],
+    arranged,
+    providerRecoveries = [],
+    providerStartAmbiguities = [],
+    executionStatuses,
+    edit: origin,
+  } = event as {
+    type: 'graphSync';
+    nodes: Node<NodeData>[];
+    edges: Edge[];
+    empty: boolean;
+    graphReplaced?: boolean;
+    /** A Clear (DELETE /api/graph): ids start again at n1 in the same project. */
+    cleared?: boolean;
+    moved?: string[];
+    arrange?: unknown;
+    /** Set when this sync finishes an agent's arrange: {id, nodeIds}. Not an edit. */
+    arranged?: unknown;
+    /** Set when a graph edit caused this sync: who made it, and which tab sent it. */
+    edit?: EditOrigin;
+    providerRecoveries?: ProviderRecoveryCheckpoint[];
+    providerStartAmbiguities?: ProviderStartAmbiguity[];
+    executionStatuses?: ExecutionStatusResult[];
+  };
+  if (graphReplaced || cleared) {
+    // Round 12 of PR #114: a Clear restarts node ids too (an agent's, or
+    // another tab's), so a run started before it is no longer this
+    // canvas's and its refused start marks nothing on the new n1.
+    canvasReplacementRevision += 1;
+    forgetRunsOfReplacedGraph();
+  }
+  if (graphReplaced) {
+    pendingConnectedNodeCreationAttempt = null;
+    wireWrites.clear();
+    unsavedParamEdits.clear();
+    // The committed import can arrive before, or instead of, its HTTP ack.
+    // Revoke old same-ID uploads/writes and suspended drafts before merging.
+    clearCinemaScenePersistence();
+    useCinemaUploadStore.getState().clear();
+    useCinemaMotionStore.getState().clear();
+    clearReplacedCanvasFocus();
+  }
+  useGraphStore.getState().hydrateProviderRecoveries(providerRecoveries);
+  useGraphStore.getState().hydrateProviderStartAmbiguities(providerStartAmbiguities);
+  if (executionStatuses !== undefined) {
+    useGraphStore.getState().hydrateExecutionStatuses(executionStatuses);
+  }
+  const cliNodes = rewriteBackendAssetUrls(rawCliNodes).map((raw) => {
+    const node = raw as Node<NodeData>;
+    if (node.data.definitionId !== 'cinema-scene') return node;
+    const scene = node.data.params.scene as CinemaSceneSpec | undefined;
+    if (!scene?.shots) return node;
+    // The backend final graph snapshot can arrive after executionStatus and
+    // still contain its optimistic spinner. Terminal ownership wins over that
+    // spinner; completed media and a newly launched owner remain untouched.
+    return { ...node, data: { ...node.data, params: { ...node.data.params, scene: {
+      ...scene, shots: scene.shots.map((shot) => {
+        const status = settledCinemaRuns.get(`${node.id}\u0000${shot.id}`);
+        const active = [...activeRunOwners.values()].some((owner) => owner.nodeId === node.id && owner.shotId === shot.id);
+        if (!status || active || shot.output?.status !== 'running') return shot;
+        return { ...shot, output: { ...shot.output, status: status === 'failed' ? 'error' as const : 'idle' as const,
+          error: status === 'failed' ? 'Shot generation failed.' : undefined } };
+      }),
+    } } } };
+  });
+  const observedPendingNodeId = observePendingNodeCreation(cliNodes as Node<NodeData>[]);
+  observePendingConnectedNodeCreation(cliNodes as Node<NodeData>[], cliEdges as Edge[]);
+
+  const state = useGraphStore.getState();
+  const held = heldWires(cliEdges ?? []);
+  for (const seen of syncWatchers) {
+    for (const node of cliNodes) seen.add(node.id);
+    for (const edge of cliEdges ?? []) seen.add(edgeKey(edge));
+  }
+
+  if (empty) {
+    // cli_graph was cleared — drop only cli-origin nodes/edges; keep frontend work.
+    const remainingNodes = graphReplaced ? [] : state.nodes.filter((n) => !CLI_ID_RE.test(n.id));
+    const remainingIds = new Set(remainingNodes.map((n) => n.id));
+    const remainingEdges = state.edges.filter(
+      (e) => remainingIds.has(e.source) && remainingIds.has(e.target),
+    );
+    useGraphStore.setState({
+      nodes: remainingNodes,
+      edges: remainingEdges,
+      backendFreshStartPending: false,
+      ...foreignEditStep(state, remainingNodes, remainingEdges, origin, graphReplaced, moved),
+    });
+    useCinemaUploadStore.getState().reconcileTargets(remainingNodes);
+    useArrangeStore.getState().setPending([]);
+    return true;
+  }
+
+  const existingById = new Map((graphReplaced ? [] : state.nodes).map((n) => [n.id, n]));
+  const frontendOnlyNodes = graphReplaced ? [] : state.nodes.filter((n) => !CLI_ID_RE.test(n.id));
+  // Nodes the backend put somewhere new (an agent's move, or another tab's
+  // drag). The rest keep the position this canvas has, as do nodes being
+  // dragged here and nodes this tab's own layout write hasn't settled.
+  const takesBackendPosition = (node: Node<NodeData>, existing: Node<NodeData>) =>
+    moved.includes(node.id) && !existing.dragging && !layoutWritesInFlight.has(node.id) && Boolean(node.position);
+
+  // Compute keyStatus for a node given its definition. Used for both new and
+  // existing cli nodes so the "missing API key" badge shows up consistently.
+  const { settingsCache } = useUIStore.getState();
+  const keyStatusFor = (definitionId: string, params: Record<string, unknown>): 'missing' | undefined =>
+    nodeKeyStatus(NODE_DEFINITIONS[definitionId], params, settingsCache);
+
+  const cliMerged = (cliNodes as Node<NodeData>[]).map((incoming) => {
+    const existing = existingById.get(incoming.id);
+    // Keys the person typed and the backend doesn't have yet stay as typed.
+    const cliNode = existing && unsavedParamEdits.has(incoming.id)
+      ? { ...incoming, data: { ...incoming.data,
+        params: withUnsavedParams(incoming.id, incoming.data.params, existing.data.params) } }
+      : incoming;
+    const keyStatus = keyStatusFor(cliNode.data.definitionId, cliNode.data.params);
+    if (existing) {
+      // Preserve position (unless the backend moved the node; see
+      // takesBackendPosition) and existing outputs when the CLI side doesn't
+      // have newer ones. Spread existing.data FIRST so
+      // frontend-only fields (dynamicInputPorts, dynamicParams, providerMeta,
+      // modelId on universal nodes) survive the merge — cliNode.data then
+      // overrides common keys like label/definitionId/params.
+      const cliOutputs = cliNode.data?.outputs ?? {};
+      const hasCliOutputs = Object.keys(cliOutputs).length > 0;
+      const changedOutput = hasCliOutputs && !sameExecutionOutputs(cliOutputs, existing.data.outputs);
+      const isPaperSource = cliNode.data.definitionId === 'paper-source';
+      const previousSource = existing.data.params._paperSource as PaperSourceRecord | undefined;
+      const incomingSource = cliNode.data.params._paperSource as PaperSourceRecord | undefined;
+      const paperSource = isPaperSource && previousSource
+        && (!incomingSource || (previousSource.id === incomingSource.id
+          && previousSource.sequence >= incomingSource.sequence))
+        ? previousSource : incomingSource;
+      const localScene = existing.data.params.scene as CinemaSceneSpec | undefined;
+      const incomingScene = cliNode.data.params.scene as CinemaSceneSpec | undefined;
+      const cinemaScene = cliNode.data.definitionId === 'cinema-scene'
+        && cinemaScenePersistence.has(cliNode.id) && localScene?.shots && incomingScene?.shots
+        ? mergePendingCinemaScene(cliNode.id, localScene, incomingScene) : null;
+      const cinemaOutputs = cinemaScene ? Object.fromEntries(
+        Object.entries(hasCliOutputs ? cliOutputs : existing.data.outputs).filter(([port]) =>
+          !port.startsWith('shot_') || cinemaScene.shots.some((shot) => shotPortId(shot.id) === port)),
+      ) : null;
+      if (cinemaScene && cinemaOutputs) {
+        for (const shot of cinemaScene.shots) {
+          if (shot.output?.imageUrl) cinemaOutputs[shotPortId(shot.id)] = {
+            type: 'Image', value: shot.output.imageUrl,
+          };
+        }
+      }
+      return {
+        ...cliNode,
+        // What React Flow keeps on the node (its measured size, whether it
+        // is selected or being dragged) isn't the backend's: keep this
+        // canvas's. Dropping `measured` had React Flow measure every node
+        // again after each sync (a second update of every card), and
+        // dropping `selected` cleared the person's selection whenever an
+        // agent or a run synced the graph.
+        ...canvasOwnFields(existing),
+        type: isPaperSource ? 'paperSourceNode' : cliNode.data.definitionId === 'batch'
+          ? 'batchNode' : existing.type ?? cliNode.type,
+        position: takesBackendPosition(cliNode, existing) ? cliNode.position : existing.position,
+        data: {
+          ...existing.data,
+          ...cliNode.data,
+          ...keptUniversalFields(existing, cliNode),
+          outputs: hasCliOutputs ? cliOutputs : keptOutputs(existing, cliNode),
+          // The sync says "complete" for any node with outputs. Over the
+          // same outputs it must not hide what a run's events said since:
+          // a failure (an agent's run ends with a sync), a skip, or a run
+          // still going. New outputs do replace it.
+          // The backend's "error" is the node's last run failing
+          // (services/node_errors.py): a tab that missed that run's events
+          // shows it, unless it has started the node again since.
+          state: cliNode.data.state === 'error'
+            ? (existing.data.state === 'queued' || existing.data.state === 'executing' ? existing.data.state : 'error')
+            : !hasCliOutputs ? existing.data.state
+              : changedOutput || !RUN_HELD_STATES.has(existing.data.state) ? cliNode.data.state
+                : existing.data.state,
+          // That error comes whole: an older run's friendly line or
+          // category must not sit beside a newer message.
+          ...(cliNode.data.state === 'error' ? {
+            errorFriendly: cliNode.data.errorFriendly, errorCategory: cliNode.data.errorCategory,
+            errorPerson: cliNode.data.errorPerson, errorProviderText: cliNode.data.errorProviderText,
+            errorProvider: cliNode.data.errorProvider,
+          } : {}),
+          keyStatus,
+          ...(changedOutput ? clearBatchPreview() : {}),
+          ...(isPaperSource && paperSource ? {
+            params: { ...cliNode.data.params, _paperSource: paperSource },
+            outputs: paperSource.snapshot
+              ? { image: { type: 'Image' as const, value: paperSource.snapshot.filePath } }
+              : existing.data.outputs,
+            // The backend's 'error' (a run that couldn't read the pinned
+            // snapshot) stands, as worked out above; the snapshot decides
+            // the state only when there is none (error copy round 3e).
+            ...(cliNode.data.state === 'error' ? {}
+              : { state: paperSource.snapshot ? 'complete' as const : 'idle' as const }),
+          } : {}),
+          ...(cinemaScene ? {
+            params: { ...cliNode.data.params, scene: cinemaScene },
+            dynamicOutputPorts: shotOutputPorts(cinemaScene),
+            outputs: cinemaOutputs!,
+          } : {}),
+        },
+      };
+    }
+    // New cli node: trust the position the backend sent. It already handles
+    // auto-layout for nodes without a stored position (Claude's `nebula
+    // create`) and round-trips user-saved positions for imported graphs.
+    return {
+      ...cliNode,
+      type: cliNode.data.definitionId === 'paper-source' ? 'paperSourceNode'
+        : cliNode.data.definitionId === 'batch' ? 'batchNode' : cliNode.type,
+      position: {
+        x: cliNode.position?.x ?? 0,
+        y: cliNode.position?.y ?? 100,
+      },
+      data: {
+        ...cliNode.data,
+        keyStatus,
+      },
+    };
+  });
+
+  // A node the sync didn't change stays the same object (and the array
+  // the same array when nothing changed), so React Flow re-renders only
+  // the cards that changed (tests/canvasRenderScope.test.tsx).
+  const merged = shareUnchanged(graphReplaced ? [] : state.nodes, nodesWithProviderRecoveries(
+    [...frontendOnlyNodes, ...cliMerged],
+    useGraphStore.getState().providerRecoveries,
+  ));
+  const mergedIds = new Set(merged.map((n) => n.id));
+
+  // A wire between two backend nodes is the backend's: one this sync lacks
+  // is gone (an agent's unwire or undo, a re-typed node's pruning), unless
+  // it is this tab's own connect on its way (heldWires). Wires on nodes only
+  // this tab has stay while both ends do. Matched by connection, not id:
+  // onConnect's optimistic wire has a UUID, the backend's copy an e-id.
+  const cliEdgeKeys = new Set((cliEdges as Edge[]).map(edgeKey));
+  const mergedById = new Map(merged.map((n) => [n.id, n]));
+  const frontendOnlyEdges = graphReplaced ? [] : state.edges.filter(
+    (e) => !cliEdgeKeys.has(edgeKey(e)) && mergedIds.has(e.source) && mergedIds.has(e.target)
+      && (!CLI_ID_RE.test(e.source) || !CLI_ID_RE.test(e.target) || held.get(edgeKey(e)) === true)
+      // A universal node whose model changed (the picker's route, which drops
+      // these wires itself) no longer has the port: the wire can't stay.
+      && universalPortsHold(e, mergedById),
+  );
+  // Edges are matched by id and connection: the backend can hand two
+  // edges the same id (cli_graph.connect numbers by count after a removal).
+  const edgeIdentity = (edge: Edge) => `${edge.id}\u0000${edgeKey(edge)}`;
+  const existingEdges = new Map((graphReplaced ? [] : state.edges).map((edge) => [edgeIdentity(edge), edge]));
+  const mergedEdges = shareUnchanged(graphReplaced ? [] : state.edges, [
+    ...frontendOnlyEdges,
+    // A selected wire stays selected (React Flow keeps `selected` on the
+    // edge, `false` once deselected, which is kept too so the wire is unchanged).
+    ...(cliEdges as Edge[]).filter((edge) => held.get(edgeKey(edge)) !== false).map((edge) => {
+      const selected = existingEdges.get(edgeIdentity(edge))?.selected;
+      return typeof selected === 'boolean' ? { ...edge, selected } : edge;
+    }),
+  ], edgeIdentity);
+
+  if (!origin && !graphReplaced) foldFinishedArrange(state, arranged, cliNodes as Node<NodeData>[]);
+  useGraphStore.setState({
+    nodes: merged,
+    edges: mergedEdges,
+    backendFreshStartPending: false,
+    ...foreignEditStep(state, merged, mergedEdges, origin, graphReplaced, moved),
+  });
+  useCinemaUploadStore.getState().reconcileTargets(merged);
+  // After the merge, so the nodes an arrange names are already on the canvas.
+  useArrangeStore.getState().setPending(arrange);
+  if (
+    observedPendingNodeId
+    && pendingNodeCreationAttempt?.phase === 'uncertain'
+    && pendingNodeCreationAttempt.observedNodeId === observedPendingNodeId
+  ) {
+    pendingNodeCreationAttempt = null;
+  }
+
+  // Only fire the auto-fit event when cli_graph actually added nodes we didn't
+  // already have — otherwise every graphSync (including output updates) would
+  // re-fit and steal the user's viewport.
+  const newCliCount = cliMerged.filter((n) => !existingById.has(n.id)).length;
+  if (newCliCount > 0) {
+    window.dispatchEvent(
+      new CustomEvent('nebula:graph-nodes-added', {
+        detail: { addedCount: newCliCount, totalCount: merged.length },
+      }),
+    );
+  }
+  return true;
+}
 
 // ---------- Edit-clip invariant helpers ----------
 
@@ -3658,132 +3871,10 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     const definition = NODE_DEFINITIONS[definitionId];
     if (!definition) return null;
 
-    if (pendingNodeCreationAttempt) {
-      const previousAttempt = pendingNodeCreationAttempt;
-      if (previousAttempt.phase === 'sending') {
-        return reportNodeCreationFailure(
-          definition.displayName,
-          'Another backend node-create request is still in progress. Wait for it to finish before adding another node.',
-        );
-      }
-      const reconciledId = await reconcilePendingNodeCreation(set, get);
-      if (reconciledId) {
-        return reportNodeCreationFailure(
-          definition.displayName,
-          `The previous ${previousAttempt.displayName} request was restored as ${reconciledId}. Review that node before adding another.`,
-        );
-      }
-      return reportNodeCreationFailure(
-        definition.displayName,
-        'A previous backend node-create request still has an unknown result. Nebula will not send another create until the canvas syncs; reconnect or reload first.',
-      );
-    }
-
     const defaults = buildDefaultParams(definition);
     Object.assign(defaults, withNewKreaMode(definition, {},
       useUIStore.getState().settingsCache.kreaConnectionMode));
-
-    const localCanvasWasEmpty = get().nodes.length === 0 && get().edges.length === 0;
-
-    const addLocally = (err: unknown): string => {
-      console.warn('[nebula] addNode backend unavailable — adding locally only:', err);
-      // Fallback: frontend-only UUID node. Claude won't see it until the
-      // backend comes back and /api/graph/import or equivalent is called.
-      pushUndo(set, get);
-      const nodeType =
-        definitionId === 'reroute'
-          ? 'reroute-node'
-          : definitionId === 'batch'
-            ? 'batchNode'
-          : definitionId === 'camera-rig'
-            ? 'cameraRigNode'
-            : definitionId === 'paper-source'
-              ? 'paperSourceNode'
-            : definitionId === 'reference-set'
-              ? 'referenceSetNode'
-              : definitionId.startsWith('qc-')
-                ? 'videoQcNode'
-              : definitionId === 'nebula-moodboard'
-                ? 'moodboardNode'
-                : 'model-node';
-      const { settingsCache } = useUIStore.getState();
-      const keyStatus = nodeKeyStatus(definition, defaults, settingsCache);
-      const newNode: Node<NodeData> = {
-        id: uuidv4(),
-        type: nodeType,
-        position,
-        data: { label: definition.displayName, definitionId, params: defaults, state: 'idle', outputs: {}, keyStatus },
-      };
-      set((state) => ({ nodes: [...state.nodes, newNode] }));
-      return newNode.id;
-    };
-
-    // Push into cli_graph on the backend so `nebula graph` shows the node to
-    // Claude. graphSync will bring it into the canvas with its cli short id.
-    let backendFresh: boolean;
-    try {
-      backendFresh = await ensureBackendFreshForLocalCanvas(localCanvasWasEmpty, set, get);
-    } catch (err) {
-      return reportNodeCreationError(definition.displayName, err);
-    }
-    if (!backendFresh) return addLocally(new Error('Backend is unavailable.'));
-
-    const attempt: NodeCreationAttempt = {
-      definitionId,
-      displayName: definition.displayName,
-      position,
-      knownCliNodeIds: new Set(get().nodes.filter((node) => CLI_ID_RE.test(node.id)).map((node) => node.id)),
-      phase: 'sending',
-    };
-    pendingNodeCreationAttempt = attempt;
-
-    const reconcileDispatchedCreate = async (reason: string): Promise<string | null> => {
-      attempt.phase = 'uncertain';
-      if (attempt.observedNodeId) {
-        if (pendingNodeCreationAttempt === attempt) pendingNodeCreationAttempt = null;
-        return attempt.observedNodeId;
-      }
-      const reconciledId = await reconcilePendingNodeCreation(set, get);
-      if (reconciledId) return reconciledId;
-      return reportNodeCreationFailure(definition.displayName, reason);
-    };
-
-    let res: Response;
-    try {
-      res = await graphMutationFetch('/api/graph/node', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ definitionId, params: defaults, position }),
-      });
-    } catch {
-      return reconcileDispatchedCreate(
-        'The backend response was lost after the node-create request was sent. Nebula did not add a local copy because the backend may already have committed it. Wait for canvas sync or reload before trying again.',
-      );
-    }
-
-    if (!res.ok) {
-      if (pendingNodeCreationAttempt === attempt) pendingNodeCreationAttempt = null;
-      return reportNodeCreationFailure(
-        definition.displayName,
-        await backendRejectionReason(res, `Couldn't add ${definition.displayName}.`),
-      );
-    }
-
-    let node: { id?: unknown };
-    try {
-      node = (await res.json()) as { id?: unknown };
-    } catch {
-      return reconcileDispatchedCreate(
-        'Backend returned an invalid response after node creation. Nebula did not add a local copy because the backend may already have committed it. Wait for canvas sync or reload before trying again.',
-      );
-    }
-    if (typeof node.id !== 'string' || !node.id) {
-      return reconcileDispatchedCreate(
-        'Backend returned no node id after node creation. Nebula did not add a local copy because the backend may already have committed it. Wait for canvas sync or reload before trying again.',
-      );
-    }
-    if (pendingNodeCreationAttempt === attempt) pendingNodeCreationAttempt = null;
-    return node.id;
+    return createNodeOnBackend(set, get, definitionId, defaults, position);
   },
 
   addLocalCinemaMotionNode: (nodeId, shotId) => {
@@ -3970,42 +4061,83 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     });
     set((state) => ({ nodes: [...state.nodes, buildNode(tempId) as unknown as Node<NodeData>] }));
 
-    // Fire-and-forget push to cli_graph. When it returns, swap the UUID for
-    // the short id so subsequent edits flow through the usual cli path.
+    const undoStep = get().undoStack[get().undoStack.length - 1];
+
+    // Round 12 of PR #114: the same path as every add. On an empty tab the
+    // backend's own nodes come in first (never a clear), and a failure takes
+    // the node off this tab again (it had stayed there, frontend-only, with
+    // only a console line) and says why, as addNode does.
+    const takeBack = (): null => {
+      set((state) => ({
+        nodes: state.nodes.filter((n) => n.id !== tempId),
+        edges: state.edges.filter((e) => e.source !== tempId && e.target !== tempId),
+        undoStack: state.undoStack[state.undoStack.length - 1] === undoStep
+          ? state.undoStack.slice(0, -1) : state.undoStack,
+      }));
+      return null;
+    };
+
+    // Push to cli_graph. When it returns, swap the UUID for the short id so
+    // subsequent edits flow through the usual cli path.
     pendingGraphMutationCount += 1;
-    ensureBackendFreshForLocalCanvas(localCanvasWasEmpty, set, get)
-      .then((backendFresh) => {
-        if (!backendFresh) throw new Error('Backend fresh-start guard failed');
-        return graphMutationFetch('/api/graph/node', {
+    void (async () => {
+      try {
+        // No backend found at all: the node stays this tab's only, as before.
+        if (!await bringBackendGraphIntoEmptyTab(localCanvasWasEmpty, set, get)) return null;
+      } catch (err) {
+        takeBack();
+        return reportNodeCreationError(definition.displayName, err);
+      }
+      let res: Response;
+      try {
+        res = await graphMutationFetch('/api/graph/node', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ definitionId, params: defaults, position }),
         });
-      })
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
-      .then((body: { id?: string }) => {
-        const shortId = body.id;
-        if (!shortId) return;
-        // Remap edges too so any connections drawn during the race window
-        // keep pointing at the renamed node.
-        const drawn = new Set(get().edges.filter((e) => e.source === tempId || e.target === tempId).map((e) => e.id));
-        set((state) => ({
-          nodes: state.nodes.map((n) => (n.id === tempId ? { ...n, id: shortId } : n)),
-          edges: state.edges.map((e) => ({
-            ...e,
-            source: e.source === tempId ? shortId : e.source,
-            target: e.target === tempId ? shortId : e.target,
-          })),
-        }));
-        // onConnect sent none of them (an end had no backend id yet): those
-        // between two backend nodes now go, held like any connect (sendWire).
-        for (const edge of get().edges) {
-          if (drawn.has(edge.id) && CLI_ID_RE.test(edge.source) && CLI_ID_RE.test(edge.target)) void sendWire(edge, true, set);
-        }
-      })
-      .catch((err) => {
-        console.warn('[nebula] addDynamicNode backend push failed — staying frontend-only:', err);
-      }).finally(() => { pendingGraphMutationCount -= 1; });
+      } catch {
+        // The backend may have it: its graphSync brings it in, so no copy stays here.
+        takeBack();
+        return reportNodeCreationFailure(definition.displayName,
+          'The backend response was lost after the node-create request was sent. Nebula did not add a local copy because the backend may already have committed it. Wait for canvas sync or reload before trying again.');
+      }
+      if (!res.ok) {
+        const reason = await backendRejectionReason(res, `Couldn't add ${definition.displayName}.`);
+        takeBack();
+        return reportNodeCreationFailure(definition.displayName, reason);
+      }
+      let body: { id?: unknown };
+      try {
+        body = (await res.json()) as { id?: unknown };
+      } catch {
+        takeBack();
+        return reportNodeCreationFailure(definition.displayName,
+          'Backend returned an invalid response after node creation. Nebula did not add a local copy because the backend may already have committed it. Wait for canvas sync or reload before trying again.');
+      }
+      const shortId = body.id;
+      if (typeof shortId !== 'string' || !shortId) {
+        takeBack();
+        return reportNodeCreationFailure(definition.displayName,
+          'Backend returned no node id after node creation. Nebula did not add a local copy because the backend may already have committed it. Wait for canvas sync or reload before trying again.');
+      }
+      // Remap edges too so any connections drawn during the race window
+      // keep pointing at the renamed node.
+      const drawn = new Set(get().edges.filter((e) => e.source === tempId || e.target === tempId).map((e) => e.id));
+      set((state) => ({
+        nodes: state.nodes.map((n) => (n.id === tempId ? { ...n, id: shortId } : n)),
+        edges: state.edges.map((e) => ({
+          ...e,
+          source: e.source === tempId ? shortId : e.source,
+          target: e.target === tempId ? shortId : e.target,
+        })),
+      }));
+      // onConnect sent none of them (an end had no backend id yet): those
+      // between two backend nodes now go, held like any connect (sendWire).
+      for (const edge of get().edges) {
+        if (drawn.has(edge.id) && CLI_ID_RE.test(edge.source) && CLI_ID_RE.test(edge.target)) void sendWire(edge, true, set);
+      }
+      return null;
+    })().finally(() => { pendingGraphMutationCount -= 1; });
 
     return tempId;
   },
@@ -5801,32 +5933,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       });
     }
 
-    const localCanvasWasEmpty = get().nodes.length === 0 && get().edges.length === 0;
-
-    try {
-      const backendFresh = await ensureBackendFreshForLocalCanvas(localCanvasWasEmpty, set, get);
-      if (!backendFresh) throw new Error('Backend fresh-start guard failed');
-
-      const res = await graphMutationFetch('/api/graph/node', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ definitionId: 'character', params, position }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const node = (await res.json()) as { id?: string };
-      return node.id ?? null;
-    } catch (err) {
-      console.warn('[nebula] addCharacterNode backend push failed — adding locally only:', err);
-      pushUndo(set, get);
-      const newNode: Node<NodeData> = {
-        id: uuidv4(),
-        type: 'characterNode',
-        position,
-        data: { label: definition.displayName, definitionId: 'character', params, state: 'idle', outputs: {} },
-      };
-      set((state) => ({ nodes: [...state.nodes, newNode] }));
-      return newNode.id;
-    }
+    // The add path's own handling (round 12 of PR #114): the backend's
+    // nodes come into an empty tab first, and a failure adds nothing.
+    return createNodeOnBackend(set, get, 'character', params, position);
   },
 
   // Moodboard node — mirrors Character node but points at a provider-neutral
@@ -5853,32 +5962,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       });
     }
 
-    const localCanvasWasEmpty = get().nodes.length === 0 && get().edges.length === 0;
-
-    try {
-      const backendFresh = await ensureBackendFreshForLocalCanvas(localCanvasWasEmpty, set, get);
-      if (!backendFresh) throw new Error('Backend fresh-start guard failed');
-
-      const res = await graphMutationFetch('/api/graph/node', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ definitionId: 'nebula-moodboard', params, position }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const node = (await res.json()) as { id?: string };
-      return node.id ?? null;
-    } catch (err) {
-      console.warn('[nebula] addMoodboardNode backend push failed — adding locally only:', err);
-      pushUndo(set, get);
-      const newNode: Node<NodeData> = {
-        id: uuidv4(),
-        type: 'moodboardNode',
-        position,
-        data: { label: definition.displayName, definitionId: 'nebula-moodboard', params, state: 'idle', outputs: {} },
-      };
-      set((state) => ({ nodes: [...state.nodes, newNode] }));
-      return newNode.id;
-    }
+    // The add path's own handling (round 12 of PR #114): the backend's
+    // nodes come into an empty tab first, and a failure adds nothing.
+    return createNodeOnBackend(set, get, 'nebula-moodboard', params, position);
   },
 
   loadGraph: (nodes, edges, options) => {

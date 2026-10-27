@@ -601,37 +601,29 @@ describe('graphStore', () => {
     );
   });
 
-  it('does not add a local node when the backend rejects the fresh-canvas clear', async () => {
+  // Round 12 of PR #114 (GM approved): the first add on an empty tab brings
+  // the backend's nodes in and never clears (it sent DELETE
+  // /api/graph?force=true here, and said "Couldn't clear the canvas. ..."
+  // when that was refused). tests/store/graphStore.addSync.test.ts has the rest.
+  it('brings the backend\'s nodes into an empty tab before the first manual node, never clearing', async () => {
+    backendDiscovery.baseUrl = 'http://localhost:8000';
     fetchMock
-      .mockResolvedValueOnce(mockResponse({ empty: false, nodes: [{ id: 'n9' }], edges: [] }))
-      .mockResolvedValueOnce(mockResponse({ detail: 'Graph has protected provider state' }, false, 409));
+      .mockResolvedValueOnce(mockResponse({ empty: false, paramsVersion: GRAPH_PARAMS_VERSION, edges: [], nodes: [{
+        id: 'n9', type: 'model-node', position: { x: 0, y: 0 },
+        data: { label: 'Text Input', definitionId: 'text-input', params: {}, state: 'idle', outputs: {} } }] }))
+      .mockResolvedValueOnce(mockResponse({ id: 'n10' }));
 
     const nodeId = await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 });
 
-    expect(nodeId).toBeNull();
+    expect(nodeId).toBe('n10');
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(useGraphStore.getState().nodes).toHaveLength(0);
-    // error-copy round 2 (GM): the backend's reason, never the status;
-    // round 11 (GM): under the clear's own heading, not "Couldn't add Text Input.".
-    expect(alertMock).toHaveBeenCalledWith(
-      "Couldn't clear the canvas. Graph has protected provider state",
-    );
-  });
-
-  it('clears stale backend graph before the first manual node on an empty canvas', async () => {
-    fetchMock
-      .mockResolvedValueOnce(mockResponse({ empty: false, nodes: [{ id: 'n9' }], edges: [] }))
-      .mockResolvedValueOnce(mockResponse({ status: 'ok' }))
-      .mockResolvedValueOnce(mockResponse({ id: 'n1' }));
-
-    const nodeId = await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 });
-
-    expect(nodeId).toBe('n1');
     expect(fetchMock).toHaveBeenNthCalledWith(1, 'http://localhost:8000/api/graph/export', { headers: expect.any(Headers) });
-    expect(fetchMock).toHaveBeenNthCalledWith(2, 'http://localhost:8000/api/graph?force=true', { method: 'DELETE', headers: expect.any(Headers) });
-    expect(fetchMock.mock.calls[2][0]).toBe('http://localhost:8000/api/graph/node');
-    expect(fetchMock.mock.calls[2][1]).toMatchObject({ method: 'POST' });
+    expect(fetchMock.mock.calls[1][0]).toBe('http://localhost:8000/api/graph/node');
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: 'POST' });
+    expect(fetchMock.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === 'DELETE')).toBe(false);
+    expect(useGraphStore.getState().nodes.map((node) => node.id)).toEqual(['n9']);
     expect(useGraphStore.getState().backendFreshStartPending).toBe(false);
+    expect(alertMock).not.toHaveBeenCalled();
   });
 
   it('does not clear backend graph when the local canvas already has nodes', async () => {
@@ -752,8 +744,11 @@ describe('graphStore', () => {
 
     expect(nodeId).toBeNull();
     expect(useGraphStore.getState().nodes).toHaveLength(0);
-    // Round 3e (GM): a written line, no "known backend" or "node creation".
-    expect(alertMock).toHaveBeenCalledWith("Couldn't add Text Input. Nebula lost contact with its backend, so the node wasn't added. Reconnect, then add it again.");
+    // Round 12 (GM): a failed sync of the backend's graph into the tab reads
+    // only "Couldn't add “<label>”."; the reason goes to the Agent log. It
+    // said "Couldn't add Text Input. Nebula lost contact with its backend, so
+    // the node wasn't added. Reconnect, then add it again." before.
+    expect(alertMock).toHaveBeenCalledWith("Couldn't add \u201cText Input\u201d.");
   });
 
   it('removes a node and cleans up connected edges', async () => {

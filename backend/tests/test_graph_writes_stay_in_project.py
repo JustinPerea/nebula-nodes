@@ -678,3 +678,227 @@ def test_a_runs_provider_recovery_reaches_no_node_once_its_canvas_was_cleared(ra
     late = [m for m in race.sent[mark:] if m.get("type") == "providerRecovery"]
     assert late == [], late
     assert [record["resume_operation_id"] for record in kept] == ["op_old_run"]
+
+
+# -- round 12 (review 11) ------------------------------------------------------------------
+#
+# G1m: an empty catalog (a fresh install, or the only project deleted) with
+# nodes on the unfiled canvas. A run registers on (None, its epoch). GET
+# /api/projects (the project list, list_projects, `nebula projects`) files
+# that same live graph, ids unchanged, as "Recovered canvas" and makes it the
+# open project. Nothing was replaced, so the run's write-backs still belong
+# on it: the migration moves the runs noted on the unfiled canvas to the new
+# project in the same step (_adopt_run_canvases).
+
+def _empty_catalog(race: Race) -> None:
+    with race.store.transaction() as catalog:
+        catalog["projects"] = {}
+        catalog["activeProjectId"] = None
+        race.store.commit(catalog)
+
+
+@pytest.mark.parametrize("lister", ["person", "agent"])
+@pytest.mark.parametrize("route", ["agent", "canvas"])
+def test_a_run_on_the_unfiled_canvas_keeps_writing_once_the_project_list_files_it(race, monkeypatch, route, lister):
+    main = race.main
+    _empty_catalog(race)
+    t1 = race.graph.add_node("text-input", {"value": "old"}, position={"x": 0, "y": 0})
+    race.graph.add_node("text-input", {"value": "old two"}, position={"x": 0, "y": 100})
+    gate = _held_run(race, monkeypatch, _old_run_events)
+
+    async def go():
+        async with _ac(main) as c:
+            run_id = await _start(c, race, route, t1)
+            await _until(lambda: "ev" in gate)
+            listed = await c.get("/api/projects", headers=PERSON if lister == "person" else AGENT)
+            assert listed.status_code == 200, listed.text
+            mark = len(race.sent)
+            await _finish(c, race, gate, run_id)
+            return run_id, mark
+
+    run_id, mark = asyncio.run(go())
+    filed = race.store.read()["activeProjectId"]
+    assert filed is not None and race.store.read()["projects"][filed]["name"] == "Recovered canvas"
+    assert sorted(race.graph.nodes) == ["n1", "n2"]  # the same live graph
+    assert race.graph.nodes["n1"]["outputs"]["text"]["value"] == "OLD RUN OUTPUT"
+    assert race.graph.nodes["n1"]["params"] == {"value": "OLD RUN PARAMS"}
+    assert main.node_errors.get("n2") is not None
+    executed = [m for m in race.sent[mark:] if m.get("type") == "executed" and m.get("nodeId") == "n1"]
+    assert executed, "the run's node events never reached the canvas"
+    assert main.execution_runs.get(run_id).canvas == (filed, main.canvas_undo_book.epoch(filed))
+
+
+def test_filing_the_unfiled_canvas_keeps_its_node_errors(race):
+    """The sweep: the unfiled canvas's last run errors are kept per project
+    (services/node_errors.py); filing it under a new id kept them under the
+    unfiled key, so its nodes' error cards went blank."""
+    main = race.main
+    _empty_catalog(race)
+    race.graph.add_node("text-input", {"value": "x"}, position={"x": 0, "y": 0})
+    main.node_errors.use_project(None)
+    main.node_errors.record("n1", "OLD FAILURE")
+    assert race.client.get("/api/projects", headers=PERSON).status_code == 200
+    assert main.node_errors.get("n1") is not None
+    exported = race.client.get("/api/graph/export", headers=PERSON).json()
+    assert exported["nodes"][0]["data"]["state"] == "error"
+
+
+def test_only_runs_on_the_unfiled_canvas_now_move_with_it(race):
+    """A run noted on an older unfiled canvas (its epoch moved since) isn't
+    this canvas's: it stays dropped once the canvas is filed."""
+    main = race.main
+    _empty_catalog(race)
+    race.graph.add_node("text-input", {"value": "x"}, position={"x": 0, "y": 0})
+
+    async def go():
+        stale = asyncio.get_running_loop().create_future()
+        live = asyncio.get_running_loop().create_future()
+        main.execution_runs.register("r-stale", stale, canvas=(None, main.canvas_undo_book.epoch(None) - 1))
+        main.execution_runs.register("r-live", live, canvas=(None, main.canvas_undo_book.epoch(None)))
+        main.execution_runs.register("r-other", asyncio.get_running_loop().create_future(), canvas=("p" * 32, 0))
+        async with _ac(main) as c:
+            assert (await c.get("/api/projects", headers=PERSON)).status_code == 200
+        return {rid: main.execution_runs.get(rid).canvas for rid in ("r-stale", "r-live", "r-other")}
+
+    noted = asyncio.run(go())
+    filed = race.store.read()["activeProjectId"]
+    assert noted["r-live"] == (filed, main.canvas_undo_book.epoch(filed))
+    assert noted["r-stale"][0] is None
+    assert noted["r-other"] == ("p" * 32, 0)
+
+
+# Item 3: a backend Clear's graphSync says the canvas was cleared, so a tab
+# counts it as a replacement (ids start again at n1).
+
+def test_a_clears_graph_sync_says_the_canvas_was_cleared(race):
+    race.graph.add_node("text-input", {"value": "x"}, position={"x": 0, "y": 0})
+    mark = len(race.sent)
+    assert race.client.delete("/api/graph?force=true", headers=AGENT).status_code == 200
+    syncs = [m for m in race.sent[mark:] if m.get("type") == "graphSync"]
+    assert syncs and syncs[-1].get("cleared") is True and syncs[-1]["empty"] is True
+    mark = len(race.sent)
+    made = race.client.post("/api/graph/node", headers=PERSON, json={
+        "definitionId": "text-input", "params": {"value": "y"}, "position": {"x": 0, "y": 0}})
+    assert made.status_code == 200, made.text
+    syncs = [m for m in race.sent[mark:] if m.get("type") == "graphSync"]
+    assert syncs and all("cleared" not in m for m in syncs)
+
+
+# Item 4: /api/quick runs temporary nodes that never sit on the canvas and
+# write nothing back by node id (its events go to the request's own dicts),
+# so one in flight doesn't hold up a Clear, a switch, an import or a delete
+# of the open project.
+
+@pytest.mark.parametrize("action", ["clear", "switch", "import", "delete_open"])
+def test_a_quick_run_in_flight_never_refuses_a_canvas_replacement(race, monkeypatch, action):
+    main = race.main
+    race.graph.add_node("text-input", {"value": "on the canvas"}, position={"x": 0, "y": 0})
+    gate: dict[str, Any] = {}
+
+    async def fake_execute_graph(*, nodes, emit, run_id, **_kwargs):
+        from models.events import ExecutedEvent
+
+        gate["ev"] = asyncio.Event()
+        await gate["ev"].wait()
+        for node in nodes:
+            await emit(ExecutedEvent(run_id=run_id, node_id=node.id,
+                                     outputs={"text": {"type": "Text", "value": "QUICK OUTPUT"}}))
+
+    monkeypatch.setattr(main, "execute_graph", fake_execute_graph)
+
+    async def go():
+        async with _ac(main) as c:
+            quick = asyncio.create_task(c.post("/api/quick", headers=AGENT, json={
+                "definitionId": "text-input", "params": {"value": "quick"}}))
+            await _until(lambda: "ev" in gate)
+            revision = race.store.read()["workspaceRevision"]
+            if action == "clear":
+                answer = await c.request("DELETE", "/api/graph?force=true", headers=PERSON)
+            elif action == "switch":
+                answer = await c.post(f"/api/projects/{race.other}/open", headers=PERSON,
+                                      json={"workspaceRevision": revision})
+            elif action == "import":
+                answer = await c.post("/api/graph/import", headers=PERSON, json={
+                    "nodes": [{"id": "a", "definitionId": "text-input", "params": {"value": "imported"},
+                               "position": {"x": 0, "y": 0}}], "edges": []})
+            else:
+                answer = await c.request("DELETE", f"/api/projects/{race.active}", headers=PERSON,
+                                         json={"workspaceRevision": revision})
+            gate["ev"].set()
+            done = await asyncio.wait_for(quick, 5)
+            return answer, done
+
+    answer, done = asyncio.run(go())
+    assert answer.status_code == 200, answer.text
+    assert done.status_code == 200, done.text
+    assert done.json()["outputs"]["text"]["value"] == "QUICK OUTPUT"
+    assert all((node.get("outputs") or {}).get("text", {}).get("value") != "QUICK OUTPUT"
+               for node in race.graph.nodes.values())
+
+
+# Item 5: a moved run's start-ambiguity event reaches no canvas (the canvas
+# puts it on its node by id); the hold itself is still kept.
+
+def test_a_runs_start_ambiguity_reaches_no_node_once_its_canvas_was_cleared(race, monkeypatch):
+    from models.events import ProviderStartAmbiguousEvent
+
+    main = race.main
+    t1 = race.graph.add_node("text-input", {"value": "old"}, position={"x": 0, "y": 0})
+    gate = _held_run(race, monkeypatch, lambda run_id: [ProviderStartAmbiguousEvent(
+        run_id=run_id, node_id="n1", kind="worldlabs-environment", message="maybe started")])
+    monkeypatch.setattr(main, "_project_replacement_guard", lambda *_a, **_k: None)
+    held: list[dict[str, Any]] = []
+    monkeypatch.setattr(main.provider_start_guard, "mark_ambiguous",
+                        lambda **record: held.append(record) or {"message": "maybe started", "durable": True})
+
+    async def go():
+        async with _ac(main) as c:
+            run_id = await _start(c, race, "agent", t1)
+            await _until(lambda: "ev" in gate)
+            cleared = await c.request("DELETE", "/api/graph?force=true", headers=PERSON)
+            assert cleared.status_code == 200, cleared.text
+            race.graph.add_node("text-input", {"value": "new"}, position={"x": 0, "y": 0})
+            mark = len(race.sent)
+            await _finish(c, race, gate, run_id)
+            return mark
+
+    mark = asyncio.run(go())
+    late = [m for m in race.sent[mark:] if m.get("type") in ("provider_start_ambiguous", "providerStartAmbiguous")]
+    assert late == [], late
+    assert [record["node_id"] for record in held] == ["n1"]
+
+
+# Item 6: MCP-SETUP.md quotes each refused action's own 409 detail, as the
+# backend says it to an agent during a run (it quoted only Clear's).
+
+def test_mcp_setup_quotes_every_refusal_a_run_causes_word_for_word(race, monkeypatch):
+    from pathlib import Path
+
+    main = race.main
+    t1 = race.graph.add_node("text-input", {"value": "old"}, position={"x": 0, "y": 0})
+    gate = _held_run(race, monkeypatch, _old_run_events)
+    doc = " ".join((Path(__file__).resolve().parents[2] / "docs" / "MCP-SETUP.md").read_text(encoding="utf-8").split())
+
+    async def go():
+        async with _ac(main) as c:
+            run_id = await _start(c, race, "agent", t1)
+            await _until(lambda: "ev" in gate)
+            revision = race.store.read()["workspaceRevision"]
+            answers = [
+                await c.request("DELETE", "/api/graph?force=true", headers=AGENT),
+                await c.post("/api/graph/import", headers=AGENT, json={
+                    "nodes": [{"id": "a", "definitionId": "text-input", "params": {"value": "x"}}], "edges": []}),
+                await c.post(f"/api/projects/{race.other}/open", headers=AGENT, json={"workspaceRevision": revision}),
+                await c.post("/api/projects", headers=AGENT, json={"name": "x", "workspaceRevision": revision}),
+                await c.request("DELETE", f"/api/projects/{race.active}", headers=AGENT,
+                                json={"workspaceRevision": revision}),
+            ]
+            await _finish(c, race, gate, run_id)
+            return answers
+
+    answers = asyncio.run(go())
+    for answer in answers:
+        assert answer.status_code == 409, answer.text
+        detail = answer.json()["detail"]
+        assert "while a run is active" in detail, detail
+        assert f'"{detail}"' in doc, detail

@@ -15,6 +15,10 @@ vi.mock('../src/lib/api', async (original) => ({
   fetchClaudeStatus: apiMocks.fetchClaudeStatus, fetchCodexStatus: apiMocks.fetchCodexStatus,
   fetchChatModels: apiMocks.fetchChatModels, fetchPersonalAgents: apiMocks.fetchPersonalAgents,
 }));
+// Round 12: the clear's answer is bounded; short here so the test waits 60 ms, not 15 s.
+vi.mock('../src/lib/chatClear', async (original) => ({
+  ...await original<typeof import('../src/lib/chatClear')>(), CHAT_CLEAR_ANSWER_MS: 60,
+}));
 vi.mock('../src/lib/backend', async (original) => ({
   ...await original<typeof import('../src/lib/backend')>(), apiFetch: apiMocks.apiFetch,
   backendWebSocketUrl: vi.fn().mockResolvedValue('ws://127.0.0.1/test-chat'),
@@ -67,8 +71,14 @@ async function typeClear() {
   const input = screen.getByPlaceholderText('Message…');
   fireEvent.change(input, { target: { value: '/clear' } });
   await act(async () => { fireEvent.keyDown(input, { key: 'Enter', shiftKey: false }); });
-  await waitFor(() => expect(apiMocks.apiFetch).toHaveBeenCalledWith('/api/graph?force=true', { method: 'DELETE' }));
+  await waitFor(() => expect(apiMocks.apiFetch).toHaveBeenCalledWith('/api/graph?force=true',
+    expect.objectContaining({ method: 'DELETE', signal: expect.any(AbortSignal) })));
 }
+
+const CONFIRMED = 'Session cleared. Next message starts a fresh conversation with an empty canvas.';
+const REFUSED = "Session cleared. Next message starts a fresh conversation. The canvas wasn't cleared.";
+const UNCONFIRMED = "Session cleared. Next message starts a fresh conversation. Nebula didn't confirm the canvas was cleared.";
+const chatText = () => document.body.textContent || '';
 
 describe('/clear in the chat panel', () => {
   it('a canvas clear refused during a run: GM\'s session line, and the refusal under Clear\'s heading', async () => {
@@ -88,5 +98,48 @@ describe('/clear in the chat panel', () => {
     expect(await screen.findByText(
       'Session cleared. Next message starts a fresh conversation with an empty canvas.')).toBeTruthy();
     expect(document.querySelector('[data-chat-notice]')).toBeNull();
+  });
+});
+
+// Round 12 of PR #114 (review 11, item 2; GM's lines): the chat clears at
+// once, as before; the line comes when the backend answers and is appended,
+// never replacing what was said meanwhile; the answer is bounded. Before
+// round 12 the DELETE had no bound (no answer: no line ever), and a slow
+// answer replaced the list, wiping a message sent while it was out.
+describe('/clear while the canvas clear is out (round 12)', () => {
+  it('no answer at all: GM\'s "didn\'t confirm" line once the bound passes', async () => {
+    clearAnswer = () => new Promise<Response>(() => {});
+    await typeClear();
+    expect(await screen.findByText(UNCONFIRMED, undefined, { timeout: 2000 })).toBeTruthy();
+    expect(chatText()).not.toContain(CONFIRMED);
+    expect(document.querySelector('[data-chat-notice]')).toBeNull();
+  });
+
+  it('the connection drops: the same line', async () => {
+    clearAnswer = () => Promise.reject(new TypeError('Failed to fetch'));
+    await typeClear();
+    expect(await screen.findByText(UNCONFIRMED)).toBeTruthy();
+  });
+
+  it('the backend fails (5xx): it may have cleared, so the same line, not "wasn\'t cleared"', async () => {
+    clearAnswer = async () => new Response(JSON.stringify({ detail: 'boom' }), { status: 500 });
+    await typeClear();
+    expect(await screen.findByText(UNCONFIRMED)).toBeTruthy();
+    expect(chatText()).not.toContain(REFUSED);
+  });
+
+  it('a message sent while the clear is out stays, and the line comes after it', async () => {
+    let release!: (r: Response) => void;
+    clearAnswer = () => new Promise<Response>((res) => { release = res; });
+    await typeClear();
+    const input = screen.getByPlaceholderText('Message…');
+    fireEvent.change(input, { target: { value: 'HELLO AFTER CLEAR' } });
+    await act(async () => { fireEvent.keyDown(input, { key: 'Enter', shiftKey: false }); });
+    await waitFor(() => expect(chatText()).toContain('HELLO AFTER CLEAR'), { timeout: 5000 });
+    await act(async () => { release(new Response('{}')); });
+    await waitFor(() => expect(chatText()).toContain(CONFIRMED), { timeout: 5000 });
+    const text = chatText();
+    expect(text).toContain('HELLO AFTER CLEAR');
+    expect(text.indexOf('HELLO AFTER CLEAR')).toBeLessThan(text.indexOf(CONFIRMED));
   });
 });

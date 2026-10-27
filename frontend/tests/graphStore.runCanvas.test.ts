@@ -109,3 +109,33 @@ describe('a run started on a graph that was replaced before its start answered',
     await running;
   });
 });
+
+// Round 12 of PR #114 (review 11, item 3): a backend Clear (an agent's, or
+// another tab's) is a graphSync with `cleared: true`, not `graphReplaced`
+// (same project, same revision; ids start again at n1). The canvas counts it
+// as a replacement for its runs, so a start refused after it doesn't mark
+// the agent's new n1 (review 11's runcanvas_clear_probe: it went to error).
+const RESTARTED = 'The canvas was cleared or replaced since, so nothing was changed. Read the canvas again and send the change again if it still fits.';
+describe('a backend Clear before a start answers (round 12)', () => {
+  it.each([
+    ['executeNode', () => useGraphStore.getState().executeNode('n1'), 'executeNode'],
+    ['executeGraph', () => useGraphStore.getState().executeGraph(), 'executeGraph'],
+  ] as const)('%s: the cleared canvas\'s new n1 is not marked, and the run still ends', async (_name, start, call) => {
+    const answer = deferred<never>();
+    vi.spyOn(api, call).mockReturnValue(answer.promise);
+    const running = start();
+    const actor = { actor: { kind: 'agent', name: 'Codex' } };
+    transport.sync?.({ type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, workspaceRevision: 'a',
+      nodes: [], edges: [], empty: true, cleared: true, edit: actor } as unknown as ExecutionEvent);
+    transport.sync?.({ type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, workspaceRevision: 'a',
+      nodes: [node("agent's new")], edges: [], empty: false, edit: actor } as unknown as ExecutionEvent);
+    answer.reject(new api.ExecutionStartRejectedError(RESTARTED, 409));
+    await running;
+    const state = useGraphStore.getState();
+    const n1 = state.nodes.find((candidate) => candidate.id === 'n1')!;
+    expect(n1.data.params.value).toBe("agent's new");
+    expect(n1.data.state).not.toBe('error');
+    expect(n1.data.error).toBeUndefined();
+    expect(state.isExecuting).toBe(false);
+  });
+});

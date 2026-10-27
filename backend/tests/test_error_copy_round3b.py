@@ -273,5 +273,6 @@ def test_the_canvas_delete_notice_says_the_backends_words():
     person = main_module._paid_state_person
     assert f'NODE_WAITING_UNLOCK = "{person("ambiguity", subject="This node is", then="delete it")}"' in ts
     assert f'NODE_WAITING_FORGET = "{person("recovery", subject="This node is", then="delete it")}"' in ts
-    assert f'SOME_NODE_WAITING_UNLOCK = "{person("ambiguity", subject="A node is", then="try again")}"' in ts
-    assert f'SOME_NODE_WAITING_FORGET = "{person("recovery", subject="A node is", then="try again")}"' in ts
+    # Round 12 of PR #114 (GM): the canvas-wide line (a switch or a delete of
+    # the open project refused over World Labs state) is GM's, as the backend's.
+    assert f'WORLD_LABS_START_NEEDS_CHECK = "{main_module.GRAPH_PAID_CHECK_PERSON}"' in ts
