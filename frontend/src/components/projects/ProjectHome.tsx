@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { ArrowUpRight, Check, ChevronRight, ImageIcon, Pencil, Plus, RotateCcw, Search, Settings, Trash2, X } from 'lucide-react';
 import { backendAssetUrlSync } from '../../lib/backend';
-import { coverImages, type CoverChoices, type ProjectCover } from '../../lib/projects';
+import { coverImages, type CatalogRestore, type CoverChoices, type ProjectCover } from '../../lib/projects';
+import { catalogRestoreLine } from './catalogRestoreCopy';
 import { actorLabel } from '../../lib/trash';
 import { CrabMark } from '../brand/CrabMark';
 import { ProposalsFor } from '../proposals/ProposalsFor';
@@ -79,6 +80,10 @@ export interface ProjectHomeProps {
   /** Cover picker: the project's images, and pinning one (null = automatic). */
   loadCoverChoices?: (id: string) => Promise<CoverChoices>;
   onPinCover?: (id: string, url: string | null) => void;
+  /** Nebula restored a damaged project list: GM's line (catalogRestoreCopy),
+   * shown until the person closes it with ×. */
+  catalogRestore?: CatalogRestore | null;
+  onDismissCatalogRestore?: () => void;
 }
 
 const UNDO_VISIBLE_MS = 8000;
@@ -382,6 +387,7 @@ function useFocusAfterHeldEdits(held: boolean, savedLine: RefObject<HTMLElement 
 export function ProjectHome({ projects, loading, busy, error, errorDetails = null, onCreate, onOpen, onRename, onDelete, onRetry, retry = 'redo',
   trash = [], lastDeleted = null, onRestore = noop, onPurge = noop, onEmptyTrash = noop, onDismissUndo = noop,
   settingsOpen = false, onToggleSettings, loadCoverChoices, onPinCover,
+  catalogRestore = null, onDismissCatalogRestore = noop,
   unsavedEdits = null, editsSavedAs = null, onDownloadEdits = noop, onContinueWithoutEdits = noop }: ProjectHomeProps) {
   const [query, setQuery] = useState('');
   // Offline is read-only (round 15 of PR #114): create, open, rename,
@@ -413,6 +419,11 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
           <div><p className="project-home__eyebrow">Your workspace</p><h1 id="project-home-title" ref={heading} tabIndex={-1}>A place for your next idea.</h1><p className="project-home__intro">Start a new canvas or pick up where you left off.</p></div>
           <button className="project-home__new" type="button" disabled={loading || locked || Boolean(unsavedEdits)} {...offlineMark(offline)} onClick={() => onCreate()}><Plus aria-hidden="true" />New project</button>
         </section>
+
+        {catalogRestore && <div className="project-home__notice project-home__restore" role="status">
+          <span>{catalogRestoreLine(catalogRestore)}</span>
+          <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismissCatalogRestore}><X aria-hidden="true" /></button>
+        </div>}
 
         {/* GM's WRAP rule: where "Try again" redoes the failure it is the retry, so the
             reason drops its own; where it only reloads, or can't help, the line stays whole. */}

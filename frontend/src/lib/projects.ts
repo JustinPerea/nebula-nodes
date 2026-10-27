@@ -49,11 +49,23 @@ export interface ProjectSnapshot {
 }
 export interface SavedProject extends ProjectSummary { snapshot: ProjectSnapshot }
 export interface TrashedProject extends ProjectSummary { deletedAt: string; purgeAt: string; deletedBy?: { kind: string; name: string } }
+/** Nebula found its project list (catalog.json) damaged and restored it
+ * (backend project_store _restore). Listed until the person closes the
+ * Projects home notice; the path fields are for the Agent log and agents. */
+export interface CatalogRestore {
+  id: string; at: string;
+  /** 'restored': from the last good copy; 'rebuilt': no good copy, from what the damaged files held. */
+  kind: 'restored' | 'rebuilt';
+  source: string | null; damagedFile: string | null;
+  addedBack: { id: string; name: string; trashed?: boolean }[]; addedBackCount: number;
+  notAddedBackCount: number; projectCount?: number; note?: string;
+}
 export interface ProjectList {
   projects: ProjectSummary[]; trash?: TrashedProject[]; activeProjectId: string | null;
   workspaceRevision: string; migratedProjectId?: string | null;
   /** The backend's params version (lib/savedParamsUpgrades.ts). */
   paramsVersion?: number;
+  catalogRestore?: CatalogRestore;
 }
 export interface ProjectActivation {
   project: SavedProject; workspaceRevision: string;
@@ -111,6 +123,9 @@ export const purgeTrashedProject = (id: string) =>
  * deleted after it loaded stays restorable. */
 export const emptyProjectTrash = (ids: string[]) =>
   request<{ trash: TrashedProject[] }>("Couldn't empty Recently deleted.", '/api/projects/trash/empty', json('POST', { ids })).then((result) => result.trash);
+/** The person closed the restore notice (×): the backend doesn't list it again. */
+export const dismissCatalogRestore = (id: string) =>
+  request<{ dismissed: boolean }>("Couldn't close the notice.", '/api/projects/catalog-restore/dismiss', json('POST', { id }));
 export const listCoverChoices = (id: string) =>
   request<CoverChoices>("Couldn't load the cover choices.", `/api/projects/${encodeURIComponent(id)}/covers`);
 /** Pin one of the project's images as its cover, or `null` for automatic. */

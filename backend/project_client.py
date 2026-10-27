@@ -72,14 +72,21 @@ def cover_for_agents(api: NebulaAPI, cover: Any) -> dict[str, Any] | None:
 
 def list_projects(api: NebulaAPI, *, headers: dict[str, str] | None = None) -> dict[str, Any]:
     """MCP list_projects: each project's id, name, `open`, node count, last
-    edit and cover, most recently edited first."""
+    edit and cover, most recently edited first, and `catalogRestore` after
+    Nebula restored a damaged project list (until the person closes its
+    notice)."""
     listing = _call(api, "GET", "/api/projects", headers)
     active = listing.get("activeProjectId")
     rows = [{"id": project.get("id"), "name": project.get("name"), "open": project.get("id") == active,
              "nodes": project.get("nodeCount", 0), "updatedAt": project.get("updatedAt"),
              "cover": cover_for_agents(api, project.get("cover"))}
             for project in listing.get("projects") or []]
-    return {"projects": rows, "openProjectId": active}
+    reply: dict[str, Any] = {"projects": rows, "openProjectId": active}
+    # Nebula restored a damaged project list and the person hasn't closed its
+    # notice yet: what came back, from where, and where the damaged file is kept.
+    if isinstance(listing.get("catalogRestore"), dict):
+        reply["catalogRestore"] = listing["catalogRestore"]
+    return reply
 
 
 def undo_rename_hint(project_id: str, previous: str, via: str) -> str:

@@ -416,6 +416,27 @@ def next_part(events: Mapping[str, Any], *, via: str) -> dict[str, Any]:
             "point": hints["point"], "pins": hints["pin"]}
 
 
+# Rows of a catalog restore's added-back projects shown in start_here.
+RESTORE_ROWS = 5
+
+
+def catalog_restore_part(view: Mapping[str, Any]) -> dict[str, Any]:
+    """A restore of the damaged project list the person hasn't closed yet
+    (main._catalog_restore_view): first in the answer, before the canvas, so
+    an agent reads it before acting on project ids from earlier. Short: the
+    note, the source, the damaged file and a few names; list_projects has
+    `catalogRestore` in full."""
+    added = [{"id": row.get("id"), "name": _cut(row.get("name"), NAME_CHARS)}
+             for row in (view.get("addedBack") or [])[:RESTORE_ROWS] if isinstance(row, Mapping)]
+    return {"at": view.get("at"), "kind": view.get("kind"), "source": view.get("source"),
+            "damagedFile": view.get("damagedFile"), "addedBack": added,
+            "addedBackCount": view.get("addedBackCount", 0), "notAddedBackCount": view.get("notAddedBackCount", 0),
+            "note": _cut(view.get("note"), 500)}
+
+
 def build(**parts: dict[str, Any]) -> dict[str, Any]:
-    """The answer, its parts in the documented order."""
-    return {name: parts[name] for name in BUDGETS}
+    """The answer, its parts in the documented order. ``catalogRestore``
+    leads when there is one (catalog_restore_part); it has no budget of its
+    own and stays under 200 tokens."""
+    lead = {"catalogRestore": parts["catalogRestore"]} if parts.get("catalogRestore") else {}
+    return {**lead, **{name: parts[name] for name in BUDGETS}}

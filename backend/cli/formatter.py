@@ -447,6 +447,10 @@ def format_start(start: dict[str, Any]) -> str:
     from services import node_categories
 
     lines: list[str] = []
+    restore = start.get("catalogRestore") or {}
+    if restore.get("note"):
+        # Nebula restored a damaged project list (services/project_store.py).
+        lines.append(f"PROJECT LIST RESTORED: {restore['note']}")
     canvas = start.get("canvas") or {}
     project = canvas.get("project") or {}
     watching = "no browser watching" if (canvas.get("view") or {}).get("stale") else "open in the browser"

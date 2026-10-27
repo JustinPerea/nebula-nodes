@@ -256,6 +256,10 @@ def test_an_unreadable_catalog_changes_nothing_and_writes_no_marker(env):
     board = _board()
     env.projects(("A", [board["id"]], []), active="A")
     env.store.path.write_text("{not json", encoding="utf-8")
+    # With no good copy to restore from (a catalog with a copy is restored
+    # on read, and the re-home then runs on it).
+    env.store.backup_path.unlink()
+    env.store.older_backup_path.unlink()
 
     report = env.run()
 

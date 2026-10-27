@@ -282,6 +282,86 @@ cli_graph = CLIGraph(persist_path=_STATE_PATH)
 project_store = ProjectStore(_STATE_DIR / "projects")
 # Pins follow `main.project_store` through the getter (tests swap the store).
 canvas_pins = CanvasPins(lambda: project_store)
+# The serving loop, for a catalog restore made in a worker thread (set at startup).
+_main_loop: asyncio.AbstractEventLoop | None = None
+
+
+def _catalog_restore_note(record: Mapping[str, Any]) -> str:
+    """What agents read about a catalog restore (GET /api/projects
+    `catalogRestore.note`, start_here, the journal): what happened, from
+    where, what came back, where the damaged file is kept. Not the person's
+    notice (frontend catalogRestoreCopy.ts has GM's lines)."""
+    where = f" from {record.get('source')}" if record.get("source") else " from the projects its damaged files still held"
+    did = "restored" if record.get("kind") == "restored" else "had no good copy and rebuilt"
+    parts = [f"Nebula found its project list (catalog.json) {record.get('reason') or 'damaged'} and {did} it{where}."]
+    added = int(record.get("addedBackCount") or 0)
+    if added:
+        parts.append(f"{added} project{'s' if added != 1 else ''} the copy lacked {'were' if added != 1 else 'was'} "
+                     "added back from the damaged file.")
+    missing = int(record.get("notAddedBackCount") or 0)
+    if missing:
+        parts.append(f"{missing} project{'s' if missing != 1 else ''} in the damaged file could not be added back "
+                     f"and {'stay' if missing != 1 else 'stays'} only there (notAddedBack).")
+    if record.get("openProjectMissing"):
+        parts.append("The project that was open didn't come back, so none is open.")
+    kept = [path for path in record.get("setAside") or [] if path]
+    if kept:
+        parts.append(f"The damaged file{'s are' if len(kept) > 1 else ' is'} kept at {', '.join(kept)}.")
+    parts.append("Project ids read before it may be stale: list the projects again "
+                 "(list_projects, `nebula projects`).")
+    return " ".join(parts)
+
+
+def _catalog_restore_view(record: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    """A restore record as GET /api/projects carries it (`catalogRestore`):
+    the person's notice reads kind and addedBack; agents and support read
+    the rest and `note`."""
+    if not record:
+        return None
+    keys = ("id", "at", "kind", "reason", "source", "damagedFile", "setAside", "addedBack", "addedBackCount",
+            "updatedFromDisk", "updatedFromDiskCount", "notAddedBack", "notAddedBackCount", "projectCount",
+            "trashCount", "openProjectMissing")
+    return {**{key: copy.deepcopy(record.get(key)) for key in keys}, "note": _catalog_restore_note(record)}
+
+
+def _on_catalog_restore(record: dict[str, Any]) -> None:
+    """ProjectStore restored a damaged catalog (services/project_store.py,
+    after it let go of the lock): journal it for agents
+    (`project.catalogRestored`, with where it came from and where the
+    damaged file is kept) and tell open tabs to list again, which shows the
+    person's notice. On the serving loop; a restore at boot has none yet and
+    is only journaled."""
+    view = _catalog_restore_view(record) or {}
+    print(f"[projects] {view.get('note')}", flush=True)
+
+    def tell() -> None:
+        data = {key: view.get(key) for key in ("id", "kind", "reason", "source", "addedBackCount",
+                                               "notAddedBackCount", "projectCount")}
+        # By name in their folder: the journal cuts strings at 160 characters.
+        kept = [Path(path) for path in view.get("setAside") or [] if path]
+        data["folder"] = str(kept[0].parent) if kept else None
+        data["damagedFile"] = Path(view["damagedFile"]).name if view.get("damagedFile") else None
+        data["setAside"] = [path.name for path in kept]
+        data["addedBack"] = [{"id": row.get("id"), "name": row.get("name")} for row in (view.get("addedBack") or [])[:20]]
+        _journal("project.catalogRestored", data=data, summary=view.get("note", ""), actor={"kind": "system"})
+        try:
+            asyncio.get_running_loop().create_task(_broadcast_projects_changed("catalogRestored"))
+        except RuntimeError:
+            pass  # no loop (boot): tabs list on load anyway
+
+    try:
+        running = asyncio.get_running_loop()
+    except RuntimeError:
+        running = None
+    if running is not None:
+        running.call_soon(tell)
+    elif _main_loop is not None and not _main_loop.is_closed():
+        _main_loop.call_soon_threadsafe(tell)
+    else:
+        tell()
+
+
+project_store.on_restore = _on_catalog_restore
 
 
 def _open_project_id() -> str | None:
@@ -2910,6 +2990,14 @@ app.include_router(render_exports_router)
 from services.paper_routes import router as paper_router
 app.include_router(paper_router)
 app.include_router(commons_router)
+
+
+@app.on_event("startup")
+async def _catalog_restore_loop_startup() -> None:
+    """The loop a catalog restore made in a worker thread is told on
+    (_on_catalog_restore)."""
+    global _main_loop
+    _main_loop = asyncio.get_running_loop()
 
 
 @app.on_event("startup")
@@ -5569,7 +5657,9 @@ async def agent_start_here(request: Request, via: str = "mcp") -> dict[str, Any]
     rows = await asyncio.to_thread(
         lambda: [_agent_node_row(definition, context) for definition in context["definitions"].values()])
     spend = await agent_spend_status(request)
+    restore = _catalog_restore_view(project_store.restore_notice())
     return agent_start.build(
+        **({"catalogRestore": agent_start.catalog_restore_part(restore)} if restore else {}),
         canvas=agent_start.canvas_part(snapshot, project=project, caller_id=caller.id if caller else None, via=via),
         pins=agent_start.pins_part(pins, via=via),
         proposals=agent_start.proposals_part(briefs, via=via),
@@ -14550,10 +14640,29 @@ async def list_projects() -> dict[str, Any]:
             **({"migratedProjectId": catalog["migratedProjectId"]} if catalog.get("migratedProjectId") else {}),
         }
         kept = set(catalog["projects"]) | set(catalog.get("trash") or {})
+    # A restore of a damaged catalog the person hasn't closed the notice of
+    # (ProjectStore.restore_notice): the Projects home shows GM's line,
+    # agents read `note` and where the damaged file is kept.
+    if restore := _catalog_restore_view(project_store.restore_notice()):
+        listing["catalogRestore"] = restore
     if expired:
         # Trash past its 30 days took its question sets with it.
         agent_questions.keep_projects(kept)
     return listing
+
+
+@app.post("/api/projects/catalog-restore/dismiss")
+async def dismiss_catalog_restore(body: dict[str, Any]) -> dict[str, Any]:
+    """The person closed the restore notice on the Projects home (×): it
+    isn't shown again. The person's only: an agent closing it would keep the
+    person from ever reading it. ``dismissed`` is false when ``id`` isn't the
+    restore the notice shows (already closed, or a newer one came)."""
+    if not _is_person_request():
+        raise _person_only_refusal("Only the person closes the project list's restore notice.")
+    record_id = body.get("id") if isinstance(body, dict) else None
+    if not isinstance(record_id, str) or not record_id:
+        raise HTTPException(status_code=400, detail="id must be the restore's id (GET /api/projects catalogRestore.id)")
+    return {"dismissed": project_store.dismiss_restore(record_id)}
 
 
 @app.get("/api/projects/{project_id}")

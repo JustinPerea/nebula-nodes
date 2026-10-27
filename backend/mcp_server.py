@@ -369,7 +369,10 @@ def start_here(ctx: Context | None = None) -> str:
     """Call this first: everything a first turn needs, in one call. Call it
     again after wait_for_canvas_change reports `gap` or `reset`.
 
-    JSON with seven parts, each kept short:
+    JSON with seven parts, each kept short, led by `catalogRestore` when
+    Nebula restored a damaged project list the person hasn't closed the
+    notice of (its `note`, the copy, the damaged file's path, a few of the
+    projects added back; list_projects has it in full):
     - `canvas`: the project, `view.stale` (no browser watching), the
       selection, other agents' cursors, and the nodes (id, name,
       definitionId, state, onScreen, inputsFrom, up to 8 params cut to 60
@@ -1298,7 +1301,13 @@ def list_projects(ctx: Context | None = None) -> dict[str, Any]:
     """The person's saved projects, most recently edited first. `open` marks
     the one on the canvas now. `cover` is the picture on its card ({source:
     pinned, output or references, images: URLs}; null when it has none);
-    get_project reads one in full without opening it."""
+    get_project reads one in full without opening it. `catalogRestore` is
+    there after Nebula found its project list damaged and restored it
+    (until the person closes the notice): `note` says what happened,
+    `source` the copy it came from (null: rebuilt from the damaged files),
+    `addedBack` the projects it added back, `notAddedBack` those it
+    couldn't, and `damagedFile` where the damaged file is kept. Project ids
+    from before it may be stale."""
     import project_client
 
     return project_client.list_projects(_api(), headers=_agent_headers(ctx))

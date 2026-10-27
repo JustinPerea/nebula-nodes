@@ -2,21 +2,37 @@
 
 A single catalog commit keeps metadata, snapshots and the active revision
 together. Callers stage graph validation before preparing a catalog commit.
+
+Every project lives whole in catalog.json; there are no per-project folders.
+So every commit that writes a catalog _check accepts also keeps a last good
+copy of it (catalog.json.bak, and catalog.json.bak.1 at most an hour old),
+each written atomically, and a read that finds catalog.json damaged (it
+won't parse or validate) or missing while a copy exists restores it
+(_recover): the damaged file is kept beside it, never deleted, the newest
+good copy comes back with every newer project the damaged file still holds
+(services/catalog_recovery.py), and the restore is recorded once for the
+person and agents (catalog-restore.json, restore_notice). With no good copy
+the list is rebuilt from what the damaged files hold; only when they hold no
+project at all does the read refuse, as before (2026-10-27).
 """
 from __future__ import annotations
 
 import copy
 import fcntl
+import hashlib
 import json
 import os
 import re
+import shutil
+import threading
+import time
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterator, NamedTuple
+from typing import Any, Callable, Iterator, NamedTuple
 from uuid import uuid4
 
-from services import project_cover
+from services import catalog_recovery, project_cover
 from services.saved_graph_upgrades import PARAMS_VERSION, catalog_params_behind, upgrade_catalog
 
 MAX_PROJECT_BYTES = 16 * 1024 * 1024
@@ -25,10 +41,39 @@ MAX_PROJECTS = 500
 # Deleted projects wait this long in Recently deleted before they go for good.
 TRASH_RETENTION = timedelta(days=30)
 _ID = re.compile(r"^[a-f0-9]{32}$")
+# The last good copies of catalog.json (ProjectStore._write_backup): the
+# newest after every commit, and an older one rewritten at most once an hour,
+# for when the newest is damaged too. Two full copies, so a third would add
+# disk for an hour-older state the damaged files can't add to.
+BACKUP_NAME = "catalog.json.bak"
+OLDER_BACKUP_NAME = "catalog.json.bak.1"
+OLDER_BACKUP_SECONDS = 3600
+# Restores, newest last, for the notice and support (ProjectStore._record_restore).
+RESTORE_RECORD_NAME = "catalog-restore.json"
+RESTORES_KEPT = 10
+RECORD_ROWS = 100  # names listed per restore; the counts are whole
+# The fields prepare writes first, so a cut file still says which project was open.
+_HEAD_KEYS = ("version", "activeProjectId", "workspaceRevision", "migratedProjectId")
+UNREADABLE = "Project catalog could not be read; the existing file was preserved"
 
 
 class ProjectStoreError(Exception):
     pass
+
+
+class _Damaged(Exception):
+    """catalog.json won't parse or validate (``raw`` holds what it does
+    hold), or is missing while a copy exists. ``reason``: "corrupt" (not
+    JSON), "invalid" (JSON of the wrong shape) or "missing"."""
+
+    def __init__(self, reason: str, detail: str, raw: bytes | None = None) -> None:
+        super().__init__(detail)
+        self.reason = reason
+        self.raw = raw
+
+
+def _log(message: str) -> None:
+    print(f"[projects] {message}", flush=True)
 
 
 class ProjectLimitError(ProjectStoreError):
@@ -202,7 +247,20 @@ class ProjectStore:
         # The projection of the catalog file last read or committed here, and
         # the one a prepared commit will make (see projection()).
         self._projection: Projection | None = None
-        self._prepared: tuple[Path, Projection] | None = None
+        # What prepare wrote, for commit_prepared: the temporary file, its
+        # projection and its bytes (the last good copy is written from them).
+        self._prepared: tuple[Path, Projection, bytes] | None = None
+        self.backup_path = root / BACKUP_NAME
+        self.older_backup_path = root / OLDER_BACKUP_NAME
+        self.record_path = root / RESTORE_RECORD_NAME
+        # Called once per restore with its record, after the lock is let go
+        # (main._on_catalog_restore journals it and tells open tabs).
+        self.on_restore: Callable[[dict[str, Any]], None] | None = None
+        # This thread's hold on .lock (a count, for a read inside a
+        # transaction that finds the file damaged: flock from a second
+        # descriptor would wait on itself), and the restores to announce
+        # once it is let go.
+        self._local = threading.local()
 
     def _ensure_root(self) -> None:
         if self.root.is_symlink():
@@ -238,33 +296,98 @@ class ProjectStore:
         if active is not None and active not in result["projects"]:
             raise ValueError("Invalid active project")
 
-    def _read(self, *, upgrade: bool = True) -> dict[str, Any]:
-        if not self.path.exists():
-            return {"version": 1, "projects": {}, "activeProjectId": None, "workspaceRevision": self._initial_revision}
-        if self.path.is_symlink() or self.path.stat().st_size > MAX_CATALOG_BYTES:
+    def _empty(self) -> dict[str, Any]:
+        return {"version": 1, "projects": {}, "activeProjectId": None, "workspaceRevision": self._initial_revision}
+
+    def _load(self, *, upgrade: bool) -> tuple[dict[str, Any], bytes | None]:
+        """catalog.json as _check accepts it, and its bytes (None for the
+        empty catalog of a fresh install). Raises _Damaged for a file that
+        won't parse or validate, or that is missing while a copy exists, and
+        ProjectStoreError for one that can't be read at all (a symbolic
+        link, too large, an I/O error), as before: those are not restored."""
+        if self.path.is_symlink():
             raise ProjectStoreError("Project catalog cannot be read safely")
         try:
-            result = json.loads(self.path.read_text(encoding="utf-8"))
+            size = self.path.stat().st_size
+        except FileNotFoundError:
+            if self.backup_path.exists() or self.older_backup_path.exists():
+                raise _Damaged("missing", "catalog.json is missing") from None
+            return self._empty(), None
+        except OSError as exc:
+            raise ProjectStoreError(UNREADABLE) from exc
+        if size > MAX_CATALOG_BYTES:
+            raise ProjectStoreError("Project catalog cannot be read safely")
+        try:
+            raw = self.path.read_bytes()
+        except FileNotFoundError:
+            raise _Damaged("missing", "catalog.json is missing") from None
+        except OSError as exc:
+            raise ProjectStoreError(UNREADABLE) from exc
+        try:
+            result = json.loads(raw.decode("utf-8"))
+        except ValueError as exc:
+            raise _Damaged("corrupt", f"not JSON: {exc}", raw) from exc
+        try:
             self._check(result)
-            # Every reader gets upgraded params (services/saved_graph_upgrades.py).
-            # The version marker is set with them, so the first commit stores
-            # both and a value set after that is never upgraded again.
-            if upgrade:
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise _Damaged("invalid", f"not a catalog: {exc}", raw) from exc
+        # Every reader gets upgraded params (services/saved_graph_upgrades.py).
+        # The version marker is set with them, so the first commit stores
+        # both and a value set after that is never upgraded again. A failing
+        # upgrade is a bug, not damage: it refuses, and restores nothing.
+        if upgrade:
+            try:
                 upgrade_catalog(result)
-            return result
-        except (ValueError, OSError) as exc:
-            raise ProjectStoreError("Project catalog could not be read; the existing file was preserved") from exc
+            except ValueError as exc:
+                raise ProjectStoreError(UNREADABLE) from exc
+        return result, raw
+
+    def _read(self, *, upgrade: bool = True) -> dict[str, Any]:
+        try:
+            return self._load(upgrade=upgrade)[0]
+        except _Damaged as damage:
+            return self._recover(damage, upgrade=upgrade)[0]
 
     @contextmanager
-    def transaction(self) -> Iterator[dict[str, Any]]:
-        """Serialize catalog mutations across API requests and processes."""
+    def _locked(self) -> Iterator[None]:
+        """Hold .lock (serializes catalog commits across requests and
+        processes). Re-entrant in one thread. Restores made while it was held
+        are announced once the outermost hold lets go. Raises OSError."""
+        depth = getattr(self._local, "depth", 0)
+        if depth:
+            self._local.depth = depth + 1
+            try:
+                yield
+            finally:
+                self._local.depth = depth
+            return
         try:
             self._ensure_root()
             fd = os.open(self.root / ".lock", os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
             with os.fdopen(fd, "a+") as handle:
                 os.fchmod(handle.fileno(), 0o600)
                 fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-                yield copy.deepcopy(self._read())
+                self._local.depth = 1
+                try:
+                    yield
+                finally:
+                    self._local.depth = 0
+        finally:
+            self._announce()
+
+    @contextmanager
+    def transaction(self) -> Iterator[dict[str, Any]]:
+        """Serialize catalog mutations across API requests and processes."""
+        try:
+            with self._locked():
+                try:
+                    catalog, raw = self._load(upgrade=True)
+                except _Damaged as damage:
+                    catalog, raw = self._recover(damage, upgrade=True)
+                if raw is not None and not self.backup_path.exists():
+                    # A catalog saved before copies were kept: keep one now.
+                    self._seed_backup(raw)
+                yield copy.deepcopy(catalog)
         except OSError as exc:
             raise ProjectStoreError("Project storage is unavailable; the canvas was preserved") from exc
 
@@ -282,6 +405,310 @@ class ProjectStore:
         a transaction is about to replace: a caller compares what it read
         with what its transaction then holds, and never commits from it."""
         return self._read()
+
+    # -- recovering a damaged catalog -------------------------------------------
+
+    def _recover(self, damage: _Damaged, *, upgrade: bool) -> tuple[dict[str, Any], bytes | None]:
+        """catalog.json after restoring it, under the lock. A reader that
+        waited for the lock reads the file again first: another request (or
+        process) may have restored it meanwhile, and one restore is enough."""
+        try:
+            with self._locked():
+                try:
+                    return self._load(upgrade=upgrade)
+                except _Damaged as current:
+                    damage = current
+                self._restore(damage)
+                try:
+                    return self._load(upgrade=upgrade)
+                except _Damaged as still:  # what it just wrote doesn't read back
+                    _log(f"the restored catalog doesn't read back ({still}); refusing")
+                    raise ProjectStoreError(UNREADABLE) from still
+        except OSError as exc:
+            raise ProjectStoreError("Project storage is unavailable; the canvas was preserved") from exc
+
+    def _copy_bytes(self, path: Path) -> bytes | None:
+        """A last good copy's bytes, or None when there is none to use."""
+        try:
+            if path.is_symlink():
+                _log(f"{path.name} is a symbolic link; not using it")
+                return None
+            if path.stat().st_size > MAX_CATALOG_BYTES:
+                _log(f"{path.name} is larger than a catalog may be; not using it")
+                return None
+            return path.read_bytes()
+        except FileNotFoundError:
+            return None
+        except OSError as exc:
+            _log(f"{path.name} could not be read ({exc}); not using it")
+            return None
+
+    def _already_kept(self, path: Path) -> Path | None:
+        """A kept file that already holds ``path`` as it is now (the same
+        file, or the same bytes), so a restore that is tried again after a
+        failure doesn't keep it twice."""
+        try:
+            info = path.stat()
+        except OSError:
+            return None
+        digest: str | None = None
+        for kept in sorted(self.root.glob(f"{path.name}.damaged-*")):
+            try:
+                other = kept.stat()
+                if (other.st_dev, other.st_ino) == (info.st_dev, info.st_ino):
+                    return kept
+                if other.st_size != info.st_size:
+                    continue
+                if digest is None:
+                    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                if hashlib.sha256(kept.read_bytes()).hexdigest() == digest:
+                    return kept
+            except OSError:
+                continue
+        return None
+
+    def _set_aside(self, path: Path, stamp: str) -> Path:
+        """Keep ``path`` as it is now under a new name beside it, before
+        anything replaces it: a hard link (the bytes stay where they are), or
+        a copy where links aren't possible. Never deleted by Nebula."""
+        existing = self._already_kept(path)
+        if existing is not None:
+            return existing  # a restore that failed after keeping it: keep one
+        target = self.root / f"{path.name}.damaged-{stamp}"
+        try:
+            os.link(path, target, follow_symlinks=False)
+        except OSError:
+            temporary = self.root / f".damaged.{uuid4().hex}.tmp"
+            try:
+                shutil.copyfile(path, temporary, follow_symlinks=False)
+                with open(temporary, "rb+") as handle:
+                    os.fsync(handle.fileno())
+                os.replace(temporary, target)
+            finally:
+                temporary.unlink(missing_ok=True)
+        os.chmod(target, 0o600, follow_symlinks=False)
+        return target
+
+    def _restore(self, damage: _Damaged) -> None:
+        """Put back a catalog _check accepts, holding the lock. Keeps every
+        damaged file it finds, restores the newest good copy (or rebuilds
+        from the damaged files' records), adds back what the damaged file
+        holds that the copy lacks, and records the restore. Raises
+        ProjectStoreError, changing nothing, when there is nothing to put
+        back."""
+        _log(f"catalog.json can't be used ({damage.reason}: {damage}); restoring it")
+        base: dict[str, Any] | None = None
+        source: str | None = None
+        damaged_copies: list[tuple[Path, bytes]] = []
+        for path in (self.backup_path, self.older_backup_path):
+            raw = self._copy_bytes(path)
+            if raw is None:
+                continue
+            try:
+                candidate = json.loads(raw.decode("utf-8"))
+                self._check(candidate)
+            except (ValueError, TypeError, AttributeError) as exc:
+                _log(f"{path.name} is damaged too ({exc})")
+                damaged_copies.append((path, raw))
+                continue
+            base, source = candidate, path.name
+            break
+        # Newest first: the damaged catalog, then the copies that failed.
+        salvages = [catalog_recovery.salvage(raw)
+                    for raw in ([damage.raw] if damage.raw is not None else []) + [raw for _, raw in damaged_copies]]
+        kind = "restored" if base is not None else "rebuilt"
+        moment = datetime.now(timezone.utc)
+        stamp = f"{moment.strftime('%Y%m%dT%H%M%SZ')}-{uuid4().hex[:8]}"
+        if base is None and not any(found.entries for found in salvages):
+            if damage.raw is None:
+                # catalog.json is gone and every copy is damaged and empty of
+                # projects: keep the copies, then start from an empty list as
+                # a missing catalog always did (a refusal would last forever).
+                for path, _raw in damaged_copies:
+                    kept = self._set_aside(path, stamp)
+                    _log(f"kept the damaged copy {path.name} as {kept}; it holds no complete project")
+                    if path.exists() and os.path.samefile(path, kept):
+                        path.unlink()
+                _log("catalog.json is missing and no copy holds a project: starting from an empty list")
+                return
+            _log("no good copy, and the damaged files hold no complete project: nothing to restore; "
+                 "catalog.json is left as it is")
+            raise ProjectStoreError(UNREADABLE)
+        if base is None:
+            base = {"version": 1, "projects": {}, "activeProjectId": None,
+                    "workspaceRevision": uuid4().hex, "trash": {}}
+            _log("no good copy: rebuilding the list from the projects the damaged files still hold")
+        else:
+            _log(f"restoring from {source}")
+        base_bytes = len(json.dumps(base, ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode("utf-8"))
+        merged = catalog_recovery.reconcile(base, salvages, max_projects=MAX_PROJECTS,
+                                            room_bytes=MAX_CATALOG_BYTES - base_bytes - 4096)
+        catalog = merged.catalog
+        catalog["version"] = 1
+        # Open tabs hold the list as it was: a new revision makes them reload.
+        catalog["workspaceRevision"] = uuid4().hex
+        try:
+            self._check(catalog)
+        except (ValueError, TypeError) as exc:  # a bug in reconcile: change nothing
+            _log(f"the restored catalog doesn't validate ({exc}); nothing changed")
+            raise ProjectStoreError(UNREADABLE) from exc
+        # Every damaged file is kept before anything replaces it.
+        set_aside: list[str] = []
+        damaged_file: str | None = None
+        if damage.raw is not None:
+            damaged_file = str(self._set_aside(self.path, stamp))
+            set_aside.append(damaged_file)
+            _log(f"kept the damaged catalog as {damaged_file}")
+        kept_copies: list[tuple[Path, Path]] = []
+        for path, _raw in damaged_copies:
+            kept = self._set_aside(path, stamp)
+            kept_copies.append((path, kept))
+            set_aside.append(str(kept))
+            _log(f"kept the damaged copy {path.name} as {kept}")
+        try:
+            temporary = self.prepare(catalog)
+        except ProjectLimitError as exc:
+            if not (merged.added or merged.updated) or base is None:
+                raise
+            # Past a limit with what was added back: the copy alone, and
+            # every record added back is reported (it stays in the damaged file).
+            _log(f"the restored catalog is past a limit ({exc}); restoring the copy alone")
+            merged.not_added.extend({"id": row["id"], "reason": "size"} for row in [*merged.added, *merged.updated])
+            merged.added, merged.updated = [], []
+            catalog = copy.deepcopy(base)
+            catalog["workspaceRevision"] = uuid4().hex
+            if catalog.get("activeProjectId") not in catalog["projects"]:
+                catalog["activeProjectId"] = None
+            temporary = self.prepare(catalog)
+        try:
+            self.commit_prepared(temporary)
+        finally:
+            temporary.unlink(missing_ok=True)
+        for path, kept in kept_copies:
+            # A damaged copy the commit didn't replace (the older one) goes,
+            # so it is never read again; its bytes stay in the kept file.
+            try:
+                if path.exists() and os.path.samefile(path, kept):
+                    path.unlink()
+            except OSError as exc:
+                _log(f"could not take the damaged {path.name} out of use: {exc}")
+        for row in merged.added:
+            _log(f"added back {row['id']} \"{row['name']}\"{' (in Recently deleted)' if row['trashed'] else ''}")
+        for row in merged.updated:
+            _log(f"took the damaged file's newer {row['id']} \"{row['name']}\""
+                 f"{' (in Recently deleted)' if row['trashed'] else ''}")
+        for row in merged.not_added:
+            _log(f"could not add back {row['id']} ({row['reason']}); it stays in the damaged file")
+        if merged.open_project_missing:
+            _log(f"the open project {merged.open_project_missing} didn't come back; no project is open")
+        _log(f"{kind} the project list: {len(catalog['projects'])} projects, "
+             f"{len(catalog.get('trash') or {})} in Recently deleted")
+        record = {
+            "id": uuid4().hex, "at": moment.isoformat(), "kind": kind, "reason": damage.reason,
+            "detail": str(damage)[:300], "source": source, "damagedFile": damaged_file, "setAside": set_aside,
+            "addedBack": merged.added[:RECORD_ROWS], "addedBackCount": len(merged.added),
+            "updatedFromDisk": merged.updated[:RECORD_ROWS], "updatedFromDiskCount": len(merged.updated),
+            "notAddedBack": merged.not_added[:RECORD_ROWS], "notAddedBackCount": len(merged.not_added),
+            "projectCount": len(catalog["projects"]), "trashCount": len(catalog.get("trash") or {}),
+            "openProject": catalog.get("activeProjectId"), "openFrom": merged.active_from,
+            "openProjectMissing": merged.open_project_missing, "dismissedAt": None,
+        }
+        try:
+            self._record_restore(record)
+        except Exception as exc:  # noqa: BLE001 - the catalog is restored; the notice is what's lost
+            _log(f"the restore could not be recorded for the notice: {exc}")
+        pending = getattr(self._local, "announce", None)
+        if pending is None:
+            pending = self._local.announce = []
+        pending.append(record)
+
+    def _announce(self) -> None:
+        pending, self._local.announce = getattr(self._local, "announce", None) or [], []
+        for record in pending:
+            if self.on_restore is None:
+                continue
+            try:
+                self.on_restore(copy.deepcopy(record))
+            except Exception as exc:  # noqa: BLE001 - telling is decoration on a restore that happened
+                _log(f"announcing the restore failed: {exc}")
+
+    def _records(self) -> list[dict[str, Any]]:
+        try:
+            found = json.loads(self.record_path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return []
+        except (OSError, ValueError) as exc:
+            _log(f"{RESTORE_RECORD_NAME} could not be read ({exc})")
+            return []
+        restores = found.get("restores") if isinstance(found, dict) else None
+        return [entry for entry in restores if isinstance(entry, dict)] if isinstance(restores, list) else []
+
+    def _write_records(self, restores: list[dict[str, Any]]) -> None:
+        encoded = json.dumps({"version": 1, "restores": restores[-RESTORES_KEPT:]}, ensure_ascii=False,
+                             indent=1).encode("utf-8")
+        self._write_file(self.record_path, encoded)
+
+    def _record_restore(self, record: dict[str, Any]) -> None:
+        if self.record_path.exists() and not self._records():
+            try:  # unreadable: keep it, as every damaged file is kept
+                self._set_aside(self.record_path, uuid4().hex[:8])
+            except OSError:
+                pass
+        self._write_records([*self._records(), record])
+
+    def restore_notice(self) -> dict[str, Any] | None:
+        """The newest restore, as recorded, while the person hasn't dismissed
+        it (an older one is behind it: the notice is about the latest)."""
+        restores = self._records()
+        return restores[-1] if restores and not restores[-1].get("dismissedAt") else None
+
+    def dismiss_restore(self, record_id: str) -> bool:
+        """The person closed the notice: it isn't shown again. False when
+        ``record_id`` isn't the restore the notice shows."""
+        try:
+            with self._locked():
+                restores = self._records()
+                if not restores or restores[-1].get("id") != record_id or restores[-1].get("dismissedAt"):
+                    return False
+                restores[-1]["dismissedAt"] = now()
+                self._write_records(restores)
+                return True
+        except OSError as exc:
+            raise ProjectStoreError("Project storage is unavailable; the canvas was preserved") from exc
+
+    # -- the last good copy -------------------------------------------------------
+
+    def _write_file(self, target: Path, encoded: bytes) -> None:
+        """Write ``target`` whole: a private temporary file, fsync, rename."""
+        temporary = self.root / f".catalog-backup.{uuid4().hex}.tmp"
+        try:
+            fd = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(encoded)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, target)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    def _write_backup(self, encoded: bytes) -> None:
+        """Keep ``encoded`` (a catalog _check accepted, as committed) as the
+        last good copy, and as the older copy too when that is missing or
+        over an hour old. Called after the commit's rename; raises OSError."""
+        self._write_file(self.backup_path, encoded)
+        try:
+            age = time.time() - self.older_backup_path.stat().st_mtime
+        except FileNotFoundError:
+            age = None
+        if age is None or age >= OLDER_BACKUP_SECONDS:
+            self._write_file(self.older_backup_path, encoded)
+
+    def _seed_backup(self, raw: bytes) -> None:
+        try:
+            self._write_backup(raw)
+            _log("kept a first copy of catalog.json")
+        except Exception as exc:  # noqa: BLE001 - a read never fails for its copy
+            _log(f"could not keep a copy of catalog.json: {exc}")
 
     def workspace(self) -> dict[str, Any]:
         """{activeProjectId, workspaceRevision} without copying the catalog.
@@ -368,7 +795,11 @@ class ProjectStore:
         self._ensure_root()
         if len(catalog["projects"]) > MAX_PROJECTS:
             raise ProjectLimitError("Project limit reached", "projects")
-        encoded = json.dumps(catalog, ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode("utf-8")
+        # Which project is open goes first, so a file cut short still says
+        # (services/catalog_recovery.py); the rest keep their order.
+        ordered = {key: catalog[key] for key in _HEAD_KEYS if key in catalog}
+        ordered.update((key, value) for key, value in catalog.items() if key not in ordered)
+        encoded = json.dumps(ordered, ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode("utf-8")
         if len(encoded) > MAX_CATALOG_BYTES:
             raise ProjectLimitError("Project storage limit reached", "storage")
         temporary = self.root / f".catalog.{uuid4().hex}.tmp"
@@ -387,10 +818,12 @@ class ProjectStore:
             # commit_prepared to keep. Only for a catalog _read accepts (one
             # it would refuse is read, and refused, as before); the pins go
             # through JSON as they are stored, so the caller can't change them.
+            # The same check decides that these bytes may become the last good
+            # copy: one _read would refuse never replaces it.
             self._check(catalog, fill=False)
             view = _projection(catalog, None)
             stored = json.loads(json.dumps(view.pins, ensure_ascii=False, allow_nan=False))
-            self._prepared = (temporary, view._replace(pins=tuple(stored)))
+            self._prepared = (temporary, view._replace(pins=tuple(stored)), encoded)
         except (ValueError, TypeError, KeyError):
             pass
         return temporary
@@ -423,6 +856,16 @@ class ProjectStore:
                 os.fsync(fd)
             except OSError as exc:
                 print(f"[projects] directory fsync failed after commit: {exc}", flush=True)
+            if written is not None and prepared is not None:
+                # The commit is made; now its last good copy. A process that
+                # dies here leaves the copy one commit behind, which a restore
+                # makes up from the damaged file (catalog_recovery). Never
+                # fails the commit: the next one writes the copy again.
+                try:
+                    self._write_backup(prepared[2])
+                    os.fsync(fd)
+                except Exception as exc:  # noqa: BLE001 - the commit itself landed
+                    _log(f"could not keep the last good copy of catalog.json: {exc}")
         finally:
             os.close(fd)
 

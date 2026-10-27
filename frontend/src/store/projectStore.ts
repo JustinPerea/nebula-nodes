@@ -29,7 +29,8 @@ import {
   failureMessage, isNoAnswer, oneLine, shortReason,
 } from '../lib/errorCopy';
 import { WORLD_LABS_NEEDS_CHECK } from '../lib/worldLabsWaiting';
-import type { ProjectSnapshot, ProjectSummary, SavedProject, TrashedProject } from '../lib/projects';
+import type { CatalogRestore, ProjectList, ProjectSnapshot, ProjectSummary, SavedProject, TrashedProject } from '../lib/projects';
+import { catalogRestoreLogLine } from '../components/projects/catalogRestoreCopy';
 
 /** An agent (or a script) opened or made a project and this tab followed it.
  * Shown as a toast with the way back. */
@@ -103,6 +104,11 @@ interface ProjectState {
   trash: TrashedProject[];
   /** The project the Undo toast offers to bring back. */
   lastDeleted: { id: string; name: string } | null;
+  /** Nebula restored a damaged project list (backend catalog restore): the
+   * Projects home notice, until the person closes it with ×. */
+  catalogRestore: CatalogRestore | null;
+  /** The person's ×: hides the notice and tells the backend not to list it again. */
+  dismissCatalogRestore: () => void;
   workspaceRevision: string; error: string | null;
   /** What `error`'s Details toggle holds, for that line (projectErrorDetails). */
   errorDetails: ProjectErrorDetails | null;
@@ -703,6 +709,8 @@ async function recoverPendingWork(): Promise<boolean> {
  * each test starts from this. A handling of a params-version change still in
  * flight from an earlier test is superseded, so its late answer writes nothing. */
 export function resetProjectStoreForTests(): void {
+  dismissedRestores.clear();
+  loggedRestores.clear();
   followingSwitch = null;
   initializing = null;
   saveQueue = Promise.resolve();
@@ -1008,6 +1016,24 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
   }
 }
 
+/** Restores this tab closed the notice of, or wrote the Agent log line for. */
+const dismissedRestores = new Set<string>();
+const loggedRestores = new Set<string>();
+
+/** The listing's restore notice, unless the person closed it here already
+ * (the backend lists it until its dismiss lands). The first time this tab
+ * sees a restore, the Agent log gets its source and the damaged file's path
+ * (source "system"), which the notice leaves out. */
+function restoreFrom(list: ProjectList): CatalogRestore | null {
+  const restore = list.catalogRestore;
+  if (!restore || typeof restore.id !== 'string' || dismissedRestores.has(restore.id)) return null;
+  if (!loggedRestores.has(restore.id) && typeof window !== 'undefined') {
+    loggedRestores.add(restore.id);
+    window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', { detail: { source: 'system', message: catalogRestoreLogLine(restore) } }));
+  }
+  return restore;
+}
+
 /** List the saved projects again, keeping whatever this tab has open. One
  * request at a time; changes that land meanwhile get one more. A tab with no
  * project open also takes the new workspace revision, so its next create or
@@ -1027,7 +1053,7 @@ function relistProjects(): Promise<void> {
           // The open project's card as listed now (a rename made elsewhere).
           const open = state.activeProject ? list.projects.find((project) => project.id === state.activeProject?.id) : undefined;
           return {
-            projects: list.projects, trash: list.trash ?? [],
+            projects: list.projects, trash: list.trash ?? [], catalogRestore: restoreFrom(list),
             ...(open ? { activeProject: open } : {}),
             ...(!state.activeProject && !getProjectContext() ? { workspaceRevision: list.workspaceRevision } : {}),
             ...(state.switchNotice ? { switchNotice: wayBackIn(state.switchNotice, list.projects) } : {}),
@@ -1089,7 +1115,7 @@ async function loadWorkspace(): Promise<void> {
     return;
   }
   clearParamsReloadMark();
-  if (generation === listingGeneration) set({ projects: list.projects, trash: list.trash ?? [] });
+  if (generation === listingGeneration) set({ projects: list.projects, trash: list.trash ?? [], catalogRestore: restoreFrom(list) });
   set({ workspaceRevision: list.workspaceRevision });
   if (list.activeProjectId) {
     let project = await api.getProject(list.activeProjectId);
@@ -1320,7 +1346,7 @@ async function listNow(): Promise<void> {
   const generation = ++listingGeneration;
   const list = await api.listProjects();
   if (generation === listingGeneration) {
-    useProjectStore.setState((state) => ({ projects: list.projects, trash: list.trash ?? [],
+    useProjectStore.setState((state) => ({ projects: list.projects, trash: list.trash ?? [], catalogRestore: restoreFrom(list),
       ...(!state.activeProject ? { workspaceRevision: list.workspaceRevision } : {}) }));
   }
 }
@@ -1340,7 +1366,7 @@ async function emptyTrashOf(ids: string[]): Promise<void> {
 // Projects waits while the Commons holds unsaved labels (lib/commonsUnsaved).
 export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectState>(holdProjects, (set, get) => ({
   screen: 'home', initialized: false, loading: true, busy: false,
-  projects: [], activeProject: null, trash: [], lastDeleted: null, workspaceRevision: '', error: null, errorDetails: null,
+  projects: [], activeProject: null, trash: [], lastDeleted: null, catalogRestore: null, workspaceRevision: '', error: null, errorDetails: null,
   errorRetry: null, saveError: null, saveStatus: 'saved', dirty: false, switchNotice: null,
   unsavedEdits: null, editsSavedAs: null, savePaused: null, sizeNotice: null, sizePanelOpen: false,
   openSizePanel: () => { if (get().savePaused) set({ sizePanelOpen: true }); },
@@ -1521,6 +1547,14 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
   },
   emptyTrash: async () => emptyTrashOf(get().trash.map((entry) => entry.id)),
   dismissUndo: () => set({ lastDeleted: null }),
+  dismissCatalogRestore: () => {
+    const restore = get().catalogRestore;
+    if (!restore) return;
+    dismissedRestores.add(restore.id);
+    set({ catalogRestore: null });
+    // Closed in this tab either way; a dismiss that didn't land shows it again on the next load.
+    void api.dismissCatalogRestore(restore.id).catch(() => undefined);
+  },
   goHome: async () => {
     // The person's own way to Projects: refused, as the corner's Review is.
     refuseWhileCommonsUnsaved();

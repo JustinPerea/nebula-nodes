@@ -144,6 +144,12 @@ EVENT_KINDS = frozenset({
     "project.renamed",
     "project.deleted",
     "project.restored",
+    # Nebula found catalog.json damaged and restored it (services/
+    # project_store.py _restore): data {id, kind (restored | rebuilt), reason,
+    # source (the copy, or null for a rebuild), folder, damagedFile and
+    # setAside (file names in that folder), addedBack [{id, name}],
+    # addedBackCount, notAddedBackCount, projectCount}.
+    "project.catalogRestored",
     # A paid start Nebula holds (World Labs recovery checkpoints and starts it
     # couldn't confirm) and its clearing: data {hold, change, runId, ...}.
     "provider.hold",

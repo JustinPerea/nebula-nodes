@@ -661,11 +661,18 @@ def test_restore_respects_the_project_limit(workspace, monkeypatch):
 
 
 def test_a_corrupt_trash_entry_is_reported_not_silently_dropped(workspace):
+    """The catalog no longer validates, so its last good copy comes back
+    (tests/test_project_catalog_backup.py), the damaged file is kept as it
+    was, and the entry that couldn't come back is reported, not dropped."""
     client, graph, store, _ = workspace
     create(client, "A")
     raw = json.loads(store.path.read_text())
     raw["trash"] = {"0" * 32: {"id": "0" * 32, "snapshot": {}, "deletedAt": "not a date"}}
     store.path.write_text(json.dumps(raw))
     before = store.path.read_bytes()
-    assert client.get("/api/projects").status_code == 507
-    assert store.path.read_bytes() == before
+    listing = client.get("/api/projects")
+    assert listing.status_code == 200
+    assert [project["name"] for project in listing.json()["projects"]] == ["A"]
+    assert listing.json()["catalogRestore"]["notAddedBack"] == [{"id": "0" * 32, "reason": "invalid"}]
+    [kept] = store.root.glob("catalog.json.damaged-*")
+    assert kept.read_bytes() == before

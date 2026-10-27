@@ -26,6 +26,10 @@ def run_list(client: NebulaClient, *, as_json: bool = False) -> None:
     listing = client.list_projects()
     active = listing.get("activeProjectId")
     projects = listing.get("projects") or []
+    restore = listing.get("catalogRestore")
+    if isinstance(restore, dict) and restore.get("note"):
+        # Nebula restored a damaged project list (until the person closes its notice).
+        print(f"Note: {restore['note']}\n")
     if not projects:
         print("No saved projects.")
         return
