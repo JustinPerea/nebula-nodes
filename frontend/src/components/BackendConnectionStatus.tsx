@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { apiFetch } from '../lib/backend';
 import {
-  noteBackendBootId, noteProbeAnswer, refuseEditWhileOffline, startHealthProbe, subscribeHealthProbeRequests, subscribeOfflinePulse,
+  noteBackendBootId, noteProbeAnswer, refuseEditWhileOffline, startHealthProbe, subscribeHealthProbeRequests,
 } from '../lib/backendConnection';
 import { OFFLINE_MARK, useBackendOffline } from '../lib/useBackendOffline';
+import { useOfflinePulse } from '../hooks/useOfflinePulse';
 
 export const BACKEND_PROBE_INTERVAL_MS = 3_000;
 
@@ -27,13 +28,14 @@ export const OFFLINE_LINE = 'Nebula is offline. Editing is paused until it recon
 export function BackendConnectionStatus({ placement = 'workspace' }: {
   /** GM r17 (C): on the home screen the banner sits right under its top bar
    * (the workspace's place, below both bars, covered the heading there).
-   * GM, PR #198 r1 item 5: every other screen but the canvas is a studio,
-   * and the banner sits right under its own header (App.css). */
+   * GM, PR #198 r2: every other screen but the canvas is a studio, and there
+   * the banner is a row of the studio's own layout, under its header
+   * (StudioOfflineRow, rendered by WorkspaceHeader); this keeps probing and
+   * pulsing but shows nothing of its own. */
   placement?: 'workspace' | 'home' | 'studio';
 } = {}) {
   const offline = useBackendOffline();
   const banner = useRef<HTMLDivElement>(null);
-  const [pulse, setPulse] = useState<{ seq: number; kind: 'spring' | 'flash' } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,24 +81,9 @@ export function BackendConnectionStatus({ placement = 'workspace' }: {
     return () => document.removeEventListener('pointerdown', pressed, true);
   }, [offline]);
 
-  useEffect(() => subscribeOfflinePulse(() => {
-    const reduce = typeof window.matchMedia === 'function'
-      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    setPulse((previous) => ({ seq: (previous?.seq ?? 0) + 1, kind: reduce ? 'flash' : 'spring' }));
-  }), []);
+  const pulse = useOfflinePulse(banner, offline);
 
-  // Restart the animation in place: drop the attribute, reflow, set it again.
-  useEffect(() => {
-    const element = banner.current;
-    if (!element || !pulse) return;
-    element.removeAttribute('data-pulse');
-    void element.offsetWidth;
-    element.setAttribute('data-pulse', pulse.kind);
-  }, [pulse]);
-
-  useEffect(() => { if (!offline) setPulse(null); }, [offline]);
-
-  if (!offline) return null;
+  if (!offline || placement === 'studio') return null;
 
   return (
     <div
@@ -112,3 +99,4 @@ export function BackendConnectionStatus({ placement = 'workspace' }: {
     </div>
   );
 }
+

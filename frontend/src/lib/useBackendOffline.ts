@@ -22,3 +22,24 @@ export const OFFLINE_MARK = 'data-offline-disabled';
 export function offlineMark(offline: boolean): { 'data-offline-disabled'?: '' } {
   return offline ? { [OFFLINE_MARK]: '' } as { 'data-offline-disabled': '' } : {};
 }
+
+/** The attribute a paid or saving action carries while it is disabled
+ * offline: it drops its accent (orange Generate, Export) for the neutral
+ * control look (App.css), as Run does on the canvas (GM, PR #198 r2). */
+export const OFFLINE_NEUTRAL = 'data-offline-neutral';
+
+/**
+ * Spread on an action that saves or spends (GM, PR #198 r2: Cinema's
+ * Generate shot, Generate N, Generate all and Add shot, Create's Generate,
+ * Remotion's adds, REC and Export): disabled while offline, with the offline
+ * mark (cursor, dimming, a press pulses the banner) and the neutral look.
+ * `disabled` is the action's own reason to be off; the button keeps its own
+ * title, as Run does. One helper, so every studio reads the same.
+ */
+export function offlineAction(offline: boolean, disabled = false): {
+  disabled: boolean; 'data-offline-disabled'?: ''; 'data-offline-neutral'?: '';
+} {
+  if (!offline) return { disabled };
+  return { disabled: true, [OFFLINE_MARK]: '', [OFFLINE_NEUTRAL]: '' } as {
+    disabled: true; 'data-offline-disabled': ''; 'data-offline-neutral': '' };
+}

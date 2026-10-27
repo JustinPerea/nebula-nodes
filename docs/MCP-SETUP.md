@@ -535,8 +535,8 @@ model's own settings by their key in sentence case, "Set “Guidance scale”";
 a setting with no label anywhere, such as an extra param on the FAL node,
 draws no bubble, and the log says "Changed a setting on “<node>”" or
 "Changed 3 settings on “<node>”"), and the time. No action is left out:
-the presence event carries `log` when the log's line isn't the bubble's,
-and an action with no words at all is listed in the Agents panel's words
+the presence event carries `log`, the Agent log's line (the same words as
+`say` for a labeled setting, "Set “Guidance scale”"), and an action with no words at all is listed in the Agents panel's words
 ("Changed “Hero”"). Moodboard writes are listed there too
 (your edit batch's `say`, else the journal's words: "Set aside #1 on board
 Dusk"; "Analyzed board Dusk"), and so is a run of the
@@ -1959,6 +1959,15 @@ How it works (`backend/services/agent_spend.py`):
 - The cost is the upper estimate at list prices over every node the run
   includes, batches counted. Nebula can't know in advance what the cache will
   skip, so the estimate never undercounts.
+- Amounts are written one way on both sides (`backend/services/money.py`,
+  `frontend/src/lib/pricing.ts`, one table in
+  `contracts/fixtures/money/cases.json`): what was spent to the cent
+  ("$3.40", "$1,234.50", "<$0.01" for a non-zero amount under half a cent,
+  "$0.00" only for nothing), and a price, limit or estimate with two
+  significant figures under $0.10 ("$0.0047", "$0.044"), cents under $10
+  ("$0.43") and whole dollars from $10 ("$12"), picked after rounding
+  ("$0.10", never "$0.1"; "$10", never "$10.00"). A negative amount reads
+  as nothing ("$0.00", "$0"), never "$-0.00".
 - A cinema scene counts as its base image model (`scene.base.model`, default
   `seedream-4-5`), once per shot, and falls under that model's own limits. A
   base without a list price means the run must be proposed. A shot request
@@ -2837,6 +2846,39 @@ Nebula's log). `wait` waits for it to end,
 as for a CLI run. A CLI run that is still going also carries `nodes` and
 `startedBy`; once it ends it answers exactly as its start did. The run id
 comes from the `run.started` journal events (`wait_for_canvas_change`).
+
+### Cinema scenes over MCP
+
+A `cinema-scene` node's `scene` is filled in on every write that sets it:
+`edit_canvas` and `nebula apply` adding the node, a proposal and its Accept,
+import and `load_graph_file`, `PUT /api/graph/node/{id}` (`nebula set`), an
+undo or redo (`/api/graph/restore`) and a project's load
+(`backend/services/cinema_scene_spec.py`, PR #198 review 2, M2). Only
+`shots` is needed; a missing `version` is 1, a missing or empty `base` (or
+`base.model`) is `{"model": "seedream-4-5"}`, a missing or empty
+`aspectRatio` is "16:9", a shot without `prompt` gets "". A scene that
+can't be filled in is refused with 400 and a `detail` naming the field
+(`scene.shots must be a list of shots`, `scene.shots[1].id 's1' is used
+twice`, `scene.base must be an object like {"model": "seedream-4-5"}`) and an
+example of the shape. A saved project is never refused on load: what can be
+filled in is, and Cinema shows a scene it still can't open as "Couldn't open
+“<node>”. …" with Back to canvas, and the Agent log says which field is
+missing.
+
+A shot's stored `output.status` is never `running`: a run writes `done` or
+`error`, so a `running` (or `queued`) a write or a saved file carries is
+settled to `done` when the shot has an image, else `idle`. An undo that
+brings a removed shot back keeps its image only when it was `done` or
+`error`; when a run put a newer image on the shot's port after it left, the
+shot takes that image and the port keeps it.
+
+A write that would remove a shot a live run is rendering (its own shot run,
+or a run of the whole scene) is refused with 409 and changes nothing: "Shot 2
+(s2) of “Opening” (n4) is still rendering (run <id>), so it can't be
+removed. Stop the run first (cancel_run, or `nebula cancel <id>`; a run the
+person started is theirs to stop) or wait for it to finish, then try again.
+Nothing changed." The canvas blocks the same thing: the shot's × is
+disabled, titled "Stop the run first." or "Wait for “Shot 2” to finish.".
 
 ### Universal nodes over MCP
 

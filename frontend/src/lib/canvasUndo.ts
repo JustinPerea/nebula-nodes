@@ -25,6 +25,7 @@ import type { Edge, Node } from '@xyflow/react';
 import type { CinemaSceneSpec, NodeData } from '../types';
 import type { RemovalRecord } from './deleteNotice';
 import { canonicalBackendAssetUrls } from './backend';
+import { keepRenderingShots, settledParams } from './cinemaScene';
 
 /** Backend (cli_graph) node ids: n1, n2, ... Everything else is frontend-only. */
 export const CLI_NODE_ID_RE = /^n\d+$/;
@@ -127,6 +128,13 @@ export interface KeptAfterAccept {
   /** A node Accept added, kept whole because it changed since (GM, round 17:
    * named as one item). False for settings kept on a node it didn't add. */
   wholeNode: boolean;
+  /** A list Accept reordered that was reordered again since (PR #198 review
+   * 2, L3): the order now is kept, named as one item ("the shot order"). */
+  order?: 'shots' | 'clips';
+  /** Keys kept because a run wrote into the part Accept changed (a shot it
+   * added and a run rendered): nobody's edit, so the line names no one
+   * (review 2, N5). */
+  runKept?: string[];
 }
 
 /** Who made a change this tab saw arrive (round 17 of PR #114, review 16 L3;
@@ -206,19 +214,33 @@ export function captureOwnAdd(step: OwnAdd, nodes: Node<NodeData>[], edges: Edge
     const current = node.data.params ?? {};
     const params: Record<string, unknown> = { ...current };
     const changed: string[] = [];
+    const runKept: string[] = [];
+    const reordered = new Set<'shots' | 'clips'>();
     let undoes = false;
     for (const key of [...Object.keys(change.before), ...change.absent]) {
       const target = Object.prototype.hasOwnProperty.call(change.before, key) ? change.before[key] : ABSENT;
       const now = has(current, key) ? current[key] : ABSENT;
       const conflicts: Path[] = [];
+      const orders: Path[] = [];
       // A step from before `set` was kept puts its keys back whole.
-      const value = change.set ? merge3(has(change.set, key) ? change.set[key] : ABSENT, target, now, [key], conflicts) : target;
+      const value = change.set
+        ? merge3(has(change.set, key) ? change.set[key] : ABSENT, target, now, [key], conflicts, orders) : target;
+      // Both sides reordered a list: the order now stays, named as one item
+      // (the shots, the clips); any other list's order counts as its key.
+      for (const path of orders) {
+        const list = orderedList(node.data.definitionId, path);
+        if (list) reordered.add(list); else conflicts.push(path);
+      }
       if (conflicts.length > 0 || change.runKept?.includes(key)) changed.push(key);
+      if (conflicts.length === 0 && change.runKept?.includes(key)) runKept.push(key);
       if (same(value, now)) continue;
       undoes = true;
       if (value === ABSENT) delete params[key]; else params[key] = value;
     }
-    if (changed.length > 0) kept.push({ nodeId: node.id, keys: changed, wholeNode: false });
+    if (changed.length > 0) {
+      kept.push({ nodeId: node.id, keys: changed, wholeNode: false, ...(runKept.length > 0 ? { runKept } : {}) });
+    }
+    for (const order of reordered) kept.push({ nodeId: node.id, keys: [], wholeNode: false, order });
     if (!undoes) continue;
     const now = keep(node);
     step.before.nodes[node.id] = { ...now, data: { ...now.data, params } };
@@ -289,13 +311,13 @@ function ordered(primary: string[], secondary: string[], items: Map<string, Valu
  * For an undo: base = what the step set, ours = what it replaced, theirs =
  * the canvas now, so the result is before ⊕ (now − set).
  */
-function merge3(base: Value, ours: Value, theirs: Value, path: Path, conflicts: Path[]): Value {
+function merge3(base: Value, ours: Value, theirs: Value, path: Path, conflicts: Path[], orders: Path[] = []): Value {
   if (same(theirs, base)) return ours;
   if (same(ours, base)) return theirs;
   if (isRecord(base) && isRecord(ours) && isRecord(theirs)) {
     const out: Record<string, unknown> = {};
     for (const key of keysOf(ours, theirs, base)) {
-      const value = merge3(child(base, key), child(ours, key), child(theirs, key), [...path, key], conflicts);
+      const value = merge3(child(base, key), child(ours, key), child(theirs, key), [...path, key], conflicts, orders);
       if (value !== ABSENT) out[key] = value;
     }
     return out;
@@ -304,12 +326,16 @@ function merge3(base: Value, ours: Value, theirs: Value, path: Path, conflicts: 
   if (b && o && t) {
     const items = new Map<string, Value>();
     for (const id of new Set([...o.keys(), ...t.keys(), ...b.keys()])) {
-      const value = merge3(b.get(id) ?? ABSENT, o.get(id) ?? ABSENT, t.get(id) ?? ABSENT, [...path, { id }], conflicts);
+      const value = merge3(b.get(id) ?? ABSENT, o.get(id) ?? ABSENT, t.get(id) ?? ABSENT, [...path, { id }], conflicts, orders);
       if (value !== ABSENT) items.set(id, value);
     }
     // Their order unless they kept base's; then ours.
     const order = (map: Map<string, unknown>, other: Map<string, unknown>) => [...map.keys()].filter((id) => other.has(id));
-    const theirsReordered = order(t, b).join('\u0000') !== order(b, t).join('\u0000');
+    const reorders = (map: Map<string, unknown>) => order(map, b).join('\u0000') !== order(b, map).join('\u0000');
+    const theirsReordered = reorders(t);
+    // Both reordered, each its own way: theirs stays and the order is noted
+    // (PR #198 review 2, L3), so Undo never uses up its step in silence.
+    if (theirsReordered && reorders(o) && order(t, o).join('\u0000') !== order(o, t).join('\u0000')) orders.push(path);
     return theirsReordered ? ordered([...t.keys()], [...o.keys()], items) : ordered([...o.keys()], [...t.keys()], items);
   }
   conflicts.push(path);
@@ -323,6 +349,14 @@ function isRunMedia(definitionId: string, path: Path): boolean {
   return definitionId === 'cinema-scene' && path.length === 4 && path[0] === 'scene' && path[1] === 'shots'
     && typeof path[2] === 'object' && typeof path[3] === 'string' && SHOT_MEDIA.has(path[3]);
 }
+/** The list an order conflict is in, as the line names it: a Cinema scene's
+ * shots or a video edit's clips; null for any other list. */
+function orderedList(definitionId: string, path: Path): 'shots' | 'clips' | null {
+  if (definitionId === 'cinema-scene' && path.length === 2 && path[0] === 'scene' && path[1] === 'shots') return 'shots';
+  if (path.length === 1 && path[0] === 'clips') return 'clips';
+  return null;
+}
+
 /** A part of a Cinema scene that holds shot media (the scene, its shots, one shot). */
 function holdsRunMedia(definitionId: string, path: Path): boolean {
   return definitionId === 'cinema-scene' && path[0] === 'scene' && path.length <= 3;
@@ -359,6 +393,22 @@ function rebasePart(before: Value, set: Value, was: Value, now: Value, path: Pat
     const nextBefore = new Map<string, Value>(b);
     const nextSet = new Map<string, Value>(s);
     for (const id of new Set([...w.keys(), ...n.keys()])) {
+      const [itemBefore, itemSet, itemNow] = [b.get(id), s.get(id), n.get(id)];
+      if (itemBefore && itemSet && itemNow && !same(itemBefore, itemSet) && !same(w.get(id) ?? ABSENT, itemNow)) {
+        // An item the step changed (a clip it sped up) that a run wrote into
+        // since: everything the run wrote there is derived from what the step
+        // set (a duration, a frame-snapped trim), so it goes back with the
+        // item (PR #198 review 2, L2). A shot's media is the exception: it
+        // is the run's, and stays.
+        const media = definitionId === 'cinema-scene' && path.length === 2 && path[0] === 'scene' && path[1] === 'shots';
+        const back: Record<string, unknown> = { ...itemBefore };
+        if (media) {
+          for (const key of SHOT_MEDIA) if (has(itemNow, key)) back[key] = itemNow[key]; else delete back[key];
+        }
+        nextBefore.set(id, back);
+        nextSet.set(id, itemNow);
+        continue;
+      }
       const part = rebasePart(b.get(id) ?? ABSENT, s.get(id) ?? ABSENT, w.get(id) ?? ABSENT, n.get(id) ?? ABSENT,
         [...path, { id }], definitionId, runKept);
       if (part.before === ABSENT) nextBefore.delete(id); else nextBefore.set(id, part.before);
@@ -453,6 +503,72 @@ export function rebaseAcceptedOnRunOutput(step: OwnAdd, before: Node<NodeData>, 
 }
 
 /**
+ * A run's own param write-back (was → now on one node) in a step that holds
+ * that node (a snapshot of the person's edit, an edit from elsewhere, an
+ * undone add waiting for Redo): wherever the step holds what the run
+ * replaced, it takes what the run wrote, so undoing or redoing it never takes
+ * a run's output off the canvas (PR #198 review 2, N3: a shot rendered
+ * between Undo and Redo, a flat key a run wrote). A part the step holds
+ * otherwise is the step's own and stays, whole within an id-keyed item (a
+ * clip's duration goes back with the speed the step set, L2), except a
+ * shot's media, which is always the run's. Changes the step in place.
+ */
+export function rebaseStepOnRunOutput(entry: unknown, was: Node<NodeData>, now: Node<NodeData>): void {
+  const wasParams = was.data.params ?? {};
+  const nowParams = now.data.params ?? {};
+  const keys = keysOf(wasParams, nowParams).filter((key) => !same(child(wasParams, key), child(nowParams, key)));
+  if (keys.length === 0) return;
+  const definitionId = now.data.definitionId;
+  const rebased = (held: Node<NodeData>): Node<NodeData> => {
+    if (held.data.definitionId !== definitionId) return held;
+    const params: Record<string, unknown> = { ...held.data.params };
+    for (const key of keys) {
+      const value = rebaseHeld(child(params, key), child(wasParams, key), child(nowParams, key), [key], definitionId);
+      if (value === ABSENT) delete params[key]; else params[key] = value;
+    }
+    return { ...held, data: { ...held.data, params } };
+  };
+  if (isSliceStep(entry)) {
+    for (const slice of [entry.before, entry.after]) {
+      const held = slice.nodes[now.id];
+      if (held) slice.nodes[now.id] = rebased(held);
+    }
+    return;
+  }
+  const snapshot = entry as { nodes?: Node<NodeData>[] };
+  if (Array.isArray(snapshot.nodes) && snapshot.nodes.some((node) => node.id === now.id)) {
+    snapshot.nodes = snapshot.nodes.map((node) => (node.id === now.id ? rebased(node) : node));
+  }
+}
+
+function rebaseHeld(held: Value, was: Value, now: Value, path: Path, definitionId: string): Value {
+  if (same(was, now)) return held;
+  if (same(held, was) || isRunMedia(definitionId, path)) return now;
+  if (isRecord(held) && isRecord(was) && isRecord(now)) {
+    const out: Record<string, unknown> = { ...held };
+    for (const key of keysOf(was, now)) {
+      const value = rebaseHeld(child(held, key), child(was, key), child(now, key), [...path, key], definitionId);
+      if (value === ABSENT) delete out[key]; else out[key] = value;
+    }
+    return out;
+  }
+  const [h, w, n] = [byId(held), byId(was), byId(now)];
+  if (h && w && n) {
+    const shots = definitionId === 'cinema-scene' && path.length === 2 && path[0] === 'scene' && path[1] === 'shots';
+    return [...h.entries()].map(([id, item]) => {
+      const [before, after] = [w.get(id), n.get(id)];
+      if (!before || !after || same(before, after)) return item;
+      if (same(item, before)) return after;
+      if (!shots) return item;
+      const back: Record<string, unknown> = { ...item };
+      for (const key of SHOT_MEDIA) if (has(after, key)) back[key] = after[key]; else delete back[key];
+      return back;
+    });
+  }
+  return held;
+}
+
+/**
  * What the canvas says when Undo of an accepted proposal left changes made
  * after Accept (GM - Design, rounds 16, 17 and 18 of PR #114 and r1 of PR
  * #198, verbatim; the forms GM didn't word are marked).
@@ -480,19 +596,56 @@ export function rebaseAcceptedOnRunOutput(step: OwnAdd, before: Node<NodeData>, 
  *   proposal".
  * - "You": the person's other window, "… in another window after you
  *   accepted."
+ * - A setting with no readable name (null: a provider setting the Inspector
+ *   shows only by its key) is "a setting on “<node>”" (GM, PR #198 r2 ask
+ *   3); more than one setting with one of them unnamed is counted.
+ * - A list both reordered (`order`, GM's follow-up for PR #198 r2): "Undid the
+ *   proposal except the shot order in “<scene>”. You reordered the shots
+ *   after you accepted.", or "Nothing was undone. …" when that was all.
  */
-export function acceptUndoLine(kept: { node: string; settings: string[]; wholeNode?: boolean }[],
+export function acceptUndoLine(
+  kept: { node: string; settings: (string | null)[]; wholeNode?: boolean; order?: 'shots' | 'clips' }[],
   source: ChangeSource, nothingUndone: boolean): string {
   const quote = (text: string) => `\u201c${text}\u201d`;
   const andList = (items: string[]) =>
     items.length <= 1 ? items[0] ?? '' : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
-  const names = (settings: string[]) => andList(settings.map(quote));
+  const names = (settings: (string | null)[]) => andList(settings.map((setting) => quote(setting ?? '')));
   const agent = source.kind === 'agent' ? source.name ?? 'An agent' : null;
   const agentInner = source.kind === 'agent' ? source.name ?? 'an agent' : null;
   const where = source.kind === 'you' ? ' in another window' : '';
   const lead = agent ?? 'You';
+  const orders = kept.filter((item) => item.order);
+  if (orders.length > 0) {
+    if (orders.length === 1 && kept.length === 1) {
+      const { order, node } = orders[0];
+      const who = source.kind === 'agent' ? `${agent} reordered the ${order} after you accepted.`
+        : source.kind === 'you' ? `You reordered the ${order} in another window after you accepted.`
+          // Builder's form for an unknown source (GM worded the actors').
+          : `The ${order} were reordered after you accepted.`;
+      if (nothingUndone) return `Nothing was undone. ${who}`;
+      return `Undid the proposal except the ${order === 'shots' ? 'shot' : 'clip'} order in ${quote(node)}. ${who}`;
+    }
+    // An order kept with other changes: counted, as kept nodes and settings
+    // mixed are (builder's, after GM's counted forms).
+    const total = kept.reduce((count, item) => count + (item.order || item.wholeNode ? 1 : item.settings.length), 0);
+    if (nothingUndone) {
+      if (source.kind === 'unknown') return 'Nothing was undone. Every change in the proposal was changed again after you accepted.';
+      return `Nothing was undone. ${lead} changed every setting in the proposal${where} after you accepted.`;
+    }
+    if (source.kind === 'unknown') return `Undid the proposal except ${total} changes made after you accepted.`;
+    return `Undid the proposal except ${total} changes ${agentInner ?? 'you'} made${where} after you accepted.`;
+  }
   if (nothingUndone) {
     const one = kept.length === 1 ? kept[0] : null;
+    if (one && one.settings.length >= 1 && one.settings.length <= 3 && one.settings.includes(null)) {
+      // GM r2 ask 3: never a raw key. One unnamed setting is "a setting on";
+      // more are counted (builder's forms around GM's words).
+      const what = one.settings.length === 1 ? `a setting on ${quote(one.node)}` : `${one.settings.length} settings for ${quote(one.node)}`;
+      if (source.kind === 'unknown') {
+        return `Nothing was undone. ${what[0].toUpperCase()}${what.slice(1)} ${one.settings.length === 1 ? 'was' : 'were'} changed after you accepted.`;
+      }
+      return `Nothing was undone. ${lead} changed ${what}${where} after you accepted.`;
+    }
     if (one && one.settings.length >= 1 && one.settings.length <= 3) {
       if (source.kind === 'unknown') {
         return `Nothing was undone. ${names(one.settings)} for ${quote(one.node)} ${one.settings.length === 1 ? 'was' : 'were'} changed after you accepted.`;
@@ -509,10 +662,14 @@ export function acceptUndoLine(kept: { node: string; settings: string[]; wholeNo
   const mixed = wholeNodes.length > 0 && settingNodes.length > 0;
   // GM pr198 r1 (1): settings are named only when they are all on one node;
   // across nodes they are counted (from 2). (2): kept nodes alone, 1-3 named.
-  const named = mixed ? total < 2 : settingNodes.length > 1 ? false : total < 4;
+  // r2 ask 3: an unnamed setting is named only alone ("a setting on").
+  const unnamed = settingNodes.some((item) => item.settings.includes(null));
+  const named = mixed ? total < 2 : settingNodes.length > 1 ? false : unnamed ? total === 1 : total < 4;
   if (named) {
     // Named: one node's settings "for" it, or the kept nodes by their names.
-    const list = settingNodes.length === 1 ? `${names(settingNodes[0].settings)} for ${quote(settingNodes[0].node)}`
+    const list = settingNodes.length === 1
+      ? unnamed ? `a setting on ${quote(settingNodes[0].node)}`
+        : `${names(settingNodes[0].settings)} for ${quote(settingNodes[0].node)}`
       : andList(wholeNodes.map((item) => quote(item.node)));
     if (source.kind === 'unknown') {
       return `Undid the proposal except ${list}. ${total === 1 ? 'It was' : 'They were'} changed after you accepted.`;
@@ -646,7 +803,9 @@ function keep(node: Node<NodeData>): Node<NodeData> {
     position: { ...node.position },
     data: {
       ...node.data,
-      params: { ...node.data.params },
+      // A shot's optimistic "running" never goes on the stack (review 2, M1).
+      params: { ...settledParams(node.data.definitionId, node.data.params ?? {}) },
+      state: node.data.state === 'executing' || node.data.state === 'queued' ? 'idle' : node.data.state,
       progress: undefined,
       runStartedAt: undefined,
       streamingText: undefined,
@@ -744,7 +903,7 @@ export function applySlice(
       ...node,
       type: wanted.type ?? node.type,
       position: movedHere ? { ...wanted.position } : node.position,
-      data: { ...wanted.data, params: { ...wanted.data.params }, ...runtime },
+      data: { ...wanted.data, params: { ...keepRenderingShots(node.data.definitionId, wanted.data.params ?? {}, node.data.params) }, ...runtime },
     });
   }
   for (const [id, wanted] of Object.entries(target.nodes)) {

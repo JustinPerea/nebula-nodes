@@ -326,6 +326,10 @@ provider's answer such as "Meshy is busy. ..." with `errorProviderText`) that
 you shouldn't parse. A failed Cinema shot's `output` works the same: read its
 `error`; its `errorCategory`, `errorFriendly`, `errorPerson`,
 `errorProviderText`, `errorProvider` and `errorRaw` are for the Cinema panel.
+A new Cinema scene needs only `{"scene": {"shots": [{"id": "s1", "prompt": "…"}]}}`:
+Nebula fills in `version`, `base` (`seedream-4-5`) and `aspectRatio` (16:9),
+and a 400 names any field it can't fill. Removing a shot while a run renders
+it is refused (409): stop that run (`nebula cancel <id>`) or wait, then try again.
 Round 3f rewrote the card lines to GM's rules; nothing you read changed (a
 proposal's `cost.notReady` rows add a `person` line beside `missing`: read
 `missing`). A job the

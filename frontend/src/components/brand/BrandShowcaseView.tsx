@@ -5,7 +5,7 @@ import { CrabMarkAnimated } from './CrabMarkAnimated';
 import { HelixMark } from './HelixMark';
 import { MARK_MODES, MARK_MODE_KEYS, type MarkMode } from './crabModes';
 import { useUIStore } from '../../store/uiStore';
-import { usePublishedHeaderBottom } from '../../lib/publishedHeaderBottom';
+import { StudioOfflineRow } from '../StudioOfflineRow';
 import './BrandShowcase.css';
 
 /**
@@ -130,11 +130,9 @@ export function BrandShowcaseView() {
     exitBrandShowcase();
   };
 
-  // The offline banner sits under this bar, as under a studio's header.
-  const bar = usePublishedHeaderBottom();
   return (
     <div className="nn-bs">
-      <header ref={bar} className="nn-bs__bar">
+      <header className="nn-bs__bar">
         <div className="nn-bs__brand">
           <span>NEBULA·NODES</span>
           <span className="nn-bs__brand-dot" />
@@ -153,6 +151,8 @@ export function BrandShowcaseView() {
           <X size={16} strokeWidth={1.75} aria-hidden="true" />
         </button>
       </header>
+      {/* The offline banner is a row under this bar, as under a studio's header. */}
+      <StudioOfflineRow />
 
       <main className="nn-bs__scroll">
         {/* Section 1 — live hero */}

@@ -1,5 +1,5 @@
 {
- "about": "The model pickers' ports, params and wire pruning on main 23f11b8e (frontend/tests/universalPorts.pickerParity.test.ts writes `expected` from a verbatim copy of graphStore's configureOpenRouterModel and fetchReplicateSchemaAndConfigure). backend/tests/test_universal_ports.py checks services/universal_ports.py against the same cases. `backendChanges` lists where the backend now differs on purpose. Every Replicate model setting's label is also its key in sentence case on the backend (GM, PR #198 r1: \"Guidance scale\"); the backend test applies that to `expected` (_with_setting_labels).",
+ "about": "The model pickers' ports, params and wire pruning on main 23f11b8e (frontend/tests/universalPorts.pickerParity.test.ts writes `expected` from a verbatim copy of graphStore's configureOpenRouterModel and fetchReplicateSchemaAndConfigure). backend/tests/test_universal_ports.py checks services/universal_ports.py against the same cases. `backendChanges` lists where the backend now differs on purpose. Every Replicate model setting's label is its key in sentence case on the backend (GM, PR #198 r1: \"Guidance scale\"), written out in `backendChanges`.",
  "backendChanges": {
   "replicate list of plain strings": {
    "dynamicOutputPorts": [
@@ -10,7 +10,33 @@
      "required": false
     }
    ],
-   "why": "A Replicate model that returns a list of plain strings (a streaming text model) gives a run a `text` output (handlers/replicate_universal.py), so the picker's Image `image` port never received anything; model_schema names `text` too."
+   "why": "A Replicate model that returns a list of plain strings (a streaming text model) gives a run a `text` output (handlers/replicate_universal.py), so the picker's Image `image` port never received anything; model_schema names `text` too. A Replicate model's settings are labeled by their key in sentence case (\"Guidance scale\"; GM, PR #198 r1 item 7), where the old picker wrote Title Case. Ports keep Title Case. Written out here as a fixed table (PR #198 review 2, N1).",
+   "dynamicParams": [
+    {
+     "key": "prompt",
+     "label": "Prompt",
+     "type": "string",
+     "required": true,
+     "default": "",
+     "placeholder": "Prompt"
+    },
+    {
+     "key": "max_tokens",
+     "label": "Max tokens",
+     "type": "integer",
+     "required": false,
+     "default": 512,
+     "placeholder": "The maximum number of tokens the model should generate as output."
+    },
+    {
+     "key": "temperature",
+     "label": "Temperature",
+     "type": "float",
+     "required": false,
+     "default": 0.6,
+     "placeholder": ""
+    }
+   ]
   },
   "replicate image edit": {
    "dynamicOutputPorts": [
@@ -22,7 +48,67 @@
      "typeUnconfirmed": true
     }
    ],
-   "why": "A Replicate file output is typed from the model's own data (its output schema's content hints, else its `default_example` run's file, which the schema route keeps as `default_example_output`), and the run fills that port (handlers/replicate_universal.py). This case's schema has neither, so the output stays Image `image`, marked `typeUnconfirmed` so agents know it is a guess (2026-10-21)."
+   "why": "A Replicate file output is typed from the model's own data (its output schema's content hints, else its `default_example` run's file, which the schema route keeps as `default_example_output`), and the run fills that port (handlers/replicate_universal.py). This case's schema has neither, so the output stays Image `image`, marked `typeUnconfirmed` so agents know it is a guess (2026-10-21). A Replicate model's settings are labeled by their key in sentence case (\"Guidance scale\"; GM, PR #198 r1 item 7), where the old picker wrote Title Case. Ports keep Title Case. Written out here as a fixed table (PR #198 review 2, N1).",
+   "dynamicParams": [
+    {
+     "key": "prompt",
+     "label": "Prompt",
+     "type": "string",
+     "required": true,
+     "placeholder": "Text description of what you want to generate, or the instruction on how to edit"
+    },
+    {
+     "key": "aspect_ratio",
+     "label": "Aspect ratio",
+     "type": "string",
+     "required": false,
+     "default": "match_input_image",
+     "placeholder": "Aspect ratio of the generated image."
+    },
+    {
+     "key": "output_format",
+     "label": "Output format",
+     "type": "enum",
+     "required": false,
+     "default": "png",
+     "placeholder": "Output format",
+     "options": [
+      {
+       "label": "jpg",
+       "value": "jpg"
+      },
+      {
+       "label": "png",
+       "value": "png"
+      }
+     ]
+    },
+    {
+     "key": "safety_tolerance",
+     "label": "Safety tolerance",
+     "type": "integer",
+     "required": false,
+     "default": 2,
+     "placeholder": "Safety tolerance, 0 is most strict and 6 is most permissive.",
+     "min": 0,
+     "max": 6
+    },
+    {
+     "key": "seed",
+     "label": "Seed",
+     "type": "integer",
+     "required": false,
+     "placeholder": "Random seed. Set for reproducible generation"
+    },
+    {
+     "key": "prompt_upsampling",
+     "label": "Prompt upsampling",
+     "type": "boolean",
+     "required": false,
+     "default": false,
+     "placeholder": "Automatic prompt improvement"
+    }
+   ]
   },
   "replicate list of file urls": {
    "dynamicOutputPorts": [
@@ -34,7 +120,75 @@
      "typeUnconfirmed": true
     }
    ],
-   "why": "A Replicate file output is typed from the model's own data (its output schema's content hints, else its `default_example` run's file, which the schema route keeps as `default_example_output`), and the run fills that port (handlers/replicate_universal.py). This case's schema has neither, so the output stays Image `image`, marked `typeUnconfirmed` so agents know it is a guess (2026-10-21)."
+   "why": "A Replicate file output is typed from the model's own data (its output schema's content hints, else its `default_example` run's file, which the schema route keeps as `default_example_output`), and the run fills that port (handlers/replicate_universal.py). This case's schema has neither, so the output stays Image `image`, marked `typeUnconfirmed` so agents know it is a guess (2026-10-21). A Replicate model's settings are labeled by their key in sentence case (\"Guidance scale\"; GM, PR #198 r1 item 7), where the old picker wrote Title Case. Ports keep Title Case. Written out here as a fixed table (PR #198 review 2, N1).",
+   "dynamicParams": [
+    {
+     "key": "width",
+     "label": "Width",
+     "type": "integer",
+     "required": false,
+     "default": 1024,
+     "placeholder": "Width of output image"
+    },
+    {
+     "key": "prompt",
+     "label": "Prompt",
+     "type": "string",
+     "required": false,
+     "default": "An astronaut riding a rainbow unicorn",
+     "placeholder": "Input prompt"
+    },
+    {
+     "key": "refine",
+     "label": "Refine",
+     "type": "string",
+     "required": false,
+     "default": "no_refiner",
+     "placeholder": ""
+    },
+    {
+     "key": "num_outputs",
+     "label": "Num outputs",
+     "type": "integer",
+     "required": false,
+     "default": 1,
+     "placeholder": "",
+     "min": 1,
+     "max": 4
+    },
+    {
+     "key": "guidance_scale",
+     "label": "Guidance scale",
+     "type": "float",
+     "required": false,
+     "default": 7.5,
+     "placeholder": "",
+     "min": 1,
+     "max": 50
+    },
+    {
+     "key": "scheduler",
+     "label": "Scheduler",
+     "type": "enum",
+     "required": false,
+     "default": "K_EULER",
+     "placeholder": "",
+     "options": [
+      {
+       "label": "DDIM",
+       "value": "DDIM"
+      },
+      {
+       "label": "K_EULER",
+       "value": "K_EULER"
+      },
+      {
+       "label": "2",
+       "value": 2
+      }
+     ]
+    }
+   ]
   },
   "replicate empty schema": {
    "dynamicOutputPorts": [
@@ -47,6 +201,35 @@
     }
    ],
    "why": "A Replicate model with no Output schema says nothing about what it returns. Its output is typed by its `default_example` run's file when there is one, else stays Text `text`, marked `typeUnconfirmed` so agents know it is a guess; a run that returns a file keeps it under that file's own port (handlers/replicate_universal.py, 2026-10-21 review)."
+  },
+  "replicate uploadable audio, object output": {
+   "dynamicParams": [
+    {
+     "key": "language",
+     "label": "Language",
+     "type": "string",
+     "required": false,
+     "default": null,
+     "placeholder": "language spoken in the audio, specify None to perform language detection"
+    },
+    {
+     "key": "translate",
+     "label": "Translate",
+     "type": "boolean",
+     "required": false,
+     "default": false,
+     "placeholder": ""
+    },
+    {
+     "key": "1st_pass",
+     "label": "1st pass",
+     "type": "float",
+     "required": false,
+     "placeholder": "",
+     "min": 0.5
+    }
+   ],
+   "why": "A Replicate model's settings are labeled by their key in sentence case (\"Guidance scale\"; GM, PR #198 r1 item 7), where the old picker wrote Title Case. Ports keep Title Case. Written out here as a fixed table (PR #198 review 2, N1)."
   }
  },
  "cases": [

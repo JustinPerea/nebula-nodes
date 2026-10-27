@@ -31,7 +31,6 @@ vi.mock('../src/lib/commonsApi', async (importOriginal) => ({
 }));
 
 import { BackendConnectionStatus } from '../src/components/BackendConnectionStatus';
-import { WorkspaceHeader } from '../src/components/WorkspaceHeader';
 import {
   BATCH_REPLACED_ELSEWHERE, CommonsEvaluation, IMAGE_REPLACED_ELSEWHERE, LABELS_CHANGED_ELSEWHERE,
 } from '../src/components/commons/CommonsEvaluation';
@@ -61,7 +60,6 @@ afterEach(() => {
   resetBackendConnectionForTests();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
-  document.documentElement.style.removeProperty('--workspace-header-bottom');
 });
 
 describe('GM (4): Commons, a replaced image or batch gets its own line', () => {
@@ -133,21 +131,11 @@ describe('GM (5): the banner sits right under the topmost header of whatever scr
     expect(source('App.tsx')).toMatch(/placement=\{isHome \? 'home' : isCanvas \? 'workspace' : 'studio'\}/);
   });
 
-  it('a WorkspaceHeader publishes where it ends, and takes it back when it goes', () => {
-    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ bottom: 57, top: 0, left: 0, right: 1280,
-      width: 1280, height: 57, x: 0, y: 0, toJSON: () => ({}) } as DOMRect);
-    const { unmount } = render(<WorkspaceHeader title="Cinema" updatesSlot={false} />);
-    expect(document.documentElement.style.getPropertyValue('--workspace-header-bottom')).toBe('57px');
-    unmount();
-    expect(document.documentElement.style.getPropertyValue('--workspace-header-bottom')).toBe('');
-  });
-
-  it('the studio banner is 8px under that header (61px when nothing published yet)', () => {
+  it('a studio shows no floating banner: its row under the header has it (GM, PR #198 r2; pr198Fix2Ui)', () => {
     noteBackendConnection('offline');
     render(<BackendConnectionStatus placement="studio" />);
-    expect(document.querySelector('.backend-connection')).toHaveAttribute('data-placement', 'studio');
-    expect(rule(css('App.css'), ".backend-connection[data-placement='studio']"))
-      .toMatch(/top:\s*calc\(var\(--workspace-header-bottom,\s*61px\)\s*\+\s*8px\)/);
+    expect(document.querySelector('.backend-connection')).toBeNull();
+    expect(rule(css('App.css'), ".backend-connection[data-placement='studio']")).toBe('');
     expect(rule(css('App.css'), ".backend-connection[data-placement='editor']")).toBe('');
   });
 });
@@ -178,7 +166,8 @@ describe('GM (6): the price chip, "$0" only ever means free', () => {
     expect(runChipLabel(summary({ low: 0.0001, high: 0.0049 }))).toBe('<$0.01');
     for (const shape of [summary({ low: 0.0047, high: 0.43, unpriced: ['Kling'] }), summary({ low: 0.0047, high: 0.0047 }),
       summary({ low: 0.0047, high: 0.0047, unpriced: ['Kling'] })]) {
-      expect(runChipTitle(shape)).toMatch(/[Ll]ess than \$0\.01/);
+      // GM, PR #198 r2 ask 1: "under $0.01" on its own, "less than $0.01" as a range's low end.
+      expect(runChipTitle(shape)).toMatch(/[Uu]nder \$0\.01|less than \$0\.01/);
       expect(runChipTitle(shape)).not.toMatch(/\$0(?![.\d])/);
     }
   });
@@ -201,11 +190,12 @@ describe('GM (6): the price chip, "$0" only ever means free', () => {
     }
   });
 
-  it('r18\'s forms are unchanged above a cent', () => {
+  it('r18\'s forms above a cent, with every range in the range form (GM, PR #198 r2 ask 2)', () => {
     expect(runChipTitle(summary({}))).toBe('Estimated cost');
     expect(runChipTitle(summary({ unpriced: ['Kling'] }))).toBe("At least $0.067. Some costs aren't known yet.");
-    expect(runChipTitle(summary({ low: 0.05, high: 0.43, unpriced: ['Kling'] }))).toBe("At least $0.05. Some costs aren't known yet.");
-    expect(runChipTitle(summary({ low: 0.05, high: 0.43 }))).toBeUndefined();
+    expect(runChipTitle(summary({ low: 0.05, high: 0.43, unpriced: ['Kling'] })))
+      .toBe("Between $0.05 and $0.43, plus costs that aren't known yet.");
+    expect(runChipTitle(summary({ low: 0.05, high: 0.43 }))).toBe('Between $0.05 and $0.43.');
   });
 });
 

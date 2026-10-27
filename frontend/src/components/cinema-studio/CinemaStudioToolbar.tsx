@@ -2,6 +2,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { getCinemaUploadIssue, useCinemaUploadStore } from '../../store/cinemaUploadStore';
 import { WorkspaceHeader } from '../WorkspaceHeader';
+import { offlineAction, useBackendOffline } from '../../lib/useBackendOffline';
 
 interface CinemaStudioToolbarProps {
   cinemaNodeId: string;
@@ -15,6 +16,7 @@ export function CinemaStudioToolbar({ cinemaNodeId }: CinemaStudioToolbarProps) 
   const isImportingGraph = useGraphStore((s) => s.isImportingGraph);
   const activeRuns = useGraphStore((s) => s.activeRuns);
   const cancelRun = useGraphStore((s) => s.cancelRun);
+  const offline = useBackendOffline();
   useCinemaUploadStore((state) => state.uploads);
   const referenceIssue = getCinemaUploadIssue(cinemaNodeId, undefined, true);
   const sceneRuns = activeRuns.filter((run) => run.nodeIds.includes(cinemaNodeId));
@@ -46,7 +48,7 @@ export function CinemaStudioToolbar({ cinemaNodeId }: CinemaStudioToolbarProps) 
         onClick={() => {
           if (!getCinemaUploadIssue(cinemaNodeId, undefined, true)) executeNode(cinemaNodeId);
         }}
-        disabled={isExecuting || isImportingGraph || Boolean(referenceIssue)}
+        {...offlineAction(offline, isExecuting || isImportingGraph || Boolean(referenceIssue))}
         title={referenceIssue ?? 'Generate every shot using the current scene settings'}
       >
         {sceneRuns.length > 0 ? 'Generating…' : 'Generate all'}

@@ -137,7 +137,7 @@ describe('L3: who changed it (probes Y6, Y7e; GM r17)', () => {
       nodes: [node('n1', { value: 'saved' }, 'Brief'), added({ value: 'p', seed: 42 })] });
     await sleep(10);
     const { notice } = await undoAndRead();
-    expect(notice).toBe('Nothing was undone. “seed” for “Added” was changed after you accepted.');
+    expect(notice).toBe('Nothing was undone. A setting on “Added” was changed after you accepted.');
   });
 
   it("the person's other window: \"You … in another window\" (Y7e)", async () => {
@@ -154,7 +154,7 @@ describe('L3: who changed it (probes Y6, Y7e; GM r17)', () => {
       () => { own([node('n1', { value: 'b', x: 2 }, 'Brief')]); otherWindow([node('n1', { value: 'b', x: 3 }, 'Brief')]); });
     await sleep(10);
     const { notice } = await undoAndRead();
-    expect(notice).toBe('Undid the proposal except “x” for “Brief”. You changed it in another window after you accepted.');
+    expect(notice).toBe('Undid the proposal except a setting on “Brief”. You changed it in another window after you accepted.');
   });
 
   it('an agent and the other window: mixed, so the actor goes (two settings on two nodes: counted, GM pr198 r1)', async () => {

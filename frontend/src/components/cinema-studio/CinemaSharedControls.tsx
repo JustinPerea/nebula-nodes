@@ -4,6 +4,7 @@ import { cinemaLookLabel, defaultCinemaLook, defaultCinemaPalette } from '../../
 import { attachCinemaReferences, removeCinemaReferenceUpload, retryCinemaReferenceUpload } from '../../lib/cinemaUploads';
 import { useCinemaUploadStore } from '../../store/cinemaUploadStore';
 import { shortLine } from '../../lib/errorCopy';
+import { normalizeCinemaScene } from '../../lib/cinemaScene';
 import type { CinemaSceneSpec } from '../../types';
 import { CinemaLookControls, CinemaPaletteControls } from './CinemaArtDirectionControls';
 
@@ -29,7 +30,10 @@ const BASE_MODELS: Array<{ id: string; label: string }> = [
 
 const ASPECT_RATIOS = ['16:9', '2.39:1', '4:5', '1:1', '9:16'];
 
-export function CinemaSharedControls({ cinemaNodeId, scene, connectedRefs = [], onChange }: CinemaSharedControlsProps) {
+export function CinemaSharedControls({ cinemaNodeId, scene: given, connectedRefs = [], onChange }: CinemaSharedControlsProps) {
+  // Read through the defaults, so a scene saved without its base still shows
+  // (PR #198 review 2, M2).
+  const scene = normalizeCinemaScene(given);
   const controlId = useId();
   const refInputRef = useRef<HTMLInputElement>(null);
   const uploads = useCinemaUploadStore((state) => state.uploads);

@@ -95,7 +95,7 @@ import { NOTHING_RAN_LINE, OTHER_NODE_LINE, SHOT_NOT_STARTED_LINE, validationRea
 import {
   RUNTIME_FIELDS, applySlice, captureOwnAdd, diffCanvas, edgeKey, editArrivedText, foldArrange, foreignSource, isForeignEdit,
   isOwnAdd, isOwnEcho, isSliceStep, ownAddStep, paramChange, renameOwnedNode, restoreRequest, undoNoticeText,
-  acceptUndoLine, ownAddIsEmpty, rebaseAcceptedOnRunOutput, sameValue, type ChangeSource, type KeptAfterAccept,
+  acceptUndoLine, ownAddIsEmpty, rebaseAcceptedOnRunOutput, rebaseStepOnRunOutput, sameValue, type ChangeSource, type KeptAfterAccept,
   type EditOrigin, type ForeignEdit, type OwnAdd, type OwnParamChange, type RestoreBody,
 } from '../lib/canvasUndo';
 import { TAB_ID } from '../lib/tabId';
@@ -111,6 +111,7 @@ import { cinemaMotionSource, cinemaMotionTarget, useCinemaMotionStore } from './
 import { nodeKeyStatus, withNewKreaMode } from '../lib/kreaConnection';
 import { allParamDefinitions } from '../lib/directRoute';
 import { universalSettingLabel } from '../lib/universalSettingLabel';
+import { keepRenderingShots, normalizeCinemaScene, settledParams, shotRemovalBlock } from '../lib/cinemaScene';
 import { clipSpeed, type EditClip } from '../lib/editor/virtualPlayback';
 import type { KeyframeData, VideoGraphManifest, TrackItem } from '../types/video';
 import { createEmptyManifest, DEFAULT_FPS } from '../types/video';
@@ -564,7 +565,9 @@ function createSnapshot(nodes: Node<NodeData>[], edges: Edge[]): UndoSnapshot {
       dragging: false,
       data: {
         ...n.data,
-        params: { ...n.data.params },
+        // A shot's optimistic "running" never goes on the stack (PR #198
+        // review 2, M1): it would come back as a spinner nothing settles.
+        params: { ...settledParams(n.data.definitionId, n.data.params ?? {}) },
         state: settledState(n.data.state),
         progress: undefined,
         runStartedAt: undefined,
@@ -591,7 +594,9 @@ function restoreWithOutputs(
     const current = live.get(n.id);
     if (!current) return n;
     const runtime = Object.fromEntries(RUNTIME_FIELDS.map((field) => [field, current.data[field]]));
-    return { ...n, data: { ...n.data, ...runtime } as NodeData };
+    // A shot still rendering keeps its spinner (the snapshot holds it settled).
+    const params = keepRenderingShots(n.data.definitionId, n.data.params ?? {}, current.data.params);
+    return { ...n, data: { ...n.data, params, ...runtime } as NodeData };
   });
 }
 
@@ -1338,7 +1343,9 @@ function createDefaultScene(): CinemaSceneSpec {
 function sceneFromNode(node: Node<NodeData>): CinemaSceneSpec {
   const params = (node.data.params ?? {}) as Record<string, unknown>;
   const scene = params.scene as CinemaSceneSpec | undefined;
-  if (scene && Array.isArray(scene.shots)) return scene;
+  // A scene missing its base or aspect reads through the defaults (PR #198
+  // review 2, M2), so every edit writes a whole scene.
+  if (scene && Array.isArray(scene.shots)) return normalizeCinemaScene(scene);
   return createDefaultScene();
 }
 
@@ -1514,23 +1521,33 @@ function settleParamEdit(nodeId: string, entry: { keys: Set<string>; inFlight: n
 /** A param's label as the node's settings show it (the Inspector's lookup:
  * every param a routed node declares, lib/directRoute allParamDefinitions;
  * PR #198 review 1, L1), a universal node's provider setting in sentence
- * case (GM r1 item 7), else its key. */
-function paramLabel(node: Node<NodeData>, key: string): string {
+ * case (GM r1 item 7), else null: the Inspector shows only its raw key, so
+ * a line says "a setting on “<node>”" (GM, PR #198 r2 ask 3). The Agent log
+ * keeps the key (paramLogName). */
+function paramLabel(node: Node<NodeData>, key: string): string | null {
   const definition = NODE_DEFINITIONS[node.data.definitionId];
   const defined = definition ? allParamDefinitions(definition).find((param) => param.key === key)?.label : undefined;
   if (defined) return defined;
   const dynamic = (node.data as Partial<DynamicNodeData>).dynamicParams?.some((param) => param.key === key);
-  return dynamic ? universalSettingLabel(key) : key;
+  return dynamic ? universalSettingLabel(key) : null;
+}
+
+/** A param as the Agent log names it: its label, else its raw key. */
+function paramLogName(node: Node<NodeData> | undefined, key: string): string {
+  return (node ? paramLabel(node, key) : null) ?? key;
 }
 
 /** GM - Design, rounds 14 and 15 of PR #114, verbatim: one setting, two,
- * or three or more. The second sentence only when every one went back. */
-export function paramSaveFailedLine(params: string | string[], node: string, reverted: boolean): string {
+ * or three or more. The second sentence only when every one went back. A
+ * setting with no readable name (null) is "a setting on “<node>”" alone (GM,
+ * PR #198 r2 ask 3) and counted with others, never its raw key. */
+export function paramSaveFailedLine(params: string | (string | null)[], node: string, reverted: boolean): string {
   const names = typeof params === 'string' ? [params] : params;
   if (names.length <= 1) {
+    if (names[0] === null) return `Couldn't save a setting on \u201c${node}\u201d.${reverted ? " It's back to its last saved value." : ''}`;
     return `Couldn't save \u201c${names[0] ?? ''}\u201d for \u201c${node}\u201d.${reverted ? " It's back to its last saved value." : ''}`;
   }
-  const what = names.length === 2 ? `\u201c${names[0]}\u201d and \u201c${names[1]}\u201d` : `${names.length} settings`;
+  const what = names.length === 2 && !names.includes(null) ? `\u201c${names[0]}\u201d and \u201c${names[1]}\u201d` : `${names.length} settings`;
   return `Couldn't save ${what} for \u201c${node}\u201d.${reverted ? " They're back to their last saved values." : ''}`;
 }
 export function modelChangeFailedLine(node: string, currentModel: string): string {
@@ -3350,8 +3367,11 @@ function sourceOf(origin: EditOrigin): ChangeSource {
 function keptSource(kept: KeptAfterAccept[]): ChangeSource {
   let found: ChangeSource | null = null;
   for (const item of kept) {
-    const keys = item.keys.length > 0 ? item.keys : ['*'];
+    // A reordered list is its param's change: the scene's shots, the clips.
+    const keys = item.order ? [item.order === 'shots' ? 'scene' : 'clips'] : item.keys.length > 0 ? item.keys : ['*'];
     for (const key of keys) {
+      // What a run's render kept is nobody's edit (review 2, N5).
+      if (item.runKept?.includes(key)) return { kind: 'unknown' };
       const source = foreignTouches.get(item.nodeId)?.get(key) ?? { kind: 'unknown' as const };
       if (source.kind === 'unknown') return source;
       if (!found) { found = source; continue; }
@@ -3366,17 +3386,23 @@ function keptSource(kept: KeptAfterAccept[]): ChangeSource {
 /** GM's partial-undo line for an accepted proposal, from what the undo kept,
  * also written to the Agent log. */
 function acceptUndoNoticeText(kept: KeptAfterAccept[], nodes: Node<NodeData>[], nothingUndone: boolean): string {
-  const line = acceptUndoLine(kept.map((item) => {
+  const items = (name: (node: Node<NodeData> | undefined, key: string) => string | null) => kept.map((item) => {
     const node = nodes.find((candidate) => candidate.id === item.nodeId);
     return {
       node: node?.data.label ?? item.nodeId,
-      settings: item.keys.length === 0 ? ['settings'] : item.keys.map((key) => key === 'label' ? 'Name'
-        : node ? paramLabel(node, key) : key),
+      settings: item.order ? [] : item.keys.length === 0 ? ['settings']
+        : item.keys.map((key) => key === 'label' ? 'Name' : name(node, key)),
       wholeNode: item.wholeNode,
+      ...(item.order ? { order: item.order } : {}),
     };
-  }), keptSource(kept), nothingUndone);
+  });
+  const source = keptSource(kept);
+  // The canvas line never shows a raw key (GM, PR #198 r2 ask 3); the Agent
+  // log is the technical record and names it.
+  const line = acceptUndoLine(items((node, key) => (node ? paramLabel(node, key) : key)), source, nothingUndone);
+  const logLine = acceptUndoLine(items(paramLogName), source, nothingUndone);
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', { detail: { source: 'system', message: line } }));
+    window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', { detail: { source: 'system', message: logLine } }));
   }
   return line;
 }
@@ -3386,12 +3412,15 @@ function acceptUndoNoticeText(kept: KeptAfterAccept[], nodes: Node<NodeData>[], 
  * reverts them as run output and still removes a node Accept added. */
 function rebaseAcceptedSteps(state: GraphState, nextNodes: Node<NodeData>[]): void {
   const steps = state.undoStack.filter((entry): entry is OwnAdd => isOwnAdd(entry) && Boolean(entry.accepted || entry.params));
-  if (steps.length === 0) return;
   const before = new Map(state.nodes.map((node) => [node.id, node]));
   for (const node of nextNodes) {
     const was = before.get(node.id);
     if (!was || was === node) continue;
     for (const step of steps) rebaseAcceptedOnRunOutput(step, was, node);
+    // Every other step holding this node takes the run's write where it held
+    // what the run replaced, so neither Undo nor Redo takes a run's output
+    // off the canvas (PR #198 review 2, N3): a shot's image, a flat key.
+    for (const entry of [...state.undoStack, ...state.redoStack]) rebaseStepOnRunOutput(entry, was, node);
   }
 }
 
@@ -6466,7 +6495,11 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     if (!node) return;
 
     const scene = sceneFromNode(node);
-    if (!scene.shots.some((s) => s.id === shotId)) return;
+    const removing = scene.shots.find((s) => s.id === shotId);
+    if (!removing) return;
+    // A shot that is rendering stays (GM, PR #198 r2): the rail's × says why,
+    // and the backend refuses it too (409) for any other caller.
+    if (shotRemovalBlock(get().activeRuns, nodeId, removing)) return;
 
     pushUndo(set, get);
 

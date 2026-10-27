@@ -98,14 +98,14 @@ describe('the video editor offline', () => {
   const editNode = { id: 'e1', type: 'model-node', position: { x: 0, y: 0 },
     data: { definitionId: 'video-edit', label: 'Edit', params: { clips: [clip], sourceFps: 30 }, state: 'idle', outputs: {} } } as unknown as Node<NodeData>;
 
-  it('the banner sits right under the editor header, not at the canvas\'s place', () => {
-    // GM, PR #198 r1 item 5: the editor is a studio like the others; the
-    // banner is 8px under its header's published bottom (61px, so 69px).
+  it('the banner is a row under the editor header, not at the canvas\'s place', () => {
+    // GM, PR #198 r2: the editor is a studio like the others; its
+    // WorkspaceHeader brings the banner's row (StudioOfflineRow), and the
+    // floating banner shows nothing there.
     noteBackendConnection('offline');
     render(<BackendConnectionStatus placement="studio" />);
-    expect(document.querySelector('.backend-connection')).toHaveAttribute('data-placement', 'studio');
-    expect(rule(css('App.css'), ".backend-connection[data-placement='studio']"))
-      .toMatch(/top:\s*calc\(var\(--workspace-header-bottom,\s*61px\)\s*\+\s*8px\)/);
+    expect(document.querySelector('.backend-connection')).toBeNull();
+    expect(readFileSync(join(__dirname, '../src/components/editor/EditorView.tsx'), 'utf8')).toMatch(/<WorkspaceHeader title="Video editor"/);
     const app = readFileSync(join(__dirname, '../src/App.tsx'), 'utf8');
     expect(app).toMatch(/placement=\{isHome \? 'home' : isCanvas \? 'workspace' : 'studio'\}/);
   });
@@ -193,12 +193,13 @@ describe('the price chip\'s tooltips (GM)', () => {
     expect(runChipLabel(summary({ unpriced: ['Kling'] }))).toBe('$0.067+');
     expect(runChipTitle(summary({ unpriced: ['Kling'] }))).toBe("At least $0.067. Some costs aren't known yet.");
     expect(runChipTitle(summary({ plus: ['input images'] }))).toBe("At least $0.067. Some costs aren't known yet.");
-    // A range with a "+": the least it can be is the low end.
-    expect(runChipTitle(summary({ low: 0.05, high: 0.43, unpriced: ['Kling'] }))).toBe("At least $0.05. Some costs aren't known yet.");
+    // A range with a "+" is in the range form (GM, PR #198 r2 ask 2).
+    expect(runChipTitle(summary({ low: 0.05, high: 0.43, unpriced: ['Kling'] })))
+      .toBe("Between $0.05 and $0.43, plus costs that aren't known yet.");
   });
 
-  it('no tooltip for a plain range or "N paid"', () => {
-    expect(runChipTitle(summary({ low: 0.05, high: 0.43 }))).toBeUndefined();
+  it('a plain range says "Between" (PR #198 r2 ask 2); "N paid" has no tooltip', () => {
+    expect(runChipTitle(summary({ low: 0.05, high: 0.43 }))).toBe('Between $0.05 and $0.43.');
     expect(runChipTitle({ total: 1, paid: ['X'] })).toBeUndefined();
   });
 

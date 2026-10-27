@@ -1,0 +1,147 @@
+{
+ "about": "Money as Nebula writes it (PR #198 review 2, L4). `spent`: backend services/money.usd_spent and frontend lib/pricing formatSpentUsd (Settings, `nebula spend`). `amount`: services/money.usd_amount and formatUsd (spend refusals, chip figures). Both sides test against this table. Negative amounts are clamped to nothing (see services/money.py).",
+ "spent": [
+  {
+   "amount": 0,
+   "text": "$0.00"
+  },
+  {
+   "amount": 0.0001,
+   "text": "<$0.01"
+  },
+  {
+   "amount": 0.004,
+   "text": "<$0.01"
+  },
+  {
+   "amount": 0.0049999,
+   "text": "<$0.01"
+  },
+  {
+   "amount": 0.005,
+   "text": "$0.01"
+  },
+  {
+   "amount": 0.0051,
+   "text": "$0.01"
+  },
+  {
+   "amount": 0.009,
+   "text": "$0.01"
+  },
+  {
+   "amount": 0.01,
+   "text": "$0.01"
+  },
+  {
+   "amount": 0.015,
+   "text": "$0.02"
+  },
+  {
+   "amount": 1.005,
+   "text": "$1.00"
+  },
+  {
+   "amount": 3.4,
+   "text": "$3.40"
+  },
+  {
+   "amount": 5,
+   "text": "$5.00"
+  },
+  {
+   "amount": 9.995,
+   "text": "$9.99"
+  },
+  {
+   "amount": 1234.5,
+   "text": "$1,234.50"
+  },
+  {
+   "amount": -0.001,
+   "text": "$0.00"
+  },
+  {
+   "amount": -3,
+   "text": "$0.00"
+  }
+ ],
+ "amount": [
+  {
+   "amount": 0,
+   "text": "$0"
+  },
+  {
+   "amount": 0.0004,
+   "text": "$0.0004"
+  },
+  {
+   "amount": 0.004,
+   "text": "$0.004"
+  },
+  {
+   "amount": 0.0047,
+   "text": "$0.0047"
+  },
+  {
+   "amount": 1.234e-05,
+   "text": "$0.000012"
+  },
+  {
+   "amount": 0.04,
+   "text": "$0.04"
+  },
+  {
+   "amount": 0.044,
+   "text": "$0.044"
+  },
+  {
+   "amount": 0.0995,
+   "text": "$0.10"
+  },
+  {
+   "amount": 0.09949,
+   "text": "$0.099"
+  },
+  {
+   "amount": 0.1,
+   "text": "$0.10"
+  },
+  {
+   "amount": 0.43,
+   "text": "$0.43"
+  },
+  {
+   "amount": 1.005,
+   "text": "$1.00"
+  },
+  {
+   "amount": 4.2,
+   "text": "$4.20"
+  },
+  {
+   "amount": 9.994,
+   "text": "$9.99"
+  },
+  {
+   "amount": 9.996,
+   "text": "$10"
+  },
+  {
+   "amount": 10,
+   "text": "$10"
+  },
+  {
+   "amount": 12.4,
+   "text": "$12"
+  },
+  {
+   "amount": 1234.56,
+   "text": "$1,235"
+  },
+  {
+   "amount": -0.001,
+   "text": "$0"
+  }
+ ]
+}

@@ -39,8 +39,11 @@ a {
    is shorter than the banner, so the banner sits under that line with the
    same 8px gap floating panels keep (lib/bottomBar.ts floatingTopLimit):
    92 + 50 + 8. It takes no pointer events. */
-.backend-connection {
+:root {
   --backend-offline-spring: linear(0, 0.062, 0.215, 0.411, 0.615, 0.799, 0.95, 1.059, 1.126, 1.158, 1.161, 1.145, 1.116, 1.083, 1.051, 1.023, 1.001, 0.986, 0.977, 0.974, 0.974, 0.978, 0.983, 0.988, 0.994, 0.998, 1.001, 1.003, 1);
+}
+
+.backend-connection {
   position: fixed;
   z-index: 10000;
   top: 150px;
@@ -66,16 +69,67 @@ a {
   top: 81px;
 }
 
-/* GM, PR #198 r1 item 5: one rule, the banner sits right under the topmost
-   header of whatever screen shows. The canvas keeps its place above; every
-   other screen (Cinema, Character, Moodboard, Create, Remotion, the video
-   editor, the Commons) is a studio, with its WorkspaceHeader on top: the
-   banner is 8px under where that header ends, as the header publishes it
-   (WorkspaceHeader.tsx, HEADER_BOTTOM_VAR), so a header that wraps taller
-   moves it too. 61px is the header's height at 1280 and 1440 before it has
-   published. */
-.backend-connection[data-placement='studio'] {
-  top: calc(var(--workspace-header-bottom, 61px) + 8px);
+/* GM, PR #198 r2: on every screen but the canvas (Cinema, Character,
+   Moodboard, Create, Remotion, the video editor, the Commons) the banner is
+   a row of the screen's own layout right under its top header
+   (StudioOfflineRow, the `offline` area of each studio's grid in
+   styles/workspace-header.css): centred, 8px above and below, pushing the
+   content down. The row opens and closes on the panel spring: its one track
+   goes 0fr → 1fr, so the content below moves with it. */
+.studio-offline-row {
+  display: grid;
+  grid-area: offline;
+  grid-template-rows: 0fr;
+  min-width: 0;
+  /* The panel spring (styles/workspace-rail.css :root), as the dock panels open. */
+  transition: grid-template-rows var(--workspace-dock-spring);
+}
+
+.studio-offline-row[data-open='true'] {
+  grid-template-rows: 1fr;
+}
+
+.studio-offline-row__clip {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.studio-offline-row__pad {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.studio-offline-row__pill {
+  max-width: min(92vw, 560px);
+  padding: 8px 14px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 999px;
+  background: rgb(32 16 13 / 96%);
+  color: #ffb49f;
+  font-size: 12px;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  text-align: center;
+}
+
+.studio-offline-row__pill[data-pulse='spring'] {
+  animation: studio-offline-nudge 700ms var(--backend-offline-spring) both;
+}
+
+@keyframes studio-offline-nudge {
+  from { transform: scale(1.045); }
+  to { transform: scale(1); }
+}
+
+.studio-offline-row__pill[data-pulse='flash'] {
+  animation: backend-offline-flash 600ms steps(1, end) both;
+}
+
+/* Reduced motion: the row opens and closes at once, and a pulse flashes. */
+@media (prefers-reduced-motion: reduce) {
+  .studio-offline-row { transition: none; }
+  .studio-offline-row__pill[data-pulse='spring'] { animation: backend-offline-flash 600ms steps(1, end) both; }
 }
 
 /* A blocked edit nudges the banner once (GM, round 14): it springs from a
@@ -121,6 +175,17 @@ a {
 
 [data-offline-disabled] {
   opacity: 0.6;
+}
+
+/* A paid or saving action disabled offline (lib/useBackendOffline.ts
+   offlineAction; GM, PR #198 r2) loses its accent: the neutral control look,
+   never the orange of Generate or Export. */
+[data-offline-neutral],
+[data-offline-neutral]:hover {
+  background: var(--sr-surface-control) !important;
+  border-color: var(--sr-edge) !important;
+  color: var(--sr-ink-light) !important;
+  box-shadow: none !important;
 }
 
 /* Placed by the app's notice region (NoticeRegion), like every toast. */

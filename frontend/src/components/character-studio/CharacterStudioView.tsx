@@ -24,6 +24,7 @@ import { TAB_ID } from '../../lib/tabId';
 import { CharacterVersionConflict, changedFields, characterFields, conflictNote, editedFields, editorLabel,
   rebaseCharacterDraft, type CharacterConflict, type CharacterFields } from '../../lib/characterEdits';
 import { CharacterStudioToolbar } from './CharacterStudioToolbar';
+import { useOfflineHiddenNotice } from '../../hooks/useOfflineHiddenNotice';
 import { CharacterLibraryRail } from './CharacterLibraryRail';
 import { CharacterDefinitionPanel } from './CharacterDefinitionPanel';
 import { CharacterTestPanel } from './CharacterTestPanel';
@@ -197,6 +198,16 @@ export function CharacterStudioView() {
     lastEditor.current = 'Someone else';
     void follow();
   }, [loaded, savedId, key, epoch, follow]);
+
+  // A load-failure notice ("Character not found…") is hidden while Nebula is
+  // offline, and the character is checked again on reconnect (GM, PR #198
+  // r2): a failed load is retried, and a not-found one reloaded unless the
+  // person has started a new character here since.
+  const shownLoadError = useOfflineHiddenNotice(loadError, () => {
+    if (!projectReady) return;
+    if (!loaded) patch({ loadError: null, revision: revision + 1 });
+    else if (!dirty && !isDraftId && characterEditorId) patch({ loaded: false, loadError: null, revision: revision + 1 });
+  });
 
   useEffect(() => {
     if (!projectReady || loaded) return;
@@ -429,15 +440,15 @@ export function CharacterStudioView() {
         {loading ? (
           <div className="character-studio-view__loading">
             {/* As in the board's Studio (round 3b): no Retry loading with no project open. */}
-            {loadError ? <div role="alert"><FailureLines failure={loadError} retry={projectReady} /></div> : 'Loading Character…'}
-            {loadError && projectReady && <button type="button" className="character-studio-view__retry"
+            {shownLoadError ? <div role="alert"><FailureLines failure={shownLoadError} retry={projectReady} /></div> : 'Loading Character…'}
+            {shownLoadError && projectReady && <button type="button" className="character-studio-view__retry"
               onClick={() => patch({ loadError: null, revision: revision + 1 })}>Retry loading</button>}
           </div>
         ) : (
           <>
-            {loadError && (
+            {shownLoadError && (
               <div className="character-studio-view__notice character-studio-view__notice--warn">
-                <FailureLines failure={loadError} />
+                <FailureLines failure={shownLoadError} />
               </div>
             )}
             {deleting.deleteError && (

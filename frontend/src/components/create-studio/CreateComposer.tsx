@@ -7,6 +7,7 @@ import { ParamPills } from './ParamPills';
 import { isCreateModel } from '../../lib/createModels';
 import { ProviderReadinessBadge } from '../ProviderReadinessBadge';
 import { failureMessage } from '../../lib/errorCopy';
+import { offlineAction, useBackendOffline } from '../../lib/useBackendOffline';
 
 interface CreateComposerProps {
   modelDef: ModelNodeDefinition | null;
@@ -42,7 +43,8 @@ export function CreateComposer({
   const [prevPrompt, setPrevPrompt] = useState<string | null>(null);
   const [enhanceError, setEnhanceError] = useState<string | null>(null);
   const modelSupported = Boolean(modelDef && isCreateModel(modelDef));
-  const canGenerate = modelSupported && !isLaunching && !referencesBlocked && activeCount < maxConcurrent;
+  const offline = useBackendOffline();
+  const canGenerate = modelSupported && !isLaunching && !referencesBlocked && activeCount < maxConcurrent && !offline;
   const canEnhance = prompt.trim().length > 0 && !enhancing;
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -165,7 +167,7 @@ export function CreateComposer({
         <button
           type="button"
           className="create-composer__generate"
-          disabled={!canGenerate}
+          {...offlineAction(offline, !canGenerate)}
           onClick={(e) => { if (e.detail <= 1 && canGenerate) onGenerate(); }}
         >
           <Sparkles size={16} strokeWidth={1.9} aria-hidden="true" />

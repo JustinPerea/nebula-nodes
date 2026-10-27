@@ -17,6 +17,7 @@ import { CommonsEvaluation } from './CommonsEvaluation';
 import { CommonsReview } from './CommonsReview';
 import { CommonsSettings } from './CommonsSettings';
 import { CommonsProposalsLine } from './CommonsProposalsLine';
+import { useOfflineHiddenNotice } from '../../hooks/useOfflineHiddenNotice';
 import { WorkspaceHeader } from '../WorkspaceHeader';
 import { ToolbarMenuPopover } from '../asset-move/AssetMoveMenu';
 import { workspaceLabel } from '../../lib/workspaceLabel';
@@ -342,6 +343,17 @@ export function CommonsView() {
   const proposed = useMemo(() => new Set(proposedIds), [proposedIds]);
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
+  // A load's failure (the collections, the worker status, a search) is kept
+  // apart from an action's, so it can hide while Nebula is offline and be
+  // checked again on reconnect (GM, PR #198 r2: "Couldn't check the Commons
+  // status…" read as if the Commons broke when the backend was only away).
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [collectionsKey, setCollectionsKey] = useState(0);
+  const shownLoadError = useOfflineHiddenNotice(loadError, () => {
+    setLoadError(null);
+    setCollectionsKey((key) => key + 1);
+    refresh();
+  });
 
   // Refused offline before it was sent: the banner says why (round 16, L4).
   const fail = (e: unknown) => { if (!isOfflineRefusal(e)) setError(failureMessage(e, "Couldn't update the library.")); };
@@ -361,14 +373,14 @@ export function CommonsView() {
         setCollections(list);
         setTarget((current) => current || list[0]?.id || '');
       },
-      (e: unknown) => { if (!cancelled) setError(failureMessage(e, "Couldn't load the collections.")); },
+      (e: unknown) => { if (!cancelled) setLoadError(failureMessage(e, "Couldn't load the collections.")); },
     );
     return () => { cancelled = true; };
-  }, []);
+  }, [collectionsKey]);
 
   useEffect(() => {
     let cancelled = false;
-    const poll = () => commonsApi.status().then((s) => { if (!cancelled) setStatus(s); }, (e: unknown) => { if (!cancelled) setError(failureMessage(e, "Couldn't load the library status.")); });
+    const poll = () => commonsApi.status().then((s) => { if (!cancelled) setStatus(s); }, (e: unknown) => { if (!cancelled) setLoadError(failureMessage(e, "Couldn't load the library status.")); });
     poll();
     const timer = window.setInterval(poll, STATUS_POLL_MS);
     return () => {
@@ -388,11 +400,12 @@ export function CommonsView() {
           if (cancelled) return;
           setRows(r.results);
           setError(null);
+          setLoadError(null);
           setLoading(false);
         },
         (e: unknown) => {
           if (cancelled) return;
-          setError(failureMessage(e, "Couldn't search the library."));
+          setLoadError(failureMessage(e, "Couldn't search the library."));
           setLoading(false);
         },
       );
@@ -506,6 +519,9 @@ export function CommonsView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reviewAsked]);
 
+  // An action's failure first; a load's only while Nebula is online.
+  const shownError = error ?? shownLoadError;
+
   const emptyHint = tab === 'inbox'
     ? 'Nothing waiting in the inbox. Items agents add land here for you to accept.'
     : 'No matches. Drop images or videos here, or use Add.';
@@ -597,9 +613,9 @@ export function CommonsView() {
         />
       </WorkspaceHeader>
 
-      {(error || notice || uploadFailures.length > 0 || proposed.size > 0) && (
+      {(shownError || notice || uploadFailures.length > 0 || proposed.size > 0) && (
         <div className="commons-messages">
-          {error && <p className="commons-notice commons-notice--error" role="alert">{error}</p>}
+          {shownError && <p className="commons-notice commons-notice--error" role="alert">{shownError}</p>}
           {uploadFailures.length > 0 && (
             <p className="commons-notice commons-notice--error" role="alert">
               <span className="commons-notice__list">
@@ -607,7 +623,7 @@ export function CommonsView() {
               </span>
             </p>
           )}
-          {!error && notice && <p className="commons-notice" role="status">{notice}</p>}
+          {!shownError && notice && <p className="commons-notice" role="status">{notice}</p>}
           <CommonsProposalsLine onOpen={reviewProposal} />
         </div>
       )}

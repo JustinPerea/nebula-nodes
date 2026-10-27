@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from services.cinema_scene_spec import normalize_params as normalize_scene_params
 from services.file_access import require_allowed_path, validate_file_references
 from services.retired_nodes import migrate_graph, migrate_node
 from services.saved_graph_upgrades import PARAMS_VERSION, stored_version, upgrade_flat_nodes
@@ -100,7 +101,10 @@ class CLIGraph:
         node: dict[str, Any] = {
             "id": short_id,
             "definitionId": definition_id,
-            "params": dict(params),
+            # A Cinema scene's missing fields filled in, a transient run status
+            # settled (services/cinema_scene_spec.py). Routes refuse what can't
+            # be filled before they get here; this is the backstop.
+            "params": dict(normalize_scene_params(definition_id, params, strict=False)),
             "outputs": dict(outputs) if outputs else {},
         }
         if position is not None:
@@ -369,7 +373,7 @@ class CLIGraph:
         # Build everything first and assign together, so a file that fails
         # part way leaves the previous graph whole (main keeps it on failure,
         # and the next save would write new nodes with old edges otherwise).
-        nodes = {n["id"]: _migrate_retired(n) for n in migrated}
+        nodes = {n["id"]: _normalized_scene(_migrate_retired(n)) for n in migrated}
         # A file written before an upgrade existed gets it once; the next save
         # records the current version, so a value set afterwards is kept.
         version = stored_version(data.get("paramsVersion"))
@@ -377,6 +381,16 @@ class CLIGraph:
         self.nodes, self.edges, self._counter = nodes, edges, counter
         self.upgraded_on_load = upgraded
         self.params_advanced_on_load = version < PARAMS_VERSION
+
+
+def _normalized_scene(node: dict[str, Any]) -> dict[str, Any]:
+    """A saved Cinema scene with its missing fields filled in and no shot
+    left rendering (nothing renders across a load); every other node as is."""
+    params = node.get("params")
+    if not isinstance(params, dict):
+        return node
+    normalized = normalize_scene_params(str(node.get("definitionId", "")), params, strict=False)
+    return node if normalized is params else {**node, "params": normalized}
 
 
 def _migrate_retired(node: dict[str, Any]) -> dict[str, Any]:

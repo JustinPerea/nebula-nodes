@@ -89,6 +89,7 @@ from services import agent_connect, agent_spend, backend_address, app_tokens, ma
 from services import agent_start, input_sizes, node_categories, node_lookup, node_names
 from services import output_thumbnail
 from services import refusal_copy
+from services import cinema_scene_spec
 from services.node_errors import NodeErrors
 from services import project_cover
 from services import graph_file_links, project_size
@@ -1635,6 +1636,7 @@ def _validate_restore_graph(graph: Any) -> dict[str, Any]:
         reference_key="id",
         include_outputs=True,
         normalize_image_inputs=False,
+        strict_scenes=False,
     )
     _stage_graph_edges(candidate, ingress_edges, id_map, saved=True)
     return graph
@@ -5103,8 +5105,13 @@ def _note_run(run_id: str) -> None:
 
 def _note_run_nodes(run_id: str, nodes: list[GraphNode]) -> None:
     """The canvas nodes a run set out to run: while it is going they count as
-    run for an agent's undo, before the engine reaches them."""
+    run for an agent's undo, before the engine reaches them. A Cinema scene
+    in it is rendering every shot (_cinema_renders); a shot run notes its
+    own shot after this."""
     canvas_undo_book.run_nodes(run_id, [node.id for node in nodes])
+    for node in nodes:
+        if node.definition_id == "cinema-scene":
+            _note_cinema_render(run_id, node.id, None)
 
 
 def _run_is_active(run_id: str) -> bool:
@@ -10007,6 +10014,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     if not sub_nodes:
         raise _node_gone(request.node_id, f"Node '{request.node_id}' not found in graph")
     _note_run_nodes(run_id, sub_nodes)
+    _note_cinema_render(run_id, request.node_id, request.shot_id)
     fresh_paid_ancestors = _fresh_paid_worldlabs_claims(sub_nodes)
     if fresh_paid_ancestors:
         blocked_ids = ", ".join(node_id for _kind, node_id in fresh_paid_ancestors)
@@ -10974,8 +10982,14 @@ def _to_float(v: Any) -> float:
     return value
 
 
-def _coerce_params(definition_id: str, params: dict[str, Any]) -> dict[str, Any]:
+def _coerce_params(definition_id: str, params: dict[str, Any], *, strict_scenes: bool = True) -> dict[str, Any]:
     """Coerce param values to the types declared in the node definition.
+
+    A cinema-scene's ``scene`` is filled in here too (services/
+    cinema_scene_spec.py, PR #198 review 2 M2): every write path coerces,
+    so a scene without ``base`` never reaches the graph. What can't be
+    filled is refused with the field named (400); ``strict_scenes=False``
+    (a saved project opening) keeps that part as it was instead.
 
     The CLI sends every `--param k=v` as a string, and some providers (Meshy,
     for one) reject string values where booleans or ints are expected. Normalise
@@ -10984,6 +10998,10 @@ def _coerce_params(definition_id: str, params: dict[str, Any]) -> dict[str, Any]
     canonical UI sentinel for "unset/random/inherit"; preserve that sentinel
     instead of attempting ``int("")`` or ``float("")``.
     """
+    try:
+        params = cinema_scene_spec.normalize_params(definition_id, params, strict=strict_scenes)
+    except cinema_scene_spec.SceneSpecError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     defn = node_registry.get(definition_id)
     if not defn:
         return dict(params)
@@ -11487,6 +11505,57 @@ async def get_graph() -> dict:
     return cli_graph.get_state()
 
 
+# Which Cinema shots a live run is rendering (GM, PR #198 r2: a shot that is
+# rendering can't be removed): run id -> (node id, shot id), or None for the
+# shot when the run renders the whole scene. A run counts while the registry
+# holds it as running or cancelling (_run_is_active); an entry for a run that
+# ended is dropped the next time anyone looks.
+_cinema_renders: OrderedDict[str, tuple[str, str | None]] = OrderedDict()
+
+
+def _note_cinema_render(run_id: str, node_id: str, shot_id: str | None) -> None:
+    _cinema_renders.pop(run_id, None)
+    _cinema_renders[run_id] = (node_id, shot_id)
+    while len(_cinema_renders) > 512:
+        _cinema_renders.popitem(last=False)
+
+
+def _rendering_runs(node_id: str) -> list[tuple[str, str | None]]:
+    """(run id, shot id or None for the whole scene) of every live run
+    rendering ``node_id``."""
+    found: list[tuple[str, str | None]] = []
+    for run_id, (rendered, shot_id) in list(_cinema_renders.items()):
+        record = execution_runs.get(run_id)
+        if record is not None and not _run_is_active(run_id):
+            _cinema_renders.pop(run_id, None)
+            continue
+        if rendered == node_id and _run_is_active(run_id):
+            found.append((run_id, shot_id))
+    return found
+
+
+def _refuse_removing_rendering_shots(node_id: str, node: dict[str, Any], current: Mapping[str, Any],
+                                     kept: set[str]) -> None:
+    """409 when a write would remove a shot a live run is rendering, with
+    what to do: stop the run or wait for it."""
+    removed = [shot_id for shot_id in current if shot_id not in kept]
+    if not removed:
+        return
+    runs = _rendering_runs(node_id)
+    if not runs:
+        return
+    order = list(current)
+    for shot_id in removed:
+        run_id = next((run for run, shot in runs if shot is None or shot == shot_id), None)
+        if run_id is None:
+            continue
+        name = _quoted(_node_label(node_id)) if node_id in cli_graph.nodes else _quoted(str(node.get("label") or "Cinema Scene"))
+        raise HTTPException(status_code=409, detail=(
+            f"Shot {order.index(shot_id) + 1} ({shot_id}) of {name} ({node_id}) is still rendering (run {run_id}), "
+            f"so it can't be removed. Stop the run first (cancel_run, or `nebula cancel {run_id}`; a run the "
+            "person started is theirs to stop) or wait for it to finish, then try again. Nothing changed."))
+
+
 def _author_cinema_scene(graph: CLIGraph, node_id: str, node: dict[str, Any], params: dict[str, Any], *,
                          returning_media: bool = False) -> None:
     """Keep a Cinema scene's runtime media when a write sets its authoring.
@@ -11499,7 +11568,15 @@ def _author_cinema_scene(graph: CLIGraph, node_id: str, node: dict[str, Any], pa
     (the person's restore, or an inverse the server kept). A shot the scene
     doesn't have now comes back with the media it carries, and its port, so
     undoing a delete (an accepted proposal's, say) never drops an image a run
-    made (PR #198 review 1, M1). Anyone else's returning shot starts idle."""
+    made (PR #198 review 1, M1). Anyone else's returning shot starts idle.
+    Review 2, M1: only a finished shot (``done`` or ``error``) keeps what it
+    carries; one the undo caught rendering comes back idle, never stuck on
+    "Generating…". Its ``shot_<id>`` port is never overwritten: a port still
+    there holds a newer result (a run that landed after the shot was removed),
+    and the shot takes that image as its own.
+
+    A shot that is rendering can't be removed (GM, PR #198 r2: "block it"):
+    the write is refused (409) so nobody's edit orphans a paid run."""
     if node.get("definitionId") != "cinema-scene" or "scene" not in params:
         return
     # Studio/Inspector PUTs carry authoring snapshots captured before
@@ -11520,20 +11597,35 @@ def _author_cinema_scene(graph: CLIGraph, node_id: str, node: dict[str, Any], pa
         shot["id"]: shot for shot in (stored_shots if isinstance(stored_shots, list) else [])
         if isinstance(shot, dict) and isinstance(shot.get("id"), str)
     }
+    _refuse_removing_rendering_shots(node_id, node, current_shots, {shot["id"] for shot in shots})
     authored_scene = copy.deepcopy(incoming_scene)
     returned_ports: dict[str, Any] = {}
+    live_ports = node.get("outputs") or {}
     for shot in authored_scene["shots"]:
         canonical = current_shots.get(shot["id"])
         if canonical is None and returning_media and isinstance(shot.get("output"), dict):
-            # Back as the undo had it: its media, and its port when it has an image.
-            if not isinstance(shot.get("variations"), list):
-                shot.pop("variations", None)
-            if not isinstance(shot.get("selectedVariation"), int):
+            port = live_ports.get(f"shot_{shot['id']}")
+            newer = port.get("value") if isinstance(port, dict) else None
+            if isinstance(newer, str) and newer:
+                # A run landed after the shot left: its image is the newest
+                # result, the port stays, and the shot shows that image.
+                shot["output"] = {"imageUrl": newer, "status": "done"}
                 shot.pop("selectedVariation", None)
-            image = shot["output"].get("imageUrl")
-            if shot["output"].get("status") == "done" and isinstance(image, str) and image:
-                returned_ports[f"shot_{shot['id']}"] = {"type": "Image", "value": image}
-            continue
+                if not isinstance(shot.get("variations"), list):
+                    shot.pop("variations", None)
+                continue
+            if shot["output"].get("status") in ("done", "error"):
+                # Back as the undo had it: its media, and its port when it has an image.
+                if not isinstance(shot.get("variations"), list):
+                    shot.pop("variations", None)
+                if not isinstance(shot.get("selectedVariation"), int):
+                    shot.pop("selectedVariation", None)
+                image = shot["output"].get("imageUrl")
+                if shot["output"].get("status") == "done" and isinstance(image, str) and image:
+                    returned_ports[f"shot_{shot['id']}"] = {"type": "Image", "value": image}
+                continue
+            # Caught mid-render (the canvas's optimistic mark): idle, as any
+            # returning shot that carries nothing finished.
         for field in ("output", "variations", "selectedVariation"):
             shot.pop(field, None)
             if canonical is not None and field in canonical:
@@ -11673,11 +11765,14 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
         )
     updated = copy.deepcopy(cli_graph.nodes[node_id])
     await _broadcast_graph_sync(edit=True)
-    publish_action(f"Updated {node_id} params")
+    if params:
+        publish_action(f"Updated {node_id} params")
     # The bubble's words are worked out inside _show_agent's guard (review 1
     # N2): a failure there never turns this saved PUT into a 500.
+    # An empty change says nothing and logs nothing: the cursor only moves
+    # there (review 2, N4: "Updated “<node>”" is gone for good).
     await _show_agent({"nodeId": node_id}, words=(lambda: _set_params_bubble(node_id, params)) if params else None,
-                      say="" if params else f"Updated {_quoted(_node_label(node_id))}", did=_did("Changed", node_id))
+                      did=_did("Changed", node_id) if params else None)
     return updated
 
 
@@ -13642,6 +13737,7 @@ def _validated_ingress_node(
     *,
     include_outputs: bool,
     normalize_image_inputs: bool = True,
+    strict_scenes: bool = True,
 ) -> tuple[str, dict[str, Any], dict[str, Any] | None, dict[str, Any] | None, str | None]:
     """Validate one ingress node: (definitionId, params, position, outputs, custom label).
 
@@ -13664,7 +13760,7 @@ def _validated_ingress_node(
     definition_id, params, retired_label = migrate_node(definition_id, params)
     _refuse_unknown_definition(definition_id)
     _validate_params(definition_id, params)
-    params = _coerce_params(definition_id, params)
+    params = _coerce_params(definition_id, params, strict_scenes=strict_scenes)
     if definition_id == "image-input" and normalize_image_inputs:
         params = _normalize_image_input_params(params)
 
@@ -13721,8 +13817,11 @@ def _stage_graph_nodes(
     reference_key: str,
     include_outputs: bool,
     normalize_image_inputs: bool = True,
+    strict_scenes: bool = True,
 ) -> dict[str, str]:
-    """Validate and add ingress nodes to a persistence-free candidate graph."""
+    """Validate and add ingress nodes to a persistence-free candidate graph.
+    ``strict_scenes=False`` for a saved project's own file (it still opens
+    with a scene that can't be filled in; services/cinema_scene_spec.py)."""
     id_map: dict[str, str] = {}
     for index, raw in enumerate(raw_nodes):
         reference = raw.get(reference_key)
@@ -13738,6 +13837,7 @@ def _stage_graph_nodes(
             )
         definition_id, params, position, outputs, label = _validated_ingress_node(
             raw, index, include_outputs=include_outputs, normalize_image_inputs=normalize_image_inputs,
+            strict_scenes=strict_scenes,
         )
         try:
             new_id = candidate.add_node(

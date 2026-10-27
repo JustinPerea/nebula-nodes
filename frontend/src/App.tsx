@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef } from 'react';
+import { lazy, Suspense, useEffect, useRef, type ReactNode } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { Canvas } from './components/Canvas';
 import { CanvasTabs } from './components/CanvasTabs';
@@ -35,6 +35,8 @@ import { getKreaConnection, normalizeKreaMode, nodeKeyStatus } from './lib/kreaC
 import { useUIStore } from './store/uiStore';
 import { usePricingStore } from './store/pricingStore';
 import { useGraphStore } from './store/graphStore';
+import { StudioBoundary } from './components/StudioBoundary';
+import { cinemaSceneProblem, type StudioScreen } from './lib/studioBoundary';
 import { useCommonsCapability } from './hooks/useCommonsCapability';
 import { useZoomManifest } from './hooks/useZoomManifest';
 import { useMoodboardDeepLink } from './hooks/useMoodboardDeepLink';
@@ -96,6 +98,25 @@ const CommonsView = lazy(() =>
 function ZoomManifestRecorder() {
   useZoomManifest();
   return null;
+}
+
+/** A studio inside its boundary (PR #198 review 2, M2): one that can't
+ * render shows GM's line and Back to canvas instead of blanking the app.
+ * Keyed by screen and node, so opening another starts clean. */
+function StudioScreenBoundary({ screen, children }: { screen: StudioScreen; children: ReactNode }) {
+  const nodeId = useUIStore((s) => (screen === 'cinema-editor' ? s.cinemaEditorNodeId
+    : screen === 'remotion-editor' ? s.remotionEditorTargetNodeId : screen === 'editor' ? s.editorTargetNodeId : null));
+  const label = useGraphStore((s) => (nodeId ? s.nodes.find((node) => node.id === nodeId)?.data.label ?? null : null));
+  const problem = () => {
+    if (screen !== 'cinema-editor' || !nodeId) return null;
+    return cinemaSceneProblem(useGraphStore.getState().nodes.find((node) => node.id === nodeId)?.data.params);
+  };
+  return (
+    <StudioBoundary key={`${screen}:${nodeId ?? ''}`} studio={screen} node={nodeId ? { id: nodeId, label } : null}
+      problem={problem}>
+      {children}
+    </StudioBoundary>
+  );
 }
 
 export default function App() {
@@ -286,6 +307,12 @@ export default function App() {
     mainView = <CreateView />;
   } else {
     mainView = <EditorView />;
+  }
+  if (!isHome && !isCanvas) {
+    const screen: StudioScreen = isCommons ? 'commons' : isBrandShowcase ? 'brand-showcase' : isRemotion ? 'remotion-editor'
+      : isCinema ? 'cinema-editor' : isCharacter ? 'character-editor' : isMoodboard ? 'moodboard-editor'
+        : isCreate ? 'create' : 'editor';
+    mainView = <StudioScreenBoundary screen={screen}>{mainView}</StudioScreenBoundary>;
   }
 
   return (

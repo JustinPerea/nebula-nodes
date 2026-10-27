@@ -2,6 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { useGraphStore } from '../../store/graphStore';
+import { shotRemovalBlock, shotRemovalBlockTitle } from '../../lib/cinemaScene';
+import { offlineAction, useBackendOffline } from '../../lib/useBackendOffline';
 import type { CinemaSceneSpec, CinemaShot } from '../../types';
 
 interface CinemaShotsRailProps {
@@ -37,6 +39,7 @@ export function CinemaShotsRail({
   const addRef = useRef<HTMLButtonElement>(null);
   const pendingFocus = useRef<{ shotId: string | null; removedId?: string } | null>(null);
   const activeRuns = useGraphStore((state) => state.activeRuns);
+  const offline = useBackendOffline();
   const tabStopId = scene.shots.some((shot) => shot.id === selectedShotId)
     ? selectedShotId : scene.shots[0]?.id;
   const orderedShotIds = JSON.stringify(scene.shots.map((shot) => shot.id));
@@ -118,6 +121,9 @@ export function CinemaShotsRail({
           description: owner.status === 'cancelling' ? 'Stopping' : 'Generating',
         } : statusBadge(shot);
         const thumb = shot.output?.imageUrl ?? null;
+        // A shot that is rendering can't be removed (GM, PR #198 r2): × is
+        // disabled and says why; the store and the backend refuse it too.
+        const block = shotRemovalBlock(activeRuns, cinemaNodeId, shot);
         return (
           <div
             key={shot.id}
@@ -165,13 +171,16 @@ export function CinemaShotsRail({
                   disabled={idx === scene.shots.length - 1} onClick={() => reorder(shot.id, idx + 1, true)}>→</button>
               </>}
               <button type="button" className="cinema-shots-rail__remove"
-                aria-label={`Remove Shot ${idx + 1}`} title="Remove shot"
+                aria-label={`Remove Shot ${idx + 1}`}
+                title={block ? shotRemovalBlockTitle(block, `Shot ${idx + 1}`) : 'Remove shot'}
+                disabled={Boolean(block)}
                 onClick={() => handleRemove(shot.id, idx)}>×</button>
             </div>
           </div>
         );
       })}
-      <button ref={addRef} type="button" className="cinema-shots-rail__add" onClick={onAddShot}>
+      <button ref={addRef} type="button" className="cinema-shots-rail__add" onClick={onAddShot}
+        {...offlineAction(offline)}>
         + Add shot
       </button>
     </div>

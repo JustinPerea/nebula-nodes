@@ -7,6 +7,7 @@ import type { TrackComponentType, VideoGraphManifest } from '../../types/video';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { startRemotionRender } from '../../lib/renderJobs';
 import { useRenderJob } from '../../hooks/useRenderJob';
+import { offlineAction, useBackendOffline } from '../../lib/useBackendOffline';
 
 interface RemotionEditorToolbarProps {
   remotionNodeId: string;
@@ -31,6 +32,11 @@ const Z_ORDER_BUTTONS: Array<{ label: string; title: string; action: TrackItemOr
 export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarProps) {
   const [exportOpen, setExportOpen] = useState(false);
   const renderJob = useRenderJob();
+  // Every add, a layer's order and delete, and REC save into the project (the
+  // store's edit gates and its autosave), and Export renders on the backend:
+  // all are off while Nebula is offline (GM, PR #198 r2). REC can still be
+  // turned off.
+  const offline = useBackendOffline();
   const addTrackItemWithCanvasMirror = useGraphStore((s) => s.addTrackItemWithCanvasMirror);
   const deleteTrackItem = useGraphStore((s) => s.deleteTrackItem);
   const reorderTrackItem = useGraphStore((s) => s.reorderTrackItem);
@@ -80,6 +86,7 @@ export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarP
           type="button"
           className="remotion-editor-toolbar__add"
           onClick={() => handleAdd(btn.componentType)}
+          {...offlineAction(offline)}
         >
           {btn.label}
         </button>
@@ -91,11 +98,8 @@ export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarP
             type="button"
             className="remotion-editor-toolbar__zorder"
             onClick={() => handleZOrder(btn.action)}
-            disabled={
-              btn.action === 'send-to-back' || btn.action === 'send-backward'
-                ? !canMoveBackward
-                : !canMoveForward
-            }
+            {...offlineAction(offline,
+              btn.action === 'send-to-back' || btn.action === 'send-backward' ? !canMoveBackward : !canMoveForward)}
             title={btn.title}
           >
             {btn.label}
@@ -106,7 +110,7 @@ export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarP
         type="button"
         className="remotion-editor-toolbar__delete"
         onClick={handleDelete}
-        disabled={!selectedTrackItemId}
+        {...offlineAction(offline, !selectedTrackItemId)}
       >
         Delete
       </button>
@@ -114,6 +118,7 @@ export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarP
         type="button"
         className={`remotion-editor-toolbar__record ${isKeyframeRecording ? 'remotion-editor-toolbar__record--active' : ''}`}
         onClick={toggleKeyframeRecording}
+        {...offlineAction(offline && !isKeyframeRecording)}
         title={isKeyframeRecording ? 'Recording keyframes - click to stop' : 'Click to record keyframes on drag'}
       >
         ● REC
@@ -123,6 +128,7 @@ export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarP
           type="button"
           className="remotion-editor-toolbar__export"
           onClick={() => setExportOpen((open) => !open)}
+          {...offlineAction(offline)}
         >
           <Download size={14} aria-hidden="true" /> Export
         </button>
@@ -152,7 +158,7 @@ export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarP
               <button
                 type="button"
                 className="final-export__start"
-                disabled={!manifest}
+                {...offlineAction(offline, !manifest)}
                 onClick={() => manifest && void renderJob.begin(() => startRemotionRender(manifest))}
               >
                 Render MP4

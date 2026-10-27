@@ -105,9 +105,10 @@ def test_renaming_moving_and_updating_name_the_node_in_quotes(logged):
     assert client.put("/api/graph/layout", headers=AGENT,
                       json={"positions": {node: {"x": 900, "y": 640}}}).status_code == 200
     assert _says(sent)[-1] == "Moved “Hero shots”"
-    # A params update that names no param: the node, by its label (never its id).
+    # A params update that names no param changes nothing, so it says nothing
+    # (PR #198 review 2, N4): the last line is still the move.
     assert client.put(f"/api/graph/node/{node}", headers=AGENT, json={"params": {}}).status_code == 200
-    assert _says(sent)[-1] == "Updated “Hero shots”"
+    assert [say for say in _says(sent) if say][-1] == "Moved “Hero shots”"
     # A params update that names params says which, by the field's label on
     # the card, in quotes; never the param key (GM, r18 of PR #114).
     assert client.put(f"/api/graph/node/{node}", headers=AGENT, json={"params": {"value": "b"}}).status_code == 200
@@ -115,10 +116,16 @@ def test_renaming_moving_and_updating_name_the_node_in_quotes(logged):
 
 
 def test_updating_an_unlabeled_node_falls_back_to_its_type_name(logged):
-    client, graph, sent, _lines = logged
+    client, graph, sent, lines = logged
     node = graph.add_node("text-input", {"value": "a"})
+    assert client.put(f"/api/graph/node/{node}", headers=AGENT, json={"params": {"value": "b"}}).status_code == 200
+    # The Agents panel's line names it by its type: Changed “Text Input”.
+    assert (_presence_events(sent)[-1].get("did") or {}).get("label") == "Text Input"
+    # An empty change says and logs nothing (PR #198 review 2, N4).
+    before = (len(_presence_events(sent)), len(lines))
     assert client.put(f"/api/graph/node/{node}", headers=AGENT, json={"params": {}}).status_code == 200
-    assert _says(sent)[-1] == "Updated “Text Input”"
+    assert not any(event.get("say") or event.get("log") for event in _presence_events(sent)[before[0]:])
+    assert lines[before[1]:] == []
 
 
 def test_removing_a_node_names_it_by_the_label_read_before_removal(logged):

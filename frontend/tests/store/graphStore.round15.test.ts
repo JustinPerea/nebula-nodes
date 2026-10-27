@@ -119,7 +119,7 @@ describe('L2: a failed save names its own settings (GM, round 15)', () => {
     firstAnswer.resolve?.(json({}));
     await settle(50);
     expect(notices.map((notice) => notice.line)).toEqual(
-      ["Couldn't save “seed” for “Banana”. It's back to its last saved value."]);
+      ["Couldn't save a setting on “Banana”. It's back to its last saved value."]);
     expect(useGraphStore.getState().nodes[0].data.params).toMatchObject({ prompt: 'new prompt', seed: 1 });
   });
 
@@ -129,7 +129,7 @@ describe('L2: a failed save names its own settings (GM, round 15)', () => {
     useGraphStore.getState().updateNodeData('n5', { params: { prompt: 'new', seed: 7 } });
     await settle(PUSH_WAIT + 50);
     expect(notices.map((notice) => notice.line)).toEqual(
-      ["Couldn't save “prompt” and “seed” for “Banana”. They're back to their last saved values."]);
+      ["Couldn't save 2 settings for “Banana”. They're back to their last saved values."]);
     expect(useGraphStore.getState().nodes[0].data.params).toMatchObject({ prompt: 'old', seed: 1 });
   });
 
@@ -153,7 +153,7 @@ describe('L2: a failed save names its own settings (GM, round 15)', () => {
     answer.resolve?.(json({ detail: 'refused' }, 409));
     await settle(50);
     expect(notices.map((notice) => notice.line)).toEqual(
-      ["Couldn't save “prompt” and “seed” for “Banana”."]);
+      ["Couldn't save 2 settings for “Banana”."]);
     expect(useGraphStore.getState().nodes[0].data.params).toMatchObject({ prompt: 'newer', seed: 1 });
   });
 });

@@ -11,7 +11,7 @@ import type { CinemaLook, CinemaPalette } from '../../lib/cinemaArtDirection';
 import type { CinemaSceneSpec, CinemaShot } from '../../types';
 import { shortLine } from '../../lib/errorCopy';
 import { NodeError } from '../nodes/NodeError';
-import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { offlineAction, offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 
 interface CinemaShotPanelProps {
   cinemaNodeId: string;
@@ -182,7 +182,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
             type="button"
             className="cinema-shot-panel__action cinema-shot-panel__action--primary"
             onClick={handleGenerateShot}
-            disabled={shotBlocked}
+            {...offlineAction(readOnly, shotBlocked)}
             title={referenceIssue ?? (sharedInputsBlocked ? sharedInputsMessage : undefined)}
           >
             {shotRunning ? 'Generating…' : 'Generate shot'}
@@ -226,7 +226,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
             type="button"
             className="cinema-shot-panel__action"
             onClick={handleGenerateVariations}
-            disabled={shotBlocked}
+            {...offlineAction(readOnly, shotBlocked)}
             title={referenceIssue ?? (sharedInputsBlocked ? sharedInputsMessage : undefined)}
           >
             Generate {variationCount}

@@ -1249,6 +1249,10 @@ def edit_canvas(
       result is `status: "stopped"` with `failedStep`, `error`, what the
       earlier steps `applied` (and the ids their refs became), and their undo
       tokens, so you can fix that step and send the rest, or undo what landed.
+    A new cinema-scene node needs only {"scene": {"shots": [{"id": "s1",
+    "prompt": "..."}]}}: its version, base model and aspect ratio are filled
+    in, and a 400 names any field that can't be (an existing scene is edited
+    in Cinema, not here).
     Who bills a run is the person's call: Krea billing (`_kreaAuth`: API token
     or the Krea plan) and a multi-provider node's route (`_provider`: a route id
     or auto; describe_node lists them and the values each takes). Send a change
@@ -1571,7 +1575,9 @@ def cancel_run(run_id: str, ctx: Context | None = None) -> dict[str, Any]:
 
     A run the person started is theirs to stop and is refused (403). If they
     ask you to stop it, tell them to press Stop in Nebula (the toolbar, or
-    the run in Run history).
+    the run in Run history). A shot can't be removed from a Cinema scene
+    while a run renders it (409 naming the run): stop that run here first,
+    or wait for it to finish.
 
     A run id Nebula hasn't started yet (its start still on the way) answers
     `pendingAdmission: true`: the stop is recorded and Nebula refuses to

@@ -55,7 +55,7 @@ export function CanvasTabs() {
     // The workspace header: floating panels stop below it (lib/bottomBar.ts floatingTopLimit).
     <div className="canvas-tabs-wrap" data-top-bar="">
       <WorkspaceHeader title="Canvas" className="workspace-header--canvas"
-        navigation={<WorkspaceModeNavigation />} updatesSlot={false} />
+        navigation={<WorkspaceModeNavigation />} updatesSlot={false} offlineRow={false} />
     </div>
   );
 }

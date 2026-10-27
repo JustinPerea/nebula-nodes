@@ -7,7 +7,7 @@ import { usesKreaAccount } from './kreaConnection';
 import { runRouteProvider } from './modelDiscovery';
 import { cinemaSceneBase, isLocalRun } from './nodeKeys';
 import {
-  awaitsInput, CHIP_FLOOR_USD, CHIP_UNDER_FLOOR_WORDS, entryForRoute, estimateNode, formatChipEstimate, formatChipUsd, formatUsd,
+  awaitsInput, chipEstimate, chipTitle, entryForRoute, estimateNode, formatChipEstimate, formatUsd,
   formatUsdRange, sizingPorts, type InputSize, type PricingTable,
 } from './pricing';
 
@@ -334,33 +334,12 @@ export function runChipLabel({ paid, cost }: RunScopeSummary): string | null {
   return formatChipEstimate(cost.low, cost.high, cost.unpriced.length > 0 || cost.plus.length > 0);
 }
 
-/** The Run chip's tooltip (GM - Design, r18 of PR #114 and r1 of PR #198):
- * - "~$X": "Estimated cost"; "$X+": "At least $X. Some costs aren't known
- *   yet.", with X the low end;
- * - "$0+", the known part really $0: "Some costs aren't known yet.";
- * - a range from $0: "Between $0 and $Y, plus costs that aren't known yet.",
- *   or "Between $0 and $Y." without the +;
- * - under a cent ("<$0.01"), the amount is "less than $0.01": builder's
- *   sentences around GM's words, marked below, for GM to confirm.
- * A plain range from more than $0 and "N paid" have none (the button's own
- * title has the details). */
+/** The Run chip's tooltip, from the same parts as its label (pricing.ts
+ * chipTitle; GM - Design, r18 of PR #114, r1 and r2 of PR #198): every chip
+ * form has one, "N paid" has none (the button's own title has the details). */
 export function runChipTitle({ paid, cost }: RunScopeSummary): string | undefined {
   if (paid.length === 0 || !cost || cost.lines.length === 0) return undefined;
-  const open = cost.unpriced.length > 0 || cost.plus.length > 0;
-  const unknown = "Some costs aren't known yet.";
-  const plusUnknown = ", plus costs that aren't known yet.";
-  const exact = formatChipUsd(cost.low) === formatChipUsd(cost.high) || cost.high < CHIP_FLOOR_USD;
-  if (exact && cost.high <= 0) return open ? unknown : 'Estimated cost';
-  if (exact && cost.high < CHIP_FLOOR_USD) {
-    // Builder's sentences (GM's words: "less than $0.01").
-    return open ? `Less than $0.01${plusUnknown}` : `Estimated cost: ${CHIP_UNDER_FLOOR_WORDS}.`;
-  }
-  if (exact) return open ? `At least ${formatUsd(cost.low)}. ${unknown}` : 'Estimated cost';
-  const high = formatUsd(cost.high);
-  if (cost.low <= 0) return `Between $0 and ${high}${open ? plusUnknown : '.'}`;
-  // Builder's sentence (GM's words: "less than $0.01").
-  if (cost.low < CHIP_FLOOR_USD) return `Between ${CHIP_UNDER_FLOOR_WORDS} and ${high}${open ? plusUnknown : '.'}`;
-  return open ? `At least ${formatUsd(cost.low)}. ${unknown}` : undefined;
+  return chipTitle(chipEstimate(cost.low, cost.high, cost.unpriced.length > 0 || cost.plus.length > 0));
 }
 
 const AWAITING = 'Priced when its input is known:';
