@@ -90,9 +90,11 @@ def test_every_commit_keeps_a_last_good_copy(tmp_path):
     assert store.backup_path.read_bytes() == store.path.read_bytes()
     assert oct(store.backup_path.stat().st_mode & 0o777) == "0o600"
     _add(store, "Beta")
-    assert _names(json.loads(store.backup_path.read_text())) == {"Alpha", "Beta"}
+    # .bak is the catalog each commit replaced (one commit behind, a hard
+    # link: review 1 of PR #199, L6); the damaged file holds the newest.
+    assert _names(json.loads(store.backup_path.read_text())) == {"Alpha"}
     # No temporary copy is left behind.
-    assert not list(store.root.glob(".catalog-backup.*"))
+    assert not list(store.root.glob(".catalog-backup.*")) and not list(store.root.glob(".catalog-bak.*"))
 
 
 def test_the_older_copy_rotates_at_most_once_an_interval(tmp_path):
@@ -132,7 +134,9 @@ def test_corrupt_json_restores_the_last_good_copy_and_keeps_the_damaged_file(tmp
     catalog = store.read()
 
     assert _names(catalog) == {"Alpha", "Beta"}
-    assert catalog["activeProjectId"] == beta
+    # The damaged file can't say which project was open, so none is: never
+    # the copy's, which may not be the live canvas's (review 1, H1).
+    assert catalog["activeProjectId"] is None
     # Open tabs hold the old list: a new revision makes them reload.
     assert catalog["workspaceRevision"] != revision
     [damaged] = _damaged_files(store)
@@ -162,7 +166,7 @@ def test_a_truncated_file_restores_the_last_good_copy(tmp_path):
 
 @pytest.mark.parametrize("shape", [
     [1, 2, 3],
-    {"version": 2, "projects": {}, "workspaceRevision": "x"},
+    {"version": 1, "projects": {}, "workspaceRevision": 7},
     {"version": 1, "projects": [], "workspaceRevision": "x"},
     {"version": 1, "projects": {"not-an-id": {}}, "workspaceRevision": "x"},
 ])
@@ -242,16 +246,12 @@ def test_with_nothing_to_rebuild_from_it_refuses_as_before_and_changes_nothing(t
 
 
 def _commit_without_copy(store: ProjectStore, monkeypatch, mutate) -> None:
-    """A commit whose catalog lands and whose copy never does: the process dies between them."""
-    def crash(*_args, **_kwargs):
-        raise Crash()
-
-    monkeypatch.setattr(store, "_write_backup", crash)
-    with pytest.raises(Crash):
-        with store.transaction() as catalog:
-            mutate(catalog)
-            store.commit(catalog)
-    monkeypatch.undo()
+    """A commit whose change is in catalog.json only. .bak is the catalog a
+    commit replaced (review 1, L6), so every commit is one: the latest change
+    is only in the file that may then be damaged."""
+    with store.transaction() as catalog:
+        mutate(catalog)
+        store.commit(catalog)
 
 
 def test_a_crash_between_the_catalog_write_and_the_copy_write_loses_nothing(tmp_path, monkeypatch):
@@ -267,9 +267,9 @@ def test_a_crash_between_the_catalog_write_and_the_copy_write_loses_nothing(tmp_
     assert _names(store.read()) == {"Alpha", "Beta"}
     assert _names(json.loads(store.backup_path.read_text())) == {"Alpha"}
     assert _records(store) == []
-    # The next commit brings the copy up to date.
+    # The next commit keeps this one as the copy.
     _add(store, "Gamma")
-    assert _names(json.loads(store.backup_path.read_text())) == {"Alpha", "Beta", "Gamma"}
+    assert _names(json.loads(store.backup_path.read_text())) == {"Alpha", "Beta"}
 
 
 def test_projects_created_after_the_copy_are_added_back_from_the_damaged_file(tmp_path, monkeypatch):
@@ -319,7 +319,8 @@ def test_a_project_cut_off_by_the_damage_is_reported_not_added(tmp_path, monkeyp
     assert _names(catalog) == {"Alpha"}
     [record] = _records(store)
     assert record["addedBack"] == []
-    assert record["notAddedBack"] == [{"id": made["Beta"], "reason": "incomplete"}]
+    [row] = record["notAddedBack"]
+    assert (row["id"], row["reason"], row["trashed"]) == (made["Beta"], "incomplete", False)
 
 
 def test_a_project_moved_to_recently_deleted_after_the_copy_stays_there(tmp_path, monkeypatch):
@@ -345,8 +346,10 @@ def test_a_project_moved_to_recently_deleted_after_the_copy_stays_there(tmp_path
 
 def test_a_project_deleted_for_good_after_the_copy_comes_back_rather_than_being_dropped(tmp_path, monkeypatch):
     """Every project's data lives in the catalog itself, so a project the copy
-    holds is never "gone". The damaged file can't prove it was purged, so it
-    comes back (to delete again) instead of being dropped on that evidence."""
+    holds is never "gone". A damaged file that can't be read at all can't
+    prove it was purged, so it comes back (to delete again) instead of being
+    dropped on that evidence. (A readable head remembers the purge, and it
+    stays deleted: test_project_catalog_restore_fix1.py.)"""
     store = _store(tmp_path)
     _alpha, beta = _add(store, "Alpha", "Beta")
 
@@ -357,18 +360,23 @@ def test_a_project_deleted_for_good_after_the_copy_comes_back_rather_than_being_
 
 
 def test_an_older_copy_of_a_project_in_the_damaged_file_never_replaces_the_good_copy(tmp_path):
+    """A damaged file older than its copy (a sync tool put an old one back):
+    a record dated before the copy's never rolls the project back."""
     store = _store(tmp_path)
     [alpha] = _add(store, "Alpha")
     with store.transaction() as catalog:
         catalog["projects"][alpha]["name"] = "Alpha, renamed"
         catalog["projects"][alpha]["updatedAt"] = datetime.now(timezone.utc).isoformat()
         store.commit(catalog)
+    _add(store, "Beta")  # .bak now holds the rename
     stale = json.loads(store.path.read_text())
     stale["projects"][alpha]["name"] = "Alpha, damaged"
-    stale["version"] = 99
+    for key in ("updatedAt", "lastOpenedAt", "createdAt"):
+        stale["projects"][alpha][key] = "2020-01-01T00:00:00+00:00"
+    stale["workspaceRevision"] = 7  # the wrong shape: damaged
     store.path.write_text(json.dumps(stale), encoding="utf-8")
 
-    assert _names(store.read()) == {"Alpha, renamed"}
+    assert _names(store.read()) == {"Alpha, renamed", "Beta"}
 
 
 # -- concurrency ---------------------------------------------------------------

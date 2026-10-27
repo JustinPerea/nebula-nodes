@@ -424,19 +424,31 @@ def catalog_restore_part(view: Mapping[str, Any]) -> dict[str, Any]:
     """A restore of the damaged project list the person hasn't closed yet
     (main._catalog_restore_view): first in the answer, before the canvas, so
     an agent reads it before acting on project ids from earlier. Short: the
-    note, the source, the damaged file and a few names; list_projects has
-    `catalogRestore` in full."""
-    added = [{"id": row.get("id"), "name": _cut(row.get("name"), NAME_CHARS)}
-             for row in (view.get("addedBack") or [])[:RESTORE_ROWS] if isinstance(row, Mapping)]
-    return {"at": view.get("at"), "kind": view.get("kind"), "source": view.get("source"),
-            "damagedFile": view.get("damagedFile"), "addedBack": added,
+    note, the source and its time, the damaged file, and a few names of what
+    was added back and of what the copy decided (reverted, cameBack,
+    backInTrash); list_projects has `catalogRestore` in full."""
+    def rows(key: str) -> list[dict[str, Any]]:
+        return [{"id": row.get("id"), "name": _cut(row.get("name"), NAME_CHARS)}
+                for row in (view.get(key) or [])[:RESTORE_ROWS] if isinstance(row, Mapping)]
+
+    part = {"at": view.get("at"), "kind": view.get("kind"), "source": view.get("source"),
+            "copyAt": view.get("copyAt"), "damagedFile": view.get("damagedFile"), "addedBack": rows("addedBack"),
             "addedBackCount": view.get("addedBackCount", 0), "notAddedBackCount": view.get("notAddedBackCount", 0),
-            "note": _cut(view.get("note"), 500)}
+            "damagedReadWhole": view.get("damagedReadWhole")}
+    for key in ("reverted", "cameBack", "backInTrash"):
+        count = view.get(f"{key}Count") or 0
+        if count:
+            part[key], part[f"{key}Count"] = rows(key), count
+    if isinstance(view.get("recoveredCanvas"), Mapping):
+        part["recoveredCanvas"] = {"id": view["recoveredCanvas"].get("id"),
+                                   "name": _cut(view["recoveredCanvas"].get("name"), NAME_CHARS)}
+    part["note"] = _cut(view.get("note"), 700)
+    return part
 
 
 def build(**parts: dict[str, Any]) -> dict[str, Any]:
     """The answer, its parts in the documented order. ``catalogRestore``
     leads when there is one (catalog_restore_part); it has no budget of its
-    own and stays under 200 tokens."""
+    own and stays under 300 tokens."""
     lead = {"catalogRestore": parts["catalogRestore"]} if parts.get("catalogRestore") else {}
     return {**lead, **{name: parts[name] for name in BUDGETS}}

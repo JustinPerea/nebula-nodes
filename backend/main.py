@@ -92,7 +92,7 @@ from services import refusal_copy
 from services.node_errors import NodeErrors
 from services import project_cover
 from services import graph_file_links, project_size
-from services.cli_graph import SHORT_ID_RE, CLIGraph
+from services.cli_graph import OWNER_UNKNOWN, OWNER_UNPROVEN, SHORT_ID_RE, CLIGraph
 from services.retired_nodes import folded_entry, migrate_graph, migrate_node, migrate_param_update, migrate_params, retired_message
 from services.saved_graph_upgrades import PARAMS_VERSION, request_version, upgrade_flat_nodes, upgrade_project
 from services.project_store import (
@@ -289,20 +289,62 @@ _main_loop: asyncio.AbstractEventLoop | None = None
 def _catalog_restore_note(record: Mapping[str, Any]) -> str:
     """What agents read about a catalog restore (GET /api/projects
     `catalogRestore.note`, start_here, the journal): what happened, from
-    where, what came back, where the damaged file is kept. Not the person's
-    notice (frontend catalogRestoreCopy.ts has GM's lines)."""
+    where, what came back, what the copy decided, where the damaged file is
+    kept. Not the person's notice (frontend catalogRestoreCopy.ts has GM's
+    lines)."""
+    def count(key: str) -> int:
+        try:
+            return int(record.get(key) or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    def projects(number: int) -> str:
+        return f"{number} project{'s' if number != 1 else ''}"
+
     where = f" from {record.get('source')}" if record.get("source") else " from the projects its damaged files still held"
     did = "restored" if record.get("kind") == "restored" else "had no good copy and rebuilt"
     parts = [f"Nebula found its project list (catalog.json) {record.get('reason') or 'damaged'} and {did} it{where}."]
-    added = int(record.get("addedBackCount") or 0)
+    if record.get("source") and record.get("copyAt"):
+        parts.append(f"That copy is from {record['copyAt']}.")
+    if record.get("kind") == "restored" and record.get("damagedReadWhole") is False:
+        parts.append("The damaged file couldn't be read to its end, so changes made after the copy "
+                     "may be missing without being listed here (damagedReadWhole: false).")
+    added = count("addedBackCount")
     if added:
-        parts.append(f"{added} project{'s' if added != 1 else ''} the copy lacked {'were' if added != 1 else 'was'} "
+        parts.append(f"{projects(added)} the copy lacked {'were' if added != 1 else 'was'} "
                      "added back from the damaged file.")
-    missing = int(record.get("notAddedBackCount") or 0)
+    updated = count("updatedFromDiskCount")
+    if updated:
+        parts.append(f"{projects(updated)} {'were' if updated != 1 else 'was'} brought up to date from the "
+                     "damaged file (updatedFromDisk).")
+    missing = count("notAddedBackCount")
     if missing:
-        parts.append(f"{missing} project{'s' if missing != 1 else ''} in the damaged file could not be added back "
+        parts.append(f"{projects(missing)} in the damaged file could not be added back "
                      f"and {'stay' if missing != 1 else 'stays'} only there (notAddedBack).")
-    if record.get("openProjectMissing"):
+    reverted = count("revertedCount")
+    if reverted:
+        parts.append(f"{projects(reverted)} went back to {'their versions' if reverted != 1 else 'its version'} in "
+                     "the copy (reverted): the damaged file's newer record couldn't be read whole, and stays only "
+                     "there.")
+        if any(isinstance(row, Mapping) and row.get("liveCanvas") for row in record.get("reverted") or []):
+            parts.append("The open project's nodes and connections come from the live canvas, which is newer.")
+    came_back = count("cameBackCount")
+    if came_back:
+        parts.append(f"{projects(came_back)} deleted after the copy {'are' if came_back != 1 else 'is'} back "
+                     "(cameBack): the person may delete them again.")
+    back_in_trash = count("backInTrashCount")
+    if back_in_trash:
+        parts.append(f"{projects(back_in_trash)} restored from Recently deleted after the copy "
+                     f"{'are' if back_in_trash != 1 else 'is'} in Recently deleted again (backInTrash).")
+    kept_deleted = count("keptDeletedCount")
+    if kept_deleted:
+        parts.append(f"{projects(kept_deleted)} deleted for good after the copy "
+                     f"{'stay' if kept_deleted != 1 else 'stays'} deleted (keptDeleted).")
+    recovered = record.get("recoveredCanvas")
+    if isinstance(recovered, Mapping) and recovered.get("id"):
+        parts.append(f"The live canvas wasn't a project in the restored list, so it was filed as its own project "
+                     f"\"{recovered.get('name') or RECOVERED_CANVAS_NAME}\" ({recovered['id']}) and opened.")
+    elif record.get("openProjectMissing"):
         parts.append("The project that was open didn't come back, so none is open.")
     kept = [path for path in record.get("setAside") or [] if path]
     if kept:
@@ -314,14 +356,20 @@ def _catalog_restore_note(record: Mapping[str, Any]) -> str:
 
 def _catalog_restore_view(record: Mapping[str, Any] | None) -> dict[str, Any] | None:
     """A restore record as GET /api/projects carries it (`catalogRestore`):
-    the person's notice reads kind and addedBack; agents and support read
-    the rest and `note`."""
+    the person's notice reads kind, the copy's time and the rows; agents and
+    support read the rest and `note`."""
     if not record:
         return None
-    keys = ("id", "at", "kind", "reason", "source", "damagedFile", "setAside", "addedBack", "addedBackCount",
-            "updatedFromDisk", "updatedFromDiskCount", "notAddedBack", "notAddedBackCount", "projectCount",
-            "trashCount", "openProjectMissing")
-    return {**{key: copy.deepcopy(record.get(key)) for key in keys}, "note": _catalog_restore_note(record)}
+    keys = ("id", "at", "kind", "reason", "source", "copyAt", "damagedFile", "setAside", "addedBack",
+            "addedBackCount", "updatedFromDisk", "updatedFromDiskCount", "notAddedBack", "notAddedBackCount",
+            "reverted", "revertedCount", "cameBack", "cameBackCount", "backInTrash", "backInTrashCount",
+            "keptDeleted", "keptDeletedCount", "projectCount", "trashCount", "openProject", "openFrom",
+            "openProjectMissing", "recoveredCanvas", "damagedReadWhole")
+    view = {key: copy.deepcopy(record.get(key)) for key in keys}
+    for key in ("reverted", "cameBack", "backInTrash", "keptDeleted"):
+        view[key] = view[key] if isinstance(view[key], list) else []
+        view[f"{key}Count"] = view[f"{key}Count"] if isinstance(view[f"{key}Count"], int) else len(view[key])
+    return {**view, "note": _catalog_restore_note(record)}
 
 
 def _on_catalog_restore(record: dict[str, Any]) -> None:
@@ -335,8 +383,9 @@ def _on_catalog_restore(record: dict[str, Any]) -> None:
     print(f"[projects] {view.get('note')}", flush=True)
 
     def tell() -> None:
-        data = {key: view.get(key) for key in ("id", "kind", "reason", "source", "addedBackCount",
-                                               "notAddedBackCount", "projectCount")}
+        data = {key: view.get(key) for key in ("id", "kind", "reason", "source", "copyAt", "addedBackCount",
+                                               "notAddedBackCount", "revertedCount", "cameBackCount",
+                                               "backInTrashCount", "keptDeletedCount", "projectCount")}
         # By name in their folder: the journal cuts strings at 160 characters.
         kept = [Path(path) for path in view.get("setAside") or [] if path]
         data["folder"] = str(kept[0].parent) if kept else None
@@ -362,6 +411,22 @@ def _on_catalog_restore(record: dict[str, Any]) -> None:
 
 
 project_store.on_restore = _on_catalog_restore
+
+
+def _canvas_owner_for_restore() -> Any:
+    """Which project the live canvas is, for a restore choosing which
+    project to open (ProjectStore.canvas_owner; review 1 of PR #199, H1):
+    that project, None for no project's (unfiled, or unproven), or
+    catalog_recovery.UNKNOWN when state.json never recorded it."""
+    from services import catalog_recovery
+
+    owner = cli_graph.owner
+    if owner is OWNER_UNKNOWN:
+        return catalog_recovery.UNKNOWN
+    return None if owner is OWNER_UNPROVEN else owner
+
+
+project_store.canvas_owner = _canvas_owner_for_restore
 
 
 def _open_project_id() -> str | None:
@@ -436,6 +501,47 @@ def _finish_params_upgrade_at_boot(*, live_graph_advanced: bool) -> bool:
     if rotated:
         print(f"[main] saved params are at version {PARAMS_VERSION}; tabs opened before this restart will reload", flush=True)
     return rotated
+
+
+def _resolve_canvas_owner_at_boot(graph: CLIGraph, store: ProjectStore, *, state_loaded: bool) -> None:
+    """Which project the live canvas is, when state.json didn't say (saved
+    before it recorded it, or no state.json at all). Read before any
+    restore, so a damaged catalog's copy never decides it (review 1, H1):
+    - no catalog (a fresh install, or a canvas from before projects): left
+      unknown, so the catalog's open project, as before;
+    - a canvas that didn't load (none saved, persistence off, a failed
+      load) beside a catalog: empty, so no project's (the open one is
+      never emptied by the next listing);
+    - a catalog that reads: its open project, as before this was recorded;
+    - a damaged or missing one: unproven, so the listing files the canvas
+      as its own project instead of saving it into the restored list's."""
+    if graph.owner is not OWNER_UNKNOWN:
+        return
+    if not store.path.exists():
+        if store.backup_path.exists() or store.older_backup_path.exists():
+            graph.owner = OWNER_UNPROVEN if state_loaded else None
+        return
+    if not state_loaded:
+        graph.owner = None
+        return
+    try:
+        catalog, _raw = store._load(upgrade=False)
+    except ProjectStoreError:
+        return  # unreadable, not damaged (a link, too large, a newer Nebula): as before
+    except Exception:  # noqa: BLE001 - _Damaged: the copy must not decide it
+        graph.owner = OWNER_UNPROVEN
+        return
+    graph.owner = catalog.get("activeProjectId")
+
+
+_resolve_canvas_owner_at_boot(cli_graph, project_store,
+                              state_loaded=_STATE_PATH is not None and _STATE_PATH.exists() and not _live_graph_load_failed)
+if cli_graph.owner is not OWNER_UNKNOWN and _STATE_PATH is not None and not _live_graph_load_failed:
+    cli_graph._maybe_persist()
+try:
+    project_store.sweep_orphans()  # temporary files a crash left behind (review 1, L7)
+except Exception as exc:  # noqa: BLE001 - housekeeping at boot never stops it
+    print(f"[projects] could not sweep temporary files: {exc}", flush=True)
 
 
 # Not after a failed state.json load: that boot already started from an empty
@@ -1184,8 +1290,32 @@ def _params_outdated(request: Request) -> bool:
     return supplied.strip() != str(PARAMS_VERSION)
 
 
+_catalog_reading: tuple[asyncio.AbstractEventLoop, asyncio.Future[Any]] | None = None
+
+
+async def _read_catalog_off_loop() -> None:
+    """When catalog.json changed outside this process (or was damaged), read
+    it once in a worker thread before the request reads it on the loop: a
+    restore of a large catalog takes seconds to minutes, and on the loop it
+    held up every request, canvas event and run (review 1 of PR #199, L5).
+    Concurrent requests wait on the same read. A failure is left to the
+    request, which reads again and answers its own error."""
+    global _catalog_reading
+    store = project_store
+    if not store.needs_reading():
+        return
+    loop = asyncio.get_running_loop()
+    if _catalog_reading is None or _catalog_reading[0] is not loop or _catalog_reading[1].done():
+        _catalog_reading = (loop, asyncio.ensure_future(asyncio.to_thread(store.projection)))
+    try:
+        await asyncio.shield(_catalog_reading[1])
+    except Exception:  # noqa: BLE001 - the request reads it again and answers its own error
+        pass
+
+
 @app.middleware("http")
 async def project_workspace_fence(request: Request, call_next):
+    await _read_catalog_off_loop()
     if _params_outdated(request):
         return JSONResponse(status_code=409, content={
             "code": "params_outdated", "detail": PARAMS_OUTDATED_DETAIL, "paramsVersion": PARAMS_VERSION,
@@ -14381,8 +14511,28 @@ async def _save_live_project(project_id: str | None) -> None:
             project_store.commit(catalog)
 
 
+def _canvas_is(project_id: str | None, active: str | None) -> bool:
+    """Whether the live canvas is project ``project_id`` (``active``: the
+    project the catalog has open). state.json records it (CLIGraph.owner);
+    a canvas saved before it did is the open project's, as before."""
+    owner = cli_graph.owner
+    if owner is OWNER_UNKNOWN:
+        return project_id == active
+    return owner is not OWNER_UNPROVEN and owner == project_id
+
+
 def _overlay_live_project(project: dict[str, Any], exported: dict[str, Any]) -> bool:
-    """Overlay CLI changes while retaining frontend-only data and run recipes."""
+    """Overlay CLI changes while retaining frontend-only data and run recipes.
+
+    Only onto the project the live canvas is: never one project's canvas
+    into another's (review 1 of PR #199, H1: a restore opened another
+    project and the next listing saved the canvas into it). A canvas that
+    doesn't record its project (OWNER_UNKNOWN) is the open one's, and
+    callers pass the open project. Returns False, changing nothing, for any
+    other project."""
+    owner = cli_graph.owner
+    if owner is not OWNER_UNKNOWN and owner != project.get("id"):
+        return False
     previous = project["snapshot"]
     updated = _overlaid_snapshot(project, exported)
     changed = updated != previous
@@ -14418,6 +14568,86 @@ def _overlaid_snapshot(project: dict[str, Any], exported: dict[str, Any]) -> dic
     return {**previous, "nodes": merged_nodes, "edges": merged_edges}
 
 
+RECOVERED_CANVAS_NAME = "Recovered canvas"
+
+
+def _set_canvas_owner(owner: Any) -> None:
+    """Record which project the live canvas is, in state.json first
+    (strictly: a failed write raises, before any catalog commit, so the two
+    files never disagree about a project that was committed)."""
+    if cli_graph.owner == owner and cli_graph.owner is not OWNER_UNKNOWN:
+        return
+    previous = cli_graph.owner
+    cli_graph.owner = owner
+    if cli_graph._persist_path is not None:
+        try:
+            cli_graph.save(cli_graph._persist_path)
+        except Exception as exc:
+            cli_graph.owner = previous
+            raise ProjectStoreError("The live canvas could not be saved; nothing changed") from exc
+
+
+def _file_live_canvas(catalog: dict[str, Any], exported: dict[str, Any], *, migrated: bool = False) -> dict[str, Any]:
+    """File the live canvas as a new project, "Recovered canvas", and open
+    it: the same graph and ids, recorded as that project's in state.json
+    before the caller commits the catalog. For a canvas no project in the
+    catalog is (the unfiled canvas of a first launch, ``migrated``, or one
+    whose project a restore couldn't bring back)."""
+    project = make_project(RECOVERED_CANVAS_NAME, {**empty_snapshot(), "nodes": exported["nodes"], "edges": exported["edges"]})
+    _set_canvas_owner(project["id"])
+    _overlay_live_project(project, exported)
+    catalog["projects"][project["id"]] = project
+    catalog["activeProjectId"] = project["id"]
+    catalog["workspaceRevision"] = uuid4().hex
+    if migrated:
+        catalog["migratedProjectId"] = project["id"]
+    return project
+
+
+def _settle_live_canvas(catalog: dict[str, Any], exported: dict[str, Any]) -> tuple[str, dict[str, Any] | None] | None:
+    """Make the catalog's open project the one the live canvas is, before
+    anything saves the canvas into a project or replaces it (review 1 of PR
+    #199, H1). The two disagree after a restore, or a crash between the two
+    files of a switch, a create or a delete. Returns None when they agree,
+    else (what it did, the project filed): "opened" the canvas's own project
+    (still in the list); "filed" the canvas as "Recovered canvas" (its
+    project isn't in the list, or which it is can't be known); "closed": no
+    project open (an empty canvas that isn't the open project). The caller
+    commits; the workspace revision changes, so open tabs reload."""
+    owner = cli_graph.owner
+    active = catalog["activeProjectId"]
+    if owner is OWNER_UNKNOWN or owner == active:
+        return None
+    if isinstance(owner, str) and owner in catalog["projects"]:
+        catalog["activeProjectId"] = owner
+        catalog["workspaceRevision"] = uuid4().hex
+        node_errors.use_project(owner)
+        print(f"[projects] the live canvas is project {owner}, not the open {active}: opening it", flush=True)
+        return "opened", None
+    if cli_graph.nodes or cli_graph.edges:
+        project = _file_live_canvas(catalog, exported)
+        print(f"[projects] the live canvas isn't a project in the list (it was {owner!r}): "
+              f"filed as \"{RECOVERED_CANVAS_NAME}\" {project['id']}", flush=True)
+        return "filed", project
+    _set_canvas_owner(None)
+    if active is None:
+        return None
+    catalog["activeProjectId"] = None
+    catalog["workspaceRevision"] = uuid4().hex
+    print(f"[projects] the live canvas is empty and isn't the open project {active}: none is open", flush=True)
+    return "closed", None
+
+
+def _note_live_canvas_settled(settled: tuple[str, dict[str, Any] | None] | None) -> None:
+    """After the commit: a canvas filed as "Recovered canvas" right after a
+    restore goes in that restore's record (the agents' note says so)."""
+    if not settled or settled[0] != "filed" or settled[1] is None:
+        return
+    notice = project_store.restore_notice()
+    if notice and notice.get("id") and not notice.get("recoveredCanvas"):
+        project_store.note_restore(notice["id"], recoveredCanvas={"id": settled[1]["id"], "name": settled[1]["name"]})
+
+
 def _graph_canvas_export(graph: CLIGraph) -> dict[str, list[dict[str, Any]]]:
     """``graph``'s nodes and wires as the canvas gets them
     (export_graph_for_frontend's shape), without its side effects: for
@@ -14442,7 +14672,7 @@ def _open_project_with(graph: CLIGraph) -> tuple[dict[str, Any], dict[str, Any]]
     """(the open project, its snapshot with ``graph`` on its canvas), or None
     with no project open."""
     active = project_store.workspace().get("activeProjectId")
-    project = _open_project_record(active) if active else None
+    project = _open_project_record(active) if active and _canvas_is(active, active) else None
     if project is None:
         return None
     return project, _overlaid_snapshot(project, _graph_canvas_export(graph))
@@ -14569,6 +14799,10 @@ CLEAR_DURING_RUN_PERSON = "A run is still going. Wait for it to finish or stop i
 def _commit_project_workspace(catalog: dict[str, Any], candidate: CLIGraph) -> None:
     """Prepare both disk writes before adopting any new live graph in memory."""
     previous = cli_graph.clone()
+    # The canvas becomes the project now open, recorded with it in state.json
+    # before the catalog says so (a crash between the two leaves a canvas
+    # that names its project: _settle_live_canvas).
+    candidate.owner = catalog["activeProjectId"]
     temporary = project_store.prepare(catalog)
     additions = []
     graph_written = False
@@ -14593,6 +14827,7 @@ def _commit_project_workspace(catalog: dict[str, Any], candidate: CLIGraph) -> N
     cli_graph.nodes = copy.deepcopy(candidate.nodes)
     cli_graph.edges = copy.deepcopy(candidate.edges)
     cli_graph._counter = candidate._counter
+    cli_graph.owner = candidate.owner
     # The incoming project's nodes' last run errors, kept while it was closed.
     node_errors.use_project(catalog["activeProjectId"])
 
@@ -14604,19 +14839,18 @@ async def list_projects() -> dict[str, Any]:
         changed = False
         adopted: str | None = None
         filed_from: tuple[str, int] | None = None
+        # The open project is the one the live canvas is, or the canvas is
+        # filed as its own (review 1 of PR #199, H1).
+        settled = _settle_live_canvas(catalog, exported)
+        changed = settled is not None
         if not catalog["projects"] and cli_graph.nodes:
+            # The unfiled canvas of a first launch (or from before projects).
             filed_from = (catalog["workspaceRevision"], canvas_undo_book.epoch(None))
-            snapshot = {**empty_snapshot(), "nodes": exported["nodes"], "edges": exported["edges"]}
-            project = make_project("Recovered canvas", snapshot)
-            _overlay_live_project(project, exported)
-            catalog["projects"][project["id"]] = project
-            catalog["activeProjectId"] = project["id"]
-            catalog["workspaceRevision"] = uuid4().hex
-            catalog["migratedProjectId"] = project["id"]
+            project = _file_live_canvas(catalog, exported, migrated=True)
             changed = True
             adopted = project["id"]
         elif active := catalog["activeProjectId"]:
-            changed = _overlay_live_project(catalog["projects"][active], exported)
+            changed = _overlay_live_project(catalog["projects"][active], exported) or changed
         for project in catalog["projects"].values():
             if needs_cover(project):  # saved before covers existed
                 refresh_metadata(project, touch=False)
@@ -14630,6 +14864,7 @@ async def list_projects() -> dict[str, Any]:
             _adopt_run_canvases(adopted)
             if filed_from is not None:
                 _note_canvas_filed(*filed_from, _workspace_context())
+        _note_live_canvas_settled(settled)
         listing = {
             "projects": sorted((project_metadata(project) for project in catalog["projects"].values()), key=lambda project: project["updatedAt"], reverse=True),
             "trash": _trash_listing(catalog),
@@ -14700,7 +14935,7 @@ async def get_project_size(project_id: str) -> dict[str, Any]:
     catalog = project_store.read()
     project = _project_id_or_404(project_id, catalog)
     is_open = catalog["activeProjectId"] == project_id
-    snapshot = _overlaid_snapshot(project, exported) if is_open else project["snapshot"]
+    snapshot = _overlaid_snapshot(project, exported) if is_open and _canvas_is(project_id, project_id) else project["snapshot"]
     found = project_size.breakdown(snapshot)
     size, limit = found["bytes"], MAX_PROJECT_BYTES
     all_defs = node_registry.get_all()
@@ -14938,12 +15173,11 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
         _project_replacement_guard()
         # API callers need not visit the menu first. Never erase a legacy
         # live canvas merely because no catalog migration request preceded it.
+        # Never replace a canvas that isn't the open project's without
+        # keeping it (review 1 of PR #199, H1): its own project, or filed.
+        _settle_live_canvas(catalog, exported)
         if not catalog["projects"] and cli_graph.nodes:
-            recovered = make_project("Recovered canvas", {**empty_snapshot(), "nodes": exported["nodes"], "edges": exported["edges"]})
-            _overlay_live_project(recovered, exported)
-            catalog["projects"][recovered["id"]] = recovered
-            catalog["activeProjectId"] = recovered["id"]
-            catalog["migratedProjectId"] = recovered["id"]
+            recovered = _file_live_canvas(catalog, exported, migrated=True)
             # Unreachable with a run registered (the guard above refuses), but
             # the same filing as list_projects', so the same bookkeeping.
             _adopt_run_canvases(recovered["id"])
@@ -15034,6 +15268,8 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
         _project_revision(body or {}, catalog)
         _project_replacement_guard()
         project = _project_id_or_404(project_id, catalog)
+        # The canvas this open replaces is kept: its own project, or filed (H1).
+        _settle_live_canvas(catalog, exported)
         if active := catalog["activeProjectId"]:
             _overlay_live_project(catalog["projects"][active], exported)
         historical = {node["id"]: node.get("data", {}).get("definitionId") for node in project["snapshot"]["nodes"]}
@@ -15097,7 +15333,8 @@ def _save_project(project_id: str, body: dict[str, Any], *, ingress: _IngressVer
                     "handoff": True}
         _project_revision(body, catalog, required="snapshot" in body)
         if "snapshot" in body:
-            if catalog["activeProjectId"] != project_id:
+            if catalog["activeProjectId"] != project_id or not _canvas_is(project_id, catalog["activeProjectId"]):
+                # The backend's canvas isn't this project (H1): the tab reloads.
                 raise HTTPException(status_code=409, detail="Only the currently open project can autosave its canvas")
             historical = {node["id"]: node.get("data", {}).get("definitionId") for node in project["snapshot"]["nodes"]}
             historical.update({node_id: node["definitionId"] for node_id, node in cli_graph.nodes.items()})
@@ -15300,6 +15537,7 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
     itself, pins included, can be restored until the trash expires.
     """
     body = body or {}
+    exported = await _projects_live_export()
     with project_store.transaction() as catalog, ExitStack() as fences:
         _project_id_or_404(project_id, catalog)
         _project_revision(body, catalog, required=True)
@@ -15307,6 +15545,13 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
         if deleting_active:
             fences.enter_context(_paid_graph_mutation("delete the open project"))
             _project_replacement_guard("delete the open project")
+            # The canvas a delete empties is kept: in the project when it is
+            # that one (so Recently deleted has its latest), or its own, or
+            # filed (H1). Settling may change what is open.
+            if _settle_live_canvas(catalog, exported) is not None:
+                deleting_active = catalog["activeProjectId"] == project_id
+            if deleting_active:
+                _overlay_live_project(catalog["projects"][project_id], exported)
         trashed = move_to_trash(catalog, project_id,
                                 actor_record(actor_for_headers(current_request_headers())))
         if deleting_active:

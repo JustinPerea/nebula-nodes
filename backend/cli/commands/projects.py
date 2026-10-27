@@ -12,7 +12,7 @@ import sys
 import project_client
 
 from ..client import NebulaClient
-from ..formatter import format_project
+from ..formatter import catalog_restore_lines, format_project
 
 
 def _print_json(data) -> None:
@@ -29,7 +29,10 @@ def run_list(client: NebulaClient, *, as_json: bool = False) -> None:
     restore = listing.get("catalogRestore")
     if isinstance(restore, dict) and restore.get("note"):
         # Nebula restored a damaged project list (until the person closes its notice).
-        print(f"Note: {restore['note']}\n")
+        print(f"Note: {restore['note']}")
+        for line in catalog_restore_lines(restore):
+            print(line)
+        print()
     if not projects:
         print("No saved projects.")
         return

@@ -371,8 +371,11 @@ def start_here(ctx: Context | None = None) -> str:
 
     JSON with seven parts, each kept short, led by `catalogRestore` when
     Nebula restored a damaged project list the person hasn't closed the
-    notice of (its `note`, the copy, the damaged file's path, a few of the
-    projects added back; list_projects has it in full):
+    notice of (its `note`, the copy and its time, the damaged file's path, a
+    few of the projects added back, and of those that went back to the
+    copy's version, came back after a delete or are in Recently deleted
+    again, and whether the damaged file was read to its end; list_projects
+    has it in full):
     - `canvas`: the project, `view.stale` (no browser watching), the
       selection, other agents' cursors, and the nodes (id, name,
       definitionId, state, onScreen, inputsFrom, up to 8 params cut to 60
@@ -1306,8 +1309,14 @@ def list_projects(ctx: Context | None = None) -> dict[str, Any]:
     (until the person closes the notice): `note` says what happened,
     `source` the copy it came from (null: rebuilt from the damaged files),
     `addedBack` the projects it added back, `notAddedBack` those it
-    couldn't, and `damagedFile` where the damaged file is kept. Project ids
-    from before it may be stale."""
+    couldn't, `reverted` those that went back to the copy's version,
+    `cameBack` those deleted after the copy that are back, `backInTrash`
+    those restored after the copy that are in Recently deleted again,
+    `recoveredCanvas` the live canvas filed as its own project,
+    `damagedReadWhole` false when the damaged file couldn't be read to its
+    end (changes after the copy may then be missing without a row), and
+    `damagedFile` where the damaged file is kept. Project ids from before it
+    may be stale; ask the person before deleting a project that came back."""
     import project_client
 
     return project_client.list_projects(_api(), headers=_agent_headers(ctx))

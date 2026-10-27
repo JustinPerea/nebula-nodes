@@ -566,7 +566,10 @@ def test_a_deleted_project_waits_in_the_trash_and_restores_whole(workspace):
     catalog = store.read()
     assert catalog["trash"] == {}
     assert catalog["activeProjectId"] == second["project"]["id"]
-    assert catalog["projects"][project_id] == before
+    # Whole, plus when it came back (a restore of a damaged list reads it).
+    restored_entry = dict(catalog["projects"][project_id])
+    assert restored_entry.pop("restoredAt")
+    assert restored_entry == before
     assert client.post(f"/api/projects/{project_id}/restore").status_code == 404
 
 
@@ -673,6 +676,6 @@ def test_a_corrupt_trash_entry_is_reported_not_silently_dropped(workspace):
     listing = client.get("/api/projects")
     assert listing.status_code == 200
     assert [project["name"] for project in listing.json()["projects"]] == ["A"]
-    assert listing.json()["catalogRestore"]["notAddedBack"] == [{"id": "0" * 32, "reason": "invalid"}]
+    assert listing.json()["catalogRestore"]["notAddedBack"] == [{"id": "0" * 32, "reason": "invalid", "trashed": True}]
     [kept] = store.root.glob("catalog.json.damaged-*")
     assert kept.read_bytes() == before

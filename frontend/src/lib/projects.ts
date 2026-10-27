@@ -57,8 +57,27 @@ export interface CatalogRestore {
   /** 'restored': from the last good copy; 'rebuilt': no good copy, from what the damaged files held. */
   kind: 'restored' | 'rebuilt';
   source: string | null; damagedFile: string | null;
+  /** When the copy's catalog was saved (the notice says its age when it decided something). */
+  copyAt?: string | null;
+  setAside?: string[];
   addedBack: { id: string; name: string; trashed?: boolean }[]; addedBackCount: number;
-  notAddedBackCount: number; projectCount?: number; note?: string;
+  /** Found in the damaged file but not put back; `name` when it could be read. */
+  notAddedBack?: { id: string; reason: string; name?: string; trashed?: boolean }[];
+  notAddedBackCount: number;
+  /** What the copy decided (review 1 of PR #199, M1): (a) back to the copy's
+   * version (`liveCanvas`: the open project, whose graph came from the live
+   * canvas), (b) deleted after the copy and back, (c) restored after the copy
+   * and in Recently deleted again. */
+  reverted?: { id: string; name: string; trashed?: boolean; liveCanvas?: boolean }[]; revertedCount?: number;
+  cameBack?: { id: string; name: string; how?: string }[]; cameBackCount?: number;
+  backInTrash?: { id: string; name: string }[]; backInTrashCount?: number;
+  /** The live canvas filed as its own project (it wasn't one in the restored list). */
+  recoveredCanvas?: { id: string; name: string } | null;
+  /** The damaged catalog.json was read to its end (it parsed; only its
+   * shape was wrong). False when it was cut or zeroed: what it held past the
+   * damage is unknown, so the notice never says nothing was missing. */
+  damagedReadWhole?: boolean;
+  projectCount?: number; note?: string;
 }
 export interface ProjectList {
   projects: ProjectSummary[]; trash?: TrashedProject[]; activeProjectId: string | null;

@@ -437,6 +437,31 @@ def format_price_line(detail: dict[str, Any]) -> str | None:
     return "PRICE: no list price at default settings"
 
 
+# What an older copy decided in a catalog restore, by name (start_here's
+# catalogRestore; `nebula projects` prints the same).
+_RESTORE_ROWS = (
+    ("reverted", "Went back to the copy's version"),
+    ("cameBack", "Deleted after the copy, now back"),
+    ("backInTrash", "Restored after the copy, in Recently deleted again"),
+)
+
+
+def catalog_restore_lines(restore: dict[str, Any]) -> list[str]:
+    """One line per kind of outcome a catalog restore reported, with names."""
+    lines = []
+    for key, label in _RESTORE_ROWS:
+        rows = [row for row in restore.get(key) or [] if isinstance(row, dict)]
+        count = restore.get(f"{key}Count") or len(rows)
+        if not count:
+            continue
+        names = ", ".join(str(row.get("name")) for row in rows)
+        more = count - len(rows)
+        lines.append(f"  {label}: {names}{f' and {more} more' if more > 0 else ''}")
+    if restore.get("kind") == "restored" and restore.get("damagedReadWhole") is False:
+        lines.append("  Damaged file not read to its end: changes after the copy may be missing")
+    return lines
+
+
 def format_start(start: dict[str, Any]) -> str:
     """Render GET /api/agent/start (services/agent_start.py) for `nebula context`:
     the canvas, pins, proposals, boards, the nodes that run here with prices,
@@ -451,6 +476,7 @@ def format_start(start: dict[str, Any]) -> str:
     if restore.get("note"):
         # Nebula restored a damaged project list (services/project_store.py).
         lines.append(f"PROJECT LIST RESTORED: {restore['note']}")
+        lines.extend(catalog_restore_lines(restore))
     canvas = start.get("canvas") or {}
     project = canvas.get("project") or {}
     watching = "no browser watching" if (canvas.get("view") or {}).get("stale") else "open in the browser"

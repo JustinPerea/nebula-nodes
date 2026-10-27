@@ -70,7 +70,8 @@ describe('the catalog restore notice', () => {
     relist();
     await vi.advanceTimersByTimeAsync(0);
     expect(useProjectStore.getState().catalogRestore?.id).toBe(RESTORE.id);
-    expect(logged).toEqual([`Project list restored from catalog.json.bak; damaged file kept at ${RESTORE.damagedFile}; 1 added back.`]);
+    // GM's sentences, with the path the notice leaves out (round 2).
+    expect(logged).toEqual([`Restored the project list from catalog.json.bak. The damaged file was kept at ${RESTORE.damagedFile}. Added back “Dunes”.`]);
 
     relist();
     await vi.advanceTimersByTimeAsync(0);

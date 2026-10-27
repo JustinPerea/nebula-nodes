@@ -23,6 +23,31 @@ SHORT_ID_RE = re.compile(r"n([0-9]{1,9})")
 # ceiling, not "no higher than the counter".
 MAX_ID_JUMP = 1_000_000
 
+# Which project the live canvas is (state.json's ``projectId``, PR #199
+# review 1, H1). The catalog says which project is open; this says whose
+# graph the canvas holds, so nothing saves one project's canvas into another
+# (main._overlay_live_project) after a restore, or a crash between the two
+# files. A project id, None for the unfiled canvas, or:
+# - OWNER_UNKNOWN: never recorded (a state.json saved before it, or a graph
+#   made in memory): the catalog's open project, as before;
+# - OWNER_UNPROVEN: it can't be known (the catalog was damaged when an
+#   unrecorded state.json loaded): no project's; main files it as its own.
+OWNER_UNKNOWN: Any = type("OwnerUnknown", (), {"__repr__": lambda self: "OWNER_UNKNOWN"})()
+OWNER_UNPROVEN: Any = type("OwnerUnproven", (), {"__repr__": lambda self: "OWNER_UNPROVEN"})()
+_UNPROVEN_MARK = "unproven"
+_PROJECT_ID = re.compile(r"[a-f0-9]{32}")
+
+
+def stored_owner(value: Any, present: bool) -> Any:
+    """``projectId`` as state.json holds it, as an owner."""
+    if not present:
+        return OWNER_UNKNOWN
+    if value is None:
+        return None
+    if value == _UNPROVEN_MARK:
+        return OWNER_UNPROVEN
+    return value if isinstance(value, str) and _PROJECT_ID.fullmatch(value) else OWNER_UNPROVEN
+
 
 class CLIGraph:
     """In-memory graph state for CLI operations.
@@ -43,6 +68,9 @@ class CLIGraph:
         self.edges: list[dict[str, str]] = []
         self._counter: int = 0
         self._persist_path: Path | None = persist_path
+        # Which project this canvas is (OWNER_UNKNOWN above): set by whoever
+        # puts a project on it (main._commit_project_workspace), saved with it.
+        self.owner: Any = OWNER_UNKNOWN
         # Nodes whose params ``load`` upgraded (services/saved_graph_upgrades.py),
         # and whether the file was saved before ``PARAMS_VERSION`` (true even
         # when no value changed: main's boot step writes the marker and makes
@@ -231,11 +259,14 @@ class CLIGraph:
         replacement_edges = copy.deepcopy(candidate.edges)
         replacement_counter = candidate._counter
         if self._persist_path is not None:
+            # The same canvas with new contents (an import, an apply): its
+            # project stays.
             self._save_state(
                 self._persist_path,
                 replacement_nodes,
                 replacement_edges,
                 replacement_counter,
+                self.owner,
             )
         self.nodes = replacement_nodes
         self.edges = replacement_edges
@@ -247,6 +278,7 @@ class CLIGraph:
         candidate.nodes = copy.deepcopy(self.nodes)
         candidate.edges = copy.deepcopy(self.edges)
         candidate._counter = self._counter
+        candidate.owner = self.owner
         return candidate
 
     # ------------------------------------------------------------------
@@ -289,7 +321,7 @@ class CLIGraph:
 
     def save(self, path: Path) -> None:
         """Atomically persist the graph (including counter) to a JSON file."""
-        self._save_state(path, self.nodes, self.edges, self._counter)
+        self._save_state(path, self.nodes, self.edges, self._counter, self.owner)
 
     @staticmethod
     def _save_state(
@@ -297,15 +329,20 @@ class CLIGraph:
         nodes: dict[str, dict[str, Any]],
         edges: list[dict[str, str]],
         counter: int,
+        owner: Any = OWNER_UNKNOWN,
     ) -> None:
         target = require_allowed_path(path)
-        data = {
+        data: dict[str, Any] = {
             "nodes": list(nodes.values()),
             "edges": list(edges),
             "counter": counter,
             # Everything this code writes already holds upgraded params.
             "paramsVersion": PARAMS_VERSION,
         }
+        if owner is OWNER_UNPROVEN:
+            data["projectId"] = _UNPROVEN_MARK
+        elif owner is not OWNER_UNKNOWN:
+            data["projectId"] = owner
         temporary = target.with_name(f".{target.name}.{uuid4().hex}.tmp")
         try:
             with temporary.open("x", encoding="utf-8") as handle:
@@ -375,6 +412,7 @@ class CLIGraph:
         version = stored_version(data.get("paramsVersion"))
         upgraded = upgrade_flat_nodes(nodes.values(), version)
         self.nodes, self.edges, self._counter = nodes, edges, counter
+        self.owner = stored_owner(data.get("projectId"), "projectId" in data)
         self.upgraded_on_load = upgraded
         self.params_advanced_on_load = version < PARAMS_VERSION
 

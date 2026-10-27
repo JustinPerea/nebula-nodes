@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { ArrowUpRight, Check, ChevronRight, ImageIcon, Pencil, Plus, RotateCcw, Search, Settings, Trash2, X } from 'lucide-react';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { coverImages, type CatalogRestore, type CoverChoices, type ProjectCover } from '../../lib/projects';
-import { catalogRestoreLine } from './catalogRestoreCopy';
+import { catalogRestoreNotice, OPEN_RECENTLY_DELETED } from './catalogRestoreCopy';
 import { actorLabel } from '../../lib/trash';
 import { CrabMark } from '../brand/CrabMark';
 import { ProposalsFor } from '../proposals/ProposalsFor';
@@ -294,18 +294,35 @@ function ConfirmInline({ label, confirmLabel, prompt, busy, onConfirm, className
   );
 }
 
-function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash }: {
+function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash, openRequest = 0 }: {
   trash: TrashedProject[]; busy: boolean;
   onRestore: (id: string) => void; onPurge: (id: string) => void; onEmptyTrash: () => void;
+  /** When something last asked the list open (the restore notice's
+   * "Open Recently deleted"), as the clock at that click; 0 for never. A new
+   * value opens the list and moves focus to it. */
+  openRequest?: number;
 }) {
   const [open, setOpen] = useState(false);
   // Read the clock when the list opens, not on every render.
   const [now, setNow] = useState(() => Date.now());
+  const toggle = useRef<HTMLButtonElement>(null);
+  // A new request opens the list in this render (React's "adjust state when
+  // a prop changes"), so the effect below only moves focus.
+  const [seenRequest, setSeenRequest] = useState(0);
+  if (openRequest !== seenRequest) {
+    setSeenRequest(openRequest);
+    if (openRequest) { setNow(openRequest); setOpen(true); }
+  }
+  useEffect(() => {
+    if (!openRequest) return;
+    toggle.current?.focus();
+    toggle.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [openRequest]);
   return (
     <section className="project-home__trash" aria-labelledby="recently-deleted-title">
       <div className="project-home__trash-header">
         <h2 id="recently-deleted-title">
-          <button type="button" className="project-home__trash-toggle" aria-expanded={open} aria-controls="recently-deleted-list" onClick={() => {
+          <button ref={toggle} type="button" className="project-home__trash-toggle" aria-expanded={open} aria-controls="recently-deleted-list" onClick={() => {
             if (!open) setNow(Date.now());
             setOpen(!open);
           }}>
@@ -363,6 +380,38 @@ function UndoToast({ project, busy, onUndo, onDismiss }: {
 
 const noop = () => {};
 
+/** The notice after Nebula restored a damaged project list (GM's lines,
+ * catalogRestoreCopy). Its status region is in the page from the start and
+ * filled after it mounts, so screen readers announce it (a live region
+ * reads changes, not what it held when it appeared: review 1 of PR #199,
+ * L8). × closes it and puts focus on the page heading. */
+function CatalogRestoreNotice({ restore, onDismiss, onOpenRecentlyDeleted, heading }: {
+  restore: CatalogRestore | null; onDismiss: () => void; onOpenRecentlyDeleted: () => void;
+  heading: RefObject<HTMLHeadingElement | null>;
+}) {
+  // Filled once the region is in the page: the callback ref runs after it
+  // is attached, and the content follows in the next render.
+  const [ready, setReady] = useState(false);
+  const attached = useCallback((region: HTMLDivElement | null) => { if (region) setReady(true); }, []);
+  const notice = ready && restore ? catalogRestoreNotice(restore) : null;
+  return (
+    // A polite live region rather than role="status": the page keeps one
+    // status per notice it shows (the loading line, the saved-file line),
+    // and this empty region stays in the page the whole time.
+    <div ref={attached} className={notice ? 'project-home__notice project-home__restore' : 'project-home__sr-only'} aria-live="polite" aria-atomic="true">
+      {notice && <>
+        <span>{notice.text}</span>
+        {notice.openRecentlyDeleted && <button type="button" className="project-home__restore-action" onClick={onOpenRecentlyDeleted}>{OPEN_RECENTLY_DELETED}</button>}
+        <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={() => {
+          // Before the button goes, so focus never drops to the page body.
+          heading.current?.focus();
+          onDismiss();
+        }}><X aria-hidden="true" /></button>
+      </>}
+    </div>
+  );
+}
+
 /** The held edits' notice goes when the person chooses, and takes the
  * focused button (or the confirm's) with it, which would drop focus to the
  * page body and send the next Tab back to the top. Focus moves to the line
@@ -398,6 +447,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
   const savedLine = useRef<HTMLDivElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   useFocusAfterHeldEdits(Boolean(unsavedEdits), savedLine, heading);
+  const [trashOpenRequest, setTrashOpenRequest] = useState(0);
   const visibleProjects = useMemo(() => projects
     .filter((project) => project.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
     .sort((left, right) => recentTimestamp(right) - recentTimestamp(left)), [projects, query]);
@@ -420,10 +470,8 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
           <button className="project-home__new" type="button" disabled={loading || locked || Boolean(unsavedEdits)} {...offlineMark(offline)} onClick={() => onCreate()}><Plus aria-hidden="true" />New project</button>
         </section>
 
-        {catalogRestore && <div className="project-home__notice project-home__restore" role="status">
-          <span>{catalogRestoreLine(catalogRestore)}</span>
-          <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismissCatalogRestore}><X aria-hidden="true" /></button>
-        </div>}
+        <CatalogRestoreNotice restore={catalogRestore} onDismiss={onDismissCatalogRestore} heading={heading}
+          onOpenRecentlyDeleted={() => setTrashOpenRequest((last) => Math.max(Date.now(), last + 1))} />
 
         {/* GM's WRAP rule: where "Try again" redoes the failure it is the retry, so the
             reason drops its own; where it only reloads, or can't help, the line stays whole. */}
@@ -449,7 +497,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
               : projects.length > 0 ? <div className="project-home__empty" role="status"><Search className="project-home__empty-search" aria-hidden="true" /><h3>No projects match “{query.trim()}”</h3><p>Try another name or clear your search.</p><button type="button" className="project-home__secondary" onClick={() => setQuery('')}>Clear search</button></div>
                 : !error && !unsavedEdits && <div className="project-home__empty"><div className="project-home__empty-graph"><NodeGraphPlaceholder /></div><h3>Your first project starts here.</h3><p>Connect ideas, models and media on a canvas of your own.</p><button type="button" className="project-home__secondary" disabled={locked} {...offlineMark(offline)} onClick={() => onCreate()}><Plus aria-hidden="true" />Create your first project</button></div>}
         </section>
-        {!loading && trash.length > 0 && <RecentlyDeleted trash={trash} busy={locked} onRestore={onRestore} onPurge={onPurge} onEmptyTrash={onEmptyTrash} />}
+        {!loading && trash.length > 0 && <RecentlyDeleted trash={trash} busy={locked} onRestore={onRestore} onPurge={onPurge} onEmptyTrash={onEmptyTrash} openRequest={trashOpenRequest} />}
       </main>
       {lastDeleted && <UndoToast key={lastDeleted.id} project={lastDeleted} busy={locked}
         onUndo={() => onRestore(lastDeleted.id)} onDismiss={onDismissUndo} />}
