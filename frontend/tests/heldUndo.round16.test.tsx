@@ -53,6 +53,7 @@ import { useGraphStore } from '../src/store/graphStore';
 import { wsClient, type ExecutionEvent } from '../src/lib/wsClient';
 import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
 import { TAB_ID } from '../src/lib/tabId';
+import { DROPPED_UNDO_TEXT } from '../src/lib/deleteNotice';
 
 const initialGraph = useGraphStore.getState();
 function textNode(id: string, value = id): Node<NodeData> {
@@ -67,6 +68,8 @@ const backend = () => [...net.backend].sort();
 const valueOf = (id: string) => store().nodes.find((node) => node.id === id)?.data.params.value;
 const notice = () => store().undoNotice?.text ?? null;
 const message = () => store().messageNotice?.text ?? null;
+/** The dropped-press line, wherever it shows (the notice, or the message beside an error). */
+const dropped = () => [notice(), message()].includes(DROPPED_UNDO_TEXT);
 const edgeIds = () => store().edges.map((edge) => `${edge.source}>${edge.target}`).sort();
 const settle = () => act(async () => { for (let i = 0; i < 8; i += 1) await new Promise((resolve) => setTimeout(resolve, 5)); });
 const undo = async () => { act(() => { store().undo(); }); await settle(); };
@@ -155,25 +158,30 @@ describe('round 16 (review 15): an undo takes off only what its step added; no s
       await answer('n1'); await answer('n2');
       net.holdDeletes = false;
       await undo();
-      expect(restores()).toEqual([restore(['n1=n1', 'n2=n2'])]);
-      expect(notice()).toBe('Restored 2 nodes.');
-      expect(ids()).toEqual(['n1', 'n2', 'n3']);
+      // Round 18 (GM option (c)): the delete's step stays below the typing, so the first Cmd+Z undoes the typing.
+      expect(restores()).toEqual([restore(['n3=n3'])]);
+      expect(notice()).not.toBe('Deleted the node.');
+      expect(ids()).toEqual(['n3']);
+      expect(valueOf('n3')).toBe('n3');
       sameAsBackend();
       await undo();
-      expect(restores()[1]).toEqual(restore(['n3=n3']));
-      expect(notice()).not.toBe('Deleted the node.');
+      // Round 18 (GM option (c)): the second Cmd+Z restores both nodes.
+      expect(restores()[1]).toEqual(restore(['n1=n1', 'n2=n2']));
+      expect(notice()).toBe('Restored 2 nodes.');
       expect(ids()).toEqual(['n1', 'n2', 'n3']);
       expect(valueOf('n3')).toBe('n3');
       sameAsBackend();
       await redo();
-      expect(restores()[2]).toEqual(restore(['n3=F']));
-      expect(ids()).toEqual(['n1', 'n2', 'n3']);
-      expect(valueOf('n3')).toBe('F');
-      sameAsBackend();
-      await redo();
-      expect(restores()[3]).toEqual(restore([], ['n1', 'n2']));
+      // Round 18 (GM option (c)): redo runs in the new order: the delete first.
+      expect(restores()[2]).toEqual(restore([], ['n1', 'n2']));
       expect(notice()).toBe('Deleted 2 nodes.');
       expect(ids()).toEqual(['n3']);
+      sameAsBackend();
+      await redo();
+      // Round 18 (GM option (c)): then the typing.
+      expect(restores()[3]).toEqual(restore(['n3=F']));
+      expect(ids()).toEqual(['n3']);
+      expect(valueOf('n3')).toBe('F');
       sameAsBackend();
       expect(restores()).toHaveLength(4);
     });
@@ -187,10 +195,12 @@ describe('round 16 (review 15): an undo takes off only what its step added; no s
       await answer('n2'); await answer('n1');
       net.holdDeletes = false;
       await undo();
-      expect(restores()).toEqual([restore(['n1=n1', 'n2=n2'])]);
+      // Round 18 (GM option (c)): the typing is the newer step, undone first.
+      expect(restores()).toEqual([restore(['n3=n3'])]);
       sameAsBackend();
       await undo();
-      expect(restores()).toEqual([restore(['n1=n1', 'n2=n2']), restore(['n3=n3'])]);
+      // Round 18 (GM option (c)): then the delete.
+      expect(restores()).toEqual([restore(['n3=n3']), restore(['n1=n1', 'n2=n2'])]);
       expect(ids()).toEqual(['n1', 'n2', 'n3']);
       sameAsBackend();
     });
@@ -206,15 +216,19 @@ describe('round 16 (review 15): an undo takes off only what its step added; no s
       sameAsBackend();
       net.holdDeletes = false;
       await undo();
-      expect(restores()).toEqual([restore(['n1=n1', 'n3=n3'])]);
+      // Round 18 (GM option (c)): the typing is the newer step, undone first.
+      expect(restores()).toEqual([restore(['n4=n4'])]);
+      expect(ids()).toEqual(['n2', 'n4']);
       sameAsBackend();
       await undo();
-      expect(restores()[1]).toEqual(restore(['n4=n4']));
+      // Round 18 (GM option (c)): then the delete, bringing back only the two it removed.
+      expect(restores()[1]).toEqual(restore(['n1=n1', 'n3=n3']));
       expect(ids()).toEqual(['n1', 'n2', 'n3', 'n4']);
       sameAsBackend();
       await redo();
-      expect(restores()[2]).toEqual(restore(['n4=T']));
-      expect(ids()).toEqual(['n1', 'n2', 'n3', 'n4']);
+      // Round 18 (GM option (c)): redo runs in the new order: the delete first.
+      expect(restores()[2]).toEqual(restore([], ['n1', 'n3']));
+      expect(ids()).toEqual(['n2', 'n4']);
       sameAsBackend();
     });
 
@@ -227,11 +241,13 @@ describe('round 16 (review 15): an undo takes off only what its step added; no s
       await answer('n1'); await answer('n2');
       net.holdDeletes = false;
       await undo();
-      expect(restores()).toEqual([restore(['n1=n1', 'n2=n2'], [], ['n1>n2', 'n2>n3'])]);
-      expect(edgeIds()).toEqual(['n1>n2', 'n2>n3']);
+      // Round 18 (GM option (c)): the typing is the newer step, undone first.
+      expect(restores()).toEqual([restore(['n3=n3'])]);
+      expect(edgeIds()).toEqual([]);
       sameAsBackend();
       await undo();
-      expect(restores()[1]).toEqual(restore(['n3=n3']));
+      // Round 18 (GM option (c)): then the delete, with both wires.
+      expect(restores()[1]).toEqual(restore(['n1=n1', 'n2=n2'], [], ['n1>n2', 'n2>n3']));
       expect(ids()).toEqual(['n1', 'n2', 'n3']);
       expect(edgeIds()).toEqual(['n1>n2', 'n2>n3']);
       sameAsBackend();
@@ -241,24 +257,34 @@ describe('round 16 (review 15): an undo takes off only what its step added; no s
       setGraph([textNode('n1'), textNode('n2'), textNode('n3'), textNode('n4')]);
       removeTogether('n1', 'n2', 'n3'); await settle();
       await undo();
+      // Round 18 (GM option (c)): the press during the delete's flight is dropped at once and changes nothing.
+      expect(dropped()).toBe(true);
+      expect(ids()).toEqual(['n4']);
       ownSync([textNode('n1'), textNode('n2'), textNode('n4')]);
       type('n4', 'A'); await pause();
       ownSync([textNode('n1'), textNode('n4', 'A')]);
       type('n4', 'AB');
       ownSync([textNode('n4', 'AB')]);
       await answer('n3'); await answer('n2'); await answer('n1');
-      expect(restores()).toEqual([restore(['n1=n1', 'n2=n2', 'n3=n3'])]);
-      expect(notice()).toBe('Restored 3 nodes.');
+      // Round 18 (GM option (c)): the dropped press is never applied late.
+      expect(restores()).toEqual([]);
       sameAsBackend();
       net.holdDeletes = false;
       await undo();
-      expect(restores()[1]).toEqual(restore(['n4=A']));
-      expect(ids()).toEqual(['n1', 'n2', 'n3', 'n4']);
+      // Round 18 (GM option (c)): the typing steps are above the delete's, so they undo first, one by one.
+      expect(restores()[0]).toEqual(restore(['n4=A']));
+      expect(ids()).toEqual(['n4']);
       sameAsBackend();
       await undo();
-      expect(restores()[2]).toEqual(restore(['n4=n4']));
-      expect(ids()).toEqual(['n1', 'n2', 'n3', 'n4']);
+      expect(restores()[1]).toEqual(restore(['n4=n4']));
+      expect(ids()).toEqual(['n4']);
       expect(notice() ?? '').not.toMatch(/Deleted|Restored/);
+      sameAsBackend();
+      await undo();
+      // Round 18 (GM option (c)): then one Cmd+Z restores the three.
+      expect(restores()[2]).toEqual(restore(['n1=n1', 'n2=n2', 'n3=n3']));
+      expect(notice()).toBe('Restored 3 nodes.');
+      expect(ids()).toEqual(['n1', 'n2', 'n3', 'n4']);
       sameAsBackend();
     });
   });
@@ -323,12 +349,15 @@ describe('round 16 (review 15): an undo takes off only what its step added; no s
       await answer('n1', 404);
       net.holdDeletes = false;
       await undo();
-      expect(restores()).toEqual([restore(['n1=n1', 'n2=n2'])]);
-      expect(notice()).toBe('Restored 2 nodes.');
-      expect(store().undoStack).toHaveLength(0);
+      // Round 18 (GM option (c)): n1 left before the clear, so the clear's undo puts back n2 only; the delete's step stays below.
+      expect(restores()).toEqual([restore(['n2=n2'])]);
+      expect(notice()).toBe('Restored the node.');
+      expect(store().undoStack).toHaveLength(1);
       sameAsBackend();
       await undo();
-      expect(restores()).toHaveLength(1);
+      // Round 18 (GM option (c)): the next Cmd+Z undoes the delete (a 404 counts as deleted); no dead step is left.
+      expect(restores()).toEqual([restore(['n2=n2']), restore(['n1=n1'])]);
+      expect(store().undoStack).toHaveLength(0);
       expect(ids()).toEqual(['n1', 'n2']);
       sameAsBackend();
     });
@@ -341,7 +370,12 @@ describe('round 16 (review 15): an undo takes off only what its step added; no s
       await answer('n1');
       net.holdDeletes = false;
       await undo();
-      expect(restores()).toEqual([restore(['n1=n1', 'n2=n2'])]);
+      // Round 18 (GM option (c)): n1 left before the clear, so the clear's undo puts back n2 only; the delete's step stays below.
+      expect(restores()).toEqual([restore(['n2=n2'])]);
+      expect(store().undoStack).toHaveLength(1);
+      await undo();
+      // Round 18 (GM option (c)): the next Cmd+Z undoes the delete.
+      expect(restores()).toEqual([restore(['n2=n2']), restore(['n1=n1'])]);
       expect(store().undoStack).toHaveLength(0);
       expect(ids()).toEqual(['n1', 'n2']);
       sameAsBackend();
@@ -367,12 +401,26 @@ describe('round 16 (review 15): an undo takes off only what its step added; no s
       setGraph([textNode('n1'), textNode('n2')]);
       act(() => { store().deleteNode('n1'); }); await settle();
       await undo();
+      // Round 18 (GM option (c)): the press during the delete's flight is dropped at once, not held.
+      expect(notice()).toBe(DROPPED_UNDO_TEXT);
+      expect(ids()).toEqual(['n2']);
+      // Clear that line so the held press below has to say its own.
+      act(() => { useGraphStore.setState({ undoNotice: null } as never); });
       const step = clearStep();
       await undo();
+      expect(dropped()).toBe(false);
       act(() => { store().cancelUndoStep(step); store().endUndoStep(step); }); await settle();
+      // Round 18 (GM option (c)): the press held for the refused clear says it skipped at once (no later restore to say it beside).
+      expect(notice()).toBe(DROPPED_UNDO_TEXT);
       await answer('n1');
+      // Round 18 (GM option (c)): neither press is applied late.
+      expect(restores()).toEqual([]);
+      expect(notice()).toBe('Deleted the node.');
+      net.holdDeletes = false;
+      await undo();
+      // Round 18 (GM option (c)): once the delete has landed, a new Cmd+Z restores the node.
       expect(restores()).toEqual([restore(['n1=n1'])]);
-      expect(notice()).toBe('Restored the node. 1 undo was skipped while a change was saving.');
+      expect(notice()).toBe('Restored the node.');
       expect(ids()).toEqual(['n1', 'n2']);
       sameAsBackend();
     });
@@ -382,10 +430,21 @@ describe('round 16 (review 15): an undo takes off only what its step added; no s
       type('n1', 'E1');
       act(() => { store().deleteNode('n2'); }); await settle();
       await undo(); await undo();
+      // Round 18 (GM option (c)): both presses target the delete still on its way: each is dropped at once and changes nothing.
+      expect(notice()).toBe(DROPPED_UNDO_TEXT);
+      expect(valueOf('n1')).toBe('E1');
       await answer('n2', 409);
       expect(notice()).toBe("Couldn't delete the node. Nebula failed.");
-      expect(message()).toBe('1 undo was skipped while a change was saving.');
+      // Round 18 (GM option (c)): no press was held, so nothing is said beside the failure line and nothing is applied late.
+      expect(message()).toBeNull();
+      expect(restores()).toEqual([]);
+      expect(ids()).toEqual(['n1', 'n2']);
+      net.holdDeletes = false;
+      await undo();
+      // Round 18 (GM option (c)): the failed delete left no step, so a new Cmd+Z undoes the typing; the failure line stays.
+      expect(notice()).toBe("Couldn't delete the node. Nebula failed.");
       expect(restores()).toEqual([restore(['n1=n1'])]);
+      expect(store().undoStack).toHaveLength(0);
       sameAsBackend();
     });
     it('r14 C1: two clears, a Cmd+Z held for the first; the second changed nothing, so the next Cmd+Z puts the first back', async () => {

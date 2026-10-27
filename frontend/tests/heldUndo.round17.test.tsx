@@ -241,10 +241,13 @@ describe('round 17 (review 16): an undo always takes off what its own step added
       while (nebula().releaseAnswer()) await settle();
       nebula().holdAnswers = false;
       nebula().holdEchoes = false;
+      // Round 18 (GM, option (c)): the delete's change lands when Delete is
+      // pressed, so the typing after it is the newer step: the first Cmd+Z
+      // takes the typing back, the second brings both nodes back.
       await undo();
-      expect(restores()[0]).toEqual(restore(['n1=n1', 'n2=n2']));
+      expect(restores()[0]).toEqual(restore(['n3=n3']));
       await undo();
-      expect(restores()[1]).toEqual(restore(['n3=n3']));
+      expect(restores()[1]).toEqual(restore(['n1=n1', 'n2=n2']));
       expect(ids()).toEqual(['n1', 'n2', 'n3']);
       sameAsNebula();
     });
@@ -660,7 +663,10 @@ describe('round 17 (review 16): an undo always takes off what its own step added
       nebula().holdEchoes = true;
       nebula().holdAnswers = true;
       await del('n1');
-      expect(cliIds()).toEqual(['n1', 'n2']);
+      // Round 18 (GM, option (c)): the node is off the canvas at once, so a
+      // second Delete has nothing to press on; a remove for it (a stale
+      // selection) is left to the delete on its way.
+      expect(cliIds()).toEqual(['n2']);
       await del('n1');
       nebula().holdEchoes = false;
       nebula().holdAnswers = false;

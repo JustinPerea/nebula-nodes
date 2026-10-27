@@ -133,21 +133,29 @@ export function PlaceholderRunDialog({ model, changed = false, moved, onDone }: 
   if (track.last !== current) {
     const movedNow = movedRowIds(track.model, model);
     const all = [...new Set([...track.moved, ...movedNow])];
-    // A node joining or leaving: the left line says so, else the total.
-    const says = (movedNow.length > 0 ? movedNodesLine(model.rows, all) : null)
-      ?? (model.leftLine !== track.model.leftLine ? model.leftLine : null) ?? model.totalLine ?? '';
+    // Review 17: every line the update brings, in the body's order: the
+    // nodes that moved, then a node joining or leaving (the left line); else the total.
+    const lines = [movedNow.length > 0 ? movedNodesLine(model.rows, all) : null,
+      model.leftLine !== track.model.leftLine ? model.leftLine : null].filter((line): line is string => Boolean(line));
+    const says = lines.length > 0 ? lines.join(' ') : model.totalLine ?? '';
     seen = { last: current, model, changes: track.changes + 1, moved: all, says };
     setTrack(seen);
   }
   const { changes } = seen;
   const movedLine = movedNodesLine(model.rows, [...(moved ?? []), ...seen.moved]);
   // Before any click can land: a layout effect runs in the same task as the commit.
+  const price = `${model.runLabel}\u0000${model.confirmCost ?? ''}`;
+  const shownPrice = useRef(price);
   useLayoutEffect(() => {
     if (current === shown.current) return;
     const opening = shown.current === null;
     shown.current = current;
     if (!opening || changed) heldUntil.current = Date.now() + RUN_CLICK_GUARD_MS;
-  }, [current, changed]);
+    // Review 17 (nit): a price that changes in place moves focus to Cancel,
+    // as on a re-ask (GM: focus stays on Cancel).
+    if (!opening && price !== shownPrice.current) cancel.current?.focus();
+    shownPrice.current = price;
+  }, [current, changed, price]);
   const run = () => {
     if (Date.now() < heldUntil.current) return;
     onDone(true, model);

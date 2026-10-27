@@ -61,13 +61,16 @@ describe('the re-asked dialog', () => {
 });
 
 describe('a price that changes while the dialog is open', () => {
-  it('holds Run for 500 ms and keeps focus where it was', () => {
+  it('holds Run for 500 ms; a price change moves focus to Cancel (review 17)', () => {
     const answers: boolean[] = [];
     const { rerender } = render(<PlaceholderRunDialog model={model('price not listed', '$0')} onDone={(ok) => answers.push(ok)} />);
     const run = document.querySelector<HTMLButtonElement>('.prompt-dialog__confirm')!;
     act(() => { run.focus(); });
     rerender(<PlaceholderRunDialog model={model('$35', '$35')} onDone={(ok) => answers.push(ok)} />);
-    expect(document.activeElement).toBe(run);
+    // Round 18 (review 17 nit, coordinator's decision, flagged to GM): an
+    // in-place price change moves focus to Cancel, as on a re-ask; this
+    // replaces round 5's "keep focus where it was" for price changes.
+    expect(document.activeElement?.textContent).toBe('Cancel');
     expect(run.textContent).toBe('Run for $35');
     fireEvent.click(run);
     expect(answers).toEqual([]);

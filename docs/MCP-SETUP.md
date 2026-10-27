@@ -151,7 +151,11 @@ The server exposes these tools for building and running (see
   [Undoing your own edit](#undoing-your-own-edit)). A proposal
   (`propose_change`) takes the same nodes, connections and params, but not moves,
   removals, unwires, `arrange`, `steps` or renames of nodes already on the
-  canvas; it can name its own new nodes (`rename`).
+  canvas; it can name its own new nodes (`rename`). An unnamed node whose
+  provider depends on the person's keys shows its model without the
+  gateway on the person's card ("Grok Imagine 2.0" for a "Grok Imagine 2.0
+  (Krea)" node); the catalog, search and your reads keep the full name, and
+  renaming a node to either form leaves it unnamed.
 - `upload_file`: adds a local image, video, audio file or document to
   Nebula (`nebula upload <file>`): Nebula copies it into its output folder
   through `POST /api/uploads` and puts an Image Input, Video Input,
@@ -200,28 +204,37 @@ The server exposes these tools for building and running (see
   Delete key, the selection toolbar, the context menu or the Inspector; the
   Delete and Backspace keys, like every canvas shortcut, act only with focus
   on the canvas or its bars, never in a panel that owns its keys such as the
-  Inspector or chat, nor behind a modal dialog). A Cmd+Z the person
-  presses before their own delete has reached Nebula waits for Nebula's
-  answer, then undoes that delete: the nodes come back with their
-  connections on the canvas and in Nebula's graph, and Redo deletes them
-  again (the same for every step the canvas takes before Nebula answers: a
-  clear, an upload once its node is on the canvas, an accepted proposal, a
-  model picked on an OpenRouter or Replicate node; a delete Nebula refused
-  undoes nothing, and says why: a refused delete, clear, upload, accept or
-  model pick each has its own line). That Cmd+Z is bound to the step it was
-  pressed for, and a second Cmd+Z to the step below it, or to a step the
-  person took after the first Cmd+Z that is still on its way (delete,
-  Cmd+Z, delete, Cmd+Z undoes both deletes). While its own step is still on
-  its way it waits, even if something else lands meanwhile; the person's
-  own earlier delete answering first is no newer edit (the delete lands in
-  its place on the undo stack, with no extra step left behind, even when
-  its answer comes after the person's later edits: a Cmd+Z for one of them
-  still goes through), and a later step of the person's still on its way
-  isn't either (the Cmd+Z applies beneath it, and never brings back a node
-  that later delete removed). A delete's change lands when Nebula's own
-  sync takes its nodes off, which can come before its answer: no undo
-  after that, waiting or not, brings those nodes back to the canvas or to
-  Nebula's graph unless it undoes that delete. A delete of several nodes
+  Inspector or chat, nor behind a modal dialog). A delete (the person's,
+  yours or another agent's) takes the nodes and their connections off the
+  canvas the moment it is made; edits to them still waiting to be sent
+  (the person's typing, yours) are dropped once Nebula confirms it, and a
+  sync that still shows them meanwhile leaves them off. If Nebula refuses
+  it, the nodes come back where they were, with their connections, not
+  selected, with the usual line saying why, and the waiting edits go out.
+  A Cmd+Z pressed while a delete is still on its way undoes nothing and
+  says "Nothing was undone. Your last change was still saving."; once the
+  delete has landed, one Cmd+Z brings the nodes back with their
+  connections, on the canvas and in Nebula's graph, and Redo deletes them
+  again. A Cmd+Z the person presses before another step has reached Nebula
+  waits for Nebula's answer, then undoes it (a clear, an upload once its
+  node is on the canvas, an accepted proposal, a model picked on an
+  OpenRouter or Replicate node; a step Nebula refused undoes nothing, and
+  says why: a refused clear, upload, accept or model pick each has its own
+  line). That Cmd+Z is bound to the step it was pressed for, and a second
+  Cmd+Z to the step below it. While its own step is still on its way it
+  waits, even if something else lands meanwhile; a later step of the
+  person's still on its way is no newer edit (the Cmd+Z applies beneath
+  it). Your edits to a node that a waiting Cmd+Z holds are kept and show on
+  the canvas once it lands, with their Agent log line and their own undo
+  step (a run's outputs too); if Nebula doesn't answer an undo within 15 s
+  it fails with "Couldn't undo that." and the reason, and the edits it held
+  go out in order. An undo Nebula refuses leaves the canvas as Nebula's
+  graph is. An edit or Cmd+Z still waiting when another project opens or a
+  graph import replaces the canvas is never sent: it would land on the
+  wrong project. A delete's change lands when Nebula's own sync takes its
+  nodes off, which can come before its answer: no undo after that brings
+  those nodes back to the canvas or to Nebula's graph unless it undoes
+  that delete. A delete of several nodes
   is one step however its nodes' syncs arrive (one per node, with your edit
   or the person's typing between them): one Cmd+Z brings them all back. A
   sync that already took a node off makes its delete done, whatever its
@@ -239,7 +252,7 @@ The server exposes these tools for building and running (see
   read never shows a later edit undone by an earlier Cmd+Z;
   a Cmd+Z never does nothing without a word: a step that ended up changing
   nothing is passed over (the press undoes the step below it), and a press
-  whose step was taken back meanwhile (a refused delete) counts in the
+  whose step was taken back meanwhile (a refused clear) counts in the
   skipped line below; a Cmd+Z pressed after the clear undoes the clear once it lands,
   and a step taken while a clear was on its way never brings a cleared
   node back. If a newer edit has settled on top of its step by then
@@ -588,8 +601,9 @@ name in its cursor colour, the cursor's words ("Added “Moodboard”", "Running
 “Krea 2”", "Connecting “Prompt” to “Krea 2”", "Accepted"; a node by its name in
 curly quotes, else its type's name), and the time. A params change names the
 fields by the labels the card shows them under, in the card's order: "Set
-“Aspect ratio”", "Set “Aspect ratio” and “Resolution”", "Set 3 settings" for
-three or more. A field the card shows no label for is left out of the bubble
+“Aspect ratio”", "Set “Aspect ratio” and “Resolution”", and "Changed 3 settings" for
+three or more on the cursor (the Agent log names them all; a universal
+node's own fields follow the card's order too). A field the card shows no label for is left out of the bubble
 and its count (with none labelled the cursor moves without words), and the
 Agent log names it by its key instead, after the labelled fields ("Set
 “Aspect ratio”, “Seed” and seed_mode", "Set seed_mode"), up to four names

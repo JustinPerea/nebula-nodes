@@ -26,6 +26,7 @@ import { NodeLabel } from './NodeLabel';
 import { NodeRunStatus } from './NodeRunStatus';
 import { OverviewImage, OverviewVideoStill } from './OverviewImage';
 import { StructuredOutputs } from './StructuredValuePreview';
+import { canvasTitle } from '../../lib/directRoute';
 
 function isDynamicData(data: NodeData): data is DynamicNodeData {
   return 'isDynamic' in data && (data as DynamicNodeData).isDynamic === true;
@@ -158,7 +159,8 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
         {isSlavaSkin
           ? <NodeTypeIcon definition={definition} />
           : <span className="model-node__category-dot" style={{ backgroundColor: categoryColor }} />}
-        <NodeLabel nodeId={id} label={nodeData.label} displayName={definition?.displayName} />
+        <NodeLabel nodeId={id} label={nodeData.label} displayName={definition?.displayName}
+          defaultTitle={definition ? canvasTitle(definition) : undefined} />
         {batchPreview.label && <span className="batch-carousel__active-label" title={batchPreview.lineage}>[{batchPreview.label}]</span>}
         {nodeData.keyStatus === 'missing' && <span className="model-node__badge model-node__badge--warning" title="API Key Missing">&#x26A0;</span>}
       </div>

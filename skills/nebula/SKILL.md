@@ -132,7 +132,9 @@ person deleted since prints "Couldn't re-attach …" with why) and the
 proposals the delete closed reopen when they still fit ("Reopened: p_…";
 one that expired or no longer fits prints "Couldn't reopen …" with why).
 The person's Cmd+Z of your delete does the same, and so does your undo
-after the person redid your delete or undid your undo. A plan of steps prints one line with every
+after the person redid your delete or undid your undo. Your delete takes the nodes off
+the person's canvas at once, and edits to them still waiting to be sent (the
+person's typing) are dropped. A plan of steps prints one line with every
 step's token, newest first. Only your own `nebula apply` edits have tokens.
 
 Single edits also exist: `nebula create`, `connect`, `set`, `rename`, `move`,

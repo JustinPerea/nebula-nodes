@@ -170,7 +170,7 @@ describe('SelectionToolbar', () => {
 
   // Undo puts back everything a delete removed (GM - Design, 2026-10-23,
   // item 1), so the delete no longer asks; it still waits for the backend.
-  it('deletes the whole selection without a confirm, after the backend acknowledges it', async () => {
+  it('deletes the whole selection without a confirm, and tells the backend', async () => {
     useGraphStore.setState({ nodes: [selectedNode('n1'), selectedNode('n2')] });
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     const fetch = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
@@ -178,10 +178,11 @@ describe('SelectionToolbar', () => {
     render(<SelectionToolbar />);
 
     fireEvent.click(screen.getByLabelText('Delete selected nodes'));
-    expect(useGraphStore.getState().nodes).toHaveLength(2);
-    await waitFor(() => expect(useGraphStore.getState().nodes).toHaveLength(0));
+    // Round 18 (GM option (c)): the nodes leave the canvas the moment Delete is pressed.
+    expect(useGraphStore.getState().nodes).toHaveLength(0);
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    expect(useGraphStore.getState().nodes).toHaveLength(0);
     expect(confirm).not.toHaveBeenCalled();
-    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   it('offers a note for agents on exactly one saved node, and opens the composer', () => {

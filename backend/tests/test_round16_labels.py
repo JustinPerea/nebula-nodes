@@ -121,7 +121,8 @@ def test_two_labels(api):
 
 def test_three_or_more_labels_are_counted(api):
     event = _set(api, GROK, {"aspect_ratio": "16:9", "resolution": "2K", "quality": "high"})
-    assert event["say"] == "Set 3 settings"
+    # GM, round 18: "Changed N settings" (was "Set N settings").
+    assert event["say"] == "Changed 3 settings"
 
 
 def test_the_card_order_and_the_labels_follow_the_card(api):

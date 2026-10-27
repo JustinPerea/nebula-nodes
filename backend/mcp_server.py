@@ -1326,7 +1326,9 @@ def remove_from_canvas(node_ids: list[str] | None = None, wires: list[dict] | No
     the person's pins on it and closes the proposals that read it; `removals`
     lists them per node (with its `projectId`, `definitionId` and, when it
     supersedes an earlier delete of the same node, `replaces`), and
-    undo_canvas_edit (or the person's Cmd+Z) puts them back.
+    undo_canvas_edit (or the person's Cmd+Z) puts them back. On the person's
+    open canvas the nodes leave at once, and edits to them still waiting to be
+    sent (the person's typing) are dropped.
     """
     body: dict[str, Any] = {}
     if node_ids:

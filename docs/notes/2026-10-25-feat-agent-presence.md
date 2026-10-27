@@ -1690,3 +1690,75 @@ Branch feat/agent-presence, base main (head f4c6f719 before this round).
 - tsc: clean.
 - Lint: clean (the inline-style and Slava-scope guards passed).
 - Build budget: 393,248 bytes raw / 118,372 gzip (limit 512,000).
+
+## Round 18: review 17 and GM - Design's round-18 rulings (2026-10-26)
+
+### What changed
+
+- **H-1: a write that waited behind an undo is checked against the canvas it was made for** (`graphStore.graphMutationFetch`, `admitWrite`, `stillAdmitted`; `backend.apiFetch` takes `{ project }`).
+  - Each graph write captures the open project (id and revision) and `canvasReplacementRevision` when it is made. After its wait, if either changed (another project opened, an import or template replaced the canvas), it is not sent. It gets the same answer Nebula gives a write to a replaced canvas, `STALE_CANVAS_DETAIL` ("This canvas is out of date. Open the current project before editing or running it.", main.py:739 word for word), so the person reads the existing line.
+  - A write that did wait sends the revision it captured, never one read later. `sendRestore` captures at the Cmd+Z and checks again before its fetch.
+  - Writes queue first in, first out (`writesWaiting`, `waitingTail`) behind `restoreQueue`, so a write never overtakes an earlier one (seed 286). An undo's restore also waits for the writes already waiting when it was pressed (seed 55: typing flushed by the Cmd+Z went out after the restore that undid it, and Nebula kept the typing).
+  - The backend still lets a request with no revision header through (`_check_workspace_revision`). Not changed, as decided; flagged to the coordinator.
+- **M-1: a step that can't be popped owns nothing** (`cancelUndoStep`: `stepAdds.set(step, new Set())`), so `dropDeadSteps` drops it and a Cmd+Z never takes off a node someone else added (Z1, Z2). The repo property test has a foreign-add variant: an agent, a reconnect sync and another tab add nodes while steps are on their way.
+- **M-2: a node held by a waiting undo keeps the newest synced copy** (`heldCopies`, `noteHeldCopies`, `applyHeldCopies`; `holdNode`'s release returns whether it ended the hold). When the hold ends, the copy is applied. An agent's edit keeps its Agent log row and its own undo step, and a run's outputs are never dropped (W3, run-output test).
+- **L-1: the first sync after a PUT's answer releases the typing's hold**, whatever value it carries (`answered`, `before` on `UnsavedParamEdit`). One guard stays: a sync that still shows every key at its pre-edit value doesn't release it, which keeps r17 A11/A11b passing. Residue: the canvas can show " A " while Nebula has "A" until the next sync (L3x).
+- **L-2: an undo's restore is bounded by `HOLD_LIMIT_MS` (15 s)** (`RestoreTimeout`). On timeout it fails with the existing undo failure line plus the no-answer reason: "Couldn't undo that. Nebula's server isn't answering. Make sure it's running, then try again." (composed from existing strings; for GM). The writes it held go out in order under the H-1 check. A pending restore no longer blocks a project switch (`restoreBoundMutationCount`).
+- **W5: a refused undo leaves the canvas equal to Nebula** (`refused`, `revertRestoreOnCanvas`, `revertRestorePresence`), with the existing failure line, even when newer steps sit on top.
+- **GM (2), option (c): a delete leaves at once** (`changeCanvasNodes`, `applyDeleteAnswers`, `putBackFailedDeletes`, `pressHitsDeleteInFlight`, `noteDeletesGoneBySync`).
+  - The node and its wires leave the canvas when Delete is pressed. A sync that still shows it while its delete is on its way leaves it off.
+  - A Cmd+Z aimed at a delete on its way shows "Nothing was undone. Your last change was still saving." and is not applied later. Once the delete lands, one Cmd+Z restores it.
+  - Typing still waiting for the node (`deferredParamPushes`) and held copies are dropped when the delete lands, and sent if it fails.
+  - A failed delete puts the original node back at its old place in the node order, with its wires, not selected, with the existing failure line. Its step is removed wherever it is when nothing was deleted, and newer steps' snapshots get the node back.
+  - Agent deletes arrive by sync and take the same path.
+  - Ten older test files were updated to these rules (rounds 11-17, `lateRestoreCount`, `graphStore.test`, `SelectionToolbar`; each changed expectation has a round-18 comment). No store bug turned up.
+- **GM (1): an unnamed node's canvas title drops the gateway** (`directRoute.canvasTitle`, `isDefaultTitle`, `nodeTitle`, `routeDependsOnKeys`; backend `node_route.canvas_title`, `is_default_title`).
+  - Only for the 44 nodes whose name ends with their own gateway and whose routes name more than one provider. The catalog, library and search keep the full names; nothing is migrated.
+  - Unnamed = the label is either form. `NodeLabel` shows the canvas title; the add paths, a rename to nothing and the backend's sync default (`_cli_node_to_rf`) use it; `_custom_node_label` stores neither form.
+  - Dialog row for an unnamed node whose name is its model: `“Grok Imagine 2.0” · via xAI · $0.06` (on Krea: `· via Krea · price not listed`). A named node keeps the full form. The changed line, the price footnote and the "saved" sentence use the row's name. `runNodeName` (cost lines) still says "Grok Imagine 2.0 via xAI".
+  - Accepted limit (GM): two unnamed nodes of a colliding pair read the same on the canvas (#196).
+- **m2stale: the 409 re-ask reads the keys again first** (`rereadRunKeys`, bounded by `RUN_INPUTS_WAIT_MS`, the first ask's wait). Each row's name and price then come from one route resolution.
+  - If the keys can't be read in that time, the re-ask keeps Nebula's numbers, as before (review 4, M1), so the yes it sends passes. A first version priced with the canvas's numbers instead; Nebula then refuses every yes and the person can never run, so it was dropped. Residue: in that case a row is named by the route the tab last knew.
+- **Screen reader: an update brings both lines.** When a node moves and another leaves in one update, the live region reads the changed line and then the left line.
+- **Nit: an in-place price change moves focus to Cancel.** For GM: this replaces round 5's verbatim "keep focus where it was" for price changes.
+- **Nit: a universal node's fields follow the card order** in the Agent log (`_set_words` reads `dynamicParams` after the definition's params).
+- **GM (3): the cursor bubble for three or more labelled fields reads "Changed N settings"**; one or two keep "Set “…”". The Agent log still names them.
+- Docs: MCP-SETUP (delete, held edits, stale writes, the bubble, the canvas title), SKILL.md and `remove_from_canvas`'s docstring.
+
+### Person write paths that can go out with no revision header while a project is open
+
+`apiFetch` adds `X-Nebula-Workspace-Revision` to every non-GET request whenever a project context is set, and the context is set from the first project load on (`projectStore.applyProject`) and never cleared. So no canvas or graph write made through `apiFetch` goes out without it. What does:
+- The chat WebSocket's messages (`ChatPanel.tsx`: `close_session`, `personal_option`, `permission`, `cancel`) and the canvas socket's `hello` (`wsClient.ts`). None writes the graph; a `permission` answer lets an agent act, and the agent's own write carries no header by design.
+- Any write sent before the first project has loaded at startup (no context yet).
+- No `apiFetch` call passes `{ project: null }` except a write admitted while no context was set.
+- Raw `fetch`/`fetchUrl` calls in `src/` are GETs of assets.
+A write built for one project but sent after a switch through `apiFetch` outside `graphMutationFetch` would carry the new revision. The debounced param pushes are cleared on a project load (`clearAllParamPushTimers`); no other such path was found.
+
+### Tests first (round 18)
+
+- `heldUndo.round18` (23 tests: H-1 W1/W2 and queued restores, M-1 Z1/Z2, M-2 W3 and run outputs, L-1 L3x, L-2 W4, W5, option (c)): 18 failed on 47be7b2b, all pass.
+- `canvasTitle.round18` (15): 12 failed on 47be7b2b. `rerunKeys.round18` (3): 2 failed (the third guards the unreadable-keys case, unchanged). `PlaceholderRunDialog.round18` (4): 2 failed.
+- Backend `test_round18_words` (4) and `test_round18_titles` (4): 6 of 8 failed on 47be7b2b.
+- Property test: plain seeds 1-6000 and foreign-add seeds 1-600, 0 failures (110 blocks of 60 seeds, one process each). Seed 55 failed during the round and is fixed (the restore ordering above). The harness slows quadratically inside one process (240 seeds: 86 s on 47be7b2b and on this branch), so blocks stay small.
+
+### Live check (round 18, 1440 and 1280)
+
+- Isolated backend 8795 and Vite 5795, temp HOME, no keys (masked stand-ins in the page's settings answer), every run request answered in the page: 23 of 23 checks passed.
+- Unnamed Grok: card "Grok Imagine 2.0"; rows "“Grok Imagine 2.0” · via Krea · price not listed" then "· via xAI · $0.06"; changed line "“Grok Imagine 2.0” changed while this was open."; focus moved to Cancel. Named: "“Alt still” · Grok Imagine 2.0 via xAI · $0.06". A node added from the library is saved as "Grok Imagine 2.0" in the tab and in Nebula.
+- Delete with its answer held: off at once; Cmd+Z said "Nothing was undone. Your last change was still saving."; after the answer one Cmd+Z restored it; canvas and Nebula ended at the start.
+- Cursor bubble "Changed 3 settings"; two fields "Set “AI Model” and “Topology”"; the Agent log names all three.
+- Blocked requests: 2, both the canaries; none toward 8000-8010 or 5173.
+
+### Gates (round 18, on the final code)
+
+- Backend full suite (iso.sh): 11,171 passed, 71 skipped (22 min 37 s).
+- Vitest full suite: 517 files, 6,510 tests; 506 files passed and 11 failed (24 tests, 18 of them "Test timed out" under load). Those 11 files rerun alone with `--no-file-parallelism`: 196 tests passed.
+- errorCopy ratchets: 21 files, 475 tests passed. tsc clean. Lint clean.
+- Build budget: 393,365 bytes raw / 118,439 gzip (limit 512,000).
+
+### Open items (round 18)
+
+- For GM: the focus rule above, and the timeout line "Couldn't undo that. Nebula's server isn't answering. …".
+- For GM (wording PR, not #195): Meshy's "AI Model" → "AI model".
+- The backend's no-header rule (flagged, not changed).
+- The re-ask with unreadable keys can still name a row by the route the tab last knew (m2stale residue above).

@@ -851,7 +851,9 @@ describe('graphStore', () => {
 
     useGraphStore.getState().onNodesChange([{ type: 'remove', id: cliNode.id }]);
 
-    expect(useGraphStore.getState().nodes).toEqual([cliNode]);
+    // GM r18, option (c): it leaves the canvas when Delete is pressed, and
+    // the refusal puts it back as it was, with the failure line.
+    expect(useGraphStore.getState().nodes).toEqual([]);
     await vi.waitFor(() => expect(alert).toHaveBeenCalledWith(expect.stringContaining(
       'Cannot delete while provider recovery is unresolved.',
     )));

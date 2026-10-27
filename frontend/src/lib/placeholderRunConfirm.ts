@@ -1,7 +1,8 @@
 import type { Edge, Node } from '@xyflow/react';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { NodeData } from '../types';
-import { allParamDefinitions, hasRoutes, nameOnRoute, routeById, selectRoute, withWiredBlockers } from './directRoute';
+import { allParamDefinitions, canvasTitle, hasRoutes, isDefaultTitle, nameOnRoute, nodeTitle, providerLabel, routeById, selectRoute,
+  withWiredBlockers } from './directRoute';
 import { isLocalRun, modelChoice } from './nodeKeys';
 import { cleanPending, type PendingAgent } from './pendingNodes';
 import { formatUsdRange } from './pricing';
@@ -450,7 +451,8 @@ export function modelNotChosenText(nodes: Node<NodeData>[], names?: Readonly<Rec
       { apiKeys: context.apiKeys, wired, planReady: context.planReady });
     if (!found) continue;
     const [verb, field] = found;
-    const name = names?.[node.id] || node.data?.label || NODE_DEFINITIONS[node.data?.definitionId]?.displayName || node.id;
+    const definition = NODE_DEFINITIONS[node.data?.definitionId];
+    const name = names?.[node.id] || (definition ? nodeTitle(definition, node.data?.label) : node.data?.label) || node.id;
     // GM, round 13: "an aspect ratio", "a model".
     const article = /^[aeiou]/i.test(field) ? 'an' : 'a';
     return `Nothing ran. ${verb} ${article} ${field} for “${name}” first.`;
@@ -672,7 +674,22 @@ export function placeholderRunConfirm(
   // takes (summarizeRunScope's `routes`): a node under its model's own name,
   // and the model, read "Grok Imagine 2.0 via xAI" on the person's xAI key (round 16).
   const routeOf = (node: Node<NodeData>) => summary.routes?.[node.id] ?? null;
-  const labelOf = (node: Node<NodeData>) => options.names?.[node.id] || runNodeName(node, routeOf(node));
+  // GM - Design, round 18, item 1 (verbatim): "Unnamed node: the default
+  // title drops the route. "Grok Imagine 2.0" in all three places" (the card,
+  // the changed line, the row): "“Grok Imagine 2.0” · via xAI · $0.06". "When
+  // the name already is the model, the row drops the model and keeps only the
+  // route. A named node keeps the full form: "“Alt still” · Grok Imagine 2.0
+  // via xAI · $0.06". On Krea: "“Grok Imagine 2.0” · via Krea · price not
+  // listed"." Only for nodes whose route depends on keys (canvasTitle).
+  const titled = (node: Node<NodeData>) => {
+    const definition = NODE_DEFINITIONS[node.data?.definitionId];
+    return !options.names?.[node.id] && definition !== undefined && !definition.providerVia
+      && isDefaultTitle(definition, node.data?.label) && canvasTitle(definition) !== definition.displayName ? definition : null;
+  };
+  const labelOf = (node: Node<NodeData>) => {
+    const definition = titled(node);
+    return definition ? canvasTitle(definition) : options.names?.[node.id] || runNodeName(node, routeOf(node));
+  };
   const row = (node: Node<NodeData>): PlaceholderRunRow => {
     const label = labelOf(node);
     const model = modelOnRoute(node, routeOf(node));
@@ -680,7 +697,13 @@ export function placeholderRunConfirm(
     if (price.missing) anyMissing = true;
     if (price.text === PRICE_NOT_LISTED) unlisted.push(`“${label}”`);
     if (price.text === PRICE_DEPENDS_ON_INPUT) byInput.push(`“${label}”`);
-    return { nodeId: node.id, name: `“${label}”`, model: model === label ? null : model, modelKey: model,
+    const definition = titled(node);
+    const route = routeOf(node);
+    // The model segment of an unnamed node whose name is the model: only the route.
+    const shownModel = definition && modelName(node) === definition.displayName
+      ? (route ? `via ${providerLabel(route)}` : null)
+      : model === label ? null : model;
+    return { nodeId: node.id, name: `“${label}”`, model: shownModel, modelKey: model,
       setting: kreaSetting(node), price: price.text, agent: agentOf.get(node.id) ?? null };
   };
   const paidNodes = scope.filter(isPaid);

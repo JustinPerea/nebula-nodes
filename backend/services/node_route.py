@@ -1409,6 +1409,43 @@ def name_on_route(definition: Mapping[str, Any], provider: Any) -> str:
     return f"{own.group(1)} via {provider_label(provider)}"
 
 
+def _gateway_stripped(definition: Mapping[str, Any]) -> str | None:
+    """The model part of a display name that ends by naming its own gateway
+    ("Grok Imagine 2.0" for "Grok Imagine 2.0 (Krea)"); None otherwise."""
+    name = str(definition.get("displayName") or "")
+    gateway = definition.get("apiProvider")
+    own = _OWN_GATEWAY.match(name)
+    if not own:
+        return None
+    said = own.group(2).strip().lower()
+    return own.group(1) if said in {str(gateway).lower(), provider_label(gateway).lower()} else None
+
+
+def route_depends_on_keys(definition: Mapping[str, Any]) -> bool:
+    """Whether the provider a node runs on depends on the keys set: its routes
+    name more than one provider (:func:`routes_of`)."""
+    return len({str(route.get("provider") or "") for route in routes_of(definition)}) > 1
+
+
+def canvas_title(definition: Mapping[str, Any]) -> str:
+    """A node's default title on the canvas (GM - Design, round 18, item 1,
+    verbatim: "Unnamed node: the default title drops the route", "Only for
+    nodes whose route depends on keys"; canvas only, the library and search
+    keep the catalog names): the display name without the gateway it names
+    when the route depends on keys, else the display name.
+    frontend/src/lib/directRoute.ts canvasTitle is the same."""
+    stripped = _gateway_stripped(definition)
+    if stripped and route_depends_on_keys(definition):
+        return stripped
+    return str(definition.get("displayName") or "")
+
+
+def is_default_title(definition: Mapping[str, Any], label: Any) -> bool:
+    """A label that is either form of the definition's default title (its
+    display name or :func:`canvas_title`): the node is unnamed."""
+    return isinstance(label, str) and label in {str(definition.get("displayName") or ""), canvas_title(definition)}
+
+
 def _or_list(items: Iterable[str]) -> str:
     listed = list(items)
     return listed[0] if len(listed) == 1 else f"{', '.join(listed[:-1])} or {listed[-1]}"

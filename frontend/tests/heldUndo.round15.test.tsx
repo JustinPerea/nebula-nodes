@@ -55,6 +55,7 @@ import { useGraphStore } from '../src/store/graphStore';
 import { wsClient, type ExecutionEvent } from '../src/lib/wsClient';
 import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
 import { TAB_ID } from '../src/lib/tabId';
+import { DROPPED_UNDO_TEXT } from '../src/lib/deleteNotice';
 
 const initialGraph = useGraphStore.getState();
 function textNode(id: string, value = id): Node<NodeData> {
@@ -70,6 +71,8 @@ const valueOf = (id: string) => store().nodes.find((node) => node.id === id)?.da
 const notice = () => store().undoNotice?.text ?? null;
 const message = () => store().messageNotice?.text ?? null;
 /** A delete's failure line, wherever it shows (the notice, or the message beside it). */
+/** The dropped-press line, wherever it shows (the notice, or the message beside an error). */
+const dropped = () => [notice(), message()].includes(DROPPED_UNDO_TEXT);
 const failure = () => [notice(), message()].find((text) => text?.startsWith("Couldn't delete")) ?? null;
 const settle = () => act(async () => { for (let i = 0; i < 8; i += 1) await new Promise((resolve) => setTimeout(resolve, 5)); });
 const undo = async () => { act(() => { store().undo(); }); await settle(); };
@@ -154,12 +157,14 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       await answer('n1'); await answer('n2');
       net.holdDeletes = false;
       await undo();
-      expect(restores()).toEqual([{ nodes: ['n1=n1', 'n2=n2'], remove: [] }]);
-      expect(notice()).toBe('Restored 2 nodes.');
-      expect(ids()).toEqual(['n1', 'n2', 'n3', 'n4']);
+      // Round 18 (GM option (c)): the delete's step stays below Codex's edit, so the first Cmd+Z undoes Codex.
+      expect(restores()).toEqual([{ nodes: [], remove: ['n4'] }]);
+      expect(ids()).toEqual(['n3']);
       sameAsBackend();
       await undo();
-      expect(restores()[1]).toEqual({ nodes: [], remove: ['n4'] });
+      // Round 18 (GM option (c)): the second Cmd+Z restores both nodes in one step.
+      expect(restores()[1]).toEqual({ nodes: ['n1=n1', 'n2=n2'], remove: [] });
+      expect(notice()).toBe('Restored 2 nodes.');
       expect(ids()).toEqual(['n1', 'n2', 'n3']);
       sameAsBackend();
     });
@@ -173,9 +178,15 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       await answer('n1'); await answer('n2');
       net.holdDeletes = false;
       await undo();
-      expect(restores()).toEqual([{ nodes: ['n1=n1', 'n2=n2'], remove: [] }]);
+      // Round 18 (GM option (c)): the typing is the newer step, so the first Cmd+Z undoes it.
+      expect(restores()).toEqual([{ nodes: ['n3=n3'], remove: [] }]);
+      expect(valueOf('n3')).toBe('n3');
+      sameAsBackend();
+      await undo();
+      // Round 18 (GM option (c)): the second Cmd+Z restores both nodes in one step.
+      expect(restores()[1]).toEqual({ nodes: ['n1=n1', 'n2=n2'], remove: [] });
       expect(notice()).toBe('Restored 2 nodes.');
-      expect(valueOf('n3')).toBe('F');
+      expect(ids()).toEqual(['n1', 'n2', 'n3']);
       sameAsBackend();
     });
 
@@ -183,17 +194,29 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       setGraph([textNode('n1'), textNode('n2'), textNode('n3'), textNode('n4')]);
       removeTogether('n1', 'n2', 'n3'); await settle();
       await undo();
+      // Round 18 (GM option (c)): the press during the delete's flight is dropped at once and changes nothing.
+      expect(dropped()).toBe(true);
+      expect(ids()).toEqual(['n4']);
       ownSync([textNode('n2'), textNode('n3'), textNode('n4')]);
       agentSync([textNode('n2'), textNode('n3'), textNode('n4'), textNode('n5')]);
       ownSync([textNode('n3'), textNode('n4'), textNode('n5')]);
       ownSync([textNode('n4'), textNode('n5')]);
       await answer('n1'); await answer('n2'); await answer('n3');
-      expect(restores()).toEqual([{ nodes: ['n1=n1', 'n2=n2', 'n3=n3'], remove: [] }]);
+      // Round 18 (GM option (c)): the dropped press is never applied late.
+      expect(restores()).toEqual([]);
+      expect(ids()).toEqual(['n4', 'n5']);
+      net.holdDeletes = false;
+      await undo();
+      // Round 18 (GM option (c)): Codex's edit is the newer step, undone first.
+      expect(restores()).toEqual([{ nodes: [], remove: ['n5'] }]);
+      await undo();
+      // Round 18 (GM option (c)): then one Cmd+Z restores all three.
+      expect(restores()[1]).toEqual({ nodes: ['n1=n1', 'n2=n2', 'n3=n3'], remove: [] });
       expect(notice()).toBe('Restored 3 nodes.');
-      expect(ids()).toEqual(['n1', 'n2', 'n3', 'n4', 'n5']);
+      expect(ids()).toEqual(['n1', 'n2', 'n3', 'n4']);
       sameAsBackend();
       backendEcho();
-      expect(ids()).toEqual(['n1', 'n2', 'n3', 'n4', 'n5']);
+      expect(ids()).toEqual(['n1', 'n2', 'n3', 'n4']);
     });
 
     it('M6: typing after the first echo, Cmd+Z held after both echoes', async () => {
@@ -203,10 +226,17 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       type('n3', 'F');
       ownSync([textNode('n3', 'F')]);
       await undo();
+      // Round 18 (GM option (c)): the typing is the newer step (the delete's step stays below it), so this press undoes it (on the canvas: its write hadn't gone out).
+      expect(restores()).toEqual([]);
+      expect(valueOf('n3')).toBe('n3');
+      expect(dropped()).toBe(false);
       await answer('n1'); await answer('n2');
-      expect(restores()).toEqual([{ nodes: ['n1=n1', 'n2=n2'], remove: [] }]);
+      net.holdDeletes = false;
+      await undo();
+      // Round 18 (GM option (c)): once the delete has landed, the next Cmd+Z restores both nodes.
+      expect(restores()[1]).toEqual({ nodes: ['n1=n1', 'n2=n2'], remove: [] });
       expect(notice()).toBe('Restored 2 nodes.');
-      expect(valueOf('n3')).toBe('F');
+      expect(ids()).toEqual(['n1', 'n2', 'n3']);
       sameAsBackend();
     });
 
@@ -219,8 +249,14 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       await answer('n2'); await answer('n1');
       net.holdDeletes = false;
       await undo();
-      expect(restores()).toEqual([{ nodes: ['n1=n1', 'n2=n2'], remove: [] }]);
+      // Round 18 (GM option (c)): Codex's edit is the newer step, undone first.
+      expect(restores()).toEqual([{ nodes: [], remove: ['n4'] }]);
+      sameAsBackend();
+      await undo();
+      // Round 18 (GM option (c)): then one Cmd+Z brings both back.
+      expect(restores()[1]).toEqual({ nodes: ['n1=n1', 'n2=n2'], remove: [] });
       expect(notice()).toBe('Restored 2 nodes.');
+      expect(ids()).toEqual(['n1', 'n2', 'n3']);
       sameAsBackend();
     });
 
@@ -228,13 +264,25 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       setGraph([textNode('n1'), textNode('n2'), textNode('n3')]);
       removeTogether('n1', 'n2'); await settle();
       await undo();
+      // Round 18 (GM option (c)): the press during the delete's flight is dropped at once and changes nothing.
+      expect(dropped()).toBe(true);
+      expect(ids()).toEqual(['n3']);
       ownSync([textNode('n1'), textNode('n3')]);
       type('n3', 'G');
       ownSync([textNode('n3', 'G')]);
       await answer('n2'); await answer('n1');
-      expect(restores()).toEqual([{ nodes: ['n1=n1', 'n2=n2'], remove: [] }]);
-      expect(notice()).toBe('Restored 2 nodes.');
+      // Round 18 (GM option (c)): the dropped press is never applied late; the typing stays.
+      expect(restores()).toEqual([]);
       expect(valueOf('n3')).toBe('G');
+      net.holdDeletes = false;
+      await undo();
+      // Round 18 (GM option (c)): the typing is the newer step, undone first.
+      expect(restores()).toEqual([{ nodes: ['n3=n3'], remove: [] }]);
+      await undo();
+      // Round 18 (GM option (c)): then one Cmd+Z brings both back.
+      expect(restores()[1]).toEqual({ nodes: ['n1=n1', 'n2=n2'], remove: [] });
+      expect(notice()).toBe('Restored 2 nodes.');
+      expect(ids()).toEqual(['n1', 'n2', 'n3']);
       sameAsBackend();
     });
 
@@ -282,8 +330,15 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       ownSync([]);
       expect(ids()).toEqual([]);
       await undo();
+      // Round 18 (GM option (c)): the press during the delete's flight is dropped at once and changes nothing.
+      expect(dropped()).toBe(true);
       await answer('n1');
-      expect(restores()).toEqual([{ nodes: ['n1=E'], remove: [] }]);
+      // Round 18 (GM option (c)): the dropped press is never applied late; a new Cmd+Z restores the node.
+      expect(restores()).toEqual([]);
+      net.holdDeletes = false;
+      await undo();
+      // Round 18 (GM option (c)): the node left the canvas at Delete, so the later typing never reached it.
+      expect(restores()).toEqual([{ nodes: ['n1=n1'], remove: [] }]);
       expect(notice()).toBe('Restored the node.');
       expect(ids()).toEqual(['n1']);
       sameAsBackend();
@@ -297,10 +352,19 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       type('local-a', 'E');
       ownSync([textNode('local-a', 'E')]);
       await undo();
+      // Round 18 (GM option (c)): the typing is the newer step (the delete's step stays below it), so this press undoes it.
+      expect(dropped()).toBe(false);
+      expect(valueOf('local-a')).toBe('local-a');
+      expect(ids()).toEqual(['local-a']);
       await answer('n1');
+      expect(restores()).toEqual([]);
+      net.holdDeletes = false;
+      await undo();
+      // Round 18 (GM option (c)): once the delete has landed, the next Cmd+Z restores the node.
       expect(restores()).toEqual([{ nodes: ['n1=n1'], remove: [] }]);
       expect(ids()).toEqual(['local-a', 'n1']);
-      expect(valueOf('local-a')).toBe('E');
+      // Round 18 (GM option (c)): the typing was undone by the first press.
+      expect(valueOf('local-a')).toBe('local-a');
       sameAsBackend();
     });
   });
@@ -310,12 +374,15 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       setGraph([textNode('n1'), textNode('n2')]);
       act(() => { store().deleteNode('n1'); }); await settle();
       await undo();
+      // Round 18 (GM option (c)): the first press is dropped at once (not held), with the dropped line.
+      expect(dropped()).toBe(true);
       const c = clearStep();
       await undo();
       await answer('n1');
       clearAnswers(c); await settle();
       expect(restores()).toEqual([{ nodes: ['n2=n2'], remove: [] }]);
-      expect(notice()).toBe('Restored the node. 1 undo was skipped while a change was saving.');
+      // Round 18 (GM option (c)): the first press already said so when it was pressed, so no skipped count here.
+      expect(notice()).toBe('Restored the node.');
       expect(ids()).toEqual(['n2']);
       sameAsBackend();
     });
@@ -372,8 +439,14 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       setGraph([textNode('n1'), textNode('n2')]);
       act(() => { store().deleteNode('n1'); }); await settle();
       await undo();
+      // Round 18 (GM option (c)): the press during the delete's flight is dropped at once and changes nothing.
+      expect(dropped()).toBe(true);
       plainSync([textNode('n2'), textNode('n3')]);
       await answer('n1');
+      // Round 18 (GM option (c)): the dropped press is never applied late; a new Cmd+Z restores the node.
+      expect(restores()).toEqual([]);
+      net.holdDeletes = false;
+      await undo();
       expect(restores()).toEqual([{ nodes: ['n1=n1'], remove: [] }]);
       expect(ids()).toEqual(['n1', 'n2', 'n3']);
       sameAsBackend();
@@ -412,9 +485,15 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       setGraph([textNode('n1'), textNode('n2')]);
       act(() => { store().deleteNode('n1'); }); await settle();
       await undo();
+      // Round 18 (GM option (c)): the press during the delete's flight is dropped at once and changes nothing.
+      expect(dropped()).toBe(true);
       ownSync([textNode('n2')]);
       await answer('n1', 500);
       expect(failure()).toBeNull();
+      // Round 18 (GM option (c)): the dropped press is never applied late; a new Cmd+Z restores the node.
+      expect(restores()).toEqual([]);
+      net.holdDeletes = false;
+      await undo();
       expect(restores()).toEqual([{ nodes: ['n1=n1'], remove: [] }]);
       expect(notice()).toBe('Restored the node.');
       expect(ids()).toEqual(['n1', 'n2']);

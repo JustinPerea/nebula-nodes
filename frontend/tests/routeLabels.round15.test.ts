@@ -68,8 +68,9 @@ describe("GM round 15, item 3: the placeholder dialog's row names the route that
   });
   it('an unnamed node names the route in its name, with no second model', () => {
     const { row } = dialogRow(GROK, null, { XAI_API_KEY: 'x' });
-    expect(row.name).toBe('“Grok Imagine 2.0 via xAI”');
-    expect(row.model).toBeNull();
+    // Round 18 (GM item 1): the name is the canvas title and the model segment only the route.
+    expect(row.name).toBe('“Grok Imagine 2.0”');
+    expect(row.model).toBe('via xAI');
     expect(row.price).toBe('$0.06');
   });
   it('Style images wired keeps the run on Krea: the Krea name, never the xAI price', () => {
@@ -96,11 +97,13 @@ describe("GM round 15, item 3: the placeholder dialog's row names the route that
     const model = placeholderRunConfirm(all, wires, 'n2', summary)!;
     const flare = model.rows.find((row) => row.nodeId === 'n2')!;
     const base = model.rows.find((row) => row.nodeId === 'n4')!;
-    expect(flare.name).toBe('“GPT Image 2.5 Flare via OpenAI”');
+    // Round 18 (GM item 1): an unnamed node is named by its canvas title, the route its own segment.
+    expect(rowSegments(flare)).toEqual(['“GPT Image 2.5 Flare”', 'via OpenAI', 'price not listed']);
     expect(flare.price).toBe('price not listed');
     expect(rowSegments(base)).toEqual(['“Base”', 'Grok Imagine 2.0 via xAI', '$0.06']);
     expect(model.totalLine).toBe('The listed prices total $0.06.');
-    expect(model.notes).toContain('“GPT Image 2.5 Flare via OpenAI” has no list price, so the run may cost more.');
+    // Round 18 (GM item 1): the footnote names it as its row does.
+    expect(model.notes).toContain('“GPT Image 2.5 Flare” has no list price, so the run may cost more.');
   });
   it('the Krea plan stays Krea', () => {
     const { row } = dialogRow(KREA2, 'Hero', {}, { _kreaAuth: 'mcp', aspect_ratio: '1:1', resolution: '1K' });

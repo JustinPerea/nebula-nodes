@@ -13,7 +13,7 @@ import { getReferenceRole } from '../../lib/referenceRoles';
 import { CATEGORY_COLORS } from '../../constants/ports';
 import { useUIStore } from '../../store/uiStore';
 import { usesKreaAccount } from '../../lib/kreaConnection';
-import { routeSwitch } from '../../lib/directRoute';
+import { canvasTitle, routeSwitch } from '../../lib/directRoute';
 import { nodeWiredCounts } from '../../lib/runScope';
 import { useProviderNoteStore } from '../../store/providerNoteStore';
 import { ProviderSwitcher } from './ProviderSwitcher';
@@ -446,7 +446,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         {isSlavaSkin
           ? <NodeTypeIcon definition={definition} />
           : <span className="model-node__category-dot" style={{ backgroundColor: categoryColor }} />}
-        <NodeLabel nodeId={id} label={nodeData.label} displayName={definition.displayName} />
+        <NodeLabel nodeId={id} label={nodeData.label} displayName={definition.displayName} defaultTitle={canvasTitle(definition)} />
         {batchPreview.label && <span className="batch-carousel__active-label" title={batchPreview.lineage}>[{batchPreview.label}]</span>}
         {nodeData.keyStatus === 'missing' && !switchable && <span className="model-node__badge model-node__badge--warning"
           title={usesKreaAccount(definition, nodeData.params) ? 'Krea sign-in required' : missingKeyTitle(definition, nodeData.params)}>&#x26A0;</span>}

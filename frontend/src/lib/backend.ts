@@ -1,4 +1,4 @@
-import { getProjectContext } from './projectContext';
+import { getProjectContext, type ProjectContext } from './projectContext';
 import { BACKEND_NOT_RUNNING_COPY, ConnectionLostError, isConnectionFailure } from './errorCopy';
 import { TAB_HEADER, TAB_ID } from './tabId';
 import { noteParamsOutdated, PARAMS_VERSION_HEADER } from './paramsOutdated';
@@ -391,9 +391,13 @@ function classifyBodyReads(response: Response, heading: string): Response {
   return response;
 }
 
-export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+/** `options.project`: the project the caller read when the person acted (a
+ * graph write that waited behind an undo: graphStore.graphMutationFetch,
+ * review 17 H-1). Its revision is the one sent, never one read later. */
+export async function apiFetch(path: string, init?: RequestInit,
+  options?: { project?: ProjectContext | null }): Promise<Response> {
   // Capture at admission, before discovery can await a later project switch.
-  const project = getProjectContext();
+  const project = options && 'project' in options ? options.project ?? null : getProjectContext();
   const method = String(init?.method ?? 'GET').toUpperCase();
   const baseUrl = await getBackendBaseUrl();
   const requestUrl = joinBackendPath(baseUrl, path);

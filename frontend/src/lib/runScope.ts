@@ -2,7 +2,7 @@ import type { Edge, Node } from '@xyflow/react';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { NodeData } from '../types';
 import { batchSizeCap, parseBatchItems } from './batch';
-import { hasRoutes, nameOnRoute, routePriceKey, routeUnavailable, selectRoute, withWiredBlockers } from './directRoute';
+import { hasRoutes, isDefaultTitle, nameOnRoute, routePriceKey, routeUnavailable, selectRoute, withWiredBlockers } from './directRoute';
 import { usesKreaAccount } from './kreaConnection';
 import { runRouteProvider } from './modelDiscovery';
 import { cinemaSceneBase, isLocalRun } from './nodeKeys';
@@ -70,7 +70,8 @@ export interface RunScopeSummary {
 export function runNodeName(node: Node<NodeData>, provider: string | null | undefined): string {
   const definition = node.data?.definitionId ? NODE_DEFINITIONS[node.data.definitionId] : undefined;
   const label = node.data?.label;
-  if (label && label !== definition?.displayName) return label;
+  // GM - Design, round 18: either form of the default title is unnamed.
+  if (label && !isDefaultTitle(definition, label)) return label;
   return definition ? nameOnRoute(definition, provider) : (label || node.id);
 }
 

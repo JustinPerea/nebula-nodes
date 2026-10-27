@@ -151,8 +151,10 @@ describe('a late restore count', () => {
     await settle();
     // Round 17: the delete reaches Nebula after the restore (the order the
     // person made them), so its line comes once the restore has answered.
-    expect(useGraphStore.getState().nodes.map((node) => node.id)).toContain('n2');
+    // Round 18 (GM option (c)): the card leaves the canvas at once, though its DELETE waits for the restore.
+    expect(useGraphStore.getState().nodes.map((node) => node.id)).not.toContain('n2');
     await release();
+    expect(useGraphStore.getState().nodes.map((node) => node.id)).not.toContain('n2');
     // The newer notice keeps its Undo, and the count is not lost.
     expect(notice()).toMatchObject({ text: 'Deleted the node.', offer: 'undo' });
     expect(notice()?.entry).toBe(top('undoStack'));

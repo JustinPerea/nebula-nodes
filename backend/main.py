@@ -4778,7 +4778,9 @@ def _custom_node_label(raw: Any, definition_id: str) -> str | None:
         return None
     label = " ".join(raw.split())[:MAX_NODE_LABEL_LENGTH]
     definition = node_registry.get(definition_id) or {}
-    if not label or label == definition.get("displayName"):
+    # GM - Design, round 18: either form of the default title (the catalog
+    # name, or the canvas title without its gateway) is no name of its own.
+    if not label or label == definition.get("displayName") or (definition and node_route.is_default_title(definition, label)):
         return None
     return label
 
@@ -11520,28 +11522,34 @@ def _card_label(definition: Mapping[str, Any] | None, node: Mapping[str, Any] | 
 def _set_words(node_id: str, keys: list[str]) -> tuple[str, str]:
     """The cursor's words for an agent setting fields (GM - Design, round 16,
     verbatim): the card's labels in curly quotes, "Set “Aspect ratio”", "Set
-    “Aspect ratio” and “Seed”", "Set 3 settings" for three or more. A field
+    “Aspect ratio” and “Seed”"; three or more "Changed 3 settings" (GM,
+    round 18: "Changed N settings" (was "Set N settings")). A field
     with no card label is left out of the list and the count; with none
     labelled the bubble says nothing ("") and the cursor still moves. The
     Agent log keeps the change: it names an unlabelled field by its key,
     labelled fields first in the card's order, then the raw keys (GM, round
     17: "Set “Aspect ratio”, “Seed” and seed_mode"; four names, then "and N
-    more"). Returns (say, log)."""
+    more"). The card's order is its definition's fields, then a configured
+    model's own (``dynamicParams``, review 17: a universal node's fields were
+    listed in key order). Returns (say, log)."""
     node = cli_graph.nodes.get(node_id) or {}
     definition = node_registry.get(str(node.get("definitionId") or ""))
-    order = {str(param.get("key")): index
-             for index, param in enumerate(node_route.all_param_definitions(definition or {}))}
+    order: dict[str, int] = {}
+    for param in [*node_route.all_param_definitions(definition or {}), *(node.get("dynamicParams") or [])]:
+        if isinstance(param, Mapping):
+            order.setdefault(str(param.get("key")), len(order))
     ordered = sorted(dict.fromkeys(keys), key=lambda key: (order.get(key, len(order)), key))
     labels = {key: _card_label(definition, node, key) for key in ordered}
     named = [f"“{labels[key]}”" for key in ordered if labels[key]]
-    say = f"Set {_set_list(named)}" if named else ""
+    say = (f"Changed {len(named)} settings" if len(named) >= 3 else f"Set {_set_list(named)}") if named else ""
     logged = named + [key for key in ordered if not labels[key]]
     log = f"Set {_set_list(logged, cap=4)}"
     return say, log
 
 
 def _set_list(items: list[str], cap: int | None = None) -> str:
-    """"“A”", "“A” and “B”", three or more "3 settings" (GM, round 16). With a
+    """"“A”", "“A” and “B”", three or more "3 settings" (GM, round 16; the
+    bubble says "Changed N settings" for those itself, round 18). With a
     ``cap`` (the Agent log), up to that many named: "A, B, C and D", then "and N more"."""
     if cap is None:
         return items[0] if len(items) == 1 else " and ".join(items) if len(items) == 2 else f"{len(items)} settings"
@@ -13884,7 +13892,8 @@ def _cli_node_to_rf(n: dict[str, Any], position: dict[str, float], all_defs: dic
         params = _normalize_image_input_params(params)
 
     data: dict[str, Any] = {
-        "label": n.get("label") or defn.get("displayName", definition_id),
+        # GM - Design, round 18: an unnamed node reads its canvas title.
+        "label": n.get("label") or (node_route.canvas_title(defn) if defn else "") or definition_id,
         "definitionId": definition_id,
         "params": params,
         "state": node_state,

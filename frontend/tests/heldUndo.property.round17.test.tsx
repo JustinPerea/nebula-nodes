@@ -12,6 +12,12 @@ import { FakeNebula, canvasNode, textFakeNode } from './helpers/undoFakeBackend'
 //   3. no press is silent while its stack holds a step: pressed with nothing
 //      on its way, a Cmd+Z or Cmd+Shift+Z changes the canvas or says why.
 // Seeds: UNDO_PROPERTY_SEEDS (default 120), from UNDO_PROPERTY_FIRST (default 1).
+// Review 17, M-1 (round 18): the foreign-add variant also has nodes added by
+// someone else at random (an agent's edit, a reconnect's sync with no edit,
+// another window's edit). A plain sync's node is no step, so it stays at the
+// end; an agent's or another window's add is a step the person can undo.
+// Seeds: UNDO_PROPERTY_FOREIGN_SEEDS (default 60), from
+// UNDO_PROPERTY_FOREIGN_FIRST (default 1).
 
 const fake = vi.hoisted(() => ({ backend: null as unknown as FakeNebula }));
 vi.mock('../src/lib/backend', async (importOriginal) => ({
@@ -77,13 +83,13 @@ const noticeIds = () => `${store().undoNotice?.id ?? '-'}/${store().messageNotic
 
 interface Failure { seed: number; step: number; what: string; log: string[]; calls: string[] }
 
-async function runSeed(seed: number): Promise<Failure | null> {
-  const failure = await runSeedInner(seed);
+async function runSeed(seed: number, foreign = false): Promise<Failure | null> {
+  const failure = await runSeedInner(seed, foreign);
   if (failure) failure.calls = nebula().calls.filter((call) => call.method !== 'GET').map((call) => `${call.method} ${call.path} ${call.body ?? ''}`.slice(0, 300));
   return failure;
 }
 
-async function runSeedInner(seed: number): Promise<Failure | null> {
+async function runSeedInner(seed: number, foreign: boolean): Promise<Failure | null> {
   await freshStore();
   const random = rng(seed);
   const pick = <T,>(items: T[]): T | undefined => items[Math.floor(random() * items.length)];
@@ -99,6 +105,26 @@ async function runSeedInner(seed: number): Promise<Failure | null> {
   const connectingFrom = new Set<string>();
   let letter = 0;
   const quiet = () => nebula().answers.length === 0 && nebula().echoes.length === 0;
+  // The foreign-add variant: which requests were someone else's, and the
+  // nodes a plain sync brought (no step: they stay).
+  const foreignRequests = new Map<number, 'plain' | 'agent' | 'tab'>();
+  const plainIds: string[] = [];
+  // Each seed starts with the fake's own echo delivery (a foreign seed's goes with it).
+  delete (nebula() as unknown as { deliverEcho?: unknown }).deliverEcho;
+  if (foreign) {
+    const fake = nebula() as unknown as { deliverEcho: () => boolean; echoes: Array<{ nodes: unknown[]; edges: unknown[]; request: number }> };
+    fake.deliverEcho = function deliverEcho(): boolean {
+      const graph = fake.echoes.shift();
+      if (!graph) return false;
+      const kind = foreignRequests.get(graph.request);
+      const edit = kind === 'plain' ? undefined
+        : kind === 'agent' ? { actor: { kind: 'agent', name: 'Codex', id: 'codex' }, id: `ed_ag${graph.request}` }
+          : kind === 'tab' ? { actor: { kind: 'person' }, tab: 'another-window', id: `ed_tab${graph.request}` }
+            : { actor: { kind: 'person' }, tab: nebula().tab, id: 'ed_own' };
+      nebula().emit({ nodes: FakeNebula.syncNodes(graph as never), edges: graph.edges, empty: graph.nodes.length === 0, ...(edit ? { edit } : {}) });
+      return true;
+    };
+  }
 
   const press = async (action: 'undo' | 'redo', step: number): Promise<Failure | null> => {
     const stack = action === 'undo' ? store().undoStack : store().redoStack;
@@ -150,6 +176,21 @@ async function runSeedInner(seed: number): Promise<Failure | null> {
       await settle();
     }
     const nodes = store().nodes;
+    if (foreign && random() < 0.10) {
+      // Someone else adds a node: Nebula makes it and syncs it.
+      const draw = random();
+      const kind = draw < 0.4 ? 'plain' : draw < 0.75 ? 'agent' : 'tab';
+      const id = `n${nebula().next}`;
+      nebula().next += 1;
+      nebula().request += 1;
+      foreignRequests.set(nebula().request, kind);
+      nebula().nodes.set(id, textFakeNode(id, `F${id}`));
+      if (kind === 'plain') plainIds.push(id);
+      nebula().broadcast();
+      await settle();
+      log.push(`${kind} foreign add ${id}`);
+      continue;
+    }
     if (roll < 0.06) {
       nebula().holdEchoes = random() < 0.5;
       nebula().holdAnswers = random() < 0.5;
@@ -239,8 +280,15 @@ async function runSeedInner(seed: number): Promise<Failure | null> {
   }
   await deliverAll();
   if (store().undoStack.length > 0) return { calls: [], seed, step: OPS, what: 'the undo stack never emptied', log };
-  if (canvasShape() !== start) return { calls: [], seed, step: OPS, what: `back at ${canvasShape()}, started at ${start}`, log };
-  if (nebulaShape() !== startNebula) return { calls: [], seed, step: OPS, what: `Nebula at ${nebulaShape()}, started at ${startNebula}`, log };
+  // A plain sync's nodes are no step: they stay (the foreign-add variant).
+  const [startCanvasNodes, startCanvasEdges] = JSON.parse(start) as [string[], string[]];
+  const [startNebulaNodes, startNebulaEdges] = JSON.parse(startNebula) as [string[], string[]];
+  const extra = plainIds.map((id) => `${id}=F${id}`);
+  const expected = JSON.stringify([[...startCanvasNodes, ...extra].sort(), startCanvasEdges]);
+  const expectedNebula = JSON.stringify([[...startNebulaNodes, ...extra]
+    .sort((a, b) => a.split('=')[0].localeCompare(b.split('=')[0])), startNebulaEdges]);
+  if (canvasShape() !== expected) return { calls: [], seed, step: OPS, what: `back at ${canvasShape()}, expected ${expected}`, log };
+  if (nebulaShape() !== expectedNebula) return { calls: [], seed, step: OPS, what: `Nebula at ${nebulaShape()}, expected ${expectedNebula}`, log };
   if (canvasBackendShape() !== nebulaShape()) return { calls: [], seed, step: OPS, what: 'canvas and Nebula differ at the end', log };
   return null;
 }
@@ -267,14 +315,22 @@ describe('round 17 (review 16, H1): random sequences of edits, undos and echoes'
     vi.restoreAllMocks();
   });
 
-  const chunks: number[][] = [];
-  for (let seed = FIRST; seed < FIRST + SEEDS; seed += CHUNK) {
-    chunks.push(Array.from({ length: Math.min(CHUNK, FIRST + SEEDS - seed) }, (_, index) => seed + index));
-  }
-  it.each(chunks.map((seeds) => [`${seeds[0]}-${seeds[seeds.length - 1]}`, seeds] as const))('seeds %s', async (_range, seeds) => {
+  const chunksOf = (first: number, count: number) => {
+    const chunks: number[][] = [];
+    for (let seed = first; seed < first + count; seed += CHUNK) {
+      chunks.push(Array.from({ length: Math.min(CHUNK, first + count - seed) }, (_, index) => seed + index));
+    }
+    return chunks.map((seeds) => [`${seeds[0]}-${seeds[seeds.length - 1]}`, seeds] as const);
+  };
+  const ONLY_FOREIGN = process.env.UNDO_PROPERTY_ONLY_FOREIGN === '1';
+  const plain = ONLY_FOREIGN ? [] : chunksOf(FIRST, SEEDS);
+  const foreign = process.env.UNDO_PROPERTY_SKIP_FOREIGN === '1' ? []
+    : chunksOf(Number(process.env.UNDO_PROPERTY_FOREIGN_FIRST ?? 1), Number(process.env.UNDO_PROPERTY_FOREIGN_SEEDS ?? 60));
+  it.each([...plain.map(([range, seeds]) => [range, seeds, false] as const),
+    ...foreign.map(([range, seeds]) => [`${range}, others adding nodes`, seeds, true] as const)])('seeds %s', async (_range, seeds, withForeign) => {
     const failures: Failure[] = [];
     for (const seed of seeds) {
-      const failure = await runSeed(seed);
+      const failure = await runSeed(seed, withForeign);
       if (failure) failures.push(failure);
       await tick(20_000);
     }
