@@ -51,7 +51,7 @@ import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 from services import pending_nodes
 from services.canvas_events import MOVE_THRESHOLD_PX, actor_record
@@ -895,9 +895,11 @@ class CanvasUndoBook:
     def restore_epoch(self, project_id: str | None, epoch: int) -> None:
         """Put back the epoch ``advance_epoch`` returned when the change it
         was moved for didn't happen (an import whose commit failed), in the
-        same synchronous step, so nothing read the moved one."""
+        same synchronous step, so nothing read the moved one. That project's
+        entry is written as given (this book moved it, in this step); the
+        rest of the file is merged as usual (``_save_epochs``)."""
         self._epochs[project_id] = epoch
-        self._save_epochs(self._epochs)
+        self._save_epochs(self._epochs, exact=(project_id,))
 
     def forget_project(self, project_id: str | None, why: str, *, advance: bool = True) -> None:
         """The project's node ids start again: its epoch moves (unless the
@@ -944,10 +946,36 @@ class CanvasUndoBook:
             epochs[None] = raw["unfiled"]
         return epochs
 
-    def _save_epochs(self, epochs: Mapping[str | None, int]) -> None:
-        """Atomically (a temporary file, fsync, rename), best effort."""
+    def _on_disk(self) -> dict[str | None, int]:
+        """The epochs the file holds now, or {} when it can't be read."""
+        try:
+            raw = json.loads(self.persist_path.read_text(encoding="utf-8")) if self.persist_path else None
+        except (OSError, ValueError):
+            return {}
+        if not isinstance(raw, dict):
+            return {}
+        projects = raw.get("projects")
+        found: dict[str | None, int] = {key: value for key, value in (projects.items() if isinstance(projects, dict) else ())
+                                        if isinstance(key, str) and key and _counter(value)}
+        if _counter(raw.get("unfiled")):
+            found[None] = raw["unfiled"]
+        return found
+
+    def _save_epochs(self, epochs: Mapping[str | None, int], *, exact: Iterable[str | None] = ()) -> None:
+        """Atomically (a temporary file, fsync, rename), best effort, and as a
+        merge (round 21 of PR #195, review 20 L-5): the file is read again
+        and each project keeps the higher of the two, so another book's
+        write on the same state dir never moves a revision backwards, and a
+        corrupt file read at boot isn't rewritten with only the projects in
+        memory once it reads again. ``exact``: projects written as given
+        (restore_epoch's own undo of its move)."""
         if self.persist_path is None:
             return
+        merged: dict[str | None, int] = dict(self._on_disk())
+        exact = set(exact)
+        for key, value in epochs.items():
+            merged[key] = value if key in exact else max(value, merged.get(key, value))
+        epochs = merged
         data: dict[str, Any] = {"version": 1,
                 "projects": {key: value for key, value in sorted(epochs.items(), key=lambda item: str(item[0]))
                              if key is not None and value != self._base},

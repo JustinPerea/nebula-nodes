@@ -798,6 +798,10 @@ class Proposal:
     # again, so a later delete of "n1" may be another node): the undo of
     # those deletes can't reopen it, and says so (``dropped_reason``).
     dropped_by: dict[str, str] = field(default_factory=dict)
+    # The canvas revision it was made on (main._canvas_revision). Accept is
+    # refused once it moved: a clear or an import landed since, so node ids
+    # may name other nodes (round 21 of PR #195, review 20 L-3).
+    canvas_revision: str | None = None
     dropped_reason: str | None = None
     # Which node it read under each id (main.node_removals.lineage, set when
     # it was made): a delete tags it only when it took that very node.

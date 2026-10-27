@@ -251,11 +251,12 @@ describe('round 20 (review 19)', () => {
     });
 
     it("RST as the reviewer wrote it: a sync with no edit whose revision moved but whose canvas didn't keeps the typing", async () => {
+      // Round 21 (review 20, L-4): only when Nebula says it lost its revisions.
       setProjectContext({ id: 'p1', revision: 'r1', canvas: '2' });
       start([textFakeNode('n1'), textFakeNode('n2')]);
       type('n2', 'Typed');
       await tick(200);
-      sync('0');
+      sync('0', { canvasRevisionRestored: false });
       await settle();
       await tick(6000);
       expect(writes()).toContain('PUT /api/graph/node/n2');
@@ -270,7 +271,7 @@ describe('round 20 (review 19)', () => {
       type('n2', 'Typed');
       await tick(200);
       nebula().nodes.clear(); nebula().edges = [];
-      sync('0');
+      sync('0', { canvasRevisionRestored: false });
       await settle();
       await tick(6000);
       expect(lines().filter((line) => String(line).includes('cleared the canvas'))).toEqual([]);

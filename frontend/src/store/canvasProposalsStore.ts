@@ -18,6 +18,7 @@ import type { Point } from '../lib/agentCursorMotion';
 import { useGraphStore, watchGraphSyncs } from './graphStore';
 import { PERSON_REQUIRED_CODE, failureMessage } from '../lib/errorCopy';
 import { refuseEditWhileOffline } from '../lib/backendConnection';
+import { refuseEditWhileFollowing } from '../lib/canvasFollow';
 
 /** How long a closed proposal's ghosts fade before they go. Matches canvasProposals.css. */
 export const PROPOSAL_EXIT_MS = 220;
@@ -216,8 +217,11 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
   accept: async (id) => {
     const entry = get().proposals[id];
     if (!entry || entry.closing || get().pending[id]) return;
-    // Offline is read-only (round 15 of PR #114): nothing is sent or marked;
-    // the banner pulses.
+    // Not while the canvas follows an agent's project switch (round 21,
+    // review 20 L-1: the canvas is about to go; the bar pulses), as the
+    // store's gates ask it first. Offline is read-only (round 15 of PR
+    // #114): nothing is sent or marked; the banner pulses.
+    if (refuseEditWhileFollowing()) return;
     if (refuseEditWhileOffline()) return;
     set((state) => ({ pending: { ...state.pending, [id]: 'accept' }, errors: without(state.errors, id) }));
     // Accepting is one undo step: the canvas before the proposal's nodes

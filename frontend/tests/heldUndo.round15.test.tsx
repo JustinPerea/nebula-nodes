@@ -292,7 +292,8 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       ownSync([textNode('n2'), textNode('n3')]);
       type('n3', 'F');
       await answer('n2', 500); await answer('n1');
-      expect(failure()).toMatch(/^Couldn't delete the node\./);
+      // GM round 21 (LOCKED): a 500 names the node and says it's back.
+      expect(failure()).toBe("Couldn't delete “n2”. Nebula ran into an error, so it's back on the canvas. Try again, and if it keeps happening, restart Nebula.");
       expect(ids()).toEqual(['n2', 'n3']);
       net.holdDeletes = false;
       await undo();
@@ -517,7 +518,8 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       setGraph([textNode('n1'), textNode('n2')]);
       act(() => { store().deleteNode('n1'); }); await settle();
       await answer('n1', 500);
-      expect(failure()).toMatch(/^Couldn't delete the node\./);
+      // GM round 21 (LOCKED): a 500 names the node and says it's back.
+      expect(failure()).toBe("Couldn't delete “n1”. Nebula ran into an error, so it's back on the canvas. Try again, and if it keeps happening, restart Nebula.");
       expect(ids()).toEqual(['n1', 'n2']);
       expect(store().undoStack.length).toBe(0);
       sameAsBackend();

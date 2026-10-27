@@ -1355,7 +1355,8 @@ def new_project(name: str, ctx: Context | None = None) -> dict[str, Any]:
     canvas: the project that was open is saved as it is. The person's canvas follows, names you,
     and offers them a way back. Their canvas is read-only until the
     new one loads; what they had typed is saved into the project left (or, if
-    that fails, as a new project "<name> (recovered)"). Refused while a run is going.
+    that fails, as a new project named after the project left, "<project
+    left> (recovered)", then "(recovered 2)" and so on). Refused while a run is going.
     """
     return _switch("/api/projects", {"name": name}, ctx)
 
@@ -1365,9 +1366,11 @@ def open_project(project_id: str, ctx: Context | None = None) -> dict[str, Any]:
     """Switch the canvas to a saved project (ids from list_projects).
 
     The project that was open is saved as it is. The person's canvas follows,
-    names you, and offers them a way back. Their canvas is read-only until the
+    names you, and offers them a way back. Opening the project that is already
+    open reloads it from what was saved; what they had typed there still lands. Their canvas is read-only until the
     new one loads; what they had typed is saved into the project left (or, if
-    that fails, as a new project "<name> (recovered)"). Refused while a run is going.
+    that fails, as a new project named after the project left, "<project
+    left> (recovered)", then "(recovered 2)" and so on). Refused while a run is going.
     """
     from urllib.parse import quote
 

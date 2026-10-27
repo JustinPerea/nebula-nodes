@@ -7333,6 +7333,8 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
         )
     except ProposalError as exc:
         raise _proposal_http_error(exc) from exc
+    # The canvas it was made on, in the step that made it (review 20 L-3).
+    proposal.canvas_revision = _canvas_revision()
     # Which node it reads under each id, so only a delete of that very node tags it (second review).
     proposal.lineage = {node_id: node_removals.lineage(proposal.project_id, node_id) for node_id in spec.references}
     first_reference = next(iter(sorted(proposal.references, key=_node_order)), None)
@@ -7456,7 +7458,7 @@ async def withdraw_canvas_proposal(proposal_id: str) -> dict[str, Any]:
     return {"proposal": _proposal_view(proposal)}
 
 
-async def _decidable_proposal(proposal_id: str) -> Proposal:
+async def _decidable_proposal(proposal_id: str, *, reject: bool = False) -> Proposal:
     """The person-only checks shared by accept and reject, in order.
 
     1. No agent markers and this launch's person token.
@@ -7474,7 +7476,7 @@ async def _decidable_proposal(proposal_id: str) -> Proposal:
     if not supplied or not secrets.compare_digest(supplied.encode(), proposal.accept_key.encode()):
         raise HTTPException(status_code=403, detail="This proposal can only be accepted from the Nebula canvas.")
     await _sweep_proposals()
-    _ensure_still_decidable(proposal)
+    _ensure_still_decidable(proposal, reject=reject)
     return proposal
 
 
@@ -7507,12 +7509,19 @@ def _refuse_changed_runs(proposal: Proposal, candidate: CLIGraph, id_map: dict[s
             f"what it runs changed after it was proposed ({_listed(sorted(changed, key=_node_order), 4)})"))
 
 
-def _ensure_still_decidable(proposal: Proposal) -> None:
-    """Re-check after an await: still open and still for the open project."""
+def _ensure_still_decidable(proposal: Proposal, *, reject: bool = False) -> None:
+    """Re-check after an await: still open, still for the open project, and
+    still on the canvas it was made on (not for a reject, which only closes
+    it: a reject on a cleared canvas closes what the clear closes anyway)."""
     if not proposal.is_open:
         raise HTTPException(status_code=409, detail=f"This proposal is already {proposal.status}")
     if proposal.project_id != _workspace_context()["activeProjectId"]:
         raise HTTPException(status_code=409, detail="This proposal belongs to another project")
+    if not reject and proposal.canvas_revision is not None and proposal.canvas_revision != _canvas_revision():
+        # A clear or an import landed since it was made (they close open
+        # proposals only after their awaits): its node ids may name other
+        # nodes now (round 21 of PR #195, review 20 L-3).
+        raise HTTPException(status_code=409, detail="This proposal was made before the canvas was cleared or replaced")
 
 
 async def _proposal_body(request: Request) -> dict[str, Any]:
@@ -7662,9 +7671,9 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
 @app.post("/api/canvas/proposals/{proposal_id}/reject")
 async def reject_canvas_proposal(proposal_id: str, request: Request) -> dict[str, Any]:
     """The person says no. Body: {reason?} (one short line the agent will read)."""
-    proposal = await _decidable_proposal(proposal_id)
+    proposal = await _decidable_proposal(proposal_id, reject=True)
     body = await _proposal_body(request)
-    _ensure_still_decidable(proposal)
+    _ensure_still_decidable(proposal, reject=True)
     reason: str | None = None
     if body.get("reason") not in (None, ""):
         try:
@@ -15598,7 +15607,7 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
             candidate, *([cli_graph.nodes] if catalog["activeProjectId"] == source["id"] else []),
             _snapshot_nodes(source["snapshot"]))
         try:
-            project = make_project(body.get("name", f"{source['name'][:100]} (recovered)"), snapshot)
+            project = make_project(body.get("name") or _recovered_copy_name(source["name"], catalog), snapshot)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         project.update({
@@ -15614,6 +15623,22 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
     _journal_project_change("project.created", result["project"])  # before any await (round 8 of PR #114)
     await _broadcast_projects_changed("created", recovery_id)
     return result
+
+
+def _recovered_copy_name(source_name: str, catalog: Mapping[str, Any]) -> str:
+    """A new recovered copy's name (GM - Design, round 21 of PR #195, G5):
+    "<project> (recovered)", then "(recovered 2)", 3 and so on, one past the
+    highest the project's copies have (in Projects or the trash), so a new
+    copy never takes an earlier copy's name."""
+    stem = f"{source_name[:100]} (recovered"
+    pattern = re.compile(re.escape(stem) + r"(?: (\d+))?\)")
+    highest = 0
+    for listing in (catalog.get("projects") or {}, catalog.get("trash") or {}):
+        for project in listing.values():
+            match = pattern.fullmatch(str((project or {}).get("name") or ""))
+            if match:
+                highest = max(highest, int(match.group(1) or 1))
+    return f"{stem})" if highest == 0 else f"{stem} {highest + 1})"
 
 
 def _switch_actor() -> dict[str, Any] | None:
@@ -15875,6 +15900,10 @@ async def save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
         # Its refusal comes where the check ran before (_IngressVerdict).
         verdict = await _ingress_verdict_off_loop(body["snapshot"])
     result = _save_project(project_id, body, ingress=verdict)
+    if result.pop("_liveChanged", False):
+        # An agent reopened the project the tab showed: the handoff's typing
+        # went onto the live graph too (review 20 M-1). The tab's own echo.
+        await _broadcast_graph_sync(edit=True)
     if "previousName" in result and result["previousName"] != result["project"]["name"]:
         # Before any await (round 8 of PR #114).
         _journal_project_change("project.renamed", result["project"], previous_name=result["previousName"])
@@ -15896,12 +15925,13 @@ def _save_project(project_id: str, body: dict[str, Any], *, ingress: _IngressVer
             # switches (_begin_switch). The project may be the open one
             # again: an agent reopened the project the tab was showing,
             # which reloads it from what was saved.
-            _save_handoff(project, body["snapshot"], ingress=ingress,
-                          pending_params=body.get("pendingParams"), pending_labels=body.get("pendingLabels"))
+            merged = _save_handoff(project, body["snapshot"], ingress=ingress,
+                                   pending_params=body.get("pendingParams"), pending_labels=body.get("pendingLabels"))
             refresh_metadata(project)
             project_store.commit(catalog)
+            live = catalog["activeProjectId"] == project_id and _apply_handoff_live(project, merged)
             return {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"],
-                    "handoff": True}
+                    "handoff": True, **({"_liveChanged": True} if live else {})}
         _project_revision(body, catalog, required="snapshot" in body)
         if "snapshot" in body:
             if catalog["activeProjectId"] != project_id:
@@ -15959,7 +15989,37 @@ def _keep_person_viewport(staged: dict[str, Any], stored: dict[str, Any]) -> Non
         staged["viewport"] = copy.deepcopy(stored.get("viewport"))
 
 
-HANDOFF_MERGE_REFUSED = "Nebula couldn't keep this save's unsent changes in the project ({why}), so nothing was saved."
+# GM - Design, round 21 (G4): agents and logs read it; the person sees the
+# copy line instead. ``why`` is one of HANDOFF_WHY's forms.
+HANDOFF_MERGE_REFUSED = "Nebula couldn't keep this save's unsent changes in the project because {why}, so nothing was saved."
+HANDOFF_WHY = {
+    "type": "a node's type changed",
+    "removed": "the node was removed",
+    "unreadable": "the project can't be read",
+    "agent": "the change came from an agent",
+}
+
+
+def _handoff_refused(why: str) -> HTTPException:
+    return HTTPException(status_code=409, detail=HANDOFF_MERGE_REFUSED.format(why=why))
+
+
+def _handoff_key_refused(key: str) -> HTTPException:
+    return _handoff_refused(f"“{key}” isn't a setting on that node")
+
+
+def _refuse_handoff_pending_not_from_the_tab(pending_params: Any, pending_labels: Any) -> None:
+    """Only the person's own canvas tab sends the unsent changes (round 21 of
+    PR #195, review 20 L-6): the person's token and X-Nebula-Tab. Anyone else
+    holding the old revision (the agent that switched, a script) could
+    otherwise rewrite saved settings in the project left with no journal
+    entry or undo."""
+    if not pending_params and not pending_labels:
+        return
+    headers = current_request_headers() or {}
+    tab = next((value for key, value in headers.items() if key.lower() == "x-nebula-tab"), None)
+    if not (_is_person_request() and isinstance(tab, str) and _TAB_ID_RE.fullmatch(tab)):
+        raise _handoff_refused(HANDOFF_WHY["agent"])
 
 
 def _handoff_pending(pending_params: Any, pending_labels: Any) -> tuple[dict[str, list[str]], set[str]]:
@@ -15969,19 +16029,16 @@ def _handoff_pending(pending_params: Any, pending_labels: Any) -> tuple[dict[str
     params: dict[str, list[str]] = {}
     if pending_params is not None:
         if not isinstance(pending_params, dict):
-            raise HTTPException(status_code=409, detail=HANDOFF_MERGE_REFUSED.format(
-                why="pendingParams must map node ids to their unsent settings"))
+            raise _handoff_refused(HANDOFF_WHY["unreadable"])
         for node_id, keys in pending_params.items():
             if not isinstance(keys, dict) or not all(isinstance(key, str) and key for key in keys):
-                raise HTTPException(status_code=409, detail=HANDOFF_MERGE_REFUSED.format(
-                    why=f"the unsent settings for node {node_id} must be an object of settings"))
+                raise _handoff_refused(HANDOFF_WHY["unreadable"])
             params[node_id] = list(keys)
     labels: set[str] = set()
     if pending_labels is not None:
         if not isinstance(pending_labels, dict) or not all(
                 value is None or isinstance(value, str) for value in pending_labels.values()):
-            raise HTTPException(status_code=409, detail=HANDOFF_MERGE_REFUSED.format(
-                why="pendingLabels must map node ids to a name or null"))
+            raise _handoff_refused(HANDOFF_WHY["unreadable"])
         labels = set(pending_labels)
     return params, labels
 
@@ -15996,9 +16053,12 @@ def _merge_handoff_node(stored: dict[str, Any], staged: dict[str, Any], staged_l
     data["params"] = params
     staged_params = (staged.get("data") or {}).get("params") or {}
     for key in keys:
-        # A key the staged node lacks (dropped by staging) is not merged.
-        if key in staged_params:
-            params[key] = copy.deepcopy(staged_params[key])
+        # A key the staged node lacks (staging dropped it: not a setting of
+        # that node) refuses the save (GM's G4 form), so the tab keeps it
+        # as a copy rather than losing it silently.
+        if key not in staged_params:
+            raise _handoff_key_refused(key)
+        params[key] = copy.deepcopy(staged_params[key])
     if label:
         if staged_label:
             data["label"] = staged_label
@@ -16008,7 +16068,7 @@ def _merge_handoff_node(stored: dict[str, Any], staged: dict[str, Any], staged_l
 
 
 def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict | None = None,
-                  pending_params: Any = None, pending_labels: Any = None) -> None:
+                  pending_params: Any = None, pending_labels: Any = None) -> dict[str, tuple[list[str], bool]]:
     """The last save from a tab whose project an agent switched away from.
 
     The switch already merged the live canvas into this project
@@ -16022,8 +16082,15 @@ def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict
     per top-level key onto the stored copy. Everything else keeps the stored
     copy, so an undo the tab dropped is still not folded in. A merge that
     can't be made (a node not in the save, another definition, a malformed
-    list) refuses the whole save with 409, so the tab keeps it as a copy.
+    list, a key that isn't a setting of the node, or the lists sent by
+    anyone but the person's tab) refuses the whole save with 409, so the tab
+    keeps it as a copy.
+
+    Answers the merged nodes ({nodeId: (keys, name merged)}), so a project
+    that is the open one again (an agent reopened it) gets them onto the live
+    graph too (_apply_handoff_live, round 21, review 20 M-1).
     """
+    _refuse_handoff_pending_not_from_the_tab(pending_params, pending_labels)
     stored = project["snapshot"]
     historical = {node["id"]: node.get("data", {}).get("definitionId") for node in stored["nodes"]}
     unsent_params, unsent_labels = _handoff_pending(pending_params, pending_labels)
@@ -16040,14 +16107,12 @@ def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict
     for node_id in [*unsent_params, *(key for key in unsent_labels if key not in unsent_params)]:
         tab_node = staged_nodes.get(node_id)
         if tab_node is None:
-            raise HTTPException(status_code=409, detail=HANDOFF_MERGE_REFUSED.format(
-                why=f"node {node_id} isn't in the save"))
+            raise _handoff_refused(HANDOFF_WHY["removed"])
         if node_id not in backend_nodes or node_id not in stored_nodes:
             continue  # only the tab had it: it is added with its own values
         kept = stored_nodes[node_id]
         if (tab_node.get("data") or {}).get("definitionId") != (kept.get("data") or {}).get("definitionId"):
-            raise HTTPException(status_code=409, detail=HANDOFF_MERGE_REFUSED.format(
-                why=f"node {node_id} is another kind of node in the project"))
+            raise _handoff_refused(HANDOFF_WHY["type"])
         merged[node_id] = _merge_handoff_node(kept, tab_node, (candidate.nodes.get(node_id) or {}).get("label"),
                                               unsent_params.get(node_id, []), node_id in unsent_labels)
     nodes = [merged.get(node["id"]) or stored_nodes.get(node["id"], node) if node["id"] in backend_nodes else node
@@ -16061,6 +16126,41 @@ def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict
     edges += [edge for edge in stored["edges"] if edge["id"] in backend_edges and edge["id"] not in listed_edges]
     edges = [edge for edge in edges if edge["source"] in kept and edge["target"] in kept]
     project["snapshot"] = {**staged, "nodes": nodes, "edges": edges}
+    return {node_id: (unsent_params.get(node_id, []), node_id in unsent_labels) for node_id in merged}
+
+
+def _apply_handoff_live(project: Mapping[str, Any], merged: Mapping[str, tuple[list[str], bool]]) -> bool:
+    """The handoff's merged keys and names onto the live graph, for a project
+    that is the open one again (round 21 of PR #195, review 20 M-1): an
+    agent's reopen of the project the tab showed reloaded the live graph from
+    what was saved, and every read of the open project lays the live graph
+    over the stored copy, so the typing kept only in the stored copy was lost
+    at the next read. Same step as the save (no await). Answers whether the
+    live graph changed (the route then broadcasts a graphSync)."""
+    stored = {node["id"]: node for node in project["snapshot"]["nodes"]}
+    changed = False
+    for node_id, (keys, label) in merged.items():
+        live = cli_graph.nodes.get(node_id)
+        node = stored.get(node_id)
+        if live is None or node is None:
+            continue
+        data = node.get("data") or {}
+        if live.get("definitionId") != data.get("definitionId"):
+            continue
+        params = data.get("params") or {}
+        before = copy.deepcopy(live.get("params") or {})
+        update = {key: copy.deepcopy(params[key]) for key in keys if key in params}
+        if update:
+            cli_graph.update_params(node_id, update)
+        if label:
+            cli_graph.set_label(node_id, data.get("label") or None)
+        changes = param_changes(before, cli_graph.nodes[node_id].get("params") or {})
+        if changes:
+            _person_touched([node_id])
+            _journal("node.params", node_id=node_id, data=changes,
+                     summary=f"set {_listed(changes['keys'], 4)} on {_node_label(node_id)} ({node_id})")
+        changed = changed or bool(update) or label
+    return changed
 
 
 @app.get("/api/projects/{project_id}/covers")

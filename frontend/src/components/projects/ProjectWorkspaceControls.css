@@ -113,22 +113,27 @@ body.app-slava-restraint .project-workspace-controls__home[aria-busy="true"] {
   padding: 0 8px;
 }
 body.app-slava-restraint .project-workspace-controls__busy { font-size: 12px; white-space: nowrap; }
-/* Round 20 (GM follow-up 1): following an agent's switch. "Opening “<project>”…"
-   takes the save state's place; the bar keeps the width it had (set inline
-   from its measured width), so the line ellipsizes rather than widen it. */
+/* Round 20 (GM follow-up 1) and round 21 (GM item 1): following an agent's
+   switch. "Opening “<project>”…" takes the name slot (the old name and the
+   save state go); the bar keeps the width it had (set inline from its
+   measured width). A long name is cut inside itself ("Opening “Second ca…”…"):
+   the words around it never shrink, so the closing quote and ellipsis stay. */
 body.app-slava-restraint .project-workspace-controls--following { overflow: hidden; }
-body.app-slava-restraint .project-workspace-controls--following .project-workspace-controls__name {
-  flex: 0 1 auto;
-  min-width: 3ch;
-}
 body.app-slava-restraint .project-workspace-controls__opening {
+  display: flex;
   flex: 1 1 auto;
-  min-width: 4ch;
+  min-width: 0;
   overflow: hidden;
   color: var(--sr-ink);
-  font: 11px/1.4 var(--sr-ui);
-  text-overflow: ellipsis;
+  font: 500 12px/1.4 var(--sr-ui);
   white-space: nowrap;
+}
+body.app-slava-restraint .project-workspace-controls__opening-fixed { flex: 0 0 auto; }
+body.app-slava-restraint .project-workspace-controls__opening-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* A refused edit while it follows: one nudge, on the repo's k 500 / c 36
    spring sampled as linear() (the same curve as asset-move.css). */

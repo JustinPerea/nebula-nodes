@@ -15,6 +15,9 @@
  * The named form only when exactly one setting of one node was cut off.
  */
 export interface CutOffSave {
+  /** The node's id (never shown): two nodes with the same title are two
+   * changes (round 21, review 20 L-8). Lines written before it key on the title. */
+  nodeId?: string | null;
   /** The node's title as its card showed it. */
   node: string | null;
   /** The setting's label on the card (never a raw key). */
@@ -41,11 +44,14 @@ export function savingCutOffLine(saves: CutOffSave[], project: string, how: CutO
   return `${head} ${ending(how)}`;
 }
 
-/** Each setting once (a save named twice is one change). */
-function distinct(saves: CutOffSave[]): CutOffSave[] {
+/** Which node a save is for: its id, or its title when it has none. */
+const nodeKey = (save: CutOffSave): string => (save.nodeId ? `id:${save.nodeId}` : `title:${save.node}`);
+
+/** Each setting of each node once (a save named twice is one change), by node id (L-8). */
+export function distinctSaves(saves: CutOffSave[]): CutOffSave[] {
   const seen = new Set<string>();
   return saves.filter((save) => {
-    const key = `${save.node}\u0000${save.setting}`;
+    const key = `${nodeKey(save)}\u0000${save.setting}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -67,16 +73,25 @@ function quotedList(items: string[]): string {
  *   Several settings use the undo counting: "Couldn't save 3 changes in
  *   “<old project>”…". One it can't name: "your last change" (as round 19).
  * The copy is a whole new project in Projects (POST /api/projects/recover),
- * "<old project> (recovered)"; the line's "Open copy" opens it.
+ * "<old project> (recovered)", then "(recovered 2)", 3 and so on (GM round
+ * 21, G5: Nebula names it); the line's "Open copy" opens it.
+ * GM round 21 (polish): non-breaking spaces inside the quoted project names,
+ * so a name wraps as one piece.
  */
 export function handoffFailedLine(saves: CutOffSave[], project: string, agent: string | null, copyName: string): string {
-  const changes = distinct(saves);
+  const changes = distinctSaves(saves);
   const [only] = changes;
+  const left = keepTogether(project);
   const head = changes.length === 1 && only.node && only.setting
-    ? `Couldn't save “${only.setting}” for “${only.node}” in “${project}”`
-    : changes.length > 1 ? `Couldn't save ${changes.length} changes in “${project}”`
-      : `Couldn't save your last change in “${project}”`;
-  return `${head} when ${agent || 'an agent'} switched projects. Your edits were saved as a copy, “${copyName}”.`;
+    ? `Couldn't save “${only.setting}” for “${only.node}” in “${left}”`
+    : changes.length > 1 ? `Couldn't save ${changes.length} changes in “${left}”`
+      : `Couldn't save your last change in “${left}”`;
+  return `${head} when ${agent || 'an agent'} switched projects. Your edits were saved as a copy, “${keepTogether(copyName)}”.`;
+}
+
+/** A project name that wraps as one piece: its spaces non-breaking. */
+function keepTogether(name: string): string {
+  return name.replace(/ /g, '\u00a0');
 }
 
 /**
@@ -95,10 +110,10 @@ export function handoffFailedLine(saves: CutOffSave[], project: string, agent: s
  * named settings count; null when there are none.
  */
 export function agentClearedLine(saves: CutOffSave[], agent: string | null): string | null {
-  const settings = distinct(saves.filter((save) => save.node && save.setting));
+  const settings = distinctSaves(saves.filter((save) => save.node && save.setting));
   if (settings.length === 0) return null;
   const who = agent || 'An agent';
-  const nodes = new Set(settings.map((save) => save.node));
+  const nodes = new Set(settings.map(nodeKey));
   if (nodes.size === 1 && settings.length <= 3) {
     const tail = settings.length === 1 ? "That change wasn't saved." : "Those changes weren't saved.";
     return `${who} cleared the canvas while you were editing ${quotedList(settings.map((save) => save.setting!))} `

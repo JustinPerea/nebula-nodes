@@ -198,15 +198,18 @@ def test_H1_values_come_from_the_staged_snapshot_not_the_side_list(api):
     assert _stored(api, node)["data"]["params"]["value"] == "typed"
 
 
-def test_H1_a_key_the_staged_node_lacks_is_dropped(api):
+def test_H1_a_key_the_staged_node_lacks_refuses_the_save(api):
+    """Round 21 (GM's G4): a key that isn't a setting of the node refuses the
+    save with its own form, so the tab keeps it as a copy (it was dropped
+    silently before)."""
     node = api.graph.add_node("combine-text", {"separator": ",", "template": "x"}, position={"x": 0, "y": 0})
     old_revision, saved = _switch_away(api)
     tab = _with(saved, node, params={"separator": ";"})
     answer = _handoff(api, old_revision, tab, pendingParams={node: {"separator": ";", "nothere": "v"}})
-    assert answer.status_code == 200, answer.text
-    params = _stored(api, node)["data"]["params"]
-    assert params["separator"] == ";"
-    assert "nothere" not in params
+    assert answer.status_code == 409, answer.text
+    assert answer.json()["detail"] == ("Nebula couldn't keep this save's unsent changes in the project because "
+                                       "“nothere” isn't a setting on that node, so nothing was saved.")
+    assert _stored(api, node)["data"]["params"]["separator"] == ","
 
 
 def test_H1_without_pending_keys_the_stored_copy_wins_as_before(api):
@@ -373,8 +376,8 @@ ALLOWLIST: dict[tuple[str, str], str] = {
     ("POST", "/api/canvas/proposals"): "an agent proposes; nothing changes until the person accepts",
     ("DELETE", "/api/canvas/proposals/{proposal_id}"): "an agent withdraws its proposal; no graph",
     ("POST", "/api/canvas/proposals/{proposal_id}/accept"): (
-        "project-bound: refused unless its own project and canvas are open, closed on clear/replace "
-        "(_decidable_proposal)"),
+        "project-bound: refused unless its own project is open and its canvas revision hasn't moved "
+        "since it was made (_ensure_still_decidable, proposal.canvas_revision)"),
     ("POST", "/api/canvas/proposals/{proposal_id}/reject"): "closes the proposal; no graph",
     ("DELETE", "/api/canvas/approvals/{approval_id}"): "releases a run approval; no graph",
     ("POST", "/api/canvas/questions"): "an agent's questions; no graph",
@@ -401,7 +404,9 @@ ALLOWLIST: dict[tuple[str, str], str] = {
     ("POST", "/api/projects/recover"): "saves a recovered copy as a new project; never the live graph",
     ("POST", "/api/projects"): "the person's or an agent's create: checked by the body's workspaceRevision",
     ("POST", "/api/projects/{project_id}/open"): "the person's or an agent's open: checked by the body's workspaceRevision",
-    ("PUT", "/api/projects/{project_id}"): "saves by project id: the handoff after an agent's switch must land",
+    ("PUT", "/api/projects/{project_id}"): (
+        "saves by project id, checked by the body's workspaceRevision; the handoff after an agent's switch "
+        "must land, and on a reopen writes the tab's own unsent keys to the live graph (person's tab only)"),
     ("PUT", "/api/projects/{project_id}/cover"): "the project card's picture; no graph",
     ("DELETE", "/api/projects/{project_id}"): "moves a project to the trash: checked by its own revision rule",
     ("POST", "/api/projects/{project_id}/restore"): "restores a trashed project to the list; no live graph",

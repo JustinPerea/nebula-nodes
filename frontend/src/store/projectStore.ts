@@ -1331,8 +1331,11 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
     const landed = [...following.notices].reverse().find((item) => item.projectId === loaded?.id) ?? latest();
     const left = notice.previousProjectId;
     const reopened = (loaded?.id ?? landed.projectId) === left;
+    // Round 21 (review 20, L-7): the project loaded, and the last agent
+    // that switched (a second agent's switch during the follow is the one
+    // that landed).
     useProjectStore.setState({ switchNotice: {
-      actorName: agentNameOf(landed), created: landed.created === true && landed.projectId === (loaded?.id ?? landed.projectId),
+      actorName: agentNameOf(latest()), created: landed.created === true && landed.projectId === (loaded?.id ?? landed.projectId),
       projectName: loaded?.name ?? landed.projectName,
       previousProjectId: reopened ? null : left,
       previousProjectName: reopened ? null : notice.previousProjectName, keptCopy,
@@ -1850,7 +1853,11 @@ export function subscribeProjectAutosave(): () => void {
     if (state.busy) {
       // Another switch while this tab follows the last one (offline, the
       // follow waits for Nebula): kept, so the follow names where it lands.
-      if (followingSwitch && isSwitchNotice(event.projectSwitch)) followingSwitch.notices.push(event.projectSwitch);
+      // Round 21 (review 20, L-7): the bar and Run's tooltip name it now.
+      if (followingSwitch && isSwitchNotice(event.projectSwitch)) {
+        followingSwitch.notices.push(event.projectSwitch);
+        startFollowing(event.projectSwitch);
+      }
       return;
     }
     if (!context) {

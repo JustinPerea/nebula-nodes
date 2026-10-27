@@ -53,7 +53,17 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
         <Home size={16} aria-hidden="true" />
         {homeBusy && <span className="project-workspace-controls__busy">Saving…</span>}
       </button>
-      {draft !== null
+      {following
+        // GM round 21 (item 1): the old project's name goes; the name slot
+        // reads "Opening “<project>”…". A long name is cut inside itself,
+        // keeping the closing quote and ellipsis; the bar never widens.
+        ? <span key={pulse} className={`project-workspace-controls__opening${pulse > 0 ? ' project-workspace-controls__opening--pulse' : ''}`}
+            role="status" title={openingLine(following.projectName)} aria-label={openingLine(following.projectName)}>
+            <span className="project-workspace-controls__opening-fixed" aria-hidden="true">Opening “</span>
+            <span className="project-workspace-controls__opening-name" aria-hidden="true">{following.projectName}</span>
+            <span className="project-workspace-controls__opening-fixed" aria-hidden="true">”…</span>
+          </span>
+        : draft !== null
         ? <input className="project-workspace-controls__name project-workspace-controls__name-input" aria-label="Project name"
             autoFocus maxLength={120} value={draft} onFocus={(event) => event.target.select()}
             // Offline (round 15 of PR #114): disabled with its draft kept, as a node's rename.
@@ -73,8 +83,7 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
               }
             }}>{project.name}</button>}
       {following
-        ? <span key={pulse} className={`project-workspace-controls__opening${pulse > 0 ? ' project-workspace-controls__opening--pulse' : ''}`}
-            role="status" title={openingLine(following.projectName)}>{openingLine(following.projectName)}</span>
+        ? null
         : status === 'paused' && pausedBytes !== null
         // Q118 (GM): the persistent state, where "Saved" usually is, in Save
         // failed's warning colour; it opens the "what's large" panel.
@@ -89,7 +98,9 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
             onClick={() => void useProjectStore.getState().retrySave()}>Save failed · Retry</button>
         : <span className={`project-workspace-controls__status${status === 'saved' ? ' project-workspace-controls__status--settled' : ''}`}
             role="status">{label}</span>}
-      <span className="project-workspace-controls__count">{nodeCount} {nodeCount === 1 ? 'node' : 'nodes'}</span>
+      {/* While following, the count (the canvas that is going) gives its room to the opening line, so the new
+          name shows at the locked width rather than shrinking to nothing (round 21 live check). */}
+      {!following && <span className="project-workspace-controls__count">{nodeCount} {nodeCount === 1 ? 'node' : 'nodes'}</span>}
     </div>
   );
 }

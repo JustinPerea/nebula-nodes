@@ -80,10 +80,28 @@ export function waitToOpenTooltip(project: string): string {
   return `Wait for “${project}” to open.`;
 }
 
-/** `node` null: a run of the whole canvas or of several nodes ("Couldn't run
- * the canvas.", derived from GM's line, not GM's own). */
-export function runWhileFollowingLine(node: string | null, agent: string | null, project: string): string {
-  return `Couldn't run ${node === null ? 'the canvas' : `“${node}”`}. ${agent || 'An agent'} is opening “${project}”.`;
+/** Who is opening what, after the action's own heading (GM round 21, G1:
+ * "An agent is opening “<project>”." is fine; with no project known,
+ * "Another project is opening.", never "Nebula is opening another project."
+ * on its own). */
+export function followingReason(switching: FollowingSwitch | null): string {
+  if (!switching) return 'Another project is opening.';
+  return `${switching.agent || 'An agent'} is opening “${switching.projectName}”.`;
+}
+
+/** GM's derived lines (round 21, confirmed): `node` names a one-node run;
+ * `count` (2 or more) a run of several nodes ("Couldn't run <N> nodes.");
+ * neither: a run of the whole canvas ("Couldn't run the canvas."). */
+export function runWhileFollowingLine(node: string | null, agent: string | null, project: string, count?: number): string {
+  const what = count !== undefined && count >= 2 ? `${count} nodes` : node === null ? 'the canvas' : `“${node}”`;
+  return `Couldn't run ${what}. ${followingReason({ agent, projectName: project })}`;
+}
+
+/** Create's line while following (G1), in its normal error style: its own
+ * heading (graphStore's GENERATE_HEADING) over followingReason. */
+export const CREATE_WHILE_FOLLOWING_HEADING = "Couldn't start the generation.";
+export function createWhileFollowingLine(switching: FollowingSwitch | null): string {
+  return `${CREATE_WHILE_FOLLOWING_HEADING} ${followingReason(switching)}`;
 }
 
 /** Tests share one module: each starts from here. */

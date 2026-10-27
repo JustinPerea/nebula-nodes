@@ -197,8 +197,8 @@ describe('GM follow-up 2: a failed handoff is one line, with Open copy', () => {
     vi.mocked(projects.recoverProject).mockResolvedValue({ ...project('recovered'), name: 'Glass campaign (recovered)' });
     agentOpens();
     await vi.waitFor(() => expect(useProjectStore.getState().activeProject?.id).toBe('beta'));
-    const line = "Couldn't save “Text” for “Hero prompt” in “Glass campaign” when Claude Code switched projects. "
-      + 'Your edits were saved as a copy, “Glass campaign (recovered)”.';
+    const line = "Couldn't save “Text” for “Hero prompt” in “Glass\u00a0campaign” when Claude Code switched projects. "
+      + 'Your edits were saved as a copy, “Glass\u00a0campaign\u00a0(recovered)”.';
     await vi.waitFor(() => expect(lines()).toContain(line));
     const notice = [useGraphStore.getState().undoNotice, useGraphStore.getState().messageNotice].find((item) => item?.text === line);
     expect(notice?.copy).toEqual({ projectId: 'recovered' });
@@ -245,5 +245,21 @@ describe('M1: the canvas is read-only while it follows an agent\'s switch', () =
     agentOpens();
     await vi.waitFor(() => expect(useProjectStore.getState().busy).toBe(false));
     expect(followingSwitch()).toBeNull();
+  });
+});
+
+describe('Round 21 (review 20, M-1): an agent reopens the project the tab shows', () => {
+  it('the handoff carries the typing still in its debounce', async () => {
+    type('Typed');
+    vi.mocked(projects.listProjects).mockResolvedValue(listing({ activeProjectId: 'alpha', workspaceRevision: 'rev-a2' }));
+    emit({ type: 'graphSync', workspaceRevision: 'rev-a2', paramsVersion: GRAPH_PARAMS_VERSION, nodes: [], edges: [], empty: true,
+      graphReplaced: true,
+      projectSwitch: { projectId: 'alpha', projectName: 'Glass campaign', previousProjectId: 'alpha',
+        previousProjectName: 'Glass campaign', previousRevision: 'rev-a', actor: { kind: 'agent', name: 'Codex' } } });
+    await vi.waitFor(() => expect(useProjectStore.getState().busy).toBe(false));
+    expect(handoffs()).toContain('Typed');
+    // Params only: a rename an earlier test in this file left on its way is
+    // carried too (the module's writes outlive a test), with the same name.
+    expect((pendingOf() as { params: unknown }).params).toEqual({ n1: { value: 'Typed' } });
   });
 });

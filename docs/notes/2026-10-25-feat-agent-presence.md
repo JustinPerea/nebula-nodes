@@ -1903,11 +1903,11 @@ Backend:
 
 ### Where this meets #114
 
-#114 is still open (checked with `git fetch` on 2026-10-27), so nothing was merged. At merge:
+#114 was still open when round 20 was written (checked with `git fetch` on 2026-10-27), so nothing was merged then. The merge came in round 21 (below), which follows review 20's clash list (C1-C8). Corrected in round 21 (review 20, L-10): the prefix list is main's, not #114's; #114 already calls `_refuse_if_graph_moved` before registering a run; and the list below missed C1-C8. At merge:
 - **Run write-backs:** replace `_admitted_canvas_moved(what)` with #114's `_run_canvas_moved(run_id, what)`, and the ContextVar with `_register_run(canvas=)`. `_run_canvas_now` already has #114's name and meaning.
-- **Fence:** take this PR's marker middleware over #114's prefix list, and keep #114's `_filed_canvases` translation ahead of the canvas check.
+- **Fence:** take this PR's marker middleware over main's prefix list, and keep #114's `_filed_canvases` translation ahead of the canvas check.
 - **Uploads:** #114's `_refuse_if_graph_moved(fence)` can replace the second `_check_workspace_revision()`.
-- **Gates:** `FOLLOW_GATES` and `EDIT_GATES` both wrap the same actions. Keep both, or fold the follow check into #114's gate as a second reason.
+- **Gates:** `FOLLOW_GATES` and `EDIT_GATES` both wrap the same actions. Keep both, or fold the follow check into #114's gate as a second reason (round 21: folded, one table).
 
 ### Probes, live check and gates
 
@@ -1950,3 +1950,84 @@ Backend:
   - Pins and selection are on the allowlist, not fenced: they are written by node id onto the project record.
   - A run whose canvas is cleared during its admission awaits still starts; only its write-backs are dropped. #114's `_refuse_if_graph_moved` before registering is the full fix.
 - **A handoff could be refused by mistake:** if it names a node that `_migrate_rf_graph` folds into a new id, the whole save is refused and the tab saves a copy.
+
+## Round 21: the merge of main (#114), review 20 and GM - Design's round-21 rulings (2026-10-27)
+
+### The merge (Part A, its own commit: 2675e4c2)
+
+origin/main at c1e7338c (#114) merged by hand into c898138e, keeping both sides' intent. Review 20's clash list (C1-C8) was the checklist:
+- **Run admission (C3):** in execute, execute-node, generate-shot and graph/run nothing awaits between the final fence, the canvas read and `_register_run`. `_admit_registered_run` (placeholders made normal, then `_start_agent_run`) runs after registration, so a run refused at the last fence leaves its placeholders and keeps no agent-run record (`tests/test_round21_merge.py`).
+- **Silent leftovers (C1):** `_execution_canvas`, `_admitted_canvas_moved`, the second `_run_canvas_now`, the outputs check, `_synchronous_workspace_runs` and `_track_synchronous_project_run` are gone; #114's `_emit_and_sync` guards outputs.
+- **`_check_workspace_revision` (C2):** restructured: with a filed revision the canvas header is compared with the filed canvas's epoch, otherwise with the live one; the early return no longer skips it.
+- **Epoch base:** revisions that can't be restored after a restart (the file unreadable, missing while a canvas was saved before, or memory only) start from a boot-unique base (ms since the epoch), never 0; the base is saved at once, and the sync and export say `canvasRevisionRestored: false` for that run.
+- **Clear (C4, C5):** #114's no-clear-while-a-run-is-registered guard is kept; only #195's epoch move remains, after it. The five L3 tests in `test_round20_fence.py` were rewritten around `_register_run(canvas=)`. #114's delete of the open project moves the epoch before `_commit_project_workspace`.
+- **`applyGraphSync` (C6, C7):** the export on a first add adopts the revision without a clear or the clear line; `isSliceStep` is in the refused-undo put-back and every snapshot-only spot.
+- **Gates:** one `EDIT_GATES` table, each entry with an optional `follow` override; the wrapper asks following first, then offline. `onNodesChange` applies `followingChanges`, then `readOnlyChanges`.
+- **C8:** read-only stays on while #114's queue of switch notices holds one (cleared only when the follow that set it ends).
+- `fence=` with `approval_scope=`; the param-push bodies combined; #114's OwnAdd slice steps used for Accept, paste, duplicate and the dynamic and cinema adds, with #195's in-flight steps elsewhere.
+- **Deviation:** `noteOwnAdd` is not called beside `arrives` in the file drop: it made a second undo step for the same add (the in-flight step already holds it). Canvas.fileDrop's test says so.
+- **Copy where the two sides disagreed (for GM):** the generic model-picker failure takes #114's "Couldn't change the model for “<node>”." (the settings and missing-key lines stay #195's); chat /clear takes #114's lines (all or nothing; the step stays on a 5xx or no answer).
+- `ForgetRecoveryConfirm` (#114) renders through `ModalPortal`, per #195's modal rule.
+
+### Review 20 (Part B)
+
+- **M-1:** `_save_handoff` returns the nodes it merged; when the project left is the open one again (an agent reopened it), `_apply_handoff_live` puts the same keys and names on the live graph in the same step (journaled as the person's `node.params`), and the route broadcasts a graphSync (the tab's own echo).
+- **L-1:** `deleteCanvasElements`, `clearBackendNodes` and `adoptAcceptedProposal` are in `EDIT_GATES`; proposal Accept asks `refuseEditWhileFollowing` first. `gatedGraphActions()` and `NOT_GRAPH_EDITS` let a store test walk every action (each is gated or listed as not an edit).
+- **L-2:** `.node-inspector-popover` is in `EDITABLE_AREA` (exported) and in `canvas-follow.css`.
+- **L-3:** a proposal records `_canvas_revision()` in the step that makes it; `_ensure_still_decidable` refuses Accept once it moved ("This proposal was made before the canvas was cleared or replaced"); Reject still closes it. The allowlist reason is corrected.
+- **L-4:** a no-origin sync whose revision moved is the same canvas only when it says `canvasRevisionRestored: false` (and carries the same ids and definitions).
+- **L-5:** the old to new revision of such an adoption is kept; a held write goes out under the adopted one. The revisions file is saved as a merge (re-read, max per project); `restore_epoch` writes its own project exactly.
+- **L-6:** `pendingParams` and `pendingLabels` are honoured only from the person's tab (person token and `X-Nebula-Tab`); otherwise 409 "…because the change came from an agent…".
+- **L-7:** a later switch during a follow updates the bar and Run's tooltip; the toast names the project loaded and the last agent.
+- **L-8:** `CutOffSave.nodeId`; `distinctSaves` and the node count key on it (the title when there is none).
+- **L-9:** MCP-SETUP (the reviewed list's wording, the reopen, numbered copies, the G4 refusal, the restored flag, Accept after a clear), `mcp_server.py` (`new_project`, `open_project`), SKILL.md. The CLI needed nothing (`nebula project open` of the open project says it's already open).
+- **L-10:** round 20's merge section corrected above.
+
+### GM's round-21 rulings (Part C), verbatim
+
+- The failed handoff's line: non-breaking spaces inside the quoted project names (the left project and the copy).
+- The cursor pill: `inset 0 0 0 1px rgb(255 255 255 / 0.12)` beside its shadow (inset, so the height stays).
+- A delete answered with a server error, when the node is back on the canvas: "Couldn't delete “<node>”. Nebula ran into an error, so it's back on the canvas. Try again, and if it keeps happening, restart Nebula." (several: up to 3 names, then "<N> nodes", "…so they're back on the canvas."). The status goes to the Agent log ("Delete of “<node>” (<id>) failed: Nebula answered HTTP 500."). Nebula's answers carry no error id.
+- The bar while following: the old name, the save state and the node count go (the count is my call, for room: for GM); the name slot reads "Opening “<project>”…", the name cut inside itself (the words around it never shrink), at the locked width.
+- An agent's clear is one toast: the clear line takes the place of "<agent> changed the canvas" and keeps its Undo.
+- Derived: "Couldn't run <N> nodes. <agent> is opening “<project>”." (several), "the canvas" only for a whole-canvas run, "An agent" when unknown.
+- G1: Create rejects with a `FailureNotice` under its heading: "Couldn't start the generation. <agent> is opening “<project>”." ("Another project is opening." when nothing is known); never "Nebula is opening another project." bare.
+- G4: `HANDOFF_MERGE_REFUSED` "Nebula couldn't keep this save's unsent changes in the project because <why>, so nothing was saved." with "a node's type changed", "the node was removed", "“<key>” isn't a setting on that node", "the project can't be read" (a malformed list), "the change came from an agent". A pending key the staged node lacks now refuses the save with the key form (it was dropped silently; the tab keeps a copy instead).
+- G5: recovered copies are "<project> (recovered)", then one past the highest number the project's copies have in Projects or the trash ("(recovered 2)", 3…); a retry of the same copy is the same copy.
+
+### Tests written first, and how they failed
+
+- Merge: `backend/tests/test_round21_merge.py` (16) was written against the resolved merge and passed at once (the resolution was in place); it pins C2, C3, the epoch base and the sync flag.
+- `backend/tests/test_round21_review20.py`: 11 of 14 failed first (M-1 three: the live graph and the export kept "a"; L-6 three: 200 instead of 409; G4 two: the old wording; L-3: no `canvas_revision`; L-5: the second book moved p back to 0; G5: two "Active (recovered)"). One test's own fixture was wrong (its params didn't match the new definition, a 400) and was fixed.
+- `frontend/tests/round21Lines.test.ts` and `round21Store.test.ts`: 15 of 17 failed first (the missing exports, the old counting by title, no non-breaking spaces, "the canvas" for three nodes, the Delete key, clear and Accept going through, `following` still naming beta, the held typing not re-admitted, two toasts on an agent clear, no 500 line). The M-1 reopen case moved to `projectSwitchSaves.round20` (the same harness).
+- Changed on purpose: `test_H1_a_key_the_staged_node_lacks_refuses_the_save` (was "is dropped"; G4), round20Copy and projectSwitchSaves.round20's handoff lines (non-breaking spaces), heldUndo.round20's restart cases (they send `canvasRevisionRestored: false`), followingControls.round20 (the opening line is three spans; the popover).
+
+### Live check (8795/5795, isolated; scratchpad r21/live/live-r21.mjs)
+
+- First full run: 26 of 29. The three misses were the script's: the popover never opened (`selectNode` alone doesn't show it), the reopen's typing went out as a plain PUT before the switch (so no `pendingParams` to see), and the Undo click used a bad selector. Fixed and run again (follow, reopen, agentclear): 18 of 18.
+- Following plus the Delete key: the node stays and no DELETE is sent; the project left keeps it. The popover's textarea shows opacity 0.55 and `not-allowed`, and typed " XYZ" changed nothing.
+- The bar at 1440 and 1280: "Opening “Second canvas with a name far too long for the project bar”…" cut inside the name, both fixed parts whole, the old name gone, never wider. The first run's checks passed, but its screenshot showed the name cut to nothing and the closing "”…" clipped: at the locked width (173 px) the node count left no room. While following, the count (of the canvas that is going) is now hidden; run again (11 of 11) the bar reads "Opening “Secon…”…" (the name 48 px at 1440, 60 px at 1280; at 1280 the bar was 4 px narrower than before, never wider), and the check now asks for a visible name and closing part.
+- The reopen (PUT held in the page): the handoff carried `pendingParams`; the canvas, Nebula's live graph and the stored project all keep "a lighthouse at dusk in fog". (Unheld, the PUT lands first and the typing is kept that way.)
+- An agent's clear: one toast, GM's line with Undo, no "Codex changed the canvas"; Undo put the node back.
+- A 500 on delete: GM's LOCKED line, the node back, "Delete of “Hero prompt” (n1) failed: Nebula answered HTTP 500." in the Agent log.
+- A refused agent run (a canvas header that isn't this canvas's): 409, its two placeholders still placeholders. The last-fence path itself is covered by `test_round21_merge.py`.
+- Offline plus following (the backend stopped mid-follow): read-only, nothing sent, both states on; back online the follow finished on "Second canvas".
+- Blocked: 2 requests in each run, both the canaries; 0 toward 8000-8010 or 5173.
+
+### Gates (round 21, on the final code)
+
+- **Backend:** the full suite passed 11,655 with 71 skipped (isolated). On the merge alone, five real failures showed first and were fixed before the merge commit (a `validate_graph` stub without `**kwargs` in conftest, four tests; "wired" in a journal row of MCP-SETUP.md, from main). Four more failed only under load and passed alone: the guardian race, `test_journal_write_project`'s reopened proposal, two `test_mcp_channel` listener tests and one `test_mcp_nonblocking` cancel.
+- **Frontend:** the full vitest run, 6,919 of 6,930 under load. 11 failures in 8 files: 6 were mine (3 handoff lines in projectSwitchSaves.round19 without the non-breaking spaces; 3 deletes answered 500 in heldUndo.round15/18 still expecting "Couldn't delete the node.", now GM's LOCKED line) and were updated; the other 5 (Settings, CommonsDetail, ResultsGallery, PlaceholderRunDialog.round12, modalStyles.round11) were 5 s timeouts and passed alone. The 10 files run again: 171 of 171 after the updates. The errorCopy ratchets: 15 files, 192 of 192. tsc, lint and both style guards are clean.
+- **Build:** first load 400,973 bytes raw (121,007 gzip), under 512,000.
+
+### Open items (round 21)
+
+- **For GM:**
+  - The two copy choices in the merge (the model picker's generic line, chat /clear's lines).
+  - The Agent log's wording for a 500 ("Delete of “<node>” (<id>) failed: Nebula answered HTTP 500.") and Accept's new refusal ("This proposal was made before the canvas was cleared or replaced"; agents and logs read it, the canvas shows "Couldn't accept the proposal." over it).
+  - Hiding the node count while following, so the cut name has room at the locked width.
+  - The 500 line is used only when every failed node has a card title and is back on the canvas; otherwise the old line shows.
+- Nebula's 500 answers carry no error id, so the Agent log has the status only.
+- `noteOwnAdd` is not used beside `arrives` in the file drop (it would make a second step).
+- A rename still in flight from an earlier test leaked into a later test's handoff labels in projectSwitchSaves.round20 (module state outlives a test); the reopen test checks params only. In the app it would carry the node's current name, which changes nothing.
+- The refused-run live check uses a wrong canvas header (refused at the first fence); the last-fence refusal is tested in the backend only.

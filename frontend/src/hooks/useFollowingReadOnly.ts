@@ -1,8 +1,10 @@
 import { useEffect } from 'react';
 import { refuseEditWhileFollowing, useFollowingSwitch } from '../lib/canvasFollow';
 
-/** Where the canvas's fields live: its nodes and the Inspector. */
-const EDITABLE_AREA = '.react-flow, .panel--inspector';
+/** Where the canvas's fields live: its nodes and the Inspector, docked or
+ * the popover the canvas opens over a node (portaled into the body; round
+ * 21, review 20 L-2). Kept in step with styles/canvas-follow.css. */
+export const EDITABLE_AREA = '.react-flow, .panel--inspector, .node-inspector-popover';
 /** Keys that edit a field (navigation, selection and shortcuts with a
  * modifier pass; the store's own gate refuses any edit they reach). */
 const EDITING_KEY = /^(?:.|Backspace|Delete|Enter)$/u;

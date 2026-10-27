@@ -58,6 +58,9 @@ Start new work in a new project (`nebula project new "<name>"`) or open the
 right one (`nebula project open <id>`). The person's canvas follows (from
 their Projects screen too), names you, and offers them a button back.
 Their canvas is read-only until the new one loads ("Opening “<project>”…").
+What they had typed is saved into the project left (also when you reopen the
+project already open); if that fails it is kept as a new project, "<project
+left> (recovered)", then "(recovered 2)" and so on.
 **Never run `nebula clear` to make room**: a new project keeps their work.
 `nebula clear` refuses on a canvas with nodes, and `--force` clears it
 anyway (not while a run is going: it waits for runs, as a project switch does). With their canvas open that is one undo step for them; with none
@@ -189,7 +192,8 @@ nodes can be placeholders, and only you make yours ready. `nebula undo` of
 your `--ready` (or of a delete) makes them placeholders again, unless someone
 ran or changed one since. A proposal whose run needs your placeholder runs
 nothing until you finish it, and once one turns normal the proposal no longer
-fits (Accept refuses it): propose again when they're ready. In a steps file,
+fits (Accept refuses it): propose again when they're ready. Accept also
+refuses a proposal made before the canvas was cleared or replaced. In a steps file,
 put `"pending": true` on the step that adds them and `{"pending": false,
 "nodeIds": ["+hero"]}` in a later step. MCP: `edit_canvas(pending=True)`,
 then `edit_canvas(pending=False, node_ids=[...])`.

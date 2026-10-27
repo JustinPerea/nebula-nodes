@@ -23,6 +23,9 @@ import { CanvasUndoNotice } from '../src/components/canvas/CanvasUndoNotice';
 import { useProjectStore } from '../src/store/projectStore';
 import { useGraphStore } from '../src/store/graphStore';
 import { resetCanvasFollowForTests, setFollowingSwitch } from '../src/lib/canvasFollow';
+import { EDITABLE_AREA, useFollowingReadOnly } from '../src/hooks/useFollowingReadOnly';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 const initialProject = useProjectStore.getState();
 const project = { id: 'alpha', name: 'Glass campaign', createdAt: '', updatedAt: '', lastOpenedAt: null, nodeCount: 1,
@@ -41,15 +44,30 @@ afterEach(() => {
 });
 
 describe('the project bar while it follows', () => {
-  it('"Opening “beta”…" in place of the save state', () => {
-    render(<ProjectWorkspaceControls />);
+  it('"Opening “beta”…" in the name slot, in place of the old name and the save state (GM round 21, item 1)', () => {
+    const { container } = render(<ProjectWorkspaceControls />);
     expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
     act(() => setFollowingSwitch({ projectName: 'beta', agent: 'Claude Code' }));
-    expect(screen.getByText('Opening “beta”…')).toBeInTheDocument();
+    const line = screen.getByRole('status', { name: 'Opening “beta”…' });
+    expect(line.textContent).toBe('Opening “beta”…');
+    expect(screen.queryByText('Glass campaign')).toBeNull();
     expect(screen.queryByText('Unsaved changes')).toBeNull();
     expect(screen.queryByText('Saved')).toBeNull();
+    // The count of the canvas that is going gives its room to the line.
+    expect(container.querySelector('.project-workspace-controls__count')).toBeNull();
+    // The name is the part that is cut: the words around it never shrink.
+    expect(container.querySelector('.project-workspace-controls__opening-name')?.textContent).toBe('beta');
+    expect([...container.querySelectorAll('.project-workspace-controls__opening-fixed')].map((part) => part.textContent))
+      .toEqual(['Opening “', '”…']);
     act(() => setFollowingSwitch(null));
-    expect(screen.queryByText('Opening “beta”…')).toBeNull();
+    expect(screen.queryByRole('status', { name: 'Opening “beta”…' })).toBeNull();
+    expect(screen.getByText('Glass campaign')).toBeInTheDocument();
+  });
+
+  it('the CSS cuts inside the name and never the quote or the ellipsis', () => {
+    const css = readFileSync(resolve(__dirname, '../src/components/projects/ProjectWorkspaceControls.css'), 'utf8');
+    expect(css).toMatch(/\.project-workspace-controls__opening-fixed \{ flex: 0 0 auto; \}/);
+    expect(css).toMatch(/\.project-workspace-controls__opening-name \{[^}]*text-overflow: ellipsis;[^}]*\}/);
   });
 
   it('keeps the width it had', () => {
@@ -59,6 +77,33 @@ describe('the project bar while it follows', () => {
     act(() => setFollowingSwitch({ projectName: 'a much longer project name than the bar holds', agent: 'Claude Code' }));
     expect(bar.style.width).toBe('214px');
     expect(bar.style.maxWidth).toBe('214px');
+  });
+});
+
+describe('the node popover\'s Inspector while it follows (round 21, review 20 L-2)', () => {
+  function Gate() {
+    useFollowingReadOnly();
+    return null;
+  }
+  it('is in the read-only area: its fields show disabled and typing is refused', () => {
+    expect(EDITABLE_AREA.split(',').map((part) => part.trim())).toContain('.node-inspector-popover');
+    const css = readFileSync(resolve(__dirname, '../src/styles/canvas-follow.css'), 'utf8');
+    expect(css).toContain(':is(.react-flow, .panel--inspector, .node-inspector-popover) :is(input, textarea');
+    render(<Gate />);
+    const popover = document.createElement('div');
+    popover.className = 'node-inspector-popover';
+    const field = document.createElement('textarea');
+    popover.appendChild(field);
+    document.body.appendChild(popover);
+    act(() => setFollowingSwitch({ projectName: 'beta', agent: 'Claude Code' }));
+    expect(document.body).toHaveClass('nebula-following');
+    const typing = new InputEvent('beforeinput', { bubbles: true, cancelable: true, data: 'X', inputType: 'insertText' });
+    field.dispatchEvent(typing);
+    expect(typing.defaultPrevented).toBe(true);
+    const key = new KeyboardEvent('keydown', { key: 'X', bubbles: true, cancelable: true });
+    field.dispatchEvent(key);
+    expect(key.defaultPrevented).toBe(true);
+    popover.remove();
   });
 });
 

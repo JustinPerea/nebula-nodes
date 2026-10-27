@@ -481,7 +481,8 @@ describe('round 18 (review 17)', () => {
       expect(nodeOf('n2')?.position).toEqual({ x: 420, y: 260 });
       expect(nodeOf('n2')?.selected).toBeFalsy();
       expect(wires()).toEqual(['n1>n2']);
-      expect(lines().some((line) => String(line).startsWith("Couldn't delete the node."))).toBe(true);
+      // GM round 21 (LOCKED): a 500 names the node and says it's back.
+      expect(lines().some((line) => /^Couldn't delete “[^”]+”\. Nebula ran into an error, so it's back on the canvas\./.test(String(line)))).toBe(true);
       // No step is left for a delete that didn't happen.
       expect(store().undoStack).toHaveLength(0);
       sameAsNebula();

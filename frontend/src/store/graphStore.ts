@@ -124,9 +124,9 @@ import { validateManifest } from '../lib/video/manifestValidator';
 import { componentTypeToCanvasDefId, pruneTrackItemsForDeletedNode } from '../lib/video/mirroring';
 import { isPortCompatible } from '../lib/portCompatibility';
 import { STALE_CANVAS_DETAIL, adoptCanvasRevision, getProjectContext, type ProjectContext } from '../lib/projectContext';
-import { agentClearedLine, handoffFailedLine, savingCutOffLine, type CutOffEnding, type CutOffSave } from '../lib/savingCutOff';
-import { deleteNoAnswerLine } from '../lib/deleteCopy';
-import { followingSwitch, refuseEditWhileFollowing, runWhileFollowingLine } from '../lib/canvasFollow';
+import { agentClearedLine, distinctSaves, handoffFailedLine, savingCutOffLine, type CutOffEnding, type CutOffSave } from '../lib/savingCutOff';
+import { deleteNoAnswerLine, deleteServerErrorLine } from '../lib/deleteCopy';
+import { followingReason, followingSwitch, refuseEditWhileFollowing, runWhileFollowingLine } from '../lib/canvasFollow';
 import { boundingRect, findOpenGroupOffset, UNMEASURED_NODE_SIZE, type NodeRect } from '../lib/nodePlacement';
 import { withParamDefaults } from '../lib/paramDefaults';
 import { replaceChanged, shareUnchanged } from '../lib/structuralShare';
@@ -1857,6 +1857,25 @@ function admitWrite(): WriteAdmission {
   return { project: project ? { ...project } : null, graph: canvasReplacementRevision, seq: ++admissionSeq };
 }
 
+/** Round 21 (review 20, L-5): canvas revisions the tab adopted as the same
+ * canvas (a reconnect's sync after Nebula lost its revisions, which says
+ * `canvasRevisionRestored: false`), old to new. A write held from before
+ * goes out under the adopted one, so Nebula doesn't refuse it while the
+ * canvas keeps showing its value. */
+const adoptedSameCanvas = new Map<string, string>();
+
+function readmitted(project: ProjectContext | null): ProjectContext | null {
+  const canvas = project?.canvas;
+  const adopted = canvas !== undefined ? adoptedSameCanvas.get(canvas) : undefined;
+  return project && adopted !== undefined ? { ...project, canvas: adopted } : project;
+}
+
+function noteSameCanvas(from: string | undefined, to: string): void {
+  if (from === undefined || from === to) return;
+  for (const [old, now] of adoptedSameCanvas) if (now === from) adoptedSameCanvas.set(old, to);
+  adoptedSameCanvas.set(from, to);
+}
+
 function stillAdmitted(admission: WriteAdmission): boolean {
   const now = getProjectContext();
   return admission.graph === canvasReplacementRevision
@@ -1927,23 +1946,23 @@ function describeSaves(path: string, init?: RequestInit): CutOffSave[] {
   const match = /^\/api\/graph\/node\/(n\d+)$/.exec(path);
   if (!match || String(init?.method ?? 'GET').toUpperCase() !== 'PUT') return [{ node: null, setting: null }];
   const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === match[1]);
-  if (!node) return [{ node: null, setting: null }];
+  if (!node) return [{ nodeId: match[1], node: null, setting: null }];
   const definition = NODE_DEFINITIONS[node.data.definitionId];
   const title = nodeTitle(definition, node.data.label) || null;
   let keys: string[] = [];
   try { keys = Object.keys((JSON.parse(String(init?.body ?? '{}')) as { params?: object }).params ?? {}); } catch { keys = []; }
-  if (keys.length === 0) return [{ node: title, setting: null }];
+  if (keys.length === 0) return [{ nodeId: node.id, node: title, setting: null }];
   return keys.map((key) => {
     const param = (definition ? allParamDefinitions(definition) : []).find((candidate) => candidate.key === key)
       ?? (node.data.dynamicParams as Array<{ key: string; label?: string }> | undefined)?.find((candidate) => candidate.key === key);
-    return { node: title, setting: param?.label || null };
+    return { nodeId: node.id, node: title, setting: param?.label || null };
   });
 }
 
 /** A rename: "Name" (GM, round 20), for the node as its card showed it before. */
 function renameSave(node: Node<NodeData>, previous: string | undefined): CutOffSave[] {
   const title = nodeTitle(NODE_DEFINITIONS[node.data.definitionId], previous ?? node.data.label) || null;
-  return [{ node: title, setting: 'Name' }];
+  return [{ nodeId: node.id, node: title, setting: 'Name' }];
 }
 
 function settleTracked(write: TrackedWrite, ok: boolean): void {
@@ -1973,13 +1992,7 @@ function showReplacementReport(): void {
   const report = replacementReport;
   if (!report?.ending || report.saves.length === 0 || clearReportWaiting) return;
   const ending = report.ending;
-  const seen = new Set<string>();
-  const saves = report.saves.filter((save) => {
-    const key = `${save.node}\u0000${save.setting}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  const saves = distinctSaves(report.saves);
   let text: string | null;
   let copy: NoticeCopy | undefined;
   if (ending.kind === 'agentClear') {
@@ -2003,6 +2016,14 @@ function showReplacementReport(): void {
     if (report.noticeId !== null && state.messageNotice?.id === report.noticeId) {
       return { messageNotice: { ...state.messageNotice, text: line } };
     }
+    // GM round 21: an agent's clear is one toast. Its line takes the place
+    // of the sync's "<agent> changed the canvas" and keeps that toast's Undo
+    // (which puts the cleared canvas back as last saved).
+    if (ending.kind === 'agentClear' && report.noticeId === null && state.undoNotice?.offer === 'undo'
+      && state.undoNotice.entry && isForeignEdit(state.undoNotice.entry)) {
+      report.noticeId = state.undoNotice.id;
+      return { undoNotice: { ...state.undoNotice, text: line } };
+    }
     const shown = plainLine(state, line, 'error', copy);
     report.noticeId = (shown.undoNotice ?? shown.messageNotice)?.id ?? null;
     return shown;
@@ -2016,9 +2037,9 @@ function showReplacementReport(): void {
 function startReplacementReport(ending: CutOffEnding | null, project: string | null, saves: CutOffSave[] = [],
   options: { later?: boolean } = {}): void {
   replacementReport = { graph: canvasReplacementRevision, project, ending, saves: [...saves], noticeId: null };
-  // An agent's clear says it once its sync is on the canvas (beside the
-  // sync's own "<agent> changed the canvas", never under it): the sync
-  // handler shows it (showClearReport).
+  // An agent's clear says it once its sync is on the canvas, in the place
+  // of the sync's own "<agent> changed the canvas", keeping its Undo (GM
+  // round 21: one toast): the sync handler shows it (showClearReport).
   clearReportWaiting = Boolean(options.later);
   if (!clearReportWaiting) showReplacementReport();
 }
@@ -2216,7 +2237,7 @@ function graphMutationFetch(path: string, init?: RequestInit,
   // A write sent in the turn it was admitted reads the same project as
   // apiFetch does; one that waited names the one read at admission.
   const fetchNow = (request?: RequestInit) => (options.admission || writesWaitingNow() > 0 || restoresPendingNow() > 0
-    ? apiFetch(path, request, { project: admission.project }) : apiFetch(path, request));
+    ? apiFetch(path, request, { project: readmitted(admission.project) }) : apiFetch(path, request));
   const send = () => {
     if (!stillAdmitted(admission)) return Promise.resolve(staleCanvasAnswer());
     if (options.timeoutMs === undefined) return fetchNow(init);
@@ -3050,6 +3071,8 @@ function changeCanvasNodes(
     const failures: string[] = [];
     // The ids that failed with no answer from Nebula (GM, round 20, item 1).
     const unanswered: string[] = [];
+    // The ids Nebula answered with a server error, and the status (GM round 21).
+    const serverErrors = new Map<string, number>();
     const removals: RemovalRecord[] = [];
     // Review 14, L-E: the echo is the truth. A node a sync of Nebula's graph
     // already took off is deleted there, whatever its answer said (a 500
@@ -3064,6 +3087,9 @@ function changeCanvasNodes(
       } else {
         failures.push(failureCopy(result.reason).reason);
         if (isBackendUnreachable(result.reason)) unanswered.push(cliRemovedIds[index]);
+        else if (result.reason instanceof RequestFailedError && result.reason.status >= 500) {
+          serverErrors.set(cliRemovedIds[index], result.reason.status);
+        }
       }
     });
     const failed = cliRemovedIds.filter((nodeId) => !confirmed.has(nodeId));
@@ -3111,14 +3137,30 @@ function changeCanvasNodes(
     if (deleted > 0 && confirmed.size > 0 && top && top === undoStep) set(deletedNotice(deleted, top));
     // GM, round 20 (item 1): no answer at all names the nodes; any other
     // cause keeps its reason.
+    const cardTitle = (nodeId: string) => {
+      const node = onCanvas.find((candidate) => candidate.id === nodeId);
+      return (node && nodeTitle(NODE_DEFINITIONS[node.data.definitionId], node.data.label)) || '';
+    };
+    const titleOf = (nodeId: string) => cardTitle(nodeId) || nodeId;
+    // GM round 21 (LOCKED): a server error says "back on the canvas" only
+    // when every node it names really is back.
+    const shownNow = new Set(get().nodes.map((node) => node.id));
     if (failures.length > 0 && unanswered.length === failures.length) {
-      const names = unanswered.map((nodeId) => {
-        const node = onCanvas.find((candidate) => candidate.id === nodeId);
-        return (node && nodeTitle(NODE_DEFINITIONS[node.data.definitionId], node.data.label)) || nodeId;
-      });
-      const message = deleteNoAnswerLine(names);
+      const message = deleteNoAnswerLine(unanswered.map(titleOf));
       console.warn(`[nebula] ${message}`);
       get().notify(message);
+    } else if (failures.length > 0 && serverErrors.size === failures.length
+      // Named as its card names it (never by a raw id): one it can't name keeps the line below.
+      && [...serverErrors.keys()].every((nodeId) => shownNow.has(nodeId) && cardTitle(nodeId))) {
+      const ids = [...serverErrors.keys()];
+      const message = deleteServerErrorLine(ids.map(titleOf));
+      console.warn(`[nebula] ${message}`);
+      get().notify(message);
+      // The status goes in the Agent log, not in the line (GM). Nebula's
+      // answers carry no error id yet.
+      const statuses = [...new Set(serverErrors.values())].join(', ');
+      window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', { detail: { source: 'system',
+        message: `Delete of ${ids.map((nodeId) => `“${titleOf(nodeId)}” (${nodeId})`).join(', ')} failed: Nebula answered HTTP ${statuses}.` } }));
     } else if (failures.length > 0) {
       // GM, round 15 of PR #114: one kept node is named ("Couldn't delete “<node>”.").
       reportNodeDeletionFailure(failures, failures.length, failed.length === 1 ? namedOnCanvas(onCanvas, failed[0]) : undefined);
@@ -6435,7 +6477,12 @@ function applyGraphSync(event: ExecutionEvent, options: { fromExport?: boolean }
   // (every backend node, each with its definition) is that canvas seen
   // across a restart that lost its revision: the tab takes the revision
   // and keeps everything, and never reads it as a clear.
-  const sameCanvas = canvasMoved && !origin && !graphReplaced && sameBackendCanvas(rawCliNodes);
+  // Round 21 (review 20, L-4): only when Nebula says it lost its revisions
+  // (`canvasRevisionRestored: false`); with them restored, a moved revision
+  // is a real replacement (a missed agent clear that re-added the same ids).
+  const revisionsLost = (event as { canvasRevisionRestored?: unknown }).canvasRevisionRestored === false;
+  const sameCanvas = canvasMoved && revisionsLost && !origin && !graphReplaced && sameBackendCanvas(rawCliNodes);
+  if (sameCanvas && typeof canvasRevision === 'string') noteSameCanvas(knownCanvas, canvasRevision);
   adoptCanvasRevision(revision, canvasRevision);
   let replacedPresses: DroppedPresses | null = null;
   // The tab's own clear moved it already (clearGraph, clearBackendNodes),
@@ -10748,9 +10795,12 @@ function refuseRunWhileFollowing(nodeIds: string[]): Promise<void> {
   const following = followingSwitch();
   if (!following) return Promise.resolve();
   const nodes = useGraphStore.getState().nodes;
-  const only = nodeIds.length === 1 ? nodes.find((node) => node.id === nodeIds[0]) : undefined;
+  const ids = [...new Set(nodeIds)];
+  const only = ids.length === 1 ? nodes.find((node) => node.id === ids[0]) : undefined;
   const name = only ? (nodeTitle(NODE_DEFINITIONS[only.data.definitionId], only.data.label) || null) : null;
-  useGraphStore.getState().notify(runWhileFollowingLine(name, following.agent, following.projectName));
+  // No ids: a run of the whole canvas; several: counted (GM round 21).
+  useGraphStore.getState().notify(runWhileFollowingLine(name, following.agent, following.projectName,
+    ids.length >= 2 ? ids.length : undefined));
   return Promise.resolve();
 }
 const FOLLOW_RUN = (ids: (...args: never[]) => string[]): FollowGate => ({
@@ -10789,6 +10839,9 @@ const EDIT_GATES: Partial<Record<keyof GraphState, EditGate>> = {
   addNode: REFUSED_NULL_ASYNC, addCharacterNode: REFUSED_NULL_ASYNC, addMoodboardNode: REFUSED_NULL_ASYNC,
   addNodeAndConnect: REFUSED_NULL_ASYNC, addDynamicNode: REFUSED_NULL, addLocalCinemaMotionNode: REFUSED_NULL,
   addShot: REFUSED_NULL, pasteClipboard: { refused: () => [] },
+  // Round 21 (review 20, L-1): the Delete key (Canvas's handler), the chat's
+  // clear landing on the canvas, and an accepted proposal's merge.
+  deleteCanvasElements: REFUSED_VOID, clearBackendNodes: REFUSED_VOID, adoptAcceptedProposal: REFUSED_VOID,
   duplicateSelected: REFUSED_VOID, duplicateNode: REFUSED_VOID, deleteSelected: REFUSED_VOID, deleteNode: REFUSED_VOID,
   deleteGeneration: REFUSED_VOID, onConnect: REFUSED_VOID, renameNode: REFUSED_VOID, applyPaperSource: REFUSED_VOID,
   updateRemotionManifest: REFUSED_VOID, addTrackItemWithCanvasMirror: REFUSED_VOID, deleteTrackItem: REFUSED_VOID,
@@ -10817,7 +10870,8 @@ const EDIT_GATES: Partial<Record<keyof GraphState, EditGate>> = {
   // local add: '' means none was made), Forget ID, the two unlocks and an
   // accepted proposal's merge.
   authorGenerationCluster: { refused: () => Promise.reject(new OfflineRefusal('POST', '/api/graph/cluster')),
-    follow: { refused: () => Promise.reject(new Error('Nebula is opening another project.')) } },
+    // While following, Create says it in its own error style (GM round 21, G1).
+    follow: { refused: () => Promise.reject(new FailureNotice(GENERATE_HEADING, followingReason(followingSwitch()))) } },
   getOrCreateEditNodeDownstream: { refused: () => '' },
   deleteProviderRecovery: REFUSED_ASYNC, acknowledgeProviderStartAmbiguity: REFUSED_ASYNC,
   acknowledgeUncertainWorldLabsRun: REFUSED_VOID,
@@ -10827,6 +10881,35 @@ const EDIT_GATES: Partial<Record<keyof GraphState, EditGate>> = {
     follow: { ...FOLLOW_VOID,
       blocks: ((_nodeId: string, data: Partial<NodeData>) => 'params' in data || 'label' in data) as FollowGate['blocks'] } },
 };
+
+/** The actions the gates wrap (round 21, review 20 L-1: a store test walks
+ * every action and checks each is here or in NOT_GRAPH_EDITS). */
+export function gatedGraphActions(): string[] {
+  return [...Object.keys(EDIT_GATES), 'onNodesChange', 'onEdgesChange'];
+}
+
+/** The store's actions that change neither the person's nodes nor wires and
+ * send no graph write: reads, selection, notices, run state Nebula reports,
+ * the undo bookkeeping and the replacement/sync plumbing (which apply what
+ * Nebula already has). Each new action goes in EDIT_GATES or here. */
+export const NOT_GRAPH_EDITS: ReadonlySet<string> = new Set<string>([
+  // Undo bookkeeping (the edits they bracket are gated themselves).
+  'beginUndoStep', 'cancelUndoStep', 'endUndoStep', 'noteOwnAdd', 'noteRenameDraft',
+  // Notices.
+  'dismissUndoNotice', 'dismissLateNotice', 'dismissMessageNotice', 'notify', 'dismissProviderRecoveryWarning',
+  // Reads and selection.
+  'copySelected', 'selectAll', 'allowCanvasDelete', 'canSwitchProject', 'isShotAdmissionBlocked',
+  // Stopping a run or a launch (never refused: it stops spend) and the locks around them.
+  'resetExecution', 'cancelExecution', 'cancelRun', 'reserveGraphImport', 'releaseGraphImport',
+  'reserveCreateGeneration', 'releaseCreateGeneration', 'cancelCreateGeneration',
+  // A project's canvas loading and the switch/replacement plumbing (they put
+  // on the canvas what Nebula already has; following uses them itself).
+  'loadGraph', 'loadProjectGraph', 'drainGraphWrites', 'beginAgentSwitch', 'finishCanvasReplacement',
+  'setCanvasProjectName',
+  // The tab's own run history, and what Nebula reports about runs.
+  'clearRunHistory', 'handleExecutionEvent', 'hydrateProviderRecoveries', 'hydrateProviderStartAmbiguities',
+  'hydrateExecutionStatuses', 'reconcilePersistedWorldLabsRun',
+]);
 
 /** React Flow's changes minus the edits (moves, removals, adds); a refused
  * one pulses the banner once. Selection and measured sizes pass. A move of a

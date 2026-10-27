@@ -330,9 +330,12 @@ The server exposes these tools for building and running (see
   agent, and offers a button back to the project they had open. Until the
   new canvas has loaded, their canvas is read-only: the project bar says
   "Opening “<project>”…" and Run says "Wait for “<project>” to open." What
-  they typed before the switch is saved into the project they left; if that
-  save fails it is kept as a new project, "<project> (recovered)", and a
-  line says so with an Open copy button. The Projects
+  they typed before the switch is saved into the project they left, and
+  when you reopened the project they were showing, onto the reopened canvas
+  too. If that save fails it is kept as a new project named after the
+  project left, "<project left> (recovered)" (then "(recovered 2)", 3 and
+  so on: a new copy each time, never an earlier one), and a line says so
+  with an Open copy button. The Projects
   screen also lists again whenever anyone makes, renames, deletes or restores
   a project (the `projectsChanged` socket event).
   Start new work in a new project rather than emptying the canvas: it keeps
@@ -1301,8 +1304,11 @@ the route, in the same step that adds the node, after the file is read and
 probed: a drop made for a project or canvas that was switched or cleared
 while it uploaded is refused, and no node is added. An upload without
 `create_node` adds nothing and isn't checked. Every other non-GET route is
-on a reviewed list of routes that don't touch the graph
-(`backend/tests/test_round20_fence.py`); Stop (`DELETE /api/executions/…`)
+on a reviewed list of routes that don't write the open canvas by node id,
+or check their own revision (`backend/tests/test_round20_fence.py`): a
+project's open, create and delete check the body's workspace revision, and
+a proposal's Accept is refused when the canvas it was made on was cleared
+or replaced since; Stop (`DELETE /api/executions/…`)
 stays open while the canvas follows an agent's switch.
 
 A write that carries `X-Nebula-Tab` (only the canvas sends it) to one of
@@ -1323,10 +1329,17 @@ except the settings and names the tab lists as not yet sent
 null}` beside `snapshot`): those keys, read from the saved snapshot after
 its checks, are merged per top-level setting onto Nebula's copy, so typing
 still in its debounce is kept, and your edit to another setting of the same
-node stays. Nodes only the tab had are added as they are. If a listed node
-isn't in the save, is another kind of node in the project, or the lists are
-malformed, the whole save is refused with 409 and the canvas keeps it as a
-copy (the person sees that it wasn't saved).
+node stays. When the project left is the open one again (an agent reopened
+the project the tab was showing, which reloads it from what was saved),
+the same keys and names go onto the live canvas too, with a graphSync.
+Nodes only the tab had are added as they are. Only the person's own canvas
+tab may send `pendingParams` and `pendingLabels`; from anyone else the save
+is refused. A merge Nebula can't make refuses the whole save with 409, and
+the canvas keeps it as a copy (the person sees that it wasn't saved). The
+409 reads "Nebula couldn't keep this save's unsent changes in the project
+because <why>, so nothing was saved.", where <why> is "a node's type
+changed", "the node was removed", "“<key>” isn't a setting on that node",
+"the project can't be read" or "the change came from an agent".
 
 The canvas revision is in every graphSync (`canvasRevision`), in
 `GET /api/graph/export`, and in the answers of `DELETE /api/graph`,
@@ -1335,7 +1348,20 @@ per-project counter undo restores use: a restore made for a canvas a clear
 or an import replaced is refused. It is kept in the state dir
 (`canvas-revisions.json`, written before the canvas changes), so a backend
 restart keeps it: after a restart the canvas says the same revision and
-writes the canvas held keep landing.
+writes the canvas held keep landing. The file is saved as a merge (each
+project keeps the higher revision), so it never moves backwards. If it
+couldn't be read at boot (deleted, or unreadable while a canvas was saved
+before), revisions start again from a number unique to that boot, never
+from 0, and every graphSync and `GET /api/graph/export` says
+`"canvasRevisionRestored": false` until Nebula restarts with them read
+(the base is saved at once, so the next boot restores it). Only then does
+an open canvas take a moved revision with the same nodes as the same canvas
+(and send the writes it held under it); otherwise a moved revision is
+another canvas.
+
+A proposal keeps the canvas revision it was made on: Accept is refused
+(409) once a clear or an import moved it, so a proposal never lands on a
+canvas whose node ids name other nodes. Reject still closes it.
 
 A run notes its canvas when it starts. If that canvas is cleared while the
 run goes, the run's results and the settings its nodes changed are not
