@@ -90,6 +90,7 @@ from services.node_registry import NodeRegistry
 from services.input_file_name import PARAM as INPUT_FILE_NAME_PARAM, file_name_param
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
 from services import agent_start, input_sizes, node_categories, node_lookup, node_names
+from services import scene_keys
 from services import output_thumbnail
 from services import refusal_copy
 from services import cinema_scene_spec
@@ -956,6 +957,8 @@ def _canvas_change_actor() -> dict[str, str]:
 def _note_canvas_change() -> None:
     """Call right after a commit that replaced the live canvas, before any
     await: the canvas it left (_graph_fence) and who asked. Never fails."""
+    # Node ids start again: no scene read or write before names them now.
+    scene_keys.forget()
     try:
         _last_canvas_change.clear()
         _last_canvas_change.update(fence=_graph_fence(), by=_canvas_change_actor())
@@ -982,6 +985,41 @@ def _canvas_replaced_refusal(exc: HTTPException) -> CodedRefusal:
     """The open project's canvas was cleared or replaced since (its id epoch
     moved), not another project opened: its own code, with the same fields."""
     return _coded(exc, "canvas_replaced", **_workspace_moved_fields())
+
+
+def _scene_scope() -> str:
+    """Which canvas a scene read or write is on (services/scene_keys.py): the
+    live graph and, when known, its project and canvas epoch."""
+    token = scene_keys.graph_token(cli_graph)
+    try:
+        return f"{token}:{_workspace_context()['activeProjectId']}:{_canvas_revision()}"
+    except Exception:  # noqa: BLE001 - the graph alone still scopes it
+        return token
+
+
+def _reader_agent() -> str | None:
+    """The agent behind this request, by name, for services/scene_keys.py
+    (None for the person and anonymous callers)."""
+    try:
+        actor = _canvas_change_actor()
+    except Exception:  # noqa: BLE001 - reads never fail over this
+        return None
+    return str(actor.get("name") or "An agent") if actor.get("kind") == "agent" else None
+
+
+def _scene_changed_refusal(node_id: str, node: dict[str, Any]) -> CodedRefusal:
+    """PR #198 fix round 8, H2: a scene write built on a scene that changed
+    since (services/scene_keys.py). Nothing was saved; the answer carries the
+    scene Nebula has now, its key and who changed it last, so the writer can
+    put its change on top and send it again."""
+    label = _quoted(_node_label(node_id))
+    exc = HTTPException(status_code=409, detail=(
+        f"Couldn't save {label}, node {node_id}. Its scene changed since you read it, so nothing was saved. "
+        "Read it again (or take `scene` from this answer), put your change on top and send it again "
+        "(with `ifSceneKey`, this answer's `sceneKey`)."))
+    scene = copy.deepcopy((node.get("params") or {}).get("scene"))
+    return _coded(exc, "scene_changed", scene=scene, sceneKey=scene_keys.node_scene_key(node),
+                  changedBy=scene_keys.writer(_scene_scope(), node_id))
 
 
 def _workspace_context() -> dict[str, Any]:
@@ -6106,6 +6144,12 @@ async def get_canvas_snapshot() -> dict[str, Any]:
     await _sweep_proposals()
     snapshot["proposals"] = [canvas_proposals.brief(p) for p in canvas_proposals.open_list()]
     snapshot["providerHolds"] = _provider_holds_for_agents()
+    # Fix round 8, H2: each Cinema scene's key (send it back as ifSceneKey);
+    # this agent has read these scenes now (services/scene_keys.py).
+    keys = scene_keys.keys_of(cli_graph.nodes)
+    scene_keys.note_read(_scene_scope(), _reader_agent(), keys)
+    if keys:  # only with a scene: the rest of the answer is as it was
+        snapshot["sceneKeys"] = keys
     return snapshot
 
 
@@ -12799,7 +12843,12 @@ async def send_cinema_shot_to_motion(body: dict[str, Any]) -> dict:
 
 @app.get("/api/graph")
 async def get_graph() -> dict:
-    return cli_graph.get_state()
+    state = cli_graph.get_state()
+    # Fix round 8, H2: each Cinema scene's key, which a write sends back as
+    # ifSceneKey; an agent's read is noted (services/scene_keys.py).
+    keys = scene_keys.keys_of(cli_graph.nodes)
+    scene_keys.note_read(_scene_scope(), _reader_agent(), keys)
+    return {**state, "sceneKeys": keys} if keys else state
 
 
 def _author_cinema_scene(graph: CLIGraph, node_id: str, node: dict[str, Any], params: dict[str, Any], *,
@@ -12956,6 +13005,16 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
         params = {} if raw_params is None else raw_params
         if not isinstance(params, dict):
             raise HTTPException(status_code=400, detail="params must be an object")
+        # Fix round 8, H2: a scene write built on a scene that changed since
+        # is refused (services/scene_keys.py): the writer's own ifSceneKey,
+        # else (an agent) the scene it last read.
+        scene_key_before = scene_keys.node_scene_key(node)
+        writing_agent = _reader_agent()
+        if scene_key_before is not None and "scene" in params:
+            if_key = body.get("ifSceneKey")
+            expected = if_key if isinstance(if_key, str) and if_key else scene_keys.last_read(_scene_scope(), writing_agent, node_id)
+            if expected is not None and expected != scene_key_before:
+                raise _scene_changed_refusal(node_id, node)
         _validate_params(node.get("definitionId", ""), params)
         _refuse_agent_internal_params(params, node_id)
         _check_provider(str(node.get("definitionId") or ""), params, node_id)
@@ -13015,6 +13074,12 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
             summary=f"set {_listed(changes['keys'], 4)} on {_node_label(node_id)} ({node_id})",
         )
     updated = copy.deepcopy(cli_graph.nodes[node_id])
+    scene_key_after = scene_keys.node_scene_key(updated)
+    if scene_key_after is not None:
+        # The key the writer builds its next save on (H2), and who changed it.
+        updated["sceneKey"] = scene_key_after
+        scene_keys.note_write(_scene_scope(), node_id, _canvas_change_actor() if scene_key_after != scene_key_before else None,
+                              scene_key_after, writing_agent)
     await _broadcast_graph_sync(edit=True)
     if params:
         publish_action(f"Updated {node_id} params")
@@ -17442,6 +17507,14 @@ def _display_positions(
 
 
 @app.get("/api/graph/export")
+async def get_graph_export() -> dict:
+    """The canvas as the frontend draws it. An agent that reads it has read
+    its Cinema scenes (fix round 8, H2; services/scene_keys.py)."""
+    export = await export_graph_for_frontend()
+    scene_keys.note_read(_scene_scope(), _reader_agent(), export.get("sceneKeys") or {})
+    return export
+
+
 async def export_graph_for_frontend() -> dict:
     """Export CLI graph in React Flow format for the frontend canvas."""
     # Run normalization on every export so image-input nodes added or
@@ -17517,6 +17590,9 @@ async def export_graph_for_frontend() -> dict:
         "nodes": rf_nodes,
         "edges": rf_edges,
         "empty": False,
+        # Fix round 8, H2: each Cinema scene's key, which its next save sends
+        # back as ifSceneKey (services/scene_keys.py); none without a scene.
+        **({"sceneKeys": keys} if (keys := scene_keys.keys_of(cli_graph.nodes)) else {}),
         # Agent edits that asked the canvas to lay out their new nodes once
         # drawn (services/canvas_arrange.py). A canvas that connects later
         # gets them too.

@@ -94,9 +94,9 @@ import {
   warnFailure, nodeNameList,
 } from '../lib/errorCopy';
 import { CANVAS_NOTICE_EVENT, showNotice, type CanvasNoticeDetail } from '../lib/canvasNotice';
-import { BAD_SAVE, DELETED_ELSEWHERE, KEPT_AND_RETRYING, KEPT_UNTIL_RUN_ENDS, SWITCHED_UNNAMED, sceneClashLine, sceneSaveHeading, sceneTooBigLine,
-  switchedFirst } from '../lib/sceneSaveCopy';
-import { mergeScenes, stillClashing, unionFields, withFields, type SceneField } from '../lib/cinemaSceneMerge';
+import { BAD_SAVE, DELETED_ELSEWHERE, KEPT_AND_RETRYING, sceneStoppedLine, KEPT_UNTIL_RUN_ENDS, SWITCHED_UNNAMED, sceneClashLine,
+  sceneReorderedLine, sceneSaveHeading, sceneTooBigLine, shotBackWithoutLine, shotsRemovedLine, switchedFirst } from '../lib/sceneSaveCopy';
+import { ORDER, PRESENCE, WHOLE, mergeScenes, stillClashing, unionFields, withFields, type SceneField } from '../lib/cinemaSceneMerge';
 import { cleanPending, pendingSkipLine, type PendingAgent, type PendingSkipSummary } from '../lib/pendingNodes';
 import { MISSING_KEY_FAILURE, MODEL_SETTINGS_FAILURE, MODEL_SETTINGS_FAILURE_HEADER, modelKeyMissingText, modelSettingsFailedText, modelSetupFailedText } from '../lib/failureLines';
 import { cleanRemovals, deletedNoticeText, DROPPED_REDO_TEXT, DROPPED_UNDO_TEXT, skippedPressText, lateRestoreText, mergeRemovals, notRestoredText, pinsOnAnotherModel, restoredNoticeText, supersededBy, type RemovalRecord } from '../lib/deleteNotice';
@@ -503,6 +503,8 @@ export interface UndoNotice {
   copy?: NoticeCopy;
   /** A part of `text` shown in mono (a model id, GM round 15 of PR #114). */
   mono?: string;
+  /** GM r11 answer 3: [Try again] on a scene save whose timed retries stopped. */
+  retryScene?: { nodeId: string };
 }
 
 /** The project a line's "Open copy" opens (the copy a failed handoff saved). */
@@ -550,6 +552,8 @@ export interface MessageNotice {
   copy?: NoticeCopy;
   /** As UndoNotice's: a part of `text` shown in mono. */
   mono?: string;
+  /** As UndoNotice's: [Try again] on a scene save whose retries stopped. */
+  retryScene?: { nodeId: string };
 }
 
 /** Whether a notice's Undo or Redo still applies: its step is next in line on its stack. */
@@ -993,6 +997,8 @@ interface GraphState {
   /** The person's choice on a clash: save theirs over the other change
    * ('mine'), or take the other change ('theirs'). */
   resolveSceneClash: (nodeId: string, keep: 'mine' | 'theirs') => void;
+  /** GM r11 answer 3: [Try again] on a scene save whose retries stopped. */
+  retrySceneSave: (nodeId: string) => void;
   dismissUndoNotice: () => void;
   /** A restore's late count, shown above the canvas notice (LateNotice). */
   lateNotice: LateNotice | null;
@@ -2929,13 +2935,53 @@ interface CinemaScenePersistence {
   /** Order of the last send and the last rebase (sceneSendSeq). */
   sendSeq: number;
   rebaseSeq: number;
-  /** A save Nebula took whose echo hasn't come yet, and until when the tab
-   * waits for it: a sync built before that save can still land after its
-   * answer, so no sync is read as another change while it waits. */
+  /** Fix round 8, H2: Nebula's key for `base` (services/scene_keys.py), sent
+   * as ifSceneKey so a save built on a scene that changed since is refused
+   * (scene_changed) and merged, never taken over the other change. Null:
+   * unknown (sent unconditionally, as before). STALE_BASE: the card was
+   * built on a scene Nebula no longer has, so the first save is refused
+   * and merged. */
+  baseKey: string | null;
+  /** The authoring keys of every base and every scene this entry sent: a
+   * sync that carries one of them is this canvas's own (an echo, or one
+   * built before a save landed), never another change. */
+  known: Set<string>;
+  /** Another change a sync brought while a save was out: merged when the
+   * save's answer lands (its scene is newer than the save, which Nebula
+   * took on the base it was built on), never dropped (review 7, H2). */
+  deferred: { scene: CinemaSceneSpec; key: string | null; agent: string | null } | null;
+  /** sceneSyncSeq when the save went: a sync that stored a scene since is
+   * newer than the save's answer (review 7, H2 item 3). */
+  dispatchSyncSeq: number;
+  /** Whether the last save went with an ifSceneKey. */
+  conditional: boolean;
+  /** A save Nebula took with no key (a backend before round 8, or a base it
+   * never keyed) whose echo hasn't come: a sync built before it can land
+   * after its answer, so until then (or its echo) no sync is read as another
+   * change; what Nebula has then is merged (rebaseAfterEchoWait). A keyed
+   * save needs none: Nebula refuses one whose base changed. */
   echoWait: { key: string; until: number } | null;
+  /** scene_changed answers in a row (a loop guard; they never count as retries). */
+  changedInRow: number;
+  /** GM r11 answer 3: the timed retries stopped; the next change, a
+   * reconnect or [Try again] sends again. */
+  stopped: boolean;
+  /** Review 7, M2: the wires the other side's removal took off a shot the
+   * person kept (a PRESENCE clash), held on the card while the choice waits
+   * and sent again after Keep mine's save (GM r11 answer 4). */
+  presenceWires: { edge: Edge; target: string; done: (took: boolean) => void }[];
+  /** Keep mine was chosen: these wires go once its save lands. */
+  restoreWires: { edge: Edge; target: string; done: (took: boolean) => void }[] | null;
 }
-const SCENE_ECHO_WAIT_MS = 2_000;
 let sceneSendSeq = 0;
+const SCENE_ECHO_WAIT_MS = 2_000;
+/** H2: Nebula's key for each scene (graphSync's sceneKeys, a save's answer). */
+const backendSceneKeys = new Map<string, string>();
+/** H2: which sync last stored each node's scene (sceneSyncSeq). */
+const backendSceneSeq = new Map<string, number>();
+let sceneSyncSeq = 0;
+const STALE_BASE = 'stale';
+const SCENE_CHANGED_IN_ROW = 20;
 /** Who made the sync being merged now (applyGraphSync sets it): the
  * rebase's line names an agent; this tab's own echo is never a rebase. */
 let sceneSyncOrigin: { own: boolean; agent: string | null } = { own: false, agent: null };
@@ -2996,6 +3042,8 @@ export function clearCinemaScenePersistence(nodeId?: string): void {
     if (entry?.retryTimer) clearTimeout(entry.retryTimer);
     entry?.inFlight?.abort();
     for (const hold of entry?.wireHolds.splice(0) ?? []) hold.done(false);
+    for (const hold of entry?.presenceWires.splice(0) ?? []) hold.done(false);
+    for (const hold of entry?.restoreWires?.splice(0) ?? []) hold.done(false);
     if (entry) markSceneUnsaved(id, null);
     setSceneClash(id, null);
   }
@@ -3021,15 +3069,68 @@ function resolveSceneClash(nodeId: string, keep: 'mine' | 'theirs'): void {
   const fields = entry.clash.fields;
   entry.clash = null;
   const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
-  if (!node) return;
+  const wires = entry.presenceWires.splice(0);
+  if (!node) {
+    for (const hold of wires) hold.done(false);
+    return;
+  }
   if (keep === 'theirs') {
     const scene = withFields(sceneFromNode(node), fields, backendScenes.get(nodeId) ?? entry.base ?? sceneFromNode(node));
     applySceneToNode(useGraphStore.setState, nodeId, scene);
     entry.authoredScene = cloneScene(scene);
+    // M2: a removed shot stays removed, and so do its wires.
+    for (const hold of wires) hold.done(false);
+    const gone = new Set(wires.map((wire) => edgeKey(wire.edge)));
+    if (gone.size > 0) useGraphStore.setState((state) => ({ edges: state.edges.filter((edge) => !gone.has(edgeKey(edge))) }));
+  } else {
+    // M2 (GM r11 answer 4): the shot comes back with its wires, sent once
+    // the scene's save lands (the port exists then). Held on the card till then.
+    entry.restoreWires = [...(entry.restoreWires ?? []), ...wires];
   }
-  markSceneUnsaved(nodeId, entry.refused !== null && entry.refused !== 'replaced' ? entry.refusedLine : null);
+  // GM r10: the clash was the line; a failure of this save says its own
+  // (the normal retry line), and the retries start again.
+  entry.refusedLine = null;
+  entry.retries = 0;
+  entry.stopped = false;
+  markSceneUnsaved(nodeId, entry.refused !== null && entry.refused !== 'replaced' ? sceneKeptLine(nodeId, entry) : null);
   entry.pending = true;
   void flushCinemaScenePersistence(nodeId, entry);
+}
+
+/** GM r11 answer 3: [Try again] on a save whose timed retries stopped. */
+function retrySceneSave(nodeId: string): void {
+  const entry = cinemaScenePersistence.get(nodeId);
+  if (!entry || entry.clash) return;
+  entry.retries = 0;
+  entry.stopped = false;
+  entry.refusedLine = null;
+  entry.lastKick = Date.now();
+  if (entry.retryTimer) clearTimeout(entry.retryTimer);
+  entry.retryTimer = null;
+  entry.pending = true;
+  void flushCinemaScenePersistence(nodeId, entry);
+}
+
+/** The line a kept save's mark and toast say now. */
+function sceneKeptLine(nodeId: string, entry: CinemaScenePersistence): string | null {
+  if (entry.refused === 'server' && entry.stopped) {
+    const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
+    return sceneStoppedLine(node ? cardTitle([node], nodeId) : 'Scene');
+  }
+  return entry.refusedLine;
+}
+
+/** GM r10: while a clash waits, the clash prompt is the line: the retry
+ * toast for this scene leaves, and nothing retries until the choice. */
+function quietRetriesForClash(entry: CinemaScenePersistence): void {
+  if (entry.retryTimer) clearTimeout(entry.retryTimer);
+  entry.retryTimer = null;
+  const line = entry.refusedLine;
+  if (!line) return;
+  useGraphStore.setState((state) => ({
+    ...(state.undoNotice?.text === line && !state.undoNotice.offer ? { undoNotice: null } : {}),
+    ...(state.messageNotice?.text === line ? { messageNotice: null } : {}),
+  }));
 }
 
 /** H1 (PR #198 review 6): every scene whose edits Nebula doesn't have yet
@@ -3106,10 +3207,28 @@ export function setSceneRetryDelaysForTests(delays: number[]): void {
 function scheduleSceneRetry(nodeId: string, entry: CinemaScenePersistence): void {
   if (entry.retryTimer) clearTimeout(entry.retryTimer);
   entry.retryTimer = null;
-  // L2: a server error that goes on stops being retried on a timer; the
-  // edits stay "Unsaved" with the line, and a sync, a reconnect or the next
-  // edit sends them again (kickStoppedSceneRetries).
-  if (entry.refused === 'server' && entry.retries >= SCENE_SERVER_RETRIES) return;
+  // GM r10: nothing retries while a clash waits for the person.
+  if (entry.clash) return;
+  // L2 (GM r11 answer 3): a server error that goes on stops being retried
+  // on a timer; the edits stay "Unsaved" with GM's line and [Try again],
+  // and the next change or a reconnect sends them again.
+  if (entry.refused === 'server' && entry.retries >= SCENE_SERVER_RETRIES) {
+    if (!entry.stopped) {
+      entry.stopped = true;
+      const line = sceneKeptLine(nodeId, entry);
+      if (line) {
+        markSceneUnsaved(nodeId, line);
+        entry.refusedLine = line;
+        useGraphStore.setState((state) => {
+          const said = noticeLine(state, line);
+          const notice = said.undoNotice ? { undoNotice: { ...said.undoNotice, retryScene: { nodeId } } } : {};
+          const message = said.messageNotice ? { messageNotice: { ...said.messageNotice, retryScene: { nodeId } } } : {};
+          return { ...said, ...notice, ...message };
+        });
+      }
+    }
+    return;
+  }
   const delay = sceneRetryDelays[Math.min(entry.retries, sceneRetryDelays.length - 1)];
   entry.retries += 1;
   entry.retryTimer = setTimeout(() => {
@@ -3295,13 +3414,24 @@ type SceneAnswer =
   | { kind: 'aborted' }
   | { kind: 'rendering'; shotIds: string[]; line: string }
   | { kind: 'gone' | 'moved'; line: string }
+  | { kind: 'changed'; scene: CinemaSceneSpec; key: string | null; agent: string | null }
   | { kind: 'kept'; refused: SceneRefusalKind; line: string | null; log?: string };
 
 /** Reads a refused scene write: which part, or what clears it (GM r7 item 1). */
 async function sceneRefusal(nodeId: string, response: Response): Promise<SceneAnswer> {
   let body: { detail?: unknown; code?: unknown; rendering?: { shotIds?: unknown; shots?: unknown };
-    project?: { name?: unknown } | null; switchedBy?: { kind?: unknown; name?: unknown } | null } = {};
+    project?: { name?: unknown } | null; switchedBy?: { kind?: unknown; name?: unknown } | null;
+    scene?: unknown; sceneKey?: unknown; changedBy?: { kind?: unknown; name?: unknown } | null } = {};
   try { body = (await response.json() ?? {}) as typeof body; } catch { body = {}; }
+  // Fix round 8, H2 (GM r11): the scene changed since this save's base: no
+  // line and no retry; it is merged and sent again, or the clash asks.
+  const changedScene = body.scene as CinemaSceneSpec | undefined;
+  if (response.status === 409 && body.code === 'scene_changed' && changedScene && Array.isArray(changedScene.shots)) {
+    const by = body.changedBy;
+    return { kind: 'changed', scene: rewriteBackendAssetUrls(changedScene),
+      key: typeof body.sceneKey === 'string' ? body.sceneKey : null,
+      agent: by?.kind === 'agent' && typeof by.name === 'string' && by.name.trim() ? by.name : null };
+  }
   warnFailure("Couldn't save the scene.", response.status, body.detail);
   const status = response.status;
   const detail = detailText(body.detail);
@@ -3370,7 +3500,13 @@ async function flushCinemaScenePersistence(nodeId: string, entry: CinemaScenePer
   noteRemovedShots(nodeId, entry, sentScene);
   entry.sentScenes.push(sentScene);
   if (entry.sentScenes.length > 32) entry.sentScenes.shift();
+  entry.known.add(cinemaAuthoringKey(sentScene));
   entry.pending = false;
+  entry.dispatchSyncSeq = backendSceneSeq.get(nodeId) ?? 0;
+  // H2: the scene this save is built on, so Nebula refuses it if that
+  // changed since (scene_changed) instead of taking it over the change.
+  const ifSceneKey = entry.baseKey;
+  entry.conditional = ifSceneKey !== null;
   const wires = entry.wireHolds.splice(0);
   const controller = new AbortController();
   entry.inFlight = controller;
@@ -3378,19 +3514,32 @@ async function flushCinemaScenePersistence(nodeId: string, entry: CinemaScenePer
   try {
     const response = await graphMutationFetch(`/api/graph/node/${nodeId}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
-      body: JSON.stringify({ params: { ...node.data.params, scene: sentScene } }),
+      body: JSON.stringify({ params: { ...node.data.params, scene: sentScene }, ...(ifSceneKey ? { ifSceneKey } : {}) }),
     }, { saves: [sceneSave(nodeId, node)] });
     if (!response.ok) answer = await sceneRefusal(nodeId, response);
     else {
-      backendScenes.set(nodeId, sentScene);
+      let takenKey: string | null = null;
+      try {
+        const saved = await response.clone().json() as { sceneKey?: unknown } | null;
+        takenKey = typeof saved?.sceneKey === 'string' ? saved.sceneKey : null;
+      } catch { takenKey = null; }
+      // H2 item 3: a sync that stored this scene after the save went is newer
+      // than the save; the save never takes its place.
+      if ((backendSceneSeq.get(nodeId) ?? 0) === entry.dispatchSyncSeq) {
+        backendScenes.set(nodeId, sentScene);
+        if (takenKey) backendSceneKeys.set(nodeId, takenKey); else backendSceneKeys.delete(nodeId);
+      }
       // What the backend has now, unless another change was merged in since
       // this went (its base is newer).
-      if (entry.rebaseSeq < sendSeq) entry.base = cloneScene(sentScene);
-      entry.echoWait = { key: cinemaAuthoringKey(sentScene), until: Date.now() + SCENE_ECHO_WAIT_MS };
-      // A change from elsewhere that came while it waited is merged once the
-      // wait is over (its echo never came: the other change replaced it).
-      const waited = entry;
-      setTimeout(() => rebaseFromBackend(nodeId, waited), SCENE_ECHO_WAIT_MS + 1);
+      if (entry.rebaseSeq < sendSeq) {
+        entry.base = cloneScene(sentScene);
+        entry.baseKey = takenKey;
+      }
+      if (!ifSceneKey) {
+        entry.echoWait = { key: cinemaAuthoringKey(sentScene), until: Date.now() + SCENE_ECHO_WAIT_MS };
+        const waited = entry;
+        setTimeout(() => rebaseAfterEchoWait(nodeId, waited), SCENE_ECHO_WAIT_MS + 1);
+      }
       const sent = new Set(sentScene.shots.map((shot) => shot.id));
       for (const id of [...entry.removed.keys()]) if (!sent.has(id)) entry.removed.delete(id);
     }
@@ -3425,14 +3574,50 @@ async function flushCinemaScenePersistence(nodeId: string, entry: CinemaScenePer
 function settleSceneAnswer(nodeId: string, entry: CinemaScenePersistence, answer: SceneAnswer): void {
   const state = useGraphStore.getState();
   switch (answer.kind) {
-    case 'ok':
+    case 'ok': {
       entry.refused = null;
       entry.refusedLine = null;
       entry.retries = 0;
+      entry.stopped = false;
+      entry.changedInRow = 0;
       // A clash still waiting keeps its "Unsaved" and its line.
       markSceneUnsaved(nodeId, entry.clash?.line ?? null);
+      // Saved: a [Try again] for this scene no longer applies.
+      useGraphStore.setState((current) => ({
+        ...(current.undoNotice?.retryScene?.nodeId === nodeId ? { undoNotice: null } : {}),
+        ...(current.messageNotice?.retryScene?.nodeId === nodeId ? { messageNotice: null } : {}),
+      }));
+      // M2: Keep mine's shot is saved; its wires go now.
+      if (entry.restoreWires && !entry.clash) restorePresenceWires(nodeId, entry);
+      // H2: another change a sync brought while this save was out is newer
+      // than it: merged now (a save sent with no key can't tell, so it is
+      // left to the next sync, as before).
+      const deferred = entry.deferred;
+      entry.deferred = null;
+      if (deferred && entry.conditional && rebaseOnto(nodeId, entry, deferred.scene, deferred.key, deferred.agent)) return;
       if (entry.pending) void flushCinemaScenePersistence(nodeId, entry);
       else maybeSettleCinemaPersistence(nodeId, entry);
+      return;
+    }
+    case 'changed':
+      // H2 (GM r11): no line, no retry, not one of the 8: merged and sent
+      // again, or the clash asks.
+      entry.deferred = null;
+      entry.changedInRow += 1;
+      backendScenes.set(nodeId, answer.scene);
+      backendSceneSeq.set(nodeId, ++sceneSyncSeq);
+      if (answer.key) backendSceneKeys.set(nodeId, answer.key); else backendSceneKeys.delete(nodeId);
+      if (entry.changedInRow > SCENE_CHANGED_IN_ROW || !answer.key) {
+        // Never a loop: the save goes once more as the card has it, unasked
+        // no longer (its base is what Nebula has now).
+        entry.base = cloneScene(answer.scene);
+        entry.baseKey = answer.key;
+        settleSceneAnswer(nodeId, entry, { kind: 'kept', refused: 'other', line: null });
+        return;
+      }
+      if (rebaseOnto(nodeId, entry, answer.scene, answer.key, answer.agent, true)) return;
+      entry.pending = true;
+      void flushCinemaScenePersistence(nodeId, entry);
       return;
     case 'aborted':
       return;
@@ -3473,6 +3658,11 @@ function settleSceneAnswer(nodeId: string, entry: CinemaScenePersistence, answer
     case 'kept':
       holdRemovedWires(nodeId, entry);
       entry.refused = answer.refused;
+      // GM r10: while a clash waits, its prompt is the line; nothing retries.
+      if (entry.clash) {
+        entry.refusedLine = answer.line;
+        return;
+      }
       if (answer.line && answer.line !== entry.refusedLine) {
         state.notify(answer.line);
         if (answer.log && typeof window !== 'undefined') {
@@ -3480,7 +3670,7 @@ function settleSceneAnswer(nodeId: string, entry: CinemaScenePersistence, answer
         }
       }
       entry.refusedLine = answer.line;
-      if (answer.refused !== 'params-outdated' && answer.line) markSceneUnsaved(nodeId, entry.clash?.line ?? answer.line);
+      if (answer.refused !== 'params-outdated' && answer.line) markSceneUnsaved(nodeId, answer.line);
       if (answer.refused === 'replaced') {
         // M1: the clear's sync names these edits and lets them go; if it
         // never comes, the backend's graph is read once (a reconnect's sync).
@@ -3495,18 +3685,84 @@ function settleSceneAnswer(nodeId: string, entry: CinemaScenePersistence, answer
 
 const SCENE_REPLACED_WAIT_MS = 3_000;
 
-/** The echo wait is over: what Nebula has now, if it is another change, is
- * merged in as a sync's would have been (its sync came while it waited). */
-function rebaseFromBackend(nodeId: string, entry: CinemaScenePersistence): void {
+/** An unkeyed save's echo wait is over: what Nebula has now, if it is
+ * another change, is merged as a sync's would have been. */
+function rebaseAfterEchoWait(nodeId: string, entry: CinemaScenePersistence): void {
   if (cinemaScenePersistence.get(nodeId) !== entry || entry.inFlight || !entry.echoWait
     || Date.now() < entry.echoWait.until) return;
-  const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
+  entry.echoWait = null;
   const held = backendScenes.get(nodeId);
-  if (!node || !held) return;
-  const shown = rebaseScene(entry, sceneFromNode(node), held, cinemaAuthoringKey(held));
-  if (!shown) return;
+  if (held) rebaseOnto(nodeId, entry, held, backendSceneKeys.get(nodeId) ?? null, null);
+}
+
+/** H2: another change (a scene_changed answer, or a sync that came while a
+ * save was out) merged into the card now, then saved or asked about
+ * (settleRebasedScene). False when there was nothing to merge. */
+function rebaseOnto(nodeId: string, entry: CinemaScenePersistence, incoming: CinemaSceneSpec, key: string | null,
+  agent: string | null, refused = false): boolean {
+  const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
+  if (!node) return false;
+  const incomingKey = cinemaAuthoringKey(incoming);
+  // A sync's scene this canvas already knows is its own; a refusal's never is
+  // (Nebula says the base changed).
+  if (!refused && entry.known.has(incomingKey)) return false;
+  const shown = mergeInto(entry, sceneFromNode(node), incoming, incomingKey, key, agent);
+  if (!shown) return false;
   applySceneToNode(useGraphStore.setState, nodeId, shown);
   settleRebasedScene(nodeId, entry);
+  return true;
+}
+
+/** M2 (GM r11 answer 4): after Keep mine's save, the kept shot's wires go
+ * again. One whose other end is gone, or whose single-connection input now
+ * holds another connection (never replaced), stays off, and the line says so;
+ * when every one comes back, nothing is said. */
+function restorePresenceWires(nodeId: string, entry: CinemaScenePersistence): void {
+  const wanted = entry.restoreWires ?? [];
+  entry.restoreWires = null;
+  if (wanted.length === 0) return;
+  const state = useGraphStore.getState();
+  const scene = sceneFromNode(state.nodes.find((candidate) => candidate.id === nodeId) ?? ({ data: { params: {} } } as Node<NodeData>));
+  const missed = new Map<string, string[]>();
+  const sending: Edge[] = [];
+  for (const { edge, target } of wanted) {
+    const shot = shotIdOfPort(edge.sourceHandle);
+    if (!shot || !scene.shots.some((candidate) => candidate.id === shot)) continue;
+    const other = state.nodes.find((candidate) => candidate.id === edge.target);
+    const taken = other && !targetHandleAllowsMultiple(other, edge.targetHandle)
+      && state.edges.some((candidate) => candidate.target === edge.target && candidate.targetHandle === edge.targetHandle
+        && edgeKey(candidate) !== edgeKey(edge));
+    if (!other || taken) {
+      const name = shotName(scene, shot);
+      missed.set(name, [...(missed.get(name) ?? []), target]);
+      continue;
+    }
+    sending.push(edge);
+  }
+  const shown = new Set(useGraphStore.getState().edges.map(edgeKey));
+  const back = sending.filter((edge) => !shown.has(edgeKey(edge)));
+  if (back.length > 0) useGraphStore.setState((current) => ({ edges: [...current.edges, ...back] }));
+  // Off the card: the ones that can't come back.
+  const blocked = new Set(wanted.filter(({ edge }) => !sending.includes(edge)).map(({ edge }) => edgeKey(edge)));
+  if (blocked.size > 0) useGraphStore.setState((current) => ({ edges: current.edges.filter((edge) => !blocked.has(edgeKey(edge))) }));
+  for (const edge of sending) void sendWire(edge, true, useGraphStore.setState as GraphSet);
+  // sendWire holds what it sends; the card's holds end here.
+  for (const { done } of wanted) done(false);
+  for (const [shot, targets] of missed) useGraphStore.getState().notify(shotBackWithoutLine(shot, targets), 'info');
+}
+
+/** GM r10 answer 3: the clash's line by what clashed. Only the order: the
+ * reorder line; only shots the other side removed: the removal line; else
+ * the field line. */
+function clashLineFor(clash: SceneClash, scene: string, shown: CinemaSceneSpec): string {
+  const fields = clash.fields;
+  if (fields.length > 0 && fields.every((field) => field.shot === null && field.key === ORDER)) {
+    return sceneReorderedLine(scene, clash.agent);
+  }
+  if (fields.length > 0 && fields.every((field) => field.key === PRESENCE && field.shot)) {
+    return shotsRemovedLine(fields.map((field) => shotName(shown, field.shot!)), clash.agent);
+  }
+  return sceneClashLine(scene, clash.agent);
 }
 
 /** A scene the sync just merged another change into (H2, GM r9 decision 2):
@@ -3523,9 +3779,10 @@ function settleRebasedScene(nodeId: string, entry: CinemaScenePersistence): void
   const shown = sceneFromNode(node);
   applySceneToNode(useGraphStore.setState, nodeId, shown);
   if (entry.clash) {
-    entry.clash.line = sceneClashLine(cardTitle([node], nodeId), entry.clash.agent);
+    entry.clash.line = clashLineFor(entry.clash, cardTitle([node], nodeId), shown);
     setSceneClash(nodeId, entry.clash);
     markSceneUnsaved(nodeId, entry.clash.line);
+    quietRetriesForClash(entry);
   } else {
     setSceneClash(nodeId, null);
     if (entry.refused === null) markSceneUnsaved(nodeId, null);
@@ -3533,6 +3790,9 @@ function settleRebasedScene(nodeId: string, entry: CinemaScenePersistence): void
   if (entry.unanswered) return; // the unanswered branch sends it
   const sendable = entry.clash ? withFields(shown, entry.clash.fields, held) : shown;
   if (cinemaAuthoringKey(sendable) === cinemaAuthoringKey(held)) {
+    // Review 7, M1: nothing to send, so no retry either.
+    if (entry.retryTimer) clearTimeout(entry.retryTimer);
+    entry.retryTimer = null;
     entry.acknowledged = true;
     entry.pending = false;
     if (entry.refused !== null && entry.refused !== 'params-outdated') {
@@ -3550,12 +3810,16 @@ function settleRebasedScene(nodeId: string, entry: CinemaScenePersistence): void
   void flushCinemaScenePersistence(nodeId, entry);
 }
 
-/** L2: server-error saves whose timed retries stopped go once more (a sync
- * or a reconnect), at most once a second each. */
-function kickStoppedSceneRetries(): void {
+/** A reconnect (GM r9 answer 1; review 7, L3): kept saves go again at once,
+ * a waiting retry timer included, at most once a second each. Never while a
+ * clash waits (GM r10). */
+function resendKeptScenes(): void {
   for (const [nodeId, entry] of cinemaScenePersistence) {
-    if (entry.refused !== 'server' || entry.retryTimer || entry.inFlight || Date.now() - entry.lastKick < 1000) continue;
+    if ((entry.refused !== 'server' && entry.refused !== 'run-lock') || entry.clash || entry.inFlight
+      || Date.now() - entry.lastKick < 1000) continue;
     entry.lastKick = Date.now();
+    if (entry.retryTimer) clearTimeout(entry.retryTimer);
+    entry.retryTimer = null;
     entry.pending = true;
     void flushCinemaScenePersistence(nodeId, entry);
   }
@@ -3596,7 +3860,7 @@ function reconcileSceneEntries(): void {
       else maybeSettleCinemaPersistence(nodeId, entry);
       continue;
     }
-    if (entry.refused === 'run-lock' && entry.retryTimer && Date.now() - entry.lastKick > 1000) {
+    if (entry.refused === 'run-lock' && !entry.clash && entry.retryTimer && Date.now() - entry.lastKick > 1000) {
       entry.lastKick = Date.now();
       clearTimeout(entry.retryTimer);
       entry.retryTimer = null;
@@ -3604,7 +3868,8 @@ function reconcileSceneEntries(): void {
       void flushCinemaScenePersistence(nodeId, entry);
     }
   }
-  kickStoppedSceneRetries();
+  // Review 7, L2: a sync never sends a stopped save again (GM r11 answer 3:
+  // the next change, a reconnect or [Try again] does).
 }
 
 /** The backend's graph, read once and applied as a sync (unless a newer
@@ -3629,7 +3894,7 @@ async function readBackendGraphAgain(): Promise<void> {
 // anything (its own line).
 subscribeBackendConnection(() => {
   if (isBackendOffline()) return;
-  kickStoppedSceneRetries();
+  resendKeptScenes();
   if (![...cinemaScenePersistence.values()].some((entry) => entry.unanswered)) return;
   void readBackendGraphAgain();
 });
@@ -3659,8 +3924,25 @@ function persistSceneParam(nodeId: string, scene: CinemaSceneSpec, debounceMs = 
       since: lastStepSeq, removed: new Map(), unanswered: false, refused: null, refusedLine: null,
       retryTimer: null, retries: 0, lastKick: 0,
       base: backendScenes.has(nodeId) ? cloneScene(backendScenes.get(nodeId)!) : null,
-      clash: null, rebased: null, sendSeq: 0, rebaseSeq: 0, echoWait: null };
+      clash: null, rebased: null, sendSeq: 0, rebaseSeq: 0,
+      baseKey: backendSceneKeys.get(nodeId) ?? null, known: new Set(), deferred: null, dispatchSyncSeq: 0,
+      conditional: false, echoWait: null, changedInRow: 0, stopped: false, presenceWires: [], restoreWires: null };
+    // H2 (review 7, item 4): the card this edit was made on isn't the scene
+    // Nebula has (a change the card never showed): the save is built on the
+    // card's, so Nebula refuses it and the change is merged, never lost.
+    const was = before && typeof before === 'object' && Array.isArray((before as CinemaSceneSpec).shots)
+      ? before as CinemaSceneSpec : null;
+    if (was && entry.base && entry.baseKey && cinemaAuthoringKey(was) !== cinemaAuthoringKey(entry.base)) {
+      entry.base = cloneScene(was);
+      entry.baseKey = STALE_BASE;
+    }
+    if (entry.base) entry.known.add(cinemaAuthoringKey(entry.base));
     cinemaScenePersistence.set(nodeId, entry);
+  }
+  // GM r11 answer 3: the next change sends a stopped save again.
+  if (entry.stopped) {
+    entry.stopped = false;
+    entry.retries = 0;
   }
   if (entry.settleTimer) clearTimeout(entry.settleTimer);
   entry.settleTimer = null;
@@ -3699,31 +3981,106 @@ function persistSceneParam(nodeId: string, scene: CinemaSceneSpec, debounceMs = 
  * and the backend's in every save until they choose. Null: nothing to merge.
  */
 function rebaseScene(entry: CinemaScenePersistence, local: CinemaSceneSpec, incoming: CinemaSceneSpec,
-  incomingKey: string): CinemaSceneSpec | null {
-  if (sceneSyncOrigin.own) return null;
+  incomingKey: string, nodeId: string): CinemaSceneSpec | null {
+  // This canvas's own echo, or a scene it built on or sent (a sync from
+  // before a save landed): never another change (review 7, H2 item 2: an
+  // own echo is checked by its key, not left to a timer).
   if (entry.echoWait && incomingKey === entry.echoWait.key) entry.echoWait = null;
-  // A write on its way, or one whose echo is due: a sync now may be from
-  // before it (kept as it was, as always).
-  if (entry.inFlight || (entry.echoWait && Date.now() < entry.echoWait.until)) return null;
+  if (sceneSyncOrigin.own || entry.known.has(incomingKey)) {
+    entry.known.add(incomingKey);
+    return null;
+  }
+  // An unkeyed save's echo is still due: a sync now may be from before it.
+  if (entry.echoWait && Date.now() < entry.echoWait.until) return null;
   entry.echoWait = null;
+  // A save on its way: the change is merged when its answer lands, never
+  // dropped (review 7, H2 item 4).
+  if (entry.inFlight) {
+    entry.deferred = { scene: cloneScene(incoming), key: backendSceneKeys.get(nodeId) ?? null, agent: sceneSyncOrigin.agent };
+    return null;
+  }
+  return mergeInto(entry, local, incoming, incomingKey, backendSceneKeys.get(nodeId) ?? null, sceneSyncOrigin.agent);
+}
+
+/** The merge itself (H2): `incoming` (Nebula's, `key`) into the card's
+ * `local`, on top of the entry's base. A merge that throws never drops the
+ * sync or the edits (review 7, H1): it is one clash over the whole scene,
+ * which the person decides. */
+function mergeInto(entry: CinemaScenePersistence, local: CinemaSceneSpec, incoming: CinemaSceneSpec, incomingKey: string,
+  key: string | null, agent: string | null): CinemaSceneSpec | null {
   const base = entry.base;
   if (!base) {
     entry.base = cloneScene(incoming);
+    entry.baseKey = key;
+    entry.known.add(incomingKey);
     return null;
   }
-  if (incomingKey === cinemaAuthoringKey(base) || entry.sentScenes.some((sent) => cinemaAuthoringKey(sent) === incomingKey)) return null;
-  const mine = entry.clash ? withFields(local, entry.clash.fields, base) : local;
-  const merged = mergeScenes(base, mine, incoming, sameCinemaValue);
-  // A clash from before stays while the card and the backend still differ there.
-  const kept = entry.clash ? stillClashing(entry.clash.fields, local, incoming, sameCinemaValue) : [];
-  const fields = unionFields(merged.clashes, kept);
-  const shown = kept.length > 0 ? withFields(merged.scene, kept, local) : merged.scene;
+  let fields: SceneField[];
+  let shown: CinemaSceneSpec;
+  let back: string[] = [];
+  let fresh: SceneField[];
+  let kept: SceneField[] = [];
+  try {
+    const mine = entry.clash ? withFields(local, entry.clash.fields, base) : local;
+    const merged = mergeScenes(base, mine, incoming, sameCinemaValue);
+    // A clash from before stays while the card and the backend still differ there.
+    kept = entry.clash ? stillClashing(entry.clash.fields, local, incoming, sameCinemaValue) : [];
+    fields = unionFields(merged.clashes, kept);
+    shown = kept.length > 0 ? withFields(merged.scene, kept, local) : merged.scene;
+    back = merged.back;
+    fresh = merged.clashes;
+    if (shown.shots.some((shot) => !shot || typeof shot.id !== 'string')) throw new Error('a merged shot has no id');
+  } catch (error) {
+    console.warn('[nebula] Scene merge failed; the person chooses:', error);
+    fields = [{ shot: null, key: WHOLE }];
+    shown = local;
+    fresh = fields;
+    kept = [];
+  }
+  // L1 (review 7): the prompt names the change it clashes with. A clash
+  // that stays keeps its author unless this change clashes too; two authors
+  // read as "another window" (Use theirs takes what Nebula has).
+  const previous = entry.clash;
+  const author = !previous || kept.length === 0 ? agent
+    : fresh.length === 0 ? previous.agent : previous.agent === agent ? agent : null;
+  // M2: a shot the person kept that the other side removed: its wires, which
+  // this sync takes off, are held on the card until the choice.
+  notePresenceWires(entry, fields.filter((field) => field.key === PRESENCE && field.shot
+    && local.shots.some((shot) => shot.id === field.shot) && !incoming.shots.some((shot) => shot.id === field.shot)).map((field) => field.shot!));
   entry.base = cloneScene(incoming);
+  entry.baseKey = key;
+  entry.known.add(incomingKey);
   entry.rebaseSeq = ++sceneSendSeq;
-  entry.rebased = { agent: sceneSyncOrigin.agent, back: [...(entry.rebased?.back ?? []), ...merged.back] };
-  entry.clash = fields.length > 0 ? { fields, agent: sceneSyncOrigin.agent, line: entry.clash?.line ?? '' } : null;
+  entry.rebased = { agent, back: [...(entry.rebased?.back ?? []), ...back] };
+  entry.clash = fields.length > 0 ? { fields, agent: author, line: previous?.line ?? '' } : null;
   entry.authoredScene = cloneScene(shown);
   return shown;
+}
+
+/** M2: hold the wires of `shotIds`' ports on the card (the sync that removed
+ * the shots takes them off), for Keep mine to send again. */
+function notePresenceWires(entry: CinemaScenePersistence, shotIds: string[]): void {
+  if (shotIds.length === 0) return;
+  const state = useGraphStore.getState();
+  const ports = new Set(shotIds.map((id) => shotPortId(id)));
+  for (const edge of state.edges) {
+    if (!ports.has(edge.sourceHandle ?? '') || entry.presenceWires.some((held) => edgeKey(held.edge) === edgeKey(edge))) continue;
+    const other = state.nodes.find((candidate) => candidate.id === edge.target);
+    const target = other ? nodeTitle(NODE_DEFINITIONS[other.data.definitionId], other.data.label) || other.data.label || edge.target : edge.target;
+    entry.presenceWires.push({ edge: { ...edge }, target, done: holdWire(edge, true) });
+  }
+}
+
+/** Review 7, H1: one scene's merge never drops the sync it came in. A throw
+ * keeps the card's scene as it is (its edits); the entry's next save is
+ * refused if Nebula's changed (scene_changed) and merged then. */
+function guardedSceneMerge(nodeId: string, local: CinemaSceneSpec, incoming: CinemaSceneSpec): CinemaSceneSpec {
+  try {
+    return mergePendingCinemaScene(nodeId, local, incoming);
+  } catch (error) {
+    console.warn(`[nebula] Couldn't merge the scene of ${nodeId}; the card keeps its edits:`, error);
+    return local;
+  }
 }
 
 function mergePendingCinemaScene(nodeId: string, local: CinemaSceneSpec, incoming: CinemaSceneSpec): CinemaSceneSpec {
@@ -3734,7 +4091,7 @@ function mergePendingCinemaScene(nodeId: string, local: CinemaSceneSpec, incomin
     entry.acknowledged = true;
     maybeSettleCinemaPersistence(nodeId, entry);
   }
-  if (cinemaScenePersistence.get(nodeId) === entry) local = rebaseScene(entry, local, incoming, incomingKey) ?? local;
+  if (cinemaScenePersistence.get(nodeId) === entry) local = rebaseScene(entry, local, incoming, incomingKey, nodeId) ?? local;
   const incomingShots = new Map(incoming.shots.map((shot) => [shot.id, shot]));
   return { ...local, shots: local.shots.map((shot) => {
     const received = incomingShots.get(shot.id);
@@ -7601,7 +7958,7 @@ function mergeSyncedNode(incoming: Node<NodeData>, existing: Node<NodeData> | un
     const incomingScene = cliNode.data.params.scene as CinemaSceneSpec | undefined;
     const cinemaScene = cliNode.data.definitionId === 'cinema-scene'
       && cinemaScenePersistence.has(cliNode.id) && localScene?.shots && incomingScene?.shots
-      ? mergePendingCinemaScene(cliNode.id, localScene, incomingScene) : null;
+      ? guardedSceneMerge(cliNode.id, localScene, incomingScene) : null;
     const cinemaOutputs = cinemaScene ? Object.fromEntries(
       Object.entries(hasCliOutputs ? cliOutputs : existing.data.outputs).filter(([port]) =>
         !port.startsWith('shot_') || cinemaScene.shots.some((shot) => shotPortId(shot.id) === port)),
@@ -7819,11 +8176,14 @@ function applyGraphSync(event: ExecutionEvent, options: { fromExport?: boolean }
     executionStatuses,
     edit: origin,
     runParams,
+    sceneKeys,
   } = event as {
     type: 'graphSync';
     nodes: Node<NodeData>[];
     edges: Edge[];
     empty: boolean;
+    /** Fix round 8, H2: each Cinema scene's key (services/scene_keys.py). */
+    sceneKeys?: Record<string, string>;
     graphReplaced?: boolean;
     /** A Clear (DELETE /api/graph): ids start again at n1 in the same project. */
     cleared?: boolean;
@@ -7956,7 +8316,6 @@ function applyGraphSync(event: ExecutionEvent, options: { fromExport?: boolean }
   }
 
   const state = useGraphStore.getState();
-  const held = heldWires(cliEdges ?? []);
   const heldNodeIds = heldNodes();
   // Backend nodes this tab's undo or redo put back, still on their way
   // there: the sync leaves them on the canvas (heldNodes).
@@ -8017,6 +8376,10 @@ function applyGraphSync(event: ExecutionEvent, options: { fromExport?: boolean }
     if (incoming.data?.definitionId === 'cinema-scene' && backendScene?.shots) {
       backendScenes.set(incoming.id, backendScene);
       backendSceneOutputs.set(incoming.id, { ...(incoming.data.outputs ?? {}) });
+      // H2: Nebula's key for it, and that this sync stored it.
+      const key = sceneKeys?.[incoming.id];
+      if (typeof key === 'string') backendSceneKeys.set(incoming.id, key); else backendSceneKeys.delete(incoming.id);
+      backendSceneSeq.set(incoming.id, ++sceneSyncSeq);
     }
     // A node this tab's undo or redo puts back or sets stays as that
     // restore will write it until it lands: an older echo's params don't
@@ -8042,6 +8405,9 @@ function applyGraphSync(event: ExecutionEvent, options: { fromExport?: boolean }
   // it is this tab's own connect on its way (heldWires). Wires on nodes only
   // this tab has stay while both ends do. Matched by connection, not id:
   // onConnect's optimistic wire has a UUID, the backend's copy an e-id.
+  // Read after the nodes merged: a Cinema scene's merge can hold wires
+  // (M2, notePresenceWires) that this same sync takes off.
+  const held = heldWires(cliEdges ?? []);
   const cliEdgeKeys = new Set((cliEdges as Edge[]).map(edgeKey));
   const mergedById = new Map(merged.map((n) => [n.id, n]));
   const frontendOnlyEdges = graphReplaced ? [] : state.edges.filter(
@@ -8856,6 +9222,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   unsavedScenes: {},
   sceneClashes: {},
   resolveSceneClash: (nodeId, keep) => resolveSceneClash(nodeId, keep),
+  retrySceneSave: (nodeId) => retrySceneSave(nodeId),
   undo: () => stepHistory('undo', set, get),
 
   redo: () => stepHistory('redo', set, get),
@@ -12316,6 +12683,7 @@ const EDIT_GATES: Partial<Record<keyof GraphState, EditGate>> = {
   loadSampleGraph: REFUSED_VOID, clearGraph: REFUSED_VOID, undo: REFUSED_VOID, redo: REFUSED_VOID,
   removeEmptyEditNode: REFUSED_VOID, updateEditNodeClip: REFUSED_VOID, cutEditNodeAtSource: REFUSED_VOID,
   removeEditNodeClip: REFUSED_VOID, removeShot: REFUSED_VOID, updateScene: REFUSED_VOID, resolveSceneClash: REFUSED_VOID,
+  retrySceneSave: REFUSED_VOID,
   configureOpenRouterModel: REFUSED_ASYNC, fetchReplicateSchemaAndConfigure: REFUSED_ASYNC,
   promoteShotVariation: REFUSED_ASYNC,
   // Round 15 (review 14, M1/M2): runs are the paid path, so every run entry

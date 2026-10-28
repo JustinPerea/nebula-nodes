@@ -1298,6 +1298,10 @@ def edit_canvas(
     (the canvas was cleared or replaced since), both with `project` and
     `switchedBy`, `paid_start`, `approved_run`
     (docs/MCP-SETUP.md, Cinema scenes over MCP); here you read the detail.
+    An existing scene's write over HTTP (PUT /api/graph/node/{id}, `nebula
+    set`) is held to the scene you last read: changed since, it is refused
+    with 409 `scene_changed` (`scene`, `sceneKey`, `changedBy`) and nothing
+    is saved; read it again and put your change on top.
     Who bills a run is the person's call: Krea billing (`_kreaAuth`: API token
     or the Krea plan) and a multi-provider node's route (`_provider`: a route id
     or auto; describe_node lists them and the values each takes). Send a change

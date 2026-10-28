@@ -535,8 +535,11 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         <div className="model-node__source-stale nodrag nopan" role="status">
           <strong>Out of date — source updated</strong>
           {nodeData.outputFreshness.outOfDateReasons.map((reason) => <span key={reason}>{reason}</span>)}
-          {nodeData.outputFreshness.runId && <button type="button" disabled={isExecuting || !latestPaperSourceReady}
-            title={latestPaperSourceReady ? 'Reuse the saved recipe with the latest exported artwork' : 'Refresh or reconnect the Paper source first'}
+          {/* Review 7, L5: canvasLock's order (run, then following, then offline). */}
+          {nodeData.outputFreshness.runId && <button type="button"
+            {...lock.act({ disabled: !latestPaperSourceReady,
+              title: latestPaperSourceReady ? 'Reuse the saved recipe with the latest exported artwork' : 'Refresh or reconnect the Paper source first' },
+            { run: isExecuting })}
             onClick={(event) => {
             event.stopPropagation();
             const runId = nodeData.outputFreshness?.runId;

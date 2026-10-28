@@ -58,8 +58,6 @@ export function RunHistoryPanel() {
   // agent's switch (GM round 22, A: one state, lib/canvasLock): Rerun,
   // Retry, Recover and Forget ID are disabled and look it.
   const lock = useCanvasLock();
-  const locked = lock.locked;
-  const off = lock.mark;
 
   const [now, setNow] = useState(() => Date.now());
   const [clearingRecovery, setClearingRecovery] = useState<string | null>(null);
@@ -175,14 +173,13 @@ export function RunHistoryPanel() {
                       <button
                         type="button"
                         onClick={() => setConfirmingForget({ runId: checkpoint.runId, nodeId: checkpoint.nodeId })}
-                        disabled={isExecuting || clearingRecovery === key || locked}
-                        {...off}
+                        // Review 7, L5: canvasLock's order (run, then
+                        // following, then offline); GM, round 15 of PR #114's title.
+                        {...lock.act({ disabled: clearingRecovery === key, title: FORGET_TITLE }, { run: isExecuting })}
                         // GM, round 14: its name says which ID it forgets;
                         // its row (node and ID) stays its description.
                         aria-label={forgetAriaLabel(recordNodeName(nodes, checkpoint.nodeId, true))}
                         aria-describedby={`run-history-recovery-${key}`}
-                        // GM, round 15 of PR #114.
-                        title={FORGET_TITLE}
                       >
                         <ShieldCheck size={11} aria-hidden="true" />
                         {clearingRecovery === key ? 'Clearing…' : FORGET_LABEL}

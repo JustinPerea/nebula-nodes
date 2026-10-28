@@ -416,8 +416,16 @@ body adds `code: "rendering_shots"` and `rendering: {"shotIds": [...],
 "shots": [...], "stoppable": ...}`, and nothing in that write was taken): stop
 that run (`nebula cancel <id>`) or wait, then try again. Other refusals of a
 whole edit have a `code` over HTTP too (`workspace_moved` with the `project`
-open now and `switchedBy`, `paid_start`, `approved_run`); `nebula` prints the
-detail. A shot run holds the
+open now and `switchedBy`, `canvas_replaced` when the canvas was cleared or
+replaced since, with the same fields, `paid_start`, `approved_run`); `nebula`
+prints the detail. A scene write (`nebula set n4 scene=…`) is held to
+the scene you last read (`nebula look`, the export, or your own last write
+of it; over HTTP an explicit `ifSceneKey`, each scene's key being in
+`sceneKeys`): when the person or another agent changed it since, it is
+refused (409 `scene_changed`, with `scene`, `sceneKey` and `changedBy`) and
+nothing is saved, so read it again and put your change on top. A scene you
+never read is written as you send it. The person's canvas merges your change
+into theirs and only asks them when you both changed the same thing. A shot run holds the
 scenes upstream of it too, until it ends. A saved project, a graph file you
 import (`nebula load`, also when you load it) and the person's own edits are
 never refused for their scene: what can't be read is converted (see

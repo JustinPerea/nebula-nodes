@@ -173,7 +173,8 @@ describe('H1: a canvas replacement takes a scene\'s kept edits with it, and name
     await sleep(400);
     const before = h.puts.length;
     expect(before).toBe(9); // the first try and 8 timed retries (L2), then it waits
-    expect(unsaved()).toBe("Couldn't save your changes to “Opening”. They're kept and Nebula will try again.");
+    // GM r11 answer 3: stopped; the line says the next change sends them.
+    expect(unsaved()).toBe("Couldn't save your changes to “Opening”. They're kept and Nebula will try again with your next change.");
     h.answer([ok]);
     noteBackendConnection('offline');
     noteBackendConnection('online');
@@ -324,7 +325,10 @@ describe('L2-L5', () => {
     await sleep(500);
     expect(h.puts).toHaveLength(9);
     expect(said).toHaveLength(1);
-    expect(unsaved()).toBe("Couldn't save your changes to “Opening”. They're kept and Nebula will try again.");
+    // GM r11 answer 3: the stopped line, with [Try again] on its toast.
+    const stopped = "Couldn't save your changes to “Opening”. They're kept and Nebula will try again with your next change.";
+    expect(unsaved()).toBe(stopped);
+    expect(useGraphStore.getState().undoNotice).toMatchObject({ text: stopped, retryScene: { nodeId: 'n1' } });
   });
 
   it('L3: Undo while the removal is out, then its 409: no late line, no mark', async () => {

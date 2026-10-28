@@ -98,6 +98,8 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
   { file: 'store/graphStore.ts', text: '`${heading} ${KEPT_UNTIL_RUN_ENDS}`', why: "GM's heading over GM's fixed suffix" },
   { file: 'store/graphStore.ts', text: '`${heading} ${KEPT_AND_RETRYING}`', why: "GM's heading over GM's fixed suffix" },
   { file: 'store/graphStore.ts', text: '`${heading} ${BAD_SAVE}`', why: "GM's heading over GM's fixed suffix" },
+  // PR #198 fix round 8 (GM r11 answer 3): the stopped-after-8 line.
+  { file: 'lib/sceneSaveCopy.ts', text: '`${sceneSaveHeading(scene)} ${KEPT_UNTIL_NEXT_CHANGE}`', why: "GM's heading over GM's fixed suffix" },
     // The Agent log's raw save line: agents read the backend's own detail.
   { file: 'store/graphStore.ts', text: '`Couldn\'t save “${label}”, node ${nodeId}. ${detail || `HTTP ${status}`}`',
     why: "the Agent log's raw form (agents read the raw text)" },

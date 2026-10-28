@@ -25,10 +25,18 @@ export const KEPT_UNTIL_RUN_ENDS = "They're kept and will save when the run fini
 /** A server error, with the automatic retry the canvas makes (GM r9,
  * verbatim): "Couldn't save your changes to “Opening”. They're kept and
  * Nebula will try again."
- * After SCENE_SERVER_RETRIES timed tries (PR #198 review 6, L2) the timer
- * stops; the same line stays true, since the next sync, reconnect or edit
- * sends them again. */
+ * After SCENE_SERVER_RETRIES timed tries the timer stops: KEPT_UNTIL_NEXT_CHANGE. */
 export const KEPT_AND_RETRYING = "They're kept and Nebula will try again.";
+
+/** The timed retries stopped (GM r11 answer 3, verbatim): "Couldn't save
+ * your changes to “Opening”. They're kept and Nebula will try again with your
+ * next change.", with [Try again]. A reconnect still sends them by itself. */
+export const KEPT_UNTIL_NEXT_CHANGE = "They're kept and Nebula will try again with your next change.";
+/** GM r11 answer 3: the line once the timed retries stopped. */
+export function sceneStoppedLine(scene: string): string {
+  return `${sceneSaveHeading(scene)} ${KEPT_UNTIL_NEXT_CHANGE}`;
+}
+export const TRY_AGAIN = 'Try again';
 
 /** 404, the node was deleted elsewhere (GM r7, verbatim): no promise. */
 export const DELETED_ELSEWHERE = 'It was deleted in another window.';
@@ -62,6 +70,37 @@ export function sceneClashLine(scene: string, agent: string | null): string {
   return agent
     ? `${agent} changed “${scene}” while you were editing it. Choose which version to keep.`
     : `“${scene}” was changed in another window while you were editing it.`;
+}
+
+/** GM r10 answer 3: each kind of clash its own line, verbatim. Both sides
+ * reordered the shots: "Codex reordered the shots in “Opening” while you
+ * were editing them." The other side removed a shot the person changed:
+ * "Codex removed “Shot 2” while you were editing it." With no agent, "…in
+ * another window…" in the same shapes. Builder's plural for GM: two or more
+ * shots removed, "“Shot 2” and “Shot 3” … while you were editing them". */
+export function sceneReorderedLine(scene: string, agent: string | null): string {
+  return agent
+    ? `${agent} reordered the shots in “${scene}” while you were editing them.`
+    : `The shots in “${scene}” were reordered in another window while you were editing them.`;
+}
+export function shotsRemovedLine(shots: readonly string[], agent: string | null): string {
+  const names = quotedList(shots);
+  const them = shots.length === 1 ? 'it' : 'them';
+  return agent
+    ? `${agent} removed ${names} while you were editing ${them}.`
+    : `${names} ${shots.length === 1 ? 'was' : 'were'} removed in another window while you were editing ${them}.`;
+}
+const quotedList = (names: readonly string[]): string => {
+  const quoted = names.map((name) => `“${name}”`);
+  return quoted.length <= 1 ? (quoted[0] ?? '') : `${quoted.slice(0, -1).join(', ')} and ${quoted[quoted.length - 1]}`;
+};
+
+/** GM r11 answer 4: Keep mine brought a removed shot back, and a connection
+ * of it can't come back (the other end is gone, or a single-connection input
+ * now holds another connection, which is never replaced). Builder's plural
+ * for GM: "…without its connections to “Edit A” and “Edit B”." */
+export function shotBackWithoutLine(shot: string, targets: readonly string[]): string {
+  return `“${shot}” is back without its ${targets.length === 1 ? 'connection' : 'connections'} to ${quotedList(targets)}.`;
 }
 /** The clash's two buttons (GM r9). */
 export const KEEP_MINE = 'Keep mine';

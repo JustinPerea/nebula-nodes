@@ -23,6 +23,7 @@ vi.mock('../src/lib/paramsOutdated', async (original) => ({
 vi.mock('../src/lib/projects', async (original) => ({
   ...await original<typeof import('../src/lib/projects')>(),
   listProjects: vi.fn(), getProject: vi.fn(), saveProject: vi.fn(), recoverProject: vi.fn(), openProject: vi.fn(),
+  restoreProject: vi.fn(),
 }));
 
 import { projectRetryOffer, useProjectStore, resetProjectStoreForTests, subscribeProjectAutosave } from '../src/store/projectStore';
@@ -554,14 +555,14 @@ describe('a params stop that an Open moved past', () => {
 // PR #198 fix round 7 (GM r9 decision 1): back from the reload, the tab opens
 // the recovered copy with GM's notice; it never lands on Projects silently.
 describe('after a reload for an update', () => {
-  async function reloadedTab(listed: SavedProject[]) {
+  async function reloadedTab(listed: SavedProject[], trash: unknown[] = []) {
     unsubscribe?.(); unsubscribe = null;
     resetProjectStoreForTests();
     useProjectStore.setState(initial, true);
     setProjectContext(null);
     window.sessionStorage.setItem('nebula:recoveredForUpdate', JSON.stringify({ id: 'recovered', name: 'alpha (recovered)' }));
-    vi.mocked(projects.listProjects).mockResolvedValue({ projects: listed, activeProjectId: 'alpha',
-      workspaceRevision: 'rev-a', paramsVersion: GRAPH_PARAMS_VERSION });
+    vi.mocked(projects.listProjects).mockResolvedValue({ projects: listed, trash, activeProjectId: 'alpha',
+      workspaceRevision: 'rev-a', paramsVersion: GRAPH_PARAMS_VERSION } as never);
     vi.mocked(projects.openProject).mockResolvedValue({ project: { ...project('recovered'), name: 'alpha (recovered)' },
       workspaceRevision: 'rev-r', paramsVersion: GRAPH_PARAMS_VERSION } as never);
     const said: string[] = [];
@@ -579,10 +580,48 @@ describe('after a reload for an update', () => {
     expect(window.sessionStorage.getItem('nebula:recoveredForUpdate')).toBeNull();
   });
 
-  it('a copy that is gone: the notice on Projects, not nothing', async () => {
+  it('a copy deleted for good: GM r11\'s line, with Dismiss only (the reload left the tab none of the edits)', async () => {
     await reloadedTab([project()]);
     expect(projects.openProject).not.toHaveBeenCalled();
-    expect(useProjectStore.getState().error).toBe(
-      "These are the changes Nebula couldn't save before it updated. They're in “alpha (recovered)”.");
+    const state = useProjectStore.getState();
+    expect(state.error).toBe(
+      "Nebula couldn't save these changes before it updated. They were kept in “alpha (recovered)”, which was permanently deleted.");
+    expect(projectRetryOffer(state)).toBe('dismiss');
+    await state.retry();
+    expect(useProjectStore.getState().error).toBeNull();
+    expect(projects.listProjects).toHaveBeenCalledTimes(2);
+  });
+
+  it('a copy in Recently deleted: GM r11\'s line with Restore, which restores and opens it', async () => {
+    const trashed = { ...project('recovered'), name: 'alpha (recovered)', deletedAt: '2026-10-28T00:00:00Z', purgeAt: '2026-11-27T00:00:00Z' };
+    const said = await reloadedTab([project()], [trashed]);
+    const state = useProjectStore.getState();
+    expect(state.error).toBe(
+      "Nebula couldn't save these changes before it updated. They were kept in “alpha (recovered)”, which is in Recently deleted.");
+    expect(projectRetryOffer(state)).toBe('restore');
+    vi.mocked(projects.restoreProject).mockResolvedValue({ ...project('recovered'), name: 'alpha (recovered)' } as never);
+    await state.retry();
+    expect(projects.restoreProject).toHaveBeenCalledWith('recovered');
+    await vi.waitFor(() => expect(projects.openProject).toHaveBeenCalledWith('recovered', expect.anything()));
+    await vi.waitFor(() => expect(said).toEqual([
+      "These are the changes Nebula couldn't save before it updated. They're in “alpha (recovered)”."]));
+    expect(useProjectStore.getState().activeProject?.id).toBe('recovered');
+  });
+
+  it('a copy that won\'t open: the notice anyway, with the open\'s own retry', async () => {
+    vi.mocked(projects.openProject).mockReset();
+    const listed = [project(), { ...project('recovered'), name: 'alpha (recovered)' }];
+    unsubscribe?.(); unsubscribe = null;
+    resetProjectStoreForTests();
+    useProjectStore.setState(initial, true);
+    setProjectContext(null);
+    window.sessionStorage.setItem('nebula:recoveredForUpdate', JSON.stringify({ id: 'recovered', name: 'alpha (recovered)' }));
+    vi.mocked(projects.listProjects).mockResolvedValue({ projects: listed, activeProjectId: 'alpha',
+      workspaceRevision: 'rev-a', paramsVersion: GRAPH_PARAMS_VERSION });
+    vi.mocked(projects.openProject).mockRejectedValue(new Error('boom'));
+    await useProjectStore.getState().initialize();
+    await vi.waitFor(() => expect(useProjectStore.getState().error).toMatch(
+      /^These are the changes Nebula couldn't save before it updated\. They're in “alpha \(recovered\)”\. ./));
+    expect(useProjectStore.getState().errorRetry).toMatchObject({ reopen: 'recovered' });
   });
 });

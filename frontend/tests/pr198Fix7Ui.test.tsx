@@ -156,6 +156,38 @@ describe('GM r9 bug 1: no tooltip starts with a "Delete:"-style prefix', () => {
   });
 });
 
+describe('fix round 8, L5 (review 7): the last run-locked buttons read canvasLock\'s order', () => {
+  it('DeferredRunNotice\'s Run: the run line, no following mark, while running and following', async () => {
+    const { DeferredRunNotice } = await import('../src/components/canvas/DeferredRunNotice');
+    const { useCanvasProposalsStore } = await import('../src/store/canvasProposalsStore');
+    useCanvasProposalsStore.setState({ deferredRun: { agentName: 'Codex', nodeIds: ['n1'] } } as never);
+    follow();
+    act(() => useGraphStore.setState({ isExecuting: true }));
+    render(<DeferredRunNotice />);
+    const run = screen.getByRole('button', { name: /Run/ });
+    expect(run).toBeDisabled();
+    expect(run.getAttribute('title')).toBe(RUN_LOCK_REASON);
+    expect(run.hasAttribute(FOLLOWING_MARK)).toBe(false);
+    act(() => useGraphStore.setState({ isExecuting: false }));
+    expect(screen.getByRole('button', { name: /Run/ }).getAttribute('title')).toBe(WAIT);
+    useCanvasProposalsStore.setState({ deferredRun: null } as never);
+  });
+
+  it('the sources: Rerun with latest source, Forget and the deferred Run go through lock.act with the run', () => {
+    const root = resolve(__dirname, '../src/components');
+    const sites: [string, RegExp][] = [
+      ['nodes/ModelNode.tsx', /lock\.act\(\{ disabled: !latestPaperSourceReady,[\s\S]{0,240}\{ run: isExecuting \}\)\}\s*onClick[\s\S]{0,240}Rerun with latest source/],
+      ['panels/RunHistoryPanel.tsx', /lock\.act\(\{ disabled: clearingRecovery === key, title: FORGET_TITLE \}, \{ run: isExecuting \}\)/],
+      ['canvas/DeferredRunNotice.tsx', /lock\.act\(\{\}, \{ run: isExecuting \|\| runStarting \}\)/],
+    ];
+    for (const [file, pattern] of sites) {
+      const source = readFileSync(resolve(root, file), 'utf8');
+      expect(source, file).toMatch(pattern);
+      expect(source, file).not.toMatch(/disabled=\{isExecuting \|\| (!latestPaperSourceReady|clearingRecovery|runStarting)/);
+    }
+  });
+});
+
 describe('L7: the notice region keeps clear of the docked Agent log', () => {
   const rect = (left: number, right: number, top: number, bottom: number) =>
     ({ left, right, top, bottom, width: right - left, height: bottom - top, x: left, y: top, toJSON: () => ({}) }) as DOMRect;

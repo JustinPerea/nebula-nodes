@@ -23,6 +23,9 @@ import type { CinemaSceneSpec, CinemaShot } from '../types';
 export interface SceneField { shot: string | null; key: string }
 export const ORDER = '#order';
 export const PRESENCE = '#shot';
+/** The whole scene (fix round 8, H1): a merge that couldn't be made is one
+ * clash over everything, so the person still chooses and nothing is lost. */
+export const WHOLE = '#scene';
 const RUNTIME = new Set(['output', 'variations', 'selectedVariation']);
 
 type Same = (a: unknown, b: unknown) => boolean;
@@ -125,11 +128,23 @@ export function withFields(target: CinemaSceneSpec, fields: readonly SceneField[
   const out = { ...target, shots: target.shots.map((shot) => ({ ...shot })) } as CinemaSceneSpec & Record<string, unknown>;
   const S = byId(source);
   for (const field of fields) {
-    if (field.shot === null && field.key === ORDER) {
+    if (field.shot === null && field.key === WHOLE) {
+      return structuredCloneJson(source);
+    } else if (field.shot === null && field.key === ORDER) {
+      // The shots both sides have go in `source`'s order, in the slots they
+      // hold now; the rest stay where they are. The next id is taken once
+      // per slot, outside any search's callback (fix round 8, H1: an index
+      // moved inside `find` ran past the list and emptied every shot).
       const common = out.shots.filter((shot) => S.has(shot.id)).map((shot) => shot.id);
       const sorted = inOrder(common, source.shots.map((shot) => shot.id));
+      const byIdNow = new Map(out.shots.map((shot) => [shot.id, shot]));
       let next = 0;
-      out.shots = out.shots.map((shot) => (S.has(shot.id) ? out.shots.find((candidate) => candidate.id === sorted[next++])! : shot));
+      out.shots = out.shots.map((shot) => {
+        if (!S.has(shot.id)) return shot;
+        const id = sorted[next];
+        next += 1;
+        return byIdNow.get(id)!;
+      });
     } else if (field.shot === null) {
       setField(out, field.key, source as never);
     } else if (field.key === PRESENCE) {

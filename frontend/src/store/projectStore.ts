@@ -72,17 +72,24 @@ export type ProjectRetry =
   | { action: 'cover'; id: string; url: string | null }
   /** GM r9 decision 1: [Reload Nebula] after an update, with the edits kept
    * in their recovered copy; the reload opens it. */
-  | { action: 'reloadForUpdate'; version: number | null };
+  | { action: 'reloadForUpdate'; version: number | null }
+  /** GM r11 answer 2: the recovered copy after an update is in Recently
+   * deleted: [Restore] restores and opens it. */
+  | { action: 'restoreCopy'; id: string; name: string }
+  /** A notice that only goes away: [Dismiss] (GM r11 answer 2's permanent case). */
+  | { action: 'dismiss' };
 
 /** What the Projects screen offers beside its error: 'redo' (Try again
  * redoes the failure, so the reason is GM's short line), 'reload' (Try again
  * reloads the saved projects, as the line says; the whole line stays) or
  * 'none' (no Try again; the whole line). */
-export type ProjectRetryOffer = 'redo' | 'reload' | 'none' | 'reloadNebula';
+export type ProjectRetryOffer = 'redo' | 'reload' | 'none' | 'reloadNebula' | 'restore' | 'dismiss';
 
 export function projectRetryOffer(state: { error: string | null; errorRetry: ProjectRetry | null }): ProjectRetryOffer {
   if (!state.error || !state.errorRetry) return 'none';
   if (state.errorRetry.action === 'reloadForUpdate') return 'reloadNebula';
+  if (state.errorRetry.action === 'restoreCopy') return 'restore';
+  if (state.errorRetry.action === 'dismiss') return 'dismiss';
   return state.errorRetry.action === 'load' && state.errorRetry.full ? 'reload' : 'redo';
 }
 
@@ -536,7 +543,7 @@ const RETRY_HEADINGS: Record<ProjectRetry['action'], string> = {
   create: "Couldn't create the project.", rename: "Couldn't rename the project.", delete: "Couldn't delete the project.",
   restore: "Couldn't restore the project.", purge: "Couldn't delete the project for good.",
   emptyTrash: "Couldn't empty Recently deleted.", cover: "Couldn't set the cover.",
-  reloadForUpdate: LOAD_HEADING,
+  reloadForUpdate: LOAD_HEADING, restoreCopy: "Couldn't restore the project.", dismiss: LOAD_HEADING,
 };
 /** Show `error` with what Try again does for it: `retry`, unless the backend
  * refused for good (then no Try again). The line is GM's mapping (error copy
@@ -821,23 +828,39 @@ export function reloadForUpdateLine(project: string): string {
 export function openedAfterUpdateLine(copy: string): string {
   return `These are the changes Nebula couldn't save before it updated. They're in “${copy}”.`;
 }
+/** GM r11 answer 2, verbatim but for “X”: the copy was deleted before the
+ * reload opened it. */
+export function copyDeletedAfterUpdateLine(copy: string, permanently: boolean): string {
+  return `Nebula couldn't save these changes before it updated. They were kept in “${copy}”, which ${
+    permanently ? 'was permanently deleted' : 'is in Recently deleted'}.`;
+}
 
 /** After a reload for an update: the copy the edits went to opens, with GM's
- * notice; a copy that is gone says the notice on Projects. */
+ * notice. A copy in Recently deleted says so with [Restore]; one deleted for
+ * good says so with [Dismiss] only: the reload left this tab none of the
+ * edits (sessionStorage keeps the copy's id and name), so there is nothing
+ * to apply (GM r11 answer 2's permanent case). A copy that won't open says
+ * the notice anyway. */
 async function openCopyAfterUpdate(): Promise<void> {
   const copy = takeCopyForUpdate();
   if (!copy) return;
   const store = useProjectStore.getState();
   if (!store.projects.some((project) => project.id === copy.id)) {
-    useProjectStore.setState({ screen: 'home', error: openedAfterUpdateLine(copy.name), errorRetry: null });
+    const trashed = store.trash.find((entry) => entry.id === copy.id);
+    const name = trashed?.name || copy.name;
+    useProjectStore.setState({ screen: 'home', error: copyDeletedAfterUpdateLine(name, !trashed), errorDetails: null,
+      errorRetry: trashed ? { action: 'restoreCopy', id: copy.id, name } : { action: 'dismiss' } });
     return;
   }
   await store.open(copy.id);
   const opened = useProjectStore.getState();
   if (opened.activeProject?.id === copy.id && opened.screen === 'workspace') {
     useGraphStore.getState().notify(openedAfterUpdateLine(copy.name), 'info');
-  } else if (!opened.error) {
-    useProjectStore.setState({ error: openedAfterUpdateLine(copy.name), errorRetry: null });
+  } else if (opened.screen !== 'workspace') {
+    // Review 7, L4: the open's failure is the person's to retry from the
+    // copy's card; the notice says where the changes are first.
+    useProjectStore.setState({ error: opened.error ? sentences(openedAfterUpdateLine(copy.name), opened.error) : openedAfterUpdateLine(copy.name),
+      errorRetry: opened.error ? opened.errorRetry : { action: 'dismiss' } });
   }
 }
 
@@ -1836,6 +1859,17 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
     }
     set({ error: null, errorRetry: null });
     switch (failed?.action) {
+      case 'dismiss': return;
+      case 'restoreCopy': {
+        await get().restore(failed.id);
+        if (!get().projects.some((project) => project.id === failed.id)) return;
+        await get().open(failed.id);
+        const opened = get();
+        if (opened.activeProject?.id === failed.id && opened.screen === 'workspace') {
+          useGraphStore.getState().notify(openedAfterUpdateLine(failed.name), 'info');
+        }
+        return;
+      }
       case 'save': return get().retrySave();
       case 'open': return get().open(failed.id);
       case 'create': return get().createProject(failed.name, failed.then);
