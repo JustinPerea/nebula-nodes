@@ -293,7 +293,7 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     h.release();
     await sleep(60);
     expect(brief()).toEqual(['s1:during the run', 's2:b']);
-    expect(said).toEqual(["Couldn't save your changes to “Opening”. Your changes are kept and will save when the run finishes."]);
+    expect(said).toEqual(["Couldn't save your changes to “Opening”. They're kept and will save when the run finishes."]);
     h.answerLater(() => json({ ok: true }));
     socketSends({ type: 'executionComplete', runId: 'other-run' });
     socketSends({ type: 'graphSync', ...base, empty: false, ...backendGraph(), runParams: 'other-run' });
@@ -311,7 +311,7 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     await sleep(20);
     h.release();
     await sleep(60);
-    expect(said[0]).toBe("Couldn't save your changes to “Opening”. Your changes are kept and will save when the run finishes.");
+    expect(said[0]).toBe("Couldn't save your changes to “Opening”. They're kept and will save when the run finishes.");
     await sleep(200);
     expect(h.puts.at(-1)).toEqual(['s1:held', 's2:b']);
     expect(unsaved()).toBeNull();
@@ -323,7 +323,7 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     await sleep(20);
     h.release();
     await sleep(40);
-    expect(said).toEqual(["Couldn't save your changes to “Opening”. Your changes are kept. Nebula will try again."]);
+    expect(said).toEqual(["Couldn't save your changes to “Opening”. They're kept and Nebula will try again."]);
     expect(brief()[0]).toBe('s1:retry me');
     await sleep(200);
     expect(h.puts).toEqual([['s1:retry me', 's2:b'], ['s1:retry me', 's2:b']]);
@@ -396,8 +396,8 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
 
   it('the copy is in constants for GM', () => {
     expect(copy.SCENE_TOO_BIG).toBe('The project is too big to save. Remove something and Nebula will save your changes.');
-    expect(copy.KEPT_UNTIL_RUN_ENDS).toBe('Your changes are kept and will save when the run finishes.');
-    expect(copy.KEPT_AND_RETRYING).toBe('Your changes are kept. Nebula will try again.');
+    expect(copy.KEPT_UNTIL_RUN_ENDS).toBe("They're kept and will save when the run finishes.");
+    expect(copy.KEPT_AND_RETRYING).toBe("They're kept and Nebula will try again.");
   });
 
   it('a kept removal never goes out after a run paid for that shot\'s image', async () => {

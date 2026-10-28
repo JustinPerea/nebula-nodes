@@ -27,7 +27,11 @@
   --notice-max-w: 560px;
   position: fixed;
   left: var(--page-gutter, 16px);
-  right: var(--page-gutter, 16px);
+  /* PR #198 review 6, L7 (GM r9: "Keep clear of the docked log"): the
+     Agent log on the right edge takes its width out of the region
+     (AgentLog writes --agent-log-clearance), so a wrapped toast never
+     covers it; the stack centres in what is left. */
+  right: max(var(--page-gutter, 16px), var(--agent-log-clearance, 0px));
   bottom: calc(var(--bottom-bar-clearance, calc(var(--sr-space-6, 24px) - var(--notice-gap))) + var(--notice-gap));
   z-index: var(--sr-layer-notice, 58);
   display: flex;

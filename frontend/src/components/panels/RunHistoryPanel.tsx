@@ -22,8 +22,8 @@ import {
 } from '../../lib/runHistory';
 import '../../styles/panels.css';
 import '../../styles/run-history.css';
-import { useCanvasLock } from '../../lib/canvasLock';
-import { OFFLINE_VERBS, offlineReason } from '../../lib/useBackendOffline';
+import { lockedAction, useCanvasLock } from '../../lib/canvasLock';
+import { OFFLINE_VERBS } from '../../lib/useBackendOffline';
 
 const STATUS_LABEL: Record<RunRecord['status'], string> = {
   running: 'Running',
@@ -263,21 +263,18 @@ export function RunHistoryPanel() {
                           if (r.status === 'failed') void retryFailedRun(r.id);
                           else void rerunHistoryRecord(r.id);
                         }}
-                        disabled={isExecuting || locked}
-                        {...off}
+                        // L6 (GM r9 answer 3): one order, as the toolbar's:
+                        // the run, then following, then offline (lib/canvasLock).
+                        {...lockedAction(lock, { title: recoveryReplayReady
+                          ? 'Resume this run from its saved checkpoint'
+                          : 'Run this again with the same nodes and settings' },
+                        // GM (#200 r4 item 2): "You can rerun it when Nebula reconnects."
+                        { verb: recoveryReplayReady || r.status === 'failed' ? undefined : OFFLINE_VERBS.rerun, run: isExecuting })}
                         aria-label={recoveryReplayReady
                           ? `Recover ${runTriggerLabel(r.trigger)} run`
                           : r.status === 'failed'
                           ? `Retry failed ${runTriggerLabel(r.trigger)} run`
                           : `Rerun ${runTriggerLabel(r.trigger)}`}
-                        title={lock.offline && !lock.following
-                          // GM (#200 r4 item 2): "You can rerun it when Nebula reconnects."
-                          ? offlineReason(recoveryReplayReady || r.status === 'failed' ? undefined : OFFLINE_VERBS.rerun)
-                          : isExecuting
-                          ? 'Wait for the run to finish first.'
-                          : recoveryReplayReady
-                            ? 'Resume this run from its saved checkpoint'
-                            : 'Run this again with the same nodes and settings'}
                       >
                         <RotateCcw size={11} strokeWidth={2} aria-hidden="true" focusable="false" />
                         {recoveryReplayReady ? 'Recover' : r.status === 'failed' ? 'Retry failed' : 'Rerun'}
@@ -286,17 +283,11 @@ export function RunHistoryPanel() {
                         <button
                           type="button"
                           className="run-history__replay"
-                          disabled={isExecuting || !latestSourceReady || locked}
-                          {...off}
+                          {...lockedAction(lock, { disabled: !latestSourceReady, title: latestSourceReady
+                            ? 'Run again with the same settings and the latest artwork from Paper'
+                            : 'Refresh or reconnect the Paper source first.' }, { verb: OFFLINE_VERBS.rerun, run: isExecuting })}
                           onClick={() => void rerunHistoryWithLatestPaperSource(r.id)}
                           aria-label={`Rerun ${runTriggerLabel(r.trigger)} with latest source`}
-                          title={lock.offline && !lock.following
-                            ? offlineReason(OFFLINE_VERBS.rerun)
-                            : isExecuting
-                            ? 'Wait for the run to finish first.'
-                            : latestSourceReady
-                              ? 'Run again with the same settings and the latest artwork from Paper'
-                              : 'Refresh or reconnect the Paper source first.'}
                         >Rerun with latest source</button>
                       )}
                     </span>

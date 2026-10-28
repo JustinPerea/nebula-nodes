@@ -23,7 +23,6 @@ import {
   selectedNodeIds,
 } from '../lib/canvasSelection';
 import { failureMessage } from '../lib/errorCopy';
-import { RUN_LOCK_REASON } from '../lib/cinemaScene';
 import { useCanvasLock } from '../lib/canvasLock';
 
 
@@ -39,12 +38,10 @@ export function SelectionToolbar() {
   // for “<project>” to open." while following; Copy, Download and the
   // node's Settings stay.
   const lock = useCanvasLock();
-  // A control this tab's own run also locks (#198's run lock): while that run
-  // goes, its reason wins over following's or offline's (GM, #198 r8 merge
-  // check), so each control says one reason and the two never collide.
-  const runLocked = (running: boolean, own: { disabled?: boolean; title?: string }) => (running
-    ? { ...lock.act(own), disabled: true, title: RUN_LOCK_REASON }
-    : lock.act(own));
+  // A control this tab's own run also locks (#198's run lock): its reason
+  // wins over following's and offline's, in lib/canvasLock (GM r9 answer 3:
+  // run, follow, offline; the Next step its node portals here reads the same).
+  const runLocked = (running: boolean, own: { disabled?: boolean; title?: string }) => lock.act(own, { run: running });
   const executeNode = useGraphStore((state) => state.executeNode);
   const executeCluster = useGraphStore((state) => state.executeCluster);
   const copySelected = useGraphStore((state) => state.copySelected);

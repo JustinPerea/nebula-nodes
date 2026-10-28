@@ -1294,8 +1294,9 @@ def edit_canvas(
     ids, their rail numbers and whether a Stop can end them yet). A shot run
     holds the scenes upstream of it the same way until it ends. Over HTTP the
     other whole-edit refusals carry a `code` beside the detail too:
-    `workspace_moved` (another project opened or the canvas was replaced
-    since; with `project` and `switchedBy`), `paid_start`, `approved_run`
+    `workspace_moved` (another project opened since) or `canvas_replaced`
+    (the canvas was cleared or replaced since), both with `project` and
+    `switchedBy`, `paid_start`, `approved_run`
     (docs/MCP-SETUP.md, Cinema scenes over MCP); here you read the detail.
     Who bills a run is the person's call: Krea billing (`_kreaAuth`: API token
     or the Krea plan) and a multi-provider node's route (`_provider`: a route id

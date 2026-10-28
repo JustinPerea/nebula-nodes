@@ -69,16 +69,20 @@ export type ProjectRetry =
   | { action: 'restore'; id: string }
   | { action: 'purge'; id: string }
   | { action: 'emptyTrash'; ids: string[] }
-  | { action: 'cover'; id: string; url: string | null };
+  | { action: 'cover'; id: string; url: string | null }
+  /** GM r9 decision 1: [Reload Nebula] after an update, with the edits kept
+   * in their recovered copy; the reload opens it. */
+  | { action: 'reloadForUpdate'; version: number | null };
 
 /** What the Projects screen offers beside its error: 'redo' (Try again
  * redoes the failure, so the reason is GM's short line), 'reload' (Try again
  * reloads the saved projects, as the line says; the whole line stays) or
  * 'none' (no Try again; the whole line). */
-export type ProjectRetryOffer = 'redo' | 'reload' | 'none';
+export type ProjectRetryOffer = 'redo' | 'reload' | 'none' | 'reloadNebula';
 
 export function projectRetryOffer(state: { error: string | null; errorRetry: ProjectRetry | null }): ProjectRetryOffer {
   if (!state.error || !state.errorRetry) return 'none';
+  if (state.errorRetry.action === 'reloadForUpdate') return 'reloadNebula';
   return state.errorRetry.action === 'load' && state.errorRetry.full ? 'reload' : 'redo';
 }
 
@@ -283,6 +287,12 @@ let reloadingForParams = false;
  * window whose frontend build is still older after a reload stops instead of
  * reloading again. */
 const PARAMS_RELOAD_KEY = 'nebula:paramsReloadedFor';
+/** GM r9 decision 1: the recovered copy an update's stop saved the edits to
+ * ({id, name}), kept across the reload, so the reloaded tab opens it with
+ * GM's notice instead of landing on Projects silently. Written as soon as the
+ * copy exists, so any reload (the button, the person's own, a forced one)
+ * finds it. */
+const RECOVERED_FOR_UPDATE_KEY = 'nebula:recoveredForUpdate';
 /** Projects lists again on every projectsChanged (another writer made,
  * renamed, saved or deleted a project). Off Projects it waits for goHome. */
 let listingStale = false;
@@ -526,6 +536,7 @@ const RETRY_HEADINGS: Record<ProjectRetry['action'], string> = {
   create: "Couldn't create the project.", rename: "Couldn't rename the project.", delete: "Couldn't delete the project.",
   restore: "Couldn't restore the project.", purge: "Couldn't delete the project for good.",
   emptyTrash: "Couldn't empty Recently deleted.", cover: "Couldn't set the cover.",
+  reloadForUpdate: LOAD_HEADING,
 };
 /** Show `error` with what Try again does for it: `retry`, unless the backend
  * refused for good (then no Try again). The line is GM's mapping (error copy
@@ -779,6 +790,56 @@ function reloadOnceFor(backendVersion: number | null): 'reload' | 'reloaded' | '
 function clearParamsReloadMark(): void {
   try { window.sessionStorage.removeItem(PARAMS_RELOAD_KEY); } catch { /* Nothing to clear. */ }
 }
+/** Whether this tab already reloaded for `backendVersion` (reloadOnceFor
+ * without marking it): 'reload' when it hasn't. */
+function reloadDueFor(backendVersion: number | null): 'reload' | 'reloaded' | 'unmarked' {
+  try {
+    return window.sessionStorage.getItem(PARAMS_RELOAD_KEY) === String(backendVersion ?? 'unknown') ? 'reloaded' : 'reload';
+  } catch { return 'unmarked'; }
+}
+function rememberCopyForUpdate(copy: { id: string; name: string }): boolean {
+  try {
+    window.sessionStorage.setItem(RECOVERED_FOR_UPDATE_KEY, JSON.stringify(copy));
+    return true;
+  } catch { return false; }
+}
+function takeCopyForUpdate(): { id: string; name: string } | null {
+  try {
+    const raw = window.sessionStorage.getItem(RECOVERED_FOR_UPDATE_KEY);
+    window.sessionStorage.removeItem(RECOVERED_FOR_UPDATE_KEY);
+    const copy = raw ? JSON.parse(raw) as { id?: unknown; name?: unknown } : null;
+    return copy && typeof copy.id === 'string' && typeof copy.name === 'string' ? { id: copy.id, name: copy.name } : null;
+  } catch { return null; }
+}
+
+/** GM r8 (the line beside [Reload Nebula]) and r9 decision 1 (the notice
+ * after the reload), verbatim but for “X”: the stop keeps a whole project's
+ * edits, so the builder's form drops the scene's name. */
+export function reloadForUpdateLine(project: string): string {
+  return `Couldn't save your changes because Nebula was updated. Reload Nebula and they'll open in a recovered copy of “${project}”.`;
+}
+export function openedAfterUpdateLine(copy: string): string {
+  return `These are the changes Nebula couldn't save before it updated. They're in “${copy}”.`;
+}
+
+/** After a reload for an update: the copy the edits went to opens, with GM's
+ * notice; a copy that is gone says the notice on Projects. */
+async function openCopyAfterUpdate(): Promise<void> {
+  const copy = takeCopyForUpdate();
+  if (!copy) return;
+  const store = useProjectStore.getState();
+  if (!store.projects.some((project) => project.id === copy.id)) {
+    useProjectStore.setState({ screen: 'home', error: openedAfterUpdateLine(copy.name), errorRetry: null });
+    return;
+  }
+  await store.open(copy.id);
+  const opened = useProjectStore.getState();
+  if (opened.activeProject?.id === copy.id && opened.screen === 'workspace') {
+    useGraphStore.getState().notify(openedAfterUpdateLine(copy.name), 'info');
+  } else if (!opened.error) {
+    useProjectStore.setState({ error: openedAfterUpdateLine(copy.name), errorRetry: null });
+  }
+}
 
 const PARAMS_UPDATED = 'Nebula was updated while this tab was open.';
 /** The backend runs another params version than this bundle (graphSync, the
@@ -817,6 +878,17 @@ function handleParamsVersionChange(backendVersion: number | null): Promise<void>
     const kept = recovered ? ' Your unsaved edits were saved as a recovered project.' : ' Your saved work is kept.';
     useProjectStore.setState({ dirty: false });
     const newer = backendVersion === null || backendVersion > GRAPH_PARAMS_VERSION;
+    // GM r9 decision 1: with edits kept in a recovered copy, Nebula never
+    // reloads by itself; GM's line and [Reload Nebula] wait for the person,
+    // and the reload opens the copy (openCopyAfterUpdate). The copy is
+    // remembered first, so a reload that comes anyway still opens it.
+    const copy = recovered ? lastRecoveredCopy : null;
+    if (copy && newer && !editsDownloaded && reloadDueFor(backendVersion) === 'reload' && rememberCopyForUpdate(copy)) {
+      const source = useProjectStore.getState().activeProject?.name
+        ?? copy.name.replace(/ \(recovered\)$/, '');
+      useProjectStore.setState({ error: reloadForUpdateLine(source), errorRetry: { action: 'reloadForUpdate', version: backendVersion } });
+      return;
+    }
     const marked = newer ? reloadOnceFor(backendVersion) : null;
     // After a download the tab asks for the reload it would make (the
     // 'unmarked' line; the mark counts the person's reload): reloading now
@@ -1130,7 +1202,10 @@ function releaseLoadedProject(): void {
 
 /** Load what the backend has open now (the listing and its active project).
  * Startup, Retry, and following an agent's switch all come through here. */
+/** The last listing ran this bundle's params version (loadWorkspace). */
+let backendParamsCurrent = false;
 async function loadWorkspace(): Promise<void> {
+  backendParamsCurrent = false;
   const set = useProjectStore.setState;
   const generation = ++listingGeneration;
   const list = await api.listProjects();
@@ -1141,6 +1216,7 @@ async function loadWorkspace(): Promise<void> {
     return;
   }
   clearParamsReloadMark();
+  backendParamsCurrent = true;
   if (generation === listingGeneration) set({ projects: list.projects, trash: list.trash ?? [] });
   set({ workspaceRevision: list.workspaceRevision });
   if (list.activeProjectId) {
@@ -1531,6 +1607,9 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
           errorRetry: refusedForGood(error) ? { action: 'load', full: true } : { action: 'load' } });
       }
       finally { set({ loading: false }); initializing = null; }
+      // GM r9 decision 1: back from a reload for an update, in the copy
+      // (once the projects are loaded, as Open on its card would).
+      if (backendParamsCurrent && get().initialized && !get().error) await openCopyAfterUpdate();
     })();
     return initializing;
   },
@@ -1748,6 +1827,13 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
   },
   retry: async () => {
     const failed = get().errorRetry;
+    if (failed?.action === 'reloadForUpdate') {
+      // The person's [Reload Nebula]: the reload is marked as this version's.
+      reloadingForParams = true;
+      reloadOnceFor(failed.version);
+      reloadPage();
+      return;
+    }
     set({ error: null, errorRetry: null });
     switch (failed?.action) {
       case 'save': return get().retrySave();

@@ -184,23 +184,28 @@ describe('Cinema scene persistence ordering', () => {
     expect(current().shots[0].prompt).toBe('Imported');
   });
 
-  it('keeps failed persistence on screen over an external update and retries on the next explicit edit', async () => {
-    transport.fetch.mockResolvedValueOnce({ ok: false, status: 409 }).mockResolvedValueOnce({ ok: true });
+  it('keeps failed persistence on screen over an external update, and asks before saving over it', async () => {
+    transport.fetch.mockResolvedValueOnce({ ok: false, status: 409 }).mockResolvedValue({ ok: true });
     edit(spec('Rejected'));
     await settle();
     expect(console.warn).toHaveBeenCalled();
-    // PR #198 fix round 6 (GM r8, CHANGED_ELSEWHERE): an edit from somewhere
-    // else no longer replaces the edits kept unsaved here; they stay on
-    // screen, marked "Not saved", until the person's next edit saves them.
+    // PR #198 fix round 7 (GM r9 decision 2): the same field changed on both
+    // sides is a clash. The person's value stays on screen, and the person
+    // is asked; until then, saves send the other side's value for it.
     receive(spec('External recovery'));
     expect(current().shots[0].prompt).toBe('Rejected');
+    expect(useGraphStore.getState().sceneClashes.n1?.line).toBe('“Scene” was changed in another window while you were editing it.');
     edit(spec('Retry edit'));
     await settle();
     // Fix round 4 (review 4, HIGH): a refused write also reads the backend's
     // graph again (GET /api/graph/export), so only the PUTs are counted here.
-    const puts = transport.fetch.mock.calls.flatMap((call, index) => (call[1]?.method === 'PUT' ? [index] : []));
-    expect(puts).toHaveLength(2);
-    expect(sent(puts[1]).shots[0].prompt).toBe('Retry edit');
+    const puts = () => transport.fetch.mock.calls.flatMap((call, index) => (call[1]?.method === 'PUT' ? [index] : []));
+    expect(current().shots[0].prompt).toBe('Retry edit');
+    expect(puts().every((index) => index === puts()[0] || sent(index).shots[0].prompt === 'External recovery')).toBe(true);
+    useGraphStore.getState().resolveSceneClash('n1', 'mine');
+    await settle();
+    expect(sent(puts().at(-1)!).shots[0].prompt).toBe('Retry edit');
+    expect(useGraphStore.getState().sceneClashes.n1).toBeUndefined();
   });
 
   it('bounds a missing WebSocket acknowledgement after a successful HTTP save', async () => {

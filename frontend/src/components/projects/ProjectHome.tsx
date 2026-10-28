@@ -57,7 +57,7 @@ export interface ProjectHomeProps {
    * projectRetryOffer): 'redo' redoes the failure (the reason is GM's short
    * line), 'reload' only reloads the saved projects (the whole line stays),
    * 'none' hides Try again (the whole line). */
-  retry?: 'redo' | 'reload' | 'none';
+  retry?: 'redo' | 'reload' | 'none' | 'reloadNebula';
   trash?: TrashedProject[];
   lastDeleted?: { id: string; name: string } | null;
   onRestore?: (id: string) => void;
@@ -429,7 +429,9 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
           {errorDetails ? <div className="project-home__error-text"><span>{retry === 'redo' ? shortLine(error) : error}</span>
             <ErrorDetails raw={errorDetails} className="project-home__error-details" /></div>
             : <span>{retry === 'redo' ? shortLine(error) : error}</span>}
-          {retry !== 'none' && <button type="button" disabled={loading || busy} onClick={onRetry}>Try again</button>}</div>}
+          {/* GM r9 decision 1: after an update, [Reload Nebula] in place of Try again. */}
+          {retry !== 'none' && <button type="button" disabled={loading || busy} onClick={onRetry}>
+            {retry === 'reloadNebula' ? 'Reload Nebula' : 'Try again'}</button>}</div>}
 
         <section className="project-home__projects" aria-labelledby="recent-projects-title">
           <div className="project-home__section-header">

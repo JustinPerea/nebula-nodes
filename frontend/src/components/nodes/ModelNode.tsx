@@ -391,7 +391,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         {hasMediaPreview && <button type="button"
           className={inToolbar ? 'selection-toolbar__button nodrag' : 'model-node__next-step nodrag'}
           data-next-step-anchor={id}
-          {...lock.act({ disabled: !nextStepSource || isExecuting || !/^n\d+$/.test(id), title: nextStepTitle })}
+          {...lock.act({ disabled: !nextStepSource || !/^n\d+$/.test(id), title: nextStepTitle }, { run: isExecuting })}
           onMouseDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();

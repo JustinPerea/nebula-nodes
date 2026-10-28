@@ -55,10 +55,11 @@ export function CinemaStudioToolbar({ cinemaNodeId }: CinemaStudioToolbarProps) 
         onClick={() => {
           if (!getCinemaUploadIssue(cinemaNodeId, undefined, true)) executeNode(cinemaNodeId, { verb: 'Generate' });
         }}
+        // M2: this tab's run says its line first (lib/canvasLock's order).
         {...lockedAction(lock, {
-          disabled: isExecuting || runStarting || isImportingGraph || Boolean(referenceIssue),
+          disabled: isImportingGraph || Boolean(referenceIssue),
           title: referenceIssue ?? 'Generate every shot using the current scene settings',
-        }, { verb: OFFLINE_VERBS.generate, neutral: true })}
+        }, { verb: OFFLINE_VERBS.generate, neutral: true, run: isExecuting || runStarting })}
       >
         {sceneRuns.length > 0 ? 'Generating…' : 'Generate all'}
       </button>

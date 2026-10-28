@@ -142,20 +142,27 @@ body.app-slava-restraint .cinema-scene-node__shot-label {
   padding-right: 6px;
 }
 
-/* Edits on screen that the backend didn't take (GM, PR #198 r6 item 1): a
-   quiet mark under the summary; its title is the line that said why. */
-/* GM r8: "Not saved", small, in the header, after the card's name; its
-   tooltip says why. */
+/* Edits on screen that the backend didn't take (GM, PR #198 r6 item 1).
+   GM r9: "Unsaved", small, on its own row under the header, so it never
+   wraps the card's name; its tooltip says why. The name truncates first if
+   a badge crowds it (PR #198 review 6, L8). */
+body.app-slava-restraint .cinema-scene-node__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.app-slava-restraint .cinema-scene-node__unsaved-row {
+  display: flex;
+  margin: -2px 0 6px;
+}
+
 body.app-slava-restraint .cinema-scene-node__unsaved {
-  margin-left: auto;
   color: var(--sr-ink-meta);
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 0;
   white-space: nowrap;
   cursor: help;
-}
-
-body.app-slava-restraint .cinema-scene-node__unsaved + .cinema-scene-node__badge {
-  margin-left: 0;
 }

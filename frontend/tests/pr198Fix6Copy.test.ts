@@ -17,10 +17,11 @@ import type { NodeData } from '../src/types';
  */
 
 describe('GM r8: the scene save lines', () => {
-  it('UNSAVED_MARK, CHANGED_ELSEWHERE and SWITCHED_UNNAMED', () => {
-    expect(scene.UNSAVED_MARK).toBe('Not saved');
-    expect(`${scene.sceneSaveHeading('X')} ${scene.CHANGED_ELSEWHERE}`)
-      .toBe("Couldn't save your changes to “X”. It was changed in another window first, so your changes are kept on screen but not saved.");
+  it('UNSAVED_MARK, the clash lines (GM r9) and SWITCHED_UNNAMED', () => {
+    expect(scene.UNSAVED_MARK).toBe('Unsaved');
+    expect(scene.sceneClashLine('Opening', 'Codex')).toBe('Codex changed “Opening” while you were editing it. Choose which version to keep.');
+    expect(scene.sceneClashLine('Opening', null)).toBe('“Opening” was changed in another window while you were editing it.');
+    expect([scene.KEEP_MINE, scene.theirsLabel('Codex'), scene.theirsLabel(null)]).toEqual(['Keep mine', "Use Codex's", 'Use theirs']);
     expect(`${scene.sceneSaveHeading('X')} ${scene.SWITCHED_UNNAMED}`)
       .toBe("Couldn't save your changes to “X”. The canvas switched to another project first.");
   });
@@ -78,7 +79,7 @@ describe('GM r8: the "+ unpriced" tooltip lines', () => {
   it('the left-out lines group with the name helper, in canvas order', () => {
     const graph = [node('a', 'nano-banana', 'Hero', 0), node('e1', 'gpt-image-2-edit', 'Edit A', 100), node('e2', 'gpt-image-2-edit', 'Edit B', 200)];
     const title = runChipTitle(summarizeRunScope(graph, [], { kind: 'graph' }, { pricing, apiKeys: {} }));
-    expect(title).toBe('The priced part of this run costs between $0.07 and $0.45. '
+    expect(title).toBe('The priced part of this run costs between $0.07 and $0.45.\n'
       + '“Edit A” and “Edit B” may cost more for their input images, which the estimate leaves out.');
   });
 });

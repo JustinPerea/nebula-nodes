@@ -205,7 +205,8 @@ def test_the_moved_and_restarted_refusals_have_the_code(workspace, person):  # n
     with pytest.raises(main_module.HTTPException) as restarted:
         main_module._refuse_if_graph_moved(fence)
     assert restarted.value.detail == main_module.GRAPH_RESTARTED_DETAIL
-    assert restarted.value.fields["code"] == "workspace_moved"
+    # PR #198 review 6, M1: a clear of the same project has its own code.
+    assert restarted.value.fields["code"] == "canvas_replaced"
     assert restarted.value.fields["switchedBy"] == {"kind": "agent", "name": "Codex"}
 
 

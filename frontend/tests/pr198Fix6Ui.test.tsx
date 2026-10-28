@@ -69,9 +69,9 @@ describe('GM r8: the follow lock and the run lock in one toolbar', () => {
   });
 });
 
-describe('GM r8: "Not saved" in the scene card\'s header', () => {
-  it('a small label in the header, its tooltip the toast\'s sentence', () => {
-    const line = "Couldn't save your changes to “Opening”. Your changes are kept. Nebula will try again.";
+describe('GM r9: "Unsaved" under the scene card\'s header', () => {
+  it('a small label under the header, its tooltip the toast\'s sentence', () => {
+    const line = "Couldn't save your changes to “Opening”. They're kept and Nebula will try again.";
     useGraphStore.setState({ unsavedScenes: { n4: line } } as never);
     const props = { id: 'n4', selected: false, type: 'cinemaSceneNode', dragging: false, zIndex: 0, isConnectable: true,
       positionAbsoluteX: 0, positionAbsoluteY: 0, selectable: true, deletable: true, draggable: true,
@@ -79,9 +79,11 @@ describe('GM r8: "Not saved" in the scene card\'s header', () => {
         params: { scene: { version: 1, base: { model: 'seedream-4-5' }, aspectRatio: '16:9', shots: [] } } } } as unknown as NodeProps;
     const { container } = render(<ReactFlowProvider><CinemaSceneNode {...props} /></ReactFlowProvider>);
     const mark = container.querySelector('.cinema-scene-node__unsaved');
-    expect(mark?.textContent).toBe('Not saved');
+    expect(mark?.textContent).toBe('Unsaved');
     expect(mark?.getAttribute('title')).toBe(line);
-    expect(mark?.closest('.cinema-scene-node__title')).not.toBeNull();
+    // Under the header, never inside it, so it can't wrap the card's name (L8).
+    expect(mark?.closest('.cinema-scene-node__title')).toBeNull();
+    expect(mark?.closest('.cinema-scene-node__unsaved-row')).not.toBeNull();
   });
 });
 

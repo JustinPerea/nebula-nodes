@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * - Canvas order for every name list (GM, #200 r2 item 3): both multi-delete
  *   lines name their nodes in the order the canvas holds them, not the order
  *   they were removed in.
- * - CHANGED_ELSEWHERE (GM r8, verbatim): "Couldn't save your changes to “X”.
+ * - (superseded by fix round 7, GM r9 decision 2: a clash asks) CHANGED_ELSEWHERE (GM r8): "Couldn't save your changes to “X”.
  *   It was changed in another window first, so your changes are kept on
  *   screen but not saved." The edits stay on screen, marked "Not saved", and
  *   nothing sends them by itself; the person's next edit saves the scene as
@@ -178,34 +178,34 @@ describe('GM (#200 r2 item 3): the multi-delete lines read in canvas order', () 
   });
 });
 
-describe('GM r8: CHANGED_ELSEWHERE keeps the person\'s edits on screen, not saved', () => {
-  const LINE = "Couldn't save your changes to “Opening”. It was changed in another window first, so your changes are kept on screen but not saved.";
+describe('GM r9 decision 2: a clash with another window waits for the person', () => {
+  const LINE = '“Opening” was changed in another window while you were editing it.';
 
-  it('kept edits, then a newer edit from another window: the edits stay, marked, and nothing sends them by itself', async () => {
+  it('kept edits, then another window changes the same shot: mine stay on screen, saves send theirs for it, Keep mine saves mine', async () => {
     setSceneRetryDelaysForTests([400, 400, 400]);
     const h = harness({ first: () => json({ detail: 'boom' }, 500), later: () => json({ detail: 'boom' }, 500) });
     typeIn('s1', 'mine');
     await sleep(20);
     h.release();
     await sleep(60);
-    expect(unsaved()).toBe("Couldn't save your changes to “Opening”. Your changes are kept. Nebula will try again.");
+    expect(unsaved()).toBe("Couldn't save your changes to “Opening”. They're kept and Nebula will try again.");
+    h.answerLater(() => json({ ok: true }));
     syncs(backendGraph({ id: 's1', prompt: 'from another window' }));
     await sleep(60);
     expect(brief()).toEqual(['s1:mine', 's2:b']);
-    expect(said.at(-1)).toBe(LINE);
+    expect(useGraphStore.getState().sceneClashes.n1?.line).toBe(LINE);
     expect(unsaved()).toBe(LINE);
-    // No retry, no resend on a later sync.
-    syncs(backendGraph({ id: 's1', prompt: 'from another window' }));
-    await sleep(900);
-    expect(h.puts).toHaveLength(1);
-    expect(brief()).toEqual(['s1:mine', 's2:b']);
-    expect(said.filter((line) => line === LINE)).toHaveLength(1);
-    // The person's next edit saves the scene as they see it.
-    h.answerLater(() => json({ ok: true }));
+    // The person's next edit elsewhere saves, with Shot 1 as the other window left it.
     typeIn('s2', 'and more');
+    await sleep(120);
+    expect(h.puts.at(-1)).toEqual(['s1:from another window', 's2:and more']);
+    expect(brief()).toEqual(['s1:mine', 's2:and more']);
+    expect(unsaved()).toBe(LINE);
+    useGraphStore.getState().resolveSceneClash('n1', 'mine');
     await sleep(120);
     expect(h.puts.at(-1)).toEqual(['s1:mine', 's2:and more']);
     expect(unsaved()).toBeNull();
+    expect(useGraphStore.getState().sceneClashes.n1).toBeUndefined();
   });
 
   it('SWITCHED_UNNAMED: the canvas switched and the backend named no project', async () => {

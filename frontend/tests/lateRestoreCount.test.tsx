@@ -259,7 +259,7 @@ describe('in the region', () => {
     expect([...NOTICE_SLOTS]).toEqual([
       'proposal', 'run-later', 'person-required', 'project-switch', 'save-paused', 'project-home',
       // Review 7, L3: a line beside an Undo has its own slot above the late count.
-      'pin', 'board', 'asset-trash', 'message', 'late', 'notice',
+      'pin', 'board', 'asset-trash', 'scene-clash', 'message', 'late', 'notice',
     ]);
   });
 

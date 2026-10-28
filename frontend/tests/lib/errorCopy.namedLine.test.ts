@@ -94,12 +94,11 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
   // heading over one of GM's own fixed suffixes, never a backend line (the
   // backend's lines go through headedLine in sceneRefusal).
   { file: 'store/graphStore.ts', text: '`${heading} ${DELETED_ELSEWHERE}`', why: "GM's heading over GM's fixed suffix" },
-  { file: 'store/graphStore.ts', text: '`${heading} ${project ? switchedFirst(project, agent) : SWITCHED_UNNAMED}`', why: "GM's heading over GM's fixed suffix" },
+  { file: 'store/graphStore.ts', text: '`${heading} ${project ? switchedFirst(project, agent, byPerson) : SWITCHED_UNNAMED}`', why: "GM's heading over GM's fixed suffix" },
   { file: 'store/graphStore.ts', text: '`${heading} ${KEPT_UNTIL_RUN_ENDS}`', why: "GM's heading over GM's fixed suffix" },
   { file: 'store/graphStore.ts', text: '`${heading} ${KEPT_AND_RETRYING}`', why: "GM's heading over GM's fixed suffix" },
   { file: 'store/graphStore.ts', text: '`${heading} ${BAD_SAVE}`', why: "GM's heading over GM's fixed suffix" },
-  { file: 'store/graphStore.ts', text: '`${sceneSaveHeading(cardTitle([node], nodeId))} ${CHANGED_ELSEWHERE}`', why: "GM's heading over GM's fixed suffix (r8)" },
-  // The Agent log's raw save line: agents read the backend's own detail.
+    // The Agent log's raw save line: agents read the backend's own detail.
   { file: 'store/graphStore.ts', text: '`Couldn\'t save “${label}”, node ${nodeId}. ${detail || `HTTP ${status}`}`',
     why: "the Agent log's raw form (agents read the raw text)" },
 ];

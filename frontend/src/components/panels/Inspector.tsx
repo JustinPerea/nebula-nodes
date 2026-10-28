@@ -146,6 +146,10 @@ export function Inspector({ embedded = false }: InspectorProps) {
   const renderNodeId = renderNode?.id;
   // A scene with a shot rendering can't be deleted yet (GM, PR #198 r3 item 1).
   const sceneHeld = useGraphStore((s) => (renderNodeId ? sceneDeleteDisabledTitle(s, [renderNodeId]) : null));
+  // This tab's own run locks Run, Duplicate and Delete, and its line wins
+  // (PR #198 review 6, N2: as the selection toolbar and the context menu).
+  const runLocked = useGraphStore((s) => s.isExecuting);
+  const runStarting = useGraphStore((s) => s.runStarting);
   const wiredKey = useMemo(() => (renderNodeId ? nodeWiredPorts(renderNodeId, edges).join('\n') : ''), [renderNodeId, edges]);
   const resolvedParams: ParamDefinition[] = useMemo(() => {
     if (!definition) return [];
@@ -1183,7 +1187,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button"
-            {...lock.act({ title: 'Run this node and its dependencies' })}
+            {...lock.act({ title: 'Run this node and its dependencies' }, { run: runLocked || runStarting })}
             onClick={() => executeNode(renderNode.id)}
           >
             <Play
@@ -1198,7 +1202,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button"
-            {...lock.act({ title: 'Duplicate this node' })}
+            {...lock.act({ title: 'Duplicate this node' }, { run: runLocked })}
             onClick={() => duplicateNode(renderNode.id)}
           >
             <Copy
@@ -1213,7 +1217,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button inspector__action-button--danger"
-            {...lock.act({ disabled: sceneHeld !== null, title: sceneHeld ?? 'Delete this node' })}
+            {...lock.act({ disabled: sceneHeld !== null, title: sceneHeld ?? 'Delete this node' }, { run: runLocked })}
             onClick={() => {
               // A World Labs hold refuses, with its notice; otherwise it deletes at
               // once and says "Deleted the node." with Undo (GM, 2026-10-23).

@@ -1,7 +1,7 @@
 import type { ModelNodeDefinition } from '../types';
 import { allParamDefinitions, hasRoutes, routeBlock, routeById, routesOf, withWiredBlockers } from './directRoute';
 import {
-  CEILING_FIGURE, CEILING_USD, OVER_CEILING_SPENT_USD, OVER_CEILING_USD, OVER_TITLE, PRICED_PART, UNPRICED_SUFFIX,
+  CEILING_USD, OVER_CEILING_SPENT_USD, OVER_CEILING_USD, OVER_TITLE, PRICED_PART, UNPRICED_SUFFIX,
 } from './unpricedCopy';
 
 /** One curated price entry from backend/data/model_pricing.json. The format
@@ -575,7 +575,7 @@ export function chipTitle(chip: ChipEstimate): string {
     switch (chip.kind) {
       case 'free': return PRICED_PART.free;
       case 'under': return PRICED_PART.under;
-      case 'over': return PRICED_PART.over(CEILING_FIGURE);
+      case 'over': return PRICED_PART.over;
       case 'exact': return PRICED_PART.exact(chip.amount);
       case 'upTo': return PRICED_PART.upTo(chip.amount);
       case 'range': return PRICED_PART.range(chip.low, chip.high);
@@ -584,7 +584,7 @@ export function chipTitle(chip: ChipEstimate): string {
   switch (chip.kind) {
     case 'free': return 'Estimated cost';
     case 'under': return 'Estimated cost under $0.01';
-    case 'over': return OVER_TITLE(CEILING_FIGURE);
+    case 'over': return OVER_TITLE;
     case 'exact': return 'Estimated cost';
     case 'upTo': return `Up to ${chip.amount}.`;
     case 'range': return `Between ${chip.low} and ${chip.high}.`;

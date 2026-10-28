@@ -204,7 +204,7 @@ describe('H1: a scene save the backend refuses keeps the person\'s typing', () =
     expect(shotsOf('n31')[0].prompt).toBe('typed by the person');
   });
 
-  it('a newer edit from someone else after the refusal: the person\'s edits stay on screen, not saved (GM r8)', async () => {
+  it('a newer edit from someone else after the refusal: the person\'s edits stay on screen, and a clash asks (GM r9)', async () => {
     const said: string[] = [];
     useGraphStore.setState({ nodes: [cinema('n32', [{ id: 's1', prompt: 'old' }], 'Opening')],
       notify: (text: string) => said.push(text) } as never);
@@ -217,9 +217,11 @@ describe('H1: a scene save the backend refuses keeps the person\'s typing', () =
     socketSends({ type: 'graphSync', ...base, empty: false, edges: [], nodes: [cinema('n32', [{ id: 's1', prompt: 'an agent\'s fix' }], 'Opening')],
       edit: { actor: { kind: 'agent', name: 'Codex', id: 'cx' } } });
     await sleep(10);
-    // PR #198 round 6 (GM r8, CHANGED_ELSEWHERE): kept on screen, and said.
+    // PR #198 round 7 (GM r9 decision 2): the same field on both sides is a
+    // clash: kept on screen, and the person is asked which to keep.
     expect(shotsOf('n32')[0].prompt).toBe('typed');
-    expect(said.at(-1)).toBe("Couldn't save your changes to “Opening”. It was changed in another window first, so your changes are kept on screen but not saved.");
+    expect(useGraphStore.getState().sceneClashes.n32?.line)
+      .toBe('Codex changed “Opening” while you were editing it. Choose which version to keep.');
   });
 });
 

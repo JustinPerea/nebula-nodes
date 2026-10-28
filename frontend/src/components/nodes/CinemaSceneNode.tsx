@@ -55,15 +55,19 @@ export function CinemaSceneNode({ id, data, selected }: NodeProps) {
     <div className={`cinema-scene-node ${selected ? 'cinema-scene-node--selected' : ''}`} data-pending={pendingAttr(data.pending)}
       style={{ ['--node-category-color' as string]: SCENE_CATEGORY_COLOR }}>
       <div className="cinema-scene-node__title">
-        <span>⛭ Cinema Scene</span>
-        {/* GM r8: a small "Not saved" label in the header, its tooltip the
-            same sentence as the toast that said why. */}
-        {unsaved && <span className="cinema-scene-node__unsaved" title={unsaved}>{UNSAVED_MARK}</span>}
+        <span className="cinema-scene-node__name">⛭ Cinema Scene</span>
         {keyStatus === 'missing' && (
           <span className="model-node__badge model-node__badge--warning cinema-scene-node__badge"
             title={missingKeyTitle(NODE_DEFINITIONS['cinema-scene'], (params ?? {}) as Record<string, unknown>)}>&#x26A0;</span>
         )}
       </div>
+      {/* GM r9: "Unsaved", under the header so it never wraps the title; its
+          tooltip is the sentence of the toast that said why. */}
+      {unsaved && (
+        <div className="cinema-scene-node__unsaved-row">
+          <span className="cinema-scene-node__unsaved" title={unsaved}>{UNSAVED_MARK}</span>
+        </div>
+      )}
 
       <div className="cinema-scene-node__thumb">
         {thumbUrl ? (

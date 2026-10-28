@@ -26,14 +26,14 @@ export const PRICED_PART = {
   /** The priced nodes add up to nothing: no line (GM r8: "$0 is a price,
    * not unpriced"), so the tooltip starts with the reasons. */
   free: '',
-  /** PLACEHOLDER: the priced part is past the ceiling (review 5, N4). GM r8
-   * worded "“X” may cost more than $Y." for a price cap; the ceiling is
-   * Nebula's display limit ($10 trillion), not a cap, so it waits for GM. */
-  over: (amount: string) => `The priced part of this run costs more than ${amount}.`,
+  /** The priced part is past the ceiling (review 5, N4), Nebula's display
+   * limit, not a price cap: no line (GM r9, "Ceiling: no line; drop the
+   * placeholder"), so the tooltip starts with the reasons. */
+  over: '',
 };
 
-/** A closed chip past the ceiling: its tooltip. PLACEHOLDER. */
-export const OVER_TITLE = (amount: string) => `More than ${amount}.`;
+/** A closed chip past the ceiling: no tooltip line (GM r9). */
+export const OVER_TITLE = '';
 
 type Line = (names: string, several: boolean) => string;
 
@@ -92,5 +92,3 @@ export const LEFT_OUT_OTHER = (plus: string): Line => leftOut(`its ${plus}`, `th
 export const CEILING_USD = 1e13;
 export const OVER_CEILING_USD = '>$10,000,000,000,000';
 export const OVER_CEILING_SPENT_USD = '>$10,000,000,000,000.00';
-/** The ceiling as a chip's figure, for "more than" lines. */
-export const CEILING_FIGURE = '$10,000,000,000,000';

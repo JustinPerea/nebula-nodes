@@ -3554,7 +3554,8 @@ was):
 |---|---|---|---|
 | `paid_start` | 409 | a World Labs paid start is settling; try again in a moment | |
 | `approved_run` | 409 | an agent's edit to a run the person approved and the canvas hasn't started (never the person's) | |
-| `workspace_moved` | 409 | another project was opened, made or deleted, or the canvas was cleared or replaced, since the caller read it (a tab's `X-Nebula-Workspace-Revision`, or a write that waited); nothing changed | `project`: `{id, name}` of the project open now (`null` for the unfiled canvas); `switchedBy`: `{kind, name}` of who did it (`agent` with its name, `person` as "You"), or `null` when Nebula doesn't know (it restarted since) |
+| `workspace_moved` | 409 | another project was opened, made or deleted since the caller read it (a tab's `X-Nebula-Workspace-Revision`, or a write that waited); nothing changed | `project`: `{id, name}` of the project open now (`null` for the unfiled canvas); `switchedBy`: `{kind, name}` of who did it (`agent` with its name, `person` as "You"), or `null` when Nebula doesn't know (it restarted since) |
+| `canvas_replaced` | 409 | the same project is open, but its canvas was cleared or replaced (a graph import) since the caller read it (a tab's `X-Nebula-Canvas-Revision`, or a write that waited), so node ids may name new nodes; nothing changed | the same `project` and `switchedBy` as `workspace_moved` |
 | `params_outdated` | 409 | the tab was built for another params version; reload | `paramsVersion` |
 | `run_safeguards` | 507 | the paid-start fence can't be read or written | |
 

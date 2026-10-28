@@ -18,6 +18,8 @@ interface MenuItem {
   disabled?: boolean;
   /** Why it is disabled, when that isn't offline. */
   title?: string;
+  /** This tab's run locks it now: the run's line wins (lib/canvasLock). */
+  run?: boolean;
   action: () => void;
 }
 
@@ -113,7 +115,8 @@ export function ContextMenu() {
   const items: MenuItem[] = [
     {
       label: 'Run This Node',
-      disabled: isExecuting || runStarting,
+      // The run lock's line wins (M2): run, follow, offline.
+      run: isExecuting || runStarting,
       action: () => {
         executeNode(nodeId);
         hideContextMenu();
@@ -131,6 +134,7 @@ export function ContextMenu() {
     {
       label: 'Duplicate',
       shortcut: 'Ctrl+D',
+      run: isExecuting,
       action: () => {
         duplicateNode(nodeId);
         hideContextMenu();
@@ -140,6 +144,7 @@ export function ContextMenu() {
       label: 'Delete',
       shortcut: 'Del',
       danger: true,
+      run: isExecuting,
       disabled: sceneHeld !== null,
       title: sceneHeld ?? undefined,
       action: () => {
@@ -162,7 +167,7 @@ export function ContextMenu() {
           key={item.label}
           className={`context-menu__item ${item.danger ? 'context-menu__item--danger' : ''}`}
           onClick={item.action}
-          {...lock.act({ disabled: item.disabled, title: item.title })}
+          {...lock.act({ disabled: item.disabled, title: item.title }, { run: item.run })}
         >
           <span>{item.label}</span>
           {item.shortcut && <span className="context-menu__shortcut">{item.shortcut}</span>}

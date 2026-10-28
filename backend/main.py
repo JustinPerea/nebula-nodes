@@ -903,10 +903,14 @@ class CodedRefusal(HTTPException):
       ``rendering: {shotIds, shots, stoppable}`` (_RenderingSceneRefusal);
     - ``paid_start``: a World Labs paid start is settling (_paid_start_refusal);
     - ``approved_run``: an agent's edit to a run the person approved;
-    - ``workspace_moved``: another project is open, or the canvas was cleared
-      or replaced, since the caller read it; ``project`` ({id, name} of the
-      project open now, null for the unfiled canvas) and ``switchedBy``
+    - ``workspace_moved``: another project is open (opened, made or deleted)
+      since the caller read it; ``project`` ({id, name} of the project open
+      now, null for the unfiled canvas) and ``switchedBy``
       (_workspace_moved_refusal);
+    - ``canvas_replaced``: the same project is open, but its canvas was
+      cleared or replaced (an import) since, so node ids may name new nodes;
+      the same ``project`` and ``switchedBy`` (_canvas_replaced_refusal; PR
+      #198 review 6, M1: a clear is not a switch);
     - ``params_outdated`` (the params-version gate's own answer).
 
     Raised where those helpers are used by other routes too: the fields are
@@ -974,6 +978,12 @@ def _workspace_moved_refusal(exc: HTTPException) -> CodedRefusal:
     return _coded(exc, "workspace_moved", **_workspace_moved_fields())
 
 
+def _canvas_replaced_refusal(exc: HTTPException) -> CodedRefusal:
+    """The open project's canvas was cleared or replaced since (its id epoch
+    moved), not another project opened: its own code, with the same fields."""
+    return _coded(exc, "canvas_replaced", **_workspace_moved_fields())
+
+
 def _workspace_context() -> dict[str, Any]:
     # Read on every canvas event: only these two fields, never a copy of every
     # project (ProjectStore.workspace).
@@ -1020,7 +1030,7 @@ def _check_workspace_revision(revision: str | None = None) -> None:
         expected_canvas = str(filed[0])
     canvas = _request_canvas_revision.get()
     if canvas is not None and canvas != expected_canvas:
-        raise _workspace_moved_refusal(HTTPException(status_code=409, detail=CANVAS_OUT_OF_DATE))
+        raise _canvas_replaced_refusal(HTTPException(status_code=409, detail=CANVAS_OUT_OF_DATE))
 
 
 # A write that awaits lands only on the canvas that was open when it was asked
@@ -1103,7 +1113,7 @@ def _refuse_if_graph_moved(fence: tuple[str, str | None, int]) -> None:
     if (revision, project_id) != fence[:2]:
         raise _workspace_moved_refusal(refusal_copy.refusal(409, GRAPH_MOVED_DETAIL, CANVAS_OUT_OF_DATE, route="canvas"))
     if epoch != fence[2]:
-        raise _workspace_moved_refusal(refusal_copy.refusal(409, GRAPH_RESTARTED_DETAIL, CANVAS_OUT_OF_DATE,
+        raise _canvas_replaced_refusal(refusal_copy.refusal(409, GRAPH_RESTARTED_DETAIL, CANVAS_OUT_OF_DATE,
                                                             route="canvas"))
 
 
@@ -1323,7 +1333,7 @@ async def project_workspace_fence(request: Request, call_next):
             try:
                 _check_workspace_revision()
             except HTTPException as exc:
-                # A CodedRefusal's fields too (workspace_moved: project, switchedBy).
+                # A CodedRefusal's fields too (workspace_moved, canvas_replaced: project, switchedBy).
                 return JSONResponse(status_code=exc.status_code,
                                     content={"detail": exc.detail, **getattr(exc, "fields", {})})
             except ProjectStoreError as exc:

@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { followingSwitch, refuseEditWhileFollowing, useFollowingSwitch, waitToOpenTooltip, type FollowingSwitch } from './canvasFollow';
 import { isBackendOffline, refuseEditWhileOffline } from './backendConnection';
 import { OFFLINE_MARK, OFFLINE_NEUTRAL, offlineReason, useBackendOffline, type OfflineVerb } from './useBackendOffline';
+import { RUN_LOCK_REASON } from './cinemaScene';
 
 /**
  * Round 22 of PR #195 (GM - Design, blocker A): the one read-only state
@@ -17,6 +18,13 @@ import { OFFLINE_MARK, OFFLINE_NEUTRAL, offlineReason, useBackendOffline, type O
  * disabled look with the tooltip "Wait for “<project>” to open.". Settings
  * and Copy stay enabled (they change nothing). Offline plus following:
  * disabled too, with the following tooltip.
+ *
+ * PR #198 review 6, M2 (GM r9 answer 3): this tab's own run is a third
+ * reason, for the controls it locks too (a run, a delete, a duplicate, an
+ * undo). One order everywhere: the run, then following, then offline, then
+ * the control's own title. A control the run lock wins on says only the
+ * run's line and carries neither mark, so a press never pulses the project
+ * bar or the banner for a reason its tooltip doesn't give.
  */
 export const FOLLOWING_MARK = 'data-following-disabled';
 
@@ -30,9 +38,16 @@ export interface CanvasLock {
    * (following) or the offline banner. Empty when unlocked. */
   mark: Record<string, ''>;
   /** A control that acts: `disabled` (its own reasons too), the marks, and
-   * while following GM's tooltip in place of its own. */
-  act(own?: { disabled?: boolean; title?: string }): ActProps;
+   * while following GM's tooltip in place of its own. `run`: the run lock
+   * holds it now (the caller reads isExecuting, or a wider condition such as
+   * a run that is starting, so a card that draws no run lock never
+   * re-renders when a run starts); its line then wins. */
+  act(own?: { disabled?: boolean; title?: string }, options?: RunLock): ActProps;
 }
+
+/** The run lock's hold on one control (M2): `runTitle` when a run holds it
+ * for a reason of its own (a shot that is rendering), else GM's run line. */
+export interface RunLock { run?: boolean; runTitle?: string }
 
 export interface ActProps {
   disabled: boolean;
@@ -52,9 +67,9 @@ export interface ActProps {
  * Following plus offline keeps the following tooltip (GM round 22, A).
  */
 export function lockedAction(lock: CanvasLock, own: { disabled?: boolean; title?: string } = {},
-  options: { verb?: OfflineVerb; neutral?: boolean; offlineTooltip?: boolean } = {}): ActProps & { 'data-offline-neutral'?: '' } {
-  const props: ActProps & { 'data-offline-neutral'?: '' } = lock.act(own);
-  if (!lock.offline) return props;
+  options: { verb?: OfflineVerb; neutral?: boolean; offlineTooltip?: boolean } & RunLock = {}): ActProps & { 'data-offline-neutral'?: '' } {
+  const props: ActProps & { 'data-offline-neutral'?: '' } = lock.act(own, options);
+  if (!lock.offline || options.run) return props;
   if (options.neutral) props[OFFLINE_NEUTRAL] = '';
   // Create's and Remotion's actions keep their own title offline for now
   // (GM deferred their offline tooltips: `offlineTooltip: false`).
@@ -70,11 +85,14 @@ export function canvasLockOf(following: FollowingSwitch | null, offline: boolean
   const locked = Boolean(following) || offline;
   return {
     locked, following, offline, mark,
-    act: (own = {}) => ({
-      ...mark,
-      disabled: locked || Boolean(own.disabled),
-      title: following ? waitToOpenTooltip(following.projectName) : own.title,
-    }),
+    act: (own = {}, options = {}) => (options.run
+      // The run's line first, alone (M2, N1).
+      ? { disabled: true, title: options.runTitle ?? RUN_LOCK_REASON }
+      : {
+        ...mark,
+        disabled: locked || Boolean(own.disabled),
+        title: following ? waitToOpenTooltip(following.projectName) : own.title,
+      }),
   };
 }
 

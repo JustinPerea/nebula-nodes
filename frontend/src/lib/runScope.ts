@@ -530,13 +530,15 @@ export function runChipTitle({ paid, cost }: RunScopeSummary): string | undefine
   const lead = chipTitle(chipEstimate(cost.low, cost.high, open));
   // A free priced part has no line of its own (GM r8: "$0 is a price, not
   // unpriced"): the reasons start the tooltip.
-  if (!open) return lead;
+  // Past the ceiling the lead is no line either (GM r9): no tooltip.
+  if (!open) return lead || undefined;
   // A summary with no reasons recorded (one built before them) names its
   // unpriced nodes as having no listed price, so a free lead never leaves
   // the chip without a tooltip.
   const reasons = cost.reasons?.length ? cost.reasons
     : lead ? [] : cost.unpriced.map((name) => ({ name, reason: { kind: 'noPrice' as const } }));
-  return [lead, ...reasonSentences(reasons)].filter(Boolean).join(' ') || undefined;
+  // GM r9 bug 2: each reason on its own line under the priced part's.
+  return [lead, ...reasonSentences(reasons)].filter(Boolean).join('\n') || undefined;
 }
 
 const AWAITING = 'Priced when its input is known:';

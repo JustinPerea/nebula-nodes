@@ -78,6 +78,13 @@ function clearPersistedPosition() {
   }
 }
 
+/** The log counts as docked on the right within this of the edge, and low
+ * enough for a notice to reach within this of the bottom (L7). */
+const AGENT_LOG_EDGE_PX = 64;
+const AGENT_LOG_LOW_PX = 360;
+/** The gap a notice keeps from the log (--sr-space-2). */
+const AGENT_LOG_GAP_PX = 8;
+
 export function AgentLog() {
   const isExecuting = useGraphStore((s) => s.isExecuting);
   const enabled = useUIStore((s) => s.agentLogEnabled);
@@ -218,6 +225,36 @@ export function AgentLog() {
     });
     return () => window.cancelAnimationFrame(frameId);
   }, [visible, position]);
+
+  // PR #198 review 6, L7 (GM r9 answer 5): the notice region keeps clear of
+  // the log while it sits on the right edge, low enough for a toast to reach
+  // it: --agent-log-clearance is the room it takes from the right
+  // (noticeRegion.css), 0 otherwise. Measured, since the log can be dragged
+  // and resized.
+  useEffect(() => {
+    const root = document.documentElement;
+    const log = logRef.current;
+    if (!visible || !log) {
+      root.style.removeProperty('--agent-log-clearance');
+      return undefined;
+    }
+    const measure = () => {
+      const rect = log.getBoundingClientRect();
+      const docked = rect.width > 0 && window.innerWidth - rect.right <= AGENT_LOG_EDGE_PX
+        && rect.bottom >= window.innerHeight - AGENT_LOG_LOW_PX;
+      if (docked) root.style.setProperty('--agent-log-clearance', `${Math.ceil(window.innerWidth - rect.left + AGENT_LOG_GAP_PX)}px`);
+      else root.style.removeProperty('--agent-log-clearance');
+    };
+    measure();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(log);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', measure);
+      root.style.removeProperty('--agent-log-clearance');
+    };
+  }, [visible, open, position]);
 
   // The notice leaves after a few seconds unless it is hovered or focused;
   // Settings > Preferences stays the way back after that.
