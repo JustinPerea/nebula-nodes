@@ -702,8 +702,8 @@ body.app-slava-restraint .connection-popup__category-label--button {
     color var(--sr-motion-fast);
 }
 
-body.app-slava-restraint .context-menu__item:hover,
-body.app-slava-restraint .connection-popup__item:hover,
+body.app-slava-restraint .context-menu__item:hover:not(:disabled),
+body.app-slava-restraint .connection-popup__item:hover:not(:disabled),
 body.app-slava-restraint .connection-popup__category-label--button:hover {
   background: var(--sr-surface-control-hover);
   color: var(--sr-ink-bold);
@@ -713,7 +713,7 @@ body.app-slava-restraint .context-menu__item:disabled {
   opacity: var(--sr-disabled-opacity-strong);
 }
 
-body.app-slava-restraint .context-menu__item--danger:hover {
+body.app-slava-restraint .context-menu__item--danger:hover:not(:disabled) {
   background: var(--sr-danger-soft);
   color: var(--sr-danger);
 }
@@ -2164,13 +2164,13 @@ body.app-slava-restraint .inspector__action-button:disabled {
 }
 
 body.app-slava-restraint .inspector__file-button:hover,
-body.app-slava-restraint .inspector__action-button:hover {
+body.app-slava-restraint .inspector__action-button:hover:not(:disabled) {
   border-color: var(--sr-edge-strong);
   background: var(--sr-surface-control-hover);
   color: var(--sr-ink-bold);
 }
 
-body.app-slava-restraint .inspector__action-button--danger:hover {
+body.app-slava-restraint .inspector__action-button--danger:hover:not(:disabled) {
   border-color: var(--sr-danger-border);
   background: var(--sr-danger-soft);
   color: var(--sr-danger);
@@ -2714,9 +2714,9 @@ body.app-slava-restraint .agent-log__empty-status {
 body.app-slava-restraint .agent-log__entry {
   --agent-log-source-color: var(--sr-ink-meta);
   display: grid;
-  /* The time takes its own width and never wraps ("03:34:41 / PM" in a 64px
-     column, GM, PR #198 r2); it is zero-padded and tabular, so every row's
-     time column is the same width. */
+  /* The time takes its own width and never wraps ("03:46:22 PM", GM, round
+     17 of PR #195 and PR #198 r2); it is zero-padded and tabular, so every
+     row's time column is the same width. */
   grid-template-columns: 8px max-content 70px 1fr;
   gap: 8px;
   align-items: baseline;

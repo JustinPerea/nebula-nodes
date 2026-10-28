@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef } from 'react';
-import { createPortal } from 'react-dom';
+import { ModalPortal } from '../ModalPortal';
 import { FORGET_BODY, FORGET_LABEL, forgetHeading } from '../../lib/worldLabsWaiting';
 import '../../styles/prompt-dialog.css';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
@@ -70,9 +70,12 @@ export function ForgetRecoveryConfirm({ name, onCancel, onConfirm }: {
     return () => document.removeEventListener('keydown', onKeyDown, true);
   }, []);
 
-  return createPortal(
-    // A press on the backdrop keeps focus in the dialog (it did nothing else
-    // before either; nothing outside it can be used while it is open).
+  // Through ModalPortal, as every modal in the app (#195's review 9; the
+  // round 21 merge).
+  return (
+    <ModalPortal>
+    {/* A press on the backdrop keeps focus in the dialog (it did nothing else
+        before either; nothing outside it can be used while it is open). */}
     <div className="prompt-dialog" onMouseDown={(event) => { if (event.target === event.currentTarget) event.preventDefault(); }}>
       <div ref={card} className="prompt-dialog__card" role="alertdialog" aria-modal="true"
         aria-labelledby={headingId} aria-describedby={bodyId}>
@@ -84,7 +87,7 @@ export function ForgetRecoveryConfirm({ name, onCancel, onConfirm }: {
             onClick={onConfirm}>{FORGET_LABEL}</button>
         </div>
       </div>
-    </div>,
-    document.body,
+    </div>
+    </ModalPortal>
   );
 }

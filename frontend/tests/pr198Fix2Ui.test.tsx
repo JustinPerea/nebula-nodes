@@ -147,11 +147,14 @@ describe('GM: Cinema, Create and Remotion actions are disabled offline, neutral,
     }
   });
 
-  it('one helper: Cinema, Create and Remotion use offlineAction; neutral is one rule', () => {
+  // Merged with #195: where a control also takes the canvas lock it uses
+  // canvasLock's lockedAction, which applies the same offline title and
+  // neutral mark (offlineReason, OFFLINE_NEUTRAL) on top of the lock.
+  it('one helper: Cinema, Create and Remotion use offlineAction or lockedAction; neutral is one rule', () => {
     for (const file of ['components/cinema-studio/CinemaShotPanel.tsx', 'components/cinema-studio/CinemaShotsRail.tsx',
       'components/cinema-studio/CinemaStudioToolbar.tsx', 'components/create-studio/CreateComposer.tsx',
       'components/video-editor/RemotionEditorToolbar.tsx']) {
-      expect(source(file), file).toMatch(/offlineAction\(/);
+      expect(source(file), file).toMatch(/\b(?:offlineAction|lockedAction)\(/);
     }
     expect(css('App.css')).toMatch(/\[data-offline-neutral\][^{]*\{[^}]*background:\s*var\(--sr-surface-control\)/);
   });

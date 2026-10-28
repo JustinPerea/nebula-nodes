@@ -1,9 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { backendAssetUrlSync } from '../../lib/backend';
+import { lockedAction, refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 import { useGraphStore } from '../../store/graphStore';
 import { shotRemovalBlock, shotRemovalBlockTitle } from '../../lib/cinemaScene';
-import { OFFLINE_VERBS, offlineAction, offlineMark, offlineReason, offlineTitle, useBackendOffline } from '../../lib/useBackendOffline';
+import { OFFLINE_VERBS } from '../../lib/useBackendOffline';
 import type { CinemaSceneSpec, CinemaShot } from '../../types';
 
 interface CinemaShotsRailProps {
@@ -35,13 +36,15 @@ export function CinemaShotsRail({
   onReorder,
 }: CinemaShotsRailProps) {
   const [dragId, setDragId] = useState<string | null>(null);
+  // Round 23 (review 22, L-3): moving, removing and adding shots edit the
+  // canvas, so they take the canvas lock; selecting a shot only looks.
+  const lock = useCanvasLock();
   const selectorRefs = useRef(new Map<string, HTMLButtonElement>());
   const addRef = useRef<HTMLButtonElement>(null);
   const pendingFocus = useRef<{ shotId: string | null; removedId?: string } | null>(null);
   const activeRuns = useGraphStore((state) => state.activeRuns);
   // A run of the graph holds the shots only while it is on this scene (L2).
   const sceneState = useGraphStore((state) => state.nodes.find((node) => node.id === cinemaNodeId)?.data.state);
-  const offline = useBackendOffline();
   const tabStopId = scene.shots.some((shot) => shot.id === selectedShotId)
     ? selectedShotId : scene.shots[0]?.id;
   const orderedShotIds = JSON.stringify(scene.shots.map((shot) => shot.id));
@@ -65,9 +68,10 @@ export function CinemaShotsRail({
   }, [scene.shots]);
 
   const reorder = (shotId: string, targetIndex: number, focusSelector: boolean) => {
-    // Offline the order can't save (the store refuses it): the arrows are
-    // disabled, a drag doesn't start, and Alt + arrow keys do nothing.
-    if (offline) return;
+    // Offline or following the order can't save (the store refuses it): the
+    // arrows are disabled, a drag doesn't start, and Alt + arrow keys do
+    // nothing but pulse the banner or the project bar (PR #198 r5, #195 r23).
+    if (refuseCanvasEdit()) return;
     const shots = [...scene.shots];
     const from = shots.findIndex((shot) => shot.id === shotId);
     if (from < 0 || targetIndex < 0 || targetIndex >= shots.length || from === targetIndex) return;
@@ -133,8 +137,8 @@ export function CinemaShotsRail({
           <div
             key={shot.id}
             className={`cinema-shots-rail__shot ${selected ? 'cinema-shots-rail__shot--selected' : ''} ${dragId === shot.id ? 'cinema-shots-rail__shot--dragging' : ''}`}
-            draggable={!offline}
-            onDragStart={() => { if (!offline) setDragId(shot.id); }}
+            draggable={!lock.locked}
+            onDragStart={() => { if (!lock.locked) setDragId(shot.id); }}
             onDragEnd={() => setDragId(null)}
             onDragOver={(event) => event.preventDefault()}
             onDrop={() => handleDrop(shot.id)}
@@ -169,24 +173,26 @@ export function CinemaShotsRail({
             <div className="cinema-shots-rail__actions">
               {selected && <>
                 <button type="button" className="cinema-shots-rail__move"
-                  aria-label={`Move Shot ${idx + 1} earlier`} title={offlineTitle(offline, OFFLINE_VERBS.reorderShots, 'Move shot earlier')}
-                  disabled={offline || idx === 0} {...offlineMark(offline)} onClick={() => reorder(shot.id, idx - 1, true)}>←</button>
+                  aria-label={`Move Shot ${idx + 1} earlier`}
+                  {...lockedAction(lock, { disabled: idx === 0, title: 'Move shot earlier' }, { verb: OFFLINE_VERBS.reorderShots })}
+                  onClick={() => reorder(shot.id, idx - 1, true)}>←</button>
                 <button type="button" className="cinema-shots-rail__move"
-                  aria-label={`Move Shot ${idx + 1} later`} title={offlineTitle(offline, OFFLINE_VERBS.reorderShots, 'Move shot later')}
-                  disabled={offline || idx === scene.shots.length - 1} {...offlineMark(offline)} onClick={() => reorder(shot.id, idx + 1, true)}>→</button>
+                  aria-label={`Move Shot ${idx + 1} later`}
+                  {...lockedAction(lock, { disabled: idx === scene.shots.length - 1, title: 'Move shot later' }, { verb: OFFLINE_VERBS.reorderShots })}
+                  onClick={() => reorder(shot.id, idx + 1, true)}>→</button>
               </>}
               <button type="button" className="cinema-shots-rail__remove"
                 aria-label={`Remove Shot ${idx + 1}`}
-                title={offlineTitle(offline, OFFLINE_VERBS.removeShots,
-                  block ? shotRemovalBlockTitle(block, `Shot ${idx + 1}`) : 'Remove shot')}
-                disabled={offline || Boolean(block)} {...offlineMark(offline)}
+                {...lockedAction(lock, { disabled: Boolean(block),
+                  title: block ? shotRemovalBlockTitle(block, `Shot ${idx + 1}`) : 'Remove shot' }, { verb: OFFLINE_VERBS.removeShots })}
                 onClick={() => handleRemove(shot.id, idx)}>×</button>
             </div>
           </div>
         );
       })}
-      <button ref={addRef} type="button" className="cinema-shots-rail__add" onClick={onAddShot}
-        {...offlineAction(offline)} title={offline ? offlineReason(OFFLINE_VERBS.addShots) : undefined}>
+      <button ref={addRef} type="button" className="cinema-shots-rail__add"
+        {...lockedAction(lock, {}, { verb: OFFLINE_VERBS.addShots, neutral: true })}
+        onClick={() => { if (!refuseCanvasEdit()) onAddShot(); }}>
         + Add shot
       </button>
     </div>

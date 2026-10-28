@@ -4,6 +4,7 @@ import { useGraphStore } from '../../store/graphStore';
 import type { CharacterDraft } from './CharacterStudioView';
 import { assetStudioDraftKey, resolveAssetStudioDraftKey, useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
 import { currentProject } from '../../lib/currentProject';
+import { useCanvasLock } from '../../lib/canvasLock';
 
 interface CharacterTestPanelProps {
   /** The saved Character id, or null while the draft is still unsaved. */
@@ -36,6 +37,9 @@ export function CharacterTestPanel({
   const exitCharacterEditor = useUIStore((s) => s.exitCharacterEditor);
   const [prompt, setPrompt] = useState('');
   const [pending, setPending] = useState(false);
+  // Round 23 (review 22, L-3): Test on canvas adds a node, so it takes the
+  // canvas lock.
+  const lock = useCanvasLock();
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
@@ -95,12 +99,12 @@ export function CharacterTestPanel({
         type="button"
         className="character-test__run"
         onClick={() => void handleTestOnCanvas()}
-        disabled={!canTest || pending}
-        title={
-          canTest
+        {...lock.act({
+          disabled: !canTest || pending,
+          title: canTest
             ? 'Drop this Character on the canvas to test on a base-edit node'
-            : 'Save the Character first (needs a name + ≥3 reference views)'
-        }
+            : 'Save the Character first (needs a name + ≥3 reference views)',
+        })}
       >
         {pending ? 'Adding to canvas…' : 'Test on canvas →'}
       </button>

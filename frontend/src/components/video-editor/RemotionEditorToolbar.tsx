@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { Download, X } from 'lucide-react';
 import { useGraphStore } from '../../store/graphStore';
+import { lockedAction, useCanvasLock } from '../../lib/canvasLock';
 import type { TrackItemOrderAction } from '../../store/graphStore';
 import { useUIStore } from '../../store/uiStore';
 import type { TrackComponentType, VideoGraphManifest } from '../../types/video';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { startRemotionRender } from '../../lib/renderJobs';
 import { useRenderJob } from '../../hooks/useRenderJob';
-import { offlineAction, useBackendOffline } from '../../lib/useBackendOffline';
+import { offlineAction } from '../../lib/useBackendOffline';
 
 interface RemotionEditorToolbarProps {
   remotionNodeId: string;
@@ -35,11 +36,15 @@ export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarP
   // Every add, a layer's order and delete, and REC save into the project (the
   // store's edit gates and its autosave), and Export renders on the backend:
   // all are off while Nebula is offline (GM, PR #198 r2). REC can still be
-  // turned off.
-  const offline = useBackendOffline();
+  // turned off. Read from the canvas lock, the one source for offline.
+  const lock = useCanvasLock();
+  const offline = lock.offline;
   const addTrackItemWithCanvasMirror = useGraphStore((s) => s.addTrackItemWithCanvasMirror);
   const deleteTrackItem = useGraphStore((s) => s.deleteTrackItem);
   const reorderTrackItem = useGraphStore((s) => s.reorderTrackItem);
+  // Round 23 (review 22, L-3): adding, ordering and deleting layers edit the
+  // canvas's Remotion node, so they take the canvas lock. REC (a drag mode)
+  // and Export (a file) stay enabled while following.
   const selectedTrackItemId = useUIStore((s) => s.selectedTrackItemId);
   const setSelectedTrackItem = useUIStore((s) => s.setSelectedTrackItem);
   const isKeyframeRecording = useUIStore((s) => s.isKeyframeRecording);
@@ -86,7 +91,7 @@ export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarP
           type="button"
           className="remotion-editor-toolbar__add"
           onClick={() => handleAdd(btn.componentType)}
-          {...offlineAction(offline)}
+          {...lockedAction(lock, {}, { neutral: true, offlineTooltip: false })}
         >
           {btn.label}
         </button>
@@ -98,9 +103,12 @@ export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarP
             type="button"
             className="remotion-editor-toolbar__zorder"
             onClick={() => handleZOrder(btn.action)}
-            {...offlineAction(offline,
-              btn.action === 'send-to-back' || btn.action === 'send-backward' ? !canMoveBackward : !canMoveForward)}
-            title={btn.title}
+            {...lockedAction(lock, {
+              disabled: btn.action === 'send-to-back' || btn.action === 'send-backward'
+                ? !canMoveBackward
+                : !canMoveForward,
+              title: btn.title,
+            }, { neutral: true, offlineTooltip: false })}
           >
             {btn.label}
           </button>
@@ -110,7 +118,7 @@ export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarP
         type="button"
         className="remotion-editor-toolbar__delete"
         onClick={handleDelete}
-        {...offlineAction(offline, !selectedTrackItemId)}
+        {...lockedAction(lock, { disabled: !selectedTrackItemId }, { neutral: true, offlineTooltip: false })}
       >
         Delete
       </button>

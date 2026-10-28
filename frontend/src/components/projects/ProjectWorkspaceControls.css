@@ -113,3 +113,37 @@ body.app-slava-restraint .project-workspace-controls__home[aria-busy="true"] {
   padding: 0 8px;
 }
 body.app-slava-restraint .project-workspace-controls__busy { font-size: 12px; white-space: nowrap; }
+/* Round 20 (GM follow-up 1) and round 21 (GM item 1): following an agent's
+   switch. "Opening “<project>”…" takes the name slot (the old name and the
+   save state go); the bar keeps the width it had (set inline from its
+   measured width). A long name is cut inside itself ("Opening “Second ca…”…"):
+   the words around it never shrink, so the closing quote and ellipsis stay. */
+body.app-slava-restraint .project-workspace-controls--following { overflow: hidden; }
+body.app-slava-restraint .project-workspace-controls__opening {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--sr-ink);
+  font: 500 12px/1.4 var(--sr-ui);
+  white-space: nowrap;
+}
+body.app-slava-restraint .project-workspace-controls__opening-fixed { flex: 0 0 auto; }
+body.app-slava-restraint .project-workspace-controls__opening-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* A refused edit while it follows: one nudge, on the repo's k 500 / c 36
+   spring sampled as linear() (the same curve as asset-move.css). */
+body.app-slava-restraint .project-workspace-controls__opening--pulse {
+  animation: project-opening-pulse 420ms linear(0, 0.079, 0.247, 0.434, 0.606, 0.744, 0.847, 0.919, 0.965, 0.992, 1.006, 1.013, 1.014, 1.012, 1.01, 1.007, 1);
+}
+@keyframes project-opening-pulse {
+  0% { color: var(--sr-ink-bold, #fff); text-shadow: 0 0 10px rgb(255 255 255 / 0.55); }
+  100% { color: var(--sr-ink); text-shadow: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .project-workspace-controls__opening--pulse { animation-timing-function: steps(1, end); }
+}

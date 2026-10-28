@@ -338,6 +338,18 @@ body.app-slava-restraint .remotion-editor-toolbar__record--active {
 
 /* ── RemotionPropertiesPanel ────────────────────────────────────────────────── */
 
+/* The fields' fieldset (round 23): no frame of its own; the panel's gap
+   spaces its sections as before. */
+.remotion-properties-panel__fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
 body.app-slava-restraint .remotion-properties-panel {
   padding: 12px;
   display: flex;

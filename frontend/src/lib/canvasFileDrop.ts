@@ -16,6 +16,7 @@
  * differ. Files that went in get no notice of their own.
  */
 import { apiRequest } from './apiRequest';
+import { refuseEditWhileFollowing } from './canvasFollow';
 import { failureCopy, failureMessage } from './errorCopy';
 import { useGraphStore } from '../store/graphStore';
 import { refuseEditWhileOffline } from './backendConnection';
@@ -171,6 +172,8 @@ export function fileDropInFlight(): boolean {
  * file that made a node, owning only that node. Resolves when every upload
  * has settled. */
 export async function addDroppedFiles(files: readonly File[], origin: { x: number; y: number }): Promise<void> {
+  // Round 20 (M1): nothing lands on a canvas that's about to go away.
+  if (refuseEditWhileFollowing()) return;
   // Offline is read-only (GM, round 14 of PR #114): nothing uploads, no
   // notice; the banner pulses (review 13, L6: a drop still sent).
   if (refuseEditWhileOffline()) return;
@@ -200,18 +203,26 @@ export async function addDroppedFiles(files: readonly File[], origin: { x: numbe
     form.append('create_node', 'true');
     form.append('x', String(spot.x));
     form.append('y', String(spot.y));
+    // One undo step per dropped file, taken before its graphSync lands.
+    const undoStep = useGraphStore.getState().beginUndoStep();
     const heading = `Couldn't upload ${quoted(file.name)}.`;
+    // The node the upload adds, which comes with its echo (review 11, L-2).
+    let arrives: string[] = [];
     try {
       const response = await apiRequest(heading, '/api/uploads', { method: 'POST', body: form });
-      // One undo step per dropped file, owning only the node it made (round
-      // 14 of PR #114): a snapshot taken before the upload held none of the
-      // backend's nodes its echo brought into an empty tab, so Undo deleted
-      // an agent's node with it (review 13, Q5).
-      const answer = await response.json().catch(() => ({})) as { nodeId?: unknown };
-      if (typeof answer.nodeId === 'string' && answer.nodeId) useGraphStore.getState().noteOwnAdd([answer.nodeId]);
+      // The step owns only the node the upload made (round 14 of PR #114,
+      // review 13 Q5): an agent's node its echo brings into an empty tab
+      // isn't this step's, and its Undo leaves it (#195's `arrives`).
+      const body = await response.json().catch(() => null) as { nodeId?: unknown } | null;
+      if (typeof body?.nodeId === 'string' && body.nodeId) arrives = [body.nodeId];
     } catch (error) {
+      useGraphStore.getState().cancelUndoStep(undoStep);
       failed.set(at, { kind: 'upload', name: file.name, line: failureMessage(error, heading),
         reason: failureCopy(error, { heading }).reason });
+    } finally {
+      // An undo pressed while the upload was on its way acts once its node is
+      // on the canvas (review 10, L-2; review 11, L-2).
+      useGraphStore.getState().endUndoStep(undoStep, { arrives });
     }
   }));
   window.setTimeout(() => { dropsInFlight = Math.max(0, dropsInFlight - 1); }, DROP_FIT_GRACE_MS);

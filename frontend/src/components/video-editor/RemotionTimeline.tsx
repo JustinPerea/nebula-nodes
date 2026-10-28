@@ -10,6 +10,7 @@ import type {
 import type { VideoGraphManifest, TrackItem } from '../../types/video';
 import { DEFAULT_FPS } from '../../types/video';
 import { useGraphStore } from '../../store/graphStore';
+import { useCanvasLock } from '../../lib/canvasLock';
 import { useUIStore } from '../../store/uiStore';
 
 /** Local structural typing for the @xzdarcy timeline imperative ref.
@@ -76,6 +77,10 @@ export function RemotionTimeline({
   const editorData = useMemo(() => manifestToEditorData(manifest), [manifest]);
 
   const updateTrackItemTime = useGraphStore((s) => s.updateTrackItemTime);
+  // Round 23 (review 22, L-3): moving and resizing a layer edit the canvas;
+  // while following or offline the timeline doesn't drag (selecting and
+  // scrubbing still work).
+  const lock = useCanvasLock();
   const setSelectedTrackItem = useUIStore((s) => s.setSelectedTrackItem);
   const toggleSelectedTrackItem = useUIStore((s) => s.toggleSelectedTrackItem);
   const selectedTrackItemId = useUIStore((s) => s.selectedTrackItemId);
@@ -94,6 +99,7 @@ export function RemotionTimeline({
         editorData={editorData}
         effects={EFFECTS}
         autoScroll
+        disableDrag={lock.locked}
         onClickAction={(e, { action }) => {
           const event = e as unknown as MouseEvent;
           if (event.shiftKey || event.metaKey || event.ctrlKey) {

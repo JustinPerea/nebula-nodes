@@ -1,7 +1,8 @@
 import { useContext, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import { LeaveBusyContext } from './leaveBusy';
-import type { AgentNote, AgentNoteAction, AgentNoteAuthor } from '../../lib/agentNotes';
-import { authorInitials, noteControls, type NoteButton } from '../../lib/agentNotesView';
+import { backendAssetUrlSync } from '../../lib/backend';
+import type { AgentNote, AgentNoteAction, AgentNoteAuthor, AgentNoteRun } from '../../lib/agentNotes';
+import { authorInitials, clipDuration, noteControls, type NoteButton } from '../../lib/agentNotesView';
 
 /**
  * What a surface (the main canvas, later a board in the Studio) gives the
@@ -61,6 +62,49 @@ export function AuthorDot({
       {authorInitials(author)}
     </span>
   );
+}
+
+/**
+ * A done card's picture (Q125 item 3; GM - Design, 2026-10-25): below the
+ * message, 96 px tall, natural aspect, never cropped, capped at the card's
+ * width. A video shows its first frame with its length in mono in the
+ * corner. None for a failed run, or when the file can't be read.
+ */
+export function RunThumbnail({ run }: { run: AgentNoteRun | null | undefined }) {
+  const [failed, setFailed] = useState(false);
+  const [duration, setDuration] = useState<number | null>(null);
+  const thumb = run && run.outcome !== 'failure' ? run.thumbnail : undefined;
+  if (!thumb || failed) return null;
+  const src = backendAssetUrlSync(thumb.url);
+  return (
+    <div className="agent-run-thumb" data-kind={thumb.kind}>
+      {thumb.kind === 'image' ? (
+        <img src={src} alt="" loading="lazy" decoding="async" draggable={false} onError={() => setFailed(true)} />
+      ) : (
+        <>
+          {/* #t: the first frame, without playing it. */}
+          <video src={`${src}#t=0.001`} preload="metadata" muted playsInline aria-hidden="true"
+            onLoadedMetadata={(event) => {
+              const length = event.currentTarget.duration;
+              setDuration(Number.isFinite(length) && length > 0 ? length : null);
+            }}
+            onError={() => setFailed(true)} />
+          {duration !== null && <span className="agent-run-thumb__duration">{clipDuration(duration)}</span>}
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * GM: a failed run's card gets the error icon by its message, never a red
+ * edge. The glyph a node's own failure shows (a failed Cinema shot's ⚠; the
+ * card's error block itself has no icon), and aria-hidden: the message
+ * already says "failed" (GM - Design, 2026-10-25).
+ */
+export function RunOutcomeIcon({ run }: { run: AgentNoteRun | null | undefined }) {
+  if (run?.outcome !== 'failure') return null;
+  return <span className="agent-run-icon" aria-hidden="true">&#x26A0;</span>;
 }
 
 /**

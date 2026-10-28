@@ -600,8 +600,12 @@ export async function requestError(heading: string, response: Response,
  *   "2 “Text” nodes"; a mix, "“Brief” and 2 “Text” nodes".
  * - The rule counts nodes, not groups: from 4 nodes in total, "4 nodes".
  * - No node ids: the Agent log keeps those.
- * Groups keep the order their first node came in. The same rule (and name)
- * as fix/agent-presence-followups' helper, which replaces this one at merge.
+ * Groups keep the order their first node came in. The one helper for this
+ * rule (PR #198 merged with #195): the run-lock and multi-delete lines
+ * (lib/cinemaScene), the deleted notice, the "+ unpriced" tooltip
+ * (lib/runScope), the no-answer and server-error delete lines
+ * (lib/deleteCopy), and the placeholder dialog's moved-rows and replay lines
+ * (lib/placeholderRunConfirm).
  */
 export function nodeNameList(names: string[]): string {
   if (names.length >= 4) return `${names.length} nodes`;

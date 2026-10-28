@@ -4,6 +4,7 @@ import { currentMediaSource } from '../../lib/canvasNextSteps';
 import { useGraphStore } from '../../store/graphStore';
 import { useUIStore } from '../../store/uiStore';
 import type { DynamicNodeData, NodeData } from '../../types';
+import { useCanvasLock } from '../../lib/canvasLock';
 import '../../styles/canvas-next-steps.css';
 
 function videoSource(data: NodeData, displayedOutputs: NodeData['outputs']) {
@@ -28,6 +29,8 @@ export function VideoEditAction({ id, data, displayedOutputs, className = 'model
   const isImportingGraph = useGraphStore((state) => state.isImportingGraph);
   const viewMode = useUIStore((state) => state.viewMode);
   const commonsEnabled = useUIStore((state) => state.commonsEnabled);
+  // Editing writes back to this canvas: read-only offline and while following (GM round 22, A).
+  const lock = useCanvasLock();
   const source = videoSource(data, displayedOutputs);
   if (!source) return null;
   const canvasActive = viewMode === 'canvas' || (viewMode === 'commons' && !commonsEnabled);
@@ -35,8 +38,8 @@ export function VideoEditAction({ id, data, displayedOutputs, className = 'model
   return (
     <button type="button"
       className={`${className} model-node__video-edit nodrag nopan`}
-      disabled={isImportingGraph || !canvasActive}
-      title={isImportingGraph ? 'Wait for the graph import to finish' : 'Edit this video result'}
+      {...lock.act({ disabled: isImportingGraph || !canvasActive,
+        title: isImportingGraph ? 'Wait for the graph import to finish' : 'Edit this video result' })}
       onPointerDown={(event) => event.stopPropagation()}
       onMouseDown={(event) => event.stopPropagation()}
       onKeyDown={(event) => event.stopPropagation()}

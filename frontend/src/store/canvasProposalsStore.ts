@@ -11,14 +11,23 @@ import {
   ProposalRequestError,
   rejectProposal,
   releaseApproval,
+  runsNothing,
   withAncestors,
 } from '../lib/canvasProposals';
 import type { Point } from '../lib/agentCursorMotion';
 import { useGraphStore, watchGraphSyncs } from './graphStore';
 import { PERSON_REQUIRED_CODE, failureMessage } from '../lib/errorCopy';
 import { refuseEditWhileOffline } from '../lib/backendConnection';
+import { refuseEditWhileFollowing } from '../lib/canvasFollow';
 
 /** How long a closed proposal's ghosts fade before they go. Matches canvasProposals.css. */
+/** The answer's code for an Accept refused because the canvas was cleared or
+ * replaced after the proposal was made (backend PROPOSAL_CANVAS_REPLACED_CODE). */
+export const PROPOSAL_CANVAS_REPLACED_CODE = 'proposal_canvas_replaced';
+/** GM - Design, round 22 (4b), verbatim; the same with no agent named. */
+export const PROPOSAL_CANVAS_REPLACED_LINE =
+  "Couldn't accept this proposal. The canvas was cleared or replaced after it was made. Ask the agent for a new one.";
+
 export const PROPOSAL_EXIT_MS = 220;
 
 export interface ProposalEntry {
@@ -50,7 +59,10 @@ interface CanvasProposalsState {
   pending: Record<string, 'accept' | 'reject'>;
   errors: Record<string, string>;
   focusedId: string | null;
+  /** The held run the notice shows (the oldest), and those waiting behind it
+   * in the order they were accepted (review 16, L-2): each runs once. */
   deferredRun: DeferredRun | null;
+  deferredQueue: DeferredRun[];
   sync: (proposals: Array<ProposalView & { acceptKey: string; personValues?: ProposalPersonValues }>) => void;
   open: (view: ProposalView, acceptKey: string, values?: ProposalPersonValues) => void;
   close: (event: Pick<ProposalClosedEvent, 'proposalId' | 'status'>) => void;
@@ -62,6 +74,12 @@ interface CanvasProposalsState {
   reject: (id: string, reason?: string) => Promise<void>;
   runDeferred: () => Promise<void>;
   dismissDeferred: () => void;
+}
+
+/** The held run after the one the notice shows, if any, takes its place. */
+function nextDeferred(state: Pick<CanvasProposalsState, 'deferredQueue'>): Pick<CanvasProposalsState, 'deferredRun' | 'deferredQueue'> {
+  const [next = null, ...rest] = state.deferredQueue;
+  return { deferredRun: next, deferredQueue: rest };
 }
 
 const SAFE_COLOR = /^#[0-9a-fA-F]{6}$/;
@@ -137,6 +155,7 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
   errors: {},
   focusedId: null,
   deferredRun: null,
+  deferredQueue: [],
 
   sync: (list) => {
     for (const id of exitTimers.keys()) cancelExit(id);
@@ -205,8 +224,11 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
   accept: async (id) => {
     const entry = get().proposals[id];
     if (!entry || entry.closing || get().pending[id]) return;
-    // Offline is read-only (round 15 of PR #114): nothing is sent or marked;
-    // the banner pulses.
+    // Not while the canvas follows an agent's project switch (round 21,
+    // review 20 L-1: the canvas is about to go; the bar pulses), as the
+    // store's gates ask it first. Offline is read-only (round 15 of PR
+    // #114): nothing is sent or marked; the banner pulses.
+    if (refuseEditWhileFollowing()) return;
     if (refuseEditWhileOffline()) return;
     set((state) => ({ pending: { ...state.pending, [id]: 'accept' }, errors: without(state.errors, id) }));
     // Accepting is one undo step: the canvas before the proposal's nodes
@@ -219,10 +241,27 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
       accepted = true;
       synced.stop();
       useGraphStore.getState().adoptAcceptedProposal(result, { undoStep, synced: synced.seen });
+      // Its nodes are on the canvas: an undo pressed meanwhile acts now, not after the run below.
+      useGraphStore.getState().endUndoStep(undoStep);
       get().close({ proposalId: id, status: 'accepted' });
-      if (result.runNodeIds.length > 0) {
-        if (useGraphStore.getState().isExecuting) {
-          set({ deferredRun: { agentName: entry.view.agent.name, nodeIds: result.runNodeIds, approvalId: result.approvalId } });
+      // Undone while it was on its way (review 11, L-5): its nodes are off
+      // the canvas, so its run goes nowhere; the approval goes back instead.
+      const onCanvas = new Set(useGraphStore.getState().nodes.map((node) => node.id));
+      const undone = result.runNodeIds.some((nodeId) => !onCanvas.has(nodeId));
+      if (result.runNodeIds.length > 0 && undone) {
+        if (result.approvalId) await releaseApproval(result.approvalId);
+      } else if (result.runNodeIds.length > 0 && runsNothing(entry.view)) {
+        // Its whole run waits on agents' placeholders, so the button said
+        // "Accept" (GM - Design, round 5): no run, no Run history entry, no
+        // held run, and the approval goes back (review 5, L1).
+        if (result.approvalId) await releaseApproval(result.approvalId);
+      } else if (result.runNodeIds.length > 0) {
+        // A run waiting for its inputs counts as running (review 15, M-B).
+        if (useGraphStore.getState().isExecuting || useGraphStore.getState().runStarting) {
+          const deferred = { agentName: entry.view.agent.name, nodeIds: result.runNodeIds, approvalId: result.approvalId };
+          // One already held: this one waits behind it (review 16, L-2).
+          set((state) => state.deferredRun
+            ? { deferredQueue: [...state.deferredQueue, deferred] } : { deferredRun: deferred });
         } else {
           // The Accept click is the person's approval for these runs, at these values.
           await runNodes(result.runNodeIds, result.approvalId);
@@ -232,11 +271,17 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
       if (!accepted) useGraphStore.getState().cancelUndoStep(undoStep);
       // A person-only refusal (this tab isn't connected as the person) says
       // GM's line, by its code (Q116 a); a refused accept key, the canvas line.
-      const message = error instanceof ProposalRequestError && error.status === 403 && error.code !== PERSON_REQUIRED_CODE
+      // GM round 22 (4b): a proposal made before a clear or an import of
+      // this canvas, by the answer's code (never its words).
+      const message = error instanceof ProposalRequestError && error.code === PROPOSAL_CANVAS_REPLACED_CODE
+        ? PROPOSAL_CANVAS_REPLACED_LINE
+        : error instanceof ProposalRequestError && error.status === 403 && error.code !== PERSON_REQUIRED_CODE
         ? 'Only the canvas can accept this. Reload the page.'
         : failureMessage(error, "Couldn't accept the proposal.");
       set((state) => ({ errors: { ...state.errors, [id]: message } }));
     } finally {
+      // On every path (ending twice is harmless): an undo pressed meanwhile acts (review 10, L-2).
+      useGraphStore.getState().endUndoStep(undoStep);
       synced.stop();
       set((state) => ({ pending: without(state.pending, id) }));
     }
@@ -264,10 +309,11 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
 
   runDeferred: async () => {
     const deferred = get().deferredRun;
-    if (!deferred || useGraphStore.getState().isExecuting) return;
+    if (!deferred || useGraphStore.getState().isExecuting || useGraphStore.getState().runStarting) return;
     const live = new Set(useGraphStore.getState().nodes.map((node) => node.id));
     const nodeIds = deferred.nodeIds.filter((nodeId) => live.has(nodeId));
-    set({ deferredRun: null });
+    // The next held run shows now; its Run waits for this one to finish.
+    set(nextDeferred);
     // A node deleted since Accept makes this a different run; the backend
     // refuses it as changed, and the person can run what is left by hand.
     if (nodeIds.length > 0) await runNodes(nodeIds, deferred.approvalId);
@@ -276,7 +322,7 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
 
   dismissDeferred: () => {
     const deferred = get().deferredRun;
-    set({ deferredRun: null });
+    set(nextDeferred);
     if (deferred?.approvalId) void releaseApproval(deferred.approvalId);
   },
 }));
@@ -289,6 +335,9 @@ wsClient.subscribe((event) => {
   else if (event.type === 'graphSync' && event.graphReplaced) {
     // Another project or an import: the backend invalidated every proposal.
     store.clear();
-    useCanvasProposalsStore.setState({ deferredRun: null });
+    // Every held run goes, and every approval it held goes back (review 16, L-2).
+    const { deferredRun, deferredQueue } = useCanvasProposalsStore.getState();
+    useCanvasProposalsStore.setState({ deferredRun: null, deferredQueue: [] });
+    for (const held of [deferredRun, ...deferredQueue]) if (held?.approvalId) void releaseApproval(held.approvalId);
   }
 });

@@ -36,7 +36,7 @@ import '../../styles/mask-painter.css';
 import { failureMessage } from '../../lib/errorCopy';
 import { extractPaletteFromImage, paletteNotice } from '../../lib/paletteExtract';
 import { fileNameParam, inputFileName } from '../../lib/fileName';
-import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { useCanvasLock } from '../../lib/canvasLock';
 
 type InspectorParamDefinition = ParamDefinition | DynamicParamDefinition;
 
@@ -62,9 +62,13 @@ function normalizeHex(input: string): string | null {
 }
 
 export function Inspector({ embedded = false }: InspectorProps) {
-  // Offline is read-only (round 15 of PR #114): every field and action that
-  // edits renders disabled from this, so reconnect just re-renders.
-  const readOnly = useBackendOffline();
+  // Offline is read-only (round 15 of PR #114), and so is following an
+  // agent's switch (GM round 22, A: one state, lib/canvasLock): every field
+  // and action that edits renders disabled from this, so the end of either
+  // just re-renders. Run, Duplicate and Delete say "Wait for “<project>” to
+  // open." while following.
+  const lock = useCanvasLock();
+  const readOnly = lock.locked;
   const panelVisible = useUIStore((s) => s.panels.inspector.visible);
   const position = useUIStore((s) => s.panels.inspector.position);
   const selectedNodeId = useUIStore((s) => s.selectedNodeId);
@@ -456,7 +460,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
         <select
           className="inspector__field"
           value={selectedModel}
-          disabled={readOnly} {...offlineMark(readOnly)}
+          disabled={readOnly} {...lock.mark}
           onChange={(e) => {
             const selected = openRouterModels.find((m) => m.id === e.target.value);
             if (selected) {
@@ -489,7 +493,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
               title={isFavorite ? 'Remove favorite' : 'Add favorite'}
               aria-label={isFavorite ? 'Remove model from favorites' : 'Add model to favorites'}
               aria-pressed={isFavorite}
-              disabled={readOnly} {...offlineMark(readOnly)}
+              disabled={readOnly} {...lock.mark}
               onClick={() => {
                 const updated = isFavorite
                   ? favoriteIds.filter((modelId: string) => modelId !== selectedModel)
@@ -557,7 +561,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           aria-label={param.label}
           value={String(value)}
           disabled={options.length === 0 || readOnly}
-          {...offlineMark(readOnly)}
+          {...lock.mark}
           onChange={(e) => {
             const option = options.find((opt) => String(opt.value) === e.target.value);
             if (!param.required && param.default == null && e.target.value === '' && !option) {
@@ -590,7 +594,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           className="inspector__field"
           rows={3}
           value={String(value)}
-          disabled={readOnly} {...offlineMark(readOnly)}
+          disabled={readOnly} {...lock.mark}
           onChange={(e) => onParamChange(param.key, e.target.value)}
           placeholder={param.placeholder}
         />
@@ -604,7 +608,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           type="number"
           aria-label={param.label}
           value={String(value)}
-          disabled={readOnly} {...offlineMark(readOnly)}
+          disabled={readOnly} {...lock.mark}
           onChange={(e) => {
             const next = e.target.value;
             onParamChange(param.key, next === '' ? '' : Number(next));
@@ -648,7 +652,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
                       type="color"
                       className="inspector__palette-color"
                       value={safeHex}
-                      disabled={readOnly} {...offlineMark(readOnly)}
+                      disabled={readOnly} {...lock.mark}
                       aria-label={`Swatch ${idx + 1} color`}
                       onChange={(e) => {
                         const next = [...swatches];
@@ -660,7 +664,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
                       type="text"
                       className="inspector__field inspector__palette-hex"
                       value={hex}
-                      disabled={readOnly} {...offlineMark(readOnly)}
+                      disabled={readOnly} {...lock.mark}
                       spellCheck={false}
                       aria-label={`Swatch ${idx + 1} hex`}
                       onChange={(e) => {
@@ -682,7 +686,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
                       className="inspector__palette-remove"
                       title="Remove swatch"
                       aria-label={`Remove swatch ${idx + 1}`}
-                      disabled={readOnly} {...offlineMark(readOnly)}
+                      disabled={readOnly} {...lock.mark}
                       onClick={() => writeSwatches(swatches.filter((_, i) => i !== idx))}
                     >
                       <X
@@ -703,7 +707,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
               type="button"
               className="inspector__action-button"
               title="Add a swatch"
-              disabled={readOnly} {...offlineMark(readOnly)}
+              disabled={readOnly} {...lock.mark}
               onClick={() => writeSwatches([...swatches, '#808080'])}
             >
               <Plus
@@ -729,7 +733,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
                 accept="image/*"
                 className="inspector__file-input"
                 disabled={extracting || readOnly}
-                {...offlineMark(readOnly)}
+                {...lock.mark}
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
@@ -791,7 +795,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
             <input
               type="file"
               accept={acceptAttr}
-              disabled={readOnly} {...offlineMark(readOnly)}
+              disabled={readOnly} {...lock.mark}
               className="inspector__file-input"
               onChange={(e) => {
                 const file = e.target.files?.[0];
@@ -834,7 +838,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
             className="inspector__field"
             aria-label={param.label}
             value={value === true ? 'true' : value === false ? 'false' : ''}
-            disabled={readOnly} {...offlineMark(readOnly)}
+            disabled={readOnly} {...lock.mark}
             onChange={(e) => {
               if (e.target.value === '') clearParam(param.key);
               else onParamChange(param.key, e.target.value === 'true');
@@ -851,7 +855,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <input
             type="checkbox"
             checked={Boolean(activeNodeData.params[param.key] ?? param.default)}
-            disabled={readOnly} {...offlineMark(readOnly)}
+            disabled={readOnly} {...lock.mark}
             onChange={(e) => onParamChange(param.key, e.target.checked)}
           />
           <span className="inspector__checkbox-copy">{param.label}</span>
@@ -864,7 +868,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
         className="inspector__field"
         type="text"
         value={String(value)}
-        disabled={readOnly} {...offlineMark(readOnly)}
+        disabled={readOnly} {...lock.mark}
         onChange={(e) => onParamChange(param.key, e.target.value)}
         placeholder={param.placeholder}
       />
@@ -898,7 +902,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
             type="button"
             className="inspector__action-button inspector__action-button--full inspector__action-button--stacked"
             disabled={schemaLoading || !activeNodeData.params.model_id || readOnly}
-            {...offlineMark(readOnly)}
+            {...lock.mark}
             onClick={async () => {
               const modelId = String(activeNodeData.params.model_id ?? '');
               if (!modelId.includes('/')) return;
@@ -1120,7 +1124,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
                 <button
                   type="button"
                   className="mask-painter__paint-btn"
-                  disabled={readOnly} {...offlineMark(readOnly)}
+                  disabled={readOnly} {...lock.mark}
                   onClick={() => setMaskPainterOpen(true)}
                   onPointerEnter={() => void DeferredMaskPainterModal.preload().catch(() => {})}
                   onFocus={() => void DeferredMaskPainterModal.preload().catch(() => {})}
@@ -1179,9 +1183,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button"
-            disabled={readOnly} {...offlineMark(readOnly)}
+            {...lock.act({ title: 'Run this node and its dependencies' })}
             onClick={() => executeNode(renderNode.id)}
-            title="Run this node and its dependencies"
           >
             <Play
               className="inspector__action-icon"
@@ -1195,9 +1198,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button"
-            disabled={readOnly} {...offlineMark(readOnly)}
+            {...lock.act({ title: 'Duplicate this node' })}
             onClick={() => duplicateNode(renderNode.id)}
-            title="Duplicate this node"
           >
             <Copy
               className="inspector__action-icon"
@@ -1211,13 +1213,12 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button inspector__action-button--danger"
-            disabled={readOnly || sceneHeld !== null} {...offlineMark(readOnly)}
+            {...lock.act({ disabled: sceneHeld !== null, title: sceneHeld ?? 'Delete this node' })}
             onClick={() => {
               // A World Labs hold refuses, with its notice; otherwise it deletes at
               // once and says "Deleted the node." with Undo (GM, 2026-10-23).
               if (useGraphStore.getState().allowCanvasDelete([renderNode.id])) deleteNode(renderNode.id);
             }}
-            title={sceneHeld ?? 'Delete this node'}
           >
             <Trash2
               className="inspector__action-icon"

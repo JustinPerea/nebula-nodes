@@ -51,6 +51,12 @@ class ExecuteNodeRequest(BaseModel):
     preserve_graph_params: bool = Field(False, alias="preserveGraphParams")
     # The run the person approved by accepting a proposal (services/run_approvals.py).
     approval_id: str | None = Field(None, alias="approvalId", max_length=64)
+    # The agents' paid placeholders the person confirmed running (Q133): the
+    # person's direct run over any runs only with exactly these (main.execute_node).
+    confirmed_placeholders: list[str] | None = Field(None, alias="confirmedPlaceholders", max_length=500)
+    # The upper total (USD, list prices) the person's dialog showed for that
+    # run: it runs only when Nebula's own estimate is no higher.
+    confirmed_cost: float | None = Field(None, alias="confirmedCost", ge=0, le=1_000_000)
 
     model_config = {"populate_by_name": True}
 
@@ -73,6 +79,10 @@ class GenerateShotRequest(BaseModel):
     # Bounded 1–4 server-side (matches the panel stepper) so a raw POST can't
     # queue an unbounded run of real base-model calls.
     variations: int | None = Field(None, ge=1, le=4)
+    # A shot is the person's direct run of the scene (Q133): the agents' paid
+    # placeholders it runs, and the total the dialog showed, as ExecuteNodeRequest.
+    confirmed_placeholders: list[str] | None = Field(None, alias="confirmedPlaceholders", max_length=500)
+    confirmed_cost: float | None = Field(None, alias="confirmedCost", ge=0, le=1_000_000)
 
     model_config = {"populate_by_name": True}
 

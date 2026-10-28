@@ -29,7 +29,9 @@ Memory-only and bounded: ``UNDO_TTL_SECONDS``, ``MAX_EDITS``,
 ``MAX_EDIT_BYTES`` and ``MAX_TOTAL_BYTES``. A backend restart forgets every
 inverse (a token then gets 404). Clearing the canvas or loading a graph into
 the open project ends that project's tokens, because its node ids start
-again.
+again. Only the per-project id epochs (``epoch``) are kept across a restart,
+in ``persist_path`` (round 20 of PR #195): they are the canvas revision a tab
+holds, and PR #114's ``_graph_fence`` reads them too.
 
 Links: every edit id handed out (an agent's edit, an agent's undo, the
 person's Cmd+Z of a step the canvas knew the edit of) keeps a small brief
@@ -41,14 +43,18 @@ from __future__ import annotations
 
 import copy
 import json
+import math
+import os
 import re
 import secrets
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import Any, Callable, Mapping
+from pathlib import Path
+from typing import Any, Callable, Iterable, Mapping
 
-from services.canvas_events import actor_record
+from services import pending_nodes
+from services.canvas_events import MOVE_THRESHOLD_PX, actor_record
 
 UNDO_TTL_SECONDS = 3600
 MAX_EDITS = 100
@@ -110,15 +116,19 @@ def _wire_text(wire: Wire) -> str:
 
 def capture_before(nodes: Mapping[str, dict[str, Any]], edges: list[dict[str, Any]], *,
                    removed: list[str], changed: list[str], renamed: list[str], moved: list[str],
-                   shown: Mapping[str, Any]) -> dict[str, Any]:
+                   shown: Mapping[str, Any], ready: list[str] | tuple[str, ...] = ()) -> dict[str, Any]:
     """The canvas as an edit is about to change it: only what the edit names.
 
     ``shown`` are the positions the canvas shows (a node without a stored one
     is laid out on export), so undoing a move puts a node back where the
-    person saw it."""
+    person saw it. ``ready`` are the agent's placeholders the edit makes
+    normal (``pending: false``): their flags, so an undo makes them
+    placeholders again, as the person's Cmd+Z does (Q125 item 3). A removed
+    node keeps its flag the same way."""
     def node_copy(node_id: str) -> dict[str, Any]:
         node = nodes[node_id]
         position = node.get("position") or shown.get(node_id)
+        flag = pending_nodes.clean(node.get(pending_nodes.PENDING_KEY))
         return {
             "id": node_id,
             "definitionId": str(node.get("definitionId") or ""),
@@ -127,9 +137,12 @@ def capture_before(nodes: Mapping[str, dict[str, Any]], edges: list[dict[str, An
             **({"position": {"x": float(position["x"]), "y": float(position["y"])}}
                if isinstance(position, Mapping) else {}),
             "outputs": copy.deepcopy(node.get("outputs") or {}),
+            **({"pending": flag} if flag is not None else {}),
         }
 
     return {
+        "ready": {node_id: flag for node_id in dict.fromkeys(ready) if node_id in nodes
+                  if (flag := pending_nodes.clean(nodes[node_id].get(pending_nodes.PENDING_KEY))) is not None},
         "removed": [node_copy(node_id) for node_id in dict.fromkeys(removed) if node_id in nodes],
         "params": {node_id: copy.deepcopy(nodes[node_id].get("params") or {})
                    for node_id in changed if node_id in nodes},
@@ -166,6 +179,11 @@ def build_inverse(before: Mapping[str, Any], nodes: Mapping[str, dict[str, Any]]
         "moved": [],
         "removed": [copy.deepcopy(node) for node in before["removed"] if node["id"] not in nodes],
         "removedWires": sorted(wires_before - wires_after),
+        # Placeholders the edit made ready: undo makes them placeholders again,
+        # but only while the node is as the edit left it (_ready_changed_since).
+        "ready": [{"id": node_id, "pending": copy.deepcopy(flag), **_ready_state(nodes[node_id], node_id, edges)}
+                  for node_id, flag in (before.get("ready") or {}).items()
+                  if node_id in nodes and not pending_nodes.is_pending(nodes[node_id])],
     }
     for node_id, params in before["params"].items():
         now = nodes.get(node_id)
@@ -186,6 +204,49 @@ def build_inverse(before: Mapping[str, Any], nodes: Mapping[str, dict[str, Any]]
     return inverse
 
 
+def _node_wires(node_id: str, edges: list[dict[str, Any]] | set[Wire]) -> list[list[str]]:
+    """The connections to and from a node, sorted."""
+    wires = edges if isinstance(edges, set) else {wire_key(edge) for edge in edges}
+    return sorted(list(wire) for wire in wires if node_id in (wire[0], wire[2]))
+
+
+def _ready_state(node: Mapping[str, Any], node_id: str, edges: list[dict[str, Any]]) -> dict[str, Any]:
+    """A node as an agent's ``pending: false`` left it: what the person
+    changing since would change (GM: "the person edits it (params, label,
+    wiring, a real move)" turns it normal), so the agent's undo can tell."""
+    return {
+        "definitionId": str(node.get("definitionId") or ""),
+        "params": copy.deepcopy(node.get("params") or {}),
+        "label": node.get("label") or None,
+        "position": _point(node.get("position")),
+        "wires": _node_wires(node_id, edges),
+    }
+
+
+def _ready_changed_since(ready: Mapping[str, Any], now: Mapping[str, Any], wires: set[Wire]) -> bool:
+    """Whether a node an agent made ready was changed since (params, name, a
+    move, a connection to or from it), by anyone. An entry kept before these
+    fields were (none survives a restart) compares nothing."""
+    node_id = str(ready["id"])
+    if "params" in ready and (authored(str(ready.get("definitionId") or ""), now.get("params") or {})
+                              != authored(str(ready.get("definitionId") or ""), ready["params"])):
+        return True
+    if "label" in ready and (now.get("label") or None) != ready["label"]:
+        return True
+    if "position" in ready and ready["position"] is not None and _moved_far(ready["position"], _point(now.get("position"))):
+        return True
+    return "wires" in ready and _node_wires(node_id, wires) != [list(wire) for wire in ready["wires"]]
+
+
+def _moved_far(before: Mapping[str, float], after: Mapping[str, float] | None) -> bool:
+    """A real move, as the layout route counts one (main._moved_far_enough,
+    MOVE_THRESHOLD_PX): a nudge under it isn't an edit, so it doesn't make
+    the node "changed since" (review 4, L4)."""
+    if after is None:
+        return True
+    return math.hypot(after["x"] - before["x"], after["y"] - before["y"]) >= MOVE_THRESHOLD_PX
+
+
 def describe(inverse: Mapping[str, Any]) -> str:
     """One line on what undoing this edit does."""
     parts: list[str] = []
@@ -196,6 +257,8 @@ def describe(inverse: Mapping[str, Any]) -> str:
     earlier = [item["id"] for key in ("changed", "renamed", "moved") for item in inverse[key]]
     if earlier:
         parts.append("returns " + _ids(list(dict.fromkeys(earlier))) + " to how they were")
+    if inverse.get("ready"):
+        parts.append("makes " + _ids([item["id"] for item in inverse["ready"]]) + " placeholders again")
     wires = len(inverse["addedWires"]) + len(inverse["removedWires"])
     if wires and not parts:
         parts.append(f"puts {wires} connection{'s' if wires != 1 else ''} back")
@@ -213,7 +276,7 @@ def touched_nodes(inverse: Mapping[str, Any]) -> list[str]:
     """The nodes on the canvas an undo of this edit would change: those it
     added, changed, renamed or moved, and those its wires go into."""
     ids = [node["id"] for node in inverse["added"]]
-    ids += [item["id"] for key in ("changed", "renamed", "moved") for item in inverse[key]]
+    ids += [item["id"] for key in ("changed", "renamed", "moved", "ready") for item in inverse.get(key) or []]
     ids += [str(wire[2]) for key in ("addedWires", "removedWires") for wire in inverse[key]]
     return list(dict.fromkeys(ids))
 
@@ -421,11 +484,31 @@ def plan_undo(
             continue
         item(node_id)["position"] = dict(move["before"])
 
+    # Placeholders the edit made ready turn placeholders again, unless the
+    # node is one again already, someone else ran it since (a run makes a
+    # placeholder normal for good), or it changed since: the person's edit
+    # made it theirs (GM: "turns normal ... on any edit by the person"), and
+    # undo never takes that back, as for params, names and moves.
+    for ready in inverse.get("ready") or []:
+        node_id = ready["id"]
+        now = nodes.get(node_id)
+        if now is None or pending_nodes.is_pending(now):
+            continue
+        if node_id in ran:
+            leave(node_id, "placeholder")
+            continue
+        if _ready_changed_since(ready, now, current_wires):
+            skipped.append({"nodeId": node_id, "part": "placeholder", "reason": "changed since",
+                            "message": f"{node_id} changed since, so it stays a normal node"})
+            continue
+        item(node_id)["pending"] = copy.deepcopy(ready["pending"])
+
     back_again: list[str] = []
     for node in inverse["removed"]:
         if node["id"] in nodes:
             continue  # already back: ids are never handed out twice
-        restored = {key: copy.deepcopy(node[key]) for key in ("id", "definitionId", "params", "outputs", "position")
+        restored = {key: copy.deepcopy(node[key]) for key in ("id", "definitionId", "params", "outputs", "position",
+                                                              "pending")
                     if key in node}
         if node.get("label"):
             restored["label"] = node["label"]
@@ -464,7 +547,8 @@ def plan_undo(
 # order: "Undone: removed 1, disconnected 1." A wire counts too, so an undo that
 # only took a wire away doesn't read "no change".
 UNDONE_VERBS = (("removed", "removed"), ("added", "put back"), ("changed", "reset"), ("renamed", "renamed"),
-                ("moved", "moved"), ("wired", "connected back"), ("unwired", "disconnected"))
+                ("moved", "moved"), ("wired", "connected back"), ("unwired", "disconnected"),
+                ("placeholders", "made pending"))
 
 
 def nothing_went_back(skipped: list[dict[str, Any]], left: str = "") -> str:
@@ -570,6 +654,11 @@ class _Run:
     nodes: frozenset[str] = frozenset()
 
 
+def _counter(value: Any) -> bool:
+    """A stored epoch: a positive int (0 is not written)."""
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
 def _actor_key(actor: Mapping[str, Any]) -> str:
     """One run-er: an agent by its id, the person, or nobody we know."""
     kind = str(actor.get("kind") or "anonymous")
@@ -579,16 +668,38 @@ def _actor_key(actor: Mapping[str, Any]) -> str:
 
 
 class CanvasUndoBook:
-    def __init__(self, clock: Callable[[], float] = time.time) -> None:
+    def __init__(self, clock: Callable[[], float] = time.time, *, persist_path: Path | None = None,
+                 unrestored_base: int | None = None, prior_state: bool = False) -> None:
         self._clock = clock
+        # Where the per-project id epochs are kept across restarts (round 20
+        # of PR #195, review 19 M2): the canvas revision a tab holds is this
+        # epoch, so a restart that started it again at 0 read as an agent's
+        # clear. None (tests, a state dir that can't be made): memory only.
+        self.persist_path = persist_path
+        # Round 21 (the #114 merge, with review 20 L-4/L-5): when the epochs
+        # can't be restored (the file unreadable, missing while a canvas was
+        # saved before, or no file at all: memory only), every project's
+        # epoch starts at ``unrestored_base`` (main passes a boot-unique
+        # one, larger than any epoch a tab from before the restart can
+        # hold), never at 0: a tab's old revision then never matches the
+        # new canvas. ``restored`` says which, for the sync
+        # (canvasRevisionRestored). Without a base (tests): 0, as before.
+        self._unrestored_base = unrestored_base
+        self._prior_state = prior_state
+        self._base = 0
+        self.restored = True
         self._records: OrderedDict[str, EditRecord] = OrderedDict()  # by token, oldest first
         self._by_edit: dict[str, str] = {}
         self._links: OrderedDict[str, EditLink] = OrderedDict()
         self._gone: OrderedDict[str, str] = OrderedDict()  # token -> why it no longer works
         self._bytes = 0
         # Per project: how many times its node ids started again (forget_project),
-        # so an edit that was still finishing then keeps no token.
-        self._epochs: dict[str | None, int] = {}
+        # so an edit that was still finishing then keeps no token. Kept in
+        # ``persist_path`` (records and tokens stay memory-only).
+        self._epochs: dict[str | None, int] = self._load_epochs()
+        if not self.restored and self.persist_path is not None:
+            # The base is kept, so the next restart restores it.
+            self._save_epochs(self._epochs)
         # Runs, for "ran since": a clock that only goes up (``mark``), each
         # run's start, and per node the latest run each run-er started.
         self._tick = 0
@@ -687,7 +798,7 @@ class CanvasUndoBook:
     # -- records
     def epoch(self, project_id: str | None) -> int:
         """Pass it to ``keep`` from when the edit committed."""
-        return self._epochs.get(project_id, 0)
+        return self._epochs.get(project_id, self._base)
 
     def keep(self, *, edit_id: str, actor: Mapping[str, Any], agent_id: str, project_id: str | None,
              project_name: str, inverse: dict[str, Any], epoch: int | None = None,
@@ -767,12 +878,125 @@ class CanvasUndoBook:
         token = self._by_edit.get(edit_id or "")
         return self._records.get(token) if token else None
 
-    def forget_project(self, project_id: str | None, why: str) -> None:
-        self._epochs[project_id] = self.epoch(project_id) + 1
+    def advance_epoch(self, project_id: str | None) -> int:
+        """Move the project's epoch on, on disk first, and return the old one.
+
+        Call it before the canvas changes (a clear, an import), in the same
+        synchronous step: a crash between the two then leaves a moved epoch
+        over the old canvas (a tab reads it as a replacement and reloads),
+        never the new canvas under the old epoch (a held write for an old node
+        would land on the new node with its id). A storage error is printed
+        and the epoch still moves in memory: it never breaks a clear."""
+        previous = self.epoch(project_id)
+        self._save_epochs({**self._epochs, project_id: previous + 1})
+        self._epochs[project_id] = previous + 1
+        return previous
+
+    def restore_epoch(self, project_id: str | None, epoch: int) -> None:
+        """Put back the epoch ``advance_epoch`` returned when the change it
+        was moved for didn't happen (an import whose commit failed), in the
+        same synchronous step, so nothing read the moved one. That project's
+        entry is written as given (this book moved it, in this step); the
+        rest of the file is merged as usual (``_save_epochs``)."""
+        self._epochs[project_id] = epoch
+        self._save_epochs(self._epochs, exact=(project_id,))
+
+    def forget_project(self, project_id: str | None, why: str, *, advance: bool = True) -> None:
+        """The project's node ids start again: its epoch moves (unless the
+        caller moved it already, ``advance=False``) and its undo tokens end."""
+        if advance:
+            self.advance_epoch(project_id)
         for key in [key for key in self._node_runs if key[0] == project_id]:
             del self._node_runs[key]
         for token in [token for token, record in self._records.items() if record.project_id == project_id]:
             self._drop(token, why)
+
+    def _start_unrestored(self) -> dict[str | None, int]:
+        """No epochs to restore: from the boot-unique base, if main gave one."""
+        if self._unrestored_base is not None:
+            self.restored = False
+            self._base = int(self._unrestored_base)
+        return {}
+
+    # -- the epochs on disk: {"version": 1, "projects": {id: n}, "unfiled": n,
+    #    and "base": n when they started from an unrestored base}
+    def _load_epochs(self) -> dict[str | None, int]:
+        if self.persist_path is None:
+            return self._start_unrestored()
+        try:
+            raw = json.loads(self.persist_path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            # A first run has nothing a tab could hold; a canvas saved before
+            # without the file (deleted, or from before round 20) has.
+            return self._start_unrestored() if self._prior_state else {}
+        except (OSError, ValueError) as exc:
+            print(f"[canvas_undo] could not read {self.persist_path}: {exc}; canvas revisions start again",
+                  flush=True)
+            return self._start_unrestored()
+        epochs: dict[str | None, int] = {}
+        if not isinstance(raw, dict):
+            return self._start_unrestored()
+        if _counter(raw.get("base")):
+            self._base = raw["base"]
+        projects = raw.get("projects")
+        for project_id, value in (projects.items() if isinstance(projects, dict) else ()):
+            if isinstance(project_id, str) and project_id and _counter(value):
+                epochs[project_id] = value
+        if _counter(raw.get("unfiled")):
+            epochs[None] = raw["unfiled"]
+        return epochs
+
+    def _on_disk(self) -> dict[str | None, int]:
+        """The epochs the file holds now, or {} when it can't be read."""
+        try:
+            raw = json.loads(self.persist_path.read_text(encoding="utf-8")) if self.persist_path else None
+        except (OSError, ValueError):
+            return {}
+        if not isinstance(raw, dict):
+            return {}
+        projects = raw.get("projects")
+        found: dict[str | None, int] = {key: value for key, value in (projects.items() if isinstance(projects, dict) else ())
+                                        if isinstance(key, str) and key and _counter(value)}
+        if _counter(raw.get("unfiled")):
+            found[None] = raw["unfiled"]
+        return found
+
+    def _save_epochs(self, epochs: Mapping[str | None, int], *, exact: Iterable[str | None] = ()) -> None:
+        """Atomically (a temporary file, fsync, rename), best effort, and as a
+        merge (round 21 of PR #195, review 20 L-5): the file is read again
+        and each project keeps the higher of the two, so another book's
+        write on the same state dir never moves a revision backwards, and a
+        corrupt file read at boot isn't rewritten with only the projects in
+        memory once it reads again. ``exact``: projects written as given
+        (restore_epoch's own undo of its move)."""
+        if self.persist_path is None:
+            return
+        merged: dict[str | None, int] = dict(self._on_disk())
+        exact = set(exact)
+        for key, value in epochs.items():
+            merged[key] = value if key in exact else max(value, merged.get(key, value))
+        epochs = merged
+        data: dict[str, Any] = {"version": 1,
+                "projects": {key: value for key, value in sorted(epochs.items(), key=lambda item: str(item[0]))
+                             if key is not None and value != self._base},
+                "unfiled": int(epochs.get(None, self._base))}
+        if self._base:
+            data["base"] = self._base
+        temporary = self.persist_path.with_name(f".{self.persist_path.name}.{os.getpid()}.{secrets.token_hex(4)}.tmp")
+        try:
+            self.persist_path.parent.mkdir(parents=True, exist_ok=True)
+            fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(data, handle)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, self.persist_path)
+        except OSError as exc:
+            print(f"[canvas_undo] could not save canvas revisions to {self.persist_path}: {exc}", flush=True)
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
 
     def _expire(self) -> None:
         now = self._clock()

@@ -4,8 +4,12 @@ import { wsClient, type AgentCursorAnchor, type AgentPresenceEvent } from '../li
 /** Cursors dim after this long without news, and disappear after AGENT_CURSOR_EXPIRE_MS. */
 export const AGENT_CURSOR_IDLE_MS = 20_000;
 export const AGENT_CURSOR_EXPIRE_MS = 120_000;
-/** Narration stays beside the cursor this long. */
-export const AGENT_SAY_MS = 6_000;
+/** Narration stays beside the cursor this long after the agent's last event,
+ * then fades (GM - Design, round 19: "fades out about 3 s after the agent's
+ * last event"). */
+export const AGENT_SAY_MS = 3_000;
+/** The bubble's fade: the length of --agent-cursor-say-fade in agentCursor.css. */
+export const AGENT_SAY_FADE_MS = 320;
 
 export interface AgentCursor {
   id: string;

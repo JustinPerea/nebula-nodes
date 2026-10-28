@@ -9,6 +9,8 @@ import { missingKeyTitle } from '../../lib/nodeKeys';
 import type { NodeData } from '../../types';
 import { sceneCardView } from '../../lib/cinemaScene';
 import { NodeRunError } from './NodeError';
+import { PlaceholderLine } from './PlaceholderLine';
+import { pendingAttr } from '../../lib/pendingNodes';
 import '../../styles/cinema-node.css';
 
 interface CinemaSceneNodeData {
@@ -50,7 +52,7 @@ export function CinemaSceneNode({ id, data, selected }: NodeProps) {
   return (
     // GM r7 item 2: one selection style. The card carries its category's
     // colour as ModelNode does, and cinema-node.css selects it in that colour.
-    <div className={`cinema-scene-node ${selected ? 'cinema-scene-node--selected' : ''}`}
+    <div className={`cinema-scene-node ${selected ? 'cinema-scene-node--selected' : ''}`} data-pending={pendingAttr(data.pending)}
       style={{ ['--node-category-color' as string]: SCENE_CATEGORY_COLOR }}>
       <div className="cinema-scene-node__title">
         <span>⛭ Cinema Scene</span>
@@ -67,6 +69,8 @@ export function CinemaSceneNode({ id, data, selected }: NodeProps) {
           <div className="cinema-scene-node__thumb-placeholder">storyboard</div>
         )}
       </div>
+
+      <PlaceholderLine pending={data.pending} />
 
       <div className="cinema-scene-node__summary">{summary}</div>
       {unsaved && <div className="cinema-scene-node__unsaved" title={unsaved}>{UNSAVED_MARK}</div>}

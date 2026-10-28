@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { Edge, Node } from '@xyflow/react';
 import { apiFetch, rewriteBackendAssetUrls } from './backend';
 import { isOfflineRefusal, refuseEditWhileOffline } from './backendConnection';
+import { refuseEditWhileFollowing } from './canvasFollow';
 import { nodeKeyStatus } from './kreaConnection';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { shotPortId } from '../constants/ports';
@@ -61,8 +62,10 @@ export async function sendCinemaShotToMotion(nodeId: string, shotId: string): Pr
   const graph = useGraphStore.getState();
   if (graph.isImportingGraph) return;
   // Round 16 (L3): connecting a video node is an edit. Offline the button is
-  // disabled; a press that gets here only pulses the banner.
-  if (refuseEditWhileOffline()) return;
+  // disabled; a press that gets here only pulses the banner. Round 22
+  // (review 21, L-d): so while following an agent's switch, the project
+  // bar's pulse, and nothing is sent or marked.
+  if (refuseEditWhileFollowing() || refuseEditWhileOffline()) return;
   const previous = useCinemaMotionStore.getState().handoffs.find((item) => item.nodeId === nodeId && item.shotId === shotId);
   if (previous?.status === 'pending') return;
   const source = cinemaMotionSource(graph.nodes, nodeId, shotId);

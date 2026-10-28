@@ -3,13 +3,18 @@ import { lastForeignToucher, useGraphStore } from '../../store/graphStore';
 import { droppedRenameLine } from '../../lib/canvasUndo';
 import { NODE_RENAME_EVENT } from '../../lib/keyboardShortcuts';
 import { isBackendOffline, refuseEditWhileOffline } from '../../lib/backendConnection';
-import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { useCanvasLock } from '../../lib/canvasLock';
+import { followingSwitch, refuseEditWhileFollowing } from '../../lib/canvasFollow';
 
 interface NodeLabelProps {
   nodeId: string;
   label: string;
   /** The model's own name; shown as a hint once the node has a custom one. */
   displayName?: string;
+  /** GM - Design, round 18, item 1: the title an unnamed node shows on the
+   * canvas (directRoute canvasTitle: "Grok Imagine 2.0" for "Grok Imagine
+   * 2.0 (Krea)"). Defaults to the display name. */
+  defaultTitle?: string;
 }
 
 /** A node's title. Double-click to rename; Enter or clicking away saves,
@@ -24,16 +29,33 @@ interface NodeLabelProps {
  * Round 16 (review 15 nit): on reconnect the draft gets focus back, unless an
  * agent renamed the node meanwhile. Then the draft is dropped, so the
  * agent's name isn't overwritten, and GM's toast says so (no refocus). */
-export function NodeLabel({ nodeId, label, displayName }: NodeLabelProps) {
+export function NodeLabel({ nodeId, label, displayName, defaultTitle }: NodeLabelProps) {
+  const fallback = defaultTitle ?? displayName;
+  // Unnamed: the saved label is either form of the default title (GM - Design,
+  // round 18), the catalog name or the canvas title; it shows the canvas title.
+  const custom = Boolean(displayName) && label !== displayName && label !== fallback;
+  const shown = displayName && !custom && fallback ? fallback : label;
   const renameNode = useGraphStore((state) => state.renameNode);
-  const readOnly = useBackendOffline();
+  const noteRenameDraft = useGraphStore((state) => state.noteRenameDraft);
+  // Offline or following an agent's switch: one read-only state (GM round 22, A).
+  const lock = useCanvasLock();
+  const readOnly = lock.offline;
   const [draft, setDraft] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   /** The name when this rename started: a different one on reconnect means
    * someone else renamed the node while the tab was offline. */
   const startedFrom = useRef(label);
   const wasReadOnly = useRef(readOnly);
-  const begin = () => { startedFrom.current = label; setDraft(label); };
+  const begin = () => { startedFrom.current = label; setDraft(shown); };
+
+  // Round 22 (review 21, L-c): a draft open when an agent switched project
+  // was handed off into the project left (graphStore.beginAgentSwitch saves
+  // it as clicking away would have). It goes here, so the next canvas's
+  // node with the same id never gets it.
+  const following = lock.following;
+  useEffect(() => {
+    if (following) setDraft(null);
+  }, [following]);
 
   useEffect(() => {
     const reconnected = wasReadOnly.current && !readOnly;
@@ -49,17 +71,26 @@ export function NodeLabel({ nodeId, label, displayName }: NodeLabelProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readOnly]);
 
+  // Round 20 (GM: "A rename draft counts as "Name""): the store knows a name
+  // typed here and not yet saved, so an agent's clear names it and an agent's
+  // switch saves it into the project left. A draft that still reads the
+  // shown title is no change.
+  useEffect(() => {
+    noteRenameDraft(nodeId, draft !== null && draft !== shown ? draft : null);
+  }, [nodeId, draft, shown, noteRenameDraft]);
+  useEffect(() => () => noteRenameDraft(nodeId, null), [nodeId, noteRenameDraft]);
+
   // F2 on the canvas asks the selected node to start renaming.
   useEffect(() => {
     const onRename = (event: Event) => {
       if ((event as CustomEvent<{ nodeId?: string }>).detail?.nodeId !== nodeId) return;
-      if (refuseEditWhileOffline()) return;
+      if (refuseEditWhileFollowing() || refuseEditWhileOffline()) return;
       startedFrom.current = label;
-      setDraft(label);
+      setDraft(shown);
     };
     window.addEventListener(NODE_RENAME_EVENT, onRename);
     return () => window.removeEventListener(NODE_RENAME_EVENT, onRename);
-  }, [nodeId, label]);
+  }, [nodeId, label, shown]);
 
   useEffect(() => {
     if (draft === null) return;
@@ -79,14 +110,15 @@ export function NodeLabel({ nodeId, label, displayName }: NodeLabelProps) {
         ref={inputRef}
         className="model-node__label model-node__label-input nodrag nopan"
         value={draft}
-        disabled={readOnly}
-        {...offlineMark(readOnly)}
+        disabled={lock.locked}
+        {...lock.mark}
         maxLength={80}
         aria-label="Node name"
-        placeholder={displayName}
+        placeholder={fallback}
         onChange={(event) => setDraft(event.target.value)}
         // Offline, the field is disabled and loses focus: keep the draft.
-        onBlur={() => { if (!isBackendOffline()) finish(true); }}
+        // Following: the switch handed the draft off; the effect above drops it.
+        onBlur={() => { if (!isBackendOffline() && !followingSwitch()) finish(true); }}
         onClick={(event) => event.stopPropagation()}
         onDoubleClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
@@ -98,18 +130,17 @@ export function NodeLabel({ nodeId, label, displayName }: NodeLabelProps) {
     );
   }
 
-  const custom = displayName && label !== displayName;
   return (
     <span
       className="model-node__label"
       title={custom ? `${displayName} · double-click to rename` : 'Double-click to rename'}
       onDoubleClick={(event) => {
         event.stopPropagation();
-        if (refuseEditWhileOffline()) return;
+        if (refuseEditWhileFollowing() || refuseEditWhileOffline()) return;
         begin();
       }}
     >
-      {label}
+      {shown}
     </span>
   );
 }

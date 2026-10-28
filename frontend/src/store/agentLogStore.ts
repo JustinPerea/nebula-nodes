@@ -45,6 +45,8 @@ export const useAgentLogStore = create<AgentLogState>((set) => ({
 export function agentActionEntry(event: AgentPresenceEvent, now = Date.now()): Omit<AgentLogEntry, 'id'> | null {
   const agent = event.agent;
   if (!agent || typeof agent.id !== 'string' || typeof agent.name !== 'string') return null;
+  // The log's own words when the bubble's leave something out (round 16 of
+  // PR #195; PR #198 r1).
   const said = typeof event.say === 'string' ? event.say.trim() : '';
   const message = (typeof event.log === 'string' ? event.log.trim() : '') || said;
   if (!message) return null;

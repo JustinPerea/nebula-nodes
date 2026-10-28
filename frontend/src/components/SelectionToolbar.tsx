@@ -24,18 +24,21 @@ import {
 } from '../lib/canvasSelection';
 import { failureMessage } from '../lib/errorCopy';
 import { RUN_LOCK_REASON } from '../lib/cinemaScene';
-import { offlineMark, useBackendOffline } from '../lib/useBackendOffline';
+import { useCanvasLock } from '../lib/canvasLock';
 
 
 export function SelectionToolbar() {
   const nodes = useGraphStore((state) => state.nodes);
   const edges = useGraphStore((state) => state.edges);
   const isExecuting = useGraphStore((state) => state.isExecuting);
-  // Offline is read-only (GM, round 15 of PR #114): Run, Ask, Note,
-  // Duplicate, Arrange and Delete are disabled and look it; Copy and
-  // Download stay.
-  const offline = useBackendOffline();
-  const off = offlineMark(offline);
+  // A run waiting for its inputs counts as starting (review 15, M-B).
+  const runStarting = useGraphStore((state) => state.runStarting);
+  // Offline is read-only (GM, round 15 of PR #114), and so is following an
+  // agent's switch (GM round 22, A: one state, lib/canvasLock): Run, Ask,
+  // Note, Duplicate, Arrange and Delete are disabled and look it, with "Wait
+  // for “<project>” to open." while following; Copy, Download and the
+  // node's Settings stay.
+  const lock = useCanvasLock();
   const executeNode = useGraphStore((state) => state.executeNode);
   const executeCluster = useGraphStore((state) => state.executeCluster);
   const copySelected = useGraphStore((state) => state.copySelected);
@@ -130,8 +133,8 @@ export function SelectionToolbar() {
         {ids.length} selected
       </span>
       <span className="selection-toolbar__divider" aria-hidden="true" />
-      <button type="button" className="selection-toolbar__button" onClick={openAgent} title="Ask agent about selection"
-        disabled={offline} {...off}>
+      <button type="button" className="selection-toolbar__button" onClick={openAgent}
+        {...lock.act({ title: 'Ask agent about selection' })}>
         <MessageCircle size={17} aria-hidden="true" />
         <span>Ask</span>
       </button>
@@ -140,9 +143,7 @@ export function SelectionToolbar() {
           type="button"
           className="selection-toolbar__button"
           onClick={() => composeNote({ nodeId: ids[0] })}
-          disabled={offline}
-          {...off}
-          title="Note for agents"
+          {...lock.act({ title: 'Note for agents' })}
           aria-label="Note for agents"
         >
           <StickyNote size={17} aria-hidden="true" />
@@ -153,11 +154,9 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button selection-toolbar__button--primary"
         onClick={runSelection}
-        disabled={isExecuting || offline}
-        {...off}
+        {...lock.act({ disabled: isExecuting || runStarting, title: `Run selected nodes. ${describeRunScope(runScope)}` })}
         aria-label="Run selected nodes"
         aria-describedby={runScopeId}
-        title={`Run selected nodes. ${describeRunScope(runScope)}`}
       >
         <Play size={17} fill="currentColor" aria-hidden="true" />
         <span>Run</span>
@@ -179,9 +178,7 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button"
         onClick={duplicateSelected}
-        disabled={isExecuting || offline}
-        {...off}
-        title={isExecuting ? RUN_LOCK_REASON : 'Duplicate selected nodes'}
+        {...lock.act({ disabled: isExecuting, title: isExecuting ? RUN_LOCK_REASON : 'Duplicate selected nodes' })}
       >
         <Files size={17} aria-hidden="true" />
         <span className="selection-toolbar__label--compact">Duplicate</span>
@@ -190,9 +187,7 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button"
         onClick={autoLayoutSelected}
-        disabled={ids.length < 2 || isExecuting || offline}
-        {...off}
-        title="Arrange selected nodes"
+        {...lock.act({ disabled: ids.length < 2 || isExecuting, title: 'Arrange selected nodes' })}
       >
         <LayoutGrid size={17} aria-hidden="true" />
         <span className="selection-toolbar__label--compact">Arrange</span>
@@ -219,9 +214,7 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button selection-toolbar__button--danger"
         onClick={removeSelection}
-        disabled={isExecuting || offline || sceneHeld !== null}
-        {...off}
-        title={isExecuting ? RUN_LOCK_REASON : sceneHeld ?? 'Delete selected nodes'}
+        {...lock.act({ disabled: isExecuting || sceneHeld !== null, title: isExecuting ? RUN_LOCK_REASON : sceneHeld ?? 'Delete selected nodes' })}
         aria-label="Delete selected nodes"
       >
         <Trash2 size={17} aria-hidden="true" />

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useGraphStore } from '../../store/graphStore';
 import { useUIStore } from '../../store/uiStore';
+import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
 
 interface UseRemotionKeyboardOptions {
   remotionNodeId: string;
@@ -10,7 +11,9 @@ interface UseRemotionKeyboardOptions {
 export function useRemotionKeyboard({ remotionNodeId, currentFrame }: UseRemotionKeyboardOptions) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.defaultPrevented) return;
+      // Nothing acts behind a modal dialog, focus on the page or on its
+      // buttons included (review 8, L-d).
+      if (e.defaultPrevented || keyBlockedByModal()) return;
       // Ignore if user is typing in an input/textarea
       const target = e.target as HTMLElement | null;
       if (

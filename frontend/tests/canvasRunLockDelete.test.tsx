@@ -21,11 +21,14 @@ vi.mock('@xyflow/react', async (importOriginal) => {
     useReactFlow: () => ({
       fitView: flow.fitView, viewportInitialized: flow.initialized,
       screenToFlowPosition: (point: unknown) => point,
+      // #195's Delete key reads the selection from React Flow (the merge).
+      getNodes: () => useGraphStore.getState().nodes,
+      getEdges: () => useGraphStore.getState().edges,
     }),
     useInternalNode: (id: string) => flow.internalNodes.get(id),
     useStore: () => 1,
     // Fit view reads the canvas size to frame open proposals' ghosts (useFitCanvasView).
-    useStoreApi: () => ({ getState: () => ({ width: 1280, height: 800, minZoom: 0.1, maxZoom: 2 }) }),
+    useStoreApi: () => ({ getState: () => ({ width: 1280, height: 800, minZoom: 0.1, maxZoom: 2 }), setState: () => {} }),
   };
 });
 vi.mock('../src/components/SelectionToolbar', () => ({ SelectionToolbar: () => null }));
@@ -109,10 +112,13 @@ describe('M1: the Delete key during the tab\'s own run', () => {
     expect(useGraphStore.getState().undoNotice?.text).toBe("Couldn't delete “Brief”. Wait for the active run to finish.");
   });
 
-  it('with no run, the key is React Flow\'s (the handler stays out of it)', () => {
+  // Merged with #195: the canvas's handler owns the Delete key (React Flow's
+  // deleteKeyCode is off), so with no run it deletes the selection through
+  // the store, with no run-lock line.
+  it('with no run, the key deletes the selection, with no run-lock line', () => {
     render(<Canvas />);
     act(() => { document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true })); });
-    expect(useGraphStore.getState().undoNotice).toBeNull();
-    expect(useGraphStore.getState().nodes.map((node) => node.id)).toEqual(['n4', 'n5']);
+    expect(useGraphStore.getState().undoNotice?.text ?? '').not.toMatch(/active run/);
+    expect(useGraphStore.getState().nodes.map((node) => node.id)).toEqual(['n4']);
   });
 });

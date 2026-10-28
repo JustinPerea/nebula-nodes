@@ -10,7 +10,6 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
-import { createPortal } from 'react-dom';
 import {
   Download,
   ExternalLink,
@@ -38,7 +37,9 @@ import type { WorldNavigationMode, WorldViewerStatus } from './WorldEnvironmentV
 import { InvalidWorldFace, WorldPreviewFace } from './WorldPreviewFace';
 import { safeWorldAsset as safeAsset, worldCaption, worldThumbnail } from '../../lib/worldCard';
 import '../../styles/world-preview.css';
+import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
 import { failureMessage } from '../../lib/errorCopy';
+import { ModalPortal } from '../ModalPortal';
 
 const LazyWorldEnvironmentViewer = lazy(() =>
   import('./WorldEnvironmentViewer').then((module) => ({ default: module.WorldEnvironmentViewer })),
@@ -129,6 +130,8 @@ function WorldPreviewComponent({ value, compact = false }: WorldPreviewProps) {
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     closeRef.current?.focus({ preventScroll: true });
     const onKeyDown = (event: KeyboardEvent) => {
+      // A modal dialog opened over the preview owns the keys (review 8, L-d).
+      if (keyBlockedByModal(dialogRef.current)) return;
       if (event.key === 'Escape') {
         event.preventDefault();
         close();
@@ -228,7 +231,8 @@ function WorldPreviewComponent({ value, compact = false }: WorldPreviewProps) {
         <WorldPreviewFace world={world} />
       </button>
 
-      {showModal && createPortal(
+      {showModal && (
+        <ModalPortal>
         <div
           className="world-modal-overlay nodrag nowheel"
           onMouseDown={(event) => event.stopPropagation()}
@@ -434,8 +438,8 @@ function WorldPreviewComponent({ value, compact = false }: WorldPreviewProps) {
               </div>
             </footer>
           </section>
-        </div>,
-        document.body,
+        </div>
+        </ModalPortal>
       )}
     </>
   );

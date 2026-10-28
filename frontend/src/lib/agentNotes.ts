@@ -8,7 +8,8 @@ import { apiRequest } from './apiRequest';
  */
 
 export type AgentNoteAbout =
-  | 'sinceLastTurn' | 'analyze' | 'suggestion' | 'removedLook' | 'changedWords' | 'proposal' | 'question' | 'other';
+  | 'sinceLastTurn' | 'analyze' | 'suggestion' | 'removedLook' | 'changedWords' | 'proposal' | 'question' | 'run'
+  | 'other';
 
 export interface AgentNoteAuthor {
   kind: 'agent' | 'reader';
@@ -48,6 +49,18 @@ export interface AgentNote {
   /** A question set's Update (Q125 item 1): the set it asks. Its questions
    * and answers are never on the Update (store/agentQuestionsStore.ts). */
   questionsId?: string | null;
+  /** A done card (Q125 item 3): the agent's run that ended, as Nebula posted it. */
+  run?: AgentNoteRun | null;
+}
+
+/** A done card's run (backend agent_notes.post_run_done). */
+export interface AgentNoteRun {
+  id: string;
+  nodeIds: string[];
+  lastNodeId: string;
+  outcome: 'success' | 'partial' | 'failure';
+  /** An output Nebula keeps (an /api/outputs URL), never a copy or a provider's URL. */
+  thumbnail?: { kind: 'image' | 'video'; url: string; nodeId: string };
 }
 
 export type AgentNotesSurface = { kind: 'canvas' } | { kind: 'board'; boardId: string };
@@ -83,8 +96,32 @@ export const MAX_NOTE_BUTTONS = 2;
 
 const SAFE_COLOR = /^#[0-9a-fA-F]{6}$/;
 const ABOUT: readonly AgentNoteAbout[] = [
-  'sinceLastTurn', 'analyze', 'suggestion', 'removedLook', 'changedWords', 'proposal', 'question', 'other',
+  'sinceLastTurn', 'analyze', 'suggestion', 'removedLook', 'changedWords', 'proposal', 'question', 'run', 'other',
 ];
+const OUTCOMES: readonly AgentNoteRun['outcome'][] = ['success', 'partial', 'failure'];
+/** Only a file in Nebula's output folder: no scheme, no `..`, nothing signed. */
+const OUTPUT_URL = /^\/api\/outputs\/(?!.*\.\.)[^?#\s]+$/;
+
+function sanitizeRun(raw: unknown): AgentNoteRun | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const run = raw as Record<string, unknown>;
+  const id = str(run.id);
+  const lastNodeId = str(run.lastNodeId);
+  if (!id || !lastNodeId) return null;
+  const outcome = OUTCOMES.includes(run.outcome as AgentNoteRun['outcome'])
+    ? (run.outcome as AgentNoteRun['outcome']) : 'success';
+  const thumb = run.thumbnail && typeof run.thumbnail === 'object' ? run.thumbnail as Record<string, unknown> : null;
+  const thumbnail = thumb && (thumb.kind === 'image' || thumb.kind === 'video')
+    && typeof thumb.url === 'string' && OUTPUT_URL.test(thumb.url)
+    ? { kind: thumb.kind, url: thumb.url, nodeId: str(thumb.nodeId) ?? lastNodeId } as const : null;
+  return {
+    id,
+    nodeIds: Array.isArray(run.nodeIds) ? run.nodeIds.filter((node): node is string => typeof node === 'string').slice(0, 200) : [],
+    lastNodeId,
+    outcome,
+    ...(thumbnail ? { thumbnail } : {}),
+  };
+}
 
 function str(value: unknown): string | null {
   return typeof value === 'string' && value ? value : null;
@@ -159,6 +196,7 @@ export function sanitizeNote(raw: unknown): AgentNote | null {
     outcome: typeof note.outcome === 'string' && note.outcome ? note.outcome.slice(0, 80) : null,
     questionsId: note.questions && typeof note.questions === 'object'
       ? str((note.questions as Record<string, unknown>).id) : null,
+    run: note.about === 'run' ? sanitizeRun(note.run) : null,
   };
 }
 

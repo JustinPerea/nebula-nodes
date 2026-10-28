@@ -7,7 +7,7 @@ import { ParamPills } from './ParamPills';
 import { isCreateModel } from '../../lib/createModels';
 import { ProviderReadinessBadge } from '../ProviderReadinessBadge';
 import { failureMessage } from '../../lib/errorCopy';
-import { offlineAction, useBackendOffline } from '../../lib/useBackendOffline';
+import { lockedAction, refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 
 interface CreateComposerProps {
   modelDef: ModelNodeDefinition | null;
@@ -39,12 +39,16 @@ export function CreateComposer({
   onPromptChange, onSelectModel, onParamsChange, onGenerate, onAttach, onQuantityChange, onOpenStyles,
 }: CreateComposerProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Round 23 (review 22, L-3): Generate adds the generation's nodes to the
+  // canvas and runs them, so it takes the canvas lock. The rest of the
+  // composer edits this Create session's own draft (createDraftStore, kept in
+  // the browser), never the canvas, and stays enabled.
+  const lock = useCanvasLock();
   const [enhancing, setEnhancing] = useState(false);
   const [prevPrompt, setPrevPrompt] = useState<string | null>(null);
   const [enhanceError, setEnhanceError] = useState<string | null>(null);
   const modelSupported = Boolean(modelDef && isCreateModel(modelDef));
-  const offline = useBackendOffline();
-  const canGenerate = modelSupported && !isLaunching && !referencesBlocked && activeCount < maxConcurrent && !offline;
+  const canGenerate = modelSupported && !isLaunching && !referencesBlocked && activeCount < maxConcurrent && !lock.offline;
   const canEnhance = prompt.trim().length > 0 && !enhancing;
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -119,6 +123,7 @@ export function CreateComposer({
         onKeyDown={(e) => {
           if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.repeat && canGenerate) {
             e.preventDefault();
+            if (refuseCanvasEdit()) return;
             onGenerate();
           }
         }}
@@ -167,8 +172,8 @@ export function CreateComposer({
         <button
           type="button"
           className="create-composer__generate"
-          {...offlineAction(offline, !canGenerate)}
-          onClick={(e) => { if (e.detail <= 1 && canGenerate) onGenerate(); }}
+          {...lockedAction(lock, { disabled: !canGenerate }, { neutral: true, offlineTooltip: false })}
+          onClick={(e) => { if (e.detail <= 1 && canGenerate && !refuseCanvasEdit()) onGenerate(); }}
         >
           <Sparkles size={16} strokeWidth={1.9} aria-hidden="true" />
           {activeCount > 0 ? `Generating… (${activeCount})` : 'Generate'}

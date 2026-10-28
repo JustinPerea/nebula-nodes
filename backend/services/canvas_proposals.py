@@ -473,6 +473,8 @@ def cost_for(
     params: Mapping[str, Any] | None = None,
     definitions: Mapping[str, Mapping[str, Any]] | None = None,
     api_keys: Mapping[str, Any] | None = None,
+    *,
+    wired: Any = (),
 ) -> dict[str, Any]:
     """`free` for local utility nodes, else `paid` with the provider. No prices exist.
 
@@ -487,7 +489,14 @@ def cost_for(
     ``provider`` is None, ``unavailable`` says why and, for a setting the
     route doesn't offer, ``fixes`` lists route_unavailable's one-click
     param edits ([{param, value}], value None = clear). Without ``api_keys``
-    it names the explicit route's provider, or under Auto the maker's."""
+    it names the explicit route's provider, or under Auto the maker's.
+
+    Any other node that can run on more than one provider (a Krea copy that
+    runs on its maker's API with the person's key, a fal copy on its maker's)
+    is paid by the provider of the route select_route picks with ``api_keys``
+    and the input ports ``wired`` into it (a Krea-only input keeps the run on
+    Krea): the route that actually runs, as the estimate beside it prices it
+    (GM - Design, round 15, item 3; review 14, L-I)."""
     from services import model_pricing, node_readiness, node_route
 
     if definition and node_route.has_routes(definition):
@@ -506,7 +515,7 @@ def cost_for(
             spec = (node_route.route_by_id(definition, choice) if choice != node_route.AUTO
                     else node_route.maker_route(definition) or next(iter(node_route.routes_of(definition)), None))
             routed = str((spec or {}).get("provider") or "") or None
-        return {"kind": "paid", "provider": routed, "label": f"paid · {routed or 'provider'}"}
+        return {"kind": "paid", "provider": routed, "label": _paid_label(definition, routed)}
 
     if (definition or {}).get("id") == model_pricing.CINEMA_SCENE:
         nested = model_pricing.cinema_scene_base(params or {})
@@ -514,6 +523,9 @@ def cost_for(
         provider = str((base or {}).get("apiProvider") or "") or None
         return {"kind": "paid", "provider": provider, "label": f"paid · {provider or 'provider'}, per shot"}
     provider = str((definition or {}).get("apiProvider") or "") or None
+    if definition and api_keys is not None and provider not in (None, "utility"):
+        routed = node_route.with_wired_blockers(definition, params or {}, wired or ())
+        provider = str(node_route.select_route(definition, routed, api_keys).provider or "") or provider
     if provider == "utility" and not model_pricing.is_local(definition or {}, params or {}):
         via = node_readiness.provider_via(definition or {}) or {}
         _keys, what = node_readiness.param_route(via, node_readiness.param_value(definition or {}, params or {}))
@@ -526,7 +538,21 @@ def cost_for(
                 "label": f"paid · {what} model{'' if priced else ', no list price'}"}
     if provider == "utility":
         return {"kind": "free", "provider": None, "label": "free · runs locally"}
-    return {"kind": "paid", "provider": provider, "label": f"paid · {provider or 'provider'}"}
+    return {"kind": "paid", "provider": provider, "label": _paid_label(definition, provider)}
+
+
+def _paid_label(definition: Mapping[str, Any] | None, provider: str | None) -> str:
+    """"paid · <provider>", or, for a run that leaves the gateway its name
+    says, the route built as the confirm dialog builds it (GM - Design, round
+    16 (b), verbatim: "Grok Imagine 2.0 via xAI"): "paid · Grok Imagine 2.0
+    via xAI". node_route.name_on_route is frontend nameOnRoute's twin."""
+    from services import node_route
+
+    name = str((definition or {}).get("displayName") or "")
+    built = node_route.name_on_route(definition or {}, provider) if definition else name
+    if built and built != name:
+        return f"paid · {built}"
+    return f"paid · {provider or 'provider'}"
 
 
 def summarize_cost(
@@ -772,6 +798,10 @@ class Proposal:
     # again, so a later delete of "n1" may be another node): the undo of
     # those deletes can't reopen it, and says so (``dropped_reason``).
     dropped_by: dict[str, str] = field(default_factory=dict)
+    # The canvas revision it was made on (main._canvas_revision). Accept is
+    # refused once it moved: a clear or an import landed since, so node ids
+    # may name other nodes (round 21 of PR #195, review 20 L-3).
+    canvas_revision: str | None = None
     dropped_reason: str | None = None
     # Which node it read under each id (main.node_removals.lineage, set when
     # it was made): a delete tags it only when it took that very node.
@@ -1016,6 +1046,8 @@ class ProposalBook:
 
     # -- what agents and the canvas see (never the accept key) ---------------
     def view(self, proposal: Proposal, *, registry: Any) -> dict[str, Any]:
+        from services import node_route
+
         definitions = registry.get_all() if registry is not None else {}
         spec = proposal.spec
         node_costs = {entry.get("ref"): entry for entry in proposal.cost.get("nodes", [])}
@@ -1027,8 +1059,9 @@ class ProposalBook:
             nodes.append({
                 "ref": node.ref,
                 "definitionId": node.definition_id,
-                # The name the proposal gives it (accepting applies it), else the model's.
-                "name": names.get(node.ref) or model,
+                # The name the proposal gives it (accepting applies it), else
+                # its canvas title (review 18 M-D).
+                "name": names.get(node.ref) or node_route.node_name(definition, None, node.definition_id),
                 **({"model": model} if names.get(node.ref) else {}),
                 "category": str(definition.get("category") or ""),
                 "params": safe_value(node.params, key="params"),

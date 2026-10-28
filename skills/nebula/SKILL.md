@@ -58,10 +58,15 @@ Projects: `nebula projects` lists them; `*` is the one open on the canvas.
 Start new work in a new project (`nebula project new "<name>"`) or open the
 right one (`nebula project open <id>`). The person's canvas follows (from
 their Projects screen too), names you, and offers them a button back.
+Their canvas is read-only until the new one loads ("Opening “<project>”…").
+What they had typed is saved into the project left (also when you reopen the
+project already open); if that fails it is kept as a new project, "<project
+left> (recovered)", then "(recovered 2)" and so on.
 **Never run `nebula clear` to make room**: a new project keeps their work.
 `nebula clear` refuses on a canvas with nodes, and `--force` clears it
 anyway (not while a run is going: it waits for runs, as a project switch does). With their canvas open that is one undo step for them; with none
-open it can't be undone yet. `nebula selection` is what they have selected.
+open it can't be undone yet. A setting they were still editing is lost, and
+their canvas says you cleared it while they were editing. `nebula selection` is what they have selected.
 `nebula project rename <id> "<name>"` (or `current`) renames one, prints the
 old name and the command that puts it back. `nebula project show <id>` reads
 a saved project without opening it: nodes as `nebula look` shows them, connections,
@@ -133,11 +138,68 @@ person deleted since prints "Couldn't re-attach …" with why) and the
 proposals the delete closed reopen when they still fit ("Reopened: p_…";
 one that expired or no longer fits prints "Couldn't reopen …" with why).
 The person's Cmd+Z of your delete does the same, and so does your undo
-after the person redid your delete or undid your undo. A plan of steps prints one line with every
+after the person redid your delete or undid your undo. Your delete takes the nodes off
+the person's canvas at once, and edits to them still waiting to be sent (the
+person's typing) are dropped. A plan of steps prints one line with every
 step's token, newest first. Only your own `nebula apply` edits have tokens.
 
 Single edits also exist: `nebula create`, `connect`, `set`, `rename`, `move`,
 `delete`, `disconnect`.
+
+An unnamed node goes by its card's title everywhere Nebula names it to you
+(`nebula look`, `apply`'s output, proposals, run refusals): for a node whose
+provider depends on the keys, the model without the gateway ("Grok Imagine
+2.0", not "Grok Imagine 2.0 (Krea)"). `nebula nodes` and `nebula info` keep
+the catalog name.
+
+`nebula set` changes only the params you name; the rest keep their values,
+including ones the person set. The person's canvas sends only the keys they
+change, so it never writes your other settings back over. The same key from
+both: the later write wins. Your writes need no revision headers; the
+canvas's are refused once a clear, a load or a project switch replaced the
+canvas they were made for (docs/MCP-SETUP.md, "Canvas writes"). When you
+switch projects, the person's unsent typing is saved into the project they
+left, on top of your edits to their other settings. A run you start keeps its
+results off the canvas if it is cleared while the run goes.
+
+### Placeholders while you set nodes up
+
+```bash
+nebula apply --add +hero=flux-2-pro --add +p=text-input --wire +p:text +hero:prompt --pending
+nebula apply --ready n4 --ready n5      # they're ready: normal again
+```
+
+`--pending` makes that apply's new nodes your placeholders: the person sees
+a dashed outline in your colour and "<you> is setting this up.", and every
+run (theirs, yours, another agent's) skips them and what needs their output,
+listing them as `skipped` with the reason. Nothing is spent on them. They
+turn normal with `--ready`, when you run them yourself (a run refused
+before it starts leaves them pending), after 10 minutes without a request
+from you, or when the person edits or runs one (when the person's run
+would run a paid placeholder of yours, Nebula asks them first, so leave
+the model and params as they should be; if you finish or change them while
+they are deciding, Nebula shows them your changes and runs nothing that
+costs more than they agreed to, nor a node, model, price or extra cost
+they didn't see (a model or price that changed asks them again, even a
+cheaper one, and a switch on a free-text model such as OpenRouter's counts,
+as does a Meshy node's mesh type, or a Krea node's Variant, Engine, Model,
+Training Model, Version, Enhancement model or Frame interpolation model (the
+Topaz video upscalers), or grain model while Grain is on);
+if you delete or disconnect one, it tells them it's no longer in the run,
+and a replay of a saved run then runs its saved copy, as it does when you
+changed one after the run was saved: the dialog names the nodes you changed
+(up to three; a count from four) and tells them the replay uses the saved settings). Only new
+nodes can be placeholders, and only you make yours ready. `nebula undo` of
+your `--ready` (or of a delete) makes them placeholders again, unless someone
+ran or changed one since. A proposal whose run needs your placeholder runs
+nothing until you finish it, and once one turns normal the proposal no longer
+fits (Accept refuses it): propose again when they're ready. Accept also
+refuses a proposal when the canvas was cleared or replaced after it was made
+(the person reads "…Ask the agent for a new one."): read the canvas again and
+make a new proposal. In a steps file,
+put `"pending": true` on the step that adds them and `{"pending": false,
+"nodeIds": ["+hero"]}` in a later step. MCP: `edit_canvas(pending=True)`,
+then `edit_canvas(pending=False, node_ids=[...])`.
 
 Prompts go into input ports, not params: connect a `text-input` node's `text`
 output to the model's `prompt` (or a chat model's `messages`).
@@ -193,6 +255,11 @@ nebula cancel <run-id>
 nebula path n5         # the local file of a node's image
 nebula status
 ```
+
+A run that started always answers with its run id. If `nebula run` prints
+a note that open canvases were told late (`canvasSync: "deferred"` over
+MCP), the run is still going: follow it with `nebula result <run-id>`, and
+never start it again.
 
 Runs spend the person's own provider credits. A run over their limits, or
 with a node that has no list price, is refused: send it as a proposal.
@@ -251,7 +318,20 @@ what it did." Don't tell the person nothing ran: ask them to check Run
 History in Nebula.
 
 A run where any node failed exits 1 and prints each node's error (a missing
-key refuses the whole run before anything is called or spent). The card on
+key refuses the whole run before anything is called or spent, as does a
+Krea node with a required field nobody chose: Krea 2's Aspect ratio and
+Resolution, a Width and Height on Flux 1.1 Pro, Seedream, Wan 2.1/2.2,
+Magnific and the Topaz image upscalers, Topaz Standard's Model, a node app's
+Version, a style training's Name: "Choose an aspect ratio for “Hero”
+first." for a picker, "Set a width for “Hero” first." for a typed value,
+naming the first one in the card's order; `nebula quick` is refused the same
+way. Only the route the run takes counts: Krea's own API needs them all, but
+GPT Image 2.5 Flare/Sunburst with an OpenAI key and Grok Imagine 2.0 with an
+xAI key run without an Aspect ratio or Resolution (Seedream with a BytePlus
+key still needs its Width and Height). With no key that can run it, the
+refusal names the key instead ("Missing API key: KREA_API_TOKEN", or "…
+XAI_API_KEY or KREA_API_TOKEN" for a copy that can also run on its maker). Set it with `nebula set` first, or leave the
+choice to the person). The card on
 the canvas shows the same error. `nebula look` prints a failed node's error
 under it, and `nebula path` says why there is no file. The error stays on the
 node, through reloads, project switches and restarts, until it runs again.
@@ -343,8 +423,8 @@ import (`nebula load`, also when you load it) and the person's own edits are
 never refused for their scene: what can't be read is converted (see
 docs/MCP-SETUP.md, Cinema scenes over MCP), so `nebula look` a scene you
 loaded. A converted shot never takes the id of a removed shot's leftover port,
-but a shot that lost its id keeps its own image port under its new id, wires
-included. A shot output no shot owns, and its wires, are dropped on load or
+but a shot that lost its id keeps its own image port under its new id, connections
+included. A shot output no shot owns, and its connections, are dropped on load or
 open, and each drop is a line in `warnings` (`nebula load` and `nebula project
 open` print them as `note:`).
 Round 3f rewrote the card lines to GM's rules; nothing you read changed (a
@@ -689,7 +769,9 @@ Set a status when you start a piece of work and replace it when the work
 changes. The person sees it under your name in the Agents panel (the top
 of Updates), and other agents in `nebula agents`. It lasts until you change
 or clear it, or until you make no call to Nebula for 10 minutes; clear it
-when you finish. One line, 140 characters at most; `--node` puts it on a
+when you finish. One line, 140 characters at most (a longer one is cut
+after its last whole word if that keeps at least 100 characters, otherwise
+cut hard without splitting a character, and ends in "…"); `--node` puts it on a
 node on the open canvas (deleting that node, or switching projects, drops
 the node and keeps the line). A status is what you are working on and
 lasts; `nebula point --say "..."` is a passing remark at your cursor; what you
@@ -704,6 +786,14 @@ cursor's last action ("Added “Text Input” · 2 min ago"). Counts only: you
 never see another agent's questions, the person's answers or another
 agent's proposal notes. MCP: `set_status`, `list_agents`.
 
+While your run is on a node, the person sees your mark above it ("Running
+FLUX.2 [pro] · 0:41"); `nebula agents` lists each agent's running nodes and
+placeholders too. When a run you started ends, Nebula posts your done card
+in Updates ("Codex finished “Hero shots”.", "Codex finished 2 of 3 nodes.
+“Upscale” failed.") with a thumbnail and Show on canvas; read it with
+`nebula notes` (MCP `list_notes`, `about: "run"`). You don't post it
+yourself, and a newer card for the same node replaces yours.
+
 ## Watch and answer the person
 
 ```bash
@@ -715,6 +805,12 @@ nebula point --say "Reading your board"   # no target: said where your cursor is
 nebula note "n4 and n7 use different seeds; I'll match them" --node n4 --node n7
 nebula notes --unread          # your updates the person hasn't opened
 ```
+
+A pin you read before a project switch may be gone from the open project:
+`nebula pin resolve` then says that note isn't in the open project. Run
+`nebula pins` again and answer one listed there. The person's notes are tied
+to the canvas they wrote them on, so a note never lands on another project's
+node with the same id.
 
 `--say` (on `point`, `pin resolve`) and `--note` (on `apply`, `propose`) are
 for your own action. What you noticed, a report or a suggestion goes in

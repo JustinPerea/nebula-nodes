@@ -169,11 +169,15 @@ a {
   cursor: not-allowed;
 }
 
-[data-offline-disabled] {
+[data-offline-disabled],
+[data-following-disabled] {
   cursor: not-allowed !important;
 }
 
-[data-offline-disabled] {
+/* Round 22 (GM A): following an agent's switch is the same read-only state
+   as offline (lib/canvasLock.ts), so it looks the same. */
+[data-offline-disabled],
+[data-following-disabled] {
   opacity: 0.6;
 }
 

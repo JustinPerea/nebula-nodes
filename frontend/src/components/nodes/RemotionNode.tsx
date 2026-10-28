@@ -3,6 +3,8 @@ import { useUIStore } from '../../store/uiStore';
 import type { VideoGraphManifest } from '../../types/video';
 import type { NodeData } from '../../types';
 import { NodeRunError } from './NodeError';
+import { PlaceholderLine } from './PlaceholderLine';
+import { pendingAttr } from '../../lib/pendingNodes';
 
 interface RemotionNodeData {
   params?: {
@@ -31,10 +33,11 @@ export function RemotionNode({ id, data, selected }: NodeProps) {
       : `${layerCount} layer${layerCount === 1 ? '' : 's'} · ${totalFrames}f`;
 
   return (
-    <div className={`remotion-node ${selected ? 'remotion-node--selected' : ''}`}>
+    <div className={`remotion-node ${selected ? 'remotion-node--selected' : ''}`} data-pending={pendingAttr(data.pending)}>
       <Handle type="target" position={Position.Left} id="sources" />
       <div className="remotion-node__title">▶ Remotion Composition</div>
       <div className="remotion-node__summary">{summary}</div>
+      <PlaceholderLine pending={data.pending} />
       {selected && (
         <button
           type="button"

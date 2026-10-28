@@ -21,6 +21,7 @@ import random
 import re
 import secrets
 import shutil
+import sys
 import stat
 import tempfile
 import time as _time_module
@@ -41,6 +42,7 @@ from uuid import uuid4
 from dotenv import load_dotenv
 from fastapi import Body, FastAPI, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.routing import Match
 from fastapi.responses import FileResponse, Response, JSONResponse
 
 # Load only process-level path/runtime overrides from the optional project
@@ -71,7 +73,7 @@ from models.events import (
     ProviderStartAmbiguousEvent,
     execution_run_id,
 )
-from execution.engine import execute_graph, validate_graph, topological_sort, get_subgraph, CycleError
+from execution.engine import execute_graph, validate_graph, topological_sort, get_subgraph, CycleError, unchosen_model_errors
 from execution.sync_runner import get_handler_registry
 from execution import provider_calls
 from services.settings import (
@@ -140,6 +142,7 @@ from services.agent_presence import (
     PresenceError,
     RequestHeadersContext,
     agent_presence,
+    clean_say,
     current_request_headers,
     identify as identify_agent,
     parse_target,
@@ -148,6 +151,7 @@ from services.canvas_events import (
     MOVE_THRESHOLD_PX,
     TooManyWaiters,
     actor_for_headers,
+    actor_for_identity,
     actor_record,
     actor_label,
     canvas_events,
@@ -213,6 +217,8 @@ from services.agent_questions import (
 from services.agent_presence import request_headers_scope
 # The Agents panel (Q125 item 2): each agent's status line and the roster.
 from services.agent_status import AgentStatusBook, StatusError, Waiting, build_roster, clean_status_text
+from services import pending_nodes
+from services.run_done_cards import AgentRunBook, done_text, thumbnail_for
 from services.local_guard import host_allowed
 from services import run_approvals as approvals
 from services.run_approvals import RunApprovals
@@ -280,6 +286,12 @@ except Exception as exc:
 else:
     _STATE_PATH = _STATE_DIR / "state.json"
 
+# Whether a canvas was saved before this boot (round 21): a missing
+# canvas-revisions.json then can't be a first run, so the canvas revisions
+# start from a boot-unique base (CanvasUndoBook), never at 0.
+_STATE_EXISTED_AT_BOOT = bool(_STATE_PATH is not None and (
+    _STATE_PATH.exists() or (_STATE_DIR / "projects").exists()))
+
 cli_graph = CLIGraph(persist_path=_STATE_PATH)
 project_store = ProjectStore(_STATE_DIR / "projects")
 # Pins follow `main.project_store` through the getter (tests swap the store).
@@ -317,6 +329,9 @@ agent_notes = AgentNotes(lambda: project_store)
 agent_questions = QuestionBook(store=lambda: project_store)
 # Each agent's status line (Q125 item 2): in memory only, like cursors.
 agent_status = AgentStatusBook()
+# The runs agents started, while they go (Q125 item 3): the mark on the node
+# they run, and the done card after (services/run_done_cards.py). In memory.
+agent_runs = AgentRunBook()
 
 
 def _agent_sign(identity: AgentIdentity) -> None:
@@ -326,7 +341,11 @@ def _agent_sign(identity: AgentIdentity) -> None:
 
 
 _request_workspace_revision: ContextVar[str | None] = ContextVar("workspace_revision", default=None)
+# The canvas a tab's request was made for (X-Nebula-Canvas-Revision), round 19.
+_request_canvas_revision: ContextVar[str | None] = ContextVar("canvas_revision", default=None)
 _execution_workspace_context: ContextVar[dict[str, Any] | None] = ContextVar("execution_workspace", default=None)
+# A fenced route's request came from a canvas tab (X-Nebula-Tab), round 20.
+_request_from_tab: ContextVar[bool] = ContextVar("request_from_tab", default=False)
 _live_graph_load_failed = False
 if _STATE_PATH is not None and _STATE_PATH.exists():
     try:
@@ -968,21 +987,40 @@ def _workspace_context() -> dict[str, Any]:
 CANVAS_OUT_OF_DATE = "This canvas is out of date. Open the current project before editing or running it."
 
 
+def _canvas_revision() -> str:
+    """Which canvas is live in the open project: its id epoch
+    (canvas_undo_book.epoch), new on every clear and every import, when node
+    ids start again at n1 (round 19 of PR #195, review 18 H-A). Opening or
+    making a project moves the workspace revision instead. PR #114's
+    ``_graph_fence`` reads this same epoch for agents' writes, so a Clear is a
+    replacement for both. Every graphSync, GET /api/graph/export and the
+    answers to a clear, an import, an open and a create carry it
+    (``canvasRevision``); a tab sends the one it had when the person acted
+    (``X-Nebula-Canvas-Revision``)."""
+    return str(canvas_undo_book.epoch(_workspace_context()["activeProjectId"]))
+
+
 def _check_workspace_revision(revision: str | None = None) -> None:
     supplied = revision if revision is not None else _request_workspace_revision.get()
-    if supplied is None:
-        return
     current = _workspace_context()
-    if supplied == current["workspaceRevision"]:
-        return
-    # A tab still on the unfiled canvas's revision is on the same canvas, if
-    # nothing replaced it since its filing (round 13, H1).
-    filed = _filed_canvases.get(supplied)
-    if (filed is not None and filed[1]["workspaceRevision"] == current["workspaceRevision"]
-            and filed[1]["activeProjectId"] == current["activeProjectId"]
-            and filed[2] == canvas_undo_book.epoch(current["activeProjectId"])):
-        return
-    raise _workspace_moved_refusal(HTTPException(status_code=409, detail=CANVAS_OUT_OF_DATE))
+    # The canvas a tab's request names (X-Nebula-Canvas-Revision, round 19 of
+    # PR #195): a write made for a canvas cleared or replaced since may name
+    # new nodes by its ids. Compared below with the open canvas, or, for a tab
+    # still on the unfiled canvas's revision, with that canvas's epoch when it
+    # was filed.
+    expected_canvas = _canvas_revision()
+    if supplied is not None and supplied != current["workspaceRevision"]:
+        # A tab still on the unfiled canvas's revision is on the same canvas,
+        # if nothing replaced it since its filing (round 13 of PR #114, H1).
+        filed = _filed_canvases.get(supplied)
+        if not (filed is not None and filed[1]["workspaceRevision"] == current["workspaceRevision"]
+                and filed[1]["activeProjectId"] == current["activeProjectId"]
+                and filed[2] == canvas_undo_book.epoch(current["activeProjectId"])):
+            raise _workspace_moved_refusal(HTTPException(status_code=409, detail=CANVAS_OUT_OF_DATE))
+        expected_canvas = str(filed[0])
+    canvas = _request_canvas_revision.get()
+    if canvas is not None and canvas != expected_canvas:
+        raise _workspace_moved_refusal(HTTPException(status_code=409, detail=CANVAS_OUT_OF_DATE))
 
 
 # A write that awaits lands only on the canvas that was open when it was asked
@@ -1196,31 +1234,105 @@ def _params_outdated(request: Request) -> bool:
     return supplied.strip() != str(PARAMS_VERSION)
 
 
+# Which routes a canvas tab's write must say its project and canvas for (round
+# 20 of PR #195, review 19 H2): every route that changes the graph or starts
+# work on the canvas carries the marker ``graph_write``, and the fence
+# (project_workspace_fence) reads it from the route the request matches, never
+# from the path. tests/test_round20_fence.py walks every non-GET route: each is
+# marked or on its allowlist, with why it doesn't touch the graph.
+GRAPH_FENCE_ATTR = "__nebula_graph_fence__"
+# The fence refuses a tab request with no workspace revision and checks the
+# revisions before the route runs.
+FENCE_BEFORE_ROUTE = "before-route"
+# The route checks (_refuse_tab_write_without_revision and
+# _check_workspace_revision, in the step that writes): it writes the graph only
+# for some requests (/api/uploads with create_node). The fence still reads the
+# revision headers for it.
+FENCE_IN_ROUTE = "in-route"
+
+
+def graph_write(endpoint: Any = None, *, checks_in_route: bool = False) -> Any:
+    """Mark a route that changes the graph or starts work on the canvas. Put
+    it right under ``@app.post(...)`` (or put, delete): it sets an attribute
+    and returns the same function, so FastAPI reads the signature as before."""
+    def mark(function: Any) -> Any:
+        setattr(function, GRAPH_FENCE_ATTR, FENCE_IN_ROUTE if checks_in_route else FENCE_BEFORE_ROUTE)
+        return function
+    return mark(endpoint) if endpoint is not None else mark
+
+
+_GRAPH_FENCE_CACHE: OrderedDict[tuple[str, str], str | None] = OrderedDict()
+_GRAPH_FENCE_CACHE_SIZE = 1024
+
+
+def _graph_fence_of(method: str, path: str) -> str | None:
+    """The fence marker of the route a ``method`` request to ``path`` runs
+    (the first full match, as the router picks), or None."""
+    if method in {"GET", "HEAD", "OPTIONS"}:
+        return None
+    key = (method, path)
+    if key in _GRAPH_FENCE_CACHE:
+        return _GRAPH_FENCE_CACHE[key]
+    scope = {"type": "http", "method": method, "path": path, "root_path": ""}
+    fence = None
+    for route in app.router.routes:
+        match, _child = route.matches(scope)
+        if match is Match.FULL:
+            fence = getattr(getattr(route, "endpoint", None), GRAPH_FENCE_ATTR, None)
+            break
+    _GRAPH_FENCE_CACHE[key] = fence
+    while len(_GRAPH_FENCE_CACHE) > _GRAPH_FENCE_CACHE_SIZE:
+        _GRAPH_FENCE_CACHE.popitem(last=False)
+    return fence
+
+
+def _refuse_tab_write_without_revision() -> None:
+    """For a FENCE_IN_ROUTE route when this request writes the graph: a canvas
+    tab's write that says no project (sent while the tab held none) is
+    refused, as the fence refuses it before FENCE_BEFORE_ROUTE routes."""
+    if _request_from_tab.get() and _request_workspace_revision.get() is None:
+        raise HTTPException(status_code=409, detail=CANVAS_OUT_OF_DATE)
+
+
 @app.middleware("http")
 async def project_workspace_fence(request: Request, call_next):
     if _params_outdated(request):
         return JSONResponse(status_code=409, content={
             "code": "params_outdated", "detail": PARAMS_OUTDATED_DETAIL, "paramsVersion": PARAMS_VERSION,
         })
-    path = request.url.path
-    guarded = request.method not in {"GET", "HEAD", "OPTIONS"} and path.startswith((
-        "/api/graph", "/api/execute", "/api/cinema", "/api/quick",
-    ))
+    fence = _graph_fence_of(request.method, request.scope.get("path") or request.url.path)
+    guarded = fence is not None
     supplied = request.headers.get("x-nebula-workspace-revision") if guarded else None
+    from_tab = request.headers.get("x-nebula-tab") is not None
+    # Round 19 (review 18, H-B): a canvas tab's graph write always says which
+    # project it was made in. Every tab request carries X-Nebula-Tab (the
+    # canvas's apiFetch) and agents, the CLI and MCP never send one, so the
+    # no-header pass stays theirs only. Without it the tab's write is refused
+    # with the canvas's out-of-date line: a write sent while the tab had no
+    # project (an agent's switch half-followed) never lands in whatever is
+    # open now. A FENCE_IN_ROUTE route does this itself, for the requests
+    # that write.
+    if fence == FENCE_BEFORE_ROUTE and supplied is None and from_tab:
+        return JSONResponse(status_code=409, content={"detail": CANVAS_OUT_OF_DATE})
     token = _request_workspace_revision.set(supplied)
+    canvas_token = _request_canvas_revision.set(request.headers.get("x-nebula-canvas-revision") if guarded else None)
+    tab_token = _request_from_tab.set(from_tab and guarded)
     execution_token = _execution_workspace_context.set(None)
     try:
-        try:
-            _check_workspace_revision()
-        except HTTPException as exc:
-            # A CodedRefusal's fields too (workspace_moved: project, switchedBy).
-            return JSONResponse(status_code=exc.status_code,
-                                content={"detail": exc.detail, **getattr(exc, "fields", {})})
-        except ProjectStoreError as exc:
-            return JSONResponse(status_code=507, content={**_storage_error_body(exc), "code": PROJECT_STORE_STORAGE_CODE})
+        if fence == FENCE_BEFORE_ROUTE:
+            try:
+                _check_workspace_revision()
+            except HTTPException as exc:
+                # A CodedRefusal's fields too (workspace_moved: project, switchedBy).
+                return JSONResponse(status_code=exc.status_code,
+                                    content={"detail": exc.detail, **getattr(exc, "fields", {})})
+            except ProjectStoreError as exc:
+                return JSONResponse(status_code=507, content={**_storage_error_body(exc), "code": PROJECT_STORE_STORAGE_CODE})
         return await call_next(request)
     finally:
         _execution_workspace_context.reset(execution_token)
+        _request_from_tab.reset(tab_token)
+        _request_canvas_revision.reset(canvas_token)
         _request_workspace_revision.reset(token)
 
 
@@ -1248,6 +1360,8 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # The model picker's failure kind (MODEL_SETTINGS_FAILURE_HEADER, review 12 L-4).
+    expose_headers=["X-Nebula-Failure"],
 )
 # Added after CORS so it runs first (Starlette wraps later middleware around
 # earlier ones): foreign Hosts and Origins never reach CORS or the routes.
@@ -1262,7 +1376,7 @@ app.add_middleware(LocalRequestGuard)
 _DESKTOP_RENDERER_ORIGINS = frozenset({"null", "file://"})
 _DESKTOP_CORS_HEADERS = ", ".join((
     "Content-Type", "Authorization", "X-Nebula-Person", "X-Nebula-Workspace-Revision", "X-Nebula-Proposal-Key",
-    "X-Nebula-Params-Version", "X-Nebula-Tab",
+    "X-Nebula-Params-Version", "X-Nebula-Tab", "X-Nebula-Canvas-Revision",
 ))
 
 
@@ -2568,20 +2682,23 @@ def _settle_hold(run_id: str) -> None:
 
 async def _require_run_spend_approval(
     run_id: str, nodes: list[GraphNode], edges: list[GraphEdge], *, approval_id: str | None = None,
+    approval_scope: tuple[list[GraphNode], list[GraphEdge]] | None = None,
     fence: tuple[str, str | None, int] | None = None, **kwargs: Any,
 ) -> None:
     """The approval and spend checks for a run already noted for its actor: a
     refusal forgets the note. The inputs a price reads are measured first,
     off the event loop (_measure_run_inputs); the approval is taken and the
-    limits checked after that, with no await between them. ``fence``
+    limits checked after that, with no await between them. ``approval_scope``:
+    what the run was asked to run, when placeholders were skipped from it
+    (the approval matches the request; only ``nodes`` are priced). ``fence``
     (_graph_fence, taken before the route's first await) is checked right
     after the measure, before the approval is used up or anything counts
-    (round 11, as run_graph does)."""
+    (round 11 of PR #114, as run_graph does)."""
     try:
         measured = await _measure_run_inputs(nodes, edges)
         if fence is not None:
             _refuse_if_graph_moved(fence)
-        approval = _check_run_approval(approval_id, nodes, edges)
+        approval = _check_run_approval(approval_id, *(approval_scope or (nodes, edges)))
         _require_spend_approval(nodes, edges, run_id=run_id, measured=measured, **kwargs)
     except (HTTPException, PersonGateError):
         canvas_events.forget_run(run_id)
@@ -3230,6 +3347,7 @@ def _roll_back_upload_node(project_id: str | None, epoch: int, node_id: str, nod
 
 
 @app.post("/api/uploads")
+@graph_write(checks_in_route=True)
 async def upload_file_consolidated(
     file: UploadFile,
     create_node: str = Form("false"),
@@ -3267,7 +3385,16 @@ async def upload_file_consolidated(
     wants_node = create_node.strip().lower() in ("true", "1", "yes")
     # Only an upload that adds a node reads which canvas is open (a plain
     # upload still works with the project catalog unreadable).
-    fence = _graph_fence() if wants_node else None
+    fence = None
+    if wants_node:
+        # Fenced in the route (graph_write(checks_in_route=True), round 20 of
+        # PR #195, review 19 H2): only an upload that adds a node writes the
+        # canvas. A tab's drop that says no project, or one made for a
+        # project or canvas that isn't open, is refused here, and again in
+        # the step that adds the node, after the file read and the probe.
+        _refuse_tab_write_without_revision()
+        _check_workspace_revision()
+        fence = _graph_fence()
     content = await file.read()
     # Reject anything that cannot possibly be an accepted file before sniffing.
     # Images are capped at MAX_CHAT_UPLOAD_BYTES; videos at MAX_VIDEO_UPLOAD_BYTES.
@@ -3393,8 +3520,11 @@ async def upload_file_consolidated(
         kept_name = file_name_param(node_params["filePath"], file.filename)
         if kept_name is not None:
             node_params[INPUT_FILE_NAME_PARAM] = kept_name
-        # The file stays stored either way (content-addressed), but the node
-        # goes only to the canvas it was dropped on (review 9 of PR #114).
+        # The same step as the add, after every await: an agent's switch or
+        # clear while the file was read or probed refuses the drop. The file
+        # stays stored either way (content-addressed), but the node goes only
+        # to the canvas it was dropped on (review 9 of PR #114; it checks the
+        # tab's revisions first, round 20 of PR #195).
         _refuse_if_graph_moved(fence)
         node_id = cli_graph.add_node(node_type, node_params, position=new_position)
         # The event as the write made it, and the project it went to: it is
@@ -5097,18 +5227,20 @@ async def _show_agent(
     say: str = "",
     origin: dict[str, Any] | None = None,
     did: dict[str, Any] | None = None,
-    log: str = "",
+    log: str | None = None,
     words: Callable[[], tuple[str, str]] | None = None,
 ) -> None:
     """Move the calling agent's cursor; a no-op for the browser's own requests.
 
     ``did`` (_did) is what the action was, for the Agents panel. ``log`` is
-    the Agent log's line when the bubble's ``say`` is empty or differs; an
-    action with neither is logged in the Agents panel's words ("Changed
-    “Hero”"), so no action is left out of the log (MCP-SETUP.md, PR #198
-    r1). ``words`` computes (say, log) inside the guard (_set_params_bubble).
-    Never fails the route that called it: presence is decoration on top of
-    an edit that already succeeded.
+    the Agent log's line when it differs from the bubble's ``say`` (e.g. a
+    field the card shows no label for, named there by its key while the
+    bubble leaves it out: GM - Design, round 16 of PR #195); an action with
+    neither is logged in the Agents panel's words ("Changed “Hero”"), so no
+    action is left out of the log (MCP-SETUP.md, PR #198 r1). ``words``
+    computes (say, log) inside the guard (_set_params_bubble). Never fails
+    the route that called it: presence is decoration on top of an edit that
+    already succeeded.
     """
     identity = identify_agent(current_request_headers())
     if identity is None:
@@ -5121,6 +5253,9 @@ async def _show_agent(
                 say, log = "", ""
         if not say and not log and did is not None and did.get("verb"):
             log = f"{did['verb']} {_quoted(str(did.get('label') or ''))}" if did.get("label") else str(did["verb"])
+        # The event carries ``log`` only when it isn't the bubble's own words (PR #195).
+        if log is not None and clean_say(log) == clean_say(say):
+            log = None
         event = _point(identity, target=target, origin=origin, action=action, say=say, did=did, log=log)
         await manager.broadcast_raw(event)
     except Exception:  # noqa: BLE001 - decoration must not break graph edits
@@ -5590,17 +5725,21 @@ def _custom_node_label(raw: Any, definition_id: str) -> str | None:
         return None
     label = " ".join(raw.split())[:MAX_NODE_LABEL_LENGTH]
     definition = node_registry.get(definition_id) or {}
-    if not label or label == definition.get("displayName"):
+    # GM - Design, round 18: either form of the default title (the catalog
+    # name, or the canvas title without its gateway) is no name of its own.
+    if not label or label == definition.get("displayName") or (definition and node_route.is_default_title(definition, label)):
         return None
     return label
 
 
-def _node_label(node_id: str) -> str:
-    node = cli_graph.nodes.get(node_id) or {}
-    if isinstance(node.get("label"), str) and node["label"]:
-        return node["label"]
+def _node_label(node_id: str, graph: CLIGraph | None = None) -> str:
+    """A node's name: its own label, else its canvas title (review 18 M-D:
+    agents, the cursor and the Agent log name it as the canvas does,
+    node_route.node_name), else its type, else its id. ``graph`` is a staged
+    copy (a proposal's), else the live canvas."""
+    node = (graph or cli_graph).nodes.get(node_id) or {}
     definition = node_registry.get_all().get(str(node.get("definitionId", "")), {})
-    return str(definition.get("displayName") or node.get("definitionId") or node_id)
+    return node_route.node_name(definition, node.get("label"), str(node.get("definitionId") or node_id))
 
 
 def _run_node_name(node_id: str, run_nodes: Mapping[str, GraphNode]) -> str:
@@ -5614,18 +5753,37 @@ def _run_node_name(node_id: str, run_nodes: Mapping[str, GraphNode]) -> str:
         node = run_nodes.get(node_id)
         if node is None:
             return node_id
+        definition = node_registry.get_all().get(node.definition_id) or {}
         own = getattr(node, "label", None)
         if isinstance(own, str) and own.strip():
-            return own
+            return node_route.node_name(definition, own, node_id)
         live = cli_graph.nodes.get(node_id)
         if isinstance(live, dict) and live.get("definitionId") == node.definition_id:
-            canvas_label = live.get("label")
-            if isinstance(canvas_label, str) and canvas_label.strip():
-                return canvas_label
-        definition = node_registry.get_all().get(node.definition_id) or {}
-        return str(definition.get("displayName") or node_id)
+            return node_route.node_name(definition, live.get("label"), node_id)
+        return node_route.node_name(definition, None, node_id)
     except Exception:  # noqa: BLE001 - a name in a refusal must never turn it into a 500
         return node_id
+
+
+def _run_names(nodes: list[GraphNode]) -> Callable[[str], str]:
+    """A run's node names for its refusals (_run_node_name), by node id."""
+    by_id = {node.id: node for node in nodes}
+    return lambda node_id: _run_node_name(node_id, by_id)
+
+
+async def _refuse_unchosen_models(run_id: str, nodes: list[GraphNode], edges: list[GraphEdge],
+                                  api_keys: Mapping[str, Any], skips: Mapping[str, Any]) -> dict[str, Any] | None:
+    """The person's direct run (a node's, a shot's) of a Krea node with no
+    model chosen is refused before its paid-placeholder confirmation: GM -
+    Design, round 12 addendum b, "Don't ask someone to approve a run that
+    can't go out." The same line validate_graph gives every other run path,
+    on the route the run takes (review 13, M-1: a maker key that takes the
+    run without the field is no refusal)."""
+    errors = unchosen_model_errors(nodes, edges, api_keys, name_of=_run_names(nodes))
+    if not errors:
+        return None
+    await _announce_validation_errors(errors, run_id)
+    return {**_validation_response(errors), "runId": run_id, **_skip_reply(skips)}
 
 
 def _quoted(label: str) -> str:
@@ -5757,6 +5915,68 @@ async def _sweep_agent_statuses() -> None:
     _schedule_status_expiry()
 
 
+# ---------- Placeholders (Q125 item 3): the idle rule ----------
+#
+# A placeholder turns normal when its agent has made no request for
+# pending_nodes.IDLE_SECONDS (the status line's rule and clock: any
+# identified request is a sign). Nothing is deleted.
+
+_pending_expiry: asyncio.TimerHandle | None = None
+_pending_sweeps: set[asyncio.Task[Any]] = set()
+
+
+def _schedule_pending_expiry() -> None:
+    """Check again just after the next placeholder would run out."""
+    global _pending_expiry
+    if _pending_expiry is not None:
+        _pending_expiry.cancel()
+        _pending_expiry = None
+    deadline = pending_nodes.next_deadline(cli_graph.nodes, agent_status.last_seen)
+    if deadline is None:
+        return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:  # no running loop (a script): the next roster read or graph change sweeps
+        return
+    _pending_expiry = loop.call_later(max(0.0, deadline - agent_status.now()) + 0.5, _start_pending_sweep)
+
+
+def _start_pending_sweep() -> None:
+    task = asyncio.get_running_loop().create_task(_sweep_pending_nodes())
+    _pending_sweeps.add(task)
+    task.add_done_callback(_pending_sweeps.discard)
+
+
+async def _sweep_pending_nodes() -> list[str]:
+    """Turn normal the placeholders whose agent went quiet, and tell every canvas."""
+    gone = pending_nodes.expired(cli_graph.nodes, agent_status.last_seen, agent_status.now())
+    cleared = _clear_pending(gone) if gone else []
+    if cleared:
+        await _broadcast_graph_sync()
+    _schedule_pending_expiry()
+    return cleared
+
+
+def _clear_pending(node_ids: Iterable[str]) -> list[str]:
+    """Turn these placeholders normal on the live graph (saved at once); the ids that changed."""
+    ids = [node_id for node_id in dict.fromkeys(node_ids) if pending_nodes.is_pending(cli_graph.nodes.get(node_id))]
+    if not ids:
+        return []
+    candidate = cli_graph.clone()
+    cleared = pending_nodes.clear(candidate.nodes, ids)
+    cli_graph.replace_with(candidate)
+    return cleared
+
+
+def _person_touched(node_ids: Iterable[str]) -> list[str]:
+    """The person edited these nodes (params, name, position, a connection): any
+    placeholder among them turns normal (GM: "on any edit by the person").
+    Agents' edits through the same routes leave them as they are."""
+    if not _is_person_request():
+        return []
+    return _clear_pending(node_ids)
+
+
 async def _forget_status_anchors(*, node_id: str | None = None) -> None:
     """A node deleted (``node_id``) or the graph cleared or replaced: the
     lines on those nodes stay, without them (as cursors re-anchor)."""
@@ -5832,9 +6052,14 @@ async def list_canvas_agents() -> dict[str, Any]:
     await _sweep_proposals()
     await _sweep_asset_proposals()
     project_id = _workspace_context()["activeProjectId"]
+    await _sweep_pending_nodes()
+    running = agent_runs.running_in(project_id)
     agents = build_roster(project_id=project_id, now=agent_status.now(), cursors=agent_presence.active(),
                           statuses=agent_status.for_project(project_id), waiting=_waiting_in(project_id),
-                          status_view=agent_status.view)
+                          status_view=agent_status.view,
+                          # The open canvas's placeholders, and the nodes agents' runs are running now.
+                          pending=pending_nodes.by_agent(cli_graph.nodes),
+                          running=[(agent, running[agent.id]) for agent in agent_runs.agents_in(project_id)])
     return {"projectId": project_id, "agents": agents, "rev": agent_status.revision}
 
 
@@ -6613,10 +6838,21 @@ async def list_canvas_pins() -> dict[str, Any]:
 
 
 @app.post("/api/canvas/pins", status_code=201)
+@graph_write
 async def create_canvas_pin(body: dict[str, Any]) -> dict[str, Any]:
     """Pin a short note to a node or a canvas spot. Only the person can do this.
 
     Body: {text, nodeId} or {text, position: {x, y}}.
+
+    Round 23 (review 22, M-1): a graph write for the fence. A note's anchor
+    is a node id (or a spot) of the canvas it was written on, and ids restart
+    at n1 in every project and after a clear, so a note sent after an agent
+    opened another project, or cleared this one, would land on that canvas's
+    n1 and be journaled to the agent working there as the person's request.
+    The canvas tab sends the project and canvas the note was composed on
+    (X-Nebula-Workspace-Revision, X-Nebula-Canvas-Revision); the fence refuses
+    it (409, the canvas's out-of-date line) when either moved, or when a tab
+    sends none, before anything is pinned or journaled.
     """
     require_person(current_request_headers())
     try:
@@ -6646,8 +6882,11 @@ async def create_canvas_pin(body: dict[str, Any]) -> dict[str, Any]:
 
 
 @app.delete("/api/canvas/pins/{pin_id}")
+@graph_write
 async def delete_canvas_pin(pin_id: str) -> dict[str, Any]:
-    """Delete a note. Only the person can do this."""
+    """Delete a note. Only the person can do this. Fenced as a graph write
+    (round 23, see create_canvas_pin): a delete made for a canvas that has
+    gone is refused, never looked up in the canvas open now."""
     require_person(current_request_headers())
     try:
         project_id, pin = canvas_pins.remove_in(pin_id)
@@ -6665,8 +6904,13 @@ async def delete_canvas_pin(pin_id: str) -> dict[str, Any]:
 
 
 @app.post("/api/canvas/pins/{pin_id}/resolve")
+@graph_write
 async def resolve_canvas_pin(pin_id: str, body: dict[str, Any]) -> dict[str, Any]:
-    """An agent answers a note in one line, which resolves it and moves its cursor there."""
+    """An agent answers a note in one line, which resolves it and moves its cursor there.
+
+    Fenced as a graph write like the other pin routes (round 23): agents send
+    no revision, so for them it is the 404 that says the note isn't in the
+    open project (canvas_pins.resolve_in)."""
     identity = identify_agent(current_request_headers())
     if identity is None:
         raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
@@ -7242,11 +7486,18 @@ def _outputs_available(outputs: Any) -> bool:
 
 def _proposal_run_scope(
     candidate: CLIGraph, run_ids: list[str],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str], list[str], bool, list[dict[str, Any]]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str], list[str], bool, list[dict[str, Any]],
+           dict[str, dict[str, Any]]]:
     """A proposal's run as the cost sees it: the staged graph (nodes, edges),
     the nodes it may start (``chosen``: the targets plus ancestors without
     outputs), every node its pre-call check reads (``scope``), whether
-    ancestors are counted (``up_to``), and the chosen nodes as price items."""
+    ancestors are counted (``up_to``), the chosen nodes as price items, and
+    the agents' placeholders the run will skip with what needs them
+    (``skips``, pending_nodes.run_skips). The run after Accept isn't the
+    person's direct run, so it skips them (main._skip_placeholders) and
+    nothing is spent on them: they are left out of ``chosen`` and ``scope``,
+    so the cost the person sees before Accept & run prices only what runs
+    (GM - Design, 2026-10-25)."""
     graph_nodes, graph_edges = candidate.to_execute_format()
     nodes = [GraphNode.model_validate(node) for node in graph_nodes]
     edges = [GraphEdge.model_validate(edge) for edge in graph_edges]
@@ -7266,6 +7517,10 @@ def _proposal_run_scope(
                     continue
                 up_to = True
             chosen.append(node.id)
+    skips = pending_nodes.run_skips(scope, [(edge.source, edge.target) for edge in edges], candidate.nodes,
+                                    label=lambda node_id: _node_label(node_id, candidate))
+    chosen = [node_id for node_id in chosen if node_id not in skips]
+    scope = [node_id for node_id in scope if node_id not in skips]
     items = [
         {
             "id": node_id,
@@ -7274,7 +7529,7 @@ def _proposal_run_scope(
         }
         for node_id in chosen
     ]
-    return graph_nodes, graph_edges, chosen, scope, up_to, items
+    return graph_nodes, graph_edges, chosen, scope, up_to, items, skips
 
 
 async def _measure_proposal_inputs(candidate: CLIGraph, run_ids: list[str]) -> input_sizes.Measured:
@@ -7287,7 +7542,7 @@ async def _measure_proposal_inputs(candidate: CLIGraph, run_ids: list[str]) -> i
         pricing = model_pricing.load_pricing()
     except (OSError, ValueError):
         return input_sizes.Measured()
-    _graph_nodes, graph_edges, chosen, _scope, _up_to, items = _proposal_run_scope(candidate, run_ids)
+    _graph_nodes, graph_edges, chosen, _scope, _up_to, items, _skips = _proposal_run_scope(candidate, run_ids)
     if not input_sizes.needs_measuring(items, pricing):
         return input_sizes.Measured()
     wired = [(str(e.get("source")), e.get("sourceHandle"), str(e.get("target")), e.get("targetHandle"))
@@ -7314,15 +7569,19 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
     entries: list[dict[str, Any]] = []
     up_to = False
     if run_ids:
-        graph_nodes, graph_edges, chosen, scope, up_to, items = _proposal_run_scope(candidate, run_ids)
+        graph_nodes, graph_edges, chosen, scope, up_to, items, skips = _proposal_run_scope(candidate, run_ids)
         estimate = _estimate_proposal_run(items, graph_nodes, graph_edges, definitions, measured)
         for node_id in chosen:
             definition = definitions.get(str(candidate.nodes[node_id].get("definitionId") or ""), {})
             line = (estimate or {}).get("priced", {}).get(node_id)
+            # The input ports wired into it: a Krea-only one keeps the run on Krea (cost_for).
+            wired = {str(edge.get("targetHandle")) for edge in graph_edges
+                     if str(edge.get("target")) == node_id and edge.get("targetHandle")}
             entries.append({
                 "ref": ref_for.get(node_id, node_id),
                 "nodeId": None if node_id in ref_for else node_id,
-                **cost_for(definition, candidate.nodes[node_id].get("params") or {}, definitions, api_keys),
+                **cost_for(definition, candidate.nodes[node_id].get("params") or {}, definitions, api_keys,
+                           wired=wired),
                 "price": {"low": line["low"], "high": line["high"]} if line else None,
             })
         if estimate:
@@ -7338,7 +7597,13 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
         for entry in entries:
             if entry["ref"] in needs:
                 entry["missing"] = needs[entry["ref"]]
-        return summarize_cost(entries, up_to=up_to, estimate=estimate, not_ready=not_ready)
+        cost = summarize_cost(entries, up_to=up_to, estimate=estimate, not_ready=not_ready)
+        skipped = pending_nodes.skip_summary(skips)
+        if skipped is not None:
+            # Agents' placeholders (and what needs them) the run will skip,
+            # left out of the cost above (Q125 item 3).
+            cost["pendingSkipped"] = skipped
+        return cost
     return summarize_cost(entries, up_to=up_to)
 
 
@@ -7372,7 +7637,7 @@ def _not_ready_nodes(
         need = node_readiness.instance_missing(definition, node.get("params") or {}, keys, krea_signed_in,
                                                definitions, wired.get(node_id, {}))
         if need:
-            name = str(node.get("label") or definition.get("displayName") or definition.get("id"))
+            name = node_route.node_name(definition, node.get("label"), str(definition.get("id")))
             rows.append({
                 "ref": ref_for.get(node_id, node_id),
                 "nodeId": None if node_id in ref_for else node_id,
@@ -7507,6 +7772,8 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
         )
     except ProposalError as exc:
         raise _proposal_http_error(exc) from exc
+    # The canvas it was made on, in the step that made it (review 20 L-3).
+    proposal.canvas_revision = _canvas_revision()
     # Which node it reads under each id, so only a delete of that very node tags it (second review).
     proposal.lineage = {node_id: node_removals.lineage(proposal.project_id, node_id) for node_id in spec.references}
     first_reference = next(iter(sorted(proposal.references, key=_node_order)), None)
@@ -7630,7 +7897,7 @@ async def withdraw_canvas_proposal(proposal_id: str) -> dict[str, Any]:
     return {"proposal": _proposal_view(proposal)}
 
 
-async def _decidable_proposal(proposal_id: str) -> Proposal:
+async def _decidable_proposal(proposal_id: str, *, reject: bool = False) -> Proposal:
     """The person-only checks shared by accept and reject, in order.
 
     1. No agent markers and this launch's person token.
@@ -7648,7 +7915,7 @@ async def _decidable_proposal(proposal_id: str) -> Proposal:
     if not supplied or not secrets.compare_digest(supplied.encode(), proposal.accept_key.encode()):
         raise HTTPException(status_code=403, detail="This proposal can only be accepted from the Nebula canvas.")
     await _sweep_proposals()
-    _ensure_still_decidable(proposal)
+    _ensure_still_decidable(proposal, reject=reject)
     return proposal
 
 
@@ -7681,12 +7948,43 @@ def _refuse_changed_runs(proposal: Proposal, candidate: CLIGraph, id_map: dict[s
             f"what it runs changed after it was proposed ({_listed(sorted(changed, key=_node_order), 4)})"))
 
 
-def _ensure_still_decidable(proposal: Proposal) -> None:
-    """Re-check after an await: still open and still for the open project."""
+# GM - Design, round 22 (4b): the person reads "Couldn't accept this
+# proposal. The canvas was cleared or replaced after it was made. Ask the
+# agent for a new one." (the canvas reads the code, never these words);
+# agents and logs read the detail, which says the same.
+PROPOSAL_CANVAS_REPLACED_CODE = "proposal_canvas_replaced"
+PROPOSAL_CANVAS_REPLACED_DETAIL = (
+    "Couldn't accept this proposal: the canvas was cleared or replaced after it was made. "
+    "Make a new proposal for the canvas as it is now.")
+
+
+class ProposalCanvasReplaced(HTTPException):
+    """409: Accept of a proposal whose canvas was cleared or replaced since it
+    was made (its node ids may name other nodes now). Answers ``code:
+    "proposal_canvas_replaced"`` beside ``detail``."""
+
+    def __init__(self) -> None:
+        super().__init__(status_code=409, detail=PROPOSAL_CANVAS_REPLACED_DETAIL)
+
+
+@app.exception_handler(ProposalCanvasReplaced)
+async def proposal_canvas_replaced(request, exc: ProposalCanvasReplaced):
+    return JSONResponse(status_code=409, content={"detail": exc.detail, "code": PROPOSAL_CANVAS_REPLACED_CODE})
+
+
+def _ensure_still_decidable(proposal: Proposal, *, reject: bool = False) -> None:
+    """Re-check after an await: still open, still for the open project, and
+    still on the canvas it was made on (not for a reject, which only closes
+    it: a reject on a cleared canvas closes what the clear closes anyway)."""
     if not proposal.is_open:
         raise HTTPException(status_code=409, detail=f"This proposal is already {proposal.status}")
     if proposal.project_id != _workspace_context()["activeProjectId"]:
         raise HTTPException(status_code=409, detail="This proposal belongs to another project")
+    if not reject and proposal.canvas_revision is not None and proposal.canvas_revision != _canvas_revision():
+        # A clear or an import landed since it was made (they close open
+        # proposals only after their awaits): its node ids may name other
+        # nodes now (round 21 of PR #195, review 20 L-3).
+        raise ProposalCanvasReplaced()
 
 
 async def _proposal_body(request: Request) -> dict[str, Any]:
@@ -7836,9 +8134,9 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
 @app.post("/api/canvas/proposals/{proposal_id}/reject")
 async def reject_canvas_proposal(proposal_id: str, request: Request) -> dict[str, Any]:
     """The person says no. Body: {reason?} (one short line the agent will read)."""
-    proposal = await _decidable_proposal(proposal_id)
+    proposal = await _decidable_proposal(proposal_id, reject=True)
     body = await _proposal_body(request)
-    _ensure_still_decidable(proposal)
+    _ensure_still_decidable(proposal, reject=True)
     reason: str | None = None
     if body.get("reason") not in (None, ""):
         try:
@@ -9587,7 +9885,356 @@ def _watch_for_cross_process_stop(
     execution_task.add_done_callback(lambda _done: watcher.cancel())
 
 
+async def _skip_placeholders(
+    run_id: str, nodes: list[GraphNode], edges: list[GraphEdge], *, direct: str | None = None,
+    announce: bool = True,
+) -> tuple[list[GraphNode], list[GraphEdge], dict[str, dict[str, Any]], list[str]]:
+    """Every way to run skips agents' placeholders (Q125 item 3, GM - Design:
+    "Run skips pending nodes, along with any node downstream that needs their
+    output"), before validation and before anything is priced, so nothing is
+    spent on them. Not skipped, though, are the placeholders this run makes
+    normal (the fourth value, ``ready``): the owning agent's own in the run,
+    and, when the person runs a node directly (``direct``, not an accepted
+    proposal's run), every placeholder in that run: the node and what feeds
+    it, since running it runs them (GM: "counts as their edit: it turns
+    normal and runs"). Nothing changes here: the caller turns ``ready``
+    normal with _make_ready only once the run has passed every check, so a
+    refused run leaves the placeholders as they were. Each skipped node gets
+    a ``skipped`` event with the reason (``announce``; else the caller sends
+    them with _announce_skips once the run is noted); the returned map is
+    what the route reports."""
+    identity = identify_agent(current_request_headers())
+    scope = [node.id for node in nodes]
+    if identity is not None:
+        ready = [node_id for node_id in scope
+                 if (pending_nodes.owner(cli_graph.nodes.get(node_id)) or {}).get("id") == identity.id]
+    elif direct is not None and _is_person_request():
+        ready = [node_id for node_id in scope if pending_nodes.is_pending(cli_graph.nodes.get(node_id))]
+    else:
+        ready = []
+    skips = pending_nodes.run_skips(scope, [(edge.source, edge.target) for edge in edges], cli_graph.nodes,
+                                    label=_node_label, ready=ready)
+    if not skips:
+        return nodes, edges, {}, ready
+    if announce:
+        await _announce_skips(run_id, skips)
+    return ([node for node in nodes if node.id not in skips],
+            [edge for edge in edges if edge.source not in skips and edge.target not in skips], skips, ready)
+
+
+def _paid_placeholders(nodes: list[GraphNode], ready: Iterable[str]) -> list[str]:
+    """The placeholders among ``ready`` that call a paid model with the params
+    this run sends (model_pricing.is_local; an unknown type counts as paid)."""
+    by_id = {node.id: node for node in nodes}
+    paid = []
+    for node_id in ready:
+        node = by_id.get(node_id)
+        if node is None:
+            continue
+        if not model_pricing.is_local(node_registry.get(node.definition_id) or {}, node.params or {}):
+            paid.append(node_id)
+    return sorted(paid, key=_node_order)
+
+
+def _six_places(amount: float) -> float:
+    """USD read at 6 places, the canvas's arithmetic (review 4, L1), except
+    that an amount above zero never reads as nothing (review 7, L4): under
+    half a millionth it is one millionth, so a confirmed 0 can't pass a run
+    that costs something (the canvas shows and sends $0.01 for it)."""
+    rounded = round(amount, 6)
+    return 0.000001 if amount > 0 and rounded <= 0 else rounded
+
+
+def _run_estimate(nodes: list[GraphNode], edges: list[GraphEdge], *, passes: int = 1,
+                  api_keys: Mapping[str, Any] | None = None,
+                  sizes: Mapping[str, Mapping[str, Any]] | None = None) -> dict[str, Any] | None:
+    """Nebula's list-price estimate of running ``nodes`` ``passes`` times, as
+    the canvas's run cost reads it (lib/runScope.ts summarizeRunScope:
+    fan-out, a Cinema scene's shots, routes from the keys set, a price read
+    from an input's size at ``sizes``, measured by the caller). What the
+    person's confirmation of placeholders is held to, and what its refusal
+    carries so the canvas can ask again with these numbers (review 4, M1).
+
+    ``low``/``high`` are the whole run's, multiplied by ``passes`` and then
+    rounded to 6 places, the canvas's arithmetic (review 4, L1); ``nodes``
+    maps each priced node to its {low, high} for the run; ``unpriced``,
+    ``plan``, ``awaitingInput`` list node ids, ``unavailable`` maps a node id
+    to why its route can't run, ``plus`` the costs not included. ``high`` is
+    None when nothing is priced. None when the price table can't load."""
+    try:
+        pricing = model_pricing.load_pricing()
+    except (OSError, ValueError):
+        return None
+    keys = api_keys if api_keys is not None else (load_settings().get("apiKeys", {}) or {})
+    items = [{"id": node.id, "definitionId": node.definition_id, "params": node.params or {}} for node in nodes]
+    multipliers = model_pricing.run_multipliers(items, [(edge.source, edge.target) for edge in edges])
+    wired = model_pricing.wired_counts(items, [(edge.source, edge.target, edge.target_handle) for edge in edges])
+    estimate = model_pricing.estimate_run(items, pricing, node_registry.get_all(), keys, multipliers, wired,
+                                          sizes=sizes)
+    times = max(1, int(passes or 1))
+    priced = estimate.get("priced") or {}
+    lines = {node_id: {"low": float(line["low"]) * times, "high": float(line["high"]) * times}
+             for node_id, line in priced.items()}
+    return {
+        "low": _six_places(sum(line["low"] for line in lines.values())) if lines else None,
+        "high": _six_places(sum(line["high"] for line in lines.values())) if lines else None,
+        "nodes": lines,
+        "unpriced": list(estimate.get("unpriced") or []),
+        "plan": list(estimate.get("plan") or []),
+        "plus": list(estimate.get("plus") or []),
+        "unavailable": dict(estimate.get("unavailable") or {}),
+        "awaitingInput": list(estimate.get("awaitingInput") or []),
+    }
+
+
+def _run_estimate_high(nodes: list[GraphNode], edges: list[GraphEdge], *, passes: int = 1,
+                       api_keys: Mapping[str, Any] | None = None,
+                       sizes: Mapping[str, Mapping[str, Any]] | None = None) -> float | None:
+    """The upper total of _run_estimate: None when nothing is priced or the
+    price table can't load."""
+    estimate = _run_estimate(nodes, edges, passes=passes, api_keys=api_keys, sizes=sizes)
+    return None if estimate is None else estimate["high"]
+
+
+def _placeholder_confirm_refusal(run_id: str, paid: list[str], estimate: Mapping[str, Any] | None = None, *,
+                                 shot: bool = False) -> HTTPException:
+    """409 for the person's direct run of agents' paid placeholders without
+    their confirmation (or at a higher cost than they confirmed): GM - Design's
+    round-4 words, 2026-10-25, verbatim, which the node shows as its run error
+    in a tab too old to ask again itself. A shot's ends with the shot panel's
+    words (GM, round 5): "Generate again to review it."
+
+    It carries what the canvas needs to ask again at once (review 4, M1; GM
+    round 5: the canvas re-opens its dialog with "This run changed since you
+    last reviewed it." and never shows this message): the paid placeholders,
+    each one's agent (``agents``, for a tab that hasn't heard of the flag yet)
+    and Nebula's own ``estimate`` of the run (_run_estimate), which a
+    confirmation of its ``high`` passes."""
+    canvas_events.forget_run(run_id)
+    owners: list[str] = []
+    agents: dict[str, Any] = {}
+    for node_id in paid:
+        who = pending_nodes.owner(cli_graph.nodes.get(node_id)) or {}
+        if who:
+            agents[node_id] = dict(who)
+        name = who.get("name")
+        if name and name not in owners:
+            owners.append(name)
+    # GM - Design, round 12, item 1: "the agents" ("nodes agents" read like a stumble).
+    who = f"{owners[0]} is" if len(owners) == 1 else "the agents are"
+    one = len(paid) == 1
+    again = ("Generate again to review it." if shot
+             else f"Click “Run” again to review {'it' if one else 'them'}.")
+    if paid:
+        message = (f"Nothing ran. This run includes {len(paid)} paid {'node' if one else 'nodes'} {who} still "
+                   f"setting up, and Nebula asks before running those. {again}")
+    else:
+        # No placeholder left (their agents finished them while the dialog
+        # was open), but the run now costs more than the person confirmed
+        # (review 5, H1): GM's words from the dialog and the refusal.
+        again = "Generate again to review it." if shot else "Click “Run” again to review it."
+        message = f"Nothing ran. This run changed since you last reviewed it. {again}"
+    return HTTPException(status_code=409, detail={
+        "code": "placeholder_confirm_required",
+        "message": message,
+        "placeholders": paid,
+        "agents": agents,
+        "estimate": dict(estimate) if estimate is not None else None,
+    })
+
+
+async def _require_placeholder_confirmation(
+    run_id: str, nodes: list[GraphNode], edges: list[GraphEdge], ready: list[str], confirmed: list[str] | None,
+    confirmed_cost: float | None = None, *, passes: int = 1, api_keys: Mapping[str, Any] | None = None,
+    shot: bool = False,
+) -> None:
+    """Q133 (Justin, 2026-10-25): the person's direct run that would make an
+    agent's paid placeholder normal runs only with the person's confirmation
+    for exactly those placeholders (the canvas's dialog sends them,
+    components/PlaceholderRunDialog.tsx), so a missed dialog, a stale tab or
+    another client can't skip it, and at no more than the total they
+    confirmed (``confirmed_cost``, USD): Nebula's own estimate of what runs
+    (``passes`` times: a shot's variations), with every price read from an
+    input's size measured first (review 4, H1). The total is required
+    whenever Nebula can price the run (review 4, M4). 409 before anything is
+    priced or changes, carrying the estimate so the canvas asks again with
+    it. Every route that runs the person's direct run calls this:
+    /api/execute-node and /api/cinema/generate-shot. Agents' runs of their
+    own placeholders are unchanged (their ``ready`` holds only their own, and
+    they never confirm).
+
+    Once the dialog showed (the run carries ``confirmed_cost``), that total
+    holds even when no placeholder is left: their agents may have finished
+    them while it was open, and a pricier model must not run at a total
+    nobody saw (review 5, H1). The ids confirmed then don't matter, since
+    nothing is a placeholder any more."""
+    if identify_agent(current_request_headers()) is not None or not _is_person_request():
+        return
+    paid = _paid_placeholders(nodes, ready)
+    if not paid and confirmed_cost is None:
+        return
+    sizes = await _measure_confirmed_run(nodes, edges)
+    estimate = _run_estimate(nodes, edges, passes=passes, api_keys=api_keys, sizes=sizes)
+    if paid and sorted(set(confirmed or [])) != sorted(paid):
+        raise _placeholder_confirm_refusal(run_id, paid, estimate, shot=shot)
+    high = None if estimate is None else estimate["high"]
+    if high is None:
+        return  # nothing in it has a list price: the person confirmed the rows
+    # No slack (review 6, L-e; GM - Design's answer): the canvas sends the
+    # amount it showed, in cents rounded up (lib/placeholderRunConfirm.ts
+    # roundUpToCent), so a run Nebula prices even a millionth higher than that
+    # is refused and asked again at Nebula's numbers.
+    if confirmed_cost is None or high > confirmed_cost:
+        raise _placeholder_confirm_refusal(run_id, paid, estimate, shot=shot)
+
+
+async def _measure_confirmed_run(nodes: list[GraphNode], edges: list[GraphEdge]) -> dict[str, dict[str, Any]]:
+    """The input sizes a confirmed run's prices read (services/input_sizes.py),
+    measured off the event loop. The person's runs skip the spending check's
+    measuring (_measure_run_inputs), but a placeholder's confirmation is held
+    to its price, so it measures here. A project switch while it measured
+    refuses the run (409), as for the spending check."""
+    try:
+        pricing = model_pricing.load_pricing()
+    except (OSError, ValueError):
+        return {}
+    items = [{"id": n.id, "definitionId": n.definition_id, "params": n.params or {}} for n in nodes]
+    if not input_sizes.needs_measuring(items, pricing):
+        return {}
+    before = _workspace_context()["workspaceRevision"]
+    measured = await input_sizes.measure_run(
+        items, [(e.source, e.source_handle, e.target, e.target_handle) for e in edges], pricing,
+        node_registry.get_all(), {n.id: n for n in nodes})
+    _check_workspace_revision(before)
+    return dict(measured.sizes)
+
+
+async def _make_ready(node_ids: Iterable[str]) -> None:
+    """An admitted run turns the placeholders it runs normal (_skip_placeholders's
+    ``ready``), and every canvas hears it."""
+    if _clear_pending(node_ids):
+        await _broadcast_graph_sync()
+
+
+def _admit_registered_run(run_id: str, ready: Iterable[str], nodes: list[GraphNode], edges: list[GraphEdge],
+                          canvas: tuple[str | None, int]) -> bool:
+    """A run that just registered (_register_run, after the last
+    _refuse_if_graph_moved and _run_canvas_now with no await between, PR
+    #114's round 11): the placeholders it runs turn normal and an agent's run
+    is kept (its marks and done card). Synchronous, so the run's task hasn't
+    had a turn yet; a run refused before this leaves the placeholders and
+    the agent-run record as they were (round 21, the #114 merge). True when a
+    placeholder changed: the caller then broadcasts the graph.
+
+    Round 22 (review 21, L-e): nothing here reads storage. The project is
+    the one the run registered on (``canvas``, read by _run_canvas_now), and
+    what can fail comes before the one write: the plan (who asked, which
+    nodes) is read first, then the placeholders are made normal (saved
+    whole, or not at all: CLIGraph.replace_with), and only then is the run
+    kept, in memory. A refusal here leaves everything as it was."""
+    plan = _agent_run_plan(nodes, edges)
+    cleared = bool(_clear_pending(ready))
+    if plan is not None:
+        identity, planned, models = plan
+        agent_runs.start(run_id, identity, project_id=canvas[0], planned=planned, models=models)
+    return cleared
+
+
+# Round 23 (review 22, L-4): once a run is admitted (_admit_registered_run
+# returned) it has started, and may be spending. Nothing after that point may
+# turn the answer into an error: an agent that reads a 507 as "didn't start"
+# would start the paid run again (/api/graph/run has no client run id to
+# deduplicate on). Every step after admission in the four run routes
+# (execute, execute-node, the cinema shot, /api/graph/run) goes through
+# _after_admission: a failure is logged, never raised; the placeholder
+# broadcast that fails is named in the answer (``canvasSync``), owed, and
+# sent again in the background (any later sync pays it, since a sync carries
+# the whole graph). The open canvas only shows the placeholders a little
+# longer meanwhile; the run's own events sync it too, so the person needs no
+# line of their own.
+RUN_SYNC_DEFERRED_DETAIL = (
+    "The run started. Nebula couldn't tell open canvases about it just now and will try again; they catch up "
+    "on the next change. Don't start this run again: follow it by its runId."
+)
+_graph_sync_owed = False
+_graph_resync_task: asyncio.Task[None] | None = None
+_GRAPH_RESYNC_DELAYS = (0.5, 2.0, 5.0)
+
+
+async def _after_admission(run_id: str, what: str, step: Callable[[], Awaitable[Any]]) -> bool:
+    """Run one step after a run's admission; False (logged) when it failed."""
+    try:
+        await step()
+        return True
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - the run started; this is decoration on it
+        print(f"[exec] run {run_id} started, but {what} failed: {type(exc).__name__}: {exc}",
+              file=sys.stderr, flush=True)
+        return False
+
+
+async def _pay_owed_graph_sync() -> bool:
+    """Send the sync an admitted run couldn't, if it is still owed. True when
+    nothing is owed now."""
+    if not _graph_sync_owed:
+        return True
+    try:
+        await _broadcast_graph_sync()
+    except Exception as exc:  # noqa: BLE001 - tried again later, or paid by the next sync
+        print(f"[exec] the owed canvas sync failed again: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
+        return False
+    return True
+
+
+def _schedule_owed_graph_sync() -> None:
+    global _graph_resync_task
+    if _graph_resync_task is not None and not _graph_resync_task.done():
+        return
+
+    async def retry() -> None:
+        for delay in _GRAPH_RESYNC_DELAYS:
+            await asyncio.sleep(delay)
+            if await _pay_owed_graph_sync():
+                return
+
+    try:
+        _graph_resync_task = asyncio.get_running_loop().create_task(retry())
+    except RuntimeError:  # no loop (a sync test): the next sync pays it
+        _graph_resync_task = None
+
+
+async def _broadcast_admitted_run(run_id: str, placeholders_changed: bool) -> dict[str, Any]:
+    """The placeholder broadcast after an admitted run, best effort: {} when
+    sent (or not needed), else what the answer says about it."""
+    global _graph_sync_owed
+    if not placeholders_changed:
+        return {}
+    if await _after_admission(run_id, "the placeholder broadcast (Nebula couldn't tell open canvases)",
+                              _broadcast_graph_sync):
+        return {}
+    _graph_sync_owed = True
+    _schedule_owed_graph_sync()
+    return {"canvasSync": "deferred", "canvasSyncDetail": RUN_SYNC_DEFERRED_DETAIL}
+
+
+async def _announce_skips(run_id: str, skips: Mapping[str, Mapping[str, Any]]) -> None:
+    for node_id, info in skips.items():
+        await _emit_and_sync(SkippedEvent(node_id=node_id, reason=info["reason"], run_id=run_id))
+
+
+def _skip_reply(skips: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
+    """What a canvas run's reply says about skipped placeholders: per node the
+    reason (``skipped``), and the count and whose (``pendingSkipped``) for the
+    line the canvas shows after Run."""
+    if not skips:
+        return {}
+    return {"skipped": {node_id: info["reason"] for node_id, info in skips.items()},
+            "pendingSkipped": pending_nodes.skip_summary(skips)}
+
+
 @app.post("/api/execute")
+@graph_write
 @_admits_cinema_renders
 async def execute(request: ExecuteRequest) -> dict:
     _check_workspace_revision()
@@ -9605,17 +10252,20 @@ async def execute(request: ExecuteRequest) -> dict:
     api_keys = settings.get("apiKeys", {})
     nodes = _normalize_execute_nodes(request.nodes)
     _note_run_nodes(run_id, nodes)
+    requested_nodes, requested_edges = nodes, request.edges
+    nodes, edges, skips, ready = await _skip_placeholders(run_id, nodes, request.edges)
+    # The scenes it renders: what runs, not the placeholders it skips (#198 x #195).
     _note_scene_renders(run_id, nodes)
     submitted = _submitted_params(nodes)
     _validate_cinema_base_models(nodes)
 
-    errors = validate_graph(nodes, request.edges, api_keys)
+    errors = validate_graph(nodes, edges, api_keys, name_of=_run_names(nodes))
     if errors:
         await _announce_validation_errors(errors, run_id)
-        return {**_validation_response(errors), "runId": run_id}
+        return {**_validation_response(errors), "runId": run_id, **_skip_reply(skips)}
 
     try:
-        topological_sort(nodes, request.edges)
+        topological_sort(nodes, edges)
     except CycleError as exc:
         await manager.broadcast(
             ValidationErrorEvent(
@@ -9632,8 +10282,13 @@ async def execute(request: ExecuteRequest) -> dict:
         raise HTTPException(status_code=400, detail=f"Graph contains a cycle: {exc}")
 
     # After validation, so a graph that can't run reports why, not its cost.
-    await _require_run_spend_approval(run_id, nodes, request.edges, approval_id=request.approval_id,
-                                run_ids=_end_node_ids(nodes, request.edges), settings=settings, fence=fence)
+    # The approval matches what the person accepted; only what runs is priced.
+    # The placeholders it runs turn normal, and an agent's run is kept, only
+    # once it registered (_admit_registered_run): a run refused at the last
+    # fence leaves both as they were (round 21, the #114 merge).
+    await _require_run_spend_approval(run_id, nodes, edges, approval_id=request.approval_id,
+                                      approval_scope=(requested_nodes, requested_edges),
+                                      run_ids=_end_node_ids(nodes, edges), settings=settings, fence=fence)
 
     handler_registry = get_handler_registry(emit=_emit_and_sync)
     try:
@@ -9661,7 +10316,7 @@ async def execute(request: ExecuteRequest) -> dict:
         try:
             await execute_graph(
                 nodes=nodes,
-                edges=request.edges,
+                edges=edges,
                 api_keys=api_keys,
                 handler_registry=handler_registry,
                 emit=_emit_and_sync,
@@ -9701,6 +10356,7 @@ async def execute(request: ExecuteRequest) -> dict:
             # acknowledgement, and releases only after the task is terminal.
             await _release_paid_worldlabs_starts(run_id)
             _settle_hold(run_id)
+            await _finish_agent_run(run_id)
 
     task: asyncio.Task[None] | None = None
     run_coroutine = _run()
@@ -9708,6 +10364,7 @@ async def execute(request: ExecuteRequest) -> dict:
         task = asyncio.create_task(run_coroutine)
         _register_run(run_id, task, run_canvas)
         _watch_for_cross_process_stop(run_id, task)
+        placeholders_changed = _admit_registered_run(run_id, ready, nodes, edges, run_canvas)
     except ExecutionCancelledBeforeStartError as exc:
         if task is None:
             run_coroutine.close()
@@ -9747,10 +10404,12 @@ async def execute(request: ExecuteRequest) -> dict:
         canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
         raise
 
-    return {"status": "started", "runId": run_id}
+    synced = await _broadcast_admitted_run(run_id, placeholders_changed)
+    return {"status": "started", "runId": run_id, **_skip_reply(skips), **synced}
 
 
 @app.post("/api/execute-node")
+@graph_write
 @_admits_cinema_renders
 async def execute_node(request: ExecuteNodeRequest) -> dict:
     """Execute only the subgraph feeding into a specific target node."""
@@ -9778,14 +10437,25 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     if not sub_nodes:
         raise _node_gone(request.target_node_id, f"Node '{request.target_node_id}' not found in graph")
     _note_run_nodes(run_id, sub_nodes)
+    requested_nodes, requested_edges = sub_nodes, sub_edges
+    # The person running a placeholder directly makes it theirs; an accepted
+    # proposal's run (approval_id) is not running it directly.
+    sub_nodes, sub_edges, skips, ready = await _skip_placeholders(
+        run_id, sub_nodes, sub_edges, direct=request.target_node_id if request.approval_id is None else None)
+    # The scenes it renders: what runs, not the placeholders it skips (#198 x #195).
     _note_scene_renders(run_id, sub_nodes)
+    refused = await _refuse_unchosen_models(run_id, sub_nodes, sub_edges, api_keys, skips)
+    if refused is not None:
+        return refused
+    await _require_placeholder_confirmation(run_id, sub_nodes, sub_edges, ready, request.confirmed_placeholders,
+                                            request.confirmed_cost, api_keys=api_keys)
 
     _validate_cinema_base_models(sub_nodes)
 
-    errors = validate_graph(sub_nodes, sub_edges, api_keys)
+    errors = validate_graph(sub_nodes, sub_edges, api_keys, name_of=_run_names(sub_nodes))
     if errors:
         await _announce_validation_errors(errors, run_id)
-        return {**_validation_response(errors), "runId": run_id}
+        return {**_validation_response(errors), "runId": run_id, **_skip_reply(skips)}
 
     try:
         topological_sort(sub_nodes, sub_edges)
@@ -9806,7 +10476,11 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
 
     # After validation, so a graph that can't run reports why, not its cost.
     await _require_run_spend_approval(run_id, sub_nodes, sub_edges, approval_id=request.approval_id,
-                                run_ids=[request.target_node_id], settings=settings, fence=fence)
+                                      approval_scope=(requested_nodes, requested_edges),
+                                      run_ids=[request.target_node_id] if not skips else _end_node_ids(sub_nodes, sub_edges),
+                                      settings=settings, fence=fence)
+    # Placeholders turn normal and an agent's run is kept once it registered
+    # (_admit_registered_run, as in execute).
 
     handler_registry = get_handler_registry(emit=_emit_and_sync)
     try:
@@ -9850,11 +10524,13 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
         finally:
             await _release_paid_worldlabs_starts(run_id)
             _settle_hold(run_id)
+            await _finish_agent_run(run_id)
 
     try:
         task = asyncio.create_task(_run())
         _register_run(run_id, task, run_canvas)
         _watch_for_cross_process_stop(run_id, task)
+        placeholders_changed = _admit_registered_run(run_id, ready, sub_nodes, sub_edges, run_canvas)
     except ExecutionCancelledBeforeStartError as exc:
         await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
@@ -9884,7 +10560,8 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
         canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
         raise
 
-    return {"status": "started", "nodeCount": len(sub_nodes), "runId": run_id}
+    synced = await _broadcast_admitted_run(run_id, placeholders_changed)
+    return {"status": "started", "nodeCount": len(sub_nodes), "runId": run_id, **_skip_reply(skips), **synced}
 
 
 # -- who may stop a run (Justin, 2026-10-20, MCP parity Q61 a) --------------------
@@ -10357,6 +11034,7 @@ async def _promote_shot_variation(
 
 
 @app.post("/api/cinema/promote-shot-variation")
+@graph_write
 async def promote_cinema_shot_variation(
     request: PromoteShotVariationRequest,
 ) -> dict[str, Any]:
@@ -10371,6 +11049,7 @@ async def promote_cinema_shot_variation(
 
 
 @app.post("/api/cinema/generate-shot")
+@graph_write
 @_admits_cinema_renders
 async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     """Regenerate ONLY the named shot of a cinema-scene node.
@@ -10424,7 +11103,23 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     if not sub_nodes:
         raise _node_gone(request.node_id, f"Node '{request.node_id}' not found in graph")
     _note_run_nodes(run_id, sub_nodes)
+    # A shot is the person's direct run of the scene (Q133, as /api/execute-node):
+    # the placeholders feeding it run and turn normal, a paid one only with the
+    # person's confirmation; an agent's shot skips other agents' placeholders.
+    # Before anything is priced, so nothing is spent on a skipped one.
+    sub_nodes, sub_edges, skips, ready = await _skip_placeholders(
+        run_id, sub_nodes, sub_edges, direct=request.node_id)
+    if request.node_id in skips:
+        canvas_events.forget_run(run_id)
+        return {"status": "skipped", "runId": run_id, **_skip_reply(skips)}
+    # The scenes it renders: what runs, not the placeholders it skips (#198 x #195).
     _note_scene_renders(run_id, sub_nodes, shot=(request.node_id, request.shot_id))
+    refused = await _refuse_unchosen_models(run_id, sub_nodes, sub_edges, api_keys, skips)
+    if refused is not None:
+        return refused
+    await _require_placeholder_confirmation(run_id, sub_nodes, sub_edges, ready, request.confirmed_placeholders,
+                                            request.confirmed_cost, passes=request.variations or 1,
+                                            api_keys=api_keys, shot=True)
     fresh_paid_ancestors = _fresh_paid_worldlabs_claims(sub_nodes)
     if fresh_paid_ancestors:
         blocked_ids = ", ".join(node_id for _kind, node_id in fresh_paid_ancestors)
@@ -10437,7 +11132,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
             ),
         )
 
-    errors = validate_graph(sub_nodes, sub_edges, api_keys)
+    errors = validate_graph(sub_nodes, sub_edges, api_keys, name_of=_run_names(sub_nodes))
     if errors:
         await _announce_validation_errors(errors, run_id)
         # With each error (error copy round 3e), so the shot panel can say
@@ -10463,8 +11158,11 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     # each one counts in full. Checked after validation, so a request that
     # can't run doesn't count.
     spend_nodes, spend_edges = get_subgraph(request.nodes, request.edges, request.node_id)
+    spend_nodes = [node for node in spend_nodes if node.id not in skips]
+    spend_edges = [edge for edge in spend_edges if edge.source not in skips and edge.target not in skips]
     await _require_run_spend_approval(run_id, spend_nodes, spend_edges, run_ids=[request.node_id], passes=count,
                                 settings=settings, fence=fence)
+    # The placeholders it runs turn normal once it registered (below).
 
     # A per-shot run does not acquire the frontend's Canvas-wide ``isExecuting``
     # gate, so sibling work remains available. It does register its background
@@ -10577,6 +11275,9 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
         # executes).
         _register_run(run_id, task, run_canvas)
         _watch_for_cross_process_stop(run_id, task)
+        # Admitted: the placeholders it runs turn normal, in this step (no
+        # await since the last fence; round 21, the #114 merge).
+        placeholders_changed = bool(_clear_pending(ready))
     except ExecutionCancelledBeforeStartError as exc:
         if task is None:
             run_coroutine.close()
@@ -10612,11 +11313,13 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
         _return_hold(run_id)  # it never had a turn (round 17, review 16 L5)
         raise
 
+    synced = await _broadcast_admitted_run(run_id, placeholders_changed)
     return {
         "status": "started",
         "shotId": request.shot_id,
         "variations": count,
         "runId": run_id,
+        **synced,
     }
 
 
@@ -10646,7 +11349,9 @@ async def get_input_sizes(body: dict[str, Any]) -> dict:
     given and its resolved path both inside the store, no ``..``, nothing
     Nebula is still writing: services/input_sizes.py), so the canvas and the
     check agree; an outside URL or any other path is null, never fetched or
-    opened. An inline data: image is null here (the canvas sends files)."""
+    opened. An inline data: image is measured as the run's checks measure it
+    (its pixels are in the run's params), so the canvas prices it as the
+    confirmation does (review 5, L4)."""
     refs = body.get("refs") if isinstance(body, dict) else None
     if not isinstance(refs, list) or len(refs) > MAX_SIZE_REFS:
         raise HTTPException(status_code=400, detail=f"refs must be a list of at most {MAX_SIZE_REFS} {{ref, kind}}")
@@ -10659,7 +11364,7 @@ async def get_input_sizes(body: dict[str, Any]) -> dict:
         wanted.append((ref, kind))
 
     def measure_all() -> dict[str, Any]:
-        return {ref: input_sizes.measure(ref, kind, inline=False) for ref, kind in wanted}
+        return {ref: input_sizes.measure(ref, kind) for ref, kind in wanted}
 
     return {"sizes": await asyncio.to_thread(measure_all)}
 
@@ -10835,7 +11540,8 @@ async def _broadcast_graph_sync(
         # their errors go.
         canvas_arrange.clear()
         if reason == "import":
-            # (The import moved the id epoch itself, with its commit.)
+            # Its undo tokens and canvas revision went with the commit
+            # (import_graph moved the id epoch itself).
             node_errors.forget_canvas()
         # Journaled here, in the step that replaced the canvas (a switch's
         # commit, an import's), before any await (round 8 of PR #114): the
@@ -10880,6 +11586,9 @@ async def _broadcast_graph_sync(
         agent_presence.forget_graph()
         await _forget_status_anchors()
     moved_ids = sorted({str(node_id) for node_id in moved if node_id in cli_graph.nodes})
+    # Placeholders on the graph now (a project opened, an agent's edit): when
+    # the next one runs out (pending_nodes' idle rule).
+    _schedule_pending_expiry()
     await manager.broadcast_raw({"type": "graphSync", **export,
                                  **({"graphReplaced": True} if graph_replaced else {}),
                                  **({"cleared": True} if cleared and not graph_replaced else {}),
@@ -10889,6 +11598,10 @@ async def _broadcast_graph_sync(
                                  **({"runParams": run_params} if run_params and not graph_replaced else {}),
                                  **({"edit": _graph_edit_origin()}
                                     if edit and (not graph_replaced or reason == "import") else {})})
+    # It carried the whole graph: a sync an admitted run couldn't send
+    # (_broadcast_admitted_run) is paid by this one.
+    global _graph_sync_owed
+    _graph_sync_owed = False
     if graph_replaced:
         # Its events went to the journal above, before any await. (The pins
         # listing follows catalog.json, so one taken between the commit and
@@ -11095,6 +11808,143 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
         # The canvas would put it on its node with that id (graphStore).
         return
     await manager.broadcast(event)
+    await _observe_agent_run(event, run_id)
+
+
+# ---------- Agents' runs: the mark on the node, the done card (Q125 item 3) ----------
+#
+# Justin, 2026-10-24, merge-oks Q125, item 3: "The agent's mark stays on its
+# node with a status line ... A finished run posts a card with a thumbnail
+# and Show on canvas, without the agent having to remember to." Runs an
+# identified agent starts, on any route, are kept in agent_runs while they
+# go (services/run_done_cards.py); the person's runs get neither.
+
+# The params that pick the model a node runs (review 8, L-a), the same on the
+# canvas (lib/placeholderRunConfirm.ts MODEL_SELECT_KEYS / MODEL_TEXT_KEYS):
+# a select labelled Model names its chosen option; a free-text one names the
+# model id typed or picked, as the node card shows it.
+_MODEL_SELECT_KEYS = ("model", "model_id", "ai_model")
+_MODEL_TEXT_KEYS = ("model", "model_id", "endpoint_id")
+# Params by those names that pick no model the node runs (review 9, nit c):
+# Krea Style Search's free-text ``model`` is a search filter. The canvas
+# skips the same (lib/placeholderRunConfirm.ts NOT_A_MODEL).
+_NOT_A_MODEL: dict[str, frozenset[str]] = {"krea-style-search": frozenset({"model"})}
+
+
+def _run_model_name(node: GraphNode) -> str:
+    """The model a running node shows on its mark, in the provider's own
+    spelling ("FLUX.2 [pro]"): the label of the node's chosen model option,
+    the model id a free-text model param names (a universal node's model,
+    fal's endpoint, Krea Agent's model), else the node's name, quoted (GM -
+    Design, 2026-10-25: "A node name in the run pill is quoted: Running “Text
+    Input” · 0:00 ... Provider model names stay unquoted"). The person's
+    paid-placeholder dialog names a row's model the same way."""
+    definition = node_registry.get(node.definition_id) or {}
+    params = node.params or {}
+    skipped = _NOT_A_MODEL.get(node.definition_id, frozenset())
+    specs = [spec for spec in [*(definition.get("params") or []), *(definition.get("sharedParams") or [])]
+             if isinstance(spec, dict) and spec.get("key") not in skipped]
+    for spec in specs:
+        if spec.get("key") not in _MODEL_SELECT_KEYS or spec.get("type") != "enum":
+            continue
+        value = params.get(spec["key"], spec.get("default"))
+        for option in spec.get("options") or []:
+            if isinstance(option, dict) and option.get("value") == value and option.get("label"):
+                return str(option["label"])[:80]
+    if universal_ports.is_universal(node.definition_id):
+        model = universal_ports.model_of(node.definition_id, params)
+        if model:
+            return str(model)[:80]
+    for spec in specs:
+        if spec.get("key") not in _MODEL_TEXT_KEYS or spec.get("type") != "string":
+            continue
+        value = params.get(spec["key"], spec.get("default"))
+        if isinstance(value, str) and value.strip():
+            return value.strip()[:80]
+    return f"“{node_route.node_name(definition, None, node.definition_id)[:78]}”"
+
+
+def _agent_run_plan(nodes: list[GraphNode], edges: list[GraphEdge]) -> tuple[Any, list[str], dict[str, str]] | None:
+    """What keeping this run needs, read before anything changes (round 22,
+    review 21 L-e): the identified agent that started it, its nodes in run
+    order and the model each shows. None when no identified agent asked."""
+    identity = identify_agent(current_request_headers())
+    if identity is None or not nodes:
+        return None
+    try:
+        planned = [str(node_id) for node_id in topological_sort(nodes, edges)]
+    except CycleError:
+        planned = [node.id for node in nodes]
+    return identity, planned, {node.id: _run_model_name(node) for node in nodes}
+
+
+async def _observe_agent_run(event: ExecutionEvent, run_id: str | None) -> None:
+    """A node of an agent's run started or ended: its mark follows (agentRun events)."""
+    if agent_runs.get(run_id) is None:
+        return
+    node_id = getattr(event, "node_id", None)
+    if not node_id:
+        return
+    if isinstance(event, ExecutingEvent):
+        change = agent_runs.node_started(run_id, node_id)
+    elif isinstance(event, ExecutedEvent):
+        change = agent_runs.node_ended(run_id, node_id, outputs=event.outputs)
+    elif isinstance(event, ErrorEvent):
+        change = agent_runs.node_ended(run_id, node_id, failed=True)
+    elif isinstance(event, SkippedEvent):
+        change = agent_runs.node_ended(run_id, node_id, ran=False)
+    else:
+        return
+    if change is not None:
+        await _broadcast_status_events([change])
+
+
+async def _finish_agent_run(run_id: str, *, cancelled: bool = False) -> None:
+    """The run ended: its marks go, and unless it was stopped, the agent's
+    done card goes on the run's project's Updates (GM - Design, 2026-10-25).
+    One per run; never fails the run."""
+    run, events = agent_runs.finish(run_id)
+    await _broadcast_status_events(events)
+    record = execution_runs.get(run_id)
+    if run is None or cancelled or (record is not None and record.status in {"cancelling", "cancelled"}):
+        return
+    succeeded = [node_id for node_id in run.planned if node_id in run.succeeded]
+    failed = [node_id for node_id in run.planned if node_id in run.failed]
+    if not succeeded and not failed:
+        return  # nothing ran (every node skipped): nothing finished or failed
+    try:
+        await _post_run_done(run, succeeded, failed)
+    except Exception:  # noqa: BLE001 - the card is a notice; the run's own result stands
+        logging.getLogger("nebula.done_cards").exception("could not post the done card for run %s", run_id)
+
+
+async def _post_run_done(run: Any, succeeded: list[str], failed: list[str]) -> None:
+    labels = {node_id: _node_label(node_id) for node_id in run.planned}
+    text, outcome = done_text(run.agent.name, labels, run.planned, succeeded=succeeded, failed=failed)
+    last = run.planned[-1]
+    ref: dict[str, Any] = {"id": run.run_id, "nodeIds": list(run.planned), "lastNodeId": last, "outcome": outcome}
+    if outcome != "failure" and succeeded:
+        # Success: the last node's first output. Partial: the last output that succeeded.
+        shown = succeeded[-1]
+        thumbnail = thumbnail_for(run.succeeded.get(shown), _output_url_from_ref)
+        if thumbnail is not None:
+            ref["thumbnail"] = {**thumbnail, "nodeId": shown}
+    try:
+        result = await asyncio.to_thread(agent_notes.post_run_done, author={"kind": "agent", **run.agent.as_dict()},
+                                         text=text, run=ref, project_id=run.project_id)
+    except (NoteError, ProjectStoreError):
+        result = None  # no project to post on: the Agent log line below still says a failure
+    if result is not None:
+        note = result["note"]
+        await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"], note=note,
+                                                    unread=result["unread"], removed=result["removed"]))
+        _journal_note(note, "canvas", actor=actor_for_identity(run.agent))
+    if outcome != "success":
+        # GM: "A failed run gets a card, plus the Agent log line."
+        try:
+            await manager.broadcast_raw(_point(run.agent, target=None, action="click", say=text))
+        except Exception:  # noqa: BLE001 - decoration must not break the run
+            pass
 
 
 def _sync_provider_recovery_to_cli_graph(
@@ -11576,6 +12426,7 @@ def _moved_far_enough(before: Any, after: dict[str, float]) -> bool:
 
 
 @app.post("/api/graph/node")
+@graph_write
 async def create_graph_node(body: dict[str, Any]) -> dict:
     _check_workspace_revision()
     fence = _graph_fence()
@@ -11633,6 +12484,7 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
 
 
 @app.post("/api/graph/connect")
+@graph_write
 async def connect_graph_nodes(body: dict[str, Any]) -> dict:
     _check_workspace_revision()
     _validate_connect_handles(
@@ -11654,6 +12506,8 @@ async def connect_graph_nodes(body: dict[str, Any]) -> dict:
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    # The person wiring a placeholder edits it: it turns normal (Q125 item 3).
+    _person_touched([edge["source"], edge["target"]])
     _journal_edge("edge.added", edge)  # before any await (round 8 of PR #114)
     await _broadcast_graph_sync(edit=True)
     publish_action(
@@ -11671,6 +12525,7 @@ async def connect_graph_nodes(body: dict[str, Any]) -> dict:
 
 
 @app.post("/api/graph/node-and-connect")
+@graph_write
 async def create_node_and_connect(body: dict[str, Any]) -> dict:
     """Create a node and wire it to an existing node in a single atomic call.
 
@@ -11775,6 +12630,8 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
     # Preserve the raw top-level node contract for existing CLI callers while
     # letting the canvas adopt only a connection explicitly confirmed by us.
     response = {**copy.deepcopy(candidate.nodes[short_id]), "connected": edge is not None, "edge": rf_edge}
+    if edge is not None:
+        _person_touched([src, dst])
     # Before any await (round 8 of PR #114).
     _journal_node_added(short_id)
     if edge is not None:
@@ -11841,6 +12698,7 @@ def _cinema_motion_source_position(node_id: str) -> dict[str, float]:
 
 
 @app.post("/api/cinema/send-to-motion")
+@graph_write
 async def send_cinema_shot_to_motion(body: dict[str, Any]) -> dict:
     """Create or reuse an exact shot-to-Veo connection without running it.
 
@@ -12055,6 +12913,7 @@ def _keep_recovery_checkpoint(node: dict[str, Any], params: dict[str, Any]) -> b
 
 
 @app.put("/api/graph/node/{node_id}")
+@graph_write
 async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]) -> dict:
     _check_workspace_revision()
     fence = _graph_fence()
@@ -12136,6 +12995,9 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
     # in (round 8 of PR #114); the reply is the node as the change left it.
     changes = param_changes(params_before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
     if changes:
+        # The person changing a placeholder's settings edits it: it turns normal (Q125 item 3).
+        _person_touched([node_id])
+    if changes:
         _journal(
             "node.params",
             node_id=node_id,
@@ -12146,50 +13008,103 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
     await _broadcast_graph_sync(edit=True)
     if params:
         publish_action(f"Updated {node_id} params")
-    # The bubble's words are worked out inside _show_agent's guard (review 1
-    # N2): a failure there never turns this saved PUT into a 500.
+    # What changed, as the card names it (GM - Design, round 16 of PR #195):
+    # never the raw keys. The fields the agent sent that changed, when any
+    # did, not ones a default filled in after.
+    sent = [str(key) for key in params]
+    keys = [key for key in sent if key in set((changes or {}).get("keys") or [])] or sent
+    # The bubble's words are worked out inside _show_agent's guard (PR #198
+    # review 1 N2): a failure there never turns this saved PUT into a 500.
     # An empty change says nothing and logs nothing: the cursor only moves
-    # there (review 2, N4: "Updated “<node>”" is gone for good).
-    await _show_agent({"nodeId": node_id}, words=(lambda: _set_params_bubble(node_id, params)) if params else None,
-                      did=_did("Changed", node_id) if params else None)
+    # there (PR #198 review 2, N4: "Updated “<node>”" is gone for good).
+    await _show_agent({"nodeId": node_id}, words=(lambda: _set_params_bubble(node_id, keys)) if keys else None,
+                      did=_did("Changed", node_id) if keys else None)
     return updated
 
 
-def _set_params_bubble(node_id: str, params: Mapping[str, Any]) -> tuple[str, str]:
-    """The cursor bubble and the Agent log line for an agent's param change.
-
-    The bubble names each field by its label as the Inspector shows it, in
-    quotes ("Set “Text”"), in the order the agent gave them: the card's
-    label, or for a universal node whose model the picker read (Replicate)
-    the provider setting's key in sentence case, as the Inspector shows it
-    (universal_ports.setting_label; GM, PR #198 r1 item 7: "Set “Guidance
-    scale”"). Never a param key (GM, r18 of PR #114: Codex's bubble read
-    "Set value"). With no label at all the bubble says nothing, and the log
-    line counts what changed: "Changed a setting on “<node>”", "Changed 3
-    settings on “<node>”" (GM item 7). Otherwise the log line is the
-    bubble's."""
-    from execution.person_line import and_list
-
+def _set_params_bubble(node_id: str, keys: Iterable[str]) -> tuple[str, str]:
+    """The cursor bubble and the Agent log line for an agent's param change
+    (say, log): _set_words over the fields a card or a configured model
+    names. A universal node's provider param that nothing names (FAL's,
+    OpenRouter's, Nous's extra params: no Inspector control shows them) is
+    never named by its key; when the change is only those, the bubble says
+    nothing and the log counts them on the node: "Changed a setting on
+    “<node>”", "Changed 3 settings on “<node>”" (GM, PR #198 r1 item 7)."""
+    keys = [str(key) for key in keys]
     node = cli_graph.nodes.get(node_id) or {}
     definition_id = str(node.get("definitionId") or "")
-    definition = node_registry.get_all().get(definition_id) or {}
-    # Replicate's model inputs are the Inspector's dynamic settings; the
-    # other universal nodes have none (their extra params show nowhere).
-    dynamic = definition_id == "replicate-universal"
-    labels: list[str] = []
-    for key in params:
-        param = node_route.param_definition(definition, str(key)) if definition else None
-        label = str((param or {}).get("label") or "").strip()
-        if not label and param is None and dynamic and not str(key).startswith("_"):
-            label = universal_ports.setting_label(str(key))
-        if label and label not in labels:
-            labels.append(label)
-    if labels:
-        say = f"Set {and_list(_quoted(label) for label in labels)}"
-        return say, say
-    count = len(params)
+    unnamed: list[str] = []
+    if definition_id in DYNAMIC_NODE_PROVIDER_BY_DEFINITION and definition_id != "replicate-universal":
+        definition = node_registry.get(definition_id) or {}
+        known = {str(param.get("key")) for param in [*node_route.all_param_definitions(definition),
+                                                     *(node.get("dynamicParams") or [])]
+                 if isinstance(param, Mapping)}
+        unnamed = [key for key in keys if key not in known]
+    named = [key for key in keys if key not in unnamed]
+    if named:
+        return _set_words(node_id, named)
+    count = len(unnamed)
     what = "a setting" if count == 1 else f"{count} settings"
     return "", f"Changed {what} on {_quoted(_node_label(node_id))}"
+
+
+def _card_label(definition: Mapping[str, Any] | None, node: Mapping[str, Any] | None, key: str) -> str | None:
+    """The label the node's card shows for the field ``key``: the definition's
+    own param label (node_route.all_param_definitions, the list the
+    Inspector draws from), else a configured model's own field (a universal
+    node's ``dynamicParams``), else for a Replicate node a setting its picker
+    read, by its key in sentence case as the Inspector shows it
+    (universal_ports.setting_label; GM, PR #198 r1 item 7: "Set “Guidance
+    scale”"). None for a field the card never shows (a hidden one, or one no
+    definition names)."""
+    for param in [*node_route.all_param_definitions(definition or {}),
+                  *((node or {}).get("dynamicParams") or [])]:
+        if not isinstance(param, Mapping) or param.get("key") != key:
+            continue
+        label = str(param.get("label") or "").strip()
+        return None if param.get("hidden") or not label else label
+    if str((node or {}).get("definitionId") or "") == "replicate-universal" and not key.startswith("_"):
+        return universal_ports.setting_label(key)
+    return None
+
+
+def _set_words(node_id: str, keys: list[str]) -> tuple[str, str]:
+    """The cursor's words for an agent setting fields (GM - Design, round 16,
+    verbatim): the card's labels in curly quotes, "Set “Aspect ratio”", "Set
+    “Aspect ratio” and “Seed”"; three or more "Changed 3 settings" (GM,
+    round 18: "Changed N settings" (was "Set N settings")). A field
+    with no card label is left out of the list and the count; with none
+    labelled the bubble says nothing ("") and the cursor still moves. The
+    Agent log keeps the change: it names an unlabelled field by its key,
+    labelled fields first in the card's order, then the raw keys (GM, round
+    17: "Set “Aspect ratio”, “Seed” and seed_mode"; four names, then "and N
+    more"). The card's order is its definition's fields, then a configured
+    model's own (``dynamicParams``, review 17: a universal node's fields were
+    listed in key order). Returns (say, log)."""
+    node = cli_graph.nodes.get(node_id) or {}
+    definition = node_registry.get(str(node.get("definitionId") or ""))
+    order: dict[str, int] = {}
+    for param in [*node_route.all_param_definitions(definition or {}), *(node.get("dynamicParams") or [])]:
+        if isinstance(param, Mapping):
+            order.setdefault(str(param.get("key")), len(order))
+    ordered = sorted(dict.fromkeys(keys), key=lambda key: (order.get(key, len(order)), key))
+    labels = {key: _card_label(definition, node, key) for key in ordered}
+    named = [f"“{labels[key]}”" for key in ordered if labels[key]]
+    say = (f"Changed {len(named)} settings" if len(named) >= 3 else f"Set {_set_list(named)}") if named else ""
+    logged = named + [key for key in ordered if not labels[key]]
+    log = f"Set {_set_list(logged, cap=4)}"
+    return say, log
+
+
+def _set_list(items: list[str], cap: int | None = None) -> str:
+    """"“A”", "“A” and “B”", three or more "3 settings" (GM, round 16; the
+    bubble says "Changed N settings" for those itself, round 18). With a
+    ``cap`` (the Agent log), up to that many named: "A, B, C and D", then "and N more"."""
+    if cap is None:
+        return items[0] if len(items) == 1 else " and ".join(items) if len(items) == 2 else f"{len(items)} settings"
+    if len(items) > cap:
+        return f"{', '.join(items[:cap])} and {len(items) - cap} more"
+    return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} and {items[-1]}"
 
 
 def _universal_request(body: Any, definition_id: str | None = None) -> tuple[str, str]:
@@ -12205,10 +13120,20 @@ def _universal_request(body: Any, definition_id: str | None = None) -> tuple[str
     return definition_id, model.strip()
 
 
+# Review 12, L-4: the canvas's model picker says "Couldn't load the model
+# settings for “X”." only when reading the provider's settings is what failed
+# (GM - Design, round 13); this header marks that answer (CORS exposes it).
+# Review 13, L-5: a missing key is marked as one ("missing-key": the canvas
+# names the key to add); a malformed model id carries no header.
+MODEL_SETTINGS_FAILURE_HEADER = "X-Nebula-Failure"
+
+
 async def _universal_data(definition_id: str, model: str) -> dict[str, Any]:
     found = await universal_ports.look_up(definition_id, model)
     if isinstance(found, str):
-        raise HTTPException(status_code=400, detail=found[0].upper() + found[1:] + ".")
+        kind = getattr(found, "kind", "")
+        headers = {MODEL_SETTINGS_FAILURE_HEADER: kind} if kind in ("model-settings", "missing-key") else None
+        raise HTTPException(status_code=400, detail=found[0].upper() + found[1:] + ".", headers=headers)
     return found
 
 
@@ -12237,6 +13162,7 @@ async def universal_model_ports(body: dict[str, Any]) -> dict[str, Any]:
 
 
 @app.post("/api/graph/node/{node_id}/model")
+@graph_write
 async def configure_universal_node(node_id: str, body: dict[str, Any]) -> dict[str, Any]:
     """The canvas's model picker: set a universal node's model and the ports,
     params and Inspector controls that come with it (services/universal_ports.py).
@@ -12275,7 +13201,11 @@ async def configure_universal_node(node_id: str, body: dict[str, Any]) -> dict[s
         _drop_outputs_off_ports(candidate, node_id, configured.params)
         candidate.set_params(node_id, configured.params)
         _commit_graph_candidate_with_recoveries(candidate, [candidate.nodes[node_id]], source="update")
-    # Before any await (round 8 of PR #114).
+    # The person picking a placeholder's model edits it, even to the same
+    # model: it turns normal (Q125 item 3, GM: "on any edit by the person").
+    # Before the sync, so the canvas gets the node without the flag; and
+    # before any await (round 8 of PR #114).
+    _person_touched([node_id])
     changes = param_changes(params_before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
     if changes:
         _journal("node.params", node_id=node_id, data=changes,
@@ -12295,6 +13225,7 @@ async def configure_universal_node(node_id: str, body: dict[str, Any]) -> dict[s
 
 
 @app.put("/api/graph/node/{node_id}/label")
+@graph_write
 async def rename_graph_node(node_id: str, body: dict[str, Any]) -> dict:
     """Rename a node on the canvas. A blank name, or the model's own name,
     clears the custom name. Names don't affect execution, so this stays out of
@@ -12312,6 +13243,9 @@ async def rename_graph_node(node_id: str, body: dict[str, Any]) -> dict:
     cli_graph.set_label(node_id, label)
     current = _node_label(node_id)
     if current != previous:
+        # The person renaming a placeholder edits it: it turns normal (Q125 item 3).
+        _person_touched([node_id])
+    if current != previous:
         _journal(  # before any await (round 8 of PR #114)
             "node.renamed",
             node_id=node_id,
@@ -12328,6 +13262,7 @@ async def rename_graph_node(node_id: str, body: dict[str, Any]) -> dict:
 
 
 @app.put("/api/graph/layout")
+@graph_write
 async def update_graph_layout(body: dict[str, Any]) -> dict:
     """Persist a complete or partial Canvas layout in one atomic mutation.
 
@@ -12395,6 +13330,11 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
         raise HTTPException(status_code=404, detail=str(exc))
     if arrange is None:
         canvas_arrange.forget_nodes(normalized)
+        # The person moving a placeholder edits it: it turns normal (Q125
+        # item 3). Not a write that leaves it where it was drawn, nor the
+        # canvas finishing an agent's arrange.
+        _person_touched([node_id for node_id, position in normalized.items()
+                         if _moved_far_enough(previous.get(node_id), position)])
     # This route is the authoritative move signal (drag end, auto-layout,
     # paste). Journaled before any await (round 8 of PR #114).
     moved = [
@@ -12457,6 +13397,7 @@ def _require_clear_intent(force: bool) -> None:
 
 
 @app.delete("/api/graph")
+@graph_write
 async def clear_graph(force: bool = False) -> dict:
     # Clear Canvas is not consent to forget paid-provider state. Resolve each
     # recovery/ambiguity through its exact endpoint first; otherwise recreating
@@ -12468,11 +13409,15 @@ async def clear_graph(force: bool = False) -> dict:
         # PR #114): a registered run writes back by node id, and ids start
         # again after a clear. Its paid-start fence and the run fence.
         _project_replacement_guard("clear the canvas", person=CLEAR_DURING_RUN_PERSON)
-        cli_graph.clear()
-        # The id epoch moves in the step that restarted the ids, before any
-        # await (review 10's F6): a write fenced before this clear that
-        # rechecks during the awaits below must see it.
+        # With the clear, before any await: a tab's write made for the old
+        # canvas is refused from now on (_canvas_revision, round 19 of PR
+        # #195), and so is a write an agent fenced before it (_graph_fence,
+        # review 10's F6 of PR #114). Before the canvas changes, and on disk
+        # first (round 20, M2): a crash in between leaves a moved revision
+        # over the old canvas, never the cleared canvas under the old
+        # revision. The epoch moves once per clear.
         _forget_canvas_undo("the canvas was cleared since")
+        cli_graph.clear()
         _note_canvas_change()  # who, for a stale writer's workspace_moved refusal
         run_approvals.clear()
         # Ids start again at n1: no node now is one a restore brought back.
@@ -12497,10 +13442,11 @@ async def clear_graph(force: bool = False) -> dict:
     if detached:
         await _broadcast_pins()
     await _broadcast_closed_proposals(closed)
-    return {"status": "cleared"}
+    return {"status": "cleared", "canvasRevision": _canvas_revision()}
 
 
 @app.delete("/api/provider-recoveries/{run_id}/{node_id}")
+@graph_write
 async def delete_provider_recovery(
     run_id: str,
     node_id: str,
@@ -12674,6 +13620,7 @@ def _ensure_node_deletable(node_id: str, node: dict[str, Any], *, action: str | 
 
 
 @app.delete("/api/graph/node/{node_id}")
+@graph_write
 async def delete_graph_node(node_id: str) -> dict:
     """Remove a node and any edges touching it from cli_graph."""
     _check_workspace_revision()
@@ -12896,6 +13843,7 @@ def _check_provider(definition_id: str, params: dict[str, Any], label: str) -> N
 
 
 @app.post("/api/graph/apply")
+@graph_write
 async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     """An agent edits the canvas directly: everything in the body, or nothing.
 
@@ -13004,6 +13952,20 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
             raise HTTPException(status_code=404, detail=f"{missing[0]} is not on the canvas")
         if moves:
             candidate.update_positions(moves)
+        # Placeholders (Q125 item 3): `pending: false` makes the agent's own
+        # ready (all or nothing: another's refuses the edit); `pending: true`
+        # marks only the nodes this edit adds.
+        made_pending: list[str] = []
+        made_ready: list[str] = []
+        not_pending: list[str] = []
+        if spec.ready:
+            try:
+                mine, not_pending = pending_nodes.check_ready(candidate.nodes, spec.ready, identity)
+            except pending_nodes.PendingError as exc:
+                raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
+            made_ready = pending_nodes.clear(candidate.nodes, mine)
+        if spec.pending is True:
+            made_pending = pending_nodes.mark(candidate.nodes, id_map.values(), identity, agent_status.now())
         _refuse_oversized_graph(candidate)
         _refuse_agent_growth_past_save_limit(candidate)
         touched = sorted(set(id_map.values()) | set(params_before))
@@ -13089,8 +14051,12 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         f"moved {len(moves)}" if moves else "",
         f"removed {len(removed)}" if removed else "",
         f"disconnected {len(spec.unwire)}" if spec.unwire else "",
+        f"{len(made_pending)} placeholder{'' if len(made_pending) == 1 else 's'}" if made_pending else "",
+        f"made {len(made_ready)} ready" if made_ready else "",
     ]
     summary = ", ".join(part for part in parts if part) or "no change"
+    if made_pending:
+        _schedule_pending_expiry()
     publish_action(f"{identity.name} edited the canvas: {summary}")
     focus = next(iter(added), None) or next(iter(changed or list(renamed) or list(moves)), None)
     if focus is not None and focus in cli_graph.nodes:
@@ -13117,6 +14083,9 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         # or why they can't be known yet (services/universal_ports.py).
         **({"modelPorts": model_report["ports"]} if model_report.get("ports") else {}),
         **({"modelPortNotes": model_report["notes"]} if model_report.get("notes") else {}),
+        # Placeholders this edit made, or made ready (and named ids that weren't).
+        **({"pending": made_pending} if spec.pending is True else {}),
+        **({"ready": made_ready, "notPending": not_pending} if spec.pending is False else {}),
         "undo": undo,
     }
 
@@ -13167,6 +14136,7 @@ def _kept_paper_source(current: Mapping[str, Any], incoming: Mapping[str, Any]) 
 
 
 @app.post("/api/graph/restore")
+@graph_write
 async def restore_graph_state(body: dict[str, Any]) -> dict[str, Any]:
     """Put nodes and wires back the way they were: the canvas's undo and redo.
 
@@ -13379,6 +14349,23 @@ async def _restore_graph(
                 if current.get("position") != point:
                     candidate.update_positions({node_id: point})
                     moved.append(node_id)
+        person = _is_person_request()
+        # The person's undo and redo put a placeholder flag back as the step
+        # had it (an object, or null for none; Q125 item 3), and so does an
+        # agent's undo of its own edit, from the inverse the server kept
+        # (``trusted``). Anyone else's restore never sets or clears one.
+        made_pending: list[str] = []
+        for raw in raw_nodes:
+            node = candidate.nodes.get(raw["id"])
+            if node is None or "pending" not in raw or not (person or raw["id"] in trusted):
+                continue
+            flag = pending_nodes.clean(raw["pending"])
+            if flag is None:
+                node.pop(pending_nodes.PENDING_KEY, None)
+            else:
+                if not pending_nodes.is_pending(node) and raw["id"] not in added:
+                    made_pending.append(raw["id"])
+                node[pending_nodes.PENDING_KEY] = flag
         _refuse_agent_billing_change(billing)
         wired: list[dict[str, Any]] = []
         for source, source_handle, target, target_handle in wires:
@@ -13445,7 +14432,7 @@ async def _restore_graph(
             )
     for node_id, (was, now) in renamed.items():
         definition_id = str((cli_graph.nodes.get(node_id) or {}).get("definitionId") or "")
-        display = (node_registry.get(definition_id) or {}).get("displayName", definition_id)
+        display = node_route.node_name(node_registry.get(definition_id), None, definition_id)
         _journal(
             "node.renamed",
             node_id=node_id,
@@ -13476,7 +14463,7 @@ async def _restore_graph(
     if journal_done is not None:
         journal_done({"added": added, "removed": [gone["id"] for gone in removed], "changed": sorted(changed),
                       "renamed": sorted(renamed), "moved": moved, "wired": [_edge_data(edge) for edge in wired],
-                      "unwired": unwired})
+                      "unwired": unwired, "placeholders": sorted(made_pending)})
     removals = _removal_records(entries)
     removals_token = _removals_ctx.set(removals)
     try:
@@ -13499,6 +14486,8 @@ async def _restore_graph(
         "moved": moved,
         "wired": [_edge_data(edge) for edge in wired],
         "unwired": unwired,
+        # Nodes already on the canvas this restore made placeholders again.
+        "placeholders": sorted(made_pending),
         **undone,
         "removals": removals,
     }
@@ -13511,7 +14500,29 @@ async def _restore_graph(
 # restore the canvas's Cmd+Z uses. The journal names the edit an undo reverts
 # (event ``edit``), for that undo and for the person's Cmd+Z of the edit.
 
-canvas_undo_book = CanvasUndoBook()
+# Its per-project id epochs are the canvas revision (_canvas_revision), kept in
+# the state dir so a restart doesn't start them again at 0 (round 20 of PR
+# #195, review 19 M2); no state dir, memory only, as the other stores.
+# Round 21: revisions that can't be restored start above any a tab from
+# before this boot can hold (milliseconds since 1970: every epoch before was
+# a count of clears from this same base or from 0).
+canvas_undo_book = CanvasUndoBook(
+    persist_path=_STATE_DIR / "canvas-revisions.json" if _STATE_PATH is not None else None,
+    unrestored_base=int(_time_module.time() * 1000), prior_state=_STATE_EXISTED_AT_BOOT)
+
+
+def _advance_canvas_revision_after_a_failed_load() -> None:
+    """Boot: state.json didn't load, so the live canvas starts empty under the
+    open project. That is a replacement: its revision moves, so a tab holding
+    the old one reloads instead of writing to node ids the graph no longer has."""
+    try:
+        canvas_undo_book.advance_epoch(project_store.workspace()["activeProjectId"])
+    except Exception as exc:  # noqa: BLE001 - boot goes on; the graph is already empty
+        print(f"[main] could not move the canvas revision after the failed graph load: {exc}", flush=True)
+
+
+if _live_graph_load_failed:
+    _advance_canvas_revision_after_a_failed_load()
 # The edit the current request makes ({id}, or {id, undoes|redoes, of?}): it
 # tags the request's journal events (_journal) and its graphSync (_graph_edit_origin).
 _canvas_edit_link: ContextVar[dict[str, Any] | None] = ContextVar("canvas_edit_link", default=None)
@@ -13531,6 +14542,7 @@ def _canvas_undo_before(spec: EditSpec, shown: Mapping[str, Any]) -> dict[str, A
         renamed=[key for key in spec.rename if not key.startswith("+")],
         moved=[key for key in spec.move if not key.startswith("+")],
         shown=shown,
+        ready=list(spec.ready),
     )
 
 
@@ -13557,14 +14569,17 @@ def _canvas_undo_keep(identity: Any, after: dict[str, Any]) -> dict[str, Any] | 
                                  mark=after.get("mark"), removals=after.get("removals"))
 
 
-def _forget_canvas_undo(why: str, *, project_id: Any = ...) -> None:
+def _forget_canvas_undo(why: str, *, project_id: Any = ..., advance: bool = True) -> None:
     """The open project's node ids start again: its undo tokens end, and its
-    id epoch moves (_graph_fence, _run_canvas_now). ``project_id``: that
+    canvas revision (the id epoch: _canvas_revision, _graph_fence,
+    _run_canvas_now) moves, unless the caller moved it already (``advance``),
+    on disk before memory (CanvasUndoBook.advance_epoch). Call it before the
+    canvas changes, in the same synchronous step. ``project_id``: that
     project, when the caller knows it (inside a catalog transaction)."""
     try:
         if project_id is ...:
             project_id = _workspace_context()["activeProjectId"]
-        canvas_undo_book.forget_project(project_id, why)
+        canvas_undo_book.forget_project(project_id, why, advance=advance)
     except Exception:  # noqa: BLE001 - never break a clear or a load over undo bookkeeping
         pass
 
@@ -13671,6 +14686,7 @@ def _undo_left_text(skipped: list[dict[str, Any]]) -> str:
 
 
 @app.post("/api/graph/apply/undo")
+@graph_write
 async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     """An agent undoes one of its own edits: ``{token}``, the ``undo.token``
     its POST /api/graph/apply reply carried (MCP undo_canvas_edit, ``nebula undo``).
@@ -13756,7 +14772,7 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         canvas_undo_book.note_events(undo_id, canvas_events.events_of_edit(undo_id))
         link_entry = canvas_undo_book.link_of(record.edit_id)
         counts = {key: len(changed.get(key) or []) for key in (
-            "added", "removed", "changed", "renamed", "moved", "wired", "unwired")}
+            "added", "removed", "changed", "renamed", "moved", "wired", "unwired", "placeholders")}
         done = ", ".join(f"{verb} {counts[key]}" for key, verb in UNDONE_VERBS if counts[key])
         left = f"; left {len(skipped)} part{'s' if len(skipped) != 1 else ''} as is" if skipped else ""
         _journal("edit.undone", data={
@@ -13786,7 +14802,8 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     extras = _undo_extras_text(result)
     return {"status": "undone", "editId": record.edit_id, "undoId": undo_id,
             **{key: result.get(key) for key in ("added", "removed", "changed", "renamed", "moved", "wired",
-                                                 "unwired", "reattached", "pinsLeft", "reopened", "notReopened")},
+                                                 "unwired", "placeholders", "reattached", "pinsLeft", "reopened",
+                                                 "notReopened")},
             "skipped": skipped,
             "message": f"Undone: {done or 'no change'}." + (f" Also {extras}" if extras else "")
             + (f" {_undo_left_text(skipped)}" if skipped else "")}
@@ -13954,6 +14971,7 @@ def _url_to_output_path(value: str) -> Path | None:
 
 
 @app.delete("/api/graph/edge")
+@graph_write
 async def delete_graph_edge(body: dict[str, Any]) -> dict:
     """Remove the edge matching source/sourceHandle/target/targetHandle."""
     _check_workspace_revision()
@@ -13967,6 +14985,8 @@ async def delete_graph_edge(body: dict[str, Any]) -> dict:
         body.get("targetHandle", ""),
     )
     if removed:
+        # The person unwiring a placeholder edits it: it turns normal (Q125 item 3).
+        _person_touched([str(body.get("source") or ""), str(body.get("target") or "")])
         _journal_edge("edge.removed", body)  # before any await (round 8 of PR #114)
         await _broadcast_graph_sync(edit=True)
         publish_action(
@@ -14449,6 +15469,7 @@ def _stage_graph_edges(
 
 
 @app.post("/api/graph/import")
+@graph_write
 async def import_graph(body: dict[str, Any]) -> dict:
     """Atomically replace cli_graph from a file-loaded graph.
 
@@ -14519,13 +15540,22 @@ async def import_graph(body: dict[str, Any]) -> dict:
             ), CLEAR_DURING_RUN_PERSON, route="canvas")
         # Check and commit are synchronous on this event loop. No other graph
         # or Cinema task can be admitted between this fence and replacement.
-        _commit_graph_candidate_with_recoveries(
-            candidate,
-            list(candidate.nodes.values()),
-            source="import",
-        )
-        # The id epoch moves with the commit, in the same step (round 11).
-        _forget_canvas_undo("a graph was loaded into the project since, so its node ids started again")
+        # The canvas revision moves first, on disk too (round 20, M2: a crash
+        # between leaves a moved revision over the old graph, never the new
+        # graph under the old revision), and back if the commit fails.
+        importing_into = _workspace_context()["activeProjectId"]
+        previous_revision = canvas_undo_book.advance_epoch(importing_into)
+        try:
+            _commit_graph_candidate_with_recoveries(
+                candidate,
+                list(candidate.nodes.values()),
+                source="import",
+            )
+        except BaseException:
+            canvas_undo_book.restore_epoch(importing_into, previous_revision)
+            raise
+        _forget_canvas_undo("a graph was loaded into the project since, so its node ids started again",
+                            advance=False)
         _note_canvas_change()  # who, for a stale writer's workspace_moved refusal
         # Ids start again under this project: no node now is one a restore
         # brought back. Here, with the commit, not after the sync's awaits: a
@@ -14539,6 +15569,7 @@ async def import_graph(body: dict[str, Any]) -> dict:
     )
     return {
         "status": "imported",
+        "canvasRevision": _canvas_revision(),
         "idMap": id_map,
         "nodeCount": len(cli_graph.nodes),
         "edgeCount": len(cli_graph.edges),
@@ -14597,6 +15628,7 @@ def _rf_created(node_ids: list[str], edge_ids: list[str]) -> dict[str, list[dict
 
 
 @app.post("/api/graph/cluster")
+@graph_write
 async def add_graph_cluster(body: dict[str, Any]) -> dict:
     """Additively add a node cluster (e.g. authored from the Create view) to the
     CLI graph and persist it. Mirrors /api/graph/import but does NOT clear the
@@ -14723,7 +15755,8 @@ def _cli_node_to_rf(n: dict[str, Any], position: dict[str, float], all_defs: dic
         params = _normalize_image_input_params(params)
 
     data: dict[str, Any] = {
-        "label": n.get("label") or defn.get("displayName", definition_id),
+        # GM - Design, round 18: an unnamed node reads its canvas title.
+        "label": n.get("label") or (node_route.canvas_title(defn) if defn else "") or definition_id,
         "definitionId": definition_id,
         "params": params,
         "state": node_state,
@@ -14734,6 +15767,10 @@ def _cli_node_to_rf(n: dict[str, Any], position: dict[str, float], all_defs: dic
     failed = node_errors.card(str(n.get("id") or ""))
     if failed:
         data.update(failed)
+    # An agent's placeholder (Q125 item 3): its owner, for the dashed outline.
+    flag = pending_nodes.clean(n.get(pending_nodes.PENDING_KEY))
+    if flag is not None:
+        data["pending"] = flag
     if is_dynamic_node:
         data.update({
             "isDynamic": True,
@@ -14817,7 +15854,7 @@ def _migrate_rf_graph(nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) 
             continue
         original = by_id.get(item["id"])
         definition_id = str(item["definitionId"])
-        label = item.get("label") or (node_registry.get(definition_id) or {}).get("displayName") or definition_id
+        label = node_route.node_name(node_registry.get(definition_id), item.get("label"), definition_id)
         if original is not None:
             data = {**original["data"], "definitionId": definition_id, "params": item["params"], "label": label}
             if "outputs" in item:
@@ -14952,12 +15989,22 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
         else:
             raise HTTPException(status_code=400, detail=retired_message(definition_id) or f"Unknown node definition '{definition_id}'")
         staged_node["id"] = node_id
+        # An agent's placeholder (Q125 item 3) stays one across a save and a
+        # reopen; a malformed flag loads as a normal node. Saves of the live
+        # canvas take the flag from the live graph, never from the tab
+        # (_live_pending_flags).
+        flag = pending_nodes.clean(data.get(pending_nodes.PENDING_KEY))
+        if flag is not None:
+            staged_node[pending_nodes.PENDING_KEY] = flag
+            result["nodes"][index]["data"][pending_nodes.PENDING_KEY] = flag
+        else:
+            result["nodes"][index]["data"].pop(pending_nodes.PENDING_KEY, None)
         candidate.nodes[node_id] = staged_node
         if staged_node["definitionId"] != definition_id:
             # Migrated from a retired definition: the canvas shows the replacement.
             result["nodes"][index]["data"]["definitionId"] = staged_node["definitionId"]
-            result["nodes"][index]["data"]["label"] = staged_node.get("label") or (
-                node_registry.get(staged_node["definitionId"]) or {}).get("displayName")
+            result["nodes"][index]["data"]["label"] = node_route.node_name(
+                node_registry.get(staged_node["definitionId"]), staged_node.get("label"))
         result["nodes"][index]["data"]["params"] = copy.deepcopy(staged_node["params"])
         result["nodes"][index]["data"]["outputs"] = _rewrite_output_paths(staged_node["outputs"])
         if match := re.fullmatch(r"n(\d+)", node_id):
@@ -15089,7 +16136,12 @@ def _overlaid_snapshot(project: dict[str, Any], exported: dict[str, Any]) -> dic
     merged_nodes = []
     for node in exported["nodes"]:
         old = old_nodes.get(node["id"], {})
-        merged_nodes.append({**old, **node, "data": {**old.get("data", {}), **node["data"]}})
+        data = {**old.get("data", {}), **node["data"]}
+        if pending_nodes.PENDING_KEY not in node["data"]:
+            # The live graph decides the placeholder flag for every node it
+            # holds: one it has cleared since the last save stays cleared.
+            data.pop(pending_nodes.PENDING_KEY, None)
+        merged_nodes.append({**old, **node, "data": data})
     merged_nodes.extend(node for node in previous["nodes"] if node["id"] not in live_ids and node["id"] not in backend_ids)
     retained_ids = {node["id"] for node in merged_nodes}
     old_edges = {edge["id"]: edge for edge in previous["edges"]}
@@ -15374,8 +16426,7 @@ async def get_project_size(project_id: str) -> dict[str, Any]:
                     **({"count": row["count"]} if "count" in row else {}),
                     "bytes": row["bytes"], "size": project_size.row_size(row["bytes"])}
         definition_id = str(row.get("definitionId") or "")
-        model = (all_defs.get(definition_id) or {}).get("displayName") or definition_id
-        label = row.get("label") if isinstance(row.get("label"), str) and row["label"].strip() else model
+        label = node_route.node_name(all_defs.get(definition_id), row.get("label"), definition_id)
         return {"kind": "node", "nodeId": row["nodeId"], "name": label, "definitionId": definition_id,
                 "part": project_size.PART_LABELS[row["part"]], "bytes": row["bytes"],
                 "size": project_size.row_size(row["bytes"])}
@@ -15453,11 +16504,13 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
         # The body's check covered its snapshot; staging doesn't walk it twice.
         snapshot, candidate = _stage_project_snapshot(body.get("snapshot"), historical=historical,
                                                       ingress=verdict.part("snapshot"))
+        # A recovered copy keeps only the placeholders the live graph has (never a tab's own).
+        _live_pending_flags(snapshot["nodes"], cli_graph.nodes if catalog["activeProjectId"] == source["id"] else {})
         _refuse_agent_billing_in_project(
             candidate, *([cli_graph.nodes] if catalog["activeProjectId"] == source["id"] else []),
             _snapshot_nodes(source["snapshot"]))
         try:
-            project = make_project(body.get("name", f"{source['name'][:100]} (recovered)"), snapshot)
+            project = make_project(body.get("name") or _recovered_copy_name(source["name"], catalog), snapshot)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         project.update({
@@ -15473,6 +16526,22 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
     _journal_project_change("project.created", result["project"])  # before any await (round 8 of PR #114)
     await _broadcast_projects_changed("created", recovery_id)
     return result
+
+
+def _recovered_copy_name(source_name: str, catalog: Mapping[str, Any]) -> str:
+    """A new recovered copy's name (GM - Design, round 21 of PR #195, G5):
+    "<project> (recovered)", then "(recovered 2)", 3 and so on, one past the
+    highest the project's copies have (in Projects or the trash), so a new
+    copy never takes an earlier copy's name."""
+    stem = f"{source_name[:100]} (recovered"
+    pattern = re.compile(re.escape(stem) + r"(?: (\d+))?\)")
+    highest = 0
+    for listing in (catalog.get("projects") or {}, catalog.get("trash") or {}):
+        for project in listing.values():
+            match = pattern.fullmatch(str((project or {}).get("name") or ""))
+            if match:
+                highest = max(highest, int(match.group(1) or 1))
+    return f"{stem})" if highest == 0 else f"{stem} {highest + 1})"
 
 
 def _switch_actor() -> dict[str, Any] | None:
@@ -15632,7 +16701,8 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
                                 project_switch=_switch_notice(start, project, created=True))
     await _broadcast_projects_changed("created", project["id"])
     # A bundle built for another version doesn't load it (projectStore.ts activate).
-    return {"project": public_project(project), "workspaceRevision": revision, "paramsVersion": PARAMS_VERSION}
+    return {"project": public_project(project), "workspaceRevision": revision, "canvasRevision": _canvas_revision(),
+            "paramsVersion": PARAMS_VERSION}
 
 
 async def _open_ingress_verdict_off_loop(project_id: str, body: dict[str, Any]) -> _IngressVerdict | None:
@@ -15722,7 +16792,8 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
     # What opening changed that the person should know (a folded Krea node's
     # dropped job-output connections, a scene's shot output no shot owns and
     # its connections); the snapshot is saved migrated, so this is said once.
-    return {"project": public_project(project), "workspaceRevision": revision, "warnings": warnings,
+    return {"project": public_project(project), "workspaceRevision": revision, "canvasRevision": _canvas_revision(),
+            "warnings": warnings,
             "paramsVersion": PARAMS_VERSION}
 
 
@@ -15738,6 +16809,10 @@ async def save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
         # Its refusal comes where the check ran before (_IngressVerdict).
         verdict = await _ingress_verdict_off_loop(body["snapshot"])
     result = _save_project(project_id, body, ingress=verdict)
+    if result.pop("_liveChanged", False):
+        # An agent reopened the project the tab showed: the handoff's typing
+        # went onto the live graph too (review 20 M-1). The tab's own echo.
+        await _broadcast_graph_sync(edit=True)
     if "previousName" in result and result["previousName"] != result["project"]["name"]:
         # Before any await (round 8 of PR #114).
         _journal_project_change("project.renamed", result["project"], previous_name=result["previousName"])
@@ -15759,11 +16834,13 @@ def _save_project(project_id: str, body: dict[str, Any], *, ingress: _IngressVer
             # switches (_begin_switch). The project may be the open one
             # again: an agent reopened the project the tab was showing,
             # which reloads it from what was saved.
-            _save_handoff(project, body["snapshot"], ingress=ingress)
+            merged = _save_handoff(project, body["snapshot"], ingress=ingress,
+                                   pending_params=body.get("pendingParams"), pending_labels=body.get("pendingLabels"))
             refresh_metadata(project)
             project_store.commit(catalog)
+            live = catalog["activeProjectId"] == project_id and _apply_handoff_live(project, merged)
             return {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"],
-                    "handoff": True}
+                    "handoff": True, **({"_liveChanged": True} if live else {})}
         _project_revision(body, catalog, required="snapshot" in body)
         if "snapshot" in body:
             if catalog["activeProjectId"] != project_id:
@@ -15773,6 +16850,7 @@ def _save_project(project_id: str, body: dict[str, Any], *, ingress: _IngressVer
             staged, candidate = _stage_project_snapshot(body["snapshot"], historical=historical, ingress=ingress)
             _refuse_agent_billing_in_project(candidate, cli_graph.nodes, _snapshot_nodes(project["snapshot"]))
             _keep_person_viewport(staged, project["snapshot"])
+            _live_pending_flags(staged["nodes"], cli_graph.nodes)
             project["snapshot"] = staged
             project["_backendNodeIds"] = sorted(set(cli_graph.nodes) & {node["id"] for node in project["snapshot"]["nodes"]})
             project["_backendEdgeIds"] = sorted({edge["id"] for edge in cli_graph.edges} & {edge["id"] for edge in project["snapshot"]["edges"]})
@@ -15794,6 +16872,21 @@ def _save_project(project_id: str, body: dict[str, Any], *, ingress: _IngressVer
         return result
 
 
+def _live_pending_flags(nodes: list[dict[str, Any]], live: Mapping[str, Mapping[str, Any]]) -> None:
+    """A save keeps each node's placeholder flag as the live graph has it
+    (Q125 item 3): only agents' edits and the backend's rules change one, so
+    a tab that lost the flag, or made one up, never changes it."""
+    for node in nodes:
+        data = node.get("data") if isinstance(node, dict) else None
+        if not isinstance(data, dict):
+            continue
+        flag = pending_nodes.clean((live.get(node.get("id")) or {}).get(pending_nodes.PENDING_KEY))
+        if flag is None:
+            data.pop(pending_nodes.PENDING_KEY, None)
+        else:
+            data[pending_nodes.PENDING_KEY] = flag
+
+
 def _keep_person_viewport(staged: dict[str, Any], stored: dict[str, Any]) -> None:
     """Only the person's own tab saves the project's view (design-canvas gap 19).
 
@@ -15805,23 +16898,134 @@ def _keep_person_viewport(staged: dict[str, Any], stored: dict[str, Any]) -> Non
         staged["viewport"] = copy.deepcopy(stored.get("viewport"))
 
 
-def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict | None = None) -> None:
+# GM - Design, round 21 (G4): agents and logs read it; the person sees the
+# copy line instead. ``why`` is one of HANDOFF_WHY's forms.
+HANDOFF_MERGE_REFUSED = "Nebula couldn't keep this save's unsent changes in the project because {why}, so nothing was saved."
+HANDOFF_WHY = {
+    "type": "a node's type changed",
+    "removed": "the node was removed",
+    "unreadable": "the project can't be read",
+    "agent": "the change came from an agent",
+}
+
+
+def _handoff_refused(why: str) -> HTTPException:
+    return HTTPException(status_code=409, detail=HANDOFF_MERGE_REFUSED.format(why=why))
+
+
+def _handoff_key_refused(key: str) -> HTTPException:
+    return _handoff_refused(f"“{key}” isn't a setting on that node")
+
+
+def _refuse_handoff_pending_not_from_the_tab(pending_params: Any, pending_labels: Any) -> None:
+    """Only the person's own canvas tab sends the unsent changes (round 21 of
+    PR #195, review 20 L-6): the person's token and X-Nebula-Tab. Anyone else
+    holding the old revision (the agent that switched, a script) could
+    otherwise rewrite saved settings in the project left with no journal
+    entry or undo."""
+    if not pending_params and not pending_labels:
+        return
+    headers = current_request_headers() or {}
+    tab = next((value for key, value in headers.items() if key.lower() == "x-nebula-tab"), None)
+    if not (_is_person_request() and isinstance(tab, str) and _TAB_ID_RE.fullmatch(tab)):
+        raise _handoff_refused(HANDOFF_WHY["agent"])
+
+
+def _handoff_pending(pending_params: Any, pending_labels: Any) -> tuple[dict[str, list[str]], set[str]]:
+    """The handoff's unsent keys per node and the nodes with an unsent name,
+    or a 409 for a malformed list (round 20, H1). Only names are read here:
+    every value comes from the staged snapshot."""
+    params: dict[str, list[str]] = {}
+    if pending_params is not None:
+        if not isinstance(pending_params, dict):
+            raise _handoff_refused(HANDOFF_WHY["unreadable"])
+        for node_id, keys in pending_params.items():
+            if not isinstance(keys, dict) or not all(isinstance(key, str) and key for key in keys):
+                raise _handoff_refused(HANDOFF_WHY["unreadable"])
+            params[node_id] = list(keys)
+    labels: set[str] = set()
+    if pending_labels is not None:
+        if not isinstance(pending_labels, dict) or not all(
+                value is None or isinstance(value, str) for value in pending_labels.values()):
+            raise _handoff_refused(HANDOFF_WHY["unreadable"])
+        labels = set(pending_labels)
+    return params, labels
+
+
+def _merge_handoff_node(stored: dict[str, Any], staged: dict[str, Any], staged_label: str | None,
+                        keys: list[str], label: bool) -> dict[str, Any]:
+    """The stored copy of a node with the tab's unsent keys (top-level, as
+    cli_graph.update_params merges) and name taken from its staged node."""
+    merged = copy.deepcopy(stored)
+    data = merged.setdefault("data", {})
+    params = data.get("params") if isinstance(data.get("params"), dict) else {}
+    data["params"] = params
+    staged_params = (staged.get("data") or {}).get("params") or {}
+    for key in keys:
+        # A key the staged node lacks (staging dropped it: not a setting of
+        # that node) refuses the save (GM's G4 form), so the tab keeps it
+        # as a copy rather than losing it silently.
+        if key not in staged_params:
+            raise _handoff_key_refused(key)
+        params[key] = copy.deepcopy(staged_params[key])
+    if label:
+        if staged_label:
+            data["label"] = staged_label
+        else:
+            data.pop("label", None)  # back to the model's name
+    return merged
+
+
+def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict | None = None,
+                  pending_params: Any = None, pending_labels: Any = None) -> dict[str, tuple[list[str], bool]]:
     """The last save from a tab whose project an agent switched away from.
 
     The switch already merged the live canvas into this project
     (_overlay_live_project), so nodes and wires the backend had stay as
     saved. The tab adds what only it holds: nodes and wires it never sent to
-    the backend, its viewport, run history and Create draft.
+    the backend, its viewport, run history and Create draft, and (round 20 of
+    PR #195, review 19 H1) the settings and names it hadn't sent for nodes
+    the backend had: ``pending_params`` ({nodeId: {key: value}}) and
+    ``pending_labels`` ({nodeId: name | null}) name them, and each value is
+    taken from the staged snapshot node (checked like every save), merged
+    per top-level key onto the stored copy. Everything else keeps the stored
+    copy, so an undo the tab dropped is still not folded in. A merge that
+    can't be made (a node not in the save, another definition, a malformed
+    list, a key that isn't a setting of the node, or the lists sent by
+    anyone but the person's tab) refuses the whole save with 409, so the tab
+    keeps it as a copy.
+
+    Answers the merged nodes ({nodeId: (keys, name merged)}), so a project
+    that is the open one again (an agent reopened it) gets them onto the live
+    graph too (_apply_handoff_live, round 21, review 20 M-1).
     """
+    _refuse_handoff_pending_not_from_the_tab(pending_params, pending_labels)
     stored = project["snapshot"]
     historical = {node["id"]: node.get("data", {}).get("definitionId") for node in stored["nodes"]}
+    unsent_params, unsent_labels = _handoff_pending(pending_params, pending_labels)
     staged, candidate = _stage_project_snapshot(raw, historical=historical, ingress=ingress)
     _refuse_agent_billing_in_project(candidate, _snapshot_nodes(stored))
     _keep_person_viewport(staged, stored)
     backend_nodes = set(project.get("_backendNodeIds") or [])
+    # Placeholders are the backend's: a node only the tab held never is one.
+    _live_pending_flags([node for node in staged["nodes"] if node["id"] not in backend_nodes], {})
     backend_edges = set(project.get("_backendEdgeIds") or [])
     stored_nodes = {node["id"]: node for node in stored["nodes"]}
-    nodes = [stored_nodes.get(node["id"], node) if node["id"] in backend_nodes else node for node in staged["nodes"]]
+    staged_nodes = {node["id"]: node for node in staged["nodes"]}
+    merged: dict[str, dict[str, Any]] = {}
+    for node_id in [*unsent_params, *(key for key in unsent_labels if key not in unsent_params)]:
+        tab_node = staged_nodes.get(node_id)
+        if tab_node is None:
+            raise _handoff_refused(HANDOFF_WHY["removed"])
+        if node_id not in backend_nodes or node_id not in stored_nodes:
+            continue  # only the tab had it: it is added with its own values
+        kept = stored_nodes[node_id]
+        if (tab_node.get("data") or {}).get("definitionId") != (kept.get("data") or {}).get("definitionId"):
+            raise _handoff_refused(HANDOFF_WHY["type"])
+        merged[node_id] = _merge_handoff_node(kept, tab_node, (candidate.nodes.get(node_id) or {}).get("label"),
+                                              unsent_params.get(node_id, []), node_id in unsent_labels)
+    nodes = [merged.get(node["id"]) or stored_nodes.get(node["id"], node) if node["id"] in backend_nodes else node
+             for node in staged["nodes"]]
     listed = {node["id"] for node in nodes}
     nodes += [node for node in stored["nodes"] if node["id"] in backend_nodes and node["id"] not in listed]
     kept = {node["id"] for node in nodes}
@@ -15831,6 +17035,41 @@ def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict
     edges += [edge for edge in stored["edges"] if edge["id"] in backend_edges and edge["id"] not in listed_edges]
     edges = [edge for edge in edges if edge["source"] in kept and edge["target"] in kept]
     project["snapshot"] = {**staged, "nodes": nodes, "edges": edges}
+    return {node_id: (unsent_params.get(node_id, []), node_id in unsent_labels) for node_id in merged}
+
+
+def _apply_handoff_live(project: Mapping[str, Any], merged: Mapping[str, tuple[list[str], bool]]) -> bool:
+    """The handoff's merged keys and names onto the live graph, for a project
+    that is the open one again (round 21 of PR #195, review 20 M-1): an
+    agent's reopen of the project the tab showed reloaded the live graph from
+    what was saved, and every read of the open project lays the live graph
+    over the stored copy, so the typing kept only in the stored copy was lost
+    at the next read. Same step as the save (no await). Answers whether the
+    live graph changed (the route then broadcasts a graphSync)."""
+    stored = {node["id"]: node for node in project["snapshot"]["nodes"]}
+    changed = False
+    for node_id, (keys, label) in merged.items():
+        live = cli_graph.nodes.get(node_id)
+        node = stored.get(node_id)
+        if live is None or node is None:
+            continue
+        data = node.get("data") or {}
+        if live.get("definitionId") != data.get("definitionId"):
+            continue
+        params = data.get("params") or {}
+        before = copy.deepcopy(live.get("params") or {})
+        update = {key: copy.deepcopy(params[key]) for key in keys if key in params}
+        if update:
+            cli_graph.update_params(node_id, update)
+        if label:
+            cli_graph.set_label(node_id, data.get("label") or None)
+        changes = param_changes(before, cli_graph.nodes[node_id].get("params") or {})
+        if changes:
+            _person_touched([node_id])
+            _journal("node.params", node_id=node_id, data=changes,
+                     summary=f"set {_listed(changes['keys'], 4)} on {_node_label(node_id)} ({node_id})")
+        changed = changed or bool(update) or label
+    return changed
 
 
 @app.get("/api/projects/{project_id}/covers")
@@ -15981,12 +17220,23 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
         if deleting_active:
             catalog["activeProjectId"] = None
             catalog["workspaceRevision"] = uuid4().hex
-            _commit_project_workspace(catalog, CLIGraph())
-            # The canvas is now the unfiled one, empty, its ids starting again at n1.
+            # The canvas becomes the unfiled one, empty, its ids starting again
+            # at n1, so the unfiled canvas's id epoch moves, in this step
+            # (round 11 of PR #114): a write or run noted on an earlier
+            # unfiled canvas isn't this one. Before the commit, on disk first,
+            # and back if the commit fails (round 20 of PR #195, M2, as a
+            # clear and an import): a crash in between leaves a moved
+            # revision over the old canvas, never the new canvas under an old
+            # revision.
+            previous_epoch = canvas_undo_book.advance_epoch(None)
+            try:
+                _commit_project_workspace(catalog, CLIGraph())
+            except BaseException:
+                canvas_undo_book.restore_epoch(None, previous_epoch)
+                raise
             node_removals.forget_project(None)
-            # So the unfiled canvas's id epoch moves, in this step (round 11):
-            # a write or run noted on an earlier unfiled canvas isn't this one.
-            _forget_canvas_undo("the open project was deleted since, so the canvas started again", project_id=None)
+            _forget_canvas_undo("the open project was deleted since, so the canvas started again", project_id=None,
+                                advance=False)
             _note_canvas_change()  # who, for a stale writer's workspace_moved refusal
         else:
             project_store.commit(catalog)
@@ -16132,7 +17382,13 @@ async def export_graph_for_frontend() -> dict:
     # rewritten. Idempotent — does no work when no migration is needed.
     _normalize_cli_graph_output_refs()
     state = cli_graph.get_state()
-    workspace = _workspace_context()
+    # Which canvas this is too (round 19): a tab sends it back on its writes.
+    workspace = {**_workspace_context(), "canvasRevision": _canvas_revision()}
+    # Round 21: the revisions didn't survive the restart (the file was lost
+    # or unreadable, or nothing is kept): a tab's older revision says nothing
+    # about this canvas, and it adopts this one (review 20, L-4/L-5).
+    if not canvas_undo_book.restored:
+        workspace["canvasRevisionRestored"] = False
     # The open project's nodes' last errors (ids restart in each project).
     node_errors.use_project(workspace["activeProjectId"])
     if not state["nodes"]:
@@ -16210,6 +17466,7 @@ async def export_graph_for_frontend() -> dict:
 # ---------- CLI: Synchronous execution ----------
 
 @app.post("/api/graph/run")
+@graph_write
 @_admits_cinema_renders
 async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dict:
     """Run the CLI graph (or one node and what feeds it) and return the results.
@@ -16252,24 +17509,29 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
         sub_nodes = [GraphNode.model_validate(n) for n in nodes_list]
         sub_edges = [GraphEdge.model_validate(e) for e in edges_list]
 
-    _validate_cinema_base_models(sub_nodes)
     wait = body.get("wait") if body else None
     if wait is not None and (isinstance(wait, bool) or not isinstance(wait, (int, float)) or wait < 0):
         raise HTTPException(status_code=400, detail="wait must be a number of seconds")
 
     run_id = str(uuid4())
-    # Protected from here (PR #198 review 3, L1), through the spending check.
+    # Agents' placeholders and what needs them are skipped (Q125 item 3); the
+    # caller's own turn normal and run. Announced once the run is noted.
+    sub_nodes, sub_edges, pending_skips, ready = await _skip_placeholders(run_id, sub_nodes, sub_edges,
+                                                                          announce=False)
+    # Protected from here (PR #198 review 3, L1), through the spending check:
+    # the scenes that run, not the placeholders skipped.
     _note_scene_renders(run_id, sub_nodes)
+    _validate_cinema_base_models(sub_nodes)
     # The canvas Run's own pre-call check (/api/execute): a node that can't
     # run as set up (no key, a required input unwired) stops the run here,
     # before the spending check and any provider call, and shows on its card.
-    errors = validate_graph(sub_nodes, sub_edges, api_keys)
+    errors = validate_graph(sub_nodes, sub_edges, api_keys, name_of=_run_names(sub_nodes))
     try:
         topological_sort(sub_nodes, sub_edges)
     except CycleError as exc:
         errors.append(ValidationErrorDetail(node_id="", port_id="", message=f"Graph contains a cycle: {exc}"))
     if errors:
-        return await _refused_cli_run(run_id, target, errors)
+        return await _refused_cli_run(run_id, target, errors, pending_skips)
 
     # Checked last: a request refused for anything else must not count.
     measured = await _measure_run_inputs(sub_nodes, sub_edges)
@@ -16290,8 +17552,11 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
         canvas_events.forget_run(run_id)
         raise
 
-    outcome: dict[str, Any] = {"results": {}, "errors": {}, "skipped": {}}
-    task = asyncio.create_task(_execute_cli_run(run_id, sub_nodes, sub_edges, api_keys, outcome))
+    # Skipped placeholders are reported as a gate's skips are: node id -> reason.
+    outcome: dict[str, Any] = {"results": {}, "errors": {},
+                               "skipped": {node_id: info["reason"] for node_id, info in pending_skips.items()}}
+    task = asyncio.create_task(_execute_cli_run(run_id, sub_nodes, sub_edges, api_keys, outcome,
+                                                pending_summary=pending_nodes.skip_summary(pending_skips)))
     # Registered like canvas runs: it fences project switching until it ends,
     # and DELETE /api/executions/{runId} (`nebula cancel`) stops it.
     try:
@@ -16304,26 +17569,52 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     _watch_for_cross_process_stop(run_id, task)
     _cli_runs.start(run_id, task, target, outcome)
-    # The canvas says "Running X" / "Ran X" only for a run that started
-    # (review 10's F3: one its fence refused still said it ran).
-    publish_action(
-        f"Running {target}..." if target else f"Running {len(sub_nodes)} node(s)..."
-    )
-    if target:
-        await _show_agent({"nodeId": target}, say=f"Running {_quoted(_node_label(target))}", did=_did("Ran", target))
-    else:
-        # The whole canvas has no one node to point at: the Agent log only.
-        await _say_agent_action(f"Running {len(sub_nodes)} node{'' if len(sub_nodes) == 1 else 's'}")
-    return _hide_run_key_echoes(await _cli_run_response(run_id, None if wait is None else float(wait)))
+    # Registered, with no await since the last fence: the caller's own
+    # placeholders turn normal and its run is kept (_admit_registered_run).
+    # Only now, so a run refused above leaves both as they were (round 21,
+    # the #114 merge: these used to await before the fence).
+    try:
+        placeholders_changed = _admit_registered_run(run_id, ready, sub_nodes, sub_edges, run_canvas)
+    except BaseException:
+        task.cancel()  # it never had a turn
+        await asyncio.gather(task, return_exceptions=True)
+        await _release_paid_worldlabs_starts(run_id)
+        _return_hold(run_id)
+        raise
+    # Admitted: the run has started. Every step from here is best effort
+    # (round 23, review 22 L-4): none of them may answer as if it didn't.
+    synced = await _broadcast_admitted_run(run_id, placeholders_changed)
+    await _after_admission(run_id, "the skip notes", lambda: _announce_skips(run_id, pending_skips))
+
+    async def announce() -> None:
+        # The canvas says "Running X" / "Ran X" only for a run that started
+        # (review 10's F3: one its fence refused still said it ran).
+        publish_action(
+            f"Running {target}..." if target else f"Running {len(sub_nodes)} node(s)..."
+        )
+        if target:
+            await _show_agent({"nodeId": target}, say=f"Running {_quoted(_node_label(target))}", did=_did("Ran", target))
+        else:
+            # The whole canvas has no one node to point at: the Agent log only.
+            await _say_agent_action(f"Running {len(sub_nodes)} node{'' if len(sub_nodes) == 1 else 's'}")
+
+    await _after_admission(run_id, "the Agent log line and cursor", announce)
+    # A run that crashed after it started is a failed run, never an error
+    # answer an agent could read as "didn't start" (report_failure).
+    response = await _cli_run_response(run_id, None if wait is None else float(wait), report_failure=True)
+    return _hide_run_key_echoes({**response, **synced})
 
 
-async def _refused_cli_run(run_id: str, target: str | None, errors: list[ValidationErrorDetail]) -> dict[str, Any]:
+async def _refused_cli_run(run_id: str, target: str | None, errors: list[ValidationErrorDetail],
+                           pending_skips: Mapping[str, Mapping[str, Any]] | None = None) -> dict[str, Any]:
     """A CLI run the pre-call check stopped: nothing ran and nothing was spent.
 
     The canvas shows it as it shows a refused click on Run
     (_announce_validation_errors); the caller gets the run result's own
     shape with status "failed", each node's message in `errors`."""
     _note_run(run_id)
+    if pending_skips:
+        await _announce_skips(run_id, pending_skips)
     await _announce_validation_errors(errors, run_id)
     messages = _validation_messages(errors)
     per_node = {node_id: message for node_id, message in messages.items() if node_id}
@@ -16349,7 +17640,7 @@ async def _refused_cli_run(run_id: str, target: str | None, errors: list[Validat
         "error": f"Nothing ran, so nothing was spent. {summary}",
         "results": {},
         "errors": per_node,
-        "skipped": {},
+        "skipped": {node_id: info["reason"] for node_id, info in (pending_skips or {}).items()},
         "nodesExecuted": 0,
     }
     _cli_runs.refused(run_id, target, response)
@@ -16358,12 +17649,14 @@ async def _refused_cli_run(run_id: str, target: str | None, errors: list[Validat
 
 async def _execute_cli_run(
     run_id: str, sub_nodes: list[GraphNode], sub_edges: list[GraphEdge], api_keys: dict[str, Any],
-    outcome: dict[str, Any],
+    outcome: dict[str, Any], *, pending_summary: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     results: dict[str, Any] = outcome["results"]
     errors: dict[str, str] = outcome["errors"]
-    # Nodes a gate upstream skipped: node id -> reason. They never ran.
+    # Nodes a gate upstream skipped: node id -> reason. They never ran. The
+    # route put agents' placeholders (and what needs them) here already.
     skipped: dict[str, str] = outcome.setdefault("skipped", {})
+    gated: set[str] = set()
 
     async def collect_events(event: ExecutionEvent) -> None:
         # The response carries what each node made or why it failed. The
@@ -16381,6 +17674,7 @@ async def _execute_cli_run(
             errors[event.node_id] = event.error
         elif isinstance(event, SkippedEvent):
             skipped[event.node_id] = event.reason
+            gated.add(event.node_id)
         await _emit_and_sync(event)
 
     handler_registry = get_handler_registry(emit=collect_events)
@@ -16414,6 +17708,8 @@ async def _execute_cli_run(
     finally:
         await _release_paid_worldlabs_starts(run_id)
         _settle_hold(run_id)
+        # The agent's done card, before the journal forgets who started the run.
+        await _finish_agent_run(run_id)
         canvas_events.forget_run(run_id)
     duration = _time_module.time() - start
 
@@ -16422,7 +17718,10 @@ async def _execute_cli_run(
     # Sync outputs to frontend canvas
     await _broadcast_graph_sync(run_params=run_id)
 
-    skipped_note = f", {len(skipped)} skipped by a gate" if skipped else ""
+    skipped_note = f", {len(gated)} skipped by a gate" if gated else ""
+    # Agents' placeholders the run skipped, in GM's skip line (Q125 item 3).
+    pending_note = pending_nodes.skip_line(pending_summary)
+    skipped_note += f". {pending_note}" if pending_note else ""
     if errors:
         publish_action(
             f"Ran {len(results) + len(errors)} node(s) in {duration:.1f}s — "
@@ -16707,6 +18006,7 @@ async def _quick_multi_image_input_handler(
 
 
 @app.post("/api/quick")
+@graph_write
 async def quick_execute(body: dict[str, Any]) -> dict:
     """One-shot: create a temp node, execute, return output.
 
@@ -16830,6 +18130,16 @@ async def quick_execute(body: dict[str, Any]) -> dict:
         params=params,
         outputs={},
     ))
+    # Review 12, L-3: a required field with nothing chosen (Krea 2's Aspect
+    # ratio, Topaz Standard's Width) is refused here as on every other run
+    # path (services/model_choice.py), before the spend check and before
+    # anything runs, on the route the run takes (review 13, M-1, B9: a maker
+    # key that takes the run without the field is no refusal; with no key
+    # that can run it, nothing here). The node has no canvas name: its type's
+    # name stands in.
+    unchosen = unchosen_model_errors([temp_nodes[-1]], temp_edges, api_keys)
+    if unchosen:
+        raise HTTPException(status_code=400, detail=f"Nothing ran, so nothing was spent. {unchosen[0].message}")
     # A quick run has no canvas node to propose, so point at one.
     quick_run = f"quick-{uuid4().hex}"
     measured = await _measure_run_inputs(temp_nodes, temp_edges)

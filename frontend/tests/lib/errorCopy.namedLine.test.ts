@@ -68,6 +68,14 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
   { file: 'store/graphStore.ts', text: '`${heading} ${err.raw}`', why: "the Agent log's raw form (agents read the raw text)" },
   { file: 'lib/cinemaScene.ts', text: '`Couldn\'t delete “${scene}”. ${text} ${several ? \'are\' : \'is\'} still running. ${shots.stoppable ? STOP_FIRST : WAIT_FOR_IT}`',
     why: "GM's own scene line: the interpolations are names and its fixed words" },
+  // PR #195's lines, reviewed in the merge with #198: each tail is GM's own
+  // fixed "is opening" or "isn't answering" sentence, never a failure line.
+  { file: 'lib/canvasFollow.ts', text: '`Couldn\'t run ${what}. ${followingReason({ agent, projectName: project })}`',
+    why: 'GM\'s following line (#195 round 21): the tail is "<agent> is opening “<project>”."' },
+  { file: 'lib/canvasFollow.ts', text: '`${CREATE_WHILE_FOLLOWING_HEADING} ${followingReason(switching)}`',
+    why: 'GM\'s following line for Create: the tail is the same fixed "is opening" sentence' },
+  { file: 'lib/deleteCopy.ts', text: '`Couldn\'t delete ${what}. ${DELETE_NO_ANSWER_REASON}`',
+    why: 'GM\'s no-answer delete line (#195): the tail is a fixed sentence' },
   { file: 'lib/canvasFileDrop.ts', text: '`Couldn\'t add ${quoted(failure.name)}. ${DROP_TYPES_LINE}`', why: 'the tail is a fixed sentence' },
   { file: 'lib/sceneSaveCopy.ts', text: '`Couldn\'t save “${scene}”. ${SCENE_TOO_BIG}`', why: 'the tail is a fixed sentence' },
   { file: 'lib/directRoute.ts', text: '`${name} can\'t run on ${providerLabel(spec.provider)}${whyPerson(definition, spec, block, params)}. ${fix}${also}`',

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useReactFlow } from '@xyflow/react';
 import { useShallow } from 'zustand/react/shallow';
 import { useGraphStore } from '../store/graphStore';
@@ -16,10 +15,19 @@ import { useFitCanvasView } from '../hooks/useFitCanvasView';
 import { canLoadGraph, canSaveGraph, requestGraphLoad, requestGraphSave } from '../lib/graphFileActions';
 import { COMMAND_PALETTE_OPEN_EVENT, isPaletteHotkey, paletteOpenRequestApplies } from '../lib/commandPaletteKeys';
 import { claimIntent } from '../lib/heldIntents';
+import { returnFocusOnSlip } from '../lib/modalFocus';
+import { ModalPortal } from './ModalPortal';
+import { refuseCanvasEdit, useCanvasLock } from '../lib/canvasLock';
 import '../styles/command-palette.css';
 
 const NO_NODE_FIELDS: readonly string[] = Object.freeze([]);
 const NO_COMMANDS: PaletteCommand[] = [];
+
+/** A key the input method is using to end or commit a composition (keyCode
+ * 229 is how browsers mark such a keydown when isComposing isn't set). */
+function composing(event: React.KeyboardEvent): boolean {
+  return event.nativeEvent.isComposing || event.keyCode === 229;
+}
 
 /**
  * Global ⌘K / Ctrl+K command palette. Searches + inserts nodes, runs toolbar
@@ -34,13 +42,19 @@ export function CommandPalette() {
   const [selected, setSelected] = useState(0);
   const [reservedInsertPositions, setReservedInsertPositions] = useState<NodePosition[]>([]);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
 
   const { screenToFlowPosition, fitView } = useReactFlow();
+  // Round 23 (review 22, L-3): the commands that change the canvas (acts)
+  // take the canvas lock, as every other surface does.
+  const lock = useCanvasLock();
   // Fit view includes an open proposal's ghosts.
   const fitCanvasView = useFitCanvasView();
   const addNode = useGraphStore((s) => s.addNode);
   const executeGraph = useGraphStore((s) => s.executeGraph);
   const isExecuting = useGraphStore((s) => s.isExecuting);
+  // A run waiting for its inputs counts as starting (review 15, M-B).
+  const runStarting = useGraphStore((s) => s.runStarting);
   const isImportingGraph = useGraphStore((s) => s.isImportingGraph);
   const canSave = useGraphStore(canSaveGraph);
   const canLoad = useGraphStore(canLoadGraph);
@@ -126,13 +140,13 @@ export function CommandPalette() {
           setMode('agent');
           setQuery('');
         },
-        canRun: nodeCount > 0 && !isExecuting && !isImportingGraph,
+        canRun: nodeCount > 0 && !isExecuting && !runStarting && !isImportingGraph,
         canSave,
         canLoad,
         canvasNodes,
         focusNode,
       }),
-    [open, addNodeAtCenter, executeGraph, fitCanvasView, enterCreateView, togglePanel, nodeCount, isExecuting, isImportingGraph, canSave, canLoad, canvasNodes, focusNode]
+    [open, addNodeAtCenter, executeGraph, fitCanvasView, enterCreateView, togglePanel, nodeCount, isExecuting, runStarting, isImportingGraph, canSave, canLoad, canvasNodes, focusNode]
   );
 
   // And kept in step with `open` after every render.
@@ -154,7 +168,9 @@ export function CommandPalette() {
       setOpen(true);
     };
     function onKey(e: KeyboardEvent) {
-      if (!isPaletteHotkey(e)) return;
+      // The open palette is a modal dialog itself: its own ⌘K closes it,
+      // unless another modal dialog is on top of it (review 9, L-1).
+      if (!isPaletteHotkey(e, openRef.current ? dialogRef.current : null)) return;
       e.preventDefault();
       if (openRef.current) close();
       else openPalette();
@@ -173,12 +189,13 @@ export function CommandPalette() {
     };
   }, [close]);
 
-  // Focus the input when the palette opens (DOM side effect only).
+  // Focus the input when the palette opens, and when it switches to the
+  // agent prompt (the item that was clicked is gone then) (DOM side effect only).
   useEffect(() => {
     if (!open) return;
     const id = window.setTimeout(() => inputRef.current?.focus(), 0);
     return () => window.clearTimeout(id);
-  }, [open]);
+  }, [open, mode]);
 
   const filtered = useMemo(() => filterCommands(commands, query), [commands, query]);
   const groups = useMemo(
@@ -196,7 +213,9 @@ export function CommandPalette() {
   const run = useCallback(
     (cmd: PaletteCommand | undefined) => {
       if (!cmd || cmd.enabled === false) return;
-      close();
+      // Enter on an acting command while locked: refused, with the pulse.
+      if (cmd.acts && refuseCanvasEdit()) return;
+      if (!cmd.keepsOpen) close();
       cmd.perform();
     },
     [close]
@@ -205,19 +224,31 @@ export function CommandPalette() {
   const submitAgent = useCallback(() => {
     const message = query.trim();
     if (!message) return;
+    // The agent prompt opened before a follow began: still refused.
+    if (refuseCanvasEdit()) return;
     window.dispatchEvent(new CustomEvent('nebula:chat-send', { detail: { message } }));
     close();
   }, [query, close]);
 
+  // Escape leaves the agent prompt, else closes the palette: from the field
+  // and, through the dialog (review 10, L-1), from anything else in it.
+  const escape = () => {
+    if (mode === 'agent') {
+      setMode('commands');
+      setQuery('');
+      inputRef.current?.focus();
+    } else {
+      close();
+    }
+  };
+
   const onInputKeyDown = (e: React.KeyboardEvent) => {
+    // A key that ends or commits an IME composition is the input method's,
+    // never the palette's (review 11): Escape doesn't close, Enter doesn't run.
+    if (composing(e)) return;
     if (e.key === 'Escape') {
       e.preventDefault();
-      if (mode === 'agent') {
-        setMode('commands');
-        setQuery('');
-      } else {
-        close();
-      }
+      escape();
       return;
     }
     if (mode === 'agent') {
@@ -243,8 +274,52 @@ export function CommandPalette() {
 
   const indexById = new Map(flat.map((c, i) => [c.id, i] as const));
 
-  return createPortal(
-    <div className="command-palette" onMouseDown={close}>
+  // Review 9, L-1: it covers the window, so it is a modal dialog. Focus stays
+  // in it: Tab wraps, and a click on its text (a group label) that drops focus
+  // on the page brings it back to the search field, so no canvas key (Delete,
+  // ⌘Enter, ⌘Z) acts on the graph behind it (lib/canvasShortcutScope.ts).
+  // Review 10, L-1: keys with focus on an item (or "Clear search") were lost,
+  // since only the field read them. Escape works as from the field; the arrows
+  // move the active item, as from the field, and focus with it, passing over
+  // an item that can't take focus and stopping at the ends.
+  const onDialogKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (composing(e)) return;
+    if (e.target === inputRef.current && (e.key === 'Escape' || e.key === 'ArrowDown' || e.key === 'ArrowUp')) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      escape();
+      return;
+    }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      const items = [...(dialogRef.current?.querySelectorAll<HTMLButtonElement>('.command-palette__item') ?? [])];
+      const at = items.indexOf(e.target as HTMLButtonElement);
+      if (at < 0) return;
+      e.preventDefault();
+      const step = e.key === 'ArrowDown' ? 1 : -1;
+      let next = at + step;
+      while (next >= 0 && next < items.length && items[next].disabled) next += step;
+      if (next < 0 || next >= items.length) return;
+      items[next].focus();
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    const stops = [...(dialogRef.current?.querySelectorAll<HTMLElement>('input, button:not([disabled])') ?? [])];
+    const first = stops[0];
+    const last = stops.at(-1);
+    if (!first || !last) return;
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
+
+  return (
+    <ModalPortal>
+    <div ref={dialogRef} className="command-palette" role="dialog" aria-modal="true" aria-label="Search commands and nodes"
+      onMouseDown={close} onKeyDown={onDialogKeyDown} onBlur={(e) => returnFocusOnSlip(e, () => inputRef.current)}>
       <div className="command-palette__panel" onMouseDown={(e) => e.stopPropagation()}>
         <input
           ref={inputRef}
@@ -274,14 +349,17 @@ export function CommandPalette() {
                 {g.items.map((cmd) => {
                   const index = indexById.get(cmd.id) ?? 0;
                   const isSel = index === safeSelected;
-                  const disabled = cmd.enabled === false;
+                  const act = cmd.acts ? lock.act({ disabled: cmd.enabled === false }) : null;
+                  const disabled = act ? act.disabled : cmd.enabled === false;
                   return (
                     <button
                       key={cmd.id}
                       type="button"
                       className={`command-palette__item${isSel ? ' command-palette__item--selected' : ''}${disabled ? ' command-palette__item--disabled' : ''}`}
                       onMouseEnter={() => setSelected(index)}
+                      onFocus={() => setSelected(index)}
                       onClick={() => run(cmd)}
+                      {...(act ?? {})}
                       disabled={disabled}
                     >
                       <span className="command-palette__item-title">{cmd.title}</span>
@@ -296,7 +374,7 @@ export function CommandPalette() {
           </div>
         )}
       </div>
-    </div>,
-    document.body
+    </div>
+    </ModalPortal>
   );
 }

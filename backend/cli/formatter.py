@@ -951,6 +951,13 @@ def format_applied(result: dict[str, Any], *, undo: bool = True) -> str:
                          f"out {', '.join(ports.get('outputs') or []) or '-'}")
     for node_id, note in (result.get("modelPortNotes") or {}).items():
         lines.append(f"  Ports of {node_id}: {note}")
+    # Placeholders (Q125 item 3): the nodes this apply made pending, or made ready.
+    if result.get("pending"):
+        lines.append(f"  Placeholders (runs skip them until ready): {', '.join(result['pending'])}. "
+                     f"When they're ready: nebula apply --ready {' --ready '.join(result['pending'])}")
+    if "ready" in result:
+        lines.append(f"  Ready: {', '.join(result['ready']) or 'none'}"
+                     + (f"; not placeholders: {', '.join(result['notPending'])}" if result.get("notPending") else ""))
     token = (result.get("undo") or {}).get("token") if undo else None
     if token:
         minutes = int((result["undo"].get("expiresInSeconds") or 0) // 60)
@@ -1261,4 +1268,13 @@ def format_agents(roster: dict[str, Any]) -> str:
             lines.append("  " + " · ".join(part for part in parts if part))
             if group == "needsYou" and detail:
                 lines.append(f"    {detail}")
+            # Q125 item 3: what its runs are running now, and its placeholders.
+            for running in entry.get("running") or []:
+                seconds = int(float(running.get("secondsAgo") or 0))
+                lines.append(f"    Running {running.get('model') or running.get('nodeId')} ({running.get('nodeId')})"
+                             f" · {seconds // 60}:{seconds % 60:02d}")
+            pending = entry.get("pending") or []
+            if pending:
+                lines.append(f"    {len(pending)} placeholder{'' if len(pending) == 1 else 's'} (runs skip them): "
+                             f"{', '.join(pending)}")
     return "\n".join(lines)

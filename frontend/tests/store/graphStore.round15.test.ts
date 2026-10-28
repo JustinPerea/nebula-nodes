@@ -57,6 +57,9 @@ beforeEach(() => {
   resetBackendConnectionForTests();
   setProjectContext({ id: 'A', revision: 'a' });
   useGraphStore.getState().resetExecution();
+  // Round 21 (the #195 merge): a save's answer lingers for its echo, with
+  // the values it saved; a test's canvas starts with none of it.
+  useGraphStore.getState().loadGraph([], [], { allowDuringExecution: true });
   useGraphStore.setState({ nodes: [text('n1')], edges: [], undoStack: [], redoStack: [], isExecuting: false,
     backendFreshStartPending: false, undoNotice: null, isImportingGraph: false, providerRecoveries: [], providerStartAmbiguities: [],
     notify: (line: string, _tone?: string, options?: { mono?: string }) => { notices.push({ line, ...(options?.mono ? { mono: options.mono } : {}) }); } } as never);
@@ -90,17 +93,24 @@ describe('M5 (probe S1): Accept on a stale-empty tab', () => {
 });
 
 describe('L2: a failed save names its own settings (GM, round 15)', () => {
-  it('the exact one, two and three-or-more lines', () => {
+  // GM round 23 (2026-10-27) moved the count to four: two or three settings
+  // on one node are named, four or more counted, the same as every
+  // failed-save line (lib/savingCutOff, tests/round23Lines).
+  it('the exact one, two-or-three and four-or-more lines', () => {
     expect(graphStore.paramSaveFailedLine('Seed', 'Banana', true))
       .toBe("Couldn't save “Seed” for “Banana”. It's back to its last saved value.");
     expect(graphStore.paramSaveFailedLine(['Prompt', 'Seed'], 'Banana', true))
       .toBe("Couldn't save “Prompt” and “Seed” for “Banana”. They're back to their last saved values.");
     expect(graphStore.paramSaveFailedLine(['Prompt', 'Seed', 'Size'], 'Banana', true))
-      .toBe("Couldn't save 3 settings for “Banana”. They're back to their last saved values.");
+      .toBe("Couldn't save “Prompt”, “Seed” and “Size” for “Banana”. They're back to their last saved values.");
+    expect(graphStore.paramSaveFailedLine(['Prompt', 'Seed', 'Size', 'Steps'], 'Banana', true))
+      .toBe("Couldn't save 4 settings for “Banana”. They're back to their last saved values.");
     expect(graphStore.paramSaveFailedLine(['Prompt', 'Seed'], 'Banana', false))
       .toBe("Couldn't save “Prompt” and “Seed” for “Banana”.");
     expect(graphStore.paramSaveFailedLine(['Prompt', 'Seed', 'Size'], 'Banana', false))
-      .toBe("Couldn't save 3 settings for “Banana”.");
+      .toBe("Couldn't save “Prompt”, “Seed” and “Size” for “Banana”.");
+    expect(graphStore.paramSaveFailedLine(['Prompt', 'Seed', 'Size', 'Steps'], 'Banana', false))
+      .toBe("Couldn't save 4 settings for “Banana”.");
   });
 
   it('probe P1: two requests, the first saved and the second refused, names only the second\'s key and reverts only it', async () => {
@@ -133,7 +143,10 @@ describe('L2: a failed save names its own settings (GM, round 15)', () => {
     expect(useGraphStore.getState().nodes[0].data.params).toMatchObject({ prompt: 'old', seed: 1 });
   });
 
-  it('one request with three keys refused: counted', async () => {
+  // Merged with #198: "prompt" and "seed" have no card label on this node,
+  // and #198 never shows a raw key (GM pr198 r2 ask 3), so the three are
+  // counted, as #198's own line had it; labelled ones are named (above).
+  it('one request with three keys refused, two unlabelled: counted', async () => {
     useGraphStore.setState({ nodes: [banana({ prompt: 'old', seed: 1, aspect_ratio: '1:1' })] } as never);
     fetchMock.mockImplementation(async () => json({ detail: 'refused' }, 409));
     useGraphStore.getState().updateNodeData('n5', { params: { prompt: 'new', seed: 7, aspect_ratio: '16:9' } });

@@ -117,7 +117,7 @@ async def test_cinema_shot_refuses_a_start_stopped_while_it_was_being_admitted(m
     cinema = GraphNode(id="cinema", definitionId="cinema-scene",
                        params={"scene": {"shots": [{"id": "shot-1"}]}}, outputs={})
     monkeypatch.setattr(main_module, "get_subgraph", lambda _n, _e, _t: ([cinema], []))
-    monkeypatch.setattr(main_module, "validate_graph", lambda *_args: [])
+    monkeypatch.setattr(main_module, "validate_graph", lambda *_args, **_kwargs: [])
     error, execute_graph, returned = await _stop_during_admission(
         monkeypatch, lambda: main_module.generate_cinema_shot(GenerateShotRequest(
             nodes=[cinema], edges=[], nodeId="cinema", shotId="shot-1", runId="late-run")))

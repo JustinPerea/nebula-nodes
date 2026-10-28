@@ -41,6 +41,8 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Mapping
 
+from services import pending_nodes
+
 APPROVAL_TTL_SECONDS = 1800
 MAX_APPROVALS = 50
 
@@ -104,13 +106,18 @@ def fingerprint(
     run_ids: Iterable[str],
     name: Callable[[str], str] = str,
 ) -> dict[str, str]:
-    """A digest per node a run of ``run_ids`` can start: definitionId, params, wires in.
+    """A digest per node a run of ``run_ids`` can start: definitionId, params,
+    connections in, and whose placeholder it is.
 
     ``nodes`` maps id -> {definitionId, params, ...}; ``edges`` are
     {source, sourceHandle, target, targetHandle}. ``name`` renames ids (a
     proposal's new nodes get different ids each time it is staged, so the
     pre-accept comparison names them by their refs). Outputs, positions and
-    labels are left out: they don't change what a run does.
+    labels are left out: they don't change what a run does. A placeholder
+    does (Q125 item 3): the run skips it and what needs it, so its owner is
+    in the digest and a placeholder turned normal since (its owner's
+    ``pending: false``, the idle rule) changes what the run would start and
+    spend: the proposal's Accept and the approved run both refuse it.
     """
     scope = run_scope(edges, run_ids)
     result: dict[str, str] = {}
@@ -121,6 +128,9 @@ def fingerprint(
             "params": _canonical(node.get("params") or {}),
             "inputs": _inputs(edges, node_id, name),
         }
+        owner = None if node is None else pending_nodes.owner(node)
+        if owner is not None:
+            payload["pending"] = owner["id"]
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
         result[name(node_id)] = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
     return result

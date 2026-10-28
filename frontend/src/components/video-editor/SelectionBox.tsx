@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PointerEvent, RefObject } from 'react';
 import { useGraphStore } from '../../store/graphStore';
+import { refuseCanvasEdit } from '../../lib/canvasLock';
 import { useUIStore } from '../../store/uiStore';
 import type { TrackItem, VideoGraphManifest } from '../../types/video';
 import { screenToComposition } from '../../lib/video/coordinates';
@@ -210,6 +211,9 @@ export function SelectionBox({
     // Stop the event from bubbling to PlayerOverlay's onPointerDown — clicking
     // the box body should NOT trigger select/deselect logic; it starts a drag.
     e.stopPropagation();
+    // Round 23 (review 22, L-3): a move, resize or rotate edits the layer on
+    // the canvas; while following or offline it never starts.
+    if (refuseCanvasEdit()) return;
 
     // Read the current spatial.x/y once at the start of the gesture so each
     // pointermove computes against a stable origin (avoids cumulative drift).
@@ -243,6 +247,7 @@ export function SelectionBox({
 
   const handleResizePointerDown = (handle: ResizeHandle) => (e: PointerEvent<HTMLDivElement>) => {
     e.stopPropagation();
+    if (refuseCanvasEdit()) return;
 
     const remotion = useGraphStore.getState().nodes.find((n) => n.id === remotionNodeId);
     const manifest = (remotion?.data.params as { manifest?: VideoGraphManifest } | undefined)?.manifest;
@@ -265,6 +270,7 @@ export function SelectionBox({
 
   const handleRotatePointerDown = (e: PointerEvent<HTMLDivElement>) => {
     e.stopPropagation();
+    if (refuseCanvasEdit()) return;
 
     const remotion = useGraphStore.getState().nodes.find((n) => n.id === remotionNodeId);
     const manifest = (remotion?.data.params as { manifest?: VideoGraphManifest } | undefined)?.manifest;

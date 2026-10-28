@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import '../../styles/personal-agents.css';
 import { failureMessage } from '../../lib/errorCopy';
+import { ModalPortal } from '../ModalPortal';
 
 /** The one-time notice before Nebula starts any of the person's own agents.
  * The backend refuses to start one until this is acknowledged. */
@@ -32,7 +32,8 @@ export function PersonalAgentWarning({ agentName, onAccept, onCancel }: {
     }
   };
 
-  return createPortal(
+  return (
+    <ModalPortal>
     <div className="personal-warning" role="dialog" aria-modal="true" aria-labelledby="personal-warning-title"
       onKeyDown={(event) => {
         if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onCancel(); }
@@ -71,7 +72,7 @@ export function PersonalAgentWarning({ agentName, onAccept, onCancel }: {
           </button>
         </div>
       </div>
-    </div>,
-    document.body,
+    </div>
+    </ModalPortal>
   );
 }

@@ -25,6 +25,7 @@ import { useAssetDelete } from '../../hooks/useAssetDelete';
 import '../../styles/panels.css';
 import { FailureLines } from '../failure/FailureLines';
 import { failureMessage } from '../../lib/errorCopy';
+import { useCanvasLock } from '../../lib/canvasLock';
 import '../../styles/character-studio.css';
 import '../../styles/moodboard-studio.css';
 
@@ -422,6 +423,10 @@ function AssetItem({
   deleteBusy?: boolean;
 }) {
   const label = name || 'Untitled';
+  // Round 23 (review 22, L-3): Add to canvas and dragging onto it add a node,
+  // so they take the canvas lock. Open, Move and Delete act on the asset
+  // library, not the canvas.
+  const lock = useCanvasLock();
   const stored = localOnly ? storedImageView(thumbnail) : null;
   const src = stored ? stored.src : thumbnail ? backendAssetUrlSync(thumbnail) : null;
   return (
@@ -430,7 +435,7 @@ function AssetItem({
         type="button"
         className="character-palette__item assets-item__select"
         aria-pressed={selected}
-        draggable={Boolean(onDragStart)}
+        draggable={Boolean(onDragStart) && !lock.locked}
         onDragStart={onDragStart}
         onClick={onSelect}
         onDoubleClick={onOpen}
@@ -455,7 +460,7 @@ function AssetItem({
             {openLabel}
           </button>
           {onAdd && (
-            <button type="button" className="assets-item__action" onClick={onAdd} aria-label={`Add ${label} to canvas`}>
+            <button type="button" className="assets-item__action" onClick={onAdd} {...lock.act()} aria-label={`Add ${label} to canvas`}>
               Add to canvas
             </button>
           )}

@@ -4,6 +4,8 @@ import { useGraphStore } from '../../store/graphStore';
 import { clipSpeed } from '../../lib/editor/virtualPlayback';
 import type { NodeData } from '../../types';
 import { NodeRunError } from './NodeError';
+import { PlaceholderLine } from './PlaceholderLine';
+import { pendingAttr } from '../../lib/pendingNodes';
 
 interface EditClipShape {
   duration?: number;
@@ -66,13 +68,14 @@ export function EditNode({ id, data, selected }: NodeProps) {
   }
 
   return (
-    <div className={`edit-node ${selected ? 'edit-node--selected' : ''}`}>
+    <div className={`edit-node ${selected ? 'edit-node--selected' : ''}`} data-pending={pendingAttr(data.pending)}>
       <Handle type="target" position={Position.Left} id="video_in" />
       <div className="edit-node__title">✂ Video Edit</div>
       <div className="edit-node__preview">
         <span>{totalDur.toFixed(1)}s · {cuts} cut{cuts === 1 ? '' : 's'}</span>
         {speedBadge && <div className="edit-node__speed-badge">{speedBadge}</div>}
       </div>
+      <PlaceholderLine pending={data.pending} />
       <div className="edit-node__summary">{summary || 'no edits yet'}</div>
       {selected && (
         <button type="button" className="edit-node__open" onClick={handleOpenEditor}>

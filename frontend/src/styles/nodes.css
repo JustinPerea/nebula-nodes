@@ -531,7 +531,7 @@ body:not(.app-slava-restraint) .model-node__enhance {
   transition: background 0.1s, color 0.1s, border-color 0.1s;
 }
 
-body:not(.app-slava-restraint) .model-node__enhance:hover {
+body:not(.app-slava-restraint) .model-node__enhance:hover:not(:disabled) {
   background: #242424;
   border-color: #3a3a3a;
   color: #ddd;
@@ -829,3 +829,62 @@ body.app-slava-restraint .model-node__source-stale { color: var(--sr-ink, #1a1a1
 body.app-slava-restraint .model-node__source-stale button { color: var(--sr-ink, rgba(255, 255, 255, 0.92)); border: 1px solid var(--sr-edge-strong, rgba(255, 255, 255, 0.12)); background: var(--sr-glass-raised, rgba(28, 28, 31, 0.78)); }
 body:not(.app-slava-restraint) .model-node__source-stale { color: #e8c99e; background: #2a2116; }
 body:not(.app-slava-restraint) .model-node__source-stale button { color: inherit; border: 1px solid #765a35; background: #342819; }
+
+/* An agent's placeholder (Q125 item 3, GM - Design 2026-10-25): only the
+   preview area dims; the header and the line stay at full contrast. Every
+   card kind with a preview dims that and nothing else (a card with none,
+   such as Remotion's or Batch's list of items, dims nothing). The dashed
+   outline in the agent's colour is drawn by AgentNodeMarkLayer. */
+.model-node[data-pending='true'] .model-node__preview,
+.edit-node[data-pending='true'] .edit-node__preview,
+.character-node[data-pending='true'] .character-node__thumb,
+.cinema-scene-node[data-pending='true'] .cinema-scene-node__thumb,
+.moodboard-node[data-pending='true'] .moodboard-node__preview,
+.paper-source-node[data-pending='true'] .paper-source-node__preview,
+.camera-rig-node[data-pending='true'] .camera-rig-node__diagram,
+.reference-set-node[data-pending='true'] .reference-set-node__preview {
+  opacity: 0.4;
+}
+
+/* A Reroute has no body: the line hangs below the dot, as its run error does. */
+.reroute-node__pending {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  width: 200px;
+  margin: 0;
+  translate: -50% 0;
+  justify-content: center;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.model-node__pending {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 12px;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.model-node__pending::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+body.app-slava-restraint .model-node__pending {
+  color: var(--sr-ink-light);
+}
+
+body:not(.app-slava-restraint) .model-node__pending {
+  color: #b9bbbf;
+}
+
+body.app-slava-restraint .model-node__pending::before,
+body:not(.app-slava-restraint) .model-node__pending::before {
+  background: var(--pending-color);
+}

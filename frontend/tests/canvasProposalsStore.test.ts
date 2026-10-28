@@ -12,6 +12,7 @@ const graph = vi.hoisted(() => ({
     adoptAcceptedProposal: vi.fn(),
     beginUndoStep: vi.fn(() => ({})),
     cancelUndoStep: vi.fn(),
+    endUndoStep: vi.fn(),
   },
 }));
 const api = vi.hoisted(() => ({ acceptProposal: vi.fn(), rejectProposal: vi.fn(), releaseApproval: vi.fn() }));
@@ -56,8 +57,15 @@ beforeEach(() => {
   graph.state.edges = [];
   for (const fn of [graph.state.executeNode, graph.state.executeCluster, graph.state.adoptAcceptedProposal,
     api.acceptProposal, api.rejectProposal, api.releaseApproval]) fn.mockReset();
+  // As the real store: once adopted, the run's nodes are on the canvas (the
+  // accept's run is sent only while they are: review 11, L-5).
+  graph.state.adoptAcceptedProposal.mockImplementation((result: { runNodeIds?: string[] }) => {
+    const ids = new Set(graph.state.nodes.map((node) => node.id));
+    graph.state.nodes = [...graph.state.nodes, ...(result.runNodeIds ?? []).filter((id) => !ids.has(id)).map((id) => ({ id }))];
+  });
   graph.state.beginUndoStep.mockClear();
   graph.state.cancelUndoStep.mockClear();
+  graph.state.endUndoStep.mockClear();
 });
 afterEach(() => vi.useRealTimers());
 
@@ -127,6 +135,8 @@ describe('canvas proposals store', () => {
     // One undo step for the accept, taken before the request.
     expect(graph.state.beginUndoStep).toHaveBeenCalledTimes(1);
     expect(graph.state.cancelUndoStep).not.toHaveBeenCalled();
+    // And ended once its nodes are on the canvas, so an undo pressed meanwhile acts (review 10, L-2).
+    expect(graph.state.endUndoStep).toHaveBeenCalledWith(graph.state.beginUndoStep.mock.results[0].value);
     // The run carries the approval, so the backend can check it is what was accepted.
     expect(graph.state.executeNode).toHaveBeenCalledWith('n7', { approvalId: 'ra_a' });
     // Then it is released (a no-op once the run used it), so a run the canvas
@@ -173,6 +183,24 @@ describe('canvas proposals store', () => {
     expect(graph.state.executeNode).not.toHaveBeenCalled();
   });
 
+  it('review 5, L1: Accept on a proposal that runs nothing starts no run and holds none, and frees its approval', async () => {
+    // Its whole run waits on Codex's placeholders: the button said "Accept" (GM round 5, item 3).
+    const waits = { paidRuns: 0, freeRuns: 0, estimate: null, upTo: false, providers: [], nodes: [], note: '',
+      pendingSkipped: { count: 2, placeholders: 1, agents: ['Codex'] } };
+    for (const executing of [false, true]) {
+      graph.state.isExecuting = executing;
+      const id = executing ? 'p_b' : 'p_a';
+      emit({ type: 'proposalOpened', proposal: proposal(id, { cost: waits as never }), acceptKey: `key-${id}` });
+      api.acceptProposal.mockResolvedValue({ idMap: {}, runNodeIds: ['n7'], approvalId: `ra_${id}`,
+        nodes: [], edges: [], updatedNodes: [] });
+      await useCanvasProposalsStore.getState().accept(id);
+      expect(graph.state.executeNode).not.toHaveBeenCalled();
+      expect(graph.state.executeCluster).not.toHaveBeenCalled();
+      expect(useCanvasProposalsStore.getState().deferredRun).toBeNull();
+      expect(api.releaseApproval).toHaveBeenCalledWith(`ra_${id}`);
+    }
+  });
+
   it('runs a proposal without listed runs never, and without an approval sends none', async () => {
     emit({ type: 'proposalOpened', proposal: proposal('p_a'), acceptKey: 'key-a' });
     api.acceptProposal.mockResolvedValue({ idMap: {}, runNodeIds: [], approvalId: null,
@@ -204,5 +232,18 @@ describe("a person-only refusal on accept or reject (GM, Q116 a)", () => {
     api.acceptProposal.mockRejectedValue(new ProposalRequestError(403, 'This proposal can only be accepted from the Nebula canvas.'));
     await useCanvasProposalsStore.getState().accept('p_a');
     expect(useCanvasProposalsStore.getState().errors.p_a).toBe('Only the canvas can accept this. Reload the page.');
+  });
+});
+
+describe('GM round 22 (4b): Accept after the canvas was cleared or replaced', () => {
+  it("says GM's line, read from the answer's code", async () => {
+    const { ProposalRequestError } = await import('../src/lib/canvasProposals');
+    emit({ type: 'proposalOpened', proposal: proposal('p_a'), acceptKey: 'key-a' });
+    api.acceptProposal.mockRejectedValue(new ProposalRequestError(409,
+      "Couldn't accept this proposal: the canvas was cleared or replaced after it was made. Make a new proposal for the canvas as it is now.",
+      { heading: "Couldn't accept the proposal.", code: 'proposal_canvas_replaced' } as never));
+    await useCanvasProposalsStore.getState().accept('p_a');
+    expect(useCanvasProposalsStore.getState().errors.p_a).toBe(
+      "Couldn't accept this proposal. The canvas was cleared or replaced after it was made. Ask the agent for a new one.");
   });
 });

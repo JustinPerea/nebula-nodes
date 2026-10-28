@@ -109,8 +109,9 @@ def test_renaming_moving_and_updating_name_the_node_in_quotes(logged):
     # (PR #198 review 2, N4): the last line is still the move.
     assert client.put(f"/api/graph/node/{node}", headers=AGENT, json={"params": {}}).status_code == 200
     assert [say for say in _says(sent) if say][-1] == "Moved “Hero shots”"
-    # A params update that names params says which, by the field's label on
-    # the card, in quotes; never the param key (GM, r18 of PR #114).
+    # A params update that names params says which, by the card's label in
+    # curly quotes (GM - Design, round 16 of PR #195; GM, r18 of PR #114):
+    # no node, never the raw key.
     assert client.put(f"/api/graph/node/{node}", headers=AGENT, json={"params": {"value": "b"}}).status_code == 200
     assert _says(sent)[-1] == "Set “Text”"
 

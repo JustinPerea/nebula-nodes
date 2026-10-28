@@ -83,7 +83,8 @@ describe('canvas pins store', () => {
     api.createPin.mockResolvedValue(pin('pin_new', { text: 'warmer' }));
     useCanvasPinsStore.getState().compose({ nodeId: 'n4' });
     expect(await useCanvasPinsStore.getState().submit('  warmer ')).toBe(true);
-    expect(api.createPin).toHaveBeenCalledWith('warmer', { nodeId: 'n4' });
+    // Round 23 (M-1): and the project it was composed on (none open here).
+    expect(api.createPin).toHaveBeenCalledWith('warmer', { nodeId: 'n4' }, null);
     const state = useCanvasPinsStore.getState();
     expect(state.composer).toBeNull();
     expect(state.pins[0].id).toBe('pin_new');
