@@ -16,8 +16,7 @@ import { ProviderReadinessBadge } from '../ProviderReadinessBadge';
 import { ScrollFade } from '../ScrollFade';
 import '../../styles/panels.css';
 import '../../styles/node-library.css';
-import { refuseEditWhileOffline } from '../../lib/backendConnection';
-import { useCanvasLock } from '../../lib/canvasLock';
+import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 import { waitToOpenTooltip } from '../../lib/canvasFollow';
 
 // Initial collapsed state — all categories start collapsed on first render so
@@ -225,8 +224,10 @@ export function NodeLibrary() {
   }
 
   function addNodeAtViewportCenter(definitionId: string) {
-    // Offline is read-only (GM, round 14 of PR #114): the banner pulses.
-    if (refuseEditWhileOffline()) return;
+    // Read-only offline (GM, round 14 of PR #114) and while following (fix
+    // round 4 of PR #200, review 4 LOW-4: the store gate refused it, the
+    // click itself didn't): the project bar or the banner pulses.
+    if (refuseCanvasEdit()) return;
     const preferred = screenToFlowPosition({
       x: typeof window !== 'undefined' ? window.innerWidth / 2 : 640,
       y: typeof window !== 'undefined' ? window.innerHeight / 2 : 360,

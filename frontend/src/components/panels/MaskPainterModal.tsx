@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
+import { canvasLockNow, refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 import { Brush, Eraser, Trash2, X } from 'lucide-react';
 import '../../styles/mask-painter.css';
 import { useMaskPainterDialog } from './maskPainterDialog';
@@ -119,18 +119,33 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
     setHasStrokes(true);
   }, [canvasPoint, drawSegment]);
 
+  // A stroke under way ends the moment the lock starts (fix round 4 of PR
+  // #200, review 4 LOW-2): the next move paints nothing, before React has
+  // re-rendered with the lock, and the effect below ends it once it has.
+  const endStroke = useCallback((e?: React.PointerEvent<HTMLCanvasElement>) => {
+    drawingRef.current = false;
+    lastPointRef.current = null;
+    if (e && e.currentTarget.hasPointerCapture?.(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+  }, []);
+
+  useEffect(() => {
+    if (lock.locked) endStroke();
+  }, [lock.locked, endStroke]);
+
   const onPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!drawingRef.current) return;
+    if (canvasLockNow().locked) {
+      endStroke(e);
+      return;
+    }
     const pt = canvasPoint(e);
     if (!pt || !lastPointRef.current) return;
     drawSegment(lastPointRef.current, pt);
     lastPointRef.current = pt;
-  }, [canvasPoint, drawSegment]);
+  }, [canvasPoint, drawSegment, endStroke]);
 
-  const onPointerUp = useCallback(() => {
-    drawingRef.current = false;
-    lastPointRef.current = null;
-  }, []);
+  // Up or leave: the stroke ends, painting nothing more (locked or not).
+  const onPointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => endStroke(e), [endStroke]);
 
   const clearStrokes = useCallback(() => {
     const canvas = strokesRef.current;

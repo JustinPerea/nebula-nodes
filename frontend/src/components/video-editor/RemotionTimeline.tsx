@@ -10,7 +10,7 @@ import type {
 import type { VideoGraphManifest, TrackItem } from '../../types/video';
 import { DEFAULT_FPS } from '../../types/video';
 import { useGraphStore } from '../../store/graphStore';
-import { useCanvasLock } from '../../lib/canvasLock';
+import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 import { useUIStore } from '../../store/uiStore';
 
 /** Local structural typing for the @xzdarcy timeline imperative ref.
@@ -108,12 +108,17 @@ export function RemotionTimeline({
           }
           setSelectedTrackItem(action.id);
         }}
+        // `disableDrag` stops the drag; a drag already under way when the
+        // lock starts ends without writing (fix round 4 of PR #200, review 4
+        // LOW-4).
         onActionMoveEnd={({ action, start }) => {
+          if (refuseCanvasEdit()) return;
           updateTrackItemTime(remotionNodeId, action.id, {
             startFrame: Math.round(start * DEFAULT_FPS),
           });
         }}
         onActionResizeEnd={({ action, start, end }) => {
+          if (refuseCanvasEdit()) return;
           updateTrackItemTime(remotionNodeId, action.id, {
             startFrame: Math.round(start * DEFAULT_FPS),
             durationInFrames: Math.round((end - start) * DEFAULT_FPS),

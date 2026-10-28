@@ -64,8 +64,9 @@ def clean_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = F
     #200, GM 2026-10-28 answer 5): agents get it as written. Its newlines
     stay (every line break, ``\r\n``, ``\r``, U+2028 and the rest, reads as
     ``\n``), a tab reads as a space, each
-    line loses its trailing spaces and the note its leading and trailing
-    blank lines; every other control character is still dropped.
+    line loses its trailing spaces, a run of blank lines keeps one, and the
+    note loses its leading and trailing blank lines; every other control
+    character is still dropped.
     """
     if not isinstance(raw, str):
         raise PinError(422, f"{label} must be text")
@@ -84,7 +85,10 @@ def clean_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = F
         # str.splitlines knows every line break: \r\n, \r, \v, \f, NEL and
         # U+2028/U+2029 (review 3 LOW-5), so each reads as \n on every surface.
         lines = [plain(line).rstrip() for line in raw.splitlines()]
-        text = "\n".join(lines).strip()
+        # A run of blank lines keeps one (fix round 4 of PR #200, review 4
+        # N-3: 278 newlines reached every agent as 278 lines).
+        kept_lines = [line for i, line in enumerate(lines) if line or i == 0 or lines[i - 1]]
+        text = "\n".join(kept_lines).strip()
     else:
         text = " ".join(plain(raw).split())
     if not text:

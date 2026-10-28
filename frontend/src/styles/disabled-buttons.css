@@ -41,13 +41,15 @@
      2 M-1). */
   --sr-disabled-edge: rgba(255, 255, 255, 0.06);
   /* An enabled danger label (the selection toolbar's Delete, a dialog's
-     destructive action): 9.6:1 on the toolbar's own surface (rgba(20, 20,
-     22, 0.94)), so the shared grey (6.2:1 there) reads clearly dimmer, not
-     only another hue (fix round 3 of PR #200, review 3 LOW-2; the ratchet's
-     1.5x floor, measured on that surface). It was rgba(255, 132, 118, 0.88),
-     6.9:1; #ff968a cleared the floor on black but drew 8.8 vs 6.2 live. */
-  --sr-danger-ink: #ffa395;
-  --sr-danger-ink-hover: #ffb8ad;
+     destructive action). GM, PR #200 round 5 answer 2: a true red (hue 5°,
+     full saturation, as #ff7b6e), only its lightness raised until it sits
+     about 8:1, clearly above the shared grey's 6.2:1. #ff887d: 8.03:1 on the
+     toolbar's surface (rgba(20, 20, 22, 0.94) over the canvas), 8.75:1 on a
+     dialog (--sr-canvas-elevated); the grey is 6.19:1 and 6.26:1 there.
+     Fix round 3's #ffa395 (9.7:1, hue 8°, lighter) read salmon. Hover is
+     brighter: #ff9a91 (L 78%, same hue), over the red tint. */
+  --sr-danger-ink: #ff887d;
+  --sr-danger-ink-hover: #ff9a91;
 }
 
 /* Ghost and outline buttons: unfilled, label and outline grey. First, so a
@@ -121,6 +123,48 @@
 :is(.cinema-shot-panel__variation):is(:disabled, [aria-disabled='true']) img {
   opacity: 0.45 !important;
   filter: grayscale(1) !important;
+}
+
+/* Colour swatches (Cinema's palette, the Inspector's palette): image-like,
+   with no label to grey (fix round 4 of PR #200, review 4 LOW-3). GM round 5
+   answer 1: they keep their hue, because the colour is the content; the rest
+   of the image-only look applies: dimmed to 0.45, the disabled edge, no hover
+   change, the default cursor. Clicks are inert already (`disabled`). The
+   colour's own swatch edge goes grey too, so the chip reads as a muted value,
+   not a live control. */
+:is(.cinema-shared-controls__swatch input[type='color'], .inspector__palette-color):is(:disabled, [aria-disabled='true']),
+:is(.cinema-shared-controls__swatch input[type='color'], .inspector__palette-color):is(:disabled, [aria-disabled='true']):hover {
+  border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important;
+  box-shadow: none !important;
+  filter: none !important;
+  cursor: default !important;
+  opacity: 0.45 !important;
+}
+
+:is(.cinema-shared-controls__swatch input[type='color'], .inspector__palette-color):is(:disabled, [aria-disabled='true'])::-webkit-color-swatch {
+  border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important;
+}
+
+/* The Projects cover picker's image buttons, disabled while a change saves
+   (review 4 N-7): the image-only look, as the variations. Their edge is
+   transparent at rest, so it stays so (never brighter disabled); the pinned
+   one keeps its mark in the shared grey. */
+:is(.project-home__cover-choice):is(:disabled, [aria-disabled='true']),
+:is(.project-home__cover-choice):is(:disabled, [aria-disabled='true']):hover {
+  border-color: transparent !important;
+  box-shadow: none !important;
+  cursor: default !important;
+  opacity: 1 !important;
+}
+
+:is(.project-home__cover-choice):is(:disabled, [aria-disabled='true']) img {
+  opacity: 0.45 !important;
+  filter: grayscale(1) !important;
+}
+
+:is(.project-home__cover-choice[aria-pressed='true']):is(:disabled, [aria-disabled='true']),
+:is(.project-home__cover-choice[aria-pressed='true']):is(:disabled, [aria-disabled='true']):hover {
+  border-color: var(--sr-disabled-ink, rgba(255, 255, 255, 0.55)) !important;
 }
 
 /* The selected one, disabled, keeps its mark: the shared selected outline in

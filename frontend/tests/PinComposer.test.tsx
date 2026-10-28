@@ -4,8 +4,10 @@ import { RequestFailedError } from '../src/lib/errorCopy';
 
 const api = vi.hoisted(() => ({ createPin: vi.fn(), fetchPins: vi.fn(), deletePin: vi.fn() }));
 
-vi.mock('../src/lib/wsClient', () => ({ wsClient: { subscribe: () => () => {} } }));
-vi.mock('../src/lib/canvasPins', () => ({ ...api, MAX_PIN_TEXT: 280 }));
+// Fix round 4 of PR #200: PinComposer reads project names (projectStore, which
+// loads graphStore and connects), and the kept notices' own helpers.
+vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: () => {}, subscribe: () => () => {}, send: () => {}, disconnect: () => {} } }));
+vi.mock('../src/lib/canvasPins', async (importOriginal) => ({ ...await importOriginal<typeof import('../src/lib/canvasPins')>(), ...api, MAX_PIN_TEXT: 280 }));
 
 const { PinComposer } = await import('../src/components/canvas/PinComposer');
 const { useCanvasPinsStore } = await import('../src/store/canvasPinsStore');

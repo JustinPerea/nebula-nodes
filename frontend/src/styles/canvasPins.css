@@ -181,7 +181,47 @@
 .canvas-pin-kept-stack {
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 6px;
+}
+
+.canvas-pin-kept-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* The whole list (fix round 4 of PR #200, review 4 LOW-1): it scrolls inside
+   a cap, so however many notes are kept it stays in the bottom part of the
+   screen, clear of the project bar and the selection toolbar at the top. */
+.canvas-pin-kept-stack[data-open] .canvas-pin-kept-list {
+  max-height: min(40vh, 360px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* "Show 7 more" (GM round 5 answer 2): a quiet row above the newest two. */
+.canvas-pin-kept-more {
+  align-self: flex-end;
+  padding: 4px 10px;
+  border: 1px solid #333;
+  border-radius: 6px;
+  background: #1a1a1a;
+  box-shadow: 0 4px 20px rgb(0 0 0 / 0.5);
+  color: #d8d8d8;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.canvas-pin-kept-more:hover,
+.canvas-pin-kept-more:focus-visible {
+  color: #fff;
+}
+
+.canvas-pin-kept-more:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid #9ab8ff);
+  outline-offset: var(--sr-focus-offset, 2px);
 }
 
 .canvas-pin-toast__text {
@@ -199,6 +239,9 @@
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   line-clamp: 2;
+  /* GM round 5 answer 5: the note's own line breaks (runs of spaces still
+     fold, as in any text). */
+  white-space: pre-line;
   color: #f2f2f2;
 }
 

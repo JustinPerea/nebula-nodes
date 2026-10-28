@@ -978,7 +978,12 @@ class ChannelState:
             for pin in pins[:MAX_LISTED]:
                 node = _ident(pin["node"])
                 where = f' node="{node}"' if node else ""
-                lines.append(f'<pin id="{_ident(pin["pinId"])}"{where}>{pin["text"]}</pin>')
+                # Each later line indented, as the CLI prints it (fix round 4
+                # of PR #200, review 4 N-4): a line the person typed to look
+                # like a channel line ("Nebula: …", after a typed ‹/pin›)
+                # still reads as part of their note.
+                text = "\n  ".join(str(pin["text"]).split("\n"))
+                lines.append(f'<pin id="{_ident(pin["pinId"])}"{where}>{text}</pin>')
             hidden_pins = total_pins - min(len(pins), MAX_LISTED)
             if hidden_pins:
                 lines.append(f"{hidden_pins} more notes not listed: their text is in look_at_canvas `pins`.")

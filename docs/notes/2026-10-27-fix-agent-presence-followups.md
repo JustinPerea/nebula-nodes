@@ -532,3 +532,135 @@ project, which is where it was typed.
     section's checks all passed first. Then the page reloaded on reconnect
     while the script was leaving the studio.
   - Blocked requests: 2, both canaries. None went toward 8000-8010 or 5173.
+
+## Fix round 4
+
+From review 4 (clean: 0 HIGH, 0 MEDIUM, 4 LOW, 7 nits) and GM's round 5
+rulings and answers (scratchpad msgs/gm-pr200-r5.md).
+
+### What changed, per item
+
+- **GM 1, Send note.** It already greyed through the ghost rule
+  (`prompt-dialog__confirm` is in the unfilled list); live it goes from the
+  orange label (6.73:1) and orange outline (rgba(255, 90, 31, 0.34)) to the
+  shared grey label (0.55, 6.26:1) and edge (0.06), opacity 1. The ratchet's
+  "asked GM" exemption is now GM's rule: `ACCENT_GHOSTS` keeps the brand
+  orange and requires the outline to carry the change (enabled edge at least
+  1.25× the disabled edge; Send note's is 1.60 against 1.10). No other ghost
+  or outline button changes only hue: every unfilled control's disabled label
+  is at most 0.69× its enabled label, except Send note (0.93, the outline
+  carries it). The rest above 0.8 are filled, where the fill shows the state.
+- **GM 2, the red.** `--sr-danger-ink` is #ff887d (hue 5°, full saturation,
+  lightness 74.5%): 8.03:1 on the selection toolbar's surface
+  (rgba(20, 20, 22, 0.94) over black), 8.75:1 on a dialog
+  (`--sr-canvas-elevated`), 9.07:1 on black. The shared grey is 6.19:1 on
+  the toolbar and 6.26:1 on a dialog, so enabled is 1.30× the grey. Hover is
+  #ff9a91 (same hue, L 78%): a brighter label, 7.86:1 against its own red
+  tint. Drawn live: 8.01, 7.85 and 6.20. The dialog's destructive label uses
+  the same token. #ffa395 (hue 8°, 9.7:1) is gone. The ratchet's
+  "clearly dimmer" floor goes from 1.5× to 1.25× (GM: about 8:1 against
+  6.2:1 is clearly above). It also checks the red's hue (6° or less), its
+  ratio on the toolbar (7.8 to 8.5) and that hover is brighter.
+- **GM 5, kept notices.** The note shows its own line breaks
+  (`white-space: pre-line`), clamped to 2 lines. Runs of blank lines (and
+  lines of only spaces) fold to one break for display (`keptNoteDisplay`), so
+  the two lines show text. Copy note copies the note whole.
+- **LOW-1, the stack.** The newest two show. "Show 7 more" (the real count,
+  sentence case, no period, GM's answer) sits above them and opens the whole
+  list. The list scrolls inside `min(40vh, 360px)`, opens on the newest, and
+  each note keeps Copy note and ×. "Show fewer" closes it. The list closes
+  itself once nothing is hidden, so a new note starts collapsed. Live with
+  nine notes: collapsed top 523 (1280) and 623 (1440); open top 369 and 429.
+  The project bar ends at 64 and the selection toolbar at 142.
+- **LOW-2, mask stroke.** `onPointerMove` asks `canvasLockNow()`. A locked
+  move ends the stroke and releases capture, and an effect ends it when the
+  lock renders. Live: 6,024 painted pixels at the lock, still 6,024 after
+  twelve more moves and the release, at 1280 and 1440.
+- **LOW-3, swatches.** Cinema's palette inputs and the Inspector's palette
+  colours keep their hue (GM's answer: the colour is the content). Locked,
+  they get the rest of the image-only look: 0.45, the disabled edge, no
+  filter, the default cursor, no hover change. Clicks were already inert
+  (`disabled`). Variations stay greyscale. Live: following and offline in
+  Cinema, offline in the Inspector, hover identical, and a click changes
+  nothing.
+- **LOW-4, the lock check (G).**
+  - `aria-disabled` counts only with the handler's own refusal
+    (`refuseCanvasEdit`, or `canvasLockNow()` in a gesture's move).
+  - `readOnly` counts only on a textarea or a text-like input.
+  - `disabled` counts only where it disables: a native control, a fieldset,
+    or a component.
+  - A fieldset covers only native controls outside its first `<legend>`.
+  - A trusted parent prop (`disabled`, `readOnly`, `locked`, `props.locked`,
+    `lock`) must really be a parameter, never a global.
+  - `disable[A-Z]…` no longer counts.
+  - A component or a non-control passes on a refusal only when every handler
+    that reaches a gated action refuses on its own.
+  - CommandPalette's two tag-wide entries are now `CONTROL_AT` entries, one
+    per control, matched by a snippet of the control's own tag. A new palette
+    button fails.
+  - Review 4's corpus is caught: 15 forms, including a spread
+    `aria-disabled`, a `<div disabled>` and a global `lock`. Seven locked
+    forms stay quiet.
+  - The tighter check found three real gaps, all fixed in code rather than
+    allowlisted:
+    - NodeLibrary's click refused only offline; it refuses while following
+      too.
+    - The Remotion timeline's drag ends wrote while locked (`disableDrag`
+      was trusted by its name); each now refuses.
+    - The Remotion selection box kept moving a layer mid-gesture after the
+      lock started (LOW-2's twin); its move now ends the drag.
+    - `SpatialAxisInput` takes `disabled`, which the properties panel passes
+      along with its fieldset.
+- **Nits.**
+  - N-3: the store keeps one blank line of a run (`clean_text`), so agents
+    see `a\n\nb`, not 278 lines.
+  - N-4: the channel indents each later line of a pin two spaces (as the CLI
+    does). A typed `‹/pin›` followed by "Nebula: …" can't start a line of
+    the push. MCP-SETUP.md says so.
+  - N-5: a kept note names its project as it is called now (from the project
+    list); a deleted project keeps the name it had.
+  - N-6: leaving the project a send failed on clears its error, so it never
+    comes back later; the note waits there as its draft.
+  - N-7: the Projects cover picker's image buttons get the image-only look
+    while busy (greyscale 0.45; the edge stays transparent, since it is
+    transparent at rest; the pinned one keeps a grey mark).
+
+### Left
+
+- N-1 (the presence chip's one-frame lag on Projects home): left. The chip
+  is fixed and placed from script, so a compositor scroll always moves the
+  header a frame before the chip. Placing on the scroll event instead of a
+  frame later changes nothing measurable: the review's sampler reads before
+  the scroll event fires either way. The real fix is to render the chip
+  inside the header slot, which moves its card and list placement too. That
+  is a separate change (offered).
+- N-2 (a pin card under the Inspector) predates this PR (the card's layering
+  is unchanged since 53e976c1). Issue draft: scratchpad
+  msgs/issue-pin-card-under-inspector.md.
+
+### Surprises
+
+- The tighter G found SelectionBox's mid-gesture write, the same bug as
+  LOW-2 in another editor.
+- PinComposer now reads project names, so its test's wsClient mock needed
+  `connect` (projectStore loads graphStore).
+
+### Fix round 4 gates
+
+- tsc -b: clean. Lint (eslint plus the inline-style and Slava scope guards):
+  clean.
+- Focused frontend: 540 of 540 in 41 files. This covers the PR's own files,
+  every suite that renders PinComposer, the video-editor files and the new
+  r4 file. errorCopy: 445 of 445 in 19 files.
+- The new r4 tests fail on the old code: 8 of 13 fail with PinComposer and
+  MaskPainterModal reverted.
+- Backend (iso_presence.sh): 459 passed across the pin, channel,
+  agent_start, round22/23 and CLI suites.
+- vite build plus check-build-budget: 408,568 B raw and 124,024 B gzip
+  (limit 512,000).
+- Live (backend 8795, Vite 5795 with VITE_NEBULA_BACKEND_PORT=8795, real
+  mouse and keyboard, nothing paid): every check passed across the final
+  runs (Send note, Delete, kept, swatches, Inspector, mask). The first run's
+  kept and Cinema misses were harness errors (the stack state carried over
+  between widths; a stale selection). Blocked requests: 2 per run, both
+  canaries; none toward 8000-8010 or 5173.

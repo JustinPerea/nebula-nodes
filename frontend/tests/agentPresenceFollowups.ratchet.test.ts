@@ -229,6 +229,19 @@ function isReference(id: ts.Identifier): boolean {
   return true;
 }
 
+/** Fix round 4 of PR #200 (review 4 LOW-4, "trust by name"): a name a
+ * parent hands down is trusted only when it really is a parameter of a
+ * function around it (`({ disabled }) => …`, `(props) => … props.locked`),
+ * never a global or an undeclared name that happens to be called that. */
+function boundByParam(id: ts.Identifier): boolean {
+  const names = (name: ts.BindingName): string[] => ts.isIdentifier(name) ? [name.text]
+    : name.elements.flatMap((element) => ts.isOmittedExpression(element) ? [] : names(element.name));
+  for (let up: ts.Node | undefined = id.parent; up; up = up.parent) {
+    if (ts.isFunctionLike(up) && up.parameters.some((parameter) => names(parameter.name).includes(id.text))) return true;
+  }
+  return false;
+}
+
 /** The exported function `name` of a module, as a node to follow, with the
  * module it is in: a function, or an object of methods (`runner.go()`); a
  * store (`create(…)`) is reached by its members already. Fix round 3 of PR
@@ -318,10 +331,11 @@ function isLockValue(expression: ts.Node, scope: Scope, seen: Set<string> = new 
   if (ts.isParenthesizedExpression(expression) || ts.isNonNullExpression(expression)) return isLockValue(expression.expression, scope, seen);
   if (ts.isCallExpression(expression)) return ts.isIdentifier(expression.expression) && LOCK_FACTORIES.has(expression.expression.text);
   if (ts.isPropertyAccessExpression(expression)) return LOCK_PROPS.test(expression.name.text) && !LOCK_MEMBERS.has(expression.name.text)
-    || (LOCK_PROPS.test(expression.name.text) && /^props$/.test(expression.expression.getText(scope.root)));
+    && ts.isIdentifier(expression.expression) && (isLockValue(expression.expression, scope, seen)
+      || (/^props$/.test(expression.expression.text) && boundByParam(expression.expression)));
   if (!ts.isIdentifier(expression)) return false;
   const definitions = scope.locals.get(expression.text);
-  if (!definitions) return LOCK_PROPS.test(expression.text) && !scope.imports.has(expression.text);
+  if (!definitions) return LOCK_PROPS.test(expression.text) && !scope.imports.has(expression.text) && boundByParam(expression);
   const key = expression.text;
   if (seen.has(key)) return false;
   seen.add(key);
@@ -398,12 +412,13 @@ function lockCoverage(expression: ts.Node, scope: Scope, seen: Set<string> = new
   if (ts.isPropertyAccessExpression(expression)) {
     const name = expression.name.text;
     if (LOCK_STATES[name] && isLockValue(expression.expression, scope)) return LOCK_STATES[name];
-    return DISABLED_PROPS.test(name) && /^props$/.test(expression.expression.getText(scope.root)) ? LOCKED : 0;
+    return DISABLED_PROPS.test(name) && ts.isIdentifier(expression.expression) && /^props$/.test(expression.expression.text)
+      && boundByParam(expression.expression) ? LOCKED : 0;
   }
   if (!ts.isIdentifier(expression)) return 0;
   const key = expression.text;
   const definitions = scope.locals.get(key);
-  if (!definitions) return DISABLED_PROPS.test(key) && !scope.imports.has(key) ? LOCKED : 0;
+  if (!definitions) return DISABLED_PROPS.test(key) && !scope.imports.has(key) && boundByParam(expression) ? LOCKED : 0;
   if (seen.has(key)) return 0;
   seen.add(key);
   return definitions.reduce((mask, definition) => {
@@ -446,7 +461,8 @@ function spreadCoverage(expression: ts.Node, scope: Scope, component: boolean, s
       if (ts.isSpreadAssignment(property)) return mask | spreadCoverage(property.expression, scope, component, seen);
       if (!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property)) return mask;
       const name = property.name.getText(scope.root).replace(/^['"]|['"]$/g, '');
-      if (!/^(disabled|aria-disabled|readOnly)$/.test(name)) return mask;
+      // aria-disabled blocks no click: ariaCoverage reads it (review 4 LOW-4).
+      if (!/^(disabled|readOnly)$/.test(name)) return mask;
       return mask | lockCoverage(ts.isPropertyAssignment(property) ? property.initializer : property.name, scope);
     }, 0);
   }
@@ -465,19 +481,79 @@ function spreadCoverage(expression: ts.Node, scope: Scope, component: boolean, s
  * attribute that only mentions the lock (`className`, `title`, `aria-label`,
  * `data-*`, `key`, `disabled={!lock.locked}`) puts it in none (review 3
  * LOW-6). */
-function lockAttribute(attribute: ts.JsxAttributeLike, scope: Scope, tag = ''): number {
+/** Input types readOnly applies to (HTML: text-like and date/number
+ * fields); a checkbox, radio, range, colour or file input ignores it (review
+ * 4 LOW-4). No `type` is text. */
+const READONLY_TYPES = new Set(['text', 'search', 'url', 'tel', 'email', 'password', 'number', 'date', 'month', 'week', 'time', 'datetime-local']);
+function inputType(attributes: ts.NodeArray<ts.JsxAttributeLike> | undefined, scope: Scope): string | null {
+  const type = attributes?.find((attribute) => ts.isJsxAttribute(attribute) && attribute.name.getText(scope.root) === 'type') as ts.JsxAttribute | undefined;
+  if (!type) return 'text';
+  const value = type.initializer;
+  if (value && ts.isStringLiteral(value)) return value.text;
+  if (value && ts.isJsxExpression(value) && value.expression && ts.isStringLiteralLike(value.expression)) return value.expression.text;
+  return null; // dynamic: not known to be text-like
+}
+
+/** Which locked states an attribute puts the control in (fix round 4 of PR
+ * #200, review 4 LOW-4, tightened): `disabled` only where it disables (a
+ * native control, a fieldset, or a component that takes it), `readOnly` only
+ * on a textarea or a text-like input, a component's `lock`, `locked` or
+ * `disabled` (never another `disable…` name: `disableRipple`).
+ * `aria-disabled` is no lock on its own: ariaCoverage. */
+function lockAttribute(attribute: ts.JsxAttributeLike, scope: Scope, tag = '', attributes?: ts.NodeArray<ts.JsxAttributeLike>): number {
   const component = /^[A-Z]/.test(tag);
-  if (ts.isJsxSpreadAttribute(attribute)) return spreadCoverage(attribute.expression, scope, component);
+  const disables = component || CONTROL_TAGS.has(tag) || tag === 'fieldset';
+  if (ts.isJsxSpreadAttribute(attribute)) return disables ? spreadCoverage(attribute.expression, scope, component) : 0;
   const name = attribute.name.getText(scope.root);
   if (isHandlerName(name)) return 0;
   const value = attribute.initializer;
   if (!value || !ts.isJsxExpression(value) || !value.expression) return 0;
-  if (name === 'disabled' || name === 'aria-disabled') return lockCoverage(value.expression, scope);
-  if (name === 'readOnly' && (component || tag === 'input' || tag === 'textarea')) return lockCoverage(value.expression, scope);
+  if (name === 'disabled') return disables ? lockCoverage(value.expression, scope) : 0;
+  if (name === 'readOnly' && (component || tag === 'textarea'
+    || (tag === 'input' && READONLY_TYPES.has(inputType(attributes, scope) ?? '')))) return lockCoverage(value.expression, scope);
   if (component && /^(lock|canvasLock)$/.test(name)) return isLockValue(value.expression, scope) ? LOCKED : 0;
-  if (component && (name === 'locked' || /^disable[A-Z]/.test(name))) return lockCoverage(value.expression, scope);
+  if (component && name === 'locked') return lockCoverage(value.expression, scope);
   return 0;
 }
+
+/** The states `aria-disabled` (an attribute, or a key of a spread object)
+ * marks: it blocks no click, so it counts only with a refuse in the handler
+ * (refuseCoverage), as Toolbar's Run pairs it with refuseEditWhileFollowing. */
+function ariaCoverage(attributes: ts.NodeArray<ts.JsxAttributeLike>, scope: Scope): number {
+  const fromObject = (expression: ts.Node, seen: Set<string>): number => {
+    if (ts.isParenthesizedExpression(expression)) return fromObject(expression.expression, seen);
+    if (ts.isObjectLiteralExpression(expression)) {
+      return expression.properties.reduce((mask, property) => {
+        if (ts.isSpreadAssignment(property)) return mask | fromObject(property.expression, seen);
+        if (!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property)) return mask;
+        if (property.name.getText(scope.root).replace(/^['"]|['"]$/g, '') !== 'aria-disabled') return mask;
+        return mask | lockCoverage(ts.isPropertyAssignment(property) ? property.initializer : property.name, scope);
+      }, 0);
+    }
+    if (!ts.isIdentifier(expression) || seen.has(expression.text)) return 0;
+    seen.add(expression.text);
+    return (scope.locals.get(expression.text) ?? []).reduce((mask, definition) =>
+      mask | (ts.isBindingElement(definition) ? 0 : fromObject(definition, seen)), 0);
+  };
+  return attributes.reduce((mask, attribute) => {
+    if (ts.isJsxSpreadAttribute(attribute)) return mask | fromObject(attribute.expression, new Set());
+    if (attribute.name.getText(scope.root) !== 'aria-disabled') return mask;
+    const value = attribute.initializer;
+    return value && ts.isJsxExpression(value) && value.expression ? mask | lockCoverage(value.expression, scope) : mask;
+  }, 0);
+}
+
+/** The states a handler's own refusal covers: a refuse, or a gesture's
+ * move that stops on `canvasLockNow().locked` (the mask painter, the
+ * Remotion selection box: no pulse on every move). */
+function refuseCoverage(reached: Set<string>): number {
+  return (reached.has('refuseCanvasEdit') || reached.has('canvasLockNow') ? LOCKED : 0) | (reached.has('refuseEditWhileFollowing') ? FOLLOWING : 0)
+    | (reached.has('refuseEditWhileOffline') ? OFFLINE : 0);
+}
+
+/** Opening-element text of each finding, for CONTROL_AT (an allowlist entry
+ * for one control, never every control of its tag; review 4 LOW-4). */
+const findingElement = new Map<string, string>();
 
 /** An attribute that hands a component (or a control) a callback without
  * `on`: `action={() => run()}`, `items={[{ select: () => run() }]}`, or a
@@ -521,22 +597,38 @@ function unlockedControls(source: string, file: string, resolve?: Resolve): stri
         && (isHandlerName(attribute.name.getText(root)) || handsCallback(attribute, scope)))
         || (ts.isJsxSpreadAttribute(attribute) && !isActSpread(attribute.expression, scope)));
       const reached = new Set<string>();
-      for (const handler of handlers) for (const name of reachOf(handler, scope, resolve, new Set(), 0, ownNames)) reached.add(name);
+      // Each handler that reaches a gated action, and whether it refuses
+      // while locked itself (refuseCanvasEdit), for a component or a
+      // non-control that can't be disabled (review 4 LOW-4: XzdarcyTimeline's
+      // drag ends; `disableDrag` was trusted by its name).
+      let everyGatedRefuses = true;
+      for (const handler of handlers) {
+        const reach = reachOf(handler, scope, resolve, new Set(), 0, ownNames);
+        for (const name of reach) reached.add(name);
+        if ([...reach].some((name) => GATED.has(name)) && refuseCoverage(reach) !== LOCKED) everyGatedRefuses = false;
+      }
       const hits = [...reached].filter((name) => GATED.has(name));
       if (hits.length > 0) {
         // Its own attributes and a disabled <fieldset> around it, together
         // (only a fieldset disables what it holds; review 3 LOW-6: a <div
         // title={lock.title()}> around a button disables nothing).
-        let covered = attributes.reduce((mask, attribute) => mask | lockAttribute(attribute, scope, tag), 0);
-        for (let up: ts.Node | undefined = node.parent; up && covered !== LOCKED; up = up.parent) {
+        let covered = attributes.reduce((mask, attribute) => mask | lockAttribute(attribute, scope, tag, attributes), 0);
+        // aria-disabled with the handler's own refusal (review 4 LOW-4).
+        covered |= ariaCoverage(attributes, scope) & refuseCoverage(reached);
+        // A disabled fieldset disables the form controls it holds, except
+        // those in its first <legend> (HTML), never a <div onClick> or an <a>.
+        for (let up: ts.Node | undefined = node.parent, child: ts.Node = node; up && covered !== LOCKED && CONTROL_TAGS.has(tag); child = up, up = up.parent) {
           if (ts.isJsxElement(up) && up.openingElement !== node && up.openingElement.tagName.getText(root) === 'fieldset') {
+            const firstLegend = up.children.find((item) => ts.isJsxElement(item) || ts.isJsxSelfClosingElement(item));
+            const legend = firstLegend && ts.isJsxElement(firstLegend) && firstLegend.openingElement.tagName.getText(root) === 'legend' ? firstLegend : null;
+            if (legend && child === legend) continue;
             for (const attribute of up.openingElement.attributes.properties) {
               if (ts.isJsxAttribute(attribute) && attribute.name.getText(root) === 'disabled') covered |= lockAttribute(attribute, scope, 'fieldset');
             }
           }
         }
         const own = covered === LOCKED;
-        const refusesInHandler = !CONTROL_TAGS.has(tag) && /^[a-z]/.test(tag) && (reached.has('refuseCanvasEdit') || reached.has('refuseEditWhileFollowing'));
+        const refusesInHandler = !CONTROL_TAGS.has(tag) && everyGatedRefuses;
         if (!own && !refusesInHandler) {
           const { line } = root.getLineAndCharacterOfPosition(node.getStart(root));
           // A component: the file it comes from, so a locked component is
@@ -544,7 +636,9 @@ function unlockedControls(source: string, file: string, resolve?: Resolve): stri
           const head = tag.split('.')[0];
           const from = !/^[A-Z]/.test(tag) ? null : scope.locals.has(head) ? file
             : scope.imports.get(head) && resolve ? resolve(scope.imports.get(head)!.specifier, file)?.file ?? null : null;
-          found.push(`${file}:${line + 1} <${tag}> ${hits.sort().join(', ')}${from ? ` [${from}]` : ''}`);
+          const finding = `${file}:${line + 1} <${tag}> ${hits.sort().join(', ')}${from ? ` [${from}]` : ''}`;
+          findingElement.set(finding, node.getText(root).replace(/\s+/g, ' '));
+          found.push(finding);
         }
       }
     }
@@ -569,16 +663,24 @@ const resolveSource: Resolve = (specifier, fromFile) => {
  * reason): `file <tag>` for one control, `file: action` for every control of
  * the file that reaches that action only that way. */
 const CONTROL_ALLOWLIST: Record<string, string> = {
-  'components/CommandPalette.tsx <input>': "the palette's search field: Enter runs the chosen command, and each command that edits is locked in buildCommands (round23Surfaces' CommandPalette)",
   'components/panels/ChatPanel.tsx: clearBackendNodes': "the chat's /clear (lib/chatCanvasClear, one level in): the chat itself stays usable while following or offline, and /clear is refused whole with refuseCanvasEdit before it clears (agentPresenceFollowups.surfaces)",
   'components/panels/AssetsPanel.tsx: undo': "`deleting.undo()` is the asset library's own undo of a deleted style (useAssetDelete), not the canvas's",
   // Fix round 3 of PR #200 (review 3 LOW-6): the forms G reads now (a
   // spread's handlers, `disabled` that must be truthy when locked) find these.
-  'components/CommandPalette.tsx <button>': "a palette row: a command that edits (`cmd.acts`) spreads lock.act() and takes its `disabled` (`act ? act.disabled : …`, which G can't follow); round23Surfaces' CommandPalette renders them locked",
   'components/Canvas.tsx <ReactFlow>': "React Flow's change, connect and paste handlers: the store's edit gate (EDIT_GATES) refuses each while following or offline, and the canvas is read-only (data-read-only, nodesDraggable/nodesConnectable off); round20/round23 tests",
   'components/cinema-studio/CinemaShotPanel.tsx: addLocalCinemaMotionNode': "Send to motion: disabled while locked (`… || readOnly` under the not-ready branch; ready, it only views the node it made); agentPresenceFollowups.r1 renders it locked offline",
   'components/create-studio/CreateView.tsx <ResultsGallery>': "its Delete is ResultCard's button, which spreads lock.act() (ResultCard.tsx)",
 };
+
+/** One control each, found by a snippet of its own opening tag (fix round 4
+ * of PR #200, review 4 LOW-4: the palette's entries were tag-wide, so any new
+ * palette button reaching a gated action passed unseen). */
+const CONTROL_AT: Array<{ file: string; tag: string; at: string; reason: string }> = [
+  { file: 'components/CommandPalette.tsx', tag: 'input', at: 'className="command-palette__input"',
+    reason: "the palette's search field: Enter runs the chosen command through run(), which refuses an acting command with refuseCanvasEdit (round23Surfaces' CommandPalette)" },
+  { file: 'components/CommandPalette.tsx', tag: 'button', at: 'onClick={() => run(cmd)} {...(act ?? {})} disabled={disabled}',
+    reason: "a palette row: a command that edits (`cmd.acts`) spreads lock.act() and takes its `disabled` (`act ? act.disabled : …`, which G can't follow), and run() refuses it with refuseCanvasEdit; round23Surfaces' CommandPalette renders them locked" },
+];
 
 /** Components that take the lock themselves for the gated handler they are
  * given (a menu's rows, a modal's Save): the call site needs no lock. Each
@@ -604,6 +706,8 @@ const allowed = (line: string) => {
   if (!match) return false;
   const [, file, tag, hits, from] = match;
   if (CONTROL_ALLOWLIST[`${file} <${tag}>`]) return true;
+  const element = findingElement.get(line) ?? '';
+  if (CONTROL_AT.some((entry) => entry.file === file && entry.tag === tag && element.includes(entry.at))) return true;
   const locked = LOCKED_COMPONENTS[tag];
   if (locked && from && [locked.file, ...(locked.via ?? [])].includes(from)
     && READS_LOCK.test(readFileSync(join(SRC, locked.file), 'utf8'))) return true;
@@ -713,7 +817,8 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
       local_readonly: 'const readOnly = lock.locked;\nexport const A = () => <button disabled={readOnly} onClick={() => run()}>Run</button>;',
       memo_locked: 'const off = useMemo(() => lock.locked, [lock]);\nexport const A = () => <button disabled={off} onClick={() => run()}>Run</button>;',
       act_via_local: 'const acts = lock.act();\nexport const A = () => <button {...acts} onClick={() => run()}>Run</button>;',
-      aria_disabled: 'export const A = () => <div role="button" aria-disabled={lock.locked || undefined} onClick={() => run()} />;',
+      // Review 4 LOW-4: aria-disabled counts with the handler's own refusal.
+      aria_disabled_refused: 'export const A = () => <div role="button" aria-disabled={lock.locked || undefined} onClick={() => { if (refuseCanvasEdit()) return; run(); }} />;',
       destructured_locked: 'const { locked } = lock;\nexport const A = () => <button disabled={locked} onClick={() => run()}>Run</button>;',
       locked_fieldset: 'export const A = () => <fieldset disabled={busy || lock.locked}><button onClick={() => run()}>Run</button></fieldset>;',
       render_prop_row_locked: 'export const A = () => <List render={() => <button {...lock.act()} onClick={() => run()}>Run</button>} />;',
@@ -721,6 +826,53 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
     const loud = Object.entries(quiet).filter(([form, body]) => unlockedControls(head + body, `components/${form}.tsx`, resolve).length !== 0)
       .map(([form]) => form);
     expect(loud, 'locked or harmless controls G flags').toEqual([]);
+  });
+
+  // Fix round 4 of PR #200: review 4's G corpus (r4/fe/ratchet4.probe.test.ts,
+  // ratchet4.facts.json "forms"): the forms that don't really disable.
+  it('G corpus (review 4, LOW-4): aria-disabled alone, readOnly where it does nothing, a fieldset that disables nothing, trust by name', () => {
+    const head = 'const lock = useCanvasLock();\nconst run = useGraphStore((s) => s.executeGraph);\n';
+    const forms: Record<string, string> = {
+      aria_disabled_native_button: 'export const A = () => <button aria-disabled={lock.locked} onClick={() => run()}>Run</button>;',
+      aria_disabled_div_no_refuse: 'export const A = () => <div role="button" aria-disabled={lock.locked || undefined} onClick={() => run()} />;',
+      aria_disabled_spread: "export const A = () => <button {...{ 'aria-disabled': lock.locked }} onClick={() => run()}>Run</button>;",
+      aria_disabled_following_refuse_only: 'export const A = () => <button aria-disabled={lock.locked} onClick={() => { if (refuseEditWhileFollowing()) return; run(); }}>Run</button>;',
+      readonly_checkbox: 'export const A = () => <input type="checkbox" readOnly={lock.locked} onChange={() => run()} />;',
+      readonly_range: 'export const A = () => <input type="range" readOnly={lock.locked} onChange={() => run()} />;',
+      readonly_color: 'export const A = () => <input type="color" readOnly={lock.locked} onChange={() => run()} />;',
+      fieldset_div_onclick: 'export const A = () => <fieldset disabled={lock.locked}><div onClick={() => run()}>Run</div></fieldset>;',
+      fieldset_anchor: 'export const A = () => <fieldset disabled={lock.locked}><a href="#" onClick={() => run()}>Run</a></fieldset>;',
+      fieldset_legend_button: 'export const A = () => <fieldset disabled={lock.locked}><legend><button onClick={() => run()}>Run</button></legend></fieldset>;',
+      div_disabled: 'export const A = () => <div disabled={lock.locked} onClick={() => run()}>Run</div>;',
+      global_named_disabled: 'export const A = () => <button disabled={disabled} onClick={() => run()}>Run</button>;',
+      any_name_locked: 'export const A = () => <button disabled={props.locked} onClick={() => run()}>Run</button>;',
+      global_named_lock: 'export const A = () => <button {...locked.act()} onClick={() => run()}>Run</button>;',
+      component_disable_prop_ignored: 'export const A = () => <Fancy disableRipple={lock.locked} onClick={() => run()} />;',
+    };
+    const missed = Object.entries(forms).filter(([form, body]) => unlockedControls(head + body, `components/${form}.tsx`).length !== 1)
+      .map(([form]) => form);
+    expect(missed, 'forms G lets through').toEqual([]);
+    const quiet: Record<string, string> = {
+      aria_disabled_refused: 'export const A = () => <button aria-disabled={lock.locked} onClick={() => { if (refuseCanvasEdit()) return; run(); }}>Run</button>;',
+      readonly_text: 'export const A = () => <input readOnly={lock.locked} onChange={() => run()} />;',
+      readonly_text_typed: 'export const A = () => <input type="search" readOnly={lock.locked} onChange={() => run()} />;',
+      readonly_textarea: 'export const A = () => <textarea readOnly={lock.locked} onChange={() => run()} />;',
+      fieldset_after_legend: 'export const A = () => <fieldset disabled={lock.locked}><legend>Run</legend><button onClick={() => run()}>Run</button></fieldset>;',
+      props_param_locked: 'export const A = (props: { locked: boolean }) => <button disabled={props.locked} onClick={() => run()}>Run</button>;',
+      component_disabled: 'export const A = () => <Fancy disabled={lock.locked} onClick={() => run()} />;',
+    };
+    const loud = Object.entries(quiet).filter(([form, body]) => unlockedControls(head + body, `components/${form}.tsx`).length !== 0)
+      .map(([form]) => form);
+    expect(loud, 'locked controls G flags').toEqual([]);
+  });
+
+  it('the palette is allowlisted control by control, never tag-wide (review 4 LOW-4)', () => {
+    expect(Object.keys(CONTROL_ALLOWLIST).filter((key) => key.startsWith('components/CommandPalette.tsx'))).toEqual([]);
+    const source = readFileSync(join(SRC, 'components/CommandPalette.tsx'), 'utf8');
+    const extra = source.replace('</ModalPortal>', '<button type="button" onClick={() => run(flat[0])}>Run first</button></ModalPortal>');
+    const lines = unlockedControls(extra, 'components/CommandPalette.tsx', resolveSource);
+    expect(lines.filter((line) => !allowed(line)), 'a new palette button reaching a gated action').toHaveLength(1);
+    for (const entry of CONTROL_AT) expect(entry.reason.trim()).not.toBe('');
   });
 
   it('a locked component is known by the file it comes from, never its name (review 3 LOW-6)', () => {
@@ -1230,26 +1382,36 @@ describe('GM r24 item 2 and PR #200 answer 6: a disabled button is neutral grey 
 
   // Fix round 3 of PR #200 (review 3 N-5 and LOW-2): "clearly dimmer" is a
   // floor, and modifiers count; the toolbar's red Delete was 6.9:1 → 6.3:1.
-  it('N-5: an unfilled control\'s enabled label is at least 1.5× the grey; the red Delete is measured and clears it', () => {
+  // Fix round 4 (GM round 5 answer 2): the floor is 1.25×, the red about 8:1.
+  it('N-5: an unfilled control\'s enabled label is at least 1.25× the grey; the red Delete is measured and clears it', () => {
     const report = disabledLooks();
     const danger = report.find((row) => row.className === 'selection-toolbar__button--danger');
     expect(danger, 'the modifier is measured').toBeDefined();
     expect(danger!.disabled.label).toBeLessThanOrEqual(CLEARLY_DIMMER * danger!.enabled.label);
-    expect(report.find((row) => row.className === 'prompt-dialog__destructive')!.enabled.label).toBeGreaterThanOrEqual(danger!.disabled.label * 1.5);
-    // On the toolbar's own surface, not black: the live check drew #ff968a at
-    // 8.8:1 against the grey's 6.2:1 there (0.70, over the floor).
+    expect(report.find((row) => row.className === 'prompt-dialog__destructive')!.enabled.label).toBeGreaterThanOrEqual(danger!.disabled.label / CLEARLY_DIMMER);
+    // On the toolbar's own surface, not black (fix round 3: the live check
+    // drew #ff968a at 8.8:1 against the grey's 6.2:1 there).
     const toolbar = cssRules(readFileSync(join(SRC, 'styles/canvas.css'), 'utf8')).find((rule) => rule.selector.trim() === '.selection-toolbar');
     const surface = over(parseColor(/background:\s*([^;]+)/.exec(toolbar!.body)![1])!, CANVAS);
     const red = parseColor(resolveFill('var(--sr-danger-ink)', fillTokens()))!;
     const grey = parseColor(resolveFill('var(--sr-disabled-ink)', fillTokens()))!;
     expect(contrast(over(grey, surface), surface)).toBeLessThanOrEqual(CLEARLY_DIMMER * contrast(over(red, surface), surface));
-    for (const [name, reason] of Object.entries(HUE_ONLY_ASKED)) expect(reason.trim(), name).not.toBe('');
+    for (const [name, reason] of Object.entries(ACCENT_GHOSTS)) expect(reason.trim(), name).not.toBe('');
+    // GM round 5 answer 2: a true red (hue about 5°, never the salmon
+    // #ffa395 at 8°), about 8:1 on the toolbar, the hover brighter.
+    const hue = ({ r, g, b }: Rgba) => { const max = Math.max(r, g, b); const min = Math.min(r, g, b); return max === r ? 60 * (((g - b) / (max - min)) % 6) : NaN; };
+    expect(hue(red)).toBeLessThanOrEqual(6);
+    expect(contrast(over(red, surface), surface)).toBeGreaterThanOrEqual(7.8);
+    expect(contrast(over(red, surface), surface)).toBeLessThanOrEqual(8.5);
+    const hover = parseColor(resolveFill('var(--sr-danger-ink-hover)', fillTokens()))!;
+    expect(luminance(hover)).toBeGreaterThan(luminance(red));
+    expect(hue(hover)).toBeLessThanOrEqual(6);
   });
 
   it('M-3: no-label buttons have a disabled look of their own; the selected one keeps a grey mark', () => {
     const shared = cssRules(readFileSync(join(SRC, SHARED), 'utf8'));
     for (const [name, { image, selected }] of Object.entries(NO_LABEL)) {
-      const own = shared.filter(({ selector }) => new RegExp(`\\.${name}\\)?:is\\(:disabled`).test(selector));
+      const own = shared.filter(({ selector }) => /^:is\([^)]*\):is\(:disabled/.test(selector) && new RegExp(`\\.${name}(?:\\s[^,)]*)?[,)]`).test(selector.slice(0, selector.indexOf('):is(:disabled') + 1)));
       expect(own.length, `${name}: a disabled rule`).toBeGreaterThan(0);
       // Never a fill brighter than its resting look, and the edge no brighter than enabled.
       for (const { body } of own) expect(body, name).not.toMatch(/background:\s*var\(--sr-disabled-fill/);
@@ -1259,10 +1421,29 @@ describe('GM r24 item 2 and PR #200 answer 6: a disabled button is neutral grey 
         expect(Number(/opacity:\s*([\d.]+)/.exec(img!.body)?.[1])).toBeLessThanOrEqual(0.55);
         expect(img!.body).toMatch(/filter:\s*grayscale\(1\)/);
       }
-      const mark = shared.find(({ selector }) => selected.test(selector) && /:disabled/.test(selector));
-      expect(mark, `${name}: the selected one keeps a mark`).toBeDefined();
-      expect(mark!.body).toMatch(/border-color:\s*var\(--sr-disabled-ink/);
+      if (selected) {
+        const mark = shared.find(({ selector }) => selected.test(selector) && /:disabled/.test(selector));
+        expect(mark, `${name}: the selected one keeps a mark`).toBeDefined();
+        expect(mark!.body).toMatch(/border-color:\s*var\(--sr-disabled-ink/);
+      }
     }
+  });
+
+  // Fix round 4 of PR #200 (review 4 LOW-3, GM round 5 answer 1): a locked
+  // colour swatch keeps its hue, dims to 0.45 with the disabled edge, and
+  // never changes on hover; a variation (the image is the button) greys.
+  it('LOW-3: locked colour swatches dim to 0.45 with the grey edge and keep their hue; variations stay greyscale', () => {
+    const shared = cssRules(readFileSync(join(SRC, SHARED), 'utf8'));
+    for (const name of Object.keys(NO_LABEL).filter((key) => NO_LABEL[key].swatch)) {
+      const rule = shared.find(({ selector }) => new RegExp(`\\.${name}(?![\\w-])`).test(selector) && /:disabled/.test(selector) && /:hover/.test(selector));
+      expect(rule, `${name}: one rule, its hover included`).toBeDefined();
+      expect(rule!.body).toMatch(/opacity:\s*0\.45\s*!important/);
+      expect(rule!.body).toMatch(/border-color:\s*var\(--sr-disabled-edge/);
+      expect(rule!.body).toMatch(/filter:\s*none\s*!important/);
+      expect(rule!.body).not.toMatch(/grayscale/);
+    }
+    const variation = shared.find(({ selector }) => selector.includes('.cinema-shot-panel__variation') && /\simg$/.test(selector.trim()));
+    expect(variation!.body).toMatch(/grayscale\(1\)/);
   });
 
   it('M-1: the disabled outline is the plain edge (0.06), never the brighter 0.12; M-3: a disabled toast action never changes on hover', () => {
@@ -1361,22 +1542,35 @@ function restingLook(className: string, tokens: Map<string, string>): { color?: 
  * same disabled). Each is checked for a disabled look of its own below
  * (noLabelLooks): an image dims (opacity at most the shared grey's 0.55,
  * greyscale), a cell stays unfilled; the selected one keeps a grey mark. */
-const NO_LABEL: Record<string, { image: boolean; selected: RegExp }> = {
+const NO_LABEL: Record<string, { image: boolean; selected: RegExp | null; swatch?: boolean; edgeKept?: boolean }> = {
   'cinema-shot-panel__variation': { image: true, selected: /\.cinema-shot-panel__variation--active/ },
   'remotion-properties-panel__anchor-button': { image: false, selected: /\.remotion-properties-panel__anchor-button\[data-active='true'\]/ },
+  // Fix round 4 (review 4 N-7): the Projects cover picker, disabled while busy.
+  // Its edge is transparent at rest and stays so disabled.
+  'project-home__cover-choice': { image: true, selected: /\.project-home__cover-choice\[aria-pressed='true'\]/, edgeKept: true },
+  // Fix round 4 (review 4 LOW-3; GM round 5 answer 1): colour swatches keep
+  // their hue (the colour is the content), dimmed, no selected state.
+  'cinema-shared-controls__swatch': { image: false, selected: null, swatch: true },
+  'inspector__palette-color': { image: false, selected: null, swatch: true },
 };
 /** "Clearly dimmer" (GM r1 answer 2), fix round 3 of PR #200 (review 3
- * N-5): an enabled label at least 1.5 times the disabled grey's contrast,
- * the floor review 3 suggested. The neutral controls sit near 2× (17.6:1 or
- * 12.5:1 against 6.3:1); a coloured label that greys (the toolbar's red
- * Delete) must clear it by brightness, not by its hue change alone. */
-const CLEARLY_DIMMER = 2 / 3;
-/** Unfilled controls whose coloured label only changes hue disabled, left
- * for GM (fix round 3 of PR #200): the accent is the brand orange, so
- * lightening it is GM's call. */
-const HUE_ONLY_ASKED: Record<string, string> = {
-  'prompt-dialog__confirm': 'the accent label (6.7:1) against the grey (6.3:1): GM question, round 3 of PR #200',
+ * N-5), set by GM in round 5 (answer 2): the red Delete "clearly above the
+ * disabled 6.2:1, aiming for about 8:1", so an enabled label at least 1.25
+ * times the disabled grey's contrast (8.0 against 6.2 is 1.29). The neutral
+ * controls sit near 2× (17.6:1 or 12.5:1 against 6.3:1); a coloured label
+ * that greys must clear it by brightness, not by its hue change alone. */
+const CLEARLY_DIMMER = 0.8;
+/** Ghost buttons whose label is the brand accent (GM, PR #200 round 5
+ * answer 1: "an orange label and outline, not a fill, so it follows the
+ * ghost rule"): the accent isn't lightened, and the label greys at about
+ * its luminance, so the outline carries the change: enabled it must be
+ * clearly brighter than the disabled edge (a hue-only change is invisible
+ * to colour-blind users). */
+const ACCENT_GHOSTS: Record<string, string> = {
+  'prompt-dialog__confirm': 'Send note and the other dialog confirms: the accent label (6.7:1) and outline; disabled, both go to the shared grey (GM round 5 answer 1)',
 };
+/** How much brighter an accent ghost's enabled outline is than the disabled edge. */
+const OUTLINE_DROP = 1.25;
 /** Filled buttons whose enabled label is under the grey's contrast: the fill
  * shows the state (GM r2 answer 6, "Generate shot's contrast: no change; its
  * fill shows the state"). Each still turns from its fill to the grey fill,
@@ -1428,7 +1622,7 @@ function disabledLooks() {
       const edgeColor = look.edge && look.edge !== 'none' ? parseColor(look.edge) : null;
       const enabledEdge = edgeColor ? contrast(over(edgeColor, bg), bg) : 1;
       const disabledBg = filled ? over(greyFill, CANVAS) : CANVAS;
-      const disabledEdge = !edgeColor ? 1 : filled ? 1 : contrast(over(greyEdge, CANVAS), CANVAS);
+      const disabledEdge = !edgeColor || NO_LABEL[className]?.edgeKept ? 1 : filled ? 1 : contrast(over(greyEdge, CANVAS), CANVAS);
       const enabledLabel = label ? contrast(over(label, bg), bg) : 0;
       const disabledLabel = contrast(over(ink, disabledBg), disabledBg);
       let problem: string | null = null;
@@ -1443,7 +1637,9 @@ function disabledLooks() {
           else if (disabledLabel < enabledLabel) problem = 'its label is brighter than the grey: drop it from FILL_SHOWS_STATE';
         } else if (disabledLabel >= enabledLabel) {
           problem = `disabled label ${disabledLabel.toFixed(2)}:1 is not dimmer than enabled ${enabledLabel.toFixed(2)}:1`;
-        } else if (!filled && !HUE_ONLY_ASKED[className] && disabledLabel > CLEARLY_DIMMER * enabledLabel) {
+        } else if (!filled && ACCENT_GHOSTS[className]) {
+          if (enabledEdge < OUTLINE_DROP * disabledEdge) problem = `an accent ghost: its outline ${enabledEdge.toFixed(2)}:1 is not clearly brighter than the disabled edge ${disabledEdge.toFixed(2)}:1, so only the hue changes`;
+        } else if (!filled && disabledLabel > CLEARLY_DIMMER * enabledLabel) {
           // A filled button shows its state in the fill (GM r4 answer 3);
           // an unfilled one only by its label.
           problem = `disabled label ${disabledLabel.toFixed(2)}:1 is not clearly dimmer than enabled ${enabledLabel.toFixed(2)}:1 (at most ${(CLEARLY_DIMMER * enabledLabel).toFixed(2)}:1)`;

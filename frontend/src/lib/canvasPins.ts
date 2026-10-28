@@ -76,10 +76,28 @@ export interface KeptNote {
  * names its project, "Your note for “Alpha” wasn’t sent because Codex started
  * opening “Second canvas”." A note of no project (or one whose name isn't
  * known) keeps the plain line everywhere. */
-export function keptNoteLine(note: KeptNote, here: string): string {
-  if (note.project === here || !note.projectName) return note.line;
-  return noteKeptLine(note.following, note.projectName);
+export function keptNoteLine(note: KeptNote, here: string, currentName?: string | null): string {
+  // Its project's name now, when it is still known (fix round 4 of PR #200,
+  // review 4 N-5: a rename after the note was kept); else the name it had.
+  const name = currentName || note.projectName;
+  if (note.project === here || !name) return note.line;
+  return noteKeptLine(note.following, name);
 }
+
+/** A kept note as its notice shows it (GM, PR #200 round 5 answer 5): its
+ * own line breaks, clamped to 2 lines by CSS, with each run of blank lines
+ * (and a line of only spaces) collapsed to one break, so the two lines show
+ * text (review 4 N-3). Copy note copies `note.text`, whole. */
+export function keptNoteDisplay(text: string): string {
+  return text.replace(/\n[^\S\n]*(?:\n[^\S\n]*)+/g, '\n').trim();
+}
+
+/** How many kept notes show before "Show N more" (fix round 4 of PR #200,
+ * review 4 LOW-1; GM round 5: "newest two plus a control labelled “Show 7
+ * more”"). */
+export const KEPT_SHOWN = 2;
+export const keptMoreLabel = (hidden: number) => `Show ${hidden} more`;
+export const KEPT_FEWER = 'Show fewer';
 
 export async function deletePin(id: string): Promise<void> {
   await apiRequest("Couldn't delete the note.", `/api/canvas/pins/${encodeURIComponent(id)}`, { method: 'DELETE' });

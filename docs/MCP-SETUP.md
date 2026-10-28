@@ -1439,10 +1439,12 @@ Rules:
   reach agents as `\n` in `pins[].text` (look_at_canvas, start_here, the
   snapshot JSON), and `nebula pins` and `nebula look` print each later line
   indented under the first, inside the quotes. A tab reads as a space; each
-  line loses its trailing spaces; spacing inside a line is kept, the same in
-  look_at_canvas and start_here. Every line break Unicode knows (`\r\n`,
-  `\r`, U+2028, U+2029 and the rest) reads as `\n`. The Claude Code
-  channel's push keeps the lines too, inside `<pin>…</pin>`. A one-line
+  line loses its trailing spaces; a run of blank lines keeps one; spacing
+  inside a line is kept, the same in look_at_canvas and start_here. Every
+  line break Unicode knows (`\r\n`, `\r`, U+2028, U+2029 and the rest)
+  reads as `\n`. The Claude Code channel's push keeps the lines too, inside
+  `<pin>…</pin>`, each line after the first indented two spaces (so a line
+  the person typed never reads as a line of the push itself). A one-line
   surface shows a break as ` ⏎ `: an event's `summary` (`pinned "warmer ⏎
   bluer" on n4`) and each line of `nebula watch`, so one
   event is always one line. At most 100 open notes per project and
