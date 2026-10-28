@@ -29,7 +29,8 @@ asks this module:
   - a project deleted for good (``purged``, in a file's head) stays
     deleted when that file is the newest that says anything of it: a
     record in a newer file (the same id made again) wins over an older
-    file's tombstone, and so does a record made after the tombstone;
+    file's tombstone. File order decides, never a record's createdAt (a
+    clock that ran ahead writes one later than the delete);
   - everything else the copy holds stays, and what that decided is
     reported: a record the damage cut off goes back to the copy's version
     (``reverted``), unless what is left of it shows it unchanged; one the
@@ -39,12 +40,17 @@ asks this module:
 A record's id is what the record says (its ``id``), checked against its key
 and the copy (review 2 of PR #199, M2): a bit flip in a key, an id or a
 section name leaves the file valid JSON, and trusting the structure filed a
-record under the wrong id and called the real one deleted.
+record under the wrong id and called the real one deleted. In a file that
+doesn't parse, a record whose key the damage broke is found by its own
+leading ``{"id":"<hex>"`` (review 3, M-A), and nothing nested deeper than a
+record is ever counted as one (review 3, L-2).
 
 Nothing here writes; nothing here decides wording.
 """
 from __future__ import annotations
 
+import bisect
+import itertools
 import json
 import math
 import re
@@ -55,6 +61,12 @@ from typing import Any, Iterable
 _ID = re.compile(r"^[a-f0-9]{32}$")
 # A record's key in a catalog file: a project id, then the record's object.
 _ENTRY_KEY = re.compile(r'"([a-f0-9]{32})"\s*:\s*(?=\{)')
+# A record's own first member (make_project writes "id" first): how salvage
+# finds a record whose key the damage broke (review 3 of PR #199, M-A).
+_RECORD_OPEN = re.compile(r'\{\s*"id"\s*:\s*"([a-f0-9]{32})"')
+# The members every project record opens with, in this order (make_project;
+# a rename or a move to Recently deleted keeps their places).
+_RECORD_HEAD = ("id", "name", "createdAt")
 # The two groups a record sits in, right before the first record of each.
 _GROUP_OPEN = re.compile(r'"(projects|trash)"\s*:\s*\{\s*$')
 _SPACE = re.compile(r"\s*")
@@ -375,6 +387,49 @@ def head_active(raw: bytes | None, parsed: Any = None) -> Any:
     return _UNKNOWN
 
 
+def _record_shaped(members: dict[str, Any]) -> bool:
+    """Whether what was read of an object opens as a project record does:
+    ``id``, ``name`` (a string) and ``createdAt`` (a dated time), first and
+    in that order. A nested object that only shares a record's id and name
+    ({"id", "name", "kind"}: a reference, an output map) doesn't (review 3,
+    L-2)."""
+    head = list(members)[:len(_RECORD_HEAD)]
+    return head == list(_RECORD_HEAD) and isinstance(members.get("name"), str) \
+        and _moment(members.get("createdAt")) is not None
+
+
+def _at_record_depth(text: str, start: int) -> bool:
+    """Whether the object opening at ``text[start]`` sits no deeper than a
+    record does (inside the catalog and one of its groups). Read forward
+    from it: past a record, what follows closes at most its group and the
+    catalog, two levels; past an object nested in a record (a snapshot, a
+    node's params), more closes before the file ends. A cut file closes
+    fewer, so it never makes a record look nested. Read from the object
+    itself, so damage before it (a broken key's stray quote, a torn page)
+    can't throw the count."""
+    depth = 0
+    index = start
+    while True:
+        match = _TOKEN.search(text, index)
+        if match is None:
+            return True
+        char, index = match.group(), match.end()
+        if char == '"':
+            while True:
+                inner = _IN_STRING.search(text, index)
+                if inner is None:
+                    return True
+                index = inner.end() + (1 if inner.group() == "\\" else 0)
+                if inner.group() == '"':
+                    break
+        elif char in "{[":
+            depth += 1
+        else:
+            depth -= 1
+            if depth <= -3:
+                return False
+
+
 def _misfiled(found: Salvage, key_id: str | None, entry: dict[str, Any], group: str | None) -> bool:
     """Note a whole record whose own id isn't ``key_id`` (reconcile decides
     which is its). False when it isn't such a record."""
@@ -415,6 +470,11 @@ def salvage(raw: bytes, parsed: Any = _UNKNOWN) -> Salvage:
     position = 0
     last_end: int | None = None
     last_group: str | None = None
+    # Where the key scan read an object from, and the spans it read (a whole
+    # object, or a cut one up to where its decode stopped): a record anchor
+    # inside one of them is that object's own member, never a record.
+    read_from: set[int] = set()
+    spans: list[tuple[int, int]] = []
     while (match := _ENTRY_KEY.search(text, position)) is not None:
         entry_id = match.group(1)
         # A key where a record belongs (first in its group, or right after a
@@ -428,11 +488,20 @@ def salvage(raw: bytes, parsed: Any = _UNKNOWN) -> Salvage:
         else:
             expected, group = False, None
         members, end, stopped = _members(text, match.end())
-        if not expected and members.get("id") == entry_id and isinstance(members.get("name"), str):
+        read_from.add(match.end())
+        spans.append((match.end(), end if end is not None else max(stopped, match.end() + 1)))
+        nested = not expected and end is not None and not _at_record_depth(text, match.end())
+        if nested:
+            # Whole, but deeper than a record sits: an object a record holds
+            # (review 3, L-2), whatever its members say.
+            position = end
+            continue
+        if not expected and members.get("id") == entry_id and _record_shaped(members):
             # No structure says a record belongs here (it follows a record
             # the damage cut), but its own members do: its id is its key and
-            # it has a name. A project-id key nested in a record (an output
-            # map) has neither, so it is still not counted (fix round 2's
+            # it opens as a record does (id, name, createdAt). An object
+            # nested in a record that shares only an id and a name (an output
+            # map, a reference) is not counted (review 3, L-2; fix round 2's
             # live check: a torn open project after another torn record was
             # lost, and its canvas filed nameless). Its group is told only by
             # its own deletedAt; reconcile reads None as "can't be told".
@@ -472,7 +541,51 @@ def salvage(raw: bytes, parsed: Any = _UNKNOWN) -> Salvage:
             if inner_end is not None and not (entry_ok(inner_id, members) and found.take(inner_id, members)):
                 _misfiled(found, inner_id, members, None)
         position = stop if stop > match.start() else match.start() + 1
+    _salvage_by_own_id(found, text, read_from, spans)
     return found
+
+
+def _salvage_by_own_id(found: Salvage, text: str, read_from: set[int], spans: list[tuple[int, int]]) -> None:
+    """The records the key scan couldn't anchor on: a bit flip in a key's
+    quote, colon or brace, or a hex digit turned into a control byte, a
+    quote or a byte that isn't UTF-8, makes the file fail to parse and hides
+    the key, while the record behind it is whole and holds its own id
+    (review 3 of PR #199, M-A: about a quarter of the flips in a changed
+    record's key reverted it, and no row said so). Each ``{"id":"<hex>"``
+    the key scan didn't read from or inside, whose id no record has yet:
+    - whole and a record (entry_ok) no deeper than a record sits: taken by
+      its own id (reconcile files it as a misfiled record with no key);
+    - cut, but opening as a record does (id, name, createdAt): reported as
+      a record the damage cut, its group told only by its deletedAt.
+    Anything else (an object a record holds) is not a record."""
+    starts = sorted(spans)
+    opens = [start for start, _end in starts]
+    reach = list(itertools.accumulate((end for _start, end in starts), max))
+
+    def inside(position: int) -> bool:
+        at = bisect.bisect_right(opens, position) - 1
+        return at >= 0 and position < reach[at]
+
+    claimed = set(found.entries) | set(found.failed) | {own for _key, own, _entry, _group in found.misfiled}
+    taken: list[tuple[int, int]] = []
+    for match in _RECORD_OPEN.finditer(text):
+        start, own = match.start(), match.group(1)
+        if start in read_from or own in claimed or inside(start) \
+                or any(opened < start < closed for opened, closed in taken):
+            continue
+        members, end, _stopped = _members(text, start)
+        if end is not None:
+            if not entry_ok(own, members) or not _at_record_depth(text, start):
+                continue
+            found.misfiled.append((None, own, members, "trash" if trashed(members) else "projects"))
+            taken.append((start, end))
+        elif _record_shaped(members):
+            found.failed[own] = "incomplete"
+            found.groups[own] = "trash" if isinstance(members.get("deletedAt"), str) else None
+            found.partial[own] = _scalars(members)
+        else:
+            continue
+        claimed.add(own)
 
 
 def _moment(value: Any) -> datetime | None:
@@ -583,8 +696,11 @@ def _record_name(entry_id: str, salvages: list[Salvage], *places: dict[str, Any]
 
 
 def _made_after(entry_id: str, at: str, salvages: list[Salvage], *places: dict[str, Any]) -> bool:
-    """Whether some record of ``entry_id`` was made after its tombstone's
-    time ``at``: another project with the same id (review 2, L1)."""
+    """Whether some record of ``entry_id`` says it was made after its
+    tombstone's time ``at``. Never decides anything (a clock that ran ahead
+    writes such a createdAt: review 3, L-3); it only marks the row of a
+    tombstone that drops such a record (``createdAfterDelete``), so the
+    skew is on record."""
     purged_at = _moment(at)
     if purged_at is None:
         return False
@@ -625,11 +741,16 @@ def reconcile(base: dict[str, Any], salvages: Iterable[Salvage], *, max_projects
         rekeyed.extend(_resolve_misfiled(found, copy_ids))
     # Deleted for good (a tombstone): the person's own act, written by a
     # commit that validated, so honoured even though the copy (older) still
-    # has the project. But only by the newest file that says anything of
-    # that id: a record in a newer file is the same id made again (a
-    # recover retry after the delete, review 2's L1), and so is a record
-    # made after the tombstone, whichever file it is in. Files newest first:
-    # the damaged ones, then the copy.
+    # has the project. Decided by file order alone, newest first (the
+    # damaged ones, then the copy): the newest file that says anything of
+    # an id decides it. A record in a newer file is the same id made again
+    # (a recover retry after the delete, review 2's L1): every commit that
+    # makes a project follows the delete it comes after, so its file is
+    # newer than the tombstone's. Never by comparing a record's createdAt
+    # with the tombstone's time: a clock that ran ahead when the project was
+    # made writes a createdAt after a later delete, and brought a project
+    # deleted for good back with no row (review 3, L-3). Within one file a
+    # record wins (a commit never holds both).
     decided: dict[str, str | None] = {}  # id -> the tombstone's time, or None for a record
     for found in salvages:
         for entry_id in (*found.entries, *found.failed):
@@ -640,21 +761,23 @@ def reconcile(base: dict[str, Any], salvages: Iterable[Salvage], *, max_projects
         decided.setdefault(entry_id, None)
     for entry_id, at in purged_map(result.get("purged")).items():
         decided.setdefault(entry_id, at)
-    purged: dict[str, str] = {}
-    for entry_id, at in decided.items():
-        if at is not None and not _made_after(entry_id, at, salvages, projects, trash):
-            purged[entry_id] = at
+    purged: dict[str, str] = {entry_id: at for entry_id, at in decided.items() if at is not None}
     if purged:
         result["purged"] = purged
     else:
         result.pop("purged", None)
-    for entry_id in purged:
+    for entry_id, at in purged.items():
         name = _record_name(entry_id, salvages, projects, trash)
+        skewed = _made_after(entry_id, at, salvages, projects, trash)
         gone = projects.pop(entry_id, None) or trash.pop(entry_id, None)
         held = any(entry_id in found.entries or entry_id in found.failed for found in salvages)
         if gone is not None or held:
-            # Every record a tombstone drops gets a row (agents and the log).
-            kept_deleted.append({"id": entry_id, "name": name})
+            # Every record a tombstone drops gets a row (agents and the log),
+            # and one that says it was made after the delete says so.
+            row: dict[str, Any] = {"id": entry_id, "name": name}
+            if skewed:
+                row["createdAfterDelete"] = True
+            kept_deleted.append(row)
     seen: set[str] = set()
     for found in salvages:
         for entry_id, entry in found.entries.items():
@@ -707,7 +830,7 @@ def reconcile(base: dict[str, Any], salvages: Iterable[Salvage], *, max_projects
                     row["trashed"] = group == "trash"
                 not_added.setdefault(entry_id, row)
             elif group == "trash" and not trashed(current):
-                came_back.append({"id": entry_id, "name": current["name"], "how": "trashed"})
+                came_back.append({"id": entry_id, "name": current["name"], "how": "trashed", "trashed": False})
             elif group == "projects" and trashed(current):
                 back_in_trash.append({"id": entry_id, "name": current["name"]})
             elif not _unchanged(partial, current):
@@ -720,7 +843,8 @@ def reconcile(base: dict[str, Any], salvages: Iterable[Salvage], *, max_projects
                                key=lambda key: (projects.get(key) or trash.get(key) or {}).get("name", "")):
             current = projects.get(entry_id) or trash.get(entry_id)
             if current is not None:
-                came_back.append({"id": entry_id, "name": current["name"], "how": "deleted"})
+                came_back.append({"id": entry_id, "name": current["name"], "how": "deleted",
+                                  "trashed": trashed(current)})
     # Which project is open. Never one the live canvas isn't: the next
     # listing saves the canvas into whichever is open (H1 of review 1).
     # - The canvas says which project it is: that one, if it came back live.

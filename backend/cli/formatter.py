@@ -450,9 +450,11 @@ def catalog_restore_lines(restore: dict[str, Any]) -> list[str]:
     """One line per kind of outcome a catalog restore reported, with names."""
     lines = []
     for key, label in _RESTORE_ROWS:
-        rows = [row for row in restore.get(key) or [] if isinstance(row, dict)]
-        count = restore.get(f"{key}Count") or len(rows)
-        if not count:
+        listed = [row for row in restore.get(key) or [] if isinstance(row, dict)]
+        # Only what still holds (rows marked current: false moved since).
+        rows = [row for row in listed if row.get("current") is not False]
+        count = max(restore.get(f"{key}Count") or 0, len(listed)) - (len(listed) - len(rows))
+        if count <= 0:
             continue
         names = ", ".join(str(row.get("name")) for row in rows)
         more = count - len(rows)
@@ -460,10 +462,11 @@ def catalog_restore_lines(restore: dict[str, Any]) -> list[str]:
     if restore.get("kind") == "restored" and restore.get("damagedReadWhole") is False:
         lines.append("  Damaged file not read whole: changes after the copy may be missing")
     recovered = restore.get("recoveredCanvas")
-    if isinstance(recovered, dict) and recovered.get("id"):
-        lines.append(f"  Live canvas saved as its own project: {recovered.get('name')} ({recovered['id']})")
+    if isinstance(recovered, dict) and recovered.get("id") and recovered.get("current") is not False:
+        lines.append(f"  Live canvas saved as its own project: {recovered.get('nameNow') or recovered.get('name')} "
+                     f"({recovered['id']})")
     waiting = restore.get("canvasNotFiled")
-    if isinstance(waiting, dict):
+    if isinstance(waiting, dict) and waiting.get("current") is not False:
         lines.append(f"  Live canvas not saved as a project yet: the list is at its {waiting.get('reason')} limit")
     return lines
 
@@ -483,6 +486,10 @@ def format_start(start: dict[str, Any]) -> str:
         # Nebula restored a damaged project list (services/project_store.py).
         lines.append(f"PROJECT LIST RESTORED: {restore['note']}")
         lines.extend(catalog_restore_lines(restore))
+    waiting = start.get("canvasNotFiled") or {}
+    if waiting.get("note"):
+        # The live canvas isn't a project and the list had no room to save it.
+        lines.append(f"CANVAS NOT SAVED AS A PROJECT ({waiting.get('reason')} limit): {waiting['note']}")
     canvas = start.get("canvas") or {}
     project = canvas.get("project") or {}
     watching = "no browser watching" if (canvas.get("view") or {}).get("stale") else "open in the browser"

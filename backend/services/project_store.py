@@ -44,6 +44,7 @@ import re
 import shutil
 import threading
 import time
+import zlib
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -88,6 +89,8 @@ _ORPHAN_PATTERNS = (".catalog.*.tmp", ".catalog-backup.*.tmp", ".catalog-bak.*.t
 # Restores, newest last, for the notice and support (ProjectStore._record_restore).
 RESTORE_RECORD_NAME = "catalog-restore.json"
 RESTORES_KEPT = 10
+# The live canvas waiting to be filed (main._mark_canvas_not_filed), across restarts.
+CANVAS_WAITING_NAME = "canvas-waiting.json"
 RECORD_ROWS = 100  # names listed per restore; the counts are whole
 # The fields prepare writes first, so a cut file still says which project was open.
 _HEAD_KEYS = ("version", "activeProjectId", "workspaceRevision", "migratedProjectId", "purged")
@@ -123,11 +126,16 @@ class _Damaged(Exception):
     wrong shape) or "missing". ``parsed``: what it decoded to, or None when
     it didn't, so salvage doesn't decode it again."""
 
-    def __init__(self, reason: str, detail: str, raw: bytes | None = None, parsed: Any = None) -> None:
+    def __init__(self, reason: str, detail: str, raw: bytes | None = None, parsed: Any = None,
+                 *, ours: bool = False) -> None:
         super().__init__(detail)
         self.reason = reason
         self.raw = raw
         self.parsed = parsed
+        # The file is the one this process last committed or read whole (its
+        # signature): a version it now says above 1 was changed in place,
+        # since a newer Nebula commits by rename (a new inode): damage.
+        self.ours = ours
 
 
 def _newer_version(result: Any) -> bool:
@@ -319,6 +327,24 @@ def recovered_name(source_name: str, catalog: dict[str, Any]) -> str:
     return f"{stem})" if highest == 0 else f"{stem} {highest + 1})"
 
 
+RECOVERED_CANVAS_NAME = "Recovered canvas"
+
+
+def recovered_canvas_name(catalog: dict[str, Any]) -> str:
+    """The name of a live canvas filed when which project it was isn't
+    known (GM r5 of PR #199): "Recovered canvas", then "Recovered canvas 2",
+    3 and so on, one past the highest in the list or Recently deleted, so two
+    such filings are never named alike."""
+    pattern = re.compile(re.escape(RECOVERED_CANVAS_NAME) + r"(?: (\d+))?")
+    highest = 0
+    for listing in (catalog.get("projects") or {}, catalog.get("trash") or {}):
+        for project in listing.values():
+            match = pattern.fullmatch(str((project or {}).get("name") or ""))
+            if match:
+                highest = max(highest, int(match.group(1) or 1))
+    return RECOVERED_CANVAS_NAME if highest == 0 else f"{RECOVERED_CANVAS_NAME} {highest + 1}"
+
+
 def make_project(name: str, snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
     timestamp = now()
     project = {
@@ -341,6 +367,10 @@ class Projection(NamedTuple):
     revision: str
     name: str                               # "" with no project open
     pins: tuple[dict[str, Any], ...]        # the open project's pins, as stored
+    # The file's bytes as read or written here (zlib.crc32), so a rewrite in
+    # place that keeps (inode, mtime, size) still gets the strict read
+    # (review 3 of PR #199, L-6). None when not known yet.
+    digest: int | None = None
 
 
 def _projection(catalog: dict[str, Any], signature: tuple[int, int, int] | None) -> Projection:
@@ -387,6 +417,13 @@ class ProjectStore:
         # while a hand-off for it runs, a reader skips parsing it again (at
         # 100 MB a failed parse alone holds the loop for a second).
         self._damaged_signature: tuple[int, int, int] | None = None
+        # The catalog file _load last parsed and validated, and its bytes'
+        # crc32: projection() keeps it with the projection it makes.
+        self._verified: tuple[tuple[int, int, int], int] | None = None
+        # The catalog file this process last committed or read whole, as
+        # version 1 (its signature): a version above 1 in that very file was
+        # written in place, which a newer Nebula never does (review 3, L-1).
+        self._own_signature: tuple[int, int, int] | None = None
         # This thread's hold on .lock: its depth (only _recover reads inside
         # a hold: flock from a second descriptor would wait on itself), the
         # restores to announce once it is let go, the catalog file this hold
@@ -486,18 +523,43 @@ class ProjectStore:
         except OSError as exc:
             raise ProjectStoreError(UNREADABLE) from exc
         cached = self._projection
-        committed_here = cached is not None and cached.signature == (info.st_ino, info.st_mtime_ns, info.st_size)
+        signature = (info.st_ino, info.st_mtime_ns, info.st_size)
+        ours = self._own_signature == signature
+        digest = zlib.crc32(raw)
+        # The fast read only for the very bytes this process wrote or read:
+        # a rewrite in place that kept the signature (rsync --inplace -t,
+        # cp -p onto it, bit rot) is read strictly, and the projection,
+        # which may no longer describe it, is dropped (review 3, L-6).
+        committed_here = cached is not None and cached.signature == signature and cached.digest == digest
+        if cached is not None and cached.signature == signature and cached.digest is not None \
+                and cached.digest != digest:
+            _log("catalog.json changed in place since this process read it; reading it strictly")
+            self._projection = None
         try:
             result = self._parse(raw, committed_here=committed_here)
         except ValueError as exc:
-            raise _Damaged("corrupt", f"not JSON: {exc}", raw) from exc
+            raise _Damaged("corrupt", f"not JSON: {exc}", raw, ours=ours) from exc
         if _newer_version(result):
-            _log(f"catalog.json is version {result.get('version')}, from a newer Nebula: not reading it")
+            if ours:
+                # This process wrote (or read) this file as version 1, and a
+                # newer Nebula commits by rename: its version changed in place
+                # (a bit flip: 1 -> 3, 5 or 9). Damage, not a newer Nebula's
+                # (review 3, L-1).
+                _log(f"catalog.json says version {result.get('version')}, but this process saved it as version 1 "
+                     "and it was changed in place: damaged")
+                raise _Damaged("invalid", f"version {result.get('version')} written in place", raw, result, ours=True)
+            _log(f"catalog.json is version {result.get('version')}, from a newer Nebula: not reading it"
+                 + self._older_copy_hint())
             raise ProjectStoreError(NEWER_VERSION)
         try:
             self._check(result)
         except (ValueError, TypeError, AttributeError) as exc:
-            raise _Damaged("invalid", f"not a catalog: {exc}", raw, result) from exc
+            raise _Damaged("invalid", f"not a catalog: {exc}", raw, result, ours=ours) from exc
+        if cached is not None and cached.signature == signature and cached.digest is None:
+            # Read strictly once: now its bytes are known, later reads are fast.
+            self._projection = cached._replace(digest=digest)
+        self._verified = (signature, digest)
+        self._own_signature = signature
         if getattr(self._local, "depth", 0):
             # Read and validated under this hold: .bak may become this file.
             self._local.validated = (info.st_ino, info.st_mtime_ns, info.st_size)
@@ -719,6 +781,7 @@ class ProjectStore:
         # chosen by its name). Not by mtime: a copy made by hand or a sync
         # tool has a new one.
         valid: list[tuple[Any, float, int, Path, bytes, dict[str, Any]]] = []
+        newer_copies: list[tuple[Path, bytes, Any]] = []
         mtimes: dict[Path, float] = {}
         for order, path in enumerate((self.backup_path, self.older_backup_path)):
             raw = self._copy_bytes(path)
@@ -735,8 +798,11 @@ class ProjectStore:
                 damaged_copies.append((path, raw, None))
                 continue
             if _newer_version(candidate):
-                _log(f"{path.name} is from a newer Nebula: not restoring over it")
-                raise ProjectStoreError(NEWER_VERSION)
+                # Decided below, with catalog.json's own head and the other
+                # copy (review 3, L-1): a bit flip in "version" reads as a
+                # newer Nebula's.
+                newer_copies.append((path, raw, candidate))
+                continue
             try:
                 self._check(candidate)
             except (ValueError, TypeError, AttributeError) as exc:
@@ -758,16 +824,42 @@ class ProjectStore:
         # are no older than the base (an older one would add back what was
         # deleted since; it is still kept below).
         salvages = []
-        if damage.raw is not None:
-            salvages.append(catalog_recovery.salvage(damage.raw, damage.parsed))
+        head = catalog_recovery.salvage(damage.raw, damage.parsed) if damage.raw is not None else None
+        if head is not None:
+            salvages.append(head)
+        head_version = head.version if head is not None else catalog_recovery.UNKNOWN
+        if head is not None and _newer_version({"version": head_version}) and not damage.ours:
+            _log("the damaged catalog.json says it is from a newer Nebula: not restoring over it"
+                 + self._older_copy_hint())
+            raise ProjectStoreError(NEWER_VERSION)
+        # A copy that says a newer version is damage, not a newer Nebula's,
+        # when something contradicts it (review 3, L-1: one bit makes
+        # version 1 read 3, 5 or 9): catalog.json's own head says version 1
+        # (a newer Nebula writes catalog.json first, and the copies after
+        # it), catalog.json is this process's own file, or another copy can
+        # do the restore (a bad version in one copy never blocks a restore
+        # the other can do). Only with none of those does it refuse.
+        contradicted = head_version == 1 or damage.ours or bool(valid)
+        for path, raw, candidate in newer_copies:
+            if not contradicted:
+                _log(f"{path.name} is from a newer Nebula: not restoring over it")
+                raise ProjectStoreError(NEWER_VERSION)
+            _log(f"{path.name} says version {candidate.get('version')}, which "
+                 f"{'catalog.json says it is not' if head_version == 1 else 'the other copy contradicts'}: "
+                 "damaged too")
+            damaged_copies.append((path, raw, candidate))
+        version_damaged = {path for path, _raw, _candidate in newer_copies}
         base_mtime = mtimes.get(self.root / source) if source else None
-        salvages.extend(catalog_recovery.salvage(raw, parsed) for path, raw, parsed in
-                        sorted(damaged_copies, key=lambda row: -mtimes.get(row[0], 0.0))
-                        if base_mtime is None or mtimes.get(path, 0.0) >= base_mtime)
-        for found in salvages:
+        copy_salvages = [(path, catalog_recovery.salvage(raw, parsed)) for path, raw, parsed in
+                         sorted(damaged_copies, key=lambda row: -mtimes.get(row[0], 0.0))
+                         if base_mtime is None or mtimes.get(path, 0.0) >= base_mtime]
+        salvages.extend(found for _path, found in copy_salvages)
+        for path, found in copy_salvages:
             version = found.version
-            if isinstance(version, int) and not isinstance(version, bool) and version > 1:
-                _log("a damaged file says it is from a newer Nebula: not restoring over it")
+            if path in version_damaged:
+                continue
+            if isinstance(version, int) and not isinstance(version, bool) and version > 1 and not contradicted:
+                _log(f"the damaged {path.name} says it is from a newer Nebula: not restoring over it")
                 raise ProjectStoreError(NEWER_VERSION)
         kind = "restored" if base is not None else "rebuilt"
         moment = datetime.now(timezone.utc)
@@ -893,7 +985,9 @@ class ProjectStore:
         for row in merged.back_in_trash:
             _log(f"{row['id']} \"{row['name']}\" was restored after {source} and is in Recently deleted again")
         for row in merged.kept_deleted:
-            _log(f"{row['id']} \"{row['name']}\" was deleted for good after {source}: it stays deleted")
+            _log(f"{row['id']} \"{row['name']}\" was deleted for good after {source}: it stays deleted"
+                 + (" (its record says it was made after that delete: the clock was ahead when it was made)"
+                    if row.get("createdAfterDelete") else ""))
         for row in merged.rekeyed:
             _log(f"{row['id']}'s record sat under a damaged key ({row['key'] or 'not an id'}): "
                  "filed under the id it and the copy agree on")
@@ -1077,6 +1171,31 @@ class ProjectStore:
         except OSError as exc:
             raise ProjectStoreError("Project storage is unavailable; the canvas was preserved") from exc
 
+    # -- the live canvas that couldn't be filed ------------------------------------
+
+    def canvas_waiting(self) -> dict[str, Any] | None:
+        """main's record of the live canvas that isn't a project and couldn't
+        be filed as one (the list at a limit), or of the one filed last after
+        waiting: {reason, from, since, journaled} or {saved: {id, name, at}}.
+        Kept beside the catalog so it outlives a restart (review 3, L-5)."""
+        try:
+            found = json.loads((self.root / CANVAS_WAITING_NAME).read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return None
+        except (OSError, ValueError) as exc:
+            _log(f"{CANVAS_WAITING_NAME} could not be read ({exc})")
+            return None
+        return found if isinstance(found, dict) else None
+
+    def set_canvas_waiting(self, value: dict[str, Any] | None) -> None:
+        """Write (or, for None, remove) canvas_waiting's record. Raises OSError."""
+        path = self.root / CANVAS_WAITING_NAME
+        if value is None:
+            path.unlink(missing_ok=True)
+            return
+        self._ensure_root()
+        self._write_file(path, json.dumps(value, ensure_ascii=False, indent=1).encode("utf-8"))
+
     # -- the last good copy -------------------------------------------------------
 
     def _write_file(self, target: Path, encoded: bytes) -> None:
@@ -1172,9 +1291,27 @@ class ProjectStore:
             return cached or Projection(None, None, RESTORING_REVISION, "", ())
         after = self._signature()
         view = _projection(catalog, after if after == before else None)
+        verified = self._verified
+        if view.signature is not None and verified is not None and verified[0] == view.signature:
+            view = view._replace(digest=verified[1])
         if view.signature is not None:
             self._projection = view
         return view
+
+    def _older_copy_hint(self) -> str:
+        """For the log beside a newer Nebula's catalog.json: where a copy
+        this version wrote is, so a person (or support) can go back to it by
+        hand if the newer version is gone. Never read automatically."""
+        try:
+            raw = self._copy_bytes(self.backup_path)
+            if raw is None:
+                return ""
+            older = self._parse(raw)
+            if isinstance(older, dict) and older.get("version") == 1:
+                return f" ({BACKUP_NAME}, a version-1 copy, is at {self.backup_path})"
+        except (ValueError, OSError):
+            pass
+        return ""
 
     def _read_elsewhere(self, signature: tuple[int, int, int]) -> bool:
         """Whether a worker thread is already reading this catalog file for
@@ -1277,7 +1414,11 @@ class ProjectStore:
         try:
             encoded = json.dumps(ordered, ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode("utf-8")
         except (ValueError, TypeError, RecursionError) as exc:
-            _log(f"refusing to write a catalog that can't be encoded ({exc})")
+            _log(f"refusing to write a catalog that can't be encoded ({exc}); the next read is strict")
+            # The catalog read for it may have come from the fast read of a
+            # file that isn't what this process wrote (review 3, L-6): the
+            # next read checks it whole and restores it if it is damaged.
+            self._projection = None
             raise ProjectStoreError("Project catalog could not be saved: it holds a value that can't be written. "
                                     "Nothing changed.") from exc
         if len(encoded) > MAX_CATALOG_BYTES:
@@ -1364,7 +1505,8 @@ class ProjectStore:
                 except ProjectStoreError:
                     landed = None
                 if landed is not None and landed[0] == written.st_ino and landed[2] == written.st_size:
-                    self._projection = prepared[1]._replace(signature=landed)
+                    self._projection = prepared[1]._replace(signature=landed, digest=zlib.crc32(prepared[2]))
+                    self._own_signature = landed
                     if getattr(self._local, "depth", 0):
                         # prepare validated it: the next commit in this hold may keep it as .bak.
                         self._local.validated = landed

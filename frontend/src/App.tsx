@@ -268,7 +268,8 @@ export default function App() {
       unsavedEdits={projects.unsavedEdits} editsSavedAs={projects.editsSavedAs}
       onDownloadEdits={() => void projects.downloadUnsavedEdits()}
       onContinueWithoutEdits={() => void projects.continueWithoutEdits()}
-      catalogRestore={projects.catalogRestore} onDismissCatalogRestore={projects.dismissCatalogRestore} />;
+      catalogRestore={projects.catalogRestore} onDismissCatalogRestore={projects.dismissCatalogRestore}
+      canvasNotFiled={projects.canvasNotFiled} canvasSaved={projects.canvasSaved} onDismissCanvasSaved={projects.dismissCanvasSaved} />;
   } else if (isCanvas) {
     mainView = <Canvas />;
   } else if (isCommons) {

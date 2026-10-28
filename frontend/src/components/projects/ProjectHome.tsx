@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import { ArrowUpRight, Check, ChevronRight, ImageIcon, Pencil, Plus, RotateCcw, Search, Settings, Trash2, X } from 'lucide-react';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { coverImages, type CatalogRestore, type CoverChoices, type ProjectCover } from '../../lib/projects';
-import { catalogRestoreNotice, OPEN_RECENTLY_DELETED } from './catalogRestoreCopy';
+import {
+  canvasSavedToast, canvasWaitingLine, catalogRestoreNotice, DEFAULT_PROJECT_LIMIT, OPEN_RECENTLY_DELETED,
+  type CanvasLimit, type NoticeNow,
+} from './catalogRestoreCopy';
 import { actorLabel } from '../../lib/trash';
 import { CrabMark } from '../brand/CrabMark';
 import { ProposalsFor } from '../proposals/ProposalsFor';
@@ -84,6 +87,13 @@ export interface ProjectHomeProps {
    * shown until the person closes it with ×. */
   catalogRestore?: CatalogRestore | null;
   onDismissCatalogRestore?: () => void;
+  /** The live canvas isn't a project and the list had no room to save it
+   * (the listing's `canvasNotFiled`): GM r5's waiting line, until it is saved. */
+  canvasNotFiled?: { reason: CanvasLimit; projectLimit?: number } | null;
+  /** A waiting canvas was saved as this project (the listing's `canvasSaved`):
+   * GM's toast, once per tab. */
+  canvasSaved?: { id: string; name: string } | null;
+  onDismissCanvasSaved?: () => void;
 }
 
 const UNDO_VISIBLE_MS = 8000;
@@ -294,8 +304,11 @@ function ConfirmInline({ label, confirmLabel, prompt, busy, onConfirm, className
   );
 }
 
-function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash, openRequest = 0, onOpened = noop }: {
+function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash, openRequest = 0, onOpened = noop, fromNotice = [] }: {
   trash: TrashedProject[]; busy: boolean;
+  /** The restore notice's items it opened the list to (GM r4): marked, and
+   * the first scrolled into view. */
+  fromNotice?: string[];
   onRestore: (id: string) => void; onPurge: (id: string) => void; onEmptyTrash: () => void;
   /** When the person last asked the list open (the restore notice's
    * "Open Recently deleted"), as the clock at that click; 0 for none. A new
@@ -316,10 +329,13 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash, openRe
     setSeenRequest(openRequest);
     if (openRequest) { setNow(openRequest); setOpen(true); }
   }
+  const list = useRef<HTMLUListElement>(null);
   useEffect(() => {
     if (!openRequest) return;
     toggle.current?.focus();
     toggle.current?.scrollIntoView?.({ block: 'nearest' });
+    // "Opens to those" (GM r4): the notice's first item in view, focus kept on the toggle.
+    list.current?.querySelector<HTMLElement>('[data-from-notice="true"]')?.scrollIntoView?.({ block: 'nearest' });
     onOpened();
   }, [openRequest, onOpened]);
   return (
@@ -340,9 +356,10 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash, openRe
       {open && (
         <div id="recently-deleted-list">
           <p className="project-home__trash-note">Deleted projects stay here for 30 days. Generated files stay in your outputs folder either way.</p>
-          <ul className="project-home__trash-list">
+          <ul className="project-home__trash-list" ref={list}>
             {trash.map((entry) => (
-              <li key={entry.id} className="project-home__trash-row" aria-label={entry.name}>
+              <li key={entry.id} className="project-home__trash-row" aria-label={entry.name}
+                data-from-notice={fromNotice.includes(entry.id) ? 'true' : undefined}>
                 <span className="project-home__trash-name">{entry.name}</span>
                 <span className="project-home__trash-meta">{deletedDate(entry.deletedAt)}{deletedByNote(entry)} · {removalNote(entry.purgeAt, now)}</span>
                 <span className="project-home__trash-actions">
@@ -389,15 +406,18 @@ const noop = () => {};
  * filled after it mounts, so screen readers announce it (a live region
  * reads changes, not what it held when it appeared: review 1 of PR #199,
  * L8). × closes it and puts focus on the page heading. */
-function CatalogRestoreNotice({ restore, trashCount, onDismiss, onOpenRecentlyDeleted, heading }: {
-  restore: CatalogRestore | null; trashCount: number; onDismiss: () => void; onOpenRecentlyDeleted: () => void;
+function CatalogRestoreNotice({ restore, current, onDismiss, onOpenRecentlyDeleted, heading }: {
+  restore: CatalogRestore | null; current: NoticeNow; onDismiss: () => void;
+  onOpenRecentlyDeleted: (ids: string[]) => void;
   heading: RefObject<HTMLHeadingElement | null>;
 }) {
   // Filled once the region is in the page: the callback ref runs after it
   // is attached, and the content follows in the next render.
   const [ready, setReady] = useState(false);
   const attached = useCallback((region: HTMLDivElement | null) => { if (region) setReady(true); }, []);
-  const notice = ready && restore ? catalogRestoreNotice(restore) : null;
+  // Only the lines that still hold against the list now (GM r4), so a
+  // restore or delete by the person or an agent updates it as it lands.
+  const notice = ready && restore ? catalogRestoreNotice(restore, undefined, current) : null;
   return (
     // A polite live region rather than role="status": the page keeps one
     // status per notice it shows (the loading line, the saved-file line),
@@ -408,8 +428,9 @@ function CatalogRestoreNotice({ restore, trashCount, onDismiss, onOpenRecentlyDe
         {notice.lines
           ? <div className="project-home__restore-text project-home__restore-lines">{notice.lines.map((line) => <p key={line}>{line}</p>)}</div>
           : <span className="project-home__restore-text">{notice.text}</span>}
-        {/* Only while there is something in Recently deleted to open (L6). */}
-        {notice.openRecentlyDeleted && trashCount > 0 && <button type="button" className="project-home__restore-action" onClick={onOpenRecentlyDeleted}>{OPEN_RECENTLY_DELETED}</button>}
+        {/* Only while Recently deleted holds one of the notice's items (GM r4; L6). */}
+        {notice.openRecentlyDeleted && current.trash.length > 0 && <button type="button" className="project-home__restore-action"
+          onClick={() => onOpenRecentlyDeleted(notice.recentlyDeletedIds)}>{OPEN_RECENTLY_DELETED}</button>}
         <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={() => {
           // Before the button goes, so focus never drops to the page body.
           heading.current?.focus();
@@ -417,6 +438,45 @@ function CatalogRestoreNotice({ restore, trashCount, onDismiss, onOpenRecentlyDe
         }}><X aria-hidden="true" /></button>
       </>}
     </div>
+  );
+}
+
+/** GM r5's waiting line: the live canvas isn't saved as a project yet,
+ * the list is at a limit. A slim notice where the restore notice sits; it
+ * can't be dismissed while the canvas waits and goes once it is saved. The
+ * size cap's adds "Open Recently deleted" (only a delete for good frees it). */
+function CanvasWaitingNotice({ waiting, trashCount, onOpenRecentlyDeleted }: {
+  waiting: { reason: CanvasLimit; projectLimit?: number }; trashCount: number; onOpenRecentlyDeleted: () => void;
+}) {
+  const line = canvasWaitingLine(waiting.reason, {
+    projectLimit: waiting.projectLimit ?? DEFAULT_PROJECT_LIMIT, trashHasItems: trashCount > 0,
+  });
+  return (
+    <div className="project-home__notice project-home__restore project-home__waiting" role="status">
+      <span className="project-home__restore-text">{line}</span>
+      {waiting.reason === 'storage' && trashCount > 0 && <button type="button" className="project-home__restore-action"
+        onClick={onOpenRecentlyDeleted}>{OPEN_RECENTLY_DELETED}</button>}
+    </div>
+  );
+}
+
+/** GM r5: "Once saved: the normal toast", with the project's real name. */
+function CanvasSavedToast({ project, onDismiss }: { project: { id: string; name: string }; onDismiss: () => void }) {
+  const [paused, setPaused] = useState(false);
+  useEffect(() => {
+    if (paused) return;
+    const timer = window.setTimeout(onDismiss, UNDO_VISIBLE_MS);
+    return () => window.clearTimeout(timer);
+  }, [paused, onDismiss, project.id]);
+  return (
+    <InNoticeRegion slot="project-home">
+      <div className="project-home__toast" role="status" aria-live="polite"
+        onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
+        onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
+        <span className="project-home__toast-text">{canvasSavedToast(project.name)}</span>
+        <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
+      </div>
+    </InNoticeRegion>
   );
 }
 
@@ -445,6 +505,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
   trash = [], lastDeleted = null, onRestore = noop, onPurge = noop, onEmptyTrash = noop, onDismissUndo = noop,
   settingsOpen = false, onToggleSettings, loadCoverChoices, onPinCover,
   catalogRestore = null, onDismissCatalogRestore = noop,
+  canvasNotFiled = null, canvasSaved = null, onDismissCanvasSaved = noop,
   unsavedEdits = null, editsSavedAs = null, onDownloadEdits = noop, onContinueWithoutEdits = noop }: ProjectHomeProps) {
   const [query, setQuery] = useState('');
   // Offline is read-only (round 15 of PR #114): create, open, rename,
@@ -456,7 +517,16 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
   const heading = useRef<HTMLHeadingElement>(null);
   useFocusAfterHeldEdits(Boolean(unsavedEdits), savedLine, heading);
   const [trashOpenRequest, setTrashOpenRequest] = useState(0);
+  const [trashFromNotice, setTrashFromNotice] = useState<string[]>([]);
   const trashOpened = useCallback(() => setTrashOpenRequest(0), []);
+  const openTrash = useCallback((ids: string[] = []) => {
+    setTrashFromNotice(ids);
+    setTrashOpenRequest((last) => Math.max(Date.now(), last + 1));
+  }, []);
+  const current = useMemo<NoticeNow>(() => ({ projects, trash, canvasNotFiled }), [projects, trash, canvasNotFiled]);
+  // The waiting line, unless the restore notice already says the limit.
+  const restoreSaysLimit = Boolean(catalogRestore && canvasNotFiled
+    && catalogRestoreNotice(catalogRestore, undefined, current).canvasLine === 'limit');
   const visibleProjects = useMemo(() => projects
     .filter((project) => project.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
     .sort((left, right) => recentTimestamp(right) - recentTimestamp(left)), [projects, query]);
@@ -479,8 +549,10 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
           <button className="project-home__new" type="button" disabled={loading || locked || Boolean(unsavedEdits)} {...offlineMark(offline)} onClick={() => onCreate()}><Plus aria-hidden="true" />New project</button>
         </section>
 
-        <CatalogRestoreNotice restore={catalogRestore} trashCount={trash.length} onDismiss={onDismissCatalogRestore} heading={heading}
-          onOpenRecentlyDeleted={() => setTrashOpenRequest((last) => Math.max(Date.now(), last + 1))} />
+        <CatalogRestoreNotice restore={catalogRestore} current={current} onDismiss={onDismissCatalogRestore} heading={heading}
+          onOpenRecentlyDeleted={openTrash} />
+        {canvasNotFiled && !restoreSaysLimit && <CanvasWaitingNotice waiting={canvasNotFiled} trashCount={trash.length}
+          onOpenRecentlyDeleted={() => openTrash()} />}
 
         {/* GM's WRAP rule: where "Try again" redoes the failure it is the retry, so the
             reason drops its own; where it only reloads, or can't help, the line stays whole. */}
@@ -506,10 +578,11 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
               : projects.length > 0 ? <div className="project-home__empty" role="status"><Search className="project-home__empty-search" aria-hidden="true" /><h3>No projects match “{query.trim()}”</h3><p>Try another name or clear your search.</p><button type="button" className="project-home__secondary" onClick={() => setQuery('')}>Clear search</button></div>
                 : !error && !unsavedEdits && <div className="project-home__empty"><div className="project-home__empty-graph"><NodeGraphPlaceholder /></div><h3>Your first project starts here.</h3><p>Connect ideas, models and media on a canvas of your own.</p><button type="button" className="project-home__secondary" disabled={locked} {...offlineMark(offline)} onClick={() => onCreate()}><Plus aria-hidden="true" />Create your first project</button></div>}
         </section>
-        {!loading && trash.length > 0 && <RecentlyDeleted trash={trash} busy={locked} onRestore={onRestore} onPurge={onPurge} onEmptyTrash={onEmptyTrash} openRequest={trashOpenRequest} onOpened={trashOpened} />}
+        {!loading && trash.length > 0 && <RecentlyDeleted trash={trash} busy={locked} onRestore={onRestore} onPurge={onPurge} onEmptyTrash={onEmptyTrash} openRequest={trashOpenRequest} onOpened={trashOpened} fromNotice={trashFromNotice} />}
       </main>
       {lastDeleted && <UndoToast key={lastDeleted.id} project={lastDeleted} busy={locked}
         onUndo={() => onRestore(lastDeleted.id)} onDismiss={onDismissUndo} />}
+      {canvasSaved && <CanvasSavedToast key={canvasSaved.id} project={canvasSaved} onDismiss={onDismissCanvasSaved} />}
     </div>
   );
 }

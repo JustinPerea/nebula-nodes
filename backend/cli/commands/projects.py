@@ -35,9 +35,13 @@ def run_list(client: NebulaClient, *, as_json: bool = False) -> None:
         print()
     waiting = listing.get("canvasNotFiled")
     if isinstance(waiting, dict):
-        print(f"Note: the live canvas isn't a saved project and couldn't be saved as one: the project list is at "
-              f"its {waiting.get('reason')} limit. Opening or making a project is refused until the person frees "
-              "room (moves a project to Recently deleted, or deletes one for good); the next listing then saves it.")
+        # main._canvas_not_filed_note, the same words start_here carries.
+        print(f"Note: {waiting.get('note') or 'the live canvas is not saved as a project yet: the project list is at its ' + str(waiting.get('reason')) + ' limit.'}")
+        print()
+    saved = listing.get("canvasSaved")
+    if isinstance(saved, dict) and saved.get("id"):
+        print(f"Note: the live canvas was saved as its own project, \"{saved.get('name')}\" ({saved['id']}), "
+              "once the list had room.")
         print()
     if not projects:
         print("No saved projects.")

@@ -96,3 +96,24 @@ describe('the catalog restore notice', () => {
     expect(useProjectStore.getState().catalogRestore).toBeNull();
   });
 });
+
+describe('the live canvas waiting to be saved (fix round 3, review 3 L-5)', () => {
+  const waiting = { reason: 'storage', since: '2026-10-27T10:00:00+00:00', projectLimit: 500, note: 'agents' };
+  const saved = { id: 'c'.repeat(32), name: 'Recovered canvas 2', at: '2026-10-27T10:20:00+00:00' };
+
+  it('keeps the waiting line from the listing, and the saved toast once per tab', async () => {
+    listProjects.mockResolvedValueOnce({ ...(listing() as object), canvasNotFiled: waiting } as never)
+      .mockResolvedValue({ ...(listing() as object), canvasSaved: saved } as never);
+    relist();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(useProjectStore.getState().canvasNotFiled).toEqual({ reason: 'storage', projectLimit: 500 });
+    relist();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(useProjectStore.getState().canvasNotFiled).toBeNull();
+    expect(useProjectStore.getState().canvasSaved).toEqual({ id: saved.id, name: 'Recovered canvas 2' });
+    useProjectStore.getState().dismissCanvasSaved();
+    relist();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(useProjectStore.getState().canvasSaved).toBeNull();
+  });
+});

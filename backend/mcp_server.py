@@ -374,8 +374,11 @@ def start_here(ctx: Context | None = None) -> str:
     notice of (its `note`, the copy and its time, the damaged file's path, a
     few of the projects added back, and of those that went back to the
     copy's version, came back after a delete or are in Recently deleted
-    again, and whether the damaged file was read to its end; list_projects
-    has it in full):
+    again, and whether the damaged file was read to its end, only those
+    that still hold; list_projects has it in full), then `canvasNotFiled`
+    while the live canvas isn't a saved project because the list is at a
+    limit ({reason, since, projectLimit, note}: tell the person what
+    `note` says frees room; don't free it yourself):
     - `canvas`: the project, `view.stale` (no browser watching), the
       selection, other agents' cursors, and the nodes (id, name,
       definitionId, state, onScreen, inputsFrom, up to 8 params cut to 60
@@ -1313,17 +1316,24 @@ def list_projects(ctx: Context | None = None) -> dict[str, Any]:
     `cameBack` those deleted after the copy that are back, `backInTrash`
     those restored after the copy that are in Recently deleted again,
     `recoveredCanvas` the live canvas filed as its own project ("<project>
-    (recovered)", or "Recovered canvas" when which project it was is
-    unknown), `canvasNotFiled` when it couldn't be filed because the list
-    is at a limit, `damagedReadWhole` false when the damaged file couldn't
-    be read whole (cut, zeroed, or a key or section name damaged: changes
-    after the copy may then be missing without a row), and `damagedFile`
-    where the damaged file is kept. Project ids from before it may be
-    stale; ask the person before deleting a project that came back.
-    `canvasNotFiled` (top level, {reason: projects | storage}) means the
-    live canvas isn't a saved project and the list had no room to save it
-    as one: no project is open, and open_project / new_project are refused
-    (413) until the person frees room; don't free it for them."""
+    (recovered)", or "Recovered canvas", "Recovered canvas 2" and on when
+    which project it was is unknown), `canvasNotFiled` when it couldn't be
+    filed because the list is at a limit, `damagedReadWhole` false when the
+    damaged file couldn't be read whole (cut, zeroed, or a key or section
+    name damaged: changes after the copy may then be missing without a
+    row), and `damagedFile` where the damaged file is kept. Every row says
+    `current`: false once it no longer holds (that project was restored,
+    deleted or deleted for good since), and `note` leaves those out, as the
+    person's notice does. Project ids from before it may be stale; ask the
+    person before deleting a project that came back.
+    `canvasNotFiled` (top level, {reason: projects | storage, since,
+    projectLimit, note}) means the live canvas isn't a saved project and
+    the list had no room to save it as one, whether or not a restore
+    notice is open: no project is open, and open_project / new_project are
+    refused (413) until the person frees room; `note` says what frees it
+    for that limit (the project limit: a move to Recently deleted; the size
+    limit: only a delete for good). Don't free it for them. `canvasSaved`
+    ({id, name, at}, for 10 minutes) says such a canvas was then saved."""
     import project_client
 
     return project_client.list_projects(_api(), headers=_agent_headers(ctx))

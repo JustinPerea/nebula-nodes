@@ -216,7 +216,10 @@ describe('the Projects home notice', () => {
 
   it('is a polite live notice that stays until the person closes it with ×, without the damaged path', () => {
     const onDismissCatalogRestore = vi.fn();
-    const { rerender } = render(<ProjectHome {...props({ catalogRestore: restore({ addedBack: rows('Dunes'), addedBackCount: 1 }), onDismissCatalogRestore })} />);
+    // Dunes is in the list (the notice says only what still holds: fix round 3).
+    const dunes = { id: '0'.repeat(32), name: 'Dunes', createdAt: TWO_DAYS_AGO, updatedAt: TWO_DAYS_AGO, lastOpenedAt: null,
+      nodeCount: 0, edgeCount: 0, thumbnail: null };
+    const { rerender } = render(<ProjectHome {...props({ projects: [dunes], catalogRestore: restore({ addedBack: rows('Dunes'), addedBackCount: 1 }), onDismissCatalogRestore })} />);
     const notice = screen.getByText(/project list was damaged/).closest('[aria-live="polite"]');
     expect(notice).toBeTruthy();
     expect(notice?.textContent).toContain('added back “Dunes”, a newer project it found.');
@@ -248,7 +251,7 @@ describe('the Projects home notice', () => {
 
   it('opens Recently deleted from the notice and moves focus there', () => {
     const trash: TrashedProject[] = [{
-      id: 'l'.repeat(32), name: 'Logo', createdAt: TWO_DAYS_AGO, updatedAt: TWO_DAYS_AGO, lastOpenedAt: TWO_DAYS_AGO,
+      id: '0'.repeat(32), name: 'Logo', createdAt: TWO_DAYS_AGO, updatedAt: TWO_DAYS_AGO, lastOpenedAt: TWO_DAYS_AGO,
       nodeCount: 0, edgeCount: 0, thumbnail: null, deletedAt: TWO_DAYS_AGO, purgeAt: '2026-11-24T11:00:00+00:00',
     } as TrashedProject];
     render(<ProjectHome {...props({ trash, catalogRestore: restore({ addedBack: trashedRows('Logo'), addedBackCount: 1 }) })} />);

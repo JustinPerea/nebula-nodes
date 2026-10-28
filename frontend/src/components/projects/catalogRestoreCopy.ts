@@ -42,15 +42,62 @@ export function recoveredCanvasSentence(name: string | null | undefined): string
   return `The canvas you had open was saved as its own project, ${quoted(name || RECOVERED_CANVAS)}, so nothing in it is lost.`;
 }
 
-/** PENDING GM (review 2, L4): the open canvas isn't a project in the
- * restored list and couldn't be saved as its own, because the list is at a
- * limit (backend `canvasNotFiled`). It stays the live canvas until there is
- * room. Not GM's words yet: one constant per limit so the relay replaces
- * them in one place. */
-export const CANVAS_NOT_FILED_PENDING: Record<'projects' | 'storage', string> = {
-  projects: "The canvas you had open couldn't be saved as its own project because the project list is full. Move a project to Recently deleted to make room, and it will be saved.",
-  storage: "The canvas you had open couldn't be saved as its own project because project storage is full. Delete a project for good to make room, and it will be saved.",
-};
+/** The limit the live canvas waits on (backend `canvasNotFiled.reason`):
+ * the project limit, or the project list's size cap ("storage", never said
+ * as a size: GM r4, "Never show 128 MB to the person"). */
+export type CanvasLimit = 'projects' | 'storage';
+
+/** What the limit lines need: the project limit's number (the backend's
+ * `projectLimit`; 500), and whether Recently deleted holds anything (only
+ * a delete for good frees the size cap). */
+export interface CanvasLimitContext { projectLimit: number; trashHasItems: boolean }
+
+/** The backend's MAX_PROJECTS, for a listing that doesn't say it. */
+export const DEFAULT_PROJECT_LIMIT = 500;
+
+/** GM r5, the size cap's advice by whether Recently deleted has items. */
+function sizeCapAdvice(trashHasItems: boolean): string {
+  return trashHasItems
+    ? 'Permanently delete a project in Recently deleted and Nebula will save it.'
+    : 'Delete a project, then remove it from Recently deleted too, and Nebula will save it.';
+}
+
+/** GM r5, the limit lines: in the restore notice, in the canvas line's
+ * place, while the open canvas couldn't be saved as its own project. The
+ * canvas survives restarts, so both say nothing in it is lost. */
+export function canvasLimitLine(reason: CanvasLimit, context: CanvasLimitContext): string {
+  const opening = "The canvas you had open couldn't be saved as its own project because";
+  if (reason === 'projects') {
+    return `${opening} you've reached the limit of ${context.projectLimit} projects. It stays open and nothing in it is lost. Delete a project and Nebula will save it.`;
+  }
+  return `${opening} Nebula's project list is full. It stays open and nothing in it is lost. ${sizeCapAdvice(context.trashHasItems)}`;
+}
+
+/** GM r5 (1), the waiting line: the Projects home's slim notice while the
+ * canvas waits, whether or not a restore notice is open; it can't be
+ * dismissed and goes once the canvas is saved. */
+export function canvasWaitingLine(reason: CanvasLimit, context: CanvasLimitContext): string {
+  const opening = "The canvas you had open isn't saved as a project yet because";
+  if (reason === 'projects') {
+    return `${opening} you've reached the limit of ${context.projectLimit} projects. Delete a project and Nebula will save it.`;
+  }
+  return `${opening} Nebula's project list is full. ${sizeCapAdvice(context.trashHasItems)}`;
+}
+
+/** GM r4/r5, the toast once a waiting canvas is saved: the project's real
+ * name, and no "nothing in it is lost". */
+export function canvasSavedToast(name: string): string {
+  return `The canvas you had open was saved as its own project, ${quoted(name)}.`;
+}
+
+/** The projects and Recently deleted as they are now, and the canvas
+ * waiting to be saved (the listing's `canvasNotFiled`): the notice says
+ * only what still holds against them (GM r4's stale-lines rule). */
+export interface NoticeNow {
+  projects: { id: string; name: string }[];
+  trash: { id: string; name?: string }[];
+  canvasNotFiled?: { reason: CanvasLimit; projectLimit?: number } | null;
+}
 
 function namedList(names: string[]): string {
   if (names.length === 1) return quoted(names[0]);
@@ -97,14 +144,39 @@ export interface CatalogRestoreNotice {
    * each outcome, and "The damaged file was kept." when said, one per line.
    * Null when the notice is said inline. */
   lines: string[] | null;
-  /** Show "Open Recently deleted": something the person should look at is there. */
+  /** Show "Open Recently deleted": Recently deleted holds one of the
+   * notice's items (or the size cap's line asks to empty it). */
   openRecentlyDeleted: boolean;
+  /** The notice's items Recently deleted holds now: the list opens to these. */
+  recentlyDeletedIds: string[];
+  /** What the canvas line says: saved, the limit it waits on, or nothing. */
+  canvasLine: 'saved' | 'limit' | null;
 }
 
 /** The notice from its parts: inline for one outcome or none, stacked for more. */
-function layout(opening: string, outcomes: string[], closing: string | null, openRecentlyDeleted: boolean): CatalogRestoreNotice {
+function layout(opening: string, outcomes: string[], closing: string | null, openRecentlyDeleted: boolean,
+  recentlyDeletedIds: string[] = [], canvasLine: CatalogRestoreNotice['canvasLine'] = null): CatalogRestoreNotice {
   const all = [opening, ...outcomes, ...(closing ? [closing] : [])];
-  return { text: all.join(' '), lines: outcomes.length > 1 ? all : null, openRecentlyDeleted };
+  return { text: all.join(' '), lines: outcomes.length > 1 ? all : null, openRecentlyDeleted, recentlyDeletedIds, canvasLine };
+}
+
+/** Each row as it holds now (GM r4): ``where`` says where its line puts the
+ * project ("projects", "trash", its own group by `trashed`, or "gone": in
+ * neither). Without ``current`` every row holds (logs, older callers). */
+type Where = 'projects' | 'trash' | 'own' | 'gone';
+function holding<R extends { id?: string; trashed?: boolean }>(rows: R[] | undefined, where: Where, current?: NoticeNow): { rows: R[]; dropped: number } {
+  const all = rows ?? [];
+  if (!current) return { rows: all, dropped: 0 };
+  const inProjects = new Set(current.projects.map((project) => project.id));
+  const inTrash = new Set(current.trash.map((entry) => entry.id));
+  const kept = all.filter((row) => {
+    const id = row.id ?? '';
+    if (where === 'gone') return !inProjects.has(id) && !inTrash.has(id);
+    if (where === 'trash') return inTrash.has(id);
+    if (where === 'projects') return inProjects.has(id);
+    return row.trashed === true ? inTrash.has(id) : inProjects.has(id);
+  });
+  return { rows: kept, dropped: all.length - kept.length };
 }
 
 type NoticeInput = Pick<CatalogRestore, 'kind' | 'addedBack' | 'addedBackCount' | 'notAddedBackCount'>
@@ -112,60 +184,108 @@ type NoticeInput = Pick<CatalogRestore, 'kind' | 'addedBack' | 'addedBackCount' 
     | 'revertedCount' | 'cameBack' | 'cameBackCount' | 'backInTrash' | 'backInTrashCount' | 'recoveredCanvas'
     | 'canvasNotFiled' | 'damagedReadWhole' | 'openProjectMissing'>>;
 
-/** The open canvas's outcome (GM r3: the last outcome line), if any. */
-function canvasSentence(restore: NoticeInput): string | null {
-  if (restore.recoveredCanvas) return recoveredCanvasSentence(restore.recoveredCanvas.name);
-  const waiting = restore.canvasNotFiled?.reason;
-  return waiting === 'projects' || waiting === 'storage' ? CANVAS_NOT_FILED_PENDING[waiting] : null;
+/** The open canvas's outcome (GM r3: the last outcome line before the
+ * not-read-whole line), if any, as it holds now: the saved project under
+ * its name now, dropped once it is gone; the limit line only while the
+ * canvas still waits (the listing's `canvasNotFiled`, its limit now). */
+function canvasOutcome(restore: NoticeInput, current?: NoticeNow): { line: string; kind: 'saved' | 'limit' } | null {
+  const saved = restore.recoveredCanvas;
+  if (saved) {
+    if (!current) return { line: recoveredCanvasSentence(saved.name), kind: 'saved' };
+    const now = current.projects.find((project) => project.id === saved.id) ?? current.trash.find((entry) => entry.id === saved.id);
+    return now ? { line: recoveredCanvasSentence(now.name || saved.name), kind: 'saved' } : null;
+  }
+  const recorded = restore.canvasNotFiled?.reason;
+  if (recorded !== 'projects' && recorded !== 'storage') return null;
+  if (current && !current.canvasNotFiled) return null;
+  const reason = current?.canvasNotFiled?.reason ?? recorded;
+  return {
+    line: canvasLimitLine(reason, {
+      projectLimit: current?.canvasNotFiled?.projectLimit ?? DEFAULT_PROJECT_LIMIT,
+      trashHasItems: (current?.trash.length ?? 0) > 0,
+    }),
+    kind: 'limit',
+  };
 }
 
-function rebuiltNotice(restore: NoticeInput): CatalogRestoreNotice {
+/** Whether a limit line asks the person to look in Recently deleted (the
+ * size cap, GM r5: "Size cap reason adds the Open Recently deleted button"). */
+function limitOpensTrash(restore: NoticeInput, canvas: { kind: string } | null, current?: NoticeNow): boolean {
+  if (canvas?.kind !== 'limit') return false;
+  const reason = current?.canvasNotFiled?.reason ?? restore.canvasNotFiled?.reason;
+  return reason === 'storage' && (current?.trash.length ?? 0) > 0;
+}
+
+function rebuiltNotice(restore: NoticeInput, current?: NoticeNow): CatalogRestoreNotice {
   // GM: "Lost Recently deleted entries: not in the notice; log them."
-  const rows = (restore.notAddedBack ?? []).filter((row) => row.trashed !== true);
-  const trashedRows = (restore.notAddedBack ?? []).length - rows.length;
-  const lost = Math.max(0, (restore.notAddedBackCount ?? 0) - trashedRows);
+  const all = (restore.notAddedBack ?? []).filter((row) => row.trashed !== true);
+  const trashedRows = (restore.notAddedBack ?? []).length - all.length;
+  const { rows, dropped } = holding(all, 'gone', current);
+  const recorded = Math.max(0, (restore.notAddedBackCount ?? 0) - trashedRows);
+  const lost = Math.max(0, recorded - dropped);
   const outcomes: string[] = [];
-  if (lost === 0) {
+  if (recorded === 0) {
     outcomes.push("If a project you expect isn't here, it couldn't be recovered.");
-  } else {
+  } else if (lost > 0) {
     const names = namesFor(rows, lost);
     const who = names ? namedList(names) : `${lost} ${lost === 1 ? 'project' : 'projects'}`;
     outcomes.push(`${who} couldn't be recovered, and others may be missing too.`);
   }
-  const canvas = canvasSentence(restore);
-  if (canvas) outcomes.push(canvas);
-  return layout(REBUILT, outcomes, KEPT, false);
+  const canvas = canvasOutcome(restore, current);
+  if (canvas) outcomes.push(canvas.line);
+  const opensTrash = limitOpensTrash(restore, canvas, current);
+  return layout(REBUILT, outcomes, KEPT, opensTrash, [], canvas?.kind ?? null);
 }
 
-/** The notice for `restore`: GM's sentences in GM's order. */
-export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.now()): CatalogRestoreNotice {
-  if (restore.kind === 'rebuilt') return rebuiltNotice(restore);
+/** The notice for `restore`: GM's sentences in GM's order. With `current`
+ * (the projects and Recently deleted now), only the lines that still hold
+ * (GM r4): a project restored, deleted or deleted for good since drops its
+ * line, live, as the person or an agent changes the list. What the notice
+ * says around them (the copy's age, "The damaged file was kept.") follows
+ * what the restore did, so when every outcome has gone the opening and
+ * that line remain until the person closes it. */
+export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.now(), current?: NoticeNow): CatalogRestoreNotice {
+  if (restore.kind === 'rebuilt') return rebuiltNotice(restore, current);
   const addedRows = restore.addedBack ?? [];
-  const trashedAdded = addedRows.filter((row) => row.trashed === true);
-  const liveAddedRows = addedRows.filter((row) => row.trashed !== true);
-  const liveAdded = Math.max(0, total(restore.addedBackCount, addedRows) - trashedAdded.length);
+  const recordedTrashedAdded = addedRows.filter((row) => row.trashed === true);
+  const recordedLiveAdded = Math.max(0, total(restore.addedBackCount, addedRows) - recordedTrashedAdded.length);
+  const liveHeld = holding(addedRows.filter((row) => row.trashed !== true), 'projects', current);
+  const liveAddedRows = liveHeld.rows;
+  const liveAdded = Math.max(0, recordedLiveAdded - liveHeld.dropped);
+  const trashedAdded = holding(recordedTrashedAdded, 'trash', current).rows;
   // The open project that couldn't be added back but whose canvas was saved
   // as its own project: the canvas sentence is its one sentence (GM r3), so
   // its failed add-back isn't said beside "so nothing in it is lost". The
   // Agent log still lists it.
   const savedFrom = restore.recoveredCanvas ? restore.openProjectMissing ?? null : null;
-  const failedRows = (restore.notAddedBack ?? []).filter((row) => savedFrom === null || row.id !== savedFrom);
-  const failedOut = (restore.notAddedBack ?? []).length - failedRows.length;
-  const failed = Math.max(0, total(restore.notAddedBackCount, restore.notAddedBack) - failedOut);
+  const failedListed = (restore.notAddedBack ?? []).filter((row) => savedFrom === null || row.id !== savedFrom);
+  const failedOut = (restore.notAddedBack ?? []).length - failedListed.length;
+  const recordedFailed = Math.max(0, total(restore.notAddedBackCount, restore.notAddedBack) - failedOut);
+  const failedHeld = holding(failedListed, 'gone', current);
+  const failedRows = failedHeld.rows;
+  const failed = Math.max(0, recordedFailed - failedHeld.dropped);
   // (a): the open project whose graph came back from the live canvas isn't
   // reverted for the person, and a project they deleted isn't news.
-  const revertedRows = (restore.reverted ?? []).filter((row) => !row.liveCanvas && !row.trashed);
-  const revertedOut = (restore.reverted ?? []).length - revertedRows.length;
-  const reverted = Math.max(0, total(restore.revertedCount, restore.reverted) - revertedOut);
-  const cameBackRows = restore.cameBack ?? [];
-  const cameBack = total(restore.cameBackCount, cameBackRows);
-  const backInTrashRows = restore.backInTrash ?? [];
-  const backInTrash = total(restore.backInTrashCount, backInTrashRows);
+  const revertedListed = (restore.reverted ?? []).filter((row) => !row.liveCanvas && !row.trashed);
+  const revertedOut = (restore.reverted ?? []).length - revertedListed.length;
+  const recordedReverted = Math.max(0, total(restore.revertedCount, restore.reverted) - revertedOut);
+  const revertedHeld = holding(revertedListed, 'projects', current);
+  const revertedRows = revertedHeld.rows;
+  const reverted = Math.max(0, recordedReverted - revertedHeld.dropped);
+  const recordedCameBack = total(restore.cameBackCount, restore.cameBack);
+  const cameBackHeld = holding(restore.cameBack, 'own', current);
+  const cameBackRows = cameBackHeld.rows;
+  const cameBack = Math.max(0, recordedCameBack - cameBackHeld.dropped);
+  const recordedBackInTrash = total(restore.backInTrashCount, restore.backInTrash);
+  const backInTrashHeld = holding(restore.backInTrash, 'trash', current);
+  const backInTrashRows = backInTrashHeld.rows;
+  const backInTrash = Math.max(0, recordedBackInTrash - backInTrashHeld.dropped);
   const kept = Boolean(restore.damagedFile) || (restore.setAside ?? []).length > 0;
 
   // GM: say the copy's age up front when the copy is the older one, or when
   // it decided something; unknown: the usual opening. No comma before it (GM r3).
-  const older = restore.source === 'catalog.json.bak.1' || reverted > 0 || cameBack > 0 || backInTrash > 0;
+  // As the restore decided it, so the opening stays put as lines drop.
+  const older = restore.source === 'catalog.json.bak.1' || recordedReverted > 0 || recordedCameBack > 0 || recordedBackInTrash > 0;
   const age = older ? copyAge(restore.copyAt, now) : null;
   const start = age ? `${OPENING} from ${age}` : OPENING;
   let opening: string;
@@ -227,20 +347,35 @@ export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.no
     else outcomes.push(`${backInTrash} projects are in Recently deleted again because the copy had them there. Restore them again if you need them.`);
   }
 
-  // The open canvas, saved as its own project (GM r3 string 1).
-  const canvas = canvasSentence(restore);
-  if (canvas) outcomes.push(canvas);
+  // The open canvas, saved as its own project (GM r3 string 1), or the
+  // limit it waits on (GM r5).
+  const canvas = canvasOutcome(restore, current);
+  if (canvas) outcomes.push(canvas.line);
 
   // GM r3 string 4: a damaged file that wasn't read to its end (cut,
   // zeroed, or a key damaged): what it held past that is unknown. Only
   // where a damaged file was kept (a missing catalog has none to read).
   const readWhole = restore.damagedReadWhole === true;
   if (!readWhole && kept) outcomes.push(NOT_READ_WHOLE);
-  const saidMore = liveAdded > 0 || outcomes.length > 0;
-  if (!saidMore && readWhole) outcomes.push('No projects were missing.');
-  // Only when the file really is kept AND something may be lost.
-  const closing = kept && (failed > 0 || reverted > 0 || canvas !== null || !readWhole) ? KEPT : null;
-  return layout(opening, outcomes, closing, trashedAdded.length > 0 || backInTrash > 0);
+  // "No projects were missing." only when the restore had nothing else to
+  // say, never because the other lines have since gone.
+  const saidAtFirst = recordedLiveAdded > 0 || recordedTrashedAdded.length > 0 || recordedFailed > 0
+    || recordedReverted > 0 || recordedCameBack > 0 || recordedBackInTrash > 0
+    || Boolean(restore.recoveredCanvas) || Boolean(restore.canvasNotFiled) || (!readWhole && kept);
+  if (!saidAtFirst && readWhole) outcomes.push('No projects were missing.');
+  // Only when the file really is kept AND something may be lost (as the
+  // restore found it: it stays when the lines that called for it go).
+  const closing = kept && (recordedFailed > 0 || recordedReverted > 0 || Boolean(restore.recoveredCanvas)
+    || Boolean(restore.canvasNotFiled) || !readWhole) ? KEPT : null;
+  // "Open Recently deleted" while Recently deleted holds one of the notice's
+  // items, and opens to them (GM r4); the size cap's line adds it too (GM r5).
+  const recentlyDeletedIds = current
+    ? [...trashedAdded.map((row) => row.id), ...backInTrashRows.map((row) => row.id)]
+    : [];
+  const openRecentlyDeleted = current
+    ? recentlyDeletedIds.length > 0 || limitOpensTrash(restore, canvas, current)
+    : trashedAdded.length > 0 || backInTrash > 0;
+  return layout(opening, outcomes, closing, openRecentlyDeleted, recentlyDeletedIds, canvas?.kind ?? null);
 }
 
 /** The notice's text for `restore`. */

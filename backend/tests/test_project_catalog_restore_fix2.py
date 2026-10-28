@@ -364,14 +364,18 @@ def test_l1_a_tombstone_only_in_the_copy_never_drops_a_newer_record():
     assert merged.kept_deleted == []
 
 
-def test_l1_a_tombstone_older_than_the_records_creation_is_another_incarnation():
+def test_l1_a_tombstone_in_a_newer_file_decides_even_against_a_later_created_at():
+    # Fix round 3 (review 3, L-3) replaced this test's rule: the tombstone
+    # sits in a newer file and the record, only in an older one, says it was
+    # made after it. That is a clock that ran ahead, not another project:
+    # file order decides, and the row says so.
     again = make_project("Again")
     purged_at = (datetime.fromisoformat(again["createdAt"]) - timedelta(hours=1)).isoformat()
-    # The tombstone sits in a newer file, but the record was made after it (a clock that moved).
     newest = _salvage(purged={again["id"]: purged_at})
     older = _salvage(entries={again["id"]: again}, sizes={again["id"]: 100})
     merged = catalog_recovery.reconcile(_base(), [newest, older], max_projects=500, room_bytes=10**9)
-    assert again["id"] in merged.catalog["projects"]
+    assert again["id"] not in merged.catalog["projects"]
+    assert merged.kept_deleted == [{"id": again["id"], "name": "Again", "createdAfterDelete": True}]
 
 
 # -- L2: a reader on the event loop never restores or waits for one ------------------

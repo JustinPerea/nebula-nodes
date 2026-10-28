@@ -75,7 +75,7 @@ export interface CatalogRestore {
    * list): "<project> (recovered)", numbered, or "Recovered canvas". */
   recoveredCanvas?: { id: string; name: string } | null;
   /** It couldn't be filed: the list is at a limit (review 2 of PR #199, L4). */
-  canvasNotFiled?: { reason: 'projects' | 'storage' } | null;
+  canvasNotFiled?: { reason: 'projects' | 'storage'; current?: boolean } | null;
   /** The open project that didn't come back, and its name when a file had it. */
   openProjectMissing?: string | null; openProjectName?: string | null;
   /** The damaged catalog.json was read to its end (it parsed; only its
@@ -92,7 +92,13 @@ export interface ProjectList {
   catalogRestore?: CatalogRestore;
   /** The live canvas isn't a project and the list had no room to save it as
    * one: no project is open, and opening or making one is refused (413). */
-  canvasNotFiled?: { reason: 'projects' | 'storage'; from?: string | null; since?: string | null };
+  canvasNotFiled?: { reason: 'projects' | 'storage'; from?: string | null; since?: string | null;
+    /** The project limit (the backend's MAX_PROJECTS), for GM's line. */
+    projectLimit?: number;
+    /** The agents' line (GM's waiting line is the person's). */
+    note?: string };
+  /** A waiting canvas was saved as its own project, recently: GM's toast. */
+  canvasSaved?: { id: string; name: string; at?: string };
 }
 export interface ProjectActivation {
   project: SavedProject; workspaceRevision: string;

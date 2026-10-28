@@ -374,7 +374,7 @@ def test_m1_a_delete_the_damaged_file_cant_prove_comes_back_and_is_reported(tmp_
 
     assert gone in catalog["projects"]
     [record] = _records(store)
-    assert record["cameBack"] == [{"id": gone, "name": "Gone", "how": "deleted"}]
+    assert record["cameBack"] == [{"id": gone, "name": "Gone", "how": "deleted", "trashed": False}]
 
 
 def test_m1_a_move_to_recently_deleted_the_damage_cut_off_is_reported_back(tmp_path):
@@ -388,7 +388,7 @@ def test_m1_a_move_to_recently_deleted_the_damage_cut_off_is_reported_back(tmp_p
 
     assert gone in catalog["projects"]
     [record] = _records(store)
-    assert record["cameBack"] == [{"id": gone, "name": "Gone", "how": "trashed"}]
+    assert record["cameBack"] == [{"id": gone, "name": "Gone", "how": "trashed", "trashed": False}]
 
 
 def test_m1_a_restore_from_recently_deleted_is_kept_when_the_record_reads(tmp_path):
@@ -475,7 +475,7 @@ def test_m1_several_records_cut_in_one_file_each_get_their_group(tmp_path):
     assert record["source"] == "catalog.json.bak.1"
     assert _ids(record["reverted"]) == [logo]
     assert record["backInTrash"] == [{"id": revived, "name": "Revived"}]
-    assert record["cameBack"] == [{"id": draft, "name": "Draft", "how": "trashed"}]
+    assert record["cameBack"] == [{"id": draft, "name": "Draft", "how": "trashed", "trashed": False}]
     assert revived in catalog["trash"] and draft in catalog["projects"]
 
 

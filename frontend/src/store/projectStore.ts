@@ -109,6 +109,13 @@ interface ProjectState {
   catalogRestore: CatalogRestore | null;
   /** The person's ×: hides the notice and tells the backend not to list it again. */
   dismissCatalogRestore: () => void;
+  /** The live canvas isn't a project and the list had no room to save it
+   * (the listing's `canvasNotFiled`): the Projects home's waiting line. */
+  canvasNotFiled: { reason: 'projects' | 'storage'; projectLimit?: number } | null;
+  /** A waiting canvas was saved as this project (the listing's
+   * `canvasSaved`): GM's toast, shown once per tab. */
+  canvasSaved: { id: string; name: string } | null;
+  dismissCanvasSaved: () => void;
   workspaceRevision: string; error: string | null;
   /** What `error`'s Details toggle holds, for that line (projectErrorDetails). */
   errorDetails: ProjectErrorDetails | null;
@@ -1034,6 +1041,28 @@ function restoreFrom(list: ProjectList): CatalogRestore | null {
   return restore;
 }
 
+/** Saved canvases this tab showed GM's toast for. */
+const toastedCanvases = new Set<string>();
+
+/** What a listing says beside the projects: the restore notice, the live
+ * canvas waiting to be saved, and a waiting canvas just saved (its toast
+ * once per tab; a later listing that still carries it keeps it showing
+ * until it is dismissed or times out). */
+function listingNotices(list: ProjectList): Pick<ProjectState, 'catalogRestore' | 'canvasNotFiled'> & { canvasSaved?: ProjectState['canvasSaved'] } {
+  const waiting = list.canvasNotFiled;
+  const saved = list.canvasSaved;
+  const notices: Pick<ProjectState, 'catalogRestore' | 'canvasNotFiled'> & { canvasSaved?: ProjectState['canvasSaved'] } = {
+    catalogRestore: restoreFrom(list),
+    canvasNotFiled: waiting && (waiting.reason === 'projects' || waiting.reason === 'storage')
+      ? { reason: waiting.reason, projectLimit: waiting.projectLimit } : null,
+  };
+  if (saved && typeof saved.id === 'string' && !toastedCanvases.has(saved.id)) {
+    toastedCanvases.add(saved.id);
+    notices.canvasSaved = { id: saved.id, name: saved.name };
+  }
+  return notices;
+}
+
 /** List the saved projects again, keeping whatever this tab has open. One
  * request at a time; changes that land meanwhile get one more. A tab with no
  * project open also takes the new workspace revision, so its next create or
@@ -1053,7 +1082,7 @@ function relistProjects(): Promise<void> {
           // The open project's card as listed now (a rename made elsewhere).
           const open = state.activeProject ? list.projects.find((project) => project.id === state.activeProject?.id) : undefined;
           return {
-            projects: list.projects, trash: list.trash ?? [], catalogRestore: restoreFrom(list),
+            projects: list.projects, trash: list.trash ?? [], ...listingNotices(list),
             ...(open ? { activeProject: open } : {}),
             ...(!state.activeProject && !getProjectContext() ? { workspaceRevision: list.workspaceRevision } : {}),
             ...(state.switchNotice ? { switchNotice: wayBackIn(state.switchNotice, list.projects) } : {}),
@@ -1115,7 +1144,7 @@ async function loadWorkspace(): Promise<void> {
     return;
   }
   clearParamsReloadMark();
-  if (generation === listingGeneration) set({ projects: list.projects, trash: list.trash ?? [], catalogRestore: restoreFrom(list) });
+  if (generation === listingGeneration) set({ projects: list.projects, trash: list.trash ?? [], ...listingNotices(list) });
   set({ workspaceRevision: list.workspaceRevision });
   if (list.activeProjectId) {
     let project = await api.getProject(list.activeProjectId);
@@ -1346,7 +1375,7 @@ async function listNow(): Promise<void> {
   const generation = ++listingGeneration;
   const list = await api.listProjects();
   if (generation === listingGeneration) {
-    useProjectStore.setState((state) => ({ projects: list.projects, trash: list.trash ?? [], catalogRestore: restoreFrom(list),
+    useProjectStore.setState((state) => ({ projects: list.projects, trash: list.trash ?? [], ...listingNotices(list),
       ...(!state.activeProject ? { workspaceRevision: list.workspaceRevision } : {}) }));
   }
 }
@@ -1366,7 +1395,7 @@ async function emptyTrashOf(ids: string[]): Promise<void> {
 // Projects waits while the Commons holds unsaved labels (lib/commonsUnsaved).
 export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectState>(holdProjects, (set, get) => ({
   screen: 'home', initialized: false, loading: true, busy: false,
-  projects: [], activeProject: null, trash: [], lastDeleted: null, catalogRestore: null, workspaceRevision: '', error: null, errorDetails: null,
+  projects: [], activeProject: null, trash: [], lastDeleted: null, catalogRestore: null, canvasNotFiled: null, canvasSaved: null, workspaceRevision: '', error: null, errorDetails: null,
   errorRetry: null, saveError: null, saveStatus: 'saved', dirty: false, switchNotice: null,
   unsavedEdits: null, editsSavedAs: null, savePaused: null, sizeNotice: null, sizePanelOpen: false,
   openSizePanel: () => { if (get().savePaused) set({ sizePanelOpen: true }); },
@@ -1547,6 +1576,7 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
   },
   emptyTrash: async () => emptyTrashOf(get().trash.map((entry) => entry.id)),
   dismissUndo: () => set({ lastDeleted: null }),
+  dismissCanvasSaved: () => set({ canvasSaved: null }),
   dismissCatalogRestore: () => {
     const restore = get().catalogRestore;
     if (!restore) return;

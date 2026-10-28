@@ -74,8 +74,9 @@ def list_projects(api: NebulaAPI, *, headers: dict[str, str] | None = None) -> d
     """MCP list_projects: each project's id, name, `open`, node count, last
     edit and cover, most recently edited first, `catalogRestore` after
     Nebula restored a damaged project list (until the person closes its
-    notice), and `canvasNotFiled` while the live canvas couldn't be saved
-    as its own project because the list is at a limit."""
+    notice), `canvasNotFiled` while the live canvas couldn't be saved as
+    its own project because the list is at a limit (with the agents' `note`),
+    and `canvasSaved` for a while after such a canvas was saved."""
     listing = _call(api, "GET", "/api/projects", headers)
     active = listing.get("activeProjectId")
     rows = [{"id": project.get("id"), "name": project.get("name"), "open": project.get("id") == active,
@@ -90,8 +91,12 @@ def list_projects(api: NebulaAPI, *, headers: dict[str, str] | None = None) -> d
     # The live canvas isn't a project and couldn't be filed as its own: the
     # list is at a limit, so opening or making a project is refused until
     # the person frees room (PR #199, review 2 L4).
+    # With its `note` (what frees room for which limit) and `projectLimit`.
     if isinstance(listing.get("canvasNotFiled"), dict):
         reply["canvasNotFiled"] = listing["canvasNotFiled"]
+    # A waiting canvas was saved as its own project (the person sees a toast).
+    if isinstance(listing.get("canvasSaved"), dict):
+        reply["canvasSaved"] = listing["canvasSaved"]
     return reply
 
 

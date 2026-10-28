@@ -140,9 +140,12 @@ describe('GM r3: the B layout', () => {
       id: '0'.repeat(32), name: 'Newer', createdAt: TWO_DAYS_AGO, updatedAt: TWO_DAYS_AGO, lastOpenedAt: TWO_DAYS_AGO,
       nodeCount: 0, edgeCount: 0, thumbnail: null, deletedAt: TWO_DAYS_AGO, purgeAt: '2026-11-24T11:00:00+00:00',
     } as TrashedProject];
-    const { container } = render(<ProjectHome projects={[]} loading={false} busy={false} error={null} trash={trash}
+    // Logo is in the list and Newer in Recently deleted (the notice says only what still holds: fix round 3).
+    const logo = { id: 'l'.repeat(32), name: 'Logo', createdAt: TWO_DAYS_AGO, updatedAt: TWO_DAYS_AGO, lastOpenedAt: null,
+      nodeCount: 0, edgeCount: 0, thumbnail: null };
+    const { container } = render(<ProjectHome projects={[logo]} loading={false} busy={false} error={null} trash={trash}
       onCreate={vi.fn()} onOpen={vi.fn()} onRename={vi.fn()} onDelete={vi.fn()} onRetry={vi.fn()}
-      catalogRestore={restore({ ...older, addedBack: trashedRows('Newer'), addedBackCount: 1, reverted: rows('Logo'), revertedCount: 1 })} />);
+      catalogRestore={restore({ ...older, addedBack: trashedRows('Newer'), addedBackCount: 1, reverted: [{ id: logo.id, name: 'Logo' }], revertedCount: 1 })} />);
     const lines = container.querySelector('.project-home__restore-lines');
     expect(lines?.tagName).not.toBe('UL');
     expect(Array.from(lines?.children ?? []).map((child) => child.textContent)).toEqual([

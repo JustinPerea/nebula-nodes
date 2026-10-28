@@ -426,31 +426,47 @@ def catalog_restore_part(view: Mapping[str, Any]) -> dict[str, Any]:
     an agent reads it before acting on project ids from earlier. Short: the
     note, the source and its time, the damaged file, and a few names of what
     was added back and of what the copy decided (reverted, cameBack,
-    backInTrash); list_projects has `catalogRestore` in full."""
+    backInTrash); list_projects has `catalogRestore` in full. Only what
+    still holds (a row marked `current: false` is left out, and its count
+    with it: GM's stale-lines rule, which the note follows too)."""
+    def holding(key: str) -> list[Mapping[str, Any]]:
+        return [row for row in view.get(key) or [] if isinstance(row, Mapping) and row.get("current") is not False]
+
     def rows(key: str) -> list[dict[str, Any]]:
-        return [{"id": row.get("id"), "name": _cut(row.get("name"), NAME_CHARS)}
-                for row in (view.get(key) or [])[:RESTORE_ROWS] if isinstance(row, Mapping)]
+        return [{"id": row.get("id"), "name": _cut(row.get("name"), NAME_CHARS)} for row in holding(key)[:RESTORE_ROWS]]
+
+    def count(key: str) -> int:
+        listed = [row for row in view.get(key) or [] if isinstance(row, Mapping)]
+        recorded = view.get(f"{key}Count")
+        recorded = recorded if isinstance(recorded, int) else len(listed)
+        return max(0, max(recorded, len(listed)) - (len(listed) - len(holding(key))))
 
     part = {"at": view.get("at"), "kind": view.get("kind"), "source": view.get("source"),
             "copyAt": view.get("copyAt"), "damagedFile": view.get("damagedFile"), "addedBack": rows("addedBack"),
-            "addedBackCount": view.get("addedBackCount", 0), "notAddedBackCount": view.get("notAddedBackCount", 0),
+            "addedBackCount": count("addedBack"), "notAddedBackCount": count("notAddedBack"),
             "damagedReadWhole": view.get("damagedReadWhole")}
     for key in ("reverted", "cameBack", "backInTrash"):
-        count = view.get(f"{key}Count") or 0
-        if count:
-            part[key], part[f"{key}Count"] = rows(key), count
-    if isinstance(view.get("recoveredCanvas"), Mapping):
-        part["recoveredCanvas"] = {"id": view["recoveredCanvas"].get("id"),
-                                   "name": _cut(view["recoveredCanvas"].get("name"), NAME_CHARS)}
-    if isinstance(view.get("canvasNotFiled"), Mapping):
-        part["canvasNotFiled"] = {"reason": view["canvasNotFiled"].get("reason")}
+        if count(key):
+            part[key], part[f"{key}Count"] = rows(key), count(key)
+    canvas = view.get("recoveredCanvas")
+    if isinstance(canvas, Mapping) and canvas.get("current") is not False:
+        part["recoveredCanvas"] = {"id": canvas.get("id"),
+                                   "name": _cut(canvas.get("nameNow") or canvas.get("name"), NAME_CHARS)}
+    waiting = view.get("canvasNotFiled")
+    if isinstance(waiting, Mapping) and waiting.get("current") is not False:
+        part["canvasNotFiled"] = {"reason": waiting.get("reason")}
     part["note"] = _cut(view.get("note"), 700)
     return part
 
 
 def build(**parts: dict[str, Any]) -> dict[str, Any]:
     """The answer, its parts in the documented order. ``catalogRestore``
-    leads when there is one (catalog_restore_part); it has no budget of its
-    own and stays under 300 tokens."""
+    leads when there is one (catalog_restore_part), then ``canvasNotFiled``
+    (main._canvas_not_filed_view); neither has a budget of its own, and
+    together they stay under 500 tokens."""
     lead = {"catalogRestore": parts["catalogRestore"]} if parts.get("catalogRestore") else {}
+    if parts.get("canvasNotFiled"):
+        # The live canvas waiting to be filed (the list at a limit), whether
+        # or not a restore notice is open (review 3 of PR #199, L-5).
+        lead["canvasNotFiled"] = parts["canvasNotFiled"]
     return {**lead, **{name: parts[name] for name in BUDGETS}}
