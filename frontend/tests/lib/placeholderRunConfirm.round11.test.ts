@@ -61,14 +61,17 @@ describe('GM round 11: the replay sentence names up to 3 changed nodes, then cou
     expect(all.savedLine).toBe(`Codex changed 4 nodes ${SAVED}`);
   });
 
-  it('item 1: the names come in the order the rows read, dotted rows before muted ones', () => {
-    // “Grade” is still being set up (a dotted row), “Wide” was finished with changes (a muted row after it),
-    // although “Wide” comes first on the canvas.
+  // PR #200 fix round 1 (GM answer: "use canvas order on both
+  // placeholder-run lines") replaces item 1's row order: the names come in
+  // canvas order, whatever order the rows read.
+  it('item 1, as GM ruled on PR #200: the names come in canvas order, not the order the rows read', () => {
+    // “Grade” is still being set up (a dotted row), “Wide” was finished with changes (a muted row after it);
+    // “Wide” comes first on the canvas, so it is named first.
     const nodes = [node('w', 'Wide'), node('g', 'Grade', codex), node('o', 'Final')];
     const model = placeholderRunConfirm(nodes, [wire('w', 'o'), wire('g', 'o')], 'o', priced,
       { shown: new Map([['w', codex], ['g', codex]]), changed: new Set(['w', 'g']) })!;
     expect(model.rows.map((row) => row.name).slice(0, 2)).toEqual(['“Grade”', '“Wide”']);
-    expect(model.savedLine).toBe(`Codex changed “Grade” and “Wide” ${SAVED}`);
+    expect(model.savedLine).toBe(`Codex changed “Wide” and “Grade” ${SAVED}`);
   });
 
   it('the price footnotes keep their count from 3 (they are about money)', () => {

@@ -268,7 +268,7 @@ describe('L-3: the kept note', () => {
     pins.getState().compose({ nodeId: 'n1' });
     pins.getState().setDraft('after a clear');
     agentClear();
-    expect(pins.getState().kept?.line).toBe("Your note wasn't sent because the canvas changed first.");
+    expect(pins.getState().kept?.line).toBe('Your note wasn’t sent because the canvas changed first.');
     pins.getState().dismissKept();
 
     const release = slowListing();
@@ -277,7 +277,7 @@ describe('L-3: the kept note', () => {
     agentOpens({ kind: 'agent', name: 'Codex' });
     await vi.waitFor(() => expect(pins.getState().kept).not.toBeNull());
     expect(pins.getState().kept).toEqual({ text: 'during a follow',
-      line: "Your note wasn't sent because Codex started opening “beta”." });
+      line: 'Your note wasn’t sent because Codex started opening “beta”.' });
     release();
     await vi.waitFor(() => expect(useProjectStore.getState().activeProject?.id).toBe('beta'));
     pins.getState().dismissKept();
@@ -285,14 +285,14 @@ describe('L-3: the kept note', () => {
     graphWrites.answer = () => Promise.resolve(answer(409, { detail: STALE }));
     pins.getState().compose({ nodeId: 'n1' });
     expect(await pins.getState().submit('refused')).toBe(false);
-    expect(pins.getState().kept).toEqual({ text: 'refused', line: "Your note wasn't sent because the canvas changed first." });
+    expect(pins.getState().kept).toEqual({ text: 'refused', line: 'Your note wasn’t sent because the canvas changed first.' });
   });
 
   it('an unknown agent reads "an agent"', async () => {
     const { noteKeptLine } = await import('../src/lib/canvasPins');
     expect(noteKeptLine({ agent: null, projectName: 'Second canvas' }))
-      .toBe("Your note wasn't sent because an agent started opening “Second canvas”.");
-    expect(noteKeptLine(null)).toBe("Your note wasn't sent because the canvas changed first.");
+      .toBe('Your note wasn’t sent because an agent started opening “Second canvas”.');
+    expect(noteKeptLine(null)).toBe('Your note wasn’t sent because the canvas changed first.');
   });
 });
 
@@ -333,5 +333,104 @@ describe('L-5: a save already sent when a no-agent replacement lands', () => {
     await new Promise((resolve) => setTimeout(resolve, 300));
     expect(vi.mocked(projects.recoverProject)).not.toHaveBeenCalled();
     expect(lines()).toEqual([]);
+  });
+});
+
+// ── Fix round 1 of PR #200 ──────────────────────────────────────────────────
+
+describe('fix round 1, GM 2026-10-27 answer 1 (review N-1): the draft belongs to its canvas', () => {
+  beforeEach(() => resetPins());
+  afterEach(() => resetPins());
+
+  it('a draft closed with × on one canvas never prefills the next canvas\'s dialog: the kept-note notice holds it', async () => {
+    pins.getState().compose({ nodeId: 'n1' });
+    pins.getState().setDraft('for alpha n1');
+    pins.getState().cancelCompose();
+    agentOpens({ kind: 'agent', name: 'Codex' });
+    await vi.waitFor(() => expect(useProjectStore.getState().activeProject?.id).toBe('beta'));
+    expect(pins.getState().draft).toBe('');
+    expect(pins.getState().kept).toEqual({ text: 'for alpha n1', line: 'Your note wasn’t sent because Codex started opening “beta”.' });
+  });
+
+  it('an emptied draft leaves nothing to keep; the failed-send toast goes with its canvas', async () => {
+    graphWrites.answer = () => Promise.resolve(answer(500, { detail: 'boom' }));
+    pins.getState().compose({ nodeId: 'n1' });
+    expect(await pins.getState().submit('failed note')).toBe(false);
+    expect(pins.getState().error).not.toBeNull();
+    expect(pins.getState().draft).toBe('failed note');
+    agentClear();
+    expect(pins.getState().error).toBeNull();
+    expect(pins.getState().draft).toBe('');
+    expect(pins.getState().kept).toEqual({ text: 'failed note', line: 'Your note wasn’t sent because the canvas changed first.' });
+    pins.getState().dismissKept();
+    pins.getState().compose({ nodeId: 'n1' });
+    pins.getState().setDraft('   ');
+    pins.getState().cancelCompose();
+    agentClear();
+    expect(pins.getState().kept).toBeNull();
+  });
+});
+
+describe('fix round 1, GM answer 4: what replaced the canvas, for the chat\'s Apply', () => {
+  it('an agent\'s open names the agent and the project; an agent\'s clear says cleared', async () => {
+    const { lastCanvasReplacement } = await import('../src/lib/canvasReplaced');
+    agentOpens({ kind: 'agent', name: 'Codex' });
+    await vi.waitFor(() => expect(useProjectStore.getState().activeProject?.id).toBe('beta'));
+    expect(lastCanvasReplacement()).toEqual({ kind: 'opened', agent: 'Codex', projectName: 'beta' });
+    emit({ type: 'graphSync', workspaceRevision: 'rev-b', paramsVersion: GRAPH_PARAMS_VERSION, empty: true,
+      cleared: true, canvasRevision: '31', nodes: [], edges: [], edit: { id: 'ed_c31', actor: { kind: 'agent', name: 'Codex' } } });
+    expect(lastCanvasReplacement()).toEqual({ kind: 'cleared' });
+  });
+});
+
+describe('fix round 1, review L-4 and N-2: a recovered copy is always named by a line with Open copy', () => {
+  const reconnect = (canvas: string, value: string) => emit({ type: 'graphSync', workspaceRevision: 'rev-a', paramsVersion: GRAPH_PARAMS_VERSION,
+    canvasRevision: canvas, empty: false, edges: [],
+    nodes: [{ id: 'n1', type: 'model-node', position: { x: 0, y: 0 }, data: { definitionId: 'text-input', label: 'Other', params: { value }, state: 'idle', outputs: {} } }] });
+  const COPY_LINE = 'Couldn\'t save “Text” for “Hero prompt”. Your edits were saved as a copy, “Glass campaign (recovered)”.';
+  const holdPut = () => {
+    let settle: (r: Response) => void = () => {};
+    graphWrites.answer = (path, init) => (path === '/api/graph/node/n1' && init?.method === 'PUT'
+      ? new Promise<Response>((resolve) => { settle = resolve; graphWrites.hanging.push(() => resolve(answer(200))); })
+      : Promise.resolve(answer()));
+    return (r: Response) => settle(r);
+  };
+  const copyNotice = () => [useGraphStore.getState().undoNotice, useGraphStore.getState().messageNotice]
+    // The line keeps the copy's name together with no-break spaces.
+    .find((notice) => notice?.text?.replace(/\u00a0/g, ' ') === COPY_LINE);
+
+  it('COPY-TWICE: two reconnect replacements while the save is on its way', async () => {
+    vi.mocked(projects.recoverProject).mockResolvedValue({ ...project('copy-1', 'Glass campaign (recovered)') } as never);
+    setProjectContext({ id: 'alpha', revision: 'rev-a', canvas: '4' });
+    const settle = holdPut();
+    type('typed COPY-TWICE');
+    await sentPut();
+    reconnect('12', 'theirs');
+    await flush(); await flush();
+    reconnect('13', 'theirs again');
+    await flush(); await flush();
+    settle(new Response(JSON.stringify({ detail: STALE }), { status: 409 }));
+    await vi.waitFor(() => expect(vi.mocked(projects.recoverProject)).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(copyNotice(), JSON.stringify(lines())).toBeDefined());
+    expect(copyNotice()?.copy).toEqual({ projectId: 'copy-1' });
+  });
+
+  it('COPY-HANG: a save that never answers releases the copy after the hold limit', async () => {
+    const { setReplacedCopyWaitForTests } = await import('../src/store/graphStore');
+    setReplacedCopyWaitForTests(200);
+    try {
+      vi.mocked(projects.recoverProject).mockResolvedValue({ ...project('copy-1', 'Glass campaign (recovered)') } as never);
+      setProjectContext({ id: 'alpha', revision: 'rev-a', canvas: '4' });
+      holdPut();
+      type('typed COPY-HANG');
+      await sentPut();
+      reconnect('12', 'theirs');
+      await flush(); await flush();
+      expect(vi.mocked(projects.recoverProject)).not.toHaveBeenCalled();
+      await vi.waitFor(() => expect(vi.mocked(projects.recoverProject)).toHaveBeenCalledTimes(1), { timeout: 3000 });
+      await vi.waitFor(() => expect(copyNotice()).toBeDefined());
+    } finally {
+      setReplacedCopyWaitForTests(null);
+    }
   });
 });

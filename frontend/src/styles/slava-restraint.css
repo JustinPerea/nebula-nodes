@@ -4682,10 +4682,8 @@ body.app-slava-restraint .editor-tl__playhead {
 /* ─────────────────────────────────────────────────────────────────────
  * Selection + scrollbars
  * ───────────────────────────────────────────────────────────────────── */
-body.app-slava-restraint ::selection {
-  background: var(--sr-accent);
-  color: var(--sr-on-accent);
-}
+/* Text selection keeps the platform's own colour (fix round 1 of PR #200,
+   GM bug 2): the accent means "you can press this", never "selected". */
 
 body.app-slava-restraint ::-webkit-scrollbar {
   width: 8px;

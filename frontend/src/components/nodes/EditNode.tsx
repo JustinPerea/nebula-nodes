@@ -6,6 +6,7 @@ import type { NodeData } from '../../types';
 import { NodeRunError } from './NodeError';
 import { PlaceholderLine } from './PlaceholderLine';
 import { pendingAttr } from '../../lib/pendingNodes';
+import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 
 interface EditClipShape {
   duration?: number;
@@ -17,6 +18,10 @@ interface EditClipShape {
 
 export function EditNode({ id, data, selected }: NodeProps) {
   const enterEditor = useUIStore((s) => s.enterEditor);
+  // Fix round 1 of PR #200 (review L-5): opening the trim editor makes or
+  // finds its edit node (uiStore enterEditor), which the store's gate refuses
+  // while following or offline; the button says so instead of doing nothing.
+  const lock = useCanvasLock();
   const params = ((data as { params?: Record<string, unknown> }).params ?? {}) as Record<string, unknown>;
   const clips = ((params.clips as EditClipShape[]) ?? []);
 
@@ -57,6 +62,7 @@ export function EditNode({ id, data, selected }: NodeProps) {
     .join(' · ');
 
   function handleOpenEditor() {
+    if (refuseCanvasEdit()) return;
     const state = useGraphStore.getState();
     const edge = state.edges.find((e) => e.target === id && e.targetHandle === 'video_in');
     if (edge) enterEditor(edge.source);
@@ -73,7 +79,7 @@ export function EditNode({ id, data, selected }: NodeProps) {
       <PlaceholderLine pending={data.pending} />
       <div className="edit-node__summary">{summary || 'no edits yet'}</div>
       {selected && (
-        <button type="button" className="edit-node__open" onClick={handleOpenEditor}>
+        <button type="button" className="edit-node__open" onClick={handleOpenEditor} {...lock.act({ offline: 'open the editor' })}>
           Open Editor
         </button>
       )}

@@ -76,6 +76,15 @@ export function openingLine(project: string): string {
   return `Opening “${project}”…`;
 }
 
+/** The project bar's name while following (fix round 1 of PR #200, GM bug
+ * 1): in full up to OPENING_NAME_MAX characters; a longer one is cut to
+ * fit with "…" (the bar's title and label keep all of it). */
+export const OPENING_NAME_MAX = 24;
+export function openingName(project: string): string {
+  const characters = [...project];
+  return characters.length <= OPENING_NAME_MAX ? project : `${characters.slice(0, OPENING_NAME_MAX - 1).join('').trimEnd()}…`;
+}
+
 export function waitToOpenTooltip(project: string): string {
   return `Wait for “${project}” to open.`;
 }

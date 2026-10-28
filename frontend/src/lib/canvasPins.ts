@@ -40,20 +40,20 @@ export async function createPin(text: string, target: PinTarget, project?: Proje
  * never pinned elsewhere: the dialog closes and this keeps the text, with a
  * way to copy it. GM - Design, r24 item 1 (2026-10-27), verbatim: no colon,
  * the reason given:
- *   "Your note wasn't sent because the canvas changed first."
- *   A follow started: "Your note wasn't sent because Codex started opening
+ *   "Your note wasn’t sent because the canvas changed first."
+ *   A follow started: "Your note wasn’t sent because Codex started opening
  *    “Second canvas”." ("an agent" when the agent isn't known).
  * The note itself on its own line, in quotes, clamped to 2 lines with "…";
  * "Copy note" copies the full text; "Copy note" and × stay.
  */
-export const NOTE_KEPT_LINE = "Your note wasn't sent because the canvas changed first.";
+export const NOTE_KEPT_LINE = 'Your note wasn’t sent because the canvas changed first.';
 export const NOTE_KEPT_COPY = 'Copy note';
 
 /** The kept note's line: why it wasn't sent. `following`: the follow that
  * closed the dialog (or was on when Nebula refused the note). */
 export function noteKeptLine(following: { agent: string | null; projectName: string } | null): string {
   if (!following || !following.projectName) return NOTE_KEPT_LINE;
-  return `Your note wasn't sent because ${following.agent || 'an agent'} started opening “${following.projectName}”.`;
+  return `Your note wasn’t sent because ${following.agent || 'an agent'} started opening “${following.projectName}”.`;
 }
 
 export async function deletePin(id: string): Promise<void> {

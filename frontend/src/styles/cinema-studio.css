@@ -448,7 +448,14 @@ body.app-slava-restraint .cinema-shots-rail__move {
 
 body.app-slava-restraint .cinema-shots-rail__move:disabled { opacity: var(--sr-disabled-opacity, 0.5); cursor: default; }
 
-body.app-slava-restraint .cinema-shots-rail__shot--selected { border-color: var(--sr-accent); }
+/* The selected shot (fix round 1 of PR #200, GM's note): the shared
+   selected style, the node's category colour as a selected node card has it
+   (slava-restraint .model-node--selected), never the accent. The rail sets
+   --node-category-color from the Cinema node's category. */
+body.app-slava-restraint .cinema-shots-rail__shot--selected {
+  border-color: var(--node-category-color, var(--sr-ink));
+  box-shadow: 0 0 0 1px var(--node-category-color, var(--sr-ink));
+}
 body.app-slava-restraint .cinema-shots-rail__shot--dragging { opacity: 0.5; }
 
 body.app-slava-restraint .cinema-shots-rail__thumb {

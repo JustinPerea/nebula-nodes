@@ -21,7 +21,9 @@ interface CanvasPinsState {
   /** What the person has typed in the dialog. GM (2026-10-27, the
    * follow-up to PR #195): closing the dialog with × or Esc keeps it as the
    * draft for the next open; only sending drops it, or clearing the field
-   * and then closing. */
+   * and then closing. Fix round 1 of PR #200 (GM: the draft belongs to its
+   * own canvas): when the canvas goes, a draft left closed becomes the kept
+   * note, with its line, so it never starts another canvas's dialog unseen. */
   draft: string;
   /** A note that couldn't be added because its canvas went before it was
    * sent (a follow, a replacement, Nebula's out-of-date refusal): its text,
@@ -200,9 +202,17 @@ function canvasWentFor(error: unknown): boolean {
  * never re-anchored: the canvas that replaces it reuses the same ids. */
 function closeComposerForGoneCanvas(following: ReturnType<typeof followingSwitch>): void {
   const { composer, draft } = useCanvasPinsStore.getState();
-  if (!composer) return;
   const text = draft.trim();
-  useCanvasPinsStore.setState({ composer: null, composerCanvas: null, draft: '',
+  // Fix round 1 of PR #200 (GM, 2026-10-27: the draft belongs to its own
+  // canvas; review N-1): a draft left closed by × or Esc, or by a send that
+  // failed, goes with its canvas too, so it never starts another canvas's
+  // dialog unseen. The kept-note notice holds it, with the line saying why,
+  // as for an open dialog. A failed send's toast goes with it.
+  if (!composer && !text) {
+    if (useCanvasPinsStore.getState().error) useCanvasPinsStore.setState({ error: null });
+    return;
+  }
+  useCanvasPinsStore.setState({ composer: null, composerCanvas: null, draft: '', error: null,
     ...(text ? { kept: { text, line: noteKeptLine(following) } } : {}) });
 }
 

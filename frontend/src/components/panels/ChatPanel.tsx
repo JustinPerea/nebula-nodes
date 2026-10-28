@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { refuseEditWhileFollowing } from '../../lib/canvasFollow';
 import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
-import { canvasReplacements, subscribeCanvasReplaced } from '../../lib/canvasReplaced';
+import { canvasReplacements, lastCanvasReplacement, replacedSinceWrittenLine, subscribeCanvasReplaced } from '../../lib/canvasReplaced';
+import { useProjectStore } from '../../store/projectStore';
 import { ArrowUp, ChevronDown, ChevronRight, ExternalLink, LogIn, Square, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
@@ -289,11 +290,16 @@ function AssistantBubble({ message, agentName, onPermission }: {
 }) {
   const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
   // Apply writes the canvas: it takes the canvas lock (disabled, marked,
-  // GM's tooltip while following; offline too), and goes once the canvas
-  // its node id was read on is replaced (that id may name another node now).
+  // GM's tooltip while following; offline too). Once the canvas its node id
+  // was read on is replaced (that id may name another node now) it stays,
+  // disabled, and its tooltip says why (fix round 1 of PR #200, GM answer 4:
+  // never remove an action without saying why).
   const lock = useCanvasLock();
   const canvasNow = useSyncExternalStore(subscribeCanvasReplaced, canvasReplacements, canvasReplacements);
-  const canApply = Boolean(message.enhanceTargetId) && message.enhanceCanvas === canvasNow;
+  const projectName = useProjectStore((state) => state.activeProject?.name ?? null);
+  const replacedSince = Boolean(message.enhanceTargetId) && message.enhanceCanvas !== canvasNow;
+  const applyTitle = replacedSince ? replacedSinceWrittenLine(lastCanvasReplacement(), projectName)
+    : 'Paste this into the text-input node that triggered Enhance';
 
   const applyToTarget = (content: string) => {
     if (!message.enhanceTargetId || message.enhanceCanvas !== canvasReplacements()) return;
@@ -327,12 +333,12 @@ function AssistantBubble({ message, agentName, onPermission }: {
                 ) : (
                   <div key={i} className="chat__codeblock">
                     <pre className="chat__codeblock-body">{seg.content}</pre>
-                    {canApply && (
+                    {message.enhanceTargetId && (
                       <button
                         type="button"
                         className="chat__codeblock-apply"
                         onClick={() => applyToTarget(seg.content)}
-                        {...lock.act({ title: 'Paste this into the text-input node that triggered Enhance' })}
+                        {...lock.act({ disabled: replacedSince, title: applyTitle })}
                       >
                         {applyLabel}
                       </button>

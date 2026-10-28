@@ -33,11 +33,11 @@ describe('PinComposer', () => {
     useCanvasPinsStore.getState().compose({ nodeId: 'n4' });
     api.createPin.mockResolvedValue(pin('warmer'));
     render(<PinComposer />);
-    const input = screen.getByRole('textbox', { name: 'Note for agents' }) as HTMLInputElement;
+    const input = screen.getByRole('textbox', { name: 'Note for agents' }) as HTMLTextAreaElement;
     expect(input.maxLength).toBe(280);
     fireEvent.change(input, { target: { value: '  warmer  ' } });
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Send note' }));
     });
     // Round 23 (M-1): and the project it was composed on (none open here).
     expect(api.createPin).toHaveBeenCalledWith('warmer', { nodeId: 'n4' }, null);
@@ -51,7 +51,7 @@ describe('PinComposer', () => {
     const { unmount } = render(<PinComposer />);
     fireEvent.change(screen.getByRole('textbox', { name: 'Note for agents' }), { target: { value: '   ' } });
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Send note' }));
     });
     expect(useCanvasPinsStore.getState().composer).toBeNull();
     unmount();
@@ -71,7 +71,7 @@ describe('PinComposer', () => {
     render(<PinComposer />);
     fireEvent.change(screen.getByRole('textbox', { name: 'Note for agents' }), { target: { value: 'redo this one' } });
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Send note' }));
     });
     expect(screen.getByRole('alert').textContent).toContain('only works from the Nebula canvas');
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));

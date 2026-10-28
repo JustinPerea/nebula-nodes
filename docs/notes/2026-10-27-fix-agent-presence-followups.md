@@ -176,3 +176,151 @@ Newly locked:
 - Offline, a disabled Generate shot has no tooltip: the lock gives a title
   only while following. GM's rule says the tooltip gives the reason. That is
   a question for GM, overlapping #198's offline actions.
+
+## Fix round 1
+
+From review 1 of PR #200 (6 LOW, 4 nits) and GM's visual review 1 with its
+2026-10-27 answers (draft tied to its canvas; one colour treatment, not one
+shape; canvas order on both placeholder-run lines).
+
+### What changed
+
+1. **The agent bar (GM bug 1).** The bar was held to the width it had as the
+   follow started (`width` and `max-width` inline, `overflow: hidden`, and
+   an ellipsis on the name), so "Second canvas" read "Secon…". Now it only
+   never gets narrower (`min-width`) and grows to fit. `canvasFollow
+   openingName` cuts a name past 24 characters in script (23 + "…"); the
+   title and aria-label keep it whole. Live at 1280 and 1440: "Opening
+   “Second canvas”…", nothing cut.
+2. **The kept-note dialog (GM bug 2, review L-1, N-1).**
+   - `PromptDialog` takes `multiline` and `confirmLabel`. The note uses an
+     `AutoGrowTextarea` (one line, up to about 4, then it scrolls), opens
+     with the caret at the end and nothing selected, Enter sends and
+     Shift+Enter is a new line. Other prompts still select on open.
+   - "OK" is "Send note"; "Cancel" stays.
+   - The app-wide `::selection` rule painted the accent: removed, so text
+     selection is the platform's own colour everywhere.
+   - Draft scope (GM confirmed): when the canvas goes, a draft left closed
+     (by ×, Esc or a failed send) becomes the kept note with its line, so it
+     never starts another canvas's dialog unseen. The failed-send toast is
+     cleared at the same moment.
+3. **Cinema with a failed reference (GM bug 3).** Generate 2 was already
+   disabled with the reason, but its outline style had no disabled look, so
+   it read as live. It is now in the shared look; Generate shot and
+   Generate N share one `blockedReason` tooltip, and the one reason line sits
+   under their row.
+4. **Offline tooltips (GM answer 1).** `errorCopy.offlineDisabledReason(verb?)`
+   with GM's two strings (local until #198's shared helper lands; reconcile
+   at merge). `canvasLock.act({ offline })` and `lock.title()` give it while
+   offline (the following tooltip still wins). Cinema: Generate shot /
+   Generate N / Generate all "generate", Send to motion "send to motion",
+   + Add shot "add shots", the arrows "reorder shots", Remove shot "remove
+   shots", the prompt "edit the prompt"; the rest the generic line. Opt-in
+   per control: the app-wide offline tooltip is #198's.
+5. **Chat Apply (GM answer 4).** Apply stays, disabled, with GM's tooltip.
+   `noteCanvasReplaced(cause)` records what replaced the canvas (`opened`
+   with the agent and project while following, `opened` with no agent for
+   a person's own open, `cleared`, `changed`); `replacedSinceWrittenLine`
+   gives "Codex opened “Second canvas” after this was written.", "Nebula
+   opened …" and "The canvas was cleared after this was written.". An
+   import or a file load has no GM line yet: "The canvas changed after this
+   was written." (asked of GM).
+6. **Full note on hover (GM answer 5).** The app has no shared tooltip
+   component (only the rail's own CSS one), so the `title` stays.
+7. **One disabled colour treatment (GM answer 6, review L-2, L-3).**
+   `styles/disabled-buttons.css` has two lists:
+   - unfilled (ghost and outline): transparent, label grey, outline at the
+     edge's strength. The toolbar's Run, Ask, Duplicate and Delete, Cinema's
+     outlined and rail buttons, Apply, the prompt dialog's buttons, the
+     header Back, the Inspector's actions, the proposal bar.
+   - filled: a grey fill (white at 0.10) and a grey label. The accent
+     buttons, the danger confirms (`project-home__danger`,
+     `prompt-dialog__danger`), white primaries (`project-home__new`,
+     `project-switch-toast__back`, `project-home__edits-primary`), the mask
+     painter's blue Save, and other solid fills.
+   - Both set `opacity: 1 !important`, so neither each style's own dimming
+     nor the lock's 0.6 stacks on them. Cinema's locked prompt is grey too.
+   - Decided here: the outline is `rgba(255,255,255,0.12)`, not the label's
+     grey. In the label grey (0.55) the disabled outlines outshone the live
+     buttons beside them (Generate all against Run history). Asked of GM.
+   - Measured live (label against what's behind it, opacity included):
+     disabled labels 6.04:1 on the grey fill, 6.19-6.27:1 unfilled;
+     enabled labels 17.55:1 (white primaries and Generate 2), 12.6:1
+     (toolbar Ask). The disabled grey is about a third of the enabled
+     label's contrast: clearly dimmer, still above 4.5:1.
+   - The ratchet: every solid-filled button style must be in a list (two
+     Commons light-theme buttons are excepted with the reason), and any
+     button style with a disabled look of its own outside the shared file
+     fails unless it is on `SWEEP_LATER`. That list holds the 42 rules this
+     round didn't fold in, and it can only shrink.
+8. **The selected shot card (GM note).** `.cinema-shots-rail__shot--selected`
+   uses the node card's selected colour, `--node-category-color` (the rail
+   sets the Cinema node's, cinematic #d9a441), never the accent.
+9. **Canvas order and grouping (GM answer 3, review L-6).**
+   - `CutOffSave.order` (the node's index on its canvas) orders the failed-save
+     lines.
+   - The delete lines sort by the canvas the delete was made on.
+   - Both placeholder-run lines ("… changed while this was open" and the
+     replay's "… changed … after the run was saved") use `nodeNameList`, in
+     canvas order (`PlaceholderRunConfirm.canvasOrder`).
+   - This replaces GM's round 11 item 1 (row order) and round 12 item 3 (a
+     free node after the rows). Those two tests were changed to say so.
+10. **A recovered copy is always named (review L-4, N-2).**
+    - A copy that lands after another replacement shows its own line with
+      Open copy (`showReplacementReport(report)`).
+    - The saves that didn't land are added to it (each `PendingLanding`
+      carries its saves).
+    - A save that never answers releases the copy after 15 s
+      (`landingsWithin`), the undo hold's rule.
+11. **The ratchet (review L-5).**
+    - Uses the TypeScript parser: comments and strings are not code, and
+      bracket access by a string counts.
+    - Store aliases are followed through re-exports.
+    - New check G: in a file that reads the lock, a control whose handler
+      reaches a gated action (through the file's own functions) must carry
+      the lock, or sit in a locked fieldset. It found ModelNode's "Rerun with
+      latest source", which is now locked. A drag handle may refuse in its
+      handler. The palette's search input is allowlisted with a reason.
+    - EditNode's Open Editor takes the lock.
+    - The uiStore and cinemaUploads reasons are corrected.
+12. **Curly ’.** The kept-note lines now use ’, as does every new string
+    here. The failed-save and delete lines this PR regrouped keep their
+    wording: their "Couldn't …" sentences are shared with dozens of
+    siblings, so they belong to the app-wide sweep.
+
+Agent-visible: nothing. No MCP tool, CLI command or agent-facing text
+changed (the note, Apply and disabled looks are the person's UI), so
+mcp_server.py, the CLI, MCP-SETUP.md and SKILL.md are unchanged.
+
+### Tests that failed first (on ed7edaf5)
+
+The four test files were run against ed7edaf5's `frontend/` (exported with
+git archive into scratch, sharing node_modules): 37 of 60 failed. The rest
+were controls, and the ratchet's own parser probes, which carry their own
+scanner.
+- r1: 21 of 24 failed (the bar, the dialog, selection, ’, the offline
+  reason and lock, the disabled rules, the shot card, canvas order,
+  EditNode).
+- surfaces: 4 failed (Apply kept with its three tooltips, and its look).
+- store: 7 failed (2 on ’, the draft scope ×2, the replacement cause,
+  COPY-TWICE, COPY-HANG).
+- ratchet: 5 failed (G found ModelNode; EditNode not locked; the two-rule
+  look; filled styles uncovered; disabled looks outside the shared file).
+
+### Surprises
+
+- A reconnect after a backend restart can reload the page. The live script
+  waits for it before going on.
+- A fresh canvas closes the chat dock, but its messages stay (the panel
+  stays mounted), so Apply with its tooltip is there when the dock is
+  opened again.
+- The live tooltips in the sign-off shots are drawn from each button's real
+  `title`. Headless Chrome doesn't paint native tooltips.
+
+### Fix round 1 gates
+
+- Backend full suite: 11,686 passed, 71 skipped.
+- Focused files: 225/225. errorCopy files: 173/173.
+- tsc -b and lint: clean. Build: entry 405,787 B raw (limit 512,000).
+- Full vitest under machine load: 7,009 passed and 116 failed in 48 files (95 were 5 s timeouts). Each of the 48 files rerun alone: 588/588 passed.
+- Live (backend 8795, Vite 5795): 22/22 passed. 2 requests were blocked, both canaries, and none went toward 8000-8010 or 5173.

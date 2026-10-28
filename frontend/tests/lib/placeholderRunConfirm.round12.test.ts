@@ -64,12 +64,14 @@ describe('GM round 12, item 2: Meshy\'s mesh type is named by its setting', () =
   });
 });
 
-describe('GM round 12, item 3: a changed free node stays named, after the names that have rows', () => {
-  it('“Hero still” (a row) before “Prompt” (free, no row)', () => {
+// PR #200 fix round 1 (GM answer: canvas order on both placeholder-run lines):
+// the free node stays named, now in its canvas place, not after the rows.
+describe('GM round 12, item 3: a changed free node stays named (in canvas order since PR #200)', () => {
+  it('“Prompt” (free, no row, first on the canvas) before “Hero still” (a row)', () => {
     const model = placeholderRunConfirm([node('p', 'Prompt', codex, 'text-input'), node('h', 'Hero still', codex)],
       [wire('p', 'h')], 'h', unpriced, { changed: new Set(['p', 'h']) })!;
     expect(model.rows.map((candidate) => candidate.name)).toEqual(['“Hero still”']);
-    expect(model.savedLine).toBe('Codex changed “Hero still” and “Prompt” after the run was saved. The replay uses the saved settings.');
+    expect(model.savedLine).toBe('Codex changed “Prompt” and “Hero still” after the run was saved. The replay uses the saved settings.');
   });
 });
 

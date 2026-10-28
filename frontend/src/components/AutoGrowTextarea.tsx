@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
-import type { TextareaHTMLAttributes } from 'react';
+import type { RefObject, TextareaHTMLAttributes } from 'react';
 
 /** Fit a textarea to its text: no shorter than its `rows`, no taller than its
  * CSS `max-height`, past which it scrolls. */
@@ -23,7 +23,10 @@ function fitTextareaHeight(element: HTMLTextAreaElement): void {
  * which Safari (the desktop app's other engine) doesn't have; it measures
  * again when the text or the width changes.
  */
-export function AutoGrowTextarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+export function AutoGrowTextarea({ textareaRef, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement> & {
+  /** The element, for a caller that focuses it or places the caret. */
+  textareaRef?: RefObject<HTMLTextAreaElement | null>;
+}) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const fit = useCallback(() => { if (ref.current) fitTextareaHeight(ref.current); }, []);
   useLayoutEffect(fit, [fit, props.value]);
@@ -40,5 +43,5 @@ export function AutoGrowTextarea(props: TextareaHTMLAttributes<HTMLTextAreaEleme
     observer.observe(element);
     return () => observer.disconnect();
   }, [fit]);
-  return <textarea ref={ref} {...props} />;
+  return <textarea ref={(element) => { ref.current = element; if (textareaRef) textareaRef.current = element; }} {...props} />;
 }

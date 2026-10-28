@@ -294,14 +294,15 @@ describe('B: the project bar while following', () => {
     }
   }
 
-  it('a long name: the bar keeps its width, the tooltip and label carry the whole name', () => {
+  it('a long name: the bar never gets narrower, the name is cut past 24 characters, the tooltip and label carry it whole', () => {
     useProjectStore.setState({ activeProject: project as never, screen: 'workspace', saveStatus: 'unsaved' });
     const { container } = render(<ProjectWorkspaceControls />);
     const bar = container.querySelector('.project-workspace-controls') as HTMLElement;
     bar.getBoundingClientRect = () => ({ width: 221, height: 30, x: 0, y: 0, top: 0, left: 0, right: 221, bottom: 30, toJSON: () => ({}) });
     const name = 'Second canvas with a name far too long for the project bar';
     act(() => setFollowingSwitch({ projectName: name, agent: 'Codex' }));
-    expect(bar.style.width).toBe('221px');
+    expect(bar.style.minWidth).toBe('221px');
+    expect(container.querySelector('.project-workspace-controls__opening-name')?.textContent).toBe('Second canvas with a na…');
     expect(bar).toHaveAttribute('title', `Opening “${name}”…`);
     expect(bar).toHaveAttribute('aria-label', `Opening “${name}”…`);
   });

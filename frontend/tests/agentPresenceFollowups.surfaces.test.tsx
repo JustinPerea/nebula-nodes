@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { Edge, Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 /**
  * Follow-ups to PR #195 (review 23, L-4 and the out-of-scope chat item): the
@@ -194,10 +196,38 @@ describe('the chat: Apply and /clear follow the canvas lock', () => {
     expect(useGraphStore.getState().nodes[0].data.params.value).toBe('a sky');
   });
 
-  it('Apply goes once the canvas it was read on is replaced (its n2 may be another node)', async () => {
+  // Fix round 1 (GM answer 4): never remove an action without saying why.
+  // Apply stays, disabled in the standard grey, and its tooltip says what
+  // happened to the canvas it was written for.
+  it('an agent opened another project: Apply stays, disabled, and says who opened what', async () => {
+    const apply = await enhanceReply();
+    act(() => { noteCanvasReplaced({ kind: 'opened', agent: 'Codex', projectName: 'Second canvas' }); });
+    const still = screen.getByRole('button', { name: 'Apply to @n2' });
+    expect(still).toBe(apply);
+    expect(still).toBeDisabled();
+    expect(still).toHaveAttribute('title', 'Codex opened “Second canvas” after this was written.');
+    fireEvent.click(still);
+    expect(useGraphStore.getState().nodes[0].data.params.value).toBe('a sky');
+  });
+
+  it('no agent behind it: "Nebula opened …"', async () => {
     await enhanceReply();
-    act(() => { noteCanvasReplaced(); });
-    expect(screen.queryByRole('button', { name: 'Apply to @n2' })).toBeNull();
+    act(() => { noteCanvasReplaced({ kind: 'opened', agent: null, projectName: 'Second canvas' }); });
+    expect(screen.getByRole('button', { name: 'Apply to @n2' }))
+      .toHaveAttribute('title', 'Nebula opened “Second canvas” after this was written.');
+  });
+
+  it('the canvas was cleared: "The canvas was cleared after this was written."', async () => {
+    await enhanceReply();
+    act(() => { noteCanvasReplaced({ kind: 'cleared' }); });
+    const apply = screen.getByRole('button', { name: 'Apply to @n2' });
+    expect(apply).toBeDisabled();
+    expect(apply).toHaveAttribute('title', 'The canvas was cleared after this was written.');
+  });
+
+  it('the Apply button is in the one disabled look', () => {
+    const shared = readFileSync(join(__dirname, '../src/styles/disabled-buttons.css'), 'utf8');
+    expect(shared).toMatch(/\.chat__codeblock-apply\b/);
   });
 
   it('following: /clear is refused whole; nothing is sent and the command stays typed', async () => {

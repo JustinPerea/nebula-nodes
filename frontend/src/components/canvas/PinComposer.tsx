@@ -44,6 +44,10 @@ export function PinComposer() {
         <PromptDialog
           request={request}
           maxLength={MAX_PIN_TEXT}
+          // GM bug 2 (fix round 1 of PR #200): a textarea that grows, the
+          // caret at the end of a kept note, and "Send note".
+          multiline
+          confirmLabel="Send note"
           onChange={setDraft}
           confirm={lock.act()}
           onRefused={() => { refuseCanvasEdit(); }}

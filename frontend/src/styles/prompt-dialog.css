@@ -29,6 +29,7 @@
 }
 
 .prompt-dialog__field input,
+.prompt-dialog__field textarea,
 .prompt-dialog__actions button {
   padding: 8px 10px;
   border: 1px solid var(--sr-edge-strong, #555);
@@ -36,6 +37,19 @@
   background: var(--sr-canvas, #161616);
   color: inherit;
   font: inherit;
+}
+
+/* The note for agents (fix round 1 of PR #200, GM bug 2): one line to
+   start, growing with the text to about 4 lines, then it scrolls
+   (AutoGrowTextarea measures up to this max-height). */
+.prompt-dialog__field textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 0;
+  max-height: calc(4 * 1.45em + 18px);
+  line-height: 1.45;
+  resize: none;
+  overflow-wrap: anywhere;
 }
 
 .prompt-dialog__actions {
@@ -65,6 +79,7 @@
 }
 
 .prompt-dialog__field input:focus-visible,
+.prompt-dialog__field textarea:focus-visible,
 .prompt-dialog__actions button:focus-visible {
   outline: var(--sr-focus-outline, 2px solid #9ab8ff);
   outline-offset: var(--sr-focus-offset, 2px);

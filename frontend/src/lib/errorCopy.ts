@@ -506,7 +506,9 @@ export async function requestError(heading: string, response: Response,
  *   "2 “Text” nodes"; a mix, "“Brief” and 2 “Text” nodes".
  * - The rule counts nodes, not groups: from 4 nodes in total, "4 nodes".
  * - No node ids: the Agent log keeps those.
- * Groups keep the order their first node came in.
+ * Groups keep the order their first node came in; callers give names in
+ * canvas order (GM, PR #200 answer 3: "2 “Text” nodes and “Brief”" is fine).
+ * Also the placeholder-run dialog's two lines (lib/placeholderRunConfirm).
  */
 export function nodeNameList(names: string[]): string {
   if (names.length >= 4) return `${names.length} nodes`;
@@ -514,4 +516,16 @@ export function nodeNameList(names: string[]): string {
   for (const name of names) groups.set(name, (groups.get(name) ?? 0) + 1);
   const parts = [...groups].map(([name, count]) => (count === 1 ? `“${name}”` : `${count} “${name}” nodes`));
   return parts.length <= 1 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+}
+
+/**
+ * GM - Design, PR #200 answer 1 (2026-10-27), verbatim: the tooltip of a
+ * control that is disabled because Nebula is offline. "You can <verb> when
+ * Nebula reconnects." (e.g. "You can generate when Nebula reconnects."); no
+ * verb, "This works again when Nebula reconnects.". PR #198 adds a shared
+ * disabled-reason helper with the same strings; this local one is
+ * reconciled with it when both are merged.
+ */
+export function offlineDisabledReason(verb?: string): string {
+  return verb ? `You can ${verb} when Nebula reconnects.` : 'This works again when Nebula reconnects.';
 }

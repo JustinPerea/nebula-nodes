@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type RefObject } from 'react';
+import { AutoGrowTextarea } from './AutoGrowTextarea';
 import '../styles/prompt-dialog.css';
 import { ModalPortal } from './ModalPortal';
 import type { ActProps } from '../lib/canvasLock';
@@ -10,7 +11,7 @@ export interface PromptRequest {
 }
 
 /** Shared text-entry dialog for browser and desktop workflows. */
-export function PromptDialog({ request, onDone, maxLength, onChange, confirm, onRefused }: {
+export function PromptDialog({ request, onDone, maxLength, onChange, confirm, onRefused, multiline = false, confirmLabel = 'OK' }: {
   request: PromptRequest;
   onDone: (value: string | null) => void;
   /** Optional cap passed to the input (e.g. 280 for notes to agents). */
@@ -22,17 +23,37 @@ export function PromptDialog({ request, onDone, maxLength, onChange, confirm, on
   confirm?: ActProps;
   /** Enter or OK pressed while `confirm` is disabled. */
   onRefused?: () => void;
+  /** A text that may run to several lines (the note for agents, fix round 1
+   * of PR #200, GM bug 2): a textarea that grows to about 4 lines, then
+   * scrolls; it opens with the caret at the end and nothing selected, so
+   * typing adds to a kept note instead of replacing it (review L-1). Enter
+   * sends, Shift+Enter starts a new line. */
+  multiline?: boolean;
+  /** The confirm button's words ("Send note" for the note). */
+  confirmLabel?: string;
 }) {
   const [value, setValue] = useState(request.initial);
-  const input = useRef<HTMLInputElement>(null);
+  const input = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
   const form = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     const previous = document.activeElement;
-    input.current?.focus();
-    input.current?.select();
+    const field = input.current;
+    field?.focus();
+    if (multiline && field) {
+      const end = field.value.length;
+      field.setSelectionRange(end, end);
+      field.scrollTop = field.scrollHeight;
+    } else {
+      field?.select();
+    }
     return () => { if (previous instanceof HTMLElement && previous.isConnected) previous.focus(); };
-  }, []);
+  }, [multiline]);
+
+  const change = (next: string) => {
+    setValue(next);
+    onChange?.(next);
+  };
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -51,7 +72,7 @@ export function PromptDialog({ request, onDone, maxLength, onChange, confirm, on
           event.stopPropagation();
           onDone(null);
         } else if (event.key === 'Tab') {
-          const controls = form.current?.querySelectorAll<HTMLElement>('input, button');
+          const controls = form.current?.querySelectorAll<HTMLElement>('input, textarea, button');
           if (!controls?.length) return;
           const first = controls[0];
           const last = controls[controls.length - 1];
@@ -66,14 +87,21 @@ export function PromptDialog({ request, onDone, maxLength, onChange, confirm, on
       }}>
         <label className="prompt-dialog__field">
           {request.label}
-          <input ref={input} value={value} maxLength={maxLength} onChange={(event) => {
-            setValue(event.target.value);
-            onChange?.(event.target.value);
-          }} />
+          {multiline
+            ? <AutoGrowTextarea textareaRef={input as RefObject<HTMLTextAreaElement | null>} rows={1} value={value} maxLength={maxLength}
+                onChange={(event) => change(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                    event.preventDefault();
+                    form.current?.requestSubmit();
+                  }
+                }} />
+            : <input ref={input as RefObject<HTMLInputElement | null>} value={value} maxLength={maxLength}
+                onChange={(event) => change(event.target.value)} />}
         </label>
         <div className="prompt-dialog__actions">
           <button type="button" onClick={() => onDone(null)}>Cancel</button>
-          <button type="submit" className="prompt-dialog__confirm" {...confirm}>OK</button>
+          <button type="submit" className="prompt-dialog__confirm" {...confirm}>{confirmLabel}</button>
         </div>
       </form>
     </div>

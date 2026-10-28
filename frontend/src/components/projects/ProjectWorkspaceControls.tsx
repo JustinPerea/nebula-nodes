@@ -4,7 +4,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useGraphStore } from '../../store/graphStore';
 import { shortLine } from '../../lib/errorCopy';
 import { HEADER_TOOLTIP, headerLine } from '../../lib/savePausedCopy';
-import { followingSwitch, openingLine, subscribeFollowingSwitch, subscribeFollowPulse, useFollowingSwitch } from '../../lib/canvasFollow';
+import { followingSwitch, openingLine, openingName, subscribeFollowingSwitch, subscribeFollowPulse, useFollowingSwitch } from '../../lib/canvasFollow';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { isBackendOffline, refuseEditWhileOffline } from '../../lib/backendConnection';
 import './ProjectWorkspaceControls.css';
@@ -24,8 +24,10 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
   const offline = useBackendOffline();
   const [draft, setDraft] = useState<string | null>(null);
   // Round 20 (GM follow-up 1): while the tab follows an agent's switch the
-  // bar says "Opening “<project>”…" where the save state is, and keeps the
-  // width it had (measured as the follow starts), so it never jumps.
+  // bar says "Opening “<project>”…" where the save state is. It never gets
+  // narrower than it was as the follow starts (measured then), and grows to
+  // fit the name (fix round 1 of PR #200, GM bug 1: only a name past 24
+  // characters is cut).
   const following = useFollowingSwitch();
   const bar = useRef<HTMLDivElement | null>(null);
   const [lockedWidth, setLockedWidth] = useState<number | null>(null);
@@ -49,7 +51,7 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
       // GM round 22 (B): while following, the whole bar names the project
       // being opened in full (its tooltip and label); the slot may cut it.
       {...(following ? { role: 'group', title: openingLine(following.projectName), 'aria-label': openingLine(following.projectName) } : {})}
-      style={following && lockedWidth ? { width: lockedWidth, maxWidth: lockedWidth } : undefined}>
+      style={following && lockedWidth ? { minWidth: lockedWidth } : undefined}>
       <button type="button" className="project-workspace-controls__home" aria-label={homeBusy ? 'Saving…' : 'Back to projects'}
         aria-busy={homeBusy || undefined} title="Projects" disabled={busy}
         onClick={(event) => (onHome ? onHome(event.currentTarget) : void useProjectStore.getState().goHome())}>
@@ -58,12 +60,13 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
       </button>
       {following
         // GM round 21 (item 1): the old project's name goes; the name slot
-        // reads "Opening “<project>”…". A long name is cut inside itself,
-        // keeping the closing quote and ellipsis; the bar never widens.
+        // reads "Opening “<project>”…", the name in full. Only a name past
+        // 24 characters is cut inside itself (openingName), keeping the
+        // closing quote and ellipsis; the title and label keep all of it.
         ? <span key={pulse} className={`project-workspace-controls__opening${pulse > 0 ? ' project-workspace-controls__opening--pulse' : ''}`}
             role="status" title={openingLine(following.projectName)} aria-label={openingLine(following.projectName)}>
             <span className="project-workspace-controls__opening-fixed" aria-hidden="true">Opening “</span>
-            <span className="project-workspace-controls__opening-name" aria-hidden="true">{following.projectName}</span>
+            <span className="project-workspace-controls__opening-name" aria-hidden="true">{openingName(following.projectName)}</span>
             <span className="project-workspace-controls__opening-fixed" aria-hidden="true">”…</span>
           </span>
         : draft !== null

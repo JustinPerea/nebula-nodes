@@ -4,6 +4,10 @@ import { backendAssetUrlSync } from '../../lib/backend';
 import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 import { useGraphStore } from '../../store/graphStore';
 import type { CinemaSceneSpec, CinemaShot } from '../../types';
+import { CATEGORY_COLORS } from '../../constants/ports';
+import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
+
+const CINEMA_CATEGORY_COLOR = CATEGORY_COLORS[NODE_DEFINITIONS['cinema-scene']?.category ?? 'cinematic'] ?? CATEGORY_COLORS.cinematic;
 
 interface CinemaShotsRailProps {
   cinemaNodeId: string;
@@ -113,7 +117,10 @@ export function CinemaShotsRail({
   };
 
   return (
-    <div className="cinema-shots-rail" role="group" aria-label="Shots">
+    // GM note (fix round 1 of PR #200): the selected shot uses the shared
+    // selected style, the node's category colour (never the accent).
+    <div className="cinema-shots-rail" role="group" aria-label="Shots"
+      style={{ ['--node-category-color' as string]: CINEMA_CATEGORY_COLOR }}>
       {scene.shots.map((shot, idx) => {
         const selected = shot.id === selectedShotId;
         const owner = activeRuns.find((run) => run.nodeIds.includes(cinemaNodeId)
@@ -164,22 +171,22 @@ export function CinemaShotsRail({
               {selected && <>
                 <button type="button" className="cinema-shots-rail__move"
                   aria-label={`Move Shot ${idx + 1} earlier`}
-                  {...lock.act({ disabled: idx === 0, title: 'Move shot earlier' })}
+                  {...lock.act({ disabled: idx === 0, title: 'Move shot earlier', offline: 'reorder shots' })}
                   onClick={() => reorder(shot.id, idx - 1, true)}>←</button>
                 <button type="button" className="cinema-shots-rail__move"
                   aria-label={`Move Shot ${idx + 1} later`}
-                  {...lock.act({ disabled: idx === scene.shots.length - 1, title: 'Move shot later' })}
+                  {...lock.act({ disabled: idx === scene.shots.length - 1, title: 'Move shot later', offline: 'reorder shots' })}
                   onClick={() => reorder(shot.id, idx + 1, true)}>→</button>
               </>}
               <button type="button" className="cinema-shots-rail__remove"
-                aria-label={`Remove Shot ${idx + 1}`} {...lock.act({ title: 'Remove shot' })}
+                aria-label={`Remove Shot ${idx + 1}`} {...lock.act({ title: 'Remove shot', offline: 'remove shots' })}
                 onClick={() => handleRemove(shot.id, idx)}>×</button>
             </div>
           </div>
         );
       })}
       <button ref={addRef} type="button" className="cinema-shots-rail__add"
-        {...lock.act()} onClick={() => { if (!refuseCanvasEdit()) onAddShot(); }}>
+        {...lock.act({ offline: 'add shots' })} onClick={() => { if (!refuseCanvasEdit()) onAddShot(); }}>
         + Add shot
       </button>
     </div>
