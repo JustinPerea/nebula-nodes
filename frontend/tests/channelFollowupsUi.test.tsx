@@ -189,13 +189,13 @@ describe('the price chip\'s tooltips (GM)', () => {
     expect(runChipTitle(summary({}))).toBe('Estimated cost');
   });
 
-  it('"$X+": "At least $X. Some costs aren\'t known yet."', () => {
-    expect(runChipLabel(summary({ unpriced: ['Kling'] }))).toBe('$0.07+');
-    expect(runChipTitle(summary({ unpriced: ['Kling'] }))).toBe("At least $0.07. Some costs aren't known yet.");
-    expect(runChipTitle(summary({ plus: ['input images'] }))).toBe("At least $0.07. Some costs aren't known yet.");
+  it('"$X + unpriced": the priced part leads (GM, PR #198 r6 and r7 item 3)', () => {
+    expect(runChipLabel(summary({ unpriced: ['Kling'] }))).toBe('$0.07 + unpriced');
+    expect(runChipTitle(summary({ unpriced: ['Kling'] }))).toBe('The priced part of this run costs about $0.07.');
+    expect(runChipTitle(summary({ plus: ['input images'] }))).toBe('The priced part of this run costs about $0.07.');
     // A range with a "+" is in the range form (GM, PR #198 r2 ask 2).
     expect(runChipTitle(summary({ low: 0.05, high: 0.43, unpriced: ['Kling'] })))
-      .toBe("Between $0.05 and $0.43, plus costs that aren't known yet.");
+      .toBe('The priced part of this run costs between $0.05 and $0.43.');
   });
 
   it('a plain range says "Between" (PR #198 r2 ask 2); "N paid" has no tooltip', () => {

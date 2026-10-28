@@ -21,7 +21,11 @@ would need its own words, not a minus sign ("$-0.00").
 
 An amount under a millionth of a dollar is "<$0.000001" (review 3, L5): two
 significant figures of a float denormal would be 324 decimals, past what a
-float can scale to, and no price Nebula shows is that small.
+float can scale to, and no price Nebula shows is that small. An amount above
+$10 trillion (``CEILING_USD``) is ">$10,000,000,000,000" (">$10,000,000,000,000.00"
+spent; review 5, N4): past it the figures are float noise (cents stop being
+exact near 9e13), and at 1.8e308 ``value * 100`` is infinite. No amount up to
+the largest float raises. frontend/src/lib/pricing.ts has the same rule.
 
 Rounding is spelled out (half up on the binary value) instead of left to
 each language's formatter, so Python and JavaScript agree on every amount.
@@ -35,6 +39,10 @@ UNDER_A_CENT = "<$0.01"
 # The smallest amount usd_amount writes in figures.
 TINY_USD = 0.000001
 UNDER_TINY = "<$0.000001"
+# The largest amount written in figures (review 5, N4); above it, the ceiling.
+CEILING_USD = 1e13
+OVER_CEILING = ">$10,000,000,000,000"
+OVER_CEILING_SPENT = ">$10,000,000,000,000.00"
 
 
 def _clamped(amount: Any) -> float:
@@ -56,6 +64,8 @@ def usd_spent(amount: Any) -> str:
     """What was spent, to the cent: "$0.00" for nothing, "<$0.01" for a
     non-zero amount under half a cent."""
     value = _clamped(amount)
+    if value > CEILING_USD:
+        return OVER_CEILING_SPENT
     cents = _half_up(value * 100)
     if cents == 0:
         return UNDER_A_CENT if value > 0 else "$0.00"
@@ -64,12 +74,24 @@ def usd_spent(amount: Any) -> str:
 
 def _two_figures(value: float) -> tuple[float, int]:
     """``value`` (0 < value < 0.1) to two significant figures, and how many
-    decimals that takes."""
+    decimals that takes.
+
+    The same on every platform (review 5, M2): ``scale`` is an exact int,
+    ``*`` and ``/`` are correctly rounded, and the carry check is integer
+    arithmetic (it was ``rounded >= 10 ** (exponent + 1)``, a libm ``pow``).
+    ``math.log10`` is the one libm call. A last-ulp error in it can only move
+    ``exponent`` by one, for a value within an ulp of a power of ten P, and
+    that is self-correcting: at or just above P the right exponent gives
+    ``figures`` 10 and one too low gives 100 (which drops a decimal); just
+    below P the right one gives 100 and one too high gives 10. Each pair is
+    the same rounded value (P, correctly rounded) with the same decimals.
+    test_pr198_fix5 shifts log10 by an ulp both ways over the fuzz table."""
     exponent = math.floor(math.log10(value))
     decimals = 1 - exponent
     scale = 10 ** decimals
-    rounded = _half_up(value * scale) / scale
-    if rounded >= 10 ** (exponent + 1):
+    figures = _half_up(value * scale)
+    rounded = figures / scale
+    if figures >= 100:
         # 0.0995 -> 0.10: one figure fewer after the point.
         decimals -= 1
     return rounded, decimals
@@ -81,6 +103,8 @@ def usd_amount(amount: Any) -> str:
     value = _clamped(amount)
     if value == 0:
         return "$0"
+    if value > CEILING_USD:
+        return OVER_CEILING
     if value < TINY_USD:
         return UNDER_TINY
     if value < 0.1:

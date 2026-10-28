@@ -217,7 +217,8 @@ describe('G1 / GM 1: Delete is disabled while the scene has a shot rendering', (
   it('the Inspector and the selection toolbar read the same tooltip', () => {
     expect(source('components/panels/Inspector.tsx')).toMatch(/sceneDeleteDisabledTitle\(s, \[renderNodeId\]\)/);
     expect(source('components/SelectionToolbar.tsx')).toMatch(/sceneDeleteDisabledTitle\(state, ids\)/);
-    expect(source('components/Canvas.tsx')).toMatch(/renderingScenes\(state,/);
+    // Canvas's Delete key keeps every deleted node's wires out of React Flow's own removal (round 5).
+    expect(source('components/Canvas.tsx')).toMatch(/wiresDeletedWith\(/);
   });
 });
 

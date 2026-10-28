@@ -109,11 +109,12 @@ function StudioScreenBoundary({ screen, children }: { screen: StudioScreen; chil
   const label = useGraphStore((s) => (nodeId ? s.nodes.find((node) => node.id === nodeId)?.data.label ?? null : null));
   // The data check for the node the studio edits (Cinema, the video editor,
   // the composition editor): "missing or damaged" only when it names a field
-  // (review 4, L3). A node that's gone is damaged: there's nothing to show.
+  // (review 4, L3). A node that's gone is missing (GM r6 item 4: the code
+  // knows which).
   const problem = () => {
     if (!nodeId) return null;
     const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
-    return node ? nodeDataProblem(node.data) : 'node';
+    return node ? nodeDataProblem(node.data) : { field: 'node', state: 'missing' as const };
   };
   return (
     <StudioBoundary key={`${screen}:${nodeId ?? ''}`} studio={screen} node={nodeId ? { id: nodeId, label } : null}

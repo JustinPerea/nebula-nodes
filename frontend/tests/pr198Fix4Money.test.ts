@@ -20,39 +20,42 @@ const FUZZ = JSON.parse(readFileSync(resolve(__dirname, '../../contracts/fixture
   rows: { amount: number; text: string; spent: string }[];
 };
 
-const UNKNOWN = "Some costs aren't known yet.";
-const PLUS = ", plus costs that aren't known yet.";
+// Fix round 5 (GM, PR #198 r6 and r7 item 3): an open chip reads
+// " + unpriced", and its tooltip leads with the priced part; a range from $0
+// reads "Up to $Y" (r6 item 2); a detail line writes each end in full (r6 item 3).
+const U = ' + unpriced';
+const LEAD = 'The priced part of this run costs';
 
 const CHIPS: [number, number, boolean, string, string][] = [
   // Review 4, L2: the chip and its tooltip agree.
-  [0.0049, 0.0101, true, 'Up to $0.01+', `Up to $0.01${PLUS}`],
+  [0.0049, 0.0101, true, `Up to $0.01${U}`, `${LEAD} up to $0.01.`],
   [0.0049, 0.0101, false, 'Up to $0.01', 'Up to $0.01.'],
-  [0.0099, 0.0101, true, 'Up to $0.01+', `Up to $0.01${PLUS}`],
+  [0.0099, 0.0101, true, `Up to $0.01${U}`, `${LEAD} up to $0.01.`],
   [0.0047, 0.43, false, 'Up to $0.43', 'Up to $0.43.'],
-  [0.0047, 0.43, true, 'Up to $0.43+', `Up to $0.43${PLUS}`],
+  [0.0047, 0.43, true, `Up to $0.43${U}`, `${LEAD} up to $0.43.`],
   [0.0047, 12.4, false, 'Up to $12', 'Up to $12.'],
   // Under a cent at the top: as before.
   [0.0047, 0.0047, false, '<$0.01', 'Estimated cost under $0.01'],
-  [0.0047, 0.0047, true, '<$0.01+', `Under $0.01 so far. ${UNKNOWN}`],
+  [0.0047, 0.0047, true, `<$0.01${U}`, `${LEAD} under $0.01.`],
   // No sub-cent figures on a chip.
   [0.01, 0.0149, false, '~$0.01', 'Estimated cost'],
   [0.04, 0.044, false, '~$0.04', 'Estimated cost'],
   [0.044, 0.046, false, '$0.04–0.05', 'Between $0.04 and $0.05.'],
-  [0.0123, 0.0123, true, '$0.01+', `At least $0.01. ${UNKNOWN}`],
-  [0.05, 0.05, true, '$0.05+', `At least $0.05. ${UNKNOWN}`],
-  [0.02, 0.43, true, '$0.02–0.43+', `Between $0.02 and $0.43${PLUS}`],
+  [0.0123, 0.0123, true, `$0.01${U}`, `${LEAD} about $0.01.`],
+  [0.05, 0.05, true, `$0.05${U}`, `${LEAD} about $0.05.`],
+  [0.02, 0.43, true, `$0.02–0.43${U}`, `${LEAD} between $0.02 and $0.43.`],
   // The same decimals on both ends.
   [9.5, 12, false, '$9.50–12.00', 'Between $9.50 and $12.00.'],
-  [9.5, 1234.5, true, '$9.50–1,234.50+', `Between $9.50 and $1,234.50${PLUS}`],
+  [9.5, 1234.5, true, `$9.50–1,234.50${U}`, `${LEAD} between $9.50 and $1,234.50.`],
   [12, 1234.5, false, '$12–1,235', 'Between $12 and $1,235.'],
   [9.996, 10.2, false, '~$10', 'Estimated cost'],
   // Free, and from nothing.
   [0, 0, false, '~$0', 'Estimated cost'],
-  [0, 0.43, false, '$0–0.43', 'Between $0 and $0.43.'],
-  [0, 0.044, false, '$0–0.04', 'Between $0 and $0.04.'],
+  [0, 0.43, false, 'Up to $0.43', 'Up to $0.43.'],
+  [0, 0.044, false, 'Up to $0.04', 'Up to $0.04.'],
   // A high end that isn't a number: the low end, with the rest unknown.
-  [0.02, Number.NaN, false, '$0.02+', `At least $0.02. ${UNKNOWN}`],
-  [0.0049, Number.NaN, false, '<$0.01+', `Under $0.01 so far. ${UNKNOWN}`],
+  [0.02, Number.NaN, false, `$0.02${U}`, `${LEAD} about $0.02.`],
+  [0.0049, Number.NaN, false, `<$0.01${U}`, `${LEAD} under $0.01.`],
 ];
 
 describe('GM r4: the chips and their tooltips', () => {
@@ -99,16 +102,17 @@ describe('as properties', () => {
       const where = `${low} ${high} ${open} -> ${label} / ${title}`;
       // At most two decimals on any figure ("<$0.01" included).
       for (const match of label.matchAll(/\d+\.(\d+)/g)) expect(match[1].length, where).toBeLessThanOrEqual(2);
-      const ends = label.replace(/^~|^Up to /, '').replace(/\+$/, '').split('–');
-      // "$0–0.43" keeps its "$0" (GM r1: "$0" is the one way to write nothing).
-      if (ends.length === 2 && ends[0] !== '$0') {
+      const ends = label.replace(/^~|^Up to /, '').replace(/ \+ unpriced$/, '').split('–');
+      // A range from $0 reads "Up to $Y" (GM r6 item 2), so no end is "$0".
+      if (ends.length === 2) expect(ends[0], where).not.toBe('$0');
+      if (ends.length === 2) {
         const decimals = (text: string) => text.split('.')[1]?.length ?? 0;
         expect(decimals(ends[0]), where).toBe(decimals(ends[1]));
       }
       // The tooltip's figures are the chip's.
       const said = figures(label);
       for (const figure of figures(title)) expect(said, where).toContain(figure);
-      if (label.startsWith('Up to')) expect(title, where).toMatch(/^Up to /);
+      if (label.startsWith('Up to')) expect(title, where).toMatch(open ? /^The priced part of this run costs up to / : /^Up to /);
       if (label === '~$0') expect(high, where).toBe(0);
     }
   }, 60_000);
@@ -121,7 +125,7 @@ describe('L2: formatUsdRange with an end that isn\'t a number', () => {
     [0.02, undefined as unknown as number, '$0.02'],
     [0.05, 0.02, '$0.05'],
     [Number.NaN, Number.NaN, '$0'],
-    [Number.NaN, 0.43, '$0–0.43'],
+    [Number.NaN, 0.43, '$0–$0.43'],
   ])('%s–%s reads %s', (low, high, text) => {
     expect(formatUsdRange(low, high)).toBe(text);
   });
@@ -133,8 +137,8 @@ describe('L2: formatUsdRange with an end that isn\'t a number', () => {
   });
 
   it('a detail line keeps formatUsd\'s figures and N3\'s two per end', () => {
-    expect(formatUsdRange(0.0099, 0.0101)).toBe('$0.0099–0.010');
-    expect(formatUsdRange(0.0047, 0.43)).toBe('$0.0047–0.43');
+    expect(formatUsdRange(0.0099, 0.0101)).toBe('$0.0099–$0.010');
+    expect(formatUsdRange(0.0047, 0.43)).toBe('$0.0047–$0.43');
   });
 });
 

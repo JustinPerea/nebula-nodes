@@ -188,7 +188,7 @@ describe('H1: a scene save the backend refuses keeps the person\'s typing', () =
   // back as the backend has it, so a later edit never re-sends what was
   // refused; GM's save line says it went back. This replaces round 3's "the
   // typing stays" (kept typing re-sent a refused shot removal with the next edit).
-  it('a refused scene save goes back to the saved scene, and GM\'s save line says so', async () => {
+  it('a refused scene save (400) keeps the typing on screen, and GM\'s line says so', async () => {
     const said: string[] = [];
     useGraphStore.setState({ nodes: [cinema('n31', [{ id: 's1', prompt: 'old' }], 'Opening')],
       notify: (text: string) => said.push(text) } as never);
@@ -198,8 +198,10 @@ describe('H1: a scene save the backend refuses keeps the person\'s typing', () =
     useGraphStore.getState().updateScene('n31', (current) => ({ ...current,
       shots: current.shots.map((shot) => ({ ...shot, prompt: 'typed by the person' })) }));
     await sleep(80);
-    expect(said).toEqual(["Couldn't save “Scene” for “Opening”. It's back to its last saved value."]);
-    expect(shotsOf('n31')[0].prompt).toBe('old');
+    // Round 5 (GM r7 item 1): a 400 is Nebula's bug; the typing stays on
+    // screen, unsaved, and GM's line says so.
+    expect(said).toEqual(["Couldn't save your changes to “Opening”. Nebula ran into a problem saving them, so they're kept on screen but not saved."]);
+    expect(shotsOf('n31')[0].prompt).toBe('typed by the person');
   });
 
   it('a newer edit from someone else after the refusal still wins (the person was told)', async () => {
@@ -281,7 +283,8 @@ describe('G1 / GM 1: a scene with a shot rendering can\'t be deleted', () => {
     useGraphStore.getState().deleteSelected();
     await sleep(40);
     expect(useGraphStore.getState().nodes.map((node) => node.id)).toEqual(['n4']);
-    expect(notice()).toBe("Deleted 3 nodes. “Opening” wasn't deleted because “Shot 2” is still running.");
+    // GM r6: the deleted nodes are named (up to 3).
+    expect(notice()).toBe("Deleted “Brief”, “Note” and “Logo”. “Opening” wasn't deleted because “Shot 2” is still running.");
     expect(fetchMock.mock.calls.some(([url, init]) => String(url).includes('/n4') && (init as RequestInit | undefined)?.method === 'DELETE')).toBe(false);
   });
 

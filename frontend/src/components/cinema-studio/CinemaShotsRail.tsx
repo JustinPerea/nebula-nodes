@@ -3,7 +3,7 @@ import type { KeyboardEvent } from 'react';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { useGraphStore } from '../../store/graphStore';
 import { shotRemovalBlock, shotRemovalBlockTitle } from '../../lib/cinemaScene';
-import { offlineAction, useBackendOffline } from '../../lib/useBackendOffline';
+import { OFFLINE_VERBS, offlineAction, offlineMark, offlineReason, offlineTitle, useBackendOffline } from '../../lib/useBackendOffline';
 import type { CinemaSceneSpec, CinemaShot } from '../../types';
 
 interface CinemaShotsRailProps {
@@ -65,6 +65,9 @@ export function CinemaShotsRail({
   }, [scene.shots]);
 
   const reorder = (shotId: string, targetIndex: number, focusSelector: boolean) => {
+    // Offline the order can't save (the store refuses it): the arrows are
+    // disabled, a drag doesn't start, and Alt + arrow keys do nothing.
+    if (offline) return;
     const shots = [...scene.shots];
     const from = shots.findIndex((shot) => shot.id === shotId);
     if (from < 0 || targetIndex < 0 || targetIndex >= shots.length || from === targetIndex) return;
@@ -130,8 +133,8 @@ export function CinemaShotsRail({
           <div
             key={shot.id}
             className={`cinema-shots-rail__shot ${selected ? 'cinema-shots-rail__shot--selected' : ''} ${dragId === shot.id ? 'cinema-shots-rail__shot--dragging' : ''}`}
-            draggable
-            onDragStart={() => setDragId(shot.id)}
+            draggable={!offline}
+            onDragStart={() => { if (!offline) setDragId(shot.id); }}
             onDragEnd={() => setDragId(null)}
             onDragOver={(event) => event.preventDefault()}
             onDrop={() => handleDrop(shot.id)}
@@ -166,23 +169,24 @@ export function CinemaShotsRail({
             <div className="cinema-shots-rail__actions">
               {selected && <>
                 <button type="button" className="cinema-shots-rail__move"
-                  aria-label={`Move Shot ${idx + 1} earlier`} title="Move shot earlier"
-                  disabled={idx === 0} onClick={() => reorder(shot.id, idx - 1, true)}>←</button>
+                  aria-label={`Move Shot ${idx + 1} earlier`} title={offlineTitle(offline, OFFLINE_VERBS.reorderShots, 'Move shot earlier')}
+                  disabled={offline || idx === 0} {...offlineMark(offline)} onClick={() => reorder(shot.id, idx - 1, true)}>←</button>
                 <button type="button" className="cinema-shots-rail__move"
-                  aria-label={`Move Shot ${idx + 1} later`} title="Move shot later"
-                  disabled={idx === scene.shots.length - 1} onClick={() => reorder(shot.id, idx + 1, true)}>→</button>
+                  aria-label={`Move Shot ${idx + 1} later`} title={offlineTitle(offline, OFFLINE_VERBS.reorderShots, 'Move shot later')}
+                  disabled={offline || idx === scene.shots.length - 1} {...offlineMark(offline)} onClick={() => reorder(shot.id, idx + 1, true)}>→</button>
               </>}
               <button type="button" className="cinema-shots-rail__remove"
                 aria-label={`Remove Shot ${idx + 1}`}
-                title={block ? shotRemovalBlockTitle(block, `Shot ${idx + 1}`) : 'Remove shot'}
-                disabled={Boolean(block)}
+                title={offlineTitle(offline, OFFLINE_VERBS.removeShots,
+                  block ? shotRemovalBlockTitle(block, `Shot ${idx + 1}`) : 'Remove shot')}
+                disabled={offline || Boolean(block)} {...offlineMark(offline)}
                 onClick={() => handleRemove(shot.id, idx)}>×</button>
             </div>
           </div>
         );
       })}
       <button ref={addRef} type="button" className="cinema-shots-rail__add" onClick={onAddShot}
-        {...offlineAction(offline)}>
+        {...offlineAction(offline)} title={offline ? offlineReason(OFFLINE_VERBS.addShots) : undefined}>
         + Add shot
       </button>
     </div>

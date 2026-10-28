@@ -94,7 +94,12 @@ describe('H1-new: a shot removal another window\'s run refuses (review 4, R3)', 
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (init?.method === 'PUT' && String(url).includes('/api/graph/node/n1')) {
         const body = JSON.parse(String(init.body));
-        puts.push(body.params.scene.shots.map((shot: Shot) => shot.id));
+        const shots = body.params.scene.shots.map((shot: Shot) => shot.id);
+        puts.push(shots);
+        // Round 5: the backend's 409 names the rendering shot (rendering.shotIds),
+        // so only a write that removes it is refused.
+        if (refuse && status === 409) return shots.includes('s2') ? json({ ok: true })
+          : json({ detail, code: 'rendering_shots', rendering: { shotIds: ['s2'], shots: [2], stoppable: true } }, 409);
         return refuse ? json({ detail }, status) : json({ ok: true });
       }
       if (String(url).includes('/api/graph/export')) return json({ ...base, ...backendGraph(), empty: false });
@@ -127,7 +132,9 @@ describe('H1-new: a shot removal another window\'s run refuses (review 4, R3)', 
     useGraphStore.getState().updateScene('n1', (current) => ({ ...current,
       shots: current.shots.map((shot) => (shot.id === 's1' ? { ...shot, prompt: 'a2' } : shot)) }));
     await sleep(120);
-    expect(puts).toEqual([['s1'], ['s1', 's2']]);
+    // Round 5 (GM r6 item 1): the rest of the save goes again at once without
+    // the removal; the next edit keeps Shot 2 too.
+    expect(puts).toEqual([['s1'], ['s1', 's2'], ['s1', 's2']]);
     expect(shotsOf().map((shot) => shot.id)).toEqual(['s1', 's2']);
     expect((shotsOf()[1].output as { imageUrl?: string }).imageUrl).toMatch(/\/api\/outputs\/paid-s2\.png$/);
   });
@@ -144,13 +151,13 @@ describe('H1-new: a shot removal another window\'s run refuses (review 4, R3)', 
     expect(puts.at(-1)).toEqual(['s1', 's2']);
   });
 
-  it('a refusal without a line of its own: the scene goes back, GM\'s save line says so', async () => {
+  it('a 413: the edits stay on screen, marked unsaved, with GM\'s line (round 5, GM r6 item 1)', async () => {
     setUp(413, 'Too large.');
     useGraphStore.getState().updateScene('n1', (current) => ({ ...current,
       shots: current.shots.map((shot) => (shot.id === 's1' ? { ...shot, prompt: 'very long' } : shot)) }));
     await sleep(120);
-    expect(shotsOf()[0].prompt).toBe('a');
-    expect(said).toEqual(["Couldn't save “Scene” for “Opening”. It's back to its last saved value."]);
+    expect(shotsOf()[0].prompt).toBe('very long');
+    expect(said).toEqual(["Couldn't save “Opening”. The project is too big to save. Remove something and Nebula will save your changes."]);
   });
 });
 
@@ -216,7 +223,8 @@ describe('M1: during the tab\'s own run, every delete and undo path says why', (
     expect(notice()).toBe("Couldn't delete 4 nodes. Wait for the active run to finish.");
     useGraphStore.setState({ undoNotice: null } as never);
     useGraphStore.getState().onNodesChange(['n5', 'n6'].map((id) => ({ id, type: 'remove' as const })));
-    expect(notice()).toBe("Couldn't delete 2 nodes. Wait for the active run to finish.");
+    // GM r6: several nodes are named.
+    expect(notice()).toBe("Couldn't delete “Brief” and “Note”. Wait for the active run to finish.");
     await sleep(20);
     expect(sent('DELETE')).toHaveLength(0);
     expect(ids()).toEqual(['n4', 'n5', 'n6', 'n7']);
@@ -305,7 +313,8 @@ describe('M1: a run this tab doesn\'t own: the backend\'s named line, once', () 
     await sleep(80);
     expect(ids()).toEqual(['n4']);
     const shown = useGraphStore.getState().undoNotice;
-    expect(shown?.text).toBe("Deleted 2 nodes. “Opening” wasn't deleted because “Shot 2” is still running.");
+    // GM r6: the deleted nodes are named.
+    expect(shown?.text).toBe("Deleted “Brief” and “Note”. “Opening” wasn't deleted because “Shot 2” is still running.");
     expect(shown?.offer).toBe('undo');
     expect(said).toEqual([]);
   });

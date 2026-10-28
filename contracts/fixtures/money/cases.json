@@ -1,5 +1,5 @@
 {
- "about": "Money as Nebula writes it (PR #198 review 2, L4). `spent`: backend services/money.usd_spent and frontend lib/pricing formatSpentUsd (Settings, `nebula spend`). `amount`: services/money.usd_amount and formatUsd (spend refusals, chip figures). Both sides test against this table. Negative amounts are clamped to nothing (see services/money.py). An amount under a millionth of a dollar is \"<$0.000001\" (review 3, L5).",
+ "about": "Money as Nebula writes it (PR #198 review 2, L4). `spent`: backend services/money.usd_spent and frontend lib/pricing formatSpentUsd (Settings, `nebula spend`). `amount`: services/money.usd_amount and formatUsd (spend refusals, chip figures). Both sides test against this table. Negative amounts are clamped to nothing (see services/money.py). An amount under a millionth of a dollar is \"<$0.000001\" (review 3, L5). An amount above $10 trillion (1e13) is \">$10,000,000,000,000\" (\">$10,000,000,000,000.00\" spent), up to the largest float (review 5, N4).",
  "spent": [
   {
    "amount": 0,
@@ -72,6 +72,26 @@
   {
    "amount": 1e-300,
    "text": "<$0.01"
+  },
+  {
+   "amount": 10000000000000.0,
+   "text": "$10,000,000,000,000.00"
+  },
+  {
+   "amount": 10000000000010.0,
+   "text": ">$10,000,000,000,000.00"
+  },
+  {
+   "amount": 1000000000000000.0,
+   "text": ">$10,000,000,000,000.00"
+  },
+  {
+   "amount": 1e+306,
+   "text": ">$10,000,000,000,000.00"
+  },
+  {
+   "amount": 1.7976931348623157e+308,
+   "text": ">$10,000,000,000,000.00"
   }
  ],
  "amount": [
@@ -170,6 +190,26 @@
   {
    "amount": 1.23e-06,
    "text": "$0.0000012"
+  },
+  {
+   "amount": 10000000000000.0,
+   "text": "$10,000,000,000,000"
+  },
+  {
+   "amount": 10000000000010.0,
+   "text": ">$10,000,000,000,000"
+  },
+  {
+   "amount": 1000000000000000.0,
+   "text": ">$10,000,000,000,000"
+  },
+  {
+   "amount": 1e+306,
+   "text": ">$10,000,000,000,000"
+  },
+  {
+   "amount": 1.7976931348623157e+308,
+   "text": ">$10,000,000,000,000"
   }
  ]
 }

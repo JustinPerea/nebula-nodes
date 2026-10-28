@@ -2,14 +2,34 @@ import type { Edge, Node } from '@xyflow/react';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { NodeData } from '../types';
 import { batchSizeCap, parseBatchItems } from './batch';
-import { hasRoutes, routePriceKey, routeUnavailable, selectRoute, withWiredBlockers } from './directRoute';
+import { envKeyNames, hasRoutes, keyPhrase, routePriceKey, routeUnavailable, selectRoute, withWiredBlockers } from './directRoute';
+import { namesSeveral, nodeNameList } from './errorCopy';
 import { usesKreaAccount } from './kreaConnection';
-import { runRouteProvider } from './modelDiscovery';
 import { cinemaSceneBase, isLocalRun } from './nodeKeys';
 import {
   awaitsInput, chipEstimate, chipTitle, entryForRoute, estimateNode, formatChipEstimate, formatUsd,
   formatUsdRange, sizingPorts, type InputSize, type PricingTable,
 } from './pricing';
+import {
+  AWAITING_INPUT, LEFT_OUT, LEFT_OUT_OTHER, MISSING_KEY, MISSING_KEY_UNNAMED, NO_LISTED_PRICE, ROUTE_CANT_RUN,
+  SIZE_UNREADABLE,
+} from './unpricedCopy';
+
+/** Why a paid node in a run adds to the "+ unpriced" chip (GM, PR #198 r7
+ * item 3): it has no known price (also in `unpriced`), or its estimate
+ * leaves a cost out (`leftOut`, also in `plus`).
+ * - `noPrice`: no list price for these settings, a setting it reads arrives
+ *   by wire, or an estimate that isn't in USD;
+ * - `missingKey`: its chosen route (or Auto) has no key; `key` is the key as
+ *   the node's route line names it ("fal.ai API key"), null when unnamed;
+ * - `cantRun`: its chosen route can't take the run for another reason;
+ * - `awaitingInput`: priced from its input's size, not known yet;
+ * - `sizeUnreadable`: priced from its input's size, which can't be read;
+ * - `leftOut`: priced, with a cost its price entry's `plus` names. */
+export type UnpricedReason =
+  | { kind: 'noPrice' | 'cantRun' | 'awaitingInput' | 'sizeUnreadable' }
+  | { kind: 'missingKey'; key: string | null }
+  | { kind: 'leftOut'; plus: string };
 
 /** What a run would cost, from the curated list prices. Only USD is summed. */
 export interface RunCost {
@@ -35,6 +55,10 @@ export interface RunCost {
   sizeUnreadable?: string[];
   /** Input files to measure (inputSizeStore) before those can be priced. */
   sizeRefs: Array<{ ref: string; kind: 'Image' | 'Video' }>;
+  /** Each node that makes the chip open, with why, in the order the run
+   * walks them: the store's node order (the order nodes were added), not
+   * their position on screen. The Run chip's tooltip reads it. */
+  reasons?: Array<{ name: string; reason: UnpricedReason; at?: { x: number; y: number } }>;
 }
 
 export interface RunScopeSummary {
@@ -228,7 +252,11 @@ export function summarizeRunScope(
 
   const paid: string[] = [];
   const pricing = costContext?.pricing;
-  const cost: RunCost = { low: 0, high: 0, lines: [], unpriced: [], plan: [], plus: [], awaitingInput: [], sizeRefs: [] };
+  const cost: RunCost = {
+    low: 0, high: 0, lines: [], unpriced: [], plan: [], plus: [], awaitingInput: [], sizeRefs: [], reasons: [],
+  };
+  let at: { x: number; y: number } | undefined;
+  const because = (name: string, reason: UnpricedReason) => cost.reasons!.push({ name, reason, ...(at ? { at } : {}) });
   // Fan-out within what actually runs: a node scope already holds every
   // upstream Batch, and a cluster run sends only its own nodes and edges.
   const multipliers = pricing ? runMultipliers(included, edges) : null;
@@ -236,6 +264,7 @@ export function summarizeRunScope(
   const behindGates = nodesBehindGates(included, edges);
   const gated: string[] = [];
   for (const node of included) {
+    at = node.position && Number.isFinite(node.position.x) && Number.isFinite(node.position.y) ? node.position : undefined;
     let definition = node.data?.definitionId ? NODE_DEFINITIONS[node.data.definitionId] : undefined;
     let params = (node.data?.params ?? {}) as Record<string, unknown>;
     let calls = 1;
@@ -264,6 +293,7 @@ export function summarizeRunScope(
     if (!pricing || !multipliers) continue;
     if (noPrice) {
       cost.unpriced.push(name);
+      because(name, { kind: 'noPrice' });
       continue;
     }
     // A Krea-only setting that arrives by wire keeps the run on Krea
@@ -275,16 +305,26 @@ export function summarizeRunScope(
       continue;
     }
     let priceKey: string | null;
+    // No key for any of the node's providers (selectRoute's `unset`): a node
+    // whose price depends on the provider then reads as a missing key, never
+    // as "no listed price" (PR #198 round 5 live check: a Seedream scene,
+    // priced on BytePlus only, fell back to fal.ai with no key at all).
+    let keyUnset = false;
     if (hasRoutes(definition)) {
       const missing = routeUnavailable(definition, routed, costContext.apiKeys);
       if (missing) {
         cost.unpriced.push(name);
         cost.unavailable = { ...cost.unavailable, [name]: missing.message };
+        // A route with no key names it as the route line does (keyPhrase);
+        // a block (a setting, a retired model, an unknown provider) can't run.
+        because(name, missing.block ? { kind: 'cantRun' } : { kind: 'missingKey', key: keyPhrase(missing.missing) });
         continue;
       }
       priceKey = routePriceKey(definition, selectRoute(definition, routed, costContext.apiKeys));
     } else {
-      priceKey = runRouteProvider(definition, costContext.apiKeys, routed);
+      const route = selectRoute(definition, routed, costContext.apiKeys);
+      priceKey = route.provider;
+      keyUnset = route.kind === 'unset';
     }
     // A price read from the input file: only an Image or Video Input in this
     // run gives a file before it runs (backend services/input_sizes.py).
@@ -306,6 +346,11 @@ export function summarizeRunScope(
       if (!size && awaitsInput(entryForRoute(entry, priceKey))) {
         cost.awaitingInput.push(name);
         if (size === null) cost.sizeUnreadable = [...(cost.sizeUnreadable ?? []), name];
+        because(name, { kind: size === null ? 'sizeUnreadable' : 'awaitingInput' });
+      } else if (keyUnset && envKeyNames(definition).length) {
+        because(name, { kind: 'missingKey', key: keyPhrase(envKeyNames(definition)) });
+      } else {
+        because(name, { kind: 'noPrice' });
       }
       continue;
     }
@@ -317,29 +362,76 @@ export function summarizeRunScope(
     cost.low += line.low;
     cost.high += line.high;
     if (estimate.plus && !cost.plus.includes(estimate.plus)) cost.plus.push(estimate.plus);
+    if (estimate.plus) because(name, { kind: 'leftOut', plus: estimate.plus });
   }
   const summary: RunScopeSummary = pricing ? { total: included.length, paid, cost } : { total: included.length, paid };
   if (gated.length) summary.gated = gated;
   return summary;
 }
 
-/** The Run chip: "~$0.04", "$0.04–0.43", "$0.04+" when part of the run has
- * no list price, "<$0.01" for a non-zero amount under a cent (GM, PR #198
- * r1: "$0" only ever means free), "N paid" when none of it has a list
- * price. Null when nothing is paid. */
+/** Whether a run's chip is open: part of it has no known price, or a
+ * priced node's estimate leaves a cost out, so the real total can be higher. */
+function costOpen(cost: RunCost): boolean {
+  return cost.unpriced.length > 0 || cost.plus.length > 0;
+}
+
+/** The Run chip: "~$0.04", "$0.04–0.43", "$0.04 + unpriced" when part of
+ * the run has no known price (GM, PR #198 r6), "<$0.01" for a non-zero
+ * amount under a cent (r1: "$0" only ever means free), "N paid" when none
+ * of it has a list price. Null when nothing is paid. */
 export function runChipLabel({ paid, cost }: RunScopeSummary): string | null {
   if (paid.length === 0) return null;
   if (!cost || cost.lines.length === 0) return `${paid.length} paid`;
-  // "+" when part of the run has no list price, so the real total can be higher.
-  return formatChipEstimate(cost.low, cost.high, cost.unpriced.length > 0 || cost.plus.length > 0);
+  return formatChipEstimate(cost.low, cost.high, costOpen(cost));
+}
+
+/** One sentence per reason (GM r7 item 3): the nodes sharing it named
+ * together (errorCopy nodeNameList), ordered as the nodes appear on the
+ * canvas: left to right, the way a graph reads, then top to bottom (a node
+ * with no position keeps its place after those that have one). */
+function reasonSentences(reasons: NonNullable<RunCost['reasons']>): string[] {
+  const groups = new Map<string, { line: (names: string, several: boolean) => string; names: string[] }>();
+  const placed = reasons.map((entry, index) => ({ ...entry, index }));
+  placed.sort((a, b) => (a.at && b.at ? a.at.x - b.at.x || a.at.y - b.at.y || a.index - b.index
+    : a.at ? -1 : b.at ? 1 : a.index - b.index));
+  for (const { name, reason } of placed) {
+    let id: string;
+    let line: (names: string, several: boolean) => string;
+    switch (reason.kind) {
+      case 'missingKey': {
+        const key = reason.key ?? MISSING_KEY_UNNAMED;
+        id = `missingKey:${key}`;
+        line = (names, several) => MISSING_KEY(names, several, key);
+        break;
+      }
+      case 'leftOut':
+        line = Object.hasOwn(LEFT_OUT, reason.plus) ? LEFT_OUT[reason.plus] : LEFT_OUT_OTHER;
+        // Costs worded the same are one sentence.
+        id = `leftOut:${line('', false)}`;
+        break;
+      case 'noPrice': id = 'noPrice'; line = NO_LISTED_PRICE; break;
+      case 'cantRun': id = 'cantRun'; line = ROUTE_CANT_RUN; break;
+      case 'awaitingInput': id = 'awaitingInput'; line = AWAITING_INPUT; break;
+      case 'sizeUnreadable': id = 'sizeUnreadable'; line = SIZE_UNREADABLE; break;
+    }
+    const group = groups.get(id) ?? { line, names: [] };
+    group.names.push(name);
+    groups.set(id, group);
+  }
+  return [...groups.values()].map(({ line, names }) => line(nodeNameList(names), namesSeveral(names)));
 }
 
 /** The Run chip's tooltip, from the same parts as its label (pricing.ts
- * chipTitle; GM - Design, r18 of PR #114, r1 and r2 of PR #198): every chip
- * form has one, "N paid" has none (the button's own title has the details). */
+ * chipTitle): every chip form has one, "N paid" has none (the button's own
+ * title has the details). An open chip leads with the priced part, then a
+ * sentence per reason, no colons (GM, PR #198 r7 item 3): "The priced part
+ * of this run costs up to $0.43. “Brief” has no listed price." */
 export function runChipTitle({ paid, cost }: RunScopeSummary): string | undefined {
   if (paid.length === 0 || !cost || cost.lines.length === 0) return undefined;
-  return chipTitle(chipEstimate(cost.low, cost.high, cost.unpriced.length > 0 || cost.plus.length > 0));
+  const open = costOpen(cost);
+  const lead = chipTitle(chipEstimate(cost.low, cost.high, open));
+  if (!open || !cost.reasons?.length) return lead;
+  return [lead, ...reasonSentences(cost.reasons)].join(' ');
 }
 
 const AWAITING = 'Priced when its input is known:';

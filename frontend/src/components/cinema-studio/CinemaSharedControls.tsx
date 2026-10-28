@@ -7,6 +7,7 @@ import { shortLine } from '../../lib/errorCopy';
 import { normalizeCinemaScene } from '../../lib/cinemaScene';
 import type { CinemaSceneSpec } from '../../types';
 import { CinemaLookControls, CinemaPaletteControls } from './CinemaArtDirectionControls';
+import { OFFLINE_RECONNECT_FALLBACK, offlineMark, offlineTitle, useBackendOffline } from '../../lib/useBackendOffline';
 
 interface CinemaSharedControlsProps {
   cinemaNodeId: string;
@@ -36,6 +37,7 @@ export function CinemaSharedControls({ cinemaNodeId, scene: given, connectedRefs
   const scene = normalizeCinemaScene(given);
   const controlId = useId();
   const refInputRef = useRef<HTMLInputElement>(null);
+  const offline = useBackendOffline();
   const uploads = useCinemaUploadStore((state) => state.uploads);
   const characterUploads = uploads.filter((upload) => upload.nodeId === cinemaNodeId && upload.shotId === undefined);
   const palette = scene.palette ?? defaultCinemaPalette();
@@ -84,6 +86,10 @@ export function CinemaSharedControls({ cinemaNodeId, scene: given, connectedRefs
           </span>
         </summary>
         <div className="cinema-shared-controls cinema-scene-settings__body">
+          {/* Every setting here writes the scene, so one fieldset locks them
+              offline (GM - Design, PR #198 round 5). */}
+          <fieldset className="cinema-offline-lock" disabled={offline} {...offlineMark(offline)}
+            title={offline ? OFFLINE_RECONNECT_FALLBACK : undefined}>
           <section className="cinema-shared-controls__section">
             <label htmlFor={`${controlId}-model`} className="cinema-shared-controls__label">Base model</label>
             <select id={`${controlId}-model`} className="cinema-shared-controls__select" value={scene.base.model}
@@ -137,6 +143,7 @@ export function CinemaSharedControls({ cinemaNodeId, scene: given, connectedRefs
             <span className="cinema-shared-controls__label">Film look</span>
             <CinemaLookControls value={look} onChange={setLook} labelPrefix="Scene" />
           </section>
+          </fieldset>
         </div>
       </details>
 
@@ -154,7 +161,8 @@ export function CinemaSharedControls({ cinemaNodeId, scene: given, connectedRefs
               </span>
               <div className="cinema-reference-upload__actions">
                 {upload.status === 'error' && upload.canRetry && (
-                  <button type="button" onClick={() => retryCinemaReferenceUpload(upload.id)} aria-label={`Retry ${upload.name}`}>Retry</button>
+                  <button type="button" onClick={() => retryCinemaReferenceUpload(upload.id)} aria-label={`Retry ${upload.name}`}
+                    disabled={offline} {...offlineMark(offline)} title={offlineTitle(offline, undefined)}>Retry</button>
                 )}
                 <button type="button" onClick={() => removeCinemaReferenceUpload(upload.id)} aria-label={`Remove upload ${upload.name}`}>Remove</button>
               </div>

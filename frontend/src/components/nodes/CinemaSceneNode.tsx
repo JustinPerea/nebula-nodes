@@ -1,8 +1,10 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useUIStore } from '../../store/uiStore';
+import { useGraphStore } from '../../store/graphStore';
+import { UNSAVED_MARK } from '../../lib/sceneSaveCopy';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { PORT_COLORS } from '../../lib/portCompatibility';
-import { shotPortId } from '../../constants/ports';
+import { CATEGORY_COLORS, shotPortId } from '../../constants/ports';
 import { missingKeyTitle } from '../../lib/nodeKeys';
 import type { NodeData } from '../../types';
 import { sceneCardView } from '../../lib/cinemaScene';
@@ -17,8 +19,14 @@ interface CinemaSceneNodeData {
   keyStatus?: 'ok' | 'missing';
 }
 
+/** The scene's category colour (CATEGORY_COLORS, as every model card reads it). */
+const SCENE_CATEGORY_COLOR = CATEGORY_COLORS[NODE_DEFINITIONS['cinema-scene'].category] ?? '#424242';
+
 export function CinemaSceneNode({ id, data, selected }: NodeProps) {
   const enterCinemaEditor = useUIStore((s) => s.enterCinemaEditor);
+  // Edits on screen that the backend didn't take (GM, PR #198 r6 item 1):
+  // the line that said why, kept as the mark's title.
+  const unsaved = useGraphStore((s) => s.unsavedScenes[id] ?? null);
   const { params, keyStatus } = data as CinemaSceneNodeData;
   // Read through a guard (PR #198 review 3, L4): a scene whose data is
   // damaged still draws its card.
@@ -40,7 +48,10 @@ export function CinemaSceneNode({ id, data, selected }: NodeProps) {
     .join(' · ');
 
   return (
-    <div className={`cinema-scene-node ${selected ? 'cinema-scene-node--selected' : ''}`}>
+    // GM r7 item 2: one selection style. The card carries its category's
+    // colour as ModelNode does, and cinema-node.css selects it in that colour.
+    <div className={`cinema-scene-node ${selected ? 'cinema-scene-node--selected' : ''}`}
+      style={{ ['--node-category-color' as string]: SCENE_CATEGORY_COLOR }}>
       <div className="cinema-scene-node__title">
         <span>⛭ Cinema Scene</span>
         {keyStatus === 'missing' && (
@@ -58,6 +69,7 @@ export function CinemaSceneNode({ id, data, selected }: NodeProps) {
       </div>
 
       <div className="cinema-scene-node__summary">{summary}</div>
+      {unsaved && <div className="cinema-scene-node__unsaved" title={unsaved}>{UNSAVED_MARK}</div>}
 
       {/* The scene node's own run error (error copy round 3e); each shot's
           shows in its panel and as the ⚠ beside its port. */}

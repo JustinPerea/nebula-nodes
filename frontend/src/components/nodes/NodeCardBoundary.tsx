@@ -1,9 +1,9 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
-import { shotPortId } from '../../constants/ports';
+import { CATEGORY_COLORS, shotPortId } from '../../constants/ports';
 import { sceneCardView } from '../../lib/cinemaScene';
-import { drawFailedLogLine, nodeCardBoundaryLine, nodeDataProblem, studioBoundaryLogLine } from '../../lib/studioBoundary';
+import { drawFailedLogLine, nodeCardBoundaryLine, nodeDataProblem, studioBoundaryLogLine, type DataProblem } from '../../lib/studioBoundary';
 import { NodeTypeIcon } from './NodeTypeIcon';
 import '../../styles/node-card-boundary.css';
 
@@ -27,9 +27,10 @@ function handleIds(data: Record<string, unknown>): { inputs: string[]; outputs: 
 }
 
 /** The data check, which never throws: a check that can't read the data
- * calls it damaged (it can't say the data is fine). */
-function dataProblem(data: unknown): string | null {
-  try { return nodeDataProblem(data); } catch { return 'data'; }
+ * calls it damaged (it can't say the data is fine), and can't tell missing
+ * from damaged (GM r6 item 4: "missing or damaged" only then). */
+function dataProblem(data: unknown): DataProblem | null {
+  try { return nodeDataProblem(data); } catch { return { field: 'data', state: 'unknown' }; }
 }
 
 /** The card's own icon, drawn quietly: an icon that throws leaves the header
@@ -64,9 +65,17 @@ interface NodeCardBoundaryProps {
  * (nodeDataProblem) finds what's wrong, and the Agent log names that field.
  * Data that checks out reads GM r5's neutral line, and the Agent log names
  * the error ("Couldn't draw “X”, node n4. <error message>").
+ *
+ * Review 5, L5: the card retries on every data change, and a running node's
+ * data changes with each progress event, so the Agent log gets each
+ * distinct line once while the card keeps failing (`logged`), not once per
+ * retry. A card that draws again forgets them: its next failure is news.
  */
 export class NodeCardBoundary extends Component<NodeCardBoundaryProps, { failed: boolean }> {
   state = { failed: false };
+
+  /** The Agent log lines this card has written since it last drew. */
+  private logged = new Set<string>();
 
   static getDerivedStateFromError(): { failed: boolean } {
     return { failed: true };
@@ -80,11 +89,17 @@ export class NodeCardBoundary extends Component<NodeCardBoundaryProps, { failed:
     const label = typeof data.label === 'string' && data.label ? data.label : null;
     const message = field ? studioBoundaryLogLine(label, this.props.card.id, field)
       : drawFailedLogLine(label, this.props.card.id, error);
+    if (this.logged.has(message)) return;
+    this.logged.add(message);
     window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', { detail: { source: 'system', message } }));
   }
 
   componentDidUpdate(previous: NodeCardBoundaryProps): void {
-    if (this.state.failed && previous.card.data !== this.props.card.data) this.setState({ failed: false });
+    if (!this.state.failed) {
+      this.logged.clear();
+      return;
+    }
+    if (previous.card.data !== this.props.card.data) this.setState({ failed: false });
   }
 
   render(): ReactNode {
@@ -96,7 +111,9 @@ export class NodeCardBoundary extends Component<NodeCardBoundaryProps, { failed:
     try { handles = handleIds(data); } catch { /* a card with no handles still says why */ }
     const definition = typeof data.definitionId === 'string' ? NODE_DEFINITIONS[data.definitionId] : undefined;
     return (
+      // GM r7 item 2: one selection style, in the card's category colour.
       <div className={`node-card-boundary${this.props.card.selected ? ' node-card-boundary--selected' : ''}`}
+        style={{ ['--node-category-color' as string]: (definition && CATEGORY_COLORS[definition.category]) ?? '#424242' }}
         role="alert" data-node-card-boundary="">
         {handles.inputs.map((id) => (
           <Handle key={`in-${id}`} type="target" position={Position.Left} id={id} className="node-card-boundary__handle" />

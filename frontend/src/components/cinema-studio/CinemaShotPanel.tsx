@@ -11,7 +11,7 @@ import type { CinemaLook, CinemaPalette } from '../../lib/cinemaArtDirection';
 import type { CinemaSceneSpec, CinemaShot } from '../../types';
 import { shortLine } from '../../lib/errorCopy';
 import { NodeError } from '../nodes/NodeError';
-import { offlineAction, offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { OFFLINE_RECONNECT_FALLBACK, OFFLINE_VERBS, offlineAction, offlineMark, offlineTitle, useBackendOffline } from '../../lib/useBackendOffline';
 
 interface CinemaShotPanelProps {
   cinemaNodeId: string;
@@ -147,7 +147,9 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
                 type="button"
                 className={`cinema-shot-panel__variation${shot.selectedVariation === i ? ' cinema-shot-panel__variation--active' : ''}`}
                 onClick={() => void promoteShotVariation(cinemaNodeId, shot.id, i)}
-                title={`Use variation ${i + 1} (seed ${v.seed})`}
+                disabled={readOnly}
+                {...offlineMark(readOnly)}
+                title={offlineTitle(readOnly, undefined, `Use variation ${i + 1} (seed ${v.seed})`)}
                 aria-pressed={shot.selectedVariation === i}
               >
                 <img src={backendAssetUrlSync(v.url)} alt={`Variation ${i + 1}`} draggable={false} />
@@ -174,7 +176,11 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
           className="cinema-shot-panel__prompt"
           value={shot.prompt}
           placeholder="Describe this shot…"
-          onChange={(e) => setPrompt(e.target.value)}
+          // Offline the prompt can't save (the store refuses the edit), so it
+          // is read-only, with no tooltip: the banner says why (GM, PR #200 r2).
+          readOnly={readOnly}
+          {...offlineMark(readOnly)}
+          onChange={(e) => { if (!readOnly) setPrompt(e.target.value); }}
         />
 
         <div className="cinema-shot-panel__actions">
@@ -183,7 +189,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
             className="cinema-shot-panel__action cinema-shot-panel__action--primary"
             onClick={handleGenerateShot}
             {...offlineAction(readOnly, shotBlocked)}
-            title={referenceIssue ?? (sharedInputsBlocked ? sharedInputsMessage : undefined)}
+            title={offlineTitle(readOnly, OFFLINE_VERBS.generate, referenceIssue ?? (sharedInputsBlocked ? sharedInputsMessage : undefined))}
           >
             {shotRunning ? 'Generating…' : 'Generate shot'}
           </button>
@@ -227,7 +233,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
             className="cinema-shot-panel__action"
             onClick={handleGenerateVariations}
             {...offlineAction(readOnly, shotBlocked)}
-            title={referenceIssue ?? (sharedInputsBlocked ? sharedInputsMessage : undefined)}
+            title={offlineTitle(readOnly, OFFLINE_VERBS.generate, referenceIssue ?? (sharedInputsBlocked ? sharedInputsMessage : undefined))}
           >
             Generate {variationCount}
           </button>
@@ -244,6 +250,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
             disabled={isImportingGraph || motionHandoff?.status === 'pending'
               || (motionHandoff?.status !== 'ready' && (shotRunning || status !== 'done' || !previewUrl || readOnly))}
             {...offlineMark(readOnly && motionHandoff?.status !== 'ready')}
+            title={offlineTitle(readOnly && motionHandoff?.status !== 'ready', OFFLINE_VERBS.sendToMotion)}
             aria-busy={motionHandoff?.status === 'pending' || undefined}>
             {motionHandoff?.status === 'ready' ? 'View video node'
               : motionHandoff?.status === 'pending' ? 'Connecting video node…'
@@ -261,6 +268,10 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
           )}
         </div>
         <section className="cinema-shot-panel__advanced" aria-label="Shot references">
+          {/* Every control below writes the scene or uploads, so one fieldset
+              locks them offline (GM - Design, PR #198 round 5). */}
+          <fieldset className="cinema-offline-lock" disabled={readOnly} {...offlineMark(readOnly)}
+            title={readOnly ? OFFLINE_RECONNECT_FALLBACK : undefined}>
           <h3 className="cinema-shot-panel__label">Composition references</h3>
           <div className="cinema-shot-panel__refs">
             {shotRefs.map((url, idx) => (
@@ -269,7 +280,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
                 <button
                   type="button"
                   className="cinema-shot-panel__ref-remove"
-                  title="Remove ref"
+                  title={offlineTitle(readOnly, undefined, 'Remove ref')}
                   aria-label={`Remove composition reference ${idx + 1}`}
                   onClick={() => removeShotRef(url)}
                 >
@@ -319,9 +330,11 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
               ))}
             </div>
           )}
-
+          </fieldset>
         </section>
         <section className="cinema-shot-panel__overrides" aria-label="Shot art direction">
+          <fieldset className="cinema-offline-lock" disabled={readOnly} {...offlineMark(readOnly)}
+            title={readOnly ? OFFLINE_RECONNECT_FALLBACK : undefined}>
           <h3 className="cinema-shot-panel__label">Art direction</h3>
           <p className="cinema-shot-panel__inheritance">Palette and film look follow the scene. Override only what this shot needs.</p>
           <div className="cinema-shot-panel__override">
@@ -348,6 +361,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
             {lookOverridden ? <CinemaLookControls value={look} onChange={setLook} labelPrefix="Shot" />
               : <p className="cinema-shot-panel__inheritance">Using scene film look: {cinemaLookLabel(scene.look)}</p>}
           </div>
+          </fieldset>
         </section>
       </div>
     </div>

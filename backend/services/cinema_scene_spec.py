@@ -22,7 +22,9 @@ locked a saved project, and every paid result in it, out of the UI):
   to the same scene, so the ids an open gives are the ones the next save
   keeps. A new id is never one a ``shot_<id>`` port on the node still names
   (a removed shot's late image), so it never takes over that image or its
-  wires (review 4, L1; ``reserved``).
+  wires (review 4, L1; ``reserved``). A port whose image is a renumbered
+  shot's own (it lost its id) moves to that shot's new id instead, with its
+  wires (review 5, L3; ``claim_stray_ports``).
 
 A shot's ``running`` status is the canvas's optimistic mark while a run is
 on its way. Nothing the backend stores is ever rendering (a run writes
@@ -136,7 +138,7 @@ def shot_port_ids(outputs: Any) -> set[str]:
     shot given a new id never takes it over (PR #198 review 4, L1)."""
     if not isinstance(outputs, dict):
         return set()
-    return {port[5:] for port in outputs if isinstance(port, str) and port.startswith("shot_") and len(port) > 5}
+    return {port[5:] for port in outputs if is_shot_port(port)}
 
 
 def scene_shot_ids(params: Any) -> list[str]:
@@ -147,6 +149,57 @@ def scene_shot_ids(params: Any) -> list[str]:
     if not isinstance(shots, list):
         return []
     return [shot["id"] for shot in shots if isinstance(shot, dict) and isinstance(shot.get("id"), str)]
+
+
+def is_shot_port(handle: Any) -> bool:
+    return isinstance(handle, str) and handle.startswith("shot_") and len(handle) > 5
+
+
+def claim_stray_ports(raw_params: Any, params: Any, outputs: Any) -> dict[str, str]:
+    """{stray ``shot_<id>`` port: the port of the shot that owns it} for a
+    scene read leniently (PR #198 review 5, L3).
+
+    A stray port is one no shot of the converted scene (``params``) owns. A
+    shot that lost its id in the saved data (``raw_params``, as it was before
+    the read) was given a new one, never a port's (``reserved``), so its own
+    port looks stray. Each stray port, in order, goes to the first such
+    renumbered shot, in scene order, whose ``output.imageUrl`` is the port's
+    value and that has no port of its own; the caller renames the port and
+    points its wires at the new handle. A port no shot can claim (a removed
+    shot's late image, a case that differs) is left to the caller."""
+    if not isinstance(outputs, dict):
+        return {}
+    scene = params.get("scene") if isinstance(params, dict) else None
+    shots = scene.get("shots") if isinstance(scene, dict) else None
+    if not isinstance(shots, list):
+        return {}
+    raw_scene = _from_json_text(raw_params.get("scene")) if isinstance(raw_params, dict) else None
+    raw_shots = raw_scene.get("shots") if isinstance(raw_scene, dict) else None
+    raw_ids = {text for shot in raw_shots if isinstance(shot, dict) and (text := _shot_id(shot.get("id")))} \
+        if isinstance(raw_shots, list) else set()
+    owned = {f"shot_{shot['id']}" for shot in shots if isinstance(shot, dict) and isinstance(shot.get("id"), str)}
+    renumbered = [shot for shot in shots if isinstance(shot, dict) and isinstance(shot.get("id"), str)
+                  and shot["id"] not in raw_ids and f"shot_{shot['id']}" not in outputs]
+    claimed: dict[str, str] = {}
+    for handle, port in outputs.items():
+        if not is_shot_port(handle) or handle in owned:
+            continue
+        value = port.get("value") if isinstance(port, dict) else None
+        if not isinstance(value, str) or not value:
+            continue
+        for shot in renumbered:
+            output = shot.get("output")
+            new_handle = f"shot_{shot['id']}"
+            if isinstance(output, dict) and output.get("imageUrl") == value and new_handle not in claimed.values():
+                claimed[handle] = new_handle
+                break
+    return claimed
+
+
+def rekeyed_outputs(outputs: dict[str, Any], claimed: dict[str, str]) -> dict[str, Any]:
+    """``outputs`` with each claimed port under its new handle, in place of
+    the old one (claim_stray_ports)."""
+    return {claimed.get(handle, handle): port for handle, port in outputs.items()}
 
 
 def _lenient_shots(shots: Any, reserved: Iterable[str] = ()) -> list[dict[str, Any]]:

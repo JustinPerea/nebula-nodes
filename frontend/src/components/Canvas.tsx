@@ -15,7 +15,7 @@ import {
   type Edge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { renderingScenes, useGraphStore } from '../store/graphStore';
+import { useGraphStore, wiresDeletedWith } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
 import { useIsValidConnection } from '../hooks/useIsValidConnection';
 import { CANVAS_EDGE_TYPES, CANVAS_NODE_TYPES } from './canvasTypes';
@@ -472,9 +472,11 @@ export function Canvas() {
     if (doomed.length === 0) return true;
     const state = useGraphStore.getState();
     if (!state.allowCanvasDelete(doomed.map((node) => node.id))) return false;
-    const held = new Set(renderingScenes(state, doomed.map((node) => node.id)).map((scene) => scene.id));
-    if (held.size === 0) return true;
-    return { nodes: doomed, edges: edges.filter((edge) => !held.has(edge.source) && !held.has(edge.target)) };
+    // A scene with a shot rendering stays out of the delete (the store keeps
+    // it), and every deleted node's wires go with the node's own DELETE:
+    // React Flow removes only wires between nodes that stay, so a node the
+    // backend keeps keeps its wires (PR #198 round 5).
+    return { nodes: doomed, edges: wiresDeletedWith(doomed.map((node) => node.id), edges) };
   }, []);
 
   const onConnectStart: OnConnectStart = useCallback((_event, params) => {
@@ -687,7 +689,7 @@ export function Canvas() {
       // selection stays (PR #198 review 4, M1: the lock was silent).
       if (!isCtrlOrCmd && !event.altKey && (event.key === 'Delete' || event.key === 'Backspace')) {
         const graph = useGraphStore.getState();
-        if (graph.isExecuting && graph.nodes.some((node) => node.selected)) {
+        if (graph.isExecuting && (graph.nodes.some((node) => node.selected) || graph.edges.some((edge) => edge.selected))) {
           event.preventDefault();
           graph.deleteSelected();
         }

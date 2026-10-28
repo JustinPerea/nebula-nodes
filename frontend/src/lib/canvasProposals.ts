@@ -249,8 +249,8 @@ export function proposalSummary(view: ProposalView): string {
 }
 
 /** The proposal card's chip, as the Run chip writes it (lib/pricing
- * formatChipEstimate): "~$0.07", "<$0.01–0.43", "$0.07+" when part of the
- * run has no list price. */
+ * formatChipEstimate): "~$0.07", "Up to $0.43", "$0.07 + unpriced" when part
+ * of the run has no known price. The card has no tooltip for it. */
 export function proposalEstimateLabel(view: ProposalView): string | null {
   const estimate = view.cost.estimate;
   if (!estimate || view.run.length === 0) return null;

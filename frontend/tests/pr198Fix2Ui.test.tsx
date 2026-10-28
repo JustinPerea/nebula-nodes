@@ -209,7 +209,7 @@ describe('M2: a scene without base opens; a studio that can\'t render is contain
     const exit = vi.fn();
     useUIStore.setState({ exitCinemaEditor: exit } as never);
     const Boom = () => { throw new TypeError("Cannot read properties of undefined (reading 'model')"); };
-    render(<StudioBoundary studio="cinema-editor" node={{ id: 'n4', label: 'Opening' }} problem={() => 'scene.base'}><Boom /></StudioBoundary>);
+    render(<StudioBoundary studio="cinema-editor" node={{ id: 'n4', label: 'Opening' }} problem={() => ({ field: 'scene.base', state: 'missing' })}><Boom /></StudioBoundary>);
     window.removeEventListener('nebula:agent-log-entry', listen);
     expect(screen.getByRole('alert').textContent).toContain(
       "Couldn't open “Opening”. Some of its data is missing or damaged, so Nebula can't show it.");
@@ -269,10 +269,11 @@ describe('GM: the Agent log\'s time never wraps', () => {
 describe('M2: the Agent log names the field the studio couldn\'t read', () => {
   it('a broken shot before a missing base (the base is filled in)', async () => {
     const { cinemaSceneProblem } = await import('../src/lib/studioBoundary');
-    expect(cinemaSceneProblem({ scene: { shots: [null] } })).toBe('scene.shots[0]');
-    expect(cinemaSceneProblem({ scene: { shots: 's1' } })).toBe('scene.shots');
-    expect(cinemaSceneProblem({ scene: { shots: [] } })).toBe('scene.base');
-    expect(cinemaSceneProblem({})).toBe('scene');
+    // GM r6 item 4 (fix round 5): each with whether it is missing or damaged.
+    expect(cinemaSceneProblem({ scene: { shots: [null] } })).toEqual({ field: 'scene.shots[0]', state: 'damaged' });
+    expect(cinemaSceneProblem({ scene: { shots: 's1' } })).toEqual({ field: 'scene.shots', state: 'damaged' });
+    expect(cinemaSceneProblem({ scene: { shots: [] } })).toEqual({ field: 'scene.base', state: 'missing' });
+    expect(cinemaSceneProblem({})).toEqual({ field: 'scene', state: 'missing' });
     expect(cinemaSceneProblem({ scene: { version: 1, base: { model: 'seedream-4-5' }, aspectRatio: '16:9', shots: [] } })).toBeNull();
   });
 });

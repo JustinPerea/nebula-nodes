@@ -93,7 +93,7 @@ describe('run cost', () => {
   it('shows a range when a setting only resolves at run time, and marks costs left out', () => {
     const summary = summarizeRunScope([priced('e', 'gpt-image-2-edit')], [], { kind: 'graph' }, context);
     expect(summary.cost?.plus).toEqual(['input images']);
-    expect(runChipLabel(summary)).toBe('$0.01–0.20+');
+    expect(runChipLabel(summary)).toBe('$0.01–0.20 + unpriced');
     expect(describeRunScope(summary)).toContain('Not included: input images');
   });
 
@@ -102,7 +102,7 @@ describe('run cost', () => {
       [priced('a', 'nano-banana'), priced('c', 'claude-chat', {}, 'Writer')], [], { kind: 'graph' }, context,
     );
     expect(summary.cost?.unpriced).toEqual(['Writer']);
-    expect(runChipLabel(summary)).toBe('$0.05+');
+    expect(runChipLabel(summary)).toBe('$0.05 + unpriced');
     expect(describeRunScope(summary)).toContain('No list price for Writer');
   });
 
@@ -177,7 +177,7 @@ describe('run cost', () => {
     expect(shouldConfirmRunCost(summarizeRunScope([priced('c', 'claude-chat')], [], { kind: 'graph' }), 0)).toBe(false);
     const message = runCostConfirmMessage(summary);
     expect(message).toContain('could cost up to $0.20 at list prices');
-    expect(message).toContain('• Retouch: $0.01–0.20');
+    expect(message).toContain('• Retouch: $0.01–$0.20');
     expect(message).toContain('Not included: input images.');
   });
 });

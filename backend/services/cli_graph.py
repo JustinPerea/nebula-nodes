@@ -9,7 +9,12 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from services.cinema_scene_spec import normalize_params as normalize_scene_params, shot_port_ids
+from services.cinema_scene_spec import (
+    claim_stray_ports,
+    normalize_params as normalize_scene_params,
+    rekeyed_outputs,
+    shot_port_ids,
+)
 from services.file_access import require_allowed_path, validate_file_references
 from services.retired_nodes import migrate_graph, migrate_node
 from services.saved_graph_upgrades import PARAMS_VERSION, stored_version, upgrade_flat_nodes
@@ -375,6 +380,20 @@ class CLIGraph:
         # part way leaves the previous graph whole (main keeps it on failure,
         # and the next save would write new nodes with old edges otherwise).
         nodes = {n["id"]: _normalized_scene(_migrate_retired(n)) for n in migrated}
+        # A shot that lost its id in the file was given a new one: the port
+        # it owned (its image) moves to its new id, with its wires (PR #198
+        # review 5, L3). A port no shot owns stays: a removed shot's late
+        # image, which an undo that brings the shot back takes.
+        raw_params = {n["id"]: n.get("params") for n in migrated}
+        for node_id, node in nodes.items():
+            claimed = claim_stray_ports(raw_params.get(node_id), node.get("params"), node.get("outputs")) \
+                if node.get("definitionId") == "cinema-scene" else {}
+            if not claimed:
+                continue
+            nodes[node_id] = {**node, "outputs": rekeyed_outputs(node["outputs"], claimed)}
+            for edge in edges:
+                if isinstance(edge, dict) and edge.get("source") == node_id and edge.get("sourceHandle") in claimed:
+                    edge["sourceHandle"] = claimed[edge["sourceHandle"]]
         # A file written before an upgrade existed gets it once; the next save
         # records the current version, so a value set afterwards is kept.
         version = stored_version(data.get("paramsVersion"))

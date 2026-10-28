@@ -1,6 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { useUIStore } from '../store/uiStore';
-import { drawFailedLogLine, studioBoundaryLine, studioBoundaryLogLine, type StudioScreen } from '../lib/studioBoundary';
+import { studioBoundaryLine, studioBoundaryLogLine, studioDrawFailedLogLine, type DataProblem, type StudioScreen } from '../lib/studioBoundary';
 import { WorkspaceHeader } from './WorkspaceHeader';
 
 /** Each studio's own way back to the canvas (uiStore). The Commons' own exit
@@ -64,11 +64,13 @@ interface StudioBoundaryProps {
   studio: StudioScreen;
   /** The node the studio edits, when it edits one (Cinema, the editors). */
   node: { id: string; label: string | null } | null;
-  /** The field the studio needed that isn't there ("scene.base"), read when
-   * it fails (lib/studioBoundary nodeDataProblem); null when the data checks
-   * out. It decides the line: "missing or damaged" only with a field. A check
-   * that throws counts as damaged data. */
-  problem: () => string | null;
+  /** The field the studio needed that isn't readable ("scene.base"), read
+   * when it fails (lib/studioBoundary nodeDataProblem), with whether it is
+   * missing or damaged (GM r6 item 4); a bare field name when the caller
+   * can't tell; null when the data checks out. It decides the line:
+   * "missing or damaged" only with a field. A check that throws counts as
+   * damaged data. */
+  problem: () => DataProblem | string | null;
   children: ReactNode;
 }
 
@@ -84,7 +86,8 @@ interface StudioBoundaryProps {
  *
  * Review 4, L3: data that checks out reads GM r5's neutral line ("…but its
  * data is fine. Reload Nebula to try again.") and the Agent log names the
- * error. Nothing in the fallback can throw out of the boundary: the check is
+ * error. It logs once per mount: it doesn't retry on data changes (App keys
+ * it by screen and node), so review 5's L5 flood can't happen here. Nothing in the fallback can throw out of the boundary: the check is
  * caught and the header has its own boundary (SafeHeader).
  */
 export class StudioBoundary extends Component<StudioBoundaryProps, { failed: boolean }> {
@@ -94,9 +97,9 @@ export class StudioBoundary extends Component<StudioBoundaryProps, { failed: boo
     return { failed: true };
   }
 
-  /** The field the check names, "data" when the check itself throws. */
-  private field(): string | null {
-    try { return this.props.problem(); } catch { return 'data'; }
+  /** What the check found; "data", unknown kind, when the check itself throws. */
+  private field(): DataProblem | string | null {
+    try { return this.props.problem(); } catch { return { field: 'data', state: 'unknown' }; }
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
@@ -105,7 +108,10 @@ export class StudioBoundary extends Component<StudioBoundaryProps, { failed: boo
     if (!node || typeof window === 'undefined') return;
     const field = this.field();
     const label = node.label || null;
-    const message = field ? studioBoundaryLogLine(label, node.id, field) : drawFailedLogLine(label, node.id, error);
+    // GM r6 item 5: data that checks out logs "Couldn't open “X” in <studio>,
+    // node n4. <error message>".
+    const message = field ? studioBoundaryLogLine(label, node.id, field)
+      : studioDrawFailedLogLine(this.props.studio, label, node.id, error);
     window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', { detail: { source: 'system', message } }));
   }
 

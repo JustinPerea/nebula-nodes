@@ -135,14 +135,14 @@ describe('every delete path: no confirm, a notice with Undo', () => {
     expect(notice()).toMatchObject({ text: 'Deleted the node.', offer: 'undo' });
   });
 
-  it('the selection toolbar deletes at once: "Deleted 2 nodes."', async () => {
+  it('the selection toolbar deletes at once: "Deleted 2 “Text Input” nodes." (GM r6 naming rule)', async () => {
     useGraphStore.setState({ nodes: [textNode('n1', true), textNode('n2', true)] });
     render(<SelectionToolbar />);
     fireEvent.click(screen.getByLabelText('Delete selected nodes'));
     await settle();
     expect(confirmSpy).not.toHaveBeenCalled();
     expect(ids()).toEqual([]);
-    expect(notice()?.text).toBe('Deleted 2 nodes.');
+    expect(notice()?.text).toBe('Deleted 2 “Text Input” nodes.');
   });
 
   it('the Delete key no longer asks', () => {
@@ -228,7 +228,8 @@ describe('every delete path: no confirm, a notice with Undo', () => {
     useGraphStore.getState().deleteGeneration(['n2']);
     await settle();
     expect(ids()).toEqual([]);
-    expect(notice()).toMatchObject({ text: 'Deleted 2 nodes.', offer: 'undo' });
+    // GM r6: a multi-delete names its nodes ("Text Input" is textNode's label).
+    expect(notice()).toMatchObject({ text: 'Deleted “Nano Banana” and “Text Input”.', offer: 'undo' });
     render(<StudioNotice />);
     expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
   });

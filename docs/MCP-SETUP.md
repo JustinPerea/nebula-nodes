@@ -2889,8 +2889,22 @@ What happens to a scene that can't be filled in depends on who wrote it:
   …; the first shot with an id keeps it, with its port and wires). A new id
   is never one a `shot_<id>` output on the node still names (a removed
   shot's late image), so a converted shot never takes over that image or its
-  wires; on a lenient open or import, an output port no shot owns, and a
-  saved wire from it, are dropped instead of refusing the file. A shot
+  wires. A shot that lost its id keeps its own port, though: on a lenient
+  open, import or `state.json` load, a `shot_<id>` port whose image is a
+  renumbered shot's `output.imageUrl` moves to that shot's new id
+  (`shot_s2` to `shot_s3`), and its wires go with it. On an open or import,
+  an output port no shot can claim (a removed shot's late image, an id whose
+  case differs, a scene that can't be read), and a saved wire from it, are
+  dropped instead of refusing the file, and each is said: a line in the
+  answer's `warnings` (`/api/graph/import`, `load_graph_file`, `nebula load`,
+  `open_project`; the person reads it in the "Opened." notice), the
+  `canvas.replaced` event's `droppedPorts` ([{nodeId, handle, port,
+  connections}]) and, for an agent's load or open, an Agent log line, such
+  as "“Opening” lost a shot's image output: no shot in the saved scene owns
+  it, so its 1 connection was removed.". An undo or redo
+  (`/api/graph/restore`) that puts a scene back keeps such a port when it
+  holds an image, as the live node had it, so undoing the shot's removal
+  next takes that image. A shot
   that is only text becomes a shot with that prompt; anything else that
   can't be read (a `shots` that isn't a list, a shot that isn't an object, an
   `aspectRatio` that isn't text, a `base.params` that isn't an object) takes
@@ -2965,6 +2979,36 @@ While protected:
   that window puts the scene back as Nebula has it (the shot, its image and
   its wires stay) and shows the backend's line, and a later edit never sends
   the refused removal again.
+
+Every one of these 409s (the scene write `PUT /api/graph/node/{id}`, the
+canvas's undo or redo `POST /api/graph/restore`, and the scene's delete)
+answers the same body, for agents and the person alike, beside the `detail`
+each reads:
+
+```json
+{"detail": "…", "code": "rendering_shots",
+ "rendering": {"shotIds": ["s2"], "shots": [2], "stoppable": true}}
+```
+
+`shotIds` are the refused shots' ids in scene order, `shots` their numbers
+as the rail shows them, and `stoppable` whether a Stop can end the run yet.
+Nothing else in the write was taken: to keep the rest, send it again with
+those shots in it.
+
+The other whole-write refusals of a scene write carry a `code` too, so a
+client picks its words by the cause, not the text (each `detail` is as it
+was):
+
+| `code` | Status | Why | Also |
+|---|---|---|---|
+| `paid_start` | 409 | a World Labs paid start is settling; try again in a moment | |
+| `approved_run` | 409 | an agent's edit to a run the person approved and the canvas hasn't started (never the person's) | |
+| `workspace_moved` | 409 | another project was opened, made or deleted, or the canvas was cleared or replaced, since the caller read it (a tab's `X-Nebula-Workspace-Revision`, or a write that waited); nothing changed | `project`: `{id, name}` of the project open now (`null` for the unfiled canvas); `switchedBy`: `{kind, name}` of who did it (`agent` with its name, `person` as "You"), or `null` when Nebula doesn't know (it restarted since) |
+| `params_outdated` | 409 | the tab was built for another params version; reload | `paramsVersion` |
+| `run_safeguards` | 507 | the paid-start fence can't be read or written | |
+
+The same codes come from every route that refuses for those causes (a
+project switch, an import, a clear, a restore), always beside `detail`.
 
 The canvas blocks the same things: the shot's × is disabled, titled "Stop
 the run first." or "Wait for “Shot 2” to finish."; the scene's Delete (the

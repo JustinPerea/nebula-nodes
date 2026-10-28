@@ -2,7 +2,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { getCinemaUploadIssue, useCinemaUploadStore } from '../../store/cinemaUploadStore';
 import { WorkspaceHeader } from '../WorkspaceHeader';
-import { offlineAction, useBackendOffline } from '../../lib/useBackendOffline';
+import { OFFLINE_VERBS, offlineAction, offlineTitle, useBackendOffline } from '../../lib/useBackendOffline';
 
 interface CinemaStudioToolbarProps {
   cinemaNodeId: string;
@@ -49,7 +49,7 @@ export function CinemaStudioToolbar({ cinemaNodeId }: CinemaStudioToolbarProps) 
           if (!getCinemaUploadIssue(cinemaNodeId, undefined, true)) executeNode(cinemaNodeId);
         }}
         {...offlineAction(offline, isExecuting || isImportingGraph || Boolean(referenceIssue))}
-        title={referenceIssue ?? 'Generate every shot using the current scene settings'}
+        title={offlineTitle(offline, OFFLINE_VERBS.generate, referenceIssue ?? 'Generate every shot using the current scene settings')}
       >
         {sceneRuns.length > 0 ? 'Generating…' : 'Generate all'}
       </button>

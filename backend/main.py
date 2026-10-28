@@ -525,9 +525,15 @@ def _graph_settling_specific(action: str) -> str:
             "Stop the run and wait for its terminal state first.")
 
 
+def _paid_start_refusal(action: str) -> HTTPException:
+    """409 ``code: "paid_start"``: a World Labs paid start is settling, so
+    nothing that takes the paid lifecycle fence goes on (CodedRefusal)."""
+    return _coded(_graph_paid_refusal(_graph_settling_specific(action), "active"), "paid_start")
+
+
 def _reject_graph_replacement_during_paid_start(action: str) -> None:
     if provider_start_guard.has_active():
-        raise _graph_paid_refusal(_graph_settling_specific(action), "active")
+        raise _paid_start_refusal(action)
     nodes = list(cli_graph.nodes.values())
     canonical_checkpoints = _graph_worldlabs_recovery_checkpoints(nodes)
     node: str | None = None
@@ -591,7 +597,7 @@ def _retry_graph_recovery_bootstrap(action: str) -> bool:
     except ProviderStartConflictError as exc:
         # A start began since has_active() was read: the settling refusal, as
         # _paid_graph_mutation answers it.
-        raise _graph_paid_refusal(_graph_settling_specific(action), "active") from exc
+        raise _paid_start_refusal(action) from exc
     except ProviderStartPersistenceError as exc:
         raise _paid_fence_unverifiable(action) from exc
     except (
@@ -653,7 +659,7 @@ def _paid_graph_mutation(action: str):
             _clear_bootstrap_error_after_real_write()
             yield
     except ProviderStartConflictError as exc:
-        raise _graph_paid_refusal(_graph_settling_specific(action), "active") from exc
+        raise _paid_start_refusal(action) from exc
     except ProviderStartPersistenceError as exc:
         raise _paid_fence_unverifiable(action) from exc
 
@@ -867,6 +873,88 @@ async def project_size_refusal(request, exc: ProjectSizeRefusal):
     return JSONResponse(status_code=413, content=content)
 
 
+class CodedRefusal(HTTPException):
+    """A refusal whose answer carries fields beside ``detail`` (``fields``:
+    ``code`` and what goes with it), so a client picks its line by the cause,
+    never by the words (PR #198 review 5, GM question 3). ``detail`` is the
+    text it always was, for each audience (refusal_copy). The codes a scene
+    write (``PUT /api/graph/node/{id}``, the canvas's restore) can answer:
+
+    - ``rendering_shots``: the write would remove a shot a run is rendering;
+      ``rendering: {shotIds, shots, stoppable}`` (_RenderingSceneRefusal);
+    - ``paid_start``: a World Labs paid start is settling (_paid_start_refusal);
+    - ``approved_run``: an agent's edit to a run the person approved;
+    - ``workspace_moved``: another project is open, or the canvas was cleared
+      or replaced, since the caller read it; ``project`` ({id, name} of the
+      project open now, null for the unfiled canvas) and ``switchedBy``
+      (_workspace_moved_refusal);
+    - ``params_outdated`` (the params-version gate's own answer).
+
+    Raised where those helpers are used by other routes too: the fields are
+    additive."""
+
+    def __init__(self, status_code: int, detail: str, fields: Mapping[str, Any],
+                 headers: Mapping[str, str] | None = None) -> None:
+        super().__init__(status_code=status_code, detail=detail, headers=dict(headers) if headers else None)
+        self.fields = dict(fields)
+
+
+def _coded(exc: HTTPException, code: str, **fields: Any) -> CodedRefusal:
+    """``exc`` (status, detail and headers kept) with ``code`` and ``fields``."""
+    return CodedRefusal(exc.status_code, exc.detail, {"code": code, **fields}, headers=getattr(exc, "headers", None))
+
+
+@app.exception_handler(CodedRefusal)
+async def coded_refusal(_request: Request, exc: CodedRefusal) -> JSONResponse:
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail, **exc.fields},
+                        headers=getattr(exc, "headers", None))
+
+
+# Who last replaced the live canvas (opened, made or deleted the open project;
+# cleared it; loaded a graph into it), and the canvas it left: a refused
+# write from a tab or agent still on the old canvas says who moved it
+# (``switchedBy``) when the canvas is still that one. In memory only: after a
+# restart, or once anything moves the canvas without noting it (filing the
+# unfiled canvas), it reads null.
+_last_canvas_change: dict[str, Any] = {}
+
+
+def _canvas_change_actor() -> dict[str, str]:
+    """Who is asking, as a saved record names them (actor_record): an agent
+    by its name (one that marks itself without a name is "An agent", as
+    _switch_actor reads it), the person as "You"."""
+    headers = current_request_headers()
+    actor = actor_for_headers(headers)
+    if actor.get("kind") != "agent" and has_agent_marker(headers):
+        actor = {"kind": "agent", "name": "An agent"}
+    return actor_record(actor)
+
+
+def _note_canvas_change() -> None:
+    """Call right after a commit that replaced the live canvas, before any
+    await: the canvas it left (_graph_fence) and who asked. Never fails."""
+    try:
+        _last_canvas_change.clear()
+        _last_canvas_change.update(fence=_graph_fence(), by=_canvas_change_actor())
+    except Exception:  # noqa: BLE001 - a refusal then reads switchedBy null
+        _last_canvas_change.clear()
+
+
+def _workspace_moved_fields() -> dict[str, Any]:
+    """``project`` and ``switchedBy`` for a ``workspace_moved`` refusal."""
+    try:
+        view = project_store.projection()
+        project = {"id": view.project_id, "name": view.name} if view.project_id else None
+        switched_by = _last_canvas_change.get("by") if _last_canvas_change.get("fence") == _graph_fence() else None
+    except Exception:  # noqa: BLE001 - the refusal itself never fails over its extras
+        return {"project": None, "switchedBy": None}
+    return {"project": project, "switchedBy": copy.deepcopy(switched_by)}
+
+
+def _workspace_moved_refusal(exc: HTTPException) -> CodedRefusal:
+    return _coded(exc, "workspace_moved", **_workspace_moved_fields())
+
+
 def _workspace_context() -> dict[str, Any]:
     # Read on every canvas event: only these two fields, never a copy of every
     # project (ProjectStore.workspace).
@@ -894,7 +982,7 @@ def _check_workspace_revision(revision: str | None = None) -> None:
             and filed[1]["activeProjectId"] == current["activeProjectId"]
             and filed[2] == canvas_undo_book.epoch(current["activeProjectId"])):
         return
-    raise HTTPException(status_code=409, detail=CANVAS_OUT_OF_DATE)
+    raise _workspace_moved_refusal(HTTPException(status_code=409, detail=CANVAS_OUT_OF_DATE))
 
 
 # A write that awaits lands only on the canvas that was open when it was asked
@@ -975,9 +1063,10 @@ def _refuse_if_graph_moved(fence: tuple[str, str | None, int]) -> None:
     fence = _filed_fence(fence)
     revision, project_id, epoch = _graph_fence()
     if (revision, project_id) != fence[:2]:
-        raise refusal_copy.refusal(409, GRAPH_MOVED_DETAIL, CANVAS_OUT_OF_DATE, route="canvas")
+        raise _workspace_moved_refusal(refusal_copy.refusal(409, GRAPH_MOVED_DETAIL, CANVAS_OUT_OF_DATE, route="canvas"))
     if epoch != fence[2]:
-        raise refusal_copy.refusal(409, GRAPH_RESTARTED_DETAIL, CANVAS_OUT_OF_DATE, route="canvas")
+        raise _workspace_moved_refusal(refusal_copy.refusal(409, GRAPH_RESTARTED_DETAIL, CANVAS_OUT_OF_DATE,
+                                                            route="canvas"))
 
 
 # A run writes back only to the canvas it registered on (round 11 of PR #114,
@@ -1124,7 +1213,9 @@ async def project_workspace_fence(request: Request, call_next):
         try:
             _check_workspace_revision()
         except HTTPException as exc:
-            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+            # A CodedRefusal's fields too (workspace_moved: project, switchedBy).
+            return JSONResponse(status_code=exc.status_code,
+                                content={"detail": exc.detail, **getattr(exc, "fields", {})})
         except ProjectStoreError as exc:
             return JSONResponse(status_code=507, content={**_storage_error_body(exc), "code": PROJECT_STORE_STORAGE_CODE})
         return await call_next(request)
@@ -2556,10 +2647,10 @@ def _refuse_agent_change_to_approved_runs(candidate: CLIGraph) -> None:
         now = approvals.fingerprint(candidate.nodes, candidate.edges, approval.run_node_ids)
         changed = sorted(approvals.changed_nodes(approval.fingerprint, now), key=_node_order)
         if changed:
-            raise HTTPException(status_code=409, detail=(
+            raise CodedRefusal(409, (
                 f"{_listed(changed, 4)} {'is' if len(changed) == 1 else 'are'} in a run the person approved "
                 f"from {approval.agent_name}'s proposal {approval.proposal_id}, and it hasn't started yet. "
-                "Leave it until that run starts, or propose the change instead."))
+                "Leave it until that run starts, or propose the change instead."), {"code": "approved_run"})
 
 
 def _guard_approved_runs(change: Callable[[CLIGraph], Any]) -> None:
@@ -5291,30 +5382,31 @@ def _refuse_removing_rendering_shots(node_id: str, node: dict[str, Any], current
     order = list(current)
     shot_id = shots[0]
     run_id = run_ids[0]
+    numbers = [order.index(shot) + 1 for shot in shots]
     name = _quoted(_node_label(node_id)) if node_id in cli_graph.nodes else _quoted(str(node.get("label") or "Cinema Scene"))
-    raise _node_refusal(409, (
+    specific = (
         f"Shot {order.index(shot_id) + 1} ({shot_id}) of {name} ({node_id}) is still rendering (run {run_id}), "
         f"so it can't be removed. Stop the run first (cancel_run, or `nebula cancel {run_id}`; a run the "
-        "person started is theirs to stop) or wait for it to finish, then try again. Nothing changed."),
-        _removal_person_line(action, [order.index(shot) + 1 for shot in shots], stoppable))
+        "person started is theirs to stop) or wait for it to finish, then try again. Nothing changed.")
+    # Pinned to its shots (PR #198 review 5, GM question 3): the canvas puts
+    # back only ``shotIds`` and sends the rest of the save again.
+    raise _RenderingSceneRefusal(409, refusal_copy.refusal_detail(
+        specific, _removal_person_line(action, numbers, stoppable), route="canvas"),
+        {"shotIds": shots, "shots": numbers, "stoppable": stoppable})
 
 
-class _RenderingSceneRefusal(HTTPException):
-    """A refused scene delete that also says which shots are rendering
-    (``rendering``: their numbers as the rail shows them, and whether any run
-    rendering them can be stopped), so the canvas can word a multi-select
-    delete's kept scene in GM's form (PR #198 review 4, M1) without reading
+class _RenderingSceneRefusal(CodedRefusal):
+    """A scene write or delete refused because a run is rendering some of its
+    shots, saying which (``code: "rendering_shots"``, ``rendering``: their
+    ids in scene order, their numbers as the rail shows them, and whether
+    any run rendering them can be stopped), so the canvas can word a
+    multi-select delete's kept scene in GM's form (PR #198 review 4, M1) and
+    put back only those shots of a refused save (review 5), without reading
     it out of the line."""
 
     def __init__(self, status_code: int, detail: str, rendering: dict[str, Any]) -> None:
-        super().__init__(status_code=status_code, detail=detail)
+        super().__init__(status_code, detail, {"code": "rendering_shots", "rendering": rendering})
         self.rendering = rendering
-
-
-@app.exception_handler(_RenderingSceneRefusal)
-async def _rendering_scene_refusal(_request: Request, exc: _RenderingSceneRefusal) -> JSONResponse:
-    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail, "rendering": exc.rendering},
-                        headers=getattr(exc, "headers", None))
 
 
 def _refuse_deleting_rendering_scene(node_id: str, node: Mapping[str, Any], *, action: str | None = None) -> None:
@@ -5345,7 +5437,7 @@ def _refuse_deleting_rendering_scene(node_id: str, node: Mapping[str, Any], *, a
     # agent refusal"); a no-op for the person's own request.
     _log_agent_refusal(specific)
     raise _RenderingSceneRefusal(409, refusal_copy.refusal_detail(specific, person, route="canvas"),
-                                 {"shots": numbers, "stoppable": stoppable})
+                                 {"shotIds": shots, "shots": numbers, "stoppable": stoppable})
 
 
 _agent_log_tasks: set[asyncio.Task[None]] = set()
@@ -10698,8 +10790,12 @@ async def _broadcast_graph_sync(
     *, graph_replaced: bool = False, reason: str = "import", moved: Iterable[str] = (), edit: bool = False,
     project_switch: dict[str, Any] | None = None, arranged: dict[str, Any] | None = None,
     cleared: bool = False, run_params: str | None = None,
+    dropped_ports: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Push the current CLI graph to all connected frontends via WebSocket.
+
+    `dropped_ports` (a replacement's lenient read: _stray_port_report) goes in
+    its ``canvas.replaced`` event as ``droppedPorts``.
 
     `run_params` (a run id) marks a run's own param write-back
     (_sync_params_to_cli_graph: a handler that enriches params, such as
@@ -10756,6 +10852,11 @@ async def _broadcast_graph_sync(
             summary = f"{verb} project “{project_switch.get('projectName', '')}”"
             if project_switch.get("previousProjectName"):
                 summary += f" (was “{project_switch['previousProjectName']}”)"
+        if dropped_ports:
+            # Shot outputs no shot of the saved scene owns, and their wires,
+            # left out (PR #198 review 5, L3).
+            data["droppedPorts"] = [dict(record) for record in dropped_ports[:20]]
+            summary += f"; left out {len(dropped_ports)} shot output{'' if len(dropped_ports) == 1 else 's'} no shot owns"
         _journal("canvas.replaced", data=data, summary=summary)
         # Pins belong to the project record. A project open or create brings
         # that project's pins; an import into the same project detaches pins
@@ -12372,6 +12473,7 @@ async def clear_graph(force: bool = False) -> dict:
         # await (review 10's F6): a write fenced before this clear that
         # rechecks during the awaits below must see it.
         _forget_canvas_undo("the canvas was cleared since")
+        _note_canvas_change()  # who, for a stale writer's workspace_moved refusal
         run_approvals.clear()
         # Ids start again at n1: no node now is one a restore brought back.
         node_removals.forget_project(_workspace_context()["activeProjectId"])
@@ -13220,9 +13322,13 @@ async def _restore_graph(
             current = candidate.nodes.get(node_id)
             # An undo puts back what the canvas held: a scene is converted,
             # never refused (PR #198 review 3, H1).
+            # A scene put back keeps a removed shot's late image (its port
+            # with no shot), as the live node had it, so undoing the shot's
+            # removal next takes that image (_adopt_late_image; review 5, L3).
             definition_id, params, position, outputs, label = _validated_ingress_node(
                 raw, index, include_outputs=current is None, strict_scenes=False,
                 reserved_shot_ids=cinema_scene_spec.shot_port_ids((current or {}).get("outputs")),
+                keep_unowned_shot_ports=True,
             )
             if node_id not in trusted:
                 _refuse_agent_internal_params(params, node_id)
@@ -14022,13 +14128,25 @@ def _validated_ingress_node(
     normalize_image_inputs: bool = True,
     strict_scenes: bool = True,
     reserved_shot_ids: Iterable[str] = (),
+    port_report: dict[str, Any] | None = None,
+    keep_unowned_shot_ports: bool = False,
 ) -> tuple[str, dict[str, Any], dict[str, Any] | None, dict[str, Any] | None, str | None]:
     """Validate one ingress node: (definitionId, params, position, outputs, custom label).
 
     Shared by imports, clusters (_stage_graph_nodes) and POST /api/graph/restore.
     A shot id made up for a scene's shot is never one a ``shot_<id>`` port
     names: the node's own outputs, or ``reserved_shot_ids`` (the live node's,
-    for a restore; review 4, L1)."""
+    for a restore; review 4, L1).
+
+    A scene read leniently with outputs (PR #198 review 5, L3): a port a
+    renumbered shot owned (its image is the port's value) moves to that
+    shot's new id (cinema_scene_spec.claim_stray_ports); ``port_report``
+    gets ``rekeyed`` ({old handle: new}) so the caller re-points its wires,
+    and ``dropped`` (the ``shot_<id>`` ports no shot owns, left out) so it
+    can say so. ``keep_unowned_shot_ports`` (a restore: the canvas putting
+    back a node it held) keeps such a port when it is an image instead: a
+    removed shot's late image, which a later undo that brings the shot back
+    takes (_adopt_late_image)."""
     definition_id = raw.get("definitionId")
     if not isinstance(definition_id, str) or not definition_id:
         raise HTTPException(
@@ -14081,14 +14199,24 @@ def _validated_ingress_node(
                 status_code=400,
                 detail=f"nodes[{index}].outputs must be an object",
             )
+        late_ports: dict[str, Any] = {}
         if not strict_scenes and definition_id == "cinema-scene":
             # Saved data is converted, never refused (review 3, H1): a port
             # no shot of the scene owns any more (a removed shot's late
             # image) is left out instead of failing the whole graph, and no
             # converted shot took it over (reserved above; review 4, L1).
+            # A renumbered shot's own port moves to its new id first (L3).
+            claimed = cinema_scene_spec.claim_stray_ports(raw.get("params"), params, raw_outputs)
+            raw_outputs = cinema_scene_spec.rekeyed_outputs(raw_outputs, claimed)
             owned = {f"shot_{shot_id}" for shot_id in cinema_scene_spec.scene_shot_ids(params)}
-            raw_outputs = {handle: port for handle, port in raw_outputs.items()
-                           if not (isinstance(handle, str) and handle.startswith("shot_")) or handle in owned}
+            stray = [handle for handle in raw_outputs
+                     if isinstance(handle, str) and handle.startswith("shot_") and handle not in owned]
+            if keep_unowned_shot_ports:
+                late_ports = {handle: raw_outputs[handle] for handle in stray if _is_late_image_port(raw_outputs[handle])}
+            raw_outputs = {handle: port for handle, port in raw_outputs.items() if handle not in stray}
+            if port_report is not None:
+                port_report["rekeyed"] = claimed
+                port_report["dropped"] = [handle for handle in stray if handle not in late_ports]
         try:
             _validate_imported_outputs(
                 definition_id,
@@ -14097,6 +14225,8 @@ def _validated_ingress_node(
                 params=params,
             )
             outputs = _normalize_outputs_for_storage(raw_outputs)
+            if late_ports:
+                outputs.update(_normalize_outputs_for_storage(late_ports))
         except ValueError as exc:
             raise HTTPException(
                 status_code=400,
@@ -14114,11 +14244,15 @@ def _stage_graph_nodes(
     include_outputs: bool,
     normalize_image_inputs: bool = True,
     strict_scenes: bool = True,
+    port_reports: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, str]:
     """Validate and add ingress nodes to a persistence-free candidate graph.
     ``strict_scenes`` only for an agent-authored write (a proposal, edit_canvas,
     an agent's cluster); saved data (a project, a graph file, an import) is
-    converted instead (services/cinema_scene_spec.py, PR #198 review 3 H1)."""
+    converted instead (services/cinema_scene_spec.py, PR #198 review 3 H1).
+    ``port_reports`` gets, by new node id, each scene's re-keyed and dropped
+    shot ports (_validated_ingress_node) and its name, for
+    _stage_graph_edges and _stray_port_report."""
     id_map: dict[str, str] = {}
     for index, raw in enumerate(raw_nodes):
         reference = raw.get(reference_key)
@@ -14132,9 +14266,10 @@ def _stage_graph_nodes(
                 status_code=400,
                 detail=f"duplicate node reference '{reference}'",
             )
+        report: dict[str, Any] = {}
         definition_id, params, position, outputs, label = _validated_ingress_node(
             raw, index, include_outputs=include_outputs, normalize_image_inputs=normalize_image_inputs,
-            strict_scenes=strict_scenes,
+            strict_scenes=strict_scenes, port_report=report,
         )
         try:
             new_id = candidate.add_node(
@@ -14150,14 +14285,91 @@ def _stage_graph_nodes(
             ) from exc
         if label:
             candidate.nodes[new_id]["label"] = label
+        if port_reports is not None and (report.get("rekeyed") or report.get("dropped")):
+            port_reports[new_id] = {**report, "name": _ingress_node_name(definition_id, label), "wires": {}}
         id_map[reference] = new_id
     return id_map
+
+
+def _ingress_node_name(definition_id: str, label: str | None) -> str:
+    """A staged node's name as its card shows it: its own label, else its
+    model's name (the node isn't on the canvas yet: _node_label can't)."""
+    return label or str((node_registry.get(definition_id) or {}).get("displayName") or definition_id)
+
+
+def _is_late_image_port(port: Any) -> bool:
+    """A ``shot_<id>`` port a restore may keep with no shot owning it: an
+    image a run left (CLIGraph keeps one for _adopt_late_image)."""
+    return (isinstance(port, dict) and port.get("type") == "Image"
+            and isinstance(port.get("value"), str) and bool(port["value"]))
+
+
+# Placeholder person copy awaiting GM (PR #198 review 5, L3): what loading a
+# file or opening a project dropped, one line per port. They go in the
+# answer's ``warnings`` (the canvas shows "Opened." with them; agents read
+# them in the import, load and open answers) and the Agent log.
+STRAY_SHOT_PORT_DROPPED = "\u201c{node}\u201d lost a shot's image output: no shot in the saved scene owns it."
+STRAY_SHOT_PORT_AND_WIRES_DROPPED = ("\u201c{node}\u201d lost a shot's image output: no shot in the saved scene "
+                                     "owns it, so its {connections} {verb} removed.")
+STRAY_SHOT_WIRES_DROPPED = "\u201c{node}\u201d lost {connections} from a shot the saved scene doesn't have."
+
+
+def stray_shot_port_line(node: str, connections: int, *, port: bool = True) -> str:
+    """The warning for one dropped ``shot_<id>`` port (``port``) and its
+    ``connections``, or for wires from a port the node never had."""
+    count = f"{connections} connection{'' if connections == 1 else 's'}"
+    if not port:
+        return STRAY_SHOT_WIRES_DROPPED.format(node=node, connections=count)
+    if connections == 0:
+        return STRAY_SHOT_PORT_DROPPED.format(node=node)
+    return STRAY_SHOT_PORT_AND_WIRES_DROPPED.format(node=node, connections=count,
+                                                    verb="was" if connections == 1 else "were")
+
+
+def _note_stray_wire(port_reports: dict[str, dict[str, Any]] | None, source: str, handle: str, name: str) -> None:
+    """Count a saved wire left out because no shot owns its port."""
+    if port_reports is None:
+        return
+    report = port_reports.setdefault(source, {"rekeyed": {}, "dropped": [], "wires": {}, "name": name})
+    report.setdefault("wires", {})
+    report["wires"][handle] = report["wires"].get(handle, 0) + 1
+
+
+def _stray_port_report(port_reports: Mapping[str, Mapping[str, Any]]) -> tuple[list[str], list[dict[str, Any]]]:
+    """(warning lines, journal records {nodeId, handle, port, connections}):
+    every ``shot_<id>`` port, and every wire from one, a lenient read left
+    out (L3), in the order the nodes were staged."""
+    lines: list[str] = []
+    records: list[dict[str, Any]] = []
+    for node_id, report in port_reports.items():
+        wires = dict(report.get("wires") or {})
+        dropped = list(report.get("dropped") or [])
+        for handle in [*dropped, *[handle for handle in wires if handle not in dropped]]:
+            port = handle in dropped
+            connections = int(wires.get(handle, 0))
+            lines.append(stray_shot_port_line(str(report.get("name") or node_id), connections, port=port))
+            records.append({"nodeId": node_id, "handle": handle, "port": port, "connections": connections})
+    return lines, records
+
+
+async def _say_stray_ports(lines: list[str]) -> None:
+    """The Agent log's lines for what an agent's load or open dropped (a
+    no-op for the person's own request, who reads them in the notice)."""
+    for line in lines[:_STRAY_PORT_LOG_LINES]:
+        await _say_agent_action(line)
+    if len(lines) > _STRAY_PORT_LOG_LINES:
+        await _say_agent_action(f"\u2026and {len(lines) - _STRAY_PORT_LOG_LINES} more (the load's warnings list them).")
+
+
+_STRAY_PORT_LOG_LINES = 5
 
 
 def _orphaned_shot_wire(graph: CLIGraph, source: str, source_handle: str) -> bool:
     """A saved wire from a Cinema scene's ``shot_<id>`` port that no shot of
     the scene owns (a removed shot's): saved data is converted, never refused
-    (review 3, H1), so it is left out with the port (review 4, L1)."""
+    (review 3, H1), so it is left out with the port (review 4, L1), and said
+    (_note_stray_wire; review 5, L3). A renumbered shot's port was re-keyed
+    before this is asked, so its wires aren't."""
     node = graph.nodes.get(source) or {}
     if node.get("definitionId") != "cinema-scene" or not source_handle.startswith("shot_"):
         return False
@@ -14170,9 +14382,12 @@ def _stage_graph_edges(
     id_map: dict[str, str],
     *,
     saved: bool = False,
+    port_reports: dict[str, dict[str, Any]] | None = None,
 ) -> list[str]:
     """Validate every endpoint/handle before adding any edge to live state.
-    ``saved``: the edges come from a saved graph (_validate_connect_handles)."""
+    ``saved``: the edges come from a saved graph (_validate_connect_handles).
+    ``port_reports`` (_stage_graph_nodes): a wire from a re-keyed port goes
+    to its new handle, and one left out is counted there."""
     edge_ids: list[str] = []
     seen: set[tuple[str, str, str, str]] = set()
     for index, raw in enumerate(raw_edges):
@@ -14197,11 +14412,15 @@ def _stage_graph_edges(
             )
         source = id_map[source_ref]
         target = id_map[target_ref]
+        source_handle = ((port_reports or {}).get(source) or {}).get("rekeyed", {}).get(source_handle, source_handle)
         signature = (source, source_handle, target, target_handle)
         if signature in seen:
             raise HTTPException(status_code=400, detail=f"duplicate edge at edges[{index}]")
         seen.add(signature)
         if saved and _orphaned_shot_wire(candidate, source, source_handle):
+            _note_stray_wire(port_reports, source, source_handle,
+                             _ingress_node_name(str(candidate.nodes[source].get("definitionId") or ""),
+                                                candidate.nodes[source].get("label")))
             continue
         _validate_connect_handles(
             source,
@@ -14261,17 +14480,23 @@ async def import_graph(body: dict[str, Any]) -> dict:
         upgrade_flat_nodes(raw_nodes, version)
     # A graph file is saved data: its scenes are converted, never refused
     # (PR #198 review 3, H1).
+    port_reports: dict[str, dict[str, Any]] = {}
     id_map = _stage_graph_nodes(
         candidate,
         raw_nodes,
         reference_key="id",
         include_outputs=True,
         strict_scenes=False,
+        port_reports=port_reports,
     )
     _refuse_agent_billing_change(
         (node_id, str(candidate.nodes[node_id].get("definitionId") or ""), _folded_billing_baseline(ref, folded),
          candidate.nodes[node_id].get("params") or {}) for ref, node_id in id_map.items())
-    _stage_graph_edges(candidate, raw_edges, id_map, saved=True)
+    _stage_graph_edges(candidate, raw_edges, id_map, saved=True, port_reports=port_reports)
+    # What the scenes' lenient read left out (PR #198 review 5, L3): said in
+    # the warnings, the canvas.replaced event and the Agent log.
+    stray_lines, stray_ports = _stray_port_report(port_reports)
+    warnings = [*warnings, *stray_lines]
     if body.get("refuseOverSaveLimit") is True:
         _refuse_graph_over_save_limit_on_its_own(candidate)
     # The person's Load graph opens a file of any size (Q118); anyone else's
@@ -14301,11 +14526,14 @@ async def import_graph(body: dict[str, Any]) -> dict:
         )
         # The id epoch moves with the commit, in the same step (round 11).
         _forget_canvas_undo("a graph was loaded into the project since, so its node ids started again")
+        _note_canvas_change()  # who, for a stale writer's workspace_moved refusal
         # Ids start again under this project: no node now is one a restore
         # brought back. Here, with the commit, not after the sync's awaits: a
         # delete landing during the sync would name the old node's removal.
         node_removals.forget_project(_workspace_context()["activeProjectId"])
-    exported = await _broadcast_graph_sync(graph_replaced=True, edit=True)
+    exported = await _broadcast_graph_sync(graph_replaced=True, edit=True,
+                                          **({"dropped_ports": stray_ports} if stray_ports else {}))
+    await _say_stray_ports(stray_lines)
     publish_action(
         f"Loaded graph ({len(cli_graph.nodes)} nodes, {len(cli_graph.edges)} edges)"
     )
@@ -14317,7 +14545,8 @@ async def import_graph(body: dict[str, Any]) -> dict:
         "nodes": exported["nodes"],
         "edges": exported["edges"],
         # What loading changed that the person should know (a folded Krea
-        # node's dropped job-output connections).
+        # node's dropped job-output connections, a scene's shot output no
+        # shot owns and its connections).
         "warnings": warnings,
     }
 
@@ -14615,7 +14844,8 @@ def _migrate_rf_graph(nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) 
 def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None = None,
                             warnings: list[str] | None = None,
                             ingress: _IngressVerdict | None = None,
-                            size_checked: bool = True) -> tuple[dict[str, Any], CLIGraph]:
+                            size_checked: bool = True,
+                            dropped_ports: list[dict[str, Any]] | None = None) -> tuple[dict[str, Any], CLIGraph]:
     """Validate a saved RF graph with canonical definitions, retaining its IDs.
 
     A removed definition can still be viewed when it was already in this
@@ -14629,6 +14859,10 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
     keeps the live canvas in the project it leaves), and it opens, so the
     canvas can pause saving it until the person trims it (Q118), instead of
     the project never opening again.
+    A scene's shot port a renumbered shot owned moves to its new id, with its
+    wires; a ``shot_<id>`` port no shot owns, and its wires, are left out,
+    each said in ``warnings`` and listed in ``dropped_ports`` (PR #198 review
+    5, L3; _stray_port_report).
     """
     if not isinstance(snapshot, dict):
         raise HTTPException(status_code=400, detail="Project snapshot must be an object")
@@ -14676,6 +14910,7 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
                    "nodes": copy.deepcopy(nodes), "edges": copy.deepcopy(edges)})
     candidate = CLIGraph()
     known: set[str] = set()
+    port_reports: dict[str, dict[str, Any]] = {}
     for index, node in enumerate(nodes):
         node_id = node.get("id")
         if not isinstance(node_id, str) or not 0 < len(node_id) <= 256 or node_id in candidate.nodes:
@@ -14698,12 +14933,15 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
             raise HTTPException(status_code=400, detail=f"nodes[{index}] requires a finite position")
         isolated = CLIGraph()
         if node_registry.get(migrate_node(definition_id, params)[0]) is not None:
+            reports: dict[str, dict[str, Any]] = {}
             staged = _stage_graph_nodes(isolated, [{
                 "id": node_id, "definitionId": definition_id, "params": params,
                 "outputs": outputs, "position": position, "label": data.get("label"),
             }], reference_key="id", include_outputs=True, normalize_image_inputs=False,
-                strict_scenes=False)
+                strict_scenes=False, port_reports=reports)
             staged_node = isolated.nodes[staged[node_id]]
+            if staged[node_id] in reports:
+                port_reports[node_id] = reports[staged[node_id]]
             known.add(node_id)
         elif (historical or {}).get(node_id) == definition_id:
             if any(not isinstance(port, dict) or not isinstance(port.get("type"), str) for port in outputs.values()):
@@ -14739,18 +14977,31 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
         source, source_handle, target, target_handle = values
         if source not in candidate.nodes or target not in candidate.nodes:
             raise HTTPException(status_code=400, detail=f"edges[{index}] references a missing node")
+        rekeyed = (port_reports.get(source) or {}).get("rekeyed", {}).get(source_handle)
+        if rekeyed:
+            # The renumbered shot's port moved: its wire follows (L3).
+            source_handle = rekeyed
+            result["edges"][index]["sourceHandle"] = rekeyed
         signature = (source, source_handle, target, target_handle)
         if signature in signatures:
             raise HTTPException(status_code=400, detail="Duplicate project connection")
         signatures.add(signature)
         if _orphaned_shot_wire(candidate, source, source_handle):
             dropped_edges.add(index)
+            _note_stray_wire(port_reports, source, source_handle,
+                             _ingress_node_name(str(candidate.nodes[source].get("definitionId") or ""),
+                                                candidate.nodes[source].get("label")))
             continue
         if source in known and target in known:
             _validate_connect_handles(source, source_handle, target, target_handle, graph=candidate, saved=True)
         candidate.edges.append({"id": edge_id, "source": source, "sourceHandle": source_handle, "target": target, "targetHandle": target_handle})
     if dropped_edges:
         result["edges"] = [edge for index, edge in enumerate(result["edges"]) if index not in dropped_edges]
+    stray_lines, stray_records = _stray_port_report(port_reports)
+    if warnings is not None:
+        warnings.extend(stray_lines)
+    if dropped_ports is not None:
+        dropped_ports.extend(stray_records)
     try:
         graph_nodes, graph_edges = candidate.to_execute_format()
         topological_sort([GraphNode.model_validate(node) for node in graph_nodes], [GraphEdge.model_validate(edge) for edge in graph_edges])
@@ -15373,6 +15624,7 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
         catalog["workspaceRevision"] = uuid4().hex
         _commit_project_workspace(catalog, CLIGraph())
         revision = catalog["workspaceRevision"]
+        _note_canvas_change()  # who, for a stale writer's workspace_moved refusal
     # In the step that made it, before any await (round 8 of PR #114); its
     # canvas.replaced follows (_broadcast_graph_sync journals it first thing).
     _journal_project_change("project.created", project)
@@ -15450,8 +15702,10 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
             _overlay_live_project(catalog["projects"][active], exported)
         historical = {node["id"]: node.get("data", {}).get("definitionId") for node in project["snapshot"]["nodes"]}
         warnings: list[str] = []
+        dropped_ports: list[dict[str, Any]] = []
         project["snapshot"], candidate = _stage_project_snapshot(project["snapshot"], historical=historical, warnings=warnings,
-                                                                 ingress=verdict, size_checked=False)
+                                                                 ingress=verdict, size_checked=False,
+                                                                 dropped_ports=dropped_ports)
         candidate._counter = max(candidate._counter, project.get("_nodeCounter", 0))
         project["lastOpenedAt"] = project_now()
         start = _begin_switch(catalog, actor, opening=project_id)
@@ -15459,12 +15713,15 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
         catalog["workspaceRevision"] = uuid4().hex
         _commit_project_workspace(catalog, candidate)
         revision = catalog["workspaceRevision"]
+        _note_canvas_change()  # who, for a stale writer's workspace_moved refusal
     await _broadcast_graph_sync(graph_replaced=True, reason="project-open",
-                                project_switch=_switch_notice(start, project, created=False))
+                                project_switch=_switch_notice(start, project, created=False),
+                                **({"dropped_ports": dropped_ports} if dropped_ports else {}))
+    await _say_stray_ports(warnings[len(warnings) - len(dropped_ports):] if dropped_ports else [])
     await _broadcast_projects_changed("opened", project_id)
     # What opening changed that the person should know (a folded Krea node's
-    # dropped job-output connections); the snapshot is saved migrated, so
-    # this is said once.
+    # dropped job-output connections, a scene's shot output no shot owns and
+    # its connections); the snapshot is saved migrated, so this is said once.
     return {"project": public_project(project), "workspaceRevision": revision, "warnings": warnings,
             "paramsVersion": PARAMS_VERSION}
 
@@ -15730,6 +15987,7 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
             # So the unfiled canvas's id epoch moves, in this step (round 11):
             # a write or run noted on an earlier unfiled canvas isn't this one.
             _forget_canvas_undo("the open project was deleted since, so the canvas started again", project_id=None)
+            _note_canvas_change()  # who, for a stale writer's workspace_moved refusal
         else:
             project_store.commit(catalog)
         result = {

@@ -20,9 +20,10 @@ const MONEY = JSON.parse(readFileSync(resolve(__dirname, '../../contracts/fixtur
 
 describe('L5: no "~$0" for an unknown high end', () => {
   it.each([Number.NaN, Number.POSITIVE_INFINITY, undefined as unknown as number])('high %s', (high) => {
-    expect(formatChipEstimate(0.05, high, false)).toBe('$0.05+');
-    expect(chipTitle(chipEstimate(0.05, high, false))).toBe("At least $0.05. Some costs aren't known yet.");
-    expect(formatChipEstimate(0, high, false)).toBe('$0+');
+    // Fix round 5 (GM, PR #198 r6 and r7 item 3): " + unpriced", led by the priced part.
+    expect(formatChipEstimate(0.05, high, false)).toBe('$0.05 + unpriced');
+    expect(chipTitle(chipEstimate(0.05, high, false))).toBe('The priced part of this run costs about $0.05.');
+    expect(formatChipEstimate(0, high, false)).toBe('$0 + unpriced');
     expect(formatChipEstimate(0, high, false)).not.toBe('~$0');
   });
 });
@@ -31,7 +32,8 @@ describe('L5: amounts too small for figures', () => {
   it.each([5e-324, 1e-300, 9.9e-7])('%s reads "<$0.000001", never 300 figures or a throw', (amount) => {
     expect(formatUsd(amount)).toBe('<$0.000001');
     expect(formatUsdRange(amount, amount)).toBe('<$0.000001');
-    expect(formatUsdRange(amount, 0.43)).toBe('<$0.000001–0.43');
+    // GM r6 item 3: a detail line writes each end in full.
+    expect(formatUsdRange(amount, 0.43)).toBe('<$0.000001–$0.43');
   });
 
   it('the shared table holds them, so the backend writes the same', () => {
@@ -60,21 +62,21 @@ describe('N2 and N3', () => {
   // Fix round 4 (GM r4: chips never show sub-cent precision; a low end
   // under a cent is "Up to $Y"): the chip and its tooltip say the same figure.
   it('N2: a low end under a cent reads "Up to", in the chip and its tooltip', () => {
-    expect(formatChipEstimate(0.0099, 0.0101, true)).toBe('Up to $0.01+');
-    expect(chipTitle(chipEstimate(0.0099, 0.0101, true))).toBe("Up to $0.01, plus costs that aren't known yet.");
+    expect(formatChipEstimate(0.0099, 0.0101, true)).toBe('Up to $0.01 + unpriced');
+    expect(chipTitle(chipEstimate(0.0099, 0.0101, true))).toBe('The priced part of this run costs up to $0.01.');
   });
 
   it('N3: two figures on each end of a detail line', () => {
-    expect(formatUsdRange(0.0099, 0.0101)).toBe('$0.0099–0.010');
-    expect(formatUsdRange(0.01, 0.0149)).toBe('$0.010–0.015');
-    expect(formatUsdRange(0.04, 0.044)).toBe('$0.040–0.044');
+    expect(formatUsdRange(0.0099, 0.0101)).toBe('$0.0099–$0.010');
+    expect(formatUsdRange(0.01, 0.0149)).toBe('$0.010–$0.015');
+    expect(formatUsdRange(0.04, 0.044)).toBe('$0.040–$0.044');
   });
 });
 
 describe('GM r3 item 6: a range from under a cent', () => {
-  it('"Up to $Y." and "Up to $Y, plus costs that aren\'t known yet."', () => {
+  it('"Up to $Y." and, open, "The priced part of this run costs up to $Y."', () => {
     expect(chipTitle(chipEstimate(0.0047, 0.43, false))).toBe('Up to $0.43.');
-    expect(chipTitle(chipEstimate(0.0047, 0.43, true))).toBe("Up to $0.43, plus costs that aren't known yet.");
+    expect(chipTitle(chipEstimate(0.0047, 0.43, true))).toBe('The priced part of this run costs up to $0.43.');
     expect(chipTitle(chipEstimate(0.0047, 0.43, true))).not.toMatch(/less than/);
   });
 });

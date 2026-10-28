@@ -145,42 +145,42 @@ describe('GM (6): the price chip, "$0" only ever means free', () => {
     cost: { low: 0.067, high: 0.067, lines: [{ name: 'GPT Image 2.5', low: 0.067, high: 0.067, runs: [1, 1] }],
       unpriced: [], plan: [], plus: [], awaitingInput: [], ...cost } });
 
-  it('"$0+": the known part really is $0, so the tooltip is the second sentence alone', () => {
+  it('"$0 + unpriced": the known part really is $0 (GM, PR #198 r6 and r7 item 3)', () => {
     const zero = summary({ low: 0, high: 0, unpriced: ['Kling'] });
-    expect(runChipLabel(zero)).toBe('$0+');
-    expect(runChipTitle(zero)).toBe("Some costs aren't known yet.");
+    expect(runChipLabel(zero)).toBe('$0 + unpriced');
+    expect(runChipTitle(zero)).toBe('The priced part of this run is free.');
   });
 
-  it('a range from $0: "Between $0 and $0.43", with or without the +', () => {
-    expect(runChipLabel(summary({ low: 0, high: 0.43, unpriced: ['Kling'] }))).toBe('$0–0.43+');
+  it('a range from $0: "Up to $0.43" (GM, PR #198 r6 item 2), with or without " + unpriced"', () => {
+    expect(runChipLabel(summary({ low: 0, high: 0.43, unpriced: ['Kling'] }))).toBe('Up to $0.43 + unpriced');
     expect(runChipTitle(summary({ low: 0, high: 0.43, unpriced: ['Kling'] })))
-      .toBe("Between $0 and $0.43, plus costs that aren't known yet.");
-    expect(runChipLabel(summary({ low: 0, high: 0.43 }))).toBe('$0–0.43');
-    expect(runChipTitle(summary({ low: 0, high: 0.43 }))).toBe('Between $0 and $0.43.');
+      .toBe('The priced part of this run costs up to $0.43.');
+    expect(runChipLabel(summary({ low: 0, high: 0.43 }))).toBe('Up to $0.43');
+    expect(runChipTitle(summary({ low: 0, high: 0.43 }))).toBe('Up to $0.43.');
   });
 
   it('a non-zero amount under a cent is never "$0" or a sub-cent figure: "<$0.01"', () => {
     // GM r4 (fix round 4): a range from under a cent is "Up to $Y" on the chip too.
-    expect(runChipLabel(summary({ low: 0.0047, high: 0.43, unpriced: ['Kling'] }))).toBe('Up to $0.43+');
+    expect(runChipLabel(summary({ low: 0.0047, high: 0.43, unpriced: ['Kling'] }))).toBe('Up to $0.43 + unpriced');
     expect(runChipLabel(summary({ low: 0.0047, high: 0.0047 }))).toBe('<$0.01');
-    expect(runChipLabel(summary({ low: 0.0047, high: 0.0047, unpriced: ['Kling'] }))).toBe('<$0.01+');
+    expect(runChipLabel(summary({ low: 0.0047, high: 0.0047, unpriced: ['Kling'] }))).toBe('<$0.01 + unpriced');
     expect(runChipLabel(summary({ low: 0.0001, high: 0.0049 }))).toBe('<$0.01');
     for (const shape of [summary({ low: 0.0047, high: 0.43, unpriced: ['Kling'] }), summary({ low: 0.0047, high: 0.0047 }),
       summary({ low: 0.0047, high: 0.0047, unpriced: ['Kling'] })]) {
       // GM, PR #198 r2 ask 1: "under $0.01" on its own; r3 item 6: a range
       // from under a cent is "Up to $Y.".
-      expect(runChipTitle(shape)).toMatch(/[Uu]nder \$0\.01|^Up to \$0\.43/);
+      expect(runChipTitle(shape)).toMatch(/[Uu]nder \$0\.01|^Up to \$0\.43|costs up to \$0\.43/);
       expect(runChipTitle(shape)).not.toMatch(/\$0(?![.\d])/);
     }
   });
 
   it('the proposal card\'s chip follows the same rule', () => {
     const view = (low: number, high: number, open = false) => ({ run: ['n1'], cost: { estimate: { low, high, open } } }) as never;
-    expect(proposalEstimateLabel(view(0.0047, 0.43, true))).toBe('Up to $0.43+');
+    expect(proposalEstimateLabel(view(0.0047, 0.43, true))).toBe('Up to $0.43 + unpriced');
     expect(proposalEstimateLabel(view(0.0047, 0.0047))).toBe('<$0.01');
     // GM r4: chips never show sub-cent precision.
     expect(proposalEstimateLabel(view(0.067, 0.067))).toBe('~$0.07');
-    expect(proposalEstimateLabel(view(0, 0.43, true))).toBe('$0–0.43+');
+    expect(proposalEstimateLabel(view(0, 0.43, true))).toBe('Up to $0.43 + unpriced');
   });
 
   it('what was spent, to the cent: a non-zero amount under half a cent is "<$0.01", never "$0.00"', () => {
@@ -195,9 +195,9 @@ describe('GM (6): the price chip, "$0" only ever means free', () => {
 
   it('r18\'s forms above a cent, with every range in the range form (GM, PR #198 r2 ask 2)', () => {
     expect(runChipTitle(summary({}))).toBe('Estimated cost');
-    expect(runChipTitle(summary({ unpriced: ['Kling'] }))).toBe("At least $0.07. Some costs aren't known yet.");
+    expect(runChipTitle(summary({ unpriced: ['Kling'] }))).toBe('The priced part of this run costs about $0.07.');
     expect(runChipTitle(summary({ low: 0.05, high: 0.43, unpriced: ['Kling'] })))
-      .toBe("Between $0.05 and $0.43, plus costs that aren't known yet.");
+      .toBe('The priced part of this run costs between $0.05 and $0.43.');
     expect(runChipTitle(summary({ low: 0.05, high: 0.43 }))).toBe('Between $0.05 and $0.43.');
   });
 });

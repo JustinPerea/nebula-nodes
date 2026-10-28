@@ -33,23 +33,26 @@ describe('one money formatter (L4)', () => {
 /** Every chip form, its tooltip (GM's asks 1 and 2), as built. */
 const CHIPS: [number, number, boolean, string, string | undefined][] = [
   [0, 0, false, '~$0', 'Estimated cost'],
-  [0, 0, true, '$0+', "Some costs aren't known yet."],
+  // GM, PR #198 r6 and r7 item 3: an open chip reads " + unpriced", and its
+  // tooltip leads with the priced part (the reasons need the run's scope).
+  [0, 0, true, '$0 + unpriced', 'The priced part of this run is free.'],
   [0, 0.0047, false, '<$0.01', 'Estimated cost under $0.01'],
   [0.0047, 0.0047, false, '<$0.01', 'Estimated cost under $0.01'],
-  [0.0047, 0.0047, true, '<$0.01+', "Under $0.01 so far. Some costs aren't known yet."],
-  [0, 0.43, false, '$0–0.43', 'Between $0 and $0.43.'],
-  [0, 0.43, true, '$0–0.43+', "Between $0 and $0.43, plus costs that aren't known yet."],
+  [0.0047, 0.0047, true, '<$0.01 + unpriced', 'The priced part of this run costs under $0.01.'],
+  // GM r6 item 2: a range from $0 reads "Up to $Y".
+  [0, 0.43, false, 'Up to $0.43', 'Up to $0.43.'],
+  [0, 0.43, true, 'Up to $0.43 + unpriced', 'The priced part of this run costs up to $0.43.'],
   // GM, PR #198 r3 item 6 and r4: a range from under a cent reads "Up to $Y",
   // in the chip and its tooltip (fix round 4: chips never show sub-cent figures).
   [0.0047, 0.43, false, 'Up to $0.43', 'Up to $0.43.'],
-  [0.0047, 0.43, true, 'Up to $0.43+', "Up to $0.43, plus costs that aren't known yet."],
+  [0.0047, 0.43, true, 'Up to $0.43 + unpriced', 'The priced part of this run costs up to $0.43.'],
   [0.0099, 0.0101, false, 'Up to $0.01', 'Up to $0.01.'],
-  [0.0099, 0.0101, true, 'Up to $0.01+', "Up to $0.01, plus costs that aren't known yet."],
+  [0.0099, 0.0101, true, 'Up to $0.01 + unpriced', 'The priced part of this run costs up to $0.01.'],
   [0.009, 0.0104, false, 'Up to $0.01', 'Up to $0.01.'],
   [0.01, 0.0149, false, '~$0.01', 'Estimated cost'],
-  [0.02, 0.43, true, '$0.02–0.43+', "Between $0.02 and $0.43, plus costs that aren't known yet."],
+  [0.02, 0.43, true, '$0.02–0.43 + unpriced', 'The priced part of this run costs between $0.02 and $0.43.'],
   [0.05, 0.43, false, '$0.05–0.43', 'Between $0.05 and $0.43.'],
-  [0.05, 0.05, true, '$0.05+', "At least $0.05. Some costs aren't known yet."],
+  [0.05, 0.05, true, '$0.05 + unpriced', 'The priced part of this run costs about $0.05.'],
   [0.05, 0.05, false, '~$0.05', 'Estimated cost'],
   [0.04, 0.044, false, '~$0.04', 'Estimated cost'],
   [0.0995, 0.1, false, '~$0.10', 'Estimated cost'],
@@ -72,12 +75,12 @@ describe('the chips and their tooltips (GM asks 1 and 2)', () => {
     }
   });
 
-  it('"At least" only for a single-number "$X+" chip; a range says "Between", or "Up to" from under a cent', () => {
-    for (const [low, high, open, chip, title] of CHIPS) {
-      const range = chip.includes('–');
-      if (range) expect(title, chip).toMatch(chip.startsWith('<') ? /^Up to / : /^Between /);
-      if (title?.startsWith('At least')) expect(chip, chip).toMatch(/^\$[\d.]+\+$/);
-      void low; void high; void open;
+  it('a range says "between", "Up to" says "up to", and an open chip never ends in a bare "+"', () => {
+    for (const [, , open, chip, title] of CHIPS) {
+      if (chip.includes('–')) expect(title, chip).toMatch(open ? /^The priced part of this run costs between / : /^Between /);
+      if (chip.startsWith('Up to')) expect(title, chip).toMatch(open ? /^The priced part of this run costs up to / : /^Up to /);
+      expect(chip, chip).not.toMatch(/\d\+$/);
+      if (open) expect(chip, chip).toMatch(/ \+ unpriced$/);
     }
   });
 });
@@ -111,7 +114,7 @@ describe('the formatter, as properties (L4)', () => {
       const chip = formatChipEstimate(low, high, open);
       const where = `${low} ${high} ${open} -> ${chip}`;
       expect(chip, where).not.toMatch(/\$-|\$0\.000(?!\d*[1-9])|<\$0\.01–0\.01\b/);
-      const range = chip.replace(/^[~]/, '').replace(/\+$/, '').split('–');
+      const range = chip.replace(/^[~]/, '').replace(/ \+ unpriced$/, '').split('–');
       if (range.length === 2) {
         const [from, to] = range;
         expect(from.replace('$', ''), where).not.toBe(to);

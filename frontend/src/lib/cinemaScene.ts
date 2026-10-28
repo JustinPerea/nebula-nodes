@@ -6,6 +6,7 @@
  * other way) still opens instead of blanking the studio.
  */
 import type { ActiveRun } from './runHistory';
+import { nodeNameList } from './errorCopy';
 import type { CinemaSceneSpec, CinemaShot, NodeState } from '../types';
 
 export const DEFAULT_SCENE_MODEL = 'seedream-4-5';
@@ -183,10 +184,18 @@ export const RUN_LOCK_REASON = 'Wait for the active run to finish.';
  * "Couldn't delete “X”. Wait for the active run to finish." ("the node"
  * with no name), "Couldn't delete 3 nodes. …", "Couldn't undo. …",
  * "Couldn't redo. …". */
-export function runLockedLine(action: 'delete' | 'undo' | 'redo', count = 1, name?: string): string {
+export function runLockedLine(action: 'delete' | 'undo' | 'redo', count = 1, name?: string, names?: readonly string[]): string {
   if (action !== 'delete') return `Couldn't ${action}. ${RUN_LOCK_REASON}`;
-  const what = count === 1 ? name ?? 'the node' : `${count} nodes`;
+  // GM r6: several nodes are named, up to 3, grouped by title, counted from 4.
+  const what = names && names.length > 1 ? nodeNameList([...names]) : count === 1 ? name ?? 'the node' : `${count} nodes`;
   return `Couldn't delete ${what}. ${RUN_LOCK_REASON}`;
+}
+
+/** The run lock over a selection of only wires (PR #198 review 5, N1): the
+ * Delete key is off during the run, and never silently. GM's pattern;
+ * "connection" as the canvas's other wire lines say it. */
+export function runLockedWiresLine(count: number): string {
+  return `Couldn't delete ${count === 1 ? 'the connection' : `${count} connections`}. ${RUN_LOCK_REASON}`;
 }
 
 /** GM, PR #198 r3 item 1: the scene's Delete, disabled while a shot
@@ -217,9 +226,8 @@ export function scenesKeptLine(kept: readonly { scene: string; shots: RenderingS
     return `“${kept[0].scene}” wasn't deleted because ${text} ${several ? 'are' : 'is'} still running.`;
   }
   if (kept.length >= 4) return `${kept.length} scenes weren't deleted because their shots are still running.`;
-  const names = kept.map((item) => `“${item.scene}”`);
-  const list = `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
-  return `${list} weren't deleted because their shots are still running.`;
+  // GM r6: same titles grouped with a count ("2 “Scene” nodes").
+  return `${nodeNameList(kept.map((item) => item.scene))} weren't deleted because their shots are still running.`;
 }
 
 /** `wanted` (params an undo or redo puts back) with every shot that is

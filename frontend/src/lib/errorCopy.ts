@@ -132,27 +132,98 @@ export interface FailureCopy {
   reason: string;
 }
 
+/** How a line of its own opens: every form the backend's and the browser's
+ * person lines use (review 5, N5): "Couldn't …", "Can't …", "Cannot …",
+ * "Nebula couldn't …", "Nebula can't …". Group 1 is the verb. */
+const FAILURE_LEAD = /^(?:Nebula (?:couldn['’]t|can['’]t|cannot)|Couldn['’]t|Can['’]t|Cannot) (\w+)/;
+
 /** A reason that is a line of its own: it says what failed itself
- * ("Couldn't delete “Agent scene”. “Shot 2” is still running. …"). */
+ * ("Couldn't delete “Agent scene”. “Shot 2” is still running. …", "Nebula
+ * can't read that file type. …", "Cannot clear the canvas while a run is
+ * active. …"). A tail that only says why or what to do ("Stop the run
+ * first.", "Wait for it to finish.", "Nebula didn't respond.") is not. */
 export function isNamedLine(text: string): boolean {
-  return /^Couldn['’]t /.test(text.trim());
+  return FAILURE_LEAD.test(text.trim());
 }
 
-const failedVerb = (text: string) => /^Couldn['’]t (\w+)/.exec(text.trim())?.[1] ?? null;
+const failedVerb = (text: string) => FAILURE_LEAD.exec(text.trim())?.[1].toLowerCase() ?? null;
 
-/** GM, PR #198 r5 item 3: when a specific line exists, the generic one never
- * shows as well. `heading` then `reason`, except when the reason is a line
- * of its own (isNamedLine) and the heading adds nothing to it: a heading that
- * names nothing ("Couldn't delete the node.") or says the same failure
- * ("Couldn't delete …" both). Then the reason alone ("Couldn't delete
- * “Agent scene”. …", never "Couldn't delete the node. Couldn't delete
- * “Agent scene”. …"). A heading that names a thing the reason doesn't
- * ("Couldn't run “Hero still”." over "Couldn't reach Krea.") stays. */
+/** A line's opening sentence in one spelling, for comparing: "Cannot clear
+ * the canvas while …" and "Nebula can't clear …" read as "Couldn't clear …". */
+const sameFailureForm = (text: string) => text.trim()
+  .replace(/^(?:Nebula (?:couldn['’]t|can['’]t|cannot)|Couldn['’]t|Can['’]t|Cannot) /, "Couldn't ");
+
+/** What a generic heading may say after its verb: a stand-in for what failed
+ * that names nothing ("the node", "3 nodes", "the change"), or nothing at
+ * all ("Couldn't undo."). From the call sites: deletionHeading, runLockedLine,
+ * the scene and edit saves, Undo and Redo (graphStore, lib/cinemaScene). */
+const STAND_IN = /^(?:|the node|the nodes|\d+ nodes|them|it|that|the scene|the shot|the change|the changes|your changes|your edits)$/;
+/** paramSaveFailedLine's headings (graphStore): the save of a node's
+ * settings, which names the setting but not the part of it a refusal names
+ * ("Couldn't save “Scene” for “Opening”.", "Couldn't save 3 settings for
+ * “Opening”.", "Couldn't save a setting on “Opening”."). */
+const SETTING_SAVE = /^Couldn['’]t save (?:“[^”]*”(?: and “[^”]*”)?|\d+ settings) for “[^”]*”\.$|^Couldn['’]t save a setting on “[^”]*”\.$/;
+
+/** A heading that only restates the action and names nothing a reason could
+ * add to: "Couldn't delete the node.", "Couldn't delete 3 nodes.",
+ * "Couldn't save the scene.", "Couldn't undo.", a setting's save line. A
+ * heading that names what failed ("Couldn't run the graph.", "Couldn't save
+ * the project.", "Couldn't delete “Brief”.") is not generic. */
+export function isGenericHeading(heading: string): boolean {
+  const text = heading.trim();
+  if (SETTING_SAVE.test(text)) return true;
+  const match = /^Couldn['’]t (\w+)(?: (.*?))?\.$/.exec(text);
+  return match !== null && STAND_IN.test(match[2] ?? '');
+}
+
+/**
+ * GM, PR #198 r5 item 3 and r7 ("A specific line replaces the generic one,
+ * never both"); review 5, L4. `heading` then `reason`, except that the
+ * reason shows alone when it is a line of its own (isNamedLine) that says
+ * the heading's failure itself:
+ * 1. The reason repeats the heading ("Couldn't stop the reply." over
+ *    "Couldn't stop the reply. The agent isn't answering."; "Couldn't clear
+ *    the canvas." over "Cannot clear the canvas while a run is active. …").
+ * 2. The heading is generic (isGenericHeading: decided by its role, from an
+ *    explicit list of the stand-ins the call sites use, never by curly
+ *    quotes) and the reason is the same failure, named: the same verb
+ *    ("Couldn't delete 3 nodes." over "Couldn't delete “Agent scene”. …"),
+ *    or, under a generic save, a line that names the part it refused (a
+ *    “…” name in its first sentence: "Couldn't save “Scene” for “Opening”."
+ *    over "Couldn't remove “Shot 2”. It's still running. …"; the save
+ *    carried the removal).
+ * Otherwise both. A heading that names a thing keeps its place over a
+ * reason that names another, whatever the verbs: "Couldn't run the graph.
+ * Couldn't reach the provider. …", "Couldn't save the project. Couldn't
+ * upload hero.png.", and the same verb for another object, "Couldn't
+ * delete “Brief”. Couldn't delete “Agent scene”. …" (two failures).
+ *
+ * Why a predicate, not an option the caller passes: the rule has to hold
+ * where no caller is in reach (a RequestFailedError's own `message`, every
+ * oneLine and failureMessage), and the generic headings are few and come
+ * from a handful of builders, so one list covers them all.
+ */
 export function headedLine(heading: string, reason: string): string {
   if (!reason) return heading;
   if (!heading) return reason;
-  if (isNamedLine(reason) && (!/[“”]/.test(heading) || failedVerb(heading) === failedVerb(reason))) return reason;
+  if (isNamedLine(reason) && (repeatsHeading(heading, reason) || specifiesGeneric(heading, reason))) return reason;
   return `${heading} ${reason}`;
+}
+
+/** Rule 1: the reason's first sentence opens with the heading's sentence. */
+function repeatsHeading(heading: string, reason: string): boolean {
+  const stem = sameFailureForm(heading).replace(/\.$/, '');
+  const said = sameFailureForm(reason);
+  return said.startsWith(stem) && /^[\s.,:]|^$/.test(said.slice(stem.length));
+}
+
+/** Rule 2: a generic heading over the same failure, named. */
+function specifiesGeneric(heading: string, reason: string): boolean {
+  if (!isGenericHeading(heading)) return false;
+  const verb = failedVerb(heading);
+  if (verb !== null && verb === failedVerb(reason)) return true;
+  const firstSentence = /^(?:[^.“]|“[^”]*”)*\./.exec(reason.trim())?.[0] ?? reason;
+  return verb === 'save' && /“[^”]+”/.test(firstSentence);
 }
 
 /** The one-line form, for alerts, toasts, tooltips and status text (GM:
@@ -518,4 +589,29 @@ export async function requestError(heading: string, response: Response,
   return new RequestFailedError(heading, response.status, { detail: body.detail, reason: options.reason,
     storageFull: body.storageFull, storageLimit: body.storageLimit, code: body.code,
     overSaveLimit: body.overSaveLimit, sizeBytes: body.sizeBytes });
+}
+
+/**
+ * A list of node names in a line (GM - Design, 2026-10-27, r6 of PR #198 and
+ * the follow-up to PR #195), for every line that names several nodes: the
+ * multi-delete toasts and the "+ unpriced" tooltip.
+ * - Up to 3 nodes by name: "“A”", "“A” and “B”", "“A”, “B” and “C”".
+ * - Nodes with the same title are grouped with a count, never repeated:
+ *   "2 “Text” nodes"; a mix, "“Brief” and 2 “Text” nodes".
+ * - The rule counts nodes, not groups: from 4 nodes in total, "4 nodes".
+ * - No node ids: the Agent log keeps those.
+ * Groups keep the order their first node came in. The same rule (and name)
+ * as fix/agent-presence-followups' helper, which replaces this one at merge.
+ */
+export function nodeNameList(names: string[]): string {
+  if (names.length >= 4) return `${names.length} nodes`;
+  const groups = new Map<string, number>();
+  for (const name of names) groups.set(name, (groups.get(name) ?? 0) + 1);
+  const parts = [...groups].map(([name, count]) => (count === 1 ? `“${name}”` : `${count} “${name}” nodes`));
+  return parts.length <= 1 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+}
+
+/** Whether a nodeNameList names more than one node ("have" / "has"). */
+export function namesSeveral(names: string[]): boolean {
+  return names.length > 1;
 }

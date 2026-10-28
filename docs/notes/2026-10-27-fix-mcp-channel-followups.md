@@ -258,3 +258,84 @@ Justin: "I want to do complete fixes as soon as we run into them"; "implement th
   - Variation pass 2: the agent's DELETE gets 409 with the run id and `rendering`, the person's Delete shows GM's line, and the scene is free after the run.
   - The Run chip reads "Up to $0.43" for a GPT Image 2.5 node, and its tooltip says "Up to $0.43.".
   - Screenshots: `fix4-*.png` in the scratchpad.
+
+## Fix round 5 (PR #198 review 5, GM's r6 and r7 rulings, GM's offline verbs from #200 r2)
+
+- **H1: Undo after a refused removal.** Every undo and redo step is numbered as it lands on either stack (`stepSeq`, set in the store's one `set` wrapper, so every writer is covered).
+  - A scene's authoring entry keeps the step number before its first edit (`since`), its removals' steps (`removalSteps`, appended, never overwritten by later typing), and every wire its edits took off (`takenWires`).
+  - When the backend keeps shots this canvas removed (`restoreShots`), every step since `since`, on either stack, takes those shots back into its copy of the node: the scene in a snapshot or in both slices of a slice step, the ports and their values, and in a snapshot the wires. The removals' own steps leave both stacks.
+  - So no Undo or Redo can send the scene without the shot. Review 5's P1 and P7 repros, a debounced-typing variant, and the live repro all keep Shot 2 and its image.
+- **M1 / GM r6 item 1: the partial revert.** A 409 that names its rendering shots (`rendering.shotIds`, new from the backend; a backend from before this round is read by rail number) puts back only those shots, and the backend's line is the only line. The rest of the save (the same-scene typing and anything queued) goes again at once, without the removal. A resend that already has every named shot and is refused the same way stays on screen unsaved, so it never loops.
+- **GM r7 item 1: whole-save refusals.** The edits stay on screen, marked unsaved (`unsavedScenes`, shown on the scene card), with the line for what clears it (`lib/sceneSaveCopy.ts`):
+  - 413: GM's line. The next save that fits takes the edits.
+  - A paid start or an approved run's inputs (`code` `paid_start` / `approved_run`): "…Your changes are kept and will save when the run finishes." Sent again with a backoff (2, 4, 8, then every 15 s), and at once on a sync (at most once a second), so it saves when the run ends.
+  - 5xx, 408, 429: "…Your changes are kept. Nebula will try again." The canvas really retries, on the same backoff.
+  - 404: "…It was deleted in another window." Nothing more is sent.
+  - The workspace moved (`code` `workspace_moved`, with `project` and `switchedBy`): "…Codex switched to “Y” first." / "Nebula switched to “Y” first." Nothing more is sent.
+  - 400: "…Nebula ran into a problem saving them, so they're kept on screen but not saved." The detail goes to the Agent log ("Couldn't save “X”, node n4. <detail>").
+  - `params_outdated`: **stopped for GM.** Unsaved edits do survive the reload, but as a recovered project (projectStore saves the canvas as a copy, then the tab reloads by itself), not into the same project. So "Reload Nebula and they'll save." would be untrue. The scene adds no line of its own and sends nothing more, and the edits stay on screen for the recovered copy to capture.
+  - Anything else: the backend's line (alone when it is a line of its own), marked unsaved. A retry refused the same way says nothing new.
+  - A newer edit from somewhere else to a scene with kept edits (the backend's authoring changed and it isn't one of this tab's own writes) shows that version, and the person is told (`CHANGED_ELSEWHERE`, a placeholder). Kept edits are never sent over it later. This replaces round 3's "a newer edit from someone else still wins", which dropped them silently.
+  - A kept removal never takes a newer image: on each sync, a removed shot that the backend still has, and whose runtime changed since the removal, comes back.
+- **L1: no answer.** The entry is marked `unanswered` and sends nothing more until a sync shows what the backend has; the canvas reads the backend again on reconnect. A removed shot the backend still has comes back, with its port, image and wire; one the backend no longer has stays removed. Then whatever is left (typing) goes. Until then the removed shot's wires stay held off, so no wire is drawn from a missing port.
+- **L2.** A shot put back gets its wires from the canvas's own record (`takenWires`), and its port's value from the backend's last outputs or the removal's step, whether or not `/api/graph/export` answers.
+- **Naming (GM r6, both multi-delete lines).** `nodeNameList` in errorCopy (same name and rule as fix/agent-presence-followups' helper): up to 3 named, the same title grouped with a count, a count from 4 nodes, no ids. It is used by:
+  - `runLockedLine`: "Couldn't delete “Brief” and “Note”. Wait for the active run to finish.";
+  - `deletedNotice`: "Deleted “Temp 2” and “Temp 3”. “Ref scene” wasn't deleted because “Shot 1” is still running.";
+  - `scenesKeptLine` (2-3 kept scenes; 4+ stay "4 scenes").
+  - A single delete keeps "Deleted the node." (signed off). Titles come from the card label, else the model's name, never the id.
+- **N1.** Delete with only wires selected during the tab's run: "Couldn't delete the connection. Wait for the active run to finish." / "Couldn't delete 2 connections. …" (`runLockedWiresLine`). The Canvas key handler now passes wire-only selections to `deleteSelected`.
+- **Found by the live check: a kept scene lost its wire.** A multi-select Delete of a scene that another window's run was rendering, plus two Text nodes, kept the scene but deleted the wire into it, on the backend too. React Flow sent the selected nodes' wires as their own DELETEs before the scene's 409 came back. Canvas's `onBeforeDelete` now hands React Flow only wires between nodes that stay (`wiresDeletedWith`). A deleted node's wires go with its own DELETE (the backend removes them) and the canvas prunes them when the node goes, so a node the backend keeps keeps its wires.
+- **Money.**
+  - The "+ unpriced" chip and its tooltip follow GM r6/r7 (`lib/unpricedCopy.ts`). There are no colons, one sentence per reason, "The priced part of this run costs up to $X." first, and the reasons grouped with the name helper, ordered by where each reason's first node sits on the canvas (left to right, then top to bottom).
+  - The missing-key line names the key as the node's own route line does ("its fal.ai API key").
+  - Found live: a node whose only listed price is on one provider (Seedream, BytePlus only) read "has no listed price" when no key was set, because it fell back to fal.ai. With no key for any of its providers it now reads the missing key ("can't be priced until their BytePlus or fal.ai API key is added."). With a fal.ai key alone it still has no listed price.
+  - A $0 low end reads "Up to $0.43". Detail lines write each end in full. A high end below the low end shows only the low end. Amounts above $10,000,000,000,000 read as more than that on both sides (N4, `CEILING_USD`), up to the float max.
+- **M2 (backend lane).** `test_money_fuzz_parity.py` reads each amount from the fixture, so Linux and macOS check the same floats. The only libm call left in the formatter is `log10`, and a ±1-ulp perturbation over every fixture amount and each power of ten changes nothing. The carry check's `pow` was replaced by an integer check.
+- **L3 (backend lane): stray ports.** A stray `shot_<id>` port moves to a renumbered shot whose image matches, and its wires follow (import, project open and save, `CLIGraph.load`). A port or wire still dropped is reported in the load's `warnings`, as `droppedPorts` on `canvas.replaced`, and in the Agent log for agents. Project open still drops a port nothing can take back (a switch clears the undo stack), but now says so.
+- **L4 / nits (copy lane).**
+  - `headedLine` is by role. A quoted heading with a different verb keeps both, and the ratchet is wider.
+  - L5: each distinct error is logged once.
+  - The rest: the wire-only Delete line, the tooltip's period, `isNamedLine`'s verbs, the studio's Agent log line, missing vs. damaged (`problem()` returns `state: 'missing'` for a missing node).
+- **GM r7 item 2.** The Cinema scene card and the card boundary use the selected style every card has, in their category colour. The breathing animation is untouched. `.remotion-node--selected` is still orange; that predates this PR and is left for GM.
+- **Offline (GM, #198 round 5 and #200 r2 item 4).**
+  - `lib/useBackendOffline.ts`: `offlineReason(verb)` ("You can <verb> when Nebula reconnects."), `OFFLINE_RECONNECT_FALLBACK` ("This works again when Nebula reconnects."), `offlineTitle`, and GM's verbs as named constants (`OFFLINE_VERBS`) for #200 to use.
+  - The Cinema studio is locked offline, each control with its verb:
+    - Generate shot, Generate N and Generate all: "generate";
+    - Send to motion: "send it to motion";
+    - + Add shot: "add shots";
+    - the arrows (and Alt + arrow keys, and a drag): "reorder shots";
+    - ×: "remove shots".
+  - The prompt is read-only with no tooltip. A variation pick, a reference's ×, an upload's Retry, the scene settings and the shot's references and art direction (one `fieldset.cinema-offline-lock` each) read the generic line.
+  - Every locked control looks locked (GM's merge check): the label at 55% of the ink, the outline at 12%, no fill or accent, and no extra dimming on top. Checkboxes, swatches and sliders keep the fieldset's dimming.
+  - Run history stays live, since it shows the runs already loaded and opening it needs no server.
+  - Create's and Remotion's offline actions don't use the tooltip yet (deferred by GM: "offline tooltips elsewhere through #198's helper").
+- **Tests that failed first, on 4cc05ab2.**
+  - Store (`graphStore.fix5.test.ts`): 22 of 24.
+  - Money: 32 of 38, plus the Seedream missing-key case (1 of 1, on this round's code before its fix).
+  - Copy: 46.
+  - Offline: 9 of 9 (the helper's import fails on the base; 8 of 9 with the helper alone). GM's verbs and the locked look were added after his ruling.
+  - The kept wire: 3 of 3.
+  - Backend `test_pr198_fix5.py` and the extended fix2/fix3 cases: 36 failed, 54 passed. The new fuzz form, the ±ulp test, the table-rows check and `params_outdated` passed from the start.
+- **Gates.**
+  - Backend, full suite (backend lane): 11,539 passed, 71 skipped, 0 failed (32:28). Its first full run had 7 failures from this round, all fixed: "wires" in new MCP docstrings, the import guard's exact sync call, and its own journal cursor.
+  - Vitest, full run: 476 files, 6,392 passed, 0 failed, no timeouts.
+  - Focused files and the errorCopy ratchets: 26 files, 898 passed.
+  - `tsc -b` clean. Lint clean (inline-style guard, Slava CSS scope guard, eslint).
+  - Vite build OK; budget 407,410 bytes raw / 123,207 gzip (limit 512,000).
+- **Live check** (8797/5797 with `VITE_NEBULA_BACKEND_PORT=8797`, isolated state, 1280 and 1440, a fake cinema-scene handler that holds per call, nothing paid): 29/29, 0 blocked attempts after the canary.
+  - Own run: "Couldn't delete “Brief” and “Note”. Wait for the active run to finish."
+  - Another window's run: "Deleted “Temp 2” and “Temp 3”. “Ref scene” wasn't deleted because “Shot 1” is still running." with Undo. The scene keeps its wire (the bug above). The selected scene card is no longer #FF5A1F.
+  - The chip: "Up to $0.43 + unpriced", tooltip "The priced part of this run costs up to $0.43. 7 nodes can't be priced until their BytePlus or fal.ai API key is added."
+  - The partial revert: the backend's line alone, Shot 2 back with its image and wire, the typing saved, no later PUT drops Shot 2; the same after a refresh.
+  - H1: after the refusal and the run, Cmd+Z undoes the Brief edit, and Shot 2, its image and its wire stay on the tab and the backend.
+  - Offline: every Cinema control above locked with its verb and the locked look (computed: label alpha 0.51, no fill, opacity 1).
+  - Harness notes: a node's next fake call isn't always 1 (Ref scene's run runs Agent scene upstream), and a same-input shot run is a cache hit that never reaches the handler, so H1's repro has an agent edit Shot 2's prompt first, as review 5's did. A refresh right after an edit gets "Leave site?" while the autosave is pending; it saves within 20 s.
+  - Screenshots: `fix5-*.png` in the scratchpad.
+- **Awaiting GM (placeholders).**
+  - `sceneSaveCopy.ts`: `UNSAVED_MARK` ("Not saved"), `CHANGED_ELSEWHERE`, `SWITCHED_UNNAMED`.
+  - `unpricedCopy.ts`: `PRICED_PART.free` and `.over`, `OVER_TITLE`, `MISSING_KEY`'s plural, `MISSING_KEY_UNNAMED`, `ROUTE_CANT_RUN`, `AWAITING_INPUT`'s plural, `SIZE_UNREADABLE`, and the left-out lines (one neutral line for "input images", "thinking tokens" and "input media and thinking tokens").
+  - Backend (`main.py`): `STRAY_SHOT_PORT_DROPPED`, `STRAY_SHOT_PORT_AND_WIRES_DROPPED`, `STRAY_SHOT_WIRES_DROPPED`, and the Agent log's "…and N more" line.
+  - `params_outdated` (above): no line until GM decides.
+  - The provider is "fal.ai" (Settings' own name), not GM's "fal". The Run button is never disabled for a missing key, so the tooltip's missing-key line agrees with the node's route line instead.
+  - The Cinema scene card's header reads "Cinema Scene", never its label, so “Ref scene” in a toast names a card the person can't find by that name.

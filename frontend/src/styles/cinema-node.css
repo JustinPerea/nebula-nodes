@@ -14,8 +14,25 @@ body.app-slava-restraint .cinema-scene-node {
   cursor: default;
 }
 
+/* GM r7 item 2: one selection style. The scene card is selected as every
+ * model card is (slava-restraint.css, .model-node--selected .model-node__card):
+ * its category colour (--node-category-color, set on the card by
+ * CinemaSceneNode.tsx) and the same breathing ring. Orange (--sr-accent) is
+ * for primary actions and the Inspector-pinned style. */
 body.app-slava-restraint .cinema-scene-node--selected {
-  border-color: var(--sr-accent);
+  border-color: var(--node-category-color, var(--sr-accent));
+  border-width: var(--sr-node-card-selected-border-width);
+  animation: slava-select-breathe var(--sr-node-selected-duration) ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .cinema-scene-node--selected {
+    animation: none;
+    box-shadow:
+      0 0 0 var(--sr-node-ring-width) var(--node-category-color, var(--sr-accent)),
+      0 0 var(--sr-node-selected-glow-reduced-size) color-mix(in srgb, var(--node-category-color, var(--sr-accent)) var(--sr-node-selected-glow-reduced-mix), transparent),
+      var(--sr-shadow-node);
+  }
 }
 
 body.app-slava-restraint .cinema-scene-node__title {
@@ -123,4 +140,12 @@ body.app-slava-restraint .cinema-scene-node__shot-label {
   font-size: 10px;
   color: var(--sr-ink-meta);
   padding-right: 6px;
+}
+
+/* Edits on screen that the backend didn't take (GM, PR #198 r6 item 1): a
+   quiet mark under the summary; its title is the line that said why. */
+body.app-slava-restraint .cinema-scene-node__unsaved {
+  color: var(--sr-ink-meta);
+  font-size: 10px;
+  margin: -4px 0 8px;
 }

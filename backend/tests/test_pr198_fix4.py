@@ -252,10 +252,11 @@ def test_the_persons_refused_scene_delete_names_the_rendering_shots(api, renderi
     assert reply.status_code == 409
     body = reply.json()
     assert body["detail"] == "Couldn't delete “Agent scene”. “Shot 2” is still running. Stop the run first."
-    assert body["rendering"] == {"shots": [2], "stoppable": True}
+    # Review 5 added ``shotIds`` (and ``code``) beside the numbers.
+    assert body["rendering"] == {"shotIds": ["s2"], "shots": [2], "stoppable": True}
     agent = client.delete(f"/api/graph/node/{node}", headers=AGENT)
     assert agent.status_code == 409
-    assert agent.json()["rendering"] == {"shots": [2], "stoppable": True}
+    assert agent.json()["rendering"] == {"shotIds": ["s2"], "shots": [2], "stoppable": True}
     assert "run-r" in agent.json()["detail"]
 
 
@@ -266,7 +267,7 @@ def test_a_scene_delete_while_admitting_says_wait(api, rendering, person):  # no
         main_module._note_cinema_render("admitting", node, None)
         reply = client.delete(f"/api/graph/node/{node}", headers=PERSON)
     assert reply.status_code == 409
-    assert reply.json()["rendering"] == {"shots": [1, 2], "stoppable": False}
+    assert reply.json()["rendering"] == {"shotIds": ["s1", "s2"], "shots": [1, 2], "stoppable": False}
     assert reply.json()["detail"].endswith("Wait for it to finish.")
 
 

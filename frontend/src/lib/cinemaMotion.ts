@@ -9,7 +9,7 @@ import { useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
 import { cinemaMotionSource, cinemaMotionTarget, useCinemaMotionStore, type CinemaMotionHandoff } from '../store/cinemaMotionStore';
 import type { NodeData } from '../types';
-import { NO_RESPONSE_SHORT_COPY, copyForAnswer, isNoAnswer, readRefusal, shortReason } from './errorCopy';
+import { NO_RESPONSE_SHORT_COPY, copyForAnswer, headedLine, isNoAnswer, readRefusal, shortReason } from './errorCopy';
 
 /** A refused handoff's reason: a person-only refusal says GM's line, by its
  * code (Q116 a); else the backend's reason or GM's line for the status. */
@@ -88,7 +88,9 @@ export async function sendCinemaShotToMotion(nodeId: string, shotId: string): Pr
       if (!response.ok) {
         throw new HandoffError(response.status === 409
           ? 'The shot changed before it could be connected. Retry with the current result.'
-          : `Couldn't connect the video node. ${shortReason(await refusalReason(response))}`);
+          // headedLine (review 5, L4): a backend line that already says what
+          // couldn't be done shows once, never under a second heading.
+          : headedLine("Couldn't connect the video node.", shortReason(await refusalReason(response))));
       }
       const result = validatedResponse(await response.json(), handoff);
       if (!owns(handoff)) return;

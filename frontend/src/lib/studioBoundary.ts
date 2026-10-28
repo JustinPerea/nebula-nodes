@@ -53,54 +53,107 @@ export function nodeCardBoundaryLine(label: string | null, damaged: boolean): st
   return `Couldn't show ${label ? `“${label}”` : 'this node'}. ${damaged ? CARD_DAMAGED : CARD_NEUTRAL}`;
 }
 
+/** What the data check knows about the field it names (GM r6 item 4):
+ * `missing` when the field is absent, `damaged` when it's there but isn't
+ * what Nebula reads, `unknown` when the code can't tell (the check itself
+ * failed, or a caller only had the field's name). */
+export type DataProblemState = 'missing' | 'damaged' | 'unknown';
+export interface DataProblem {
+  field: string;
+  state: DataProblemState;
+}
+
+/** GM r6 item 4, the Agent log's ending for each kind: "<field> is
+ * missing.", "<field> is damaged.", and "missing or damaged" only when the
+ * code can't tell. */
+const PROBLEM_TAIL: Record<DataProblemState, string> = {
+  missing: 'is missing.',
+  damaged: 'is damaged.',
+  unknown: 'is missing or damaged.',
+};
+
 /** GM: the Agent log's line for damaged data, "Couldn't open “<node>”, node
- * n4. <field> is missing." Never names the agent. With no field found,
- * builder's: "Its data couldn't be read." */
-export function studioBoundaryLogLine(label: string | null, nodeId: string, field: string | null): string {
-  const what = field ? `${field} is missing.` : "Its data couldn't be read.";
+ * n4. <field> is missing." (or "is damaged.", GM r6 item 4, by what the
+ * check found; a bare field name can't say, so "is missing or damaged.").
+ * Never names the agent. With no field found, builder's: "Its data
+ * couldn't be read." */
+export function studioBoundaryLogLine(label: string | null, nodeId: string,
+  problem: DataProblem | string | null): string {
+  const found = typeof problem === 'string' ? { field: problem, state: 'unknown' as const } : problem;
+  const what = found ? `${found.field} ${PROBLEM_TAIL[found.state]}` : "Its data couldn't be read.";
   return `Couldn't open ${label ? `“${label}”` : 'a node'}, node ${nodeId}. ${what}`;
 }
 
-/** GM r5: the Agent log's line when the data checks out, "Couldn't draw
- * “<node>”, node n4. <error message>". */
-export function drawFailedLogLine(label: string | null, nodeId: string, error: unknown): string {
+const errorText = (error: unknown) => {
   const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
-  const what = message.trim() || 'An error with no message.';
-  return `Couldn't draw ${label ? `“${label}”` : 'a node'}, node ${nodeId}. ${what}`;
+  return message.trim() || 'An error with no message.';
+};
+
+/** GM r5: a canvas card's Agent log line when the data checks out,
+ * "Couldn't draw “<node>”, node n4. <error message>". */
+export function drawFailedLogLine(label: string | null, nodeId: string, error: unknown): string {
+  return `Couldn't draw ${label ? `“${label}”` : 'a node'}, node ${nodeId}. ${errorText(error)}`;
+}
+
+/** Where a studio's Agent log line says the node failed to open, after
+ * "in". GM r6 item 5 worded "in Creator Studio"; the others are builder's,
+ * for GM to confirm (each studio by the name its header shows). */
+export const STUDIO_PLACE: Record<StudioScreen, string> = {
+  'cinema-editor': 'Cinema',
+  editor: 'the video editor',
+  'remotion-editor': 'the composition editor',
+  'character-editor': 'the character editor',
+  'moodboard-editor': 'the moodboard editor',
+  create: 'Creator Studio',
+  commons: 'the Commons',
+  'brand-showcase': 'the showcase',
+};
+
+/** GM r6 item 5: a studio's Agent log line when the data checks out,
+ * "Couldn't open “<node>” in <studio>, node n4. <error message>". */
+export function studioDrawFailedLogLine(studio: StudioScreen, label: string | null, nodeId: string, error: unknown): string {
+  return `Couldn't open ${label ? `“${label}”` : 'a node'} in ${STUDIO_PLACE[studio]}, node ${nodeId}. ${errorText(error)}`;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
+/** A field that is there but not what Nebula reads is damaged; one that
+ * isn't there at all is missing (GM r6 item 4). */
+const problem = (field: string, value: unknown): DataProblem =>
+  ({ field, state: value === undefined ? 'missing' : 'damaged' });
+
 /** The first item of `list` that isn't an object, as `<name>[i]`; `<name>`
- * when it's there but isn't a list; null when it's fine or absent. */
-function listProblem(name: string, list: unknown, item: (value: unknown) => boolean = isRecord): string | null {
+ * when it's there but isn't a list; null when it's fine or absent. Both are
+ * damaged: the list is there. */
+function listProblem(name: string, list: unknown, item: (value: unknown) => boolean = isRecord): DataProblem | null {
   if (list === undefined) return null;
-  if (!Array.isArray(list)) return name;
+  if (!Array.isArray(list)) return { field: name, state: 'damaged' };
   const broken = list.findIndex((value) => !item(value));
-  return broken >= 0 ? `${name}[${broken}]` : null;
+  return broken >= 0 ? { field: `${name}[${broken}]`, state: 'damaged' } : null;
 }
 
 /** The first part of a node's data a card or studio can't read (as the
- * backend names fields), or null when it checks out (review 4, L3: only then
- * does a boundary say "missing or damaged"). It checks what every card reads
- * (a known definitionId; label as text; params and outputs as objects) and
- * the structures the studios walk (a scene's shots and base, an edit's
- * clips, a composition's timeline). Absent optional parts are fine: the
- * canvas fills them in. */
-export function nodeDataProblem(data: unknown): string | null {
-  if (!isRecord(data)) return 'data';
-  if (typeof data.definitionId !== 'string' || !NODE_DEFINITIONS[data.definitionId]) return 'definitionId';
-  if (data.label !== undefined && data.label !== null && typeof data.label !== 'string') return 'label';
-  if ('params' in data && !isRecord(data.params)) return 'params';
-  if ('outputs' in data && !isRecord(data.outputs)) return 'outputs';
+ * backend names fields), with whether it is missing or damaged (GM r6 item
+ * 4), or null when it checks out (review 4, L3: only then does a boundary
+ * say "missing or damaged"). It checks what every card reads (a known
+ * definitionId; label as text; params and outputs as objects) and the
+ * structures the studios walk (a scene's shots and base, an edit's clips, a
+ * composition's timeline). Absent optional parts are fine: the canvas fills
+ * them in. */
+export function nodeDataProblem(data: unknown): DataProblem | null {
+  if (!isRecord(data)) return problem('data', data ?? undefined);
+  if (typeof data.definitionId !== 'string' || !NODE_DEFINITIONS[data.definitionId]) return problem('definitionId', data.definitionId);
+  if (data.label !== undefined && data.label !== null && typeof data.label !== 'string') return problem('label', data.label);
+  if ('params' in data && !isRecord(data.params)) return problem('params', data.params);
+  if ('outputs' in data && !isRecord(data.outputs)) return problem('outputs', data.outputs);
   const params = isRecord(data.params) ? data.params : {};
   switch (data.definitionId) {
     case 'cinema-scene': return cinemaSceneProblem(params);
     case 'video-edit': return listProblem('clips', params.clips);
     case 'remotion-node': {
       if (params.manifest === undefined) return null;
-      if (!isRecord(params.manifest)) return 'manifest';
+      if (!isRecord(params.manifest)) return problem('manifest', params.manifest);
       return listProblem('manifest.timeline', params.manifest.timeline);
     }
     default: return null;
@@ -108,18 +161,19 @@ export function nodeDataProblem(data: unknown): string | null {
 }
 
 /** The first part of a Cinema scene the studio can't read through its
- * defaults (as the backend names fields: "scene.shots[0]"), or null when
- * none is. A missing base or aspect is filled in (lib/cinemaScene), so it
- * is named only when nothing else is wrong. */
-export function cinemaSceneProblem(params: Record<string, unknown> | undefined): string | null {
+ * defaults (as the backend names fields: "scene.shots[0]"), with whether it
+ * is missing or damaged, or null when none is. A missing base or aspect is
+ * filled in (lib/cinemaScene), so it is named only when nothing else is
+ * wrong. */
+export function cinemaSceneProblem(params: Record<string, unknown> | undefined): DataProblem | null {
   const scene = params?.scene;
-  if (!isRecord(scene)) return 'scene';
+  if (!isRecord(scene)) return problem('scene', scene);
   if (Array.isArray(scene.shots)) {
     const broken = scene.shots.findIndex((shot) => !isRecord(shot) || typeof shot.id !== 'string');
-    if (broken >= 0) return `scene.shots[${broken}]`;
-  } else if (scene.shots !== undefined) return 'scene.shots';
-  if (!isRecord(scene.base)) return 'scene.base';
-  if (typeof scene.base.model !== 'string' || !scene.base.model) return 'scene.base.model';
-  if (typeof scene.aspectRatio !== 'string' || !scene.aspectRatio) return 'scene.aspectRatio';
+    if (broken >= 0) return { field: `scene.shots[${broken}]`, state: 'damaged' };
+  } else if (scene.shots !== undefined) return { field: 'scene.shots', state: 'damaged' };
+  if (!isRecord(scene.base)) return problem('scene.base', scene.base);
+  if (typeof scene.base.model !== 'string' || !scene.base.model) return problem('scene.base.model', scene.base.model);
+  if (typeof scene.aspectRatio !== 'string' || !scene.aspectRatio) return problem('scene.aspectRatio', scene.aspectRatio);
   return null;
 }

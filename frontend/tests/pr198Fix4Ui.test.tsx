@@ -105,6 +105,7 @@ describe('L3: a card that throws on data that checks out', () => {
 
 describe('L3: a card whose data is damaged', () => {
   it.each([
+    // Fix round 5 (GM r6 item 4): each is there but malformed, so "is damaged."
     ['params null', { label: 'Hero still', definitionId: 'text-input', params: null, outputs: {} }, 'params'],
     ['outputs null', { label: 'Hero still', definitionId: 'text-input', params: {}, outputs: null }, 'outputs'],
     ['an unknown definition', { label: 'Hero still', definitionId: 'remotion-composition', params: {}, outputs: {} }, 'definitionId'],
@@ -113,16 +114,16 @@ describe('L3: a card whose data is damaged', () => {
     ['a layer a string', { label: 'Hero still', definitionId: 'remotion-node', params: { manifest: { timeline: ['x'] } }, outputs: {} }, 'manifest.timeline[0]'],
     ['a scene shot null', { label: 'Hero still', definitionId: 'cinema-scene', params: { scene: { shots: [null] } }, outputs: {} }, 'scene.shots[0]'],
   ])('%s: GM r4\'s damaged line', (_name, data, field) => {
-    expect(nodeDataProblem(data)).toBe(field);
+    expect(nodeDataProblem(data)).toEqual({ field, state: 'damaged' });
     const lines = logged(() => render(<Flow nodes={[card(data)]} />));
     const boundary = document.querySelector('[data-node-card-boundary]')!;
     expect(boundary.querySelector('.node-card-boundary__line')!.textContent)
       .toBe('Couldn\'t show “Hero still”. Some of its data is missing or damaged.');
-    expect(lines).toEqual([`Couldn't open “Hero still”, node n7. ${field} is missing.`]);
+    expect(lines).toEqual([`Couldn't open “Hero still”, node n7. ${field} is damaged.`]);
   });
 
   it('a label that isn\'t text is damaged data, and the card says "this node"', () => {
-    expect(nodeDataProblem({ label: { broken: true }, definitionId: 'text-input', params: {}, outputs: {} })).toBe('label');
+    expect(nodeDataProblem({ label: { broken: true }, definitionId: 'text-input', params: {}, outputs: {} })).toEqual({ field: 'label', state: 'damaged' });
     render(<Flow nodes={[card({ label: { broken: true }, definitionId: 'text-input', params: {}, outputs: {} })]} />);
     expect(document.querySelector('.node-card-boundary__line')!.textContent)
       .toBe("Couldn't show this node. Some of its data is missing or damaged.");
@@ -153,7 +154,8 @@ describe('L3: the studio boundary', () => {
       problem={() => null}><Throws /></StudioBoundary>));
     expect(document.querySelector('.studio-boundary__line')!.textContent)
       .toBe("Couldn't open “Opening”. Nebula ran into a problem showing it, but its data is fine. Reload Nebula to try again.");
-    expect(lines).toEqual(["Couldn't draw “Opening”, node n4. studio broke"]);
+    // GM r6 item 5 (fix round 5): the studio's own neutral Agent log line.
+    expect(lines).toEqual(["Couldn't open “Opening” in Cinema, node n4. studio broke"]);
     fireEvent.click(screen.getByRole('button', { name: 'Back to canvas' }));
     expect(exit).toHaveBeenCalledTimes(1);
   });

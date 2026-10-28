@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import math
+import sys
 import random
 
 import pytest
@@ -533,12 +534,16 @@ def test_a_float_denormal_or_a_tiny_amount_never_raises_or_sprawls(amount):
 
 def test_an_amount_never_raises_and_never_lies_about_nothing():
     rng = random.Random(198_3)
-    samples = [10 ** rng.uniform(-330, 9) for _ in range(20_000)] + [
-        rng.uniform(-1, 1) for _ in range(2_000)] + [math.nan, math.inf, -math.inf, 0.0, -0.0, True, None, "3"]
+    # Past 1e9 to the largest float (review 5, N4): above $10 trillion both
+    # forms write the ceiling (">$10,000,000,000,000", 20 characters, and
+    # ">$10,000,000,000,000.00", 23), never an OverflowError.
+    samples = [10 ** rng.uniform(-330, 308.25) for _ in range(20_000)] + [
+        rng.uniform(-1, 1) for _ in range(2_000)] + [math.nan, math.inf, -math.inf, 0.0, -0.0, True, None, "3"] + [
+        sys.float_info.max, math.nextafter(sys.float_info.max, 0.0), 1e308, 1e13, math.nextafter(1e13, math.inf)]
     for value in samples:
         amount = money.usd_amount(value)
         spent = money.usd_spent(value)
-        assert len(amount) <= 16 and len(spent) <= 20, (value, amount, spent)
+        assert len(amount) <= 20 and len(spent) <= 23, (value, amount, spent)
         positive = isinstance(value, float) and math.isfinite(value) and value > 0
         assert (amount == "$0") == (not positive), (value, amount)
         assert (spent == "$0.00") == (not positive), (value, spent)

@@ -23,6 +23,7 @@ import {
   selectedNodeIds,
 } from '../lib/canvasSelection';
 import { failureMessage } from '../lib/errorCopy';
+import { RUN_LOCK_REASON } from '../lib/cinemaScene';
 import { offlineMark, useBackendOffline } from '../lib/useBackendOffline';
 
 
@@ -180,7 +181,7 @@ export function SelectionToolbar() {
         onClick={duplicateSelected}
         disabled={isExecuting || offline}
         {...off}
-        title={isExecuting ? 'Wait for the active run to finish' : 'Duplicate selected nodes'}
+        title={isExecuting ? RUN_LOCK_REASON : 'Duplicate selected nodes'}
       >
         <Files size={17} aria-hidden="true" />
         <span className="selection-toolbar__label--compact">Duplicate</span>
@@ -220,7 +221,7 @@ export function SelectionToolbar() {
         onClick={removeSelection}
         disabled={isExecuting || offline || sceneHeld !== null}
         {...off}
-        title={isExecuting ? 'Wait for the active run to finish' : sceneHeld ?? 'Delete selected nodes'}
+        title={isExecuting ? RUN_LOCK_REASON : sceneHeld ?? 'Delete selected nodes'}
         aria-label="Delete selected nodes"
       >
         <Trash2 size={17} aria-hidden="true" />
