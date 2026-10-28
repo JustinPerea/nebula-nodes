@@ -75,13 +75,15 @@ const PROBLEM_TAIL: Record<DataProblemState, string> = {
 /** GM: the Agent log's line for damaged data, "Couldn't open “<node>”, node
  * n4. <field> is missing." (or "is damaged.", GM r6 item 4, by what the
  * check found; a bare field name can't say, so "is missing or damaged.").
- * Never names the agent. With no field found, builder's: "Its data
- * couldn't be read." */
+ * Opened in a studio, it names the studio (GM r8): "Couldn't open “<node>”
+ * in Cinema, node n4. …". Never names the agent. With no field found,
+ * builder's: "Its data couldn't be read." */
 export function studioBoundaryLogLine(label: string | null, nodeId: string,
-  problem: DataProblem | string | null): string {
+  problem: DataProblem | string | null, studio?: StudioScreen): string {
   const found = typeof problem === 'string' ? { field: problem, state: 'unknown' as const } : problem;
   const what = found ? `${found.field} ${PROBLEM_TAIL[found.state]}` : "Its data couldn't be read.";
-  return `Couldn't open ${label ? `“${label}”` : 'a node'}, node ${nodeId}. ${what}`;
+  const where = studio ? ` in ${STUDIO_PLACE[studio]}` : '';
+  return `Couldn't open ${label ? `“${label}”` : 'a node'}${where}, node ${nodeId}. ${what}`;
 }
 
 const errorText = (error: unknown) => {

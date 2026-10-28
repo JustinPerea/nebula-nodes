@@ -127,7 +127,8 @@ describe('the "+ unpriced" chip label', () => {
     [9.5, 12, '$9.50–12.00 + unpriced', 'The priced part of this run costs between $9.50 and $12.00.'],
     [0.04, 0.04, '$0.04 + unpriced', 'The priced part of this run costs about $0.04.'],
     [0.004, 0.004, '<$0.01 + unpriced', 'The priced part of this run costs under $0.01.'],
-    [0, 0, '$0 + unpriced', 'The priced part of this run is free.'],
+    // GM r8: a free priced part has no line of its own ($0 is a price).
+    [0, 0, '$0 + unpriced', ''],
     [0.02, Number.NaN, '$0.02 + unpriced', 'The priced part of this run costs about $0.02.'],
   ])('%s–%s open: "%s"', (low, high, label, lead) => {
     const chip = chipEstimate(low, high, true);
@@ -217,7 +218,7 @@ describe('the Run chip tooltip names each reason', () => {
   it('a cost the estimate leaves out', () => {
     const summary = summarizeRunScope([priced('e', 'gpt-image-2-edit', {}, 'Edit')], [], { kind: 'graph' }, context);
     expect(runChipLabel(summary)).toBe('$0.01–0.20 + unpriced');
-    expect(runChipTitle(summary)).toBe('The priced part of this run costs between $0.01 and $0.20. “Edit” may add costs the estimate doesn\'t include.');
+    expect(runChipTitle(summary)).toBe('The priced part of this run costs between $0.01 and $0.20. “Edit” may cost more for its input images, which the estimate leaves out.');
   });
 
   it('orders the lines by where each reason\'s first node is, with no colons', () => {
@@ -231,7 +232,7 @@ describe('the Run chip tooltip names each reason', () => {
     expect(title).toBe([
       'The priced part of this run costs between $0.01 and $0.20.',
       '“Writer” and “Writer 2” have no listed price.',
-      '“Edit” may add costs the estimate doesn\'t include.',
+      '“Edit” may cost more for its input images, which the estimate leaves out.',
       '“Flux” can\'t be priced until its fal.ai API key is added.',
     ].join(' '));
     expect(title).not.toContain(':');

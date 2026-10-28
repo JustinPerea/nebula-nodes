@@ -147,7 +147,8 @@ describe('GM r6 item 4: missing, damaged, or the code can\'t tell', () => {
     const Throws = () => { throw new TypeError('studio broke'); };
     const lines = logged(() => render(<StudioBoundary studio="cinema-editor" node={{ id: 'n4', label: 'Opening' }}
       problem={() => ({ field: 'scene.base', state: 'damaged' })}><Throws /></StudioBoundary>));
-    expect(lines).toEqual(["Couldn't open “Opening”, node n4. scene.base is damaged."]);
+    // GM r8: a studio's line names the studio.
+    expect(lines).toEqual(["Couldn't open “Opening” in Cinema, node n4. scene.base is damaged."]);
   });
 });
 

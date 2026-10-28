@@ -3441,13 +3441,18 @@ What happens to a scene that can't be filled in depends on who wrote it:
   (`shot_s2` to `shot_s3`), and its connections go with it. On an open or import,
   an output port no shot can claim (a removed shot's late image, an id whose
   case differs, a scene that can't be read), and a saved connection from it, are
-  dropped instead of refusing the file, and each is said: a line in the
-  answer's `warnings` (`/api/graph/import`, `load_graph_file`, `nebula load`,
-  `open_project`; the person reads it in the "Opened." notice), the
-  `canvas.replaced` event's `droppedPorts` ([{nodeId, handle, port,
-  connections}]) and, for an agent's load or open, an Agent log line, such
-  as "“Opening” lost a shot's image output: no shot in the saved scene owns
-  it, so its 1 connection was removed.". An undo or redo
+  dropped instead of refusing the file. Each node that lost a connection
+  that way gets a line in the answer's `warnings` (`/api/graph/import`,
+  `load_graph_file`, `nebula load`, `open_project`; the person reads it in
+  the "Opened." notice) and, for an agent's load or open, in the Agent log:
+  "Removed the connection to shot port s2 on “Opening”, node n4. That shot
+  no longer exists.", or "Removed 3 connections to shot ports on “Opening”,
+  node n4. Those shots no longer exist."; opening a project adds "while
+  loading the project" before the first period. The Agent log says up to 5
+  of these, then one line for the rest ("…on “A”, “B”, “C” and 4 more…").
+  Every dropped port and connection, including a port nothing was connected
+  to (which has no line), is in the `canvas.replaced` event's `droppedPorts`
+  ([{nodeId, handle, port, connections}]). An undo or redo
   (`/api/graph/restore`) that puts a scene back keeps such a port when it
   holds an image, as the live node had it, so undoing the shot's removal
   next takes that image. A shot

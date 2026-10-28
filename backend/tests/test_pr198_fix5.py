@@ -298,8 +298,9 @@ def test_a_renumbered_shot_keeps_its_port_and_wires(api, person, who):  # noqa: 
     assert reply.json()["warnings"] == []
 
 
-def _dropped_line(connections):
-    return main_module.stray_shot_port_line("Opening", connections)
+def _dropped_line(connections, node_id="n1", loading=False):
+    # GM's line (pr198 r8; test_pr198_fix6 has the forms).
+    return main_module.stray_shot_line("Opening", node_id, ["shot_s2"], connections, loading=loading)
 
 
 @pytest.mark.parametrize("who", ["person", "agent"])
@@ -311,16 +312,16 @@ def test_a_port_no_shot_can_claim_is_dropped_and_said(api, person, who):  # noqa
                     {"shot_s2": {"type": "Image", "value": PAID}}, "shot_s2")
     assert reply.status_code == 200, reply.text
     assert graph.edges == []
-    assert reply.json()["warnings"] == [_dropped_line(1)]
+    assert reply.json()["warnings"] == [_dropped_line(1, reply.json()["idMap"]["a"])]
     replaced = [event for event in main_module.canvas_events.read(after=start, limit=100)["events"]
                 if event["kind"] == "canvas.replaced"][-1]
     assert replaced["data"]["droppedPorts"] == [
         {"nodeId": reply.json()["idMap"]["a"], "handle": "shot_s2", "port": True, "connections": 1}]
     said = [event.get("say") for event in sent if event.get("type") == "agentPresence"]
     if who == "agent":
-        assert _dropped_line(1) in said
+        assert _dropped_line(1, reply.json()["idMap"]["a"]) in said
     else:
-        assert _dropped_line(1) not in said
+        assert _dropped_line(1, reply.json()["idMap"]["a"]) not in said
 
 
 def test_a_wire_from_a_port_that_isnt_there_is_said_too(api, person):  # noqa: F811
@@ -328,14 +329,14 @@ def test_a_wire_from_a_port_that_isnt_there_is_said_too(api, person):  # noqa: F
     reply = _import(client, PERSON, {"shots": [{"id": "s1", "prompt": "a"}]}, {}, "shot_s9")
     assert reply.status_code == 200, reply.text
     assert graph.edges == []
-    assert reply.json()["warnings"] == [main_module.stray_shot_port_line("Opening", 1, port=False)]
+    assert reply.json()["warnings"] == [main_module.stray_shot_line("Opening", reply.json()["idMap"]["a"], ["shot_s9"], 1)]
 
 
 def test_an_unreadable_scene_reports_every_port_it_drops(api, person):  # noqa: F811
     client, _graph, _sent = api
     reply = _import(client, PERSON, "not json", {"shot_s1": {"type": "Image", "value": PAID}}, "shot_s1")
     assert reply.status_code == 200, reply.text
-    assert reply.json()["warnings"] == [_dropped_line(1)]
+    assert reply.json()["warnings"] == [main_module.stray_shot_line("Opening", reply.json()["idMap"]["a"], ["shot_s1"], 1)]
 
 
 def _saved_project(workspace, nodes, edges):  # noqa: F811
@@ -376,7 +377,7 @@ def test_a_project_open_says_what_it_dropped(workspace, person):  # noqa: F811
         _rf_scene("n2", "Next", _scene("t1"), {})], [WIRE])
     assert opened.status_code == 200, opened.text
     assert graph.edges == []
-    assert opened.json()["warnings"] == [_dropped_line(1)]
+    assert opened.json()["warnings"] == [_dropped_line(1, loading=True)]
 
 
 def test_a_saved_graph_load_re_keys_a_renumbered_shots_port(tmp_path):

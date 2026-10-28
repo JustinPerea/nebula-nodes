@@ -144,8 +144,18 @@ body.app-slava-restraint .cinema-scene-node__shot-label {
 
 /* Edits on screen that the backend didn't take (GM, PR #198 r6 item 1): a
    quiet mark under the summary; its title is the line that said why. */
+/* GM r8: "Not saved", small, in the header, after the card's name; its
+   tooltip says why. */
 body.app-slava-restraint .cinema-scene-node__unsaved {
+  margin-left: auto;
   color: var(--sr-ink-meta);
   font-size: 10px;
-  margin: -4px 0 8px;
+  font-weight: 500;
+  letter-spacing: 0;
+  white-space: nowrap;
+  cursor: help;
+}
+
+body.app-slava-restraint .cinema-scene-node__unsaved + .cinema-scene-node__badge {
+  margin-left: 0;
 }

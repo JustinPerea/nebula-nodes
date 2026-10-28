@@ -74,6 +74,8 @@ describe('GM: the offline reason for a disabled action', () => {
       'You can delete nodes when Nebula reconnects.',
       'You can create projects when Nebula reconnects.',
       'You can see run history when Nebula reconnects.',
+      // GM, PR #200 r4 item 2 (PR #198 round 6).
+      'You can rerun it when Nebula reconnects.',
     ]);
   });
 });

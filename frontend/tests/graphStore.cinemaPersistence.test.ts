@@ -184,13 +184,16 @@ describe('Cinema scene persistence ordering', () => {
     expect(current().shots[0].prompt).toBe('Imported');
   });
 
-  it('releases failed persistence to external updates and retries on the next explicit edit', async () => {
+  it('keeps failed persistence on screen over an external update and retries on the next explicit edit', async () => {
     transport.fetch.mockResolvedValueOnce({ ok: false, status: 409 }).mockResolvedValueOnce({ ok: true });
     edit(spec('Rejected'));
     await settle();
     expect(console.warn).toHaveBeenCalled();
+    // PR #198 fix round 6 (GM r8, CHANGED_ELSEWHERE): an edit from somewhere
+    // else no longer replaces the edits kept unsaved here; they stay on
+    // screen, marked "Not saved", until the person's next edit saves them.
     receive(spec('External recovery'));
-    expect(current().shots[0].prompt).toBe('External recovery');
+    expect(current().shots[0].prompt).toBe('Rejected');
     edit(spec('Retry edit'));
     await settle();
     // Fix round 4 (review 4, HIGH): a refused write also reads the backend's

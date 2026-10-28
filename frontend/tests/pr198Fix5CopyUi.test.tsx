@@ -33,7 +33,9 @@ describe('N2: the toolbar\'s run-lock tooltip', () => {
     useGraphStore.setState({ nodes: [node], edges: [], isExecuting: true });
     render(<SelectionToolbar />);
     expect(RUN_LOCK_REASON).toBe('Wait for the active run to finish.');
-    expect(screen.getAllByTitle(RUN_LOCK_REASON).length).toBe(2);
+    // Round 6 (GM r8 merge check): Run and Arrange, which the run also
+    // locks, say so too.
+    expect(screen.getAllByTitle(RUN_LOCK_REASON).length).toBe(4);
     expect(screen.queryByTitle('Wait for the active run to finish')).toBeNull();
   });
 });

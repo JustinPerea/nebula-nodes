@@ -84,7 +84,7 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
   { file: 'lib/studioBoundary.ts', text: '`Couldn\'t open ${subject}. ${damaged ? STUDIO_DAMAGED : STUDIO_NEUTRAL}`', why: 'the tail is one of two fixed sentences' },
   { file: 'lib/studioBoundary.ts', text: '`Couldn\'t show ${label ? `“${label}”` : \'this node\'}. ${damaged ? CARD_DAMAGED : CARD_NEUTRAL}`',
     why: 'the tail is one of two fixed sentences' },
-  { file: 'lib/studioBoundary.ts', text: '`Couldn\'t open ${label ? `“${label}”` : \'a node\'}, node ${nodeId}. ${what}`',
+  { file: 'lib/studioBoundary.ts', text: '`Couldn\'t open ${label ? `“${label}”` : \'a node\'}${where}, node ${nodeId}. ${what}`',
     why: 'Agent log: the tail is a field sentence ("scene.base is missing.")' },
   { file: 'lib/studioBoundary.ts', text: '`Couldn\'t draw ${label ? `“${label}”` : \'a node\'}, node ${nodeId}. ${errorText(error)}`',
     why: "Agent log: the tail is the error's own message, for agents" },
@@ -98,7 +98,7 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
   { file: 'store/graphStore.ts', text: '`${heading} ${KEPT_UNTIL_RUN_ENDS}`', why: "GM's heading over GM's fixed suffix" },
   { file: 'store/graphStore.ts', text: '`${heading} ${KEPT_AND_RETRYING}`', why: "GM's heading over GM's fixed suffix" },
   { file: 'store/graphStore.ts', text: '`${heading} ${BAD_SAVE}`', why: "GM's heading over GM's fixed suffix" },
-  { file: 'store/graphStore.ts', text: '`${sceneSaveHeading(label)} ${CHANGED_ELSEWHERE}`', why: "GM's heading over a fixed suffix (placeholder)" },
+  { file: 'store/graphStore.ts', text: '`${sceneSaveHeading(cardTitle([node], nodeId))} ${CHANGED_ELSEWHERE}`', why: "GM's heading over GM's fixed suffix (r8)" },
   // The Agent log's raw save line: agents read the backend's own detail.
   { file: 'store/graphStore.ts', text: '`Couldn\'t save “${label}”, node ${nodeId}. ${detail || `HTTP ${status}`}`',
     why: "the Agent log's raw form (agents read the raw text)" },

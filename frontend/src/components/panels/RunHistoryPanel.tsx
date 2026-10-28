@@ -23,6 +23,7 @@ import {
 import '../../styles/panels.css';
 import '../../styles/run-history.css';
 import { useCanvasLock } from '../../lib/canvasLock';
+import { OFFLINE_VERBS, offlineReason } from '../../lib/useBackendOffline';
 
 const STATUS_LABEL: Record<RunRecord['status'], string> = {
   running: 'Running',
@@ -269,7 +270,10 @@ export function RunHistoryPanel() {
                           : r.status === 'failed'
                           ? `Retry failed ${runTriggerLabel(r.trigger)} run`
                           : `Rerun ${runTriggerLabel(r.trigger)}`}
-                        title={isExecuting
+                        title={lock.offline && !lock.following
+                          // GM (#200 r4 item 2): "You can rerun it when Nebula reconnects."
+                          ? offlineReason(recoveryReplayReady || r.status === 'failed' ? undefined : OFFLINE_VERBS.rerun)
+                          : isExecuting
                           ? 'Wait for the run to finish first.'
                           : recoveryReplayReady
                             ? 'Resume this run from its saved checkpoint'
@@ -286,7 +290,9 @@ export function RunHistoryPanel() {
                           {...off}
                           onClick={() => void rerunHistoryWithLatestPaperSource(r.id)}
                           aria-label={`Rerun ${runTriggerLabel(r.trigger)} with latest source`}
-                          title={isExecuting
+                          title={lock.offline && !lock.following
+                            ? offlineReason(OFFLINE_VERBS.rerun)
+                            : isExecuting
                             ? 'Wait for the run to finish first.'
                             : latestSourceReady
                               ? 'Run again with the same settings and the latest artwork from Paper'

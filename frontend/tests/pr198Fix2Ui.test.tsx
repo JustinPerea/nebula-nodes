@@ -218,7 +218,8 @@ describe('M2: a scene without base opens; a studio that can\'t render is contain
       "Couldn't open “Opening”. Some of its data is missing or damaged, so Nebula can't show it.");
     fireEvent.click(screen.getByRole('button', { name: 'Back to canvas' }));
     expect(exit).toHaveBeenCalled();
-    expect(logged).toEqual(['Couldn\'t open “Opening”, node n4. scene.base is missing.']);
+    // GM r8: a studio's line names the studio.
+    expect(logged).toEqual(['Couldn\'t open “Opening” in Cinema, node n4. scene.base is missing.']);
   });
 
   it('with no label, the studio\'s noun', () => {

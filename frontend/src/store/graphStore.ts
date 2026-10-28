@@ -2847,7 +2847,10 @@ function clearUnsavedParamEdits(): void {
  * - `params-outdated`: nothing more goes; projectStore keeps them as a
  *   recovered copy and reloads.
  */
-type SceneRefusalKind = 'too-big' | 'run-lock' | 'server' | 'bad-save' | 'params-outdated' | 'other';
+/** `changed-elsewhere`: the scene changed somewhere else while this tab
+ * held edits it couldn't save (GM r8 CHANGED_ELSEWHERE): they stay on
+ * screen, and only the person's next edit sends them. */
+type SceneRefusalKind = 'too-big' | 'run-lock' | 'server' | 'bad-save' | 'params-outdated' | 'changed-elsewhere' | 'other';
 
 interface CinemaScenePersistence {
   authoredScene: CinemaSceneSpec;
@@ -3356,20 +3359,26 @@ function reconcileSceneEntries(changed: ReadonlySet<string> = new Set()): void {
     const held = backendScenes.get(nodeId);
     const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
     if (!held?.shots || !node) continue;
-    // A newer edit from somewhere else (an agent, another window) wins over
-    // edits kept unsaved here, and the person is told: they are never
-    // dropped silently, and never sent later over that edit.
+    // Already told: the edits stay on screen as they are, and nothing here
+    // sends them (only the person's next edit does).
+    if (entry.refused === 'changed-elsewhere') continue;
+    // A newer edit from somewhere else (an agent, another window) while edits
+    // are kept unsaved here (GM r8, CHANGED_ELSEWHERE): the person's edits
+    // stay on screen, marked "Not saved", and the person is told. Nothing
+    // sends them by itself (no retry, no sync), so they never go over that
+    // edit unasked; the person's next edit to the scene saves it as they see it.
     const heldKey = cinemaAuthoringKey(held);
     if (changed.has(nodeId) && !entry.sentScenes.some((sent) => cinemaAuthoringKey(sent) === heldKey)) {
-      const label = cardTitle([node], nodeId);
-      const live = new Map(sceneFromNode(node).shots.map((shot) => [shot.id, shot]));
-      clearCinemaScenePersistence(nodeId);
-      applySceneToNode(useGraphStore.setState, nodeId, { ...held, shots: held.shots.map((shot) => {
-        const now = live.get(shot.id);
-        return now ? { ...shot, output: now.output ?? shot.output, variations: now.variations ?? shot.variations,
-          selectedVariation: now.selectedVariation ?? shot.selectedVariation } : shot;
-      }) });
-      useGraphStore.getState().notify(`${sceneSaveHeading(label)} ${CHANGED_ELSEWHERE}`);
+      const line = `${sceneSaveHeading(cardTitle([node], nodeId))} ${CHANGED_ELSEWHERE}`;
+      if (entry.retryTimer) clearTimeout(entry.retryTimer);
+      entry.retryTimer = null;
+      entry.unanswered = false;
+      entry.pending = false;
+      entry.retries = 0;
+      entry.refused = 'changed-elsewhere';
+      entry.refusedLine = line;
+      useGraphStore.getState().notify(line);
+      markSceneUnsaved(nodeId, line);
       continue;
     }
     const back: string[] = [];
@@ -3831,7 +3840,7 @@ function changeCanvasNodes(
     const present = new Set(shown.map((node) => node.id));
     applyCanvasNodeChanges(changes, set, get, step);
     const gone = removedIds.filter((nodeId) => present.has(nodeId) && !get().nodes.some((node) => node.id === nodeId));
-    if (gone.length > 0) set(deletedNotice(gone.length, step, keptScenes, gone.map((nodeId) => listedNodeTitle(shown, nodeId))));
+    if (gone.length > 0) set(deletedNotice(gone.length, step, keptScenes, inCanvasOrder(gone, shown).map((nodeId) => listedNodeTitle(shown, nodeId))));
     return;
   }
 
@@ -3902,7 +3911,7 @@ function changeCanvasNodes(
         const node = onCanvas.find((candidate) => candidate.id === cliRemovedIds[index]);
         if (shots && node?.data.definitionId === 'cinema-scene') {
           const label = typeof node.data.label === 'string' && node.data.label.trim() ? node.data.label : 'Scene';
-          renderingKept.push({ reason, scene: { scene: label, shots } });
+          renderingKept.push({ reason, scene: { id: node.id, scene: label, shots } });
         }
         failures.push(reason);
         if (isBackendUnreachable(result.reason)) unanswered.push(cliRemovedIds[index]);
@@ -3948,7 +3957,7 @@ function changeCanvasNodes(
     for (const nodeId of failed) {
       if (deferredParamPushes.delete(nodeId)) void pushNodeParams(nodeId);
     }
-    // In the order they were removed, as the non-CLI path names them.
+    // Named in canvas order (GM, PR #200 r2 item 3), as the non-CLI path names them.
     const deletedIds = removedIds.filter((nodeId) => shownBefore.has(nodeId)
       && (!CLI_ID_RE.test(nodeId) || confirmed.has(nodeId)));
     const deleted = deletedIds.length;
@@ -3959,8 +3968,10 @@ function changeCanvasNodes(
     // line too (PR #198 review 4, M1).
     let unsaid = failures;
     if (deleted > 0 && confirmed.size > 0 && top && top === undoStep) {
-      set(deletedNotice(deleted, top, [...keptScenes, ...renderingKept.map((kept) => kept.scene)],
-        deletedIds.map((nodeId) => listedNodeTitle(onCanvas, nodeId))));
+      const kept = [...keptScenes, ...renderingKept.map((each) => each.scene)];
+      const keptOrder = inCanvasOrder(kept.map((scene) => scene.id), onCanvas);
+      set(deletedNotice(deleted, top, keptOrder.map((id) => kept.find((scene) => scene.id === id)!),
+        inCanvasOrder(deletedIds, onCanvas).map((nodeId) => listedNodeTitle(onCanvas, nodeId))));
       const said = renderingKept.map((kept) => kept.reason);
       unsaid = failures.filter((reason) => {
         const at = said.indexOf(reason);
@@ -4664,6 +4675,16 @@ function warnBlockedProviderStart(ambiguity: ProviderStartAmbiguity): void {
   );
 }
 
+/** Node ids in the order the canvas holds their nodes: GM's name lists read
+ * in canvas order (PR #200 r2 item 3; the same rule as #200's own helper),
+ * never the order a delete removed them in. Ids the canvas doesn't hold go
+ * last, in their own order. */
+function inCanvasOrder(ids: readonly string[], canvas: readonly { id: string }[]): string[] {
+  const at = new Map(canvas.map((node, index) => [node.id, index]));
+  const place = (id: string) => at.get(id) ?? canvas.length;
+  return [...ids].sort((a, b) => place(a) - place(b));
+}
+
 /** A node's title for a person-facing list (GM r6: never its id): the title
  * its card shows (lib/directRoute nodeTitle: its label, else its model's
  * canvas name), else its model's name. */
@@ -4738,7 +4759,7 @@ export function sceneDeleteDisabledTitle(state: Pick<GraphState, 'nodes' | 'acti
 }
 
 /** A scene a delete kept because a shot renders, for GM's kept line. */
-type KeptScene = Pick<RenderingScene, 'scene' | 'shots'>;
+type KeptScene = Pick<RenderingScene, 'id' | 'scene' | 'shots'>;
 
 /** GM's line when every node a delete wanted is a scene with a shot
  * rendering: the scene's own line, or the kept form for several. */
@@ -4782,7 +4803,7 @@ function refuseRunLockedDelete(state: GraphState, ids: readonly string[], set: G
   const scenes = renderingScenes(state, present);
   const text = scenes.length === present.length ? scenesRefusedLine(scenes)
     : runLockedLine('delete', present.length, present.length === 1 ? namedOnCanvas(state.nodes, present[0]) : undefined,
-      present.map((id) => listedNodeTitle(state.nodes, id)));
+      inCanvasOrder(present, state.nodes).map((id) => listedNodeTitle(state.nodes, id)));
   set({ undoNotice: { id: ++undoNoticeSeq, text, offer: null } });
   return true;
 }

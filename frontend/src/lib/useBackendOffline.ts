@@ -80,6 +80,8 @@ export const OFFLINE_VERBS = {
   createProjects: 'create projects',
   /** Run history, only where opening it needs the server. */
   seeRunHistory: 'see run history',
+  /** Run history's Rerun (GM, PR #200 r4 item 2). */
+  rerun: 'rerun it',
 } as const;
 export type OfflineVerb = typeof OFFLINE_VERBS[keyof typeof OFFLINE_VERBS];
 export function offlineReason(verb?: OfflineVerb): string {

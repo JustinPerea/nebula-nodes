@@ -228,8 +228,10 @@ describe('every delete path: no confirm, a notice with Undo', () => {
     useGraphStore.getState().deleteGeneration(['n2']);
     await settle();
     expect(ids()).toEqual([]);
-    // GM r6: a multi-delete names its nodes ("Text Input" is textNode's label).
-    expect(notice()).toMatchObject({ text: 'Deleted “Nano Banana” and “Text Input”.', offer: 'undo' });
+    // GM r6: a multi-delete names its nodes ("Text Input" is textNode's label),
+    // in canvas order (GM, PR #200 r2 item 3): the upstream node first, as the
+    // canvas holds it, not the result the delete started from.
+    expect(notice()).toMatchObject({ text: 'Deleted “Text Input” and “Nano Banana”.', offer: 'undo' });
     render(<StudioNotice />);
     expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
   });

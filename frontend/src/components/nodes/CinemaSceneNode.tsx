@@ -56,6 +56,9 @@ export function CinemaSceneNode({ id, data, selected }: NodeProps) {
       style={{ ['--node-category-color' as string]: SCENE_CATEGORY_COLOR }}>
       <div className="cinema-scene-node__title">
         <span>⛭ Cinema Scene</span>
+        {/* GM r8: a small "Not saved" label in the header, its tooltip the
+            same sentence as the toast that said why. */}
+        {unsaved && <span className="cinema-scene-node__unsaved" title={unsaved}>{UNSAVED_MARK}</span>}
         {keyStatus === 'missing' && (
           <span className="model-node__badge model-node__badge--warning cinema-scene-node__badge"
             title={missingKeyTitle(NODE_DEFINITIONS['cinema-scene'], (params ?? {}) as Record<string, unknown>)}>&#x26A0;</span>
@@ -73,7 +76,6 @@ export function CinemaSceneNode({ id, data, selected }: NodeProps) {
       <PlaceholderLine pending={data.pending} />
 
       <div className="cinema-scene-node__summary">{summary}</div>
-      {unsaved && <div className="cinema-scene-node__unsaved" title={unsaved}>{UNSAVED_MARK}</div>}
 
       {/* The scene node's own run error (error copy round 3e); each shot's
           shows in its panel and as the ⚠ beside its port. */}

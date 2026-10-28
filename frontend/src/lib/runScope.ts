@@ -503,9 +503,9 @@ function reasonSentences(reasons: NonNullable<RunCost['reasons']>): string[] {
         break;
       }
       case 'leftOut':
-        line = Object.hasOwn(LEFT_OUT, reason.plus) ? LEFT_OUT[reason.plus] : LEFT_OUT_OTHER;
-        // Costs worded the same are one sentence.
-        id = `leftOut:${line('', false)}`;
+        line = Object.hasOwn(LEFT_OUT, reason.plus) ? LEFT_OUT[reason.plus] : LEFT_OUT_OTHER(reason.plus);
+        // Nodes leaving out the same cost are one sentence (GM r8).
+        id = `leftOut:${reason.plus}`;
         break;
       case 'noPrice': id = 'noPrice'; line = NO_LISTED_PRICE; break;
       case 'cantRun': id = 'cantRun'; line = ROUTE_CANT_RUN; break;
@@ -528,8 +528,15 @@ export function runChipTitle({ paid, cost }: RunScopeSummary): string | undefine
   if (paid.length === 0 || !cost || cost.lines.length === 0) return undefined;
   const open = costOpen(cost);
   const lead = chipTitle(chipEstimate(cost.low, cost.high, open));
-  if (!open || !cost.reasons?.length) return lead;
-  return [lead, ...reasonSentences(cost.reasons)].join(' ');
+  // A free priced part has no line of its own (GM r8: "$0 is a price, not
+  // unpriced"): the reasons start the tooltip.
+  if (!open) return lead;
+  // A summary with no reasons recorded (one built before them) names its
+  // unpriced nodes as having no listed price, so a free lead never leaves
+  // the chip without a tooltip.
+  const reasons = cost.reasons?.length ? cost.reasons
+    : lead ? [] : cost.unpriced.map((name) => ({ name, reason: { kind: 'noPrice' as const } }));
+  return [lead, ...reasonSentences(reasons)].filter(Boolean).join(' ') || undefined;
 }
 
 const AWAITING = 'Priced when its input is known:';

@@ -18,7 +18,7 @@ const MONEY = JSON.parse(readFileSync(resolve(__dirname, '../../contracts/fixtur
 };
 
 const summary = (low: number, high: number, open: boolean) => ({
-  paid: [{}], cost: { low, high, lines: [{}], unpriced: open ? [{}] : [], plus: [] },
+  paid: [{}], cost: { low, high, lines: [{}], unpriced: open ? ['Kling'] : [], plus: [] },
 }) as unknown as RunScopeSummary;
 
 describe('one money formatter (L4)', () => {
@@ -35,7 +35,8 @@ const CHIPS: [number, number, boolean, string, string | undefined][] = [
   [0, 0, false, '~$0', 'Estimated cost'],
   // GM, PR #198 r6 and r7 item 3: an open chip reads " + unpriced", and its
   // tooltip leads with the priced part (the reasons need the run's scope).
-  [0, 0, true, '$0 + unpriced', 'The priced part of this run is free.'],
+  // GM r8 (PR #198 round 6): no line for a free priced part; the reason leads.
+  [0, 0, true, '$0 + unpriced', '“Kling” has no listed price.'],
   [0, 0.0047, false, '<$0.01', 'Estimated cost under $0.01'],
   [0.0047, 0.0047, false, '<$0.01', 'Estimated cost under $0.01'],
   [0.0047, 0.0047, true, '<$0.01 + unpriced', 'The priced part of this run costs under $0.01.'],

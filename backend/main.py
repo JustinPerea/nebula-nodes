@@ -15324,26 +15324,46 @@ def _is_late_image_port(port: Any) -> bool:
             and isinstance(port.get("value"), str) and bool(port["value"]))
 
 
-# Placeholder person copy awaiting GM (PR #198 review 5, L3): what loading a
-# file or opening a project dropped, one line per port. They go in the
-# answer's ``warnings`` (the canvas shows "Opened." with them; agents read
-# them in the import, load and open answers) and the Agent log.
-STRAY_SHOT_PORT_DROPPED = "\u201c{node}\u201d lost a shot's image output: no shot in the saved scene owns it."
-STRAY_SHOT_PORT_AND_WIRES_DROPPED = ("\u201c{node}\u201d lost a shot's image output: no shot in the saved scene "
-                                     "owns it, so its {connections} {verb} removed.")
-STRAY_SHOT_WIRES_DROPPED = "\u201c{node}\u201d lost {connections} from a shot the saved scene doesn't have."
+# What loading a file or opening a project dropped (PR #198 review 5, L3), in
+# GM's words (pr198 r8, verbatim): "Removed the connection to shot port <port>
+# on “Scene”, node n4. That shot no longer exists." and its plural; opening a
+# project (the load case) adds "while loading the project" before the period.
+# One line per node. They go in the answer's ``warnings`` (the canvas shows
+# "Opened." with them; agents read them in the import, load and open answers)
+# and the Agent log.
+STRAY_SHOT_CONNECTION = ("Removed the connection to shot port {port} on \u201c{node}\u201d, node {node_id}{loading}. "
+                         "That shot no longer exists.")
+STRAY_SHOT_CONNECTIONS_ONE_PORT = ("Removed {count} connections to shot port {port} on \u201c{node}\u201d, "
+                                   "node {node_id}{loading}. That shot no longer exists.")
+STRAY_SHOT_CONNECTIONS = ("Removed {count} connections to shot ports on {where}{loading}. "
+                          "Those shots no longer exist.")
+STRAY_SHOT_LOADING = " while loading the project"
 
 
-def stray_shot_port_line(node: str, connections: int, *, port: bool = True) -> str:
-    """The warning for one dropped ``shot_<id>`` port (``port``) and its
-    ``connections``, or for wires from a port the node never had."""
-    count = f"{connections} connection{'' if connections == 1 else 's'}"
-    if not port:
-        return STRAY_SHOT_WIRES_DROPPED.format(node=node, connections=count)
-    if connections == 0:
-        return STRAY_SHOT_PORT_DROPPED.format(node=node)
-    return STRAY_SHOT_PORT_AND_WIRES_DROPPED.format(node=node, connections=count,
-                                                    verb="was" if connections == 1 else "were")
+def stray_shot_line(node: str, node_id: str, ports: list[str], connections: int, *, loading: bool = False) -> str | None:
+    """GM's line for one node's connections from ``shot_<id>`` ports no shot
+    owns (``ports``, by handle; the line names the shot's id). None when no
+    connection was removed: a port with nothing connected changes nothing the
+    person sees, and stays in ``droppedPorts`` for agents."""
+    if connections <= 0:
+        return None
+    tail = STRAY_SHOT_LOADING if loading else ""
+    named = sorted({port[5:] if port.startswith("shot_") else port for port in ports})
+    if connections == 1:
+        return STRAY_SHOT_CONNECTION.format(port=named[0], node=node, node_id=node_id, loading=tail)
+    if len(named) == 1:
+        return STRAY_SHOT_CONNECTIONS_ONE_PORT.format(count=connections, port=named[0], node=node, node_id=node_id,
+                                                      loading=tail)
+    return STRAY_SHOT_CONNECTIONS.format(count=connections, where=f"\u201c{node}\u201d, node {node_id}", loading=tail)
+
+
+def quoted_overflow(names: list[str], cap: int = 3) -> str:
+    """GM's Agent log overflow (pr198 r8): "“A”, “B”, “C” and 4 more", with no
+    serial comma; up to ``cap`` names, all of them named."""
+    quoted = [f"\u201c{name}\u201d" for name in names]
+    if len(quoted) > cap:
+        return f"{', '.join(quoted[:cap])} and {len(quoted) - cap} more"
+    return quoted[0] if len(quoted) == 1 else f"{', '.join(quoted[:-1])} and {quoted[-1]}"
 
 
 def _note_stray_wire(port_reports: dict[str, dict[str, Any]] | None, source: str, handle: str, name: str) -> None:
@@ -15355,33 +15375,66 @@ def _note_stray_wire(port_reports: dict[str, dict[str, Any]] | None, source: str
     report["wires"][handle] = report["wires"].get(handle, 0) + 1
 
 
-def _stray_port_report(port_reports: Mapping[str, Mapping[str, Any]]) -> tuple[list[str], list[dict[str, Any]]]:
-    """(warning lines, journal records {nodeId, handle, port, connections}):
-    every ``shot_<id>`` port, and every wire from one, a lenient read left
-    out (L3), in the order the nodes were staged."""
-    lines: list[str] = []
-    records: list[dict[str, Any]] = []
+def _stray_nodes(port_reports: Mapping[str, Mapping[str, Any]]) -> list[tuple[str, str, list[str], list[tuple[str, bool, int]]]]:
+    """(node id, name, every handle left out, [(handle, was a port, connections)])
+    per node, in the order the nodes were staged."""
+    nodes = []
     for node_id, report in port_reports.items():
         wires = dict(report.get("wires") or {})
         dropped = list(report.get("dropped") or [])
-        for handle in [*dropped, *[handle for handle in wires if handle not in dropped]]:
-            port = handle in dropped
-            connections = int(wires.get(handle, 0))
-            lines.append(stray_shot_port_line(str(report.get("name") or node_id), connections, port=port))
-            records.append({"nodeId": node_id, "handle": handle, "port": port, "connections": connections})
+        handles = [*dropped, *[handle for handle in wires if handle not in dropped]]
+        if handles:
+            nodes.append((node_id, str(report.get("name") or node_id), handles,
+                          [(handle, handle in dropped, int(wires.get(handle, 0))) for handle in handles]))
+    return nodes
+
+
+def _stray_port_report(port_reports: Mapping[str, Mapping[str, Any]], *, loading: bool = False
+                       ) -> tuple[list[str], list[dict[str, Any]]]:
+    """(warning lines, journal records {nodeId, handle, port, connections}):
+    every ``shot_<id>`` port, and every wire from one, a lenient read left
+    out (L3). A line per node that lost a connection (GM, pr198 r8); a record
+    per port or wire."""
+    lines: list[str] = []
+    records: list[dict[str, Any]] = []
+    for node_id, name, handles, parts in _stray_nodes(port_reports):
+        connected = [handle for handle, _port, connections in parts if connections > 0]
+        line = stray_shot_line(name, node_id, connected, sum(connections for _h, _p, connections in parts), loading=loading)
+        if line:
+            lines.append(line)
+        records.extend({"nodeId": node_id, "handle": handle, "port": port, "connections": connections}
+                       for handle, port, connections in parts)
     return lines, records
 
 
-async def _say_stray_ports(lines: list[str]) -> None:
-    """The Agent log's lines for what an agent's load or open dropped (a
-    no-op for the person's own request, who reads them in the notice)."""
-    for line in lines[:_STRAY_PORT_LOG_LINES]:
-        await _say_agent_action(line)
-    if len(lines) > _STRAY_PORT_LOG_LINES:
-        await _say_agent_action(f"\u2026and {len(lines) - _STRAY_PORT_LOG_LINES} more (the load's warnings list them).")
-
-
 _STRAY_PORT_LOG_LINES = 5
+
+
+def _stray_log_lines(port_reports: Mapping[str, Mapping[str, Any]], *, loading: bool = False) -> list[str]:
+    """The Agent log's lines for what a load or open dropped: a node's line
+    each, up to five, then one line for the rest that names them in GM's
+    overflow form ("on “A”, “B”, “C” and 4 more")."""
+    nodes = [(node_id, name, [handle for handle, _port, connections in parts if connections > 0],
+              sum(connections for _h, _p, connections in parts))
+             for node_id, name, _handles, parts in _stray_nodes(port_reports)]
+    nodes = [node for node in nodes if node[3] > 0]
+    shown = nodes if len(nodes) <= _STRAY_PORT_LOG_LINES else nodes[:_STRAY_PORT_LOG_LINES]
+    said = [line for node_id, name, ports, count in shown
+            if (line := stray_shot_line(name, node_id, ports, count, loading=loading))]
+    rest = nodes[len(shown):]
+    if rest:
+        said.append(STRAY_SHOT_CONNECTIONS.format(
+            count=sum(count for *_rest, count in rest), where=quoted_overflow([name for _id, name, _ports, _count in rest]),
+            loading=STRAY_SHOT_LOADING if loading else ""))
+    return said
+
+
+async def _say_stray_ports(lines: list[str]) -> None:
+    """The Agent log's lines (_stray_log_lines) for what an agent's load or
+    open dropped (a no-op for the person's own request, who reads them in the
+    notice)."""
+    for line in lines:
+        await _say_agent_action(line)
 
 
 def _orphaned_shot_wire(graph: CLIGraph, source: str, source_handle: str) -> bool:
@@ -15563,7 +15616,7 @@ async def import_graph(body: dict[str, Any]) -> dict:
         node_removals.forget_project(_workspace_context()["activeProjectId"])
     exported = await _broadcast_graph_sync(graph_replaced=True, edit=True,
                                           **({"dropped_ports": stray_ports} if stray_ports else {}))
-    await _say_stray_ports(stray_lines)
+    await _say_stray_ports(_stray_log_lines(port_reports))
     publish_action(
         f"Loaded graph ({len(cli_graph.nodes)} nodes, {len(cli_graph.edges)} edges)"
     )
@@ -15882,7 +15935,8 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
                             warnings: list[str] | None = None,
                             ingress: _IngressVerdict | None = None,
                             size_checked: bool = True,
-                            dropped_ports: list[dict[str, Any]] | None = None) -> tuple[dict[str, Any], CLIGraph]:
+                            dropped_ports: list[dict[str, Any]] | None = None,
+                            stray_log: list[str] | None = None) -> tuple[dict[str, Any], CLIGraph]:
     """Validate a saved RF graph with canonical definitions, retaining its IDs.
 
     A removed definition can still be viewed when it was already in this
@@ -15899,7 +15953,8 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
     A scene's shot port a renumbered shot owned moves to its new id, with its
     wires; a ``shot_<id>`` port no shot owns, and its wires, are left out,
     each said in ``warnings`` and listed in ``dropped_ports`` (PR #198 review
-    5, L3; _stray_port_report).
+    5, L3; _stray_port_report), in GM's load-case line ("…while loading the
+    project."); ``stray_log`` gets the Agent log's lines (_stray_log_lines).
     """
     if not isinstance(snapshot, dict):
         raise HTTPException(status_code=400, detail="Project snapshot must be an object")
@@ -16044,11 +16099,13 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
         candidate.edges.append({"id": edge_id, "source": source, "sourceHandle": source_handle, "target": target, "targetHandle": target_handle})
     if dropped_edges:
         result["edges"] = [edge for index, edge in enumerate(result["edges"]) if index not in dropped_edges]
-    stray_lines, stray_records = _stray_port_report(port_reports)
+    stray_lines, stray_records = _stray_port_report(port_reports, loading=True)
     if warnings is not None:
         warnings.extend(stray_lines)
     if dropped_ports is not None:
         dropped_ports.extend(stray_records)
+    if stray_log is not None:
+        stray_log.extend(_stray_log_lines(port_reports, loading=True))
     try:
         graph_nodes, graph_edges = candidate.to_execute_format()
         topological_sort([GraphNode.model_validate(node) for node in graph_nodes], [GraphEdge.model_validate(edge) for edge in graph_edges])
@@ -16773,9 +16830,10 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
         historical = {node["id"]: node.get("data", {}).get("definitionId") for node in project["snapshot"]["nodes"]}
         warnings: list[str] = []
         dropped_ports: list[dict[str, Any]] = []
+        stray_log: list[str] = []
         project["snapshot"], candidate = _stage_project_snapshot(project["snapshot"], historical=historical, warnings=warnings,
                                                                  ingress=verdict, size_checked=False,
-                                                                 dropped_ports=dropped_ports)
+                                                                 dropped_ports=dropped_ports, stray_log=stray_log)
         candidate._counter = max(candidate._counter, project.get("_nodeCounter", 0))
         project["lastOpenedAt"] = project_now()
         start = _begin_switch(catalog, actor, opening=project_id)
@@ -16787,7 +16845,7 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
     await _broadcast_graph_sync(graph_replaced=True, reason="project-open",
                                 project_switch=_switch_notice(start, project, created=False),
                                 **({"dropped_ports": dropped_ports} if dropped_ports else {}))
-    await _say_stray_ports(warnings[len(warnings) - len(dropped_ports):] if dropped_ports else [])
+    await _say_stray_ports(stray_log)
     await _broadcast_projects_changed("opened", project_id)
     # What opening changed that the person should know (a folded Krea node's
     # dropped job-output connections, a scene's shot output no shot owns and

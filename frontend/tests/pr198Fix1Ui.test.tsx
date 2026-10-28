@@ -148,7 +148,8 @@ describe('GM (6): the price chip, "$0" only ever means free', () => {
   it('"$0 + unpriced": the known part really is $0 (GM, PR #198 r6 and r7 item 3)', () => {
     const zero = summary({ low: 0, high: 0, unpriced: ['Kling'] });
     expect(runChipLabel(zero)).toBe('$0 + unpriced');
-    expect(runChipTitle(zero)).toBe('The priced part of this run is free.');
+    // GM r8: no line for the free part ($0 is a price, not unpriced).
+    expect(runChipTitle(zero)).toBe('“Kling” has no listed price.');
   });
 
   it('a range from $0: "Up to $0.43" (GM, PR #198 r6 item 2), with or without " + unpriced"', () => {

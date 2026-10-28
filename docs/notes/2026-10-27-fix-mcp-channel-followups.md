@@ -361,3 +361,54 @@ origin/main at cd593dea (PR #195, agent presence) merged into e43d6bd2 (fix roun
 - **#195's tests on #198's forms.** #198 writes both ends of a price range in full (GM r6 item 3, "$0.0047–$0.43"); #195's placeholder-dialog tests (round 5, round 6) expected "$0.0047–0.43" and now read the full form. #195's round-23 save test with three keys expected the raw keys "prompt" and "seed"; #198 never shows a raw key (an unlabelled setting counts), so it reads "Couldn't save 3 settings for “Banana”.", as #198's own test of that case did.
 - **Gates.** Backend: 11,983 passed, 71 skipped, 2 failed (the docs "wire" sweep, fixed after; that file then 72 passed). tsc -b and lint clean. Vitest, one full run under load 20-27: 7,238 passed, 279 failed (176 of them 5 s timeouts); the 55 files rerun alone with 4 workers: 868 passed, 10 failed; the 3 real ones fixed (above) and those 9 files rerun: 147 passed. heldUndo.property.round17 passes alone (9 tests, 760 s). Build: 417,142 bytes raw entry, under 512,000.
 - **Not changed.** #198's banner row and its studio placement (main didn't touch it); #195's disabled styles; both sides' tests, with `test_connected_copy`'s empty-PUT line on #198's form as above.
+
+## Fix round 6 (GM's pr198 r8 rulings, the merge regression shots)
+
+- **Toasts never cut a sentence (GM bug).** On the merged build the canvas's undo toast already wraps: #195's round 22 made `.canvas-undo-notice__text` `white-space: pre-line` with `overflow-wrap: anywhere`. The live check shows the other-window multi-delete line on two lines at 1280 and 1440, not clipped. Round 5's cut shot was from before the merge. Four other toasts still cut their text to one line with "…", and they now wrap:
+  - Projects' toast (`.project-home__toast-text`);
+  - the asset trash's (`.asset-trash__toast-text`);
+  - the moodboard board's lines (`.moodboard-board-toast__line`);
+  - the "Agent log hidden" notice (`white-space: nowrap` dropped).
+  - A ratchet in `tests/pr198Fix6Copy.test.ts` reads every stylesheet and fails on any toast or notice rule with `text-overflow: ellipsis` or `white-space: nowrap`. A toast's own buttons (action, ×, "Back to …") are exempt.
+- **Offline arrows (GM check).** Nothing changed. Measured live, offline, the shot ← → and × have the same label colour as Generate shot: ink at 55% (alpha 0.507, `color-mix(--sr-ink 55%)`), opacity 1, no fill. They look brighter because they sit on the rail's lighter surface (rgb 33,33,37), and Generate sits on black. Measured from the pixels:
+  - the arrows' glyphs are rgb 146 with contrast 5.1–5.2 : 1;
+  - Generate's label is rgb 129 with contrast 5.4 : 1.
+  - The tooltips are "You can reorder shots when Nebula reconnects." and "You can remove shots when Nebula reconnects.".
+- **params_outdated: not built.** Checked live, with the backend switched to params version 2 while the tab was open and back to 1 after the copy was made, as a real update's reload would find it. The result:
+  - The recovered copy is named as #199 names it: "<project> (recovered)".
+  - It doesn't hold the person's edits. Cinema saves each keystroke at once (`updateScene`, no debounce). So the first keystroke after the update is refused, and the tab captures the canvas at that moment. That is one character of the typed text (the copy's prompt read "a"). The tab then leaves for Projects, and the rest of the typing is lost.
+  - The tab reloads by itself, so no one would see a "Reload Nebula" button. After the reload it lands on Projects, listing "<project>" and "<project> (recovered)". Neither is opened, and nothing says which one holds the edits.
+  - So GM's line ("Reload Nebula and they'll open in a recovered copy of “Alpha”.") would be untrue. Nothing was built for it, and there is no fallback line. The scene still adds no line of its own for `params_outdated`.
+- **GM's words for round 5's placeholders.**
+  - `sceneSaveCopy.ts`: `SWITCHED_UNNAMED` and `CHANGED_ELSEWHERE` are verbatim. "Not saved" (`UNSAVED_MARK`) is now a small label in the scene card's header, after its name, with the cause's toast sentence as its tooltip.
+  - **CHANGED_ELSEWHERE changes behaviour.** Before, a newer edit from elsewhere replaced the kept edits on screen. GM's sentence says the opposite ("your changes are kept on screen but not saved"), so now the person's edits stay on screen, marked "Not saved", and the line shows once. Nothing sends them by itself: no retry, and no resend on a sync. The builder's choice, for GM: the person's next edit to that scene saves it as they see it, which overwrites the other window's change. The words say "another window" even when an agent made the change.
+  - `unpricedCopy.ts`, all verbatim:
+    - the plurals;
+    - `MISSING_KEY_UNNAMED` ("…until its API key is added.");
+    - `ROUTE_CANT_RUN`;
+    - `SIZE_UNREADABLE`;
+    - the three left-out lines, grouped by cost with the name helper.
+    - Builder's wording, for GM: the plurals of GM's singular lines ("as they're set up now, so they have no price", "priced by their input sizes", "their input images", "the models' thinking"), and an unknown `plus` read as "may cost more for its <plus>, …".
+  - A free priced part has no line, so the tooltip starts with its reasons. A summary with no reasons recorded names its unpriced nodes as "has no listed price", so the chip always has a tooltip.
+  - **"Ceiling" isn't a price cap.** `CEILING_USD` ($10,000,000,000,000) is Nebula's display limit for amounts. So `PRICED_PART.over` and `OVER_TITLE` stay placeholders, and GM's "“X” may cost more than $Y." isn't used.
+  - The studio's Agent log line for damaged data names the studio: "Couldn't open “X” in Cinema, node n4. scene.base is missing." A canvas card's line doesn't.
+- **STRAY_SHOT (backend).** One line per node, in GM's words:
+  - "Removed the connection to shot port s2 on “Scene”, node n4. That shot no longer exists."
+  - "Removed 3 connections to shot ports on “Scene”, node n4. Those shots no longer exist."
+  - Opening a project (the load case) adds "while loading the project" before the first period, with no comma, as GM wrote it. A graph-file import doesn't.
+  - Builder's choices, for GM:
+    - <port> is the shot's id ("s2").
+    - Several connections from one port read "Removed 2 connections to shot port s2 … That shot no longer exists."
+    - A port dropped with nothing connected has no line. It is still in `droppedPorts`.
+  - The Agent log says up to 5 node lines, then one line for the rest: "Removed 7 connections to shot ports on “F”, “G”, “H” and 4 more while loading the project. Those shots no longer exist." (`quoted_overflow`, no serial comma).
+  - MCP-SETUP.md and SKILL.md say this.
+- **Canvas order (GM, #200 r2 item 3).** Both multi-delete lines name nodes in the order the canvas holds them, as #200's `inCanvasOrder` does (the node's index in the store). This covers:
+  - "Deleted …";
+  - the kept scenes after it, including scenes the backend kept;
+  - "Couldn't delete … Wait for the active run to finish.".
+  - #198's Create Studio test now reads "Deleted “Text Input” and “Nano Banana”.".
+- **Rerun offline.** Run history's Rerun and "Rerun with latest source" read "You can rerun it when Nebula reconnects." (`OFFLINE_VERBS.rerun`). Retry failed and Recover read the generic line.
+- **Both locks in one toolbar (merge check).** The selection toolbar's Run, Duplicate, Arrange and Delete read the run lock's reason ("Wait for the active run to finish.") while the tab's own run goes, even while following. Ask and Note read the follow lock's. Before, `lock.act` let following's title win. Run and Arrange had kept their idle titles while locked by the run.
+  - Found live: the backend refuses an agent's project switch while the person's own run goes (409). So the tab only reaches both locks at once in a race. The shot sets the follow lock the way the tab does when it sees a switch.
+
+Gates, fix round 6: full backend 11,997 passed, 71 skipped, 0 failed. Full vitest under load: 57 failed / 7,481 passed across 28 files, 45 of them 5 s timeouts. Rerun of those 28 files alone, serially: 416 passed, 1 failed. That one was real: `graphStore.cinemaPersistence.test.ts` still expected an outside edit to replace the edits kept unsaved, which is the old behaviour. It now expects them kept on screen (GM r8 CHANGED_ELSEWHERE) and was renamed to match; it passes with fix3 and fix6.

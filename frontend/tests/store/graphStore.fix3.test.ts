@@ -204,8 +204,10 @@ describe('H1: a scene save the backend refuses keeps the person\'s typing', () =
     expect(shotsOf('n31')[0].prompt).toBe('typed by the person');
   });
 
-  it('a newer edit from someone else after the refusal still wins (the person was told)', async () => {
-    useGraphStore.setState({ nodes: [cinema('n32', [{ id: 's1', prompt: 'old' }], 'Opening')] } as never);
+  it('a newer edit from someone else after the refusal: the person\'s edits stay on screen, not saved (GM r8)', async () => {
+    const said: string[] = [];
+    useGraphStore.setState({ nodes: [cinema('n32', [{ id: 's1', prompt: 'old' }], 'Opening')],
+      notify: (text: string) => said.push(text) } as never);
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => (
       String(url).includes('/api/graph/node/n32') && init?.method === 'PUT'
         ? json({ detail: 'refused' }, 400) : json({})));
@@ -215,7 +217,9 @@ describe('H1: a scene save the backend refuses keeps the person\'s typing', () =
     socketSends({ type: 'graphSync', ...base, empty: false, edges: [], nodes: [cinema('n32', [{ id: 's1', prompt: 'an agent\'s fix' }], 'Opening')],
       edit: { actor: { kind: 'agent', name: 'Codex', id: 'cx' } } });
     await sleep(10);
-    expect(shotsOf('n32')[0].prompt).toBe("an agent's fix");
+    // PR #198 round 6 (GM r8, CHANGED_ELSEWHERE): kept on screen, and said.
+    expect(shotsOf('n32')[0].prompt).toBe('typed');
+    expect(said.at(-1)).toBe("Couldn't save your changes to “Opening”. It was changed in another window first, so your changes are kept on screen but not saved.");
   });
 });
 

@@ -425,8 +425,10 @@ docs/MCP-SETUP.md, Cinema scenes over MCP), so `nebula look` a scene you
 loaded. A converted shot never takes the id of a removed shot's leftover port,
 but a shot that lost its id keeps its own image port under its new id, connections
 included. A shot output no shot owns, and its connections, are dropped on load or
-open, and each drop is a line in `warnings` (`nebula load` and `nebula project
-open` print them as `note:`).
+open. Each node that lost a connection that way is a line in `warnings`
+("Removed the connection to shot port s2 on “Opening”, node n4. That shot no
+longer exists."; `nebula load` and `nebula project open` print them as
+`note:`); every dropped port is in `canvas.replaced`'s `droppedPorts`.
 Round 3f rewrote the card lines to GM's rules; nothing you read changed (a
 proposal's `cost.notReady` rows add a `person` line beside `missing`: read
 `missing`). A job the

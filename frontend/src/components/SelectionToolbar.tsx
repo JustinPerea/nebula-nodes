@@ -39,6 +39,12 @@ export function SelectionToolbar() {
   // for “<project>” to open." while following; Copy, Download and the
   // node's Settings stay.
   const lock = useCanvasLock();
+  // A control this tab's own run also locks (#198's run lock): while that run
+  // goes, its reason wins over following's or offline's (GM, #198 r8 merge
+  // check), so each control says one reason and the two never collide.
+  const runLocked = (running: boolean, own: { disabled?: boolean; title?: string }) => (running
+    ? { ...lock.act(own), disabled: true, title: RUN_LOCK_REASON }
+    : lock.act(own));
   const executeNode = useGraphStore((state) => state.executeNode);
   const executeCluster = useGraphStore((state) => state.executeCluster);
   const copySelected = useGraphStore((state) => state.copySelected);
@@ -154,7 +160,7 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button selection-toolbar__button--primary"
         onClick={runSelection}
-        {...lock.act({ disabled: isExecuting || runStarting, title: `Run selected nodes. ${describeRunScope(runScope)}` })}
+        {...runLocked(isExecuting || runStarting, { title: `Run selected nodes. ${describeRunScope(runScope)}` })}
         aria-label="Run selected nodes"
         aria-describedby={runScopeId}
       >
@@ -178,7 +184,7 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button"
         onClick={duplicateSelected}
-        {...lock.act({ disabled: isExecuting, title: isExecuting ? RUN_LOCK_REASON : 'Duplicate selected nodes' })}
+        {...runLocked(isExecuting, { title: 'Duplicate selected nodes' })}
       >
         <Files size={17} aria-hidden="true" />
         <span className="selection-toolbar__label--compact">Duplicate</span>
@@ -187,7 +193,7 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button"
         onClick={autoLayoutSelected}
-        {...lock.act({ disabled: ids.length < 2 || isExecuting, title: 'Arrange selected nodes' })}
+        {...runLocked(isExecuting, { disabled: ids.length < 2, title: 'Arrange selected nodes' })}
       >
         <LayoutGrid size={17} aria-hidden="true" />
         <span className="selection-toolbar__label--compact">Arrange</span>
@@ -214,7 +220,7 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button selection-toolbar__button--danger"
         onClick={removeSelection}
-        {...lock.act({ disabled: isExecuting || sceneHeld !== null, title: isExecuting ? RUN_LOCK_REASON : sceneHeld ?? 'Delete selected nodes' })}
+        {...runLocked(isExecuting, { disabled: sceneHeld !== null, title: sceneHeld ?? 'Delete selected nodes' })}
         aria-label="Delete selected nodes"
       >
         <Trash2 size={17} aria-hidden="true" />
