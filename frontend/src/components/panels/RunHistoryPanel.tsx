@@ -9,7 +9,7 @@ import { ScrollFade } from '../ScrollFade';
 import { ForgetRecoveryConfirm } from './ForgetRecoveryConfirm';
 import { FORGET_LABEL, FORGET_TITLE, forgetAriaLabel, recordNodeName, recoveryIdLabel } from '../../lib/worldLabsWaiting';
 import { FORGET_RECOVERY_HEADING } from '../../lib/api';
-import { failureMessage } from '../../lib/errorCopy';
+import { failureMessage, OFFLINE_RECOVER, OFFLINE_RERUN, OFFLINE_RETRY } from '../../lib/errorCopy';
 import { showNotice } from '../../lib/canvasNotice';
 import type { PaperSourceRecord } from '../../lib/paperSource';
 import {
@@ -264,7 +264,10 @@ export function RunHistoryPanel() {
                         }}
                         // Review 2 N-7: disabled by the lock, it says why
                         // (GM's tooltip following, the reconnect line offline).
-                        {...lock.act({ disabled: isExecuting, offline: true, title: isExecuting
+                        // Review 3 LOW-1: offline, its own verb.
+                        {...lock.act({ disabled: isExecuting,
+                          offline: recoveryReplayReady ? OFFLINE_RECOVER : r.status === 'failed' ? OFFLINE_RETRY : OFFLINE_RERUN,
+                          title: isExecuting
                           ? 'Wait for the run to finish first.'
                           : recoveryReplayReady
                             ? 'Resume this run from its saved checkpoint'
@@ -282,7 +285,7 @@ export function RunHistoryPanel() {
                         <button
                           type="button"
                           className="run-history__replay"
-                          {...lock.act({ disabled: isExecuting || !latestSourceReady, offline: true, title: isExecuting
+                          {...lock.act({ disabled: isExecuting || !latestSourceReady, offline: OFFLINE_RERUN, title: isExecuting
                             ? 'Wait for the run to finish first.'
                             : latestSourceReady
                               ? 'Run again with the same settings and the latest artwork from Paper'

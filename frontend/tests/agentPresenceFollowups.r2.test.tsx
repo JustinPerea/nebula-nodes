@@ -156,10 +156,12 @@ describe('L-4: the selected chip and variation use the shared selected style; di
     expect(read('components/cinema-studio/CinemaStudioView.tsx')).toMatch(/className="cinema-studio-view"[^>]*style=\{\{[^}]*--node-category-color/);
   });
 
-  it('disabled: the chip and the variation are in the shared unfilled rule; the checked switch turns the grey fill', () => {
+  // Fix round 3 (review 3 M-3): the variation, an image-only button, left the
+  // unfilled rule for its own (its thumbnail dims; agentPresenceFollowups.r3).
+  it('disabled: the chip is in the shared unfilled rule, the variation in the image rule; the checked switch turns the grey fill', () => {
     const unfilled = /:is\(([^)]*)\):is\(:disabled, \[aria-disabled='true'\]\),/.exec(shared)?.[1] ?? '';
     expect(unfilled).toMatch(/\.cinema-shared-controls__chip\b/);
-    expect(unfilled).toMatch(/\.cinema-shot-panel__variation\b/);
+    expect(shared).toMatch(/:is\(\.cinema-shot-panel__variation\):is\(:disabled, \[aria-disabled='true'\]\) img/);
     const switches = cssRules(shared).filter(({ selector }) => /\.settings-switch:checked/.test(selector) && /:disabled/.test(selector));
     expect(switches.length).toBeGreaterThan(0);
     expect(switches[0].body).toMatch(/background:\s*var\(--sr-disabled-fill[^;]*!important/);
@@ -247,13 +249,15 @@ describe('review N-7: Run History\'s disabled Rerun and Retry give the reason', 
     }
   });
 
-  it('offline: the reconnect tooltip; the panel itself stays open and live (review 2 check 2)', () => {
+  // Fix round 3 (review 3 LOW-1, GM r4 answer 2): each says its own verb.
+  it('offline: the reconnect tooltip with its verb; the panel itself stays open and live (review 2 check 2)', () => {
     render(<RunHistoryPanel />);
     offline();
-    for (const name of ['Retry failed Full graph run', 'Rerun Full graph']) {
+    for (const [name, line] of [['Retry failed Full graph run', 'You can retry it when Nebula reconnects.'],
+      ['Rerun Full graph', 'You can rerun it when Nebula reconnects.']]) {
       const control = screen.getByRole('button', { name });
       expect(control, name).toBeDisabled();
-      expect(control, name).toHaveAttribute('title', RECONNECT);
+      expect(control, name).toHaveAttribute('title', line);
     }
     expect(screen.getAllByText(/Full graph/).length).toBeGreaterThan(0);
   });

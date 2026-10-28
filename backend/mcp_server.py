@@ -378,7 +378,8 @@ def start_here(ctx: Context | None = None) -> str:
       `truncated`; look_at_canvas has every node in full.
     - `pins`: the person's open pins (id, text, anchor), newest first, and
       `openCount`. Each is a request: act on it, then resolve_pin. A note
-      keeps the person's lines (newlines in `text`).
+      keeps the person's lines (newlines in `text`) and its spacing, as
+      look_at_canvas has it.
     - `proposals`: open proposals waiting for the person, and `count`.
     - `boards`: every moodboard, the current project's first, then Global,
       then other projects (`where`), with its image count, whether it is
@@ -652,7 +653,8 @@ def wait_for_canvas_change(
     node.renamed, edge.added, selection.changed, run.finished,
     run.skipped, canvas.replaced, edit.undone, board.moved, board.fields,
     ...), the `actor` who did it (`person`, an `agent`,
-    or `anonymous`), `nodeId`, `data` and a one-line `summary`. An event
+    or `anonymous`), `nodeId`, `data` and a one-line `summary` (a line
+    break in a note shows there as " ⏎ "; `data.text` has the note whole). An event
     from a canvas edit has `edit`: your edit_canvas events carry its `id`
     (your `undo.editId`); an undo's events carry `undoes` (the edit id it
     reverted) and `of` (whose edit), and end with `edit.undone` (only a

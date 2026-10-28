@@ -98,12 +98,13 @@
    (canvas.css .selection-toolbar__button--danger), never orange primary. */
 .prompt-dialog__actions .prompt-dialog__destructive {
   font-weight: 600;
-  color: rgba(255, 132, 118, 0.88);
+  /* The toolbar's Delete red (review 3 LOW-2, disabled-buttons.css). */
+  color: var(--sr-danger-ink, #ffa395);
 }
 
 .prompt-dialog__actions .prompt-dialog__destructive:hover:not(:disabled) {
   background: rgba(255, 70, 60, 0.14);
-  color: #ff8f82;
+  color: var(--sr-danger-ink-hover, #ffb8ad);
 }
 
 .prompt-dialog__actions button:disabled {

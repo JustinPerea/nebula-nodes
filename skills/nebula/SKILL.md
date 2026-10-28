@@ -783,7 +783,8 @@ nebula notes --unread          # your updates the person hasn't opened
 
 A note keeps the lines the person wrote: `nebula pins` prints each later
 line indented under the first, inside the quotes (over MCP, `pins[].text`
-holds `\n`). Read all of it before you act.
+holds `\n`; a channel push keeps them inside `<pin>`). `nebula watch`
+keeps each event on one line, so a break in a note shows there as ` ⏎ `. Read all of it before you act.
 
 A pin you read before a project switch may be gone from the open project:
 `nebula pin resolve` then says that note isn't in the open project. Run

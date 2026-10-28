@@ -695,14 +695,19 @@ describe('the corner keeps clear of each screen\'s controls', () => {
     expect(list.style.getPropertyValue('--an-drop-top')).toBe('56px');
   });
 
-  it('stays on screen when the page scrolls the header away (Projects scrolls)', () => {
+  // GM on #199's shots (fix round 3 of PR #200): pinned to the top right, the
+  // chip sat on Projects' "New project" once the page scrolled. It leaves with
+  // its header now, as the header's Settings does; its card still starts on screen.
+  it('scrolls away with its header when the page scrolls (Projects), never over the page below', () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
     on('home');
     slot({ left: 1163, right: 1308, top: -100, bottom: -68 });
     render(<AppAgentNotes />);
     sync([note('an_1')]);
-    // Never above the page gutter: it keeps the top right while the header is gone.
-    expect(chip().style.getPropertyValue('--an-chip-top')).toBe('16px');
+    const top = Number.parseFloat(chip().style.getPropertyValue('--an-chip-top'));
+    // Centred on its slot, 100 px up with the header: off the screen.
+    expect(top).toBeLessThan(0);
+    expect(top + 40).toBeLessThanOrEqual(0); // the chip is 40 px tall (--agent-notes-chip-h)
     expect(chip().style.getPropertyValue('--an-right')).toBe('132px');
   });
 

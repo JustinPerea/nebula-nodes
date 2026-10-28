@@ -159,7 +159,7 @@ const agentClear = () => emit({ type: 'graphSync', workspaceRevision: 'rev-a', p
 import { useCanvasPinsStore } from '../src/store/canvasPinsStore';
 
 const resetPins = () => useCanvasPinsStore.setState({ projectId: null, pins: [], composer: null, removing: {}, error: null,
-  composerCanvas: null, draft: '', drafts: {}, kept: null } as never);
+  composerCanvas: null, draft: '', drafts: {}, kept: [] } as never);
 const pins = useCanvasPinsStore;
 const sentPut = () => vi.waitFor(() => expect(graphWrites.sent.some((write) => write.path === '/api/graph/node/n1')).toBe(true), { timeout: 2000 });
 const STALE = 'This canvas is out of date. Open the current project before editing or running it.';
@@ -193,7 +193,7 @@ describe('M-2 (GM answer 1): a note written for one project never shows in anoth
     pins.getState().setDraft('for alpha n1');
     pins.getState().cancelCompose();
     await onBeta();
-    expect(pins.getState().kept).toBeNull();
+    expect(pins.getState().kept).toEqual([]);
     expect(pins.getState().error).toBeNull();
     pins.getState().compose({ nodeId: 'n1' });
     expect(pins.getState().draft).toBe('');
@@ -210,20 +210,20 @@ describe('M-2 (GM answer 1): a note written for one project never shows in anoth
     pins.getState().compose({ nodeId: 'n1' });
     pins.getState().setDraft('interrupted on alpha');
     agentOpens({ kind: 'agent', name: 'Codex' });
-    await vi.waitFor(() => expect(pins.getState().kept).not.toBeNull());
-    expect(pins.getState().kept).toMatchObject({ text: 'interrupted on alpha', line: KEPT_LINE });
+    await vi.waitFor(() => expect(pins.getState().kept).toHaveLength(1));
+    expect(pins.getState().kept.at(-1)).toMatchObject({ text: 'interrupted on alpha', line: KEPT_LINE });
     release();
     await vi.waitFor(() => expect(useProjectStore.getState().activeProject?.id).toBe('beta'));
     await flush();
     pins.getState().compose({ nodeId: 'n1' });
     expect(pins.getState().draft).toBe('');
-    expect(pins.getState().kept).toMatchObject({ text: 'interrupted on alpha', line: KEPT_LINE });
+    expect(pins.getState().kept.at(-1)).toMatchObject({ text: 'interrupted on alpha', line: KEPT_LINE });
     pins.getState().cancelCompose();
-    expect(pins.getState().kept).toMatchObject({ text: 'interrupted on alpha' });
+    expect(pins.getState().kept.at(-1)).toMatchObject({ text: 'interrupted on alpha' });
     await backOnAlpha();
     pins.getState().compose({ nodeId: 'n1' });
     expect(pins.getState().draft).toBe('interrupted on alpha');
-    expect(pins.getState().kept).toBeNull();
+    expect(pins.getState().kept).toEqual([]);
   });
 
   it('a clear on the same project: a closed draft gets no line and still starts the next dialog there', () => {
@@ -231,7 +231,7 @@ describe('M-2 (GM answer 1): a note written for one project never shows in anoth
     pins.getState().setDraft('warmer sky');
     pins.getState().cancelCompose();
     agentClear();
-    expect(pins.getState().kept).toBeNull();
+    expect(pins.getState().kept).toEqual([]);
     pins.getState().compose({ nodeId: 'n1' });
     expect(pins.getState().draft).toBe('warmer sky');
   });
@@ -245,7 +245,7 @@ describe('M-2 (GM answer 1): a note written for one project never shows in anoth
     expect(failure).not.toBeNull();
     graphWrites.answer = null;
     await onBeta();
-    expect(pins.getState().kept).toBeNull();
+    expect(pins.getState().kept).toEqual([]);
     expect(pins.getState().error).toBe(failure);
     pins.getState().compose({ nodeId: 'n1' });
     expect(pins.getState().draft).toBe('');
@@ -263,7 +263,7 @@ describe('M-2 (GM answer 1): a note written for one project never shows in anoth
     expect(pins.getState().draft).toBe('');
     pins.getState().setDraft(' \n\t');
     agentClear();
-    expect(pins.getState().kept).toBeNull();
+    expect(pins.getState().kept).toEqual([]);
     pins.getState().compose({ nodeId: 'n1' });
     expect(pins.getState().draft).toBe('');
   });
@@ -272,7 +272,7 @@ describe('M-2 (GM answer 1): a note written for one project never shows in anoth
     graphWrites.answer = () => Promise.resolve(answer(409, { detail: STALE }));
     pins.getState().compose({ nodeId: 'n1' });
     expect(await pins.getState().submit('refused')).toBe(false);
-    expect(pins.getState().kept).toMatchObject({ text: 'refused', line: 'Your note wasn’t sent because the canvas changed first.' });
+    expect(pins.getState().kept.at(-1)).toMatchObject({ text: 'refused', line: 'Your note wasn’t sent because the canvas changed first.' });
     pins.getState().compose({ nodeId: 'n1' });
     expect(pins.getState().draft).toBe('refused');
   });

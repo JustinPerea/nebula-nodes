@@ -62,7 +62,8 @@ def clean_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = F
     One line by default (a reply): whitespace collapsed. ``multiline`` (the
     person's note: Shift+Enter in the dialog makes lines, fix round 2 of PR
     #200, GM 2026-10-28 answer 5): agents get it as written. Its newlines
-    stay (``\r\n`` and ``\r`` read as ``\n``), a tab reads as a space, each
+    stay (every line break, ``\r\n``, ``\r``, U+2028 and the rest, reads as
+    ``\n``), a tab reads as a space, each
     line loses its trailing spaces and the note its leading and trailing
     blank lines; every other control character is still dropped.
     """
@@ -80,7 +81,9 @@ def clean_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = F
         )
 
     if multiline:
-        lines = [plain(line).rstrip() for line in raw.replace("\r\n", "\n").replace("\r", "\n").split("\n")]
+        # str.splitlines knows every line break: \r\n, \r, \v, \f, NEL and
+        # U+2028/U+2029 (review 3 LOW-5), so each reads as \n on every surface.
+        lines = [plain(line).rstrip() for line in raw.splitlines()]
         text = "\n".join(lines).strip()
     else:
         text = " ".join(plain(raw).split())
@@ -447,8 +450,27 @@ class CanvasPins:
             return []
 
 
+LINE_BREAK_MARK = " ⏎ "
+
+
+def one_line(text: Any) -> str:
+    """A note on a one-line surface (an event summary, `nebula watch`): each
+    line break shows as " ⏎ " (fix round 3 of PR #200, review 3 LOW-5), so
+    the note's second line never reads as the next event, and no two words
+    are glued together."""
+    return LINE_BREAK_MARK.join(line.strip() for line in str(text or "").splitlines() if line.strip())
+
+
+def _clip(text: str, limit: int) -> str:
+    return f'{text[:limit]}{"…" if len(text) > limit else ""}'
+
+
 def pin_summary(pin: Mapping[str, Any]) -> str:
     anchor = pin.get("anchor") or {}
     where = f"on {anchor['nodeId']}" if "nodeId" in anchor else "on the canvas"
-    text = str(pin.get("text") or "")
-    return f'pinned "{text[:60]}{"…" if len(text) > 60 else ""}" {where}'
+    return f'pinned "{_clip(one_line(pin.get("text")), 60)}" {where}'
+
+
+def pin_resolved_summary(pin_id: str, pin: Mapping[str, Any], reply: Any) -> str:
+    """The pin.resolved event's summary: one line, the note cut at 40."""
+    return f'answered the note {pin_id} ("{_clip(one_line(pin.get("text")), 40)}"): {one_line(reply)}'

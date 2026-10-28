@@ -51,9 +51,34 @@ export const NOTE_KEPT_COPY = 'Copy note';
 
 /** The kept note's line: why it wasn't sent. `following`: the follow that
  * closed the dialog (or was on when Nebula refused the note). */
-export function noteKeptLine(following: { agent: string | null; projectName: string } | null): string {
-  if (!following || !following.projectName) return NOTE_KEPT_LINE;
-  return `Your note wasn’t sent because ${following.agent || 'an agent'} started opening “${following.projectName}”.`;
+export function noteKeptLine(following: { agent: string | null; projectName: string } | null, forProject?: string | null): string {
+  const note = forProject ? `Your note for “${forProject}”` : 'Your note';
+  if (!following || !following.projectName) return `${note} wasn’t sent because the canvas changed first.`;
+  return `${note} wasn’t sent because ${following.agent || 'an agent'} started opening “${following.projectName}”.`;
+}
+
+/** A note kept because its canvas went before it was sent (one per
+ * project, fix round 3 of PR #200, review 3 M-2). */
+export interface KeptNote {
+  text: string;
+  /** GM's line on the note's own project. */
+  line: string;
+  /** The project it was written in ('' for no project). */
+  project: string;
+  /** That project's name when the note was kept ('' when none). */
+  projectName: string;
+  /** Why: the follow that cut it off, or null (the canvas changed). */
+  following: { agent: string | null; projectName: string } | null;
+}
+
+/** The kept note's line as the person sees it on `here` (GM, PR #200 round 3
+ * M-2, verbatim): on its own project the line stays as it is; on another it
+ * names its project, "Your note for “Alpha” wasn’t sent because Codex started
+ * opening “Second canvas”." A note of no project (or one whose name isn't
+ * known) keeps the plain line everywhere. */
+export function keptNoteLine(note: KeptNote, here: string): string {
+  if (note.project === here || !note.projectName) return note.line;
+  return noteKeptLine(note.following, note.projectName);
 }
 
 export async function deletePin(id: string): Promise<void> {

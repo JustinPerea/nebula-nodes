@@ -167,7 +167,7 @@ const agentClear = () => emit({ type: 'graphSync', workspaceRevision: 'rev-a', p
 import { useCanvasPinsStore } from '../src/store/canvasPinsStore';
 
 const resetPins = () => useCanvasPinsStore.setState({ projectId: null, pins: [], composer: null, removing: {}, error: null,
-  composerCanvas: null, draft: '', drafts: {}, kept: null } as never);
+  composerCanvas: null, draft: '', drafts: {}, kept: [] } as never);
 const pins = useCanvasPinsStore;
 const lines = () => [useGraphStore.getState().undoNotice?.text, useGraphStore.getState().messageNotice?.text].filter(Boolean);
 const sentPut = () => vi.waitFor(() => expect(graphWrites.sent.some((write) => write.path === '/api/graph/node/n1')).toBe(true), { timeout: 2000 });
@@ -226,10 +226,10 @@ describe('L-3: the kept note', () => {
     pins.getState().compose({ nodeId: 'n1' });
     pins.getState().setDraft('Make the sky warmer');
     agentClear();
-    expect(pins.getState().kept).toMatchObject({ text: 'Make the sky warmer' });
+    expect(pins.getState().kept.at(-1)).toMatchObject({ text: 'Make the sky warmer' });
     pins.getState().compose({ nodeId: 'n1' });
     expect(pins.getState().draft).toBe('Make the sky warmer');
-    expect(pins.getState().kept).toBeNull();
+    expect(pins.getState().kept).toEqual([]);
   });
 
   it('× or Esc keeps the text as the draft for the next open; clearing the field and closing drops it', () => {
@@ -259,7 +259,7 @@ describe('L-3: the kept note', () => {
     pins.getState().compose({ nodeId: 'n1' });
     pins.getState().setDraft('Make the sky warmer');
     agentClear();
-    pins.getState().dismissKept();
+    pins.getState().dismissKept(pins.getState().kept.at(-1)?.project ?? '');
     pins.getState().compose({ nodeId: 'n1' });
     expect(pins.getState().draft).toBe('');
   });
@@ -268,24 +268,24 @@ describe('L-3: the kept note', () => {
     pins.getState().compose({ nodeId: 'n1' });
     pins.getState().setDraft('after a clear');
     agentClear();
-    expect(pins.getState().kept?.line).toBe('Your note wasn’t sent because the canvas changed first.');
-    pins.getState().dismissKept();
+    expect(pins.getState().kept.at(-1)?.line).toBe('Your note wasn’t sent because the canvas changed first.');
+    pins.getState().dismissKept(pins.getState().kept.at(-1)?.project ?? '');
 
     const release = slowListing();
     pins.getState().compose({ nodeId: 'n1' });
     pins.getState().setDraft('during a follow');
     agentOpens({ kind: 'agent', name: 'Codex' });
-    await vi.waitFor(() => expect(pins.getState().kept).not.toBeNull());
-    expect(pins.getState().kept).toMatchObject({ text: 'during a follow',
+    await vi.waitFor(() => expect(pins.getState().kept).toHaveLength(1));
+    expect(pins.getState().kept.at(-1)).toMatchObject({ text: 'during a follow',
       line: 'Your note wasn’t sent because Codex started opening “beta”.' });
     release();
     await vi.waitFor(() => expect(useProjectStore.getState().activeProject?.id).toBe('beta'));
-    pins.getState().dismissKept();
+    pins.getState().dismissKept(pins.getState().kept.at(-1)?.project ?? '');
 
     graphWrites.answer = () => Promise.resolve(answer(409, { detail: STALE }));
     pins.getState().compose({ nodeId: 'n1' });
     expect(await pins.getState().submit('refused')).toBe(false);
-    expect(pins.getState().kept).toMatchObject({ text: 'refused', line: 'Your note wasn’t sent because the canvas changed first.' });
+    expect(pins.getState().kept.at(-1)).toMatchObject({ text: 'refused', line: 'Your note wasn’t sent because the canvas changed first.' });
   });
 
   it('an unknown agent reads "an agent"', async () => {
@@ -350,7 +350,7 @@ describe('fix round 1, GM 2026-10-27 answer 1 (review N-1): the draft belongs to
     pins.getState().cancelCompose();
     agentOpens({ kind: 'agent', name: 'Codex' });
     await vi.waitFor(() => expect(useProjectStore.getState().activeProject?.id).toBe('beta'));
-    expect(pins.getState().kept).toBeNull();
+    expect(pins.getState().kept).toEqual([]);
     pins.getState().compose({ nodeId: 'n1' });
     expect(pins.getState().draft).toBe('');
   });
@@ -360,7 +360,7 @@ describe('fix round 1, GM 2026-10-27 answer 1 (review N-1): the draft belongs to
     pins.getState().setDraft('   ');
     pins.getState().cancelCompose();
     agentClear();
-    expect(pins.getState().kept).toBeNull();
+    expect(pins.getState().kept).toEqual([]);
   });
 });
 

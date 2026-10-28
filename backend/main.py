@@ -158,7 +158,7 @@ from services.canvas_events import (
     param_changes,
     parse_kinds,
 )
-from services.canvas_pins import ANOTHER_PROJECT, CanvasPins, PinError, pin_left, pin_summary
+from services.canvas_pins import ANOTHER_PROJECT, CanvasPins, PinError, pin_left, pin_resolved_summary, pin_summary
 from services.node_removals import RemovalLedger
 from services.agent_notes import AgentNotes, NoteError, note_summary
 from services import person_session
@@ -6536,7 +6536,7 @@ async def resolve_canvas_pin(pin_id: str, body: dict[str, Any]) -> dict[str, Any
         "pin.resolved",
         node_id=anchor.get("nodeId"),
         data={"pinId": pin_id, "text": pin.get("text"), "reply": reply},
-        summary=f'answered the note {pin_id} ("{str(pin.get("text"))[:40]}"): {reply}',
+        summary=pin_resolved_summary(pin_id, pin, reply),
         project_id=project_id,
     )
     await _broadcast_pins()

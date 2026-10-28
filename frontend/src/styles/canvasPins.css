@@ -92,6 +92,12 @@
   overflow-wrap: anywhere;
   /* The lines the person wrote (Shift+Enter), as agents get them (fix round 2 of PR #200, review 2 L-2). */
   white-space: pre-line;
+  /* A tall note (up to 280 characters can be ~280 lines) scrolls inside the
+     card, about 12 lines; the time and Delete stay in view (review 3 LOW-5).
+     The card is .nowheel, so the wheel scrolls it, not the canvas. */
+  max-height: 16.8em;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .canvas-pin__meta {
@@ -168,6 +174,14 @@
 .canvas-pin-toast--kept {
   border-color: #333;
   color: #d8d8d8;
+}
+
+/* Kept notes stack, one per project, newest at the bottom (fix round 3 of PR
+   #200, review 3 M-2). */
+.canvas-pin-kept-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .canvas-pin-toast__text {

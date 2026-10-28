@@ -67,7 +67,7 @@ afterEach(() => {
   useGraphStore.setState(initialGraph, true);
   useUIStore.setState(initialUI, true);
   useCinemaUploadStore.setState({ uploads: [] });
-  useCanvasPinsStore.setState({ composer: null, composerCanvas: null, draft: '', drafts: {}, kept: null, error: null } as never);
+  useCanvasPinsStore.setState({ composer: null, composerCanvas: null, draft: '', drafts: {}, kept: [], error: null } as never);
 });
 
 // ── GM bug 1: the agent bar ─────────────────────────────────────────────────
@@ -119,7 +119,7 @@ describe('GM bug 1: the project bar names the project being opened in full', () 
 
 describe('GM bug 2 and review L-1: the note dialog', () => {
   it('starts with the caret at the end of the kept note, nothing selected, in a textarea that grows', () => {
-    useCanvasPinsStore.setState({ kept: { text: 'Make the sky warmer and the sea darker', line: NOTE_KEPT_LINE, project: '' } } as never);
+    useCanvasPinsStore.setState({ kept: [{ text: 'Make the sky warmer and the sea darker', line: NOTE_KEPT_LINE, project: '', projectName: '', following: null }] } as never);
     act(() => useCanvasPinsStore.getState().compose({ nodeId: 'n1' }));
     render(<PinComposer />);
     const field = screen.getByRole('textbox', { name: 'Note for agents' }) as HTMLTextAreaElement;
@@ -134,7 +134,7 @@ describe('GM bug 2 and review L-1: the note dialog', () => {
   });
 
   it('typing adds to it; it never replaces it', () => {
-    useCanvasPinsStore.setState({ kept: { text: 'warmer sky', line: NOTE_KEPT_LINE, project: '' } } as never);
+    useCanvasPinsStore.setState({ kept: [{ text: 'warmer sky', line: NOTE_KEPT_LINE, project: '', projectName: '', following: null }] } as never);
     act(() => useCanvasPinsStore.getState().compose({ nodeId: 'n1' }));
     render(<PinComposer />);
     const field = screen.getByRole('textbox', { name: 'Note for agents' }) as HTMLTextAreaElement;

@@ -140,9 +140,10 @@ def _cut(text: Any, limit: int) -> str:
 
 
 def _cut_note(text: Any, limit: int) -> str:
-    """A pin's note, its lines kept (fix round 2 of PR #200: agents get the
-    note as written), each line's spacing collapsed, cut at `limit`."""
-    lines = [" ".join(line.split()) for line in str(text or "").split("\n")]
+    """A pin's note as stored, its lines and spacing kept (fix round 2 of PR
+    #200: agents get the note as written; round 3 N-6: the same spacing as
+    look_at_canvas), cut at `limit`."""
+    lines = [line.rstrip() for line in str(text or "").splitlines()]
     note = "\n".join(lines).strip()
     return note if len(note) <= limit else note[: limit - 1].rstrip() + "…"
 

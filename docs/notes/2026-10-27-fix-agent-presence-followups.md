@@ -431,3 +431,104 @@ Review 2 of PR #200, built with GM's r3 answers (msgs/gm-pr200-r3.md).
   - The offline row has `pointer-events: none`, so elementFromPoint reports it
     as covered. The shot shows it on top of the editor.
 - Blocked requests: 2, both canaries. None went toward 8000-8010 or 5173.
+
+## Fix round 3
+
+Inputs: review 3 and GM's rulings r1-r4 (build the M-2 and M-3 answers as
+written). Base 7434346a.
+
+### What changed, per item
+
+- **M-1, newlines in pins.** `clean_text(..., multiline=True)` splits on
+  `str.splitlines()`, so every Unicode break (U+2028, U+2029, NEL, \v, \f)
+  reads as `\n`, and each line keeps its inner spacing. The channel pushes a
+  pin's text with its lines inside `<pin>` (GM: "keep the break").
+- **M-2, kept notes per project.** `kept` is now a list, one note per
+  project, newest last. On another project a notice names the note's
+  project ("Your note for “Alpha” wasn't sent because Codex started opening
+  “Second canvas”."); on its own project the line is unchanged. Each notice
+  has its own Copy note and ×. A failed send's error shows only on the project
+  that sent it (N-3).
+- **M-3, image-only buttons.** A disabled variation dims its thumbnail
+  (opacity 0.45, grayscale) and its selected outline turns the shared grey.
+  The selected Cinema chip uses the same grey. This is the image-only
+  disabled look app-wide (GM).
+- **LOW-1.** Run history's offline verbs: Rerun, Retry (failed) and Recover.
+  GM approved the tooltips.
+- **LOW-2, red Delete.** The shared grey disables it. The enabled red is now
+  `--sr-danger-ink: #ffa395`, used by Delete and the dialog's destructive
+  label. The first value, #ff968a, cleared the ratchet's 1.5x floor on black,
+  but live on the toolbar's own surface it drew 8.8:1 against the grey's
+  6.2:1 (0.70). The ratchet now measures the toolbar surface too. Live now:
+  9.65 against 6.2.
+- **LOW-3, the mask painter during a follow.** Brush, Erase, Size and Clear
+  lock offline and while following, and a stroke is refused. The project
+  bar sits above the painter's scrim: `.canvas-tabs-wrap[data-following]`
+  has z-index 1002. The first live run caught a gap: the skin's more specific
+  `body.app-slava-restraint .canvas-tabs-wrap` rule still won, so the scrim
+  covered the bar. That rule now has its own `[data-following]` twin, and a
+  test checks that every rule which layers the wrap has one.
+- **LOW-4, trim editor.** Render Preview, Export… and the final export's
+  Start lock offline and while following. GM's "Trim editor: fine" was read
+  as approval of this.
+- **LOW-5.**
+  - `nebula watch` and event summaries stay on one line: a break shows as
+    ` ⏎ `, and `data.text` keeps the note whole. `pin.resolved` gets a
+    one-line summary too.
+  - A pin card's text scrolls past about 12 lines (`nowheel`, so the canvas
+    doesn't zoom).
+  - The selected chip goes grey offline.
+- **LOW-6, ratchet.**
+  - Review 3's 17 bypass forms are caught, and 9 quiet forms stay quiet.
+  - Components are identified by file.
+  - Lock coverage is tracked per state (following or offline).
+  - G now runs on every .tsx file.
+  - The fill parser reads named colours, `color-mix`, `oklch`/`oklab`, `:is`
+    and `:where`, layers and `var()` fallbacks.
+- **Nits.**
+  - N-5: the 1.5x margin applies to unfilled controls; filled ones show their
+    state in the fill (GM r4). `prompt-dialog__confirm` (orange label) is
+    exempt pending GM.
+  - N-6: `start_here` keeps spacing, as `look_at_canvas` does.
+  - The Cinema banner over Palette Strength belongs to #198, so it is left
+    alone.
+- **Presence pill on Projects home** (coordinator). It sat fixed at the top
+  right and covered "New project" once the page scrolled. It now follows its
+  header slot and scrolls away with the header. A reserved band was the other
+  option, but it would keep an empty strip over the page and leave the chip
+  floating over cards. The header owns the slot, so following it is the
+  consistent choice, and the slot also reserves the chip's width. Live: home
+  scrolled at 1280 and 1440 and to the bottom, then back to the top; the
+  Cinema studio and Create view; no overlaps. Commons is off in this config.
+
+### Doc correction
+
+The brief's "nebula events / nebula wait" don't exist. The docs say
+`nebula watch` (test_skill_examples_parse failed until they did).
+
+### Left unchanged
+
+Unfiled and '' project keys keep their round-2 behaviour. A note composed
+with no project id is kept under '' and shows only on a screen with no
+project, which is where it was typed.
+
+### Surprises
+
+- The ratchet's G check takes 4.8 s alone. In the full run at load ~28 it
+  took 195 s and hit its 120 s timeout. It passes alone.
+- A notice previews a multi-line note on one line. Copy note copies it whole.
+
+### Fix round 3 gates
+
+- Backend full suite: 11,694 passed, 71 skipped.
+- Focused files plus every errorCopy test: 1,042 of 1,042 across 61 files.
+- tsc -b, eslint, the inline-style and Slava scope guards: clean.
+- Build: entry 407,758 B raw and 123,382 B gzip (limit 512,000).
+- Full vitest at load ~20-28: 7,130 passed and 58 failed in 21 files.
+  - The 20 files other than the ratchet, rerun serially: 294 of 294.
+  - The ratchet with r3 alone: 39 of 39, with G at 4.8 s.
+- Live (backend 8795, Vite 5795): 25 of 26 checks passed.
+  - The miss is a harness error, not a failed check. The variations
+    section's checks all passed first. Then the page reloaded on reconnect
+    while the script was leaving the studio.
+  - Blocked requests: 2, both canaries. None went toward 8000-8010 or 5173.

@@ -529,3 +529,11 @@ export function nodeNameList(names: string[]): string {
 export function offlineDisabledReason(verb?: string): string {
   return verb ? `You can ${verb} when Nebula reconnects.` : 'This works again when Nebula reconnects.';
 }
+
+/** Run history's replay verbs offline (fix round 3 of PR #200, review 3
+ * LOW-1). Rerun is GM's (r4 answer 2: "You can rerun it when Nebula
+ * reconnects."); Retry and Recover follow it ("You can retry it …", "You can
+ * recover it …", approved in GM's round 3 answers). */
+export const OFFLINE_RERUN = 'rerun it';
+export const OFFLINE_RETRY = 'retry it';
+export const OFFLINE_RECOVER = 'recover it';

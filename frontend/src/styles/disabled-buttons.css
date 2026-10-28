@@ -40,6 +40,14 @@
      enabled; 0.12 doubled Cinema's outlines when they went disabled (review
      2 M-1). */
   --sr-disabled-edge: rgba(255, 255, 255, 0.06);
+  /* An enabled danger label (the selection toolbar's Delete, a dialog's
+     destructive action): 9.6:1 on the toolbar's own surface (rgba(20, 20,
+     22, 0.94)), so the shared grey (6.2:1 there) reads clearly dimmer, not
+     only another hue (fix round 3 of PR #200, review 3 LOW-2; the ratchet's
+     1.5x floor, measured on that surface). It was rgba(255, 132, 118, 0.88),
+     6.9:1; #ff968a cleared the floor on black but drew 8.8 vs 6.2 live. */
+  --sr-danger-ink: #ffa395;
+  --sr-danger-ink-hover: #ffb8ad;
 }
 
 /* Ghost and outline buttons: unfilled, label and outline grey. First, so a
@@ -60,7 +68,6 @@
   .cinema-shared-controls__swatch-add,
   .cinema-shared-controls__swatch-remove,
   .cinema-shared-controls__chip,
-  .cinema-shot-panel__variation,
   .chat__codeblock-apply,
   .prompt-dialog__confirm,
   .prompt-dialog__destructive,
@@ -83,7 +90,6 @@
   .cinema-shared-controls__swatch-add,
   .cinema-shared-controls__swatch-remove,
   .cinema-shared-controls__chip,
-  .cinema-shot-panel__variation,
   .chat__codeblock-apply,
   .prompt-dialog__confirm,
   .prompt-dialog__destructive,
@@ -98,6 +104,43 @@
   opacity: 1 !important;
 }
 
+/* Image-only buttons (Cinema's variation thumbnails): there is no label to
+   grey, so the image is what dims (fix round 3 of PR #200, review 3 M-3; GM's
+   round 3 answer: "dim the thumbnail, and keep the selected one's outline in
+   the shared grey. That's the disabled look for image-only buttons
+   everywhere."). The thumbnail goes greyscale at 0.45, under the shared
+   grey's own strength (white at 0.55), and its edge is the disabled edge; a
+   new image-only button joins this list. */
+:is(.cinema-shot-panel__variation):is(:disabled, [aria-disabled='true']),
+:is(.cinema-shot-panel__variation):is(:disabled, [aria-disabled='true']):hover {
+  border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important;
+  cursor: default;
+  opacity: 1 !important;
+}
+
+:is(.cinema-shot-panel__variation):is(:disabled, [aria-disabled='true']) img {
+  opacity: 0.45 !important;
+  filter: grayscale(1) !important;
+}
+
+/* The selected one, disabled, keeps its mark: the shared selected outline in
+   the shared grey (review 3 M-3 and LOW-5: offline, the selected variation
+   and the selected film-look chip looked like the others). The grey (6.2:1)
+   stays under the category colour it replaces, so it is never brighter than
+   the enabled outline (GM 2026-10-28 answer 3). After the ghost rule, which
+   drops box-shadows, so this one wins. */
+:is(.cinema-shot-panel__variation--active):is(:disabled, [aria-disabled='true']),
+:is(.cinema-shot-panel__variation--active):is(:disabled, [aria-disabled='true']):hover {
+  border-color: var(--sr-disabled-ink, rgba(255, 255, 255, 0.55)) !important;
+  box-shadow: 0 0 0 1px var(--sr-disabled-ink, rgba(255, 255, 255, 0.55)) !important;
+}
+
+:is(.cinema-shared-controls__chip--active):is(:disabled, [aria-disabled='true']),
+:is(.cinema-shared-controls__chip--active):is(:disabled, [aria-disabled='true']):hover {
+  border-color: var(--sr-disabled-ink, rgba(255, 255, 255, 0.55)) !important;
+  box-shadow: inset 0 0 0 1px var(--sr-disabled-ink, rgba(255, 255, 255, 0.55)) !important;
+}
+
 /* Filled buttons: the accent (orange), danger (which is the accent), white
    primaries ("Back to …", "New project", the canvas toast's Undo, Redo and
    Open copy) and other solid fills (the mask painter's blue Save): the fill
@@ -107,7 +150,6 @@
   .create-composer__generate,
   .onboarding__cta--primary,
   .asset-trash__button--danger,
-  .remotion-properties-panel__anchor-button,
   .chat-panel__send,
   .chat-panel__send--stop,
   .mesh-modal__download,
@@ -128,14 +170,14 @@
   .settings__button--primary,
   .canvas-undo-notice__action,
   .moodboard-board-toast__action,
-  .workspace-rail__item--primary
+  .workspace-rail__item--primary,
+  .proposal-bar__button--primary
 ):is(:disabled, [aria-disabled='true']),
 :is(
   .cinema-shot-panel__action--primary,
   .create-composer__generate,
   .onboarding__cta--primary,
   .asset-trash__button--danger,
-  .remotion-properties-panel__anchor-button,
   .chat-panel__send,
   .chat-panel__send--stop,
   .mesh-modal__download,
@@ -156,7 +198,8 @@
   .settings__button--primary,
   .canvas-undo-notice__action,
   .moodboard-board-toast__action,
-  .workspace-rail__item--primary
+  .workspace-rail__item--primary,
+  .proposal-bar__button--primary
 ):is(:disabled, [aria-disabled='true']):hover {
   background: var(--sr-disabled-fill, rgba(255, 255, 255, 0.1)) !important;
   border-color: var(--sr-disabled-fill, rgba(255, 255, 255, 0.1)) !important;
@@ -180,4 +223,24 @@
    keeps its place, so it still reads as on. */
 body.app-slava-restraint .settings-switch:checked:is(:disabled, [aria-disabled='true']) {
   background: var(--sr-disabled-fill, rgba(255, 255, 255, 0.1)) !important;
+}
+
+/* Remotion's anchor cells: empty 18 px buttons with no label, unfilled at
+   rest, the chosen one filled. Disabled, they stay unfilled with the disabled
+   edge (a grey fill would make every cell brighter than it is enabled), and
+   the chosen one keeps its mark in the shared grey: the grey fill and a grey
+   outline (review 3 M-3: no-label buttons get a disabled look of their own). After
+   the two list rules, so they find their own first. */
+:is(.remotion-properties-panel__anchor-button):is(:disabled, [aria-disabled='true']),
+:is(.remotion-properties-panel__anchor-button):is(:disabled, [aria-disabled='true']):hover {
+  background: transparent !important;
+  border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important;
+  cursor: default;
+  opacity: 1 !important;
+}
+
+:is(.remotion-properties-panel__anchor-button[data-active='true']):is(:disabled, [aria-disabled='true']),
+:is(.remotion-properties-panel__anchor-button[data-active='true']):is(:disabled, [aria-disabled='true']):hover {
+  background: var(--sr-disabled-fill, rgba(255, 255, 255, 0.1)) !important;
+  border-color: var(--sr-disabled-ink, rgba(255, 255, 255, 0.55)) !important;
 }

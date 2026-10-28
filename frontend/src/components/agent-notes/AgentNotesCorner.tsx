@@ -241,13 +241,17 @@ function placeCorner(chip: HTMLElement | null, card: HTMLElement | null, list: H
   const reserved = headerSlot();
   if (reserved) {
     const { slot, header } = reserved;
-    // Where the page scrolls its header away (Projects), the chip keeps the
-    // top right at the gutter instead of leaving with it.
-    const top = Math.round(slot.top >= 0 ? slot.top + (slot.height - size.height) / 2 : gutter);
+    // Where the page scrolls its header away (Projects), the chip leaves with
+    // it, as the header's Settings does (GM on #199's shots, fix round 3 of
+    // PR #200): pinned to the top right it sat on "New project" once the page
+    // scrolled. Reserving a band for it would cost every scrolled screen its
+    // top 64 px; scrolling back up brings it back with the header.
+    const top = Math.round(slot.top + (slot.height - size.height) / 2);
     const right = Math.round(viewport.width - slot.right);
     chip.style.setProperty('--an-right', `${right}px`);
     chip.style.setProperty('--an-chip-top', `${top}px`);
-    const dropTop = Math.round(Math.max(top + size.height, header?.bottom ?? 0) + gap);
+    // A card or the list opened with the header gone still starts on screen.
+    const dropTop = Math.round(Math.max(top + size.height, header?.bottom ?? 0, gutter - gap) + gap);
     // A chat left open on the canvas stays up in the studios: docked, it
     // starts below this line (layouts.css), so it never sits under the chip.
     setDropLine(dropTop);

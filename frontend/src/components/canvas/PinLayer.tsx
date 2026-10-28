@@ -138,7 +138,7 @@ function PinBadge({ pin, slot, zoom }: { pin: Pin; slot: number; zoom: number })
         {resolved ? <Check size={12} aria-hidden="true" /> : <StickyNote size={12} aria-hidden="true" />}
       </button>
       {expanded && (
-        <div className="canvas-pin__card" role="note">
+        <div className="canvas-pin__card nowheel" role="note">
           <p className="canvas-pin__text">{pin.text}</p>
           <p className="canvas-pin__meta">
             {relativeTime(pin.createdAt)}

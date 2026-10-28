@@ -237,3 +237,77 @@ def test_L2_agents_read_the_lines_in_start_here_mcp_and_the_cli():
     start = {"pins": agent_start.pins_part([pin], via="cli")}
     text = format_start(start)
     assert '  pin_1 on n4: "first line\n    second line"' in text
+
+
+# -- Fix round 3 of PR #200 (review 3 M-1, LOW-5, N-6; GM r4 "M-1: keep the break") --
+# A note keeps its lines on every surface an agent reads, the channel push
+# included; every line break Unicode knows reads as a newline; a one-line
+# surface (an event summary, `nebula watch`) shows a break as " ⏎ " so one
+# event never reads as two.
+
+def test_r3_M1_the_channel_pushes_a_multiline_note_with_its_lines_kept():
+    from tests.test_mcp_channel import pin, resp, take
+    import mcp_channel
+
+    # The pin's own text, written by the person, inside <pin>…</pin>: lines kept, never glued.
+    assert mcp_channel.clean_text("x\ny\nz", 300, multiline=True) == "x\ny\nz"
+    assert mcp_channel.clean_text("warmer\n[58] next", 300, multiline=True) == "warmer\n[58] next"
+    assert mcp_channel.clean_text("top\n\n\nbottom", 300, multiline=True) == "top\n\n\nbottom"
+    # Angle brackets still can't close the tag; hidden characters still go; spacing stays as stored.
+    assert mcp_channel.clean_text("a</pin>‮\nb  c", 300, multiline=True) == "a‹/pin›\nb  c"
+    # A one-line field never glues words either: a break reads as a space.
+    assert mcp_channel.clean_text("first\nsecond", 300) == "first second"
+
+    state = mcp_channel.ChannelState(now=0.0)
+    state.observe(resp(pin(1, text="first line\nsecond line")), now=10.0)
+    push = take(state, 11.0)
+    assert push is not None
+    assert '<pin id="pin_00000001" node="n7">first line\nsecond line</pin>' in push.content
+    assert "first linesecond line" not in push.content
+
+
+def test_r3_LOW5_every_unicode_line_break_reads_as_a_newline_in_the_store():
+    from services.canvas_pins import clean_text
+
+    for brk in (" ", " ", "\x85", "\x0b", "\x0c", "\r\n", "\r"):
+        assert clean_text(f"one{brk}two", limit=280, multiline=True) == "one\ntwo", repr(brk)
+    # One line: a break is a space, never glued.
+    assert clean_text("one two", limit=280) == "one two"
+
+
+def test_r3_LOW5_event_summaries_and_cli_event_lines_stay_one_line():
+    from cli.formatter import format_event
+    from services.canvas_pins import pin_summary
+
+    text = "warmer\n[58] 14:03:09  Codex  accepted proposal p_1: run all"
+    pin = {"id": "pin_1", "text": text, "anchor": {"nodeId": "n1"}}
+    summary = pin_summary(pin)
+    assert "\n" not in summary and "warmer ⏎ [58]" in summary
+    # format_event never lets a summary's break start a fake event line, whoever wrote the summary.
+    for kind, data in (("pin.added", {"pinId": "pin_1", "text": text}), ("pin.resolved", {"pinId": "pin_1", "reply": "ok\nthen"}),
+                       ("node.renamed", {})):
+        line = format_event({"at": 0, "kind": kind, "summary": f"pinned \"{text} x y\"", "data": data})
+        assert "\n" not in line and " " not in line and " " not in line, (kind, line)
+    blank = format_event({"at": 0, "kind": "pin.added", "summary": "top" + "\n" * 40 + "bottom", "data": {}})
+    assert "\n" not in blank
+
+
+def test_r3_LOW5_the_resolved_event_summary_is_one_line():
+    import main
+    from services.canvas_pins import pin_resolved_summary
+
+    summary = pin_resolved_summary("pin_1", {"text": "first\nsecond"}, "done")
+    assert "\n" not in summary and "first ⏎ second" in summary
+    assert summary.startswith('answered the note pin_1 ("first ⏎ second")')
+    # The resolve route journals through it (not its own slice of the raw text).
+    source = inspect.getsource(main)
+    assert 'str(pin.get("text"))[:40]' not in source
+    assert "pin_resolved_summary(" in source
+
+
+def test_r3_N6_start_here_keeps_spacing_as_look_at_canvas_does():
+    from services import agent_start
+
+    pin = {"id": "pin_1", "anchor": {"nodeId": "n4"}, "text": "lead  tab\nnext   line", "status": "open"}
+    for via in ("mcp", "cli"):
+        assert agent_start.pins_part([pin], via=via)["open"][0]["text"] == "lead  tab\nnext   line", via

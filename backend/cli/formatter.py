@@ -6,6 +6,7 @@ from typing import Any
 # The readiness rule lives with the backend so the CLI and MCP server agree.
 from services.node_readiness import node_access  # noqa: F401 (re-exported for tests and callers)
 from services.agent_params import ASSET_PARAM_TYPES
+from services.canvas_pins import one_line  # an event is one line (PR #200 fix round 3, LOW-5)
 from services.canvas_undo import UNDONE_VERBS, nothing_went_back
 from services.maker_sizes import rule_note
 from services import node_categories
@@ -749,7 +750,7 @@ def quote_note(text: Any, indent: str = "    ") -> str:
     """A note in quotes, JSON-escaped, its lines kept: each line after the
     first starts on its own line under it (fix round 2 of PR #200, GM
     2026-10-28 answer 5: agents read the note as the person wrote it)."""
-    lines = str(text or "").split("\n")
+    lines = str(text or "").splitlines() or [""]
     return '"' + ("\n" + indent).join(json.dumps(line, ensure_ascii=False)[1:-1] for line in lines) + '"'
 
 
@@ -829,7 +830,7 @@ def format_event(event: dict[str, Any]) -> str:
     elif kind == "proposal.reopened" and data.get("proposalId"):
         summary = (f"{summary} — waiting for the person again "
                    f"(nebula proposal {data['proposalId']} --wait)")
-    return f"[{event.get('seq', '?')}] {clock}  {_actor_label(event.get('actor'))}  {summary}"
+    return f"[{event.get('seq', '?')}] {clock}  {_actor_label(event.get('actor'))}  {one_line(summary)}"
 
 
 def format_events(response: dict[str, Any]) -> str:

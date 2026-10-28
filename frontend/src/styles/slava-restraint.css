@@ -4099,6 +4099,14 @@ body.app-slava-restraint .canvas-tabs-wrap {
   gap: 6px;
 }
 
+/* While following, above the mask painter's scrim (1000) and agent cursors
+   (1001), as CanvasTabs.css raises it; this skin rule is more specific, so
+   it needs its own twin (fix round 3 of PR #200, LOW-3: live, the scrim
+   still covered the bar). */
+body.app-slava-restraint .canvas-tabs-wrap[data-following] {
+  z-index: 1002;
+}
+
 body.app-slava-restraint .canvas-tabs__wordmark {
   color: var(--sr-ink-faint);
   font-family: var(--sr-mono);

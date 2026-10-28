@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useCanvasLock } from '../../lib/canvasLock';
+import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 import { Brush, Eraser, Trash2, X } from 'lucide-react';
 import '../../styles/mask-painter.css';
 import { useMaskPainterDialog } from './maskPainterDialog';
@@ -108,6 +108,8 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
   );
 
   const onPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    // Read-only while following or offline (review 3 LOW-3): no stroke.
+    if (refuseCanvasEdit()) return;
     const pt = canvasPoint(e);
     if (!pt) return;
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -205,10 +207,14 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
         )}
 
         <div className="mask-painter__toolbar">
+          {/* Review 3 LOW-3: while following or offline the painter is
+              read-only, as the other editors: its tools and strokes lock (the
+              project bar or the offline row above the scrim says why). */}
           <button
             type="button"
             className={`mask-painter__tool ${tool === 'brush' ? 'mask-painter__tool--active' : ''}`}
             onClick={() => setTool('brush')}
+            {...lock.act({ offline: true })}
           >
             <Brush size={14} /> Brush
           </button>
@@ -216,6 +222,7 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
             type="button"
             className={`mask-painter__tool ${tool === 'erase' ? 'mask-painter__tool--active' : ''}`}
             onClick={() => setTool('erase')}
+            {...lock.act({ offline: true })}
           >
             <Eraser size={14} /> Erase
           </button>
@@ -227,9 +234,10 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
               max={160}
               value={brushSize}
               onChange={(e) => setBrushSize(Number(e.target.value))}
+              {...lock.act({ offline: true })}
             />
           </label>
-          <button type="button" className="mask-painter__tool" onClick={clearStrokes}>
+          <button type="button" className="mask-painter__tool" onClick={clearStrokes} {...lock.act({ offline: true })}>
             <Trash2 size={14} /> Clear
           </button>
           <div className="mask-painter__spacer" />

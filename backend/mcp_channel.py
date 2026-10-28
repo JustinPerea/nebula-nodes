@@ -205,13 +205,30 @@ class ChannelRefused(Exception):
     """A tool a gated turn may not call (Q42 a, Q51 a)."""
 
 
-def clean_text(raw: Any, limit: int = MAX_TEXT) -> str:
-    """Canvas text as a push quotes it: NFKC, no hidden characters, one line,
-    no angle brackets (so it can't close or open a tag), at most `limit`."""
+def clean_text(raw: Any, limit: int = MAX_TEXT, *, multiline: bool = False) -> str:
+    """Canvas text as a push quotes it: NFKC, no hidden characters, no angle
+    brackets (so it can't close or open a tag), at most `limit`.
+
+    One line by default. Line breaks are split on before hidden characters
+    go (``\n`` is a Cc character), so a break reads as a space and never
+    glues two words together. ``multiline`` (a pin's note, fix round 3 of PR
+    #200, review 3 M-1, GM "keep the break"): its lines are kept as real
+    newlines inside ``<pin>…</pin>``, the spacing within a line as stored.
+    The channel's content is a plain string that Claude Code wraps in
+    ``<channel>…</channel>`` and already holds many lines, so a newline is
+    safe there, and with ``<`` and ``>`` escaped a line can't leave the tag.
+    """
     text = unicodedata.normalize("NFKC", str(raw or ""))
-    text = "".join(ch for ch in text if unicodedata.category(ch) not in _HIDDEN)
-    text = text.replace("<", "‹").replace(">", "›").replace('"', "'")
-    text = " ".join(text.split())
+
+    def plain(line: str) -> str:
+        line = "".join(ch for ch in line if unicodedata.category(ch) not in _HIDDEN)
+        return line.replace("<", "‹").replace(">", "›").replace('"', "'")
+
+    lines = [plain(line) for line in text.splitlines()]
+    if multiline:
+        text = "\n".join(line.rstrip() for line in lines).strip()
+    else:
+        text = " ".join(" ".join(lines).split())
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
@@ -349,7 +366,7 @@ class ChannelState:
             return
         anchor = data.get("anchor") if isinstance(data.get("anchor"), Mapping) else {}
         project = event.get("projectId") or self.project_id
-        self._pins[pin_id] = {"pinId": pin_id, "text": clean_text(data.get("text"), 300),
+        self._pins[pin_id] = {"pinId": pin_id, "text": clean_text(data.get("text"), 300, multiline=True),
                               "node": anchor.get("nodeId") or event.get("nodeId"),
                               "project": str(project) if project else None}
 

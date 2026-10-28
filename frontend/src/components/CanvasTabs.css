@@ -16,6 +16,14 @@
   pointer-events: none;
 }
 
+/* While following an agent's switch, the pill (and its "Opening “X”…" bar)
+   sits above a full-screen modal's scrim, the mask painter's (z-index 1000)
+   and agent cursors (1001), as it does over the other editors (review 3
+   LOW-3, GM). Below dialogs (10000) and the offline row. */
+.canvas-tabs-wrap[data-following] {
+  z-index: 1002;
+}
+
 .canvas-tabs__wordmark {
   pointer-events: none;
   white-space: nowrap;
