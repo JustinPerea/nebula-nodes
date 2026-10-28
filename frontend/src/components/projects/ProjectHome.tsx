@@ -3,10 +3,12 @@ import { ArrowUpRight, Check, ChevronRight, ImageIcon, Pencil, Plus, RotateCcw, 
 import { backendAssetUrlSync } from '../../lib/backend';
 import { coverImages, type CatalogRestore, type CoverChoices, type ProjectCover } from '../../lib/projects';
 import {
-  canvasSavedToast, canvasWaitingLine, catalogRestoreNotice, DEFAULT_PROJECT_LIMIT, OPEN_RECENTLY_DELETED, restoreAtLimitTooltip,
-  type CanvasLimit, type NoticeNow,
+  canvasHeldUnreadableLine, canvasSavedToast, canvasWaitingLine, catalogRestoreNotice, DEFAULT_PROJECT_LIMIT, OPEN_RECENTLY_DELETED,
+  restoreAtLimitTooltip, type CanvasLimit, type NoticeNow, type RestoreRoom,
 } from './catalogRestoreCopy';
 import { actorLabel } from '../../lib/trash';
+import { removalNote } from './trashDays';
+import { lastInputWasKeyboard } from '../../lib/inputModality';
 import { CrabMark } from '../brand/CrabMark';
 import { ProposalsFor } from '../proposals/ProposalsFor';
 import { UpdatesSlot } from '../agent-notes/UpdatesSlot';
@@ -93,10 +95,15 @@ export interface ProjectHomeProps {
   onDismissCatalogRestore?: () => void;
   /** The live canvas isn't a project and the list had no room to save it
    * (the listing's `canvasNotFiled`): GM r5's waiting line, until it is saved. */
-  canvasNotFiled?: { reason: CanvasLimit; projectLimit?: number } | null;
+  canvasNotFiled?: { reason: CanvasLimit; projectLimit?: number; canvases?: { name?: string | null }[] } | null;
   /** A waiting canvas was saved as this project (the listing's `canvasSaved`):
-   * GM's toast, once per tab. */
-  canvasSaved?: { id: string; name: string } | null;
+   * GM's toast, once per tab, naming each canvas filed with it (`filed`). */
+  canvasSaved?: { id: string; name: string; filed?: { id: string; name: string }[] } | null;
+  /** The backend's verdict on a restore now (the listing's `restoreRoom`,
+   * review 6 of PR #199, L-3): Restore greys on it, held canvases counted. */
+  restoreRoom?: RestoreRoom | null;
+  /** Held canvases canvas-held.json couldn't read (review 6, L-1). */
+  canvasHeldUnreadable?: { count: number | null } | null;
   onDismissCanvasSaved?: () => void;
   /** How many projects the list may hold (the listing's `projectLimit`):
    * at it, Restore in Recently deleted is disabled with GM r7's tooltip. */
@@ -270,16 +277,6 @@ function ProjectCard({ project, busy, onOpen, onRename, onDelete, loadCoverChoic
   );
 }
 
-function daysLeft(purgeAt: string, now: number): number {
-  const remaining = Date.parse(purgeAt) - now;
-  return Number.isFinite(remaining) ? Math.max(0, Math.ceil(remaining / 86_400_000)) : 0;
-}
-
-function removalNote(purgeAt: string, now: number): string {
-  const days = daysLeft(purgeAt, now);
-  return days <= 1 ? 'Removed for good within a day' : `Removed for good in ${days} days`;
-}
-
 function deletedDate(value: string): string {
   const date = new Date(value);
   return Number.isFinite(date.getTime())
@@ -315,11 +312,14 @@ function ConfirmInline({ label, confirmLabel, prompt, busy, onConfirm, className
 }
 
 function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash, openRequest = 0, onOpened = noop, fromNotice = [],
-  atLimit = null }: {
+  atLimit = null, restoreRoom = null }: {
   trash: TrashedProject[]; busy: boolean;
-  /** The project limit when the list is at it (GM r7): Restore is disabled
-   * in the shared grey, focusable, its tooltip saying why. */
+  /** The project limit when a restore is refused now (GM r7): Restore is
+   * disabled in the shared grey, focusable, its tooltip saying why. */
   atLimit?: number | null;
+  /** Why, from the backend (L-3): the real number of deletes, and whether
+   * a canvas waiting to be saved holds the last place. */
+  restoreRoom?: RestoreRoom | null;
   /** The restore notice's items it opened the list to (GM r4): marked, and
    * the first scrolled into view. */
   fromNotice?: string[];
@@ -334,7 +334,10 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash, openRe
 }) {
   const [open, setOpen] = useState(false);
   // Read the clock when the list opens, not on every render.
-  const [now, setNow] = useState(() => Date.now());
+  const [openedAt, setNow] = useState(() => Date.now());
+  // A project deleted while the list is open was deleted after the clock was
+  // read: the clock is at least the newest delete (GM r7, bug 2).
+  const now = Math.max(openedAt, ...trash.map((entry) => Date.parse(entry.deletedAt)).filter(Number.isFinite));
   const toggle = useRef<HTMLButtonElement>(null);
   // A new request opens the list in this render (React's "adjust state when
   // a prop changes"), so the effect below only moves focus.
@@ -375,10 +378,10 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash, openRe
               <li key={entry.id} className="project-home__trash-row" aria-label={entry.name}
                 data-from-notice={fromNotice.includes(entry.id) ? 'true' : undefined}>
                 <span className="project-home__trash-name">{entry.name}</span>
-                <span className="project-home__trash-meta">{deletedDate(entry.deletedAt)}{deletedByNote(entry)} · {removalNote(entry.purgeAt, now)}</span>
+                <span className="project-home__trash-meta">{deletedDate(entry.deletedAt)}{deletedByNote(entry)} · {removalNote(entry.deletedAt, entry.purgeAt, now)}</span>
                 <span className="project-home__trash-actions">
                   {atLimit !== null
-                    ? <button type="button" disabled={busy} aria-disabled="true" title={restoreAtLimitTooltip(atLimit)}
+                    ? <button type="button" disabled={busy} aria-disabled="true" title={restoreAtLimitTooltip(atLimit, restoreRoom)}
                       className="project-home__restore--at-limit" aria-label={`Restore ${entry.name}`}><RotateCcw aria-hidden="true" />Restore</button>
                     : <button type="button" disabled={busy} aria-label={`Restore ${entry.name}`} onClick={() => onRestore(entry.id)}><RotateCcw aria-hidden="true" />Restore</button>}
                   <ConfirmInline label="Delete forever" confirmLabel="Delete forever" prompt="This can’t be undone." busy={busy}
@@ -412,11 +415,13 @@ function UndoToast({ project, busy, onUndo, onDismiss }: {
   }, [paused, onDismiss, notice]);
   // The Undo button goes with the refusal: when it had focus, focus stays in
   // the toast (its ×) rather than dropping to the page. That focus is
-  // Nebula's, not the person's, so it holds nothing.
+  // Nebula's, not the person's, so it holds nothing. Only from the keyboard
+  // (review 6 of PR #199, N-4; GM): after a mouse click focus stays where
+  // the click left it, and the ring shows only on :focus-visible.
   const close = useRef<HTMLButtonElement>(null);
   const movingFocus = useRef(false);
   useEffect(() => {
-    if (!project.refused) return;
+    if (!project.refused || !lastInputWasKeyboard()) return;
     const active = document.activeElement;
     if (!active || active === document.body || !active.isConnected) {
       movingFocus.current = true;
@@ -441,6 +446,17 @@ function UndoToast({ project, busy, onUndo, onDismiss }: {
 }
 
 const noop = () => {};
+
+/** The limit to say when a restore is refused now, else null (L-3): the
+ * backend's own verdict, which counts canvases held aside to be saved; a
+ * listing without it (an older backend) by the count of projects. */
+function restoreRefusedNow(count: number, projectLimit: number | undefined, passes: boolean,
+  room: RestoreRoom | null): number | null {
+  if (passes) return null;
+  const limit = projectLimit ?? DEFAULT_PROJECT_LIMIT;
+  if (room) return limit;
+  return projectLimit !== undefined && count >= projectLimit ? projectLimit : null;
+}
 
 /** The notice after Nebula restored a damaged project list (GM's lines,
  * catalogRestoreCopy). Its status region is in the page from the start and
@@ -487,10 +503,11 @@ function CatalogRestoreNotice({ restore, current, onDismiss, onOpenRecentlyDelet
  * can't be dismissed while the canvas waits and goes once it is saved. The
  * size cap's adds "Open Recently deleted" (only a delete for good frees it). */
 function CanvasWaitingNotice({ waiting, trashCount, onOpenRecentlyDeleted }: {
-  waiting: { reason: CanvasLimit; projectLimit?: number }; trashCount: number; onOpenRecentlyDeleted: () => void;
+  waiting: { reason: CanvasLimit; projectLimit?: number; canvases?: { name?: string | null }[] }; trashCount: number;
+  onOpenRecentlyDeleted: () => void;
 }) {
   const line = canvasWaitingLine(waiting.reason, {
-    projectLimit: waiting.projectLimit ?? DEFAULT_PROJECT_LIMIT, trashHasItems: trashCount > 0,
+    projectLimit: waiting.projectLimit ?? DEFAULT_PROJECT_LIMIT, trashHasItems: trashCount > 0, canvases: waiting.canvases,
   });
   return (
     <div className="project-home__notice project-home__restore project-home__waiting" role="status">
@@ -502,7 +519,9 @@ function CanvasWaitingNotice({ waiting, trashCount, onOpenRecentlyDeleted }: {
 }
 
 /** GM r5: "Once saved: the normal toast", with the project's real name. */
-function CanvasSavedToast({ project, onDismiss }: { project: { id: string; name: string }; onDismiss: () => void }) {
+function CanvasSavedToast({ project, onDismiss }: {
+  project: { id: string; name: string; filed?: { id: string; name: string }[] }; onDismiss: () => void;
+}) {
   const [paused, setPaused] = useState(false);
   useEffect(() => {
     if (paused) return;
@@ -514,7 +533,7 @@ function CanvasSavedToast({ project, onDismiss }: { project: { id: string; name:
       <div className="project-home__toast" role="status" aria-live="polite"
         onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
         onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
-        <span className="project-home__toast-text">{canvasSavedToast(project.name)}</span>
+        <span className="project-home__toast-text">{canvasSavedToast(project.name, project.filed)}</span>
         <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
       </div>
     </InNoticeRegion>
@@ -547,6 +566,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
   settingsOpen = false, onToggleSettings, loadCoverChoices, onPinCover,
   catalogRestore = null, onDismissCatalogRestore = noop,
   canvasNotFiled = null, canvasSaved = null, onDismissCanvasSaved = noop, projectLimit, restorePassesLimit = false,
+  restoreRoom = null, canvasHeldUnreadable = null,
   unsavedEdits = null, editsSavedAs = null, onDownloadEdits = noop, onContinueWithoutEdits = noop }: ProjectHomeProps) {
   const [query, setQuery] = useState('');
   // Offline is read-only (round 15 of PR #114): create, open, rename,
@@ -594,6 +614,8 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
           onOpenRecentlyDeleted={openTrash} />
         {canvasNotFiled && !restoreSaysLimit && <CanvasWaitingNotice waiting={canvasNotFiled} trashCount={trash.length}
           onOpenRecentlyDeleted={() => openTrash()} />}
+        {canvasHeldUnreadable && <div className="project-home__notice project-home__restore project-home__waiting" role="status">
+          <span className="project-home__restore-text">{canvasHeldUnreadableLine(canvasHeldUnreadable.count)}</span></div>}
 
         {/* GM's WRAP rule: where "Try again" redoes the failure it is the retry, so the
             reason drops its own; where it only reloads, or can't help, the line stays whole. */}
@@ -620,7 +642,8 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
                 : !error && !unsavedEdits && <div className="project-home__empty"><div className="project-home__empty-graph"><NodeGraphPlaceholder /></div><h3>Your first project starts here.</h3><p>Connect ideas, models and media on a canvas of your own.</p><button type="button" className="project-home__secondary" disabled={locked} {...offlineMark(offline)} onClick={() => onCreate()}><Plus aria-hidden="true" />Create your first project</button></div>}
         </section>
         {!loading && trash.length > 0 && <RecentlyDeleted trash={trash} busy={locked} onRestore={onRestore} onPurge={onPurge} onEmptyTrash={onEmptyTrash} openRequest={trashOpenRequest} onOpened={trashOpened} fromNotice={trashFromNotice}
-          atLimit={projectLimit !== undefined && !restorePassesLimit && projects.length >= projectLimit ? projectLimit : null} />}
+          atLimit={restoreRefusedNow(projects.length, projectLimit, restorePassesLimit, restoreRoom)}
+          restoreRoom={restoreRoom} />}
       </main>
       {lastDeleted && <UndoToast key={lastDeleted.id} project={lastDeleted} busy={locked}
         onUndo={() => onRestore(lastDeleted.id, 'undo')} onDismiss={onDismissUndo} />}

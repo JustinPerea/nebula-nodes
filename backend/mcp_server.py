@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import functools
 import inspect
 import json as _json
@@ -9,7 +10,7 @@ import re as _re
 import sys
 import time as _time
 from pathlib import Path as _Path
-from typing import Any
+from typing import Any, Iterator
 
 import anyio
 import anyio.from_thread
@@ -288,6 +289,22 @@ def _sleep_unless_cancelled(seconds: float) -> None:
         _time.sleep(min(0.05, left))
 
 
+@contextlib.contextmanager
+def _canvas_waiting_said() -> Iterator[None]:
+    """Every tool's refusal by the waiting-canvas guard (review 6 of PR #199,
+    M-1: any change to a canvas waiting to be saved as a project, at the
+    limit) reaches the agent as GM's line with "(409, canvas_waiting)", so
+    it tells it from a stale revision, whichever tool sent the write."""
+    try:
+        yield
+    except NebulaAPIError as exc:
+        payload = exc.payload if isinstance(exc.payload, dict) else {}
+        if payload.get("code") != "canvas_waiting" or "canvas_waiting" in exc.detail:
+            raise
+        raise NebulaAPIError(f"{exc.detail} ({exc.status}, canvas_waiting)", status=exc.status, kind=exc.kind,
+                             headers=exc.headers, payload=exc.payload) from exc
+
+
 def _tool(*, annotations: ToolAnnotations, waits: bool = False, structured_output: bool | None = None):
     """Register a tool. A plain function is registered as an async wrapper that
     runs it on a worker thread; the module keeps the plain function, so direct
@@ -306,7 +323,8 @@ def _tool(*, annotations: ToolAnnotations, waits: bool = False, structured_outpu
         if inspect.iscoroutinefunction(fn):
             @functools.wraps(fn)
             async def native(*args: Any, **kwargs: Any) -> Any:
-                return await _through_channel(name, kwargs, lambda: fn(*args, **kwargs))
+                with _canvas_waiting_said():
+                    return await _through_channel(name, kwargs, lambda: fn(*args, **kwargs))
 
             mcp.tool(**options)(native)
             return fn
@@ -314,8 +332,9 @@ def _tool(*, annotations: ToolAnnotations, waits: bool = False, structured_outpu
         @functools.wraps(fn)
         async def offloaded(*args: Any, **kwargs: Any) -> Any:
             # A partial, so a tool argument can never collide with _offload's own names.
-            return await _through_channel(
-                name, kwargs, lambda: _offload(functools.partial(fn, *args, **kwargs), waits=waits))
+            with _canvas_waiting_said():
+                return await _through_channel(
+                    name, kwargs, lambda: _offload(functools.partial(fn, *args, **kwargs), waits=waits))
 
         offloaded._nebula_offloaded = True  # type: ignore[attr-defined]
         mcp.tool(**options)(offloaded)
@@ -380,9 +399,9 @@ def start_here(ctx: Context | None = None) -> str:
     because the list is at a limit ({reason, since, projectLimit, live,
     held, roomNow, note}: nothing in it is lost, but the person can't see
     or open it until it is saved, so never say it is open; opening an
-    existing project works, clearing the canvas (`nebula clear`) or loading
-    a graph onto it (load_graph_file) at the limit is refused (409, code
-    canvas_waiting); tell them what
+    existing project works, and at the limit every change to the waiting
+    canvas (an edit, a removal, a run, a clear, load_graph_file) is refused
+    with "(409, canvas_waiting)", so open a project to work in; tell them what
     `note` says frees room, or, with `roomNow`, that the next listing saves
     it; don't free it yourself):
     - `canvas`: the project, `view.stale` (no browser watching), the
@@ -1376,15 +1395,21 @@ def list_projects(ctx: Context | None = None) -> dict[str, Any]:
     the person can't see or open one until it is saved (never say it is
     open). open_project works: the waiting canvas is held aside first,
     whole, and saved from that copy later. new_project is refused (413)
-    until there is room; so are a clear (`nebula clear`) and load_graph_file
-    while the live canvas waits at the limit (409, code canvas_waiting: "The project
-    limit is reached, so a new canvas can't be saved. Open an existing
-    project to work in, or ask the person to delete a project."). Below the
-    limit they hold it aside first and work (`heldCanvas` true). `roomNow`
+    until there is room; so is every change to the live canvas while it
+    waits at the limit (409, code canvas_waiting): a clear or load_graph_file
+    ("The project limit is reached, so a new canvas can't be saved. Open an
+    existing project to work in, or ask the person to delete a project.")
+    and any edit, removal or run ("The open canvas isn't saved as a project
+    yet because the project limit is reached, so it can't be changed. …").
+    Below the limit a change holds it aside first and works, on a canvas
+    with no project that is never saved (open or make a project to keep
+    your work). `restoreRoom` ({refused, deletes, heldTakesPlace}) says a
+    restore from Recently deleted is refused now and how many deletes free
+    a place for it; `canvasHeldUnreadable` that a held canvas couldn't be read. `roomNow`
     true means room is free and the next listing saves them; `projectLimit` (top level) is the list's limit; `note` says what frees it
     for that limit (the project limit: a move to Recently deleted; the size
     limit: only a delete for good). Don't free it for them. `canvasSaved`
-    ({id, name, at}, for 10 minutes) says such a canvas was then saved."""
+    ({id, name, at, filed}, for 10 minutes) says such canvases were then saved."""
     import project_client
 
     return project_client.list_projects(_api(), headers=_agent_headers(ctx))

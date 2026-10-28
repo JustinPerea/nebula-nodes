@@ -22,7 +22,6 @@
 """
 from __future__ import annotations
 
-import ast
 import asyncio
 import hashlib
 import json
@@ -518,11 +517,13 @@ _real_commit_prepared = ProjectStore.commit_prepared
 
 def _waiting(client, store, graph, state, monkeypatch, owner="e" * 32) -> list[str]:
     """Three projects at a limit of 3, the live canvas unfiled and waiting,
-    holding a node no project has (an agent added it while it waits)."""
+    holding a node no project has. Added as the person's (no tab: the person
+    can't reach a waiting canvas from one), since an agent's add at the
+    limit is refused from fix round 6 on (review 6, M-1)."""
     ids = _unfiled_at_the_limit(client, store, graph, state, monkeypatch, owner)
     listing = client.get("/api/projects", headers=PERSON).json()
     assert listing["canvasNotFiled"]["reason"] == "projects"
-    added = client.post("/api/graph/node", headers=AGENT, json={"definitionId": "text-input", "params": {"value": ONLY_W}})
+    added = client.post("/api/graph/node", headers=PERSON, json={"definitionId": "text-input", "params": {"value": ONLY_W}})
     assert added.status_code == 200, added.text
     return ids
 
@@ -608,7 +609,9 @@ def test_m3_a_clear_or_graph_load_at_the_limit_is_refused_and_changes_nothing(ap
 def test_m3_the_refusal_lines(app):
     assert main_module.CANVAS_WAITING_REFUSAL == ("The project limit is reached, so a new canvas can't be saved. "
                                                   "Open an existing project to work in, or ask the person to delete a project.")
-    assert main_module.CANVAS_WAITING_REFUSAL_STORAGE.startswith("The project list is full, so a new canvas can't be saved.")
+    assert main_module.CANVAS_WAITING_REFUSAL_STORAGE == (
+        "Nebula's project list is full, so a new canvas can't be saved. Open an existing project to work in, or ask "
+        "the person to permanently delete a project in Recently deleted.")
 
 
 def test_m3_an_agents_refused_clear_tells_the_person_in_the_agent_log(app, monkeypatch):
@@ -618,7 +621,8 @@ def test_m3_an_agents_refused_clear_tells_the_person_in_the_agent_log(app, monke
     sent.reset_mock()
     client.request("DELETE", "/api/graph?force=true", headers=AGENT)
     events = [call.args[0] for call in sent.call_args_list if call.args and call.args[0].get("type") == "projectsChanged"]
-    assert {"change": "canvasHoldRefused", "canvasHeld": {"action": "clear", "agent": "Probe"}}.items() <= events[-1].items()
+    assert events[-1]["change"] == "canvasHoldRefused"
+    assert {"action": "clear", "agent": "Probe", "agentId": "ext:probe"}.items() <= events[-1]["canvasHeld"].items()
 
 
 def _make_room_without_listing(client, store, project_id: str) -> None:
@@ -650,8 +654,9 @@ def test_m3_below_the_limit_a_clear_or_load_holds_the_canvas_first(app, monkeypa
     assert ONLY_W in _held_values(held)
     events = [call.args[0] for call in sent.call_args_list if call.args and call.args[0].get("type") == "projectsChanged"]
     action = "replaced" if route == "import" else "cleared"
-    assert any(event.get("change") == "canvasHeld" and event.get("canvasHeld") == {"action": action, "agent": "Probe"}
-               for event in events)
+    # The agent's own row from fix round 6 on (GM r7): its id and colour too.
+    assert any(event.get("change") == "canvasHeld" and {"action": action, "agent": "Probe", "agentId": "ext:probe"}.items()
+               <= (event.get("canvasHeld") or {}).items() for event in events)
     listing = client.get("/api/projects", headers=PERSON).json()
     assert listing["canvasSaved"]["name"] == "Recovered canvas"
     assert _projects_holding(client, store, ONLY_W) == ["Recovered canvas"]
@@ -675,7 +680,10 @@ def test_m3_the_hold_is_on_disk_before_the_open_writes_the_canvas(app, monkeypat
     assert seen and all(seen)
 
 
-def test_m3_a_failed_open_takes_its_hold_back(app, monkeypatch):
+def test_m3_a_failed_open_keeps_its_hold_and_the_next_settle_drops_it_by_digest(app, monkeypatch):
+    """Fix round 6 (review 6, L-2): a failed open never gives its hold back;
+    the next settle drops the copy because the live canvas, on disk too, is
+    that canvas, so it is filed once."""
     client, store, graph, state = app
     ids = _waiting(client, store, graph, state, monkeypatch)
 
@@ -683,9 +691,13 @@ def test_m3_a_failed_open_takes_its_hold_back(app, monkeypatch):
         raise OSError("rename failed")
     monkeypatch.setattr(ProjectStore, "commit_prepared", boom)
     response = client.post(f"/api/projects/{ids[1]}/open", headers=PERSON, json={"workspaceRevision": _rev(client)})
-    monkeypatch.undo()
+    monkeypatch.setattr(ProjectStore, "commit_prepared", _real_commit_prepared)
     assert response.status_code == 507
-    assert _held(store) == [] and ONLY_W in _live_values(graph)
+    assert len(_held(store)) == 1 and ONLY_W in _live_values(graph)
+    client.get("/api/projects", headers=PERSON)
+    assert _held(store) == []
+    _free_a_slot(client, ids[0])
+    assert _projects_holding(client, store, ONLY_W) == ["Recovered canvas"]
 
 
 def test_m3_a_crash_between_the_hold_and_the_open_files_the_canvas_once(app, monkeypatch):
@@ -694,7 +706,6 @@ def test_m3_a_crash_between_the_hold_and_the_open_files_the_canvas_once(app, mon
     of it. After the restart it is one canvas, filed once."""
     client, store, graph, state = app
     ids = _waiting(client, store, graph, state, monkeypatch)
-    monkeypatch.setattr(main_module, "_release_hold", lambda *args, **kwargs: None)
 
     def dies(self, temporary):
         raise OSError("power lost")
@@ -717,7 +728,6 @@ def test_m3_a_crash_after_the_canvas_switched_and_before_the_catalog_files_the_h
     the held copy is filed once there is room."""
     client, store, graph, state = app
     ids = _waiting(client, store, graph, state, monkeypatch)
-    monkeypatch.setattr(main_module, "_release_hold", lambda *args, **kwargs: None)
     real_prepare = ProjectStore.prepare
 
     class PowerLost(BaseException):
@@ -769,7 +779,7 @@ def test_m3_an_agent_opening_right_after_more_edits_holds_every_edit(app, monkey
     client, store, graph, state = app
     ids = _waiting(client, store, graph, state, monkeypatch)
     for value in ("typed-1", "typed-2"):
-        client.post("/api/graph/node", headers=AGENT, json={"definitionId": "text-input", "params": {"value": value}})
+        client.post("/api/graph/node", headers=PERSON, json={"definitionId": "text-input", "params": {"value": value}})
     response = client.post(f"/api/projects/{ids[1]}/open", headers=AGENT, json={"workspaceRevision": _rev(client)})
     assert response.status_code == 200, response.text
     (held,) = _held(store)
@@ -777,21 +787,23 @@ def test_m3_an_agent_opening_right_after_more_edits_holds_every_edit(app, monkey
 
 
 def test_m3_undo_across_the_hold_never_reaches_the_held_canvas(app, monkeypatch):
-    """An agent's edit on the waiting canvas, then the person opens B (the
-    hold), then the agent undoes its edit: B and the held copy stay."""
+    """Below the limit an agent's apply holds the waiting canvas first (fix
+    round 6, M-1), then lands on the canvas with no project; its undo then
+    works there and never reaches the held copy."""
     client, store, graph, state = app
     ids = _waiting(client, store, graph, state, monkeypatch)
+    _make_room_without_listing(client, store, ids[0])
     applied = client.post("/api/graph/apply", headers=AGENT,
                           json={"note": "x", "nodes": [{"ref": "+a", "definitionId": "text-input", "params": {"value": "applied"}}]})
     assert applied.status_code == 200, applied.text
+    (held,) = _held(store)
+    assert ONLY_W in _held_values(held) and "applied" not in _held_values(held)
     token = applied.json()["undo"]["token"]
-    client.post(f"/api/projects/{ids[1]}/open", headers=PERSON, json={"workspaceRevision": _rev(client)})
-    b_before = _live_values(main_module.cli_graph)
-    held_before = _held(store)
-    undone = client.post("/api/graph/apply/undo", headers=AGENT, json={"token": token})
-    assert undone.status_code != 200 or undone.json().get("status") != "undone"
-    assert _live_values(main_module.cli_graph) == b_before
-    assert _held(store) == held_before and "applied" in _held_values(held_before[0])
+    client.post("/api/graph/apply/undo", headers=AGENT, json={"token": token})
+    assert _held(store) == [held]
+    client.get("/api/projects", headers=PERSON)
+    assert _projects_holding(client, store, ONLY_W) == ["Recovered canvas"]
+    assert _projects_holding(client, store, "applied") == []
 
 
 def test_m3_two_waiting_canvases_are_held_and_filed_separately(app, monkeypatch):
@@ -860,49 +872,5 @@ def test_m3_nothing_in_it_is_lost_on_every_path(app, monkeypatch):
     assert _held(store) == []
 
 
-REPLACERS = {"_commit_project_workspace", "clear", "import"}
-# Every route that replaces or clears the live canvas, and how it keeps a
-# waiting canvas: settled first ("settle": open and create hold or refuse
-# through _settle_live_canvas and _hold_if_waiting), or guarded
-# (_guard_waiting_canvas: refused at the limit, held below it), or it can't
-# reach one (a delete replaces the canvas only when it deletes the open
-# project, and no project is open while a canvas waits).
-KEPT_BY = {
-    "create_saved_project": "settle", "open_saved_project": "settle",
-    "clear_graph": "guard", "import_graph": "guard",
-    "delete_saved_project": "no project open while a canvas waits",
-}
-
-
-def test_m3_every_canvas_replacement_is_one_this_round_covers():
-    """A new route that replaces the canvas fails here until it says how it
-    keeps a waiting canvas."""
-    source = Path(main_module.__file__).read_text()
-    tree = ast.parse(source)
-    found: dict[str, set[str]] = {}
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        for call in ast.walk(node):
-            if not isinstance(call, ast.Call):
-                continue
-            func = call.func
-            name = func.attr if isinstance(func, ast.Attribute) else func.id if isinstance(func, ast.Name) else None
-            owner = func.value.id if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name) else None
-            if name == "_commit_project_workspace":
-                found.setdefault(node.name, set()).add(name)
-            elif name == "clear" and owner == "cli_graph":
-                found.setdefault(node.name, set()).add("clear")
-            elif name == "_commit_graph_candidate_with_recoveries" and any(
-                    keyword.arg == "source" and isinstance(keyword.value, ast.Constant) and keyword.value.value == "import"
-                    for keyword in call.keywords):
-                found.setdefault(node.name, set()).add("import")
-    found.pop("_commit_project_workspace", None)
-    assert set(found) == set(KEPT_BY), found
-    for name, how in KEPT_BY.items():
-        body = ast.get_source_segment(source, next(n for n in ast.walk(tree)
-                                                   if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == name))
-        if how == "settle":
-            assert "_settle_live_canvas" in body and "_hold_if_waiting" in body, name
-        elif how == "guard":
-            assert "_guard_waiting_canvas" in body, name
+# The route-coverage test (every canvas replacement) became fix round 6's
+# fence-based one: tests/test_project_catalog_restore_fix6.py (review 6, N-6).

@@ -112,6 +112,15 @@ PURGED_NAME = "catalog-purged.json"
 # edges, ...}] (review 5 of PR #199, M-3; GM's held model, 2026-10-28).
 CANVAS_HELD_NAME = "canvas-held.json"
 CANVAS_HELD_BACKUP_NAME = CANVAS_HELD_NAME + ".bak"
+# The held list's cap (review 6 of PR #199, N-5): every hold rewrites both
+# copies whole, and each held canvas becomes a project in the catalog later,
+# so a quarter of the catalog's cap is room for many canvases. A hold past
+# it is refused (main: nothing replaces the canvas). A file past the cap
+# plus a margin isn't one Nebula wrote: it is kept aside as damaged.
+CANVAS_HELD_MAX_BYTES = 32 * 1024 * 1024
+CANVAS_HELD_READ_MAX_BYTES = CANVAS_HELD_MAX_BYTES + 1024 * 1024
+# How long the person is told a held canvas couldn't be read (review 6, L-1).
+HELD_UNREADABLE_SECONDS = 7 * 24 * 3600
 PURGED_FILE_MAX_BYTES = 1024 * 1024
 # Whether a restore from Recently deleted (the person's Undo, or Restore in
 # the list) may take the list past MAX_PROJECTS. GM (r6) prefers yes, since
@@ -123,7 +132,7 @@ PURGED_FILE_MAX_BYTES = 1024 * 1024
 RESTORE_MAY_PASS_THE_PROJECT_LIMIT = False
 RECORD_ROWS = 100  # names listed per restore; the counts are whole
 # The fields prepare writes first, so a cut file still says which project was open.
-_HEAD_KEYS = ("version", "commitSeq", "activeProjectId", "workspaceRevision", "migratedProjectId", "purged")
+_HEAD_KEYS = ("version", "commitSeq", "commitCheck", "activeProjectId", "workspaceRevision", "migratedProjectId", "purged")
 # Every read refuses NaN, Infinity and -Infinity (parse_constant: free on the
 # C decoder). A file this process didn't commit (or a copy) is also read
 # strictly: a number past float's range and a lone surrogate are refused too
@@ -431,13 +440,60 @@ def _waiting_record(found: Any) -> dict[str, Any] | None:
     if "saved" in found:
         if isinstance(saved, dict) and isinstance(saved.get("id"), str) and isinstance(saved.get("name"), str) \
                 and catalog_recovery.dated(saved.get("at")):
-            return {"saved": {"id": saved["id"], "name": saved["name"], "at": saved["at"]}}
+            record = {"id": saved["id"], "name": saved["name"], "at": saved["at"]}
+            # Every canvas filed together (review 6 of PR #199, N-2).
+            filed = saved.get("filed")
+            if isinstance(filed, list) and all(isinstance(row, dict) and isinstance(row.get("id"), str)
+                                               and isinstance(row.get("name"), str) for row in filed):
+                record["filed"] = [{"id": row["id"], "name": row["name"]} for row in filed]
+            return {"saved": record}
         return None
     owner = found.get("from")
     if found.get("reason") not in ("projects", "storage") or not catalog_recovery.dated(found.get("since")) \
             or not isinstance(found.get("journaled"), bool) or not (owner is None or isinstance(owner, str)):
         return None
     return {"reason": found["reason"], "from": owner, "since": found["since"], "journaled": found["journaled"]}
+
+
+def _held_unreadable_note(found: Any) -> dict[str, Any] | None:
+    """canvas-held.json's ``unreadable`` note ({count: int or None for
+    unknown, kept: [file names], at}) when its fields are what this writes."""
+    if not isinstance(found, dict) or not catalog_recovery.dated(found.get("at")):
+        return None
+    count, kept = found.get("count"), found.get("kept")
+    if not (count is None or (isinstance(count, int) and not isinstance(count, bool) and count > 0)):
+        return None
+    if not isinstance(kept, list) or not all(isinstance(name, str) for name in kept):
+        return None
+    return {"count": count, "kept": list(kept), "at": found["at"]}
+
+
+def _held_id(found: Any) -> str | None:
+    """An entry's projectId when it reads as one, damaged entry or not."""
+    project_id = found.get("projectId") if isinstance(found, dict) else None
+    if isinstance(project_id, str) and len(project_id) == 32 and all(c in "0123456789abcdef" for c in project_id):
+        return project_id
+    return None
+
+
+def _held_entry_salvaged(found: Any) -> dict[str, Any] | None:
+    """A damaged entry whose canvas is still there (its id, nodes and wires
+    read): its other fields made good, so the canvas is still saved. Its
+    digest is unknown, so it is never taken for the live canvas."""
+    project_id = _held_id(found)
+    if project_id is None or not isinstance(found.get("nodes"), list) or not isinstance(found.get("edges"), list):
+        return None
+    owner, counter = found.get("from"), found.get("counter")
+    stamp = now()
+    return {**found, "projectId": project_id,
+            "from": owner if isinstance(owner, str) else None,
+            "unproven": found["unproven"] if isinstance(found.get("unproven"), bool) else not isinstance(owner, str),
+            "reason": found["reason"] if found.get("reason") in ("projects", "storage") else "projects",
+            "since": found["since"] if catalog_recovery.dated(found.get("since")) else stamp,
+            "heldAt": found["heldAt"] if catalog_recovery.dated(found.get("heldAt")) else stamp,
+            "digest": found["digest"] if isinstance(found.get("digest"), str) else "",
+            "counter": int(counter) if isinstance(counter, (int, float)) and not isinstance(counter, bool)
+            and counter == counter and abs(counter) < 2 ** 53 else 0}
 
 
 def _held_entry(found: Any) -> dict[str, Any] | None:
@@ -468,6 +524,10 @@ class ProjectStore:
         # What prepare wrote, for commit_prepared: the temporary file, its
         # projection and its bytes (the older copy is written from them).
         self._prepared: tuple[Path, Projection, bytes] | None = None
+        # canvas-held.json's unreadable note (canvas_held), and one just made
+        # that main hasn't journaled yet (take_held_damage).
+        self._held_note: dict[str, Any] | None = None
+        self._held_damage_new: dict[str, Any] | None = None
         self.backup_path = root / BACKUP_NAME
         self.older_backup_path = root / OLDER_BACKUP_NAME
         self.record_path = root / RESTORE_RECORD_NAME
@@ -908,8 +968,8 @@ class ProjectStore:
             pick = valid[0]
             if len(valid) > 1:
                 (_o, _p, _r, newest_copy), (_o1, _p1, _r1, older_copy) = valid[0], valid[1]
-                newer_seq = catalog_recovery._commit_of(newest_copy.get("commitSeq"))
-                older_seq = catalog_recovery._commit_of(older_copy.get("commitSeq"))
+                newer_seq = catalog_recovery.proven_commit(newest_copy)
+                older_seq = catalog_recovery.proven_commit(older_copy)
                 later_commit = older_seq is not None and (newer_seq is None or older_seq > newer_seq) \
                     or (older_seq is None and newer_seq is None)
                 if later_commit and catalog_recovery.newer_copy(newest_copy, older_copy, until=clock):
@@ -1330,37 +1390,154 @@ class ProjectStore:
 
     def canvas_held(self) -> list[dict[str, Any]]:
         """The live canvases held aside while they wait to be saved as their
-        own projects (main._hold_live_canvas), oldest first: canvas-held.json,
-        or its .bak copy when that one is missing or damaged. [] for none."""
+        own projects (main._hold_live_canvas), oldest first. [] for none.
+
+        Read entry by entry (review 6 of PR #199, L-1): canvas-held.json's
+        valid entries are kept when others in it aren't, and when it is
+        missing, unreadable or holds a damaged entry its .bak's valid entries
+        that it lacks are added. A copy that doesn't read whole is kept
+        aside (``.damaged-<UTC>-<id>``) before anything rewrites it, and when
+        a canvas could be lost (an entry neither copy reads, or no copy
+        reads at all) the file says so (``unreadable``: {count, kept, at};
+        canvas_held_unreadable), which the person and agents are told. The
+        healed list is written back at once."""
+        copies: list[tuple[str, str, list[Any] | None, dict[str, Any] | None]] = []
         for name in (CANVAS_HELD_NAME, CANVAS_HELD_BACKUP_NAME):
             path = self.root / name
             try:
+                if path.is_symlink() or path.stat().st_size > CANVAS_HELD_READ_MAX_BYTES:
+                    _log(f"{name} is not a file Nebula wrote; not using it")
+                    copies.append((name, "damaged", None, None))
+                    continue
                 found = json.loads(path.read_text(encoding="utf-8"))
             except FileNotFoundError:
+                copies.append((name, "missing", None, None))
                 continue
             except (OSError, ValueError) as exc:
                 _log(f"{name} could not be read ({exc})")
+                copies.append((name, "damaged", None, None))
                 continue
-            entries = found.get("held") if isinstance(found, dict) else None
-            checked = [_held_entry(entry) for entry in entries] if isinstance(entries, list) else None
-            if checked is None or any(entry is None for entry in checked):
-                _log(f"{name} doesn't hold the held canvases' records; not using it")
+            raw = found.get("held") if isinstance(found, dict) else None
+            note = _held_unreadable_note(found.get("unreadable")) if isinstance(found, dict) else None
+            if not isinstance(raw, list):
+                _log(f"{name} doesn't hold the held canvases' list; not using it")
+                copies.append((name, "damaged", None, note))
                 continue
-            return [entry for entry in checked if entry is not None]
-        return []
+            whole = all(_held_entry(entry) is not None for entry in raw)
+            if not whole:
+                _log(f"{name} holds a held canvas's record it can't read; keeping the others")
+            copies.append((name, "read" if whole else "damaged", raw, note))
+        self._held_note = next((note for _name, _status, _raw, note in copies if note is not None), None)
+        first = copies[0]
+        if first[1] == "read":
+            if copies[1][1] == "damaged":
+                self._keep_damaged_held([copies[1][0]])
+            return [dict(entry) for entry in first[2] or []]
+        if all(status == "missing" for _name, status, _raw, _note in copies):
+            return []
+        # Entry by entry, canvas-held.json's first, then the .bak's it lacks;
+        # then an entry neither copy reads whole but whose canvas is there
+        # (its id, nodes and wires), with its other fields made good.
+        entries: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for salvage in (_held_entry, _held_entry_salvaged):
+            for _name, _status, raw, _note in copies:
+                for found in raw or []:
+                    entry = salvage(found)
+                    if entry is not None and entry["projectId"] not in seen:
+                        seen.add(entry["projectId"])
+                        entries.append(entry)
+        entries.sort(key=lambda entry: entry["heldAt"])
+        # What may be lost: entries no copy reads (by id when it reads, else
+        # the most id-less ones in one copy), unknown when no copy read at all.
+        lost_ids: set[str] = set()
+        lost_unnamed = 0
+        for _name, _status, raw, _note in copies:
+            unnamed = 0
+            for found in raw or []:
+                if _held_entry(found) is not None:
+                    continue
+                project_id = _held_id(found)
+                if project_id is None:
+                    unnamed += 1
+                elif project_id not in seen:
+                    lost_ids.add(project_id)
+            lost_unnamed = max(lost_unnamed, unnamed)
+        read_any = any(raw is not None for _name, _status, raw, _note in copies)
+        count: int | None = len(lost_ids) + lost_unnamed if read_any else None
+        damaged = [name for name, status, _raw, _note in copies if status == "damaged"]
+        kept = self._keep_damaged_held(damaged)
+        if count != 0:
+            previous = self._held_note
+            if previous is not None:
+                count = None if count is None or previous["count"] is None else count + previous["count"]
+                kept = [*previous["kept"], *[name for name in kept if name not in previous["kept"]]]
+            self._held_note = {"count": count, "kept": kept, "at": now()}
+            self._held_damage_new = dict(self._held_note)
+            _log(f"{len(damaged)} cop{'y' if len(damaged) == 1 else 'ies'} of {CANVAS_HELD_NAME} couldn't be read "
+                 f"whole (kept as {', '.join(kept) or 'nothing'}): "
+                 f"{'an unknown number of' if count is None else count} held canvas"
+                 f"{'' if count == 1 else 'es'} may be lost; {len(entries)} still read")
+        try:
+            self.set_canvas_held(entries)
+        except OSError as exc:
+            _log(f"could not write back the held canvases it read: {exc}")
+        return entries
+
+    def _keep_damaged_held(self, names: list[str]) -> list[str]:
+        """Keep each damaged copy of the held list aside before anything
+        rewrites it; the names it is kept under."""
+        kept: list[str] = []
+        for name in names:
+            path = self.root / name
+            try:
+                if path.is_symlink() or not path.exists():
+                    continue
+                kept.append(self._set_aside(path, _stamp(datetime.now(timezone.utc))).name)
+            except OSError as exc:
+                _log(f"could not keep the damaged {name} aside: {exc}")
+        return kept
+
+    def canvas_held_unreadable(self) -> dict[str, Any] | None:
+        """Whether held canvases couldn't be read (canvas_held keeps the note
+        it found or made): {count (None: unknown), kept, at} while recent
+        (HELD_UNREADABLE_SECONDS), else None. Read canvas_held first."""
+        note = getattr(self, "_held_note", None)
+        if note is None:
+            return None
+        try:
+            age = (datetime.now(timezone.utc) - datetime.fromisoformat(note["at"])).total_seconds()
+        except (TypeError, ValueError):
+            return None
+        return dict(note) if 0 <= age <= HELD_UNREADABLE_SECONDS else None
+
+    def take_held_damage(self) -> dict[str, Any] | None:
+        """The unreadable note canvas_held just made (once), for main's journal."""
+        found, self._held_damage_new = getattr(self, "_held_damage_new", None), None
+        return found
+
+    def held_encoded_size(self, entries: list[dict[str, Any]]) -> int:
+        """How many bytes canvas-held.json would hold for ``entries`` (N-5)."""
+        return len(self._held_bytes(entries))
+
+    def _held_bytes(self, entries: list[dict[str, Any]]) -> bytes:
+        body: dict[str, Any] = {"version": 1, "held": entries}
+        if (note := self.canvas_held_unreadable()) is not None:
+            body["unreadable"] = note
+        return json.dumps(body, ensure_ascii=False, separators=(",", ":"), default=str).encode("utf-8")
 
     def set_canvas_held(self, entries: list[dict[str, Any]]) -> None:
         """Write canvas_held's list (both copies, each fsynced, then the
-        folder), or remove it when empty. Raises OSError: a hold that isn't
-        on disk must not let anything replace the canvas."""
+        folder), or remove it when empty and no recent unreadable note needs
+        keeping. Raises OSError: a hold that isn't on disk must not let
+        anything replace the canvas."""
         paths = (self.root / CANVAS_HELD_NAME, self.root / CANVAS_HELD_BACKUP_NAME)
         self._ensure_root()
-        if not entries:
+        if not entries and self.canvas_held_unreadable() is None:
             for path in paths:
                 path.unlink(missing_ok=True)
         else:
-            encoded = json.dumps({"version": 1, "held": entries}, ensure_ascii=False, separators=(",", ":"),
-                                 default=str).encode("utf-8")
+            encoded = self._held_bytes(entries)
             for path in paths:
                 self._write_file(path, encoded)
         fd = os.open(self.root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
@@ -1418,9 +1595,9 @@ class ProjectStore:
         if not isinstance(found, dict):
             return {}
         previous = found.get("previous") if isinstance(found.get("previous"), dict) else {}
-        return {"commit": catalog_recovery._commit_of(found.get("commit")),
+        return {"commit": catalog_recovery.proven_commit(found, "commit"),
                 "purged": catalog_recovery.purged_map(found.get("purged")),
-                "previous": {"commit": catalog_recovery._commit_of(previous.get("commit")),
+                "previous": {"commit": catalog_recovery.proven_commit(previous, "commit"),
                              "purged": catalog_recovery.purged_map(previous.get("purged"))}}
 
     def _read_purged_file(self) -> dict[str, str]:
@@ -1458,9 +1635,13 @@ class ProjectStore:
             except FileNotFoundError:
                 before = None
             taken = {project_id: at for project_id, at in held.items() if project_id not in purged}
-            body: dict[str, Any] = {"version": 1, "commit": seq, "purged": purged}
+            body: dict[str, Any] = {"version": 1, "commit": seq, "commitCheck": catalog_recovery.commit_check(seq),
+                                    "purged": purged}
             if taken:
-                body["previous"] = {"commit": side.get("commit"), "purged": taken}
+                before_commit = side.get("commit")
+                body["previous"] = {"commit": before_commit, "purged": taken,
+                                    **({"commitCheck": catalog_recovery.commit_check(before_commit)}
+                                       if before_commit is not None else {})}
             self._write_file(path, json.dumps(body, separators=(",", ":")).encode("utf-8"))
             self._side_purged = None
             return before
@@ -1708,6 +1889,7 @@ class ProjectStore:
         seq = catalog_recovery._commit_of(catalog.get("commitSeq")) or 0
         side_seq = self._side_file().get("commit") or 0
         catalog["commitSeq"] = max(seq, self._last_seq, side_seq) + 1
+        catalog["commitCheck"] = catalog_recovery.commit_check(catalog["commitSeq"])
         self._last_seq = catalog["commitSeq"]
         # Which project is open goes first, so a file cut short still says
         # (services/catalog_recovery.py); the rest keep their order.

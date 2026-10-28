@@ -274,7 +274,8 @@ export default function App() {
       onContinueWithoutEdits={() => void projects.continueWithoutEdits()}
       catalogRestore={projects.catalogRestore} onDismissCatalogRestore={projects.dismissCatalogRestore}
       canvasNotFiled={projects.canvasNotFiled} canvasSaved={projects.canvasSaved} onDismissCanvasSaved={projects.dismissCanvasSaved}
-      projectLimit={projects.projectLimit} restorePassesLimit={projects.restorePassesLimit} />;
+      projectLimit={projects.projectLimit} restorePassesLimit={projects.restorePassesLimit}
+      restoreRoom={projects.restoreRoom} canvasHeldUnreadable={projects.canvasHeldUnreadable} />;
   } else if (isCanvas) {
     mainView = <Canvas />;
   } else if (isCommons) {

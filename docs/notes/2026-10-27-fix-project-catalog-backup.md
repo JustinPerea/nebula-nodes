@@ -224,3 +224,51 @@ Supersedes the bullets above where they disagree: `.bak` is now one commit behin
   - The below-the-limit hold ("Codex replaced the canvas…") is covered by tests but wasn't shot live: any agent change that frees room makes the page list again, which saves the canvas first.
   - The legacy-copy clock case above.
   - The orange banner, for the sweep.
+
+## Fix round 6 (review 6: M-1, L-1-L-5, N-1-N-6; GM r7 and answers to review 6)
+
+- **M-1: one guard at the `@graph_write` fence.**
+  - `graph_write(canvas_action=...)` tags each route with what it does to the canvas (`change`, `clear`, `replace`). The fence middleware runs `_fence_waiting_canvas(action)` right after the workspace-revision check, for every fenced route. `/api/uploads` with `create_node` runs the same guard in `_refuse_tab_write_without_revision()`.
+  - Agents only. At the limit (count or size) it refuses 409 `canvas_waiting` with GM's answer-1 lines. Below the limit it holds the canvas first and clears the waiting record in the same step, so two writes in one request (or two requests at once) make one hold, not two.
+  - The person's own writes skip the fence guard. The route-level clear/load guards from round 5 are still there for the person, so the person's own clear or load at the limit is still refused (see open questions).
+  - A route that fails after the fence held keeps the hold: the held copy is the person's canvas, and the next listing files it.
+  - The Agent log line is sent after the route answers (`_tell_canvas_guarded`): "held" only on a 2xx, "refused" always.
+  - N-6: the old test that listed a few routes by hand is gone. The new one walks `app.router.routes` and sends every fenced method (26 of them) as Codex at the limit. Each must answer 409 `canvas_waiting`, and each in-route route must call `_refuse_tab_write_without_revision()`.
+- **L-1: the held file is read entry by entry.** Each copy is read as missing, damaged or read. A main copy that reads whole wins (a damaged .bak beside it is set aside). Otherwise strict, then salvaged, entries from both copies are unioned by projectId. A damaged copy is renamed aside with a stamp, never overwritten. The lost count is ids no copy reads plus the id-less entries one copy had; it's unknown when no copy read at all. It reaches the person as a notice (`canvasHeldUnreadable` in the listing, kept 7 days) and the log as `project.canvasHeldUnreadable`.
+- **L-2: no release on a failed open.** `_release_hold` is gone. A failed open or create (a 507 included) keeps its hold. The next settle drops a held copy only when the live canvas in memory and `state.json` on disk both match its digest, so a 507 that left disk behind memory can't drop the only good copy.
+- **L-3: `restoreRoom` in the listing.** `_restore_room` simulates the deletes: the live canvas is filed first when the reason is the count, then held canvases in order while they fit by size. It returns how many deletes a restore needs and whether a held canvas takes the place. The tooltip reads it. The count case (2 deletes) is checked against real deletes and restores in the test.
+- **L-4.** Every `:hover:not(:disabled)` rule on the Projects home is now also `:not([aria-disabled="true"])` (12 rules). The at-limit override is gone. Live: the disabled Restore's background, colour and border match at rest and under the pointer, and Delete forever beside it still lights up.
+- **L-5: why a CRC rather than a date check.** A flipped `commitSeq` bit made a stale copy look newer, so a purged project came back. A date heuristic depends on the clock, which this lane already showed can't be trusted (the legacy-copy clock case). So every commit number now carries `commitCheck = crc32("nebula-commit:{seq}")` in the catalog, its copies and the side file (`commit` and `previous.commit`). `proven_commit` returns the number only when its check matches; otherwise it reads as unknown, and an unknown number takes the conservative path (never newer). Files from before this round have no check, so they read as unproven and take that cautious path once, then the next commit writes the check.
+- **N-1.** The agents' "room now" note says the next listing (the Projects home, `nebula projects`, list_projects) saves each canvas as its own project. The plain note says every change is refused (409) at the limit and held aside below it.
+- **N-2.** The waiting notice names 2-3 canvases when every name is known, else counts them. The saved toast names every canvas it filed: saved records within 5 s merge into one `filed` list, named up to 3 and counted from 4.
+- **N-3.** `canvasHeld` events carry `agentId` and `color`. The store dispatches the log line as `{source: 'agent', agent: {id, name, color}}`, and `agentLogStore` checks the colour against SAFE_COLOR. The branch has no filter control in the Agent log, so the live check reads the row's `data-source="agent"` and name "Codex" instead.
+- **N-4.** The new `lib/inputModality.ts` tracks the last input in the capture phase. UndoToast moves focus only after keyboard input, and the ring shows on `:focus-visible` only. Live, mouse only: after the race toast, focus stays on BODY with no ring.
+- **N-5.** The held file is capped at 32 MiB. Past the cap, a hold is refused 409 `canvas_held_full` (`limitBytes` in the body) and nothing changes. Reads above cap + 1 MiB are treated as damaged.
+- **GM r7 (b).** The size-cap refusal is GM's line word for word.
+- **GM bug 2.** `trashDays.ts` counts the days left as `span - floor(elapsed / day)` from `deletedAt`, a duration rather than calendar days. A project deleted today reads 30 in every time zone and across midnight. `now` is the newer of the page's open time and the newest `deletedAt`, so a delete made while the list is open never reads 31.
+- **MCP.** `_canvas_waiting_said()` in `mcp_server.py` adds " (409, canvas_waiting)" to the tool error. MCP-SETUP.md and SKILL.md describe the guard, both line pairs, `restoreRoom`, `canvas_held_full`, the held-damage note, the saved `filed` list and the new event row.
+- **Old tests changed.**
+  - `test_project_catalog_restore_fix5.py`: the setup adds its nodes as the person, since the agent's add is now refused. The failed-open test now asserts the hold is kept and dropped by digest. The `_release_hold` patches are gone. Event checks include `agentId`. The hand-made route list (AST) test is replaced by fix6's N-6.
+  - `catalogRestore.fix2.test.tsx` pins its clock. It had drifted to "3 days ago", a failure that predates this round.
+- **Tests failed first (on c64a41b1).**
+  - Backend `test_project_catalog_restore_fix6.py`: 31 of 33 failed. The 2 passes are guards: the person's own writes pass, and there is no `restoreRoom` verdict below the limit.
+  - Frontend `projectStore.fix6.test.ts`: 3 of 4 failed.
+  - `catalogRestore.fix6.test.tsx` can't load there without `trashDays.ts`. With that file copied in, 12 of 20 failed.
+- **Gates.**
+  - Backend full suite: 11,931 passed, 71 skipped, 2 failed. Both were the connected-copy sweep: "nodes and wires" in the new agent note and in MCP-SETUP.md, now "nodes and connections". After the fix, the sweep plus fix5 plus fix6: 151 of 151.
+  - Frontend: 53 files (projects, projectStore*, the `tests/` errorCopy ratchets, connectedCopy, the studios' errorCopy tests, AgentLog): 877 of 877.
+  - `tsc -b` (app and node) and lint are clean, and `vite build` passes. Budget: 422,778 bytes raw / 127,281 gzip, under the 512,000 limit.
+- **Live check (2026-10-28): 23 of 23.** Backend 8799 via `iso_cat.sh` with a state dir per scenario, Vite 5799 with `VITE_NEBULA_BACKEND_PORT=8799`. CDP blocks 8000-8010 and 5173, a dead proxy carries the rest, and the canary on 8123 was unreachable. Blocked app requests: 0.
+  - M-1 repro: Codex's apply that removes every node, and its node delete, are refused with GM's line, and the canvas is unchanged. The person deletes Beta with a real click. The canvas is saved as "Recovered canvas" with delta-1 and person-typed-this-in-delta, and no codex-scratch.
+  - Counted: "2 canvases you had open couldn't be saved…". Two deletes give one toast naming both canvases.
+  - Held: 2 of 3 listed with one canvas held. `restoreRoom` returns `{deletes: 1, heldTakesPlace: true}`. Restore is aria-disabled with GM's tooltip, and a click sends nothing.
+  - Log: Codex's refused add is Codex's row (`data-source="agent"`, #7AD3FF).
+  - Days: both of today's deletes read "Removed for good in 30 days".
+  - Mouse race: no focus move.
+- **Open after round 6 (for GM / Justin).**
+  - The size-cap ending of the change refusal ("…ask the person to permanently delete a project in Recently deleted.") is my wording in GM's shape.
+  - The below-limit held line "Codex changed the canvas you had open…" for the `change` action.
+  - The plural waiting line and its advice ("Delete projects and Nebula will save them.", and the two storage forms).
+  - The unreadable notice line, and the `canvas_held_full` wording.
+  - The plural tooltip "The canvases you had open are holding the last places." and the second sentence when 2 or more deletes are needed.
+  - "Never blocked" vs round 5: the person's own clear or load at the limit is still refused (the round 5 rule for the route guards). Only GM can say whether that should change.

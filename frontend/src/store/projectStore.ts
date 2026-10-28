@@ -35,6 +35,7 @@ import { WORLD_LABS_NEEDS_CHECK } from '../lib/worldLabsWaiting';
 import type { CatalogRestore, ProjectList, ProjectSnapshot, ProjectSummary, SavedProject, TrashedProject } from '../lib/projects';
 import {
   canvasHeldLogLine, canvasHoldRefusedLogLine, catalogRestoreLogLine, DEFAULT_PROJECT_LIMIT, restoreRefusedLine,
+  type RestoreRoom,
 } from '../components/projects/catalogRestoreCopy';
 
 /** An agent (or a script) opened or made a project and this tab followed it.
@@ -124,10 +125,16 @@ interface ProjectState {
   dismissCatalogRestore: () => void;
   /** The live canvas isn't a project and the list had no room to save it
    * (the listing's `canvasNotFiled`): the Projects home's waiting line. */
-  canvasNotFiled: { reason: 'projects' | 'storage'; projectLimit?: number } | null;
+  canvasNotFiled: { reason: 'projects' | 'storage'; projectLimit?: number; canvases?: { name?: string | null }[] } | null;
+  /** The backend's verdict on a restore now (the listing's `restoreRoom`,
+   * review 6 of PR #199, L-3): Restore greys on it, held canvases counted. */
+  restoreRoom: RestoreRoom | null;
+  /** Held canvases that couldn't be read (the listing's
+   * `canvasHeldUnreadable`, review 6, L-1): the person's line. */
+  canvasHeldUnreadable: { count: number | null } | null;
   /** A waiting canvas was saved as this project (the listing's
    * `canvasSaved`): GM's toast, shown once per tab. */
-  canvasSaved: { id: string; name: string } | null;
+  canvasSaved: { id: string; name: string; filed?: { id: string; name: string }[] } | null;
   dismissCanvasSaved: () => void;
   workspaceRevision: string; error: string | null;
   /** What `error`'s Details toggle holds, for that line (projectErrorDetails). */
@@ -1120,22 +1127,36 @@ const toastedCanvases = new Set<string>();
  * canvas waiting to be saved, and a waiting canvas just saved (its toast
  * once per tab; a later listing that still carries it keeps it showing
  * until it is dismissed or times out). */
-function listingNotices(list: ProjectList): Pick<ProjectState, 'catalogRestore' | 'canvasNotFiled' | 'restorePassesLimit'> & { canvasSaved?: ProjectState['canvasSaved'] }
-  & { projectLimit?: number } {
+type ListingNotices = Pick<ProjectState, 'catalogRestore' | 'canvasNotFiled' | 'restorePassesLimit' | 'restoreRoom'
+  | 'canvasHeldUnreadable'> & { canvasSaved?: ProjectState['canvasSaved'] } & { projectLimit?: number };
+
+function listingNotices(list: ProjectList): ListingNotices {
   const waiting = list.canvasNotFiled;
   const saved = list.canvasSaved;
-  const notices: Pick<ProjectState, 'catalogRestore' | 'canvasNotFiled' | 'restorePassesLimit'> & { canvasSaved?: ProjectState['canvasSaved'] }
-    & { projectLimit?: number } = {
+  const room = list.restoreRoom;
+  const unreadable = list.canvasHeldUnreadable;
+  const notices: ListingNotices = {
     catalogRestore: restoreFrom(list),
     restorePassesLimit: list.restoreMayPassTheProjectLimit === true,
     ...(typeof list.projectLimit === 'number' && Number.isFinite(list.projectLimit) && list.projectLimit > 0
       ? { projectLimit: list.projectLimit } : {}),
     canvasNotFiled: waiting && (waiting.reason === 'projects' || waiting.reason === 'storage')
-      ? { reason: waiting.reason, projectLimit: waiting.projectLimit } : null,
+      ? { reason: waiting.reason, projectLimit: waiting.projectLimit,
+        ...(Array.isArray(waiting.canvases) ? { canvases: waiting.canvases.map((canvas) => ({
+          name: typeof canvas?.name === 'string' ? canvas.name : null })) } : {}) }
+      : null,
+    restoreRoom: room && room.refused === 'projects'
+      ? { refused: 'projects', deletes: typeof room.deletes === 'number' && room.deletes > 0 ? room.deletes : null,
+        heldTakesPlace: room.heldTakesPlace === true, ...(typeof room.waiting === 'number' ? { waiting: room.waiting } : {}) }
+      : null,
+    canvasHeldUnreadable: unreadable && typeof unreadable === 'object'
+      ? { count: typeof unreadable.count === 'number' ? unreadable.count : null } : null,
   };
   if (saved && typeof saved.id === 'string' && !toastedCanvases.has(saved.id)) {
     toastedCanvases.add(saved.id);
-    notices.canvasSaved = { id: saved.id, name: saved.name };
+    const filed = Array.isArray(saved.filed)
+      ? saved.filed.filter((row) => typeof row?.id === 'string' && typeof row?.name === 'string') : [];
+    notices.canvasSaved = { id: saved.id, name: saved.name, ...(filed.length > 1 ? { filed } : {}) };
   }
   return notices;
 }
@@ -1516,7 +1537,7 @@ async function emptyTrashOf(ids: string[]): Promise<void> {
 // Projects waits while the Commons holds unsaved labels (lib/commonsUnsaved).
 export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectState>(holdProjects, (set, get) => ({
   screen: 'home', initialized: false, loading: true, busy: false,
-  projects: [], activeProject: null, trash: [], lastDeleted: null, projectLimit: DEFAULT_PROJECT_LIMIT, restorePassesLimit: false, catalogRestore: null, canvasNotFiled: null, canvasSaved: null, workspaceRevision: '', error: null, errorDetails: null,
+  projects: [], activeProject: null, trash: [], lastDeleted: null, projectLimit: DEFAULT_PROJECT_LIMIT, restorePassesLimit: false, catalogRestore: null, canvasNotFiled: null, canvasSaved: null, restoreRoom: null, canvasHeldUnreadable: null, workspaceRevision: '', error: null, errorDetails: null,
   errorRetry: null, saveError: null, saveStatus: 'saved', dirty: false, switchNotice: null,
   unsavedEdits: null, editsSavedAs: null, savePaused: null, sizeNotice: null, sizePanelOpen: false,
   openSizePanel: () => { if (get().savePaused) set({ sizePanelOpen: true }); },
@@ -1966,10 +1987,18 @@ export function subscribeProjectAutosave(): () => void {
       const held = event.canvasHeld;
       if (held && typeof window !== 'undefined') {
         const message = event.change === 'canvasHeld'
-          ? canvasHeldLogLine(held.agent, held.action === 'cleared' ? 'cleared' : 'replaced')
+          ? canvasHeldLogLine(held.agent, held.action === 'cleared' || held.action === 'replaced' ? held.action : 'changed')
           : event.change === 'canvasHoldRefused'
-            ? canvasHoldRefusedLogLine(held.agent, held.action === 'clear' ? 'clear' : 'replace') : null;
-        if (message) window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', { detail: { source: 'system', message } }));
+            ? canvasHoldRefusedLogLine(held.agent, held.action === 'clear' || held.action === 'replace' ? held.action : 'change')
+            : null;
+        // The agent's own row (GM r7): its name and colour, so filtering the
+        // log to that agent shows what it tried. Nebula's when unnamed.
+        const agent = typeof held.agentId === 'string' && typeof held.agent === 'string'
+          ? { id: held.agentId, name: held.agent, color: typeof held.color === 'string' ? held.color : '' } : null;
+        if (message) {
+          window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', {
+            detail: agent ? { source: 'agent', agent, message } : { source: 'system', message } }));
+        }
       }
       const state = useProjectStore.getState();
       // The toast's way back shows on the canvas too: a change to that

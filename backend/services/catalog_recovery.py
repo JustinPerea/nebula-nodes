@@ -78,6 +78,7 @@ import itertools
 import json
 import math
 import re
+import zlib
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Iterable
@@ -363,7 +364,7 @@ def _scalars(members: dict[str, Any]) -> dict[str, Any]:
 
 
 # The top-level fields a catalog holds (ProjectStore.prepare, _HEAD_KEYS).
-CATALOG_FIELDS = frozenset(("version", "commitSeq", "activeProjectId", "workspaceRevision", "migratedProjectId",
+CATALOG_FIELDS = frozenset(("version", "commitSeq", "commitCheck", "activeProjectId", "workspaceRevision", "migratedProjectId",
                             "purged", "projects", "trash"))
 
 
@@ -431,7 +432,7 @@ def _salvage_whole(found: Salvage, whole: dict[str, Any]) -> None:
     found.complete = keys_whole
     found.active = _whole_active(whole, held)
     found.purged = purged_map(whole.get("purged"))
-    found.seq = _commit_of(whole.get("commitSeq"))
+    found.seq = proven_commit(whole)
 
 
 def head_active(raw: bytes | None, parsed: Any = None) -> Any:
@@ -612,7 +613,7 @@ def salvage(raw: bytes, parsed: Any = _UNKNOWN) -> Salvage:
             if active is None or (isinstance(active, str) and _ID.fullmatch(active)):
                 found.active = active
         found.purged = purged_map(head.get("purged"))
-        found.seq = _commit_of(head.get("commitSeq"))
+        found.seq = proven_commit(head)
     position = 0
     last_end: int | None = None
     last_group: str | None = None
@@ -1003,6 +1004,31 @@ def _commit_of(value: Any) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
 
 
+def commit_check(seq: int) -> int:
+    """The check written beside a commit number (``commitCheck``): a CRC-32
+    of it, so a flipped digit reads as damage (review 6 of PR #199, L-5)."""
+    return zlib.crc32(f"nebula-commit:{seq}".encode("ascii"))
+
+
+def proven_commit(holder: Any, key: str = "commitSeq") -> int | None:
+    """``holder[key]`` as a commit number only when its ``commitCheck`` is
+    that number's (review 6 of PR #199, L-5). A number with no check, or a
+    check that doesn't match (a flipped digit in either), is unproven: None,
+    as for a file from before commits were numbered, so it never moves the
+    side file's tombstones after that file, and never picks a copy as the
+    later commit. Files of this PR before the check (unreleased) read as
+    unnumbered, the cautious way."""
+    if not isinstance(holder, dict):
+        return None
+    seq = _commit_of(holder.get(key))
+    if seq is None:
+        return None
+    check = holder.get("commitCheck")
+    if not isinstance(check, int) or isinstance(check, bool) or check != commit_check(seq):
+        return None
+    return seq
+
+
 def reconcile(base: dict[str, Any], salvages: Iterable[Salvage], *, max_projects: int,
               room_bytes: int, open_project: Any = _UNKNOWN, until: datetime | None = None,
               side_purged: dict[str, str] | None = None, side_index: int = 1,
@@ -1070,7 +1096,7 @@ def reconcile(base: dict[str, Any], salvages: Iterable[Salvage], *, max_projects
     files: list[tuple[list[str], dict[str, str], datetime | None, int | None]] = [
         ([*found.entries, *found.failed], found.purged, salvage_freshness(found, until, FUTURE_IS_NOW), found.seq)
         for found in salvages]
-    files.append((list(copy_ids), purged_map(result.get("purged")), None, _commit_of(result.get("commitSeq"))))
+    files.append((list(copy_ids), purged_map(result.get("purged")), None, proven_commit(result)))
     side_behind = False
     placed: list[tuple[int, int, tuple[list[str], dict[str, str], datetime | None, int | None]]] = []
     for rank, (commit, tombstones) in enumerate(layers):

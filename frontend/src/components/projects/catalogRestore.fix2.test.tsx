@@ -6,7 +6,7 @@
  * rebuild's Agent log line, and "Open Recently deleted" that never outlives
  * its use or moves focus for an agent.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { ProjectHome, type ProjectHomeProps } from './ProjectHome';
 import { catalogRestoreLine, catalogRestoreLogLine, catalogRestoreNotice, copyAge, OPEN_RECENTLY_DELETED, recoveredCanvasSentence } from './catalogRestoreCopy';
@@ -138,6 +138,11 @@ describe('GM r3: the B layout', () => {
   });
 
   it('renders the lines stacked, without bullets, with the button beside them', () => {
+    // The page reads the clock: pin it to the fixture's, or "2 days ago"
+    // drifts with the real date (it failed on 2026-10-28).
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
+    onTestFinished(() => { vi.useRealTimers(); });
     const trash: TrashedProject[] = [{
       id: '0'.repeat(32), name: 'Newer', createdAt: TWO_DAYS_AGO, updatedAt: TWO_DAYS_AGO, lastOpenedAt: TWO_DAYS_AGO,
       nodeCount: 0, edgeCount: 0, thumbnail: null, deletedAt: TWO_DAYS_AGO, purgeAt: '2026-11-24T11:00:00+00:00',

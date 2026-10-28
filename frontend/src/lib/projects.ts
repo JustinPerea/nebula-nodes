@@ -97,9 +97,21 @@ export interface ProjectList {
     /** The project limit (the backend's MAX_PROJECTS), for GM's line. */
     projectLimit?: number;
     /** The agents' line (GM's waiting line is the person's). */
-    note?: string; live?: boolean; held?: number };
-  /** A waiting canvas was saved as its own project, recently: GM's toast. */
-  canvasSaved?: { id: string; name: string; at?: string };
+    note?: string; live?: boolean; held?: number;
+    /** Each canvas that waits (held ones, then the live one), with the name
+     * of the project it was when known (review 6 of PR #199, N-2). */
+    canvases?: { name?: string | null }[];
+    /** Held canvases canvas-held.json couldn't read (review 6, L-1). */
+    heldUnreadable?: { count: number | null; kept?: string[]; at?: string } };
+  /** A waiting canvas was saved as its own project, recently: GM's toast.
+   * `filed` names every canvas saved with it (review 6, N-2). */
+  canvasSaved?: { id: string; name: string; at?: string; filed?: { id: string; name: string }[] };
+  /** The backend's verdict on a restore from Recently deleted now, held
+   * canvases counted (review 6 of PR #199, L-3): absent when it passes. */
+  restoreRoom?: { refused: 'projects'; deletes: number | null; heldTakesPlace: boolean; waiting?: number };
+  /** canvas-held.json didn't read whole and a held canvas may be lost, for a
+   * week (review 6, L-1): the person's line. `count` null: unknown. */
+  canvasHeldUnreadable?: { count: number | null; kept?: string[]; at?: string };
   /** How many projects the list may hold (the backend's MAX_PROJECTS). */
   projectLimit?: number;
   /** The switch that lets a restore pass the limit is on (GM r6): Restore in

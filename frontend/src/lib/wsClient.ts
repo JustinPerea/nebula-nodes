@@ -145,11 +145,12 @@ export interface ProjectsChangedEvent {
   change: 'created' | 'opened' | 'saved' | 'renamed' | 'cover' | 'deleted' | 'restored' | 'purged' | string;
   /** Null when several went at once (emptying Recently deleted). */
   projectId: string | null;
-  /** change 'canvasHeld' / 'canvasHoldRefused' (review 5 of PR #199, M-3):
-   * an agent's clear or graph load held the waiting canvas aside (action
-   * 'cleared' | 'replaced'), or was refused at the limit ('clear' |
-   * 'replace'); agent null when unnamed. */
-  canvasHeld?: { action: string; agent: string | null };
+  /** change 'canvasHeld' / 'canvasHoldRefused' (review 5 of PR #199, M-3;
+   * review 6, M-1): an agent's write held the waiting canvas aside (action
+   * 'cleared' | 'replaced' | 'changed'), or was refused at the limit
+   * ('clear' | 'replace' | 'change'); agent null when unnamed. `agentId` and
+   * `color` (the agent's cursor's) make the Agent log row the agent's (N-3). */
+  canvasHeld?: { action: string; agent: string | null; agentId?: string; color?: string };
 }
 
 /** The active project's pins, sent after graphSync and on every pin change. */

@@ -73,10 +73,15 @@ a project because the list is full (`canvasNotFiled`, with or without a
 restore), making a project is refused until the person frees room. Opening
 an existing project works: Nebula holds the waiting canvas aside first,
 whole, and saves that copy as its own project once there is room (`held`
-counts them). At the limit, `nebula clear` and `nebula load` are refused
-while the canvas waits ("The project limit is reached, so a new canvas can't
-be saved. Open an existing project to work in, or ask the person to delete a
-project.", 409 `canvas_waiting`); below it they hold the canvas aside first.
+counts them). At the limit, every change to the waiting canvas is refused
+(409 `canvas_waiting`): `nebula clear` and `nebula load` with "The project
+limit is reached, so a new canvas can't be saved. Open an existing project to
+work in, or ask the person to delete a project.", and any other edit
+(`nebula apply`, adding or removing nodes, a run) with "The open canvas isn't
+saved as a project yet because the project limit is reached, so it can't be
+changed. …". Open an existing project to work in. Below the limit a change
+holds the canvas aside first and then lands on a canvas with no project that
+is never saved, so open or make a project before you build.
 Nothing in the canvas is lost, also across restarts, but the person can't
 see or open it until it is saved: never tell them it is open. Its
 note says what frees room: for the project limit, moving a project to

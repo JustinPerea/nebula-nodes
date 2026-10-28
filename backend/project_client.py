@@ -98,6 +98,13 @@ def list_projects(api: NebulaAPI, *, headers: dict[str, str] | None = None) -> d
     # A waiting canvas was saved as its own project (the person sees a toast).
     if isinstance(listing.get("canvasSaved"), dict):
         reply["canvasSaved"] = listing["canvasSaved"]
+    # A restore from Recently deleted is refused now, held canvases counted,
+    # and how many deletes free a place (review 6 of PR #199, L-3).
+    if isinstance(listing.get("restoreRoom"), dict):
+        reply["restoreRoom"] = listing["restoreRoom"]
+    # canvas-held.json didn't read whole and a held canvas may be lost (L-1).
+    if isinstance(listing.get("canvasHeldUnreadable"), dict):
+        reply["canvasHeldUnreadable"] = listing["canvasHeldUnreadable"]
     # The list's project limit (a restore or create past it is refused).
     if isinstance(listing.get("projectLimit"), int):
         reply["projectLimit"] = listing["projectLimit"]
