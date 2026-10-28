@@ -241,10 +241,18 @@ def test_m1_mcp_tools_say_the_refusal_with_its_code(app, monkeypatch):
 
 
 def _held_one(client, store, graph, state, monkeypatch) -> list[str]:
+    """One canvas held, as fix round 6 kept it: canvas-held.json and its
+    .bak (fix round 7 moves it into canvas-held/ on the next read, through
+    the same tolerant reader these tests damage)."""
     ids = _waiting(client, store, graph, state, monkeypatch)
     opened = client.post(f"/api/projects/{ids[1]}/open", headers=PERSON, json={"workspaceRevision": _rev(client)})
     assert opened.status_code == 200, opened.text
-    assert len(store.canvas_held()) == 1
+    entries = store.canvas_held()
+    assert len(entries) == 1
+    import shutil
+    shutil.rmtree(store.held_dir)
+    for path in _paths(store):
+        path.write_text(json.dumps({"version": 1, "held": entries}, separators=(",", ":")))
     return ids
 
 
@@ -307,11 +315,12 @@ def test_l1_an_entry_whose_canvas_cant_be_read_is_counted_and_the_others_kept(ap
     assert listing["canvasNotFiled"]["heldUnreadable"]["count"] == 1
     assert listing["canvasHeldUnreadable"]["count"] == 1
     assert "project.canvasHeldUnreadable" in kinds
-    # Healed on disk: both copies read whole now, the note kept.
-    for path in _paths(store):
-        healed = json.loads(path.read_text())
-        assert [entry["projectId"] for entry in healed["held"]] == [good["projectId"]]
-        assert healed["unreadable"]["count"] == 1
+    # Moved into canvas-held/ (fix round 7): the good canvas in its own two
+    # copies, the lost one nowhere, the note kept beside them.
+    assert store._held_ids_on_disk() == {good["projectId"]}
+    assert all(path.exists() for path in store.held_paths(good["projectId"]))
+    assert json.loads((store.held_dir / store_module.CANVAS_HELD_NOTE_NAME).read_text())["count"] == 1
+    assert not any(path.exists() for path in _paths(store))
 
 
 def test_l1_main_copy_damaged_and_the_bak_whole_loses_nothing_and_says_nothing(app, monkeypatch):
@@ -327,19 +336,8 @@ def test_l1_main_copy_damaged_and_the_bak_whole_loses_nothing_and_says_nothing(a
     assert _projects_holding(client, store, ONLY_W) == ["Recovered canvas"]
 
 
-def test_n5_a_hold_past_the_cap_is_refused_and_changes_nothing(app, monkeypatch):
-    client, store, graph, state = app
-    ids = _waiting(client, store, graph, state, monkeypatch)
-    monkeypatch.setattr(store_module, "CANVAS_HELD_MAX_BYTES", 200)
-    response = client.post(f"/api/projects/{ids[1]}/open", headers=PERSON, json={"workspaceRevision": _rev(client)})
-    assert response.status_code == 409, response.text
-    assert response.json()["code"] == main_module.CANVAS_HELD_FULL_CODE
-    assert ONLY_W in _live_values(graph) and _held(store) == []
-    assert json.loads(store.path.read_text())["activeProjectId"] is None
-    _make_room_without_listing(client, store, ids[0])
-    refused = client.post("/api/graph/node", headers=CODEX, json={"definitionId": "text-input", "params": {"value": "x"}})
-    assert refused.status_code == 409 and refused.json()["code"] == main_module.CANVAS_HELD_FULL_CODE
-    assert "x" not in _live_values(graph)
+# fix round 7 (review 7, L-3): no shared cap. The per-canvas cap, for agents
+# only, is tested in test_project_catalog_restore_fix7.py.
 
 
 # -- L-2: a failed open keeps its hold ------------------------------------------------

@@ -106,19 +106,26 @@ CANVAS_WAITING_BACKUP_NAME = CANVAS_WAITING_NAME + ".bak"
 # without it. A write that fails leaves it at its older commit; the copies
 # numbered later than it then decide the ids they hold (review 5, L-1).
 PURGED_NAME = "catalog-purged.json"
-# The live canvas held aside while it waits to be saved as its own project
-# (main._hold_live_canvas: an open, a create, or below the limit an agent's
-# clear or graph load replaced it), in two copies: [{projectId, nodes,
-# edges, ...}] (review 5 of PR #199, M-3; GM's held model, 2026-10-28).
+# The live canvases held aside while they wait to be saved as their own
+# projects (main._hold_live_canvas: an open, a create, or below the limit an
+# agent's write replaced it; review 5 of PR #199, M-3; GM's held model,
+# 2026-10-28). Each canvas in its own file (review 7, L-3: one shared file,
+# capped, refused the person's open once it was full), in two copies:
+# canvas-held/<projectId>.json and its .bak, {version: 2, entry, check},
+# each written whole and fsynced, then the folder. ``check`` is a digest of
+# the entry, so a flip that still parses loses to the other copy (review 7,
+# M-2). The canvas-held.json of fix rounds 5-6 is moved in once
+# (_migrate_legacy_held) and kept aside as canvas-held.json.migrated-<UTC>.
+CANVAS_HELD_DIR_NAME = "canvas-held"
 CANVAS_HELD_NAME = "canvas-held.json"
 CANVAS_HELD_BACKUP_NAME = CANVAS_HELD_NAME + ".bak"
-# The held list's cap (review 6 of PR #199, N-5): every hold rewrites both
-# copies whole, and each held canvas becomes a project in the catalog later,
-# so a quarter of the catalog's cap is room for many canvases. A hold past
-# it is refused (main: nothing replaces the canvas). A file past the cap
-# plus a margin isn't one Nebula wrote: it is kept aside as damaged.
-CANVAS_HELD_MAX_BYTES = 32 * 1024 * 1024
-CANVAS_HELD_READ_MAX_BYTES = CANVAS_HELD_MAX_BYTES + 1024 * 1024
+CANVAS_HELD_NOTE_NAME = "unreadable.json"
+_HELD_FILE = re.compile(r"^([0-9a-f]{32})\.json(\.bak)?$")
+# No shared cap (review 7, L-3). A held canvas is capped like a project
+# (main: MAX_PROJECT_BYTES, for agents only; the person's open always holds
+# it). A file past the catalog's own cap isn't one Nebula wrote: it can't
+# be saved as a project, so it is kept aside as damaged.
+CANVAS_HELD_READ_MAX_BYTES = 128 * 1024 * 1024 + 1024 * 1024
 # How long the person is told a held canvas couldn't be read (review 6, L-1).
 HELD_UNREADABLE_SECONDS = 7 * 24 * 3600
 PURGED_FILE_MAX_BYTES = 1024 * 1024
@@ -440,12 +447,16 @@ def _waiting_record(found: Any) -> dict[str, Any] | None:
     if "saved" in found:
         if isinstance(saved, dict) and isinstance(saved.get("id"), str) and isinstance(saved.get("name"), str) \
                 and catalog_recovery.dated(saved.get("at")):
-            record = {"id": saved["id"], "name": saved["name"], "at": saved["at"]}
-            # Every canvas filed together (review 6 of PR #199, N-2).
+            record = {"id": saved["id"], "name": saved["name"], "at": saved["at"],
+                      **({"overSaveLimit": True} if saved.get("overSaveLimit") is True else {})}
+            # Every canvas filed together (review 6 of PR #199, N-2), each
+            # marked when it is over the save limit (GM, review 7).
             filed = saved.get("filed")
             if isinstance(filed, list) and all(isinstance(row, dict) and isinstance(row.get("id"), str)
                                                and isinstance(row.get("name"), str) for row in filed):
-                record["filed"] = [{"id": row["id"], "name": row["name"]} for row in filed]
+                record["filed"] = [{"id": row["id"], "name": row["name"],
+                                    **({"overSaveLimit": True} if row.get("overSaveLimit") is True else {})}
+                                   for row in filed]
             return {"saved": record}
         return None
     owner = found.get("from")
@@ -476,12 +487,52 @@ def _held_id(found: Any) -> str | None:
     return None
 
 
+def held_canvas_items_ok(nodes: Any, edges: Any) -> bool:
+    """Whether a held canvas's nodes and connections are what a project
+    stores (review 7 of PR #199, M-2 and N-6): lists of dicts, each node
+    with a unique string ``id`` (and a dict ``data`` when it has one), each
+    connection with a unique string ``id``, ``source`` and ``target``.
+    Anything else is damage: filing it raised (a node without an id, mixed
+    id types) or saved a project holding garbage nodes."""
+    if not isinstance(nodes, list) or not isinstance(edges, list):
+        return False
+    seen: set[str] = set()
+    for node in nodes:
+        if not isinstance(node, dict):
+            return False
+        node_id = node.get("id")
+        if not isinstance(node_id, str) or not node_id or node_id in seen:
+            return False
+        if "data" in node and not isinstance(node["data"], dict):
+            return False
+        seen.add(node_id)
+    seen = set()
+    for edge in edges:
+        if not isinstance(edge, dict):
+            return False
+        edge_id = edge.get("id")
+        if not isinstance(edge_id, str) or not edge_id or edge_id in seen:
+            return False
+        if not isinstance(edge.get("source"), str) or not isinstance(edge.get("target"), str):
+            return False
+        seen.add(edge_id)
+    return True
+
+
+def held_entry_check(entry: dict[str, Any]) -> str:
+    """The digest a held canvas's file carries of its entry (review 7, M-2's
+    option): a copy whose bytes still parse after a flip loses to the other."""
+    return hashlib.sha256(json.dumps(entry, sort_keys=True, ensure_ascii=False, separators=(",", ":"),
+                                     default=str).encode("utf-8")).hexdigest()
+
+
 def _held_entry_salvaged(found: Any) -> dict[str, Any] | None:
-    """A damaged entry whose canvas is still there (its id, nodes and wires
-    read): its other fields made good, so the canvas is still saved. Its
-    digest is unknown, so it is never taken for the live canvas."""
+    """A damaged entry whose canvas is still there (its id, and nodes and
+    connections that pass held_canvas_items_ok): its other fields made good,
+    so the canvas is still saved. Its digest is unknown, so it is never
+    taken for the live canvas."""
     project_id = _held_id(found)
-    if project_id is None or not isinstance(found.get("nodes"), list) or not isinstance(found.get("edges"), list):
+    if project_id is None or not held_canvas_items_ok(found.get("nodes"), found.get("edges")):
         return None
     owner, counter = found.get("from"), found.get("counter")
     stamp = now()
@@ -497,20 +548,57 @@ def _held_entry_salvaged(found: Any) -> dict[str, Any] | None:
 
 
 def _held_entry(found: Any) -> dict[str, Any] | None:
-    """One canvas-held.json entry when its fields are what main writes, else None."""
+    """One held canvas's entry when its fields are what main writes, its
+    nodes and connections included (held_canvas_items_ok), else None."""
     if not isinstance(found, dict):
         return None
     project_id, owner = found.get("projectId"), found.get("from")
     if not (isinstance(project_id, str) and len(project_id) == 32 and all(c in "0123456789abcdef" for c in project_id)):
         return None
-    if not isinstance(found.get("nodes"), list) or not isinstance(found.get("edges"), list):
+    if not held_canvas_items_ok(found.get("nodes"), found.get("edges")):
         return None
     if found.get("reason") not in ("projects", "storage") or not catalog_recovery.dated(found.get("since")) \
             or not catalog_recovery.dated(found.get("heldAt")) or not (owner is None or isinstance(owner, str)) \
             or not isinstance(found.get("unproven"), bool) or not isinstance(found.get("digest"), str) \
-            or not isinstance(found.get("counter"), int):
+            or not isinstance(found.get("counter"), int) or isinstance(found.get("counter"), bool):
         return None
     return dict(found)
+
+
+_HELD_ARRAY = re.compile(r'"held"[ \t\n\r]*:[ \t\n\r]*\[')
+
+
+def _held_entries_cut(text: str) -> tuple[list[Any], bool] | None:
+    """The complete leading entries of a cut canvas-held.json (review 7 of PR
+    #199, L-2: truncating both copies lost every canvas), and whether the
+    array's end was reached (its length is then known): each element of its
+    "held" array decoded in turn, separated by JSON's own whitespace only
+    (as catalog_recovery's salvage), up to the first that doesn't decode.
+    None when the array isn't found."""
+    match = _HELD_ARRAY.search(text)
+    if match is None:
+        return None
+    decoder = json.JSONDecoder()
+    space = catalog_recovery._JSON_SPACE
+    position, found = match.end(), []
+    while True:
+        while position < len(text) and text[position] in space:
+            position += 1
+        if position < len(text) and text[position] == "]":
+            return found, True
+        if position >= len(text) or text[position] not in '{"[':
+            return found, False
+        try:
+            value, position = decoder.raw_decode(text, position)
+        except ValueError:
+            return found, False
+        found.append(value)
+        while position < len(text) and text[position] in space:
+            position += 1
+        if position < len(text) and text[position] == ",":
+            position += 1
+        elif not (position < len(text) and text[position] == "]"):
+            return found, False
 
 
 class ProjectStore:
@@ -1388,115 +1476,289 @@ class ProjectStore:
         for path in paths:
             self._write_file(path, encoded)
 
+    # -- the canvases held aside (one file per canvas: review 7 of PR #199, L-3) --
+
+    @property
+    def held_dir(self) -> Path:
+        return self.root / CANVAS_HELD_DIR_NAME
+
+    def _ensure_held_dir(self) -> None:
+        self._ensure_root()
+        if self.held_dir.is_symlink():
+            raise OSError(f"{CANVAS_HELD_DIR_NAME} is a symbolic link")
+        self.held_dir.mkdir(exist_ok=True, mode=0o700)
+
+    @staticmethod
+    def _fsync_dir(path: Path) -> None:
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+
+    def held_paths(self, project_id: str) -> tuple[Path, Path]:
+        """A held canvas's two copies."""
+        return self.held_dir / f"{project_id}.json", self.held_dir / f"{project_id}.json.bak"
+
+    @staticmethod
+    def _held_file_bytes(entry: dict[str, Any]) -> bytes:
+        return json.dumps({"version": 2, "check": held_entry_check(entry), "entry": entry}, ensure_ascii=False,
+                          separators=(",", ":"), default=str).encode("utf-8")
+
+    def _write_held_pair(self, entry: dict[str, Any]) -> None:
+        """Both copies of one held canvas, each written whole and fsynced
+        (the folder is fsynced by the caller). Raises OSError."""
+        encoded = self._held_file_bytes(entry)
+        for path in self.held_paths(entry["projectId"]):
+            self._write_file(path, encoded)
+
+    def _held_ids_on_disk(self) -> set[str]:
+        try:
+            names = os.listdir(self.held_dir)
+        except FileNotFoundError:
+            return set()
+        return {match.group(1) for name in names if (match := _HELD_FILE.match(name))}
+
+    def _read_held_file(self, path: Path, project_id: str) -> tuple[str, Any]:
+        """("missing" | "read" | "damaged", the entry: valid for "read", the
+        raw one, if any, for "damaged")."""
+        try:
+            if path.is_symlink() or path.stat().st_size > CANVAS_HELD_READ_MAX_BYTES:
+                _log(f"{CANVAS_HELD_DIR_NAME}/{path.name} is not a file Nebula wrote; not using it")
+                return "damaged", None
+            found = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return "missing", None
+        except (OSError, ValueError) as exc:
+            _log(f"{CANVAS_HELD_DIR_NAME}/{path.name} could not be read ({exc})")
+            return "damaged", None
+        entry = found.get("entry") if isinstance(found, dict) else None
+        valid = _held_entry(entry)
+        if valid is None or valid["projectId"] != project_id or found.get("version") != 2 \
+                or found.get("check") != held_entry_check(entry):
+            _log(f"{CANVAS_HELD_DIR_NAME}/{path.name} doesn't read whole")
+            return "damaged", entry
+        return "read", valid
+
+    def _keep_held_aside(self, paths: list[Path], kind: str = "damaged") -> list[str]:
+        """Keep each file as it is now beside itself (``<name>.<kind>-<UTC>-<id>``,
+        a hard link or a copy), before anything rewrites or removes it; the
+        names it is kept under (relative to the project folder)."""
+        kept: list[str] = []
+        for path in paths:
+            try:
+                if path.is_symlink() or not path.exists():
+                    continue
+                target = path.with_name(f"{path.name}.{kind}-{_stamp(datetime.now(timezone.utc))}")
+                try:
+                    os.link(path, target, follow_symlinks=False)
+                except OSError:
+                    shutil.copyfile(path, target, follow_symlinks=False)
+                os.chmod(target, 0o600, follow_symlinks=False)
+                kept.append(str(target.relative_to(self.root)))
+            except OSError as exc:
+                _log(f"could not keep {path.name} aside: {exc}")
+        return kept
+
+    def _read_held_note(self) -> dict[str, Any] | None:
+        """The note of held canvases that may be lost. A note that is there
+        but doesn't read still says that something may be lost (count
+        unknown), with the damaged note kept aside, so damage to the note
+        never silences it."""
+        path = self.held_dir / CANVAS_HELD_NOTE_NAME
+        try:
+            if path.is_symlink() or not path.exists():
+                return None
+            found = None
+            if path.stat().st_size <= 1024 * 1024:
+                try:
+                    found = _held_unreadable_note(json.loads(path.read_text(encoding="utf-8")))
+                except ValueError:
+                    found = None
+            if found is not None:
+                return found
+            note = {"count": None, "kept": self._keep_held_aside([path]), "at": now()}
+            self._write_file(path, json.dumps(note, ensure_ascii=False).encode("utf-8"))
+            return note
+        except OSError:
+            return None
+
+    def _note_held_lost(self, count: int | None, kept: list[str]) -> None:
+        """Held canvases that may be lost (``count``, None: unknown): added to
+        the note the person and agents are told, kept on disk."""
+        previous = self._held_note
+        if previous is not None:
+            count = None if count is None or previous["count"] is None else count + previous["count"]
+            kept = [*previous["kept"], *[name for name in kept if name not in previous["kept"]]]
+        self._held_note = {"count": count, "kept": kept, "at": now()}
+        self._held_damage_new = dict(self._held_note)
+        try:
+            self._ensure_held_dir()
+            self._write_file(self.held_dir / CANVAS_HELD_NOTE_NAME,
+                             json.dumps(self._held_note, ensure_ascii=False).encode("utf-8"))
+        except OSError as exc:
+            _log(f"could not keep the note of the held canvases that couldn't be read: {exc}")
+
     def canvas_held(self) -> list[dict[str, Any]]:
         """The live canvases held aside while they wait to be saved as their
         own projects (main._hold_live_canvas), oldest first. [] for none.
 
-        Read entry by entry (review 6 of PR #199, L-1): canvas-held.json's
-        valid entries are kept when others in it aren't, and when it is
-        missing, unreadable or holds a damaged entry its .bak's valid entries
-        that it lacks are added. A copy that doesn't read whole is kept
-        aside (``.damaged-<UTC>-<id>``) before anything rewrites it, and when
-        a canvas could be lost (an entry neither copy reads, or no copy
-        reads at all) the file says so (``unreadable``: {count, kept, at};
-        canvas_held_unreadable), which the person and agents are told. The
-        healed list is written back at once."""
-        copies: list[tuple[str, str, list[Any] | None, dict[str, Any] | None]] = []
+        Each canvas is read on its own (review 7 of PR #199, L-3/M-2): its
+        file when it reads whole (its entry valid, nodes and connections
+        included, and its check matching), else its .bak, else either copy's
+        entry whose canvas is still there, its other fields made good. A
+        copy that doesn't read is kept aside (``.damaged-<UTC>-<id>``) and
+        the canvas's two copies written again from the one that read. A
+        canvas neither copy yields is said (``unreadable``: {count, kept,
+        at}; canvas_held_unreadable) and its files kept aside: one damaged
+        canvas never costs another. canvas-held.json from before is moved in
+        first (_migrate_legacy_held)."""
+        self._held_note = self._read_held_note()
+        entries = self._migrate_legacy_held()
+        on_disk = {entry["projectId"] for entry in entries}
+        lost: list[str] = []
+        kept: list[str] = []
+        for project_id in sorted(self._held_ids_on_disk()):
+            main, backup = self.held_paths(project_id)
+            (main_status, main_found), (backup_status, backup_found) = (
+                self._read_held_file(main, project_id), self._read_held_file(backup, project_id))
+            entry = main_found if main_status == "read" else backup_found if backup_status == "read" else None
+            if entry is None:
+                for found in (main_found, backup_found):
+                    if isinstance(found, dict):
+                        entry = _held_entry_salvaged({**found, "projectId": project_id})
+                        if entry is not None:
+                            break
+            damaged = [path for path, status in ((main, main_status), (backup, backup_status)) if status == "damaged"]
+            if entry is None:
+                kept += self._keep_held_aside(damaged)
+                for path in (main, backup):
+                    path.unlink(missing_ok=True)
+                lost.append(project_id)
+                continue
+            if project_id not in on_disk:
+                entries.append(entry)
+            if damaged or "missing" in (main_status, backup_status) or main_status != "read":
+                kept += self._keep_held_aside(damaged)
+                try:
+                    self._write_held_pair(entry)
+                except OSError as exc:
+                    _log(f"could not write back the held canvas {project_id}: {exc}")
+        if lost:
+            _log(f"{len(lost)} held canvas{'' if len(lost) == 1 else 'es'} couldn't be read from either copy "
+                 f"(kept as {', '.join(kept) or 'nothing'}); {len(entries)} still read")
+            self._note_held_lost(len(lost), kept)
+        if lost or kept:
+            try:
+                self._fsync_dir(self.held_dir)
+            except OSError:
+                pass
+        entries.sort(key=lambda entry: entry["heldAt"])
+        return entries
+
+    # The canvas-held.json of fix rounds 5-6 (one file, both copies), read once
+    # and moved in (review 7 of PR #199, L-3).
+
+    def _legacy_held_read(self) -> tuple[list[dict[str, Any]], list[str], int | None, dict[str, Any] | None]:
+        """canvas-held.json and its .bak read entry by entry: (the entries,
+        the damaged copies' names, how many canvases may be lost (None:
+        unknown), its unreadable note). A cut copy gives its complete leading
+        entries (L-2). An entry is counted lost only when no copy yields it
+        (N-1)."""
+        copies: list[tuple[str, str, list[Any] | None, bool]] = []
+        note = None
         for name in (CANVAS_HELD_NAME, CANVAS_HELD_BACKUP_NAME):
             path = self.root / name
             try:
                 if path.is_symlink() or path.stat().st_size > CANVAS_HELD_READ_MAX_BYTES:
-                    _log(f"{name} is not a file Nebula wrote; not using it")
-                    copies.append((name, "damaged", None, None))
+                    copies.append((name, "damaged", None, False))
                     continue
-                found = json.loads(path.read_text(encoding="utf-8"))
+                text = path.read_text(encoding="utf-8", errors="replace")
             except FileNotFoundError:
-                copies.append((name, "missing", None, None))
+                copies.append((name, "missing", None, False))
                 continue
-            except (OSError, ValueError) as exc:
+            except OSError as exc:
                 _log(f"{name} could not be read ({exc})")
-                copies.append((name, "damaged", None, None))
+                copies.append((name, "damaged", None, False))
+                continue
+            try:
+                found = json.loads(text)
+            except ValueError:
+                cut = _held_entries_cut(text)
+                _log(f"{name} could not be read whole; {len(cut[0]) if cut else 0} of its entries still read")
+                copies.append((name, "damaged", cut[0] if cut else None, bool(cut and cut[1])))
                 continue
             raw = found.get("held") if isinstance(found, dict) else None
-            note = _held_unreadable_note(found.get("unreadable")) if isinstance(found, dict) else None
+            note = note or (_held_unreadable_note(found.get("unreadable")) if isinstance(found, dict) else None)
             if not isinstance(raw, list):
-                _log(f"{name} doesn't hold the held canvases' list; not using it")
-                copies.append((name, "damaged", None, note))
+                copies.append((name, "damaged", None, False))
                 continue
             whole = all(_held_entry(entry) is not None for entry in raw)
-            if not whole:
-                _log(f"{name} holds a held canvas's record it can't read; keeping the others")
-            copies.append((name, "read" if whole else "damaged", raw, note))
-        self._held_note = next((note for _name, _status, _raw, note in copies if note is not None), None)
-        first = copies[0]
-        if first[1] == "read":
-            if copies[1][1] == "damaged":
-                self._keep_damaged_held([copies[1][0]])
-            return [dict(entry) for entry in first[2] or []]
-        if all(status == "missing" for _name, status, _raw, _note in copies):
-            return []
-        # Entry by entry, canvas-held.json's first, then the .bak's it lacks;
-        # then an entry neither copy reads whole but whose canvas is there
-        # (its id, nodes and wires), with its other fields made good.
+            copies.append((name, "read" if whole else "damaged", raw, True))
+        if all(status == "missing" for _name, status, _raw, _known in copies):
+            return [], [], 0, note
         entries: list[dict[str, Any]] = []
         seen: set[str] = set()
         for salvage in (_held_entry, _held_entry_salvaged):
-            for _name, _status, raw, _note in copies:
+            for _name, _status, raw, _known in copies:
                 for found in raw or []:
                     entry = salvage(found)
                     if entry is not None and entry["projectId"] not in seen:
                         seen.add(entry["projectId"])
                         entries.append(entry)
-        entries.sort(key=lambda entry: entry["heldAt"])
-        # What may be lost: entries no copy reads (by id when it reads, else
-        # the most id-less ones in one copy), unknown when no copy read at all.
-        lost_ids: set[str] = set()
-        lost_unnamed = 0
-        for _name, _status, raw, _note in copies:
-            unnamed = 0
-            for found in raw or []:
-                if _held_entry(found) is not None:
-                    continue
-                project_id = _held_id(found)
-                if project_id is None:
-                    unnamed += 1
-                elif project_id not in seen:
-                    lost_ids.add(project_id)
-            lost_unnamed = max(lost_unnamed, unnamed)
-        read_any = any(raw is not None for _name, _status, raw, _note in copies)
-        count: int | None = len(lost_ids) + lost_unnamed if read_any else None
-        damaged = [name for name, status, _raw, _note in copies if status == "damaged"]
-        kept = self._keep_damaged_held(damaged)
-        if count != 0:
-            previous = self._held_note
-            if previous is not None:
-                count = None if count is None or previous["count"] is None else count + previous["count"]
-                kept = [*previous["kept"], *[name for name in kept if name not in previous["kept"]]]
-            self._held_note = {"count": count, "kept": kept, "at": now()}
-            self._held_damage_new = dict(self._held_note)
-            _log(f"{len(damaged)} cop{'y' if len(damaged) == 1 else 'ies'} of {CANVAS_HELD_NAME} couldn't be read "
-                 f"whole (kept as {', '.join(kept) or 'nothing'}): "
-                 f"{'an unknown number of' if count is None else count} held canvas"
-                 f"{'' if count == 1 else 'es'} may be lost; {len(entries)} still read")
-        try:
-            self.set_canvas_held(entries)
-        except OSError as exc:
-            _log(f"could not write back the held canvases it read: {exc}")
-        return entries
+        lost_ids = {project_id for _name, _status, raw, _known in copies for found in raw or []
+                    if (project_id := _held_id(found)) is not None and project_id not in seen}
+        listed = [len(raw or []) for _name, _status, raw, known in copies if known]
+        count: int | None = None
+        if listed:
+            count = len(lost_ids) + max(0, max(listed) - len(entries) - len(lost_ids))
+        damaged = [name for name, status, _raw, _known in copies if status == "damaged"]
+        return entries, damaged, count, note
 
-    def _keep_damaged_held(self, names: list[str]) -> list[str]:
-        """Keep each damaged copy of the held list aside before anything
-        rewrites it; the names it is kept under."""
-        kept: list[str] = []
-        for name in names:
-            path = self.root / name
+    def _migrate_legacy_held(self) -> list[dict[str, Any]]:
+        """Move canvas-held.json's canvases into their own files, once: each
+        canvas not already there written (both copies), the folder fsynced,
+        then the old files kept aside as ``.migrated-<UTC>-<id>`` (a
+        crash anywhere before that runs it again: canvases already there are
+        left as they are). Returns the canvases it couldn't write, which
+        stay in memory and in the old file until the next try."""
+        legacy = [self.root / CANVAS_HELD_NAME, self.root / CANVAS_HELD_BACKUP_NAME]
+        if not any(path.exists() or path.is_symlink() for path in legacy):
+            return []
+        entries, damaged, count, note = self._legacy_held_read()
+        unwritten: list[dict[str, Any]] = []
+        try:
+            self._ensure_held_dir()
+            present = self._held_ids_on_disk()
+            for entry in entries:
+                if entry["projectId"] not in present:
+                    self._write_held_pair(entry)
+            self._fsync_dir(self.held_dir)
+        except OSError as exc:
+            _log(f"could not move {CANVAS_HELD_NAME} into {CANVAS_HELD_DIR_NAME}/ ({exc}); it is tried again")
+            present = self._held_ids_on_disk()
+            return [entry for entry in entries if entry["projectId"] not in present]
+        if note is not None and self._held_note is None:
+            self._held_note = note
             try:
-                if path.is_symlink() or not path.exists():
-                    continue
-                kept.append(self._set_aside(path, _stamp(datetime.now(timezone.utc))).name)
-            except OSError as exc:
-                _log(f"could not keep the damaged {name} aside: {exc}")
-        return kept
+                self._write_file(self.held_dir / CANVAS_HELD_NOTE_NAME, json.dumps(note).encode("utf-8"))
+            except OSError:
+                pass
+        # A damaged copy is kept as it was, whatever was saved from it.
+        kept = self._keep_held_aside([self.root / name for name in damaged])
+        if count != 0:
+            self._note_held_lost(count, kept)
+        stamp = _stamp(datetime.now(timezone.utc))
+        try:
+            for path in legacy:
+                if path.exists() or path.is_symlink():
+                    os.replace(path, path.with_name(f"{path.name}.migrated-{stamp}"))
+            self._fsync_dir(self.root)
+        except OSError as exc:
+            _log(f"could not keep the old {CANVAS_HELD_NAME} aside after moving it ({exc}); it is moved again")
+        _log(f"moved {len(entries)} held canvas{'' if len(entries) == 1 else 'es'} from {CANVAS_HELD_NAME} into "
+             f"{CANVAS_HELD_DIR_NAME}/")
+        return unwritten
 
     def canvas_held_unreadable(self) -> dict[str, Any] | None:
         """Whether held canvases couldn't be read (canvas_held keeps the note
@@ -1516,35 +1778,53 @@ class ProjectStore:
         found, self._held_damage_new = getattr(self, "_held_damage_new", None), None
         return found
 
-    def held_encoded_size(self, entries: list[dict[str, Any]]) -> int:
-        """How many bytes canvas-held.json would hold for ``entries`` (N-5)."""
-        return len(self._held_bytes(entries))
+    def hold_canvas(self, entry: dict[str, Any]) -> None:
+        """Keep one canvas aside: its two copies, then the folder, fsynced.
+        Raises OSError: a hold that isn't on disk must not let anything
+        replace the canvas."""
+        self._ensure_held_dir()
+        self._write_held_pair(entry)
+        self._fsync_dir(self.held_dir)
 
-    def _held_bytes(self, entries: list[dict[str, Any]]) -> bytes:
-        body: dict[str, Any] = {"version": 1, "held": entries}
-        if (note := self.canvas_held_unreadable()) is not None:
-            body["unreadable"] = note
-        return json.dumps(body, ensure_ascii=False, separators=(",", ":"), default=str).encode("utf-8")
+    def drop_held(self, project_ids: list[str] | set[str]) -> None:
+        """The canvases filed (or found to be the live one) leave: both copies,
+        then the folder fsynced. Raises OSError."""
+        if not project_ids or not self.held_dir.exists():
+            return
+        for project_id in project_ids:
+            for path in self.held_paths(project_id):
+                path.unlink(missing_ok=True)
+        self._fsync_dir(self.held_dir)
 
     def set_canvas_held(self, entries: list[dict[str, Any]]) -> None:
-        """Write canvas_held's list (both copies, each fsynced, then the
-        folder), or remove it when empty and no recent unreadable note needs
-        keeping. Raises OSError: a hold that isn't on disk must not let
-        anything replace the canvas."""
-        paths = (self.root / CANVAS_HELD_NAME, self.root / CANVAS_HELD_BACKUP_NAME)
-        self._ensure_root()
-        if not entries and self.canvas_held_unreadable() is None:
-            for path in paths:
+        """Make the held canvases on disk ``entries``: those not there are
+        written, those not in it removed. Raises OSError."""
+        self._ensure_held_dir()
+        present = self._held_ids_on_disk()
+        wanted = {entry["projectId"]: entry for entry in entries}
+        for project_id, entry in wanted.items():
+            if project_id not in present:
+                self._write_held_pair(entry)
+        for project_id in present - set(wanted):
+            for path in self.held_paths(project_id):
                 path.unlink(missing_ok=True)
-        else:
-            encoded = self._held_bytes(entries)
-            for path in paths:
-                self._write_file(path, encoded)
-        fd = os.open(self.root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        self._fsync_dir(self.held_dir)
+
+    def set_aside_unfileable_held(self, project_id: str) -> list[str]:
+        """A held canvas whose entry read but couldn't be saved as a project
+        (review 7 of PR #199, M-2): its copies kept aside as
+        ``.unfileable-<UTC>-<id>``, removed from the held canvases, and
+        counted in the note the person and agents are told."""
+        paths = [path for path in self.held_paths(project_id) if path.exists()]
+        kept = self._keep_held_aside(paths, "unfileable")
+        for path in paths:
+            path.unlink(missing_ok=True)
         try:
-            os.fsync(fd)
-        finally:
-            os.close(fd)
+            self._fsync_dir(self.held_dir)
+        except OSError:
+            pass
+        self._note_held_lost(1, kept)
+        return kept
 
     # -- the last good copy -------------------------------------------------------
 

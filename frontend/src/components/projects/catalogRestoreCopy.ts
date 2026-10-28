@@ -38,8 +38,31 @@ const NOT_READ_WHOLE = "Nebula couldn't read the whole damaged file, so changes 
  * project the canvas was couldn't be proven. `name` is the project it was
  * filed as: "Alpha (recovered)", "Alpha (recovered 2)" and so on (backend
  * project_store.recovered_name), or "Recovered canvas". */
-export function recoveredCanvasSentence(name: string | null | undefined): string {
+export function recoveredCanvasSentence(name: string | null | undefined, overSaveLimit = false): string {
+  if (overSaveLimit) return canvasSavedOverLimitLine(name || RECOVERED_CANVAS);
   return `The canvas you had open was saved as its own project, ${quoted(name || RECOVERED_CANVAS)}, so nothing in it is lost.`;
+}
+
+/** GM (review 7 of PR #199): a canvas saved as a project over the save
+ * limit (the person's own act holds a canvas whatever its size), in the
+ * toast and the restore notice alike. It replaces the plain line. */
+export function canvasSavedOverLimitLine(name: string): string {
+  return `The canvas you had open was saved as its own project, ${quoted(name)}. It's over the save limit, so new changes won't save until it's smaller.`;
+}
+
+/** Several canvases saved, some over the save limit: only those are marked
+ * (fix round 7; plural form for GM to confirm). */
+function overLimitTail(rows: { name: string; overSaveLimit?: boolean }[], counted: boolean): string {
+  const over = rows.filter((row) => row.overSaveLimit === true);
+  if (over.length === 0) return '';
+  if (counted) {
+    return over.length === 1
+      ? ' One of them is over the save limit, so new changes to it won\'t save until it\'s smaller.'
+      : ` ${over.length} of them are over the save limit, so new changes to them won't save until they're smaller.`;
+  }
+  return over.length === 1
+    ? ` ${quoted(over[0].name)} is over the save limit, so new changes to it won't save until it's smaller.`
+    : ` ${namedList(over.map((row) => row.name))} are over the save limit, so new changes to them won't save until they're smaller.`;
 }
 
 /** The limit the live canvas waits on (backend `canvasNotFiled.reason`):
@@ -55,6 +78,17 @@ export type CanvasLimit = 'projects' | 'storage';
 export interface CanvasLimitContext {
   projectLimit: number; trashHasItems: boolean;
   canvases?: { name?: string | null }[];
+  /** How many projects to delete before every waiting canvas is saved (the
+   * listing's `canvasNotFiled.deletes`): GM's answer 3, the real number. */
+  deletes?: number | null;
+}
+
+/** GM's answer 3 to review 6: "Delete 2 projects and Nebula will save them."
+ * with the real number (the canvases that wait, when the listing doesn't say). */
+function deleteToSaveMany(context: CanvasLimitContext): string {
+  const deletes = typeof context.deletes === 'number' && context.deletes > 0
+    ? context.deletes : (context.canvases?.length ?? 2);
+  return deletes === 1 ? 'Delete a project and Nebula will save them.' : `Delete ${deletes} projects and Nebula will save them.`;
 }
 
 /** The backend's MAX_PROJECTS, for a listing that doesn't say it. */
@@ -105,7 +139,7 @@ export function canvasLimitLine(reason: CanvasLimit, context: CanvasLimitContext
   if (many) {
     const opening = `${many} couldn't be saved as their own projects because`;
     if (reason === 'projects') {
-      return `${opening} you've reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST_MANY} Delete projects and Nebula will save them.`;
+      return `${opening} you've reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST_MANY} ${deleteToSaveMany(context)}`;
     }
     return `${opening} Nebula's project list is full. ${NOTHING_LOST_MANY} ${sizeCapAdviceMany(context.trashHasItems)}`;
   }
@@ -126,7 +160,7 @@ export function canvasWaitingLine(reason: CanvasLimit, context: CanvasLimitConte
   if (many) {
     const opening = `${many} aren't saved as projects yet because`;
     if (reason === 'projects') {
-      return `${opening} you've reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST_MANY} Delete projects and Nebula will save them.`;
+      return `${opening} you've reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST_MANY} ${deleteToSaveMany(context)}`;
     }
     return `${opening} Nebula's project list is full. ${NOTHING_LOST_MANY} ${sizeCapAdviceMany(context.trashHasItems)}`;
   }
@@ -170,13 +204,18 @@ export interface RestoreRoom { refused: 'projects'; deletes: number | null; held
  * deletes is the real one (the next listing saves a waiting canvas into a
  * freed place first, so it can take 2). */
 export function restoreAtLimitTooltip(projectLimit: number, room?: RestoreRoom | null): string {
+  const holding = (room?.waiting ?? 1) > 1
+    ? 'The canvases you had open are holding the last places.' : 'The canvas you had open is holding the last place.';
+  if (room && room.deletes === null) {
+    // Review 7 of PR #199, N-2: deleting can't make room (what waits doesn't
+    // fit by size), so no count of deletes is true (wording for GM).
+    const saved = (room.waiting ?? 1) > 1 ? 'the canvases you had open are saved' : 'the canvas you had open is saved';
+    return `You can restore it once ${saved}. ${room.heldTakesPlace ? holding : `You've reached the limit of ${projectLimit} projects.`}`;
+  }
   const deletes = room?.deletes ?? 1;
   const first = deletes === 1 ? 'You can restore it after you delete a project.'
     : `You can restore it after you delete ${deletes} projects.`;
-  if (room?.heldTakesPlace) {
-    const many = (room.waiting ?? 1) > 1;
-    return `${first} ${many ? 'The canvases you had open are holding the last places.' : 'The canvas you had open is holding the last place.'}`;
-  }
+  if (room?.heldTakesPlace) return `${first} ${holding}`;
   return `${first} You've reached the limit of ${projectLimit} projects.`;
 }
 
@@ -198,11 +237,17 @@ export function canvasHoldRefusedLogLine(agent: string | null | undefined, actio
 /** GM r4/r5, the toast once a waiting canvas is saved: the project's real
  * name, and no "nothing in it is lost". GM's answer 2 to review 6: it names
  * each canvas it filed (up to 3; a count from 4). */
-export function canvasSavedToast(name: string, filed?: { name: string }[] | null): string {
-  const names = filed && filed.length > 1 ? filed.map((row) => row.name) : null;
-  if (!names) return `The canvas you had open was saved as its own project, ${quoted(name)}.`;
-  if (names.length > RESTORE_NAMED_MAX) return `${names.length} canvases you had open were saved as their own projects.`;
-  return `The canvases you had open were saved as their own projects, ${namedList(names)}.`;
+export function canvasSavedToast(name: string, filed?: { name: string; overSaveLimit?: boolean }[] | null,
+  overSaveLimit = false): string {
+  const rows = filed && filed.length > 1 ? filed : null;
+  if (!rows) {
+    const over = overSaveLimit || filed?.[0]?.overSaveLimit === true;
+    return over ? canvasSavedOverLimitLine(name) : `The canvas you had open was saved as its own project, ${quoted(name)}.`;
+  }
+  if (rows.length > RESTORE_NAMED_MAX) {
+    return `${rows.length} canvases you had open were saved as their own projects.${overLimitTail(rows, true)}`;
+  }
+  return `The canvases you had open were saved as their own projects, ${namedList(rows.map((row) => row.name))}.${overLimitTail(rows, false)}`;
 }
 
 /** The projects and Recently deleted as they are now, and the canvas
@@ -211,7 +256,7 @@ export function canvasSavedToast(name: string, filed?: { name: string }[] | null
 export interface NoticeNow {
   projects: { id: string; name: string }[];
   trash: { id: string; name?: string }[];
-  canvasNotFiled?: { reason: CanvasLimit; projectLimit?: number; canvases?: { name?: string | null }[] } | null;
+  canvasNotFiled?: { reason: CanvasLimit; projectLimit?: number; canvases?: { name?: string | null }[]; deletes?: number | null } | null;
 }
 
 function namedList(names: string[]): string {
@@ -309,9 +354,9 @@ type NoticeInput = Pick<CatalogRestore, 'kind' | 'addedBack' | 'addedBackCount' 
 function canvasOutcome(restore: NoticeInput, current?: NoticeNow): { line: string; kind: 'saved' | 'limit' } | null {
   const saved = restore.recoveredCanvas;
   if (saved) {
-    if (!current) return { line: recoveredCanvasSentence(saved.name), kind: 'saved' };
+    if (!current) return { line: recoveredCanvasSentence(saved.name, saved.overSaveLimit === true), kind: 'saved' };
     const now = current.projects.find((project) => project.id === saved.id) ?? current.trash.find((entry) => entry.id === saved.id);
-    return now ? { line: recoveredCanvasSentence(now.name || saved.name), kind: 'saved' } : null;
+    return now ? { line: recoveredCanvasSentence(now.name || saved.name, saved.overSaveLimit === true), kind: 'saved' } : null;
   }
   const recorded = restore.canvasNotFiled?.reason;
   if (recorded !== 'projects' && recorded !== 'storage') return null;
@@ -322,6 +367,7 @@ function canvasOutcome(restore: NoticeInput, current?: NoticeNow): { line: strin
       projectLimit: current?.canvasNotFiled?.projectLimit ?? DEFAULT_PROJECT_LIMIT,
       trashHasItems: (current?.trash.length ?? 0) > 0,
       canvases: current?.canvasNotFiled?.canvases,
+      deletes: current?.canvasNotFiled?.deletes,
     }),
     kind: 'limit',
   };

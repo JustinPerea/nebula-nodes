@@ -125,7 +125,7 @@ interface ProjectState {
   dismissCatalogRestore: () => void;
   /** The live canvas isn't a project and the list had no room to save it
    * (the listing's `canvasNotFiled`): the Projects home's waiting line. */
-  canvasNotFiled: { reason: 'projects' | 'storage'; projectLimit?: number; canvases?: { name?: string | null }[] } | null;
+  canvasNotFiled: { reason: 'projects' | 'storage'; projectLimit?: number; canvases?: { name?: string | null }[]; deletes?: number | null } | null;
   /** The backend's verdict on a restore now (the listing's `restoreRoom`,
    * review 6 of PR #199, L-3): Restore greys on it, held canvases counted. */
   restoreRoom: RestoreRoom | null;
@@ -134,7 +134,7 @@ interface ProjectState {
   canvasHeldUnreadable: { count: number | null } | null;
   /** A waiting canvas was saved as this project (the listing's
    * `canvasSaved`): GM's toast, shown once per tab. */
-  canvasSaved: { id: string; name: string; filed?: { id: string; name: string }[] } | null;
+  canvasSaved: { id: string; name: string; overSaveLimit?: boolean; filed?: { id: string; name: string; overSaveLimit?: boolean }[] } | null;
   dismissCanvasSaved: () => void;
   workspaceRevision: string; error: string | null;
   /** What `error`'s Details toggle holds, for that line (projectErrorDetails). */
@@ -1143,7 +1143,8 @@ function listingNotices(list: ProjectList): ListingNotices {
     canvasNotFiled: waiting && (waiting.reason === 'projects' || waiting.reason === 'storage')
       ? { reason: waiting.reason, projectLimit: waiting.projectLimit,
         ...(Array.isArray(waiting.canvases) ? { canvases: waiting.canvases.map((canvas) => ({
-          name: typeof canvas?.name === 'string' ? canvas.name : null })) } : {}) }
+          name: typeof canvas?.name === 'string' ? canvas.name : null })) } : {}),
+        ...(typeof waiting.deletes === 'number' && waiting.deletes > 0 ? { deletes: waiting.deletes } : {}) }
       : null,
     restoreRoom: room && room.refused === 'projects'
       ? { refused: 'projects', deletes: typeof room.deletes === 'number' && room.deletes > 0 ? room.deletes : null,
@@ -1154,9 +1155,21 @@ function listingNotices(list: ProjectList): ListingNotices {
   };
   if (saved && typeof saved.id === 'string' && !toastedCanvases.has(saved.id)) {
     toastedCanvases.add(saved.id);
-    const filed = Array.isArray(saved.filed)
-      ? saved.filed.filter((row) => typeof row?.id === 'string' && typeof row?.name === 'string') : [];
-    notices.canvasSaved = { id: saved.id, name: saved.name, ...(filed.length > 1 ? { filed } : {}) };
+    const all = Array.isArray(saved.filed) && saved.filed.length > 0
+      ? saved.filed.filter((row) => typeof row?.id === 'string' && typeof row?.name === 'string')
+      : [{ id: saved.id, name: saved.name, ...(saved.overSaveLimit === true ? { overSaveLimit: true } : {}) }];
+    // GM r8 (a): the saved line shows once. A filing the restore notice says
+    // (its canvas line, on screen now) gets no toast; the toast is for a
+    // filing the notice doesn't say. A canvas is named once (GM, review 7).
+    const said = notices.catalogRestore?.recoveredCanvas?.id ?? null;
+    const seen = new Set<string>();
+    const filed = all.filter((row) => row.id !== said && !seen.has(row.id) && (seen.add(row.id), true))
+      .map((row) => ({ id: row.id, name: row.name, ...(row.overSaveLimit === true ? { overSaveLimit: true } : {}) }));
+    if (filed.length > 0) {
+      const last = filed[filed.length - 1];
+      notices.canvasSaved = { id: last.id, name: last.name, ...(last.overSaveLimit ? { overSaveLimit: true } : {}),
+        ...(filed.length > 1 ? { filed } : {}) };
+    }
   }
   return notices;
 }

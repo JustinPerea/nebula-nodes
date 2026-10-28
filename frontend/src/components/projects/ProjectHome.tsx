@@ -95,10 +95,10 @@ export interface ProjectHomeProps {
   onDismissCatalogRestore?: () => void;
   /** The live canvas isn't a project and the list had no room to save it
    * (the listing's `canvasNotFiled`): GM r5's waiting line, until it is saved. */
-  canvasNotFiled?: { reason: CanvasLimit; projectLimit?: number; canvases?: { name?: string | null }[] } | null;
+  canvasNotFiled?: { reason: CanvasLimit; projectLimit?: number; canvases?: { name?: string | null }[]; deletes?: number | null } | null;
   /** A waiting canvas was saved as this project (the listing's `canvasSaved`):
    * GM's toast, once per tab, naming each canvas filed with it (`filed`). */
-  canvasSaved?: { id: string; name: string; filed?: { id: string; name: string }[] } | null;
+  canvasSaved?: { id: string; name: string; overSaveLimit?: boolean; filed?: { id: string; name: string; overSaveLimit?: boolean }[] } | null;
   /** The backend's verdict on a restore now (the listing's `restoreRoom`,
    * review 6 of PR #199, L-3): Restore greys on it, held canvases counted. */
   restoreRoom?: RestoreRoom | null;
@@ -503,11 +503,12 @@ function CatalogRestoreNotice({ restore, current, onDismiss, onOpenRecentlyDelet
  * can't be dismissed while the canvas waits and goes once it is saved. The
  * size cap's adds "Open Recently deleted" (only a delete for good frees it). */
 function CanvasWaitingNotice({ waiting, trashCount, onOpenRecentlyDeleted }: {
-  waiting: { reason: CanvasLimit; projectLimit?: number; canvases?: { name?: string | null }[] }; trashCount: number;
+  waiting: { reason: CanvasLimit; projectLimit?: number; canvases?: { name?: string | null }[]; deletes?: number | null }; trashCount: number;
   onOpenRecentlyDeleted: () => void;
 }) {
   const line = canvasWaitingLine(waiting.reason, {
     projectLimit: waiting.projectLimit ?? DEFAULT_PROJECT_LIMIT, trashHasItems: trashCount > 0, canvases: waiting.canvases,
+    deletes: waiting.deletes,
   });
   return (
     <div className="project-home__notice project-home__restore project-home__waiting" role="status">
@@ -520,7 +521,8 @@ function CanvasWaitingNotice({ waiting, trashCount, onOpenRecentlyDeleted }: {
 
 /** GM r5: "Once saved: the normal toast", with the project's real name. */
 function CanvasSavedToast({ project, onDismiss }: {
-  project: { id: string; name: string; filed?: { id: string; name: string }[] }; onDismiss: () => void;
+  project: { id: string; name: string; overSaveLimit?: boolean; filed?: { id: string; name: string; overSaveLimit?: boolean }[] };
+  onDismiss: () => void;
 }) {
   const [paused, setPaused] = useState(false);
   useEffect(() => {
@@ -533,7 +535,7 @@ function CanvasSavedToast({ project, onDismiss }: {
       <div className="project-home__toast" role="status" aria-live="polite"
         onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
         onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
-        <span className="project-home__toast-text">{canvasSavedToast(project.name, project.filed)}</span>
+        <span className="project-home__toast-text">{canvasSavedToast(project.name, project.filed, project.overSaveLimit === true)}</span>
         <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
       </div>
     </InNoticeRegion>

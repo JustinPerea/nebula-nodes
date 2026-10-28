@@ -46,12 +46,12 @@ describe('N-2: every canvas that waits is counted or named', () => {
 
   it('names up to 3 when every name is known (GM (a), the name helper)', () => {
     expect(canvasWaitingLine('projects', { ...context, canvases: [{ name: 'Delta' }, { name: 'Gamma' }] })).toBe(
-      "The canvases you had open, “Delta” and “Gamma”, aren't saved as projects yet because you've reached the limit of 3 projects. Nothing in them is lost. Delete projects and Nebula will save them.");
+      "The canvases you had open, “Delta” and “Gamma”, aren't saved as projects yet because you've reached the limit of 3 projects. Nothing in them is lost. Delete 2 projects and Nebula will save them.");
   });
 
   it('counts when a name is unknown, and from 4', () => {
     expect(canvasWaitingLine('projects', { ...context, canvases: [{ name: 'Delta' }, { name: null }] })).toBe(
-      "2 canvases you had open aren't saved as projects yet because you've reached the limit of 3 projects. Nothing in them is lost. Delete projects and Nebula will save them.");
+      "2 canvases you had open aren't saved as projects yet because you've reached the limit of 3 projects. Nothing in them is lost. Delete 2 projects and Nebula will save them.");
     const four = [{ name: 'A' }, { name: 'B' }, { name: 'C' }, { name: 'D' }];
     expect(canvasWaitingLine('storage', { ...context, trashHasItems: true, canvases: four })).toBe(
       "4 canvases you had open aren't saved as projects yet because Nebula's project list is full. Nothing in them is lost. Permanently delete projects in Recently deleted and Nebula will save them.");
@@ -59,7 +59,7 @@ describe('N-2: every canvas that waits is counted or named', () => {
 
   it('counts in the restore notice line too', () => {
     expect(canvasLimitLine('projects', { ...context, canvases: [{ name: null }, { name: null }] })).toBe(
-      "2 canvases you had open couldn't be saved as their own projects because you've reached the limit of 3 projects. Nothing in them is lost. Delete projects and Nebula will save them.");
+      "2 canvases you had open couldn't be saved as their own projects because you've reached the limit of 3 projects. Nothing in them is lost. Delete 2 projects and Nebula will save them.");
   });
 
   it('renders the counted waiting line on Projects home', () => {

@@ -102,7 +102,7 @@ def list_projects(api: NebulaAPI, *, headers: dict[str, str] | None = None) -> d
     # and how many deletes free a place (review 6 of PR #199, L-3).
     if isinstance(listing.get("restoreRoom"), dict):
         reply["restoreRoom"] = listing["restoreRoom"]
-    # canvas-held.json didn't read whole and a held canvas may be lost (L-1).
+    # A held canvas couldn't be read or saved and may be lost (L-1).
     if isinstance(listing.get("canvasHeldUnreadable"), dict):
         reply["canvasHeldUnreadable"] = listing["canvasHeldUnreadable"]
     # The list's project limit (a restore or create past it is refused).

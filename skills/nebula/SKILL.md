@@ -81,7 +81,12 @@ work in, or ask the person to delete a project.", and any other edit
 saved as a project yet because the project limit is reached, so it can't be
 changed. …". Open an existing project to work in. Below the limit a change
 holds the canvas aside first and then lands on a canvas with no project that
-is never saved, so open or make a project before you build.
+is never saved, so open or make a project before you build. A canvas bigger
+than a project can be saved is never held for you: that change is refused
+(409 `canvas_held_full`, "This canvas is too big for Nebula to keep aside, so
+nothing was changed. Work in an existing project, or make the canvas smaller
+first."). Right after a restore of the project list, your first change finds
+the same: Nebula reads whether the canvas waits from the canvas itself.
 Nothing in the canvas is lost, also across restarts, but the person can't
 see or open it until it is saved: never tell them it is open. Its
 note says what frees room: for the project limit, moving a project to

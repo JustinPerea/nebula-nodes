@@ -602,7 +602,11 @@ def test_m3_a_clear_or_graph_load_at_the_limit_is_refused_and_changes_nothing(ap
     assert response.status_code == 409, response.text
     body = response.json()
     assert body["code"] == "canvas_waiting" and body["reason"] == "projects"
-    assert body["detail"] == main_module.CANVAS_WAITING_REFUSAL
+    # The person's own refusal is GM's person line (answer 7 to review 6,
+    # fix round 7); the agents' keeps its own words.
+    expected = (main_module.canvas_waiting_person_reason("projects") if who == "person"
+                else main_module.CANVAS_WAITING_REFUSAL)
+    assert body["detail"] == expected
     assert _live_values(graph) == before and _held(store) == []
 
 

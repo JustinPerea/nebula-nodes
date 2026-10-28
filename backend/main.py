@@ -1291,6 +1291,9 @@ def _refuse_if_graph_moved(fence: tuple[str, str | None, int]) -> None:
     person reads the canvas's own out-of-date line (a tab that sent its
     revision gets it from _check_workspace_revision); agents the detail."""
     _check_workspace_revision()
+    # The waiting-canvas guard again, in the write step (review 7 of PR #199,
+    # N-4): a restore may have landed during the route's awaits.
+    _fence_waiting_canvas(_canvas_guard_action.get())
     fence = _filed_fence(fence)
     revision, project_id, epoch = _graph_fence()
     if (revision, project_id) != fence[:2]:
@@ -1648,7 +1651,10 @@ async def project_workspace_fence(request: Request, call_next):
                 return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
             except ProjectStoreError as exc:
                 return JSONResponse(status_code=507, content={**_storage_error_body(exc), "code": PROJECT_STORE_STORAGE_CODE})
+            finally:
+                await _tell_canvas_settled(guard_note)
         response = await call_next(request)
+        await _tell_canvas_settled(guard_note)
         if guard_note.get("refused") or (guard_note.get("held") and 200 <= response.status_code < 300):
             await _tell_canvas_guarded(guard_note)
         return response
@@ -15953,7 +15959,7 @@ def _filing_room(catalog: dict[str, Any], exported: dict[str, Any]) -> str | Non
 # The live canvas couldn't be filed as its own project because the list is
 # at a limit (review 2 of PR #199, L4): {reason, from, since, journaled}. It
 # is still state.json's canvas and no project is open, so nothing replaces or
-# overlays it (the person can't see it until it is saved: GM r6); making a project is refused until there is room and opening one holds it aside first (canvas-held.json),
+# overlays it (the person can't see it until it is saved: GM r6); making a project is refused until there is room and opening one holds it aside first (canvas-held/),
 # and the next listing with room files it. Kept beside the catalog
 # (ProjectStore.canvas_waiting), so `since` and the one journal event hold
 # across restarts (review 3, L-5); this is only its cache in this process.
@@ -15975,7 +15981,7 @@ def _forget_canvas_waiting_cache() -> None:
 # The waiting canvases held aside (review 5 of PR #199, M-3; GM's held
 # model, 2026-10-28): before an open, a create, or (below the limit) an
 # agent's clear or graph load replaces a waiting live canvas, it is kept
-# whole in projects/canvas-held.json (and its .bak), fsynced with its folder,
+# whole in its own file, projects/canvas-held/<projectId>.json (and its .bak), fsynced with its folder,
 # and only that copy is ever filed as the person's canvas (_file_held_canvases,
 # on the next listing with room), each on its own. (the store, the list).
 _canvas_held_cache: tuple[Any, list[dict[str, Any]]] | None = None
@@ -16008,21 +16014,42 @@ def _canvas_waiting_detail(reason: str, action: str) -> str:
     return CANVAS_CHANGE_REFUSAL if reason == "projects" else CANVAS_CHANGE_REFUSAL_STORAGE
 
 
-class CanvasWaitingRefusal(HTTPException):
-    """409: an agent's write would change the live canvas while it waits to
-    be saved as its own project and the list has no room to keep it aside
-    and a new canvas too (``reason``: projects | storage; ``action``: what
-    the write does, CANVAS_ACTIONS)."""
+def canvas_waiting_person_reason(reason: str, *, trash_has_items: bool = False) -> str:
+    """The person's own clear or load refused while the canvas waits at a
+    limit (GM's answer 7 to review 6): the reason and the way out, under the
+    surface's heading ("Couldn't clear the canvas." / "Couldn't load
+    “file.json”."). The size cap's: its reason and advice (the waiting
+    line's, GM r5), with the same way out."""
+    if reason == "projects":
+        return (f"It isn't saved as a project yet because you've reached the limit of "
+                f"{project_store_module.MAX_PROJECTS} projects. Delete a project and Nebula will save it, or open an "
+                "existing project to work in.")
+    advice = ("Permanently delete a project in Recently deleted and Nebula will save it" if trash_has_items else
+              "Delete a project, then remove it from Recently deleted too, and Nebula will save it")
+    return (f"It isn't saved as a project yet because Nebula's project list is full. {advice}, or open an existing "
+            "project to work in.")
 
-    def __init__(self, reason: str, action: str = "replace") -> None:
-        super().__init__(status_code=409, detail=_canvas_waiting_detail(reason, action))
+
+class CanvasWaitingRefusal(HTTPException):
+    """409: a write would change the live canvas while it waits to be saved
+    as its own project and the list has no room to keep it aside and a new
+    canvas too (``reason``: projects | storage; ``action``: what the write
+    does, CANVAS_ACTIONS). ``person``: the person's own clear or load, whose
+    detail is GM's line for the person (answer 7), never the agents'."""
+
+    def __init__(self, reason: str, action: str = "replace", *, person: bool = False,
+                 trash_has_items: bool = False) -> None:
+        detail = (canvas_waiting_person_reason(reason, trash_has_items=trash_has_items) if person
+                  else _canvas_waiting_detail(reason, action))
+        super().__init__(status_code=409, detail=detail)
         self.reason = reason
         self.action = action
+        self.person = person
 
 
 def _canvas_waiting_body(exc: CanvasWaitingRefusal) -> dict[str, Any]:
     return {"detail": exc.detail, "code": CANVAS_WAITING_CODE, "reason": exc.reason, "action": exc.action,
-            "projectLimit": project_store_module.MAX_PROJECTS}
+            "projectLimit": project_store_module.MAX_PROJECTS, **({"audience": "person"} if exc.person else {})}
 
 
 @app.exception_handler(CanvasWaitingRefusal)
@@ -16039,8 +16066,21 @@ def _held_canvases() -> list[dict[str, Any]]:
     return list(cached[1])
 
 
+def _held_distinct() -> list[dict[str, Any]]:
+    """The held canvases that aren't the live canvas itself (a copy held by
+    an open whose rollback failed: memory is that canvas, state.json the
+    other project's; review 7 of PR #199, L-1), for every count that also
+    counts the live canvas: one canvas holds one place, is named once, and
+    is filed once."""
+    held = _held_canvases()
+    if not held or not (cli_graph.nodes or cli_graph.edges):
+        return held
+    digest = _canvas_digest(cli_graph)
+    return [entry for entry in held if entry.get("digest") != digest]
+
+
 def _journal_held_unreadable() -> None:
-    """canvas-held.json didn't read whole and a held canvas may be lost
+    """A held canvas couldn't be read (or saved) and may be lost
     (review 6 of PR #199, L-1): journaled once (`project.canvasHeldUnreadable`),
     so agents watching see it; the listing tells the person
     (`canvasHeldUnreadable`). Never fails the caller."""
@@ -16058,7 +16098,7 @@ def _journal_held_unreadable() -> None:
 
 def _held_unreadable_view() -> dict[str, Any] | None:
     """The listing's `canvasHeldUnreadable` ({count (null: unknown), kept,
-    at}) while recent: held canvases canvas-held.json couldn't read."""
+    at}) while recent: held canvases that couldn't be read or saved."""
     _held_canvases()
     try:
         return project_store.canvas_held_unreadable()
@@ -16066,30 +16106,53 @@ def _held_unreadable_view() -> dict[str, Any] | None:
         return None
 
 
-# A hold past canvas-held.json's cap is refused (review 6 of PR #199, N-5):
-# nothing replaces or changes the canvas. Not worded by GM yet.
-CANVAS_HELD_FULL_DETAIL = ("The canvas you had open can't be kept aside: Nebula is already keeping as many waiting "
-                           "canvases as it can until there's room in the project list, so nothing was changed. "
-                           "Delete a project and Nebula will save them.")
+# No shared cap on the held canvases (review 7 of PR #199, L-3: one refused
+# the person's every open once it filled). Each held canvas is capped like
+# a project, MAX_PROJECT_BYTES measured as a project's snapshot, and only
+# for agents: the person's open, create, clear and load always hold it
+# (GM: a canvas over the save limit is filed with saving paused, as a
+# project stored over it opens). An agent's write that would hold a canvas
+# past it is refused (409 canvas_held_full) with GM's line, verbatim.
+CANVAS_HELD_TOO_BIG_DETAIL = ("This canvas is too big for Nebula to keep aside, so nothing was changed. Work in an "
+                              "existing project, or make the canvas smaller first.")
 CANVAS_HELD_FULL_CODE = "canvas_held_full"
 
 
 class CanvasHeldFull(HTTPException):
-    def __init__(self) -> None:
-        super().__init__(status_code=409, detail=CANVAS_HELD_FULL_DETAIL)
+    def __init__(self, size: int) -> None:
+        super().__init__(status_code=409, detail=CANVAS_HELD_TOO_BIG_DETAIL)
+        self.size = size
+
+
+def _canvas_held_full_body(exc: CanvasHeldFull) -> dict[str, Any]:
+    return {"detail": exc.detail, "code": CANVAS_HELD_FULL_CODE, "scope": "canvas", "sizeBytes": exc.size,
+            "limitBytes": MAX_PROJECT_BYTES}
 
 
 @app.exception_handler(CanvasHeldFull)
 async def canvas_held_full(request, exc: CanvasHeldFull):
-    return JSONResponse(status_code=409, content={"detail": exc.detail, "code": CANVAS_HELD_FULL_CODE,
-                                                  "limitBytes": project_store_module.CANVAS_HELD_MAX_BYTES})
+    return JSONResponse(status_code=409, content=_canvas_held_full_body(exc))
 
 
-def _write_held(entries: list[dict[str, Any]]) -> None:
-    """Keep the held list on disk first (raises OSError), then in the cache."""
+def _held_snapshot_bytes(entry: dict[str, Any]) -> int:
+    """A held canvas's size as the project it is filed as measures (the cap)."""
+    return project_size.snapshot_bytes({**empty_snapshot(), "nodes": entry["nodes"], "edges": entry["edges"]})
+
+
+def _add_held(entry: dict[str, Any]) -> None:
+    """Keep one held canvas on disk first (raises OSError), then in the cache."""
     global _canvas_held_cache
-    project_store.set_canvas_held(entries)
-    _canvas_held_cache = (project_store, list(entries))
+    project_store.hold_canvas(entry)
+    _canvas_held_cache = (project_store, [*_held_canvases(), entry])
+
+
+def _drop_held(project_ids: set[str]) -> None:
+    """Held canvases leave, on disk first (raises OSError), then the cache."""
+    global _canvas_held_cache
+    if not project_ids:
+        return
+    project_store.drop_held(project_ids)
+    _canvas_held_cache = (project_store, [entry for entry in _held_canvases() if entry["projectId"] not in project_ids])
 
 
 def _canvas_digest(graph: CLIGraph) -> str:
@@ -16099,26 +16162,34 @@ def _canvas_digest(graph: CLIGraph) -> str:
                                      default=str).encode("utf-8")).hexdigest()
 
 
-def _hold_live_canvas(exported: dict[str, Any]) -> dict[str, Any]:
+def _hold_live_canvas(exported: dict[str, Any], *, capped: bool = False) -> dict[str, Any]:
     """Hold the waiting live canvas aside, whole (``exported``: its nodes and
-    wires as a project stores them, taken in this step), before anything
-    replaces it. Its project id is chosen now, so a crash after the filing's
-    commit never files it twice. Raises ProjectStoreError when it can't be
-    kept on disk: nothing replaces the canvas then."""
+    connections as a project stores them, taken in this step), before
+    anything replaces it, in its own file. Its project id is chosen now, so
+    a crash after the filing's commit never files it twice. A canvas held
+    already (the same digest: an open whose rollback failed, then tried
+    again; review 7 of PR #199, L-1) isn't held twice: that hold is it.
+    ``capped`` (an agent's write): refused past MAX_PROJECT_BYTES
+    (CanvasHeldFull); the person's own act is never refused for its size.
+    Raises ProjectStoreError when it can't be kept on disk: nothing
+    replaces the canvas then."""
+    digest = _canvas_digest(cli_graph)
+    if same := next((entry for entry in _held_canvases() if entry.get("digest") == digest), None):
+        print("[projects] the waiting canvas is held aside already: not held twice", flush=True)
+        return same
     waiting = _canvas_not_filed_now() or {}
     owner = cli_graph.owner
     entry = {"projectId": uuid4().hex, "from": owner if isinstance(owner, str) else None,
              "unproven": owner is OWNER_UNPROVEN, "reason": waiting.get("reason") or "projects",
              "since": waiting.get("since") or project_now(), "heldAt": project_now(),
-             "digest": _canvas_digest(cli_graph), "counter": int(cli_graph._counter),
+             "digest": digest, "counter": int(cli_graph._counter),
              "nodes": copy.deepcopy(exported["nodes"]), "edges": copy.deepcopy(exported["edges"])}
-    entries = [*_held_canvases(), entry]
-    if project_store.held_encoded_size(entries) > project_store_module.CANVAS_HELD_MAX_BYTES:
-        print(f"[projects] refused to hold the waiting canvas aside: canvas-held.json would pass its "
-              f"{project_store_module.CANVAS_HELD_MAX_BYTES} bytes; nothing replaced it", flush=True)
-        raise CanvasHeldFull()
+    if capped and (size := _held_snapshot_bytes(entry)) > MAX_PROJECT_BYTES:
+        print(f"[projects] refused to hold the waiting canvas aside for an agent: it is {size} bytes, over a "
+              f"project's {MAX_PROJECT_BYTES}; nothing replaced it", flush=True)
+        raise CanvasHeldFull(size)
     try:
-        _write_held(entries)
+        _add_held(entry)
     except OSError as exc:
         print(f"[projects] could not hold the waiting canvas aside: {exc}; nothing replaced it", flush=True)
         raise ProjectStoreError("The canvas you had open couldn't be kept aside, so nothing replaced it") from exc
@@ -16166,12 +16237,12 @@ def _drop_held_copies_of_live() -> None:
         print("[projects] a held canvas is the live canvas, but state.json holds another: the held copy stays",
               flush=True)
         return
-    keep = [entry for entry in held if entry.get("digest") != digest]
-    if len(keep) != len(held):
+    same = {entry["projectId"] for entry in held if entry.get("digest") == digest}
+    if same:
         print("[projects] a held canvas is the live canvas itself (its replacement never landed): kept once",
               flush=True)
         try:
-            _write_held(keep)
+            _drop_held(same)
         except OSError as exc:
             print(f"[projects] could not drop the held copy of the live canvas: {exc}", flush=True)
 
@@ -16185,25 +16256,97 @@ def _hold_if_waiting(settled: tuple[str, Any] | None, exported: dict[str, Any]) 
     PR #199, L-2): the next settle drops it by its digest
     (_drop_held_copies_of_live) when the live canvas is still that one."""
     if settled and settled[0] == "waiting":
-        return _hold_live_canvas(exported)
+        return _hold_live_canvas(exported, capped=not _is_person_request())
     return None
 
 
-def _waiting_canvas_plan() -> tuple[str, Any] | None:
-    """What a clear or a graph load must do first while the live canvas
-    waits to be saved as its own project: None (it doesn't wait), ("refuse",
-    the limit) when the list has no room for one more canvas with no project
-    either (GM (b) of the held model: that new canvas couldn't be saved, and
-    a second one waiting would be filed as the person's), or ("hold", the
-    canvas as a project stores it). Synchronous: the route's step holds."""
-    if _canvas_not_filed_now() is None or not (cli_graph.nodes or cli_graph.edges):
+def _live_canvas_unsettled(catalog: dict[str, Any]) -> bool:
+    """Whether the live canvas waits by the facts, whatever any record says
+    (review 7 of PR #199, M-1): it holds something, and its owner (a
+    project id, or unproven) is neither the open project nor in the list,
+    so the next settle would file it as its own project. A catalog restore
+    leaves it so until something settles it, and the waiting record only a
+    settle writes."""
+    return _settle_would_file(catalog)
+
+
+def _settle_in_step() -> tuple[str, Any] | None:
+    """Settle the live canvas now, in the caller's step, as a listing would
+    (review 7 of PR #199, M-1): filed as its own project when there is
+    room, else marked waiting with no project open, committed either way.
+    So no request ever acts on a restored catalog with the live canvas
+    unsettled: an agent's write right after a restore finds it saved (and
+    goes on, on that project, as after a listing) or waiting (and refused
+    at the limit). None when this thread already holds the catalog's lock
+    (a nested transaction would lose a commit): the caller refuses then.
+    The filing's broadcast is the fence's, after the route
+    (_canvas_guard_note's ``filed``)."""
+    if getattr(project_store._local, "depth", 0):
         return None
+    exported = _graph_canvas_export(cli_graph)
+    with project_store.transaction() as catalog:
+        if not _live_canvas_unsettled(catalog):
+            return ("settled", None)
+        revision_read = catalog["workspaceRevision"]
+        settled = _settle_live_canvas(catalog, exported)
+        if settled is not None and (settled[0] != "waiting" or catalog["workspaceRevision"] != revision_read):
+            try:
+                project_store.commit(catalog)
+            except ProjectLimitError as exc:
+                if not settled or settled[0] != "filed":
+                    raise
+                filed, previous_owner = settled[1]
+                catalog["projects"].pop(filed["id"], None)
+                catalog["activeProjectId"] = None
+                catalog["workspaceRevision"] = uuid4().hex
+                _set_canvas_owner(previous_owner)
+                _mark_canvas_not_filed(exc.limit, previous_owner)
+                settled = ("waiting", exc.limit)
+                project_store.commit(catalog)
+            except Exception:
+                _undo_canvas_filing(settled)
+                raise
+    _note_canvas_settled(settled)
+    if settled and settled[0] == "filed":
+        note = _canvas_guard_note.get()
+        if note is not None:
+            note["filed"] = settled[1][0]["id"]
+    print(f"[projects] settled the live canvas before a write (it waited unsettled after a restore): "
+          f"{settled[0] if settled else 'agreed'}", flush=True)
+    return settled or ("settled", None)
+
+
+def _waiting_canvas_plan() -> tuple[str, Any] | None:
+    """What a write that changes the canvas must do first while the live
+    canvas waits to be saved as its own project: None (it doesn't wait),
+    ("refuse", the limit) when the list has no room for one more canvas
+    with no project either (GM (b) of the held model: that new canvas
+    couldn't be saved, and a second one waiting would be filed as the
+    person's), or ("hold", the canvas as a project stores it).
+
+    Whether it waits is read from the canvas itself, not only the record a
+    settle writes (review 7 of PR #199, M-1): a canvas left unsettled by a
+    restore is settled here first (_settle_in_step). Synchronous: the
+    route's step holds."""
+    if not (cli_graph.nodes or cli_graph.edges):
+        return None
+    if _canvas_not_filed_now() is None:
+        try:
+            catalog = project_store.read_unlocked()
+        except ProjectStoreError:
+            return None
+        if not _live_canvas_unsettled(catalog):
+            return None
+        if _settle_in_step() is None:
+            return "refuse", "projects"
+        if _canvas_not_filed_now() is None:
+            return None
     exported = _graph_canvas_export(cli_graph)
     try:
         catalog = project_store.read_unlocked()
     except ProjectStoreError:
         return "refuse", (_canvas_not_filed_now() or {}).get("reason") or "projects"
-    if len(catalog["projects"]) + len(_held_canvases()) >= project_store_module.MAX_PROJECTS:
+    if len(catalog["projects"]) + len(_held_distinct()) >= project_store_module.MAX_PROJECTS:
         return "refuse", "projects"
     if (limit := _filing_room(catalog, exported)) is not None:
         return "refuse", limit
@@ -16246,6 +16389,12 @@ async def _refuse_a_waiting_canvas_change(action: str) -> None:
         await _broadcast_projects_changed("canvasHoldRefused", None, canvasHeld={"action": action, **_canvas_agent()})
     print(f"[projects] refused to {action} the canvas: it waits to be saved as a project and the list is at its "
           f"{plan[1]} limit", flush=True)
+    if _is_person_request():
+        try:
+            trash = bool(project_store.read_unlocked().get("trash"))
+        except ProjectStoreError:
+            trash = False
+        raise CanvasWaitingRefusal(plan[1], action, person=True, trash_has_items=trash)
     raise CanvasWaitingRefusal(plan[1], action)
 
 
@@ -16261,8 +16410,8 @@ def _guard_waiting_canvas(action: str) -> dict[str, Any] | None:
     if plan is None:
         return None
     if plan[0] == "refuse":
-        raise CanvasWaitingRefusal(plan[1], action)
-    hold = dict(_hold_live_canvas(plan[1]))
+        raise CanvasWaitingRefusal(plan[1], action, person=_is_person_request())
+    hold = dict(_hold_live_canvas(plan[1], capped=not _is_person_request()))
     previous = cli_graph.owner
     # A failed owner write leaves the canvas waiting, its copy held: the
     # next settle drops the copy by its digest (L-2: never released here).
@@ -16289,18 +16438,21 @@ def _fence_waiting_canvas(action: str) -> None:
     """The one guard every agent graph write passes while the live canvas
     waits to be saved as a project (review 6 of PR #199, M-1): the fence
     runs it before the route (project_workspace_fence), an in-route route in
-    its write step (_refuse_tab_write_without_revision). At the limit the
-    write is refused (409 canvas_waiting); below it the canvas is held aside
-    first and the write goes on, on a canvas that has no project. The
-    person's own writes pass: the person can't reach a waiting canvas (GM
-    r6), a tab's write is refused by its revision, and the person's clear or
-    load keeps its own guard in the route. Records what it did for the
-    person's Agent log line (_tell_canvas_guarded). Synchronous: no await
-    between the check and the hold."""
+    its write step (_refuse_tab_write_without_revision), and every route
+    that awaits runs it again right before it writes (_refuse_if_graph_moved;
+    review 7, N-4: a restore that lands between the fence and the write).
+    Whether the canvas waits is read from the canvas itself (review 7, M-1;
+    _waiting_canvas_plan). At the limit the write is refused (409
+    canvas_waiting); below it the canvas is held aside first and the write
+    goes on, on a canvas that has no project. The person's own writes pass:
+    the person can't reach a waiting canvas (GM r6), a tab's write is
+    refused by its revision, and the person's clear or load keeps its own
+    guard in the route. Records what it did for the person's Agent log line
+    (_tell_canvas_guarded). Synchronous: no await between the check and the
+    hold."""
     note = _canvas_guard_note.get()
-    if note is None or note.get("done"):
+    if note is None or note.get("held") or note.get("refused"):
         return
-    note["done"] = True
     if is_person(current_request_headers()):
         return
     try:
@@ -16316,6 +16468,16 @@ def _fence_waiting_canvas(action: str) -> None:
     # once, so a write that comes while this one runs passes, never holds twice.
     _held_settled(hold)
     note.update({"held": True, "action": action, **_canvas_agent()})
+
+
+async def _tell_canvas_settled(note: dict[str, Any]) -> None:
+    """A write's guard settled the live canvas by filing it (_settle_in_step):
+    other tabs list again and see the new project, as after a listing."""
+    project_id = note.get("filed")
+    if not project_id or note.get("filedTold"):
+        return
+    note["filedTold"] = True
+    await _broadcast_projects_changed("canvasFiled", project_id)
 
 
 _HELD_PAST = {"clear": "cleared", "replace": "replaced", "change": "changed"}
@@ -16365,36 +16527,78 @@ def _held_room(catalog: dict[str, Any], entry: dict[str, Any], adding_bytes: int
     return None
 
 
+def _live_canvas_is_saved_project(catalog: dict[str, Any]) -> bool:
+    """Whether the live canvas is the open project's, on disk too (its
+    filing's state.json write landed): a held copy with its digest is then
+    that project already (review 7 of PR #199, L-1)."""
+    active = catalog.get("activeProjectId")
+    return (active is not None and cli_graph.owner == active and active in catalog["projects"]
+            and _disk_canvas_digest() == _canvas_digest(cli_graph))
+
+
 def _file_held_canvases(catalog: dict[str, Any]) -> list[tuple[dict[str, Any] | None, dict[str, Any]]]:
     """File each held canvas, oldest first, as its own project while there is
     room ("<project> (recovered)" or "Recovered canvas", numbered), never
     opened: the live canvas is another. A held canvas whose project id the
     catalog already has (or deleted for good) was filed by a commit that
-    landed before its hold could go: (None, entry), dropped after. The caller
+    landed before its hold could go, and one that is the live canvas now
+    saved as a project (the same digest: review 7 of PR #199, L-1) is that
+    project already: (None, entry), dropped after, never filed twice. Each
+    is filed in its own try (review 7, M-2): one that can't be is set aside
+    (``.unfileable-…``) and said, never failing the listing. The caller
     commits, then calls _note_held_filed."""
     filed: list[tuple[dict[str, Any] | None, dict[str, Any]]] = []
     purged = catalog.get("purged") or {}
     adding = 0
+    live_digest = _canvas_digest(cli_graph) if (cli_graph.nodes or cli_graph.edges) else None
+    live_saved: bool | None = None
     for entry in _held_canvases():
         project_id = entry["projectId"]
         if project_id in catalog["projects"] or project_id in (catalog.get("trash") or {}) or project_id in purged:
             filed.append((None, entry))
             continue
+        if live_digest is not None and entry.get("digest") == live_digest:
+            if live_saved is None:
+                live_saved = _live_canvas_is_saved_project(catalog)
+            if live_saved:
+                print(f"[projects] a held canvas is the open project's canvas already: not saved twice", flush=True)
+                filed.append((None, entry))
+                continue
         if _held_room(catalog, entry, adding) is not None:
             break
-        owner = OWNER_UNPROVEN if entry.get("unproven") else entry.get("from")
-        project = make_project(_filed_canvas_name(catalog, owner),
-                               {**empty_snapshot(), "nodes": copy.deepcopy(entry["nodes"]),
-                                "edges": copy.deepcopy(entry["edges"])})
-        project["id"] = project_id
-        project["_backendNodeIds"] = sorted({node["id"] for node in entry["nodes"] if isinstance(node, dict)})
-        project["_backendEdgeIds"] = sorted({edge["id"] for edge in entry["edges"] if isinstance(edge, dict)})
-        project["_nodeCounter"] = entry.get("counter", 0)
+        try:
+            owner = OWNER_UNPROVEN if entry.get("unproven") else entry.get("from")
+            project = make_project(_filed_canvas_name(catalog, owner),
+                                   {**empty_snapshot(), "nodes": copy.deepcopy(entry["nodes"]),
+                                    "edges": copy.deepcopy(entry["edges"])})
+            project["id"] = project_id
+            project["_backendNodeIds"] = sorted(node["id"] for node in entry["nodes"])
+            project["_backendEdgeIds"] = sorted(edge["id"] for edge in entry["edges"])
+            project["_nodeCounter"] = int(entry.get("counter", 0))
+            size = len(json.dumps(project, ensure_ascii=False, separators=(",", ":"), default=str).encode("utf-8"))
+        except Exception as exc:  # noqa: BLE001 - one canvas never fails the listing
+            print(f"[projects] couldn't save the held canvas {project_id} as a project ({exc}): kept aside",
+                  flush=True)
+            _set_aside_unfileable(project_id)
+            continue
         catalog["projects"][project_id] = project
-        adding += len(json.dumps(project, ensure_ascii=False, separators=(",", ":"), default=str).encode("utf-8"))
+        adding += size
         filed.append((project, entry))
         print(f"[projects] saved the held canvas as its own project \"{project['name']}\" {project_id}", flush=True)
     return filed
+
+
+def _set_aside_unfileable(project_id: str) -> None:
+    """A held canvas that can't be saved as a project leaves the held list,
+    its files kept aside and said (canvasHeldUnreadable; review 7, M-2)."""
+    global _canvas_held_cache
+    try:
+        project_store.set_aside_unfileable_held(project_id)
+    except Exception as exc:  # noqa: BLE001 - it stays held, said in the log
+        print(f"[projects] could not set the held canvas {project_id} aside: {exc}", flush=True)
+        return
+    _canvas_held_cache = (project_store, [entry for entry in _held_canvases() if entry["projectId"] != project_id])
+    _journal_held_unreadable()
 
 
 def _note_held_filed(filed: list[tuple[dict[str, Any] | None, dict[str, Any]]]) -> None:
@@ -16407,7 +16611,7 @@ def _note_held_filed(filed: list[tuple[dict[str, Any] | None, dict[str, Any]]]) 
         return
     done = {entry["projectId"] for _project, entry in filed}
     try:
-        _write_held([entry for entry in _held_canvases() if entry["projectId"] not in done])
+        _drop_held(done)
     except OSError as exc:
         print(f"[projects] could not drop the held canvases just saved: {exc} (the next listing does)", flush=True)
     saved: list[dict[str, Any]] = []
@@ -16419,7 +16623,7 @@ def _note_held_filed(filed: list[tuple[dict[str, Any] | None, dict[str, Any]]]) 
             notice = project_store.restore_notice()
             restore_id = notice["id"] if _restore_of(notice, owner) else None
             if restore_id:
-                project_store.note_restore(restore_id, recoveredCanvas={"id": project["id"], "name": project["name"]},
+                project_store.note_restore(restore_id, recoveredCanvas=_saved_row(project),
                                            canvasNotFiled=None)
             _journal("project.canvasFiled", data={"projectId": project["id"], "name": project["name"],
                                                   "from": entry.get("from"), "restoreId": restore_id, "held": True},
@@ -16455,9 +16659,23 @@ def _note_canvases_saved(projects: list[dict[str, Any]]) -> None:
         if age is not None and 0 <= age <= CANVAS_SAVED_TOGETHER_SECONDS:
             filed = list(earlier.get("filed") or [{"id": earlier["id"], "name": earlier["name"]}])
     seen = {row["id"] for row in filed}
-    filed += [{"id": project["id"], "name": project["name"]} for project in projects if project["id"] not in seen]
+    filed += [_saved_row(project) for project in projects if project["id"] not in seen]
     last = projects[-1]
-    _write_canvas_waiting({"saved": {"id": last["id"], "name": last["name"], "at": project_now(), "filed": filed}})
+    _write_canvas_waiting({"saved": {**_saved_row(last), "at": project_now(), "filed": filed}})
+
+
+def _saved_row(project: dict[str, Any]) -> dict[str, Any]:
+    """A filed canvas as the person's saved line names it: {id, name}, and
+    ``overSaveLimit`` when the project is over the save limit (GM: its line
+    says new changes won't save until it's smaller; a held canvas the
+    person's act held is never refused for its size)."""
+    row: dict[str, Any] = {"id": project["id"], "name": project["name"]}
+    try:
+        if project_size.snapshot_bytes(project.get("snapshot") or {}) > MAX_PROJECT_BYTES:
+            row["overSaveLimit"] = True
+    except Exception:  # noqa: BLE001 - unknown: the plain line
+        pass
+    return row
 
 
 def _canvas_waiting_record() -> dict[str, Any] | None:
@@ -16538,7 +16756,8 @@ def _canvas_not_filed_note(reason: str, *, room_now: bool = False, live: bool = 
             "waits at the limit, every change to it is refused (409, code canvas_waiting): adding, removing or "
             "editing nodes and connections, applying, restoring, running, clearing it or loading a graph onto it. Below "
             "the limit a change holds it aside first and then goes ahead on a canvas that has no project and is "
-            "never saved: open or make a project to keep your work. Freeing room is the person's choice: tell "
+            "never saved: open or make a project to keep your work. A canvas bigger than a project can be saved is "
+            "never held for an agent: that change is refused (409, code canvas_held_full). Freeing room is the person's choice: tell "
             "them, don't delete projects to make room.")
 
 
@@ -16548,7 +16767,7 @@ def _canvas_not_filed_view(room_now: bool = False, catalog: dict[str, Any] | Non
     ``room_now`` (start_here, which doesn't settle the canvas): the list has
     room for them again, so the next listing, open or create saves them."""
     waiting = _canvas_not_filed_now()
-    held = _held_canvases()
+    held = _held_distinct() if waiting is not None else _held_canvases()
     if waiting is None and not held:
         return None
     first = waiting or held[0]
@@ -16562,6 +16781,11 @@ def _canvas_not_filed_view(room_now: bool = False, catalog: dict[str, Any] | Non
             + ([{"name": _waiting_canvas_name(waiting.get("from"), catalog)}] if waiting is not None else []),
             **({"heldUnreadable": unreadable} if unreadable else {}),
             **({"roomNow": True} if room_now else {}),
+            # How many projects the person deletes before every canvas that
+            # waits is saved (GM's answer 3: the plural line's real number).
+            **({"deletes": max(1, len(catalog["projects"]) + len(held) + (1 if waiting is not None else 0)
+                               - project_store_module.MAX_PROJECTS)}
+               if catalog is not None and first["reason"] == "projects" else {}),
             "note": _canvas_not_filed_note(first["reason"], room_now=room_now, live=waiting is not None,
                                            held=len(held))}
 
@@ -16699,7 +16923,7 @@ def _note_canvas_settled(settled: tuple[str, Any] | None) -> None:
             project, owner = settled[1]
             restore_id = notice["id"] if _restore_of(notice, owner) else None
             if restore_id:
-                project_store.note_restore(restore_id, recoveredCanvas={"id": project["id"], "name": project["name"]},
+                project_store.note_restore(restore_id, recoveredCanvas=_saved_row(project),
                                            canvasNotFiled=None)
             # After its commit landed: a waiting canvas leaves {saved} for the toast.
             _canvas_settled_off_waiting(project)
@@ -16742,7 +16966,7 @@ def _refuse_a_create_past_the_limit(catalog: dict[str, Any]) -> None:
     canvas, then refused the create, and left state.json owning a project
     that never existed). Refused with the limit's 413; nothing changes, and
     the next listing files the canvas (there is room for it alone)."""
-    adding = 1 + (1 if _settle_would_file(catalog) else 0) + len(_held_canvases())
+    adding = 1 + (1 if _settle_would_file(catalog) else 0) + len(_held_distinct())
     if len(catalog["projects"]) + adding > project_store_module.MAX_PROJECTS:
         raise ProjectLimitError("Project limit reached", "projects")
 
@@ -17037,7 +17261,7 @@ async def list_projects() -> dict[str, Any]:
             # A waiting canvas was filed (GM r5: the person's "saved" toast).
             listing["canvasSaved"] = dict(saved)
         if unreadable := _held_unreadable_view():
-            # canvas-held.json didn't read whole and a held canvas may be lost
+            # A held canvas couldn't be read or saved and may be lost
             # (review 6 of PR #199, L-1): the person's line, for a week.
             listing["canvasHeldUnreadable"] = unreadable
         kept = set(catalog["projects"]) | set(catalog.get("trash") or {})
@@ -18019,49 +18243,59 @@ def _refuse_a_restore_past_the_limit(catalog: dict[str, Any]) -> None:
         raise ProjectLimitError("Project limit reached", "projects")
 
 
-def _held_fits_by_size(catalog: dict[str, Any], entry: dict[str, Any], adding_bytes: int) -> bool:
-    """Whether filing ``entry`` stays under the catalog's size cap (its
-    count aside): _held_room's size half."""
-    room = _held_room({**catalog, "projects": {}}, entry, adding_bytes)
-    return room is None
-
-
 def _restore_room(catalog: dict[str, Any]) -> dict[str, Any] | None:
     """The listing's `restoreRoom` (review 6 of PR #199, L-3): None when a
     restore from Recently deleted passes now; else {refused: "projects",
     deletes: how many projects the person must delete first (None: deleting
-    can't make room), heldTakesPlace: the canvases waiting to be saved hold
-    the places the list has left}. From the same count as
-    _refuse_a_restore_past_the_limit, and what a delete then really does
-    (GM's answer 3 to review 6): the next listing saves a waiting canvas
-    into a freed place first (the live one, then the held ones, while they
-    fit by size), so one delete may not be enough."""
+    can't make room, the canvases waiting don't fit by size), heldTakesPlace:
+    the canvases waiting to be saved hold the places the list has left,
+    waiting: how many wait}. From the same count as
+    _refuse_a_restore_past_the_limit, and what deletes then really do (GM's
+    answer 3 to review 6): each delete is followed by a listing, which saves
+    the waiting canvases into the freed places (the live one, then the held
+    ones, while they fit by size), and those are projects the person can
+    delete too (review 7, N-2: counted along the way). Each canvas's size is
+    measured once (N-5)."""
     if project_store_module.RESTORE_MAY_PASS_THE_PROJECT_LIMIT:
         return None
     limit = project_store_module.MAX_PROJECTS
     projects = len(catalog["projects"])
-    held = _held_canvases()
-    if projects + len(held) < limit:
+    if projects + len(_held_canvases()) < limit:
         return None
+    held = _held_distinct()
     waiting = _canvas_not_filed_now()
-    live_files = waiting is not None and waiting.get("reason") == "projects" and bool(cli_graph.nodes or cli_graph.edges)
-    deletes = None
-    for k in range(1, projects + 1):
-        count, left, adding = projects - k, len(held), 0
-        if live_files and count < limit:
-            count += 1
-        for entry in held:
-            if count >= limit or not _held_fits_by_size(catalog, entry, adding):
-                break
-            adding += len(json.dumps({"nodes": entry["nodes"], "edges": entry["edges"]}, ensure_ascii=False,
-                                     separators=(",", ":"), default=str).encode("utf-8")) + 1024
-            count += 1
-            left -= 1
-        if count + left < limit:
+    live = waiting is not None and bool(cli_graph.nodes or cli_graph.edges)
+    try:
+        signature = project_store.signature()
+    except ProjectStoreError:
+        signature = None
+    room = project_store_module.MAX_CATALOG_BYTES - (signature[2] if signature else 0) - 64 * 1024
+    # (bytes, the limit it waits on) per waiting canvas, in filing order.
+    queue: list[int] = []
+    if live:
+        try:
+            exported = _graph_canvas_export(cli_graph)
+            queue.append(len(json.dumps({"nodes": exported["nodes"], "edges": exported["edges"]}, ensure_ascii=False,
+                                        separators=(",", ":"), default=str).encode("utf-8")))
+        except Exception:  # noqa: BLE001 - unknown: counted as fitting
+            queue.append(0)
+    for entry in held:
+        queue.append(len(json.dumps({"nodes": entry["nodes"], "edges": entry["edges"]}, ensure_ascii=False,
+                                    separators=(",", ":"), default=str).encode("utf-8")))
+    waiting_count = len(queue)
+    listed, used, deletes = projects, 0, None
+    for k in range(1, projects + waiting_count + 1):
+        listed -= 1  # one delete (to Recently deleted: it frees a place, not bytes)
+        while queue and listed < limit and used + queue[0] + 1024 <= room:
+            used += queue.pop(0) + 1024
+            listed += 1
+        if listed + len(queue) < limit:
             deletes = k
             break
+        if listed <= 0 and queue:
+            break  # what waits doesn't fit by size: deletes can't make room
     return {"refused": "projects", "deletes": deletes, "heldTakesPlace": projects < limit,
-            "waiting": len(held) + (1 if waiting is not None else 0)}
+            "waiting": waiting_count}
 
 
 @app.post("/api/projects/{project_id}/restore")

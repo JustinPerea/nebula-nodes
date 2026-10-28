@@ -272,3 +272,72 @@ Supersedes the bullets above where they disagree: `.bak` is now one commit behin
   - The unreadable notice line, and the `canvas_held_full` wording.
   - The plural tooltip "The canvases you had open are holding the last places." and the second sentence when 2 or more deletes are needed.
   - "Never blocked" vs round 5: the person's own clear or load at the limit is still refused (the round 5 rule for the route guards). Only GM can say whether that should change.
+
+## Fix round 7 (review 7: M-1, M-2, L-1-L-3, N-1-N-6; GM r8 and GM's answers to review 7)
+
+- **M-1: the guard reads the canvas, and settles it in the step.** Before, "the canvas waits" was a record only a settle (a listing, open, create or delete) wrote, so between a catalog restore and the first settle an agent's write went through, and the agent's canvas was later filed as the person's.
+  - `_waiting_canvas_plan` now asks the canvas itself when no record says it waits (`_live_canvas_unsettled`: it holds something, and its owner is neither the open project nor in the list).
+  - It then settles it right there, synchronously, as a listing would (`_settle_in_step`), and commits. When there is room, the canvas is saved as its own project (the restore notice says so, other tabs get `canvasFiled` after the route) and the agent's write goes on, on that project. At the limit, it is marked waiting with no project open, and the write is refused 409 `canvas_waiting` with GM's line.
+  - Why (a) and not (b), settling in the restore path: the restore runs inside whichever read found the damage, often the fence's worker-thread read, and `_on_catalog_restore` runs after the lock with no access to the loop's graph. A settle there would race the loop's `cli_graph`, and a restore at boot has no graph yet. Reading the facts in the guard covers every way the canvas can end up unsettled (a restore, a crash between `state.json` and `catalog.json`, another process's commit), not just restores. And every request then sees the same state a listing would have left: refused at the limit, the person's canvas saved first below it.
+  - Inside a held catalog transaction the settle can't run (a nested transaction would lose a commit), so the guard refuses there. No graph-write route holds one at the fence or write step.
+  - **N-4:** `_refuse_if_graph_moved`, the write step of every route that awaits, runs the guard again. The guard runs until it has held or refused once per request (`done` is gone), so a restore during the route's awaits is caught. The upload test makes the open project vanish mid-route: refused, no node.
+  - **N-3:** review 7's static reachability scan is `test_n3_every_route_that_can_change_the_graph_is_marked_or_says_why`. A route that reaches a `cli_graph` mutation without `graph_write` fails CI unless it is listed with its reason. The list is the 15 known person-only, proposal and project routes; the scan is a little wider than the probe, so it also lists `create_canvas_proposal`.
+  - **GM default (answer 1):** an agent's write refused right after a restore gets the usual Agent log line, "Codex tried to change the canvas you had open…", on Codex's row (tested).
+- **L-3: one file per held canvas, no shared cap (coordinator's design, GM approved).**
+  - Each canvas lives in `projects/canvas-held/<projectId>.json` and `.bak`, `{version: 2, entry, check}`. Each copy is written whole (fsynced temp file, rename), then the folder is fsynced. A drop unlinks both copies and fsyncs the folder. The unreadable note is `canvas-held/unreadable.json`.
+  - `check` is a sha256 of the entry. A flip that still parses (in a param value, say) makes that copy damaged, so the other copy wins (M-2's option).
+  - The per-canvas cap is a project's: `MAX_PROJECT_BYTES`, measured as a project's snapshot. It applies to agents only (`capped=not _is_person_request()`). An agent is refused 409 `canvas_held_full` `{scope: "canvas", sizeBytes, limitBytes}` with GM's line, "This canvas is too big for Nebula to keep aside, so nothing was changed. Work in an existing project, or make the canvas smaller first." MCP adds "(409, canvas_held_full)" and the CLI "(canvas_held_full)".
+  - The person's open, create, clear and load always hold the canvas, so the person can never hit the cap (tested with a 200-byte cap).
+  - The shared 32 MiB cap is gone, and GM's answer-5 line with it (nothing can trigger it now).
+  - **GM check (a), reported to the coordinator, ruled by GM:** a held canvas can be bigger than the 16 MiB save limit. The person's own edits are never refused for size (Q118), and a project stored over the limit opens. It is never bigger than a project can be stored: the catalog keeps projects over the save limit. So it is saved as a project over the limit, with saving paused. Its saved line is GM's: "The canvas you had open was saved as its own project, “X”. It's over the save limit, so new changes won't save until it's smaller." It comes from `overSaveLimit` on the filed row and on `recoveredCanvas`, in the toast and the restore notice alike, and replaces the plain line.
+  - **Migration.** `canvas-held.json` is read once with the tolerant reader, plus L-2 and N-1. Each canvas not already in the folder is written there, the folder fsynced, then the old copies renamed `canvas-held.json.migrated-<UTC>-<id>`. A damaged old copy is also kept as `.damaged-…`.
+  - **Crash midway:** canvases already written are skipped on the next run. A canvas it couldn't write stays in memory and in the old file until the next try. A canvas already filed comes back only with its projectId, and the filing skips any projectId the catalog has.
+  - Tested: a crash after the first canvas, and a crash before keeping aside. In both, the next run has both canvases once, and they are filed as exactly two projects.
+- **M-2 / N-6.**
+  - `held_canvas_items_ok`: nodes are dicts with unique string ids (and dict `data`); connections are dicts with unique string ids, `source` and `target`. `_held_entry` and the salvage both require it.
+  - Each held canvas is read on its own: its file, else its .bak, else either copy's salvaged entry, using the filename's id, so a flipped `projectId` still salvages. The copy that didn't read is kept as `.damaged-…`, and both copies are rewritten from the good one.
+  - A canvas neither copy yields is counted (exact, by its filename), and its files are kept aside, then removed so they aren't counted twice.
+  - `_file_held_canvases` files each canvas in its own try. One that raises is kept aside (`.unfileable-…`), counted in `canvasHeldUnreadable`, and the listing goes on. Garbage nodes are never filed.
+- **L-1: held once, filed once, named once.**
+  - `_hold_live_canvas` returns the existing hold when the digest matches, so 507 retries hold once.
+  - `_held_distinct()` leaves out a held copy that is the live canvas itself in every count that also counts the live one: the waiting line, the plan, create, and `restoreRoom`. So the person reads one canvas, not two.
+  - When the live canvas is saved (memory and `state.json` agree, owner is the open project), a held copy with its digest is "already filed" and dropped after the commit, so it is never a "Recovered canvas 2". After that, the notice no longer says a canvas "isn't saved as a project yet".
+  - **GM (b):** a duplicate held canvas files only one project (tested with 3 failed opens and 2 freed slots).
+  - The toast also dedupes by id.
+- **L-2:** a cut `canvas-held.json` gives its complete leading entries (`_held_entries_cut`: `raw_decode` per element, JSON whitespace only).
+  - When neither copy's length is known, the lost count is unknown (null) and said. When an array end was reached, the count is exact.
+  - Per-canvas files make a cut cost only that canvas.
+- **N-1:** an id-less entry counts as lost only when the union recovered fewer than the longest known copy listed. A `.bak` that supplies the entry says nothing.
+- **N-2:** `restoreRoom.deletes` steps delete by delete. Each delete is followed by the listing that files waiting canvases into freed places, and those projects can be deleted too. `deletes` is null only when what waits can't fit by size.
+  - Live plus 2 held at a limit of 3 gives 4, checked with real deletes: 3 is refused, 4 restores.
+  - The tooltip for null no longer says "after you delete a project": "You can restore it once the canvases you had open are saved. …" (wording for GM).
+- **N-5:** `_restore_room` measures each waiting canvas once (one `json.dumps` each, tested).
+- **GM r8.**
+  - **Toast:** #198's no-cut CSS (project-home, asset-trash, moodboard and the agent-log notice wrap) and its sweep as `frontend/tests/toastsNeverCut.test.ts`.
+  - **(a) One saved line:** `listingNotices` drops the filed rows that the restore notice on screen says (`catalogRestore.recoveredCanvas`), and marks them shown. The toast is only for a filing the notice doesn't say.
+  - **Answer 3:** the plural "Delete 2 projects and Nebula will save them." uses the listing's `canvasNotFiled.deletes` (projects + waiting − limit).
+  - **Answers 2 and 6** were already in.
+  - **Answer 5** has no trigger left (see L-3).
+  - **Answer 7:** the person's own clear and load at the limit get `canvas_waiting_person_reason`, with `audience: "person"`: "It isn't saved as a project yet because you've reached the limit of N projects. Delete a project and Nebula will save it, or open an existing project to work in." Under Clear's heading, or "Couldn't load “file.json”." (`loadRefusedHeading`). The size cap gives its reason and the waiting line's advice; that composition is for GM. The agents keep their own lines.
+  - **Duplicate named once:** confirmed.
+- **Old tests changed.**
+  - `test_project_catalog_restore_fix5.py`: the person's clear and load expect the person's line.
+  - `test_project_catalog_restore_fix6.py`: the L-1 tests now write the old `canvas-held.json` and go through the migration, and the healed-on-disk check reads `canvas-held/`. The shared-cap test is gone; fix7 covers the per-canvas cap.
+- **Tests failed first (on 5e0dd675).**
+  - Backend `test_project_catalog_restore_fix7.py`: 32 of 35 failed. The fix doesn't touch the 3 passes: the N-3 scan (nothing unmarked at 5e0dd675 either) and two guards.
+  - Most of the M-1, N-4, L-1, L-2, N-1 and GM-7 failures are the bug itself. The per-canvas, M-2 flip, N-2 and N-5 tests fail there on the new layout's API. Review 7's own probes are the bug's repro at 5e0dd675.
+  - Frontend: 13 of 18 failed. The 5 passes are guards: the sweep finds toasts, the size-cap plurals, answer 6's tooltip, the clear line (backend-worded), and the render.
+- **Found while re-running review 7's probes:** a damaged `canvas-held/unreadable.json` silenced the "may be lost" notice. `_read_held_note` now keeps a damaged note aside and says "may be lost" with the count unknown (`test_l2_a_damaged_note_still_says_a_canvas_may_be_lost`).
+- **Frontend fix6 test changed:** `catalogRestore.fix6.test.tsx` expected the old plural ("Delete projects…"). It now expects GM answer 3's "Delete 2 projects and Nebula will save them."
+- **Review 7's probes at this head.** They wrote and read `canvas-held.json` directly and patched `CANVAS_HELD_MAX_BYTES`, so 53 of 89 failed on the layout (FileNotFoundError, AttributeError), not on behaviour. An adapted copy writes the old file just before each damage, so the damage goes through the tolerant reader and the move. f7 patches `MAX_PROJECT_BYTES`, and t3's second damage hits the per-canvas pair.
+  - All 89 pass.
+  - T1, both copies with the same typed damage: the damaged canvas is lost and counted exactly (1), and the other is filed. The `edge-str` case, filed as garbage at 5e0dd675, is now refused.
+  - T2 and T4 have no 500s and no duplicates. T5 journals once.
+  - F10 and F2-F6 behave as the M-1 fix intends: at the limit, codex's write is refused and W is filed. Below it, W is saved first.
+- **Live check** (8799/5799, 8000-8010 and 5173 blocked, canary unreachable, 0 blocked requests), 17/17.
+  - CLEAR was first staged with a bare fetch and then without a project. Both were refused before the guard: one for the params version, the other by round 19's rule that a tab's write must name its workspace. It is now staged through `apiFetch` with the current workspace revision.
+  - Neither Clear nor Load can be reached while the canvas waits, because no project is open. The line comes from the app's own `errorCopy`.
+  - The canvas notice region lives in the canvas view, so the Projects home screenshot can't show that line.
+- **Gates.**
+  - Backend, full (no -n): 11,966 passed, 71 skipped, and 2 failed under load (machine load average about 21, a 55-minute run): `test_terminate_agent_process_tree_kills_setsid_grandchild` and `test_get_run_reads_a_run_the_person_started_on_the_canvas`. Neither is catalog code, and both passed 3 of 3 alone.
+  - Frontend gate set: 956/956 across 62 files. tsc (app and node) and lint are clean. The build budget is 424,474 bytes raw (limit 512,000).

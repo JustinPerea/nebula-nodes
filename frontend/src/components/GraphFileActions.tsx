@@ -11,8 +11,9 @@ import { apiRequest } from '../lib/apiRequest';
 import { rewriteBackendAssetUrls } from '../lib/backend';
 import { adoptCanvasRevision } from '../lib/projectContext';
 import type { CutOffSave } from '../lib/savingCutOff';
-import { failureMessage, RequestFailedError } from '../lib/errorCopy';
+import { failureMessage, failureUnder, RequestFailedError } from '../lib/errorCopy';
 import { showNotice } from '../lib/canvasNotice';
+import { loadRefusedHeading } from '../lib/failureLines';
 import { isModalDialogOpen } from '../lib/canvasShortcutScope';
 import { computeCanvasFitPadding } from '../lib/canvasFit';
 import { providerKeyWarnings } from '../lib/providerSwitch';
@@ -166,7 +167,9 @@ export function GraphFileActions() {
     } catch (error) {
       if (refuseOverLimit && error instanceof RequestFailedError && error.overSaveLimit) return 'over';
       console.error('Graph import failed; existing graph preserved:', error);
-      showNotice(failureMessage(error, LOAD_GRAPH));
+      // GM's answer 7: a refusal while the canvas waits names the file.
+      const heading = loadRefusedHeading(error, result.fileName, LOAD_GRAPH);
+      showNotice(heading === LOAD_GRAPH ? failureMessage(error, LOAD_GRAPH) : failureUnder(error, heading));
     } finally {
       if (importReserved) useGraphStore.getState().releaseGraphImport();
       // Not replaced: the writes that waited go to the canvas still there.

@@ -73,7 +73,7 @@ export interface CatalogRestore {
   backInTrash?: { id: string; name: string }[]; backInTrashCount?: number;
   /** The live canvas filed as its own project (it wasn't one in the restored
    * list): "<project> (recovered)", numbered, or "Recovered canvas". */
-  recoveredCanvas?: { id: string; name: string } | null;
+  recoveredCanvas?: { id: string; name: string; overSaveLimit?: boolean } | null;
   /** It couldn't be filed: the list is at a limit (review 2 of PR #199, L4). */
   canvasNotFiled?: { reason: 'projects' | 'storage'; current?: boolean } | null;
   /** The open project that didn't come back, and its name when a file had it. */
@@ -101,11 +101,14 @@ export interface ProjectList {
     /** Each canvas that waits (held ones, then the live one), with the name
      * of the project it was when known (review 6 of PR #199, N-2). */
     canvases?: { name?: string | null }[];
-    /** Held canvases canvas-held.json couldn't read (review 6, L-1). */
+    /** How many projects to delete before every waiting canvas is saved (GM's answer 3). */
+    deletes?: number;
+    /** Held canvases that couldn't be read (review 6, L-1). */
     heldUnreadable?: { count: number | null; kept?: string[]; at?: string } };
   /** A waiting canvas was saved as its own project, recently: GM's toast.
    * `filed` names every canvas saved with it (review 6, N-2). */
-  canvasSaved?: { id: string; name: string; at?: string; filed?: { id: string; name: string }[] };
+  canvasSaved?: { id: string; name: string; at?: string; overSaveLimit?: boolean;
+    filed?: { id: string; name: string; overSaveLimit?: boolean }[] };
   /** The backend's verdict on a restore from Recently deleted now, held
    * canvases counted (review 6 of PR #199, L-3): absent when it passes. */
   restoreRoom?: { refused: 'projects'; deletes: number | null; heldTakesPlace: boolean; waiting?: number };

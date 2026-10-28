@@ -55,10 +55,11 @@ class NebulaClient:
         else:
             message = exc.detail
             payload = exc.payload if isinstance(exc.payload, dict) else {}
-            if payload.get("code") == "canvas_waiting":
+            if payload.get("code") in ("canvas_waiting", "canvas_held_full"):
                 # The canvas waits to be saved as a project and the list is at
-                # its limit (review 5 of PR #199, M-3): the code, for scripts.
-                message = f"{message} (canvas_waiting)"
+                # its limit (review 5 of PR #199, M-3), or it is too big to
+                # keep aside (review 7, L-3): the code, for scripts.
+                message = f"{message} ({payload['code']})"
         print(f"error: {message}", file=sys.stderr)
         sys.exit(1)
 

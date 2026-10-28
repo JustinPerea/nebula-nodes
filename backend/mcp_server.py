@@ -299,9 +299,11 @@ def _canvas_waiting_said() -> Iterator[None]:
         yield
     except NebulaAPIError as exc:
         payload = exc.payload if isinstance(exc.payload, dict) else {}
-        if payload.get("code") != "canvas_waiting" or "canvas_waiting" in exc.detail:
+        code = payload.get("code")
+        # canvas_held_full: the canvas is too big to keep aside (review 7, L-3).
+        if code not in ("canvas_waiting", "canvas_held_full") or code in exc.detail:
             raise
-        raise NebulaAPIError(f"{exc.detail} ({exc.status}, canvas_waiting)", status=exc.status, kind=exc.kind,
+        raise NebulaAPIError(f"{exc.detail} ({exc.status}, {code})", status=exc.status, kind=exc.kind,
                              headers=exc.headers, payload=exc.payload) from exc
 
 
