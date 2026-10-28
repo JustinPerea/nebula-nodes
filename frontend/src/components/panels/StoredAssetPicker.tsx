@@ -12,7 +12,7 @@ import {
   type StoredAssetKind,
   type StoredAssetSummary,
 } from '../../store/storedAssetsStore';
-import { offlineMark } from '../../lib/useBackendOffline';
+import { useCanvasLock } from '../../lib/canvasLock';
 
 interface StoredAssetPickerProps {
   kind: StoredAssetKind;
@@ -45,6 +45,7 @@ async function listAssets(kind: StoredAssetKind, projectId: string | null): Prom
  * asset the node shows. The value is the asset's id, the same one agents set.
  */
 export function StoredAssetPicker({ kind, label, value, onChange, readOnly = false }: StoredAssetPickerProps) {
+  const lock = useCanvasLock();
   const enterMoodboardEditor = useUIStore((s) => s.enterMoodboardEditor);
   const enterCharacterEditor = useUIStore((s) => s.enterCharacterEditor);
   const current = useStoredAsset(kind, value);
@@ -82,7 +83,7 @@ export function StoredAssetPicker({ kind, label, value, onChange, readOnly = fal
         aria-label={label}
         value={value}
         disabled={readOnly}
-        {...offlineMark(readOnly)}
+        {...(readOnly ? lock.mark : {})}
         onChange={(e) => onChange(e.target.value)}
       >
         {!value && <option value="">{options === null ? 'Loading…' : `Choose a ${NOUN[kind]}…`}</option>}

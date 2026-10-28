@@ -586,3 +586,27 @@ def test_nebula_delete_keeps_the_id(capsys, ref, label, shown):
 
     run_delete(_DeletingClient(label), [ref])
     assert capsys.readouterr().out == shown + "\n"
+
+
+# -- the docs agents read: the same ratchet over their prose (review 3, finding 6) -------------
+
+# Prose the docs ratchet doesn't read: fenced code, `backtick spans`, the
+# --wire / --unwire flags, and the one line that names the old word to say
+# it is gone.
+_DOC_NOT_PROSE = re.compile(r"```.*?```|`[^`]*`|--(?:un)?wire\b|\"connected\" for \"wired\"", re.DOTALL)
+AGENT_DOCS = ("docs/MCP-SETUP.md", "skills/nebula/SKILL.md")
+
+
+def _doc_wire_words(text: str) -> list[str]:
+    prose = _DOC_NOT_PROSE.sub("", text)
+    return [prose[max(0, m.start() - 40):m.end() + 20].replace("\n", " ") for m in WIRE_WORDS.finditer(prose)]
+
+
+@pytest.mark.parametrize("path", AGENT_DOCS)
+def test_no_prose_in_the_docs_agents_read_says_wire_or_wired(path):
+    assert _doc_wire_words((REPO / path).read_text()) == []
+
+
+def test_the_docs_ratchet_skips_code_and_flags_but_reads_prose():
+    assert _doc_wire_words("```\nnebula apply --wire a b\n```\nUse `wired` and --unwire.") == []
+    assert _doc_wire_words("the person edits one (a wire\n  to or from it)") != []

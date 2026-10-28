@@ -151,7 +151,14 @@ The server exposes these tools for building and running (see
   [Undoing your own edit](#undoing-your-own-edit)). A proposal
   (`propose_change`) takes the same nodes, connections and params, but not moves,
   removals, unwires, `arrange`, `steps` or renames of nodes already on the
-  canvas; it can name its own new nodes (`rename`).
+  canvas; it can name its own new nodes (`rename`). An unnamed node whose
+  provider depends on the person's keys goes by its model without the
+  gateway ("Grok Imagine 2.0" for a "Grok Imagine 2.0 (Krea)" node), on the
+  person's card and everywhere Nebula names a node to you: `look_at_canvas`
+  and `get_project` `name`, `edit_canvas`'s `added[].name`, proposals, run
+  refusals, the cursor's bubble and the Agent log. The catalog and search
+  (`find_nodes`, `describe_node`) keep the full name, and renaming a node to
+  either form leaves it unnamed.
 - `upload_file`: adds a local image, video, audio file or document to
   Nebula (`nebula upload <file>`): Nebula copies it into its output folder
   through `POST /api/uploads` and puts an Image Input, Video Input,
@@ -194,7 +201,77 @@ The server exposes these tools for building and running (see
   path follows `upload_file`'s rules (an in-app chat's turn reads only its
   own workspace, protected files are refused, the read follows no links),
   files up to 528 MB.
-- `remove_from_canvas`: deletes nodes or single connections, all or nothing. Its
+- `remove_from_canvas`: deletes nodes or single connections, all or nothing.
+  On the person's open canvas it is one undo step: one Cmd+Z puts the nodes
+  back with their connections (as the person's own delete is, from the
+  Delete key, the selection toolbar, the context menu or the Inspector; the
+  Delete and Backspace keys, like every canvas shortcut, act only with focus
+  on the canvas or its bars, never in a panel that owns its keys such as the
+  Inspector or chat, nor behind a modal dialog). A delete (the person's,
+  yours or another agent's) takes the nodes and their connections off the
+  canvas the moment it is made; edits to them still waiting to be sent
+  (the person's typing, yours) are dropped once Nebula confirms it, and a
+  sync that still shows them meanwhile leaves them off. If Nebula refuses
+  it, the nodes come back where they were, with their connections, not
+  selected, with the usual line saying why, and the waiting edits go out.
+  A Cmd+Z pressed while a delete is still on its way undoes nothing and
+  says "Nothing was undone. Your last change was still saving."; once the
+  delete has landed, one Cmd+Z brings the nodes back with their
+  connections, on the canvas and in Nebula's graph, and Redo deletes them
+  again. A Cmd+Z the person presses before another step has reached Nebula
+  waits for Nebula's answer, then undoes it (a clear, an upload once its
+  node is on the canvas, an accepted proposal, a model picked on an
+  OpenRouter or Replicate node; a step Nebula refused undoes nothing, and
+  says why: a refused clear, upload, accept or model pick each has its own
+  line). That Cmd+Z is bound to the step it was pressed for, and a second
+  Cmd+Z to the step below it. While its own step is still on its way it
+  waits, even if something else lands meanwhile; a later step of the
+  person's still on its way is no newer edit (the Cmd+Z applies beneath
+  it). Your edits to a node that a waiting Cmd+Z holds are kept and show on
+  the canvas once it lands, with their Agent log line and their own undo
+  step (a run's outputs too); if Nebula doesn't answer an undo within 15 s
+  it fails with "Couldn't undo that." and the reason, and the edits it held
+  go out in order. An undo Nebula refuses leaves the canvas as Nebula's
+  graph is. An edit or Cmd+Z still waiting when another project opens or a
+  graph import replaces the canvas is never sent: it would land on the
+  wrong project. A delete's change lands when Nebula's own sync takes its
+  nodes off, which can come before its answer: no undo after that brings
+  those nodes back to the canvas or to Nebula's graph unless it undoes
+  that delete. A delete of several nodes
+  is one step however its nodes' syncs arrive (one per node, with your edit
+  or the person's typing between them): one Cmd+Z brings them all back. A
+  sync that already took a node off makes its delete done, whatever its
+  answer says, and undoing a delete puts back only what it removed (a node
+  you added meanwhile stays). A clear the person issues after a Cmd+Z that
+  is still waiting supersedes it: the Cmd+Z is dropped and the canvas ends
+  cleared; an undo takes off only the nodes its own step added (a node you,
+  another agent or the person added while that step was on its way stays),
+  and always the ones it did add, even after a delete of one and its undo
+  brought it back (adding a node from the library, a drop, the command
+  palette, a Character or Moodboard drop and Creator's inserts are each
+  their own step too); while an undo or redo is still on its way to
+  Nebula, the person's next edits (typing, a delete, an added node) reach
+  Nebula after it, in the order the person made them, so the graph you
+  read never shows a later edit undone by an earlier Cmd+Z;
+  a Cmd+Z never does nothing without a word: a step that ended up changing
+  nothing is passed over (the press undoes the step below it), and a press
+  whose step was taken back meanwhile (a refused clear) counts in the
+  skipped line below; a Cmd+Z pressed after the clear undoes the clear once it lands,
+  and a step taken while a clear was on its way never brings a cleared
+  node back. If a newer edit has settled on top of its step by then
+  (yours, another agent's, or the person's own later edit), it never undoes
+  that edit instead: it is dropped, and the canvas says "Nothing was undone. Your last
+  change was still saving." ("Nothing was redone. …" when only Cmd+Shift+Z
+  presses were dropped); if some presses went through and some were
+  dropped, the restore's line ends with what was skipped, undos and redos
+  counted apart: "1 undo was skipped while a change was saving.", "2 undos
+  and 1 redo were skipped while a change was saving." (Redo stays). The same line shows if Nebula hasn't answered
+  within 15 s, or another project opens (the person's own switch, or your
+  load into the open project, whose own notice stays beside it). A clear
+  takes off only the nodes that were on the canvas when the person cleared,
+  never one you added after it (even under a reused id such as n1), and an
+  accept the person undid while it was on its way runs nothing (its
+  approval goes back). Its
   result has `undo` too, which puts the nodes back with their params,
   outputs, names and connections, the person's pins on them, and the proposals
   the delete closed when they still fit. `removals` lists, per node it
@@ -250,13 +327,25 @@ The server exposes these tools for building and running (see
   projects, switch the canvas to one, or start a new, empty one. The project
   that was open is saved as it is. The person's canvas follows (from the
   Projects screen too, which opens the canvas), shows a note naming the
-  agent, and offers a button back to the project they had open. The Projects
+  agent, and offers a button back to the project they had open. Until the
+  new canvas has loaded, their canvas is read-only: the project bar says
+  "Opening “<project>”…" and Run says "Wait for “<project>” to open." What
+  they typed before the switch is saved into the project they left, and
+  when you reopened the project they were showing, onto the reopened canvas
+  too. If that save fails it is kept as a new project named after the
+  project left, "<project left> (recovered)" (then "(recovered 2)", 3 and
+  so on: a new copy each time, never an earlier one), and a line says so
+  with an Open copy button. The Projects
   screen also lists again whenever anyone makes, renames, deletes or restores
   a project (the `projectsChanged` socket event).
   Start new work in a new project rather than emptying the canvas: it keeps
   the person's work. Clearing a project that has nodes needs an explicit
   force from anyone (`nebula clear --force`, or `DELETE /api/graph?force=true`);
-  on an open canvas the person can undo it. Each `list_projects` row has the
+  on an open canvas the person can undo it. If they were editing when you
+  cleared, that edit is lost and their canvas says so, naming you: "Codex
+  cleared the canvas while you were editing “Text” for “Hero prompt”. That
+  change wasn't saved." (a count from 4 settings, or settings on several
+  nodes). Each `list_projects` row has the
   card's `cover` ({source, images}).
 - `list_project_covers` / `set_project_cover`: the images a project's card
   can show (`images`, `pinned`, `pinnedBy`, `cover`) and setting its cover to
@@ -529,7 +618,15 @@ Every one of these actions is also listed in the canvas's **Agent log**
 own eye-off button or Settings > Preferences > "Agent log"): the agent's
 name in its cursor colour, the cursor's words ("Added “Moodboard”", "Running
 “Krea 2”", "Connecting “Prompt” to “Krea 2”", "Accepted"; a node by its name in
-curly quotes, else its type's name), and the time. Moodboard writes are listed there too
+curly quotes, else its type's name), and the time. A params change names the
+fields by the labels the card shows them under, in the card's order: "Set
+“Aspect ratio”", "Set “Aspect ratio” and “Resolution”", and "Changed 3 settings" for
+three or more on the cursor (the Agent log names them all; a universal
+node's own fields follow the card's order too). A field the card shows no label for is left out of the bubble
+and its count (with none labelled the cursor moves without words), and the
+Agent log names it by its key instead, after the labelled fields ("Set
+“Aspect ratio”, “Seed” and seed_mode", "Set seed_mode"), up to four names
+and then a count ("Set “Aspect ratio”, “Seed”, seed_mode, cfg and 2 more"). Moodboard writes are listed there too
 (your edit batch's `say`, else the journal's words: "Set aside #1 on board
 Dusk"; "Analyzed board Dusk"), and so is a run of the
 whole canvas ("Running 4 nodes"); neither has one place on the canvas, so
@@ -575,7 +672,7 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `node.params` | a param changed (only keys whose value changed) | `keys`, redacted `values`; `proposalId` when an accepted proposal set it |
 | `node.moved` | a drag ended, auto-layout or paste moved nodes 8 px or more | `nodeIds`, `count` |
 | `node.renamed` | a node got a new name on the canvas (or went back to its model name) | `from`, `to` |
-| `edge.added` / `edge.removed` | connected / disconnected | source, target and handles; `proposalId` when an accepted proposal wired it |
+| `edge.added` / `edge.removed` | connected / disconnected | source, target and handles; `proposalId` when an accepted proposal connected it |
 | `selection.changed` | the selected set changed | `nodeIds`, `count` |
 | `run.started` / `run.finished` / `run.failed` | per node, attributed to whoever started the run | `runId`, `error`; `proposalId` on the run the canvas starts for an accepted proposal |
 | `run.cancelled` | a run stopped, attributed to whoever pressed Stop or called `cancel_run` (the starter when another backend took the Stop) | `runId`, `startedBy` (`kind`, `name`) |
@@ -1184,6 +1281,113 @@ themselves follow the same rule through `loads_checked`: the `/ws` and
 accept and reject bodies, and `graph.json` in a restore bundle (400 "Invalid
 graph.json: ...").
 
+### Canvas writes: the project and the canvas they were made for
+
+The person's canvas tab sends two headers with every request that changes
+the graph or starts work on the canvas: `X-Nebula-Workspace-Revision` (the
+project it holds open) and `X-Nebula-Canvas-Revision` (which canvas of that
+project: a new one after every clear and every graph load or import).
+Nebula refuses the write with 409 `{"detail": "This canvas is out of date.
+Open the current project before editing or running it."}` when either names
+something other than what is open now, so an edit made for one canvas never
+lands on the nodes of the next (node ids start again at n1 after a clear or
+a load).
+
+Which routes: since round 20 every route that changes the graph or starts
+work on the canvas is marked in the backend (`graph_write` in
+`backend/main.py`), and the check reads the marker of the route a request
+matches, not its path. That is every write under `/api/graph…`,
+`/api/execute` and `/api/execute-node`, `/api/cinema…` and `/api/quick`,
+plus `DELETE /api/provider-recoveries/{run_id}/{node_id}` and
+`POST /api/uploads` when it adds a node (`create_node`). The upload checks in
+the route, in the same step that adds the node, after the file is read and
+probed: a drop made for a project or canvas that was switched or cleared
+while it uploaded is refused, and no node is added. An upload without
+`create_node` adds nothing and isn't checked. Every other non-GET route is
+on a reviewed list of routes that don't write the open canvas by node id,
+or check their own revision (`backend/tests/test_round20_fence.py`): a
+project's open, create and delete check the body's workspace revision, and
+a proposal's Accept is refused when the canvas it was made on was cleared
+or replaced since (409, `code: "proposal_canvas_replaced"`, detail "Couldn't
+accept this proposal: the canvas was cleared or replaced after it was made.
+Make a new proposal for the canvas as it is now."; the person reads "Couldn't
+accept this proposal. The canvas was cleared or replaced after it was made.
+Ask the agent for a new one.", so propose again against the canvas as it is
+now); Stop (`DELETE /api/executions/…`)
+stays open while the canvas follows an agent's switch.
+
+A write that carries `X-Nebula-Tab` (only the canvas sends it) to one of
+those routes must also carry `X-Nebula-Workspace-Revision`; without it, the
+same 409. A tab that has let go of its project (it is following an agent's
+switch) can't write into whatever is open next. Agents, the CLI, MCP and
+scripts send none of these headers and are unchanged: their writes go to
+the canvas open when they land. A script that sends `X-Nebula-Tab` is
+treated as a canvas tab.
+
+`/api/projects/…` isn't fenced this way. A project save names its project
+by id (`PUT /api/projects/{id}` with the workspace revision in its body),
+so when an agent's `open_project` or `new_project` switches away, the
+person's canvas still saves its last edits into the project it left (the
+handoff). For nodes Nebula already had, the project keeps Nebula's copy,
+except the settings and names the tab lists as not yet sent
+(`pendingParams: {nodeId: {key: value}}`, `pendingLabels: {nodeId: name or
+null}` beside `snapshot`): those keys, read from the saved snapshot after
+its checks, are merged per top-level setting onto Nebula's copy, so typing
+still in its debounce is kept, and your edit to another setting of the same
+node stays. When the project left is the open one again (an agent reopened
+the project the tab was showing, which reloads it from what was saved),
+the same keys and names go onto the live canvas too, with a graphSync.
+Nodes only the tab had are added as they are. Only the person's own canvas
+tab may send `pendingParams` and `pendingLabels`; from anyone else the save
+is refused. A merge Nebula can't make refuses the whole save with 409, and
+the canvas keeps it as a copy (the person sees that it wasn't saved). The
+409 reads "Nebula couldn't keep this save's unsent changes in the project
+because <why>, so nothing was saved.", where <why> is "a node's type
+changed", "the node was removed", "“<key>” isn't a setting on that node",
+"the project can't be read" or "the change came from an agent".
+
+The canvas revision is in every graphSync (`canvasRevision`), in
+`GET /api/graph/export`, and in the answers of `DELETE /api/graph`,
+`POST /api/graph/import`, and opening or making a project. It is the same
+per-project counter undo restores use: a restore made for a canvas a clear
+or an import replaced is refused. It is kept in the state dir
+(`canvas-revisions.json`, written before the canvas changes), so a backend
+restart keeps it: after a restart the canvas says the same revision and
+writes the canvas held keep landing. The file is saved as a merge (each
+project keeps the higher revision), so it never moves backwards. If it
+couldn't be read at boot (deleted, or unreadable while a canvas was saved
+before), revisions start again from a number unique to that boot, never
+from 0, and every graphSync and `GET /api/graph/export` says
+`"canvasRevisionRestored": false` until Nebula restarts with them read
+(the base is saved at once, so the next boot restores it). Only then, and
+only across an actual restart (the sync comes from another backend process
+than the canvas last synced with: the socket's first graphSync carries
+`bootId`), does an open canvas take a moved revision with the same nodes as
+the same canvas, once per boot, and send the writes it held under it,
+including a param save Nebula refused as out of date before that sync came.
+Otherwise a moved revision is another canvas: within one boot, a clear the
+tab missed that re-added the same ids is a replacement, and typing the
+canvas held for it is named in a line ("Couldn't save “<setting>” for
+“<node>”."), never sent to the new nodes.
+
+A proposal keeps the canvas revision it was made on: Accept is refused
+(409, `code: "proposal_canvas_replaced"`) once a clear or an import moved
+it, so a proposal never lands on a canvas whose node ids name other nodes.
+Reject still closes it.
+
+A run notes its canvas when it starts. If that canvas is cleared while the
+run goes, the run's results and the settings its nodes changed are not
+written back onto the new canvas (whose nodes may reuse the old ids); the
+run's own events still report them.
+
+Param writes merge per key. `PUT /api/graph/node/{id}` with `{"params":
+{...}}` changes only the keys sent; a key not sent keeps its value, whoever
+set it. The canvas sends only the keys the person changed, so your edit to
+another setting of the same node is never written back over. Two writers
+setting the same key: the later write wins (per top-level setting: a nested
+object or list is replaced whole). (One exception: an agent that
+changes a universal node's model sets the node's params for that model.)
+
 ### Pins
 
 The person can pin a short note to a node or to a spot on the canvas for
@@ -1225,6 +1429,20 @@ Rules:
   snapshot, so autosave never touches them) and switch with it. Deleting a
   pinned node leaves its pins where the node stood, marked detached; so does
   an import or Clear canvas that removes the node.
+- A note belongs to the canvas it was written on (round 23 of PR #195,
+  review 22 M-1). Node ids start again at n1 in every project and after a
+  Clear, so the pin routes are graph writes for the fence (`graph_write`):
+  the person's canvas sends the project and canvas the note was composed on
+  (`X-Nebula-Workspace-Revision`, `X-Nebula-Canvas-Revision`), and
+  `POST /api/canvas/pins` and `DELETE /api/canvas/pins/{id}` answer 409 with
+  the canvas's out-of-date line, pinning, deleting and journaling nothing,
+  once an agent opened another project or cleared this one. No `pin.added`
+  reaches you for a note the person wrote on a canvas you never saw. While
+  the canvas follows an agent's switch the note dialog closes, and the
+  person keeps the text they typed.
+- `resolve_pin` (`nebula pin resolve`) on a note you read before a switch
+  answers 404 saying that note isn't in the open project. Read the canvas
+  again (`look_at_canvas`, `nebula pins`) and answer a note listed there.
 
 ### Updates
 
@@ -1378,14 +1596,35 @@ the `propose_change` arguments:
 ```
 
 A named node's entry in the proposal has `name` (the given name) and
-`model` (the model's own name); an unnamed one has only `name`, the model's.
+`model` (the model's own name); an unnamed one has only `name`, the name its
+card will show (the model's, without the gateway for a node whose provider
+depends on the keys).
 
 `--wait` exits 0 when accepted (printing the new ids and what the canvas will
 run), 3 when rejected (with the person's reason, if any), 4 when withdrawn,
 expired or invalidated, and 2 on timeout (600 s default, still open).
 
 **Cost wording.** Proposals say how many paid model runs and free nodes
-would run, and from which providers. Upstream nodes that have no outputs yet
+would run, and from which providers: each entry in `cost.nodes` names the
+provider its run would go through with the keys set (`provider`, and
+`label` "paid · krea"), the route its `price` is for. A Krea copy that runs
+on its maker's API with the person's key names the maker (Grok Imagine 2.0
+on an xAI key: `xai`, priced at xAI's price, never Krea's; its `label` is
+"paid · Grok Imagine 2.0 via xAI"), and a connection into a Krea-only input
+(Grok's style images) keeps it on `krea`, named the same way ("paid · Grok
+Imagine 2.0 via Krea"); the person's confirm rows name the same route
+("Grok Imagine 2.0 via xAI · $0.06", "“Alt still” · Grok Imagine 2.0 via
+Krea · price not listed"). When the canvas can't read the person's keys in
+time, a row leaves the route out rather than name one that may be old
+("“Grok Imagine 2.0” · $0.06", "“Alt still” · Grok Imagine 2.0 · $0.06"); the
+price is still Nebula's. If
+a route or price has moved by the time the person says yes, the confirm asks
+again and says which node moved, named as its row reads now ("“Alt still”
+changed while this was open."; two or three by name, "4 nodes changed while
+this was open." past that), and its Run ignores clicks for half a second. Its
+rows price the nodes whose route moved at the canvas's own route-aware
+numbers, and the rest at the refusal's `estimate`.
+Upstream nodes that have no outputs yet
 are counted too, and then the count reads "up to", because the run cache may
 skip some of them. `cost.estimate` adds up list prices in USD from
 `backend/data/model_pricing.json`, where every price cites the vendor page it
@@ -1602,7 +1841,10 @@ Needs-you row opens its oldest question set or proposal.
 - **Set your status:** MCP `set_status(text, node_id?)`, CLI
   `nebula status "<text>" [--node nX]`, HTTP `POST /api/canvas/status` with
   `{text, nodeId?}`. One line, cleaned like a cursor's `say` (whitespace
-  collapsed, 140 characters at most); `nodeId` must be a node on the open
+  collapsed, 140 characters at most: a longer one is cut after its last
+  whole word that fits when that keeps at least 100 characters, else cut
+  hard (a long URL stays mostly whole), and ends in "…"; a hard cut never
+  splits a character (an accent, an emoji sequence, a flag); `nodeId` must be a node on the open
   canvas. Empty text clears it (`set_status("")`, `nebula status --clear`).
   Only an identified agent sets one, and only its own: the browser gets 403,
   an unnamed caller 400, and the body takes no agent name. A bare
@@ -1642,7 +1884,295 @@ Needs-you row opens its oldest question set or proposal.
   whichever project is open), `waitingSeconds` (the oldest open item's
   age) and `activeSecondsAgo`.
   Counts only: never the text of another agent's questions, the person's
-  answers, a proposal's note, or a cursor's `say`.
+  answers, a proposal's note, or a cursor's `say`. Each entry also lists
+  `pending` (that agent's placeholder ids on the open canvas) and `running`
+  (`[{runId, nodeId, model, secondsAgo}]`: the nodes its runs are running
+  now); an agent with only placeholders is listed too.
+
+### Placeholders, the run mark and done cards
+
+Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
+
+- **Placeholders (pending nodes):** MCP `edit_canvas(..., pending=True)`,
+  CLI `nebula apply --add ... --pending`, HTTP `POST /api/graph/apply` with
+  `"pending": true` makes the call's **new** nodes your placeholders while
+  you set them up: the canvas draws a dashed outline in your colour and
+  dims the preview with "<you> is setting this up." The reply lists them in
+  `pending`. Only new nodes: `pending: true` with no new nodes is refused
+  (422), and no agent marks a node already on the canvas or the person's.
+  In a steps plan, put `"pending": true` on the step that adds them.
+- **Making them ready:** `edit_canvas(pending=False, node_ids=["n4"])`,
+  `nebula apply --ready n4 [--ready n5]`, HTTP `{"pending": false,
+  "nodeIds": [...]}` (a step may name earlier steps' +refs). The reply has
+  `ready` and `notPending`. Only the owner: naming another agent's
+  placeholder refuses the whole call (403, nothing changes). They also turn
+  normal, and nothing is ever deleted, when you run them (your run clears
+  your own once it starts: a run refused before it starts, by the pre-call
+  check, a cycle or the spending check, leaves them pending), after 10
+  minutes with no request from you (the status line's rule and clock), when
+  the person edits one (params, the model picker, name, a real move, a
+  connection to or from it), or when the person runs one directly (its own Run; an
+  accepted proposal's run is not that). The person's direct Run of a node
+  runs what feeds it too, so every placeholder in that run turns normal and
+  runs. Another agent's edit to it, or yours, leaves it pending.
+- **Runs skip them:** every way to run (the toolbar Run, a node's Run,
+  MCP `run_nodes`, `nebula run`, an accepted proposal's run) skips each
+  placeholder and every node downstream that needs its output, before
+  anything is priced: nothing is spent on them. Each gets a `skipped`
+  event with an agent-readable reason ("Codex is still setting this up.",
+  which the canvas's Skipped badge shows as "Skipped: Codex is still
+  setting this up.", or "needs “Hero prompt”, which Codex is still setting
+  up." for a node downstream, naming the placeholder by its name, or its
+  type's name when it has none); run results list them in `skipped` beside
+  a gate's skips;
+  a canvas run's reply adds `pendingSkipped` ({count, placeholders,
+  agents}: `count` is the placeholders and what needs them, `placeholders`
+  the placeholders alone) for the line
+  under Run ("Skipped 3 nodes Codex is still setting up.", "Skipped 3
+  nodes the agents are still setting up." when they are more than one
+  agent's), and the run's Agent log line ends with
+  the same sentence. The cost the person sees before a run matches what it
+  runs: a whole-canvas Run, Run selected and an accepted proposal's run
+  leave the skipped nodes out (a proposal's `cost` adds `pendingSkipped`;
+  a proposal whose whole run waits on them reads "runs nothing until Codex
+  finishes 2 nodes", or "agents finish" for several, counting the
+  placeholders themselves, and its button reads "Accept": Accept starts no
+  run for it (it would skip every node; no Run history entry) and frees its
+  approval, and nothing is queued for when you finish), and the person's
+  direct Run of a node counts the placeholders it runs, with "Includes 2
+  nodes Codex is still setting up." ("Includes 3 nodes the agents are
+  still setting up." for several agents) under the cost. A proposal's run is
+  priced when it is made, so a placeholder in it that turns normal before
+  the run starts (its owner's `pending: false`, the idle rule) changes what
+  it runs: Accept refuses it (409, "what it runs changed after it was
+  proposed"), the approved run refuses it ("changed since you accepted"),
+  and while an approved run waits to start, its placeholders can't be made
+  ready (409). A placeholder's owner is part of the run's fingerprint.
+- **The person confirms paid ones:** when the person's direct run would
+  make a placeholder that calls a paid model normal (a node's Run, the
+  Inspector, a Cinema shot's Generate, a replay of a node run or a shot
+  from Run history), the canvas always asks first (whatever "Ask before
+  costly runs" is set to), in one dialog that replaces the costly-run
+  confirm: "Run 2 nodes Codex is still setting up?" ("Run 3 nodes the
+  agents are still setting up?" for several agents), a row per paid
+  placeholder with its agent's dot ("“Hero still” · FLUX · $0.04"; a node
+  whose model is a free-text param names the chosen model as its card
+  shows it, "“Writer” · openai/gpt-4o-mini · price not listed", so a switch
+  to another model is a changed row, even when the node is named after its
+  model; a Meshy node names its Model option and its mesh type, even at
+  the default, "Mesh type: Smart Topology (Meshy T2)", since it picks the
+  model that runs; a Krea node also names its
+  sub-model setting as its card does, even at the default: "“Hero” · Krea 2
+  · Variant: Medium · on your Krea plan", "Engine: …" on Magnific Creative,
+  "Model: …" on Topaz Image Upscale and Topaz Standard, "Training Model: …" on Krea Style
+  Train, "Grain model: …" on Topaz Bloom 2 and Wonder 3.5 while Grain is on
+  (with Grain off no grain model runs), "Enhancement model: …" and "Frame
+  interpolation model: …" on Topaz Video Upscale, "Frame interpolation
+  model: …" on Topaz Starlight Precise, Starlight Precise 2.5, Astra, Astra
+  2 and Hyperion 2.5, "Version: …" on a Krea node app, so switching one asks
+  again; a required one with nothing chosen reads "Model: not chosen"
+  ("Version: not chosen") and the row keeps its other parts, though such a
+  run never reaches the dialog (a required field with nothing chosen, below): a setting is named when it chooses which model or engine runs, so
+  Magnific Precise's Flavor (a style of the same engine) is not; Krea Style
+  Search's free-text Model is a search filter, never named as the model),
+  "price
+  not listed", "price depends on its input" while an input's size is
+  measured, "on your Krea plan"), then a muted row with no dot for every
+  other paid node in the run ("“Shot 1” · Nano Banana · $0.07"), so every
+  dollar in the total has a row, the free placeholders in one line, the
+  run's total, then "Cancel" and "Run for $0.12" ("Run for up to $0.86" for
+  a range; from Cinema "Generate for $0.12", "Generate for up to $0.50",
+  "Generate"). The amount in the button and the total line is always in
+  cents, rounded up to the next cent ($0.201 shows "$0.21", $10.481
+  "$10.49", anything under a cent "$0.01"); the rows keep their own prices.
+  A dollar amount shows only when it covers every paid row (a
+  Krea-plan row costs nothing extra): with a row that has none the total
+  reads "The listed prices total $0.43." and the button just "Run", and a
+  footnote names those rows: "“Flux still” has no list price, so the run
+  may cost more." (two by name, "3 nodes have no list price, …" for more);
+  for rows priced by their input, "“Upscale” is priced by its input, so the
+  run may cost more." / "“Upscale” and “Grade” are priced by their input,
+  …"; both kinds together, or three or more priced by their input, "3 nodes
+  have no price yet, so the run may cost more."; with nothing priced there
+  is no total and no footnote. With many paid nodes the rows scroll inside
+  the dialog (a Tab stop when they do), and the heading, total, footnote
+  and buttons stay on screen; focus starts on Cancel. Cancel changes nothing. A price read from an input file (FLUX
+  Video Upscale, SeedVR2) is measured while the dialog is open, and the
+  row updates in place. When a node's route or price changes after the
+  dialog first shows, it names the node above the rows, as its row reads
+  now ("“Alt still” changed while this was open."; two or three by name,
+  "4 nodes changed while this was open." past that), and the line stays;
+  a node joining or leaving the run adds no such line (the line for
+  placeholders that left the run covers it). A screen reader hears each
+  change, and after any change in place (a row, a price, the heading) Run
+  takes no click for 500 ms. Once it has shown, the dialog stays in charge of
+  that run until it is sent or cancelled. It follows only that run's
+  placeholders (another agent's elsewhere on the canvas never changes it):
+  if their agents finish them while it is open, it reads "Run with Codex's
+  changes?" / "Codex finished setting up this node." ("… these nodes." for
+  two or more; "Run with the agents' changes?" / "The agents finished
+  setting up these nodes." for several agents); if they leave the run
+  (deleted, or disconnected) and none finished, "Run without the node Codex
+  was setting up?" / "It's no longer in this run." ("Run without the nodes
+  Codex was setting up?" / "They're no longer in this run."; several
+  agents, "Run without the nodes the agents were setting up?"); if some
+  finished and some left, the "changes" heading counting the finished ones,
+  then "1 node Codex was setting up is no longer in this run." ("2 nodes …
+  are no longer in this run."; several agents, "2 nodes the agents were
+  setting up are no longer in this run."); and if some are still placeholders, the
+  first heading counting only those, with the same line for any that left
+  under its body. A replay from Run history sends its saved copy of every
+  node, so it words what runs: a placeholder deleted from the canvas, or
+  turned into another type and finished, counts as one that left (never
+  "finished"), and its saved copy runs as a muted row priced in the total;
+  one still a placeholder under another type is asked about, as Nebula
+  does (it reads placeholders by id). A placeholder its agent changed after
+  the run was saved (same type, other settings) runs at its saved settings,
+  so the dialog says so: "Replay the saved version?" / "Codex changed
+  “Grade” after the run was saved. The replay uses the saved settings."
+  (two: "“Grade” and “Wide”"; three: "“Wide”, “Hero still” and
+  “Grade”"; four or more: "4 nodes"; the names in the order of the rows
+  under it; several agents, "The agents changed …"), with the saved
+  version as a muted row; if placeholders are still being set up, the
+  still-setting-up heading stays and that sentence goes under its body,
+  before the left line. One finished with the saved settings reads "Run
+  with Codex's changes?" as above. If anything changed by the time the
+  person clicks, it asks again over the new run; a run with no placeholder
+  left goes ahead without asking again only if its total is no higher than
+  the one the person saw, every row in it was on screen exactly as it is
+  now (the same node, model, Krea setting and price; a row now on another
+  model or setting or at another price, even a cheaper one, asks again), and every "Not included"
+  note in it was on screen, held to that total. If another run started
+  first, a yes runs nothing and the canvas says "Nothing ran. Another run
+  started first. Click “Run” again when it finishes." (from Cinema, "…
+  Generate again when it finishes."); if a graph import is running,
+  "Nothing ran. Nebula is still importing. Click “Run” again when it
+  finishes." (from Cinema, "… Generate again when it finishes."). A notice
+  that arrives while "Codex changed the canvas" offers its Undo shows above
+  it and leaves the Undo in place. While the dialog is open, focus stays in
+  it (if the rows stop scrolling while they have focus, focus moves to
+  Cancel) and no key acts behind it: not Cmd+Enter, Delete or Backspace,
+  Cmd+K, Cmd+O or any other canvas shortcut, nor Moodboard Studio's or the
+  video editors' keys, wherever focus is (the same for every modal dialog,
+  the keyboard shortcuts, the command palette and the mask painter
+  included). Every modal dialog covers the whole window (the mask painter
+  too), and nothing pressed or clicked inside one reaches
+  what is behind it: arrows, Enter, Space and Escape in the Mesh or World
+  preview never move, select or deselect its node, and a click or
+  right-click there never selects it or opens its menu.
+  The costly-run setting's browser confirm never follows it. A row wraps
+  only between its parts, at the " · ", never inside one ("Grain model:
+  gaussian", "on your Krea plan", a node's name), and its second line keeps
+  the row's indent.
+- **A required field nobody chose:** some Krea nodes have required fields
+  with no default, and Krea refuses a request without them: Krea 2 (Large,
+  Medium, Turbo), GPT Image 2.5 Flare and Sunburst, Recraft V4.1 Flash,
+  Grok Imagine 2.0 and Z Image need an Aspect ratio and a Resolution; Flux
+  1.1 Pro, Seedream 4 and 5, Wan 2.1 and 2.2, Magnific Creative and
+  Precise, and Topaz Bloom, Bloom 2, Image Upscale, Standard and Wonder 3.5
+  need a Width and a Height; Topaz Standard also needs its Model, a Krea
+  node app its Version, Krea Style Train its Name. Nebula never fills one
+  in. Only the route the run takes counts (the one `describe_node` and the
+  run's price name): Krea's own API (a Krea token, or the person's Krea
+  plan) needs every one of these. A copy that runs on its maker's API with
+  the person's key needs only what that API sizes by: GPT Image 2.5 Flare
+  and Sunburst with an OpenAI key, and Grok Imagine 2.0 with an xAI key,
+  run without an Aspect ratio or Resolution (OpenAI picks the size, xAI
+  leaves it out); Seedream 4 and 5 with a BytePlus key still need a Width
+  and a Height. A connection into a Krea-only input (Grok's style images) keeps
+  the run on Krea. With no key that can run it (or the plan not signed in),
+  no field is named: the run is refused for the key or the sign-in first.
+  Your `run_nodes` and `nebula run` get "Missing API key: KREA_API_TOKEN"
+  (or every key a copy can use: "Missing API key: XAI_API_KEY or
+  KREA_API_TOKEN"), the card "Add your Krea API token in Settings, then
+  run the node again."; a run on the plan that isn't signed in gets
+  "Connect your Krea account in Settings before running this recipe".
+  A run that would send one with nothing in it is refused before anything
+  runs or is priced, on every run path, and before any dialog (the canvas
+  reads the keys and the plan's sign-in first when it hasn't yet, and
+  checks again when the person says yes: a key removed or a connection made
+  while the dialog was open refuses instead of sending, and a run whose
+  route changed asks again with the new row): the canvas
+  says "Nothing ran. Choose an aspect ratio for “Hero” first." for a
+  picker ("… a model …", "… a version …", "… a resolution …") and "Nothing
+  ran. Set a width for “Hero” first." for a value typed in ("… a height
+  …", "… a name …"), naming only the first missing field in the card's
+  order, and asks nothing. Your `run_nodes` and `nebula run` come back
+  `failed` with that line, without "Nothing ran.", as that node's error
+  (and in `error`, after "Nothing ran, so nothing was spent."), and the
+  card shows the same line; `nebula quick` gets the same refusal (HTTP 400,
+  naming the node type). A whole-canvas run that skips the node (a
+  placeholder) isn't refused for it. Set the field with `edit_canvas` (or
+  `nebula set`) before you run it, or leave it for the person to choose.
+  `/api/execute-node` and `/api/cinema/generate-shot` enforce it: the
+  person's run carries `confirmedPlaceholders` (exactly those paid
+  placeholder ids) and `confirmedCost` (the amount the dialog showed in its
+  button and total line, USD: the listed prices' upper total rounded up to
+  the cent; required with
+  `confirmedPlaceholders` whenever Nebula can price the run) or gets 409
+  `placeholder_confirm_required` before anything is priced or changes.
+  Nebula holds the run to its own estimate: at the keys in Settings, with
+  every price read from an input file measured first (an inline `data:`
+  image too, as `POST /api/pricing/input-sizes` measures it for the
+  canvas), a shot as one shot times its variations, multiplied and then
+  rounded to 6 places (an amount above zero never reads as 0: under half a
+  millionth it reads 0.000001, so `confirmedCost: 0` can't pass a run that
+  costs something; the canvas shows and sends $0.01 for it); anything above
+  `confirmedCost` (no slack) gets the same 409. A run that carries `confirmedCost` is held to it even when
+  no placeholder is left (their agents finished them while the dialog was
+  open); `confirmedPlaceholders` then doesn't matter. A paid node with no
+  list price counts nothing on either side, as the dialog says. The 409
+  carries `placeholders` (empty when none is left), `agents` (each one's
+  owner), `estimate` (`low`, `high`, `nodes` {id: {low, high}}, `unpriced`,
+  `plan`, `plus`, `unavailable`, `awaitingInput`) and the message "Nothing
+  ran. This run includes 1 paid node Codex is still setting up, and Nebula
+  asks before running those. Click “Run” again to review it." (a shot's
+  ends "Generate again to review it."; with no placeholder left, "Nothing
+  ran. This run changed since you last reviewed it. Click “Run” again to
+  review it."). The canvas never shows that message: it takes the start
+  back (no Run history record, nothing Queued, no Stop), asks again at
+  once in its dialog, priced at `estimate`, and starts the same run again
+  with `estimate.high` rounded up to the cent after a yes; the message is
+  for a tab too old to do that. Free placeholders need no confirmation. Agents' runs are
+  unchanged: your own placeholders run when you run them, and a Cinema
+  shot you start skips another agent's.
+- **Saved with the graph:** the flag lives on the node with its owner
+  (`{agent: {id, name, color, verified}, at}`), in the persisted graph, the
+  export (`data.pending`) and the project, so it survives a reload and a
+  project switch. Saves take it from the live graph, never from a tab.
+  `look_at_canvas` shows `pending: {agent, agentId}` on such a node. The
+  person's undo and redo (`POST /api/graph/restore`) put it back as the
+  step had it (`pending` on a node item: the flag, or null). Your own undo
+  (`undo_canvas_edit`, `nebula undo`) does the same from what the server
+  kept: a placeholder you removed comes back as one, and undoing your
+  `pending: false` makes those nodes placeholders again (the reply's
+  `placeholders`; not a node someone else ran since, nor one changed since
+  by anyone: params, name, a move of 8 px or more, a connection to or from
+  it, which is `skipped` with reason "changed since"). An agent's restore
+  never sets or clears one otherwise.
+- **The run mark:** while a run an agent started is on a node, the canvas
+  shows that agent's pill above it ("Running FLUX.2 [pro] · 0:41": the
+  chosen Model option, or the model id a free-text model param names, such
+  as "openai/gpt-4o-mini" or a fal endpoint; else the node name in quotes,
+  "Running “Text Input” · 0:03"; the person's paid-placeholder dialog names
+  a row's model the same way), once the run has
+  gone 1 s; `model` carries the quotes), from
+  `agentRun` socket events (`change`: started or ended, with `agent`,
+  `runId`, `nodeId`, `model`, `projectId`, `secondsAgo`). A status line on
+  a node (`set_status(text, node_id)`) shows the same pill.
+- **Done cards:** when a run an agent started ends (finished, partly
+  failed or failed; not stopped), Nebula posts one Update for it under that
+  agent's name (`source: "nebula"`, `about: "run"`): "Codex finished
+  “Hero shots”.", "Codex finished 2 of 3 nodes. “Upscale” failed.",
+  "Codex's run of 3 nodes failed." Its `run` is `{id, nodeIds, lastNodeId,
+  outcome, thumbnail?}`; `refs` is the last node, which **Show on canvas**
+  flies to. The thumbnail links an output Nebula already keeps
+  (`/api/outputs/...`, never a provider URL or a copy): the last node's
+  first output for a success, the last output that succeeded for a
+  partial run, none for a failure or a text or audio output. A failed run
+  also gets an Agent log line. A newer card for the same node and agent
+  replaces the older one. The agent reads its own with `list_notes`. Runs
+  the person starts get no card.
 
 ### Proposals outside the canvas
 
@@ -2740,6 +3270,21 @@ restore from anyone else that names `removals` restores its nodes and connection
 but ignores the records (its answer's `reattached`, `pinsLeft`, `reopened`
 and `notReopened` stay empty). Your `undo_canvas_edit` puts back what your
 deletes removed from the records the backend kept for that edit.
+
+A run that started always answers as started (round 23 of PR #195, review
+22 L-4). Once Nebula admits a run it may be spending, so nothing after that
+point turns the answer into an error: `/api/execute`, `/api/execute-node`,
+`/api/cinema/generate-shot` and `/api/graph/run` answer with the `runId`
+(`status: "started"`, or the run's own status for `/api/graph/run`) even
+when a later step failed. When the step that tells open canvases about the
+run's placeholders failed (the project store couldn't be read just then),
+the answer adds `canvasSync: "deferred"` and `canvasSyncDetail` ("The run
+started. … Don't start this run again: follow it by its runId."); Nebula logs
+it, sends that sync again in the background, and any later sync carries it.
+The other steps (the skip notes, the Agent log line, the cursor) are logged
+when they fail and never change the answer. A run that crashed after it
+started answers `status: "failed"` with `error`, never an HTTP error.
+`nebula run` prints the detail as a note.
 
 A run from `run_nodes` is a CLI run (`POST /api/graph/run` with `wait`), so
 it gets the same spending check and the same long-run handling. It also gets

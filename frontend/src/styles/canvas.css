@@ -181,12 +181,15 @@ body.app-slava-restraint .react-flow__minimap {
   background: var(--sr-accent-hover, #ff7040);
 }
 
-/* GM, round 16 of PR #114: a disabled Run is neutral, like the disabled
-   bottom Run. Orange only ever means "you can press this". */
-.selection-toolbar__button--primary:disabled {
-  background: var(--sr-surface-control-active, rgba(255, 255, 255, 0.09));
-  color: var(--sr-ink-bold, #fff);
-  opacity: 0.45;
+/* GM, round 16 of PR #114: a disabled Run is neutral; orange only ever
+   means "you can press this". GM round 22 (A): the neutral disabled look is
+   the toolbar's own, as Ask, Duplicate and Delete have it: no fill (a grey
+   fill read as hovered), and hover never lights it. */
+.selection-toolbar__button--primary:disabled,
+.selection-toolbar__button--primary:disabled:hover {
+  background: transparent;
+  color: inherit;
+  opacity: 0.34;
 }
 
 .selection-toolbar__button--danger {

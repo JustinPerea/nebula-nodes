@@ -51,14 +51,14 @@ The loop:
 2. edit_canvas: new nodes ("+img" refs), connections, params, names, moves and removals in one call, all or nothing (or send `steps`). remove_from_canvas deletes nodes or connections. Each edit returns an undo token: undo_canvas_edit takes your own edit back.
 3. run_nodes: runs a node and what feeds it, within the person's spend limits.
 4. view_output: look at what it made.
-5. propose_change instead, for a run over a limit or without a list price, or reworking their graph: the person accepts or rejects it in Nebula; agents cannot accept.
+5. propose_change instead, for a run over a limit or without a list price, or reworking their graph: the person decides in Nebula; agents cannot accept.
 Off the canvas (a pinned cover, a board's Send notes, Commons curation): propose_asset_change.
 A decision only the person makes: ask_person; get_answers waits.
 
 Pins are the person's requests: act on one, then answer it with resolve_pin. wait_for_canvas_change waits for the next change instead of polling.
 When you start on a request, call point_at with a short say naming your own next step (under 8 words). What you noticed, a report or a suggestion goes in post_note: the person reads those in Updates, top right, not at your cursor.
 set_status: your current work (clear it when done). list_agents: who else is working, on what.
-Moodboards: moodboard_get; moodboard_update(cover=...) picks the image a board opens on; moodboard_edit moves, resizes and groups cards (with `undo`). New work goes in a new project (new_project), not over theirs.
+Moodboards: moodboard_get; moodboard_update(cover=...) sets its cover; moodboard_edit moves, resizes and groups cards (with `undo`). New work goes in a new project (new_project), not over theirs.
 get_project reads a project unopened, project_size its size, rename_project renames it. Working keys: get_settings, provider_status.
 Styles: style_list, style_get, style_create, style_update, style_delete.
 cancel_run stops agents' runs only; a run the person started is theirs to Stop.
@@ -442,7 +442,9 @@ def resolve_pin(pin_id: str, reply: str, ctx: Context | None = None) -> dict[str
     is a short line (280 characters max) shown on the pin, such as "Warmed the
     grade on n7". Your cursor moves to the pin. Only the person can create or
     delete pins; agents answer them. The reply is about your own answer only;
-    what you noticed along the way goes in post_note.
+    what you noticed along the way goes in post_note. A note you read before
+    a project switch isn't in the open project and is refused with 404: read
+    the canvas again and answer a note listed there.
     """
     from urllib.parse import quote
 
@@ -522,6 +524,11 @@ def list_notes(board: str | None = None, unread: bool = False, ctx: Context | No
     "Expired" (15 minutes without a decision), "No longer fits", or
     "Closed: Nebula restarted" (Nebula restarted while it was open;
     proposals don't survive a restart, so ask again if you still want it).
+    When a run you started ends, Nebula posts your done card (`about: "run"`,
+    `source: "nebula"`, under your name): its text says how it went, `run` has
+    {id, nodeIds, lastNodeId, outcome: success, partial or failure,
+    thumbnail?}, and `refs` the last node (the person's Show on canvas goes
+    there). A newer card for the same node replaces the older one.
     """
     params = {"unread": 1} if unread else None
     if board:
@@ -598,7 +605,9 @@ def set_status(text: str, node_id: str | None = None, ctx: Context | None = None
     A status is what you are working on, and it lasts. point_at's `say` is a
     passing remark at your cursor, gone in seconds; a report, something you
     noticed or a suggestion for the person goes in post_note. One line, at
-    most 140 characters (whitespace is collapsed). You set only your own; it
+    most 140 characters (whitespace is collapsed; a longer one is cut after
+    its last whole word if that keeps at least 100 characters, otherwise cut
+    hard without splitting a character, and ends in "…"). You set only your own; it
     belongs to the open project and isn't kept across a Nebula restart.
     """
     body: dict[str, Any] = {"text": text}
@@ -614,8 +623,10 @@ def list_agents(ctx: Context | None = None) -> dict[str, Any]:
     and node, its cursor's last action and how long ago, and how many of its
     questions and proposals wait for the person (`needsYou`: counts only,
     never their text). `group` is "needsYou" (first, longest wait first) or
-    "working" (most recent first). Read it to see what the others are on
-    before you start on the same thing.
+    "working" (most recent first). Each agent's `pending` lists its
+    placeholders (nodes it is still setting up; runs skip them) and `running`
+    the nodes its runs are running now ({nodeId, model, secondsAgo}). Read it
+    to see what the others are on before you start on the same thing.
     """
     return _canvas_call("GET", "/api/canvas/agents", ctx)
 
@@ -748,7 +759,9 @@ def propose_change(
     and remove_from_canvas do that directly.
 
     Returns {"proposal": {...}} with `id`, `status`, and `cost`: nodes are
-    "free" (run locally) or "paid · <provider>", and `cost.estimate` sums
+    "free" (run locally) or "paid · <provider>" (the provider the run would
+    go through with the keys set, as its price is; a Krea copy on its
+    maker's key names both: "paid · Grok Imagine 2.0 via xAI"), and `cost.estimate` sums
     list prices in USD where Nebula has them (null when none do; `open` when
     some paid node has none). `cost.notReady` lists the run's nodes that
     can't run here as set up (no key, no Krea sign-in), each with `missing`
@@ -791,7 +804,10 @@ def get_proposal(proposal_id: str, wait_seconds: float = 0, ctx: Context | None 
 
     `proposal.status` is open, accepted, rejected, withdrawn, expired (15
     minutes without a decision) or invalidated (a node it needed was deleted,
-    or the canvas changed; `reason` says why). An invalidated one can be open
+    or the canvas changed; `reason` says why). When the canvas was cleared or
+    replaced after you proposed, the person's Accept is refused (they read
+    "Ask the agent for a new one."): read the canvas again and propose anew.
+    An invalidated one can be open
     again: when the person (or you) undoes the delete and it still fits, it
     reopens with the same id and expiry (event proposal.reopened). When accepted, `idMap` maps
     your refs to the new node ids and `runNodeIds` lists the nodes the canvas
@@ -1217,6 +1233,8 @@ def edit_canvas(
     arrange: bool | dict | None = None,
     remove: list[str] | None = None,
     unwire: list[dict] | None = None,
+    pending: bool | None = None,
+    node_ids: list[str] | None = None,
     steps: list[dict] | None = None,
     ctx: Context | None = None,
 ) -> dict[str, Any]:
@@ -1230,7 +1248,8 @@ def edit_canvas(
       refs start with "+" and only live inside this call.
     - `edges`: connections [{"source", "sourceHandle", "target", "targetHandle"}];
       ends are refs or existing ids ("n4"); handles are port ids from describe_node.
-    - `params`: changes to existing nodes [{"nodeId": "n4", "params": {...}}].
+    - `params`: changes to existing nodes [{"nodeId": "n4", "params": {...}}];
+      only the keys you send change (the person's other settings stay).
     - `rename`: {"n4" or "+img": "Hero shot"} ("" restores the model's name).
     - `move`: {"n4" or "+img": {"x": 0, "y": 0}}. New nodes are placed for you.
     - `arrange`: true (or {"direction": "right" or "down", "gap": 120}) to have
@@ -1241,6 +1260,15 @@ def edit_canvas(
       [{"source", "sourceHandle", "target", "targetHandle"}].
     - `note`: one line on what this is for; shown beside your cursor. Your own
       edit only; what you noticed goes in post_note.
+    - `pending`: true makes this call's new nodes your placeholders while you
+      set them up: the person sees a dashed outline in your colour, and every
+      run skips them and what needs their output (run results list them in
+      `skipped`, with why). Only new nodes; never one already on the canvas.
+      When they're ready, call again with `pending: false` and `node_ids` (your
+      placeholders' ids), or run them yourself. They turn normal on their own
+      if you make no request for 10 minutes, or when the person edits or runs
+      one. Another agent's placeholder isn't yours to clear. The result lists
+      `pending` (marked), or `ready` and `notPending`.
     No limit on how much one call adds; it all lands or none of it does.
     Applied in this order: unwire, remove, add and change, rename, move.
     - `steps`: a list of such plans (no `run`), sent one after another, each
@@ -1269,8 +1297,10 @@ def edit_canvas(
     """
     body: dict[str, Any] = {key: value for key, value in {
         "note": note, "nodes": nodes, "edges": edges, "params": params, "rename": rename, "move": move,
-        "arrange": arrange, "remove": remove, "unwire": unwire,
+        "arrange": arrange, "remove": remove, "unwire": unwire, "nodeIds": node_ids,
     }.items() if value}
+    if pending is not None:
+        body["pending"] = pending
     if steps is not None:
         return _edit_in_steps({**body, "steps": steps}, ctx)
     return _canvas_call("POST", "/api/graph/apply", ctx, json=body)
@@ -1328,7 +1358,10 @@ def new_project(name: str, ctx: Context | None = None) -> dict[str, Any]:
 
     Start new work in a new project rather than emptying the person's
     canvas: the project that was open is saved as it is. The person's canvas follows, names you,
-    and offers them a way back. Refused while a run is going.
+    and offers them a way back. Their canvas is read-only until the
+    new one loads; what they had typed is saved into the project left (or, if
+    that fails, as a new project named after the project left, "<project
+    left> (recovered)", then "(recovered 2)" and so on). Refused while a run is going.
     """
     return _switch("/api/projects", {"name": name}, ctx)
 
@@ -1338,7 +1371,11 @@ def open_project(project_id: str, ctx: Context | None = None) -> dict[str, Any]:
     """Switch the canvas to a saved project (ids from list_projects).
 
     The project that was open is saved as it is. The person's canvas follows,
-    names you, and offers them a way back. Refused while a run is going.
+    names you, and offers them a way back. Opening the project that is already
+    open reloads it from what was saved; what they had typed there still lands. Their canvas is read-only until the
+    new one loads; what they had typed is saved into the project left (or, if
+    that fails, as a new project named after the project left, "<project
+    left> (recovered)", then "(recovered 2)" and so on). Refused while a run is going.
     """
     from urllib.parse import quote
 
@@ -1356,7 +1393,9 @@ def remove_from_canvas(node_ids: list[str] | None = None, wires: list[dict] | No
     the person's pins on it and closes the proposals that read it; `removals`
     lists them per node (with its `projectId`, `definitionId` and, when it
     supersedes an earlier delete of the same node, `replaces`), and
-    undo_canvas_edit (or the person's Cmd+Z) puts them back.
+    undo_canvas_edit (or the person's Cmd+Z) puts them back. On the person's
+    open canvas the nodes leave at once, and edits to them still waiting to be
+    sent (the person's typing) are dropped.
     """
     body: dict[str, Any] = {}
     if node_ids:
@@ -1389,8 +1428,12 @@ def undo_canvas_edit(token: str | list[str], ctx: Context | None = None) -> dict
     "another-model" or "another-project"), and proposals your delete closed
     reopen when they still fit (`reopened`; the ones that can't, say because
     they expired, are in `notReopened` with the reason).
+    A placeholder you removed comes back as your placeholder, and undoing
+    your `pending=False` makes those nodes placeholders again (`placeholders`),
+    unless someone else ran one since or anyone changed it since (params,
+    name, a move, a connection: `skipped`, reason "changed since").
     Returns `{status, added, removed, changed, renamed, moved, wired, unwired,
-    skipped, reattached, pinsLeft, reopened, notReopened, message}`
+    placeholders, skipped, reattached, pinsLeft, reopened, notReopened, message}`
     (`message` says what went back and what was left, and why);
     `status` is "undone", "skipped" (nothing could go back; the token still
     works if a changed part is put back, but a node someone ran since stays
@@ -1471,7 +1514,8 @@ def _run_result(payload: dict[str, Any], ctx: Context | None) -> list:
     status = payload.get("status")
     shown: dict[str, Any] = {key: payload[key] for key in ("status", "runId", "targetNodeId", "elapsed",
                                                             "duration", "nodesExecuted", "error",
-                                                            "source", "startedBy", "nodes", "neverStarted", "noRecord")
+                                                            "source", "startedBy", "nodes", "neverStarted", "noRecord",
+                                                            "canvasSync", "canvasSyncDetail")
              if key in payload}
     if payload.get("results"):
         shown["outputs"] = {node: _brief_outputs(outputs) for node, outputs in payload["results"].items()}
@@ -1526,8 +1570,10 @@ async def run_nodes(node_id: str | None = None, wait_seconds: float = DEFAULT_RU
     same run isn't known yet, so connect an Image Input holding the file to
     it, or propose it. Waits up to
     `wait_seconds` (max 300). Finished: outputs per node, errors, `skipped`
-    (nodes a gate such as Jev Decide's On Pass / On Fail withheld, with
-    the reason; they never ran and cost nothing), and small previews of
+    (nodes a gate such as Jev Decide's On Pass / On Fail withheld, and
+    another agent's placeholders with the nodes that need them, each with
+    the reason; they never ran and cost nothing; your own placeholders run
+    and turn normal, unless the run is refused before it starts), and small previews of
     images and videos. Status is "finished", or "failed" when any node
     failed: `errors` has each node's message (also on its card), `error` says
     it in one line, and finished nodes keep their outputs. A node that can't
@@ -1535,6 +1581,9 @@ async def run_nodes(node_id: str | None = None, wait_seconds: float = DEFAULT_RU
     before it starts: nothing ran, nothing was spent. Still going: status "running" and a runId;
     it keeps running, so call get_run(runId) or cancel_run(runId). To run
     several separate nodes, run the canvas or call this once per node.
+    A run that started always answers with its runId, even when a later
+    step failed: `canvasSync: "deferred"` (with `canvasSyncDetail`) says only
+    that open canvases were told late. The run is going: never start it again.
     """
     wait = max(0.0, min(float(wait_seconds), MAX_RUN_WAIT))
     body: dict[str, Any] = {"wait": wait, **({"targetNodeId": node_id} if node_id else {})}

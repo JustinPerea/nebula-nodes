@@ -350,6 +350,13 @@ def build_parser() -> argparse.ArgumentParser:
     apply_p.add_argument("--arrange", nargs="?", const="right", default=None, choices=("right", "down"),
                          help="Have the canvas lay out the new nodes by their real size once it draws them; works with --file too "
                               "(flowing right, or down)")
+    apply_p.add_argument("--pending", action="store_true",
+                         help="Make this apply's new nodes your placeholders while you set them up: a dashed "
+                              "outline in your colour, and runs skip them and what needs them. They turn normal "
+                              "with --ready, when you run them, after 10 minutes without a request from you, or "
+                              "when the person edits or runs one")
+    apply_p.add_argument("--ready", action="append", default=[], metavar="nX",
+                         help="Your placeholder is ready: it turns normal (repeatable)")
     apply_p.add_argument("--json", action="store_true", help="Print the raw result JSON")
     apply_p.add_argument("--as", dest="agent_name",
                          help="Your agent name (default: $NEBULA_AGENT_NAME; in-app agents are named automatically)")

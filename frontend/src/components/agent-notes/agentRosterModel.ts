@@ -45,6 +45,16 @@ export interface RosterStatus {
   at: number;
 }
 
+/** A node a run the agent started is running now (Q125 item 3), `at` (when it started) in this tab's clock. */
+export interface RosterRun {
+  agent: RosterAgent;
+  runId: string;
+  nodeId: string;
+  model: string | null;
+  projectId: string | null;
+  at: number;
+}
+
 /** What the agent's last action was (backend agent_presence `did`). */
 export interface RosterDid {
   verb: string;

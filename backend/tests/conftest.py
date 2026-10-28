@@ -23,6 +23,7 @@ import atexit
 import os
 import shutil
 import tempfile
+from collections.abc import Mapping
 import uuid
 from pathlib import Path
 
@@ -91,6 +92,20 @@ def pytest_runtest_teardown(item, nextitem):
 
 
 @pytest.fixture(autouse=True)
+def empty_model_cache():
+    """Each test starts and ends with an empty provider model cache (review
+    14, L-G): services.model_cache lives for the process, so a model list one
+    test cached (OpenRouter's, for 5 minutes) answered a later test's picker
+    before its own fixture's keys were read, and its outcome depended on test
+    order."""
+    from services.model_cache import model_cache
+
+    model_cache.clear()
+    yield
+    model_cache.clear()
+
+
+@pytest.fixture(autouse=True)
 def isolated_commons_opt_in(request, monkeypatch):
     """Only the dedicated synthetic Commons tests opt into store access."""
     name = request.node.path.name
@@ -150,7 +165,7 @@ def run_shot_task(monkeypatch, spending_limits_off):
     import main
     from models.graph import GenerateShotRequest
 
-    monkeypatch.setattr(main, "validate_graph", lambda *_args: [])
+    monkeypatch.setattr(main, "validate_graph", lambda *_args, **_kwargs: [])
     monkeypatch.setattr(main, "_validate_cinema_base_models", lambda *_args: None)
 
     async def run(scene, shot_id: str) -> None:
@@ -177,6 +192,35 @@ CANVAS_PARAMS_VERSION = {"X-Nebula-Params-Version": str(PARAMS_VERSION)}
 PERSON = {"Origin": "http://localhost:5173", "X-Nebula-Person": PERSON_TOKEN, **CANVAS_PARAMS_VERSION}
 FORGED_ORIGIN = {"Origin": "http://localhost:5173", **CANVAS_PARAMS_VERSION}
 PERSON_HELLO = {"type": "hello", "personToken": PERSON_TOKEN}
+
+
+class TabHeaders(Mapping):
+    """What a canvas tab sends on a graph write: ``base`` (PERSON and
+    X-Nebula-Tab) plus the open workspace's revision, read when the request
+    is made. Round 19 of PR #195: Nebula refuses a tab's write that carries no
+    revision on a route that writes the graph (marked ``main.graph_write``
+    since round 20), as the canvas's apiFetch always sends one while a
+    project is open."""
+
+    def __init__(self, base: Mapping[str, str]) -> None:
+        self._base = dict(base)
+
+    def _live(self) -> dict[str, str]:
+        # A tab says its params version on every request, beside the revision.
+        live = {**CANVAS_PARAMS_VERSION, **self._base}
+        if "X-Nebula-Workspace-Revision" in live:
+            return live
+        import main
+        return {**live, "X-Nebula-Workspace-Revision": main.project_store.workspace()["workspaceRevision"]}
+
+    def __getitem__(self, key: str) -> str:
+        return self._live()[key]
+
+    def __iter__(self):
+        return iter(self._live())
+
+    def __len__(self) -> int:
+        return len(self._live())
 
 
 class PersonFixture:

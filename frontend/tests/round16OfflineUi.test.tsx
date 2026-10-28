@@ -111,9 +111,10 @@ describe('M1: Stop works while offline (a false offline must never trap a spendi
 describe('the toolbar\'s disabled Run is neutral (GM, round 16)', () => {
   it('the selection toolbar\'s primary button has a neutral disabled style, not orange', () => {
     const css = readFileSync(join(__dirname, '../src/styles/canvas.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-    const rule = /\.selection-toolbar__button--primary:disabled\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
-    expect(rule).toContain('var(--sr-surface-control-active');
-    expect(rule).toContain('var(--sr-ink-bold');
+    // GM round 22 (A): neutral is the toolbar's own disabled look, with no
+    // fill (the grey fill of round 16 read as hovered), hover included.
+    const rule = /\.selection-toolbar__button--primary:disabled\s*,\s*\.selection-toolbar__button--primary:disabled:hover\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(rule).toContain('background: transparent');
     expect(rule).not.toMatch(/accent/);
   });
 });

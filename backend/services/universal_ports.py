@@ -420,12 +420,32 @@ def _http_status(exc: Exception) -> tuple[int, str] | None:
     return None
 
 
-def _missing(provider: str, what: str, credential: str) -> str:
-    return (f"Nebula can't read {PROVIDER_NAME[provider]}'s {what} because {credential} isn't set, "
-            "and only the person can add it (Settings in Nebula)")
+class LookupFailure(str):
+    """Why look_up has no data for a model, and which kind of why (review 13,
+    L-5): ``kind`` is "missing-key" (the provider's key isn't set),
+    "invalid" (the model id can't be one) or "model-settings" (reading the
+    provider's settings for the model failed: no answer, an error, no such
+    model). The canvas says "Couldn't load the model settings for “X”." only
+    for the last."""
+
+    kind: str
+
+    def __new__(cls, text: str, kind: str) -> "LookupFailure":
+        failure = super().__new__(cls, text)
+        failure.kind = kind
+        return failure
 
 
-async def look_up(definition_id: str, model: str) -> dict[str, Any] | str:
+def _missing(provider: str, what: str, credential: str) -> LookupFailure:
+    return LookupFailure(f"Nebula can't read {PROVIDER_NAME[provider]}'s {what} because {credential} isn't set, "
+                         "and only the person can add it (Settings in Nebula)", "missing-key")
+
+
+def _unread(text: str) -> LookupFailure:
+    return LookupFailure(text, "model-settings")
+
+
+async def look_up(definition_id: str, model: str) -> dict[str, Any] | LookupFailure:
     """The provider's data for ``model`` (a catalog row, a Replicate schema)
     through the routes the pickers read, which cache it (5 minutes, Replicate
     an hour); or a plain sentence saying why it can't be had. Reads only:
@@ -437,7 +457,7 @@ async def look_up(definition_id: str, model: str) -> dict[str, Any] | str:
     try:
         if provider == "replicate":
             if not REPLICATE_MODEL.fullmatch(model):
-                return "a Replicate model_id is owner/name, e.g. black-forest-labs/flux-kontext-pro"
+                return LookupFailure("a Replicate model_id is owner/name, e.g. black-forest-labs/flux-kontext-pro", "invalid")
             from routes.replicate_proxy import get_model_schema
 
             owner, model_name = model.split("/", 1)
@@ -448,7 +468,7 @@ async def look_up(definition_id: str, model: str) -> dict[str, Any] | str:
             from routes.nous_proxy import get_models
         catalog = await get_models()
     except httpx.HTTPError:
-        return f"Nebula couldn't reach {name} to read {model}'s ports; try again"
+        return _unread(f"Nebula couldn't reach {name} to read {model}'s ports; try again")
     except Exception as exc:  # noqa: BLE001 - the routes raise HTTPException
         found = _http_status(exc)
         if found is None:
@@ -459,15 +479,15 @@ async def look_up(definition_id: str, model: str) -> dict[str, Any] | str:
         if provider == "replicate" and status == 400 and "REPLICATE_API_TOKEN" in detail:
             return _missing("replicate", f"schema for {model}", "REPLICATE_API_TOKEN")
         if provider == "nous" and status == 401:
-            return (f"Nebula can't read Nous Portal's model list: {detail.rstrip('.')}. "
-                    "Only the person can sign in (Hermes, on this machine)")
+            return _unread(f"Nebula can't read Nous Portal's model list: {detail.rstrip('.')}. "
+                           "Only the person can sign in (Hermes, on this machine)")
         if provider == "replicate" and status == 404:
-            return f"Replicate has no model {model}"
-        return f"Nebula couldn't read {name}'s data for {model} (HTTP {status})"
+            return _unread(f"Replicate has no model {model}")
+        return _unread(f"Nebula couldn't read {name}'s data for {model} (HTTP {status})")
     rows = catalog.get("models") if isinstance(catalog, Mapping) else None
     row = next((item for item in rows or [] if isinstance(item, Mapping) and item.get("id") == model), None)
     if row is None:
-        return f"{name} lists no model {model}; check the model id"
+        return _unread(f"{name} lists no model {model}; check the model id")
     return dict(row)
 
 

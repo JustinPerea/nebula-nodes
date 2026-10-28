@@ -15,6 +15,8 @@ export function DeferredRunNotice() {
   const runDeferred = useCanvasProposalsStore((s) => s.runDeferred);
   const dismissDeferred = useCanvasProposalsStore((s) => s.dismissDeferred);
   const isExecuting = useGraphStore((s) => s.isExecuting);
+  // A run waiting for its inputs counts as starting (review 15, M-B).
+  const runStarting = useGraphStore((s) => s.runStarting);
   if (!deferredRun) return null;
   return (
     <div className="proposal-bar proposal-bar--notice" role="status">
@@ -25,7 +27,7 @@ export function DeferredRunNotice() {
         <button
           type="button"
           className="proposal-bar__button proposal-bar__button--primary"
-          disabled={isExecuting}
+          disabled={isExecuting || runStarting}
           onClick={() => void runDeferred()}
         >
           <Play size={13} aria-hidden="true" />

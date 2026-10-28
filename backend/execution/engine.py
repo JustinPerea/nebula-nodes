@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from graphlib import TopologicalSorter, CycleError as _GraphlibCycleError
 from pathlib import Path
-from typing import Any, Callable, Awaitable
+from typing import Any, Awaitable, Callable, Mapping
 from uuid import uuid4
 
 from models.graph import GraphNode, GraphEdge, PortValueDict
@@ -807,12 +807,61 @@ def _iterator_validation_errors(
     return errors
 
 
+def unchosen_model_errors(
+    nodes: list[GraphNode], edges: list[GraphEdge] | None = None, api_keys: Mapping[str, Any] | None = None,
+    *, name_of: Callable[[str], str] | None = None,
+) -> list[ValidationErrorDetail]:
+    """A Krea node whose required field has nothing in it, on the route the
+    run takes (services/model_choice.py ``unchosen``: the Krea gateway needs
+    it; a maker's own API only what it sizes by): that route would refuse it,
+    so the run is refused before anything runs or is priced, naming the node
+    and the field (GM - Design, round 12 addendum b; round 14, item 1:
+    "Set a width for “X” first.", "Choose an aspect ratio for “X” first.").
+    With no usable route, nothing here: the key or sign-in refusal says so
+    first (review 13, L-6). ``edges``: what is wired into each node, which
+    can keep a run on Krea (node_route.with_wired_blockers)."""
+    from services import model_choice
+
+    keys = api_keys or {}
+    wired: dict[str, dict[str, int]] = {}
+    for edge in edges or []:
+        ports = wired.setdefault(edge.target, {})
+        ports[edge.target_handle] = ports.get(edge.target_handle, 0) + 1
+    errors: list[ValidationErrorDetail] = []
+    for node in nodes:
+        if node.definition_id not in model_choice.required_fields():
+            continue
+        found = model_choice.unchosen(node.definition_id, node.params, keys, wired=wired.get(node.id, {}),
+                                      plan_ready=_krea_plan_ready())
+        if found is None:
+            continue
+        definition = _node_def_for(node.definition_id) or {}
+        name = (name_of(node.id) if name_of else None) or str(definition.get("displayName") or node.id)
+        line = model_choice.not_chosen_line(name, found.field, found.verb)
+        errors.append(ValidationErrorDetail(node_id=node.id, port_id="", message=line, person=line))
+    return errors
+
+
+def _krea_plan_ready() -> bool:
+    """The person's Krea plan is signed in (validate_graph's own check)."""
+    try:
+        from services.krea_connector import is_krea_connected
+        return bool(is_krea_connected())
+    except Exception:  # noqa: BLE001 - unknown means not ready: the sign-in refusal speaks
+        return False
+
+
 def validate_graph(
     nodes: list[GraphNode],
     edges: list[GraphEdge],
     api_keys: dict[str, str],
+    *,
+    name_of: Callable[[str], str] | None = None,
 ) -> list[ValidationErrorDetail]:
+    """Every pre-call refusal of a run. ``name_of``: a node's name for the
+    lines that name it (the canvas's label), else its type's name."""
     errors: list[ValidationErrorDetail] = []
+    errors.extend(unchosen_model_errors(nodes, edges, api_keys, name_of=name_of))
     errors.extend(_iterator_validation_errors(nodes, edges))
 
     definitions = dict(NODE_DEFS)

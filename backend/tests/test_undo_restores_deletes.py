@@ -20,7 +20,7 @@ import pytest
 from services.agent_notes import AgentNotes
 from services.canvas_pins import CanvasPins
 from services.canvas_proposals import PROPOSAL_TTL_SECONDS, ProposalBook
-from tests.conftest import PERSON
+from tests.conftest import PERSON, TabHeaders
 from tests.test_canvas_proposals import (  # noqa: F401 - api is a fixture
     CLAUDE,
     KEY,
@@ -30,8 +30,8 @@ from tests.test_canvas_proposals import (  # noqa: F401 - api is a fixture
     api,
 )
 
-TAB_A = {**PERSON, "X-Nebula-Tab": "tab-aaaaaaaaaaaaaaaa"}
-TAB_B = {**PERSON, "X-Nebula-Tab": "tab-bbbbbbbbbbbbbbbb"}
+TAB_A = TabHeaders({**PERSON, "X-Nebula-Tab": "tab-aaaaaaaaaaaaaaaa"})
+TAB_B = TabHeaders({**PERSON, "X-Nebula-Tab": "tab-bbbbbbbbbbbbbbbb"})
 
 
 @pytest.fixture

@@ -1,11 +1,11 @@
 import { useMemo, useState, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { Search, Check } from 'lucide-react';
 import type { ModelNodeDefinition } from '../../types';
 import { getCreateModels, getFeaturedModels, searchModels } from '../../lib/createModels';
 import { usePanelFocus } from '../../hooks/usePanelFocus';
 import { CATEGORY_LABELS, providerLabel, modelInputSummary, supportedModelProviders, matchesModelProvider } from '../../lib/modelDiscovery';
 import { ProviderReadinessBadge } from '../ProviderReadinessBadge';
+import { ModalPortal } from '../ModalPortal';
 
 interface ModelPickerProps {
   value: string | null;
@@ -42,7 +42,8 @@ export function ModelPicker({ value, onSelect, onClose, selectedParams }: ModelP
     ];
   }, [query, provider]);
 
-  return createPortal(
+  return (
+    <ModalPortal>
     <div className="model-picker-overlay" onMouseDown={onClose}>
     <div ref={panelRef} className="model-picker" role="dialog" aria-modal="true" aria-label="Choose a model"
       tabIndex={-1} onMouseDown={(event) => event.stopPropagation()}>
@@ -98,6 +99,7 @@ export function ModelPicker({ value, onSelect, onClose, selectedParams }: ModelP
         ))}
       </div>
     </div>
-    </div>, document.body,
+    </div>
+    </ModalPortal>
   );
 }

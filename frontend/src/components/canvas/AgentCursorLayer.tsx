@@ -3,6 +3,7 @@ import { useStore, useStoreApi, ViewportPortal, type Node } from '@xyflow/react'
 import type { NodeData } from '../../types';
 import {
   AGENT_CURSOR_IDLE_MS,
+  AGENT_SAY_FADE_MS,
   AGENT_SAY_MS,
   useAgentPresenceStore,
   type AgentCursor,
@@ -37,19 +38,33 @@ function AgentCursorView({ cursor, zoom }: { cursor: AgentCursor; zoom: number }
   const [arrivedSeq, setArrivedSeq] = useState(0);
   // Each holds the event seq whose timer ran out, so a new event resets both.
   const [sayDoneSeq, setSayDoneSeq] = useState(0);
+  const [sayFadeSeq, setSayFadeSeq] = useState(0);
   const [idleSeq, setIdleSeq] = useState(0);
   const showSay = Boolean(cursor.say) && sayDoneSeq !== cursor.seq;
+  // Fading out, still mounted (GM - Design, round 19); a new event's seq ends it.
+  const sayLeaving = sayFadeSeq === cursor.seq;
   const idle = idleSeq === cursor.seq;
 
   const dragging = cursor.action === 'drag' && cursor.from !== undefined;
 
-  // Narration and idle dimming follow each new event.
+  // Narration and idle dimming follow each new event. The bubble fades on a
+  // spring about 3 s after the last event, then goes; at once under reduced
+  // motion. A new event clears both timers, so a fade in progress stops.
   useEffect(() => {
     const seq = cursor.seq;
-    const sayTimer = window.setTimeout(() => setSayDoneSeq(seq), AGENT_SAY_MS);
+    let fadeTimer: number | undefined;
+    const sayTimer = window.setTimeout(() => {
+      if (prefersReducedMotion()) {
+        setSayDoneSeq(seq);
+        return;
+      }
+      setSayFadeSeq(seq);
+      fadeTimer = window.setTimeout(() => setSayDoneSeq(seq), AGENT_SAY_FADE_MS);
+    }, AGENT_SAY_MS);
     const idleTimer = window.setTimeout(() => setIdleSeq(seq), AGENT_CURSOR_IDLE_MS);
     return () => {
       window.clearTimeout(sayTimer);
+      if (fadeTimer !== undefined) window.clearTimeout(fadeTimer);
       window.clearTimeout(idleTimer);
     };
   }, [cursor.seq]);
@@ -168,7 +183,9 @@ function AgentCursorView({ cursor, zoom }: { cursor: AgentCursor; zoom: number }
         </svg>
         <div className="agent-cursor__label">
           <span className="agent-cursor__name">{cursor.name}</span>
-          {showSay && !idle && <span className="agent-cursor__say">{cursor.say}</span>}
+          {showSay && !idle && (
+            <span className={`agent-cursor__say${sayLeaving ? ' agent-cursor__say--leaving' : ''}`}>{cursor.say}</span>
+          )}
         </div>
       </div>
     </>

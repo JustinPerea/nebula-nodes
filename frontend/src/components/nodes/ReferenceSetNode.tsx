@@ -15,8 +15,10 @@ import { useGraphStore } from '../../store/graphStore';
 import { edgesInto } from '../../lib/graphIndex';
 import type { NodeData } from '../../types';
 import { NodeRunError } from './NodeError';
+import { PlaceholderLine } from './PlaceholderLine';
+import { pendingAttr } from '../../lib/pendingNodes';
 import '../../styles/reference-set-node.css';
-import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { useCanvasLock } from '../../lib/canvasLock';
 
 // The ReferenceSetNode is the canvas card for the reference-set utility node.
 // It renders one role-labeled input slot per semantic reference role (7 total,
@@ -53,7 +55,8 @@ function formatWeight(weight: number): string {
 }
 
 export function ReferenceSetNode({ id, data, selected }: NodeProps) {
-  const readOnly = useBackendOffline();
+  const lock = useCanvasLock(); // offline or following (GM round 22, A)
+  const readOnly = lock.locked;
   const updateNodeData = useGraphStore((s) => s.updateNodeData);
   // Which role ports have a wire in, as text, so wires elsewhere on the
   // canvas don't re-render this card.
@@ -97,7 +100,7 @@ export function ReferenceSetNode({ id, data, selected }: NodeProps) {
   );
 
   return (
-    <div className={`reference-set-node ${selected ? 'reference-set-node--selected' : ''}`}>
+    <div className={`reference-set-node ${selected ? 'reference-set-node--selected' : ''}`} data-pending={pendingAttr(data.pending)}>
       <div className="reference-set-node__title">▤ Reference Set</div>
       <p className="reference-set-node__guidance">
         Connect to Cinema Scene. Reference priority sets image order; 0 excludes.
@@ -131,7 +134,7 @@ export function ReferenceSetNode({ id, data, selected }: NodeProps) {
                 step={REFERENCE_WEIGHT_STEP}
                 value={weights[role]}
                 disabled={readOnly}
-                {...offlineMark(readOnly)}
+                {...lock.mark}
                 onChange={handleWeightChange(role)}
                 aria-label={`${roleDef.label} reference priority`}
               />
@@ -160,6 +163,8 @@ export function ReferenceSetNode({ id, data, selected }: NodeProps) {
           ))
         )}
       </div>
+
+      <PlaceholderLine pending={data.pending} />
 
       <NodeRunError data={data as unknown as NodeData} className="reference-set-node__run-error" />
 

@@ -7,7 +7,8 @@ new thing kept here: a status line per agent.
 - An identified agent sets one line of text about what it is doing,
   optionally on a node (``set_status``, ``nebula status``, ``POST
   /api/canvas/status``). The text is cleaned like a cursor's ``say``
-  (whitespace collapsed, at most MAX_STATUS_CHARS); empty text clears it.
+  (whitespace collapsed, at most MAX_STATUS_CHARS, a longer one cut to end
+  in "…"); empty text clears it.
   The browser and anonymous callers have no identity, so they can't set
   one, and an agent sets only its own (the route takes no agent name).
 - It lasts until the agent replaces or clears it, or until
@@ -40,9 +41,13 @@ from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Mapping
 
 from services.agent_presence import MAX_SAY_CHARS, AgentIdentity
+from services.text_cut import safe_cut
 
 STATUS_IDLE_SECONDS = 600.0
 MAX_STATUS_CHARS = MAX_SAY_CHARS
+# A cut at a word keeps at least this many of the 140 characters; a status
+# whose last space comes earlier is cut hard (review 7, L5, coordinator's decision).
+MIN_WORD_CUT_CHARS = 100
 
 
 class StatusError(ValueError):
@@ -50,10 +55,27 @@ class StatusError(ValueError):
 
 
 def clean_status_text(raw: Any) -> str:
-    """One line, like a cursor's ``say``: whitespace collapsed, cut at MAX_STATUS_CHARS."""
+    """One line, like a cursor's ``say``: whitespace collapsed, at most
+    MAX_STATUS_CHARS. A longer one is cut and ends in "…", so the pill that
+    shows it whole (GM - Design, round 6: "let it wrap until the whole status
+    shows") never ends as if that were all of it. The cut lands after the
+    last whole word that fits (GM, round 7: it reads "then…", not
+    "then checki…"), but only when that keeps at least MIN_WORD_CUT_CHARS
+    (review 7, L5: "Reading https://…" must not become "Reading…");
+    otherwise it is cut hard, and a hard cut never splits a character
+    (text_cut.safe_cut: an accent, an emoji sequence, a flag)."""
     if not isinstance(raw, str):
         raise StatusError("text must be text: one line about what you're working on (\"\" clears it)")
-    return " ".join(raw.split())[:MAX_STATUS_CHARS]
+    text = " ".join(raw.split())
+    if len(text) <= MAX_STATUS_CHARS:
+        return text
+    room = MAX_STATUS_CHARS - 1  # the "…" takes the last place
+    end = room
+    if text[room] != " ":  # the cut falls inside a word: drop that word if enough is left
+        space = text.rfind(" ", 0, room)
+        if space >= MIN_WORD_CUT_CHARS:
+            end = space
+    return text[:safe_cut(text, end)].rstrip() + "…"
 
 
 @dataclass
@@ -88,6 +110,11 @@ class AgentStatusBook:
         for agent_id in [key for key, at in self._seen.items()
                          if key not in self._statuses and now - at > STATUS_IDLE_SECONDS]:
             del self._seen[agent_id]
+
+    def last_seen(self, agent_id: str) -> float | None:
+        """When this agent last gave a sign (placeholders use the same idle
+        rule: services/pending_nodes.py), or None when it gave none lately."""
+        return self._seen.get(agent_id)
 
     def _last_sign(self, status: AgentStatus) -> float:
         return max(status.set_at, self._seen.get(status.agent.id, status.set_at))
@@ -180,12 +207,17 @@ def _identity(raw: Mapping[str, Any]) -> AgentIdentity:
 
 def build_roster(*, project_id: str | None, now: float, cursors: Iterable[Mapping[str, Any]],
                  statuses: Iterable[AgentStatus], waiting: Iterable[Waiting],
-                 status_view: Callable[[AgentStatus], dict[str, Any]]) -> list[dict[str, Any]]:
+                 status_view: Callable[[AgentStatus], dict[str, Any]],
+                 pending: Mapping[str, Mapping[str, Any]] | None = None,
+                 running: Iterable[tuple[AgentIdentity, list[dict[str, Any]]]] = ()) -> list[dict[str, Any]]:
     """One entry per agent around in ``project_id``, Needs you first (longest
     wait first), then Working (most recent activity first).
 
     ``cursors`` are agent_presence.active() rows (each with its projectId);
-    ``statuses`` and ``waiting`` are already the open project's."""
+    ``statuses`` and ``waiting`` are already the open project's. ``pending``
+    is the open canvas's placeholders by agent (pending_nodes.by_agent) and
+    ``running`` each agent's nodes running now in its runs (Q125 item 3):
+    every entry lists both, and an agent with only placeholders is listed."""
     entries: dict[str, dict[str, Any]] = {}
 
     def entry_for(identity: AgentIdentity) -> dict[str, Any]:
@@ -194,7 +226,7 @@ def build_roster(*, project_id: str | None, now: float, cursors: Iterable[Mappin
             found = entries[identity.id] = {
                 "agent": identity.as_dict(), "group": "working", "status": None, "lastAction": None,
                 "cursor": None, "needsYou": {"questions": 0, "proposals": 0}, "waitingSeconds": None,
-                "activeSecondsAgo": None, "_waitingSince": None,
+                "activeSecondsAgo": None, "_waitingSince": None, "pending": [], "running": [],
             }
         return found
 
@@ -222,6 +254,15 @@ def build_roster(*, project_id: str | None, now: float, cursors: Iterable[Mappin
         view = status_view(status)
         entry["status"] = {"text": view["text"], "nodeId": view["nodeId"], "secondsAgo": view["secondsAgo"]}
         active(entry, view["secondsAgo"])
+
+    for agent, nodes in running:
+        entry = entry_for(agent)
+        entry["running"] = [dict(node) for node in nodes]
+        active(entry, 0.0)
+
+    for mine in (pending or {}).values():
+        entry = entry_for(_identity(mine["agent"]))
+        entry["pending"] = list(mine["nodeIds"])
 
     for item in waiting:
         entry = entry_for(item.agent)

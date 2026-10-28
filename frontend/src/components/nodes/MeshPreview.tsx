@@ -6,7 +6,6 @@ import {
   useRef,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
-import { createPortal } from 'react-dom';
 import { Download, X } from 'lucide-react';
 import { backendAssetUrlSync, fetchUrl } from '../../lib/backend';
 import { AssetByteLimitError, readBoundedAssetResponse } from '../../lib/boundedAsset';
@@ -14,6 +13,8 @@ import { downloadWorldAsset, worldAssetFilename } from '../../lib/worldDownload'
 import { oneLine, requestError, requestSucceeded, FailureNotice, failureMessage } from '../../lib/errorCopy';
 import { isSafeWorldUrl } from '../../lib/worldValue';
 import { isSplatExport, meshFormatLabel } from '../../lib/meshFormat';
+import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
+import { ModalPortal } from '../ModalPortal';
 
 interface MeshPreviewProps {
   src: string;
@@ -215,6 +216,8 @@ function MeshPreviewComponent({ src }: MeshPreviewProps) {
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     closeRef.current?.focus({ preventScroll: true });
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+      // A modal dialog opened over the preview owns the keys (review 8, L-d).
+      if (keyBlockedByModal(dialogRef.current)) return;
       if (e.key === 'Escape') {
         e.preventDefault();
         handleClose();
@@ -285,7 +288,8 @@ function MeshPreviewComponent({ src }: MeshPreviewProps) {
         </div>
       </div>
 
-      {showModal && createPortal(
+      {showModal && (
+        <ModalPortal>
         <div className="mesh-modal-overlay" onClick={handleClose}>
           <div
             ref={dialogRef}
@@ -352,8 +356,8 @@ function MeshPreviewComponent({ src }: MeshPreviewProps) {
               </button>
             </div>
           </div>
-        </div>,
-        document.body
+        </div>
+        </ModalPortal>
       )}
     </>
   );

@@ -82,6 +82,13 @@
   max-width: min(var(--notice-max-w), 100%);
 }
 
+/* A bar that comes or goes is a screen switch: the region jumps to its new
+   line, never springs across the bar that just arrived (lib/bottomBar.ts
+   BOTTOM_BAR_SWITCH_ATTR; GM - Design, round 7). */
+:root[data-bottom-bar-switch] .notice-region {
+  transition: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .notice-region {
     transition: none;

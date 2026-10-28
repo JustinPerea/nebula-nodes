@@ -18,6 +18,8 @@ import { CHAT_SEND_EVENT, type ChatSendDetail } from '../lib/chatSend';
 import { COMMAND_PALETTE_OPEN_EVENT, isPaletteHotkey, paletteOpenRequestApplies } from '../lib/commandPaletteKeys';
 import { dropIntent, heldIntent, holdIntent, isIntentClaimed } from '../lib/heldIntents';
 import { DeferredBoundary } from './DeferredBoundary';
+import { ModalPortal } from './ModalPortal';
+import { useMaskPainterDialog } from './panels/maskPainterDialog';
 import { CONNECTION_LOST_SHORT_COPY } from '../lib/errorCopy';
 
 /**
@@ -141,11 +143,16 @@ export function ConnectionPopup() {
  * (with its Close) in the state it shows while it reads the image size, so the
  * dialog appears at once and fills in. If the chunk cannot load, the same
  * shell says so, with Try again next to Close (DeferredBoundary). The next
- * Paint Mask mounts it afresh, which fetches again too.
+ * Paint Mask mounts it afresh, which fetches again too. Both are on
+ * document.body (ModalPortal, review 9 M-2): rendered inside the Inspector
+ * popover, whose backdrop-filter under Slava restraint makes it the
+ * containing block of a position:fixed overlay, the painter was the
+ * popover's 260x300 box, with the canvas usable beside it.
  */
 function MaskPainterShell({ children, onClose, busy = false }: { children: ReactNode; onClose: () => void; busy?: boolean }) {
+  const dialog = useMaskPainterDialog(onClose);
   return (
-    <div className="mask-painter__overlay" role="dialog" aria-label="Mask painter" aria-busy={busy || undefined}>
+    <div {...dialog} className="mask-painter__overlay" role="dialog" aria-modal="true" aria-label="Mask painter" aria-busy={busy || undefined}>
       <div className="mask-painter__panel">
         <div className="mask-painter__header">
           <span className="mask-painter__title">Paint Mask</span>
@@ -161,6 +168,7 @@ function MaskPainterShell({ children, onClose, busy = false }: { children: React
 
 export function MaskPainterModal(props: ComponentProps<typeof DeferredMaskPainterModal>) {
   return (
+    <ModalPortal>
     <DeferredBoundary
       chunk={DeferredMaskPainterModal}
       failed={({ retry, retrying }) => (
@@ -189,6 +197,7 @@ export function MaskPainterModal(props: ComponentProps<typeof DeferredMaskPainte
         <DeferredMaskPainterModal {...props} />
       </Suspense>
     </DeferredBoundary>
+    </ModalPortal>
   );
 }
 

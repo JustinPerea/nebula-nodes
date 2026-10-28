@@ -10,6 +10,8 @@ import { useOpenOnDoubleClick } from './useOpenOnDoubleClick';
 import { moodboardImagesLabel } from '../../lib/moodboardCount';
 import type { NodeData } from '../../types';
 import { NodeRunError } from './NodeError';
+import { PlaceholderLine } from './PlaceholderLine';
+import { pendingAttr } from '../../lib/pendingNodes';
 import '../../styles/moodboard-node.css';
 
 // The node stores only the board's id (its `moodboard` param, which agents
@@ -51,7 +53,7 @@ export function MoodboardNode({ id, data, selected }: NodeProps) {
   const cardRef = useOpenOnDoubleClick<HTMLDivElement>(canOpen ? () => enterMoodboardEditor(boardId) : null);
 
   return (
-    <div ref={cardRef} className={`moodboard-node ${selected ? 'moodboard-node--selected' : ''}`} data-moodboard-status={status}
+    <div ref={cardRef} className={`moodboard-node ${selected ? 'moodboard-node--selected' : ''}`} data-moodboard-status={status} data-pending={pendingAttr(data.pending)}
       data-node-inspector-anchor={id} title={canOpen ? 'Double-click to open in Moodboard Studio' : undefined}>
       <div className="moodboard-node__title">Moodboard</div>
       <NodeSettingsAction id={id} />
@@ -65,6 +67,7 @@ export function MoodboardNode({ id, data, selected }: NodeProps) {
           <span>No images</span>
         )}
       </div>
+      <PlaceholderLine pending={data.pending} />
       {/* The count stays on one line, cut with an ellipsis when long ("124
           images · 112 set aside · subject"), so the card keeps its height;
           the whole line on hover. A status ("#id was deleted for good or

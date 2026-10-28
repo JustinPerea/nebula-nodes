@@ -18,6 +18,11 @@ EXIT_CANCELLED = 3
 def _report(result: dict[str, Any]) -> int:
     status = result.get("status")
     run_id = result.get("runId", "")
+    if result.get("canvasSync") == "deferred":
+        # Round 23 (review 22, L-4): the run started; only the canvas's
+        # update was late. Never a reason to run it again.
+        print(f"note: {result.get('canvasSyncDetail') or 'The run started; open canvases catch up shortly.'}",
+              file=sys.stderr)
     if status == "running":
         print(
             f"Still running after {result.get('elapsed', 0)}s (run {run_id}). It keeps going, and its "

@@ -1,8 +1,9 @@
 import { useEffect, useCallback, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ViewableMedia } from '../../lib/createGallery';
 import { usePanelFocus } from '../../hooks/usePanelFocus';
+import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
+import { ModalPortal } from '../ModalPortal';
 
 export interface LightboxProps {
   items: ViewableMedia[];
@@ -44,6 +45,8 @@ export function Lightbox({ items, index, onClose, onIndexChange }: LightboxProps
     if (!visible) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || !panelRef.current?.contains(e.target as globalThis.Node)) return;
+      // A modal dialog over the lightbox owns the keys (review 8, L-d).
+      if (keyBlockedByModal(panelRef.current)) return;
       // Keep the native video player's arrow-key controls intact.
       if (e.target instanceof HTMLVideoElement) return;
       if (e.key === 'ArrowLeft') { e.preventDefault(); goPrev(); }
@@ -59,7 +62,8 @@ export function Lightbox({ items, index, onClose, onIndexChange }: LightboxProps
 
   if (!current) return null;
 
-  return createPortal(
+  return (
+    <ModalPortal>
     <div ref={panelRef} className="lightbox" role="dialog" aria-modal="true" aria-label="Result preview" tabIndex={-1} onClick={onClose}>
       <button type="button" className="lightbox__close" onClick={(event) => { event.stopPropagation(); onClose(); }} aria-label="Close (Esc)">
         <X size={22} strokeWidth={1.75} />
@@ -96,7 +100,7 @@ export function Lightbox({ items, index, onClose, onIndexChange }: LightboxProps
       )}
 
       {count > 1 && <div className="lightbox__counter">{safeIndex + 1} / {count}</div>}
-    </div>,
-    document.body,
+    </div>
+    </ModalPortal>
   );
 }

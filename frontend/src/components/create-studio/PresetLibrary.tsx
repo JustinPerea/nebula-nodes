@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, Bookmark } from 'lucide-react';
 import { fetchPresets, type Preset } from '../../lib/createPresets';
 import { PresetCard } from './PresetCard';
 import { useCurrentProjectId } from '../../lib/currentProject';
 import { wsClient } from '../../lib/wsClient';
+import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
 
 export interface PresetLibraryProps {
   onApply: (preset: Preset) => void;
@@ -38,8 +39,10 @@ export function PresetLibrary({ onApply, onSaveCurrent, onClose, reloadKey, savi
     return () => { cancelled = true; };
   }, [reloadKey, projectId, changed]);
 
+  const rootRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    // A modal dialog over Styles owns Escape (review 8, L-d).
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !keyBlockedByModal(rootRef.current)) onClose(); };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
@@ -57,7 +60,7 @@ export function PresetLibrary({ onApply, onSaveCurrent, onClose, reloadKey, savi
   }, [presets, query, category]);
 
   return (
-    <div className="preset-library" role="dialog" aria-label="Styles">
+    <div ref={rootRef} className="preset-library" role="dialog" aria-label="Styles">
       <div className="preset-library__top">
         <div className="preset-library__search">
           <Search size={15} strokeWidth={1.75} aria-hidden="true" />

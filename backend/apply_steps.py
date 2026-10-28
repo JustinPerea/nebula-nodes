@@ -21,7 +21,8 @@ from typing import Any, Callable
 from nebula_api import NebulaAPIError, never_reached, offline_read_only
 
 _STEP_KEYS = frozenset({"note", "steps"})
-_EDIT_KEYS = ("nodes", "edges", "params", "rename", "move", "remove", "unwire")
+# `nodeIds` (with `pending: false`) makes the agent's placeholders ready (Q125 item 3).
+_EDIT_KEYS = ("nodes", "edges", "params", "rename", "move", "remove", "unwire", "nodeIds")
 
 
 class PlanError(ValueError):
@@ -41,7 +42,8 @@ def _named_nodes(step: dict[str, Any]) -> list[str]:
     for key in ("rename", "move"):
         if isinstance(step.get(key), dict):
             names.extend(str(name) for name in step[key])
-    names.extend(str(item) for item in step.get("remove") or [] if isinstance(item, str))
+    for key in ("remove", "nodeIds"):
+        names.extend(str(item) for item in step.get(key) or [] if isinstance(item, str))
     return names
 
 
@@ -77,7 +79,10 @@ def check_steps(body: dict[str, Any], *, note: str | None = None, run_hint: str 
                             f"{run_hint} after the plan is applied")
         if not any(step.get(key) for key in _EDIT_KEYS):
             raise PlanError(f"step {number} changes nothing; give it nodes, edges, params, rename, move, "
-                            "remove or unwire, or drop it")
+                            "remove, unwire or nodeIds (with pending: false), or drop it")
+        if step.get("pending") is True and not step.get("nodes"):
+            raise PlanError(f"step {number} has pending: true but adds no nodes; pending marks the nodes its own "
+                            "step adds, so put it on the step that adds them")
         if step.get("arrange") and not step.get("nodes"):
             raise PlanError(f"step {number} has arrange but adds no nodes; arrange lays out the nodes its own "
                             "step adds, so put it on the step that adds them")
@@ -117,8 +122,9 @@ def resolve_step(step: dict[str, Any], id_map: dict[str, str]) -> dict[str, Any]
     for key in ("rename", "move"):
         if isinstance(step.get(key), dict):
             out[key] = {swap(name): value for name, value in step[key].items()}
-    if isinstance(step.get("remove"), list):
-        out["remove"] = [swap(item) for item in step["remove"]]
+    for key in ("remove", "nodeIds"):
+        if isinstance(step.get(key), list):
+            out[key] = [swap(item) for item in step[key]]
     return out
 
 

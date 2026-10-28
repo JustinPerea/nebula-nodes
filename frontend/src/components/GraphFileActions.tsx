@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
+import { refuseEditWhileFollowing } from '../lib/canvasFollow';
 import { useReactFlow, type Edge, type Node } from '@xyflow/react';
 import { useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
@@ -8,8 +9,11 @@ import { graphFileModule } from '../lib/deferredChunks';
 import { canLoadGraph, canSaveGraph, GRAPH_LOAD_EVENT, GRAPH_SAVE_EVENT } from '../lib/graphFileActions';
 import { apiRequest } from '../lib/apiRequest';
 import { rewriteBackendAssetUrls } from '../lib/backend';
+import { adoptCanvasRevision } from '../lib/projectContext';
+import type { CutOffSave } from '../lib/savingCutOff';
 import { failureMessage, RequestFailedError } from '../lib/errorCopy';
 import { showNotice } from '../lib/canvasNotice';
+import { isModalDialogOpen } from '../lib/canvasShortcutScope';
 import { computeCanvasFitPadding } from '../lib/canvasFit';
 import { providerKeyWarnings } from '../lib/providerSwitch';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
@@ -64,10 +68,25 @@ export function GraphFileActions() {
   const importGraph = useCallback(async (result: LoadedGraph, refuseOverLimit = false,
     asNewProject = false): Promise<'over' | void> => {
     // Offline is read-only (GM, round 14 of PR #114): nothing is sent.
-    if (refuseEditWhileOffline()) return;
-    if (!canLoadGraph(useGraphStore.getState())) return;
+    if (refuseEditWhileFollowing() || refuseEditWhileOffline() || !canLoadGraph(useGraphStore.getState())) return;
     let importReserved = false;
+    // Round 19 (GM): new graph writes wait from here; those on their way go
+    // first (15 s at most, "Saving…" on the project bar), so none can land
+    // on the imported nodes. One that failed or didn't land in time doesn't
+    // hold the import: the new canvas says it.
+    const leaving = useProjectStore.getState().activeProject?.name ?? null;
+    const statusBefore = useProjectStore.getState().saveStatus;
+    const showSaving = leaving !== null && (statusBefore === 'saved' || statusBefore === 'unsaved');
+    if (showSaving) useProjectStore.setState({ saveStatus: 'saving' });
+    let replaced = false;
+    let cutOff: CutOffSave[] = [];
     try {
+      cutOff = await useGraphStore.getState().drainGraphWrites('import');
+    } finally {
+      if (showSaving && useProjectStore.getState().saveStatus === 'saving') useProjectStore.setState({ saveStatus: statusBefore });
+    }
+    try {
+      if (!canLoadGraph(useGraphStore.getState())) return;
       // graphSync can publish the imported graph before this HTTP response.
       // Fence every local generation admission through that entire interval.
       importReserved = useGraphStore.getState().reserveGraphImport();
@@ -90,7 +109,10 @@ export function GraphFileActions() {
           ...(refuseOverLimit ? { refuseOverSaveLimit: true } : {}),
         }),
       });
-      const imported = await response.json() as { nodes: Node<NodeData>[]; edges: Edge[]; warnings?: string[] };
+      const imported = await response.json() as { nodes: Node<NodeData>[]; edges: Edge[]; warnings?: string[];
+        canvasRevision?: string };
+      // The canvas Nebula holds now: the tab's writes to it carry it.
+      adoptCanvasRevision(undefined, imported.canvasRevision);
       // Read from what the backend loaded: a node folded into another
       // (services/retired_nodes.py MERGED) arrives as its new node.
       // Nodes set to a provider with no key here keep their choice and values
@@ -109,6 +131,9 @@ export function GraphFileActions() {
       // this backend's links resolved, so a file:// desktop tab can draw them.
       // A World keeps its relative links; saves canonicalize the rest again.
       useGraphStore.getState().loadGraph(rewriteBackendAssetUrls(imported.nodes), rewriteBackendAssetUrls(imported.edges));
+      replaced = true;
+      useGraphStore.getState().finishCanvasReplacement({ kind: 'import', project: leaving ?? '', cutOff,
+        show: leaving !== null });
       // A file over the save limit opens (Q118): the project store says so
       // with GM's Load graph line and pauses saving until it is trimmed.
       useProjectStore.getState().noteLoadedGraph(result.fileName ?? 'the graph', asNewProject);
@@ -144,12 +169,15 @@ export function GraphFileActions() {
       showNotice(failureMessage(error, LOAD_GRAPH));
     } finally {
       if (importReserved) useGraphStore.getState().releaseGraphImport();
+      // Not replaced: the writes that waited go to the canvas still there.
+      if (!replaced) useGraphStore.getState().finishCanvasReplacement(null);
     }
   }, [fitView]);
 
   const load = useCallback(async () => {
-    // Offline is read-only (round 15 of PR #114): no picker, nothing read.
-    if (refuseEditWhileOffline()) return;
+    // Round 20 (M1): not while the tab follows an agent's switch. Offline is
+    // read-only (GM, round 14 of PR #114): nothing is sent.
+    if (refuseEditWhileFollowing() || refuseEditWhileOffline()) return;
     if (actionInFlight.current || !canLoadGraph(useGraphStore.getState())) return;
     actionInFlight.current = true;
     try {
@@ -200,6 +228,8 @@ export function GraphFileActions() {
       const key = event.key.toLowerCase();
       if (key !== 's' && key !== 'o') return;
       event.preventDefault();
+      // Never behind an open dialog: opening a file swaps the canvas under it (review 7, M-1).
+      if (isModalDialogOpen()) return;
       if (key === 's') void save();
       else void load();
     };

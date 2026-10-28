@@ -2,7 +2,7 @@ import { type CSSProperties, type Ref } from 'react';
 import { X } from 'lucide-react';
 import type { AgentNote, AgentNoteAction } from '../../lib/agentNotes';
 import { noteLabel, noteText } from '../../lib/agentNotesView';
-import { AuthorDot, NoteButtons, type AgentNotesAdapter } from './AgentNoteParts';
+import { AuthorDot, NoteButtons, RunOutcomeIcon, RunThumbnail, type AgentNotesAdapter } from './AgentNoteParts';
 
 interface HoldHandlers {
   onMouseEnter: () => void;
@@ -43,6 +43,8 @@ export function AgentNoteCard({
       ref={cardRef}
       className="agent-note-card"
       data-kind={note.author.kind}
+      data-about={note.about}
+      data-outcome={note.run?.outcome}
       data-leaving={leaving ? 'true' : undefined}
       role="status"
       aria-label={`Update from ${note.author.name}`}
@@ -67,8 +69,10 @@ export function AgentNoteCard({
         </button>
       </div>
       <p className="agent-note-card__text" onClick={(event) => { onRead(); if (note.refs.length > 0) onShow(event.currentTarget); }}>
+        <RunOutcomeIcon run={note.run} />
         {noteText(note, adapter.numberFor)}
       </p>
+      <RunThumbnail run={note.run} />
       <NoteButtons
         note={note}
         adapter={adapter}

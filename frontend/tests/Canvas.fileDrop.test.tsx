@@ -258,16 +258,27 @@ describe('Canvas file drop', () => {
   });
 
   // Round 14 of PR #114: each file that made a node is one step that owns
-  // only that node (never a snapshot taken before the upload); a failed
-  // upload takes none.
+  // only that node; a failed upload takes none. Round 21 (the merge): the
+  // step is #195's in-flight one, owning the node the answer names.
   it('takes one undo step per dropped file that made a node, owning only that node', async () => {
     const owned = vi.spyOn(useGraphStore.getState(), 'noteOwnAdd');
+    const end = vi.spyOn(useGraphStore.getState(), 'endUndoStep');
+    const cancel = vi.spyOn(useGraphStore.getState(), 'cancelUndoStep');
     let calls = 0;
     api.fetch.mockImplementation(async () => (++calls === 2
       ? new Response('', { status: 503 }) : new Response(JSON.stringify({ nodeId: 'n7' }), { status: 200 })));
     await drop([file('a.png', 'image/png'), file('b.pdf', 'application/pdf'), file('z.zip')]);
-    expect(owned).toHaveBeenCalledTimes(1);
-    expect(owned).toHaveBeenCalledWith(['n7']);
+    // No second step beside the in-flight one.
+    expect(owned).not.toHaveBeenCalled();
+    expect(end.mock.calls.filter(([, options]) => options?.arrives?.length)).toEqual([[expect.any(Object), { arrives: ['n7'] }]]);
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("ends each upload's step with the node its echo brings (review 11, L-2)", async () => {
+    const end = vi.spyOn(useGraphStore.getState(), 'endUndoStep');
+    api.fetch.mockImplementation(async () => new Response(JSON.stringify({ nodeId: 'n4' }), { status: 200 }));
+    await drop([file('a.png', 'image/png')]);
+    expect(end).toHaveBeenCalledWith(expect.any(Object), { arrives: ['n4'] });
   });
 
   it('does not refit the camera over the nodes the person just dropped', async () => {

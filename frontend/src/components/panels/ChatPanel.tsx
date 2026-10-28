@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { refuseEditWhileFollowing } from '../../lib/canvasFollow';
 import { ArrowUp, ChevronDown, ChevronRight, ExternalLink, LogIn, Square, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
@@ -31,6 +32,7 @@ import { PersonalAgentWarning } from './PersonalAgentWarning';
 import { PERSONAL_AGENTS_CHANGED_EVENT } from '../../lib/personalAgentsEvents';
 import { CHAT_SEND_EVENT, type ChatSendDetail } from '../../lib/chatSend';
 import { claimIntent } from '../../lib/heldIntents';
+import { clearCanvasFromChat } from '../../lib/chatCanvasClear';
 import '../../styles/personal-agents.css';
 import { apiFetch, backendAssetUrlSync, backendWebSocketUrl, personTokenForSocket } from '../../lib/backend';
 import { DEFAULT_BACKEND_PORT, devProxyPort } from '../../lib/devBackendPort';
@@ -40,7 +42,7 @@ import { chatUploadChipError } from '../../lib/chatUploadCopy';
 import { refuseEditWhileOffline } from '../../lib/backendConnection';
 import { chatAuthority } from '../../lib/commonsChatAuthority';
 import {
-  CHAT_CLEAR_ANSWER_MS, CHAT_CLEARED_CANVAS, CHAT_CLEARED_CANVAS_KEPT, CHAT_CLEARED_CANVAS_UNCONFIRMED,
+  CHAT_CLEARED_CANVAS, CHAT_CLEARED_CANVAS_KEPT, CHAT_CLEARED_CANVAS_UNCONFIRMED,
 } from '../../lib/chatClear';
 import { onPersonConnected, reportPersonRequired } from '../../lib/personSession';
 import { normalizeAgentEventSource } from '../../lib/agentEvents';
@@ -846,6 +848,16 @@ export function ChatPanel() {
 
   const uploadFile = useCallback(
     async (file: File, chipId: string) => {
+      // Round 20 (M1): no node is added to a canvas that's about to go away;
+      // the chip goes, as the drop did nothing.
+      if (refuseEditWhileFollowing()) {
+        setPendingImages((prev) => {
+          const prior = prev.find((p) => p.id === chipId);
+          if (prior && prior.status === 'uploading' && prior.thumbUrl.startsWith('blob:')) URL.revokeObjectURL(prior.thumbUrl);
+          return prev.filter((p) => p.id !== chipId);
+        });
+        return;
+      }
       const form = new FormData();
       form.append('file', file);
       form.append('create_node', 'true');
@@ -854,6 +866,12 @@ export function ChatPanel() {
         setPendingImages((prev) => prev.filter((p) => p.id !== chipId));
         return;
       }
+      // The upload adds a node to the canvas: one undo step, taken before the
+      // backend's graphSync can add it, owning only that node (round 14 of PR
+      // #114: an agent's node its echo brings isn't this step's).
+      const undoStep = useGraphStore.getState().beginUndoStep();
+      // The node the upload adds, which comes with its echo (review 11, L-2).
+      let arrives: string[] = [];
       try {
         const resp = await apiFetch('/api/uploads', { method: 'POST', body: form });
         if (!resp.ok) {
@@ -881,10 +899,7 @@ export function ChatPanel() {
           thumbUrl: string;
           filename: string;
         };
-        // The upload added a node to the canvas: one undo step that owns only
-        // that node (round 14 of PR #114; a snapshot taken before the upload
-        // could take an agent's node away with it).
-        if (typeof body.nodeId === 'string' && body.nodeId) useGraphStore.getState().noteOwnAdd([body.nodeId]);
+        if (typeof body.nodeId === 'string' && body.nodeId) arrives = [body.nodeId];
         setPendingImages((prev) => {
           const prior = prev.find((p) => p.id === chipId);
           // URL.revokeObjectURL is idempotent — safe inside a StrictMode-
@@ -926,6 +941,10 @@ export function ChatPanel() {
               : p,
           );
         });
+      } finally {
+        // The step was cancelled, or it settles once its node is on the canvas:
+        // an undo pressed meanwhile then acts (review 10, L-2; review 11, L-2).
+        useGraphStore.getState().endUndoStep(undoStep, { arrives });
       }
     },
     [],
@@ -1469,11 +1488,7 @@ export function ChatPanel() {
       if (refuseEditWhileOffline()) return;
       if (personal && sessionId) closePersonalSessionRef.current(sessionId);
       setSessionId(null);
-      // Also wipe cli_graph on the backend so Claude starts with a clean canvas,
-      // not whatever nodes accumulated from prior sessions. graphSync handles the
-      // frontend side — cli-origin nodes drop out, library-dragged work survives.
-      // One undo step, so the person can bring the canvas back.
-      const undoStep = useGraphStore.getState().beginUndoStep();
+      // Also wipe Nebula's graph, under one undo step (lib/chatCanvasClear.ts).
       // The chat clears now, as before; the line comes with the canvas
       // clear's answer, appended, so a message sent meanwhile stays (round
       // 12 of PR #114: it used to replace the list when the answer came).
@@ -1484,42 +1499,15 @@ export function ChatPanel() {
       setInput('');
       // The session is this tab's own and always clears; the canvas clear is
       // the backend's and can be refused (a run going: round 11 of PR #114)
-      // or go unanswered, so the line says only what is known (GM). force:
-      // typing /clear is the person's confirmation (the backend refuses a
-      // clear of a project with nodes without it). Bounded: with no answer
-      // the line still comes.
-      const bound = AbortSignal.timeout(CHAT_CLEAR_ANSWER_MS);
-      const unanswered = new Promise<null>((resolve) => {
-        bound.addEventListener('abort', () => resolve(null), { once: true });
+      // or go unanswered (bounded), so the line says only what is known (GM).
+      // A refusal also shows under Clear's heading.
+      const outcome = await clearCanvasFromChat({
+        onRefused: async (response) => {
+          setNotice(failureMessage(await requestError(CLEAR_CANVAS, response), CLEAR_CANVAS));
+        },
       });
-      let response: Response | null;
-      try {
-        response = await Promise.race([
-          apiFetch('/api/graph?force=true', { method: 'DELETE', signal: bound }), unanswered]);
-      } catch {
-        response = null;
-      }
-      if (response?.ok) {
-        said(CHAT_CLEARED_CANVAS);
-        return;
-      }
-      if (response === null || response.status >= 500) {
-        // No answer, or the backend failed partway: Clear empties the canvas
-        // in one step, so it may have happened. Don't say either way. The
-        // undo step stays (round 13 of PR #114, review 12 item 4): if it
-        // happened, Undo brings the canvas back; if not, Undo finds nothing
-        // changed and sends nothing (sendRestore sends only what differs,
-        // and the backend's restore replaces a node it has, never adds one).
-        if (response) warnFailure(CLEAR_CANVAS, response.status, await readDetail(response));
-        said(CHAT_CLEARED_CANVAS_UNCONFIRMED);
-        return;
-      }
-      // Refused (4xx): the clear surely didn't happen.
-      useGraphStore.getState().cancelUndoStep(undoStep);
-      // GM: "Session cleared. Next message starts a fresh conversation. The
-      // canvas wasn't cleared.", and the refusal itself under Clear's heading.
-      said(CHAT_CLEARED_CANVAS_KEPT);
-      setNotice(failureMessage(await requestError(CLEAR_CANVAS, response), CLEAR_CANVAS));
+      said(outcome === 'cleared' ? CHAT_CLEARED_CANVAS
+        : outcome === 'refused' ? CHAT_CLEARED_CANVAS_KEPT : CHAT_CLEARED_CANVAS_UNCONFIRMED);
       return;
     }
 

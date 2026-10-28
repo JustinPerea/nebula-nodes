@@ -2,6 +2,7 @@ import type { InternalNode, Node } from '@xyflow/react';
 import type { NodeData } from '../types';
 import { apiRequest } from './apiRequest';
 import type { Pin } from './wsClient';
+import type { ProjectContext } from './projectContext';
 
 export type { Pin } from './wsClient';
 
@@ -20,14 +21,27 @@ export async function fetchPins(): Promise<PinListing> {
   return (await response.json()) as PinListing;
 }
 
-export async function createPin(text: string, target: PinTarget): Promise<Pin> {
+/** `project`: the project and canvas the note was composed on (round 23 of
+ * PR #195, review 22 M-1). Its target names a node or spot of that canvas
+ * only, so it is sent for that canvas (its revision headers) and Nebula
+ * refuses it once that canvas has gone. */
+export async function createPin(text: string, target: PinTarget, project?: ProjectContext | null): Promise<Pin> {
   const response = await apiRequest("Couldn't save the note.", '/api/canvas/pins', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text, ...target }),
-  });
+  }, project === undefined ? {} : { project });
   return ((await response.json()) as { pin: Pin }).pin;
 }
+
+/**
+ * Round 23 (review 22, M-1): a note the person was writing when its canvas
+ * went (an agent opened another project, or the canvas was replaced) is
+ * never pinned elsewhere: the dialog closes and this keeps the text, with a
+ * way to copy it. PENDING GM - Design's words (the line and the button).
+ */
+export const NOTE_KEPT_LINE = 'Your note wasn’t added: the canvas changed before it was sent.';
+export const NOTE_KEPT_COPY = 'Copy note';
 
 export async function deletePin(id: string): Promise<void> {
   await apiRequest("Couldn't delete the note.", `/api/canvas/pins/${encodeURIComponent(id)}`, { method: 'DELETE' });

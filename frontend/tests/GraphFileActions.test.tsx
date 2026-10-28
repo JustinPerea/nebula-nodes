@@ -351,6 +351,54 @@ describe('workspace-independent graph file actions', () => {
     } finally { vi.useRealTimers(); }
   });
 
+  describe("round 19 (GM): Load graph waits for the saves on their way", () => {
+    const calls = () => mocks.apiFetch.mock.calls.map(([path, init]) => `${String((init as RequestInit | undefined)?.method ?? 'GET')} ${String(path)}`);
+    const lines = () => [useGraphStore.getState().undoNotice?.text, useGraphStore.getState().messageNotice?.text].filter(Boolean);
+    async function withProject(run: () => Promise<void>): Promise<void> {
+      const before = useProjectStore.getState();
+      const { setProjectContext } = await import('../src/lib/projectContext');
+      useProjectStore.setState({ initialized: true, activeProject: { id: 'alpha', name: 'Glass campaign' } } as never);
+      setProjectContext({ id: 'alpha', revision: 'rev-a' });
+      try { await run(); } finally {
+        setProjectContext(null);
+        useProjectStore.setState(before, true);
+      }
+    }
+    // A node Nebula holds (ids it gave: n1, n2, …), so its typing is sent.
+    const typeText = () => {
+      useGraphStore.setState({ nodes: [{ ...node('n3'), data: { ...node('n3').data, label: 'Hero prompt',
+        definitionId: 'text-input', params: { value: 'A' }, outputs: {} } }] });
+      useGraphStore.getState().updateNodeData('n3', { params: { value: 'B' } });
+    };
+
+    it('typing still in its debounce goes out before the import, and then nothing is said', async () => {
+      await withProject(async () => {
+        render(<GraphFileActions />);
+        mocks.apiFetch.mockImplementation(async (path: string) => new Response(JSON.stringify(
+          path === '/api/graph/import' ? { nodes: [node('n8')], edges: [] } : {}), { status: 200 }));
+        typeText();
+        await act(async () => { requestGraphLoad(); });
+        await waitFor(() => expect(useGraphStore.getState().nodes[0].id).toBe('n8'));
+        expect(calls()).toEqual(['PUT /api/graph/node/n3', 'POST /api/graph/import']);
+        expect(lines()).toEqual([]);
+      });
+    });
+
+    it("a save refused meanwhile doesn't hold the import; the new canvas says GM's import line", async () => {
+      await withProject(async () => {
+        render(<GraphFileActions />);
+        mocks.apiFetch.mockImplementation(async (path: string) => (path === '/api/graph/import'
+          ? new Response(JSON.stringify({ nodes: [node('n8')], edges: [] }), { status: 200 })
+          : new Response(JSON.stringify({ detail: 'Nope.' }), { status: 500 })));
+        typeText();
+        await act(async () => { requestGraphLoad(); });
+        await waitFor(() => expect(useGraphStore.getState().nodes[0].id).toBe('n8'));
+        await waitFor(() => expect(lines()).toEqual(
+          ["Couldn't save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when the import replaced the canvas."]));
+      });
+    });
+  });
+
   it.each(['execution', 'preparation', 'import'] as const)('blocks file I/O during %s ownership', async (owner) => {
     useGraphStore.setState(owner === 'execution' ? { isExecuting: true }
       : owner === 'import' ? { isImportingGraph: true } : { createLaunchingIds: ['preparing'] });

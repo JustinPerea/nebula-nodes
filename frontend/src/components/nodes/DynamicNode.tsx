@@ -15,6 +15,8 @@ import { MeshPreview } from './DeferredViewers';
 import { RepresentationViewer } from './RepresentationViewer';
 import { NodeError } from './NodeError';
 import { SkippedBadge } from './SkippedBadge';
+import { PlaceholderLine } from './PlaceholderLine';
+import { pendingAttr } from '../../lib/pendingNodes';
 import { VideoEditAction } from './VideoEditAction';
 import { NodeTypeIcon } from './NodeTypeIcon';
 import { useSelectionActionSlot } from '../../lib/selectionActionSlot';
@@ -24,6 +26,7 @@ import { NodeLabel } from './NodeLabel';
 import { NodeRunStatus } from './NodeRunStatus';
 import { OverviewImage, OverviewVideoStill } from './OverviewImage';
 import { StructuredOutputs } from './StructuredValuePreview';
+import { canvasTitle } from '../../lib/directRoute';
 
 function isDynamicData(data: NodeData): data is DynamicNodeData {
   return 'isDynamic' in data && (data as DynamicNodeData).isDynamic === true;
@@ -134,6 +137,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
   return (
     <div
       className={`model-node ${stateClass}${isImageSurface ? ' model-node--image-surface' : ''}${isWorldSurface ? ' model-node--world-surface' : ''}${shouldRenderSpatial ? ' model-node--spatial-surface' : ''}${isTextSurface ? ' model-node--text-surface' : ''}${isStructuredSurface ? ' model-node--structured-surface' : ''} ${isNodeSelected ? 'model-node--selected' : ''}${entranceClass}`}
+      data-pending={pendingAttr(nodeData.pending)}
       onClick={() => selectNode(id)}
       style={{ ['--node-category-color' as string]: categoryColor }}
     >
@@ -155,7 +159,8 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
         {isSlavaSkin
           ? <NodeTypeIcon definition={definition} />
           : <span className="model-node__category-dot" style={{ backgroundColor: categoryColor }} />}
-        <NodeLabel nodeId={id} label={nodeData.label} displayName={definition?.displayName} />
+        <NodeLabel nodeId={id} label={nodeData.label} displayName={definition?.displayName}
+          defaultTitle={definition ? canvasTitle(definition) : undefined} />
         {batchPreview.label && <span className="batch-carousel__active-label" title={batchPreview.lineage}>[{batchPreview.label}]</span>}
         {nodeData.keyStatus === 'missing' && <span className="model-node__badge model-node__badge--warning" title="API Key Missing">&#x26A0;</span>}
       </div>
@@ -186,6 +191,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
+      <PlaceholderLine pending={nodeData.pending} />
       <NodeRunStatus data={nodeData} definition={definition} nodeId={id} />
 
       {previewComplete && worldOutput && (

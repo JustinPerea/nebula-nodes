@@ -57,6 +57,8 @@ export interface ProjectList {
 }
 export interface ProjectActivation {
   project: SavedProject; workspaceRevision: string;
+  /** The canvas's revision once it's loaded (round 19): sent back with graph writes. */
+  canvasRevision?: string;
   /** Create and open only: the backend's params version (none = 0, a backend from before the gate). */
   paramsVersion?: number;
   /** Open only: what opening changed that the person should know (a folded
@@ -97,8 +99,16 @@ export const createProject = (name: string | undefined, workspaceRevision: strin
   request<ProjectActivation>("Couldn't create the project.", '/api/projects', json('POST', { name, workspaceRevision }));
 export const openProject = (id: string, workspaceRevision: string) =>
   request<ProjectActivation>("Couldn't open the project.", `/api/projects/${encodeURIComponent(id)}/open`, json('POST', { workspaceRevision }));
-export const saveProject = (id: string, snapshot: ProjectSnapshot, workspaceRevision: string) =>
-  request<ProjectActivation>("Couldn't save the project.", `/api/projects/${encodeURIComponent(id)}`, json('PUT', { snapshot, workspaceRevision })).then((result) => result.project);
+/** `pending` (round 20, H1): the handoff after an agent's switch names the
+ * settings and renames Nebula may not have; Nebula merges exactly those onto
+ * its copy of the project left (backend `_save_handoff`). */
+export const saveProject = (id: string, snapshot: ProjectSnapshot, workspaceRevision: string,
+  pending?: { params: Record<string, Record<string, unknown>>; labels: Record<string, string> }) =>
+  request<ProjectActivation>("Couldn't save the project.", `/api/projects/${encodeURIComponent(id)}`, json('PUT', {
+    snapshot, workspaceRevision,
+    ...(pending && Object.keys(pending.params).length > 0 ? { pendingParams: pending.params } : {}),
+    ...(pending && Object.keys(pending.labels).length > 0 ? { pendingLabels: pending.labels } : {}),
+  })).then((result) => result.project);
 export const renameProject = (id: string, name: string) =>
   request<ProjectActivation>("Couldn't rename the project.", `/api/projects/${encodeURIComponent(id)}`, json('PUT', { name })).then((result) => result.project);
 export const deleteProject = (id: string, workspaceRevision: string) =>

@@ -8,6 +8,7 @@ import { EditorTransport } from './EditorTransport';
 import { Timeline } from './Timeline';
 import { useBottomBarClearance } from '../../hooks/useBottomBarClearance';
 import './EditorView.css';
+import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
 
 export function EditorView() {
   const editorTargetNodeId = useUIStore((s) => s.editorTargetNodeId);
@@ -51,7 +52,9 @@ export function EditorView() {
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
-      if (e.defaultPrevented) return;
+      // Nothing acts behind a modal dialog: M, I, O, B, Delete, Escape…
+      // wherever focus is (review 8, L-d).
+      if (e.defaultPrevented || keyBlockedByModal()) return;
       // Bail out of all bindings if the user is typing in a form field.
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) {

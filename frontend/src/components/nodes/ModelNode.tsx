@@ -13,7 +13,7 @@ import { getReferenceRole } from '../../lib/referenceRoles';
 import { CATEGORY_COLORS } from '../../constants/ports';
 import { useUIStore } from '../../store/uiStore';
 import { usesKreaAccount } from '../../lib/kreaConnection';
-import { routeSwitch } from '../../lib/directRoute';
+import { canvasTitle, routeSwitch } from '../../lib/directRoute';
 import { nodeWiredCounts } from '../../lib/runScope';
 import { useProviderNoteStore } from '../../store/providerNoteStore';
 import { ProviderSwitcher } from './ProviderSwitcher';
@@ -29,6 +29,8 @@ import { MeshPreview } from './DeferredViewers';
 import { RepresentationViewer } from './RepresentationViewer';
 import { NodeError } from './NodeError';
 import { SkippedBadge } from './SkippedBadge';
+import { PlaceholderLine } from './PlaceholderLine';
+import { pendingAttr } from '../../lib/pendingNodes';
 import { VideoEditAction } from './VideoEditAction';
 import { NodeTypeIcon } from './NodeTypeIcon';
 import { useSelectionActionSlot } from '../../lib/selectionActionSlot';
@@ -47,7 +49,7 @@ import { isJevNode, jevBrandStyle, parseJevOutputs, JEV_BOX, JEV_BRAND, JEV_DECI
 import { JEV_CARD_FIELDS, jevCardText, jevResultKey, upstreamPortValues } from '../../lib/jevView';
 import { failureMessage } from '../../lib/errorCopy';
 import { showNotice } from '../../lib/canvasNotice';
-import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { useCanvasLock } from '../../lib/canvasLock';
 
 // Input cards that name the file they hold, under the picture for an image.
 const INPUT_FILE_CARDS = new Set(['image-input', 'video-input', 'audio-input', 'document-input']);
@@ -88,7 +90,9 @@ function portLabels(definition: { outputPorts: Array<{ id: string; label: string
 
 function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as unknown as NodeData;
-  const readOnly = useBackendOffline();
+  // Offline or following an agent's switch: one read-only state (GM round 22, A).
+  const lock = useCanvasLock();
+  const readOnly = lock.locked;
   const batchPreview = useBatchPreview(id, nodeData);
   const actionSlot = useSelectionActionSlot(id);
   const previewOutputs = batchPreview.outputs;
@@ -387,9 +391,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         {hasMediaPreview && <button type="button"
           className={inToolbar ? 'selection-toolbar__button nodrag' : 'model-node__next-step nodrag'}
           data-next-step-anchor={id}
-          disabled={!nextStepSource || isExecuting || !/^n\d+$/.test(id) || readOnly}
-          {...offlineMark(readOnly)}
-          title={nextStepTitle}
+          {...lock.act({ disabled: !nextStepSource || isExecuting || !/^n\d+$/.test(id), title: nextStepTitle })}
           onMouseDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
@@ -422,6 +424,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   return (
     <div
       className={`model-node ${stateClass}${isImageSurface ? ' model-node--image-surface' : ''}${isWorldSurface ? ' model-node--world-surface' : ''}${shouldRenderSpatial ? ' model-node--spatial-surface' : ''}${isTextSurface ? ' model-node--text-surface' : ''}${isStructuredSurface ? ' model-node--structured-surface' : ''}${isInlineTextNode ? ' model-node--inline-text' : ''}${isTextInput ? ' model-node--text-input' : ''}${isImageInput ? ' model-node--image-input' : ''}${isStickyNote ? ' model-node--sticky-note' : ''}${isJev ? ' model-node--jev' : ''}${showJevResult ? ' model-node--jev-surface' : ''} ${switchable ? ' model-node--switchable' : ''} ${isNodeSelected ? 'model-node--selected' : ''}${entranceClass}`}
+      data-pending={pendingAttr(nodeData.pending)}
       onClick={() => selectNode(id)}
       style={isJev ? jevBrandStyle() : { ['--node-category-color' as string]: categoryColor }}
     >
@@ -446,7 +449,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         {isSlavaSkin
           ? <NodeTypeIcon definition={definition} />
           : <span className="model-node__category-dot" style={{ backgroundColor: categoryColor }} />}
-        <NodeLabel nodeId={id} label={nodeData.label} displayName={definition.displayName} />
+        <NodeLabel nodeId={id} label={nodeData.label} displayName={definition.displayName} defaultTitle={canvasTitle(definition)} />
         {batchPreview.label && <span className="batch-carousel__active-label" title={batchPreview.lineage}>[{batchPreview.label}]</span>}
         {nodeData.keyStatus === 'missing' && !switchable && <span className="model-node__badge model-node__badge--warning"
           title={usesKreaAccount(definition, nodeData.params) ? 'Krea sign-in required' : missingKeyTitle(definition, nodeData.params)}>&#x26A0;</span>}
@@ -578,7 +581,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
             className="model-node__textarea nodrag nowheel"
             value={inlineTextValue}
             disabled={readOnly}
-            {...offlineMark(readOnly)}
+            {...lock.mark}
             onChange={handleInlineTextChange}
             onMouseDown={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
@@ -590,14 +593,12 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
             <button
               type="button"
               className="model-node__enhance nodrag"
-              disabled={readOnly}
-              {...offlineMark(readOnly)}
+              {...lock.act({ title: "Ask Claude to rewrite this prompt for the node it's connected to" })}
               onClick={(e) => {
                 e.stopPropagation();
                 handleEnhance();
               }}
               onMouseDown={(e) => e.stopPropagation()}
-              title="Ask Claude to rewrite this prompt for the node it's connected to"
             >
               Enhance
             </button>
@@ -663,6 +664,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         />
       )}
 
+      <PlaceholderLine pending={nodeData.pending} />
       <NodeRunStatus data={nodeData} definition={definition} nodeId={id} />
 
       {jevResult && (

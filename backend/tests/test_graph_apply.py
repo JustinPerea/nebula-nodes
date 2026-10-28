@@ -19,7 +19,7 @@ from services.cli_graph import CLIGraph
 from services.project_store import ProjectStore, make_project
 from services.provider_recovery import ProviderRecoveryStore
 from services.provider_start_guard import ProviderStartGuard
-from tests.conftest import FORGED_ORIGIN, PERSON
+from tests.conftest import FORGED_ORIGIN, PERSON, TabHeaders
 
 AGENT = {"X-Nebula-Agent": "Claude Desktop"}
 
@@ -405,7 +405,7 @@ def test_the_first_arrange_write_wins_and_a_second_tab_changes_nothing(api):
 def test_the_canvas_finishing_an_arrange_is_not_a_new_edit(api):
     body = _apply(api, _arrange_plan(count=2)).json()
     arrange_id, new = body["arrange"]["id"], body["arrange"]["nodeIds"]
-    tab = {**PERSON, "X-Nebula-Tab": "tab_arranging01"}
+    tab = TabHeaders({**PERSON, "X-Nebula-Tab": "tab_arranging01"})
     positions = {node_id: {"x": 1200, "y": 300 * n} for n, node_id in enumerate(new)}
     assert api.client.put("/api/graph/layout", headers=tab,
                           json={"positions": positions, "arrangeId": arrange_id}).json()["status"] == "arranged"
