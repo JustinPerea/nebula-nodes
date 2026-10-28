@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // listing's notices.
 
 vi.mock('../lib/wsClient', () => ({
-  wsClient: { setViewing: vi.fn(), connect: vi.fn(), subscribe: vi.fn(() => () => {}), subscribeFirst: vi.fn(() => () => {}), disconnect: vi.fn() },
+  wsClient: { setViewing: vi.fn(), notePersonAct: vi.fn(), connect: vi.fn(), subscribe: vi.fn(() => () => {}), subscribeFirst: vi.fn(() => () => {}), disconnect: vi.fn() },
 }));
 vi.mock('../lib/personSession', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/personSession')>()),
@@ -64,8 +64,12 @@ beforeEach(async () => {
 });
 afterEach(() => unsubscribe());
 
-describe('GM r11, 2: the tab says which project its canvas shows', () => {
-  it('the open project on the canvas, null on Projects home', () => {
+describe('GM r11, 2 (as GM r13, 1 has it): the tab says the project the person opened there', () => {
+  it('the person-opened project on the canvas, null on Projects home; a project only loaded is never said', async () => {
+    // Loaded, not opened by the person in this tab (round 10: never said).
+    expect(vi.mocked(wsClient.setViewing)).toHaveBeenLastCalledWith(null);
+    useProjectStore.setState({ screen: 'home' });
+    await useProjectStore.getState().open('p1');
     expect(vi.mocked(wsClient.setViewing)).toHaveBeenLastCalledWith('p1');
     useProjectStore.setState({ screen: 'home' });
     expect(vi.mocked(wsClient.setViewing)).toHaveBeenLastCalledWith(null);

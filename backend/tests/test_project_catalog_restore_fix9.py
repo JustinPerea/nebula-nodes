@@ -71,11 +71,11 @@ def test_m1_p3_the_protects_owner_write_fails_and_the_project_stays_protected(ap
     real = main_module._set_canvas_owner
     seen = {"n": 0}
 
-    def flaky(owner):
+    def flaky(owner, *more):
         seen["n"] += 1
         if seen["n"] == 2:  # the first is _file_live_canvas's, the second the protect's
             raise ProjectStoreError("power cut (test)")
-        return real(owner)
+        return real(owner, *more)
     monkeypatch.setattr(main_module, "_set_canvas_owner", flaky)
     if action == "add":
         client.post("/api/graph/node", headers=CODEX, json={"definitionId": "text-input", "params": {"value": "codex-x"}})
@@ -100,11 +100,11 @@ def test_m1_p7_the_protects_owner_write_fails_with_no_restart(app, monkeypatch):
     real = main_module._set_canvas_owner
     seen = {"n": 0}
 
-    def flaky(owner):
+    def flaky(owner, *more):
         seen["n"] += 1
         if seen["n"] == 2:
             raise ProjectStoreError("disk full (test)")
-        return real(owner)
+        return real(owner, *more)
     monkeypatch.setattr(main_module, "_set_canvas_owner", flaky)
     first = client.post("/api/graph/node", headers=CODEX, json={"definitionId": "text-input", "params": {"value": "x"}})
     assert first.status_code == 507, first.text
@@ -181,7 +181,10 @@ def test_gm11_2_the_persons_tab_on_the_project_ends_its_protection_for_good(app,
         socket.receive_json()
         socket.send_json(PERSON_HELLO)
         _drain(socket, "proposalSync")
-        socket.send_json({"type": "viewing", "projectId": project_id})
+        # The person's own open of it (GM r13, 1): the screen they reached themselves.
+        opened = client.post(f"/api/projects/{project_id}/open", headers=PERSON, json={"workspaceRevision": _rev(client)})
+        assert opened.status_code == 200, opened.text
+        socket.send_json({"type": "viewing", "projectId": project_id, "openedBy": "person"})
         assert _settles(lambda: _fresh(store) is None)
     # The tab closed: protection doesn't come back, and the agent's add
     # lands on the project itself, the person's working project again.
@@ -207,8 +210,10 @@ def test_gm11_2_an_agent_cant_end_the_protection(app, monkeypatch, how):
             if how != "socket-without-hello":
                 socket.send_json(PERSON_HELLO)
                 _drain(socket, "personRequired" if how == "agent-socket-with-hello" else "proposalSync")
-            socket.send_json({"type": "viewing", "projectId": "f" * 32 if how == "wrong-project" else project_id})
-            socket.send_json({"type": "viewing", "projectId": project_id} if how == "wrong-project" else {"type": "x"})
+            socket.send_json({"type": "viewing", "projectId": "f" * 32 if how == "wrong-project" else project_id,
+                              "openedBy": "person"})
+            socket.send_json({"type": "viewing", "projectId": project_id, "openedBy": "person"} if how == "wrong-project"
+                             else {"type": "x"})
             if how == "wrong-project":
                 # The person's own tab on it ends it; the wrong id before it didn't.
                 assert _settles(lambda: _fresh(store) is None)
@@ -225,9 +230,12 @@ def test_gm11_2_no_http_route_ends_it():
     import inspect
 
     source = inspect.getsource(main_module)
-    # The one writer of fresh=None after a filing is the person's socket frame.
+    # The one writer of fresh=None after a filing is the person's socket
+    # frames (their own open, their own edit: GM r13, 1).
     assert source.count('{**pending, "fresh": None}') == 1
-    assert "_person_tab_viewing(frame.get(\"projectId\"))" in source
+    assert "_person_tab_viewing(frame.get(\"projectId\"), frame.get(\"openedBy\"))" in source
+    assert "_person_tab_input(frame.get(\"projectId\"))" in source
+    assert "_person_tab_open(frame.get(\"projectId\"))" in source
 
 
 # -- M-2: the CLI prints GM's reply ------------------------------------------------------
@@ -301,7 +309,7 @@ def test_gm10_3_the_edit_reply_says_the_copy_waits(app, monkeypatch):
         "The copy isn't saved as a project yet because Nebula's project list is full.")
     # GM r11, 4: the waiting copy is the agent's in the listing, never the person's.
     listing = client.get("/api/projects", headers=PERSON).json()
-    assert listing["canvasNotFiled"]["canvases"] == [{"name": None, "agentCopy": {"agent": "Codex"}}]
+    assert listing["canvasNotFiled"]["canvases"] == [{"name": None, "agentCopy": {"agent": "Codex"}, "deletes": 1}]
 
 
 # -- GM r11, 4 and GM r10: the copy named as the agent's, in saved order -------------------

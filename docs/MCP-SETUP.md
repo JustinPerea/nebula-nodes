@@ -3023,16 +3023,29 @@ Nebula process restores the same folder. The restore:
    your next write) saves as its own project, "<name> copy" ("<name> copy
    2" and on), opened, and your later writes land on it. The same holds
    when a listing (yours, or the load client's own list before it loads)
-   has just saved and opened the waiting canvas: until the person's own tab
-   is on that project and connected, it is the person's, so a clear or load
-   closes it and starts a new canvas and an edit works on a copy. Only the
-   person's tab ends that (its person-promoted canvas socket sends
-   `{type: "viewing", projectId}`), for good; an agent's open, socket or
-   HTTP call never does. What protects it is in the catalog itself
-   (`canvasPending`: `fresh` `{projectId, digest}` and the agents' `copies`
-   by id, `{name, agent, mark, boot}`), written in the same commit as the
-   filing, so a failed write or a crash after it never leaves the project
-   open and unprotected. The reply says so
+   has just saved and opened the waiting canvas: until the person opens
+   that project themselves or makes their first own edit there, it is the
+   person's, so a clear or load closes it (saving the live canvas into it
+   first) and starts a new canvas, and an edit works on a copy. Only the
+   person's tab ends that, for good, on their person-promoted canvas socket:
+   `{type: "viewing", projectId, openedBy: "person"}` for a project the
+   person opened in that tab (refused when the last switch to it was an
+   agent's), `{type: "personOpen", projectId}` when they open the project
+   their tab already shows, or `{type: "personInput", projectId}` on their
+   first own edit there. A tab that follows your open of the project never
+   ends it, and neither does your open, socket or HTTP call, your write, or
+   the tab writing back what it was sent. What protects it is in the
+   catalog itself (`canvasPending`, written at the top of `catalog.json`
+   before `activeProjectId`: `fresh` `{projectId, digest}` and the agents'
+   `copies` by id, `{name, agent, mark, boot}`), written in the same commit
+   as the filing, so a failed write or a crash after it never leaves the
+   project open and unprotected. A restore keeps what the copy and the
+   damaged file's head still say, and a restore that couldn't read the
+   damaged file whole protects the project it reopens again when it is the
+   live canvas's (a damaged record fails safe: at worst your next write
+   goes on a copy). A copy also carries its own name and agent with the
+   canvas (state.json's `projectCopy`; a held copy's entry, `copy`), so a
+   damaged catalog never saves it as the person's. The reply says so
    (`savedCanvas`, `{id, name, copy (the copy's name, edits only), copyWaits
    (when the copy can't be saved now: `projects` or `storage`), message}`;
    `message` is "Nebula saved the open canvas as its own project, “X”, and
@@ -3047,7 +3060,10 @@ Nebula process restores the same folder. The restore:
    Nebula's project list is full."), and your next write is refused at the
    limit. The person sees the copy as yours: `canvasNotFiled.canvases` marks
    it `agentCopy: {agent}`, and their line is "Codex’s copy of your canvas
-   isn't saved as a project yet…". A write sent while the project list is
+   isn't saved as a project yet…". The person's canvases are saved before
+   an agent's copy, and `canvasNotFiled.canvases` lists them in that order;
+   at the project limit each row's `deletes` says how many projects must go
+   before it is saved (`canvasNotFiled.deletes` is the last row's). A write sent while the project list is
    in a transaction is refused as busy (507, `code: "project_store"`, "The
    project list is busy, so nothing was changed. Try again."), never as the
    limit. At the limit it is

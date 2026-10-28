@@ -401,13 +401,19 @@ class WebSocketClient {
     });
   }
 
-  /** The project this tab shows on its canvas (null: none, or Projects
-   * home), as the person's tab says it to the backend: a project filed from
-   * the person's waiting canvas is theirs again once their tab is on it and
-   * connected (GM r11 on PR #199, 2). Sent after every hello, and on change;
-   * undefined until the store says it. */
+  /** The project this tab shows on its canvas because the person opened it
+   * there themselves (null: none, Projects home, or a project the tab
+   * reached by following an agent's switch), as the person's tab says it to
+   * the backend: the person's own open ends the protection of a project
+   * filed from their waiting canvas (GM r13 on PR #199, 1). Sent after every
+   * hello, and on change, with `openedBy: 'person'`; undefined until the
+   * store says it. */
   private viewing: string | null | undefined = undefined;
   private greeted: WebSocket | null = null;
+  /** The person's own acts not yet said on a promoted socket (GM r13, 1):
+   * their open of the project already loaded (no request goes out for it)
+   * and their first own edit in a project. Each is said once. */
+  private personActs: { type: 'personOpen' | 'personInput'; projectId: string }[] = [];
 
   setViewing(projectId: string | null): void {
     if (this.viewing === projectId) return;
@@ -415,10 +421,22 @@ class WebSocketClient {
     if (this.ws) this.sendViewing(this.ws);
   }
 
+  /** One of the person's own acts in `projectId`, said on the person's
+   * promoted socket (now, or after its next hello). */
+  notePersonAct(type: 'personOpen' | 'personInput', projectId: string): void {
+    this.personActs = [...this.personActs.filter((act) => act.type !== type), { type, projectId }];
+    if (this.ws) this.sendViewing(this.ws);
+  }
+
   private sendViewing(socket: WebSocket): void {
-    if (this.viewing === undefined || this.greeted !== socket || this.ws !== socket
-      || socket.readyState !== WebSocket.OPEN) return;
-    socket.send(JSON.stringify({ type: 'viewing', projectId: this.viewing }));
+    if (this.greeted !== socket || this.ws !== socket || socket.readyState !== WebSocket.OPEN) return;
+    if (this.viewing !== undefined) {
+      socket.send(JSON.stringify(this.viewing === null ? { type: 'viewing', projectId: null }
+        : { type: 'viewing', projectId: this.viewing, openedBy: 'person' }));
+    }
+    const acts = this.personActs;
+    this.personActs = [];
+    for (const act of acts) socket.send(JSON.stringify(act));
   }
 
   private personConnected(): void {

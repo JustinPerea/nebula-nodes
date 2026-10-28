@@ -132,6 +132,7 @@ import { noteCanvasReplaced } from '../lib/canvasReplaced';
 import { boundingRect, findOpenGroupOffset, UNMEASURED_NODE_SIZE, type NodeRect } from '../lib/nodePlacement';
 import { withParamDefaults } from '../lib/paramDefaults';
 import { replaceChanged, shareUnchanged } from '../lib/structuralShare';
+import { notePersonInput } from '../lib/personInput';
 
 export type TrackItemOrderAction = 'send-to-back' | 'send-backward' | 'bring-forward' | 'bring-to-front';
 
@@ -647,6 +648,9 @@ function pushUndo(
   const newStack = [...undoStack, snapshot];
   if (newStack.length > UNDO_CAP) newStack.shift();
   set({ undoStack: newStack, redoStack: [] });
+  // Only the person's own actions take a step here (an agent's edit arriving
+  // is stacked by editArrived): their first own edit (GM r13 on PR #199, 1).
+  notePersonInput();
   return snapshot;
 }
 
@@ -662,6 +666,7 @@ function pushOwnAdd(set: GraphSet, get: GraphGet, nodeIds: Iterable<string>,
   const undoStack = [...get().undoStack, step];
   if (undoStack.length > UNDO_CAP) undoStack.shift();
   set({ undoStack, redoStack: [] });
+  notePersonInput();
   return step;
 }
 
@@ -7756,9 +7761,10 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   // Undo/Redo actions
   // ---------------------------------------------------------------------------
 
-  undo: () => stepHistory('undo', set, get),
+  // The person's Undo and Redo are their own edits (GM r13 on PR #199, 1).
+  undo: () => { if (get().undoStack.length > 0) notePersonInput(); stepHistory('undo', set, get); },
 
-  redo: () => stepHistory('redo', set, get),
+  redo: () => { if (get().redoStack.length > 0) notePersonInput(); stepHistory('redo', set, get); },
 
   beginUndoStep: (options) => {
     breakUndoDebounce();

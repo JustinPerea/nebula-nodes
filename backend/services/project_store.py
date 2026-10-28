@@ -138,8 +138,13 @@ PURGED_FILE_MAX_BYTES = 1024 * 1024
 # land and a new project is still refused.
 RESTORE_MAY_PASS_THE_PROJECT_LIMIT = False
 RECORD_ROWS = 100  # names listed per restore; the counts are whole
-# The fields prepare writes first, so a cut file still says which project was open.
-_HEAD_KEYS = ("version", "commitSeq", "commitCheck", "activeProjectId", "workspaceRevision", "migratedProjectId", "purged")
+# The fields prepare writes first, so a cut file still says which project was
+# open. ``canvasPending`` (what protects the person's canvas) comes right
+# before ``activeProjectId`` (review 10 of PR #199, HIGH-1: at the file's end,
+# damage in its last quarter lost it while the open project survived): a
+# head that still says which project is open has its protection whole too.
+_HEAD_KEYS = ("version", "commitSeq", "commitCheck", "canvasPending", "activeProjectId", "workspaceRevision",
+              "migratedProjectId", "purged")
 # Every read refuses NaN, Infinity and -Infinity (parse_constant: free on the
 # C decoder). A file this process didn't commit (or a copy) is also read
 # strictly: a number past float's range and a lone surrogate are refused too
@@ -740,6 +745,11 @@ class ProjectStore:
         # restore opens that one, or none, never the copy's (review 1, H1).
         # catalog_recovery.UNKNOWN, or no callback, when it isn't recorded.
         self.canvas_owner: Callable[[], Any] | None = None
+        # After a restore that couldn't read the damaged file whole, given the
+        # restored catalog (before it is written): main._protect_after_restore
+        # protects the reopened project again when it is the live canvas's
+        # (review 10 of PR #199, HIGH-1: a record the damage took fails safe).
+        self.protect_after_restore: Callable[[dict[str, Any]], None] | None = None
         # A reader that finds catalog.json damaged asks this first (main's
         # _hand_off_catalog_restore): True when the restore was handed to a
         # worker thread (the reader is on the event loop), and projection()
@@ -1280,6 +1290,8 @@ class ProjectStore:
         catalog["version"] = 1
         # Open tabs hold the list as it was: a new revision makes them reload.
         catalog["workspaceRevision"] = uuid4().hex
+        read_whole = bool(damage.raw is not None and salvages and salvages[0].complete)
+        self._carry_protection(catalog, salvages, read_whole)
         try:
             self._check(catalog)
         except (ValueError, TypeError) as exc:  # a bug in reconcile: change nothing
@@ -1317,6 +1329,7 @@ class ProjectStore:
                 merged.active_from = "none"
             if catalog.get("migratedProjectId") not in catalog["projects"]:
                 catalog.pop("migratedProjectId", None)
+            self._carry_protection(catalog, salvages, read_whole)
             temporary = self.prepare(catalog)
         # Every damaged file is kept before anything replaces it.
         set_aside: list[str] = []
@@ -1405,7 +1418,7 @@ class ProjectStore:
             # only its shape was wrong). When it wasn't (cut, zeroed, a key
             # destroyed), what it held past the damage is unknown, so nobody
             # may say nothing was lost (live check of fix round 1).
-            "damagedReadWhole": bool(damage.raw is not None and salvages and salvages[0].complete),
+            "damagedReadWhole": read_whole,
             # catalog-purged.json was older than a file that decided ids it
             # names (review 5, L-1): its write had failed, or a crash.
             "purgedFileBehind": merged.purged_file_behind,
@@ -1422,6 +1435,31 @@ class ProjectStore:
         if pending is None:
             pending = self._local.announce = []
         pending.append(record)
+
+    def _carry_protection(self, catalog: dict[str, Any], salvages: list[catalog_recovery.Salvage],
+                          read_whole: bool) -> None:
+        """The restored catalog's ``canvasPending`` (review 10 of PR #199,
+        HIGH-1): the copy's, with what each damaged file's head still says
+        (newer than the copy) on top: a protection either holds is kept, and
+        every copy's name. Then, when the damaged catalog.json wasn't read
+        whole (its record may be what the damage took), main protects the
+        reopened project again if it is the live canvas
+        (protect_after_restore). Never fails the restore."""
+        pending = canvas_pending_of(catalog)
+        fresh, copies = pending["fresh"], dict(pending["copies"])
+        for found in salvages:
+            if found.pending is None:
+                continue
+            said = canvas_pending_of({CANVAS_PENDING_FIELD: found.pending})
+            fresh = said["fresh"] or fresh
+            copies.update(said["copies"])
+        set_canvas_pending_in(catalog, {"fresh": fresh, "copies": copies})
+        if read_whole or self.protect_after_restore is None:
+            return
+        try:
+            self.protect_after_restore(catalog)
+        except Exception as exc:  # noqa: BLE001 - the restore goes on; the protection is main's
+            _log(f"couldn't protect the reopened project again after the restore: {exc}")
 
     def _prune_damaged(self, *, keep: set[Path]) -> None:
         """Delete kept damaged files past the bound (DAMAGED_KEPT_*), never

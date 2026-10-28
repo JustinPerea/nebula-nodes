@@ -92,8 +92,11 @@ project limit is reached." (or "…because Nebula's project list is full."):
 the copy waits, and the person sees it as your copy, not theirs. The CLI
 prints this reply under its own line (`nebula clear` prints it in place of
 the Undo sentence: the person's canvas wasn't cleared). The same holds right
-after a listing saved and opened the waiting canvas, until the person's own
-tab is on that project; opening it yourself doesn't end it. A canvas bigger
+after a listing saved and opened the waiting canvas, until the person opens
+that project themselves or makes their own first edit there; opening it
+yourself doesn't end it, even when their tab follows you onto it, and after
+a restore of a damaged project list the project it reopens is protected
+again. A canvas bigger
 than a project can be saved is never held for you: that change is refused
 (409 `canvas_held_full`, "This canvas is too big for Nebula to keep aside, so
 nothing was changed. Work in an existing project, or make the canvas smaller

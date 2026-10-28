@@ -24,7 +24,7 @@ const graphWrites = vi.hoisted(() => ({
   /** Answers never given in the test: given after it, so no test leaves a write out. */
   hanging: [] as Array<() => void>,
 }));
-vi.mock('../src/lib/wsClient', () => ({ wsClient: { setViewing: () => {},
+vi.mock('../src/lib/wsClient', () => ({ wsClient: { setViewing: () => {}, notePersonAct: () => {},
   connect: vi.fn(), disconnect: vi.fn(),
   subscribe: vi.fn((handler) => { socket.handlers.push(handler); return () => {
     socket.handlers = socket.handlers.filter((item) => item !== handler);

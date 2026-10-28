@@ -111,9 +111,11 @@ export interface ProjectList {
     projectLimit?: number;
     /** The agents' line (GM's waiting line is the person's). */
     note?: string; live?: boolean; held?: number;
-    /** Each canvas that waits (held ones, then the live one), with the name
-     * of the project it was when known (review 6 of PR #199, N-2). */
-    canvases?: { name?: string | null; agentCopy?: { agent?: string | null } | null }[];
+    /** Each canvas that waits, in the order they are saved (the person's,
+     * then agents' copies: GM r12, 2), with the name of the project it was
+     * when known (review 6 of PR #199, N-2) and, at the project limit, how
+     * many projects to delete before it is saved (`deletes`). */
+    canvases?: { name?: string | null; agentCopy?: { agent?: string | null } | null; deletes?: number }[];
     /** How many projects to delete before every waiting canvas is saved (GM's answer 3). */
     deletes?: number;
     /** Held canvases that couldn't be read (review 6, L-1). */

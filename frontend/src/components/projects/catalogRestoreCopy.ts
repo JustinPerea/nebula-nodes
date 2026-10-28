@@ -17,6 +17,17 @@ import type { CatalogRestore } from '../../lib/projects';
 /** How many projects are named before a line gives a count. */
 export const RESTORE_NAMED_MAX = 3;
 
+/** GM r12 on PR #199, 1: the button beside the line a restore leaves when
+ * this tab's edits weren't saved (projectStore RESTORED_LIST_UNSAVED). */
+export const SAVE_AS_A_PROJECT = 'Save as a project';
+
+/** Its saved toast names the project the edits went into, under the
+ * "(recovered)" name (builder's wording; GM: "the saved toast names the
+ * project"). */
+export function editsRecoveredToast(name: string): string {
+  return `Your edits were saved as their own project, ${quoted(name)}.`;
+}
+
 /** The button the notice shows when something is in Recently deleted. */
 export const OPEN_RECENTLY_DELETED = 'Open Recently deleted';
 
@@ -90,19 +101,33 @@ function agentPossessive(agent: string | null | undefined): string {
 }
 
 /** GM r11, 4, verbatim: an agent's copy saved as its own project, on its
- * own line after the person's. Over the save limit adds the singular tail. */
+ * own line after the person's. Over the save limit adds GM r12's tail (3). */
 export function agentCopySavedLine(agent: string | null | undefined, name: string, overSaveLimit = false): string {
-  return `${agentPossessive(agent)} changes were saved as their own project, ${quoted(name)}.${overSaveLimit ? ` ${ONE_OVER}` : ''}`;
+  return `${agentPossessive(agent)} changes were saved as their own project, ${quoted(name)}.${overSaveLimit ? ` ${COPY_OVER}` : ''}`;
 }
 
-/** GM r11, 4, verbatim: an agent's copy that waits to be saved. */
+/** GM r12 on PR #199, 3, verbatim: the copy's over-limit tail. */
+const COPY_OVER = "It's over the save limit, so new changes to it won't save until it's smaller.";
+
+/** GM r11, 4, verbatim: an agent's copy that waits to be saved. At the
+ * project limit its own count (GM r12, 2: the person's canvases are saved
+ * first, so the copy's line counts them too: "Delete 2 projects and Nebula
+ * will save it."); at the size cap GM r13, 2: "Nothing in it is lost." then
+ * the singular size advice. */
 export function agentCopyWaitingLine(agent: string | null | undefined, reason: CanvasLimit,
-  context: Pick<CanvasLimitContext, 'projectLimit' | 'trashHasItems'>): string {
+  context: Pick<CanvasLimitContext, 'projectLimit' | 'trashHasItems'>, deletes?: number | null): string {
   const opening = `${agentPossessive(agent)} copy of your canvas isn't saved as a project yet because`;
   if (reason === 'projects') {
-    return `${opening} you've reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST} Delete a project and Nebula will save it.`;
+    return `${opening} you've reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST} ${deleteToSaveIt(deletes)}`;
   }
   return `${opening} Nebula's project list is full. ${NOTHING_LOST} ${sizeCapAdvice(context.trashHasItems)}`;
+}
+
+/** "Delete a project and Nebula will save it.", or with the real number
+ * when more than one has to go (GM r12, 2). */
+function deleteToSaveIt(deletes?: number | null): string {
+  return typeof deletes === 'number' && deletes > 1
+    ? `Delete ${deletes} projects and Nebula will save it.` : 'Delete a project and Nebula will save it.';
 }
 
 /** GM r9 (1): every canvas saved is over the save limit. */
@@ -154,17 +179,23 @@ export type CanvasLimit = 'projects' | 'storage';
  * name of the project it was when known; review 6 of PR #199, N-2). */
 export interface CanvasLimitContext {
   projectLimit: number; trashHasItems: boolean;
-  canvases?: { name?: string | null; agentCopy?: { agent?: string | null } | null }[];
+  canvases?: { name?: string | null; agentCopy?: { agent?: string | null } | null; deletes?: number | null }[];
   /** How many projects to delete before every waiting canvas is saved (the
    * listing's `canvasNotFiled.deletes`): GM's answer 3, the real number. */
   deletes?: number | null;
 }
 
+/** The person's own count for their line: the listing's per-canvas one when
+ * it says (GM r12, 2), else its total. */
+function ownCount(context: CanvasLimitContext): number | null {
+  return countOf(context.canvases ?? []) ?? (typeof context.deletes === 'number' ? context.deletes : null);
+}
+
 /** GM's answer 3 to review 6: "Delete 2 projects and Nebula will save them."
  * with the real number (the canvases that wait, when the listing doesn't say). */
 function deleteToSaveMany(context: CanvasLimitContext): string {
-  const deletes = typeof context.deletes === 'number' && context.deletes > 0
-    ? context.deletes : (context.canvases?.length ?? 2);
+  const own = ownCount(context);
+  const deletes = typeof own === 'number' && own > 0 ? own : (context.canvases?.length ?? 2);
   return deletes === 1 ? 'Delete a project and Nebula will save them.' : `Delete ${deletes} projects and Nebula will save them.`;
 }
 
@@ -223,9 +254,21 @@ function withAgentCopies(reason: CanvasLimit, context: CanvasLimitContext,
   const copies = all.filter((canvas) => canvas.agentCopy);
   if (copies.length === 0) return persons(reason, context);
   const own = all.filter((canvas) => !canvas.agentCopy);
-  const lines = own.length > 0 ? [persons(reason, { ...context, canvases: own })] : [];
-  for (const copy of copies) lines.push(agentCopyWaitingLine(copy.agentCopy?.agent, reason, context));
+  // Each line its own count (GM r12, 2): the person's canvases are saved
+  // first, so theirs counts only what they need (the last of theirs' count),
+  // and each copy's counts every canvas saved before it too.
+  const ownDeletes = countOf(own);
+  const lines = own.length > 0 ? [persons(reason, { ...context, canvases: own,
+    ...(ownDeletes !== null ? { deletes: ownDeletes } : {}) })] : [];
+  for (const copy of copies) lines.push(agentCopyWaitingLine(copy.agentCopy?.agent, reason, context, copy.deletes ?? context.deletes));
   return lines.join(' ');
+}
+
+/** The count of the last of `rows` (the listing's per-canvas `deletes`, in
+ * the order they are saved), or null when the listing doesn't say. */
+function countOf(rows: { deletes?: number | null }[]): number | null {
+  const last = rows[rows.length - 1];
+  return last && typeof last.deletes === 'number' && last.deletes > 0 ? last.deletes : null;
 }
 
 function personsLimitLine(reason: CanvasLimit, context: CanvasLimitContext): string {
@@ -239,7 +282,7 @@ function personsLimitLine(reason: CanvasLimit, context: CanvasLimitContext): str
   }
   const opening = "The canvas you had open couldn't be saved as its own project because";
   if (reason === 'projects') {
-    return `${opening} you've reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST} Delete a project and Nebula will save it.`;
+    return `${opening} you've reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST} ${deleteToSaveIt(ownCount(context))}`;
   }
   return `${opening} Nebula's project list is full. ${NOTHING_LOST} ${sizeCapAdvice(context.trashHasItems)}`;
 }
@@ -264,7 +307,7 @@ function personsWaitingLine(reason: CanvasLimit, context: CanvasLimitContext): s
   }
   const opening = "The canvas you had open isn't saved as a project yet because";
   if (reason === 'projects') {
-    return `${opening} you've reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST} Delete a project and Nebula will save it.`;
+    return `${opening} you've reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST} ${deleteToSaveIt(ownCount(context))}`;
   }
   return `${opening} Nebula's project list is full. ${NOTHING_LOST} ${sizeCapAdvice(context.trashHasItems)}`;
 }

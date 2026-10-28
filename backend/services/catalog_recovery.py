@@ -200,6 +200,9 @@ class Salvage:
     entry_groups: dict[str, str] = field(default_factory=dict)
     # The file's commit number (its head's ``commitSeq``), when it reads.
     seq: int | None = None
+    # Its ``canvasPending`` (what protects the person's canvas: written in
+    # the head since review 10 of PR #199, HIGH-1), as read, or None.
+    pending: Any = None
 
     def take(self, entry_id: str, entry: dict[str, Any], group: str | None = None) -> bool:
         """Keep ``entry`` (entry_ok) unless the store couldn't write it back."""
@@ -433,6 +436,7 @@ def _salvage_whole(found: Salvage, whole: dict[str, Any]) -> None:
     found.active = _whole_active(whole, held)
     found.purged = purged_map(whole.get("purged"))
     found.seq = proven_commit(whole)
+    found.pending = whole.get("canvasPending")
 
 
 def head_active(raw: bytes | None, parsed: Any = None) -> Any:
@@ -614,6 +618,7 @@ def salvage(raw: bytes, parsed: Any = _UNKNOWN) -> Salvage:
                 found.active = active
         found.purged = purged_map(head.get("purged"))
         found.seq = proven_commit(head)
+        found.pending = head.get("canvasPending")
     position = 0
     last_end: int | None = None
     last_group: str | None = None

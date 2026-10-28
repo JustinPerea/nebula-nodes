@@ -274,6 +274,7 @@ export default function App() {
       onContinueWithoutEdits={() => void projects.continueWithoutEdits()}
       catalogRestore={projects.catalogRestore} onDismissCatalogRestore={projects.dismissCatalogRestore}
       canvasNotFiled={projects.canvasNotFiled} canvasSaved={projects.canvasSaved} onDismissCanvasSaved={projects.dismissCanvasSaved}
+      editsRecoveredAs={projects.editsRecoveredAs} onDismissEditsRecovered={projects.dismissEditsRecovered}
       projectLimit={projects.projectLimit} restorePassesLimit={projects.restorePassesLimit}
       restoreRoom={projects.restoreRoom} canvasHeldUnreadable={projects.canvasHeldUnreadable}
       onDismissCanvasHeldUnreadable={projects.dismissCanvasHeldUnreadable} />;

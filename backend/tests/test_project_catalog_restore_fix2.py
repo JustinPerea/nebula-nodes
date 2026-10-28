@@ -272,6 +272,7 @@ def app(tmp_path, monkeypatch, person):
     monkeypatch.setattr(main_module, "project_store", store)
     store.on_restore = main_module._on_catalog_restore
     store.canvas_owner = main_module._canvas_owner_for_restore
+    store.protect_after_restore = getattr(main_module, "_protect_after_restore", None)
     store.hand_off_restore = getattr(main_module, "_hand_off_catalog_restore", None)
     store.read_in_flight = getattr(main_module, "_catalog_read_in_flight", None)
     monkeypatch.setattr(main_module, "provider_recovery_store", ProviderRecoveryStore(None))

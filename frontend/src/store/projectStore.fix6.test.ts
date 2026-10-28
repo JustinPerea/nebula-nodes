@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // listing's restore verdict, counted lines and saved names reach the store.
 
 vi.mock('../lib/wsClient', () => ({
-  wsClient: { setViewing: vi.fn(), connect: vi.fn(), subscribe: vi.fn(() => () => {}), subscribeFirst: vi.fn(() => () => {}), disconnect: vi.fn() },
+  wsClient: { setViewing: vi.fn(), notePersonAct: vi.fn(), connect: vi.fn(), subscribe: vi.fn(() => () => {}), subscribeFirst: vi.fn(() => () => {}), disconnect: vi.fn() },
 }));
 vi.mock('../lib/projects', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/projects')>()),

@@ -3,8 +3,8 @@ import { ArrowUpRight, Check, ChevronRight, ImageIcon, Pencil, Plus, RotateCcw, 
 import { backendAssetUrlSync } from '../../lib/backend';
 import { coverImages, type CatalogRestore, type CoverChoices, type ProjectCover, type SavedCanvas } from '../../lib/projects';
 import {
-  canvasHeldUnreadableLine, canvasSavedToast, canvasWaitingLine, catalogRestoreNotice, DEFAULT_PROJECT_LIMIT, OPEN_RECENTLY_DELETED,
-  restoreAtLimitTooltip, type CanvasLimit, type CanvasLimitContext, type NoticeNow, type RestoreRoom,
+  canvasHeldUnreadableLine, canvasSavedToast, canvasWaitingLine, catalogRestoreNotice, DEFAULT_PROJECT_LIMIT, editsRecoveredToast,
+  OPEN_RECENTLY_DELETED, restoreAtLimitTooltip, SAVE_AS_A_PROJECT, type CanvasLimit, type CanvasLimitContext, type NoticeNow, type RestoreRoom,
 } from './catalogRestoreCopy';
 import { actorLabel } from '../../lib/trash';
 import { removalNote } from './trashDays';
@@ -62,8 +62,10 @@ export interface ProjectHomeProps {
   /** What Try again does for `error` (error copy round 3b, store/projectStore
    * projectRetryOffer): 'redo' redoes the failure (the reason is GM's short
    * line), 'reload' only reloads the saved projects (the whole line stays),
+   * 'save' is [Save as a project] (GM r12 on PR #199, 1: the edits a
+   * restore stopped, kept in this tab; the whole line), and
    * 'none' hides Try again (the whole line). */
-  retry?: 'redo' | 'reload' | 'none';
+  retry?: 'redo' | 'reload' | 'save' | 'none';
   trash?: TrashedProject[];
   /** The project the person just moved to Recently deleted (the Undo
    * toast); ``refused`` is the line that replaces it when its Undo was
@@ -100,6 +102,10 @@ export interface ProjectHomeProps {
    * GM's toast, once per tab, naming each canvas filed with it (`filed`). */
   canvasSaved?: { id: string; name: string; overSaveLimit?: boolean; another?: boolean; agentCopy?: { agent?: string | null };
     filed?: SavedCanvas[] } | null;
+  /** The project [Save as a project] saved this tab's edits as (GM r12 on
+   * PR #199, 1): its toast names it. */
+  editsRecoveredAs?: { id: string; name: string } | null;
+  onDismissEditsRecovered?: () => void;
   /** The backend's verdict on a restore now (the listing's `restoreRoom`,
    * review 6 of PR #199, L-3): Restore greys on it, held canvases counted. */
   restoreRoom?: RestoreRoom | null;
@@ -547,18 +553,25 @@ function CanvasSavedToast({ project, onDismiss }: {
     filed?: SavedCanvas[] };
   onDismiss: () => void;
 }) {
+  return <SavedToast text={canvasSavedToast(project.name, project.filed, project.overSaveLimit === true,
+    project.another === true, project.agentCopy)} onDismiss={onDismiss} />;
+}
+
+/** The app's saved toast: it goes after UNDO_VISIBLE_MS, held while pointed
+ * at or focused. Keyed by the caller on what it names. */
+function SavedToast({ text, onDismiss }: { text: string; onDismiss: () => void }) {
   const [paused, setPaused] = useState(false);
   useEffect(() => {
     if (paused) return;
     const timer = window.setTimeout(onDismiss, UNDO_VISIBLE_MS);
     return () => window.clearTimeout(timer);
-  }, [paused, onDismiss, project.id]);
+  }, [paused, onDismiss]);
   return (
     <InNoticeRegion slot="project-home">
       <div className="project-home__toast" role="status" aria-live="polite"
         onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
         onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
-        <span className="project-home__toast-text">{canvasSavedToast(project.name, project.filed, project.overSaveLimit === true, project.another === true, project.agentCopy)}</span>
+        <span className="project-home__toast-text">{text}</span>
         <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
       </div>
     </InNoticeRegion>
@@ -590,7 +603,8 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
   trash = [], lastDeleted = null, onRestore = noop, onPurge = noop, onEmptyTrash = noop, onDismissUndo = noop,
   settingsOpen = false, onToggleSettings, loadCoverChoices, onPinCover,
   catalogRestore = null, onDismissCatalogRestore = noop,
-  canvasNotFiled = null, canvasSaved = null, onDismissCanvasSaved = noop, projectLimit, restorePassesLimit = false,
+  canvasNotFiled = null, canvasSaved = null, onDismissCanvasSaved = noop, editsRecoveredAs = null, onDismissEditsRecovered = noop,
+  projectLimit, restorePassesLimit = false,
   restoreRoom = null, canvasHeldUnreadable = null, onDismissCanvasHeldUnreadable = noop,
   unsavedEdits = null, editsSavedAs = null, onDownloadEdits = noop, onContinueWithoutEdits = noop }: ProjectHomeProps) {
   const [query, setQuery] = useState('');
@@ -654,7 +668,8 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
           {errorDetails ? <div className="project-home__error-text"><span>{retry === 'redo' ? shortLine(error) : error}</span>
             <ErrorDetails raw={errorDetails} className="project-home__error-details" /></div>
             : <span>{retry === 'redo' ? shortLine(error) : error}</span>}
-          {retry !== 'none' && <button type="button" disabled={loading || busy} onClick={onRetry}>Try again</button>}</div>}
+          {retry !== 'none' && <button type="button" disabled={loading || busy} onClick={onRetry}>
+            {retry === 'save' ? SAVE_AS_A_PROJECT : 'Try again'}</button>}</div>}
 
         <section className="project-home__projects" aria-labelledby="recent-projects-title">
           <div className="project-home__section-header">
@@ -673,6 +688,8 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
       {lastDeleted && <UndoToast key={lastDeleted.id} project={lastDeleted} busy={locked}
         onUndo={() => onRestore(lastDeleted.id, 'undo')} onDismiss={onDismissUndo} />}
       {canvasSaved && <CanvasSavedToast key={canvasSaved.id} project={canvasSaved} onDismiss={onDismissCanvasSaved} />}
+      {editsRecoveredAs && !canvasSaved && <SavedToast key={editsRecoveredAs.id} text={editsRecoveredToast(editsRecoveredAs.name)}
+        onDismiss={onDismissEditsRecovered} />}
     </div>
   );
 }

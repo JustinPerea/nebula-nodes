@@ -907,10 +907,46 @@ describe('browser person link', () => {
     sockets[0].onopen?.();
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
     expect(sockets[0].sent.map((frame) => JSON.parse(frame).type)).toEqual(['hello', 'viewing']);
-    expect(JSON.parse(sockets[0].sent[1])).toEqual({ type: 'viewing', projectId: 'p1' });
+    // GM r13 on PR #199, 1: only a screen the person opened themselves is said.
+    expect(JSON.parse(sockets[0].sent[1])).toEqual({ type: 'viewing', projectId: 'p1', openedBy: 'person' });
     wsClient.setViewing('p1');
     wsClient.setViewing(null);
     expect(sockets[0].sent.slice(2).map((frame) => JSON.parse(frame))).toEqual([{ type: 'viewing', projectId: null }]);
+    wsClient.disconnect();
+  });
+
+  it("the person's own acts go on the promoted socket, once each, after its hello (GM r13 on PR #199, 1)", async () => {
+    sessionStorage.setItem('nebula.person', JSON.stringify({ token: TOKEN, backend: 'http://127.0.0.1:8131' }));
+    const sockets: Array<{ sent: string[]; onopen: (() => void) | null }> = [];
+    class MockWS {
+      static OPEN = 1;
+      readyState = 1;
+      sent: string[] = [];
+      onopen: (() => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onclose: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      constructor(public url: string) { sockets.push(this); }
+      send(data: string) { this.sent.push(data); }
+      close() { this.readyState = 3; }
+    }
+    vi.stubGlobal('WebSocket', MockWS);
+    await importFresh();
+    const { wsClient } = await import('../../src/lib/wsClient');
+    // Before the socket is promoted: kept, never sent on an unpromoted one.
+    wsClient.notePersonAct('personInput', 'p1');
+    wsClient.connect();
+    await vi.waitFor(() => expect(sockets).toHaveLength(1));
+    expect(sockets[0].sent).toEqual([]);
+    sockets[0].onopen?.();
+    await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
+    expect(sockets[0].sent.map((frame) => JSON.parse(frame))).toEqual([
+      { type: 'hello', personToken: TOKEN }, { type: 'personInput', projectId: 'p1' }]);
+    wsClient.notePersonAct('personOpen', 'p2');
+    expect(JSON.parse(sockets[0].sent[2])).toEqual({ type: 'personOpen', projectId: 'p2' });
+    // Said once: a later frame doesn't repeat it.
+    wsClient.setViewing(null);
+    expect(sockets[0].sent.slice(3).map((frame) => JSON.parse(frame))).toEqual([{ type: 'viewing', projectId: null }]);
     wsClient.disconnect();
   });
 

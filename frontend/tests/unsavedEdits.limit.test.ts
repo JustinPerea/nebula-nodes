@@ -20,7 +20,7 @@ vi.mock('../src/lib/backend', async (original) => ({
 vi.mock('../src/lib/personSession', async (original) => ({
   ...await original<typeof import('../src/lib/personSession')>(), holdsPersonCredential: () => true,
 }));
-vi.mock('../src/lib/wsClient', () => ({ wsClient: { setViewing: () => {},
+vi.mock('../src/lib/wsClient', () => ({ wsClient: { setViewing: () => {}, notePersonAct: () => {},
   connect: vi.fn(), disconnect: vi.fn(),
   subscribe: vi.fn((handler) => { socket.handlers.push(handler); return () => {
     socket.handlers = socket.handlers.filter((item) => item !== handler);

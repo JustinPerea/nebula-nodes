@@ -98,6 +98,7 @@ def app(tmp_path, monkeypatch, person):
     monkeypatch.setattr(main_module, "project_store", store)
     store.on_restore = main_module._on_catalog_restore
     store.canvas_owner = main_module._canvas_owner_for_restore
+    store.protect_after_restore = getattr(main_module, "_protect_after_restore", None)
     monkeypatch.setattr(main_module, "provider_recovery_store", ProviderRecoveryStore(None))
     monkeypatch.setattr(main_module, "provider_start_guard", ProviderStartGuard(tmp_path / "paid-starts.json"))
     monkeypatch.setattr(main_module, "execution_runs", ExecutionRunRegistry())

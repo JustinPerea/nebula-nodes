@@ -49,6 +49,17 @@ def stored_owner(value: Any, present: bool) -> Any:
     return value if isinstance(value, str) and _PROJECT_ID.fullmatch(value) else OWNER_UNPROVEN
 
 
+def copy_note_of(note: Any, owner: Any) -> dict[str, Any] | None:
+    """``note`` (CLIGraph.copy_note) when it is the canvas's own: of the
+    project id ``owner`` is, with a name and an agent (or None)."""
+    if not isinstance(note, dict) or not isinstance(owner, str) or note.get("of") != owner:
+        return None
+    name, agent = note.get("name"), note.get("agent")
+    if not (isinstance(name, str) and 0 < len(name) <= 200) or not (agent is None or isinstance(agent, str)):
+        return None
+    return {"of": owner, "name": name, "agent": agent}
+
+
 class CLIGraph:
     """In-memory graph state for CLI operations.
 
@@ -71,6 +82,12 @@ class CLIGraph:
         # Which project this canvas is (OWNER_UNKNOWN above): set by whoever
         # puts a project on it (main._commit_project_workspace), saved with it.
         self.owner: Any = OWNER_UNKNOWN
+        # When this canvas is a copy an agent's change was made on (main's
+        # _protect_persons_canvas): {"of": the copy's id, "name", "agent"},
+        # saved with it as ``projectCopy`` while ``owner`` is that id. So the
+        # copy is named as the agent's whatever happens to the catalog's
+        # record of it (review 10 of PR #199, L-1). Inert once the owner changes.
+        self.copy_note: dict[str, Any] | None = None
         # Nodes whose params ``load`` upgraded (services/saved_graph_upgrades.py),
         # and whether the file was saved before ``PARAMS_VERSION`` (true even
         # when no value changed: main's boot step writes the marker and makes
@@ -267,6 +284,7 @@ class CLIGraph:
                 replacement_edges,
                 replacement_counter,
                 self.owner,
+                self.copy_note,
             )
         self.nodes = replacement_nodes
         self.edges = replacement_edges
@@ -279,6 +297,7 @@ class CLIGraph:
         candidate.edges = copy.deepcopy(self.edges)
         candidate._counter = self._counter
         candidate.owner = self.owner
+        candidate.copy_note = copy.deepcopy(self.copy_note)
         return candidate
 
     # ------------------------------------------------------------------
@@ -321,7 +340,7 @@ class CLIGraph:
 
     def save(self, path: Path) -> None:
         """Atomically persist the graph (including counter) to a JSON file."""
-        self._save_state(path, self.nodes, self.edges, self._counter, self.owner)
+        self._save_state(path, self.nodes, self.edges, self._counter, self.owner, self.copy_note)
 
     @staticmethod
     def _save_state(
@@ -330,6 +349,7 @@ class CLIGraph:
         edges: list[dict[str, str]],
         counter: int,
         owner: Any = OWNER_UNKNOWN,
+        copy_note: dict[str, Any] | None = None,
     ) -> None:
         target = require_allowed_path(path)
         data: dict[str, Any] = {
@@ -343,6 +363,8 @@ class CLIGraph:
             data["projectId"] = _UNPROVEN_MARK
         elif owner is not OWNER_UNKNOWN:
             data["projectId"] = owner
+        if note := copy_note_of(copy_note, owner):
+            data["projectCopy"] = {"name": note["name"], "agent": note["agent"]}
         temporary = target.with_name(f".{target.name}.{uuid4().hex}.tmp")
         try:
             with temporary.open("x", encoding="utf-8") as handle:
@@ -413,6 +435,8 @@ class CLIGraph:
         upgraded = upgrade_flat_nodes(nodes.values(), version)
         self.nodes, self.edges, self._counter = nodes, edges, counter
         self.owner = stored_owner(data.get("projectId"), "projectId" in data)
+        found = data.get("projectCopy")
+        self.copy_note = copy_note_of({**found, "of": self.owner}, self.owner) if isinstance(found, dict) else None
         self.upgraded_on_load = upgraded
         self.params_advanced_on_load = version < PARAMS_VERSION
 

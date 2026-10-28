@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // path with the real stores and the real autosave subscription.
 
 vi.mock('../../src/lib/wsClient', () => ({
-  wsClient: { setViewing: () => {}, connect: vi.fn(), send: vi.fn(), subscribe: vi.fn(() => () => {}), subscribeFirst: vi.fn(() => () => {}), disconnect: vi.fn() },
+  wsClient: { setViewing: () => {}, notePersonAct: () => {}, connect: vi.fn(), send: vi.fn(), subscribe: vi.fn(() => () => {}), subscribeFirst: vi.fn(() => () => {}), disconnect: vi.fn() },
 }));
 vi.mock('../../src/lib/projects', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/lib/projects')>()),
