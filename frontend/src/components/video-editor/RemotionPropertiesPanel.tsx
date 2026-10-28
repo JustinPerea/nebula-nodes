@@ -3,6 +3,7 @@ import { useUIStore } from '../../store/uiStore';
 import { DEFAULT_ANCHOR } from '../../types/video';
 import type { KeyframeData, TrackItem, VideoGraphManifest } from '../../types/video';
 import { SpatialAxisInput } from './SpatialAxisInput';
+import { useCanvasLock } from '../../lib/canvasLock';
 
 const ANCHOR_PRESETS: Array<{ label: string; value: NonNullable<TrackItem['spatial']['anchor']> }> = [
   { label: 'top left', value: [0, 0] },
@@ -46,6 +47,10 @@ export function RemotionPropertiesPanel({ remotionNodeId }: RemotionPropertiesPa
   const updateTrackItemSpatial = useGraphStore((s) => s.updateTrackItemSpatial);
   const updateKeyframe = useGraphStore((s) => s.updateKeyframe);
   const deleteKeyframe = useGraphStore((s) => s.deleteKeyframe);
+  // Round 23 (review 22, L-3): every field here edits the layer on the
+  // canvas, so the fields sit in one fieldset the canvas lock disables (a
+  // disabled fieldset disables each control inside it).
+  const lock = useCanvasLock();
 
   const manifest = ((node?.data.params as { manifest?: VideoGraphManifest } | undefined)?.manifest) ?? null;
   const item: TrackItem | null = manifest?.timeline.find((t) => t.id === selectedTrackItemId) ?? null;
@@ -124,6 +129,8 @@ export function RemotionPropertiesPanel({ remotionNodeId }: RemotionPropertiesPa
         <span className="remotion-properties-panel__type">{item.componentType}</span>
         <span className="remotion-properties-panel__id">{item.id.slice(0, 8)}</span>
       </header>
+      <fieldset className="remotion-properties-panel__fields" disabled={lock.locked} {...lock.mark}
+        title={lock.act().title}>
 
       <section className="remotion-properties-panel__section">
         <h4>Time</h4>
@@ -460,6 +467,7 @@ export function RemotionPropertiesPanel({ remotionNodeId }: RemotionPropertiesPa
           </label>
         </section>
       )}
+      </fieldset>
     </aside>
   );
 }

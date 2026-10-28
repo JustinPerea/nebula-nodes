@@ -255,6 +255,11 @@ nebula path n5         # the local file of a node's image
 nebula status
 ```
 
+A run that started always answers with its run id. If `nebula run` prints
+a note that open canvases were told late (`canvasSync: "deferred"` over
+MCP), the run is still going: follow it with `nebula result <run-id>`, and
+never start it again.
+
 Runs spend the person's own provider credits. A run over their limits, or
 with a node that has no list price, is refused: send it as a proposal.
 Some nodes are priced from their input file's size (SeedVR2 Upscale: $0.001
@@ -775,6 +780,12 @@ nebula point --say "Reading your board"   # no target: said where your cursor is
 nebula note "n4 and n7 use different seeds; I'll match them" --node n4 --node n7
 nebula notes --unread          # your updates the person hasn't opened
 ```
+
+A pin you read before a project switch may be gone from the open project:
+`nebula pin resolve` then says that note isn't in the open project. Run
+`nebula pins` again and answer one listed there. The person's notes are tied
+to the canvas they wrote them on, so a note never lands on another project's
+node with the same id.
 
 `--say` (on `point`, `pin resolve`) and `--note` (on `apply`, `propose`) are
 for your own action. What you noticed, a report or a suggestion goes in

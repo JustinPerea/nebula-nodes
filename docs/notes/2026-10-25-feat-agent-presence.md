@@ -2087,3 +2087,129 @@ origin/main at c1e7338c (#114) merged by hand into c898138e, keeping both sides'
 - The agent-clear screenshot also shows the earlier section's "Codex opened “Second canvas”." toast stacked above (a real toast the live script left; not part of the frame's subject).
 - Parked saves wait at most 15 s for a sync; past that they are sent once more under the same revision and, if refused again, become a failed save with its line.
 - The full vitest run was taken under heavy machine load; every file that failed or didn't start there passed alone or in the rerun.
+
+## Round 23: review 22 and GM - Design's failed-save wording (2026-10-27)
+
+Branch feat/agent-presence, base b74d4466. Justin: "I want to do complete fixes as soon as we run into them"; "implement the correct and better choice - not the easy now choice".
+
+### What changed
+
+- **M-1, the "Note for agents" dialog:**
+  - The pin store's compose, submit and delete ask the same gate every canvas surface reads (`refuseCanvasEdit()` in lib/canvasLock: following first, then offline). The dialog's OK takes `lock.act()`. Delete on a note (PinLayer) is locked too.
+  - When a follow starts, or the canvas is replaced (a clear, a sync that replaced the canvas, loadGraph, loadProjectGraph: the new `noteCanvasReplaced()` in lib/canvasReplaced), the dialog closes.
+  - What the person typed is kept, not re-anchored: a notice in the pin slot shows it with "Copy note" and ×.
+    - Why not re-anchor: the anchor is a node id of the canvas that went, and ids start again on a new or cleared canvas. The person may also never come back to that project. Showing the text costs nothing and puts nothing in the wrong place.
+    - Its two lines are pending constants for GM: `NOTE_KEPT_LINE` "Your note wasn’t added: the canvas changed before it was sent." and `NOTE_KEPT_COPY` "Copy note".
+  - The POST names the project and canvas the note was composed on (`createPin(text, target, project)` sends its revision headers). A 409 for a moved canvas keeps the text the same way.
+  - **Backend:**
+    - The pin create, delete and resolve routes are `@graph_write`, out of the fence allowlist. A tab write whose canvas moved, or a tab write with no revision, is refused 409 and nothing is pinned or journaled.
+    - Resolve's 404 now tells agents the note "isn't in the open project (it may have changed since you read it)" and to read the canvas again.
+    - There is no PATCH pin route.
+- **L-1:**
+  - Undo's restore after an agent clear is resolved lazily for saves in flight. Each PUT (params and rename) registers a landing.
+  - The Undo step taken "as last saved" holds (the existing `holdStep` path, so an Undo pressed meanwhile waits) until those landings settle. It then applies the ones that landed (200), in send order, and drops the refused ones.
+  - Both orders are tested and checked live: the broadcast before the 200, and the 200 before the broadcast.
+- **L-2:** `canvasSyncBoot` is set to null on every canvas load over HTTP (loadGraph, loadProjectGraph, clearGraph, clearBackendNodes) and on a sync that replaced the canvas.
+  - Why null and not `socketBoot`: no HTTP load answer says which boot served it. With null, a restart in that window reads as a named replacement, which is the safe side.
+- **L-3:**
+  - **Locked through `useCanvasLock`:**
+    - Cinema:
+      - CinemaShotPanel: Generate shot, −, +, Generate N, the variations, the refs and their file input, Retry, the override boxes and resets, and the prompt (read-only).
+      - CinemaShotsRail: move, remove, add and dragging.
+      - CinemaStudioToolbar: Generate all.
+      - CinemaArtDirectionControls and CinemaSharedControls.
+    - The command palette: a new `acts` flag on Run graph, Load graph, Ask the agent… and every node insert. Each is disabled with the Wait tooltip, and Enter or the agent prompt refuses it with a pulse.
+    - Create: Generate, including ⌘Enter, and ResultCard's Delete.
+    - Smaller controls: CanvasUndoNotice's Undo/Redo, CharacterTestPanel's Test on canvas, and AssetsPanel's Add to canvas and dragging.
+    - ProviderRecoveryStatus's unlocks: the store refuses them while following too, so it moved off offline-only.
+    - The video editors:
+      - EditorTransport: Cut, the speed and volume controls, Mute.
+      - RemotionEditorToolbar: add, order, Delete.
+      - RemotionPropertiesPanel: one disabled `<fieldset>`.
+      - RemotionTimeline: `disableDrag`.
+      - TimelineClip and SelectionBox: their drags refused at pointerdown.
+  - While following or offline, Generate shot and Create's Generate take the neutral disabled look, never orange (GM blocker A).
+  - **The new ratchet (tests/round23Surfaces.test.tsx):**
+    - Static: every component that reaches an EDIT_GATES action or a pin write reads the lock. The only exceptions are CinemaStudioView and CreateView, which hand their actions to named delegates that are rendered below.
+    - Every palette command says whether it acts.
+    - Rendered: 13 surfaces × following / offline / offline+following. Every button, input, select and textarea is disabled or read-only and marked, with GM's tooltip while following, unless it is on that surface's named list of controls that only look, copy or stop.
+- **L-4:** after admission, the placeholder broadcast is best effort (`_broadcast_admitted_run`).
+  - A failure is logged ("couldn't tell open canvases"), the answer is still 200 started with `canvasSync: "deferred"` and a detail, and the sync is owed: retried at 0.5, 2 and 5 s, and paid by any later sync.
+  - The other post-admission steps in `/api/graph/run` (skip notes, Agent log, cursor) can't turn the answer into a failure either.
+- **GM's failed-save wording, verbatim** (lib/savingCutOff):
+  - "Couldn't save “a” and “b” for “Hero still”." and "“a”, “b” and “c”" (one node, 2–3 settings).
+  - "Couldn't save 4 settings for “Hero still”." (one node, 4+ settings).
+  - "Couldn't save your changes to “Hero still” and “Hero prompt”." (two or three nodes).
+  - "Couldn't save your changes to 4 nodes." (four or more nodes).
+  - "Couldn't save your last change."
+  - The no-agent form: "Couldn't save “Text” for “Hero prompt”. Your edits were saved as a copy, “Round r20 (recovered)”."
+    - To say that truthfully, a replacement by a reconnect or restart (no agent) that cut off typing now makes a recovered copy (`keepReplacedCanvasAsCopy`). The line names it, with Open copy. If the copy fails, the line still names what wasn't saved.
+  - The canvas's own failed save (`paramSaveFailedLine`) uses the same counting, so three settings are now named rather than counted.
+- **Agents:**
+  - mcp_server.py: `run_nodes` shows `canvasSync`/`canvasSyncDetail`; `resolve_pin` explains the 404.
+  - CLI: `nebula run` prints a stderr note on a deferred sync.
+  - docs/MCP-SETUP.md and skills/nebula/SKILL.md cover the pin fence, the resolve 404 and the started answer with `canvasSync`.
+
+### Decisions and surprises
+
+- An agent's switch with an unnamed agent (actor kind "anonymous") still says "when an agent switched projects". Only a switch made by the person or by Nebula ("person", "system") uses the no-agent form.
+- In the live check, the project bar's name button stays enabled offline. Its rename is refused on double-click or Enter (PR #114's design), so it isn't a Cinema control.
+- The kept-note notice reuses the "pin" notice slot rather than a new slot.
+
+### Tests written first, and how they failed on b74d4466
+
+- **backend/tests/test_round23.py:** 14 of 15 failed by assertion. The failures:
+  - The pin routes had no fence.
+  - A note for A was accepted 201 after the switch to B.
+  - The cleared-canvas and no-revision cases were 201.
+  - The delete was 404 instead of 409, and the resolve detail was missing.
+  - Run routes answered 507 after admission (cli, execute and execute-node).
+  - `canvasSync` and `_graph_sync_owed` were missing, and the docs test failed.
+  - The control "a note for the canvas open now lands" passed.
+- **frontend:** 63 of 75 failed, all by assertion.
+  - round23Surfaces 40 of 43: the static scan listed 13 files. Rendered, every surface had unlocked controls, for example Cinema's Prompt, Generate shot, Fewer and More, and Generate 2. The controls that passed were the scan's self-test, ProviderRecoveryStatus offline, and "back to normal".
+  - round23Store 14 of 18: PIN-F, PIN-A, PIN-D, kept text, clear and load closing, POST context, 409 keeps text, GA-LATE, the waits, debounce behind a landed PUT, rename landed, and the copy cases. The controls that passed were offline gating (already on), GA-EARLY, Undo refused, and nothing cut off.
+  - round23Restart 2 of 3: STALEBOOT via loadProjectGraph and via loadGraph. The L-a control passed.
+  - round23Lines 7 of 11: the new 2–3 and node-count forms, and the copy line.
+  - The CSS test added after the live check (a locked primary looks neutral) fails on b74d4466 too.
+- **Changed on purpose:**
+  - graphStore.round15: three settings are now named, and four are counted.
+  - canvasPinsStore and PinComposer: createPin now gets the composed project (null with none).
+  - round22Surfaces: ProviderRecoveryStatus is out of OFFLINE_ONLY.
+
+### Gates (round 23, final code)
+
+- **Backend:** the full suite, isolated through iso_presence.sh, passed 11,681 with 71 skipped (6 min 35 s).
+- **Frontend vitest:**
+  - First full run: 7,046 of 7,052 passed. The 6 failures were real, not timeouts:
+    - The pin tests expected the old createPin arity.
+    - An anonymous agent got the no-agent line.
+    - A mocked recoverProject returning nothing threw synchronously.
+    - round15's old count.
+  - All 6 were fixed (the copy request is now wrapped so it can't throw). The rerun passed 7,052 of 7,052 in 552 files, and the final run, after the CSS test, passed 7,053 of 7,053.
+- **Other frontend gates:**
+  - errorCopy ratchets: 14 files, 173 of 173.
+  - tsc -b and lint are clean.
+  - Build: first load 404,121 bytes raw (122,090 gzip), +2,108 over b74d4466 and under 512,000.
+
+### Live check (8795/5795, isolated through iso_presence.sh; scratchpad agent-presence/r23/live/live-r23.mjs)
+
+- Full run: 20 of 20. Cinema was run again after the neutral-look CSS: 9 of 9.
+- **The note during a follow:**
+  - The follow closed the dialog. The notice shows the line, "Make the sky warmer", Copy note and ×.
+  - No pin write was sent, and no note landed on either project. A compose while following made no dialog.
+- **The palette while following:** 311 acting items (Run, Load, Ask, every node) were disabled with "Wait for “Second canvas” to open.". Fit view, the views and the panels stayed enabled. Enter on "Run graph" sent no run.
+- **Cinema:** offline and following, every control that acts was disabled and marked, with the Wait tooltip while following. A press on Generate shot sent no run. Back online, nothing was left locked.
+- **Agent clear with a landed PUT:**
+  - GA-LATE: the PUT was applied in Nebula, and its 200 was held until after the clear's broadcast. "Codex changed the canvas" showed with Undo. Undo restored "a lighthouse in rain" on the canvas, in Nebula and in the restore body.
+  - GA-EARLY did the same with "a lighthouse in fog".
+- **Blocked:** 2 requests in each run, both the canaries; 0 toward 8000-8010 or 5173.
+
+### Open items (round 23)
+
+- **For GM:**
+  - The kept-note words `NOTE_KEPT_LINE` and `NOTE_KEPT_COPY` (pending).
+  - Whether the neutral disabled look should also cover Generate when it is disabled for other reasons (max runs, references). It covers only the lock for now.
+- The paramSaveFailedLine change (three settings named) changes PR #114's round-15 copy, by GM's round-23 counting.
+- A recovered copy is made only when typing was cut off at replacement time.
+- The project bar's rename stays enabled offline (refused on use) by #114's design.

@@ -9,6 +9,7 @@ import type { ResultContext } from '../../lib/resultContext';
 import { ResultDetails, ResultMetadata } from './ResultDetails';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { failureMessage } from '../../lib/errorCopy';
+import { useCanvasLock } from '../../lib/canvasLock';
 
 function firstMediaUrl(outputs: Record<string, PortValue>): string | null {
   for (const t of ['Image', 'Video', 'Audio', 'Mesh', 'SVG'] as const) {
@@ -49,6 +50,10 @@ function ResultCardOutput({ node, prompt, url, onOpenInCanvas, onUseAsInput, onD
   url: string | null;
 }) {
   const [saved, setSaved] = useState(false);
+  // Round 23 (review 22, L-3): Delete removes the generation's nodes from the
+  // canvas, so it takes the canvas lock. Open in canvas, Use as input, Reveal,
+  // Save to folder, Download and Compare only look or copy, and stay enabled.
+  const lock = useCanvasLock();
   const [dlOpen, setDlOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -202,7 +207,7 @@ function ResultCardOutput({ node, prompt, url, onOpenInCanvas, onUseAsInput, onD
               <FolderDown size={15} strokeWidth={1.75} />
             </button>
           )}
-          <button className="result-card__btn result-card__btn--danger" type="button" onClick={onDelete} title="Delete" aria-label="Delete"><Trash2 size={15} strokeWidth={1.75} /></button>
+          <button className="result-card__btn result-card__btn--danger" type="button" onClick={onDelete} {...lock.act({ title: 'Delete' })} aria-label="Delete"><Trash2 size={15} strokeWidth={1.75} /></button>
         </div>
         {dlOpen && url && (
           <div ref={downloadMenuRef} className="result-card__dl-menu" role="menu" aria-label="Download format" aria-orientation="horizontal"

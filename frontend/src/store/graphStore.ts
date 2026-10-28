@@ -124,9 +124,11 @@ import { validateManifest } from '../lib/video/manifestValidator';
 import { componentTypeToCanvasDefId, pruneTrackItemsForDeletedNode } from '../lib/video/mirroring';
 import { isPortCompatible } from '../lib/portCompatibility';
 import { STALE_CANVAS_DETAIL, adoptCanvasRevision, getProjectContext, type ProjectContext } from '../lib/projectContext';
-import { agentClearedLine, changesNotSavedLine, distinctSaves, handoffFailedLine, savingCutOffLine, type CutOffEnding, type CutOffSave } from '../lib/savingCutOff';
+import { agentClearedLine, changesNotSavedLine, changesSavedAsCopyLine, distinctSaves, handoffFailedLine, savingCutOffLine,
+  settingsOnOneNode, type CutOffEnding, type CutOffSave } from '../lib/savingCutOff';
 import { deleteNoAnswerLine, deleteServerErrorLine } from '../lib/deleteCopy';
 import { followingReason, followingSwitch, refuseEditWhileFollowing, runWhileFollowingLine } from '../lib/canvasFollow';
+import { noteCanvasReplaced } from '../lib/canvasReplaced';
 import { boundingRect, findOpenGroupOffset, UNMEASURED_NODE_SIZE, type NodeRect } from '../lib/nodePlacement';
 import { withParamDefaults } from '../lib/paramDefaults';
 import { replaceChanged, shareUnchanged } from '../lib/structuralShare';
@@ -1123,7 +1125,7 @@ interface GraphState {
    *  that waited go now, under their own admission. `copy`: the copy a
    *  failed handoff saved the person's edits to (GM, round 20). */
   finishCanvasReplacement: (report: { kind: 'switch' | 'import' | 'agent'; agent?: string | null; project: string;
-    cutOff: CutOffSave[]; show: boolean; copy?: { id: string; name: string } | null } | null) => void;
+    cutOff: CutOffSave[]; show: boolean; copy?: { id: string; name: string } | null; byAgent?: boolean } | null) => void;
   /** Round 20: a node's title field holds a name the person hasn't saved
    *  (NodeLabel), or no longer does (null). */
   noteRenameDraft: (nodeId: string, draft: string | null) => void;
@@ -1749,20 +1751,22 @@ function paramLabel(node: Node<NodeData>, key: string): string {
   return dynamic || defined || key;
 }
 
-/** GM - Design, rounds 14 and 15 of PR #114, verbatim: one setting, two,
- * or three or more. The second sentence only when every one went back. */
 /** GM round 22 (4a): the Agent log's line for a delete Nebula answered
  * with a server error (the canvas says GM's locked line). */
 export function deleteServerErrorLogLine(node: string, nodeId: string, status: number | string): string {
   return `Couldn't delete \u201c${node}\u201d, node ${nodeId}. Nebula returned HTTP ${status}.`;
 }
+/** GM - Design, rounds 14 and 15 of PR #114: one setting, or several. The
+ * second sentence only when every one went back. Round 23 of PR #195 (GM,
+ * 2026-10-27): several are counted as every failed-save line counts them
+ * (lib/savingCutOff settingsOnOneNode): “a” and “b”; “a”, “b” and “c”; then
+ * "4 settings". */
 export function paramSaveFailedLine(params: string | string[], node: string, reverted: boolean): string {
   const names = typeof params === 'string' ? [params] : params;
   if (names.length <= 1) {
     return `Couldn't save \u201c${names[0] ?? ''}\u201d for \u201c${node}\u201d.${reverted ? " It's back to its last saved value." : ''}`;
   }
-  const what = names.length === 2 ? `\u201c${names[0]}\u201d and \u201c${names[1]}\u201d` : `${names.length} settings`;
-  return `Couldn't save ${what} for \u201c${node}\u201d.${reverted ? " They're back to their last saved values." : ''}`;
+  return `Couldn't save ${settingsOnOneNode(names)} for \u201c${node}\u201d.${reverted ? " They're back to their last saved values." : ''}`;
 }
 export function modelChangeFailedLine(node: string, currentModel: string): string {
   return `Couldn't change the model for \u201c${node}\u201d.${currentModel ? ` It's still on ${currentModel}.` : ''}`;
@@ -2003,7 +2007,13 @@ function showReplacementReport(): void {
   if (ending.kind === 'agentClear') {
     text = agentClearedLine(saves, ending.agent);
   } else if (ending.kind === 'reconnect') {
-    text = changesNotSavedLine(saves);
+    // GM round 23: with the copy its edits were saved to, no agent named.
+    text = ending.copy ? changesSavedAsCopyLine(saves, ending.copy.name) : changesNotSavedLine(saves);
+    if (ending.copy) copy = { projectId: ending.copy.id };
+  } else if (ending.kind === 'agent' && ending.copy && ending.byAgent === false) {
+    // A switch with no agent behind it (GM round 23): no "when … switched".
+    text = changesSavedAsCopyLine(saves, ending.copy.name);
+    copy = { projectId: ending.copy.id };
   } else if (!report.project) {
     text = null;
   } else if (ending.kind === 'agent' && ending.copy) {
@@ -2018,10 +2028,10 @@ function showReplacementReport(): void {
   useGraphStore.setState((state) => {
     // The line already shown for this replacement is updated in place.
     if (report.noticeId !== null && state.undoNotice?.id === report.noticeId) {
-      return { undoNotice: { ...state.undoNotice, text: line } };
+      return { undoNotice: { ...state.undoNotice, text: line, ...(copy ? { copy } : {}) } };
     }
     if (report.noticeId !== null && state.messageNotice?.id === report.noticeId) {
-      return { messageNotice: { ...state.messageNotice, text: line } };
+      return { messageNotice: { ...state.messageNotice, text: line, ...(copy ? { copy } : {}) } };
     }
     // GM round 21: an agent's clear is one toast. Its line takes the place
     // of the sync's "<agent> changed the canvas" and keeps that toast's Undo
@@ -2125,10 +2135,16 @@ function replaceCanvasByClear(agentClear?: { agent: string | null }, options: { 
   // GM's failed-save line. The person's own clear in another window says nothing.
   const parked = takeParkedParamSaves();
   const editing = agentClear || options.reconnect ? [...editingNow(), ...parked] : [];
+  // GM round 23: with no agent, what it cuts off is kept as a copy, from the
+  // canvas as it is now (before this sync replaces it).
+  const keeping = options.reconnect && !agentClear && editing.length > 0 ? keepReplacedCanvas?.() ?? null : null;
   // GM (review 21, G-a): Undo on an agent's clear line puts the canvas back
   // as Nebula last saved it, never with the typing the line says wasn't saved.
   clearedAsSaved = agentClear ? lastSavedView() : null;
   canvasReplacementRevision += 1;
+  // Round 23 (review 22, M-1): what still holds an id of this canvas (the
+  // note dialog) lets it go.
+  noteCanvasReplaced();
   // A run started before it is no longer this canvas's, and its refused
   // start marks nothing on the new n1 (round 12 of PR #114).
   forgetRunsOfReplacedGraph();
@@ -2149,18 +2165,81 @@ function replaceCanvasByClear(agentClear?: { agent: string | null }, options: { 
   startReplacementReport(agentClear ? { kind: 'agentClear', agent: agentClear.agent }
     : options.reconnect ? { kind: 'reconnect' } : null, null, editing,
   { later: Boolean(agentClear) || Boolean(options.reconnect) });
+  if (keeping) {
+    // The line says where the edits went once the copy is made (in place).
+    const report = replacementReport;
+    void keeping.then((copy) => {
+      if (!copy || replacementReport !== report || report?.ending?.kind !== 'reconnect') return;
+      report.ending = { kind: 'reconnect', copy };
+      showReplacementReport();
+    }, () => {});
+  }
   return dropped;
+}
+
+/**
+ * Round 23 (GM - Design, 2026-10-27): a replacement found with no agent
+ * behind it (the reconnect after a gap, a restart that brought another
+ * canvas) that cut off the person's edits keeps them: the canvas as the tab
+ * held it, typing included, is saved as a recovered copy (a whole project in
+ * Projects, as a failed handoff's is), and GM's line names it with Open
+ * copy. projectStore registers how (it owns snapshots and copies); null
+ * when there is no project to copy from. Read before the canvas changes.
+ */
+let keepReplacedCanvas: (() => Promise<{ id: string; name: string } | null> | null) | null = null;
+export function setReplacedCanvasKeeper(keeper: typeof keepReplacedCanvas): void {
+  keepReplacedCanvas = keeper;
 }
 
 /** Round 22 (GM, review 21 G-a): each node's params and name as Nebula last
  * saved them, for the nodes whose typing or rename it may not have (unsaved
  * keys put back to their last saved values, a rename on its way to the name
  * before it). Read before a clear forgets them. */
-let clearedAsSaved: Map<string, { params: Record<string, unknown>; label: string | undefined }> | null = null;
+let clearedAsSaved: LastSavedView | null = null;
 
-function lastSavedView(): Map<string, { params: Record<string, unknown>; label: string | undefined }> {
+/**
+ * Round 23 (review 22, L-1): a write of the person's on its way (a param
+ * save, a rename). The tab learns that Nebula took it only from its answer,
+ * which can come after the broadcast of an agent's clear Nebula applied
+ * after it. `apply` puts what it carried on a node; `settled` is true once
+ * Nebula answered 200, false once it refused it or no answer came.
+ */
+interface PendingLanding {
+  nodeId: string;
+  /** Send order: a later write of the same node wins. */
+  order: number;
+  apply: (node: Node<NodeData>) => Node<NodeData>;
+  settled: Promise<boolean>;
+}
+const landingsOut = new Set<PendingLanding>();
+let landingSeq = 0;
+
+/** A write going out: its landing, and the call that settles it (once). */
+function watchLanding(nodeId: string, apply: PendingLanding['apply']): (landed: boolean) => void {
+  let settle: (landed: boolean) => void = () => {};
+  const landing: PendingLanding = { nodeId, order: ++landingSeq, apply,
+    settled: new Promise<boolean>((resolve) => { settle = resolve; }) };
+  landingsOut.add(landing);
+  let done = false;
+  return (landed) => {
+    if (done) return;
+    done = true;
+    landingsOut.delete(landing);
+    settle(landed);
+  };
+}
+
+interface LastSavedView {
+  nodes: Map<string, { params: Record<string, unknown>; label: string | undefined }>;
+  /** The writes still on their way for the nodes it covers (L-1). */
+  pending: PendingLanding[];
+}
+
+function lastSavedView(): LastSavedView {
   const view = new Map<string, { params: Record<string, unknown>; label: string | undefined }>();
+  const onCanvas = new Set<string>();
   for (const node of useGraphStore.getState().nodes) {
+    onCanvas.add(node.id);
     const edits = unsavedParamEdits.get(node.id);
     const saved = savedParamValues.get(node.id);
     const renamedFrom = labelsInFlight.has(node.id) ? labelsSavedBefore.get(node.id) : undefined;
@@ -2176,18 +2255,64 @@ function lastSavedView(): Map<string, { params: Record<string, unknown>; label: 
     }
     view.set(node.id, { params, label: renamedFrom ?? (node.data.label as string | undefined) });
   }
-  return view;
+  return { nodes: view, pending: [...landingsOut].filter((landing) => onCanvas.has(landing.nodeId)) };
 }
+
+/** The writes on their way when the canvas of the next foreign step was
+ * read as last saved (asLastSaved); that step waits for them (L-1). */
+let landingsForNextStep: PendingLanding[] | null = null;
 
 /** The canvas a step of an agent's clear is taken from: as last saved (G-a), once. */
 function asLastSaved(state: GraphState): GraphState {
-  const view = clearedAsSaved;
+  const saved = clearedAsSaved;
   clearedAsSaved = null;
+  landingsForNextStep = saved && saved.pending.length > 0 ? saved.pending : null;
+  const view = saved?.nodes;
   if (!view || view.size === 0) return state;
   return { ...state, nodes: state.nodes.map((node) => {
-    const saved = view.get(node.id);
-    return saved ? { ...node, data: { ...node.data, params: saved.params, label: saved.label ?? node.data.label } } : node;
+    const kept = view.get(node.id);
+    return kept ? { ...node, data: { ...node.data, params: kept.params, label: kept.label ?? node.data.label } } : node;
   }) };
+}
+
+/**
+ * Round 23 (review 22, L-1): an agent's clear read while writes of the
+ * person's were on their way. "As last saved" includes those Nebula then
+ * answers 200 for: it applied them before the clear (a write made for the
+ * canvas the clear replaced is refused after it). So the step is held, as a
+ * step of the person's on its way is (stepsInFlight): an Undo pressed
+ * meanwhile waits (holdsHistory), never restoring over typing Nebula has.
+ * Each write that landed puts what it carried on the step's `before`, in
+ * send order; one refused or unanswered leaves the value saved before it.
+ * Writes that never answer release the step after HOLD_LIMIT_MS with what it
+ * knows, and a press waiting on it is dropped with its line (waitFor).
+ */
+function holdForLandings(entry: ForeignEdit, landings: PendingLanding[]): void {
+  holdStep(entry);
+  const landed: PendingLanding[] = [];
+  let left = landings.length;
+  let released = false;
+  const set = useGraphStore.setState as GraphSet;
+  const get = useGraphStore.getState;
+  const timer = setTimeout(() => {
+    released = true;
+    stepsInFlight.delete(entry);
+    if (heldFor === entry) announceDrop(set, dropHeldPresses());
+  }, HOLD_LIMIT_MS);
+  for (const landing of landings) {
+    void landing.settled.then((ok) => {
+      if (released) return;
+      if (ok) landed.push(landing);
+      left -= 1;
+      if (left > 0) return;
+      clearTimeout(timer);
+      for (const write of landed.sort((a, b) => a.order - b.order)) {
+        const node = entry.before.nodes[write.nodeId];
+        if (node) entry.before.nodes[write.nodeId] = write.apply(node);
+      }
+      if (stepsInFlight.has(entry)) settleStep(entry, set, get);
+    });
+  }
 }
 
 /** A name as Nebula stores it (the backend's rules): whitespace collapsed,
@@ -2555,6 +2680,10 @@ function pushNodeParams(nodeId: string, options: { resent?: boolean } = {}): Pro
   const saves = describeSaves(`/api/graph/node/${nodeId}`, request);
   let ok = false;
   let parked = false;
+  // Round 23 (review 22, L-1): an agent's clear read before this answer
+  // takes what it carried as saved once it lands (holdForLandings).
+  const landed = watchLanding(nodeId, (was) => ({ ...was, data: { ...was.data,
+    params: { ...(was.data.params as Record<string, unknown>), ...changed } } }));
   return graphMutationFetch(`/api/graph/node/${nodeId}`, request, { saves }).then(async (response) => {
     ok = response.ok;
     // Until round 14 of PR #114 a refusal counted as saved here (only the network error was caught).
@@ -2563,6 +2692,7 @@ function pushNodeParams(nodeId: string, options: { resent?: boolean } = {}): Pro
       throw new ParamSaveRefused(response.status, text.includes(STALE_CANVAS_DETAIL));
     }
     // The backend took these: they are the last saved values now.
+    landed(true);
     const saved = savedParamValues.get(nodeId);
     if (saved) for (const key of Object.keys(changed)) if (saved.has(key)) saved.set(key, changed[key]);
     const pushes = paramPushesOut.get(nodeId);
@@ -2593,6 +2723,7 @@ function pushNodeParams(nodeId: string, options: { resent?: boolean } = {}): Pro
       if (pushes) paramPushesOut.set(nodeId, pushes.filter((entry) => entry !== push));
     }
   }).finally(() => {
+    landed(false);
     if (!parked) {
       settleParamEdit(nodeId, edits, ok);
       return;
@@ -4907,6 +5038,8 @@ function foreignEditStep(
   moved: string[],
   runParams = false,
 ): Partial<GraphState> {
+  const landings = landingsForNextStep;
+  landingsForNextStep = null;
   if (origin && isOwnEcho(origin, TAB_ID)) return {};
   if (!origin) {
     if (graphReplaced) return { undoStack: [], redoStack: [] };
@@ -4941,6 +5074,10 @@ function foreignEditStep(
   // The person's next keystroke starts its own step, so undoing this edit
   // never takes their later typing with it.
   breakUndoDebounce();
+  // Taken as last saved while saves were on their way (L-1): it waits for them.
+  if (landings && Object.keys(entry.before.nodes).some((id) => landings.some((landing) => landing.nodeId === id))) {
+    holdForLandings(entry, landings.filter((landing) => landing.nodeId in entry.before.nodes));
+  }
   const text = editArrivedText(entry);
   return {
     undoStack: [...state.undoStack, entry].slice(-UNDO_CAP),
@@ -6513,6 +6650,18 @@ let socketBoot: string | null = null;
 let canvasSyncBoot: string | null = null;
 
 /**
+ * Round 23 (review 22, L-2): the canvas was loaded or replaced over HTTP (a
+ * project load, an import, the person's own clear). Nothing the tab holds
+ * says which backend process served it (the socket's last hello may be from
+ * the process before a restart), so it never inherits the boot of the canvas
+ * it replaced: until a sync of its own names one, a restart that lost the
+ * revisions reads as a named replacement, never as the same canvas.
+ */
+function canvasLoadedOverHttp(): void {
+  canvasSyncBoot = null;
+}
+
+/**
  * A create whose answer was lost stays "uncertain" (it may have landed), and
  * holds the next create until a sync shows it (review 13, M2: add-and-connect
  * stayed refused, "Another node-create request is still unresolved", until a
@@ -6642,6 +6791,9 @@ function applyGraphSync(event: ExecutionEvent, options: { fromExport?: boolean }
   const syncBoot = options.fromExport ? null : typeof eventBoot === 'string' && eventBoot ? eventBoot : socketBoot;
   const restarted = syncBoot !== null && canvasSyncBoot !== null && syncBoot !== canvasSyncBoot;
   if (syncBoot !== null) canvasSyncBoot = syncBoot;
+  // Round 23 (review 22, L-2): a replacement the export brought (no process
+  // named) is a canvas no sync has named a process for yet.
+  else if (graphReplaced || (canvasMoved && !ownEcho)) canvasSyncBoot = null;
   const sameCanvas = canvasMoved && revisionsLost && restarted && !origin && !graphReplaced && sameBackendCanvas(rawCliNodes);
   if (sameCanvas && typeof canvasRevision === 'string') noteSameCanvas(knownCanvas, canvasRevision);
   adoptCanvasRevision(revision, canvasRevision);
@@ -6666,6 +6818,7 @@ function applyGraphSync(event: ExecutionEvent, options: { fromExport?: boolean }
   }
   if (graphReplaced) {
     canvasReplacementRevision += 1;
+    noteCanvasReplaced();
     forgetRunsOfReplacedGraph();
     newWriteQueue();
     // An agent's import into this project (a switch comes through
@@ -8389,6 +8542,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     // Until Nebula answers, an agent's switch carries it in the handoff (round 20, H1).
     if (!labelsInFlight.has(nodeId) && typeof previous === 'string') labelsSavedBefore.set(nodeId, previous);
     labelsInFlight.set(nodeId, next);
+    // Round 23 (L-1): as a param save, for an agent's clear read before the answer.
+    const landed = watchLanding(nodeId, (was) => ({ ...was, data: { ...was.data, label: next } }));
     graphMutationFetch(`/api/graph/node/${nodeId}/label`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -8397,8 +8552,10 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
     }).then(() => {
       // Nebula has it: it's the saved name now.
+      landed(true);
       if (labelsInFlight.get(nodeId) !== next) labelsSavedBefore.set(nodeId, next);
     }).finally(() => {
+      landed(false);
       if (labelsInFlight.get(nodeId) === next) {
         labelsInFlight.delete(nodeId);
         labelsSavedBefore.delete(nodeId);
@@ -10084,6 +10241,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   loadGraph: (nodes, edges, options) => {
     if (get().isExecuting && !options?.allowDuringExecution) return;
     canvasReplacementRevision += 1;
+    canvasLoadedOverHttp();
+    noteCanvasReplaced();
     forgetRunsOfReplacedGraph();
     newWriteQueue();
     // Typing still in its debounce was for the graph this replaces: its
@@ -10153,7 +10312,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   finishCanvasReplacement: (report) => {
     if (report) {
       const ending: CutOffEnding = report.kind === 'agent'
-        ? { kind: 'agent', agent: report.agent ?? null, copy: report.copy ?? null } : { kind: report.kind };
+        ? { kind: 'agent', agent: report.agent ?? null, copy: report.copy ?? null, byAgent: report.byAgent !== false }
+        : { kind: report.kind };
       startReplacementReport(report.show ? ending : null, report.project, [...report.cutOff, ...typingLost.splice(0)]);
     }
     typingLost.length = 0;
@@ -10205,6 +10365,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     if (!get().canSwitchProject() && !bootstrapSameOwners) return false;
 
     canvasReplacementRevision += 1;
+    // Round 23 (review 22, L-2 and M-1): another canvas, loaded over HTTP.
+    canvasLoadedOverHttp();
+    noteCanvasReplaced();
     newWriteQueue();
     const droppedPresses = forgetStepsInFlight();
     pendingNodeCreationAttempt = null;
@@ -10371,6 +10534,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     // Round 19 (review 18, H-A): a clear is a replacement. Writes held from
     // before it never reach the nodes that take their ids after it.
     replaceCanvasByClear();
+    // Round 23 (review 22, L-2): a new canvas, which no sync has named a
+    // process for yet (canvasLoadedOverHttp).
+    canvasLoadedOverHttp();
     if (step) stepRevisions.set(step, canvasReplacementRevision);
     clearCinemaScenePersistence();
     useCinemaMotionStore.getState().clear();
@@ -10401,6 +10567,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     // Round 19 (review 18, H-A): the chat's clear replaces the canvas as the
     // Toolbar's does (clearGraph): its own echo doesn't move it again.
     replaceCanvasByClear();
+    canvasLoadedOverHttp();
     stepRevisions.set(step, canvasReplacementRevision);
     // As the clear's graphSync has it (its `empty` branch): only nodes this
     // tab alone has stay; and only the ones the clear sent go (as above).

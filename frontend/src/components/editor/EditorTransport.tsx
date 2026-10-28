@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
+import { useCanvasLock } from '../../lib/canvasLock';
 import { renderPreview } from '../../lib/editor/api';
 import { backendAssetUrlSync } from '../../lib/backend';
 import {
@@ -62,6 +63,11 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
   const setPlayheadOutputTime = useUIStore((s) => s.setPlayheadOutputTime);
   const setRenderedPreviewUrl = useUIStore((s) => s.setRenderedPreviewUrl);
   const updateClip = useGraphStore((s) => s.updateEditNodeClip);
+  // Round 23 (review 22, L-3): Cut, the speed and volume controls and Mute
+  // edit the clip on the canvas, so they take the canvas lock. Play, the edit
+  // points, Trim/Speed/Vol (they select and focus), zoom, Render Preview and
+  // Export only look or make a file, and stay enabled.
+  const lock = useCanvasLock();
   const cutAtSource = useGraphStore((s) => s.cutEditNodeAtSource);
   const speedSliderRef = useRef<HTMLInputElement>(null);
   const volSliderRef = useRef<HTMLInputElement>(null);
@@ -188,7 +194,7 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
           <Gauge className="editor-transport__icon" aria-hidden="true" focusable="false" />
           <span>Speed</span>
         </button>
-        <button className="editor-transport__tool" type="button" onClick={handleCut} disabled={clips.length === 0} title="Cut at playhead (B)">
+        <button className="editor-transport__tool" type="button" onClick={handleCut} {...lock.act({ disabled: clips.length === 0, title: 'Cut at playhead (B)' })}>
           <Split className="editor-transport__icon" aria-hidden="true" focusable="false" />
           <span>Cut</span>
         </button>
@@ -203,6 +209,7 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
           <label className="editor-transport__label">Speed</label>
           <input ref={speedSliderRef} className="editor-transport__range" type="range" min={0.25} max={4} step={0.05}
             value={clipSpeed(selectedClip)}
+            {...lock.act()}
             onChange={(e) => {
               const newSpeed = parseFloat(e.target.value);
               if (newSpeed <= 0) return;
@@ -215,17 +222,17 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
               updateClip(editNode.id, selectedClip.id, { duration });
             }} />
           <span className="editor-transport__value">{clipSpeed(selectedClip).toFixed(2)}×</span>
-          <button className="editor-transport__preset" type="button" onClick={() => {
+          <button className="editor-transport__preset" type="button" {...lock.act()} onClick={() => {
             const sourceRange = selectedClip.sourceOut - selectedClip.sourceIn;
             const { duration } = clampSpeedToFloor(0.5, sourceRange);
             updateClip(editNode.id, selectedClip.id, { duration });
           }}>0.5×</button>
-          <button className="editor-transport__preset" type="button" onClick={() => {
+          <button className="editor-transport__preset" type="button" {...lock.act()} onClick={() => {
             const sourceRange = selectedClip.sourceOut - selectedClip.sourceIn;
             const { duration } = clampSpeedToFloor(1, sourceRange);
             updateClip(editNode.id, selectedClip.id, { duration });
           }}>1×</button>
-          <button className="editor-transport__preset" type="button" onClick={() => {
+          <button className="editor-transport__preset" type="button" {...lock.act()} onClick={() => {
             const sourceRange = selectedClip.sourceOut - selectedClip.sourceIn;
             const { duration } = clampSpeedToFloor(2, sourceRange);
             updateClip(editNode.id, selectedClip.id, { duration });
@@ -234,7 +241,7 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
           <label className="editor-transport__label">Vol</label>
           <input ref={volSliderRef} className="editor-transport__range" type="range" min={0} max={1} step={0.05}
             value={selectedClip.mute ? 0 : selectedClip.volume}
-            disabled={selectedClip.mute}
+            {...lock.act({ disabled: selectedClip.mute })}
             onChange={(e) => updateClip(editNode.id, selectedClip.id, { volume: parseFloat(e.target.value) })} />
           <span className="editor-transport__value">
             {Math.round((selectedClip.mute ? 0 : selectedClip.volume) * 100)}%
@@ -243,6 +250,7 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
             type="button"
             className="editor-transport__btn editor-transport__btn--icon"
             onClick={() => updateClip(editNode.id, selectedClip.id, { mute: !selectedClip.mute })}
+            {...lock.act()}
             aria-pressed={selectedClip.mute}
             aria-label={selectedClip.mute ? 'Unmute clip' : 'Mute clip'}
           >

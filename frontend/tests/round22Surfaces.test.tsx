@@ -216,7 +216,6 @@ describe('A: one source for the read-only state', () => {
   const OFFLINE_ONLY = new Set([
     'components/BackendConnectionStatus.tsx',
     'components/ProviderReadinessBadge.tsx',
-    'components/ProviderRecoveryStatus.tsx',
     'components/canvas/CanvasViewReporter.tsx',
     'components/commons/CommonsCloseBatch.tsx',
     'components/commons/CommonsDetail.tsx',

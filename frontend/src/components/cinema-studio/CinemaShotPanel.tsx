@@ -29,7 +29,12 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
   const promoteShotVariation = useGraphStore((s) => s.promoteShotVariation);
   const isImportingGraph = useGraphStore((s) => s.isImportingGraph);
   // Offline or following an agent's switch: one read-only state (GM round
-  // 22, A; review 21 L-d: Send to motion is an edit of the canvas).
+  // 22, A; review 21 L-d: Send to motion is an edit of the canvas). Round 23
+  // (review 22, L-3): every control here that acts takes it (lock.act):
+  // Generate shot, the variation stepper and Generate N, a variation, the
+  // prompt, the references and the art direction. Stop shot never does
+  // (it stops spend), nor does an upload's Remove (it only drops a file
+  // still on its way from this tab).
   const lock = useCanvasLock();
   const readOnly = lock.locked;
   const activeRuns = useGraphStore((s) => s.activeRuns);
@@ -150,7 +155,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
                 type="button"
                 className={`cinema-shot-panel__variation${shot.selectedVariation === i ? ' cinema-shot-panel__variation--active' : ''}`}
                 onClick={() => void promoteShotVariation(cinemaNodeId, shot.id, i)}
-                title={`Use variation ${i + 1} (seed ${v.seed})`}
+                {...lock.act({ title: `Use variation ${i + 1} (seed ${v.seed})` })}
                 aria-pressed={shot.selectedVariation === i}
               >
                 <img src={backendAssetUrlSync(v.url)} alt={`Variation ${i + 1}`} draggable={false} />
@@ -178,6 +183,9 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
           value={shot.prompt}
           placeholder="Describe this shot…"
           onChange={(e) => setPrompt(e.target.value)}
+          readOnly={readOnly}
+          {...lock.mark}
+          title={lock.act().title}
         />
 
         <div className="cinema-shot-panel__actions">
@@ -185,8 +193,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
             type="button"
             className="cinema-shot-panel__action cinema-shot-panel__action--primary"
             onClick={handleGenerateShot}
-            disabled={shotBlocked}
-            title={referenceIssue ?? (sharedInputsBlocked ? sharedInputsMessage : undefined)}
+            {...lock.act({ disabled: shotBlocked, title: referenceIssue ?? (sharedInputsBlocked ? sharedInputsMessage : undefined) })}
           >
             {shotRunning ? 'Generating…' : 'Generate shot'}
           </button>
@@ -209,7 +216,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
               type="button"
               className="cinema-shot-panel__stepper-btn"
               onClick={() => setVariationCount((c) => Math.max(1, c - 1))}
-              disabled={variationCount <= 1 || shotBlocked}
+              {...lock.act({ disabled: variationCount <= 1 || shotBlocked })}
               aria-label="Fewer variations"
             >
               −
@@ -219,7 +226,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
               type="button"
               className="cinema-shot-panel__stepper-btn"
               onClick={() => setVariationCount((c) => Math.min(4, c + 1))}
-              disabled={variationCount >= 4 || shotBlocked}
+              {...lock.act({ disabled: variationCount >= 4 || shotBlocked })}
               aria-label="More variations"
             >
               +
@@ -229,8 +236,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
             type="button"
             className="cinema-shot-panel__action"
             onClick={handleGenerateVariations}
-            disabled={shotBlocked}
-            title={referenceIssue ?? (sharedInputsBlocked ? sharedInputsMessage : undefined)}
+            {...lock.act({ disabled: shotBlocked, title: referenceIssue ?? (sharedInputsBlocked ? sharedInputsMessage : undefined) })}
           >
             Generate {variationCount}
           </button>
@@ -273,7 +279,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
                 <button
                   type="button"
                   className="cinema-shot-panel__ref-remove"
-                  title="Remove ref"
+                  {...lock.act({ title: 'Remove ref' })}
                   aria-label={`Remove composition reference ${idx + 1}`}
                   onClick={() => removeShotRef(url)}
                 >
@@ -286,6 +292,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
               className="cinema-shot-panel__ref-add"
               onClick={() => refInputRef.current?.click()}
               aria-label="Attach composition references"
+              {...lock.act()}
             >
               +
             </button>
@@ -296,6 +303,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
               aria-label="Composition reference images"
               multiple
               hidden
+              {...lock.act()}
               onChange={(e) => {
                 handleFiles(e.target.files);
                 e.target.value = '';
@@ -315,7 +323,8 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
                   </span>
                   <div className="cinema-reference-upload__actions">
                     {upload.status === 'error' && upload.canRetry && (
-                      <button type="button" onClick={() => retryCinemaReferenceUpload(upload.id)} aria-label={`Retry ${upload.name}`}>Retry</button>
+                      <button type="button" onClick={() => retryCinemaReferenceUpload(upload.id)} aria-label={`Retry ${upload.name}`}
+                        {...lock.act()}>Retry</button>
                     )}
                     <button type="button" onClick={() => removeCinemaReferenceUpload(upload.id)} aria-label={`Remove upload ${upload.name}`}>Remove</button>
                   </div>
@@ -331,11 +340,11 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
           <div className="cinema-shot-panel__override">
             <div className="cinema-shot-panel__override-heading">
               <label className="cinema-shot-panel__toggle">
-                <input type="checkbox" checked={paletteOverridden} onChange={() => toggleOverride('palette')} />
+                <input type="checkbox" checked={paletteOverridden} onChange={() => toggleOverride('palette')} {...lock.act()} />
                 <span>Override palette</span>
               </label>
               {paletteOverridden && <button type="button" className="cinema-shot-panel__reset"
-                aria-label="Reset shot palette to scene" onClick={() => resetOverride('palette')}>Reset to scene</button>}
+                aria-label="Reset shot palette to scene" onClick={() => resetOverride('palette')} {...lock.act()}>Reset to scene</button>}
             </div>
             {paletteOverridden ? <CinemaPaletteControls value={palette} onChange={setPalette} labelPrefix="Shot" />
               : <p className="cinema-shot-panel__inheritance">Using scene palette: {inheritedPalette}</p>}
@@ -343,11 +352,11 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
           <div className="cinema-shot-panel__override">
             <div className="cinema-shot-panel__override-heading">
               <label className="cinema-shot-panel__toggle">
-                <input type="checkbox" checked={lookOverridden} onChange={() => toggleOverride('look')} />
+                <input type="checkbox" checked={lookOverridden} onChange={() => toggleOverride('look')} {...lock.act()} />
                 <span>Override look</span>
               </label>
               {lookOverridden && <button type="button" className="cinema-shot-panel__reset"
-                aria-label="Reset shot look to scene" onClick={() => resetOverride('look')}>Reset to scene</button>}
+                aria-label="Reset shot look to scene" onClick={() => resetOverride('look')} {...lock.act()}>Reset to scene</button>}
             </div>
             {lookOverridden ? <CinemaLookControls value={look} onChange={setLook} labelPrefix="Shot" />
               : <p className="cinema-shot-panel__inheritance">Using scene film look: {cinemaLookLabel(scene.look)}</p>}

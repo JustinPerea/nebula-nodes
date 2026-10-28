@@ -303,7 +303,11 @@ class CanvasPins:
                     pin["status"] = "resolved"
                     pin["reply"] = {"agent": identity.as_dict(), "text": text, "at": _iso(self._clock())}
                     return public_pin(pin)
-            raise PinError(404, f"No note {pin_id[:40]} on this canvas")
+            # Round 23 (review 22, M-1): pins belong to a project, and an agent
+            # that read them before a switch holds another project's ids.
+            raise PinError(404, f"No note {pin_id[:40]} on this canvas: that note isn't in the open project "
+                                "(it may have changed since you read it). Read the canvas again (look_at_canvas, "
+                                "or nebula pins) and answer a note listed there.")
 
         return self._write(mutate)
 

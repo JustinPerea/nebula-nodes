@@ -1429,6 +1429,20 @@ Rules:
   snapshot, so autosave never touches them) and switch with it. Deleting a
   pinned node leaves its pins where the node stood, marked detached; so does
   an import or Clear canvas that removes the node.
+- A note belongs to the canvas it was written on (round 23 of PR #195,
+  review 22 M-1). Node ids start again at n1 in every project and after a
+  Clear, so the pin routes are graph writes for the fence (`graph_write`):
+  the person's canvas sends the project and canvas the note was composed on
+  (`X-Nebula-Workspace-Revision`, `X-Nebula-Canvas-Revision`), and
+  `POST /api/canvas/pins` and `DELETE /api/canvas/pins/{id}` answer 409 with
+  the canvas's out-of-date line, pinning, deleting and journaling nothing,
+  once an agent opened another project or cleared this one. No `pin.added`
+  reaches you for a note the person wrote on a canvas you never saw. While
+  the canvas follows an agent's switch the note dialog closes, and the
+  person keeps the text they typed.
+- `resolve_pin` (`nebula pin resolve`) on a note you read before a switch
+  answers 404 saying that note isn't in the open project. Read the canvas
+  again (`look_at_canvas`, `nebula pins`) and answer a note listed there.
 
 ### Updates
 
@@ -3256,6 +3270,21 @@ restore from anyone else that names `removals` restores its nodes and connection
 but ignores the records (its answer's `reattached`, `pinsLeft`, `reopened`
 and `notReopened` stay empty). Your `undo_canvas_edit` puts back what your
 deletes removed from the records the backend kept for that edit.
+
+A run that started always answers as started (round 23 of PR #195, review
+22 L-4). Once Nebula admits a run it may be spending, so nothing after that
+point turns the answer into an error: `/api/execute`, `/api/execute-node`,
+`/api/cinema/generate-shot` and `/api/graph/run` answer with the `runId`
+(`status: "started"`, or the run's own status for `/api/graph/run`) even
+when a later step failed. When the step that tells open canvases about the
+run's placeholders failed (the project store couldn't be read just then),
+the answer adds `canvasSync: "deferred"` and `canvasSyncDetail` ("The run
+started. … Don't start this run again: follow it by its runId."); Nebula logs
+it, sends that sync again in the background, and any later sync carries it.
+The other steps (the skip notes, the Agent log line, the cursor) are logged
+when they fail and never change the answer. A run that crashed after it
+started answers `status: "failed"` with `error`, never an HTTP error.
+`nebula run` prints the detail as a note.
 
 A run from `run_nodes` is a CLI run (`POST /api/graph/run` with `wait`), so
 it gets the same spending check and the same long-run handling. It also gets

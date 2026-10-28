@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Download, X } from 'lucide-react';
 import { useGraphStore } from '../../store/graphStore';
+import { useCanvasLock } from '../../lib/canvasLock';
 import type { TrackItemOrderAction } from '../../store/graphStore';
 import { useUIStore } from '../../store/uiStore';
 import type { TrackComponentType, VideoGraphManifest } from '../../types/video';
@@ -34,6 +35,10 @@ export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarP
   const addTrackItemWithCanvasMirror = useGraphStore((s) => s.addTrackItemWithCanvasMirror);
   const deleteTrackItem = useGraphStore((s) => s.deleteTrackItem);
   const reorderTrackItem = useGraphStore((s) => s.reorderTrackItem);
+  // Round 23 (review 22, L-3): adding, ordering and deleting layers edit the
+  // canvas's Remotion node, so they take the canvas lock. REC (a drag mode)
+  // and Export (a file) stay enabled.
+  const lock = useCanvasLock();
   const selectedTrackItemId = useUIStore((s) => s.selectedTrackItemId);
   const setSelectedTrackItem = useUIStore((s) => s.setSelectedTrackItem);
   const isKeyframeRecording = useUIStore((s) => s.isKeyframeRecording);
@@ -80,6 +85,7 @@ export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarP
           type="button"
           className="remotion-editor-toolbar__add"
           onClick={() => handleAdd(btn.componentType)}
+          {...lock.act()}
         >
           {btn.label}
         </button>
@@ -91,12 +97,12 @@ export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarP
             type="button"
             className="remotion-editor-toolbar__zorder"
             onClick={() => handleZOrder(btn.action)}
-            disabled={
-              btn.action === 'send-to-back' || btn.action === 'send-backward'
+            {...lock.act({
+              disabled: btn.action === 'send-to-back' || btn.action === 'send-backward'
                 ? !canMoveBackward
-                : !canMoveForward
-            }
-            title={btn.title}
+                : !canMoveForward,
+              title: btn.title,
+            })}
           >
             {btn.label}
           </button>
@@ -106,7 +112,7 @@ export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarP
         type="button"
         className="remotion-editor-toolbar__delete"
         onClick={handleDelete}
-        disabled={!selectedTrackItemId}
+        {...lock.act({ disabled: !selectedTrackItemId })}
       >
         Delete
       </button>

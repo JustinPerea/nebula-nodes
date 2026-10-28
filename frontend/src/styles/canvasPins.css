@@ -160,6 +160,37 @@
   cursor: pointer;
 }
 
+/* Round 23 (review 22, M-1): a note that wasn't added because its canvas
+   went keeps its text here, in the neutral notice colours (it is no error of
+   the person's). The text wraps; Copy and × stay centred on the right. */
+.canvas-pin-toast--kept {
+  border-color: #333;
+  color: #d8d8d8;
+}
+
+.canvas-pin-toast__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.canvas-pin-toast__note {
+  display: block;
+  margin-top: 2px;
+  color: #f2f2f2;
+}
+
+.canvas-pin-toast .canvas-pin-toast__copy {
+  flex: none;
+  color: #d8d8d8;
+  font-size: 12px;
+}
+
+.canvas-pin-toast .canvas-pin-toast__copy:hover,
+.canvas-pin-toast .canvas-pin-toast__copy:focus-visible {
+  color: #fff;
+}
+
 @keyframes canvas-pin-fade {
   from { opacity: 0; }
   to { opacity: 1; }

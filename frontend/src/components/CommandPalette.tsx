@@ -17,6 +17,7 @@ import { COMMAND_PALETTE_OPEN_EVENT, isPaletteHotkey, paletteOpenRequestApplies 
 import { claimIntent } from '../lib/heldIntents';
 import { returnFocusOnSlip } from '../lib/modalFocus';
 import { ModalPortal } from './ModalPortal';
+import { refuseCanvasEdit, useCanvasLock } from '../lib/canvasLock';
 import '../styles/command-palette.css';
 
 const NO_NODE_FIELDS: readonly string[] = Object.freeze([]);
@@ -44,6 +45,9 @@ export function CommandPalette() {
   const dialogRef = useRef<HTMLDivElement | null>(null);
 
   const { screenToFlowPosition, fitView } = useReactFlow();
+  // Round 23 (review 22, L-3): the commands that change the canvas (acts)
+  // take the canvas lock, as every other surface does.
+  const lock = useCanvasLock();
   // Fit view includes an open proposal's ghosts.
   const fitCanvasView = useFitCanvasView();
   const addNode = useGraphStore((s) => s.addNode);
@@ -209,6 +213,8 @@ export function CommandPalette() {
   const run = useCallback(
     (cmd: PaletteCommand | undefined) => {
       if (!cmd || cmd.enabled === false) return;
+      // Enter on an acting command while locked: refused, with the pulse.
+      if (cmd.acts && refuseCanvasEdit()) return;
       if (!cmd.keepsOpen) close();
       cmd.perform();
     },
@@ -218,6 +224,8 @@ export function CommandPalette() {
   const submitAgent = useCallback(() => {
     const message = query.trim();
     if (!message) return;
+    // The agent prompt opened before a follow began: still refused.
+    if (refuseCanvasEdit()) return;
     window.dispatchEvent(new CustomEvent('nebula:chat-send', { detail: { message } }));
     close();
   }, [query, close]);
@@ -341,7 +349,8 @@ export function CommandPalette() {
                 {g.items.map((cmd) => {
                   const index = indexById.get(cmd.id) ?? 0;
                   const isSel = index === safeSelected;
-                  const disabled = cmd.enabled === false;
+                  const act = cmd.acts ? lock.act({ disabled: cmd.enabled === false }) : null;
+                  const disabled = act ? act.disabled : cmd.enabled === false;
                   return (
                     <button
                       key={cmd.id}
@@ -350,6 +359,7 @@ export function CommandPalette() {
                       onMouseEnter={() => setSelected(index)}
                       onFocus={() => setSelected(index)}
                       onClick={() => run(cmd)}
+                      {...(act ?? {})}
                       disabled={disabled}
                     >
                       <span className="command-palette__item-title">{cmd.title}</span>

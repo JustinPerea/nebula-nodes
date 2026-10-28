@@ -839,6 +839,16 @@ body.app-slava-restraint .cinema-shot-panel__action:disabled {
   cursor: default;
 }
 
+/* Round 23 (GM blocker A): locked while following or offline, Generate shot
+   takes the neutral disabled look, never orange (as the selection toolbar's
+   Run). */
+body.app-slava-restraint .cinema-shot-panel__action--primary[data-following-disabled],
+body.app-slava-restraint .cinema-shot-panel__action--primary[data-offline-disabled] {
+  background: var(--sr-surface-control, rgba(255, 255, 255, 0.04));
+  border-color: var(--sr-edge);
+  color: var(--sr-ink);
+}
+
 body.app-slava-restraint .cinema-shot-panel__motion {
   display: flex;
   flex-direction: column;

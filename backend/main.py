@@ -20,6 +20,7 @@ import random
 import re
 import secrets
 import shutil
+import sys
 import stat
 import tempfile
 import time as _time_module
@@ -32,7 +33,7 @@ import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
 from pathlib import PurePosixPath
-from typing import Any, BinaryIO, Callable, Iterable, Mapping, NoReturn, Sequence
+from typing import Any, Awaitable, BinaryIO, Callable, Iterable, Mapping, NoReturn, Sequence
 from urllib.parse import quote, urlsplit
 
 from uuid import uuid4
@@ -6418,10 +6419,21 @@ async def list_canvas_pins() -> dict[str, Any]:
 
 
 @app.post("/api/canvas/pins", status_code=201)
+@graph_write
 async def create_canvas_pin(body: dict[str, Any]) -> dict[str, Any]:
     """Pin a short note to a node or a canvas spot. Only the person can do this.
 
     Body: {text, nodeId} or {text, position: {x, y}}.
+
+    Round 23 (review 22, M-1): a graph write for the fence. A note's anchor
+    is a node id (or a spot) of the canvas it was written on, and ids restart
+    at n1 in every project and after a clear, so a note sent after an agent
+    opened another project, or cleared this one, would land on that canvas's
+    n1 and be journaled to the agent working there as the person's request.
+    The canvas tab sends the project and canvas the note was composed on
+    (X-Nebula-Workspace-Revision, X-Nebula-Canvas-Revision); the fence refuses
+    it (409, the canvas's out-of-date line) when either moved, or when a tab
+    sends none, before anything is pinned or journaled.
     """
     require_person(current_request_headers())
     try:
@@ -6451,8 +6463,11 @@ async def create_canvas_pin(body: dict[str, Any]) -> dict[str, Any]:
 
 
 @app.delete("/api/canvas/pins/{pin_id}")
+@graph_write
 async def delete_canvas_pin(pin_id: str) -> dict[str, Any]:
-    """Delete a note. Only the person can do this."""
+    """Delete a note. Only the person can do this. Fenced as a graph write
+    (round 23, see create_canvas_pin): a delete made for a canvas that has
+    gone is refused, never looked up in the canvas open now."""
     require_person(current_request_headers())
     try:
         project_id, pin = canvas_pins.remove_in(pin_id)
@@ -6470,8 +6485,13 @@ async def delete_canvas_pin(pin_id: str) -> dict[str, Any]:
 
 
 @app.post("/api/canvas/pins/{pin_id}/resolve")
+@graph_write
 async def resolve_canvas_pin(pin_id: str, body: dict[str, Any]) -> dict[str, Any]:
-    """An agent answers a note in one line, which resolves it and moves its cursor there."""
+    """An agent answers a note in one line, which resolves it and moves its cursor there.
+
+    Fenced as a graph write like the other pin routes (round 23): agents send
+    no revision, so for them it is the 404 that says the note isn't in the
+    open project (canvas_pins.resolve_in)."""
     identity = identify_agent(current_request_headers())
     if identity is None:
         raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
@@ -9678,6 +9698,84 @@ def _admit_registered_run(run_id: str, ready: Iterable[str], nodes: list[GraphNo
     return cleared
 
 
+# Round 23 (review 22, L-4): once a run is admitted (_admit_registered_run
+# returned) it has started, and may be spending. Nothing after that point may
+# turn the answer into an error: an agent that reads a 507 as "didn't start"
+# would start the paid run again (/api/graph/run has no client run id to
+# deduplicate on). Every step after admission in the four run routes
+# (execute, execute-node, the cinema shot, /api/graph/run) goes through
+# _after_admission: a failure is logged, never raised; the placeholder
+# broadcast that fails is named in the answer (``canvasSync``), owed, and
+# sent again in the background (any later sync pays it, since a sync carries
+# the whole graph). The open canvas only shows the placeholders a little
+# longer meanwhile; the run's own events sync it too, so the person needs no
+# line of their own.
+RUN_SYNC_DEFERRED_DETAIL = (
+    "The run started. Nebula couldn't tell open canvases about it just now and will try again; they catch up "
+    "on the next change. Don't start this run again: follow it by its runId."
+)
+_graph_sync_owed = False
+_graph_resync_task: asyncio.Task[None] | None = None
+_GRAPH_RESYNC_DELAYS = (0.5, 2.0, 5.0)
+
+
+async def _after_admission(run_id: str, what: str, step: Callable[[], Awaitable[Any]]) -> bool:
+    """Run one step after a run's admission; False (logged) when it failed."""
+    try:
+        await step()
+        return True
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - the run started; this is decoration on it
+        print(f"[exec] run {run_id} started, but {what} failed: {type(exc).__name__}: {exc}",
+              file=sys.stderr, flush=True)
+        return False
+
+
+async def _pay_owed_graph_sync() -> bool:
+    """Send the sync an admitted run couldn't, if it is still owed. True when
+    nothing is owed now."""
+    if not _graph_sync_owed:
+        return True
+    try:
+        await _broadcast_graph_sync()
+    except Exception as exc:  # noqa: BLE001 - tried again later, or paid by the next sync
+        print(f"[exec] the owed canvas sync failed again: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
+        return False
+    return True
+
+
+def _schedule_owed_graph_sync() -> None:
+    global _graph_resync_task
+    if _graph_resync_task is not None and not _graph_resync_task.done():
+        return
+
+    async def retry() -> None:
+        for delay in _GRAPH_RESYNC_DELAYS:
+            await asyncio.sleep(delay)
+            if await _pay_owed_graph_sync():
+                return
+
+    try:
+        _graph_resync_task = asyncio.get_running_loop().create_task(retry())
+    except RuntimeError:  # no loop (a sync test): the next sync pays it
+        _graph_resync_task = None
+
+
+async def _broadcast_admitted_run(run_id: str, placeholders_changed: bool) -> dict[str, Any]:
+    """The placeholder broadcast after an admitted run, best effort: {} when
+    sent (or not needed), else what the answer says about it."""
+    global _graph_sync_owed
+    if not placeholders_changed:
+        return {}
+    if await _after_admission(run_id, "the placeholder broadcast (Nebula couldn't tell open canvases)",
+                              _broadcast_graph_sync):
+        return {}
+    _graph_sync_owed = True
+    _schedule_owed_graph_sync()
+    return {"canvasSync": "deferred", "canvasSyncDetail": RUN_SYNC_DEFERRED_DETAIL}
+
+
 async def _announce_skips(run_id: str, skips: Mapping[str, Mapping[str, Any]]) -> None:
     for node_id, info in skips.items():
         await _emit_and_sync(SkippedEvent(node_id=node_id, reason=info["reason"], run_id=run_id))
@@ -9861,9 +9959,8 @@ async def execute(request: ExecuteRequest) -> dict:
         canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
         raise
 
-    if placeholders_changed:
-        await _broadcast_graph_sync()
-    return {"status": "started", "runId": run_id, **_skip_reply(skips)}
+    synced = await _broadcast_admitted_run(run_id, placeholders_changed)
+    return {"status": "started", "runId": run_id, **_skip_reply(skips), **synced}
 
 
 @app.post("/api/execute-node")
@@ -10015,9 +10112,8 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
         canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
         raise
 
-    if placeholders_changed:
-        await _broadcast_graph_sync()
-    return {"status": "started", "nodeCount": len(sub_nodes), "runId": run_id, **_skip_reply(skips)}
+    synced = await _broadcast_admitted_run(run_id, placeholders_changed)
+    return {"status": "started", "nodeCount": len(sub_nodes), "runId": run_id, **_skip_reply(skips), **synced}
 
 
 # -- who may stop a run (Justin, 2026-10-20, MCP parity Q61 a) --------------------
@@ -10758,13 +10854,13 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
         _return_hold(run_id)  # it never had a turn (round 17, review 16 L5)
         raise
 
-    if placeholders_changed:
-        await _broadcast_graph_sync()
+    synced = await _broadcast_admitted_run(run_id, placeholders_changed)
     return {
         "status": "started",
         "shotId": request.shot_id,
         "variations": count,
         "runId": run_id,
+        **synced,
     }
 
 
@@ -11033,6 +11129,10 @@ async def _broadcast_graph_sync(
                                  **({"runParams": run_params} if run_params and not graph_replaced else {}),
                                  **({"edit": _graph_edit_origin()}
                                     if edit and (not graph_replaced or reason == "import") else {})})
+    # It carried the whole graph: a sync an admitted run couldn't send
+    # (_broadcast_admitted_run) is paid by this one.
+    global _graph_sync_owed
+    _graph_sync_owed = False
     if graph_replaced:
         # Its events went to the journal above, before any await. (The pins
         # listing follows catalog.json, so one taken between the commit and
@@ -16703,20 +16803,28 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
         await _release_paid_worldlabs_starts(run_id)
         _return_hold(run_id)
         raise
-    if placeholders_changed:
-        await _broadcast_graph_sync()
-    await _announce_skips(run_id, pending_skips)
-    # The canvas says "Running X" / "Ran X" only for a run that started
-    # (review 10's F3: one its fence refused still said it ran).
-    publish_action(
-        f"Running {target}..." if target else f"Running {len(sub_nodes)} node(s)..."
-    )
-    if target:
-        await _show_agent({"nodeId": target}, say=f"Running {_quoted(_node_label(target))}", did=_did("Ran", target))
-    else:
-        # The whole canvas has no one node to point at: the Agent log only.
-        await _say_agent_action(f"Running {len(sub_nodes)} node{'' if len(sub_nodes) == 1 else 's'}")
-    return _hide_run_key_echoes(await _cli_run_response(run_id, None if wait is None else float(wait)))
+    # Admitted: the run has started. Every step from here is best effort
+    # (round 23, review 22 L-4): none of them may answer as if it didn't.
+    synced = await _broadcast_admitted_run(run_id, placeholders_changed)
+    await _after_admission(run_id, "the skip notes", lambda: _announce_skips(run_id, pending_skips))
+
+    async def announce() -> None:
+        # The canvas says "Running X" / "Ran X" only for a run that started
+        # (review 10's F3: one its fence refused still said it ran).
+        publish_action(
+            f"Running {target}..." if target else f"Running {len(sub_nodes)} node(s)..."
+        )
+        if target:
+            await _show_agent({"nodeId": target}, say=f"Running {_quoted(_node_label(target))}", did=_did("Ran", target))
+        else:
+            # The whole canvas has no one node to point at: the Agent log only.
+            await _say_agent_action(f"Running {len(sub_nodes)} node{'' if len(sub_nodes) == 1 else 's'}")
+
+    await _after_admission(run_id, "the Agent log line and cursor", announce)
+    # A run that crashed after it started is a failed run, never an error
+    # answer an agent could read as "didn't start" (report_failure).
+    response = await _cli_run_response(run_id, None if wait is None else float(wait), report_failure=True)
+    return _hide_run_key_echoes({**response, **synced})
 
 
 async def _refused_cli_run(run_id: str, target: str | None, errors: list[ValidationErrorDetail],

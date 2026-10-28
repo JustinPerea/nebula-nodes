@@ -442,7 +442,9 @@ def resolve_pin(pin_id: str, reply: str, ctx: Context | None = None) -> dict[str
     is a short line (280 characters max) shown on the pin, such as "Warmed the
     grade on n7". Your cursor moves to the pin. Only the person can create or
     delete pins; agents answer them. The reply is about your own answer only;
-    what you noticed along the way goes in post_note.
+    what you noticed along the way goes in post_note. A note you read before
+    a project switch isn't in the open project and is refused with 404: read
+    the canvas again and answer a note listed there.
     """
     from urllib.parse import quote
 
@@ -1512,7 +1514,8 @@ def _run_result(payload: dict[str, Any], ctx: Context | None) -> list:
     status = payload.get("status")
     shown: dict[str, Any] = {key: payload[key] for key in ("status", "runId", "targetNodeId", "elapsed",
                                                             "duration", "nodesExecuted", "error",
-                                                            "source", "startedBy", "nodes", "neverStarted", "noRecord")
+                                                            "source", "startedBy", "nodes", "neverStarted", "noRecord",
+                                                            "canvasSync", "canvasSyncDetail")
              if key in payload}
     if payload.get("results"):
         shown["outputs"] = {node: _brief_outputs(outputs) for node, outputs in payload["results"].items()}
@@ -1578,6 +1581,9 @@ async def run_nodes(node_id: str | None = None, wait_seconds: float = DEFAULT_RU
     before it starts: nothing ran, nothing was spent. Still going: status "running" and a runId;
     it keeps running, so call get_run(runId) or cancel_run(runId). To run
     several separate nodes, run the canvas or call this once per node.
+    A run that started always answers with its runId, even when a later
+    step failed: `canvasSync: "deferred"` (with `canvasSyncDetail`) says only
+    that open canvases were told late. The run is going: never start it again.
     """
     wait = max(0.0, min(float(wait_seconds), MAX_RUN_WAIT))
     body: dict[str, Any] = {"wait": wait, **({"targetNodeId": node_id} if node_id else {})}

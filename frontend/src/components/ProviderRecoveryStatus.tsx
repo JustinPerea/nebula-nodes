@@ -6,7 +6,7 @@ import { failureMessage } from '../lib/errorCopy';
 import {
   UNLOCK_LABEL, UNLOCK_TITLE, WORLD_LABS_RUN_NEEDS_CHECK, WORLD_LABS_RUN_STATUS_UNKNOWN, moreNodesNeedCheck, recordNodeName, unlockAriaLabel, UNLOCK_RUN_ARIA,
 } from '../lib/worldLabsWaiting';
-import { offlineMark, useBackendOffline } from '../lib/useBackendOffline';
+import { useCanvasLock } from '../lib/canvasLock';
 
 /** Persistent paid-provider safety status. Recovery-journal write warnings may
  * be dismissed; an ambiguous paid start remains until the user explicitly says
@@ -28,7 +28,9 @@ export function ProviderRecoveryStatus() {
   );
   const dismiss = useGraphStore((state) => state.dismissProviderRecoveryWarning);
   // Offline is read-only (round 15 of PR #114): the unlock is disabled.
-  const offline = useBackendOffline();
+  // Round 23 (review 22, L-3): and while following an agent's switch, since
+  // the store refuses both unlocks then too (EDIT_GATES); one lock for both.
+  const lock = useCanvasLock();
   const [unlocking, setUnlocking] = useState<string | null>(null);
   const [unlockError, setUnlockError] = useState<string | null>(null);
   const ambiguity = ambiguities[0];
@@ -71,11 +73,9 @@ export function ProviderRecoveryStatus() {
           type="button"
           className="provider-recovery-status__ack"
           onClick={() => void unlock()}
-          disabled={unlocking === ambiguityKey || offline}
-          {...offlineMark(offline)}
+          {...lock.act({ disabled: unlocking === ambiguityKey, title: UNLOCK_TITLE })}
           // GM, round 13 of PR #114: the node by its card title. No confirm.
           aria-label={unlockAriaLabel(heldTitle ?? recordNodeName([], ambiguity.nodeId, true))}
-          title={UNLOCK_TITLE}
         >
           <ShieldCheck size={15} strokeWidth={1.8} aria-hidden="true" />
           {unlocking === ambiguityKey ? 'Unlocking…' : UNLOCK_LABEL}
@@ -85,11 +85,9 @@ export function ProviderRecoveryStatus() {
           type="button"
           className="provider-recovery-status__ack"
           onClick={acknowledgeUncertainRun}
-          disabled={offline}
-          {...offlineMark(offline)}
+          {...lock.act({ title: UNLOCK_TITLE })}
           // No node to name: GM's line (round 14 of PR #114).
           aria-label={UNLOCK_RUN_ARIA}
-          title={UNLOCK_TITLE}
         >
           <ShieldCheck size={15} strokeWidth={1.8} aria-hidden="true" />
           {UNLOCK_LABEL}

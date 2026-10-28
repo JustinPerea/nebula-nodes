@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { useFollowingSwitch, waitToOpenTooltip, type FollowingSwitch } from './canvasFollow';
+import { followingSwitch, refuseEditWhileFollowing, useFollowingSwitch, waitToOpenTooltip, type FollowingSwitch } from './canvasFollow';
+import { isBackendOffline, refuseEditWhileOffline } from './backendConnection';
 import { OFFLINE_MARK, useBackendOffline } from './useBackendOffline';
 
 /**
@@ -60,4 +61,20 @@ export function useCanvasLock(): CanvasLock {
   const following = useFollowingSwitch();
   const offline = useBackendOffline();
   return useMemo(() => canvasLockOf(following, offline), [following, offline]);
+}
+
+/** The lock as it is now, outside React (a store's action, a handler). */
+export function canvasLockNow(): CanvasLock {
+  return canvasLockOf(followingSwitch(), isBackendOffline());
+}
+
+/**
+ * Round 23 (review 22, M-1): the gate a store action that edits the canvas
+ * asks, the same two states useCanvasLock reads. True when it refused: the
+ * project bar pulses while following (first: the canvas is about to go), the
+ * offline banner while offline; the caller then changes nothing and sends
+ * nothing.
+ */
+export function refuseCanvasEdit(): boolean {
+  return refuseEditWhileFollowing() || refuseEditWhileOffline();
 }

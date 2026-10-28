@@ -1,4 +1,5 @@
 import { apiFetch } from './backend';
+import type { ProjectContext } from './projectContext';
 import { RequestFailedError, requestError, requestSucceeded, withHeading } from './errorCopy';
 
 /**
@@ -15,11 +16,15 @@ import { RequestFailedError, requestError, requestSucceeded, withHeading } from 
  * mocks this call too (a call inside one module can't be mocked).
  */
 export async function apiRequest(heading: string, path: string, init?: RequestInit,
-  options: { allow?: number[]; as?: (error: RequestFailedError) => Error } = {}): Promise<Response> {
+  options: { allow?: number[]; as?: (error: RequestFailedError) => Error;
+    /** The project and canvas the request was made for, when not the one
+     * open now (a note composed before a switch: round 23 of PR #195). */
+    project?: ProjectContext | null } = {}): Promise<Response> {
   let response: Response;
   try {
     // The same call shape as a plain apiFetch(path) when there is no init.
-    response = await (init === undefined ? apiFetch(path) : apiFetch(path, init));
+    response = await ('project' in options ? apiFetch(path, init, { project: options.project ?? null })
+      : init === undefined ? apiFetch(path) : apiFetch(path, init));
   } catch (error) {
     throw withHeading(error, heading);
   }

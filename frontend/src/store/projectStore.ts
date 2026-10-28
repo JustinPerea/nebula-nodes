@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { runsThatNeverStarted, useGraphStore } from './graphStore';
+import { runsThatNeverStarted, setReplacedCanvasKeeper, useGraphStore } from './graphStore';
 import { useUIStore } from './uiStore';
 import { readDraft, useCreateDraftStore } from './createDraftStore';
 import { useArrangeStore } from './arrangeStore';
@@ -707,6 +707,31 @@ async function recoverPendingWork(): Promise<boolean> {
   return true;
 }
 
+/**
+ * Round 23 (GM - Design, 2026-10-27): the canvas a sync with no agent
+ * behind it is about to replace (the reconnect after a gap, a restart that
+ * brought another canvas) held edits it cuts off: they go into a recovered
+ * copy of the open project, as a failed handoff's do, so GM's line can say
+ * "Your edits were saved as a copy, “<name>”." The snapshot is read now,
+ * before the canvas changes. Not the pending recovery (a copy of its own,
+ * idempotent by its id); one over the save limit isn't sent. Null when no
+ * project is open; the promise is null when no copy was made.
+ */
+function keepReplacedCanvasAsCopy(): Promise<{ id: string; name: string } | null> | null {
+  const context = getProjectContext();
+  if (!context) return null;
+  const snapshot = captureProjectSnapshot();
+  if (projectSizeBytes(snapshot) > PROJECT_SAVE_LIMIT_BYTES) return null;
+  const recovery = pendingRecoveryOf(context.id, snapshot);
+  // A request that throws before it is sent is a copy not made, never a
+  // replacement left half done.
+  return new Promise<Awaited<ReturnType<typeof api.recoverProject>>>((resolve) => {
+    resolve(api.recoverProject(recovery.sourceProjectId, recovery.snapshot, recovery.recoveryId, recovery.paramsVersion));
+  })
+    .then((copy) => (copy && typeof copy.name === 'string' ? { id: copy.id ?? recovery.recoveryId, name: copy.name } : null))
+    .catch(() => null);
+}
+
 /** A reload resets this module's state in the app; tests share one module, so
  * each test starts from this. A handling of a params-version change still in
  * flight from an earlier test is superseded, so its late answer writes nothing. */
@@ -1317,7 +1342,9 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
     followed = true;
     const show = handoffFailed && typeof notice.previousProjectName === 'string';
     useGraphStore.getState().finishCanvasReplacement({ kind: 'agent', agent, project: notice.previousProjectName ?? '',
-      cutOff, show, copy });
+      // An agent's switch, named or not ("an agent"); only a switch Nebula
+      // or the person made says GM's no-agent form (round 23).
+      cutOff, show, copy, byAgent: notice.actor?.kind !== 'person' && notice.actor?.kind !== 'system' });
     // GM (round 20, follow-up 2): "as one line, not two": when the canvas
     // line names the copy, the toast says only who opened what.
     if (show && copy && cutOff.length > 0) keptCopy = false;
@@ -1821,6 +1848,8 @@ export function subscribeProjectAutosave(): () => void {
   const drafts = useCreateDraftStore.subscribe(() => markDirty());
   // GM's line after an import names the project open then.
   useGraphStore.getState().setCanvasProjectName(() => useProjectStore.getState().activeProject?.name ?? null);
+  // GM round 23: a replacement with no agent keeps what it cut off as a copy.
+  setReplacedCanvasKeeper(keepReplacedCanvasAsCopy);
   // First, so it sees the canvas before the graph store swaps in the new graph.
   const socket = wsClient.subscribeFirst((event) => {
     if (event.type === 'projectsChanged') {
@@ -1921,6 +1950,7 @@ export function subscribeProjectAutosave(): () => void {
   window.addEventListener('beforeunload', beforeUnload);
   return () => {
     graph(); ui(); drafts(); socket(); outdated(); clearTimeout(relistTimer);
+    setReplacedCanvasKeeper(null);
     window.removeEventListener('beforeunload', beforeUnload);
     for (const type of ['focus', 'online']) window.removeEventListener(type, relistIfStale);
     cancelPendingSaves();

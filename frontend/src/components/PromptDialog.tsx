@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import '../styles/prompt-dialog.css';
 import { ModalPortal } from './ModalPortal';
+import type { ActProps } from '../lib/canvasLock';
 
 export interface PromptRequest {
   label: string;
@@ -9,11 +10,18 @@ export interface PromptRequest {
 }
 
 /** Shared text-entry dialog for browser and desktop workflows. */
-export function PromptDialog({ request, onDone, maxLength }: {
+export function PromptDialog({ request, onDone, maxLength, onChange, confirm, onRefused }: {
   request: PromptRequest;
   onDone: (value: string | null) => void;
   /** Optional cap passed to the input (e.g. 280 for notes to agents). */
   maxLength?: number;
+  /** Each change of the text (the note dialog keeps it: round 23 of PR #195). */
+  onChange?: (value: string) => void;
+  /** The OK button's state when something else decides it (the canvas lock's
+   * `act()`: disabled, its marks and tooltip). Enter does nothing then. */
+  confirm?: ActProps;
+  /** Enter or OK pressed while `confirm` is disabled. */
+  onRefused?: () => void;
 }) {
   const [value, setValue] = useState(request.initial);
   const input = useRef<HTMLInputElement>(null);
@@ -28,6 +36,10 @@ export function PromptDialog({ request, onDone, maxLength }: {
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
+    if (confirm?.disabled) {
+      onRefused?.();
+      return;
+    }
     onDone(value);
   };
   return (
@@ -54,11 +66,14 @@ export function PromptDialog({ request, onDone, maxLength }: {
       }}>
         <label className="prompt-dialog__field">
           {request.label}
-          <input ref={input} value={value} maxLength={maxLength} onChange={(event) => setValue(event.target.value)} />
+          <input ref={input} value={value} maxLength={maxLength} onChange={(event) => {
+            setValue(event.target.value);
+            onChange?.(event.target.value);
+          }} />
         </label>
         <div className="prompt-dialog__actions">
           <button type="button" onClick={() => onDone(null)}>Cancel</button>
-          <button type="submit" className="prompt-dialog__confirm">OK</button>
+          <button type="submit" className="prompt-dialog__confirm" {...confirm}>OK</button>
         </div>
       </form>
     </div>

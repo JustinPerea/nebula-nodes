@@ -25,12 +25,15 @@ export interface CutOffSave {
 }
 
 export type CutOffEnding = { kind: 'switch' } | { kind: 'import' }
-  | { kind: 'agent'; agent: string | null; copy?: { id: string; name: string } | null }
+  /** `byAgent` false: the switch had no agent behind it (a script, or one
+   * found after a reconnect): GM's no-agent form (round 23). */
+  | { kind: 'agent'; agent: string | null; copy?: { id: string; name: string } | null; byAgent?: boolean }
   /** An agent's clear (round 20): agentClearedLine, no project. */
   | { kind: 'agentClear'; agent: string | null }
   /** Round 22 (review 21, L-a): a sync with no edit found another canvas (a
-   * restart, a missed change): changesNotSavedLine, no project. */
-  | { kind: 'reconnect' };
+   * restart, a missed change): changesNotSavedLine, no project. Round 23
+   * (GM): `copy`, the recovered copy the edits it cut off were saved to. */
+  | { kind: 'reconnect'; copy?: { id: string; name: string } | null };
 
 function ending(how: CutOffEnding): string {
   if (how.kind === 'reconnect') return '';
@@ -131,21 +134,45 @@ export function agentClearedLine(saves: CutOffSave[], agent: string | null): str
  * didn't keep because the canvas it was for is no longer the one Nebula
  * holds, found by a sync with no edit (a restart that lost Nebula's canvas
  * revisions, then showed another canvas). Not an agent's clear, so not its
- * line (GM follow-up 4); GM's failed-save line from PR #114 instead, in its
- * form with nothing put back:
- *   One: "Couldn't save “<setting>” for “<node>”."
- *   Two on one node: "Couldn't save “<a>” and “<b>” for “<node>”."
- *   3+ on one node: "Couldn't save <N> settings for “<node>”."
- *   Across nodes (derived, for GM): "Couldn't save <N> settings."
+ * line (GM follow-up 4). GM - Design's failed-save wording (round 23,
+ * 2026-10-27), verbatim:
+ *   One node, one setting: "Couldn't save “<setting>” for “<node>”."
+ *   One node, 2–3 settings: "Couldn't save “a” and “b” for “Hero still”." /
+ *    "“a”, “b” and “c”"
+ *   One node, 4+ settings: "Couldn't save 4 settings for “Hero still”."
+ *   Two or three nodes: "Couldn't save your changes to “Hero still” and
+ *    “Hero prompt”."
+ *   Four+ nodes: "Couldn't save your changes to 4 nodes."
  *   None it can name: "Couldn't save your last change."
  */
 export function changesNotSavedLine(saves: CutOffSave[]): string | null {
   if (saves.length === 0) return null;
   const settings = distinctSaves(saves.filter((save) => save.node && save.setting));
   if (settings.length === 0) return "Couldn't save your last change.";
-  const nodes = new Set(settings.map(nodeKey));
-  if (nodes.size > 1) return `Couldn't save ${settings.length} settings.`;
-  const what = settings.length === 1 ? `“${settings[0].setting}”`
-    : settings.length === 2 ? `“${settings[0].setting}” and “${settings[1].setting}”` : `${settings.length} settings`;
-  return `Couldn't save ${what} for “${settings[0].node}”.`;
+  const nodes = new Map<string, string>();
+  for (const save of settings) if (!nodes.has(nodeKey(save))) nodes.set(nodeKey(save), save.node!);
+  if (nodes.size > 3) return `Couldn't save your changes to ${nodes.size} nodes.`;
+  if (nodes.size > 1) return `Couldn't save your changes to ${quotedList([...nodes.values()])}.`;
+  return `Couldn't save ${settingsOnOneNode(settings.map((save) => save.setting!))} for “${settings[0].node}”.`;
+}
+
+/** One node's settings as GM counts them (round 23): “a”; “a” and “b”;
+ * “a”, “b” and “c”; then "4 settings". The canvas's own failed-save line
+ * (graphStore.paramSaveFailedLine) says the same. */
+export function settingsOnOneNode(settings: string[]): string {
+  return settings.length <= 3 ? quotedList(settings) : `${settings.length} settings`;
+}
+
+/**
+ * GM - Design, round 23 (2026-10-27), verbatim: a replacement found with no
+ * agent behind it (after a reconnect or a restart), or a switch with no
+ * agent, whose cut-off edits were saved as a copy. No "when <agent>
+ * switched projects":
+ *   "Couldn't save “Text” for “Hero prompt”. Your edits were saved as a
+ *    copy, “Round r20 (recovered)”."
+ * The head is the failed-save line above; the copy's name wraps as one piece.
+ */
+export function changesSavedAsCopyLine(saves: CutOffSave[], copyName: string): string {
+  const head = changesNotSavedLine(saves) ?? "Couldn't save your last change.";
+  return `${head} Your edits were saved as a copy, “${keepTogether(copyName)}”.`;
 }
