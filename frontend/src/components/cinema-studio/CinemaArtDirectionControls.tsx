@@ -22,11 +22,11 @@ export function CinemaPaletteControls({ value, onChange, labelPrefix }: Controls
             const color = event.target.value;
             onChange((current) => ({ ...current, swatches: current.swatches.map((swatch, i) => i === index ? color : swatch) }));
           }} />
-        <button type="button" className="cinema-shared-controls__swatch-remove" {...lock.act({ title: 'Remove swatch', offline: true })}
+        <button type="button" className="cinema-shared-controls__swatch-remove" {...lock.act({ title: 'Remove swatch', offline: 'remove swatches' })}
           aria-label={`Remove ${labelPrefix.toLowerCase()} swatch ${index + 1}`}
           onClick={() => onChange((current) => ({ ...current, swatches: current.swatches.filter((_, i) => i !== index) }))}>×</button>
       </div>)}
-      <button type="button" className="cinema-shared-controls__swatch-add" {...lock.act({ title: 'Add swatch', offline: true })}
+      <button type="button" className="cinema-shared-controls__swatch-add" {...lock.act({ title: 'Add swatch', offline: 'add swatches' })}
         aria-label={`Add ${labelPrefix.toLowerCase()} swatch`}
         onClick={() => onChange((current) => ({ ...current, swatches: [...current.swatches, '#808080'] }))}>+</button>
     </div>

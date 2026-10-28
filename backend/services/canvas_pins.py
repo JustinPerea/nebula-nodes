@@ -64,9 +64,11 @@ def clean_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = F
     #200, GM 2026-10-28 answer 5): agents get it as written. Its newlines
     stay (every line break, ``\r\n``, ``\r``, U+2028 and the rest, reads as
     ``\n``), a tab reads as a space, each
-    line loses its trailing spaces, a run of blank lines keeps one, and the
-    note loses its leading and trailing blank lines; every other control
-    character is still dropped.
+    line loses its trailing spaces, and the note loses its leading and
+    trailing blank lines; every other control character is still dropped.
+    Blank lines inside the note stay as typed (fix round 5 of PR #200,
+    review 5 N-3: agents read what the person wrote; only the canvas display
+    folds a run of blank lines, and the 280-character cap bounds the rest).
     """
     if not isinstance(raw, str):
         raise PinError(422, f"{label} must be text")
@@ -85,10 +87,7 @@ def clean_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = F
         # str.splitlines knows every line break: \r\n, \r, \v, \f, NEL and
         # U+2028/U+2029 (review 3 LOW-5), so each reads as \n on every surface.
         lines = [plain(line).rstrip() for line in raw.splitlines()]
-        # A run of blank lines keeps one (fix round 4 of PR #200, review 4
-        # N-3: 278 newlines reached every agent as 278 lines).
-        kept_lines = [line for i, line in enumerate(lines) if line or i == 0 or lines[i - 1]]
-        text = "\n".join(kept_lines).strip()
+        text = "\n".join(lines).strip()
     else:
         text = " ".join(plain(raw).split())
     if not text:
@@ -96,6 +95,18 @@ def clean_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = F
     if len(text) > limit:
         raise PinError(422, f"{label} must be {limit} characters or fewer")
     return text
+
+
+def note_block(text: Any, indent: str) -> str:
+    """A note of several lines, each on its own line under ``indent``.
+
+    Every line is indented the same, so a list or an indented line keeps its
+    shape, and a blank line stays empty (fix round 5 of PR #200, review 5
+    LOW-4). The CLI (`nebula pins`, `nebula look`, `nebula start`) and the
+    channel push both print a note this way, so a line the person typed never
+    starts where a line of the surrounding output does.
+    """
+    return "\n".join(f"{indent}{line}" if line.strip() else "" for line in str(text or "").split("\n"))
 
 
 def _point(raw: Any, label: str = "position") -> dict[str, float]:

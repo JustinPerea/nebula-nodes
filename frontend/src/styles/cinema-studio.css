@@ -523,7 +523,9 @@ body.app-slava-restraint .cinema-shots-rail__remove {
   min-height: 24px;
 }
 
-body.app-slava-restraint .cinema-shots-rail__remove:hover { color: var(--sr-danger, #c0392b); }
+/* A destructive hover is the Delete red, never the accent orange (fix round 5
+   of PR #200, review 5 N-4, GM r7 answer 2). */
+body.app-slava-restraint .cinema-shots-rail__remove:hover:not(:disabled) { color: var(--sr-danger-ink, #ff887d); }
 
 body.app-slava-restraint .cinema-shots-rail__add {
   flex: 0 0 auto;

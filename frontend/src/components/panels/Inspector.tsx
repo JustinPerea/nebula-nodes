@@ -681,9 +681,11 @@ export function Inspector({ embedded = false }: InspectorProps) {
                     <button
                       type="button"
                       className="inspector__palette-remove"
-                      title="Remove swatch"
                       aria-label={`Remove swatch ${idx + 1}`}
-                      disabled={readOnly} {...lock.mark}
+                      // Fix round 5 of PR #200 (review 5 LOW-2, GM r7): the
+                      // lock's own tooltip, the follow reason first, then
+                      // offline's verb; "Remove swatch" when live.
+                      {...lock.act({ title: 'Remove swatch', offline: 'remove swatches' })}
                       onClick={() => writeSwatches(swatches.filter((_, i) => i !== idx))}
                     >
                       <X

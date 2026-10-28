@@ -193,8 +193,11 @@ body.app-slava-restraint .character-node__open-error {
   line-height: 1.35;
 }
 
+/* Fix round 5 of PR #200 (GM r7): every toast in the notice region springs
+   in within its own slot, a scale and a fade, never sliding across a
+   neighbour (the open kept-notes list sits right below some). */
 @keyframes asset-trash-toast-in {
-  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  from { opacity: 0; transform: scale(0.98); }
   to { opacity: 1; transform: none; }
 }
 

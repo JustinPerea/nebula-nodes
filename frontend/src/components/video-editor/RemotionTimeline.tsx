@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Timeline as XzdarcyTimeline } from '@xzdarcy/react-timeline-editor';
 import '@xzdarcy/react-timeline-editor/dist/react-timeline-editor.css';
 import type {
@@ -74,7 +74,21 @@ export function RemotionTimeline({
   onScrub,
   timelineState,
 }: RemotionTimelineProps) {
-  const editorData = useMemo(() => manifestToEditorData(manifest), [manifest]);
+  // The timeline writes a drop into the rows it was given (the action's
+  // start and end, in place) before it calls onActionMoveEnd, and each block
+  // keeps where it was dragged in its own state. A drop refused while locked
+  // would stay drawn where it was let go, though nothing was saved, until the
+  // manifest next changed. `redraw` draws the timeline again from the
+  // manifest (fresh rows, a new mount), so the block goes back to where it
+  // is (fix round 5 of PR #200, review 5 N-5; live: fresh rows alone left the
+  // block where it was dropped).
+  const [redraw, setRedraw] = useState(0);
+  const editorData = useMemo(() => { void redraw; return manifestToEditorData(manifest); }, [manifest, redraw]);
+  const refused = () => {
+    if (!refuseCanvasEdit()) return false;
+    setRedraw((n) => n + 1);
+    return true;
+  };
 
   const updateTrackItemTime = useGraphStore((s) => s.updateTrackItemTime);
   // Round 23 (review 22, L-3): moving and resizing a layer edit the canvas;
@@ -95,6 +109,11 @@ export function RemotionTimeline({
       data-selected-ids={selectedTrackItemIds.join(' ')}
     >
       <XzdarcyTimeline
+        // A drag under way when the lock starts: the timeline turns dragging
+        // off and drops the gesture without reporting its end (live: the block
+        // stayed 96 px from where it is), so the lock starting or ending draws
+        // it again too.
+        key={`${redraw}:${lock.locked ? 'locked' : 'open'}`}
         ref={timelineState}
         editorData={editorData}
         effects={EFFECTS}
@@ -112,13 +131,13 @@ export function RemotionTimeline({
         // lock starts ends without writing (fix round 4 of PR #200, review 4
         // LOW-4).
         onActionMoveEnd={({ action, start }) => {
-          if (refuseCanvasEdit()) return;
+          if (refused()) return;
           updateTrackItemTime(remotionNodeId, action.id, {
             startFrame: Math.round(start * DEFAULT_FPS),
           });
         }}
         onActionResizeEnd={({ action, start, end }) => {
-          if (refuseCanvasEdit()) return;
+          if (refused()) return;
           updateTrackItemTime(remotionNodeId, action.id, {
             startFrame: Math.round(start * DEFAULT_FPS),
             durationInFrames: Math.round((end - start) * DEFAULT_FPS),

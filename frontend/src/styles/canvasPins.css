@@ -137,10 +137,11 @@
   cursor: pointer;
 }
 
+/* The Delete red (fix round 5 of PR #200, review 5 N-4: one red for every Delete). */
 .canvas-pin__delete:hover,
 .canvas-pin__delete:focus-visible {
-  background: rgb(244 67 54 / 0.15);
-  color: #f44336;
+  background: rgba(255, 70, 60, 0.14);
+  color: var(--sr-danger-ink, #ff887d);
 }
 
 /* Shown when a note couldn't be saved or deleted, in the app's notice region
@@ -198,6 +199,16 @@
   max-height: min(40vh, 360px);
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* Fix round 5 (review 5 LOW-1, GM r7: snap): the list is sized to whole
+     notes (PinComposer writes --kept-list-h, under the cap), and it rests
+     only on a note's top, so no note is ever cut at its top edge. */
+  height: var(--kept-list-h, auto);
+  scroll-snap-type: y mandatory;
+}
+
+.canvas-pin-kept-stack[data-open] .canvas-pin-kept-list > * {
+  flex: none;
+  scroll-snap-align: start;
 }
 
 /* "Show 7 more" (GM round 5 answer 2): a quiet row above the newest two. */

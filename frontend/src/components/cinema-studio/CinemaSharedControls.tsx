@@ -114,7 +114,7 @@ export function CinemaSharedControls({ cinemaNodeId, scene, connectedRefs = [], 
               {characterRefs.map((url, index) => (
                 <div key={`${url}-${index}`} className="cinema-shared-controls__ref">
                   <img src={backendAssetUrlSync(url)} alt={`Character reference ${index + 1}`} draggable={false} />
-                  <button type="button" className="cinema-shared-controls__ref-remove" {...lock.act({ title: 'Remove reference', offline: true })}
+                  <button type="button" className="cinema-shared-controls__ref-remove" {...lock.act({ title: 'Remove reference', offline: 'remove references' })}
                     aria-label={`Remove character reference ${index + 1}`} onClick={() => removeCharacterRef(url)}>×</button>
                 </div>
               ))}

@@ -282,7 +282,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
                 <button
                   type="button"
                   className="cinema-shot-panel__ref-remove"
-                  {...lock.act({ title: 'Remove ref', offline: true })}
+                  {...lock.act({ title: 'Remove ref', offline: 'remove references' })}
                   aria-label={`Remove composition reference ${idx + 1}`}
                   onClick={() => removeShotRef(url)}
                 >

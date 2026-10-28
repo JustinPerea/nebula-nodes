@@ -713,9 +713,15 @@ body.app-slava-restraint .context-menu__item:disabled {
   opacity: var(--sr-disabled-opacity-strong);
 }
 
+/* Fix round 5 of PR #200 (review 5 N-4, GM r7 answer 2): every Delete hovers
+   to the danger red (#ff887d), pressed #ff9a91; orange is never destructive. */
 body.app-slava-restraint .context-menu__item--danger:hover:not(:disabled) {
-  background: var(--sr-danger-soft);
-  color: var(--sr-danger);
+  background: rgba(255, 70, 60, 0.14);
+  color: var(--sr-danger-ink, #ff887d);
+}
+
+body.app-slava-restraint .context-menu__item--danger:active:not(:disabled) {
+  color: var(--sr-danger-ink-hover, #ff9a91);
 }
 
 body.app-slava-restraint .context-menu__shortcut,
@@ -2174,10 +2180,16 @@ body.app-slava-restraint .inspector__action-button:hover:not(:disabled) {
   color: var(--sr-ink-bold);
 }
 
+/* Fix round 5 of PR #200 (review 5 N-4, GM r7 answer 2): every Delete hovers
+   to the danger red (#ff887d), pressed #ff9a91; orange is never destructive. */
 body.app-slava-restraint .inspector__action-button--danger:hover:not(:disabled) {
-  border-color: var(--sr-danger-border);
-  background: var(--sr-danger-soft);
-  color: var(--sr-danger);
+  border-color: rgba(255, 70, 60, 0.34);
+  background: rgba(255, 70, 60, 0.14);
+  color: var(--sr-danger-ink, #ff887d);
+}
+
+body.app-slava-restraint .inspector__action-button--danger:active:not(:disabled) {
+  color: var(--sr-danger-ink-hover, #ff9a91);
 }
 
 body.app-slava-restraint .inspector__file-preview {
@@ -2201,13 +2213,17 @@ body.app-slava-restraint .inspector__palette-hex {
   font-family: var(--sr-mono);
 }
 
+/* Fix round 5 of PR #200 (review 5 LOW-2, GM r7): the palette × is a
+   control the lock greys, so its enabled ink is above the shared grey
+   (it was --sr-ink-faint, dimmer than its own disabled look), and a remove
+   hovers to the danger red, never the accent (GM r7 answer 2). */
 body.app-slava-restraint .inspector__palette-remove {
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink);
   transition: color var(--sr-motion-fast);
 }
 
-body.app-slava-restraint .inspector__palette-remove:hover {
-  color: var(--sr-accent);
+body.app-slava-restraint .inspector__palette-remove:hover:not(:disabled) {
+  color: var(--sr-danger-ink, #ff887d);
 }
 
 /* ─────────────────────────────────────────────────────────────────────

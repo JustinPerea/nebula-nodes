@@ -6,7 +6,7 @@ from typing import Any
 # The readiness rule lives with the backend so the CLI and MCP server agree.
 from services.node_readiness import node_access  # noqa: F401 (re-exported for tests and callers)
 from services.agent_params import ASSET_PARAM_TYPES
-from services.canvas_pins import one_line  # an event is one line (PR #200 fix round 3, LOW-5)
+from services.canvas_pins import note_block, one_line  # an event is one line (PR #200 fix round 3, LOW-5)
 from services.canvas_undo import UNDONE_VERBS, nothing_went_back
 from services.maker_sizes import rule_note
 from services import node_categories
@@ -480,7 +480,7 @@ def format_start(start: dict[str, Any]) -> str:
     for pin in pins.get("open") or []:
         anchor = pin.get("anchor") or {}
         at = anchor.get("nodeId") or f"({anchor.get('x')},{anchor.get('y')})"
-        lines.append(f"  {pin.get('id')} on {at}: {quote_note(pin.get('text'))}")
+        lines.append("  " + pin_line(f"{pin.get('id')} on {at}", pin.get("text")))
     if pins.get("more"):
         lines.append(f"  ({pins['more']})")
 
@@ -746,12 +746,21 @@ def _ago(iso: Any, now: float | None = None) -> str:
     return f"{seconds // 86400}d ago"
 
 
-def quote_note(text: Any, indent: str = "    ") -> str:
-    """A note in quotes, JSON-escaped, its lines kept: each line after the
-    first starts on its own line under it (fix round 2 of PR #200, GM
-    2026-10-28 answer 5: agents read the note as the person wrote it)."""
-    lines = str(text or "").splitlines() or [""]
-    return '"' + ("\n" + indent).join(json.dumps(line, ensure_ascii=False)[1:-1] for line in lines) + '"'
+def quote_note(text: Any) -> str:
+    """A one-line note in quotes, JSON-escaped."""
+    return json.dumps(str(text or ""), ensure_ascii=False)
+
+
+def pin_line(head: str, text: Any, tail: str = "", indent: str = "    ") -> str:
+    """`head: "note"tail` for a one-line note. A note of several lines goes
+    under `head tail:`, each line indented the same (`indent`, two past the
+    two-space row it sits in), blank lines empty: the lines the person typed
+    keep their shape, lists included (fix round 5 of PR #200, review 5 LOW-4,
+    GM 2026-10-28 r7 answer 4). The channel push prints it the same way."""
+    note = str(text or "")
+    if "\n" not in note:
+        return f"{head}: {quote_note(note)}{tail}"
+    return f"{head}{tail}:\n" + note_block(note, indent)
 
 
 def format_pin(pin: dict[str, Any], now: float | None = None) -> str:
@@ -766,14 +775,14 @@ def format_pin(pin: dict[str, Any], now: float | None = None) -> str:
             where = "on the canvas"
         if pin.get("detached") and pin.get("detachedFrom"):
             where += f" (its node {pin['detachedFrom']} was removed)"
-    text = quote_note(pin.get("text"))
+    head = f"{pin.get('id', '?')} {where}"
     reply = pin.get("reply") or {}
     if pin.get("status") == "resolved" and reply:
         agent = (reply.get("agent") or {}).get("name") or "an agent"
         answer = json.dumps(str(reply.get("text") or ""), ensure_ascii=False)
-        return f"{pin.get('id', '?')} {where}: {text} — resolved by {agent}: {answer}"
+        return pin_line(head, pin.get("text"), f" — resolved by {agent}: {answer}")
     ago = _ago(pin.get("createdAt"), now)
-    return f"{pin.get('id', '?')} {where}: {text}" + (f" ({ago})" if ago else "")
+    return pin_line(head, pin.get("text"), f" ({ago})" if ago else "")
 
 
 def _actor_label(actor: dict[str, Any] | None) -> str:

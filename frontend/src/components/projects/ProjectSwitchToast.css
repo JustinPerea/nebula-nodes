@@ -51,8 +51,11 @@
 }
 .project-switch-toast__close:hover { background: var(--sr-surface-control-hover, rgb(255 255 255 / 0.08)); color: var(--sr-ink, #ecece9); }
 .project-switch-toast__close svg { width: 14px; height: 14px; }
+/* Fix round 5 of PR #200 (GM r7): every toast in the notice region springs
+   in within its own slot, a scale and a fade, never sliding across a
+   neighbour (the open kept-notes list sits right below some). */
 @keyframes project-switch-toast-in {
-  from { opacity: 0; transform: translateY(16px) scale(0.96); }
+  from { opacity: 0; transform: scale(0.96); }
   30% { opacity: 1; }
   to { opacity: 1; transform: none; }
 }

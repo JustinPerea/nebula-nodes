@@ -233,13 +233,17 @@ function isReference(id: ts.Identifier): boolean {
  * parent hands down is trusted only when it really is a parameter of a
  * function around it (`({ disabled }) => …`, `(props) => … props.locked`),
  * never a global or an undeclared name that happens to be called that. */
+/* Fix round 5 (review 5 LOW-3): only a parameter of the component function
+ * itself, the outermost function around the name (`memo(…)` and
+ * `forwardRef(…)` wrap it without a function of their own), never of a
+ * callback inside it: `[false].map((disabled) => …)` and `render={(locked)
+ * => …}` name a value the parent never handed down. */
 function boundByParam(id: ts.Identifier): boolean {
   const names = (name: ts.BindingName): string[] => ts.isIdentifier(name) ? [name.text]
     : name.elements.flatMap((element) => ts.isOmittedExpression(element) ? [] : names(element.name));
-  for (let up: ts.Node | undefined = id.parent; up; up = up.parent) {
-    if (ts.isFunctionLike(up) && up.parameters.some((parameter) => names(parameter.name).includes(id.text))) return true;
-  }
-  return false;
+  let outermost: ts.SignatureDeclaration | null = null;
+  for (let up: ts.Node | undefined = id.parent; up; up = up.parent) if (ts.isFunctionLike(up)) outermost = up;
+  return !!outermost && outermost.parameters.some((parameter) => names(parameter.name).includes(id.text));
 }
 
 /** The exported function `name` of a module, as a node to follow, with the
@@ -452,17 +456,20 @@ function isActSpread(expression: ts.Node, scope: Scope, seen: Set<string> = new 
  * when locked (`const shared = { disabled: readOnly, onChange }`), and on a
  * component the lock itself (`{...lock}`). `{...lock.mark}` only marks
  * (data-*): none. */
-function spreadCoverage(expression: ts.Node, scope: Scope, component: boolean, seen: Set<string> = new Set()): number {
-  if (ts.isParenthesizedExpression(expression)) return spreadCoverage(expression.expression, scope, component, seen);
+function spreadCoverage(expression: ts.Node, scope: Scope, component: boolean, seen: Set<string> = new Set(),
+  readOnlyApplies = component): number {
+  if (ts.isParenthesizedExpression(expression)) return spreadCoverage(expression.expression, scope, component, seen, readOnlyApplies);
   if (isActSpread(expression, scope)) return LOCKED;
   if (component && isLockValue(expression, scope)) return LOCKED;
   if (ts.isObjectLiteralExpression(expression)) {
     return expression.properties.reduce((mask, property) => {
-      if (ts.isSpreadAssignment(property)) return mask | spreadCoverage(property.expression, scope, component, seen);
+      if (ts.isSpreadAssignment(property)) return mask | spreadCoverage(property.expression, scope, component, seen, readOnlyApplies);
       if (!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property)) return mask;
       const name = property.name.getText(scope.root).replace(/^['"]|['"]$/g, '');
       // aria-disabled blocks no click: ariaCoverage reads it (review 4 LOW-4).
-      if (!/^(disabled|readOnly)$/.test(name)) return mask;
+      // readOnly only on a text-like field (review 5 LOW-3: READONLY_TYPES
+      // applied to a spread too: `{...{ readOnly }}` on a checkbox).
+      if (name !== 'disabled' && !(name === 'readOnly' && readOnlyApplies)) return mask;
       return mask | lockCoverage(ts.isPropertyAssignment(property) ? property.initializer : property.name, scope);
     }, 0);
   }
@@ -471,7 +478,7 @@ function spreadCoverage(expression: ts.Node, scope: Scope, component: boolean, s
   if (seen.has(key)) return 0;
   seen.add(key);
   return (scope.locals.get(key) ?? []).reduce((mask, definition) =>
-    mask | (ts.isBindingElement(definition) ? 0 : spreadCoverage(definition, scope, component, seen)), 0);
+    mask | (ts.isBindingElement(definition) ? 0 : spreadCoverage(definition, scope, component, seen, readOnlyApplies)), 0);
 }
 
 /** Which locked states an attribute puts the control in: the lock's spread,
@@ -500,20 +507,86 @@ function inputType(attributes: ts.NodeArray<ts.JsxAttributeLike> | undefined, sc
  * on a textarea or a text-like input, a component's `lock`, `locked` or
  * `disabled` (never another `disable…` name: `disableRipple`).
  * `aria-disabled` is no lock on its own: ariaCoverage. */
-function lockAttribute(attribute: ts.JsxAttributeLike, scope: Scope, tag = '', attributes?: ts.NodeArray<ts.JsxAttributeLike>): number {
+/* Fix round 5 (review 5 LOW-3): a component's `disabled`, `readOnly`,
+ * `locked` or `lock` counts only when the component is found (in the file,
+ * or a relative import) and reads that prop (or forwards its props onto an
+ * element): `<Fancy disabled={lock.locked}>` where Fancy ignores `disabled`
+ * locks nothing. `reads` answers for the component at hand. */
+type Reads = (prop: string) => boolean;
+const LOCK_SPREAD_PROPS = ['lock', 'locked', 'following', 'offline', 'act', 'mark', 'title'];
+function lockAttribute(attribute: ts.JsxAttributeLike, scope: Scope, tag = '', attributes?: ts.NodeArray<ts.JsxAttributeLike>,
+  reads: Reads = () => false): number {
   const component = /^[A-Z]/.test(tag);
   const disables = component || CONTROL_TAGS.has(tag) || tag === 'fieldset';
-  if (ts.isJsxSpreadAttribute(attribute)) return disables ? spreadCoverage(attribute.expression, scope, component) : 0;
+  const readOnlyApplies = (component && reads('readOnly')) || tag === 'textarea'
+    || (tag === 'input' && READONLY_TYPES.has(inputType(attributes, scope) ?? ''));
+  if (ts.isJsxSpreadAttribute(attribute)) {
+    if (!disables) return 0;
+    if (!component) return spreadCoverage(attribute.expression, scope, false, new Set(), readOnlyApplies);
+    // A component's spread: the lock itself (`{...lock}`) when it reads one
+    // of the lock's members, `{...lock.act()}` and objects when it reads
+    // `disabled` (or `readOnly`).
+    if (isLockValue(attribute.expression, scope)) return LOCK_SPREAD_PROPS.some(reads) ? LOCKED : 0;
+    return reads('disabled') || readOnlyApplies ? spreadCoverage(attribute.expression, scope, false, new Set(), readOnlyApplies) : 0;
+  }
   const name = attribute.name.getText(scope.root);
   if (isHandlerName(name)) return 0;
   const value = attribute.initializer;
   if (!value || !ts.isJsxExpression(value) || !value.expression) return 0;
+  if (component && !reads(name)) return 0;
   if (name === 'disabled') return disables ? lockCoverage(value.expression, scope) : 0;
-  if (name === 'readOnly' && (component || tag === 'textarea'
-    || (tag === 'input' && READONLY_TYPES.has(inputType(attributes, scope) ?? '')))) return lockCoverage(value.expression, scope);
+  if (name === 'readOnly' && readOnlyApplies) return lockCoverage(value.expression, scope);
   if (component && /^(lock|canvasLock)$/.test(name)) return isLockValue(value.expression, scope) ? LOCKED : 0;
   if (component && name === 'locked') return lockCoverage(value.expression, scope);
   return 0;
+}
+
+/** The definition of the component `tag` names (a local, or the export of a
+ * relative import, through re-exports), or null when it can't be found. */
+function componentDefinition(tag: string, scope: Scope, resolve: Resolve | undefined): { node: ts.Node; scope: Scope } | null {
+  if (tag.includes('.')) return null;
+  const local = scope.locals.get(tag);
+  if (local?.length) return { node: local[local.length - 1], scope };
+  const imported = scope.imports.get(tag);
+  if (!imported || !resolve || !imported.specifier.startsWith('.')) return null;
+  const module = resolve(imported.specifier, scope.file);
+  return module ? exportedTarget(scopeOf(module.source, module.file), imported.imported, resolve) : null;
+}
+
+/** Which props a component reads: every name its definition spells (a
+ * destructured `disabled`, `props.disabled`), and, when it forwards its
+ * props onto an element (`<button {...rest}>`, `<button {...props}>`),
+ * every prop. A wrapper (`memo(Inner)`, `forwardRef(Inner)`) is followed
+ * one name in. */
+function componentReads(tag: string, scope: Scope, resolve: Resolve | undefined): Reads {
+  const found = componentDefinition(tag, scope, resolve);
+  if (!found) return () => false;
+  const spelled = new Set<string>();
+  let forwards = false;
+  const visit = (node: ts.Node, at: Scope, hops: number) => {
+    const walk = (current: ts.Node) => {
+      // A name it spells, never an attribute it sets (`<button disabled={busy}>`
+      // reads no `disabled` prop).
+      if (ts.isIdentifier(current) && !(current.parent && ts.isJsxAttribute(current.parent))) spelled.add(current.text);
+      if (ts.isJsxSpreadAttribute(current) && ts.isIdentifier(current.expression)) {
+        const name = current.expression.text;
+        const local = at.locals.get(name);
+        // A parameter (`props`) or a rest binding (`...rest`) of the component.
+        if (!local || local.some((definition) => ts.isBindingElement(definition) && !!definition.dotDotDotToken)) forwards = true;
+      }
+      ts.forEachChild(current, walk);
+    };
+    walk(node);
+    if (hops > 0 && ts.isCallExpression(node)) {
+      for (const argument of node.arguments) {
+        if (!ts.isIdentifier(argument)) continue;
+        const inner = componentDefinition(argument.text, at, resolve);
+        if (inner) visit(inner.node, inner.scope, hops - 1);
+      }
+    }
+  };
+  visit(found.node, found.scope, 1);
+  return (prop) => forwards || spelled.has(prop);
 }
 
 /** The states `aria-disabled` (an attribute, or a key of a spread object)
@@ -543,13 +616,97 @@ function ariaCoverage(attributes: ts.NodeArray<ts.JsxAttributeLike>, scope: Scop
   }, 0);
 }
 
-/** The states a handler's own refusal covers: a refuse, or a gesture's
- * move that stops on `canvasLockNow().locked` (the mask painter, the
- * Remotion selection box: no pulse on every move). */
-function refuseCoverage(reached: Set<string>): number {
-  return (reached.has('refuseCanvasEdit') || reached.has('canvasLockNow') ? LOCKED : 0) | (reached.has('refuseEditWhileFollowing') ? FOLLOWING : 0)
-    | (reached.has('refuseEditWhileOffline') ? OFFLINE : 0);
+/** The states a handler's own refusal covers (fix round 5 of PR #200,
+ * review 5 LOW-3: per handler, and only a refusal that gates). A refusal
+ * counts when its result stops the handler: `if (refuseCanvasEdit())
+ * return`, `if (canvasLockNow().locked) { endDrag(); return; }`, `if
+ * (refuseEditWhileFollowing() || refuseEditWhileOffline()) return`, or the
+ * call sits under `if (!refuseCanvasEdit()) …` (`ok && !refuse…() &&`). A
+ * refusal whose result is dropped (`refuseCanvasEdit(); run();`), a lock read
+ * into a local nobody tests, or `canvasLockNow().offline` (offline only)
+ * covers that much and no more. Followed like reachOf: the handler, the
+ * file's own functions it calls, and imported ones. */
+const REFUSERS: Record<string, number> = { refuseCanvasEdit: LOCKED, refuseEditWhileFollowing: FOLLOWING, refuseEditWhileOffline: OFFLINE };
+function guardMask(condition: ts.Expression, scope: Scope): number {
+  const again = (node: ts.Expression) => guardMask(node, scope);
+  if (ts.isParenthesizedExpression(condition)) return again(condition.expression);
+  if (ts.isCallExpression(condition) && ts.isIdentifier(condition.expression)) return REFUSERS[condition.expression.text] ?? 0;
+  if (ts.isPropertyAccessExpression(condition)) {
+    const state = LOCK_STATES[condition.name.text];
+    return state && isLockValue(condition.expression, scope) ? state : 0;
+  }
+  if (ts.isBinaryExpression(condition)) {
+    const op = condition.operatorToken.kind;
+    const [left, right] = [again(condition.left), again(condition.right)];
+    if (op === ts.SyntaxKind.BarBarToken) return left | right;
+    // `cmd.acts && refuseCanvasEdit()`: the refusal, when the action is one
+    // that edits; two refusals joined by && refuse only together.
+    if (op === ts.SyntaxKind.AmpersandAmpersandToken) {
+      if (condition.left.kind === ts.SyntaxKind.FalseKeyword || condition.right.kind === ts.SyntaxKind.FalseKeyword) return 0;
+      return left && right ? left & right : left | right;
+    }
+  }
+  return 0;
 }
+/** The refusals an `if` condition's && chain negates (`!refuseCanvasEdit()`):
+ * its then-branch runs only when nothing refused. */
+function negatedGuard(condition: ts.Expression, scope: Scope): number {
+  if (ts.isParenthesizedExpression(condition)) return negatedGuard(condition.expression, scope);
+  if (ts.isPrefixUnaryExpression(condition) && condition.operator === ts.SyntaxKind.ExclamationToken) return guardMask(condition.operand, scope);
+  if (ts.isBinaryExpression(condition) && condition.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) {
+    return negatedGuard(condition.left, scope) | negatedGuard(condition.right, scope);
+  }
+  return 0;
+}
+const exits = (statement: ts.Statement): boolean => ts.isReturnStatement(statement) || ts.isThrowStatement(statement)
+  || (ts.isBlock(statement) && statement.statements.length > 0 && exits(statement.statements[statement.statements.length - 1]));
+function refuseCoverage(node: ts.Node, scope: Scope, resolve: Resolve | undefined, seen: Set<string> = new Set(), depth = 0): number {
+  let mask = 0;
+  // A guard after the gated call guards nothing: `run(); if (refuse…()) return;`.
+  const gatedBefore = (statement: ts.Statement): boolean => {
+    const list = ts.isBlock(statement.parent) || ts.isSourceFile(statement.parent) || ts.isCaseClause(statement.parent)
+      ? statement.parent.statements : null;
+    if (!list) return false;
+    const before = list.slice(0, list.indexOf(statement));
+    return before.some((earlier) => [...reachOf(earlier, scope, resolve, new Set(), depth)].some((name) => GATED.has(name)));
+  };
+  const visit = (current: ts.Node) => {
+    if (current !== node && (ts.isJsxElement(current) || ts.isJsxSelfClosingElement(current) || ts.isJsxFragment(current))) return;
+    if (ts.isIfStatement(current) && !gatedBefore(current)) {
+      if (exits(current.thenStatement)) mask |= guardMask(current.expression, scope);
+      mask |= negatedGuard(current.expression, scope);
+    }
+    if (ts.isIdentifier(current) && isReference(current)) {
+      const local = scope.locals.get(current.text);
+      const key = `${scope.file}#${current.text}`;
+      if (local && !seen.has(key)) {
+        seen.add(key);
+        for (const inner of local) mask |= refuseCoverage(inner, scope, resolve, seen, depth);
+        return;
+      }
+      const imported = scope.imports.get(current.text);
+      const module = imported && resolve && imported.specifier.startsWith('.') ? resolve(imported.specifier, scope.file) : null;
+      if (imported && module && depth < IMPORT_DEPTH) {
+        const target = exportedTarget(scopeOf(module.source, module.file), imported.imported, resolve!);
+        const targetKey = target ? `${target.scope.file}#${imported.imported}` : '';
+        if (target && !seen.has(targetKey)) {
+          seen.add(targetKey);
+          mask |= refuseCoverage(target.node, target.scope, resolve, seen, depth + 1);
+        }
+      }
+      return;
+    }
+    ts.forEachChild(current, visit);
+  };
+  visit(node);
+  return mask;
+}
+
+/** Pointer handlers a disabled control still gets (review 5 LOW-3, live:
+ * Chrome dispatches pointerdown and pointerup to a disabled <button>; only
+ * mousedown and click are held back). On a native control each needs its
+ * own refusal. */
+const POINTER_HANDLER = /^onPointer[A-Z]/;
 
 /** Opening-element text of each finding, for CONTROL_AT (an allowlist entry
  * for one control, never every control of its tag; review 4 LOW-4). */
@@ -597,39 +754,51 @@ function unlockedControls(source: string, file: string, resolve?: Resolve): stri
         && (isHandlerName(attribute.name.getText(root)) || handsCallback(attribute, scope)))
         || (ts.isJsxSpreadAttribute(attribute) && !isActSpread(attribute.expression, scope)));
       const reached = new Set<string>();
-      // Each handler that reaches a gated action, and whether it refuses
-      // while locked itself (refuseCanvasEdit), for a component or a
-      // non-control that can't be disabled (review 4 LOW-4: XzdarcyTimeline's
-      // drag ends; `disableDrag` was trusted by its name).
-      let everyGatedRefuses = true;
+      // Each handler that reaches a gated action, with its own refusal
+      // (review 5 LOW-3: per handler; a refusal in onKeyDown covers no
+      // onClick) and whether it is a pointer handler.
+      const gatedHandlers: Array<{ refuse: number; pointer: boolean }> = [];
       for (const handler of handlers) {
         const reach = reachOf(handler, scope, resolve, new Set(), 0, ownNames);
         for (const name of reach) reached.add(name);
-        if ([...reach].some((name) => GATED.has(name)) && refuseCoverage(reach) !== LOCKED) everyGatedRefuses = false;
+        if (![...reach].some((name) => GATED.has(name))) continue;
+        const name = ts.isJsxAttribute(handler) ? handler.name.getText(root) : '';
+        gatedHandlers.push({ refuse: refuseCoverage(handler, scope, resolve), pointer: POINTER_HANDLER.test(name) });
       }
       const hits = [...reached].filter((name) => GATED.has(name));
       if (hits.length > 0) {
+        const control = CONTROL_TAGS.has(tag);
+        const reads = /^[A-Z]/.test(tag) ? componentReads(tag, scope, resolve) : undefined;
         // Its own attributes and a disabled <fieldset> around it, together
         // (only a fieldset disables what it holds; review 3 LOW-6: a <div
         // title={lock.title()}> around a button disables nothing).
-        let covered = attributes.reduce((mask, attribute) => mask | lockAttribute(attribute, scope, tag, attributes), 0);
-        // aria-disabled with the handler's own refusal (review 4 LOW-4).
-        covered |= ariaCoverage(attributes, scope) & refuseCoverage(reached);
+        let covered = attributes.reduce((mask, attribute) => mask | lockAttribute(attribute, scope, tag, attributes, reads), 0);
         // A disabled fieldset disables the form controls it holds, except
         // those in its first <legend> (HTML), never a <div onClick> or an <a>.
-        for (let up: ts.Node | undefined = node.parent, child: ts.Node = node; up && covered !== LOCKED && CONTROL_TAGS.has(tag); child = up, up = up.parent) {
-          if (ts.isJsxElement(up) && up.openingElement !== node && up.openingElement.tagName.getText(root) === 'fieldset') {
-            const firstLegend = up.children.find((item) => ts.isJsxElement(item) || ts.isJsxSelfClosingElement(item));
-            const legend = firstLegend && ts.isJsxElement(firstLegend) && firstLegend.openingElement.tagName.getText(root) === 'legend' ? firstLegend : null;
-            if (legend && child === legend) continue;
+        // The legend is found through fragments and expressions (review 5
+        // LOW-3: `{open && <legend>…}`, `<><legend>…</>`): any legend with no
+        // other element between it and the fieldset counts as the first.
+        let inLegend = false;
+        for (let up: ts.Node | undefined = node.parent; up && covered !== LOCKED && control; up = up.parent) {
+          if (!ts.isJsxElement(up) || up.openingElement === node) continue;
+          const upTag = up.openingElement.tagName.getText(root);
+          if (upTag === 'legend') { inLegend = true; continue; }
+          if (upTag !== 'fieldset') { inLegend = false; continue; }
+          if (!inLegend) {
             for (const attribute of up.openingElement.attributes.properties) {
               if (ts.isJsxAttribute(attribute) && attribute.name.getText(root) === 'disabled') covered |= lockAttribute(attribute, scope, 'fieldset');
             }
           }
+          inLegend = false;
         }
-        const own = covered === LOCKED;
-        const refusesInHandler = !CONTROL_TAGS.has(tag) && everyGatedRefuses;
-        if (!own && !refusesInHandler) {
+        const aria = ariaCoverage(attributes, scope);
+        // Each gated handler, on its own: the control's lock, aria-disabled
+        // with this handler's refusal (review 4 LOW-4), or, on a component or
+        // a non-control, the handler's refusal alone. A pointer handler on a
+        // native control fires while disabled: only its own refusal.
+        const own = gatedHandlers.every(({ refuse, pointer }) => (control && pointer ? refuse
+          : covered | (aria & refuse) | (control ? 0 : refuse)) === LOCKED);
+        if (!own) {
           const { line } = root.getLineAndCharacterOfPosition(node.getStart(root));
           // A component: the file it comes from, so a locked component is
           // known by its file, never its name (review 3 LOW-6).
@@ -848,6 +1017,8 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
       any_name_locked: 'export const A = () => <button disabled={props.locked} onClick={() => run()}>Run</button>;',
       global_named_lock: 'export const A = () => <button {...locked.act()} onClick={() => run()}>Run</button>;',
       component_disable_prop_ignored: 'export const A = () => <Fancy disableRipple={lock.locked} onClick={() => run()} />;',
+      // Fix round 5 (review 5 LOW-3): a component nobody can find takes no `disabled` on trust.
+      component_disabled: 'export const A = () => <Fancy disabled={lock.locked} onClick={() => run()} />;',
     };
     const missed = Object.entries(forms).filter(([form, body]) => unlockedControls(head + body, `components/${form}.tsx`).length !== 1)
       .map(([form]) => form);
@@ -859,7 +1030,65 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
       readonly_textarea: 'export const A = () => <textarea readOnly={lock.locked} onChange={() => run()} />;',
       fieldset_after_legend: 'export const A = () => <fieldset disabled={lock.locked}><legend>Run</legend><button onClick={() => run()}>Run</button></fieldset>;',
       props_param_locked: 'export const A = (props: { locked: boolean }) => <button disabled={props.locked} onClick={() => run()}>Run</button>;',
-      component_disabled: 'export const A = () => <Fancy disabled={lock.locked} onClick={() => run()} />;',
+      component_disabled_read: 'const Fancy = ({ disabled, onClick }: P) => <button disabled={disabled} onClick={onClick} />;\n'
+        + 'export const A = () => <Fancy disabled={lock.locked} onClick={() => run()} />;',
+    };
+    const loud = Object.entries(quiet).filter(([form, body]) => unlockedControls(head + body, `components/${form}.tsx`).length !== 0)
+      .map(([form]) => form);
+    expect(loud, 'locked controls G flags').toEqual([]);
+  });
+
+  // Fix round 5 of PR #200: review 5's G corpus (r5/fe/ratchet5.probe.test.ts,
+  // ratchet5.facts.json): a refusal counts only when it gates its own
+  // handler, readOnly only where it applies, a parameter only of the
+  // component, the first legend through fragments, a component's prop only
+  // when it reads it, and a pointer handler fires on a disabled button.
+  it('G corpus (review 5, LOW-3): the 14 missed forms and the 7 caught ones are caught; 7 locked forms stay quiet', () => {
+    const head = 'const lock = useCanvasLock();\nconst run = useGraphStore((s) => s.executeGraph);\n';
+    const forms: Record<string, string> = {
+      aria_refuse_other_handler: 'export const A = () => <button aria-disabled={lock.locked} onClick={() => run()} onKeyDown={() => { if (refuseCanvasEdit()) return; }}>Run</button>;',
+      aria_refuse_result_ignored: 'export const A = () => <button aria-disabled={lock.locked} onClick={() => { refuseCanvasEdit(); run(); }}>Run</button>;',
+      div_refuse_result_ignored: 'export const A = () => <div role="button" onClick={() => { refuseCanvasEdit(); run(); }}>Run</div>;',
+      div_canvasLockNow_offline_only: 'export const A = () => <div role="button" onClick={() => { if (canvasLockNow().offline) return; run(); }}>Run</div>;',
+      div_canvasLockNow_unused: 'export const A = () => <div role="button" onClick={() => { const l = canvasLockNow(); run(); }}>Run</div>;',
+      aria_canvasLockNow_offline_only: 'export const A = () => <button aria-disabled={lock.locked} onClick={() => { if (canvasLockNow().offline) return; run(); }}>Run</button>;',
+      readonly_spread_checkbox: 'export const A = () => <input type="checkbox" {...{ readOnly: lock.locked }} onChange={() => run()} />;',
+      readonly_spread_range: 'export const A = () => <input type="range" {...{ readOnly: lock.locked }} onChange={() => run()} />;',
+      readonly_spread_div: 'export const A = () => <div {...{ readOnly: lock.locked }} onClick={() => run()} />;',
+      map_param_named_disabled: 'export const A = () => <>{[false].map((disabled) => <button disabled={disabled} onClick={() => run()}>Run</button>)}</>;',
+      handler_param_named_locked: 'export const A = () => <List render={(locked: boolean) => <button disabled={locked} onClick={() => run()}>Run</button>} />;',
+      fieldset_legend_conditional: 'export const A = () => <fieldset disabled={lock.locked}>{true && <legend><button onClick={() => run()}>Run</button></legend>}</fieldset>;',
+      fieldset_legend_in_fragment: 'export const A = () => <fieldset disabled={lock.locked}><><legend><button onClick={() => run()}>Run</button></legend></></fieldset>;',
+      inverted_disabled: 'export const A = () => <button disabled={lock.locked ? false : true} onClick={() => run()}>Run</button>;',
+      disabled_and_false: 'export const A = () => <button disabled={lock.locked && false} onClick={() => run()}>Run</button>;',
+      component_disabled_ignored: 'const Fancy = (p: { onClick: () => void }) => <span onClick={p.onClick} />;\nexport const A = () => <Fancy disabled={lock.locked} onClick={() => run()} />;',
+      option_disabled: 'export const A = () => <select onChange={() => run()}><option disabled={lock.locked}>x</option></select>;',
+      fieldset_outside_component_div: 'export const A = () => <fieldset disabled={lock.locked}><span role="button" onClick={() => run()}>Run</span></fieldset>;',
+      readonly_dynamic_type: 'export const A = ({ kind }: { kind: string }) => <input type={kind} readOnly={lock.locked} onChange={() => run()} />;',
+      readonly_typed_hidden: 'export const A = () => <input type="hidden" readOnly={lock.locked} onChange={() => run()} />;',
+      pointerdown_on_disabled: 'export const A = () => <button disabled={lock.locked} onPointerDown={() => run()}>Run</button>;',
+      // Beyond the corpus: pointerup and a pointer handler beside a locked click.
+      pointerup_on_act: 'export const A = () => <button {...lock.act()} onClick={() => run()} onPointerUp={() => run()}>Run</button>;',
+      refuse_after_the_call: 'export const A = () => <div role="button" onClick={() => { run(); if (refuseCanvasEdit()) return; }}>Run</div>;',
+    };
+    expect(Object.keys(forms)).toHaveLength(23);
+    const missed = Object.entries(forms).filter(([form, body]) => unlockedControls(head + body, `components/${form}.tsx`).length !== 1)
+      .map(([form]) => form);
+    expect(missed, 'forms G lets through').toEqual([]);
+    const quiet: Record<string, string> = {
+      refuse_gate: 'export const A = () => <div role="button" onClick={() => { if (refuseCanvasEdit()) return; run(); }}>Run</div>;',
+      lockNow_locked: 'export const A = () => <div role="button" onClick={() => { if (canvasLockNow().locked) return; run(); }}>Run</div>;',
+      act_spread: 'export const A = () => <button {...lock.act()} onClick={() => run()}>Run</button>;',
+      disabled_func_param: 'export function A({ disabled }: { disabled: boolean }) { return <button disabled={disabled} onClick={() => run()}>Run</button>; }',
+      readonly_email: 'export const A = () => <input type="email" readOnly={lock.locked} onChange={() => run()} />;',
+      act_via_title_var: 'const acts = lock.act({ title: "x" });\nexport const A = () => <input type="color" {...acts} onChange={() => run()} />;',
+      fieldset_select: 'export const A = () => <fieldset disabled={lock.locked}><select onChange={() => run()} /></fieldset>;',
+      // The real forms: a negated refusal, two refusals, a block ending in return, a pointer handler that refuses.
+      negated_refuse: 'export const A = () => <div role="button" onClick={(e) => { if (e.detail <= 1 && !refuseCanvasEdit()) run(); }}>Run</div>;',
+      both_refusers: 'export const A = () => <div role="button" onClick={() => { if (refuseEditWhileFollowing() || refuseEditWhileOffline()) return; run(); }}>Run</div>;',
+      gesture_end: 'export const A = () => <div onPointerMove={() => { if (canvasLockNow().locked) { end(); return; } run(); }} />;',
+      pointer_refused: 'export const A = () => <button disabled={lock.locked} onPointerDown={() => { if (refuseCanvasEdit()) return; run(); }}>Run</button>;',
+      helper_refuses: 'function go() { if (refuseCanvasEdit()) return; run(); }\nexport const A = () => <div role="button" onClick={() => go()}>Run</div>;',
     };
     const loud = Object.entries(quiet).filter(([form, body]) => unlockedControls(head + body, `components/${form}.tsx`).length !== 0)
       .map(([form]) => form);
@@ -935,7 +1164,9 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
       locked: 'export const A = () => <button disabled={busy || lock.locked} {...lock.mark} onClick={() => run()}>Run</button>;',
       local_from_lock: 'const locked = lock.locked;\nexport const A = () => <button disabled={locked} onClick={() => run()}>Run</button>;',
       prop: 'export const A = ({ locked }: { locked: boolean }) => <button disabled={locked} onClick={() => run()}>Run</button>;',
-      passed_down: 'export const A = () => <Toolbar lock={lock} onRun={() => run()} />;',
+      // Fix round 5 (review 5 LOW-3): a component's `lock` counts when it reads it.
+      passed_down: 'const Toolbar = ({ lock, onRun }: P) => <button {...lock.act()} onClick={onRun}>Run</button>;\n'
+        + 'export const A = () => <Toolbar lock={lock} onRun={() => run()} />;',
       fieldset: 'export const A = () => <fieldset disabled={lock.locked}><button onClick={() => run()}>Run</button></fieldset>;',
       shadow_undo: 'const undo = () => setText(prev);\nexport const A = () => <button onClick={() => undo()}>Undo typing</button>;',
       no_gated: 'export const A = () => <button onClick={() => setOpen(true)}>Open</button>;',

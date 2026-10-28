@@ -69,6 +69,7 @@
   .cinema-shared-controls__ref-remove,
   .cinema-shared-controls__swatch-add,
   .cinema-shared-controls__swatch-remove,
+  .inspector__palette-remove,
   .cinema-shared-controls__chip,
   .chat__codeblock-apply,
   .prompt-dialog__confirm,
@@ -91,6 +92,7 @@
   .cinema-shared-controls__ref-remove,
   .cinema-shared-controls__swatch-add,
   .cinema-shared-controls__swatch-remove,
+  .inspector__palette-remove,
   .cinema-shared-controls__chip,
   .chat__codeblock-apply,
   .prompt-dialog__confirm,
@@ -104,6 +106,15 @@
   color: var(--sr-disabled-ink, rgba(255, 255, 255, 0.55)) !important;
   box-shadow: none !important;
   opacity: 1 !important;
+}
+
+/* The swatch's × keeps its dark bubble (the chip's own enabled fill) when
+   locked; only the × goes to the shared grey, with no hover change (fix
+   round 5 of PR #200, GM r7 answer 1). After the ghost rule, which clears
+   fills. */
+.cinema-shared-controls__swatch-remove:is(:disabled, [aria-disabled='true']),
+.cinema-shared-controls__swatch-remove:is(:disabled, [aria-disabled='true']):hover {
+  background: rgba(0, 0, 0, 0.7) !important;
 }
 
 /* Image-only buttons (Cinema's variation thumbnails): there is no label to

@@ -1437,14 +1437,19 @@ Rules:
   notes and replies. A reply is one line (whitespace collapsed). A note keeps
   the lines the person wrote (Shift+Enter in the note dialog): its newlines
   reach agents as `\n` in `pins[].text` (look_at_canvas, start_here, the
-  snapshot JSON), and `nebula pins` and `nebula look` print each later line
-  indented under the first, inside the quotes. A tab reads as a space; each
-  line loses its trailing spaces; a run of blank lines keeps one; spacing
-  inside a line is kept, the same in look_at_canvas and start_here. Every
-  line break Unicode knows (`\r\n`, `\r`, U+2028, U+2029 and the rest)
-  reads as `\n`. The Claude Code channel's push keeps the lines too, inside
-  `<pin>…</pin>`, each line after the first indented two spaces (so a line
-  the person typed never reads as a line of the push itself). A one-line
+  snapshot JSON). `nebula pins`, `nebula look` and `nebula start` print a
+  one-line note inline in quotes (`pin_1 on n4: "warmer"`); a note of several
+  lines goes under its pin's line (`pin_1 on n4 (12m ago):`), every line
+  indented the same and a blank line left empty, so a list keeps its shape.
+  A tab reads as a space; each line loses its trailing spaces; blank lines
+  inside the note stay as typed (only the canvas display folds a run of
+  them); spacing inside a line is kept, the same in look_at_canvas and
+  start_here. Every line break Unicode knows (`\r\n`, `\r`, U+2028, U+2029
+  and the rest) reads as `\n`. The Claude Code channel's push prints a note
+  the same way: one line inline in `<pin …>warmer</pin>`; several lines on
+  their own lines after `<pin …>`, each indented two spaces, then `</pin>` on
+  its own line (so a line the person typed never starts where a line of the
+  push itself does). A one-line
   surface shows a break as ` ⏎ `: an event's `summary` (`pinned "warmer ⏎
   bluer" on n4`) and each line of `nebula watch`, so one
   event is always one line. At most 100 open notes per project and

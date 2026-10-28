@@ -501,6 +501,8 @@ body.app-slava-restraint .remotion-properties-panel__keyframe-delete {
   font-size: 12px;
 }
 
-body.app-slava-restraint .remotion-properties-panel__keyframe-delete:hover {
-  border-color: var(--sr-accent);
+/* The Delete red, never the accent orange (fix round 5 of PR #200, review 5 N-4). */
+body.app-slava-restraint .remotion-properties-panel__keyframe-delete:hover:not(:disabled) {
+  border-color: rgba(255, 70, 60, 0.34);
+  color: var(--sr-danger-ink, #ff887d);
 }

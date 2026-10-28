@@ -232,6 +232,14 @@ def clean_text(raw: Any, limit: int = MAX_TEXT, *, multiline: bool = False) -> s
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
+def _note_block(text: str, indent: str = "  ") -> str:
+    """A note of several lines, each on its own line under the same indent,
+    a blank line left empty: services.canvas_pins.note_block, which the CLI
+    prints with (this module stays standalone; fix round 5 of PR #200,
+    review 5 LOW-4)."""
+    return "\n".join(f"{indent}{line}" if line.strip() else "" for line in text.split("\n"))
+
+
 def _ident(raw: Any, limit: int = 64) -> str:
     """An id for an attribute: letters, digits, `_` and `-` only."""
     return "".join(ch for ch in str(raw or "") if ch.isascii() and (ch.isalnum() or ch in "_-"))[:limit]
@@ -978,12 +986,18 @@ class ChannelState:
             for pin in pins[:MAX_LISTED]:
                 node = _ident(pin["node"])
                 where = f' node="{node}"' if node else ""
-                # Each later line indented, as the CLI prints it (fix round 4
-                # of PR #200, review 4 N-4): a line the person typed to look
-                # like a channel line ("Nebula: …", after a typed ‹/pin›)
-                # still reads as part of their note.
-                text = "\n  ".join(str(pin["text"]).split("\n"))
-                lines.append(f'<pin id="{_ident(pin["pinId"])}"{where}>{text}</pin>')
+                head = f'<pin id="{_ident(pin["pinId"])}"{where}>'
+                text = str(pin["text"])
+                if "\n" in text:
+                    # A note of several lines goes on its own lines, each
+                    # indented two spaces, as `nebula pins` prints it (fix
+                    # round 5 of PR #200, review 5 LOW-4): a list keeps its
+                    # shape, and a line the person typed to look like a
+                    # channel line ("Nebula: …", a typed ‹/pin›) starts two
+                    # spaces in, never where the push's own lines do.
+                    lines.append(f"{head}\n{_note_block(text)}\n</pin>")
+                else:
+                    lines.append(f"{head}{text}</pin>")
             hidden_pins = total_pins - min(len(pins), MAX_LISTED)
             if hidden_pins:
                 lines.append(f"{hidden_pins} more notes not listed: their text is in look_at_canvas `pins`.")

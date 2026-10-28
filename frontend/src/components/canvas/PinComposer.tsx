@@ -60,10 +60,64 @@ export function PinComposer() {
   useEffect(() => {
     if (hidden === 0 && showAll) setShowAll(false);
   }, [hidden, showAll]);
-  // The whole list opens on its newest note (at the bottom).
+  // The whole list opens on its newest note (at the bottom), and its top
+  // edge never cuts a note (fix round 5 of PR #200, review 5 LOW-1, GM r7
+  // answer 3: snap). Its height is the newest notes that fit the cap, whole,
+  // so its last scroll position is a row's top, and the rows snap to their
+  // tops (canvasPins.css), so every position it rests at starts on a note.
   useLayoutEffect(() => {
-    if (open && listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
-  }, [open]);
+    const list = listRef.current;
+    if (!open || !list) return;
+    const place = () => {
+      list.style.removeProperty('--kept-list-h');
+      const rows = [...list.children] as HTMLElement[];
+      if (!rows.length) return;
+      const cap = Math.min(window.innerHeight * 0.4, 360);
+      const gap = parseFloat(getComputedStyle(list).rowGap) || 0;
+      let height = 0;
+      let top = rows[rows.length - 1].offsetTop;
+      for (let i = rows.length - 1; i >= 0; i -= 1) {
+        const next = height + rows[i].offsetHeight + (height ? gap : 0);
+        if (next > cap && height) break;
+        height = next;
+        top = rows[i].offsetTop;
+      }
+      list.style.setProperty('--kept-list-h', `${Math.ceil(height)}px`);
+      list.scrollTop = top - rows[0].offsetTop;
+    };
+    place();
+    window.addEventListener('resize', place);
+    return () => window.removeEventListener('resize', place);
+  }, [open, shown.length]);
+
+  // Review 5 N-1 (GM r7): the × of a kept note moves focus to the next note's
+  // ×, or the previous one's when it was the last, or, once none is left, back
+  // to whatever had focus before the person came into the notes (the canvas
+  // when nothing did). Never to <body>.
+  const stackRef = useRef<HTMLDivElement | null>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
+  const focusAfter = useRef<string | null>(null);
+  const dismiss = (project: string) => {
+    const index = shown.findIndex((note) => note.project === project);
+    const stackHasFocus = Boolean(stackRef.current?.contains(document.activeElement));
+    const neighbour = shown[index + 1] ?? shown[index - 1] ?? kept.find((note) => note.project !== project) ?? null;
+    focusAfter.current = stackHasFocus ? (neighbour ? neighbour.project : '') : null;
+    if (stackHasFocus && !neighbour) {
+      const opener = openerRef.current;
+      // <body> is no opener: focus that came from nowhere goes to the canvas.
+      const back = opener?.isConnected && opener !== document.body ? opener : document.querySelector<HTMLElement>('.canvas-wrapper');
+      back?.focus({ preventScroll: true });
+      focusAfter.current = null;
+    }
+    dismissKept(project);
+  };
+  useLayoutEffect(() => {
+    const target = focusAfter.current;
+    if (target === null) return;
+    focusAfter.current = null;
+    const row = [...(stackRef.current?.querySelectorAll<HTMLElement>('.canvas-pin-toast--kept') ?? [])].find((el) => el.dataset.project === target);
+    row?.querySelector<HTMLElement>('button[aria-label="Dismiss"]')?.focus({ preventScroll: true });
+  }, [kept]);
 
   // Review 4 N-6: a failed send's error belongs to the visit it failed on.
   // Leaving its project clears it, so it never comes back much later; the
@@ -98,7 +152,7 @@ export function PinComposer() {
           multiline
           confirmLabel="Send note"
           onChange={setDraft}
-          confirm={lock.act()}
+          confirm={lock.act({ offline: 'send notes' })}
           onRefused={() => { refuseCanvasEdit(); }}
           onDone={(value) => {
             if (value === null || !value.trim()) cancel();
@@ -119,7 +173,11 @@ export function PinComposer() {
           beside the open dialog too (GM 2026-10-28 answer 1). */}
       {kept.length > 0 && (
         <InNoticeRegion slot="pin">
-          <div className="canvas-pin-kept-stack" data-open={open || undefined}>
+          <div ref={stackRef} className="canvas-pin-kept-stack" data-open={open || undefined}
+            onFocus={(event) => {
+              const from = event.relatedTarget as HTMLElement | null;
+              if (from && !event.currentTarget.contains(from)) openerRef.current = from;
+            }}>
             {hidden > 0 && (
               <button type="button" className="canvas-pin-kept-more" aria-expanded={open}
                 onClick={() => setShowAll(!open)}>{open ? KEPT_FEWER : keptMoreLabel(hidden)}</button>
@@ -135,7 +193,7 @@ export function PinComposer() {
                     <q className="canvas-pin-toast__note" title={note.text}>{keptNoteDisplay(note.text)}</q>
                   </span>
                   <button type="button" className="canvas-pin-toast__copy" onClick={() => copyKept(note)}>{NOTE_KEPT_COPY}</button>
-                  <button type="button" onClick={() => dismissKept(note.project)} aria-label="Dismiss">×</button>
+                  <button type="button" onClick={() => dismiss(note.project)} aria-label="Dismiss">×</button>
                 </div>
               ))}
             </div>

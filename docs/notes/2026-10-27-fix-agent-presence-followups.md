@@ -664,3 +664,104 @@ rulings and answers (scratchpad msgs/gm-pr200-r5.md).
   kept and Cinema misses were harness errors (the stack state carried over
   between widths; a stale selection). Blocked requests: 2 per run, both
   canaries; none toward 8000-8010 or 5173.
+
+## Fix round 5
+
+Review 5 (LOW-1 to LOW-4, N-1 to N-5) with GM's r6 bug and r7 answers.
+
+### What changed, per item
+
+- **LOW-1, the open kept list under a toast.** PinComposer sizes the open list
+  to the newest whole notes under its cap (min(40vh, 360px)), writing
+  `--kept-list-h`, and rests it on a note's top. canvasPins.css snaps each note
+  to its top, so no position cuts a note at the top edge. The toast's 7 px
+  crossing came from its `translateY(16px)` entrance. GM r7 asked for one
+  motion app-wide, so all five notice-region toasts (project switch, asset
+  trash, canvas undo, moodboard, project home) now enter with the same spring
+  as a scale inside their own slot, with no slide.
+- **LOW-2.** The Cinema swatch × offline: "You can remove swatches when Nebula
+  reconnects." (+: "add swatches"; reference ×: "remove references"). The
+  Inspector palette × takes `lock.act()`: following gives the follow reason
+  ("Wait for “…” to open."), offline the remove verb, and it uses the shared
+  grey. There is no run reason for it, so the order is follow then offline,
+  as lock.act gives. Its enabled ink was ink-faint (0.2), dimmer than the
+  disabled grey, so it rises to `--sr-ink`; hover goes red. The swatch × keeps
+  its rgba(0,0,0,.7) bubble locked; only the × goes grey.
+- **LOW-3, ratchet G.**
+  - A refusal now counts per handler, and only when its result gates the
+    handler: `if (refuse…()) return`, an if block ending in return, or
+    `if (!refuse…()) call()`. It is followed through the file's own functions
+    and imports. A guard after a gated call doesn't count.
+  - `canvasLockNow().offline/.following` covers only that state.
+  - `readOnly` in a spread counts only on a text-like field.
+  - A `disabled`/`locked` name is trusted only as a parameter of the outermost
+    function.
+  - The first legend is found through fragments and expressions.
+  - `onPointer*` on a native control needs its own refusal.
+  - A component's `disabled`/`readOnly`/`locked`/`lock` (or a lock spread)
+    counts only when the component resolves and reads that prop, or forwards
+    its props onto an element.
+  - Review 5's 21 forms and 2 more are caught, and 12 locked forms stay quiet.
+    Review 2's `passed_down` form now has a local Toolbar that reads `lock`;
+    review 4's quiet `component_disabled` is now caught (its quiet twin has a
+    Fancy that reads `disabled`).
+  - Real code: the same 22 findings, all covered by components that lock
+    themselves or the listed per-control entries. No new allowlist entry.
+- **LOW-4, the channel push.** A note of several lines goes on its own lines
+  after `<pin …>`, every line indented two spaces, blank lines empty, and
+  `</pin>` on its own line. A one-line note stays inline. The CLI's `pin_line`
+  prints the same shape under the pin's line (`nebula pins`, `look`, `start`).
+  Both share `note_block` (the channel keeps its own copy, `_note_block`, to
+  stay standalone). MCP-SETUP.md and SKILL.md are updated.
+- **N-1.** × moves focus to the next note's ×, else the previous one's, else
+  back to whatever had focus before the notes (never `<body>`), else the
+  canvas.
+- **N-2.** Send note offline: "You can send notes when Nebula reconnects."
+- **N-3, decision: store as typed.** Round 4's blank-run fold in
+  `canvas_pins.clean_text` is reverted. The store keeps blank lines inside a
+  note, so agents read what was typed. The 280-character cap bounds them, and
+  only the canvas display (`keptNoteDisplay`) folds runs. Newline
+  normalisation, trailing-space trim and control-character dropping stay.
+- **N-4.** The context menu, the Inspector and project home Delete go to
+  `--sr-danger-ink` (#ff887d) with a red tint on hover, and #ff9a91 when
+  pressed. A shot's ×, a keyframe's Delete and a pin's Delete hover to
+  #ff887d. None uses `--sr-danger` (the accent orange) on hover. The toolbar and dialog Delete
+  are unchanged (rest #ff887d, hover #ff9a91).
+- **N-5, the Remotion timeline.** The live drive found two desyncs. First, a
+  drop ending while locked: the library writes it into the rows in place, and
+  each block keeps its dragged position in its own state. Second, a drag under
+  way when the lock starts: the library turns dragging off and drops the
+  gesture without calling onActionMoveEnd, so the block stayed 96 px off.
+  Nothing was written in either case. The timeline is now keyed on a redraw
+  count (bumped on a refused drop) and on the lock state, and redrawn from the
+  manifest. Live, the block returns to 180 px with startFrame 30.
+
+### Left
+
+- The filled destructive confirms (`project-home__danger`,
+  `prompt-dialog__danger`, `asset-trash__button--danger`) still fill with
+  `--sr-danger` (orange) at rest and on hover, per GM r2 answer 6 ("white on
+  danger"). This is a question for GM, since r7 says orange is never
+  destructive.
+- A timeline lock start or end remounts the timeline, which resets its
+  horizontal scroll.
+
+### Fix round 5 gates
+
+- tsc -b: clean. Full lint: clean.
+- Focused frontend: 138 files (the PR's suites, everything that renders the
+  changed components or reads the changed CSS, and errorCopy). 2007 passed;
+  58 failed under load in 26 files, all timeouts or load-dependent waits.
+  Those 26 files rerun alone: 477 of 477. The ratchet, r5 and round23Surfaces
+  after the final timeline change: 82 of 82.
+- Backend (iso_presence.sh): 337 passed across followups, channel, pins,
+  proposals, agent_start and the CLI commands.
+- vite build plus check-build-budget: 409,786 B raw and 124,477 B gzip
+  (limit 512,000).
+- Live (backend 8795, Vite 5795 with VITE_NEBULA_BACKEND_PORT=8795, nothing
+  paid):
+  - Kept list at 1280×800 with the "Codex opened" toast entering: 0 px cut,
+    0 px overlap, and the toast never closer than 7.98 px across 228 frames.
+  - Swatch ×, Inspector ×, Send note offline, every Delete hover and the
+    timeline all passed.
+  - Blocked requests: the 2 canaries only.
