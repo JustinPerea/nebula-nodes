@@ -39,22 +39,23 @@ const CHIPS: [number, number, boolean, string, string | undefined][] = [
   [0.0047, 0.0047, true, '<$0.01+', "Under $0.01 so far. Some costs aren't known yet."],
   [0, 0.43, false, '$0–0.43', 'Between $0 and $0.43.'],
   [0, 0.43, true, '$0–0.43+', "Between $0 and $0.43, plus costs that aren't known yet."],
-  // GM, PR #198 r3 item 6: a range from under a cent reads "Up to $Y."
-  [0.0047, 0.43, false, '<$0.01–0.43', 'Up to $0.43.'],
-  [0.0047, 0.43, true, '<$0.01–0.43+', "Up to $0.43, plus costs that aren't known yet."],
-  [0.0099, 0.0101, false, '~$0.01', 'Estimated cost'],
-  // Review 3, N2: "At least" says the low end as it is.
-  [0.0099, 0.0101, true, '$0.01+', "At least $0.0099. Some costs aren't known yet."],
-  [0.009, 0.0104, false, '~$0.01', 'Estimated cost'],
-  [0.01, 0.0149, false, '$0.010–0.015', 'Between $0.010 and $0.015.'],
+  // GM, PR #198 r3 item 6 and r4: a range from under a cent reads "Up to $Y",
+  // in the chip and its tooltip (fix round 4: chips never show sub-cent figures).
+  [0.0047, 0.43, false, 'Up to $0.43', 'Up to $0.43.'],
+  [0.0047, 0.43, true, 'Up to $0.43+', "Up to $0.43, plus costs that aren't known yet."],
+  [0.0099, 0.0101, false, 'Up to $0.01', 'Up to $0.01.'],
+  [0.0099, 0.0101, true, 'Up to $0.01+', "Up to $0.01, plus costs that aren't known yet."],
+  [0.009, 0.0104, false, 'Up to $0.01', 'Up to $0.01.'],
+  [0.01, 0.0149, false, '~$0.01', 'Estimated cost'],
   [0.02, 0.43, true, '$0.02–0.43+', "Between $0.02 and $0.43, plus costs that aren't known yet."],
   [0.05, 0.43, false, '$0.05–0.43', 'Between $0.05 and $0.43.'],
   [0.05, 0.05, true, '$0.05+', "At least $0.05. Some costs aren't known yet."],
   [0.05, 0.05, false, '~$0.05', 'Estimated cost'],
-  [0.04, 0.044, false, '$0.040–0.044', 'Between $0.040 and $0.044.'],
+  [0.04, 0.044, false, '~$0.04', 'Estimated cost'],
   [0.0995, 0.1, false, '~$0.10', 'Estimated cost'],
   [9.996, 10.2, false, '~$10', 'Estimated cost'],
-  [9.5, 12, false, '$9.50–12', 'Between $9.50 and $12.'],
+  // GM r4: the same decimals on both ends.
+  [9.5, 12, false, '$9.50–12.00', 'Between $9.50 and $12.00.'],
 ];
 
 describe('the chips and their tooltips (GM asks 1 and 2)', () => {

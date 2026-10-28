@@ -193,8 +193,11 @@ describe('Cinema scene persistence ordering', () => {
     expect(current().shots[0].prompt).toBe('External recovery');
     edit(spec('Retry edit'));
     await settle();
-    expect(transport.fetch).toHaveBeenCalledTimes(2);
-    expect(sent(1).shots[0].prompt).toBe('Retry edit');
+    // Fix round 4 (review 4, HIGH): a refused write also reads the backend's
+    // graph again (GET /api/graph/export), so only the PUTs are counted here.
+    const puts = transport.fetch.mock.calls.flatMap((call, index) => (call[1]?.method === 'PUT' ? [index] : []));
+    expect(puts).toHaveLength(2);
+    expect(sent(puts[1]).shots[0].prompt).toBe('Retry edit');
   });
 
   it('bounds a missing WebSocket acknowledgement after a successful HTTP save', async () => {

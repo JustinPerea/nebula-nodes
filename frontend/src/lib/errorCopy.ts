@@ -132,10 +132,33 @@ export interface FailureCopy {
   reason: string;
 }
 
+/** A reason that is a line of its own: it says what failed itself
+ * ("Couldn't delete “Agent scene”. “Shot 2” is still running. …"). */
+export function isNamedLine(text: string): boolean {
+  return /^Couldn['’]t /.test(text.trim());
+}
+
+const failedVerb = (text: string) => /^Couldn['’]t (\w+)/.exec(text.trim())?.[1] ?? null;
+
+/** GM, PR #198 r5 item 3: when a specific line exists, the generic one never
+ * shows as well. `heading` then `reason`, except when the reason is a line
+ * of its own (isNamedLine) and the heading adds nothing to it: a heading that
+ * names nothing ("Couldn't delete the node.") or says the same failure
+ * ("Couldn't delete …" both). Then the reason alone ("Couldn't delete
+ * “Agent scene”. …", never "Couldn't delete the node. Couldn't delete
+ * “Agent scene”. …"). A heading that names a thing the reason doesn't
+ * ("Couldn't run “Hero still”." over "Couldn't reach Krea.") stays. */
+export function headedLine(heading: string, reason: string): string {
+  if (!reason) return heading;
+  if (!heading) return reason;
+  if (isNamedLine(reason) && (!/[“”]/.test(heading) || failedVerb(heading) === failedVerb(reason))) return reason;
+  return `${heading} ${reason}`;
+}
+
 /** The one-line form, for alerts, toasts, tooltips and status text (GM:
- * "Couldn't {verb} {object}. {reason}" in one string). */
+ * "Couldn't {verb} {object}. {reason}" in one string; headedLine). */
 export function oneLine(copy: FailureCopy): string {
-  return [copy.heading, copy.reason].filter(Boolean).join(' ');
+  return headedLine(copy.heading, copy.reason);
 }
 
 /**

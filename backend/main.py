@@ -5111,8 +5111,9 @@ _RUN_EVENT_VERBS = {"run.started": "started", "run.finished": "finished", "run.f
 # (_run_is_active), and from the start of its admission before that (L1:
 # _cinema_admission_scope). A whole-scene entry goes once the engine is done
 # with that scene (_scene_render_done, L2), so a downstream video's long
-# render doesn't hold the scene that fed it. An entry for a run that ended
-# is dropped the next time anyone looks.
+# render doesn't hold the scene that fed it. A shot run's upstream scenes
+# stay until it ends, since each variation pass renders them again (review 4,
+# M2). An entry for a run that ended is dropped the next time anyone looks.
 _cinema_renders: OrderedDict[str, set[tuple[str, str | None]]] = OrderedDict()
 # Runs being admitted (noted, not registered yet): run id -> monotonic deadline.
 _cinema_admitting: dict[str, float] = {}
@@ -5173,9 +5174,11 @@ def _note_scene_renders(run_id: str, nodes: Iterable[Any], *, shot: tuple[str, s
 def _scene_render_done(run_id: str | None, node_id: str) -> None:
     """The engine is done with a scene a run rendered whole (its node finished,
     failed or was skipped, a cached one included): its shots are free again.
-    A shot run's own shot stays until the run ends (its result merges then)."""
+    A shot run holds everything it noted until it ends: its own shot (its
+    result merges then) and its upstream scenes, which every variation pass
+    renders again (review 4, M2). A shot run is one that noted a shot."""
     renders = _cinema_renders.get(run_id or "")
-    if renders is None:
+    if renders is None or any(shot_id is not None for _node, shot_id in renders):
         return
     renders.discard((node_id, None))
     if not renders:
@@ -5296,6 +5299,24 @@ def _refuse_removing_rendering_shots(node_id: str, node: dict[str, Any], current
         _removal_person_line(action, [order.index(shot) + 1 for shot in shots], stoppable))
 
 
+class _RenderingSceneRefusal(HTTPException):
+    """A refused scene delete that also says which shots are rendering
+    (``rendering``: their numbers as the rail shows them, and whether any run
+    rendering them can be stopped), so the canvas can word a multi-select
+    delete's kept scene in GM's form (PR #198 review 4, M1) without reading
+    it out of the line."""
+
+    def __init__(self, status_code: int, detail: str, rendering: dict[str, Any]) -> None:
+        super().__init__(status_code=status_code, detail=detail)
+        self.rendering = rendering
+
+
+@app.exception_handler(_RenderingSceneRefusal)
+async def _rendering_scene_refusal(_request: Request, exc: _RenderingSceneRefusal) -> JSONResponse:
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail, "rendering": exc.rendering},
+                        headers=getattr(exc, "headers", None))
+
+
 def _refuse_deleting_rendering_scene(node_id: str, node: Mapping[str, Any], *, action: str | None = None) -> None:
     """409 for deleting a Cinema scene while one of its shots renders (GM,
     PR #198 r3 item 1: "refuse for agents and the person"). Agents: "Couldn't
@@ -5323,7 +5344,8 @@ def _refuse_deleting_rendering_scene(node_id: str, node: Mapping[str, Any], *, a
     # The Agent log says it too, under the agent's name (GM: "Agent log +
     # agent refusal"); a no-op for the person's own request.
     _log_agent_refusal(specific)
-    raise _node_refusal(409, specific, person)
+    raise _RenderingSceneRefusal(409, refusal_copy.refusal_detail(specific, person, route="canvas"),
+                                 {"shots": numbers, "stoppable": stoppable})
 
 
 _agent_log_tasks: set[asyncio.Task[None]] = set()
@@ -11280,7 +11302,8 @@ def _to_float(v: Any) -> float:
     return value
 
 
-def _coerce_params(definition_id: str, params: dict[str, Any], *, strict_scenes: bool = True) -> dict[str, Any]:
+def _coerce_params(definition_id: str, params: dict[str, Any], *, strict_scenes: bool = True,
+                   reserved_shot_ids: Iterable[str] = ()) -> dict[str, Any]:
     """Coerce param values to the types declared in the node definition.
 
     A cinema-scene's ``scene`` is filled in here too (services/
@@ -11290,6 +11313,8 @@ def _coerce_params(definition_id: str, params: dict[str, Any], *, strict_scenes:
     filled is refused with the field named (400). Every other path (a
     saved project, an import, the person's own edits and undo) passes
     False, and the scene is converted instead, never refused (review 3, H1).
+    ``reserved_shot_ids``: ids a converted shot must not be given (the
+    ``shot_<id>`` ports the node's outputs still hold; review 4, L1).
 
     The CLI sends every `--param k=v` as a string, and some providers (Meshy,
     for one) reject string values where booleans or ints are expected. Normalise
@@ -11299,7 +11324,8 @@ def _coerce_params(definition_id: str, params: dict[str, Any], *, strict_scenes:
     instead of attempting ``int("")`` or ``float("")``.
     """
     try:
-        params = cinema_scene_spec.normalize_params(definition_id, params, strict=strict_scenes)
+        params = cinema_scene_spec.normalize_params(definition_id, params, strict=strict_scenes,
+                                                    reserved=reserved_shot_ids)
     except cinema_scene_spec.SceneSpecError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     defn = node_registry.get(definition_id)
@@ -11965,7 +11991,9 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
         _check_provider(str(node.get("definitionId") or ""), params, node_id)
         params = migrate_param_update(node.get("definitionId", ""), params_before,
                                       _coerce_params(node.get("definitionId", ""), params,
-                                                     strict_scenes=_scene_writes_strict()))
+                                                     strict_scenes=_scene_writes_strict(),
+                                                     reserved_shot_ids=cinema_scene_spec.shot_port_ids(
+                                                         node.get("outputs"))))
         _check_asset_refs(str(node.get("definitionId") or ""), params, node_id, before=params_before)
         _refuse_agent_billing_change([(node_id, str(node.get("definitionId") or ""), params_before,
                                             {**params_before, **params})])
@@ -13194,6 +13222,7 @@ async def _restore_graph(
             # never refused (PR #198 review 3, H1).
             definition_id, params, position, outputs, label = _validated_ingress_node(
                 raw, index, include_outputs=current is None, strict_scenes=False,
+                reserved_shot_ids=cinema_scene_spec.shot_port_ids((current or {}).get("outputs")),
             )
             if node_id not in trusted:
                 _refuse_agent_internal_params(params, node_id)
@@ -13992,10 +14021,14 @@ def _validated_ingress_node(
     include_outputs: bool,
     normalize_image_inputs: bool = True,
     strict_scenes: bool = True,
+    reserved_shot_ids: Iterable[str] = (),
 ) -> tuple[str, dict[str, Any], dict[str, Any] | None, dict[str, Any] | None, str | None]:
     """Validate one ingress node: (definitionId, params, position, outputs, custom label).
 
-    Shared by imports, clusters (_stage_graph_nodes) and POST /api/graph/restore."""
+    Shared by imports, clusters (_stage_graph_nodes) and POST /api/graph/restore.
+    A shot id made up for a scene's shot is never one a ``shot_<id>`` port
+    names: the node's own outputs, or ``reserved_shot_ids`` (the live node's,
+    for a restore; review 4, L1)."""
     definition_id = raw.get("definitionId")
     if not isinstance(definition_id, str) or not definition_id:
         raise HTTPException(
@@ -14014,7 +14047,8 @@ def _validated_ingress_node(
     definition_id, params, retired_label = migrate_node(definition_id, params)
     _refuse_unknown_definition(definition_id)
     _validate_params(definition_id, params)
-    params = _coerce_params(definition_id, params, strict_scenes=strict_scenes)
+    params = _coerce_params(definition_id, params, strict_scenes=strict_scenes, reserved_shot_ids=(
+        cinema_scene_spec.shot_port_ids(raw.get("outputs")) | set(reserved_shot_ids)))
     if definition_id == "image-input" and normalize_image_inputs:
         params = _normalize_image_input_params(params)
 
@@ -14047,6 +14081,14 @@ def _validated_ingress_node(
                 status_code=400,
                 detail=f"nodes[{index}].outputs must be an object",
             )
+        if not strict_scenes and definition_id == "cinema-scene":
+            # Saved data is converted, never refused (review 3, H1): a port
+            # no shot of the scene owns any more (a removed shot's late
+            # image) is left out instead of failing the whole graph, and no
+            # converted shot took it over (reserved above; review 4, L1).
+            owned = {f"shot_{shot_id}" for shot_id in cinema_scene_spec.scene_shot_ids(params)}
+            raw_outputs = {handle: port for handle, port in raw_outputs.items()
+                           if not (isinstance(handle, str) and handle.startswith("shot_")) or handle in owned}
         try:
             _validate_imported_outputs(
                 definition_id,
@@ -14112,6 +14154,16 @@ def _stage_graph_nodes(
     return id_map
 
 
+def _orphaned_shot_wire(graph: CLIGraph, source: str, source_handle: str) -> bool:
+    """A saved wire from a Cinema scene's ``shot_<id>`` port that no shot of
+    the scene owns (a removed shot's): saved data is converted, never refused
+    (review 3, H1), so it is left out with the port (review 4, L1)."""
+    node = graph.nodes.get(source) or {}
+    if node.get("definitionId") != "cinema-scene" or not source_handle.startswith("shot_"):
+        return False
+    return source_handle[5:] not in cinema_scene_spec.scene_shot_ids(node.get("params"))
+
+
 def _stage_graph_edges(
     candidate: CLIGraph,
     raw_edges: list[dict[str, Any]],
@@ -14149,6 +14201,8 @@ def _stage_graph_edges(
         if signature in seen:
             raise HTTPException(status_code=400, detail=f"duplicate edge at edges[{index}]")
         seen.add(signature)
+        if saved and _orphaned_shot_wire(candidate, source, source_handle):
+            continue
         _validate_connect_handles(
             source,
             source_handle,
@@ -14232,13 +14286,12 @@ async def import_graph(body: dict[str, Any]) -> dict:
     with _paid_graph_mutation("replace the graph"):
         _reject_graph_replacement_during_paid_start("replace the graph")
         if execution_runs.has_active():
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "Cannot replace the graph while a run is active. "
-                    "Stop the run and wait for its terminal state first."
-                ),
-            )
+            # The person reads the line Clear has (review 4, N2); agents keep
+            # the specific one.
+            raise refusal_copy.refusal(409, (
+                "Cannot replace the graph while a run is active. "
+                "Stop the run and wait for its terminal state first."
+            ), CLEAR_DURING_RUN_PERSON, route="canvas")
         # Check and commit are synchronous on this event loop. No other graph
         # or Cinema task can be admitted between this fence and replacement.
         _commit_graph_candidate_with_recoveries(
@@ -14674,6 +14727,7 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
 
     edge_ids: set[str] = set()
     signatures: set[tuple[str, str, str, str]] = set()
+    dropped_edges: set[int] = set()
     for index, edge in enumerate(edges):
         edge_id = edge.get("id")
         if not isinstance(edge_id, str) or not 0 < len(edge_id) <= 256 or edge_id in edge_ids:
@@ -14689,9 +14743,14 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
         if signature in signatures:
             raise HTTPException(status_code=400, detail="Duplicate project connection")
         signatures.add(signature)
+        if _orphaned_shot_wire(candidate, source, source_handle):
+            dropped_edges.add(index)
+            continue
         if source in known and target in known:
             _validate_connect_handles(source, source_handle, target, target_handle, graph=candidate, saved=True)
         candidate.edges.append({"id": edge_id, "source": source, "sourceHandle": source_handle, "target": target, "targetHandle": target_handle})
+    if dropped_edges:
+        result["edges"] = [edge for index, edge in enumerate(result["edges"]) if index not in dropped_edges]
     try:
         graph_nodes, graph_edges = candidate.to_execute_format()
         topological_sort([GraphNode.model_validate(node) for node in graph_nodes], [GraphEdge.model_validate(edge) for edge in graph_edges])

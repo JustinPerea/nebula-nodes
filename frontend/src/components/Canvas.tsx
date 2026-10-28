@@ -682,6 +682,18 @@ export function Canvas() {
         return;
       }
 
+      // Delete / Backspace while this tab runs something: React Flow's own
+      // key is off then (deleteKeyCode null), so the store says why the
+      // selection stays (PR #198 review 4, M1: the lock was silent).
+      if (!isCtrlOrCmd && !event.altKey && (event.key === 'Delete' || event.key === 'Backspace')) {
+        const graph = useGraphStore.getState();
+        if (graph.isExecuting && graph.nodes.some((node) => node.selected)) {
+          event.preventDefault();
+          graph.deleteSelected();
+        }
+        return;
+      }
+
       // Ctrl+Z — Undo (must check before Ctrl+Shift+Z to avoid conflict)
       if (isCtrlOrCmd && !event.shiftKey && key === 'z') {
         event.preventDefault();

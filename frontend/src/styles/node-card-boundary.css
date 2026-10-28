@@ -26,3 +26,22 @@ body.app-slava-restraint .node-card-boundary__line {
 body.app-slava-restraint .node-card-boundary__handle {
   background: var(--sr-ink-light);
 }
+
+/* GM, PR #198 r4: the card keeps its header (icon and label); only the body
+ * is the boundary's line. */
+body.app-slava-restraint .node-card-boundary__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  min-width: 0;
+}
+
+body.app-slava-restraint .node-card-boundary__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--sr-ink);
+}

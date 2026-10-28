@@ -207,3 +207,54 @@ Justin: "I want to do complete fixes as soon as we run into them"; "implement th
     - G1: the toast, and the context menu's disabled Delete.
   - **The one failure:** the multi-select delete removed the other node and kept the scene, but no line showed. In this harness a plain delete shows no "Deleted …" line either (the control check). The tab has no person link, so the delete's sync takes the step off the top before the answer. The kept line is covered by the store test.
   - Screenshots: `fix3-*.png` in the scratchpad.
+
+## Fix round 4 (PR #198 review 4, GM's r4 and r5 rulings)
+
+- **HIGH: a refused shot removal.** Any refusal of a scene write (a 409 from another window's run, or any other non-ok answer) now ends that write's authoring entry and puts the scene back as the backend has it (`refusedSceneWrite` in graphStore). Nothing stays queued to be re-sent.
+  - The restore uses `backendScenes`, with the live runtime of the shots the canvas has. It cancels the write's undo step and reads `/api/graph/export` again when no newer sync has landed.
+  - The toast is the backend's person line alone when it has one ("Couldn't remove “Shot 2”. It's still running. Stop the run first."). Otherwise it is GM's save line with "It's back to its last saved value."
+  - The wires of a removed shot are no longer sent as separate DELETEs. The backend's scene PUT prunes them in the same write (`_author_cinema_scene`), so a refused PUT leaves them, and the image, where they were. `removeShot` and `updateScene` hand their wire holds and undo step to the entry, which settles them when the write is answered.
+  - This reverses round 3's "the typing stays": the kept typing is what re-sent the refused removal with the next edit. A person's write is lenient now, so a refusal is rare (a 413, a run's 409).
+- **M1: the run lock is never silent.**
+  - The Delete key (Canvas `onKeyDown`, since React Flow's delete key is off while a run is going), the menu's Delete, `deleteSelected`, `deleteNode`, `deleteGeneration` and Undo/Redo now say why (`refuseRunLockedDelete`, `stepHistory`).
+  - A selection of only rendering scenes reads GM's scene line. An undo that would remove a rendering shot reads its GM line. Everything else reads the lock (GM r5): "Couldn't delete “X”. Wait for the active run to finish." / "Couldn't delete 3 nodes. …" / "Couldn't undo. …" / "Couldn't redo. …". The strings are in `lib/cinemaScene.ts` (`RUN_LOCK_REASON`, `runLockedLine`).
+  - The doubled toast (GM r5 item 3) is fixed as a rule. `headedLine` in `lib/errorCopy.ts`: a reason that is a line of its own ("Couldn't …") shows alone, unless the heading names something the reason doesn't. `oneLine`, `deleteRefusalText` and `reportNodeDeletionFailure` go through it. `tests/lib/errorCopy.namedLine.test.ts` ratchets new hand-built "heading reason" templates.
+  - The person's 409 for a rendering scene carries `rendering: {shots, stoppable}` (`_RenderingSceneRefusal`). A multi-select delete in another window's run reads "Deleted 2 nodes. “Scene” wasn't deleted because “Shot 2” is still running." with Undo, as one line.
+  - GM r4: 4+ kept scenes are counted. The several-scene tooltips read "Wait for the running shots to finish." / "Stop the runs first."
+- **M2.** `_scene_render_done` returns early for a run that noted any shot entry, so a shot run holds its upstream scenes through every variation pass until it ends, stops or fails. `shotRemovalBlock` does the same on the canvas (a shot run holds the scenes in its `nodeIds`).
+- **L1.**
+  - `normalize_scene(..., reserved=)`: a new id never takes one a `shot_<id>` port names (`shot_port_ids`). The ids come from the PUT, the restore, ingress, `CLIGraph.add_node` and `CLIGraph.load`.
+  - A lenient open or import drops an output port no shot owns, and a saved wire from it (`_orphaned_shot_wire`), instead of refusing the file. `test_cli_api`'s fabricated-port import case moved from 400 to "dropped": the value never lands, the file opens.
+- **L2 (GM r4 money).**
+  - Chips never show sub-cent figures: cents under $10, whole dollars from $10.
+  - A low end under a cent is "Up to $Y" / "Up to $Y+", and the tooltip says the same figure.
+  - Both ends of a range have the same decimals ("$9.50–12.00").
+  - Ends that round to the same cents are one figure.
+  - `formatUsdRange` with a NaN, infinite or lower high end writes the low end alone.
+  - The parity fuzz is `contracts/fixtures/money/fuzz.json` (2,607 amounts, seed 198), checked by `test_money_fuzz_parity.py` and `pr198Fix4Money.test.ts`. No Python chip formatter exists, so parity covers `formatUsd` / `formatSpentUsd`.
+- **L3.** `nodeDataProblem` checks a known `definitionId`, a text label, `params` and `outputs` objects, a scene, an edit's `clips` and a composition's `manifest.timeline`. "Missing or damaged" shows only when that check names a field.
+  - Otherwise the card reads GM r5's neutral line and the studio its own neutral line, and the Agent log reads "Couldn't draw “X”, node n4. <error>".
+  - Cards keep their header (icon in its own quiet boundary, then the label), and only the body is replaced (GM r4). A check that throws counts as damaged.
+  - The studio's header sits in `SafeHeader`, which falls back to a plain header with the title and "Back to Canvas".
+  - App's `problem()` covers the editor and the composition editor too.
+- **N1, N2, MCP-SETUP.** Agents' restore and import are documented as lenient. The import-during-run 409 reads "A run is still going. Wait for it to finish or stop it first." for the person. MCP-SETUP's run-protection list (upstream scenes) and its "canvas blocks" paragraph (the own-run lock vs. another window's run) are rewritten to match.
+- **Tests that failed first, on d67a2410.**
+  - Backend `test_pr198_fix4.py`: 14 failed, 1 passed (the canvas-run case, a guard). Two tests were added after that run and weren't run on the base: the reserved-id unit test, and the leftover-port open, a guard for the L1 regression the fix itself caused.
+  - Frontend, the five new files on a base extract: 55 failed, 16 passed. Money: 19 of 33. UI: 15 of 15. Store: 15 of 16. namedLine: 5 of 5. The Delete key: 1 of 2.
+- **Gates.**
+  - Backend full suite: 11,495 passed, 71 skipped, 2 failed (36:49 under load).
+    - The import case above was updated.
+    - `test_every_tool_is_async_or_offloaded` failed because `mcp_server.py` was edited while the suite ran (`inspect.getsource` read shifted lines). It passes alone.
+    - Both files, the fix1–4 files, money parity, run-stop scope and the follow-ups rerun: 431 passed.
+  - Vitest full: 6,107 passed, 112 failed. 94 were 5 s timeouts at load ~40; the rest were the timeouts' knock-ons, plus one real one, below. The 31 failed files rerun alone: 605 passed, 1 failed.
+    - The real one was `graphStore.test.ts`'s CLI-node delete. `response.clone()` sat outside the `try`, and a test double has no `clone`. Fixed; it passes.
+  - Focused files (94) after the fixes: all pass. The errorCopy ratchets: 17 files, 363 passed.
+  - `tsc -b` clean. Lint clean.
+  - Vite build OK; budget 404,167 bytes raw / 122,160 gzip (limit 512,000).
+- **Live check** (8797/5797, 1280 and 1440, isolated state; a fake cinema-scene handler that holds per call, nothing paid): 24/24, 0 blocked attempts after the canary.
+  - The own run: Delete on one node, a multi-select, the scene alone, and Cmd+Z each show their line. No DELETE was sent.
+  - Another window's run: removing its shot gives the backend's line alone. Scene, paid image and wire stay in the tab and the backend, and the next edit's PUT keeps s2.
+  - Multi-select: "Deleted 2 nodes. “Ref scene” wasn't deleted because “Shot 1” is still running." with Undo.
+  - Variation pass 2: the agent's DELETE gets 409 with the run id and `rendering`, the person's Delete shows GM's line, and the scene is free after the run.
+  - The Run chip reads "Up to $0.43" for a GPT Image 2.5 node, and its tooltip says "Up to $0.43.".
+  - Screenshots: `fix4-*.png` in the scratchpad.

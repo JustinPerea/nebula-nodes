@@ -331,10 +331,14 @@ Nebula fills in `version`, `base` (`seedream-4-5`) and `aspectRatio` (16:9),
 and a 400 names any field it can't fill (`base` as a bare model name, a prompt
 that isn't text, a shot id used twice). `--param scene='<json>'` works: the
 text is read as the object. Removing a shot, or deleting the whole scene, while
-a run renders it is refused (409, naming the shots and the run): stop that run
-(`nebula cancel <id>`) or wait, then try again. A saved project, a graph file
-you import and the person's own edits are never refused for their scene: what
-can't be read is converted (see docs/MCP-SETUP.md, Cinema scenes over MCP).
+a run renders it is refused (409, naming the shots and the run, with
+`rendering: {"shots": [...], "stoppable": ...}` beside the detail): stop that
+run (`nebula cancel <id>`) or wait, then try again. A shot run holds the
+scenes upstream of it too, until it ends. A saved project, a graph file you
+import (`nebula load`, also when you load it) and the person's own edits are
+never refused for their scene: what can't be read is converted (see
+docs/MCP-SETUP.md, Cinema scenes over MCP), so `nebula look` a scene you
+loaded. A converted shot never takes the id of a removed shot's leftover port.
 Round 3f rewrote the card lines to GM's rules; nothing you read changed (a
 proposal's `cost.notReady` rows add a `person` line beside `missing`: read
 `missing`). A job the

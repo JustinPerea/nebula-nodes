@@ -86,7 +86,7 @@ import { noteNodeLabels } from '../lib/lastNodeLabels';
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 import { WORLD_LABS_STATUS_UNCERTAIN_WARNING, cardTitle, deleteRefusalText, heldDeleteText } from '../lib/worldLabsWaiting';
 import {
-  NEBULA_NOT_ANSWERING_COPY, ConnectionLostError, FailureNotice, REFUSED_FALLBACK_COPY, RequestFailedError, copyForAnswer, detailText, failureKind, failureCopy, failureDetails, failureMessage, readRefusal, requestError,
+  NEBULA_NOT_ANSWERING_COPY, ConnectionLostError, FailureNotice, REFUSED_FALLBACK_COPY, RequestFailedError, copyForAnswer, detailText, failureKind, failureCopy, failureDetails, failureMessage, headedLine, isNamedLine, readRefusal, requestError,
   warnFailure,
 } from '../lib/errorCopy';
 import { CANVAS_NOTICE_EVENT, type CanvasNoticeDetail } from '../lib/canvasNotice';
@@ -111,7 +111,7 @@ import { cinemaMotionSource, cinemaMotionTarget, useCinemaMotionStore } from './
 import { nodeKeyStatus, withNewKreaMode } from '../lib/kreaConnection';
 import { allParamDefinitions } from '../lib/directRoute';
 import { universalSettingLabel } from '../lib/universalSettingLabel';
-import { keepRenderingShots, normalizeCinemaScene, renderingRemovalLine, renderingShots, sceneDeleteBlockTitle,
+import { keepRenderingShots, normalizeCinemaScene, renderingRemovalLine, renderingShots, runLockedLine, sceneDeleteBlockTitle, scenesDeleteBlockTitle,
   sceneDeleteRefusedLine, scenesKeptLine, settledParams, shotRemovalBlock, type RenderingShots } from '../lib/cinemaScene';
 import { clipSpeed, type EditClip } from '../lib/editor/virtualPlayback';
 import type { KeyframeData, VideoGraphManifest, TrackItem } from '../types/video';
@@ -1704,11 +1704,14 @@ interface CinemaScenePersistence {
   inFlight: AbortController | null;
   sentScenes: CinemaSceneSpec[];
   settleTimer: ReturnType<typeof setTimeout> | null;
-  /** Set when the backend refused the last save (PR #198 review 3, H1):
-   * the authoring key of the scene the backend still holds. A sync that
-   * brings that same scene back keeps the person's typing; a sync with any
-   * other scene (an agent's edit, another window's) is new and wins. */
-  refusedOver?: string | null;
+  /** The wires the scene's edits took off (a removed shot's): held as gone on
+   * this canvas until the write that removes them is answered. They are
+   * never sent on their own: the scene write removes them on the backend,
+   * so a refused one leaves them where they are (PR #198 review 4, H1-new). */
+  wireHolds: ((took: boolean) => void)[];
+  /** The undo step of the edit this entry carries, when it was a shot's
+   * removal: a refusal takes it back off the stack (it would undo nothing). */
+  step?: UndoEntry;
 }
 const cinemaScenePersistence = new Map<string, CinemaScenePersistence>();
 /** The scene each Cinema node last had from the backend (a graphSync or a
@@ -1758,6 +1761,7 @@ export function clearCinemaScenePersistence(nodeId?: string): void {
     }
     if (entry?.settleTimer) clearTimeout(entry.settleTimer);
     entry?.inFlight?.abort();
+    for (const done of entry?.wireHolds.splice(0) ?? []) done(false);
   }
 }
 
@@ -1826,48 +1830,95 @@ async function flushCinemaScenePersistence(nodeId: string, entry: CinemaScenePer
   entry.sentScenes.push(sentScene);
   if (entry.sentScenes.length > 32) entry.sentScenes.shift();
   entry.pending = false;
+  const wires = entry.wireHolds.splice(0);
   const controller = new AbortController();
   entry.inFlight = controller;
   let failed = false;
-  let refused = false;
+  let refusal: string | null = null;
   try {
     const response = await graphMutationFetch(`/api/graph/node/${nodeId}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
       body: JSON.stringify({ params: { ...node.data.params, scene: sentScene } }),
     });
     if (!response.ok) {
-      refused = true;
-      throw new Error(`HTTP ${response.status}`);
+      const error = await requestError("Couldn't save the scene.", response);
+      refusal = error.reason;
+      throw error;
     }
     backendScenes.set(nodeId, sentScene);
   } catch (error) {
     failed = true;
     if (cinemaScenePersistence.get(nodeId) === entry && !controller.signal.aborted) {
-      console.warn(`[nebula] Scene sync for ${nodeId} failed; edit again to retry:`, error);
+      console.warn(`[nebula] Scene sync for ${nodeId} failed:`, error);
     }
   } finally {
+    for (const done of wires) done(!failed);
     if (cinemaScenePersistence.get(nodeId) === entry) {
       entry.inFlight = null;
-      if (entry.pending) void flushCinemaScenePersistence(nodeId, entry);
-      else if (failed) {
-        // The person's typing stays (PR #198 review 3, H1): the entry keeps
-        // its authored scene, so the next graphSync can't put the backend's
-        // older scene over it, and the next edit sends it again. A refusal
-        // says so with GM's save line; no answer is the offline banner's.
-        if (refused && !controller.signal.aborted) {
-          const held = backendScenes.get(nodeId);
-          entry.refusedOver = held?.shots ? cinemaAuthoringKey(held) : null;
-          const current = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
-          if (current) useGraphStore.getState().notify(paramSaveFailedLine([paramLabel(current, 'scene')], current.data.label, false));
-        }
-      } else maybeSettleCinemaPersistence(nodeId, entry);
+      // A refusal ends this scene's authoring, edits queued behind it too:
+      // they were made on a scene the backend never took (PR #198 review 4,
+      // H1-new: a removal kept and sent again later dropped a shot and the
+      // image its run had just paid for).
+      if (refusal !== null && !controller.signal.aborted) refusedSceneWrite(nodeId, entry, refusal);
+      else if (entry.pending) void flushCinemaScenePersistence(nodeId, entry);
+      // No answer at all: the offline banner says so, and the typing stays
+      // for the next edit to send.
+      else if (!failed) maybeSettleCinemaPersistence(nodeId, entry);
     }
+  }
+}
+
+/**
+ * The backend refused a scene write (a shot a run renders that this tab
+ * doesn't own, PR #198 review 4, H1-new; any other refusal too). Nothing
+ * of it may stay or go again later: the authoring entry goes, the scene the
+ * backend still has comes back (with the live runtime of the shots this
+ * canvas has, so a spinner stays), a removal's step leaves the stack, and the
+ * backend's graph is read again for what the write had taken off here (the
+ * shot's port and wires). The person reads the backend's own line when it
+ * has one ("Couldn't remove “Shot 2”. It's still running. Stop the run
+ * first."), else GM's save line with "It's back to its last saved value."
+ */
+function refusedSceneWrite(nodeId: string, entry: CinemaScenePersistence, reason: string): void {
+  const step = entry.step;
+  clearCinemaScenePersistence(nodeId);
+  const state = useGraphStore.getState();
+  const current = state.nodes.find((candidate) => candidate.id === nodeId);
+  const held = backendScenes.get(nodeId);
+  if (current && held?.shots) {
+    const live = new Map(sceneFromNode(current).shots.map((shot) => [shot.id, shot]));
+    applySceneToNode(useGraphStore.setState, nodeId, { ...held, shots: held.shots.map((shot) => {
+      const now = live.get(shot.id);
+      return now ? { ...shot, output: now.output ?? shot.output, variations: now.variations ?? shot.variations,
+        selectedVariation: now.selectedVariation ?? shot.selectedVariation } : shot;
+    }) });
+  }
+  if (step) state.cancelUndoStep(step);
+  if (current) {
+    state.notify(isNamedLine(reason) ? reason
+      : paramSaveFailedLine([paramLabel(current, 'scene')], current.data.label, Boolean(held?.shots)));
+  }
+  void readBackendGraphAgain();
+}
+
+/** The backend's graph, read once and applied as a sync (unless a newer
+ * sync lands first): what a refused write took off this canvas comes back. */
+async function readBackendGraphAgain(): Promise<void> {
+  const syncsBefore = appliedGraphSyncs;
+  try {
+    const response = await apiFetch('/api/graph/export');
+    if (!response.ok) return;
+    const exported = { ...(await response.json()) as object, type: 'graphSync' } as ExecutionEvent & { empty?: boolean; workspaceRevision?: unknown; paramsVersion?: unknown };
+    if (exported.empty === false && !graphNotForThisTab(exported) && appliedGraphSyncs === syncsBefore) applyGraphSync(exported);
+  } catch {
+    // The next sync brings it.
   }
 }
 
 /** Serialize whole-scene PUTs and coalesce edits while one is in flight.
  * Register the authoring overlay before any debounce can expose an old echo. */
-function persistSceneParam(nodeId: string, scene: CinemaSceneSpec, debounceMs = 0, before?: unknown): void {
+function persistSceneParam(nodeId: string, scene: CinemaSceneSpec, debounceMs = 0, before?: unknown,
+  taken: { wires?: Edge[]; step?: UndoEntry } = {}): void {
   if (!CLI_ID_RE.test(nodeId)) return;
   const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
   if (node?.data.definitionId !== 'cinema-scene') return;
@@ -1883,7 +1934,7 @@ function persistSceneParam(nodeId: string, scene: CinemaSceneSpec, debounceMs = 
     && Array.isArray((before as CinemaSceneSpec).shots)) backendScenes.set(nodeId, before as CinemaSceneSpec);
   if (!entry) {
     entry = { authoredScene: scene, pending: false, acknowledged: false,
-      inFlight: null, sentScenes: [], settleTimer: null };
+      inFlight: null, sentScenes: [], settleTimer: null, wireHolds: [] };
     cinemaScenePersistence.set(nodeId, entry);
   }
   if (entry.settleTimer) clearTimeout(entry.settleTimer);
@@ -1891,7 +1942,8 @@ function persistSceneParam(nodeId: string, scene: CinemaSceneSpec, debounceMs = 
   entry.authoredScene = JSON.parse(JSON.stringify(scene)) as CinemaSceneSpec;
   entry.acknowledged = false;
   entry.pending = true;
-  entry.refusedOver = undefined;
+  entry.step = taken.step;
+  for (const edge of taken.wires ?? []) entry.wireHolds.push(holdWire(edge, false));
   if (paramPushTimers[nodeId] !== undefined) {
     window.clearTimeout(paramPushTimers[nodeId]);
     delete paramPushTimers[nodeId];
@@ -1909,14 +1961,6 @@ function mergePendingCinemaScene(nodeId: string, local: CinemaSceneSpec, incomin
   const entry = cinemaScenePersistence.get(nodeId);
   if (!entry) return incoming;
   const incomingKey = cinemaAuthoringKey(incoming);
-  // After a refused save the typing stays only against the scene the backend
-  // already had (its echo, a run's write-back); anything else is someone
-  // else's newer edit, and it wins (the person was told it wasn't saved).
-  if (entry.refusedOver !== undefined && !entry.inFlight && !entry.pending
-    && (entry.refusedOver === null || incomingKey !== entry.refusedOver)) {
-    clearCinemaScenePersistence(nodeId);
-    return incoming;
-  }
   if (incomingKey === cinemaAuthoringKey(entry.authoredScene)) {
     entry.acknowledged = true;
     maybeSettleCinemaPersistence(nodeId, entry);
@@ -1972,7 +2016,7 @@ function sendWire(edge: Edge, want: boolean, set: GraphSet, after?: Promise<unkn
     done(response.ok);
     if (response.ok) return;
     const heading = `Couldn't ${want ? 'make' : 'remove'} that connection.`;
-    const text = `${heading} ${await backendRejectionReason(response, heading)}`;
+    const text = headedLine(heading, await backendRejectionReason(response, heading));
     set((state) => ({
       edges: want ? state.edges.filter((e) => e.id !== edge.id)
         : state.edges.some((e) => edgeKey(e) === edgeKey(edge)) ? state.edges : [...state.edges, edge],
@@ -2144,17 +2188,41 @@ function applyCanvasNodeChanges(
 async function deleteCLIOriginNode(nodeId: string): Promise<RemovalRecord | null> {
   const response = await graphMutationFetch(`/api/graph/node/${nodeId}`, { method: 'DELETE' });
   if (response.status === 404) return null;
-  if (!response.ok) throw await requestError("Couldn't delete the node.", response);
+  if (!response.ok) {
+    const rendering = response.status === 409 ? await renderingOf(response) : null;
+    const error = await requestError("Couldn't delete the node.", response);
+    if (rendering) renderingRefusals.set(error, rendering);
+    throw error;
+  }
   // What the delete removed (the pins it detached, the proposals it closed),
   // kept in the undo step so undo puts them back.
   const body = await response.json().catch(() => ({})) as { removal?: unknown };
   return cleanRemovals([body.removal])[0] ?? null;
 }
 
+/** Scene deletes the backend refused because a shot renders (its 409's
+ * `rendering`: the shots, as the rail numbers them, and whether any can be
+ * stopped). A multi-select delete words them in GM's kept form after
+ * "Deleted 2 nodes." (PR #198 review 4, M1) instead of a second line. */
+const renderingRefusals = new WeakMap<object, RenderingShots>();
+
+async function renderingOf(response: Response): Promise<RenderingShots | null> {
+  try {
+    // A copy, so the refusal's own reading of the body still works.
+    const body = await response.clone().json() as { rendering?: { shots?: unknown; stoppable?: unknown } } | null;
+    const shots = body?.rendering?.shots;
+    if (!Array.isArray(shots) || shots.length === 0 || !shots.every((n) => Number.isInteger(n) && n > 0)) return null;
+    return { numbers: shots as number[], stoppable: body?.rendering?.stoppable === true };
+  } catch {
+    return null;
+  }
+}
+
 /** GM's notice after a delete: "Deleted the node." / "Deleted {n} nodes.",
- * with Undo for the step that holds it (round 3f's confirm is gone). */
-function deletedNotice(count: number, step: UndoEntry, kept: string | null = null): Partial<GraphState> {
-  const text = kept ? `${deletedNoticeText(count)} ${kept}` : deletedNoticeText(count);
+ * with Undo for the step that holds it (round 3f's confirm is gone); the
+ * scenes kept because a shot renders follow it in GM's form (scenesKeptLine). */
+function deletedNotice(count: number, step: UndoEntry, kept: readonly KeptScene[] = []): Partial<GraphState> {
+  const text = kept.length > 0 ? `${deletedNoticeText(count)} ${scenesKeptLine(kept)}` : deletedNoticeText(count);
   return { undoNotice: { id: ++undoNoticeSeq, text, offer: 'undo', entry: step } };
 }
 
@@ -2167,9 +2235,19 @@ function deletionHeading(count: number): string {
 /** The backend's World Labs lines read as GM's trimmed ones (rounds 4 and
  * 4b, lib/worldLabsWaiting.ts deleteRefusalText: with a held node the line
  * starts with GM's own, "Couldn't delete them. …" for several); every other
- * reason as given, after `deletionHeading` when no node is held. */
+ * reason as given, after `deletionHeading` when no node is held. A reason
+ * that is a line of its own ("Couldn't delete “Agent scene”. …") is shown
+ * alone, once, and the heading counts only the rest (GM, PR #198 r5 item 3:
+ * the generic line never shows as well). */
 function reportNodeDeletionFailure(reasons: string[], count: number, name?: string): void {
-  const message = deleteRefusalText(deletionHeading(count), count, reasons, name);
+  const named = [...new Set(reasons.filter(isNamedLine))];
+  const rest = reasons.filter((reason) => !isNamedLine(reason));
+  const parts = [...named];
+  if (rest.length > 0 || named.length === 0) {
+    const unnamed = rest.length > 0 ? rest.length : count;
+    parts.push(deleteRefusalText(deletionHeading(unnamed), unnamed, rest, named.length === 0 ? name : undefined));
+  }
+  const message = parts.join(' ').trim();
   console.warn(`[nebula] ${message}`);
   useGraphStore.getState().notify(message);
 }
@@ -2619,35 +2697,64 @@ export function renderingScenes(state: Pick<GraphState, 'nodes' | 'activeRuns'>,
 
 /** GM's tooltip for a disabled Delete over these nodes, or null when Delete
  * can go: every one of them is a scene with a shot rendering. One scene:
- * "Stop the run first." or "Wait for “Scene” to finish." (GM); several
- * scenes are builder's: "Stop the run first." or "Wait for them to finish." */
+ * "Stop the run first." or "Wait for “Scene” to finish." (GM r3); several
+ * (GM r4 item 3): "Stop the runs first." or "Wait for the running shots to
+ * finish." */
 export function sceneDeleteDisabledTitle(state: Pick<GraphState, 'nodes' | 'activeRuns'>, ids: readonly string[]): string | null {
   if (ids.length === 0) return null;
   const scenes = renderingScenes(state, ids);
   if (scenes.length !== ids.length) return null;
   if (scenes.length === 1) return sceneDeleteBlockTitle(scenes[0].scene, scenes[0].shots);
-  return scenes.some((scene) => scene.shots.stoppable) ? 'Stop the run first.' : 'Wait for them to finish.';
+  return scenesDeleteBlockTitle(scenes.some((scene) => scene.shots.stoppable));
+}
+
+/** A scene a delete kept because a shot renders, for GM's kept line. */
+type KeptScene = Pick<RenderingScene, 'scene' | 'shots'>;
+
+/** GM's line when every node a delete wanted is a scene with a shot
+ * rendering: the scene's own line, or the kept form for several. */
+function scenesRefusedLine(scenes: readonly RenderingScene[]): string {
+  return scenes.length === 1 ? sceneDeleteRefusedLine(scenes[0].scene, scenes[0].shots) : scenesKeptLine(scenes);
 }
 
 /** The removals in `changes` minus the rendering scenes (GM, PR #198 r3
  * item 1: delete the rest, keep the scene, never silent). Null when every
  * removal was one: the person reads "Couldn't delete “Scene”. …" and
- * nothing changes. `kept` is the line after "Deleted 3 nodes.". */
+ * nothing changes. `kept` are the scenes for the line after "Deleted 3 nodes.". */
 function withoutRenderingScenes(state: GraphState, changes: NodeChange[], set: GraphSet):
-  { changes: NodeChange[]; kept: string | null } | null {
+  { changes: NodeChange[]; kept: KeptScene[] } | null {
   const removing = changes.filter((change) => change.type === 'remove').map((change) => (change as { id: string }).id);
   const scenes = renderingScenes(state, removing);
-  if (scenes.length === 0) return { changes, kept: null };
+  if (scenes.length === 0) return { changes, kept: [] };
   if (scenes.length === removing.length) {
-    const text = scenes.length === 1 ? sceneDeleteRefusedLine(scenes[0].scene, scenes[0].shots) : scenesKeptLine(scenes);
-    set({ undoNotice: { id: ++undoNoticeSeq, text, offer: null } });
+    set({ undoNotice: { id: ++undoNoticeSeq, text: scenesRefusedLine(scenes), offer: null } });
     return null;
   }
   const held = new Set(scenes.map((scene) => scene.id));
   return {
     changes: changes.filter((change) => change.type !== 'remove' || !held.has((change as { id: string }).id)),
-    kept: scenesKeptLine(scenes),
+    kept: scenes,
   };
+}
+
+/**
+ * The run lock (PR #198 review 4, M1): while this tab runs something
+ * (isExecuting: a run of the graph, a Cinema shot run, a Create launch), no
+ * node is deleted, and never silently (GM r5 item 2). When every node asked
+ * for is a scene with a shot rendering, GM's scene line says why (r3 item 1,
+ * r4 item 2); otherwise what failed, then the lock's reason: "Couldn't delete
+ * “Brief”. Wait for the active run to finish." / "Couldn't delete 4 nodes.
+ * …". True when it refused; nothing is sent.
+ */
+function refuseRunLockedDelete(state: GraphState, ids: readonly string[], set: GraphSet): boolean {
+  if (!state.isExecuting) return false;
+  const present = ids.filter((id) => state.nodes.some((node) => node.id === id));
+  if (present.length === 0) return true;
+  const scenes = renderingScenes(state, present);
+  const text = scenes.length === present.length ? scenesRefusedLine(scenes)
+    : runLockedLine('delete', present.length, present.length === 1 ? namedOnCanvas(state.nodes, present[0]) : undefined);
+  set({ undoNotice: { id: ++undoNoticeSeq, text, offer: null } });
+  return true;
 }
 
 function refuseHeldNodeDelete(state: GraphState, ids: string[], set: GraphSet): boolean {
@@ -3606,7 +3713,11 @@ function withFreshKeyStatus(nodes: Node<NodeData>[], before: Node<NodeData>[]): 
  */
 function stepHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet): void {
   const state = get();
-  if (state.isExecuting || state.providerRecoveries.length > 0 || state.providerStartAmbiguities.length > 0) return;
+  // The run lock keeps every step where it is, and says why (PR #198 review
+  // 4, M1; GM r5 item 2): GM's shot line when the step would take away a shot
+  // that is rendering, else "Couldn't undo. Wait for the active run to finish."
+  const locked = state.isExecuting;
+  if (!locked && (state.providerRecoveries.length > 0 || state.providerStartAmbiguities.length > 0)) return;
   const from = action === 'undo' ? state.undoStack : state.redoStack;
   const entry = from[from.length - 1];
   if (!entry) return;
@@ -3625,7 +3736,7 @@ function stepHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet): voi
         // the step goes (Redo would have nothing to do) with the line.
         const nothing = ownAddIsEmpty(entry);
         keptLine = acceptUndoNoticeText(kept, nodes, nothing);
-        if (nothing) {
+        if (nothing && !locked) {
           breakUndoDebounce();
           set({ undoStack: from.slice(0, -1),
             undoNotice: { id: ++undoNoticeSeq, text: keptLine, offer: null } });
@@ -3645,8 +3756,9 @@ function stepHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet): voi
   // removed shot, or its whole scene) is refused here, before anything is
   // sent, with GM's line (PR #198 r3 item 3): the step stays where it was.
   const rendering = renderingRemoval(state.activeRuns, nodes, next.nodes);
-  if (rendering) {
-    set({ undoNotice: { id: ++undoNoticeSeq, text: renderingRemovalLine(action, rendering), offer: null } });
+  if (rendering || locked) {
+    const text = rendering ? renderingRemovalLine(action, rendering) : runLockedLine(action);
+    set({ undoNotice: { id: ++undoNoticeSeq, text, offer: null } });
     return;
   }
   const nextNodes = withFreshKeyStatus(next.nodes, nodes);
@@ -4115,8 +4227,7 @@ function applyGraphSync(event: ExecutionEvent): boolean {
     const existing = existingById.get(incoming.id);
     // What the backend holds now, for a refused save to compare with (H1).
     const backendScene = incoming.data?.params?.scene as CinemaSceneSpec | undefined;
-    if (incoming.data?.definitionId === 'cinema-scene' && backendScene?.shots
-      && cinemaScenePersistence.get(incoming.id)?.refusedOver === undefined) backendScenes.set(incoming.id, backendScene);
+    if (incoming.data?.definitionId === 'cinema-scene' && backendScene?.shots) backendScenes.set(incoming.id, backendScene);
     // Keys the person typed and the backend doesn't have yet stay as typed.
     const cliNode = existing && unsavedParamEdits.has(incoming.id)
       ? { ...incoming, data: { ...incoming.data,
@@ -4562,9 +4673,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
 
   deleteSelected: () => {
     const state = get();
-    if (state.isExecuting) return;
     const selectedIds = state.nodes.filter((node) => node.selected).map((node) => node.id);
     if (selectedIds.length === 0) return;
+    if (refuseRunLockedDelete(state, selectedIds, set)) return;
     if (refuseHeldNodeDelete(state, selectedIds, set)) return;
     // Route through the normal React Flow removal path so one undo snapshot,
     // backend mirroring, edge cleanup, and Remotion source pruning stay atomic.
@@ -4893,10 +5004,13 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
 
   // No confirm (GM, 2026-10-23): undo puts back everything a delete removed,
   // so the delete says "Deleted the node." with Undo instead (lib/deleteNotice.ts).
-  allowCanvasDelete: (nodeIds) => !refuseHeldNodeDelete(get(), nodeIds, set),
+  allowCanvasDelete: (nodeIds) => !refuseRunLockedDelete(get(), nodeIds, set) && !refuseHeldNodeDelete(get(), nodeIds, set),
 
   onNodesChange: (requested) => {
-    if (get().isExecuting && requested.some((change) => change.type === 'remove')) return;
+    if (get().isExecuting && requested.some((change) => change.type === 'remove')) {
+      refuseRunLockedDelete(get(), requested.filter((c): c is NodeChange & { type: 'remove' } => c.type === 'remove').map((c) => c.id), set);
+      return;
+    }
     if (requested.some((change) => change.type === 'remove')
       && refuseHeldNodeDelete(get(), requested.filter((c): c is NodeChange & { type: 'remove' } => c.type === 'remove').map((c) => c.id), set)) return;
     // A scene with a shot rendering stays (GM, PR #198 r3 item 1).
@@ -4934,12 +5048,23 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       const failures: string[] = [];
       const failedIds: string[] = [];
       const removals: RemovalRecord[] = [];
+      // Scenes the backend kept because a shot renders (another window's
+      // run, or a run another client started): GM's kept line after
+      // "Deleted 2 nodes." when the rest went (review 4, M1).
+      const renderingKept: { reason: string; scene: KeptScene }[] = [];
       results.forEach((result, index) => {
         if (result.status === 'fulfilled') {
           confirmed.add(cliRemovedIds[index]);
           if (result.value) removals.push(result.value);
         } else {
-          failures.push(failureCopy(result.reason).reason);
+          const reason = failureCopy(result.reason).reason;
+          const shots = result.reason && typeof result.reason === 'object' ? renderingRefusals.get(result.reason) : undefined;
+          const node = get().nodes.find((candidate) => candidate.id === cliRemovedIds[index]);
+          if (shots && node?.data.definitionId === 'cinema-scene') {
+            const label = typeof node.data.label === 'string' && node.data.label.trim() ? node.data.label : 'Scene';
+            renderingKept.push({ reason, scene: { scene: label, shots } });
+          }
+          failures.push(reason);
           failedIds.push(cliRemovedIds[index]);
         }
       });
@@ -4972,8 +5097,19 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       const deleted = removing.filter((nodeId) => shownBefore.has(nodeId)).length;
       // Its Undo applies only while this step is next in line: after a newer
       // step, the line would offer a button that does nothing (withLiveNotice).
-      if (deleted > 0 && get().undoStack.at(-1) === undoStep) set(deletedNotice(deleted, undoStep, keptScenes));
-      if (failures.length > 0) reportNodeDeletionFailure(failures, failures.length, failedName);
+      let unsaid = failures;
+      if (deleted > 0 && get().undoStack.at(-1) === undoStep) {
+        set(deletedNotice(deleted, undoStep, [...keptScenes, ...renderingKept.map((kept) => kept.scene)]));
+        // Those scenes are said in the kept line: never a second line for them.
+        const said = renderingKept.map((kept) => kept.reason);
+        unsaid = failures.filter((reason) => {
+          const at = said.indexOf(reason);
+          if (at < 0) return true;
+          said.splice(at, 1);
+          return false;
+        });
+      }
+      if (unsaid.length > 0) reportNodeDeletionFailure(unsaid, unsaid.length, unsaid.length === 1 ? failedName : undefined);
     });
     // An undo pressed while the deletes are on their way waits for their
     // answers, so its restore can name what they removed.
@@ -6427,8 +6563,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   },
 
   deleteGeneration: (modelNodeIds) => {
-    const { nodes, edges, isExecuting } = get();
-    if (isExecuting) return;
+    const { nodes, edges } = get();
+    if (refuseRunLockedDelete(get(), modelNodeIds, set)) return;
     const toRemove = new Set(modelNodeIds);
     // Input nodes feeding ONLY removed model nodes become orphans → also remove.
     const inputIds = new Set(
@@ -6479,7 +6615,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   },
 
   deleteNode: (nodeId) => {
-    if (get().isExecuting || refuseHeldNodeDelete(get(), [nodeId], set)) return;
+    if (refuseRunLockedDelete(get(), [nodeId], set) || refuseHeldNodeDelete(get(), [nodeId], set)) return;
     get().onNodesChange([{ id: nodeId, type: 'remove' }]);
   },
 
@@ -6669,23 +6805,22 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     // and the backend refuses it too (409) for any other caller.
     if (shotRemovalBlock(get().activeRuns, nodeId, removing, node.data.state)) return;
 
-    pushUndo(set, get);
+    const step = pushUndo(set, get);
 
     const nextScene: CinemaSceneSpec = {
       ...scene,
       shots: scene.shots.filter((s) => s.id !== shotId),
     };
 
-    // Edges feeding off the removed shot's output port are now dangling — drop
-    // them on the backend too (CLI-origin edges only), mirroring onEdgesChange.
+    // The wires off the removed shot's port go with it here at once. On the
+    // backend the scene write removes them with the shot, so a refused write
+    // never leaves the shot without them (PR #198 review 4, H1-new).
     const deadPortId = shotPortId(shotId);
-    for (const edge of get().edges) {
-      if (edge.source !== nodeId || edge.sourceHandle !== deadPortId) continue;
-      if (CLI_ID_RE.test(edge.source) && CLI_ID_RE.test(edge.target)) void sendWire(edge, false, set);
-    }
+    const wires = get().edges.filter((edge) => edge.source === nodeId && edge.sourceHandle === deadPortId
+      && CLI_ID_RE.test(edge.target));
 
     applySceneToNode(set, nodeId, nextScene);
-    persistSceneParam(nodeId, nextScene, 0, scene);
+    persistSceneParam(nodeId, nextScene, 0, scene, { wires, step });
   },
 
   updateScene: (nodeId, change) => {
@@ -6697,16 +6832,14 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
 
     maybePushUndo(set, get, nodeId);
 
-    // Prune edges that point at a shot port the new spec no longer has.
+    // Wires off a shot port the new spec no longer has go here at once, and
+    // with the scene write on the backend (as removeShot's).
     const validPortIds = new Set(spec.shots.map((s) => shotPortId(s.id)));
-    for (const edge of get().edges) {
-      if (edge.source !== nodeId || !edge.sourceHandle?.startsWith('shot_')) continue;
-      if (validPortIds.has(edge.sourceHandle)) continue;
-      if (CLI_ID_RE.test(edge.source) && CLI_ID_RE.test(edge.target)) void sendWire(edge, false, set);
-    }
+    const wires = get().edges.filter((edge) => edge.source === nodeId && edge.sourceHandle?.startsWith('shot_')
+      && !validPortIds.has(edge.sourceHandle) && CLI_ID_RE.test(edge.target));
 
     applySceneToNode(set, nodeId, spec);
-    persistSceneParam(nodeId, spec, 0, current);
+    persistSceneParam(nodeId, spec, 0, current, { wires });
   },
 
   // Character node — mirrors addNode's static path. The node keeps only the

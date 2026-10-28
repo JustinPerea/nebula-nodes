@@ -1,6 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { useUIStore } from '../store/uiStore';
-import { studioBoundaryLine, studioBoundaryLogLine, type StudioScreen } from '../lib/studioBoundary';
+import { drawFailedLogLine, studioBoundaryLine, studioBoundaryLogLine, type StudioScreen } from '../lib/studioBoundary';
 import { WorkspaceHeader } from './WorkspaceHeader';
 
 /** Each studio's own way back to the canvas (uiStore). The Commons' own exit
@@ -30,12 +30,44 @@ const TITLE: Record<StudioScreen, string> = {
   'brand-showcase': 'Showcase',
 };
 
+/** The studio's header inside the boundary, which can't take the app down
+ * with it (review 4, L3): a header that throws gives a plain one with the
+ * title and the way back. */
+class SafeHeader extends Component<{ title: string; onBack: () => void }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError(): { failed: boolean } {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: Error): void {
+    console.error("A studio's header failed to render:", error);
+  }
+
+  render(): ReactNode {
+    const { title, onBack } = this.props;
+    if (!this.state.failed) return <WorkspaceHeader title={title} onBack={onBack} className="studio-boundary__header" />;
+    return (
+      <header className="workspace-header studio-boundary__header" aria-label="Workspace">
+        <div className="workspace-header__identity">
+          <button type="button" className="workspace-header__back" onClick={onBack} aria-label="Back to Canvas">
+            Canvas
+          </button>
+          <h1 className="workspace-header__title">{title}</h1>
+        </div>
+      </header>
+    );
+  }
+}
+
 interface StudioBoundaryProps {
   studio: StudioScreen;
   /** The node the studio edits, when it edits one (Cinema, the editors). */
   node: { id: string; label: string | null } | null;
   /** The field the studio needed that isn't there ("scene.base"), read when
-   * it fails, for the Agent log; null when nothing is missing. */
+   * it fails (lib/studioBoundary nodeDataProblem); null when the data checks
+   * out. It decides the line: "missing or damaged" only with a field. A check
+   * that throws counts as damaged data. */
   problem: () => string | null;
   children: ReactNode;
 }
@@ -49,6 +81,11 @@ interface StudioBoundaryProps {
  * the body is replaced. The Agent log gets the node and the field; neither
  * line names who wrote the data. App keys it by screen and node, so opening
  * another one starts clean.
+ *
+ * Review 4, L3: data that checks out reads GM r5's neutral line ("…but its
+ * data is fine. Reload Nebula to try again.") and the Agent log names the
+ * error. Nothing in the fallback can throw out of the boundary: the check is
+ * caught and the header has its own boundary (SafeHeader).
  */
 export class StudioBoundary extends Component<StudioBoundaryProps, { failed: boolean }> {
   state = { failed: false };
@@ -57,27 +94,33 @@ export class StudioBoundary extends Component<StudioBoundaryProps, { failed: boo
     return { failed: true };
   }
 
+  /** The field the check names, "data" when the check itself throws. */
+  private field(): string | null {
+    try { return this.props.problem(); } catch { return 'data'; }
+  }
+
   componentDidCatch(error: Error, info: ErrorInfo): void {
     console.error('A studio failed to render:', error, info.componentStack);
     const { node } = this.props;
     if (!node || typeof window === 'undefined') return;
-    let field: string | null = null;
-    try { field = this.props.problem(); } catch { field = null; }
-    window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', {
-      detail: { source: 'system', message: studioBoundaryLogLine(node.label, node.id, field) },
-    }));
+    const field = this.field();
+    const label = node.label || null;
+    const message = field ? studioBoundaryLogLine(label, node.id, field) : drawFailedLogLine(label, node.id, error);
+    window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', { detail: { source: 'system', message } }));
   }
 
   render(): ReactNode {
     if (!this.state.failed) return this.props.children;
     const { studio, node } = this.props;
     const exit = EXIT[studio];
+    // A studio with no node (Create, the Commons) has no data to check.
+    const damaged = node ? this.field() !== null : false;
     return (
       <div className="studio-boundary">
-        <WorkspaceHeader title={TITLE[studio]} onBack={exit} className="studio-boundary__header" />
+        <SafeHeader title={TITLE[studio]} onBack={exit} />
         <div className="studio-boundary__body">
           <div className="studio-boundary__card" role="alert">
-            <p className="studio-boundary__line">{studioBoundaryLine(studio, node?.label || null)}</p>
+            <p className="studio-boundary__line">{studioBoundaryLine(studio, node?.label || null, damaged)}</p>
             <button type="button" className="studio-boundary__back" onClick={exit}>
               Back to canvas
             </button>

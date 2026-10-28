@@ -184,7 +184,11 @@ describe('M2: a restore the backend refuses keeps the spinner and reads the back
 // -- H1: a refused scene save keeps the typing ------------------------------------------
 
 describe('H1: a scene save the backend refuses keeps the person\'s typing', () => {
-  it('the typing stays through the next sync, and GM\'s save line says it wasn\'t saved', async () => {
+  // Fix round 4 (review 4, HIGH): any refusal of a scene write puts the scene
+  // back as the backend has it, so a later edit never re-sends what was
+  // refused; GM's save line says it went back. This replaces round 3's "the
+  // typing stays" (kept typing re-sent a refused shot removal with the next edit).
+  it('a refused scene save goes back to the saved scene, and GM\'s save line says so', async () => {
     const said: string[] = [];
     useGraphStore.setState({ nodes: [cinema('n31', [{ id: 's1', prompt: 'old' }], 'Opening')],
       notify: (text: string) => said.push(text) } as never);
@@ -194,12 +198,8 @@ describe('H1: a scene save the backend refuses keeps the person\'s typing', () =
     useGraphStore.getState().updateScene('n31', (current) => ({ ...current,
       shots: current.shots.map((shot) => ({ ...shot, prompt: 'typed by the person' })) }));
     await sleep(80);
-    expect(said).toEqual(["Couldn't save “Scene” for “Opening”."]);
-    // The backend's older scene comes back in a sync (its own echo of nothing).
-    socketSends({ type: 'graphSync', ...base, empty: false, edges: [], nodes: [cinema('n31', [{ id: 's1', prompt: 'old' }], 'Opening')],
-      edit: { tab: 'another-tab', actor: { kind: 'person' } } });
-    await sleep(10);
-    expect(shotsOf('n31')[0].prompt).toBe('typed by the person');
+    expect(said).toEqual(["Couldn't save “Scene” for “Opening”. It's back to its last saved value."]);
+    expect(shotsOf('n31')[0].prompt).toBe('old');
   });
 
   it('a newer edit from someone else after the refusal still wins (the person was told)', async () => {

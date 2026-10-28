@@ -20,7 +20,9 @@ locked a saved project, and every paid result in it, out of the UI):
   number, a prompt that isn't text, a shot without an id or with one used
   twice), and the rest becomes the defaults. The same input always converts
   to the same scene, so the ids an open gives are the ones the next save
-  keeps.
+  keeps. A new id is never one a ``shot_<id>`` port on the node still names
+  (a removed shot's late image), so it never takes over that image or its
+  wires (review 4, L1; ``reserved``).
 
 A shot's ``running`` status is the canvas's optimistic mark while a run is
 on its way. Nothing the backend stores is ever rendering (a run writes
@@ -32,6 +34,7 @@ from __future__ import annotations
 
 import copy
 import json
+from collections.abc import Iterable
 from typing import Any
 
 DEFAULT_BASE_MODEL = "seedream-4-5"
@@ -127,10 +130,30 @@ def _new_ids(count: int, taken: set[str]) -> list[str]:
     return ids
 
 
-def _lenient_shots(shots: Any) -> list[dict[str, Any]]:
+def shot_port_ids(outputs: Any) -> set[str]:
+    """The shot ids a node's outputs hold a ``shot_<id>`` port for. A port
+    whose shot is gone (a removed shot's late image) still names its id, so a
+    shot given a new id never takes it over (PR #198 review 4, L1)."""
+    if not isinstance(outputs, dict):
+        return set()
+    return {port[5:] for port in outputs if isinstance(port, str) and port.startswith("shot_") and len(port) > 5}
+
+
+def scene_shot_ids(params: Any) -> list[str]:
+    """The text ids of a cinema-scene's shots, in order (none when its params
+    hold no readable scene)."""
+    scene = params.get("scene") if isinstance(params, dict) else None
+    shots = scene.get("shots") if isinstance(scene, dict) else None
+    if not isinstance(shots, list):
+        return []
+    return [shot["id"] for shot in shots if isinstance(shot, dict) and isinstance(shot.get("id"), str)]
+
+
+def _lenient_shots(shots: Any, reserved: Iterable[str] = ()) -> list[dict[str, Any]]:
     """Every shot that can be read, each with a unique text id and a text
     prompt. A shot that is only text is that prompt; anything else that
-    isn't an object is dropped (it holds nothing to keep)."""
+    isn't an object is dropped (it holds nothing to keep). A new id is never
+    one of ``reserved`` (the ids the node's ports name, shot_port_ids)."""
     if not isinstance(shots, list):
         return []
     kept: list[dict[str, Any]] = []
@@ -151,7 +174,7 @@ def _lenient_shots(shots: Any) -> list[dict[str, Any]]:
             continue
         shot["id"] = shot_id
         seen.add(shot_id)
-    taken = seen | {text for shot in kept if (text := _shot_id(shot.get("id")))}
+    taken = seen | {text for shot in kept if (text := _shot_id(shot.get("id")))} | set(reserved)
     for index, shot_id in zip(needs, _new_ids(len(needs), taken)):
         kept[index]["id"] = shot_id
     for shot in kept:
@@ -163,7 +186,7 @@ def _lenient_shots(shots: Any) -> list[dict[str, Any]]:
     return [{"id": shot["id"], **{key: value for key, value in shot.items() if key != "id"}} for shot in kept]
 
 
-def _lenient(scene: Any) -> dict[str, Any]:
+def _lenient(scene: Any, reserved: Iterable[str] = ()) -> dict[str, Any]:
     out = copy.deepcopy(scene) if isinstance(scene, dict) else {}
     version = out.get("version")
     if isinstance(version, bool) or not isinstance(version, int) or version < 1:
@@ -184,18 +207,19 @@ def _lenient(scene: Any) -> dict[str, Any]:
     aspect = out.get("aspectRatio")
     if not isinstance(aspect, str) or not aspect.strip():
         out["aspectRatio"] = DEFAULT_ASPECT_RATIO
-    out["shots"] = _lenient_shots(out.get("shots"))
+    out["shots"] = _lenient_shots(out.get("shots"), reserved)
     return out
 
 
-def normalize_scene(scene: Any, *, strict: bool = True) -> Any:
+def normalize_scene(scene: Any, *, strict: bool = True, reserved: Iterable[str] = ()) -> Any:
     """``scene`` with its missing fields filled and transient statuses
     settled (a copy). ``strict`` (an agent-authored write): raise
     SceneSpecError for what can't be filled. Otherwise convert what can be
-    and fill the rest with the defaults; never raises (see the module doc)."""
+    and fill the rest with the defaults; never raises (see the module doc).
+    ``reserved``: shot ids a new id must not take (shot_port_ids of the node)."""
     scene = _from_json_text(scene)
     if not strict:
-        return _lenient(scene)
+        return _lenient(scene, reserved)
     if not isinstance(scene, dict):
         raise _refuse("scene", "must be an object")
     out = copy.deepcopy(scene)
@@ -244,9 +268,11 @@ def normalize_scene(scene: Any, *, strict: bool = True) -> Any:
     return out
 
 
-def normalize_params(definition_id: str, params: dict[str, Any], *, strict: bool = True) -> dict[str, Any]:
+def normalize_params(definition_id: str, params: dict[str, Any], *, strict: bool = True,
+                     reserved: Iterable[str] = ()) -> dict[str, Any]:
     """``params`` with a cinema-scene's ``scene`` normalized (a copy when it
-    changes); other nodes' params as they are."""
+    changes); other nodes' params as they are. ``reserved`` as for
+    normalize_scene."""
     if definition_id != CINEMA_SCENE or not isinstance(params, dict) or "scene" not in params:
         return params
-    return {**params, "scene": normalize_scene(params["scene"], strict=strict)}
+    return {**params, "scene": normalize_scene(params["scene"], strict=strict, reserved=reserved)}

@@ -2461,6 +2461,10 @@ its own `detail`:
 | Open or make a project (`open_project`, `new_project`, `nebula project open` / `new`) | `POST /api/projects/{id}/open`, `POST /api/projects` | "Cannot switch projects while a run is active. Wait for the run to finish or stop it first." |
 | Delete the open project (the Projects screen) | `DELETE /api/projects/{id}` | "Cannot delete the open project while a run is active. Wait for the run to finish or stop it first." |
 
+The person reads "A run is still going. Wait for it to finish or stop it
+first." for a Clear or a loaded graph (PR #198 review 4, N2: an import from
+the File menu during a run used to show the agent's text).
+
 A quick run (`nebula quick`, `POST /api/quick`) doesn't count: its nodes
 are temporary and never on the canvas, so nothing waits for it.
 
@@ -2872,23 +2876,45 @@ What happens to a scene that can't be filled in depends on who wrote it:
   project save and autosave, the handoff save after a switch, a recovered
   copy, `/api/graph/import` and `load_graph_file`, a `.nebula` file, the
   saved `state.json`, the person's own create and edits in Cinema, and every
-  undo or redo (`/api/graph/restore`). A saved project always opens and
-  saves, so the results it holds stay reachable. The conversion: a `base`
+  undo or redo (`/api/graph/restore`). These are lenient whoever calls them:
+  an agent's `load_graph_file`, `nebula load`, `/api/graph/import` or
+  `/api/graph/restore` converts a damaged scene too, without a 400, so check
+  the scene with `look_at_canvas` after loading one you didn't write. A
+  saved project always opens and saves, so the results it holds stay
+  reachable. The conversion: a `base`
   written as a model name becomes `{"model": "<name>"}`; a `version` that
   isn't a whole number becomes 1; a prompt that is a number becomes its text
   and any other non-text prompt becomes ""; a shot with no id, or with an id
   an earlier shot has, gets a new one no shot in the scene has ("s1", "s2",
-  …; the first shot with an id keeps it, with its port and wires); a shot
+  …; the first shot with an id keeps it, with its port and wires). A new id
+  is never one a `shot_<id>` output on the node still names (a removed
+  shot's late image), so a converted shot never takes over that image or its
+  wires; on a lenient open or import, an output port no shot owns, and a
+  saved wire from it, are dropped instead of refusing the file. A shot
   that is only text becomes a shot with that prompt; anything else that
   can't be read (a `shots` that isn't a list, a shot that isn't an object, an
   `aspectRatio` that isn't text, a `base.params` that isn't an object) takes
   the default. The same scene always converts the same way, so the ids an
   open gives are the ones the next save keeps.
 
-Cinema reads a scene through the same defaults. A scene the canvas card
-still can't draw shows a contained line on its card instead of blanking the
-canvas, and Cinema shows "Couldn't open “<node>”. …" under its header with
-Back to canvas; the Agent log says which field it couldn't read.
+Cinema reads a scene through the same defaults. A card the canvas still
+can't draw keeps its header (icon and label) and shows a contained line in
+its body instead of blanking the canvas, and a studio (Cinema, the video
+editor, the composition editor) shows its line under its header with Back
+to canvas. Which line depends on a check of the node's data (a known
+`definitionId`, a text `label`, `params` and `outputs` objects, a scene's
+shots and base, an edit's `clips`, a composition's `manifest.timeline`):
+
+- the check names a field: the card reads "Couldn't show “<node>”. Some of
+  its data is missing or damaged.", the studio "Couldn't open “<node>”. Some
+  of its data is missing or damaged, so Nebula can't show it.", and the
+  Agent log "Couldn't open “<node>”, node n4. <field> is missing.";
+- the data checks out (the fault is Nebula's drawing): the card reads
+  "Couldn't show “<node>”. Nebula ran into a problem drawing it, but its data
+  is fine. Reload Nebula to try again." (the studio: "Couldn't open “<node>”.
+  Nebula ran into a problem showing it, but its data is fine. …"), and the
+  Agent log "Couldn't draw “<node>”, node n4. <error message>". Changing the
+  node's data won't help here; tell the person to reload.
 
 A shot's stored `output.status` is never `running`: a run writes `done` or
 `error`, so a `running` (or `queued`) a write or a saved file carries is
@@ -2902,7 +2928,9 @@ variations with none selected unless the image is one of them.
 A run protects what it renders, from the moment its start reaches Nebula
 (before its spending check) until the engine is done with it:
 
-- a shot run, only its own shot, until the run ends;
+- a shot run, its own shot and every shot of the scenes upstream of it
+  that it renders first, until the run ends (through every variation pass,
+  and released when it finishes, is stopped or fails);
 - a run that includes a scene (Run on the canvas, `nebula run`, a run of a
   node the scene feeds), every shot of that scene until the scene's own node
   finishes, fails or is skipped (a cached scene frees at once); a downstream
@@ -2926,15 +2954,45 @@ While protected:
   three shots are named, four or more counted: "4 shots are still
   running"). The Agent log shows the same line under the agent's name. The
   person reads "Couldn't delete “Scene”. “Shot 2” is still running. Stop
-  the run first." ("…Wait for it to finish." with no Stop for it).
+  the run first." ("…Wait for it to finish." with no Stop for it), alone:
+  never after a generic "Couldn't delete the node.". The 409 body carries
+  `rendering: {"shots": [2], "stoppable": true}` beside `detail` (the shot
+  numbers still running, and whether a Stop can end them yet: `false` while
+  the run is still being admitted), so a client can say which scene was kept
+  without reading the text;
+- a scene write that removes a rendering shot (an edit in Cinema, the
+  shot's ×) from a window that doesn't own the run is refused the same way;
+  that window puts the scene back as Nebula has it (the shot, its image and
+  its wires stay) and shows the backend's line, and a later edit never sends
+  the refused removal again.
 
 The canvas blocks the same things: the shot's × is disabled, titled "Stop
 the run first." or "Wait for “Shot 2” to finish."; the scene's Delete (the
 context menu, the Inspector, and the selection toolbar when only rendering
 scenes are selected) is disabled, titled "Stop the run first." or "Wait for
-“Scene” to finish.". The Delete key over a selection deletes the rest and
-keeps the scene and its wires: "Deleted 3 nodes. “Scene” wasn't deleted
-because “Shot 2” is still running."
+“Scene” to finish." ("Stop the runs first." / "Wait for the running shots to
+finish." for several scenes).
+
+How a delete or an undo reads depends on whose run it is:
+
+- **A run this window started** locks every delete, undo and redo on the
+  canvas until it ends (the toolbar's are disabled, titled "Wait for the
+  active run to finish."). The Delete key, the menu's Delete and Undo/Redo
+  are never silent: a selection of only rendering scenes reads GM's scene
+  line ("Couldn't delete “Scene”. “Shot 2” is still running. Stop the run
+  first."), an undo that would remove a rendering shot reads "Couldn't undo.
+  It would remove “Shot 2”, which is still running. Stop the run first.",
+  and anything else reads the lock's own reason: "Couldn't delete “Brief”.
+  Wait for the active run to finish.", "Couldn't delete 3 nodes. Wait for
+  the active run to finish.", "Couldn't undo. Wait for the active run to
+  finish." ("Couldn't redo. …"). Nothing is sent.
+- **A run another window (or an agent) started** doesn't lock the canvas.
+  The Delete key over a selection deletes the rest and keeps the scene and
+  its wires: "Deleted 3 nodes. “Scene” wasn't deleted because “Shot 2” is
+  still running." (with Undo); two or three kept scenes are named, four or
+  more counted: "4 scenes weren't deleted because their shots are still
+  running." An undo that would remove a rendering shot is refused before
+  it's sent, with the line above.
 
 ### Universal nodes over MCP
 

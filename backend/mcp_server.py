@@ -1192,6 +1192,10 @@ def load_graph_file(path: str, ctx: Context | None = None) -> dict[str, Any]:
     open project is left as it was: `previousProject` and the `note` say how
     to go back (open_project). Saving the new project is paused until it is
     under the limit (`savingPaused`); project_size shows what's large.
+    A Cinema scene in the file is read leniently, as a saved project is: what
+    can't be read is converted, not refused (docs/MCP-SETUP.md, Cinema scenes
+    over MCP), so look_at_canvas the scene after loading a file you didn't
+    write. Refused with 409 while a run is going.
 
     Returns `loaded`, `project`, `openedAsNewProject`, `nodeCount`,
     `edgeCount`, `idMap` (the file's node ids to the canvas's), `filesRestored`,
@@ -1254,7 +1258,9 @@ def edit_canvas(
     in, and a 400 names any field that can't be (`base` written as a model
     name, a prompt that isn't text, a shot id used twice). An existing scene
     is edited in Cinema, not here. A scene that is rendering a shot can't be
-    removed (409 naming the shots and the run).
+    removed (409 naming the shots and the run; its `rendering` field holds
+    the shot numbers and whether a Stop can end them yet). A shot run holds
+    the scenes upstream of it the same way until it ends.
     Who bills a run is the person's call: Krea billing (`_kreaAuth`: API token
     or the Krea plan) and a multi-provider node's route (`_provider`: a route id
     or auto; describe_node lists them and the values each takes). Send a change
@@ -1360,8 +1366,10 @@ def remove_from_canvas(node_ids: list[str] | None = None, wires: list[dict] | No
     look_at_canvas lists them. Their outputs stay in Nebula's output folder.
     Ask first before deleting the person's own work. A Cinema scene one of
     whose shots is rendering can't be deleted: 409 "Couldn't delete “Scene”,
-    node n4. “Shot 2” is still running, run <id>." (stop it with cancel_run,
-    or wait). Deleting a node detaches
+    node n4. “Shot 2” is still running, run <id>." with `rendering`
+    {"shots": [2], "stoppable": true} (stop it with cancel_run, or wait). A
+    shot run holds the scenes upstream of it until the run ends, through
+    every variation pass. Deleting a node detaches
     the person's pins on it and closes the proposals that read it; `removals`
     lists them per node (with its `projectId`, `definitionId` and, when it
     supersedes an earlier delete of the same node, `replaces`), and

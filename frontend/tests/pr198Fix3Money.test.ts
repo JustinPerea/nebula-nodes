@@ -57,9 +57,11 @@ describe('L5: amounts too small for figures', () => {
 });
 
 describe('N2 and N3', () => {
-  it('N2: "At least" says $0.0099, not $0.01', () => {
-    expect(formatChipEstimate(0.0099, 0.0101, true)).toBe('$0.01+');
-    expect(chipTitle(chipEstimate(0.0099, 0.0101, true))).toBe("At least $0.0099. Some costs aren't known yet.");
+  // Fix round 4 (GM r4: chips never show sub-cent precision; a low end
+  // under a cent is "Up to $Y"): the chip and its tooltip say the same figure.
+  it('N2: a low end under a cent reads "Up to", in the chip and its tooltip', () => {
+    expect(formatChipEstimate(0.0099, 0.0101, true)).toBe('Up to $0.01+');
+    expect(chipTitle(chipEstimate(0.0099, 0.0101, true))).toBe("Up to $0.01, plus costs that aren't known yet.");
   });
 
   it('N3: two figures on each end of a detail line', () => {

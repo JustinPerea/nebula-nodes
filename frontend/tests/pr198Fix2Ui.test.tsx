@@ -219,9 +219,9 @@ describe('M2: a scene without base opens; a studio that can\'t render is contain
   });
 
   it('with no label, the studio\'s noun', () => {
-    expect(studioBoundaryLine('cinema-editor', null)).toBe("Couldn't open this scene. Some of its data is missing or damaged, so Nebula can't show it.");
-    expect(studioBoundaryLine('editor', null)).toBe("Couldn't open this clip. Some of its data is missing or damaged, so Nebula can't show it.");
-    expect(studioBoundaryLine('remotion-editor', null)).toBe("Couldn't open this shot list. Some of its data is missing or damaged, so Nebula can't show it.");
+    expect(studioBoundaryLine('cinema-editor', null, true)).toBe("Couldn't open this scene. Some of its data is missing or damaged, so Nebula can't show it.");
+    expect(studioBoundaryLine('editor', null, true)).toBe("Couldn't open this clip. Some of its data is missing or damaged, so Nebula can't show it.");
+    expect(studioBoundaryLine('remotion-editor', null, true)).toBe("Couldn't open this shot list. Some of its data is missing or damaged, so Nebula can't show it.");
   });
 
   it('App puts every studio inside the boundary', () => {

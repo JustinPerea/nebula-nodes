@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from services.cinema_scene_spec import normalize_params as normalize_scene_params
+from services.cinema_scene_spec import normalize_params as normalize_scene_params, shot_port_ids
 from services.file_access import require_allowed_path, validate_file_references
 from services.retired_nodes import migrate_graph, migrate_node
 from services.saved_graph_upgrades import PARAMS_VERSION, stored_version, upgrade_flat_nodes
@@ -104,7 +104,8 @@ class CLIGraph:
             # A Cinema scene's missing fields filled in, a transient run status
             # settled (services/cinema_scene_spec.py). Routes refuse what can't
             # be filled before they get here; this is the backstop.
-            "params": dict(normalize_scene_params(definition_id, params, strict=False)),
+            "params": dict(normalize_scene_params(definition_id, params, strict=False,
+                                                  reserved=shot_port_ids(outputs))),
             "outputs": dict(outputs) if outputs else {},
         }
         if position is not None:
@@ -389,7 +390,8 @@ def _normalized_scene(node: dict[str, Any]) -> dict[str, Any]:
     params = node.get("params")
     if not isinstance(params, dict):
         return node
-    normalized = normalize_scene_params(str(node.get("definitionId", "")), params, strict=False)
+    normalized = normalize_scene_params(str(node.get("definitionId", "")), params, strict=False,
+                                        reserved=shot_port_ids(node.get("outputs")))
     return node if normalized is params else {**node, "params": normalized}
 
 

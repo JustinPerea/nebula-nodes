@@ -125,16 +125,19 @@ describe('L4: a card whose data is damaged never takes the canvas down', () => {
     // React Flow hides a node it hasn't measured (no roles then): by attribute.
     const alert = document.querySelector('[data-node-card-boundary]')!;
     expect(alert.getAttribute('role')).toBe('alert');
-    expect(alert.textContent).toBe("Couldn't open “Hero still”. Some of its data is missing or damaged, so Nebula can't show it.");
+    // Fix round 4 (review 4, L3; GM r4 and r5): data that checks out reads
+    // the neutral line under the card's kept header, and the log names the error.
+    expect(alert.querySelector('.node-card-boundary__line')!.textContent)
+      .toBe("Couldn't show “Hero still”. Nebula ran into a problem drawing it, but its data is fine. Reload Nebula to try again.");
     expect(alert.querySelectorAll('.react-flow__handle').length).toBeGreaterThan(0);
-    expect(logged).toEqual(['Couldn\'t open “Hero still”, node n7. Its data couldn\'t be read.']);
+    expect(logged).toEqual(["Couldn't draw “Hero still”, node n7. Cannot read properties of null (reading 'id')"]);
     rerender(<Flow nodes={[node(false)]} nodeTypes={types} />);
     expect(screen.getByTestId('card-ok')).toBeTruthy();
     expect(document.querySelector('[data-node-card-boundary]')).toBeNull();
   });
 
   it('with no label: "this node"', () => {
-    expect(nodeCardBoundaryLine(null)).toBe("Couldn't open this node. Some of its data is missing or damaged, so Nebula can't show it.");
+    expect(nodeCardBoundaryLine(null, true)).toBe("Couldn't show this node. Some of its data is missing or damaged.");
   });
 });
 

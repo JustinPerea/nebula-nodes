@@ -102,11 +102,14 @@ function sceneInFlight(state: NodeState | undefined): boolean {
  * it (Stop shot for this shot's run, the canvas's Stop for a run of the
  * graph while it is still on this scene: `sceneState`, the scene node's
  * run state), 'wait' when it renders with no Stop here (its optimistic
- * "running" while the run starts). Null when it can go. */
+ * "running" while the run starts). Null when it can go.
+ * A shot run renders its upstream scenes whole in every variation pass, so
+ * it holds them until it ends (PR #198 review 4, M2; the backend's
+ * _scene_render_done does the same). */
 export function shotRemovalBlock(activeRuns: readonly ActiveRun[], nodeId: string,
   shot: Pick<CinemaShot, 'id' | 'output'>, sceneState?: NodeState): 'stop' | 'wait' | null {
   const rendering = activeRuns.some((run) => (run.kind === 'cinema-shot'
-    ? run.nodeId === nodeId && run.shotId === shot.id
+    ? (run.nodeId === nodeId ? run.shotId === shot.id : run.nodeIds.includes(nodeId))
     : run.nodeIds.includes(nodeId) && sceneInFlight(sceneState)));
   if (rendering) return 'stop';
   return isRecord(shot.output) && shot.output.status === 'running' ? 'wait' : null;
@@ -164,6 +167,28 @@ export function renderingRemovalLine(action: 'undo' | 'redo', shots: RenderingSh
   return `Couldn't ${action}. It would remove ${text}, which ${several ? 'are' : 'is'} still running. ${end}`;
 }
 
+/** GM, PR #198 r4 item 3: the Delete over several scenes with shots
+ * rendering: "Stop the runs first." with a Stop control, else "Wait for the
+ * running shots to finish." */
+export function scenesDeleteBlockTitle(stoppable: boolean): string {
+  return stoppable ? 'Stop the runs first.' : 'Wait for the running shots to finish.';
+}
+
+/** The run lock's reason (GM, PR #198 r5 item 2): while this tab runs
+ * something, deleting and undoing wait for it. The toolbar's disabled
+ * Delete says it too ("Wait for the active run to finish", its tooltip). */
+export const RUN_LOCK_REASON = 'Wait for the active run to finish.';
+
+/** GM, PR #198 r5 item 2: what failed first, then the run lock's reason.
+ * "Couldn't delete “X”. Wait for the active run to finish." ("the node"
+ * with no name), "Couldn't delete 3 nodes. …", "Couldn't undo. …",
+ * "Couldn't redo. …". */
+export function runLockedLine(action: 'delete' | 'undo' | 'redo', count = 1, name?: string): string {
+  if (action !== 'delete') return `Couldn't ${action}. ${RUN_LOCK_REASON}`;
+  const what = count === 1 ? name ?? 'the node' : `${count} nodes`;
+  return `Couldn't delete ${what}. ${RUN_LOCK_REASON}`;
+}
+
 /** GM, PR #198 r3 item 1: the scene's Delete, disabled while a shot
  * renders: "Stop the run first." with a Stop control, else "Wait for
  * “Scene” to finish." */
@@ -182,14 +207,16 @@ export function sceneDeleteRefusedLine(scene: string, shots: RenderingShots): st
 
 /** GM, PR #198 r3 item 1, a multi-select delete that keeps the scene: the
  * rest is deleted and the line goes after "Deleted 3 nodes.": "“Scene”
- * wasn't deleted because “Shot 2” is still running." Two or more scenes
- * kept are builder's: "“A” and “B” weren't deleted because their shots are
- * still running." */
+ * wasn't deleted because “Shot 2” is still running." Two or three scenes
+ * (GM r4 item 2, approved after "Deleted 3 nodes."): "“A” and “B” weren't
+ * deleted because their shots are still running."; four or more: "4 scenes
+ * weren't deleted because their shots are still running." */
 export function scenesKeptLine(kept: readonly { scene: string; shots: RenderingShots }[]): string {
   if (kept.length === 1) {
     const { text, several } = shotList(kept[0].shots.numbers);
     return `“${kept[0].scene}” wasn't deleted because ${text} ${several ? 'are' : 'is'} still running.`;
   }
+  if (kept.length >= 4) return `${kept.length} scenes weren't deleted because their shots are still running.`;
   const names = kept.map((item) => `“${item.scene}”`);
   const list = `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
   return `${list} weren't deleted because their shots are still running.`;

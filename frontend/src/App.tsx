@@ -36,7 +36,7 @@ import { useUIStore } from './store/uiStore';
 import { usePricingStore } from './store/pricingStore';
 import { useGraphStore } from './store/graphStore';
 import { StudioBoundary } from './components/StudioBoundary';
-import { cinemaSceneProblem, type StudioScreen } from './lib/studioBoundary';
+import { nodeDataProblem, type StudioScreen } from './lib/studioBoundary';
 import { useCommonsCapability } from './hooks/useCommonsCapability';
 import { useZoomManifest } from './hooks/useZoomManifest';
 import { useMoodboardDeepLink } from './hooks/useMoodboardDeepLink';
@@ -107,9 +107,13 @@ function StudioScreenBoundary({ screen, children }: { screen: StudioScreen; chil
   const nodeId = useUIStore((s) => (screen === 'cinema-editor' ? s.cinemaEditorNodeId
     : screen === 'remotion-editor' ? s.remotionEditorTargetNodeId : screen === 'editor' ? s.editorTargetNodeId : null));
   const label = useGraphStore((s) => (nodeId ? s.nodes.find((node) => node.id === nodeId)?.data.label ?? null : null));
+  // The data check for the node the studio edits (Cinema, the video editor,
+  // the composition editor): "missing or damaged" only when it names a field
+  // (review 4, L3). A node that's gone is damaged: there's nothing to show.
   const problem = () => {
-    if (screen !== 'cinema-editor' || !nodeId) return null;
-    return cinemaSceneProblem(useGraphStore.getState().nodes.find((node) => node.id === nodeId)?.data.params);
+    if (!nodeId) return null;
+    const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
+    return node ? nodeDataProblem(node.data) : 'node';
   };
   return (
     <StudioBoundary key={`${screen}:${nodeId ?? ''}`} studio={screen} node={nodeId ? { id: nodeId, label } : null}

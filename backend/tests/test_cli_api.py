@@ -1813,15 +1813,27 @@ class TestCinemaScenePersistsScene:
             assert rejected.status_code == 400, rejected.text
         assert len(client.get("/api/graph/export").json()["edges"]) == 2
 
-    @pytest.mark.parametrize("handle, output_type", [("shot_removed", "Image"), ("shot_s1", "Video")])
-    def test_import_rejects_fabricated_shot_outputs_and_types(self, client, handle, output_type):
+    def test_import_rejects_a_shot_output_of_the_wrong_type(self, client):
         response = client.post("/api/graph/import", json={
             "nodes": [{"id": "scene", "definitionId": "cinema-scene", "params": {"scene": self._SCENE},
-                       "outputs": {handle: {"type": output_type, "value": "https://example.test/asset"}}}],
+                       "outputs": {"shot_s1": {"type": "Video", "value": "https://example.test/asset"}}}],
             "edges": [],
         })
         assert response.status_code == 400, response.text
         assert client.get("/api/graph").json()["nodes"] == []
+
+    def test_import_drops_a_shot_output_no_shot_owns(self, client):
+        """PR #198 review 4, L1: a port no shot owns (a removed shot's late
+        image, or a made-up one) is dropped on a lenient import, with any wire
+        from it, instead of refusing the file; its value never lands."""
+        response = client.post("/api/graph/import", json={
+            "nodes": [{"id": "scene", "definitionId": "cinema-scene", "params": {"scene": self._SCENE},
+                       "outputs": {"shot_removed": {"type": "Image", "value": "https://example.test/asset"}}}],
+            "edges": [],
+        })
+        assert response.status_code == 200, response.text
+        node = client.get("/api/graph/export").json()["nodes"][0]
+        assert "shot_removed" not in (node["data"].get("outputs") or {})
 
     def test_saved_zip_restore_accepts_the_scene_generated_output_and_wire(self, client):
         import io
