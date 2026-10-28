@@ -609,6 +609,8 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `project.created` / `project.deleted` / `project.restored` | anyone made a project (new, or a stale tab's recovered copy), moved one to Recently deleted, or brought one back | `projectId`, `name`; `wasOpen` on a delete; `createdBy` when an agent made it |
 | `project.renamed` | a project's name changed (saving the same name again isn't journaled) | `projectId`, `from`, `to` |
 | `project.catalogRestored` | Nebula found the project list damaged and restored it ([A damaged project list](#a-damaged-project-list)); by `system` | `id`, `kind` (`restored` or `rebuilt`), `reason`, `source`, `copyAt`, `folder`, `damagedFile` and `setAside` (file names in that folder), `addedBack` (up to 20 `{id, name}`), `addedBackCount`, `notAddedBackCount`, `revertedCount`, `cameBackCount`, `backInTrashCount`, `keptDeletedCount`, `projectCount` |
+| `project.canvasFiled` | The live canvas wasn't a project in the list (after a restore, or a crash between `state.json` and `catalog.json`) and was saved as its own, "<project> (recovered)" or "Recovered canvas" ([A damaged project list](#a-damaged-project-list)); by `system` | `projectId`, `name`, `from` (the project it was, or null), `restoreId` (the restore it came from, or null) |
+| `project.canvasNotFiled` | It couldn't be saved as its own project: the list is at a limit. No project is open and opening or making one is refused until there is room; by `system`, once | `reason` (`projects` or `storage`), `from`, `restoreId` |
 | `provider.hold` | a paid start was held (a World Labs recovery checkpoint, or a start Nebula couldn't confirm) or cleared, attributed to whoever started the run or cleared it | `hold` (`recovery` or `startAmbiguity`), `change` (`held` or `cleared`), `runId`, `kind`, `durable` |
 | `edit.undone` / `edit.redone` | a whole edit was undone (an agent's `undo_canvas_edit`, or the person's Cmd+Z of a step the canvas knew the edit of) or redone; after the node and connection events it made and the pins it put back (`pin.reattached`), and before any `proposal.reopened` of the same undo, which can follow it | `editId` (the edit reverted), `of` (whose), `editKind`, `events` (that edit's event cursors, oldest first: every event journaled under it but its own `edit.undone`, its `pin.*` and `proposal.*` ones always, and at most 50 of the rest), `eventsTruncated: true` and `eventsTotal` (how many it had) when that cut some, `undid` (for an undo of an undo), `counts`, `skipped` |
 | `note.posted` | an agent posted an update to the person (Updates, `post_note`) | `surface` (canvas or board), `noteId`, `about`, `refs` (up to 12), `text`; `boardId`, `boardName` on a board |
@@ -2348,7 +2350,9 @@ copies beside it:
   made just before the rename, and only when it is the file that commit's
   transaction read and validated. So it is one commit behind, and the newest
   change is only in `catalog.json`; a restore takes it back from there when
-  that part of the file still reads.
+  that part of the file still reads. Where hard links don't work (a
+  `NEBULA_STATE_DIR` on exFAT, FAT, or some network and FUSE mounts), every
+  commit writes `.bak` as a full copy of what it committed instead.
 - `catalog.json.bak.1`: a real copy, rewritten on the first commit after it
   is an hour old. So it is at least an hour behind `.bak`, and can be days
   old after a pause.
@@ -2357,26 +2361,49 @@ The live canvas (`state.json`) records which project it is (`projectId`),
 so nothing saves one project's canvas into another.
 
 When `catalog.json` won't parse or validate (or holds a value Nebula can't
-write back, such as `NaN`), or is missing while a copy exists, the next read,
-under the store's lock and in a worker thread:
+write back, such as `NaN`), or is missing while a copy exists, the next read
+restores it under the store's lock. An HTTP request reads a catalog that
+changed outside this process in a worker thread first, and a reader on the
+event loop (a canvas event, a `/ws` connect, the journal) hands the restore
+to that same worker thread and answers what it read before. While that
+thread is reading the file, a loop reader doesn't parse it too, so neither
+the loop nor a run waits for a restore (measured with a catalog cut in half:
+31 MB and 102 MB both held the loop 0 s, against 3.3 s and 14.1 s before).
+A transaction (a save, a create) still waits on the lock while another
+Nebula process restores the same folder. The restore:
 
-1. restores the newest copy that validates;
+1. reads both copies and starts from the valid one that holds the newest
+   catalog by its own dates (`.bak` when they agree), not by its name;
 2. takes from the damaged file every project record that still reads whole:
    added back when the copy lacks it (to Recently deleted when it was
    there), and replacing the copy's unless the copy's is newer by its dates
-   (a file older than its copy never rolls a project back). A project the
-   damaged file says was deleted for good (`purged`, remembered for a week)
-   stays deleted. Everything else the copy holds stays, and what that
-   decided is reported (`reverted`, `cameBack`, `backInTrash`);
+   (a file older than its copy never rolls a project back). A record is
+   filed under its own `id`, checked against its key and the copy, so a
+   damaged key, id or section name never files it under another id or
+   reports it as deleted. A record cut short is still noticed by its own
+   `id` and `name` where nothing else says a record sits there (right
+   after another cut record), so it is reported by name. A project deleted for good (`purged`, remembered
+   for a week) stays deleted when the file that says so is the newest that
+   says anything of that id: a record in a newer file, or one made after
+   the delete (the same id made again, as a retried recovery does), wins.
+   Everything else the copy holds stays, and what that decided is reported
+   (`reverted`, `cameBack`, `backInTrash`, `keptDeleted`);
 3. opens the project the live canvas is, if it came back, and otherwise
-   none: never the copy's open project. The next listing then files a live
-   canvas that is no project in the list as its own project, "Recovered
-   canvas" (`recoveredCanvas`);
+   none: never the copy's open project. The next listing (or open, create
+   or delete) then saves a live canvas that is no project in the list as
+   its own project, "<project> (recovered)" when the project it was is
+   known by name ("(recovered 2)" and on for later copies), otherwise
+   "Recovered canvas" (`recoveredCanvas`). When the list is at its project
+   or storage limit it can't: the canvas stays the live canvas with no
+   project open, the listing carries `canvasNotFiled` (`{reason: projects |
+   storage, from, since}`), opening or making a project is refused (413,
+   `limit`) so nothing replaces it, and the next listing with room saves it;
 4. keeps the damaged file as `catalog.json.damaged-<UTC time>-<id>` beside it
    (a hard link, or a copy), and any damaged copy as
    `catalog.json.bak.damaged-…`, before it writes anything. Nebula deletes old
-   ones only past a bound: it keeps the newest 3 of each kind, any younger
-   than 14 days up to 10, and always the ones the open notice names;
+   ones only past a bound, aged by the time in their name (when they were
+   kept): it keeps the newest 3 of each kind, any kept in the last 14 days
+   up to 10, and always the ones the open notice names;
 5. gives the workspace a new revision (open tabs reload; a run start that
    read the old one is refused as out of date, 409, and starts nothing),
    and records the restore once.
@@ -2389,15 +2416,25 @@ always did), when the rebuilt list would be past the size limit, and for a
 catalog or copy saved by a newer Nebula (`version` above 1), which is not
 damage.
 
+Upgrade day: a `state.json` saved before it recorded `projectId`, beside a
+catalog already damaged at startup. When the damaged file's head still says
+which project was open, the canvas is that project's (as an intact catalog
+would have said), so the restore opens it and the canvas goes back into it.
+When the head doesn't read (a file cut before it, or a catalog saved before
+the head came first), which project the canvas is can't be proven: no
+project opens and the canvas is saved as "Recovered canvas", beside the
+copy's version of the project. Nothing is lost either way.
+
 Agents learn about it three ways: `catalogRestore` in `start_here` (first)
 and in `list_projects` / `GET /api/projects`, until the person closes the
-Projects home notice; and a `project.catalogRestored` event. `catalogRestore`
-is `{id, at, kind, reason, source, copyAt, damagedFile, setAside, addedBack,
-addedBackCount, updatedFromDisk, updatedFromDiskCount, notAddedBack,
-notAddedBackCount, reverted, revertedCount, cameBack, cameBackCount,
-backInTrash, backInTrashCount, keptDeleted, keptDeletedCount, projectCount,
-trashCount, openProject, openFrom, openProjectMissing, recoveredCanvas,
-damagedReadWhole, note}`:
+Projects home notice; and a `project.catalogRestored` event (filing the
+canvas adds `project.canvasFiled`, or `project.canvasNotFiled`).
+`catalogRestore` is `{id, at, kind, reason, source, copyAt, damagedFile,
+setAside, addedBack, addedBackCount, updatedFromDisk, updatedFromDiskCount,
+notAddedBack, notAddedBackCount, reverted, revertedCount, cameBack,
+cameBackCount, backInTrash, backInTrashCount, keptDeleted, keptDeletedCount,
+projectCount, trashCount, openProject, openFrom, openProjectMissing,
+openProjectName, recoveredCanvas, canvasNotFiled, damagedReadWhole, note}`:
 
 - `kind` is `restored` (from the copy named in `source`, saved at `copyAt`)
   or `rebuilt` (`source` null); `reason` is `corrupt` (not JSON, or a value
@@ -2412,15 +2449,19 @@ damagedReadWhole, note}`:
   canvas. `cameBack` rows (`{id, name, how}`, `how` `trashed` or `deleted`)
   were deleted after the copy and are back from it. `backInTrash` rows were
   restored from Recently deleted after the copy and are there again.
-  `keptDeleted` rows were deleted for good after the copy and stay deleted;
+  `keptDeleted` rows were dropped by a delete for good newer than them;
 - `openFrom` says how the open project was chosen (`canvas`, `damaged file`
   or `none`); `openProjectMissing` is the project that was open when it
-  didn't come back;
+  didn't come back, `openProjectName` its name when a file had it;
+- `recoveredCanvas` (`{id, name}`) is set only when this restore is why the
+  canvas was saved as its own project; a later filing (a crash between two
+  files weeks on) is its own `project.canvasFiled` event;
 - `damagedReadWhole` is true when the damaged `catalog.json` was read to its
-  end (it parsed; only its shape was wrong). When false (cut, zeroed, a
-  record's key destroyed), what it held past the damage is unknown: changes
-  made after the copy may be missing without a row saying so, the note says
-  that, and the person's notice never says no projects were missing.
+  end with every key, id and section name intact. When false (cut, zeroed,
+  a key or section name damaged), what it held past the damage is unknown:
+  changes made after the copy may be missing without a row saying so, the
+  note says that, and the person's notice says so instead of "No projects
+  were missing."
 
 Project ids read before a restore may be stale: list the projects again.
 Only the person closes the notice (`POST /api/projects/catalog-restore/dismiss

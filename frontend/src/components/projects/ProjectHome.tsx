@@ -294,13 +294,16 @@ function ConfirmInline({ label, confirmLabel, prompt, busy, onConfirm, className
   );
 }
 
-function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash, openRequest = 0 }: {
+function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash, openRequest = 0, onOpened = noop }: {
   trash: TrashedProject[]; busy: boolean;
   onRestore: (id: string) => void; onPurge: (id: string) => void; onEmptyTrash: () => void;
-  /** When something last asked the list open (the restore notice's
-   * "Open Recently deleted"), as the clock at that click; 0 for never. A new
-   * value opens the list and moves focus to it. */
+  /** When the person last asked the list open (the restore notice's
+   * "Open Recently deleted"), as the clock at that click; 0 for none. A new
+   * value opens the list and moves focus to it, then `onOpened` clears it,
+   * so the list coming back later (an agent deletes a project after the
+   * trash emptied) never reopens it or takes focus (review 2 of PR #199, L6). */
   openRequest?: number;
+  onOpened?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   // Read the clock when the list opens, not on every render.
@@ -317,7 +320,8 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash, openRe
     if (!openRequest) return;
     toggle.current?.focus();
     toggle.current?.scrollIntoView?.({ block: 'nearest' });
-  }, [openRequest]);
+    onOpened();
+  }, [openRequest, onOpened]);
   return (
     <section className="project-home__trash" aria-labelledby="recently-deleted-title">
       <div className="project-home__trash-header">
@@ -385,8 +389,8 @@ const noop = () => {};
  * filled after it mounts, so screen readers announce it (a live region
  * reads changes, not what it held when it appeared: review 1 of PR #199,
  * L8). × closes it and puts focus on the page heading. */
-function CatalogRestoreNotice({ restore, onDismiss, onOpenRecentlyDeleted, heading }: {
-  restore: CatalogRestore | null; onDismiss: () => void; onOpenRecentlyDeleted: () => void;
+function CatalogRestoreNotice({ restore, trashCount, onDismiss, onOpenRecentlyDeleted, heading }: {
+  restore: CatalogRestore | null; trashCount: number; onDismiss: () => void; onOpenRecentlyDeleted: () => void;
   heading: RefObject<HTMLHeadingElement | null>;
 }) {
   // Filled once the region is in the page: the callback ref runs after it
@@ -400,8 +404,12 @@ function CatalogRestoreNotice({ restore, onDismiss, onOpenRecentlyDeleted, headi
     // and this empty region stays in the page the whole time.
     <div ref={attached} className={notice ? 'project-home__notice project-home__restore' : 'project-home__sr-only'} aria-live="polite" aria-atomic="true">
       {notice && <>
-        <span>{notice.text}</span>
-        {notice.openRecentlyDeleted && <button type="button" className="project-home__restore-action" onClick={onOpenRecentlyDeleted}>{OPEN_RECENTLY_DELETED}</button>}
+        {/* GM r3's B layout: more than one outcome, one per line (no bullets). */}
+        {notice.lines
+          ? <div className="project-home__restore-text project-home__restore-lines">{notice.lines.map((line) => <p key={line}>{line}</p>)}</div>
+          : <span className="project-home__restore-text">{notice.text}</span>}
+        {/* Only while there is something in Recently deleted to open (L6). */}
+        {notice.openRecentlyDeleted && trashCount > 0 && <button type="button" className="project-home__restore-action" onClick={onOpenRecentlyDeleted}>{OPEN_RECENTLY_DELETED}</button>}
         <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={() => {
           // Before the button goes, so focus never drops to the page body.
           heading.current?.focus();
@@ -448,6 +456,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
   const heading = useRef<HTMLHeadingElement>(null);
   useFocusAfterHeldEdits(Boolean(unsavedEdits), savedLine, heading);
   const [trashOpenRequest, setTrashOpenRequest] = useState(0);
+  const trashOpened = useCallback(() => setTrashOpenRequest(0), []);
   const visibleProjects = useMemo(() => projects
     .filter((project) => project.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
     .sort((left, right) => recentTimestamp(right) - recentTimestamp(left)), [projects, query]);
@@ -470,7 +479,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
           <button className="project-home__new" type="button" disabled={loading || locked || Boolean(unsavedEdits)} {...offlineMark(offline)} onClick={() => onCreate()}><Plus aria-hidden="true" />New project</button>
         </section>
 
-        <CatalogRestoreNotice restore={catalogRestore} onDismiss={onDismissCatalogRestore} heading={heading}
+        <CatalogRestoreNotice restore={catalogRestore} trashCount={trash.length} onDismiss={onDismissCatalogRestore} heading={heading}
           onOpenRecentlyDeleted={() => setTrashOpenRequest((last) => Math.max(Date.now(), last + 1))} />
 
         {/* GM's WRAP rule: where "Try again" redoes the failure it is the retry, so the
@@ -497,7 +506,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
               : projects.length > 0 ? <div className="project-home__empty" role="status"><Search className="project-home__empty-search" aria-hidden="true" /><h3>No projects match “{query.trim()}”</h3><p>Try another name or clear your search.</p><button type="button" className="project-home__secondary" onClick={() => setQuery('')}>Clear search</button></div>
                 : !error && !unsavedEdits && <div className="project-home__empty"><div className="project-home__empty-graph"><NodeGraphPlaceholder /></div><h3>Your first project starts here.</h3><p>Connect ideas, models and media on a canvas of your own.</p><button type="button" className="project-home__secondary" disabled={locked} {...offlineMark(offline)} onClick={() => onCreate()}><Plus aria-hidden="true" />Create your first project</button></div>}
         </section>
-        {!loading && trash.length > 0 && <RecentlyDeleted trash={trash} busy={locked} onRestore={onRestore} onPurge={onPurge} onEmptyTrash={onEmptyTrash} openRequest={trashOpenRequest} />}
+        {!loading && trash.length > 0 && <RecentlyDeleted trash={trash} busy={locked} onRestore={onRestore} onPurge={onPurge} onEmptyTrash={onEmptyTrash} openRequest={trashOpenRequest} onOpened={trashOpened} />}
       </main>
       {lastDeleted && <UndoToast key={lastDeleted.id} project={lastDeleted} busy={locked}
         onUndo={() => onRestore(lastDeleted.id)} onDismiss={onDismissUndo} />}

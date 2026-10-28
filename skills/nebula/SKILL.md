@@ -58,12 +58,17 @@ If Nebula found its project list damaged and restored it, `nebula projects`
 (and `nebula context`) start with a note saying so: from which copy and how
 old it is, which projects it added back, which went back to the copy's
 version, came back after a delete, or are in Recently deleted again, whether
-the live canvas was filed as "Recovered canvas", whether the damaged file
-was read to its end (if not, newer changes may be missing unlisted), and
-where the damaged file is kept (MCP: `catalogRestore` in `start_here` and `list_projects`; a
-`project.catalogRestored` event). Project ids from before it may be stale:
-list them again. Only the person closes that notice; tell them before you
-delete a project that came back.
+the live canvas was saved as its own project ("<project> (recovered)", or
+"Recovered canvas" when which project it was is unknown), whether the
+damaged file was read whole (if not, newer changes may be missing unlisted),
+and where the damaged file is kept (MCP: `catalogRestore` in `start_here` and
+`list_projects`; `project.catalogRestored` and `project.canvasFiled` events).
+Project ids from before it may be stale: list them again. Only the person
+closes that notice; tell them before you delete a project that came back.
+If `nebula projects` says the live canvas couldn't be saved as a project
+because the list is full (`canvasNotFiled`), opening or making a project is
+refused until the person frees room; tell them, and don't delete anything
+to make room yourself.
 Start new work in a new project (`nebula project new "<name>"`) or open the
 right one (`nebula project open <id>`). The person's canvas follows (from
 their Projects screen too), names you, and offers them a button back.

@@ -33,6 +33,12 @@ def run_list(client: NebulaClient, *, as_json: bool = False) -> None:
         for line in catalog_restore_lines(restore):
             print(line)
         print()
+    waiting = listing.get("canvasNotFiled")
+    if isinstance(waiting, dict):
+        print(f"Note: the live canvas isn't a saved project and couldn't be saved as one: the project list is at "
+              f"its {waiting.get('reason')} limit. Opening or making a project is refused until the person frees "
+              "room (moves a project to Recently deleted, or deletes one for good); the next listing then saves it.")
+        print()
     if not projects:
         print("No saved projects.")
         return

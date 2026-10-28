@@ -1312,11 +1312,18 @@ def list_projects(ctx: Context | None = None) -> dict[str, Any]:
     couldn't, `reverted` those that went back to the copy's version,
     `cameBack` those deleted after the copy that are back, `backInTrash`
     those restored after the copy that are in Recently deleted again,
-    `recoveredCanvas` the live canvas filed as its own project,
-    `damagedReadWhole` false when the damaged file couldn't be read to its
-    end (changes after the copy may then be missing without a row), and
-    `damagedFile` where the damaged file is kept. Project ids from before it
-    may be stale; ask the person before deleting a project that came back."""
+    `recoveredCanvas` the live canvas filed as its own project ("<project>
+    (recovered)", or "Recovered canvas" when which project it was is
+    unknown), `canvasNotFiled` when it couldn't be filed because the list
+    is at a limit, `damagedReadWhole` false when the damaged file couldn't
+    be read whole (cut, zeroed, or a key or section name damaged: changes
+    after the copy may then be missing without a row), and `damagedFile`
+    where the damaged file is kept. Project ids from before it may be
+    stale; ask the person before deleting a project that came back.
+    `canvasNotFiled` (top level, {reason: projects | storage}) means the
+    live canvas isn't a saved project and the list had no room to save it
+    as one: no project is open, and open_project / new_project are refused
+    (413) until the person frees room; don't free it for them."""
     import project_client
 
     return project_client.list_projects(_api(), headers=_agent_headers(ctx))

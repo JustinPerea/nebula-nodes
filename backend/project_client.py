@@ -72,9 +72,10 @@ def cover_for_agents(api: NebulaAPI, cover: Any) -> dict[str, Any] | None:
 
 def list_projects(api: NebulaAPI, *, headers: dict[str, str] | None = None) -> dict[str, Any]:
     """MCP list_projects: each project's id, name, `open`, node count, last
-    edit and cover, most recently edited first, and `catalogRestore` after
+    edit and cover, most recently edited first, `catalogRestore` after
     Nebula restored a damaged project list (until the person closes its
-    notice)."""
+    notice), and `canvasNotFiled` while the live canvas couldn't be saved
+    as its own project because the list is at a limit."""
     listing = _call(api, "GET", "/api/projects", headers)
     active = listing.get("activeProjectId")
     rows = [{"id": project.get("id"), "name": project.get("name"), "open": project.get("id") == active,
@@ -86,6 +87,11 @@ def list_projects(api: NebulaAPI, *, headers: dict[str, str] | None = None) -> d
     # notice yet: what came back, from where, and where the damaged file is kept.
     if isinstance(listing.get("catalogRestore"), dict):
         reply["catalogRestore"] = listing["catalogRestore"]
+    # The live canvas isn't a project and couldn't be filed as its own: the
+    # list is at a limit, so opening or making a project is refused until
+    # the person frees room (PR #199, review 2 L4).
+    if isinstance(listing.get("canvasNotFiled"), dict):
+        reply["canvasNotFiled"] = listing["canvasNotFiled"]
     return reply
 
 

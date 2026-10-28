@@ -8,7 +8,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { ProjectHome, type ProjectHomeProps } from './ProjectHome';
-import { catalogRestoreLine, catalogRestoreLogLine, catalogRestoreNotice, copyAge, OPEN_RECENTLY_DELETED, RECOVERED_CANVAS_SENTENCE_PENDING } from './catalogRestoreCopy';
+import { catalogRestoreLine, catalogRestoreLogLine, catalogRestoreNotice, copyAge, OPEN_RECENTLY_DELETED, recoveredCanvasSentence } from './catalogRestoreCopy';
 import type { CatalogRestore, TrashedProject } from '../../lib/projects';
 
 vi.mock('../../lib/backend', () => ({ backendAssetUrlSync: (url: string) => `http://127.0.0.1:8060${url}` }));
@@ -49,13 +49,14 @@ describe('form 1: restored, with what was added back', () => {
 
   it('never says no projects were missing when the damaged file could not be read to its end', () => {
     // A cut or zeroed file (live check of fix round 1): what it held past the
-    // damage is unknown, so something may be lost and the kept file says so.
-    expect(line({ damagedReadWhole: false })).toBe(`${OPEN}. The damaged file was kept.`);
-    expect(line({ damagedReadWhole: undefined })).toBe(`${OPEN}. The damaged file was kept.`);
+    // damage is unknown, so something may be lost (GM r3 string 4).
+    const notWhole = "Nebula couldn't read the whole damaged file, so changes made after that copy may be missing.";
+    expect(line({ damagedReadWhole: false })).toBe(`${OPEN}. ${notWhole} The damaged file was kept.`);
+    expect(line({ damagedReadWhole: undefined })).toBe(`${OPEN}. ${notWhole} The damaged file was kept.`);
     expect(line({ damagedReadWhole: false, source: 'catalog.json.bak.1', copyAt: TWO_DAYS_AGO }))
-      .toBe(`${OPEN}, from 2 days ago. The damaged file was kept.`);
+      .toBe(`${OPEN} from 2 days ago. ${notWhole} The damaged file was kept.`);
     expect(line({ damagedReadWhole: false, addedBack: rows('Dunes'), addedBackCount: 1 }))
-      .toBe(`${OPEN} and added back “Dunes”, a newer project it found. The damaged file was kept.`);
+      .toBe(`${OPEN} and added back “Dunes”, a newer project it found. ${notWhole} The damaged file was kept.`);
     // Nothing kept, nothing claimed.
     expect(line({ damagedReadWhole: false, damagedFile: null, setAside: [] })).toBe(`${OPEN}.`);
   });
@@ -111,65 +112,62 @@ describe('form 3: what an older copy decided', () => {
 
   it('says the copy is older up front when its age is known', () => {
     expect(line({ ...older, reverted: rows('Logo'), revertedCount: 1 }))
-      .toBe(`${OPEN}, from 2 days ago. “Logo” went back to its version in that copy, so its latest edits aren't there. The damaged file was kept.`);
-    expect(line({ ...older })).toBe(`${OPEN}, from 2 days ago. No projects were missing.`);
+      .toBe(`${OPEN} from 2 days ago. “Logo” went back to its version in that copy, so its latest edits aren't there. The damaged file was kept.`);
+    expect(line({ ...older })).toBe(`${OPEN} from 2 days ago. No projects were missing.`);
     expect(line({ source: 'catalog.json.bak.1', copyAt: null, reverted: rows('Logo'), revertedCount: 1 }))
       .toBe(`${OPEN}. “Logo” went back to its version in that copy, so its latest edits aren't there. The damaged file was kept.`);
   });
 
   it('(a) reverted', () => {
     expect(line({ ...older, reverted: rows('Logo', 'Hero'), revertedCount: 2 }))
-      .toBe(`${OPEN}, from 2 days ago. “Logo” and “Hero” went back to their versions in that copy, so their latest edits aren't there. The damaged file was kept.`);
+      .toBe(`${OPEN} from 2 days ago. “Logo” and “Hero” went back to their versions in that copy, so their latest edits aren't there. The damaged file was kept.`);
     expect(line({ ...older, reverted: rows('A', 'B', 'C', 'D'), revertedCount: 4 }))
-      .toBe(`${OPEN}, from 2 days ago. 4 projects went back to their versions in that copy, so their latest edits aren't there. The damaged file was kept.`);
+      .toBe(`${OPEN} from 2 days ago. 4 projects went back to their versions in that copy, so their latest edits aren't there. The damaged file was kept.`);
   });
 
   it('(a) leaves out the open project whose graph came from the live canvas', () => {
     expect(line({ ...older, reverted: [{ ...rows('Logo')[0], liveCanvas: true }], revertedCount: 1 }))
-      .toBe(`${OPEN}, from 2 days ago. No projects were missing.`);
+      .toBe(`${OPEN} from 2 days ago. No projects were missing.`);
   });
 
   it('(b) back after it was deleted', () => {
     expect(line({ ...older, cameBack: rows('Draft'), cameBackCount: 1 }))
-      .toBe(`${OPEN}, from 2 days ago. “Draft” was deleted, but the copy still had it, so it's back. Delete it again if you don't need it.`);
+      .toBe(`${OPEN} from 2 days ago. “Draft” was deleted, but the copy still had it, so it's back. Delete it again if you don't need it.`);
     expect(line({ ...older, cameBack: rows('Draft', 'Old hero'), cameBackCount: 2 }))
-      .toBe(`${OPEN}, from 2 days ago. “Draft” and “Old hero” were deleted, but the copy still had them, so they're back. Delete them again if you don't need them.`);
+      .toBe(`${OPEN} from 2 days ago. “Draft” and “Old hero” were deleted, but the copy still had them, so they're back. Delete them again if you don't need them.`);
     expect(line({ ...older, cameBack: rows('A', 'B', 'C', 'D'), cameBackCount: 4 }))
-      .toBe(`${OPEN}, from 2 days ago. 4 deleted projects are back because the copy still had them. Delete them again if you don't need them.`);
+      .toBe(`${OPEN} from 2 days ago. 4 deleted projects are back because the copy still had them. Delete them again if you don't need them.`);
   });
 
   it('(c) back in Recently deleted, with the button', () => {
     const one = catalogRestoreNotice(restore({ ...older, backInTrash: rows('Logo'), backInTrashCount: 1 }), NOW);
-    expect(one.text).toBe(`${OPEN}, from 2 days ago. “Logo” is in Recently deleted again because the copy had it there. Restore it again if you need it.`);
+    expect(one.text).toBe(`${OPEN} from 2 days ago. “Logo” is in Recently deleted again because the copy had it there. Restore it again if you need it.`);
     expect(one.openRecentlyDeleted).toBe(true);
     expect(line({ ...older, backInTrash: rows('Logo', 'Hero'), backInTrashCount: 2 }))
-      .toBe(`${OPEN}, from 2 days ago. “Logo” and “Hero” are in Recently deleted again because the copy had them there. Restore them again if you need them.`);
+      .toBe(`${OPEN} from 2 days ago. “Logo” and “Hero” are in Recently deleted again because the copy had them there. Restore them again if you need them.`);
     expect(line({ ...older, backInTrash: rows('A', 'B', 'C', 'D'), backInTrashCount: 4 }))
-      .toBe(`${OPEN}, from 2 days ago. 4 projects are in Recently deleted again because the copy had them there. Restore them again if you need them.`);
+      .toBe(`${OPEN} from 2 days ago. 4 projects are in Recently deleted again because the copy had them there. Restore them again if you need them.`);
   });
 
   it('gives one sentence per outcome, (a) then (b) then (c)', () => {
     expect(line({ ...older, reverted: rows('Logo'), revertedCount: 1, cameBack: rows('Draft'), cameBackCount: 1,
       backInTrash: rows('Hero'), backInTrashCount: 1 }))
-      .toBe(`${OPEN}, from 2 days ago. “Logo” went back to its version in that copy, so its latest edits aren't there. `
+      .toBe(`${OPEN} from 2 days ago. “Logo” went back to its version in that copy, so its latest edits aren't there. `
         + '“Draft” was deleted, but the copy still had it, so it\'s back. Delete it again if you don\'t need it. '
         + '“Hero” is in Recently deleted again because the copy had it there. Restore it again if you need it. The damaged file was kept.');
   });
 
-  it('never says no projects were missing when the open project was filed as "Recovered canvas"', () => {
-    expect(RECOVERED_CANVAS_SENTENCE_PENDING).toBe("The project you had open couldn't be restored, so its canvas is now “Recovered canvas”.");
+  it('never says no projects were missing when the open canvas was filed as its own project', () => {
     expect(line({ ...older, recoveredCanvas: { id: 'c'.repeat(32), name: 'Recovered canvas' } }))
-      .toBe(`${OPEN}, from 2 days ago. ${RECOVERED_CANVAS_SENTENCE_PENDING} The damaged file was kept.`);
+      .toBe(`${OPEN} from 2 days ago. ${recoveredCanvasSentence('Recovered canvas')} The damaged file was kept.`);
   });
 
-  it('says the age in plain units', () => {
+  it('says the age on GM\'s scale (r3; the full scale is in catalogRestore.fix2.test.tsx)', () => {
     const at = (ms: number) => new Date(NOW - ms).toISOString();
-    expect(copyAge(at(30_000), NOW)).toBeNull();
-    expect(copyAge(at(60_000), NOW)).toBe('a minute ago');
-    expect(copyAge(at(5 * 60_000), NOW)).toBe('5 minutes ago');
+    expect(copyAge(at(30_000), NOW)).toBe('less than an hour ago');
     expect(copyAge(at(3_600_000), NOW)).toBe('an hour ago');
     expect(copyAge(at(3 * 3_600_000), NOW)).toBe('3 hours ago');
-    expect(copyAge(at(25 * 3_600_000), NOW)).toBe('yesterday');
+    expect(copyAge(at(25 * 3_600_000), NOW)).toBe('a day ago');
     expect(copyAge(at(49 * 3_600_000), NOW)).toBe('2 days ago');
     expect(copyAge(null, NOW)).toBeNull();
   });

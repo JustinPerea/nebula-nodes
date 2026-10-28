@@ -7,15 +7,17 @@ Every project lives whole in catalog.json; there are no per-project folders.
 So every commit keeps two copies (2026-10-27, PR #199):
 - catalog.json.bak: the catalog the commit replaced, as a hard link made
   just before the rename, and only when it is the file this transaction
-  read and validated. So it is one commit behind, and costs no bytes;
+  read and validated. So it is one commit behind, and costs no bytes.
+  Where hard links fail it is a real copy of each commit instead;
 - catalog.json.bak.1: a real copy of a committed catalog, rewritten on the
   first commit after it is an hour old. So it is at least an hour behind
   .bak, and can be days old after a pause; a separate file, so damage to
   one inode can't take both.
 A read that finds catalog.json damaged (it won't parse or validate) or
 missing while a copy exists restores it (_recover): the damaged file is kept
-beside it (a few are kept: _prune_damaged), the newest good copy comes back
-with what the damaged file still holds that is newer (services/
+beside it (a few are kept: _prune_damaged), the good copy holding the
+newest catalog comes back with what the damaged file still holds that is
+newer (services/
 catalog_recovery.py), and the restore is recorded once for the person and
 agents (catalog-restore.json, restore_notice), with what an older copy
 decided (an edit reverted, a deleted project back). Projects deleted for
@@ -24,6 +26,12 @@ leaves them deleted. With no good copy the list is rebuilt from what the
 damaged files hold; only when they hold no project at all does the read
 refuse, as before. A catalog from a newer Nebula (version above 1) is not
 damage: it refuses and nothing changes.
+
+Reads stay cheap (review 2 of PR #199, M1): a file this process committed
+(its signature is the projection's) is decoded by the C decoder, refusing
+only NaN and the infinities; the strict read (a number past float's range,
+a lone surrogate) runs only for a file changed elsewhere. A reader on the
+event loop never restores or waits for one (hand_off_restore).
 """
 from __future__ import annotations
 
@@ -83,15 +91,29 @@ RESTORES_KEPT = 10
 RECORD_ROWS = 100  # names listed per restore; the counts are whole
 # The fields prepare writes first, so a cut file still says which project was open.
 _HEAD_KEYS = ("version", "activeProjectId", "workspaceRevision", "migratedProjectId", "purged")
-# A raw catalog that may hold a value the store reads but can't write back
-# (NaN, Infinity, a number past float's range, a lone surrogate): read again
-# strictly when it does (_load).
-_SUSPECT = re.compile(rb"NaN|Infinity|[0-9][eE]\+?[0-9]{3}|\\u[dD][89abAB]")
+# Every read refuses NaN, Infinity and -Infinity (parse_constant: free on the
+# C decoder). A file this process didn't commit (or a copy) is also read
+# strictly: a number past float's range and a lone surrogate are refused too
+# (catalog_recovery.loads, writable), which costs a Python call per float and
+# a re-encode, so never on the hot path (review 2 of PR #199, M1).
+_DECODER = json.JSONDecoder(parse_constant=catalog_recovery.reject_constant)
+# What a raw catalog holding an escaped lone surrogate must contain (the
+# bytes decode as UTF-8, so a raw one is refused before this).
+_ESCAPE = b"\\u"
+# What projection() returns to a reader on the event loop while a restore it
+# handed off runs, when nothing was read before (hand_off_restore).
+RESTORING_REVISION = "restoring"
 UNREADABLE = "Project catalog could not be read; the existing file was preserved"
 
 
 class ProjectStoreError(Exception):
     pass
+
+
+class _HandedOff(Exception):
+    """projection(): the restore of a damaged catalog.json was handed off
+    to a worker thread (hand_off_restore), so this reader answers the last
+    projection instead of restoring or waiting."""
 
 
 class _Damaged(Exception):
@@ -121,6 +143,28 @@ NEWER_VERSION = ("The project list was saved by a newer version of Nebula, so th
 
 def _log(message: str) -> None:
     print(f"[projects] {message}", flush=True)
+
+
+# A kept damaged file's name says when it was kept: ``<name>.damaged-<UTC>-<id>``.
+_STAMP_FORMAT = "%Y%m%dT%H%M%SZ"
+_KEPT_AT = re.compile(r"\.damaged-(\d{8}T\d{6}Z)")
+
+
+def _stamp(moment: datetime) -> str:
+    return f"{moment.strftime(_STAMP_FORMAT)}-{uuid4().hex[:8]}"
+
+
+def _kept_at(path: Path) -> float:
+    """When a damaged file was kept: the time in its name. A hard link keeps
+    the damaged file's own mtime, which can be weeks older (review 2, L7);
+    only a name without a time falls back to it."""
+    match = _KEPT_AT.search(path.name)
+    if match:
+        try:
+            return datetime.strptime(match.group(1), _STAMP_FORMAT).replace(tzinfo=timezone.utc).timestamp()
+        except ValueError:
+            pass
+    return path.stat().st_mtime
 
 
 class ProjectLimitError(ProjectStoreError):
@@ -258,6 +302,23 @@ def purge_expired_trash(catalog: dict[str, Any], *, at: datetime | None = None) 
     return bool(expired)
 
 
+def recovered_name(source_name: str, catalog: dict[str, Any]) -> str:
+    """A recovered copy's name (GM - Design, round 21 of PR #195, G5; and
+    the live canvas filed after a restore, PR #199 GM r3): "<project>
+    (recovered)", then "(recovered 2)", 3 and so on, one past the highest
+    the project's copies have in the list or Recently deleted, so a new copy
+    never takes an earlier one's name."""
+    stem = f"{source_name[:100]} (recovered"
+    pattern = re.compile(re.escape(stem) + r"(?: (\d+))?\)")
+    highest = 0
+    for listing in (catalog.get("projects") or {}, catalog.get("trash") or {}):
+        for project in listing.values():
+            match = pattern.fullmatch(str((project or {}).get("name") or ""))
+            if match:
+                highest = max(highest, int(match.group(1) or 1))
+    return f"{stem})" if highest == 0 else f"{stem} {highest + 1})"
+
+
 def make_project(name: str, snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
     timestamp = now()
     project = {
@@ -310,6 +371,22 @@ class ProjectStore:
         # restore opens that one, or none, never the copy's (review 1, H1).
         # catalog_recovery.UNKNOWN, or no callback, when it isn't recorded.
         self.canvas_owner: Callable[[], Any] | None = None
+        # A reader that finds catalog.json damaged asks this first (main's
+        # _hand_off_catalog_restore): True when the restore was handed to a
+        # worker thread (the reader is on the event loop), and projection()
+        # then answers the last projection rather than restore or wait for
+        # the lock (review 2 of PR #199, L2).
+        self.hand_off_restore: Callable[[], bool] | None = None
+        # Whether a worker thread is reading this catalog file (its
+        # signature) for a reader on the event loop: projection() then
+        # answers the last projection instead of parsing the file itself
+        # (fix round 2, L2: a damaged 102 MB file held the loop 1.6 s in the
+        # parse that finds the damage, before any hand-off could start).
+        self.read_in_flight: Callable[[tuple[int, int, int]], bool] | None = None
+        # The catalog file projection() last found damaged (its signature):
+        # while a hand-off for it runs, a reader skips parsing it again (at
+        # 100 MB a failed parse alone holds the loop for a second).
+        self._damaged_signature: tuple[int, int, int] | None = None
         # This thread's hold on .lock: its depth (only _recover reads inside
         # a hold: flock from a second descriptor would wait on itself), the
         # restores to announce once it is let go, the catalog file this hold
@@ -350,25 +427,34 @@ class ProjectStore:
         active = result.get("activeProjectId")
         if active is not None and active not in result["projects"]:
             raise ValueError("Invalid active project")
+        for key, value in result.items():
+            # A section whose name was damaged ("trasi"): its projects would
+            # vanish from the list unseen (review 2, M2).
+            if key not in catalog_recovery.CATALOG_FIELDS and catalog_recovery.holds_records(value):
+                raise ValueError(f"Invalid catalog: projects outside the list, under {key!r}")
 
     def _empty(self) -> dict[str, Any]:
         return {"version": 1, "projects": {}, "activeProjectId": None, "workspaceRevision": self._initial_revision}
 
     @staticmethod
-    def _parse(raw: bytes) -> Any:
+    def _parse(raw: bytes, *, committed_here: bool = False) -> Any:
         """``raw`` decoded as a catalog may hold it. Raises ValueError for
         anything else, including a value the store reads but can't write
         back (NaN, Infinity, 1e999, a lone surrogate: review 1, L2): those
-        would make every later commit fail. The strict reading runs only for
-        a file that may hold one."""
+        would make every later commit fail.
+
+        ``committed_here``: a file this process committed or already read
+        whole (its signature is the projection's): prepare encoded it with
+        allow_nan=False as UTF-8, so only NaN and the infinities are checked
+        (no cost). Any other file is read strictly (review 2, M1)."""
         text = raw.decode("utf-8")
-        if _SUSPECT.search(raw) is None:
-            try:
-                return json.loads(text)
-            except RecursionError as exc:
-                raise ValueError("nested too deeply") from exc
+        try:
+            if committed_here:
+                return _DECODER.decode(text)
+        except RecursionError as exc:
+            raise ValueError("nested too deeply") from exc
         result = catalog_recovery.loads(text)
-        if not catalog_recovery.writable(result):
+        if _ESCAPE in raw and not catalog_recovery.writable(result):
             raise ValueError("holds a value that can't be written back")
         return result
 
@@ -399,8 +485,10 @@ class ProjectStore:
             raise _Damaged("missing", "catalog.json is missing") from None
         except OSError as exc:
             raise ProjectStoreError(UNREADABLE) from exc
+        cached = self._projection
+        committed_here = cached is not None and cached.signature == (info.st_ino, info.st_mtime_ns, info.st_size)
         try:
-            result = self._parse(raw)
+            result = self._parse(raw, committed_here=committed_here)
         except ValueError as exc:
             raise _Damaged("corrupt", f"not JSON: {exc}", raw) from exc
         if _newer_version(result):
@@ -425,10 +513,20 @@ class ProjectStore:
                 raise ProjectStoreError(UNREADABLE) from exc
         return result, raw
 
-    def _read(self, *, upgrade: bool = True) -> dict[str, Any]:
+    def _read(self, *, upgrade: bool = True, hand_off: bool = False,
+              signature: tuple[int, int, int] | None = None) -> dict[str, Any]:
+        """catalog.json, restored first when it is damaged. ``hand_off``
+        (projection()): a damaged file is noted by ``signature``, the one
+        taken before reading it (None: missing), and when hand_off_restore
+        takes its restore (a reader on the event loop), _HandedOff is raised
+        instead of restoring."""
         try:
             return self._load(upgrade=upgrade)[0]
         except _Damaged as damage:
+            if hand_off:
+                self._damaged_signature = signature
+                if self._handed_off():
+                    raise _HandedOff from None
             return self._recover(damage, upgrade=upgrade)[0]
 
     @contextmanager
@@ -614,10 +712,22 @@ class ProjectStore:
         source: str | None = None
         copy_at: str | None = None
         damaged_copies: list[tuple[Path, bytes, Any]] = []
-        for path in (self.backup_path, self.older_backup_path):
+        # Every copy is read: the base is the valid one that holds the newest
+        # catalog by its own dates (catalog_recovery.catalog_freshness; every
+        # change Nebula makes moves one), .bak when they agree (review 2, L3:
+        # a .bak that stopped following, as where hard links fail, was
+        # chosen by its name). Not by mtime: a copy made by hand or a sync
+        # tool has a new one.
+        valid: list[tuple[Any, float, int, Path, bytes, dict[str, Any]]] = []
+        mtimes: dict[Path, float] = {}
+        for order, path in enumerate((self.backup_path, self.older_backup_path)):
             raw = self._copy_bytes(path)
             if raw is None:
                 continue
+            try:
+                mtimes[path] = path.stat().st_mtime
+            except OSError:
+                mtimes[path] = 0.0
             try:
                 candidate = self._parse(raw)
             except ValueError as exc:
@@ -633,20 +743,27 @@ class ProjectStore:
                 _log(f"{path.name} is damaged too ({exc})")
                 damaged_copies.append((path, raw, candidate))
                 continue
-            base, base_raw, source = candidate, raw, path.name
-            try:
-                # When the copy's catalog was committed: .bak keeps the
-                # replaced file's own time (a hard link), .bak.1 is written
-                # right after its commit.
-                copy_at = datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat()
-            except OSError:
-                copy_at = None
-            break
-        # Newest first: the damaged catalog, then the copies that failed.
+            freshest = catalog_recovery.catalog_freshness(candidate)
+            valid.append((freshest.timestamp() if freshest else float("-inf"), -order, path, raw, candidate))
+        if valid:
+            *_order, chosen, base_raw, base = max(valid, key=lambda row: row[:2])
+            source = chosen.name
+            if len(valid) > 1:
+                _log(f"both copies are good; {source} holds the newer catalog")
+            # When the copy's catalog was committed: .bak keeps the replaced
+            # file's own time (a hard link), .bak.1 is written right after
+            # its commit.
+            copy_at = datetime.fromtimestamp(mtimes[chosen], timezone.utc).isoformat() if mtimes[chosen] else None
+        # Newest first: the damaged catalog, then the copies that failed and
+        # are no older than the base (an older one would add back what was
+        # deleted since; it is still kept below).
         salvages = []
         if damage.raw is not None:
             salvages.append(catalog_recovery.salvage(damage.raw, damage.parsed))
-        salvages.extend(catalog_recovery.salvage(raw, parsed) for _, raw, parsed in damaged_copies)
+        base_mtime = mtimes.get(self.root / source) if source else None
+        salvages.extend(catalog_recovery.salvage(raw, parsed) for path, raw, parsed in
+                        sorted(damaged_copies, key=lambda row: -mtimes.get(row[0], 0.0))
+                        if base_mtime is None or mtimes.get(path, 0.0) >= base_mtime)
         for found in salvages:
             version = found.version
             if isinstance(version, int) and not isinstance(version, bool) and version > 1:
@@ -654,7 +771,7 @@ class ProjectStore:
                 raise ProjectStoreError(NEWER_VERSION)
         kind = "restored" if base is not None else "rebuilt"
         moment = datetime.now(timezone.utc)
-        stamp = f"{moment.strftime('%Y%m%dT%H%M%SZ')}-{uuid4().hex[:8]}"
+        stamp = _stamp(moment)
         if base is None and not any(found.entries for found in salvages):
             if damage.raw is None:
                 # catalog.json is gone and every copy is damaged and empty of
@@ -777,6 +894,9 @@ class ProjectStore:
             _log(f"{row['id']} \"{row['name']}\" was restored after {source} and is in Recently deleted again")
         for row in merged.kept_deleted:
             _log(f"{row['id']} \"{row['name']}\" was deleted for good after {source}: it stays deleted")
+        for row in merged.rekeyed:
+            _log(f"{row['id']}'s record sat under a damaged key ({row['key'] or 'not an id'}): "
+                 "filed under the id it and the copy agree on")
         if merged.open_project_missing:
             _log(f"the open project {merged.open_project_missing} didn't come back; no project is open")
         _log(f"{kind} the project list: {len(catalog['projects'])} projects, "
@@ -805,7 +925,13 @@ class ProjectStore:
             "keptDeleted": rows(merged.kept_deleted), "keptDeletedCount": len(merged.kept_deleted),
             "projectCount": len(catalog["projects"]), "trashCount": len(catalog.get("trash") or {}),
             "openProject": open_id, "openFrom": merged.active_from,
-            "openProjectMissing": merged.open_project_missing, "recoveredCanvas": None, "dismissedAt": None,
+            "openProjectMissing": merged.open_project_missing, "openProjectName": merged.open_project_name,
+            # Which project the live canvas was when this restore ran: a
+            # project id, None (no project's, or unproven) or "unknown" (never
+            # recorded). A filing of the canvas goes in this record only when
+            # it is this restore's doing (main._note_canvas_settled).
+            "canvasOwner": owner if isinstance(owner, str) else None if owner is None else "unknown",
+            "recoveredCanvas": None, "dismissedAt": None,
             # Whether the damaged catalog.json was read to its end (it parsed;
             # only its shape was wrong). When it wasn't (cut, zeroed, a key
             # destroyed), what it held past the damage is unknown, so nobody
@@ -828,7 +954,7 @@ class ProjectStore:
     def _prune_damaged(self, *, keep: set[Path]) -> None:
         """Delete kept damaged files past the bound (DAMAGED_KEPT_*), never
         one in ``keep`` (this restore's) or one the notice the person hasn't
-        closed names. Under the lock."""
+        closed names. Ages each by when it was kept (_kept_at). Under the lock."""
         notice = self.restore_notice()
         named = {Path(path) for path in (notice or {}).get("setAside") or [] if isinstance(path, str)}
         protected = {path.name for path in keep | named}
@@ -838,14 +964,14 @@ class ProjectStore:
             for path in self.root.glob(f"{prefix}.damaged-*"):
                 if path.name[len(prefix):].startswith(".damaged-") and not path.is_symlink():
                     try:
-                        found.append((path.stat().st_mtime, path))
+                        found.append((_kept_at(path), path))
                     except OSError:
                         continue
             found.sort(reverse=True)  # newest first
-            for index, (mtime, path) in enumerate(found):
+            for index, (kept_at, path) in enumerate(found):
                 if path.name in protected:
                     continue
-                if index < DAMAGED_KEPT_MIN or (mtime >= cutoff and index < DAMAGED_KEPT_MAX):
+                if index < DAMAGED_KEPT_MIN or (kept_at >= cutoff and index < DAMAGED_KEPT_MAX):
                     continue
                 try:
                     path.unlink()
@@ -920,11 +1046,16 @@ class ProjectStore:
 
     def _record_restore(self, record: dict[str, Any]) -> None:
         if self.record_path.exists() and not self._records():
-            try:  # unreadable: keep it, as every damaged file is kept
-                self._set_aside(self.record_path, uuid4().hex[:8])
+            try:  # unreadable: keep it, as every damaged file is kept (named by when, for pruning)
+                self._set_aside(self.record_path, _stamp(datetime.now(timezone.utc)))
             except OSError:
                 pass
         self._write_records([*self._records(), record])
+
+    def latest_restore(self) -> dict[str, Any] | None:
+        """The newest restore, as recorded, dismissed or not."""
+        restores = self._records()
+        return restores[-1] if restores else None
 
     def restore_notice(self) -> dict[str, Any] | None:
         """The newest restore, as recorded, while the person hasn't dismissed
@@ -1012,22 +1143,59 @@ class ProjectStore:
         and after it, and a projection is kept only when both agree (a commit
         between them makes a new inode). A writer that rewrote catalog.json in
         place keeping its size and mtime would not be seen; Nebula never
-        writes it in place (commit_prepared)."""
+        writes it in place (commit_prepared). A damaged file is restored
+        here, unless hand_off_restore takes it (a reader on the event loop):
+        then the last projection is answered, never a wait. A reader on the
+        loop also answers the last projection while the shared worker read
+        of the same file runs (read_in_flight), rather than parse it again;
+        with no projection yet it reads the file itself."""
         signature = self._signature()
         cached = self._projection
         if signature is not None and cached is not None and cached.signature == signature:
+            return cached
+        if signature is not None and signature == self._damaged_signature and self._handed_off():
+            return cached or Projection(None, None, RESTORING_REVISION, "", ())
+        if signature is not None and cached is not None and self._read_elsewhere(signature):
+            # The shared worker read of this very file is running: its result
+            # replaces this answer the moment it lands.
             return cached
         try:
             self._ensure_root()
         except OSError as exc:
             raise ProjectStoreError("Project storage is unavailable; the canvas was preserved") from exc
         before = self._signature()
-        catalog = self._read(upgrade=False)
+        try:
+            catalog = self._read(upgrade=False, hand_off=True, signature=before)
+        except _HandedOff:
+            # A restore runs in a worker thread (or another process holds
+            # the lock for one): the last projection, never a wait.
+            return cached or Projection(None, None, RESTORING_REVISION, "", ())
         after = self._signature()
         view = _projection(catalog, after if after == before else None)
         if view.signature is not None:
             self._projection = view
         return view
+
+    def _read_elsewhere(self, signature: tuple[int, int, int]) -> bool:
+        """Whether a worker thread is already reading this catalog file for
+        this reader (read_in_flight), so it needn't parse it too."""
+        if self.read_in_flight is None or getattr(self._local, "depth", 0):
+            return False
+        try:
+            return bool(self.read_in_flight(signature))
+        except Exception:  # noqa: BLE001 - the reader then reads it itself, as before
+            return False
+
+    def _handed_off(self) -> bool:
+        """Whether the restore of a damaged catalog.json was handed off from
+        this reader (hand_off_restore), so it doesn't restore or wait."""
+        if self.hand_off_restore is None or getattr(self._local, "depth", 0):
+            return False
+        try:
+            return bool(self.hand_off_restore())
+        except Exception as exc:  # noqa: BLE001 - the reader then restores, as before
+            _log(f"could not hand the restore off: {exc}")
+            return False
 
     def signature(self) -> tuple[int, int, int] | None:
         """catalog.json's (inode, mtime, size): it changes on every commit, so a
@@ -1136,27 +1304,32 @@ class ProjectStore:
             pass
         return temporary
 
-    def _link_backup(self) -> Path | None:
+    def _link_backup(self) -> tuple[Path | None, bool]:
         """Before a commit's rename: a hard link of catalog.json under a
         temporary name, when it is the file this hold read and validated
         (its signature), else None. The commit then renames it to .bak, so
         .bak is the catalog that commit replaced, never unvalidated bytes,
-        and no byte is copied (review 1, L6)."""
+        and no byte is copied (review 1, L6). The second value says the link
+        itself failed (a file system without hard links: exFAT, FAT, some
+        network and FUSE mounts): the commit then writes .bak as a real copy
+        of what it commits, every time (review 2, L3)."""
         validated = getattr(self._local, "validated", None)
         if validated is None:
-            return None
+            return None, False
         try:
             if self._signature() != validated:
-                return None
+                return None, False
         except ProjectStoreError:
-            return None
+            return None, False
         link = self.root / f".catalog-bak.{uuid4().hex}.tmp"
         try:
             os.link(self.path, link, follow_symlinks=False)
         except OSError as exc:
-            _log(f"could not keep the replaced catalog as {BACKUP_NAME}: {exc}")
-            return None
-        return link
+            if not getattr(self, "_told_no_links", False):
+                self._told_no_links = True
+                _log(f"hard links don't work here ({exc}); {BACKUP_NAME} is a full copy of each commit instead")
+            return None, True
+        return link, False
 
     def commit_prepared(self, temporary: Path) -> None:
         prepared, self._prepared = self._prepared, None
@@ -1167,7 +1340,7 @@ class ProjectStore:
             except OSError:
                 pass  # the rename below says what is wrong
         fd = os.open(self.root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-        link = self._link_backup()
+        link, link_failed = self._link_backup()
         # A successful atomic rename is the commit point. A post-commit
         # directory fsync warning must not report a failed, unadopted canvas.
         try:
@@ -1202,10 +1375,12 @@ class ProjectStore:
                 print(f"[projects] directory fsync failed after commit: {exc}", flush=True)
             if written is not None and prepared is not None:
                 # The commit is made; now the copies that need bytes: the
-                # first .bak (none yet to link) and the hourly older copy.
-                # Never fails the commit: the next one tries again.
+                # first .bak (none yet to link), .bak on every commit where
+                # links fail (a copy of this commit: never a .bak that stops
+                # following), and the hourly older copy. Never fails the
+                # commit: the next one tries again.
                 try:
-                    if link is None and not self.backup_path.exists():
+                    if link_failed or (link is None and not self.backup_path.exists()):
                         self._write_file(self.backup_path, prepared[2])
                     self._write_older_backup(prepared[2])
                     os.fsync(fd)

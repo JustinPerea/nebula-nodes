@@ -95,6 +95,7 @@ from services import graph_file_links, project_size
 from services.cli_graph import OWNER_UNKNOWN, OWNER_UNPROVEN, SHORT_ID_RE, CLIGraph
 from services.retired_nodes import folded_entry, migrate_graph, migrate_node, migrate_param_update, migrate_params, retired_message
 from services.saved_graph_upgrades import PARAMS_VERSION, request_version, upgrade_flat_nodes, upgrade_project
+from services import project_store as project_store_module
 from services.project_store import (
     MAX_PROJECT_BYTES, ProjectLimitError, ProjectStore, ProjectStoreError, empty_snapshot,
     make_project, metadata as project_metadata, needs_cover, now as project_now,
@@ -307,8 +308,9 @@ def _catalog_restore_note(record: Mapping[str, Any]) -> str:
     if record.get("source") and record.get("copyAt"):
         parts.append(f"That copy is from {record['copyAt']}.")
     if record.get("kind") == "restored" and record.get("damagedReadWhole") is False:
-        parts.append("The damaged file couldn't be read to its end, so changes made after the copy "
-                     "may be missing without being listed here (damagedReadWhole: false).")
+        parts.append("The damaged file couldn't be read whole (cut, zeroed, or a key or section name damaged), "
+                     "so changes made after the copy may be missing without being listed here "
+                     "(damagedReadWhole: false).")
     added = count("addedBackCount")
     if added:
         parts.append(f"{projects(added)} the copy lacked {'were' if added != 1 else 'was'} "
@@ -341,9 +343,16 @@ def _catalog_restore_note(record: Mapping[str, Any]) -> str:
         parts.append(f"{projects(kept_deleted)} deleted for good after the copy "
                      f"{'stay' if kept_deleted != 1 else 'stays'} deleted (keptDeleted).")
     recovered = record.get("recoveredCanvas")
+    waiting = record.get("canvasNotFiled")
     if isinstance(recovered, Mapping) and recovered.get("id"):
         parts.append(f"The live canvas wasn't a project in the restored list, so it was filed as its own project "
-                     f"\"{recovered.get('name') or RECOVERED_CANVAS_NAME}\" ({recovered['id']}) and opened.")
+                     f"\"{recovered.get('name') or RECOVERED_CANVAS_NAME}\" ({recovered['id']}) and opened; "
+                     "nothing on it is lost.")
+    elif isinstance(waiting, Mapping):
+        parts.append(f"The live canvas wasn't a project in the restored list and couldn't be filed as its own: the "
+                     f"list is at its {waiting.get('reason')} limit (canvasNotFiled). It stays the live canvas with no "
+                     "project open; opening or making a project is refused until the person frees room, and the "
+                     "next listing then files it.")
     elif record.get("openProjectMissing"):
         parts.append("The project that was open didn't come back, so none is open.")
     kept = [path for path in record.get("setAside") or [] if path]
@@ -364,7 +373,7 @@ def _catalog_restore_view(record: Mapping[str, Any] | None) -> dict[str, Any] | 
             "addedBackCount", "updatedFromDisk", "updatedFromDiskCount", "notAddedBack", "notAddedBackCount",
             "reverted", "revertedCount", "cameBack", "cameBackCount", "backInTrash", "backInTrashCount",
             "keptDeleted", "keptDeletedCount", "projectCount", "trashCount", "openProject", "openFrom",
-            "openProjectMissing", "recoveredCanvas", "damagedReadWhole")
+            "openProjectMissing", "openProjectName", "recoveredCanvas", "canvasNotFiled", "damagedReadWhole")
     view = {key: copy.deepcopy(record.get(key)) for key in keys}
     for key in ("reverted", "cameBack", "backInTrash", "keptDeleted"):
         view[key] = view[key] if isinstance(view[key], list) else []
@@ -513,8 +522,14 @@ def _resolve_canvas_owner_at_boot(graph: CLIGraph, store: ProjectStore, *, state
       load) beside a catalog: empty, so no project's (the open one is
       never emptied by the next listing);
     - a catalog that reads: its open project, as before this was recorded;
-    - a damaged or missing one: unproven, so the listing files the canvas
-      as its own project instead of saving it into the restored list's."""
+    - a damaged one whose head still says which project was open: that
+      one, the same bytes an intact catalog would have been believed on
+      (review 2 of PR #199, L8: upgrade day, a pre-PR state.json beside a
+      catalog already damaged; the restore then opens that project and the
+      canvas goes back into it, rather than into a second project);
+    - a missing one, or a head that doesn't read: unproven, so the listing
+      files the canvas as its own project instead of saving it into the
+      restored list's. Never the copy's open project (review 1, H1)."""
     if graph.owner is not OWNER_UNKNOWN:
         return
     if not store.path.exists():
@@ -524,12 +539,15 @@ def _resolve_canvas_owner_at_boot(graph: CLIGraph, store: ProjectStore, *, state
     if not state_loaded:
         graph.owner = None
         return
+    from services import catalog_recovery
+
     try:
         catalog, _raw = store._load(upgrade=False)
     except ProjectStoreError:
         return  # unreadable, not damaged (a link, too large, a newer Nebula): as before
-    except Exception:  # noqa: BLE001 - _Damaged: the copy must not decide it
-        graph.owner = OWNER_UNPROVEN
+    except Exception as damage:  # noqa: BLE001 - _Damaged: the copy must not decide it
+        head = catalog_recovery.head_active(getattr(damage, "raw", None), getattr(damage, "parsed", None))
+        graph.owner = OWNER_UNPROVEN if head is catalog_recovery.UNKNOWN else head
         return
     graph.owner = catalog.get("activeProjectId")
 
@@ -1290,7 +1308,75 @@ def _params_outdated(request: Request) -> bool:
     return supplied.strip() != str(PARAMS_VERSION)
 
 
-_catalog_reading: tuple[asyncio.AbstractEventLoop, asyncio.Future[Any]] | None = None
+# The shared off-loop read: its loop, its future and the catalog file it
+# reads (signature, None when it couldn't be taken).
+_catalog_reading: tuple[asyncio.AbstractEventLoop, asyncio.Future[Any], tuple[int, int, int] | None] | None = None
+# The catalog file an off-loop read last failed on (its signature): a reader
+# on the loop then reads it itself and answers its own error, rather than
+# starting a read that fails the same way on every canvas event.
+_catalog_read_failed: tuple[int, int, int] | None = None
+
+
+def _start_catalog_read(loop: asyncio.AbstractEventLoop) -> asyncio.Future[Any]:
+    """The shared off-loop read of catalog.json (it restores a damaged one
+    in that worker thread), started if none is running on ``loop``."""
+    global _catalog_reading
+    if _catalog_reading is None or _catalog_reading[0] is not loop or _catalog_reading[1].done():
+        store = project_store
+        try:
+            signature = store.signature()
+        except ProjectStoreError:
+            signature = None
+
+        def finished(future: asyncio.Future[Any]) -> None:
+            global _catalog_read_failed
+            failed = future.cancelled() or future.exception() is not None
+            _catalog_read_failed = signature if failed else None
+
+        future = asyncio.ensure_future(asyncio.to_thread(store.projection))
+        future.add_done_callback(finished)
+        _catalog_reading = (loop, future, signature)
+    return _catalog_reading[1]
+
+
+def _catalog_read_in_flight(signature: tuple[int, int, int]) -> bool:
+    """ProjectStore.read_in_flight: whether the shared off-loop read of this
+    catalog file is running for a reader on this event loop. The reader then
+    answers the last projection instead of parsing the file on the loop
+    (fix round 2 of PR #199, L2: the parse that finds a 102 MB file damaged
+    held the loop 1.6 s). A worker thread (no running loop) reads it."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return False
+    reading = _catalog_reading
+    return reading is not None and reading[0] is loop and not reading[1].done() and reading[2] == signature
+
+
+def _hand_off_catalog_restore() -> bool:
+    """ProjectStore.hand_off_restore: a reader on the event loop (a canvas
+    event's workspace context, the pins of a /ws connect, the journal's
+    project tag) that found catalog.json damaged hands the restore to the
+    shared worker-thread read and answers the last projection, so the loop
+    never restores or waits on the lock for one (review 2 of PR #199, L2:
+    3.3 s at 31 MB, 14.1 s at 102 MB). In a worker thread (no running
+    loop) the reader restores itself, as before. Not after the same file
+    failed off the loop: the reader then gets that error itself."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return False
+    try:
+        if _catalog_read_failed is not None and project_store.signature() == _catalog_read_failed:
+            return False
+    except ProjectStoreError:
+        return False
+    _start_catalog_read(loop)
+    return True
+
+
+project_store.hand_off_restore = _hand_off_catalog_restore
+project_store.read_in_flight = _catalog_read_in_flight
 
 
 async def _read_catalog_off_loop() -> None:
@@ -1300,15 +1386,11 @@ async def _read_catalog_off_loop() -> None:
     held up every request, canvas event and run (review 1 of PR #199, L5).
     Concurrent requests wait on the same read. A failure is left to the
     request, which reads again and answers its own error."""
-    global _catalog_reading
-    store = project_store
-    if not store.needs_reading():
+    if not project_store.needs_reading():
         return
-    loop = asyncio.get_running_loop()
-    if _catalog_reading is None or _catalog_reading[0] is not loop or _catalog_reading[1].done():
-        _catalog_reading = (loop, asyncio.ensure_future(asyncio.to_thread(store.projection)))
+    reading = _start_catalog_read(asyncio.get_running_loop())
     try:
-        await asyncio.shield(_catalog_reading[1])
+        await asyncio.shield(reading)
     except Exception:  # noqa: BLE001 - the request reads it again and answers its own error
         pass
 
@@ -14587,13 +14669,14 @@ def _set_canvas_owner(owner: Any) -> None:
             raise ProjectStoreError("The live canvas could not be saved; nothing changed") from exc
 
 
-def _file_live_canvas(catalog: dict[str, Any], exported: dict[str, Any], *, migrated: bool = False) -> dict[str, Any]:
-    """File the live canvas as a new project, "Recovered canvas", and open
-    it: the same graph and ids, recorded as that project's in state.json
-    before the caller commits the catalog. For a canvas no project in the
-    catalog is (the unfiled canvas of a first launch, ``migrated``, or one
-    whose project a restore couldn't bring back)."""
-    project = make_project(RECOVERED_CANVAS_NAME, {**empty_snapshot(), "nodes": exported["nodes"], "edges": exported["edges"]})
+def _file_live_canvas(catalog: dict[str, Any], exported: dict[str, Any], *, migrated: bool = False,
+                      name: str = RECOVERED_CANVAS_NAME) -> dict[str, Any]:
+    """File the live canvas as a new project, ``name``, and open it: the
+    same graph and ids, recorded as that project's in state.json before the
+    caller commits the catalog. For a canvas no project in the catalog is
+    (the unfiled canvas of a first launch, ``migrated``, or one whose
+    project a restore couldn't bring back)."""
+    project = make_project(name, {**empty_snapshot(), "nodes": exported["nodes"], "edges": exported["edges"]})
     _set_canvas_owner(project["id"])
     _overlay_live_project(project, exported)
     catalog["projects"][project["id"]] = project
@@ -14604,32 +14687,109 @@ def _file_live_canvas(catalog: dict[str, Any], exported: dict[str, Any], *, migr
     return project
 
 
-def _settle_live_canvas(catalog: dict[str, Any], exported: dict[str, Any]) -> tuple[str, dict[str, Any] | None] | None:
+def _filed_canvas_name(catalog: dict[str, Any], owner: Any) -> str:
+    """What the live canvas is filed as (GM r3 of PR #199): "<project>
+    (recovered)" when which project it was is known and that project's name
+    can be read (in Recently deleted, or in the restore that couldn't bring
+    it back), numbered from "(recovered 2)" like #195's copies; else
+    "Recovered canvas"."""
+    name = None
+    if isinstance(owner, str):
+        trashed = (catalog.get("trash") or {}).get(owner)
+        if isinstance(trashed, dict):
+            name = trashed.get("name")
+        else:
+            latest = project_store.latest_restore() or {}
+            if latest.get("openProjectMissing") == owner:
+                name = latest.get("openProjectName")
+    if not isinstance(name, str) or not name.strip():
+        return RECOVERED_CANVAS_NAME
+    return project_store_module.recovered_name(name, catalog)
+
+
+def _filing_room(catalog: dict[str, Any], exported: dict[str, Any]) -> str | None:
+    """Which limit filing the live canvas as a new project would pass
+    ("projects" or "storage"), or None when there is room. Checked before
+    anything is written (state.json included), so a full list never makes
+    the listing fail or the canvas change owner (review 2 of PR #199, L4);
+    prepare checks it exactly at the commit."""
+    if len(catalog["projects"]) >= project_store_module.MAX_PROJECTS:
+        return "projects"
+    try:
+        signature = project_store.signature()
+    except ProjectStoreError:
+        signature = None
+    canvas = len(json.dumps({"nodes": exported["nodes"], "edges": exported["edges"]}, ensure_ascii=False,
+                            separators=(",", ":"), default=str).encode("utf-8"))
+    if (signature[2] if signature else 0) + canvas + 64 * 1024 > project_store_module.MAX_CATALOG_BYTES:
+        return "storage"
+    return None
+
+
+# The live canvas couldn't be filed as its own project because the list is
+# at a limit (review 2 of PR #199, L4): {reason, from, since}. It stays the
+# live canvas and no project is open, so nothing replaces or overlays it;
+# opening or making a project is refused until there is room, and the next
+# listing with room files it. Cleared when it is filed or is a project again.
+_canvas_not_filed: dict[str, Any] | None = None
+
+
+def _mark_canvas_not_filed(limit: str, owner: Any) -> None:
+    """Note that the live canvas (``owner``'s) couldn't be filed: the list
+    is at its ``limit``. Logged and journaled once per limit."""
+    global _canvas_not_filed
+    first = _canvas_not_filed is None or _canvas_not_filed.get("reason") != limit
+    if first:
+        print(f"[projects] the live canvas isn't a project in the list (it was {owner!r}) and the list is "
+              f"at its {limit} limit: it stays the live canvas, unfiled, until there is room", flush=True)
+    _canvas_not_filed = {"reason": limit, "from": owner if isinstance(owner, str) else None,
+                         "since": project_now() if first else (_canvas_not_filed or {}).get("since"),
+                         # Journaled by the next _note_canvas_settled (a refused open never gets there).
+                         "new": first or bool((_canvas_not_filed or {}).get("new"))}
+
+
+def _settle_live_canvas(catalog: dict[str, Any], exported: dict[str, Any]) -> tuple[str, Any] | None:
     """Make the catalog's open project the one the live canvas is, before
     anything saves the canvas into a project or replaces it (review 1 of PR
     #199, H1). The two disagree after a restore, or a crash between the two
     files of a switch, a create or a delete. Returns None when they agree,
-    else (what it did, the project filed): "opened" the canvas's own project
-    (still in the list); "filed" the canvas as "Recovered canvas" (its
-    project isn't in the list, or which it is can't be known); "closed": no
-    project open (an empty canvas that isn't the open project). The caller
-    commits; the workspace revision changes, so open tabs reload."""
+    else (what it did, more):
+    - "opened": the canvas's own project (still in the list);
+    - "filed": the canvas as its own project (its project isn't in the list,
+      or which it is can't be known); more is (the project, the owner before);
+    - "waiting": it couldn't be filed, the list is at a limit; more is the
+      limit; no project is open;
+    - "closed": no project open (an empty canvas that isn't the open one).
+    The caller commits (the workspace revision changes, so open tabs
+    reload), then calls _note_canvas_settled."""
+    global _canvas_not_filed
     owner = cli_graph.owner
     active = catalog["activeProjectId"]
     if owner is OWNER_UNKNOWN or owner == active:
+        _canvas_not_filed = None
         return None
     if isinstance(owner, str) and owner in catalog["projects"]:
         catalog["activeProjectId"] = owner
         catalog["workspaceRevision"] = uuid4().hex
         node_errors.use_project(owner)
+        _canvas_not_filed = None
         print(f"[projects] the live canvas is project {owner}, not the open {active}: opening it", flush=True)
         return "opened", None
     if cli_graph.nodes or cli_graph.edges:
-        project = _file_live_canvas(catalog, exported)
+        limit = _filing_room(catalog, exported)
+        if limit is not None:
+            _mark_canvas_not_filed(limit, owner)
+            if active is not None:
+                catalog["activeProjectId"] = None
+                catalog["workspaceRevision"] = uuid4().hex
+            return "waiting", limit
+        project = _file_live_canvas(catalog, exported, name=_filed_canvas_name(catalog, owner))
+        _canvas_not_filed = None
         print(f"[projects] the live canvas isn't a project in the list (it was {owner!r}): "
-              f"filed as \"{RECOVERED_CANVAS_NAME}\" {project['id']}", flush=True)
-        return "filed", project
+              f"filed as \"{project['name']}\" {project['id']}", flush=True)
+        return "filed", (project, owner)
     _set_canvas_owner(None)
+    _canvas_not_filed = None
     if active is None:
         return None
     catalog["activeProjectId"] = None
@@ -14638,14 +14798,65 @@ def _settle_live_canvas(catalog: dict[str, Any], exported: dict[str, Any]) -> tu
     return "closed", None
 
 
-def _note_live_canvas_settled(settled: tuple[str, dict[str, Any] | None] | None) -> None:
-    """After the commit: a canvas filed as "Recovered canvas" right after a
-    restore goes in that restore's record (the agents' note says so)."""
-    if not settled or settled[0] != "filed" or settled[1] is None:
+def _restore_of(notice: Mapping[str, Any] | None, owner: Any) -> bool:
+    """Whether filing (or not filing) the live canvas whose owner was
+    ``owner`` is the doing of the restore ``notice`` records: it opened no
+    project, and the canvas is the project it couldn't bring back, or was
+    unproven when it ran. A later filing (a crash window weeks on) is not
+    (review 2 of PR #199, L5 i)."""
+    if not notice or notice.get("openFrom") != "none" or notice.get("recoveredCanvas"):
+        return False
+    if isinstance(owner, str):
+        return notice.get("openProjectMissing") == owner
+    return owner is OWNER_UNPROVEN and notice.get("canvasOwner") is None and not notice.get("openProjectMissing")
+
+
+def _note_canvas_settled(settled: tuple[str, Any] | None) -> None:
+    """After the commit that settled the live canvas (every route that
+    settles it: the listing, create, open and delete; review 2 of PR #199,
+    L5): a filing goes in the restore record it came from (the notice and
+    the agents' note say so) and is journaled (`project.canvasFiled`); a
+    canvas that couldn't be filed is journaled once
+    (`project.canvasNotFiled`) and noted on its restore. Never fails the
+    route."""
+    if not settled or settled[0] not in ("filed", "waiting"):
         return
-    notice = project_store.restore_notice()
-    if notice and notice.get("id") and not notice.get("recoveredCanvas"):
-        project_store.note_restore(notice["id"], recoveredCanvas={"id": settled[1]["id"], "name": settled[1]["name"]})
+    try:
+        notice = project_store.restore_notice()
+        if settled[0] == "filed":
+            project, owner = settled[1]
+            restore_id = notice["id"] if _restore_of(notice, owner) else None
+            if restore_id:
+                project_store.note_restore(restore_id, recoveredCanvas={"id": project["id"], "name": project["name"]},
+                                           canvasNotFiled=None)
+            _journal("project.canvasFiled", data={"projectId": project["id"], "name": project["name"],
+                                                  "from": owner if isinstance(owner, str) else None,
+                                                  "restoreId": restore_id},
+                     summary=f'saved the live canvas as its own project "{project["name"]}"', actor={"kind": "system"})
+            return
+        waiting = _canvas_not_filed or {}
+        if not waiting.pop("new", False):
+            return
+        owner = cli_graph.owner
+        restore_id = notice["id"] if _restore_of(notice, owner) else None
+        if restore_id:
+            project_store.note_restore(restore_id, canvasNotFiled={"reason": settled[1]})
+        _journal("project.canvasNotFiled", data={"reason": settled[1], "from": waiting.get("from"),
+                                                 "restoreId": restore_id},
+                 summary=f"couldn't save the live canvas as its own project: the project list is at its {settled[1]} limit",
+                 actor={"kind": "system"})
+    except Exception as exc:  # noqa: BLE001 - bookkeeping on a commit that landed
+        print(f"[projects] could not note how the live canvas was settled: {exc}", flush=True)
+
+
+def _refuse_while_canvas_not_filed(settled: tuple[str, Any] | None) -> None:
+    """An open or a create replaces the live canvas: refused while it
+    couldn't be filed (the list is at a limit), with the limit's own 413, so
+    nothing in it is lost. Freeing room (moving a project to Recently
+    deleted, or deleting one for good) lets the next listing file it."""
+    if settled and settled[0] == "waiting":
+        message = "Project limit reached" if settled[1] == "projects" else "Project storage limit reached"
+        raise ProjectLimitError(message, settled[1])
 
 
 def _graph_canvas_export(graph: CLIGraph) -> dict[str, list[dict[str, Any]]]:
@@ -14837,12 +15048,13 @@ async def list_projects() -> dict[str, Any]:
     exported = await _projects_live_export()
     with project_store.transaction() as catalog:
         changed = False
+        revision_read = catalog["workspaceRevision"]
         adopted: str | None = None
         filed_from: tuple[str, int] | None = None
         # The open project is the one the live canvas is, or the canvas is
         # filed as its own (review 1 of PR #199, H1).
         settled = _settle_live_canvas(catalog, exported)
-        changed = settled is not None
+        changed = settled is not None and (settled[0] != "waiting" or catalog["workspaceRevision"] != revision_read)
         if not catalog["projects"] and cli_graph.nodes:
             # The unfiled canvas of a first launch (or from before projects).
             filed_from = (catalog["workspaceRevision"], canvas_undo_book.epoch(None))
@@ -14858,13 +15070,30 @@ async def list_projects() -> dict[str, Any]:
         expired = purge_expired_trash(catalog)
         changed = expired or changed
         if changed:
-            project_store.commit(catalog)
+            try:
+                project_store.commit(catalog)
+            except ProjectLimitError as exc:
+                if not settled or settled[0] != "filed":
+                    raise
+                # The room check let it through but the commit is past a
+                # limit: undo the filing (state.json too), keep the canvas
+                # live and unfiled, and list without it (L4's backstop).
+                filed, previous_owner = settled[1]
+                catalog["projects"].pop(filed["id"], None)
+                catalog["activeProjectId"] = None
+                catalog["workspaceRevision"] = uuid4().hex
+                if catalog.get("migratedProjectId") == filed["id"]:
+                    catalog.pop("migratedProjectId", None)
+                _set_canvas_owner(previous_owner)
+                _mark_canvas_not_filed(exc.limit, previous_owner)
+                settled = ("waiting", exc.limit)
+                project_store.commit(catalog)
         if adopted is not None:
             # In the commit's step: the same live graph, now this project's.
             _adopt_run_canvases(adopted)
             if filed_from is not None:
                 _note_canvas_filed(*filed_from, _workspace_context())
-        _note_live_canvas_settled(settled)
+        _note_canvas_settled(settled)
         listing = {
             "projects": sorted((project_metadata(project) for project in catalog["projects"].values()), key=lambda project: project["updatedAt"], reverse=True),
             "trash": _trash_listing(catalog),
@@ -14874,6 +15103,10 @@ async def list_projects() -> dict[str, Any]:
             "paramsVersion": PARAMS_VERSION,
             **({"migratedProjectId": catalog["migratedProjectId"]} if catalog.get("migratedProjectId") else {}),
         }
+        if settled and settled[0] == "waiting" and _canvas_not_filed:
+            # The live canvas isn't a project and couldn't be filed: the list
+            # is at a limit (review 2 of PR #199, L4). No project is open.
+            listing["canvasNotFiled"] = {key: _canvas_not_filed.get(key) for key in ("reason", "from", "since")}
         kept = set(catalog["projects"]) | set(catalog.get("trash") or {})
     # A restore of a damaged catalog the person hasn't closed the notice of
     # (ProjectStore.restore_notice): the Projects home shows GM's line,
@@ -14883,6 +15116,9 @@ async def list_projects() -> dict[str, Any]:
     if expired:
         # Trash past its 30 days took its question sets with it.
         agent_questions.keep_projects(kept)
+    if settled and settled[0] == "filed":
+        # Other tabs list again and see the new project.
+        await _broadcast_projects_changed("canvasFiled", settled[1][0]["id"])
     return listing
 
 
@@ -15174,8 +15410,10 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
         # API callers need not visit the menu first. Never erase a legacy
         # live canvas merely because no catalog migration request preceded it.
         # Never replace a canvas that isn't the open project's without
-        # keeping it (review 1 of PR #199, H1): its own project, or filed.
-        _settle_live_canvas(catalog, exported)
+        # keeping it (review 1 of PR #199, H1): its own project, or filed;
+        # refused while it can't be filed (the list is at a limit).
+        settled = _settle_live_canvas(catalog, exported)
+        _refuse_while_canvas_not_filed(settled)
         if not catalog["projects"] and cli_graph.nodes:
             recovered = _file_live_canvas(catalog, exported, migrated=True)
             # Unreachable with a run registered (the guard above refuses), but
@@ -15195,6 +15433,7 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
         catalog["workspaceRevision"] = uuid4().hex
         _commit_project_workspace(catalog, CLIGraph())
         revision = catalog["workspaceRevision"]
+        _note_canvas_settled(settled)
     # In the step that made it, before any await (round 8 of PR #114); its
     # canvas.replaced follows (_broadcast_graph_sync journals it first thing).
     _journal_project_change("project.created", project)
@@ -15268,8 +15507,10 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
         _project_revision(body or {}, catalog)
         _project_replacement_guard()
         project = _project_id_or_404(project_id, catalog)
-        # The canvas this open replaces is kept: its own project, or filed (H1).
-        _settle_live_canvas(catalog, exported)
+        # The canvas this open replaces is kept: its own project, or filed
+        # (H1); refused while it can't be filed (the list is at a limit).
+        settled = _settle_live_canvas(catalog, exported)
+        _refuse_while_canvas_not_filed(settled)
         if active := catalog["activeProjectId"]:
             _overlay_live_project(catalog["projects"][active], exported)
         historical = {node["id"]: node.get("data", {}).get("definitionId") for node in project["snapshot"]["nodes"]}
@@ -15283,6 +15524,7 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
         catalog["workspaceRevision"] = uuid4().hex
         _commit_project_workspace(catalog, candidate)
         revision = catalog["workspaceRevision"]
+        _note_canvas_settled(settled)
     await _broadcast_graph_sync(graph_replaced=True, reason="project-open",
                                 project_switch=_switch_notice(start, project, created=False))
     await _broadcast_projects_changed("opened", project_id)
@@ -15542,13 +15784,15 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
         _project_id_or_404(project_id, catalog)
         _project_revision(body, catalog, required=True)
         deleting_active = catalog["activeProjectId"] == project_id
+        settled = None
         if deleting_active:
             fences.enter_context(_paid_graph_mutation("delete the open project"))
             _project_replacement_guard("delete the open project")
             # The canvas a delete empties is kept: in the project when it is
             # that one (so Recently deleted has its latest), or its own, or
             # filed (H1). Settling may change what is open.
-            if _settle_live_canvas(catalog, exported) is not None:
+            settled = _settle_live_canvas(catalog, exported)
+            if settled is not None:
                 deleting_active = catalog["activeProjectId"] == project_id
             if deleting_active:
                 _overlay_live_project(catalog["projects"][project_id], exported)
@@ -15565,6 +15809,7 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
             _forget_canvas_undo("the open project was deleted since, so the canvas started again", project_id=None)
         else:
             project_store.commit(catalog)
+        _note_canvas_settled(settled)
         result = {
             "deletedProjectId": project_id,
             "trashedProject": trash_metadata(trashed),

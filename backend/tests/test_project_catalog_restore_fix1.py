@@ -530,9 +530,9 @@ def test_m1_a_damaged_file_not_read_to_its_end_never_claims_nothing_was_lost(tmp
     assert record["source"] == "catalog.json.bak.1"
     assert record["damagedReadWhole"] is False
     note = main_module._catalog_restore_note(record)
-    assert "couldn't be read to its end" in note and "damagedReadWhole: false" in note
+    assert "couldn't be read whole" in note and "damagedReadWhole: false" in note
     assert main_module._catalog_restore_view(record)["damagedReadWhole"] is False
-    assert any("not read to its end" in line for line in catalog_restore_lines(record))
+    assert any("not read whole" in line for line in catalog_restore_lines(record))
 
     other = _store(tmp_path / "parsed")
     _add(other, "Gamma")
@@ -542,7 +542,7 @@ def test_m1_a_damaged_file_not_read_to_its_end_never_claims_nothing_was_lost(tmp
     other.read()
     [parsed] = _records(other)
     assert parsed["damagedReadWhole"] is True
-    assert "read to its end" not in main_module._catalog_restore_note(parsed)
+    assert "couldn't be read whole" not in main_module._catalog_restore_note(parsed)
 
 
 # -- L1-L7 ---------------------------------------------------------------------------

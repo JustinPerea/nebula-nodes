@@ -442,6 +442,8 @@ def catalog_restore_part(view: Mapping[str, Any]) -> dict[str, Any]:
     if isinstance(view.get("recoveredCanvas"), Mapping):
         part["recoveredCanvas"] = {"id": view["recoveredCanvas"].get("id"),
                                    "name": _cut(view["recoveredCanvas"].get("name"), NAME_CHARS)}
+    if isinstance(view.get("canvasNotFiled"), Mapping):
+        part["canvasNotFiled"] = {"reason": view["canvasNotFiled"].get("reason")}
     part["note"] = _cut(view.get("note"), 700)
     return part
 

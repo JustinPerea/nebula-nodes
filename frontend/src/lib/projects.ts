@@ -71,8 +71,13 @@ export interface CatalogRestore {
   reverted?: { id: string; name: string; trashed?: boolean; liveCanvas?: boolean }[]; revertedCount?: number;
   cameBack?: { id: string; name: string; how?: string }[]; cameBackCount?: number;
   backInTrash?: { id: string; name: string }[]; backInTrashCount?: number;
-  /** The live canvas filed as its own project (it wasn't one in the restored list). */
+  /** The live canvas filed as its own project (it wasn't one in the restored
+   * list): "<project> (recovered)", numbered, or "Recovered canvas". */
   recoveredCanvas?: { id: string; name: string } | null;
+  /** It couldn't be filed: the list is at a limit (review 2 of PR #199, L4). */
+  canvasNotFiled?: { reason: 'projects' | 'storage' } | null;
+  /** The open project that didn't come back, and its name when a file had it. */
+  openProjectMissing?: string | null; openProjectName?: string | null;
   /** The damaged catalog.json was read to its end (it parsed; only its
    * shape was wrong). False when it was cut or zeroed: what it held past the
    * damage is unknown, so the notice never says nothing was missing. */
@@ -85,6 +90,9 @@ export interface ProjectList {
   /** The backend's params version (lib/savedParamsUpgrades.ts). */
   paramsVersion?: number;
   catalogRestore?: CatalogRestore;
+  /** The live canvas isn't a project and the list had no room to save it as
+   * one: no project is open, and opening or making one is refused (413). */
+  canvasNotFiled?: { reason: 'projects' | 'storage'; from?: string | null; since?: string | null };
 }
 export interface ProjectActivation {
   project: SavedProject; workspaceRevision: string;

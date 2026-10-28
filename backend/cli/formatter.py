@@ -458,7 +458,13 @@ def catalog_restore_lines(restore: dict[str, Any]) -> list[str]:
         more = count - len(rows)
         lines.append(f"  {label}: {names}{f' and {more} more' if more > 0 else ''}")
     if restore.get("kind") == "restored" and restore.get("damagedReadWhole") is False:
-        lines.append("  Damaged file not read to its end: changes after the copy may be missing")
+        lines.append("  Damaged file not read whole: changes after the copy may be missing")
+    recovered = restore.get("recoveredCanvas")
+    if isinstance(recovered, dict) and recovered.get("id"):
+        lines.append(f"  Live canvas saved as its own project: {recovered.get('name')} ({recovered['id']})")
+    waiting = restore.get("canvasNotFiled")
+    if isinstance(waiting, dict):
+        lines.append(f"  Live canvas not saved as a project yet: the list is at its {waiting.get('reason')} limit")
     return lines
 
 

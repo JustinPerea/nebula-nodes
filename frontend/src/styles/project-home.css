@@ -172,7 +172,9 @@ body.app-slava-restraint .project-home__notice:focus-visible,
 body.app-slava-restraint .project-home #project-home-title:focus-visible { outline: var(--sr-focus-outline); outline-offset: 4px; }
 body.app-slava-restraint .project-home__notice { padding: 14px 16px; margin-bottom: 28px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-node-media-radius); background: var(--sr-canvas-elevated); color: var(--sr-ink); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
 body.app-slava-restraint .project-home__restore { display: flex; align-items: flex-start; gap: 12px; }
-body.app-slava-restraint .project-home__restore > span { flex: 1; min-width: 0; padding-top: 6px; }
+body.app-slava-restraint .project-home__restore-text { flex: 1; min-width: 0; padding-top: 6px; }
+body.app-slava-restraint .project-home__restore-lines { display: flex; flex-direction: column; gap: 4px; }
+body.app-slava-restraint .project-home__restore-lines > p { margin: 0; }
 body.app-slava-restraint .project-home__restore .project-home__toast-close { margin: -2px -6px 0 0; }
 body.app-slava-restraint .project-home__restore-action { flex-shrink: 0; min-height: 32px; padding: 0 12px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-radius-control); background: var(--sr-surface-control); color: var(--sr-ink); font-size: 12px; white-space: nowrap; }
 body.app-slava-restraint .project-home__restore-action:focus-visible { outline: var(--sr-focus-outline); outline-offset: 2px; }
