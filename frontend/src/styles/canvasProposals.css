@@ -654,3 +654,13 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   font-family: var(--sr-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 0.95em;
 }
+
+/* GM r12 item 1: a stopped scene save's popover, the toast's surface fixed
+   beside its card's "Unsaved" mark (anchoredPopover). */
+.scene-unsaved-popover {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: var(--sr-layer-modal-control, 61);
+  --notice-max-w: 360px;
+}

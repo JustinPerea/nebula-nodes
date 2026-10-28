@@ -1,4 +1,5 @@
-"""Conditional Cinema scene writes (PR #198 fix round 8, H2; GM r9 decision 2).
+"""Conditional Cinema scene writes (PR #198 fix rounds 8 and 9, H2; GM r9
+decision 2, r12 answer 4).
 
 A scene's ``sceneKey`` names its authoring: everything but the shots'
 runtime (``output``, ``variations``, ``selectedVariation``, which runs write
@@ -12,14 +13,31 @@ another's unasked:
   again, or asks the person when both changed the same thing.
 - An agent's write is held to the same rule (the rule is symmetric): with an
   ``ifSceneKey`` it is checked against that; without one, against the scene
-  this agent last read (graph export, canvas snapshot, the node's own
-  answer), so an agent that read the scene before the person typed in it
-  can't put its older copy back over the typing. An agent that never read
-  the scene writes it as it sends it (last writer), as before.
+  this reader last read (graph export, canvas snapshot, ``GET /api/graph``,
+  its own last write), so an agent that read the scene before the person
+  typed in it can't put its older copy back over the typing. A reader that
+  never read the scene writes it as it sends it (last writer), as before. A
+  write whose scene is the one Nebula has is never refused (nothing would
+  change). A refusal is not a read: the CLI prints only the detail, so its
+  agent never saw the answer's scene, and a blind resend of the old copy
+  must be refused again (fix round 9, L-1).
+- A reader is a session, not a name (fix round 9, M-2): a verified agent
+  token's chat session (or the token itself), else the name plus the
+  ``X-Nebula-Agent-Session`` the MCP server sends, else the name alone (every
+  session of that name shares it).
+
+Reads and writers are kept per canvas (``scope``: the live graph, its
+project and canvas epoch), so a node id another canvas uses never matches;
+nothing is forgotten on a project switch (fix round 9, M-1: reopening a
+project finds its readers' reads where they were). Both are bounded.
+
+Each scene also has a ``sceneRev`` (fix round 9, H-1): a number that grows
+every time Nebula is seen holding a different authoring for that node
+(across restarts too: it starts from the clock). A canvas that has seen
+revision R treats any scene below R as older than what it knows, so a sync
+the socket delivers late never rolls the card back.
 
 The keys are only compared, never parsed; a client echoes what Nebula gave it.
-Reads and writers are kept per canvas (``scope``: the live graph and its
-canvas, so a node id another canvas reuses never matches an older read).
 """
 
 from __future__ import annotations
@@ -27,15 +45,24 @@ from __future__ import annotations
 import hashlib
 import itertools
 import json
+import time
 import weakref
+from collections import OrderedDict
 from typing import Any, Mapping
 
 RUNTIME_KEYS = ("output", "variations", "selectedVariation")
+MAX_READS = 4096
+MAX_WRITERS = 1024
 
-# (scope, agent name, node id) -> the sceneKey that agent last read there.
-_reads: dict[tuple[str, str, str], str] = {}
+# (scope, reader, node id) -> the sceneKey that reader last read there.
+_reads: "OrderedDict[tuple[str, str, str], str]" = OrderedDict()
 # (scope, node id) -> who last changed its scene's authoring ({"kind", "name"}).
-_writers: dict[tuple[str, str], dict[str, Any]] = {}
+_writers: "OrderedDict[tuple[str, str], dict[str, Any]]" = OrderedDict()
+# node id -> (scope, key, revision) Nebula last showed for it.
+_revisions: dict[str, tuple[str, str, int]] = {}
+# Microseconds since the epoch at start, then +1 a change: above any
+# revision an earlier run of Nebula gave (unless it bumped a million a second).
+_revision_counter = itertools.count(time.time_ns() // 1000)
 _graph_tokens: "weakref.WeakKeyDictionary[Any, str]" = weakref.WeakKeyDictionary()
 _counter = itertools.count(1)
 
@@ -84,25 +111,42 @@ def keys_of(nodes: Mapping[str, Mapping[str, Any]]) -> dict[str, str]:
     return out
 
 
-def note_read(scope: str, agent: str | None, keys: Mapping[str, str]) -> None:
-    """An agent read these scenes (``keys`` from keys_of)."""
-    if not agent:
+def revision(scope: str, node_id: str, key: str) -> int:
+    """The revision of ``key`` as node ``node_id``'s scene now: the same one
+    while Nebula keeps showing that authoring, a higher one as soon as it
+    shows another (or the node is another canvas's)."""
+    seen = _revisions.get(node_id)
+    if seen is not None and seen[0] == scope and seen[1] == key:
+        return seen[2]
+    rev = next(_revision_counter)
+    _revisions[node_id] = (scope, key, rev)
+    return rev
+
+
+def revisions_of(scope: str, keys: Mapping[str, str]) -> dict[str, int]:
+    """``revision`` for every scene in ``keys`` (keys_of)."""
+    return {node_id: revision(scope, node_id, key) for node_id, key in keys.items()}
+
+
+def note_read(scope: str, reader: str | None, keys: Mapping[str, str]) -> None:
+    """A reader (reader_key) read these scenes (``keys`` from keys_of)."""
+    if not reader:
         return
     for node_id, key in keys.items():
-        _reads[(scope, agent, node_id)] = key
+        _keep(_reads, (scope, reader, node_id), key, MAX_READS)
 
 
-def last_read(scope: str, agent: str | None, node_id: str) -> str | None:
-    return _reads.get((scope, agent, node_id)) if agent else None
+def last_read(scope: str, reader: str | None, node_id: str) -> str | None:
+    return _reads.get((scope, reader, node_id)) if reader else None
 
 
-def note_write(scope: str, node_id: str, actor: Mapping[str, Any] | None, key: str | None, agent: str | None) -> None:
+def note_write(scope: str, node_id: str, actor: Mapping[str, Any] | None, key: str | None, reader: str | None) -> None:
     """A write changed the scene's authoring: who, and (for an agent) that
     it now knows this scene, as if it had read it."""
     if actor:
-        _writers[(scope, node_id)] = dict(actor)
-    if agent and key:
-        _reads[(scope, agent, node_id)] = key
+        _keep(_writers, (scope, node_id), dict(actor), MAX_WRITERS)
+    if reader and key:
+        _keep(_reads, (scope, reader, node_id), key, MAX_READS)
 
 
 def writer(scope: str, node_id: str) -> dict[str, Any] | None:
@@ -110,8 +154,15 @@ def writer(scope: str, node_id: str) -> dict[str, Any] | None:
     return dict(found) if found else None
 
 
+def _keep(book: "OrderedDict[Any, Any]", key: Any, value: Any, limit: int) -> None:
+    book.pop(key, None)
+    book[key] = value
+    while len(book) > limit:
+        book.popitem(last=False)
+
+
 def forget() -> None:
-    """The canvas was replaced (cleared, imported, another project opened):
-    node ids start again, so nothing read or written before names them."""
+    """Tests: start with no reads, writers or revisions."""
     _reads.clear()
     _writers.clear()
+    _revisions.clear()

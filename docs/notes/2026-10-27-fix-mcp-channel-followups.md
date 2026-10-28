@@ -477,3 +477,60 @@ Live, fix round 8: isolated backend on 8797 (fix8_server.py, the free fake cinem
 - R7-A live: Codex wrote shot 2 while the tab's first save was held in the backend. One 409 `scene_changed` came back, the scenes merged silently, and both changes were saved. With the same field, the field line showed with no "Couldn't save", and Keep mine saved mine.
 - Stopped after 8: exactly 9 PUTs, then GM's line with [Try again] and no more PUTs. [Try again] saved, and the mark and toast went.
 - The recovered copy: deleted for good showed GM's line with [Dismiss] only; in Recently deleted, GM's line with [Restore], which restored and opened the copy with the usual notice.
+
+## Fix round 9 (PR #198 review 8, GM's pr198 r12 review and r13 answers)
+
+- **H-1, scene revisions.** `services/scene_keys.revision()` gives each scene a number. It stays the same while Nebula holds the same authoring and takes the next value as soon as Nebula holds another. The counter starts from microseconds since the epoch, so it keeps growing across restarts. The export, the snapshot, `GET /api/graph` and every graphSync carry `sceneRevs`; each save's answer and each 409 carry `sceneRev`. The tab keeps the highest revision it has seen per node (`staleSceneRev`):
+  - A sync below it never touches the card or `backendScenes`.
+  - A 409 below it rebases onto the newer scene the tab already holds.
+  - A deferred sync whose revision is at or below the save's answer is dropped.
+  - Revisions are noted for nodes the card doesn't show yet. Without that, the fuzz caught a late sync from before a node's first sync being applied.
+- **M-3 (GM r13 answer 1).** `mergeInto` keeps a copy of each shot as it was before the other side removed it while the person edited it (`removedShots`). When the shot comes back, it is merged against that copy:
+  - Back as it was: the person's edit stands, silently, and is saved.
+  - Back with other text: the field line naming the shot, "Codex changed “Shot 2” while you were editing it." It stays one prompt, with its line replaced (`readded`, `clashLineFor`).
+  - Keep mine keeps the person's text. Use Codex’s takes the re-added text.
+  - This needed `baseRev`. A scene the tab knows by key (here, the scene from before the removal) used to be dropped as "known". It now counts as a new change when its revision is above the base's (`knownScene`).
+- **M-1.** Project open, create and delete no longer call `scene_keys.forget()`. The scope (graph token, project, canvas epoch) already separates canvases; a clear or import moves the epoch. `forget()` stays for tests only. The MCP-SETUP line saying a switch forgets reads is gone.
+- **M-2.** `_reader_agent()` returns a reader key, in this order:
+  - `chat:<session>` for a verified token with a session;
+  - `token:<hash>` for any other verified token;
+  - `name:<name>:<X-Nebula-Agent-Session>`;
+  - `name:<name>`.
+
+  The MCP server sends its own `X-Nebula-Agent-Session` (random per process, or `NEBULA_AGENT_SESSION`), and the CLI sends `NEBULA_AGENT_SESSION` when set. Reads are bounded (4,096) and writers too (1,024).
+- **L-1, builder's decision: a refusal is not a read.** The CLI prints only the detail, so its agent never sees the answer's scene. Counting the refusal as a read would let a blind resend of the old copy go over the person's typing. The CLI can't usefully send `ifSceneKey`: it is stateless, and the last-read already plays that part. GM's new detail ("Read it again and redo your change.") gives the CLI a path that works: `nebula look`, then `set`. Test: refused twice, a read, then 200.
+- **L-2.** A PUT whose scene key equals Nebula's skips the check.
+- **L-3.** `POST /api/graph/connect` takes `onlyIfFree`. When the input already holds a connection, it answers 409 `input_taken` before validation, and nothing changes. Keep mine's put-back (`sendRestoredWire`) uses it for single inputs, and a refused wire comes off the card. All the misses go into one `shotBackWithoutLine`. Without `onlyIfFree`, the real backend already refused a second connection into a single input (400); the reviewer's case was found on a fake backend.
+- **L-4 (GM r13 answer 2).** Deleting a held wire (`applyCanvasEdgeChanges`, or a replace in `onConnect`) releases it locally (`releaseHeldPresenceWire`). There is no request and no line, and Keep mine doesn't send it.
+- **GM r12 item 1 / r13 answer 3.** `stoppedScenes` follows `entry.stopped` (`setSceneStopped`). In that state the mark is a button (`SceneUnsavedMark`). A click opens a popover with the line and [Try again] (`RetrySceneButton`), in the toast's surface, anchored with `useAnchoredPopover`. Escape or a press outside closes it. The `title` tooltip is unchanged.
+- **GM r12 items 2–4.**
+  - "Use Codex’s" is curly.
+  - Clash lines are one sentence.
+  - `errorCopy.quotedNames` takes up to three quoted names, then a count ("4 shots"). It feeds `shotsRemovedLine` and `shotBackWithoutLine`; the targets go through `nodeNameList`.
+  - The agent's refusal detail is GM's, verbatim.
+  - An agent's refusal broadcasts nothing (tested: `api.sent` is empty).
+- **GM r12 item 5.** The recovered copy's notices moved out of the red error box into their own state, `projectStore.copyNotice`. `ProjectHome` draws it as a toast in the notice region (`CopyNoticeToast`, `project-home__toast`, the same look as the restored copy's notice), with ×. The Recently deleted version adds [Restore] (`restoreCopyNotice`). The `restoreCopy`/`dismiss` retry actions are gone. A copy that fails to open still says the open's own error in the error box.
+- **N-2, N-3.** MCP-SETUP says MCP has no scene write (`edit_canvas` answers 400) and that polling the export as an agent refreshes that session's read. It also covers the new `input_taken` row, `sceneRev(s)`, sessions, and that a write on Nebula's own scene is never refused. SKILL.md and the MCP docstring say the same in short.
+- **N-4.** The 20,000-seed merge fuzz has a 60 s timeout.
+- **Tests.**
+  - Backend: `test_pr198_fix9.py`, 10 tests (H-1, M-1, M-2 twice, L-1, L-2, L-3, GM's detail with no broadcast, the docs, MCP's session).
+  - Frontend:
+    - `graphStore.fix9` (15): D1, D1b, a stale 409, stale syncs, the first-seen revision, M-3 four ways, L-3, L-4, plurals, the stopped state.
+    - `graphStore.fix9.fuzz`: the reviewer's three-actor fuzz with a lagging FIFO socket and revisions, 12 seeds disjoint and 12 flaky (15% of saves fail), with invariants asserted.
+    - `pr198Fix9Ui` (9).
+  - Two MCP header assertions now include the session.
+
+Gates, fix round 9:
+- tsc -b and lint: clean.
+- Focused vitest: 295 files, 4,715 passed. That is round 8's list, ArtDirectionNodes, and the three new files.
+- Full backend: 12,020 passed, 71 skipped, with 2 failures. The 2 were MCP tests that pin the exact headers; they now include `X-Nebula-Agent-Session` and pass.
+- vite build plus the budget: 422,959 bytes raw.
+
+Live, fix round 9: 24 of 24 checks passed. The setup was an isolated backend on 8797 (`fix9_server.py`: the free fake cinema handler, plus the reviewer's lag-sync), Vite on 5797, and 8000–8010 and 5173 blocked (0 attempts after the canary).
+- **H-1, lag-sync.** Syncs went out 0.7 s apart in order. Over 4 trials, Codex and Gemini each edited another shot while the person typed 24 keys. The card never jumped back, and there was no clash and no "Unsaved". All 24 keys and both agents' edits reached Nebula and the card. Review 8 had 2 regressions in 8 trials.
+- **M-3.** Codex removed Shot 2 while I edited it, then put it back with other text. One prompt showed, its line replaced by "Codex changed “Shot 2” while you were editing it.", with [Keep mine] [Use Codex’s]. Keep mine saved my text.
+- **L-4.** Deleting the held wire sent no request and showed no line. Keep mine brought the shot back without it, with no connect.
+- **Plurals.** "Codex removed “Shot 2” and “Shot 3” while you were editing them.", then "“Shot 2” and “Shot 3” are back without their connections to “Edit P”."
+- **Popover.** Saving stopped after 8 failures, then Codex's toast took the slot. The mark is a button, and its popover showed the line and [Try again]. [Try again] saved, and the mark went.
+- **Agent refusal.** A 409 with GM's detail. No Agent log row, no toast, and the typing stayed. After a read, the redo was taken and its row showed.
+- **Recovered copy.** Both notices are neutral toasts. The one for a copy deleted for good has × only; the one for a copy in Recently deleted has [Restore] and ×. Restore opened the copy with the usual notice.

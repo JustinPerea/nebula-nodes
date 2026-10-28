@@ -957,8 +957,8 @@ def _canvas_change_actor() -> dict[str, str]:
 def _note_canvas_change() -> None:
     """Call right after a commit that replaced the live canvas, before any
     await: the canvas it left (_graph_fence) and who asked. Never fails."""
-    # Node ids start again: no scene read or write before names them now.
-    scene_keys.forget()
+    # Scene reads aren't forgotten here (fix round 9, M-1): their scope
+    # names the project and its canvas epoch, which a clear or import moves.
     try:
         _last_canvas_change.clear()
         _last_canvas_change.update(fence=_graph_fence(), by=_canvas_change_actor())
@@ -998,13 +998,33 @@ def _scene_scope() -> str:
 
 
 def _reader_agent() -> str | None:
-    """The agent behind this request, by name, for services/scene_keys.py
-    (None for the person and anonymous callers)."""
+    """The agent session behind this request, for services/scene_keys.py
+    (fix round 9, M-2: a session, never a name shared by several): a verified
+    token's chat session or the token itself; else the name with the
+    ``X-Nebula-Agent-Session`` it sent (the MCP server sends one per
+    process); else the name alone. None for the person and anonymous callers."""
     try:
         actor = _canvas_change_actor()
     except Exception:  # noqa: BLE001 - reads never fail over this
         return None
-    return str(actor.get("name") or "An agent") if actor.get("kind") == "agent" else None
+    if actor.get("kind") != "agent":
+        return None
+    name = str(actor.get("name") or "An agent")
+    headers = {str(k).lower(): v for k, v in (current_request_headers() or {}).items()}
+    auth = str(headers.get("authorization") or "")
+    if auth.startswith("Agent "):
+        token = auth[6:].strip()
+        try:
+            from commons.actors import agent_registry
+            record = agent_registry.lookup(token)
+        except Exception:  # noqa: BLE001 - the token alone still names the session
+            record = None
+        session = (record or {}).get("session") if isinstance(record, dict) else None
+        if session:
+            return f"chat:{session}"
+        return "token:" + hashlib.sha256(token.encode("utf-8")).hexdigest()[:20]
+    session = str(headers.get("x-nebula-agent-session") or "").strip()[:80]
+    return f"name:{name}:{session}" if session else f"name:{name}"
 
 
 def _scene_changed_refusal(node_id: str, node: dict[str, Any]) -> CodedRefusal:
@@ -1012,14 +1032,18 @@ def _scene_changed_refusal(node_id: str, node: dict[str, Any]) -> CodedRefusal:
     since (services/scene_keys.py). Nothing was saved; the answer carries the
     scene Nebula has now, its key and who changed it last, so the writer can
     put its change on top and send it again."""
+    # GM r12 answer 4, verbatim. The person's canvas never shows it (it
+    # merges, or asks with its own line), and no Agent log row or toast says
+    # an agent's refusal (it is the agent's to redo).
     label = _quoted(_node_label(node_id))
     exc = HTTPException(status_code=409, detail=(
-        f"Couldn't save {label}, node {node_id}. Its scene changed since you read it, so nothing was saved. "
-        "Read it again (or take `scene` from this answer), put your change on top and send it again "
-        "(with `ifSceneKey`, this answer's `sceneKey`)."))
+        f"{label} changed since you last read it, so nothing was changed. Read it again and redo your change."))
     scene = copy.deepcopy((node.get("params") or {}).get("scene"))
-    return _coded(exc, "scene_changed", scene=scene, sceneKey=scene_keys.node_scene_key(node),
-                  changedBy=scene_keys.writer(_scene_scope(), node_id))
+    key = scene_keys.node_scene_key(node)
+    scope = _scene_scope()
+    return _coded(exc, "scene_changed", scene=scene, sceneKey=key,
+                  sceneRev=scene_keys.revision(scope, node_id, key) if key else None,
+                  changedBy=scene_keys.writer(scope, node_id))
 
 
 def _workspace_context() -> dict[str, Any]:
@@ -6147,9 +6171,11 @@ async def get_canvas_snapshot() -> dict[str, Any]:
     # Fix round 8, H2: each Cinema scene's key (send it back as ifSceneKey);
     # this agent has read these scenes now (services/scene_keys.py).
     keys = scene_keys.keys_of(cli_graph.nodes)
-    scene_keys.note_read(_scene_scope(), _reader_agent(), keys)
+    scope = _scene_scope()
+    scene_keys.note_read(scope, _reader_agent(), keys)
     if keys:  # only with a scene: the rest of the answer is as it was
         snapshot["sceneKeys"] = keys
+        snapshot["sceneRevs"] = scene_keys.revisions_of(scope, keys)
     return snapshot
 
 
@@ -12541,6 +12567,20 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
 @graph_write
 async def connect_graph_nodes(body: dict[str, Any]) -> dict:
     _check_workspace_revision()
+    # Fix round 9, L-3: a wire the canvas puts back (Keep mine's shot) into
+    # an input that takes one connection says so: when anything else is
+    # connected there now, nothing is added (409 ``input_taken``), so a
+    # put-back never adds a second connection to a single input or replaces
+    # one someone made since.
+    if body.get("onlyIfFree") is True and isinstance(body.get("target"), str):
+        held = [edge for edge in cli_graph.edges
+                if edge.get("target") == body["target"] and edge.get("targetHandle") == body.get("targetHandle")
+                and (edge.get("source"), edge.get("sourceHandle")) != (body.get("source"), body.get("sourceHandle"))]
+        if held:
+            raise _coded(HTTPException(status_code=409, detail=(
+                f"Couldn't connect to {_quoted(_node_label(body['target']))}, node {body['target']}. "
+                f"Its {body.get('targetHandle')} input is connected to something else now, so nothing was changed.")),
+                "input_taken")
     _validate_connect_handles(
         body.get("source", ""),
         body.get("sourceHandle", ""),
@@ -12847,8 +12887,9 @@ async def get_graph() -> dict:
     # Fix round 8, H2: each Cinema scene's key, which a write sends back as
     # ifSceneKey; an agent's read is noted (services/scene_keys.py).
     keys = scene_keys.keys_of(cli_graph.nodes)
-    scene_keys.note_read(_scene_scope(), _reader_agent(), keys)
-    return {**state, "sceneKeys": keys} if keys else state
+    scope = _scene_scope()
+    scene_keys.note_read(scope, _reader_agent(), keys)
+    return {**state, "sceneKeys": keys, "sceneRevs": scene_keys.revisions_of(scope, keys)} if keys else state
 
 
 def _author_cinema_scene(graph: CLIGraph, node_id: str, node: dict[str, Any], params: dict[str, Any], *,
@@ -13010,7 +13051,9 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
         # else (an agent) the scene it last read.
         scene_key_before = scene_keys.node_scene_key(node)
         writing_agent = _reader_agent()
-        if scene_key_before is not None and "scene" in params:
+        # A write whose scene is the one Nebula has changes nothing there,
+        # so it is never refused (fix round 9, L-2).
+        if scene_key_before is not None and "scene" in params and scene_keys.scene_key(params.get("scene")) != scene_key_before:
             if_key = body.get("ifSceneKey")
             expected = if_key if isinstance(if_key, str) and if_key else scene_keys.last_read(_scene_scope(), writing_agent, node_id)
             if expected is not None and expected != scene_key_before:
@@ -13078,6 +13121,8 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
     if scene_key_after is not None:
         # The key the writer builds its next save on (H2), and who changed it.
         updated["sceneKey"] = scene_key_after
+        # Fix round 9, H-1: its revision, above every scene before it.
+        updated["sceneRev"] = scene_keys.revision(_scene_scope(), node_id, scene_key_after)
         scene_keys.note_write(_scene_scope(), node_id, _canvas_change_actor() if scene_key_after != scene_key_before else None,
                               scene_key_after, writing_agent)
     await _broadcast_graph_sync(edit=True)
@@ -17591,8 +17636,11 @@ async def export_graph_for_frontend() -> dict:
         "edges": rf_edges,
         "empty": False,
         # Fix round 8, H2: each Cinema scene's key, which its next save sends
-        # back as ifSceneKey (services/scene_keys.py); none without a scene.
-        **({"sceneKeys": keys} if (keys := scene_keys.keys_of(cli_graph.nodes)) else {}),
+        # back as ifSceneKey, and (round 9, H-1) its revision, so a canvas
+        # can tell a late sync from a newer one (services/scene_keys.py);
+        # none without a scene.
+        **({"sceneKeys": keys, "sceneRevs": scene_keys.revisions_of(_scene_scope(), keys)}
+           if (keys := scene_keys.keys_of(cli_graph.nodes)) else {}),
         # Agent edits that asked the canvas to lay out their new nodes once
         # drawn (services/canvas_arrange.py). A canvas that connects later
         # gets them too.

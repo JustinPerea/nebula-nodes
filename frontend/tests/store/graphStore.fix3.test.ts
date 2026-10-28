@@ -221,7 +221,7 @@ describe('H1: a scene save the backend refuses keeps the person\'s typing', () =
     // clash: kept on screen, and the person is asked which to keep.
     expect(shotsOf('n32')[0].prompt).toBe('typed');
     expect(useGraphStore.getState().sceneClashes.n32?.line)
-      .toBe('Codex changed “Opening” while you were editing it. Choose which version to keep.');
+      .toBe('Codex changed “Opening” while you were editing it.');
   });
 });
 

@@ -1,3 +1,5 @@
+import { nodeNameList, quotedNames } from './errorCopy';
+
 /**
  * What a Cinema scene says when the backend doesn't take its save (GM -
  * Design, PR #198 r6 item 1 and r7 item 1). Each refusal gets the line for
@@ -62,48 +64,55 @@ export const BAD_SAVE = "Nebula ran into a problem saving them, so they're kept 
 export const UNSAVED_MARK = 'Unsaved';
 
 /** The scene changed somewhere else while the person had edits it hadn't
- * saved, and both changed the same thing (GM r9 decision 2, verbatim). The
- * person's edits stay on screen, marked "Unsaved", until they choose. Edits
- * that don't overlap are merged and saved without a line (graphStore
- * rebaseScene). */
+ * saved, and both changed the same thing (GM r9 decision 2; GM r12: one
+ * sentence, "Choose which version to keep." dropped from the toast and the
+ * tooltip alike). The person's edits stay on screen, marked "Unsaved", until
+ * they choose. Edits that don't overlap are merged and saved without a line
+ * (graphStore rebaseScene). `scene` is what changed: the scene, or (GM r13
+ * answer 1) a shot the other side put back with other text, by its current
+ * name ("Codex changed “Shot 2” while you were editing it."). */
 export function sceneClashLine(scene: string, agent: string | null): string {
   return agent
-    ? `${agent} changed “${scene}” while you were editing it. Choose which version to keep.`
+    ? `${agent} changed “${scene}” while you were editing it.`
     : `“${scene}” was changed in another window while you were editing it.`;
 }
 
 /** GM r10 answer 3: each kind of clash its own line, verbatim. Both sides
  * reordered the shots: "Codex reordered the shots in “Opening” while you
  * were editing them." The other side removed a shot the person changed:
- * "Codex removed “Shot 2” while you were editing it." With no agent, "…in
- * another window…" in the same shapes. Builder's plural for GM: two or more
- * shots removed, "“Shot 2” and “Shot 3” … while you were editing them". */
+ * "Codex removed “Shot 2” while you were editing it."; several (GM r12 answer
+ * 3, active voice, the shared name list): "Codex removed “Shot 2” and “Shot
+ * 3” while you were editing them." With no agent, "…in another window…" in
+ * the same shapes. */
 export function sceneReorderedLine(scene: string, agent: string | null): string {
   return agent
     ? `${agent} reordered the shots in “${scene}” while you were editing them.`
     : `The shots in “${scene}” were reordered in another window while you were editing them.`;
 }
 export function shotsRemovedLine(shots: readonly string[], agent: string | null): string {
-  const names = quotedList(shots);
+  const names = quotedNames(shots, 'shots');
   const them = shots.length === 1 ? 'it' : 'them';
   return agent
     ? `${agent} removed ${names} while you were editing ${them}.`
     : `${names} ${shots.length === 1 ? 'was' : 'were'} removed in another window while you were editing ${them}.`;
 }
-const quotedList = (names: readonly string[]): string => {
-  const quoted = names.map((name) => `“${name}”`);
-  return quoted.length <= 1 ? (quoted[0] ?? '') : `${quoted.slice(0, -1).join(', ')} and ${quoted[quoted.length - 1]}`;
-};
 
-/** GM r11 answer 4: Keep mine brought a removed shot back, and a connection
- * of it can't come back (the other end is gone, or a single-connection input
- * now holds another connection, which is never replaced). Builder's plural
- * for GM: "…without its connections to “Edit A” and “Edit B”." */
-export function shotBackWithoutLine(shot: string, targets: readonly string[]): string {
-  return `“${shot}” is back without its ${targets.length === 1 ? 'connection' : 'connections'} to ${quotedList(targets)}.`;
+/** GM r11 answer 4 and r12 answer 3: Keep mine brought removed shots back,
+ * and connections of theirs can't come back (the other end is gone, or a
+ * single-connection input now holds another connection, which is never
+ * replaced). One line for all of them: "“Shot 2” is back without its
+ * connection to “Edit A”.", "“Shot 2” is back without its connections to
+ * “Edit A” and “Edit B”.", "“Shot 2” and “Shot 3” are back without their
+ * connections to “Edit A”." The nodes go through the one node-name list
+ * (errorCopy nodeNameList), the shots through the same rule. */
+export function shotBackWithoutLine(shots: readonly string[], targets: readonly string[]): string {
+  const several = shots.length > 1;
+  const what = several || targets.length > 1 ? 'connections' : 'connection';
+  return `${quotedNames(shots, 'shots')} ${several ? 'are' : 'is'} back without ${several ? 'their' : 'its'} ${what} to ${nodeNameList([...targets])}.`;
 }
 /** The clash's two buttons (GM r9). */
 export const KEEP_MINE = 'Keep mine';
 export function theirsLabel(agent: string | null): string {
-  return agent ? `Use ${agent}'s` : 'Use theirs';
+  // GM r12 answer 2: the curly apostrophe, as #195's "Undid Codex’s edit".
+  return agent ? `Use ${agent}’s` : 'Use theirs';
 }

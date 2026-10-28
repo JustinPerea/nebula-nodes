@@ -324,7 +324,8 @@ def test_mcp_point_at_and_look_name_the_cursor(monkeypatch):
     mcp_server.look_at_canvas()
     point, look = calls
     assert point["url"].endswith("/api/canvas/cursor")
-    assert point["headers"] == {"X-Nebula-Agent": "Claude Code"}
+    # Fix round 9, M-2: each MCP server sends its own session beside the name.
+    assert point["headers"] == {"X-Nebula-Agent": "Claude Code", "X-Nebula-Agent-Session": mcp_server._AGENT_SESSION}
     assert point["json"] == {
         "target": {"nodeId": "n2", "handle": "prompt"},
         "from": {"nodeId": "n1", "handle": "text"},

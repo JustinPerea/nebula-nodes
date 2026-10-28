@@ -1,7 +1,7 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
-import { UNSAVED_MARK } from '../../lib/sceneSaveCopy';
+import { SceneUnsavedMark } from './SceneUnsavedMark';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { PORT_COLORS } from '../../lib/portCompatibility';
 import { CATEGORY_COLORS, shotPortId } from '../../constants/ports';
@@ -29,6 +29,7 @@ export function CinemaSceneNode({ id, data, selected }: NodeProps) {
   // Edits on screen that the backend didn't take (GM, PR #198 r6 item 1):
   // the line that said why, kept as the mark's title.
   const unsaved = useGraphStore((s) => s.unsavedScenes[id] ?? null);
+  const stopped = useGraphStore((s) => s.stoppedScenes[id] === true);
   const { params, keyStatus } = data as CinemaSceneNodeData;
   // Read through a guard (PR #198 review 3, L4): a scene whose data is
   // damaged still draws its card.
@@ -62,10 +63,11 @@ export function CinemaSceneNode({ id, data, selected }: NodeProps) {
         )}
       </div>
       {/* GM r9: "Unsaved", under the header so it never wraps the title; its
-          tooltip is the sentence of the toast that said why. */}
+          tooltip is the sentence of the toast that said why. Stopped, a
+          click opens that line with [Try again] (GM r12 item 1). */}
       {unsaved && (
         <div className="cinema-scene-node__unsaved-row">
-          <span className="cinema-scene-node__unsaved" title={unsaved}>{UNSAVED_MARK}</span>
+          <SceneUnsavedMark nodeId={id} line={unsaved} stopped={stopped} />
         </div>
       )}
 

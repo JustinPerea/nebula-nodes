@@ -202,7 +202,7 @@ describe('H2: Codex edits a scene while the person types in it, and nothing is l
     h.onPut(async (n) => { if (n === 1) h.other((shots) => setPrompt(shots, 's1', "codex's s1")); });
     typeIn('s1', 'mine');
     await sleep(80);
-    expect(clash()?.line).toBe('Codex changed “Opening” while you were editing it. Choose which version to keep.');
+    expect(clash()?.line).toBe('Codex changed “Opening” while you were editing it.');
     expect(unsaved()).toBe(clash()?.line);
     expect(said).toEqual([]);
     expect(h.backendBrief()).toEqual(["s1:codex's s1", 's2:b']);

@@ -658,7 +658,8 @@ def test_mcp_wait_for_canvas_change_loops_until_events(monkeypatch):
     assert result["events"] == [EVENT]
     first, second = calls
     assert first["url"].endswith("/api/canvas/events")
-    assert first["headers"] == {"X-Nebula-Agent": "Claude Code"}
+    # Fix round 9, M-2: each MCP server sends its own session beside the name.
+    assert first["headers"] == {"X-Nebula-Agent": "Claude Code", "X-Nebula-Agent-Session": mcp_server._AGENT_SESSION}
     assert first["params"] == {"wait": 25.0, "limit": 50, "after": 2, "kinds": "node,pin"}
     assert first["timeout"] == 35.0
     assert second["params"]["after"] == 3 and second["params"]["journal"] == "abc123abc123"

@@ -5,6 +5,7 @@ import functools
 import inspect
 import json as _json
 import os
+import secrets
 import re as _re
 import sys
 import time as _time
@@ -350,9 +351,16 @@ def _agent_name(client: str) -> str:
     return "MCP agent" if client == "unknown" else client.replace("-", " ").replace("_", " ").title()
 
 
+# One per server process, so one agent session's scene reads are its own:
+# two sessions of one agent (two Codex lanes) never share one (fix round 9,
+# M-2; services/scene_keys.py). NEBULA_AGENT_SESSION overrides it.
+_AGENT_SESSION = os.environ.get("NEBULA_AGENT_SESSION") or secrets.token_hex(8)
+
+
 def _agent_headers(ctx: Context | None) -> dict[str, str]:
-    """Who this agent is on the canvas (its cursor name); nebula_api adds the token."""
-    return {"X-Nebula-Agent": _cursor_name(ctx)}
+    """Who this agent is on the canvas (its cursor name) and this session;
+    nebula_api adds the token."""
+    return {"X-Nebula-Agent": _cursor_name(ctx), "X-Nebula-Agent-Session": _AGENT_SESSION}
 
 
 def _canvas_call(method: str, path: str, ctx: Context | None, timeout: float = 10.0, **kwargs: Any) -> dict[str, Any]:
@@ -1298,10 +1306,13 @@ def edit_canvas(
     (the canvas was cleared or replaced since), both with `project` and
     `switchedBy`, `paid_start`, `approved_run`
     (docs/MCP-SETUP.md, Cinema scenes over MCP); here you read the detail.
-    An existing scene's write over HTTP (PUT /api/graph/node/{id}, `nebula
-    set`) is held to the scene you last read: changed since, it is refused
-    with 409 `scene_changed` (`scene`, `sceneKey`, `changedBy`) and nothing
-    is saved; read it again and put your change on top.
+    MCP has no scene write: an existing scene can't be changed here (400).
+    Its write over HTTP (PUT /api/graph/node/{id}, `nebula set`) is held to
+    the scene this session last read (this server sends its own
+    X-Nebula-Agent-Session, NEBULA_AGENT_SESSION to choose it): changed
+    since, it is refused with 409 `scene_changed` (`scene`, `sceneKey`,
+    `sceneRev`, `changedBy`) and nothing is saved; read it again and redo
+    your change (a refusal is not a read).
     Who bills a run is the person's call: Krea billing (`_kreaAuth`: API token
     or the Krea plan) and a multi-provider node's route (`_provider`: a route id
     or auto; describe_node lists them and the values each takes). Send a change
@@ -1521,7 +1532,7 @@ def _preview_with_error(node_id: str, port: str | None, size: str, ctx: Context 
 
     params = {"size": size, **({"port": port} if port else {})}
     response = _api().send("GET", f"/api/graph/node/{node_id}/preview", params=params, timeout=60.0,
-                           headers={"X-Nebula-Agent": _cursor_name(ctx)})
+                           headers=_agent_headers(ctx))
     kind = response.headers.get("content-type", "image/jpeg").split(";")[0]
     failed = response.headers.get("x-nebula-last-run-error")
     return (Image(data=response.content, format="png" if kind == "image/png" else "jpeg"),
@@ -1968,7 +1979,7 @@ def commons_concentration(brand: str | None = None, ctx: Context | None = None) 
 # downloaded by this process, never by the backend.
 
 def _board_headers(ctx: Context | None) -> dict[str, str]:
-    return {"X-Nebula-Agent": _cursor_name(ctx)}
+    return _agent_headers(ctx)
 
 
 def _board_call(fn, *args: Any, **kwargs: Any) -> Any:
@@ -2876,7 +2887,7 @@ CHANNEL_CAPABILITY = "claude/channel"
 async def _channel_fetch(path: str, params: dict[str, Any], timeout: float, agent: str) -> dict[str, Any]:
     """A GET as this agent, async on the event loop (cancellable mid long-poll, no thread held)."""
     url = await _offload(_current_url)  # NEBULA_URL_FILE is re-verified each time, as for the tools
-    headers = with_identity({"X-Nebula-Agent": agent})
+    headers = with_identity({"X-Nebula-Agent": agent, "X-Nebula-Agent-Session": _AGENT_SESSION})
     async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
         try:
             response = await client.get(f"{url}{path}", params=params, headers=headers)

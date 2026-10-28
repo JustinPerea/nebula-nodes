@@ -3551,51 +3551,91 @@ those shots in it.
 Every Cinema scene has a `sceneKey` (PR #198 fix round 8,
 `backend/services/scene_keys.py`): a name for its authoring, everything but
 the shots' runtime (`output`, `variations`, `selectedVariation`, which runs
-write). `GET /api/graph/export`, `GET /api/graph` and `GET
-/api/canvas/snapshot` list them as `sceneKeys` ({node id: key}; left out when the
-canvas has no scene), every
-graphSync carries them, and the answer to a scene write (`PUT
-/api/graph/node/{id}` with `params.scene`) has the new one as `sceneKey`.
+write). It also has a `sceneRev` (fix round 9): a number that grows each
+time Nebula holds another authoring of that scene, across restarts too, so a
+client can tell an older scene from a newer one. `GET /api/graph/export`,
+`GET /api/graph` and `GET /api/canvas/snapshot` list them as `sceneKeys` and
+`sceneRevs` ({node id: key}, {node id: revision}; both left out when the
+canvas has no scene), every graphSync carries them, and the answer to a
+scene write (`PUT /api/graph/node/{id}` with `params.scene`) has the new
+ones as `sceneKey` and `sceneRev`.
 
 A scene write is held to the scene it was built on, the same rule for
 agents and the person (it is symmetric, so neither side's older copy goes
 back over the other's change):
 
 - with `ifSceneKey` in the body, against that key;
-- without one, for an agent (`X-Nebula-Agent`, the CLI and MCP send it),
-  against the scene that agent last read: its export, snapshot or `GET
-  /api/graph`, or its own last write of that scene. An agent that read the
-  scene before the person typed in it is refused; one that never read it
-  writes it as it sends it (the last writer), as before. A canvas clear,
-  import or project switch forgets every read (node ids start again);
+- without one, for an agent, against the scene that reader last read: its
+  export, snapshot or `GET /api/graph`, or its own last write of that
+  scene. An agent that read the scene before the person typed in it is
+  refused; one that never read it writes it as it sends it (the last
+  writer), as before;
 - the person's canvas sends `ifSceneKey` on every scene save.
+
+A write whose scene is the one Nebula has now is never refused (it changes
+nothing in the scene; its other params are saved).
+
+**Who a reader is.** A read belongs to a session, not a name: a verified
+agent token (`Authorization: Agent <token>`) is its chat session's reader;
+otherwise the name in `X-Nebula-Agent` together with
+`X-Nebula-Agent-Session`. The MCP server sends a session of its own (one per
+server process; set `NEBULA_AGENT_SESSION` to choose it), and the CLI sends
+`NEBULA_AGENT_SESSION` when it is set. `X-Nebula-Agent` alone is one reader
+for every session of that name, so two lanes of one agent without a session
+share their reads; give each lane its own `NEBULA_AGENT_SESSION`.
+
+**What counts as a read.** The export, the snapshot and `GET /api/graph`
+(`nebula look`), every time: a loop that polls the export as an agent keeps
+that session's read current, so its next write is checked against the
+latest poll, not against what the agent last looked at. A refusal is not a read: the CLI prints only its detail, so an agent
+that sends the same copy again is refused again until it reads. Reads are
+kept per canvas (its project and canvas epoch) and survive a project switch
+away and back; a canvas clear or import starts new ones.
+
+**MCP has no scene write.** `edit_canvas` answers 400 "Cinema scenes can't
+be changed by an edit; edit them in Cinema" for an existing scene; the
+writes held to this rule are `PUT /api/graph/node/{id}` and `nebula set`.
 
 A write built on a scene that changed since is refused with 409, and
 nothing in it was saved:
 
 ```json
-{"detail": "Couldn't save “Opening”, node n4. Its scene changed since you read it, so nothing was saved. Read it again (or take `scene` from this answer), put your change on top and send it again (with `ifSceneKey`, this answer's `sceneKey`).",
- "code": "scene_changed", "scene": {"version": 1, "shots": […]}, "sceneKey": "…",
+{"detail": "“Opening” changed since you last read it, so nothing was changed. Read it again and redo your change.",
+ "code": "scene_changed", "scene": {"version": 1, "shots": […]}, "sceneKey": "…", "sceneRev": 1761650000000123,
  "changedBy": {"kind": "person", "name": "You"}}
 ```
 
-`scene` is the scene Nebula has now, `sceneKey` its key and `changedBy` who
-last changed it (`agent` with its name, `person` as "You"; `null` when
-Nebula doesn't know, after a restart). Put your change on top of `scene`
-and send it again; a re-read (`nebula look`) also counts as reading it. A
-change to a shot's runtime alone (a run's image) is no change, and the
-other params of the node are never held to the key.
+`scene` is the scene Nebula has now, `sceneKey` and `sceneRev` its key and
+revision, and `changedBy` who last changed it (`agent` with its name,
+`person` as "You"; `null` when Nebula doesn't know, after a restart). Read
+the scene again (`nebula look`), put your change on top and send it; over
+HTTP you can instead take `scene` from this answer and send your change on
+it with `ifSceneKey` set to this answer's `sceneKey`. A change to a shot's
+runtime alone (a run's image) is no change, and the other params of the
+node are never held to the key. Nothing is shown to the person for an
+agent's refusal: no Agent log row, no toast (the change is the agent's to
+redo).
 
 The person never reads this line. Their canvas merges the two changes
 (each side's fields kept) and sends again, silently; only when both
-changed the same thing does the card ask, with the line it shows for any
-clash ("Codex changed “Opening” while you were editing it." [Use Codex's]
+changed the same thing does the card ask, with one line for the clash
+("Codex changed “Opening” while you were editing it." [Use Codex’s]
 [Keep mine]; for a reorder "Codex reordered the shots in “Opening” while you
-were editing them."; for a shot you removed that they were editing "Codex
-removed “Shot 2” while you were editing it."). It is never a "Couldn't save"
-line and never counts toward the canvas's retries. So when you change a
-scene the person is editing, your change stays unless they changed the
-same field and choose Keep mine; read the scene again before a second write.
+were editing them."; for shots you removed that they were editing "Codex
+removed “Shot 2” and “Shot 3” while you were editing them."; when a removed
+shot comes back with other text, "Codex changed “Shot 2” while you were
+editing it."). It is never a "Couldn't save" line and never counts toward
+the canvas's retries. The canvas ignores any scene below a revision it has
+already seen (a sync that arrives late). So when you change a scene the
+person is editing, your change stays unless they changed the same field and
+choose Keep mine; read the scene again before a second write.
+
+When Keep mine brings back a shot you removed, its connections go back
+with `POST /api/graph/connect` and `"onlyIfFree": true`: if that input
+holds another connection now (yours, say), Nebula refuses with 409
+`input_taken` and nothing changes; the card then says "“Shot 2” is back
+without its connection to “Edit A”." A connect without `onlyIfFree` is as
+before.
 
 The other whole-write refusals of a scene write carry a `code` too, so a
 client picks its words by the cause, not the text (each `detail` is as it
@@ -3607,7 +3647,8 @@ was):
 | `approved_run` | 409 | an agent's edit to a run the person approved and the canvas hasn't started (never the person's) | |
 | `workspace_moved` | 409 | another project was opened, made or deleted since the caller read it (a tab's `X-Nebula-Workspace-Revision`, or a write that waited); nothing changed | `project`: `{id, name}` of the project open now (`null` for the unfiled canvas); `switchedBy`: `{kind, name}` of who did it (`agent` with its name, `person` as "You"), or `null` when Nebula doesn't know (it restarted since) |
 | `canvas_replaced` | 409 | the same project is open, but its canvas was cleared or replaced (a graph import) since the caller read it (a tab's `X-Nebula-Canvas-Revision`, or a write that waited), so node ids may name new nodes; nothing changed | the same `project` and `switchedBy` as `workspace_moved` |
-| `scene_changed` | 409 | a scene write built on a scene that changed since (its `ifSceneKey`, or for an agent the scene it last read); nothing was saved (above) | `scene`, `sceneKey`, `changedBy` |
+| `scene_changed` | 409 | a scene write built on a scene that changed since (its `ifSceneKey`, or for an agent the scene that session last read); nothing was saved (above) | `scene`, `sceneKey`, `sceneRev`, `changedBy` |
+| `input_taken` | 409 | a connect with `"onlyIfFree": true` into a single-connection input that holds another connection; nothing changed (above) | |
 | `params_outdated` | 409 | the tab was built for another params version; reload | `paramsVersion` |
 | `run_safeguards` | 507 | the paid-start fence can't be read or written | |
 

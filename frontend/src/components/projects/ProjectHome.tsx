@@ -57,7 +57,13 @@ export interface ProjectHomeProps {
    * projectRetryOffer): 'redo' redoes the failure (the reason is GM's short
    * line), 'reload' only reloads the saved projects (the whole line stays),
    * 'none' hides Try again (the whole line). */
-  retry?: 'redo' | 'reload' | 'none' | 'reloadNebula' | 'restore' | 'dismiss';
+  retry?: 'redo' | 'reload' | 'none' | 'reloadNebula';
+  /** GM r12 item 5: where an update's recovered copy went, when the reload
+   * couldn't open it (store/projectStore CopyNotice): neutral, × to close,
+   * [Restore] while it is in Recently deleted. */
+  copyNotice?: { line: string; restore: { id: string; name: string } | null } | null;
+  onRestoreCopy?: () => void;
+  onDismissCopy?: () => void;
   trash?: TrashedProject[];
   lastDeleted?: { id: string; name: string } | null;
   onRestore?: (id: string) => void;
@@ -359,6 +365,25 @@ function UndoToast({ project, busy, onUndo, onDismiss }: {
   );
 }
 
+/** GM r12 item 5: the recovered copy's notice, in the notice region and in
+ * the look of the toast that says where a restored copy's changes are: the
+ * line, [Restore] while the copy is in Recently deleted, and ×. It stays
+ * until the person closes it or restores. */
+function CopyNoticeToast({ notice, busy, onRestore, onDismiss }: {
+  notice: { line: string; restore: { id: string; name: string } | null };
+  busy: boolean; onRestore: () => void; onDismiss: () => void;
+}) {
+  return (
+    <InNoticeRegion slot="project-home">
+      <div className="project-home__toast" role="status" aria-live="polite" data-copy-notice="">
+        <span className="project-home__toast-text">{notice.line}</span>
+        {notice.restore && <button type="button" className="project-home__toast-undo" disabled={busy} onClick={onRestore}>Restore</button>}
+        <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
+      </div>
+    </InNoticeRegion>
+  );
+}
+
 const noop = () => {};
 
 /** The held edits' notice goes when the person chooses, and takes the
@@ -385,7 +410,8 @@ function useFocusAfterHeldEdits(held: boolean, savedLine: RefObject<HTMLElement 
 export function ProjectHome({ projects, loading, busy, error, errorDetails = null, onCreate, onOpen, onRename, onDelete, onRetry, retry = 'redo',
   trash = [], lastDeleted = null, onRestore = noop, onPurge = noop, onEmptyTrash = noop, onDismissUndo = noop,
   settingsOpen = false, onToggleSettings, loadCoverChoices, onPinCover,
-  unsavedEdits = null, editsSavedAs = null, onDownloadEdits = noop, onContinueWithoutEdits = noop }: ProjectHomeProps) {
+  unsavedEdits = null, editsSavedAs = null, onDownloadEdits = noop, onContinueWithoutEdits = noop,
+  copyNotice = null, onRestoreCopy = noop, onDismissCopy = noop }: ProjectHomeProps) {
   const [query, setQuery] = useState('');
   // Offline is read-only (round 15 of PR #114): create, open, rename,
   // delete, restore and covers are disabled as while busy; search and
@@ -429,10 +455,9 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
           {errorDetails ? <div className="project-home__error-text"><span>{retry === 'redo' ? shortLine(error) : error}</span>
             <ErrorDetails raw={errorDetails} className="project-home__error-details" /></div>
             : <span>{retry === 'redo' ? shortLine(error) : error}</span>}
-          {/* GM r9 decision 1: after an update, [Reload Nebula] in place of Try again.
-              GM r11 answer 2: the copy in Recently deleted [Restore]; deleted for good, [Dismiss]. */}
+          {/* GM r9 decision 1: after an update, [Reload Nebula] in place of Try again. */}
           {retry !== 'none' && <button type="button" disabled={loading || busy} onClick={onRetry}>
-            {retry === 'reloadNebula' ? 'Reload Nebula' : retry === 'restore' ? 'Restore' : retry === 'dismiss' ? 'Dismiss' : 'Try again'}</button>}</div>}
+            {retry === 'reloadNebula' ? 'Reload Nebula' : 'Try again'}</button>}</div>}
 
         <section className="project-home__projects" aria-labelledby="recent-projects-title">
           <div className="project-home__section-header">
@@ -446,6 +471,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
         </section>
         {!loading && trash.length > 0 && <RecentlyDeleted trash={trash} busy={locked} onRestore={onRestore} onPurge={onPurge} onEmptyTrash={onEmptyTrash} />}
       </main>
+      {copyNotice && <CopyNoticeToast notice={copyNotice} busy={locked} onRestore={onRestoreCopy} onDismiss={onDismissCopy} />}
       {lastDeleted && <UndoToast key={lastDeleted.id} project={lastDeleted} busy={locked}
         onUndo={() => onRestore(lastDeleted.id)} onDismiss={onDismissUndo} />}
     </div>

@@ -122,7 +122,9 @@ describe('mergeScenes: a property fuzz with reorders (review 7 H1, I6)', () => {
     // The fuzz reaches every kind of clash, order clashes included.
     expect(counts['clash ORDER'] ?? 0).toBeGreaterThan(0);
     expect(counts['clash PRESENCE'] ?? 0).toBeGreaterThan(50);
-  });
+    // Review 8, N-4: 20000 seeds take seconds; under a loaded full run the
+    // default 5 s ran out.
+  }, 60_000);
 });
 
 describe('order clashes, by name (review 7 seed 8332)', () => {

@@ -234,7 +234,7 @@ describe('H2 (GM r9 decision 2): another change is merged in, never overwritten'
     const sentBefore = h.puts.length;
     syncs({ ...AGENT, ...graph([{ id: 's1', prompt: "codex's s1" }, { id: 's2', prompt: 'b' }, { id: 's3', prompt: 'added' }]) });
     await sleep(80);
-    const LINE = 'Codex changed “Opening” while you were editing it. Choose which version to keep.';
+    const LINE = 'Codex changed “Opening” while you were editing it.';
     expect(brief()).toEqual(['s1:mine', 's2:b', 's3:added']);
     expect(clash()).toBe(LINE);
     expect(unsaved()).toBe(LINE);

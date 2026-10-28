@@ -615,6 +615,14 @@ export function nodeNameList(names: string[]): string {
   return parts.length <= 1 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 }
 
+/** The same rule for things that aren't nodes and whose names are their
+ * own (shots): up to 3 quoted names, from 4 a count ("4 shots"). */
+export function quotedNames(names: readonly string[], counted: string): string {
+  if (names.length >= 4) return `${names.length} ${counted}`;
+  const quoted = names.map((name) => `“${name}”`);
+  return quoted.length <= 1 ? (quoted[0] ?? '') : `${quoted.slice(0, -1).join(', ')} and ${quoted[quoted.length - 1]}`;
+}
+
 /** Whether a nodeNameList names more than one node ("have" / "has"). */
 export function namesSeveral(names: string[]): boolean {
   return names.length > 1;

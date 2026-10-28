@@ -297,7 +297,9 @@ export default function App() {
       loadCoverChoices={listCoverChoices} onPinCover={(id, url) => void projects.pinCover(id, url)}
       unsavedEdits={projects.unsavedEdits} editsSavedAs={projects.editsSavedAs}
       onDownloadEdits={() => void projects.downloadUnsavedEdits()}
-      onContinueWithoutEdits={() => void projects.continueWithoutEdits()} />;
+      onContinueWithoutEdits={() => void projects.continueWithoutEdits()}
+      copyNotice={projects.copyNotice} onRestoreCopy={() => void projects.restoreCopyNotice()}
+      onDismissCopy={projects.dismissCopyNotice} />;
   } else if (isCanvas) {
     mainView = <Canvas />;
   } else if (isCommons) {

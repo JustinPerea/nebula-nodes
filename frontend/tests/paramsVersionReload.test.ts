@@ -580,27 +580,30 @@ describe('after a reload for an update', () => {
     expect(window.sessionStorage.getItem('nebula:recoveredForUpdate')).toBeNull();
   });
 
-  it('a copy deleted for good: GM r11\'s line, with Dismiss only (the reload left the tab none of the edits)', async () => {
+  it('a copy deleted for good: GM r12\'s neutral notice, × only (the reload left the tab none of the edits)', async () => {
     await reloadedTab([project()]);
     expect(projects.openProject).not.toHaveBeenCalled();
     const state = useProjectStore.getState();
-    expect(state.error).toBe(
-      "Nebula couldn't save these changes before it updated. They were kept in “alpha (recovered)”, which was permanently deleted.");
-    expect(projectRetryOffer(state)).toBe('dismiss');
-    await state.retry();
-    expect(useProjectStore.getState().error).toBeNull();
-    expect(projects.listProjects).toHaveBeenCalledTimes(2);
+    expect(state.error).toBeNull();
+    expect(state.copyNotice).toEqual({ restore: null, line:
+      "Nebula couldn't save some changes before it updated. They were kept in “alpha (recovered)”, which was permanently deleted, so they can't be brought back." });
+    const listed = vi.mocked(projects.listProjects).mock.calls.length;
+    state.dismissCopyNotice();
+    expect(useProjectStore.getState().copyNotice).toBeNull();
+    // × only closes it: nothing is sent.
+    expect(projects.listProjects).toHaveBeenCalledTimes(listed);
   });
 
-  it('a copy in Recently deleted: GM r11\'s line with Restore, which restores and opens it', async () => {
+  it('a copy in Recently deleted: GM r12\'s neutral notice with Restore, which restores and opens it', async () => {
     const trashed = { ...project('recovered'), name: 'alpha (recovered)', deletedAt: '2026-10-28T00:00:00Z', purgeAt: '2026-11-27T00:00:00Z' };
     const said = await reloadedTab([project()], [trashed]);
     const state = useProjectStore.getState();
-    expect(state.error).toBe(
-      "Nebula couldn't save these changes before it updated. They were kept in “alpha (recovered)”, which is in Recently deleted.");
-    expect(projectRetryOffer(state)).toBe('restore');
+    expect(state.error).toBeNull();
+    expect(state.copyNotice).toEqual({ restore: { id: 'recovered', name: 'alpha (recovered)' }, line:
+      "Nebula couldn't save some changes before it updated. They were kept in “alpha (recovered)”, which is in Recently deleted." });
     vi.mocked(projects.restoreProject).mockResolvedValue({ ...project('recovered'), name: 'alpha (recovered)' } as never);
-    await state.retry();
+    await state.restoreCopyNotice();
+    expect(useProjectStore.getState().copyNotice).toBeNull();
     expect(projects.restoreProject).toHaveBeenCalledWith('recovered');
     await vi.waitFor(() => expect(projects.openProject).toHaveBeenCalledWith('recovered', expect.anything()));
     await vi.waitFor(() => expect(said).toEqual([

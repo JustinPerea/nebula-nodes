@@ -44,6 +44,11 @@ class NebulaClient:
         agent_name = os.environ.get("NEBULA_AGENT_NAME")
         if agent_name:
             headers.setdefault("X-Nebula-Agent", agent_name)
+        # One agent session's scene reads are its own (fix round 9, M-2):
+        # set NEBULA_AGENT_SESSION when several sessions share a name.
+        session = os.environ.get("NEBULA_AGENT_SESSION")
+        if session:
+            headers.setdefault("X-Nebula-Agent-Session", session)
         return headers
 
     def _fail(self, exc: NebulaAPIError, what: str) -> None:

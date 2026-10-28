@@ -19,9 +19,9 @@ import type { NodeData } from '../src/types';
 describe('GM r8: the scene save lines', () => {
   it('UNSAVED_MARK, the clash lines (GM r9) and SWITCHED_UNNAMED', () => {
     expect(scene.UNSAVED_MARK).toBe('Unsaved');
-    expect(scene.sceneClashLine('Opening', 'Codex')).toBe('Codex changed “Opening” while you were editing it. Choose which version to keep.');
+    expect(scene.sceneClashLine('Opening', 'Codex')).toBe('Codex changed “Opening” while you were editing it.');
     expect(scene.sceneClashLine('Opening', null)).toBe('“Opening” was changed in another window while you were editing it.');
-    expect([scene.KEEP_MINE, scene.theirsLabel('Codex'), scene.theirsLabel(null)]).toEqual(['Keep mine', "Use Codex's", 'Use theirs']);
+    expect([scene.KEEP_MINE, scene.theirsLabel('Codex'), scene.theirsLabel(null)]).toEqual(['Keep mine', 'Use Codex’s', 'Use theirs']);
     expect(`${scene.sceneSaveHeading('X')} ${scene.SWITCHED_UNNAMED}`)
       .toBe("Couldn't save your changes to “X”. The canvas switched to another project first.");
   });
