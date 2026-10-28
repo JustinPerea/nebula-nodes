@@ -336,7 +336,7 @@ export function NodeLibrary() {
           </div> : <>
           {resultCount === 0 && <div className="node-library__empty">
             <p role="status">No nodes match{search.trim() ? ` “${search.trim()}”` : ''}{provider ? ` from ${providerLabel(provider)}` : ''}.</p>
-            <button type="button" onClick={() => { searchRef.current?.focus(); setSearch(''); setProvider(''); }}>Clear filters</button>
+            <button type="button" className="node-library__filters-reset" onClick={() => { searchRef.current?.focus(); setSearch(''); setProvider(''); }}>Clear filters</button>
             <span>Try a task or media type:</span>
             <div className="node-library__suggestions">
               {['Animate a logo', 'Image', 'Audio', '3D'].map((suggestion) => <button key={suggestion} type="button"

@@ -57,7 +57,8 @@ function ConfirmInline({ label, confirmLabel, prompt, busy, onConfirm }: {
   const trigger = useRef<HTMLButtonElement>(null);
   const disarm = () => { setArmed(false); requestAnimationFrame(() => trigger.current?.focus()); };
   if (!armed) {
-    return <button type="button" ref={trigger} className="asset-trash__button" disabled={busy}
+    // It arms a Delete forever or an Empty: red on hover (GM r13), neutral at rest.
+    return <button type="button" ref={trigger} className="asset-trash__button asset-trash__trigger--danger" disabled={busy}
       onClick={() => setArmed(true)}>{label}</button>;
   }
   return (

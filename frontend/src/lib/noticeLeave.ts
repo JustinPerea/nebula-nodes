@@ -16,10 +16,92 @@ export type LeaveKind = 'surface' | 'row';
 
 const isLeave = (name: string | undefined) => Boolean(name && /-out$/.test(name));
 
+const leaves = (element: Element) => element.getAnimations().filter((animation) => isLeave((animation as CSSAnimation).animationName));
+
 /** Whether a leave animation is running on the element itself. */
 export function runsLeave(element: Element | null): boolean {
   if (!element || typeof element.getAnimations !== 'function') return false;
-  return element.getAnimations().some((animation) => isLeave((animation as CSSAnimation).animationName));
+  return leaves(element).length > 0;
+}
+
+/** Slack past a leave's own end before the fallback ends it. */
+export const LEAVE_SLACK_MS = 250;
+
+/**
+ * Review 8 NIT-1: a leave also ends when its animation is cancelled (by a
+ * style change or by script) or, if no event comes at all, once its time is
+ * up plus LEAVE_SLACK_MS, so an item is never left mounted, inert and
+ * half-gone. Returns the cleanup.
+ */
+export function watchLeave(element: HTMLElement, end: () => void): () => void {
+  let left = 0;
+  const running = leaves(element);
+  for (const animation of running) {
+    const timing = animation.effect?.getComputedTiming();
+    const total = Number(timing?.endTime ?? 0);
+    const now = Number(animation.currentTime ?? 0);
+    const rate = Math.abs(animation.playbackRate) || 1;
+    if (Number.isFinite(total)) left = Math.max(left, (total - now) / rate);
+  }
+  let ended = false;
+  const finish = () => { if (!ended) { ended = true; end(); } };
+  const onCancel = (event: Event) => {
+    if (event.target === element && isLeave((event as globalThis.AnimationEvent).animationName)) finish();
+  };
+  // A style change that drops the animation fires animationcancel on the
+  // element; Animation.cancel() from script fires only the animation's own
+  // cancel event (Chrome, live), so both are heard.
+  element.addEventListener('animationcancel', onCancel);
+  for (const animation of running) animation.addEventListener?.('cancel', finish);
+  const timer = window.setTimeout(finish, Math.max(0, left) + LEAVE_SLACK_MS);
+  return () => {
+    ended = true;
+    element.removeEventListener('animationcancel', onCancel);
+    for (const animation of running) animation.removeEventListener?.('cancel', finish);
+    window.clearTimeout(timer);
+  };
+}
+
+const CONTROL = 'button:not(:disabled), a[href], input:not(:disabled):not([type="hidden"]), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
+
+function firstControl(within: Element, leaving: Element): HTMLElement | null {
+  for (const control of within.querySelectorAll<HTMLElement>(CONTROL)) {
+    if (leaving.contains(control) || control.closest('[inert], [data-leaving]')) continue;
+    return control;
+  }
+  return null;
+}
+
+/**
+ * Review 8 NIT-2 (GM's focus rule): when what leaves holds focus, focus goes
+ * to the next notice's first control, else the one before's, else the start
+ * of the page content (the canvas, or the screen's <main>). Never <body>.
+ * It runs as the leave starts, before the item's `inert` drops focus.
+ */
+export function moveFocusFromLeave(leaving: HTMLElement): void {
+  if (!leaving.contains(document.activeElement)) return;
+  const notices = [...document.querySelectorAll<HTMLElement>('.notice-region__slot > *')];
+  const own = leaving.closest<HTMLElement>('.notice-region__slot > *');
+  const at = own ? notices.indexOf(own) : -1;
+  const ordered: HTMLElement[] = [];
+  // A row inside a notice that stays: that notice's other controls first.
+  if (own && own !== leaving) ordered.push(own);
+  if (at >= 0) ordered.push(...notices.slice(at + 1), ...notices.slice(0, at).reverse());
+  else {
+    const after = notices.filter((notice) => leaving.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const before = notices.filter((notice) => leaving.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_PRECEDING);
+    ordered.push(...after, ...before.reverse());
+  }
+  for (const notice of ordered) {
+    if (notice !== own && notice.matches('[inert], [data-leaving]')) continue;
+    const control = firstControl(notice, leaving);
+    if (control) { control.focus({ preventScroll: true }); return; }
+  }
+  const start = document.querySelector<HTMLElement>('.canvas-wrapper')
+    ?? [...document.querySelectorAll<HTMLElement>('main')].find((main) => !main.closest('[inert]')) ?? null;
+  if (!start) return;
+  if (!start.hasAttribute('tabindex')) start.setAttribute('tabindex', '-1');
+  start.focus({ preventScroll: true });
 }
 
 export interface LeaveProps {
@@ -50,8 +132,12 @@ export function useLeave<T>(value: T | null | undefined | false, kind: LeaveKind
   const ref = useCallback((node: HTMLElement | null) => { element.current = node; }, []);
   const done = useCallback(() => { setLast(null); setLeaving(false); }, []);
   useLayoutEffect(() => {
+    const node = element.current;
+    if (!leaving) return;
+    if (node) moveFocusFromLeave(node);
     // eslint-disable-next-line react-hooks/set-state-in-effect -- DOM read: whether a leave animation runs is known only once the mark is drawn; none runs, it goes before paint
-    if (leaving && !runsLeave(element.current)) done();
+    if (!node || !runsLeave(node)) { done(); return; }
+    return watchLeave(node, done);
   }, [leaving, done]);
   const shown = present ?? (leaving ? last : null);
   return {
@@ -135,10 +221,14 @@ export function useLeavingRows<T>(items: readonly T[], keyOf: (item: T) => strin
   const pending = entries.filter((entry) => entry.leaving).map((entry) => entry.key).join('\n');
   useLayoutEffect(() => {
     if (hold || !pending) return;
+    const stops: Array<() => void> = [];
     for (const key of pending.split('\n')) {
+      const node = elements.current.get(key) ?? null;
       // eslint-disable-next-line react-hooks/set-state-in-effect -- DOM read: as above, a row with no leave running goes before paint
-      if (!runsLeave(elements.current.get(key) ?? null)) finish(key);
+      if (!node || !runsLeave(node)) finish(key);
+      else stops.push(watchLeave(node, () => finish(key)));
     }
+    return () => { for (const stop of stops) stop(); };
   }, [pending, hold, finish]);
   return {
     rows: entries,

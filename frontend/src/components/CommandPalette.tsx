@@ -337,7 +337,7 @@ export function CommandPalette() {
             {flat.length === 0 && <div className="command-palette__empty">
               <p role="status">No commands or nodes match “{query}”.</p>
               <p>Try a provider, model name or task such as “animate a logo”.</p>
-              <button type="button" onClick={() => { setQuery(''); setSelected(0); inputRef.current?.focus(); }}>Clear search</button>
+              <button type="button" className="command-palette__search-reset" onClick={() => { setQuery(''); setSelected(0); inputRef.current?.focus(); }}>Clear search</button>
             </div>}
             {groups.map((g) => (
               <div key={g.group} className="command-palette__group">

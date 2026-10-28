@@ -19,7 +19,7 @@ function RemoveKeyButton({ label, removing, onConfirm }: { label: string; removi
   const disarm = () => { setArmed(false); requestAnimationFrame(() => trigger.current?.focus()); };
   if (!armed) {
     return (
-      <button type="button" ref={trigger} className="settings__button settings__button--ghost settings__remove-key"
+      <button type="button" ref={trigger} className="settings__button settings__button--ghost settings__remove-key settings__button--danger"
         aria-label={`Remove ${label} API key`} disabled={removing} onClick={() => setArmed(true)}>
         {removing ? 'Removing…' : 'Remove'}
       </button>

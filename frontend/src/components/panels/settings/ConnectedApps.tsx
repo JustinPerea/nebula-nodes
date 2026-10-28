@@ -249,7 +249,7 @@ export function ConnectedApps({ view, loadError, onChanged }: {
                     onClick={() => setArmed(null)}>Keep</button>
                 </span>
               ) : (
-                <button type="button" className="settings__button" disabled={busy}
+                <button type="button" className="settings__button settings__button--danger" disabled={busy}
                   aria-label={`Revoke the token for ${app.name}`} onClick={() => setArmed(app.id)}>Revoke</button>
               )}
             </span>

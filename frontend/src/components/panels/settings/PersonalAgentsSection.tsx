@@ -97,7 +97,7 @@ function DownloadAndSignIn({ agent, busy, run }: { agent: PersonalAgent; busy: b
             onClick={() => void run(() => antigravityAction('sign-out'))}>Sign out</button>
         )}
         {(install.state === 'installed' || install.state === 'changed') && (
-          <button type="button" className="settings__button" disabled={busy || signIn?.state === 'waiting'}
+          <button type="button" className="settings__button settings__button--danger" disabled={busy || signIn?.state === 'waiting'}
             onClick={() => void run(() => antigravityAction('remove'))}>Remove download</button>
         )}
       </span>
@@ -200,7 +200,7 @@ export function PersonalAgentsSection() {
                   onChange={(event) => void run(() => updatePersonalAgent(agent.id, { enabled: event.target.checked }))} />
               )}
               {agent.kind === 'custom' && (
-                <button type="button" className="settings__button settings__button--remove" disabled={busy}
+                <button type="button" className="settings__button settings__button--danger" disabled={busy}
                   aria-label={`Remove ${agent.displayName}`} onClick={() => void run(() => deletePersonalAgent(agent.id))}>
                   Remove
                 </button>

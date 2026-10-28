@@ -425,3 +425,33 @@ def test_r7_N3_a_dcs_sequence_goes_whole():
     assert clean_text("warmer\x1bPq#0;2;0;0;0\x1b\\ sky", limit=280) == "warmer sky"
     assert clean_text("warmer\x90q#0;2\x9c sky", limit=280, multiline=True) == "warmer sky"
     assert clean_text("a\x1bP1$r0m\x1b\\b\x1b[0m", limit=280) == "ab"
+
+
+def test_r9_NIT3_every_string_sequence_goes_whole():
+    """Review 8 NIT-3: OSC, DCS, APC, PM and SOS, 7- or 8-bit, are dropped
+    with their payload: past an inner ESC, ended by ST or BEL, and, left
+    unterminated, to the end of their line (the next lines stay)."""
+    from services.canvas_pins import clean_text
+
+    def ct(raw: str) -> str:
+        return clean_text(raw, limit=280, multiline=True)
+
+    assert ct("p\x1bPq#0;2;0;0;0\x1b\\q") == "pq"
+    assert ct("p\x90q#0;2;0\x9cq") == "pq"
+    assert ct("p\x1bPq#0;2;0;0;0 rest of note") == "p"
+    assert ct("p\x1bPq#0;2;0;0;0\nnext line") == "p\nnext line"
+    assert ct("p\x1bP1$r\x1b[0m\x1b\\q") == "pq"
+    assert ct("p\x90q#0\x1b\\q") == "pq"
+    assert ct("p\x1b_Gf=24;AAAA\x1b\\q") == "pq"
+    assert ct("p\x1b^private\x1b\\q") == "pq"
+    assert ct("p\x1bXstring\x1b\\q") == "pq"
+    assert ct("p\x9fapc\x9cq") == "pq"
+    assert ct("p\x9eprivate\x9cq") == "pq"
+    assert ct("p\x98string\x9cq") == "pq"
+    assert ct("p\x9d0;title\x07q") == "pq"
+    assert ct("p\x1b]0;title\x07q") == "pq"
+    assert ct("a\x1bPx\x1b\\b\x1bPy\x1b\\c") == "abc"
+    assert ct("a\x1bPx\x1b\\\\b") == "a\\b"
+    # Plain text with a P or a backslash is the person's.
+    assert ct("Please keep the \\ path C:\\x") == "Please keep the \\ path C:\\x"
+    assert clean_text("\x1b[31mred\x1b[0m text", limit=280) == "red text"

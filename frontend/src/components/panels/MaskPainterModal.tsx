@@ -228,6 +228,7 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
           <button
             type="button"
             className={`mask-painter__tool ${tool === 'brush' ? 'mask-painter__tool--active' : ''}`}
+            aria-pressed={tool === 'brush'}
             onClick={() => setTool('brush')}
             {...lock.act({ offline: true })}
           >
@@ -236,6 +237,7 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
           <button
             type="button"
             className={`mask-painter__tool ${tool === 'erase' ? 'mask-painter__tool--active' : ''}`}
+            aria-pressed={tool === 'erase'}
             onClick={() => setTool('erase')}
             {...lock.act({ offline: true })}
           >

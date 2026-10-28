@@ -12330,6 +12330,19 @@ async def get_graph() -> dict:
     return cli_graph.get_state()
 
 
+_SHOT_MEDIA_FIELDS = ("output", "variations", "selectedVariation")
+# How many taken-out shots one canvas keeps media for; the oldest goes first.
+_REMOVED_SHOT_MEDIA_CAP = 128
+
+
+def _keep_removed_shot_media(graph: CLIGraph, node_id: str, shot_id: str, kept: dict[str, Any]) -> None:
+    store = graph.removed_shot_media
+    store.pop((node_id, shot_id), None)
+    store[(node_id, shot_id)] = kept
+    while len(store) > _REMOVED_SHOT_MEDIA_CAP:
+        store.pop(next(iter(store)))
+
+
 def _author_cinema_scene(graph: CLIGraph, node_id: str, node: dict[str, Any], params: dict[str, Any]) -> None:
     """Keep a Cinema scene's runtime media when a write sets its authoring.
 
@@ -12357,22 +12370,46 @@ def _author_cinema_scene(graph: CLIGraph, node_id: str, node: dict[str, Any], pa
         if isinstance(shot, dict) and isinstance(shot.get("id"), str)
     }
     authored_scene = copy.deepcopy(incoming_scene)
+    incoming_ids = {shot["id"] for shot in authored_scene["shots"]}
+    outputs_before = node.get("outputs") or {}
+    # A shot this write takes out keeps its run media on the server, so the
+    # Undo that brings it back brings its images too (fix round 9 of PR #200:
+    # a shot's × is neutral because Undo puts the shot back whole, GM r13).
+    for shot_id, canonical in current_shots.items():
+        if shot_id in incoming_ids:
+            continue
+        kept = {field: copy.deepcopy(canonical[field])
+                for field in _SHOT_MEDIA_FIELDS if field in canonical}
+        port = outputs_before.get(f"shot_{shot_id}")
+        if port is not None:
+            kept["port"] = copy.deepcopy(port)
+        if kept:
+            _keep_removed_shot_media(graph, node_id, shot_id, kept)
+    restored_ports: dict[str, Any] = {}
     for shot in authored_scene["shots"]:
         canonical = current_shots.get(shot["id"])
-        for field in ("output", "variations", "selectedVariation"):
+        for field in _SHOT_MEDIA_FIELDS:
             shot.pop(field, None)
             if canonical is not None and field in canonical:
                 shot[field] = copy.deepcopy(canonical[field])
         if canonical is None:
-            shot["output"] = {"status": "idle"}
+            kept = graph.removed_shot_media.pop((node_id, shot["id"]), None)
+            if kept:
+                for field in _SHOT_MEDIA_FIELDS:
+                    if field in kept:
+                        shot[field] = kept[field]
+                if "port" in kept:
+                    restored_ports[f"shot_{shot['id']}"] = kept["port"]
+            shot.setdefault("output", {"status": "idle"})
     params["scene"] = authored_scene
     # Deleted shots no longer own live ports/connections. Import and
     # generation/promotion routes retain their separate media contract.
     valid_ports = {f"shot_{shot['id']}" for shot in authored_scene["shots"]}
     node["outputs"] = {
-        port: output for port, output in (node.get("outputs") or {}).items()
+        port: output for port, output in outputs_before.items()
         if not port.startswith("shot_") or port in valid_ports
     }
+    node["outputs"].update(restored_ports)
     graph.edges = [edge for edge in graph.edges
                    if edge.get("source") != node_id
                    or not str(edge.get("sourceHandle", "")).startswith("shot_")

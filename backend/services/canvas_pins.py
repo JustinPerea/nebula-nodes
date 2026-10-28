@@ -57,15 +57,17 @@ def _epoch(value: Any) -> float | None:
         return None
 
 
-# Terminal escape sequences, each dropped whole: CSI (7- and 8-bit), OSC
-# (ended by BEL or ST) and, fix round 7 of PR #200 (review 7 N-3), DCS
-# (ESC P ... ST, or 8-bit 0x90 ... 0x9c), so no "Pq#0;2;0;0;0\\" is left.
+# Terminal escape sequences, each dropped whole (review 7 N-3, review 8
+# NIT-3), so no "Pq#0;2;0;0;0" or "_Gf=24;AAAA" is left: CSI (7- and 8-bit),
+# then the string sequences: OSC, DCS, APC, PM and SOS
+# (ESC ] P _ ^ X, or 8-bit 0x9d 0x90 0x9f 0x9e 0x98), each dropped whole with
+# its payload up to its end: ST (ESC \ or 0x9c) or BEL, even past an inner
+# ESC (review 8 NIT-3). One left unterminated goes to the end of its line,
+# so the person's next lines stay.
 _ANSI = re.compile(
     r"\x1b\[[0-?]*[ -/]*[@-~]"
-    r"|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)"
-    r"|\x1bP[^\x1b\x9c]*(?:\x1b\\|\x9c)"
-    r"|\x90[^\x1b\x9c]*(?:\x1b\\|\x9c)"
     r"|\x9b[0-?]*[ -/]*[@-~]"
+    r"|(?:\x1b[\]P_^X]|[\x90\x98\x9d\x9e\x9f])[^\r\n]*?(?:\x1b\\|\x9c|\x07|(?=[\r\n])|\Z)"
 )
 
 

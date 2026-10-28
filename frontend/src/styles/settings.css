@@ -251,6 +251,19 @@ body.app-slava-restraint .settings__confirm--danger:active:not(:disabled) {
   color: var(--sr-danger-ink-hover, #ff9a91);
 }
 
+/* GM r13: removing a personal agent deletes a standalone thing with its own
+   settings, so it is red whatever its label says. It has no confirm, so it
+   rests neutral like every Settings button and turns red on hover. */
+body.app-slava-restraint .settings__button--danger:hover:not(:disabled) {
+  border-color: var(--sr-danger-edge);
+  background: var(--sr-danger-tint);
+  color: var(--sr-danger-ink, #ff887d);
+}
+
+body.app-slava-restraint .settings__button--danger:active:not(:disabled) {
+  color: var(--sr-danger-ink-hover, #ff9a91);
+}
+
 body.app-slava-restraint .settings__select {
   min-height: 28px;
   padding: 0 26px 0 10px;

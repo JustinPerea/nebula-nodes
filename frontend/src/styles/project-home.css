@@ -126,6 +126,9 @@ body.app-slava-restraint .project-home__trash-empty:hover:not(:disabled),
 body.app-slava-restraint .project-home__confirm button:hover:not(:disabled) { background: var(--sr-surface-control-hover); }
 body.app-slava-restraint .project-home__confirm { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
 body.app-slava-restraint .project-home__confirm-prompt { color: var(--sr-ink-light); font-size: 12px; }
+/* GM r13: the trigger that arms a Delete forever or an Empty turns red on hover. */
+body.app-slava-restraint .project-home__trash button.project-home__trigger--danger:hover:not(:disabled) { border-color: var(--sr-danger-edge); background: var(--sr-danger-tint); color: var(--sr-danger-ink, #ff887d); }
+body.app-slava-restraint .project-home__trash button.project-home__trigger--danger:active:not(:disabled) { color: var(--sr-danger-ink-hover, #ff9a91); }
 /* GM r8 (fix round 6 of PR #200): the red fill with near-black ink, never the orange. */
 body.app-slava-restraint .project-home__confirm .project-home__danger { border-color: var(--sr-danger-fill, #ff887d); background: var(--sr-danger-fill, #ff887d); color: var(--sr-on-danger, #1f1f1f); font-weight: 600; }
 body.app-slava-restraint .project-home__confirm .project-home__danger:hover:not(:disabled) { border-color: var(--sr-danger-fill-hover, #ff9a91); background: var(--sr-danger-fill-hover, #ff9a91); }

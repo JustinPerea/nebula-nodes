@@ -384,7 +384,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
                 </button>
               )}
               <button type="button" className="commons-link" onClick={() => void renameRegion(r)}>Rename</button>
-              <button type="button" className="commons-link" onClick={() => run(() => commonsApi.patchRegion(r.id, { status: 'deleted' }))}>
+              <button type="button" className="commons-link commons-region__delete" onClick={() => run(() => commonsApi.patchRegion(r.id, { status: 'deleted' }))}>
                 Delete
               </button>
             </li>

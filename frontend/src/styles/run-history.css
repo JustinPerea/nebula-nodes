@@ -323,3 +323,13 @@ body:not(.app-slava-restraint) .run-history__action:disabled {
   overflow-wrap: anywhere;
   margin: 0;
 }
+
+/* GM r13: Clear run history wipes the whole list, so red on hover. */
+body.app-slava-restraint .run-history__action--clear:hover:not(:disabled) {
+  background: var(--sr-danger-tint);
+  color: var(--sr-danger-ink, #ff887d);
+}
+
+body.app-slava-restraint .run-history__action--clear:active:not(:disabled) {
+  color: var(--sr-danger-ink-hover, #ff9a91);
+}

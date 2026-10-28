@@ -3,6 +3,7 @@ import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import ts from 'typescript';
 import { gatedGraphActions } from '../src/store/graphStore';
+import { appControls, appCss, appMenuItemFindings, cascadeFindings, controlsIn, customProperties, menuItemFindings, notRedFindings, ruleFindings } from './helpers/destructiveRule';
 
 /**
  * Follow-ups to PR #195, two static ratchets.
@@ -2110,164 +2111,134 @@ function disabledLooks() {
   return rows;
 }
 
-// Fix round 7 of PR #200 (GM r11 answer 3, verbatim: "Grep for any other
-// hard-coded reds or orange on destructive actions, so the rule is enforced
-// in code (a ratchet), not by eye."), with GM r12's rule (fix round 8):
-// - Red: Delete, Delete forever, Purge, Clear, Discard, Trash, which remove
-//   something you can't get back just by adding it again. A destructive
-//   control (a class naming danger, destructive, delete, purge, trash,
-//   discard or clear) draws its red only from the danger tokens
-//   (styles/disabled-buttons.css: --sr-danger-ink, -ink-hover, -fill,
-//   -fill-hover, -tint, -edge, --sr-on-danger), never a hard-coded red or
-//   orange, and never the accent (--sr-danger, --sr-error and --sr-accent
-//   are the orange).
-// - Neutral: a × that takes an item out of a field or list you're editing
-//   (keyword and moodboard chips, palette swatches, tags, references, a
-//   shot). That's an edit; adding again or Undo puts it back. Its class
-//   names "remove", and a remove class takes no red, no orange, no accent.
-const DESTRUCTIVE_CLASS = /\.[\w-]*(danger|destructive|delete|purge|trash|discard|clear)[\w-]*/i;
-const REMOVE_CLASS = /\.[\w-]*remove[\w-]*/i;
-const ANY_DANGER_TOKEN = /var\(--sr-(?:danger|error|accent|on-danger)(?![\w-])|var\(--sr-(?:danger|error|accent)-[\w-]+/;
-const DANGER_TOKEN = /var\(--sr-(?:danger-(?:ink|ink-hover|fill|fill-hover|tint|edge)|on-danger)\b[^()]*(?:\([^()]*\)[^()]*)*\)/g;
-const ACCENT_TOKEN = /var\(--sr-(?:danger|error|accent)(?:-border|-soft)?(?![\w-])/;
-function warmColours(value: string): string[] {
-  const out: string[] = [];
-  for (const match of value.matchAll(/#([0-9a-f]{3,8})\b|rgba?\(([^)]*)\)|\b(red|orange|orangered|tomato|crimson|coral)\b/gi)) {
-    if (match[3]) { out.push(match[0]); continue; }
-    let rgb: number[];
-    if (match[1]) {
-      const hex = match[1].length <= 4 ? [...match[1].slice(0, 3)].map((c) => c + c).join('') : match[1].slice(0, 6);
-      rgb = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
-    } else rgb = match[2].split(/[\s,/]+/).filter(Boolean).slice(0, 3).map(Number);
-    const [r, g, b] = rgb.map((v) => v / 255);
-    const max = Math.max(r, g, b); const min = Math.min(r, g, b); const d = max - min;
-    if (!d) continue;
-    const l = (max + min) / 2; const s = d / (1 - Math.abs(2 * l - 1));
-    let h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
-    h = (h * 60 + 360) % 360;
-    if (s > 0.35 && (h <= 45 || h >= 340)) out.push(match[0]);
-  }
-  return out;
-}
-/** Each destructive rule's red or orange that isn't a danger token. */
-function destructiveColours(css: string, file: string): string[] {
-  const text = css.replace(/\/\*[\s\S]*?\*\//g, '');
-  const found: string[] = [];
-  for (const rule of text.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-    const selector = rule[1].trim().replace(/\s+/g, ' ');
-    // Text about a failure (`__error`) is no control.
-    if (!selector.split(',').some((part) => DESTRUCTIVE_CLASS.test(part) && !/__error\b/.test(part))) continue;
-    for (const declaration of rule[2].split(';')) {
-      const at = declaration.indexOf(':');
-      if (at < 0) continue;
-      const property = declaration.slice(0, at).trim();
-      if (!/color|background|border|fill|stroke|outline|shadow/.test(property)) continue;
-      const value = declaration.slice(at + 1).replace(DANGER_TOKEN, 'TOKEN');
-      const bad = [...warmColours(value), ...(ACCENT_TOKEN.test(value) ? [value.trim()] : [])];
-      if (bad.length) found.push(`${file} ${selector} { ${property}: ${bad.join(' ')} }`);
-    }
-  }
-  return found;
-}
+// Fix rounds 7 to 9 of PR #200 (GM r11 answer 3, verbatim: "Grep for any
+// other hard-coded reds or orange on destructive actions, so the rule is
+// enforced in code (a ratchet), not by eye."). THE RULE, by what the action
+// does, not how the control looks (GM r13, and r14's calls):
+// - Red: it deletes a standalone thing (project, node, asset, result, agent, API key, app token), or wipes a whole surface (Clear, Purge, Discard). Undo doesn't change this (node Delete stays red).
+// - Neutral: it takes an item out of a list inside the thing you're editing (chips, swatches, tags, a shot in a scene, an item on a board, a character view).
+// Controls are found by their words (review 8 LOW-2); the class says the
+// kind; the colours are checked per rule and per control through the
+// cascade. The machinery is tests/helpers/destructiveRule.ts.
+// It parses every stylesheet and walks every TSX file: a few seconds alone,
+// past vitest's 5 s default under the full suite (it timed out there).
+describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thing or wipes a surface, an edit stays neutral, and orange marks neither', { timeout: 120_000 }, () => {
+  const sheets = appCss();
+  const vars = customProperties(sheets);
+  const controls = appControls();
 
-/** Each remove rule's red, orange, danger token or accent (GM r12: a × remover stays neutral). */
-function removeColours(css: string, file: string): string[] {
-  const text = css.replace(/\/\*[\s\S]*?\*\//g, '');
-  const found: string[] = [];
-  for (const rule of text.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-    const selector = rule[1].trim().replace(/\s+/g, ' ');
-    if (!selector.split(',').some((part) => REMOVE_CLASS.test(part) && !DESTRUCTIVE_CLASS.test(part))) continue;
-    for (const declaration of rule[2].split(';')) {
-      const at = declaration.indexOf(':');
-      if (at < 0) continue;
-      const property = declaration.slice(0, at).trim();
-      if (!/color|background|border|fill|stroke|outline|shadow/.test(property)) continue;
-      const value = declaration.slice(at + 1);
-      const bad = [...warmColours(value), ...(ANY_DANGER_TOKEN.test(value) ? [value.trim()] : [])];
-      if (bad.length) found.push(`${file} ${selector} { ${property}: ${bad.join(' ')} }`);
-    }
-  }
-  return found;
-}
-
-const DESTRUCTIVE_VERB = /^(Delete|Clear|Discard|Purge|Trash)\b/;
-/**
- * A button named (by its aria-label, or else its text) with a destructive
- * verb whose class names none, or labelled Remove whose class doesn't name
- * "remove", so the stylesheet checks above can't see its rules (the Commons
- * keyword chip's × hovered the accent orange this way, and Character
- * Studio's Delete took its Retry look's accent).
- */
-function unnamedDestructiveButtons(tsx: string, file: string): string[] {
-  const found: string[] = [];
-  for (const match of tsx.matchAll(/<button\b([^>]*?)>([\s\S]*?)<\/button>/g)) {
-    const label = match[1].match(/aria-label=(?:"([^"]*)"|\{`([^`]*)`\}|\{'([^']*)'\})/);
-    const shown = match[2].replace(/<[^>]*>/g, ' ').replace(/\{[^{}]*\}/g, ' ').replace(/\s+/g, ' ').trim();
-    const name = (label && (label[1] ?? label[2] ?? label[3])) || shown;
-    const className = match[1].match(/className=(?:"[^"]*"|\{[^}]*\})/)?.[0] ?? '';
-    const classes = `.${className.replace(/^className=["{]/, '').replace(/\s+/g, ' .')}`;
-    const line = tsx.slice(0, match.index).split('\n').length;
-    if (DESTRUCTIVE_VERB.test(name) && !DESTRUCTIVE_CLASS.test(classes)) found.push(`${file}:${line} ${name} (no destructive class)`);
-    if (/^Remove\b/.test(name) && !REMOVE_CLASS.test(classes)) found.push(`${file}:${line} ${name} (no remove class)`);
-  }
-  return found;
-}
-
-describe('GM r11 answer 3 and r12: red marks only what adding again cannot bring back, a × remover stays neutral, and orange marks neither', () => {
-  it('every button named Delete, Clear, Discard, Purge or Trash has a destructive class, and every one labelled Remove a remove class', () => {
-    const found = walk(SRC, /\.tsx$/).filter((path) => !/\.test\.tsx$/.test(path))
-      .flatMap((path) => unnamedDestructiveButtons(readFileSync(path, 'utf8'), relative(SRC, path)));
-    expect(found).toEqual([]);
-    expect(unnamedDestructiveButtons('<button type="button" aria-label={`Remove ${k}`}>×</button>', 'probe.tsx')).not.toEqual([]);
-    expect(unnamedDestructiveButtons('<button className="x__action" aria-label="Delete it">x</button>', 'probe.tsx')).not.toEqual([]);
-    expect(unnamedDestructiveButtons('<button type="button" className="x__tool" onClick={clear}><Trash2 size={14} /> Clear</button>', 'probe.tsx')).not.toEqual([]);
-    expect(unnamedDestructiveButtons('<button className="x__remove" aria-label="Delete it">x</button>', 'probe.tsx'), 'remove is no longer destructive').not.toEqual([]);
-    expect(unnamedDestructiveButtons('<button className="x__action x__action--delete" aria-label="Delete it">x</button>', 'probe.tsx')).toEqual([]);
-    expect(unnamedDestructiveButtons('<button className="chip__remove" aria-label={`Remove ${k}`}>×</button>', 'probe.tsx')).toEqual([]);
-    expect(unnamedDestructiveButtons('<button className="x__action" aria-label="Add it">x</button>', 'probe.tsx')).toEqual([]);
+  it('every control that names an action (Delete, Clear, Discard, Purge, Trash, Remove, Erase, Empty, Revoke, Forget) says its kind in its class', () => {
+    expect(controls.length).toBeGreaterThanOrEqual(61);
+    expect(controls.filter((control) => !control.kind).map((c) => `${c.file}:${c.line} ${c.name}`)).toEqual([]);
+    // Review 8's controls, each seen with GM r14's kind.
+    const kindAt = (file: string, name: RegExp) => controls.filter((c) => c.file === file && name.test(c.name)).map((c) => c.kind);
+    expect(kindAt('components/moodboard-studio/MoodboardStudioView.tsx', /^Delete$/)).toEqual(['red']);
+    expect(kindAt('components/character-studio/CharacterStudioToolbar.tsx', /^Delete$/)).toEqual(['red']);
+    expect(kindAt('components/commons/CommonsDetail.tsx', /^Delete$/)).toEqual(['red']);
+    expect(kindAt('components/commons/CommonsLeavePopover.tsx', /^Discard and leave$/)).toEqual(['red']);
+    expect(kindAt('components/commons/CommonsEvaluation.tsx', /^Discard/)).toEqual(['red']);
+    expect(kindAt('components/commons/CommonsReview.tsx', /^Discard/)).toEqual(['red']);
+    expect(kindAt('components/panels/settings/PersonalAgentsSection.tsx', /^Remove download$/)).toEqual(['red']);
+    expect(kindAt('components/panels/RunHistoryPanel.tsx', /^Clear run history$/)).toEqual(['red']);
+    expect(kindAt('components/panels/MaskPainterModal.tsx', /^Clear$/)).toEqual(['red']);
+    expect(kindAt('components/panels/ChatPanel.tsx', /^Remove image$/)).toEqual(['neutral']);
+    expect(kindAt('components/commons/CommonsEvaluation.tsx', /^Remove accent/)).toEqual(['neutral']);
+    expect(kindAt('components/projects/ProjectHome.tsx', /^Delete forever$/)).toEqual(['red', 'red']);
+    expect(kindAt('components/asset-trash/AssetTrash.tsx', /^Delete forever$/)).toEqual(['red', 'red']);
   });
-  it('no stylesheet gives a remove class red, orange, a danger token or the accent', () => {
-    const found = walk(SRC, /\.css$/).flatMap((path) => removeColours(readFileSync(path, 'utf8'), relative(SRC, path)));
-    expect(found).toEqual([]);
+
+  it('no stylesheet rule gives a kind the wrong colour: red only from the danger tokens, neutral never red, orange or a danger token', () => {
+    expect(sheets.flatMap(({ css, file }) => ruleFindings(css, file, vars))).toEqual([]);
+  });
+
+  it('on every control the rule that wins the cascade at rest, on hover and pressed keeps its kind', () => {
+    expect(controls.flatMap((control) => cascadeFindings(control, vars))).toEqual([]);
+  });
+
+  it('every red control looks red: a danger token wins at rest or on hover', () => {
+    expect(controls.flatMap((control) => notRedFindings(control))).toEqual([]);
+  });
+
+  it('a menu built from data marks each red item danger: true', () => {
+    expect(appMenuItemFindings()).toEqual([]);
+    expect(menuItemFindings("const items = [{ label: 'Delete', action: del }];", 'probe.tsx')).not.toEqual([]);
+    expect(menuItemFindings("const items = [{ label: 'Delete', action: del, danger: true }];", 'probe.tsx')).toEqual([]);
+  });
+
+  it('corpus (review 8 LOW-2): every form that hid a control is found', () => {
+    const found = (tsx: string) => controlsIn(tsx, 'probe.tsx').map((c) => c.name);
+    expect(found('<button>Delete</button>')).toEqual(['Delete']);
+    expect(found('<button title="Delete this">x</button>')).toEqual(['Delete this']);
+    expect(found('<button type="button" disabled={busy || x > 1} onClick={() => void run(() => act())}>Remove download</button>')).toEqual(['Remove download']);
+    expect(found('<button aria-label={"Delete it"}>x</button>')).toEqual(['Delete it']);
+    expect(found("const label = 'Delete it'; const A = () => <button aria-label={label}>x</button>;")).toEqual(['Delete it']);
+    expect(found('<Button onClick={go}>Delete</Button>')).toEqual(['Delete']);
+    expect(found('<div role="button" tabIndex={0}>Delete</div>')).toEqual(['Delete']);
+    expect(found('<button>delete it</button>')).toEqual(['delete it']);
+    expect(found('<button>Erase</button>')).toEqual(['Erase']);
+    expect(found('<button>Empty trash</button>')).toEqual(['Empty trash']);
+    expect(found('<button><Trash2 size={14} /> Clear</button>')).toEqual(['Clear']);
+    expect(found("function Confirm({ label }: { label: string }) { return <button className=\"x__go\">{label}</button>; }\nconst A = () => <Confirm label=\"Delete forever\" />;"))
+      .toEqual(['Delete forever']);
+    // A toggle is a state, not an action.
+    expect(found('<button aria-pressed={on} aria-label={on ? "Remove from favorites" : "Add"}>★</button>')).toEqual([]);
+    expect(controlsIn('<button className="x__action">Delete</button>', 'probe.tsx')[0].kind).toBeNull();
+    expect(controlsIn('<button className="x__action x__action--delete">Delete</button>', 'probe.tsx')[0].kind).toBe('red');
+    expect(controlsIn('<button className="chip__remove">×</button>', 'probe.tsx')).toEqual([]);
+    expect(controlsIn('<button className="chip__remove" aria-label="Remove neon">×</button>', 'probe.tsx')[0].kind).toBe('neutral');
+  });
+
+  it('corpus (review 8 LOW-2): every colour form that hid an orange is caught', () => {
+    const caught = (css: string) => ruleFindings(css, 'probe.css', customProperties([{ css }]));
     const bad = [
-      '.inspector__palette-remove:hover { color: var(--sr-danger-ink, #ff887d); }',
-      '.commons-chip__remove:hover { color: var(--sr-danger); }',
-      '.x__remove:hover { border-color: var(--sr-accent); }',
-      '.x__remove:hover { background: var(--sr-danger-tint); }',
-      '.x-remove:hover { color: #e0796b; }',
+      '.x__delete:hover { color: hsl(15 90% 60%); }',
+      '.x__delete:hover { color: oklch(0.7 0.18 45); }',
+      '.x__delete:hover { color: darkorange; }',
+      '.x__delete:hover { border-color: firebrick; }',
+      ...['', '-hover', '-hover-soft', '-border-strong', '-border-soft', '-border-muted', '-border-medium'].map((v) => `.x__delete:hover { color: var(--sr-accent${v}); }`),
+      ':root { --c: #ff3b30; } .x__delete:hover { color: var(--c); }',
+      '.x__delete:hover { filter: drop-shadow(0 0 2px #ff3b30); }',
+      '[data-action="delete"]:hover { color: #ff5a1f; }',
+      '[aria-label^="Delete"]:hover { color: #ff5a1f; }',
+      '.x { &__delete:hover { color: orange; } }',
+      '.x__delete:hover { color: var(--sr-danger-ink, #ff5a1f); }',
+      '.x__erase:hover { color: #ff5a1f; }',
+      '.x__forget:hover { color: #ff5a1f; }',
+      '.x__bin:hover { color: #ff5a1f; }',
+      '.x__delete:hover { color: var(--sr-danger); }',
+      '.x__remove:hover { color: var(--sr-danger-ink, #ff887d); }',
+      '.x__reset:hover { color: var(--sr-accent); }',
     ];
-    for (const css of bad) expect(removeColours(css, 'probe.css'), css).not.toEqual([]);
+    for (const css of bad) expect(caught(css), css).not.toEqual([]);
+    // Review 8's false flags stay quiet, and so do the tokens.
     const good = [
-      '.x__remove:hover { background: var(--sr-surface-control-hover); color: var(--sr-ink-bold); }',
-      '.x__remove { background: rgba(0, 0, 0, 0.6); color: #fff; }',
-      '.settings__confirm--danger { color: var(--sr-danger-ink, #ff887d); }',
-    ];
-    for (const css of good) expect(removeColours(css, 'probe.css'), css).toEqual([]);
-  });
-  it('no stylesheet gives a destructive control a hard-coded red or orange, or the accent', () => {
-    const found = walk(SRC, /\.css$/).flatMap((path) => destructiveColours(readFileSync(path, 'utf8'), relative(SRC, path)));
-    expect(found).toEqual([]);
-  });
-  it('the check catches the forms review 7 found, and passes the tokens', () => {
-    const bad = [
-      '.toolbar__action--danger { color: var(--sr-error, #fb8a80); }',
-      '.commons-button--danger { border-color: var(--sr-danger-border); color: var(--sr-danger); }',
-      '.result-card__btn--danger:hover { background: rgba(220, 50, 50, 0.45); }',
-      '.asset-trash__button:hover { color: #f59e0b; }',
-      '.x-delete:hover { color: tomato; }',
-      '.panel__delete:hover { border-color: var(--sr-accent); }',
-      '.character-studio-toolbar__delete:hover { border-color: var(--sr-accent); }',
-      '.commons-button--danger:hover { color: var(--sr-danger); }',
-    ];
-    for (const css of bad) expect(destructiveColours(css, 'probe.css'), css).not.toEqual([]);
-    const good = [
+      '.save-status--cleared { color: #f59e0b; }',
+      '.tool--remove-bg:hover { color: var(--sr-accent); }',
+      '.asset-trash__count { color: var(--sr-accent); }',
+      '.panel--danger .panel__run { color: var(--sr-accent); }',
+      '.picker__clear-selection:focus-visible { outline: 2px solid var(--sr-accent); }',
+      '.x__delete:focus-visible { outline: 2px solid var(--sr-accent); }',
+      '.preset-card { background: hsl(20 90% 50%); }',
       '.x__danger { background: var(--sr-danger-fill, #ff887d); color: var(--sr-on-danger, #1f1f1f); }',
       '.x--danger:hover { background: var(--sr-danger-tint); border-color: var(--sr-danger-edge); color: var(--sr-danger-ink, #ff887d); }',
       '.x__delete:active { color: var(--sr-danger-ink-hover, #ff9a91); }',
-      '.x__clear { color: var(--sr-ink); border-color: var(--sr-edge); }',
-      '.asset-trash__error { color: var(--sr-danger); }',
-      '.save:hover { color: var(--sr-accent); }',
+      '.x__remove:hover { background: var(--sr-surface-control-hover); color: var(--sr-ink-bold); }',
+      '.x__remove { background: rgba(0, 0, 0, 0.6); color: #fff; }',
     ];
-    for (const css of good) expect(destructiveColours(css, 'probe.css'), css).toEqual([]);
+    for (const css of good) expect(caught(css), css).toEqual([]);
+  });
+
+  it('corpus: the cascade check catches a shared class\'s hover winning over a control\'s own', () => {
+    const vars0 = customProperties(appCss());
+    // Moodboard Studio's Delete as review 8 found it: only the shared toolbar class (amber on hover).
+    const before = { file: 'probe.tsx', line: 1, name: 'Delete', kind: 'red' as const, classes: ['moodboard-studio-toolbar__button'], ancestors: [] as Array<[string, string[]]> };
+    expect(cascadeFindings(before, vars0).join('\n')).toMatch(/#f59e0b/);
+    expect(cascadeFindings({ ...before, classes: ['moodboard-studio-toolbar__button', 'moodboard-studio-toolbar__button--delete'] }, vars0)).toEqual([]);
+    // A neutral × that only had its parent's accent-bordered button rule.
+    const upload = { file: 'probe.tsx', line: 1, name: 'Remove upload', kind: 'neutral' as const, classes: ['x__remove'], ancestors: [['div', ['cinema-reference-upload__actions']]] as Array<[string, string[]]> };
+    expect(cascadeFindings(upload, vars0).join('\n')).toMatch(/--sr-accent/);
+    expect(cascadeFindings({ ...upload, classes: ['cinema-upload__remove'] }, vars0)).toEqual([]);
+    // A red class with nothing red behind it.
+    expect(notRedFindings({ ...before, classes: ['x__action--delete'] })).not.toEqual([]);
   });
 });

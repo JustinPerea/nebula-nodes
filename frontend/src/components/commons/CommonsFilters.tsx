@@ -35,7 +35,7 @@ function AxisRange({ axis, range, onChange }: {
           onChange={(event) => onChange([lo, Math.max(Number(event.target.value), lo)])}
         />
       </div>
-      <button type="button" className="commons-link" disabled={!range} onClick={() => onChange(undefined)}>
+      <button type="button" className="commons-link commons-filter__reset" disabled={!range} onClick={() => onChange(undefined)}>
         clear
       </button>
     </div>

@@ -2127,7 +2127,7 @@ export function ChatPanel() {
                 )}
                 <button
                   type="button"
-                  className="chat-panel__chip-close"
+                  className="chat-panel__chip-close chat-panel__chip-remove"
                   onClick={() => removeChip(chip.id)}
                   aria-label="Remove image"
                 >

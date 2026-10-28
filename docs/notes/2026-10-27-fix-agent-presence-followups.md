@@ -1067,3 +1067,90 @@ place, approved the asset trash's neutral Restore, and set the rule for red.
 - Shots: 14, one per control (a cell crop is the same picture at every
   width, so it is shot once and measured at both). No duplicates; the
   whole-folder duplicates are round 7's five pairs from earlier rounds.
+
+## Fix round 9
+
+From 9936a2b3. GM r13 (the rule by action), GM r14 (review 8's calls and
+the reduced-motion ruling), and review 8's LOW-1, LOW-2 and NIT-1 to NIT-4.
+
+- **The rule (GM r13), verbatim at the head of the ratchet.** Red: it
+  deletes a standalone thing (project, node, asset, result, agent, API key,
+  app token), or wipes a whole surface (Clear, Purge, Discard). Undo doesn't
+  change this. Neutral: it takes an item out of a list inside the thing
+  you're editing.
+- **Calls.** Red: a personal agent's Remove and Remove download (it deletes
+  files), Moodboard Studio's Delete, the Commons region Delete, Discard and
+  leave, Clear run history, the mask painter's Clear. The Projects and
+  asset-trash "Delete forever" triggers and the Settings key and app Revoke
+  triggers now carry the red class too (their look was already red or
+  approved). Neutral: the shot and upload ×, Remove from board, chat Remove
+  image, Remove accent N, and the clear-search and filter resets, each with
+  a `__remove` or `__reset` class so the ratchet can read the kind.
+- **Shot Undo (GM r13 item 3), a real bug.** Undo of a shot's × brought the
+  shot back without its image or variations: shot media is the backend's,
+  and the write that dropped the shot dropped it. `CLIGraph.removed_shot_media`
+  now keeps what a dropped shot had (128, oldest out first, reset by clear
+  and load, carried by clone and replace_with); the same shot id coming back
+  gets it back. A client can't supply media for a new shot. Cmd+Z did
+  nothing in Cinema Studio at all (the canvas's handler isn't mounted
+  there); the studio now binds Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z outside text
+  fields and dialogs. MCP-SETUP.md says what an agent now sees.
+- **The ratchet (LOW-2)** is `tests/helpers/destructiveRule.ts`: controls by
+  their words (text, aria-label, title, any case; button, Button,
+  role=button; consts and forwarded labels), a kind from the class, every CSS
+  rule checked by its last compound (attributes and nesting too) for hsl,
+  oklch, named colours, every `--sr-accent*`, custom properties and orange
+  fallbacks inside danger tokens, and each control through the cascade.
+  Review 8's bypasses and false flags are corpus fixtures. 61 controls on
+  the real tree.
+- **NIT-1.** A leave also ends on `animationcancel` (a style change), on the
+  Animation's own `cancel` event, or after its time plus 250 ms. Surprise:
+  live, Chrome fires no `animationcancel` for `Animation.cancel()` from
+  script, only the animation's `cancel`, so both are heard.
+- **NIT-2.** When a leaving notice holds focus, focus goes to the next
+  notice's first control, else the one before, else the canvas or the
+  screen's `<main>` (given `tabindex=-1`), as the leave starts, before
+  `inert` drops it.
+- **NIT-3.** OSC, DCS, APC, PM and SOS (7- and 8-bit) go whole, past an
+  inner ESC, ended by ST or BEL. Decision: one left unterminated runs to the
+  end of its line, not the whole note, so the person's later lines stay
+  (`say \x1bPlease` reads "say ").
+- **NIT-4 (GM r14).** The CSS already did it (the reduced-motion leave is
+  opacity only; the item unmounts at animationend). Now stated in
+  noticeRegion.css, pinned by tests, and checked live frame by frame.
+
+### Fix round 9 gates
+
+- tsc -b: clean. Full lint: clean.
+- Full vitest, three runs on a machine other sessions kept at load 25 to
+  81. Run 1: 7226 of 7269; 33 of the 43 were 5 s timeouts, and all 20 files
+  pass alone. The new ratchet block's cascade test (about 1 s alone) was
+  one, so its describe now has the file's usual 120 s timeout. Run 2 (load
+  81): workers failed to start and 8 files never ran, so it doesn't count.
+  Run 3 (`--maxWorkers=6`, after the timeout fix): 7242 of 7269; 23 of the
+  27 are timeouts, plus heldUndo.property seeds 31 and 32 and
+  MaskPainterPortal's 50 ms chunk wait. All 13 files pass alone, and the
+  property test passes 3 times of 3 alone. It reads only the graph store,
+  which this diff doesn't touch.
+- vite build plus check-build-budget and check-built-fonts: 414,784 B raw
+  (+1,951 on round 8, noticeLeave's focus and fallback in the startup
+  entry) and 126,183 B gzip; 13 woff2, no font CDN.
+- Backend, every file that touches canvas_pins, the graph, undo or cinema
+  (28 files): 1224 of 1225. The one,
+  `test_graph_apply::test_an_edit_can_ask_the_canvas_to_arrange_its_new_nodes`,
+  depends on test order and passes alone; neither it nor its code is in this
+  diff.
+- Live (backend 8795, Vite 5795, nothing paid; exits, openlist, undo,
+  colours and leave9): 32 of 33, then leave9 alone 9 of 9 after the cancel
+  fix. Undo of a shot's × brings it back whole after a reload and on the
+  backend; 17 reds go #ff887d on hover and #ff9a91 pressed, 12 neutrals take
+  no red or accent; a cancelled leave goes in 10 ms; × focus goes to the next
+  notice's × or the canvas; under reduced motion the row holds 80 px and the
+  stack top doesn't move for every frame to 148 ms, then the stack moves
+  554 → 640 in one frame (165 ms); an entering row has its 80 px on its first
+  frame.
+- Shots: 24 fix9, each looked at. Cell crops are taken only for the controls
+  this round changed. One new byte-identical pair: the reduced-motion "row
+  gone" shot and round 7's stack at 0 ms show the same state (one kept
+  note at 1280), and that is correct. The rest of the whole-folder pairs are
+  earlier rounds'.

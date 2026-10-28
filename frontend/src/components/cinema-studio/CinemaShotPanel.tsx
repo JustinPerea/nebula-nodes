@@ -329,7 +329,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
                       <button type="button" onClick={() => retryCinemaReferenceUpload(upload.id)} aria-label={`Retry ${upload.name}`}
                         {...lock.act({ offline: true })}>Retry</button>
                     )}
-                    <button type="button" onClick={() => removeCinemaReferenceUpload(upload.id)} aria-label={`Remove upload ${upload.name}`}>Remove</button>
+                    <button type="button" className="cinema-upload__remove" onClick={() => removeCinemaReferenceUpload(upload.id)} aria-label={`Remove upload ${upload.name}`}>Remove</button>
                   </div>
                 </div>
               ))}

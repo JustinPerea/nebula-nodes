@@ -173,7 +173,7 @@ export function ResultsGallery({
         </button>)}
         <button type="button" disabled={comparison.length !== 2} data-result-comparison-fallback
           onClick={() => setComparisonOpen(true)}>Compare selected</button>
-        <button type="button" onClick={() => setComparison([])}>Clear</button>
+        <button type="button" className="results-gallery__comparison-reset" onClick={() => setComparison([])}>Clear</button>
       </div>}
 
       {items.length === 0 ? (

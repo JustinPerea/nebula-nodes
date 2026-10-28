@@ -120,7 +120,7 @@ export function RunHistoryPanel() {
           </button>
           <button
             type="button"
-            className="panel__header-action run-history__action"
+            className="panel__header-action run-history__action run-history__action--clear"
             onClick={clearRunHistory}
             disabled={runHistory.length === 0
               || isExecuting

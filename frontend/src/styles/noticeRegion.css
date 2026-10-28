@@ -173,6 +173,12 @@
   animation: notice-row-out var(--notice-exit-ms) var(--notice-exit) both;
 }
 
+/* Reduced motion (GM r14, review 8 NIT-4): a row leaving fades out over
+   140 ms on opacity alone, so it keeps its space for the whole fade; only
+   when the fade ends (lib/noticeLeave unmounts it then) do the rows around
+   it take their new place, in one step with no height transition. A row
+   entering takes its space at once and its content fades in (notice-fade-in).
+   tests/agentPresenceFollowups.r9-leave.test.tsx pins this. */
 @media (prefers-reduced-motion: reduce) {
   .notice-region .notice-region__slot [data-leaving='surface'],
   .notice-region .notice-region__slot [data-leaving='row'] {

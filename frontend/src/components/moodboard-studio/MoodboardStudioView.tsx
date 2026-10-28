@@ -1039,7 +1039,7 @@ export function MoodboardStudioView() {
           disabled={deleting.busy || Boolean(pendingSaveId) || analyzing} />
       )}
       {savedId && !isDraftId && (
-        <button type="button" className="moodboard-studio-toolbar__button" title="Move to Recently deleted"
+        <button type="button" className="moodboard-studio-toolbar__button moodboard-studio-toolbar__button--delete" title="Move to Recently deleted"
           disabled={deleting.busy || Boolean(pendingSaveId) || analyzing} onClick={() => void deleteBoard()}>
           Delete
         </button>

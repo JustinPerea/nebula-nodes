@@ -1206,6 +1206,14 @@ keeps `error` on the shot's `output` as before and adds `errorCategory`,
 cut) for the Cinema panel. Read `error`; don't parse `person` or the shot's
 error* fields.
 
+A shot's run media (`output`, `variations`, `selectedVariation` and its
+port output) is Nebula's, not part of the scene you write. Since PR #200's
+fix round 9, a write that drops a shot keeps what it had, and the same shot
+id coming back in a later write (the person's Undo of a shot's ×, or yours)
+gets it back. Nebula keeps the last 128 removed shots in memory, until the
+canvas is cleared or another project opens. A shot id that comes back with
+none kept starts idle, as before.
+
 Round 3d gives a provider's answer a line too, from one table: a 401 or 403
 reads "{Provider} didn't accept your API key. ...", a 402 or an exhausted
 quota "Your {Provider} account is out of credits. ...", a 429 "{Provider} is

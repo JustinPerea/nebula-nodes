@@ -291,7 +291,7 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef }: {
       {!item.accent_locked ? <>
         <small>C2 · ACCENT OBSERVATIONS</small><h3 className="evaluation-step">What catches your eye?</h3><p>Choose the colors that stand out, even when they occupy very little space.</p>
         {points.map((point, n) => <div className="evaluation-point" key={n}>Accent {n + 1} · {Math.round(point.x * 100)}%, {Math.round(point.y * 100)}%
-          <button className="commons-button" disabled={readonly} onClick={() => { setPoints(points.filter((_, i) => i !== n)); onDirty(true); }}>Remove accent {n + 1}</button></div>)}
+          <button className="commons-button commons-button--remove" disabled={readonly} onClick={() => { setPoints(points.filter((_, i) => i !== n)); onDirty(true); }}>Remove accent {n + 1}</button></div>)}
         <label><input type="checkbox" checked={noAccents} disabled={readonly || !url} onChange={(e) => { setNoAccents(e.target.checked); setPoints([]); onDirty(true); }} /> I don’t see any accent colors</label>
         <div className="evaluation-save"><button className="commons-button commons-button--primary" disabled={readonly || !url || (!points.length && !noAccents) || offline} {...offlineMark(offline)}
           onClick={() => void saveAccents()}>Save accents & reveal labels</button>{unsavedMark}</div>
