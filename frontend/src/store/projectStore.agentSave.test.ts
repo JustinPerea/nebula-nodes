@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // (found live by #108's review, 2026-10-20).
 
 vi.mock('../lib/wsClient', () => ({
-  wsClient: { connect: vi.fn(), subscribe: vi.fn(() => () => {}), subscribeFirst: vi.fn(() => () => {}), disconnect: vi.fn() },
+  wsClient: { setViewing: vi.fn(), connect: vi.fn(), subscribe: vi.fn(() => () => {}), subscribeFirst: vi.fn(() => () => {}), disconnect: vi.fn() },
 }));
 vi.mock('../lib/personSession', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/personSession')>()),

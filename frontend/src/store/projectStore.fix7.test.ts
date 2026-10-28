@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // lines, the load naming its file.
 
 vi.mock('../lib/wsClient', () => ({
-  wsClient: { connect: vi.fn(), subscribe: vi.fn(() => () => {}), subscribeFirst: vi.fn(() => () => {}), disconnect: vi.fn() },
+  wsClient: { setViewing: vi.fn(), connect: vi.fn(), subscribe: vi.fn(() => () => {}), subscribeFirst: vi.fn(() => () => {}), disconnect: vi.fn() },
 }));
 vi.mock('../lib/projects', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/projects')>()),
@@ -15,8 +15,6 @@ vi.mock('../lib/projects', async (importOriginal) => ({
 }));
 
 import * as api from '../lib/projects';
-import { failureMessage, failureUnder, requestError } from '../lib/errorCopy';
-import { loadRefusedHeading } from '../lib/failureLines';
 import { GRAPH_PARAMS_VERSION } from '../lib/savedParamsUpgrades';
 import { wsClient } from '../lib/wsClient';
 import { useAgentLogStore } from './agentLogStore';
@@ -86,23 +84,3 @@ describe('GM r8 (a): the saved line shows once', () => {
   });
 });
 
-describe("GM's answer 7: the person's own clear and load refused while the canvas waits", () => {
-  const reason = "It isn't saved as a project yet because you've reached the limit of 500 projects. Delete a project and Nebula will save it, or open an existing project to work in.";
-  const refusal = () => new Response(JSON.stringify({ detail: reason, code: 'canvas_waiting', reason: 'projects',
-    action: 'clear', projectLimit: 500, audience: 'person' }), { status: 409, headers: { 'Content-Type': 'application/json' } });
-
-  it('Clear: "Couldn\'t clear the canvas." then the reason and the way out', async () => {
-    const error = await requestError("Couldn't clear the canvas.", refusal());
-    expect(failureMessage(error, "Couldn't clear the canvas.")).toBe(`Couldn't clear the canvas. ${reason}`);
-  });
-
-  it('Load: the file named', async () => {
-    const error = await requestError("Couldn't load the graph.", refusal());
-    const heading = loadRefusedHeading(error, 'file.json', "Couldn't load the graph.");
-    expect(failureUnder(error, heading)).toBe(`Couldn't load “file.json”. ${reason}`);
-  });
-
-  it("any other load failure keeps the surface's heading", () => {
-    expect(loadRefusedHeading(new Error('x'), 'file.json', "Couldn't load the graph.")).toBe("Couldn't load the graph.");
-  });
-});

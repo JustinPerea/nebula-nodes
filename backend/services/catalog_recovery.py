@@ -365,7 +365,7 @@ def _scalars(members: dict[str, Any]) -> dict[str, Any]:
 
 # The top-level fields a catalog holds (ProjectStore.prepare, _HEAD_KEYS).
 CATALOG_FIELDS = frozenset(("version", "commitSeq", "commitCheck", "activeProjectId", "workspaceRevision", "migratedProjectId",
-                            "purged", "projects", "trash"))
+                            "purged", "projects", "trash", "canvasPending"))
 
 
 def holds_records(value: Any) -> bool:

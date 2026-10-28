@@ -48,7 +48,7 @@ import zlib
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Callable, Iterator, Mapping, NamedTuple
+from typing import Any, Callable, Iterable, Iterator, Mapping, NamedTuple
 from uuid import uuid4
 
 from services import catalog_recovery, project_cover
@@ -94,14 +94,6 @@ RESTORES_KEPT = 10
 # `since` and its one journal event (review 4 of PR #199, N-1).
 CANVAS_WAITING_NAME = "canvas-waiting.json"
 CANVAS_WAITING_BACKUP_NAME = CANVAS_WAITING_NAME + ".bak"
-# What main keeps about the person's canvas once an agent's write filed it
-# first (review 8 of PR #199, HIGH-1; GM's rule (a)): the project a settle
-# filed and opened from the waiting canvas, with the canvas's digest then
-# (``fresh``: until the canvas changes, an agent's write closes it first and
-# works elsewhere), and the copies an agent's change was made on, by the id
-# each will be filed under, with the name it takes (``copies``).
-CANVAS_PENDING_NAME = "canvas-pending.json"
-CANVAS_PENDING_BACKUP_NAME = CANVAS_PENDING_NAME + ".bak"
 # The projects deleted for good as the latest commit that changed them left
 # them (its `purged`): .bak is one commit behind, so a delete for good as the
 # last commit, then a catalog.json damaged past its head, brought the project
@@ -384,6 +376,24 @@ def recovered_name(source_name: str, catalog: dict[str, Any]) -> str:
     return f"{stem})" if highest == 0 else f"{stem} {highest + 1})"
 
 
+def duplicate_name(source_name: str, catalog: Mapping[str, Any], taken: Iterable[str] = ()) -> str:
+    """Nebula's duplicate naming (GM r10, 1; the Mac Finder convention):
+    "<name> copy", then "<name> copy 2", 3 and so on, one past the highest
+    in the list, Recently deleted or ``taken`` (names already promised to
+    copies not yet filed). The one helper for every duplicate: an agent's
+    copy of the person's canvas (PR #199) and a future Duplicate project."""
+    stem = f"{source_name[:100]} copy"
+    pattern = re.compile(re.escape(stem) + r"(?: (\d+))?")
+    highest = 0
+    names = [str((project or {}).get("name") or "") for listing in (catalog.get("projects") or {}, catalog.get("trash") or {})
+             for project in listing.values()]
+    for name in [*names, *taken]:
+        match = pattern.fullmatch(name)
+        if match:
+            highest = max(highest, int(match.group(1) or 1))
+    return stem if highest == 0 else f"{stem} {highest + 1}"
+
+
 RECOVERED_CANVAS_NAME = "Recovered canvas"
 
 
@@ -479,20 +489,53 @@ def _waiting_record(found: Any) -> dict[str, Any] | None:
     return {"reason": found["reason"], "from": owner, "since": found["since"], "journaled": found["journaled"]}
 
 
-def _pending_record(found: Any) -> dict[str, Any] | None:
-    """canvas-pending.json's record when its fields are what main writes:
-    {fresh: {projectId, digest} or None, copies: {id: name}}; else None."""
+# What main keeps in the catalog about the person's canvas once it was
+# filed from waiting (review 8 of PR #199, HIGH-1, GM's rule (a); review 9,
+# M-1: in the same commit as the filing, so no failed write or crash can
+# leave a filed project open and unprotected). ``fresh``: the project filed
+# from the person's waiting canvas, with that canvas's digest; until the
+# canvas changes or one of the person's tabs is open on it (GM r11, 2), an
+# agent's write closes it first and works elsewhere. ``copies``: the copies
+# an agent's change was made on, by the id each is filed under: the name it
+# takes, the agent, and the undo book's mark and boot when it was made.
+CANVAS_PENDING_FIELD = "canvasPending"
+
+
+def canvas_pending_of(catalog: Mapping[str, Any]) -> dict[str, Any]:
+    """The catalog's ``canvasPending`` when its fields are what main writes;
+    an empty record otherwise (a damaged one protects nothing, and names
+    copies as any filed canvas)."""
+    found = catalog.get(CANVAS_PENDING_FIELD)
+    empty = {"fresh": None, "copies": {}}
     if not isinstance(found, dict):
-        return None
+        return empty
     fresh, copies = found.get("fresh"), found.get("copies")
     if fresh is not None and not (isinstance(fresh, dict) and _is_hex_id(fresh.get("projectId"))
                                   and isinstance(fresh.get("digest"), str) and len(fresh["digest"]) == 64):
-        return None
-    if not isinstance(copies, dict) or not all(_is_hex_id(key) and isinstance(name, str) and 0 < len(name) <= 200
-                                               for key, name in copies.items()):
-        return None
+        fresh = None
+    kept: dict[str, dict[str, Any]] = {}
+    for key, copy_record in (copies.items() if isinstance(copies, dict) else ()):
+        if not (_is_hex_id(key) and isinstance(copy_record, dict)):
+            continue
+        name, agent = copy_record.get("name"), copy_record.get("agent")
+        if not (isinstance(name, str) and 0 < len(name) <= 200) or not (agent is None or isinstance(agent, str)):
+            continue
+        mark, boot = copy_record.get("mark"), copy_record.get("boot")
+        kept[key] = {"name": name, "agent": agent,
+                     "mark": mark if isinstance(mark, int) and not isinstance(mark, bool) else None,
+                     "boot": boot if isinstance(boot, str) else None}
     return {"fresh": None if fresh is None else {"projectId": fresh["projectId"], "digest": fresh["digest"]},
-            "copies": dict(copies)}
+            "copies": kept}
+
+
+def set_canvas_pending_in(catalog: dict[str, Any], value: Mapping[str, Any]) -> None:
+    """Write ``canvasPending`` into ``catalog`` (the caller commits it):
+    removed when it holds nothing."""
+    fresh, copies = value.get("fresh"), dict(value.get("copies") or {})
+    if not fresh and not copies:
+        catalog.pop(CANVAS_PENDING_FIELD, None)
+        return
+    catalog[CANVAS_PENDING_FIELD] = {"fresh": fresh, "copies": copies}
 
 
 def _is_hex_id(value: Any) -> bool:
@@ -1547,38 +1590,6 @@ class ProjectStore:
         for path in paths:
             self._write_file(path, encoded)
 
-    def canvas_pending(self) -> dict[str, Any]:
-        """main's record of the person's canvas an agent's write filed first
-        and the copies an agent works on (CANVAS_PENDING_NAME), from either
-        copy that reads; an empty record when neither does."""
-        for name in (CANVAS_PENDING_NAME, CANVAS_PENDING_BACKUP_NAME):
-            try:
-                found = json.loads((self.root / name).read_text(encoding="utf-8"))
-            except FileNotFoundError:
-                continue
-            except (OSError, ValueError) as exc:
-                _log(f"{name} could not be read ({exc})")
-                continue
-            record = _pending_record(found)
-            if record is not None:
-                return record
-            _log(f"{name} doesn't hold the pending canvases' record; not using it")
-        return {"fresh": None, "copies": {}}
-
-    def set_canvas_pending(self, value: dict[str, Any]) -> None:
-        """Write canvas_pending's record, both copies (removed when empty).
-        Raises OSError."""
-        paths = (self.root / CANVAS_PENDING_NAME, self.root / CANVAS_PENDING_BACKUP_NAME)
-        if not value.get("fresh") and not value.get("copies"):
-            for path in paths:
-                path.unlink(missing_ok=True)
-            return
-        self._ensure_root()
-        encoded = json.dumps({"fresh": value.get("fresh"), "copies": value.get("copies") or {}},
-                             ensure_ascii=False, indent=1).encode("utf-8")
-        for path in paths:
-            self._write_file(path, encoded)
-
     # -- the canvases held aside (one file per canvas: review 7 of PR #199, L-3) --
 
     @property
@@ -1680,7 +1691,12 @@ class ProjectStore:
                     found = None
             if found is not None:
                 return found
-            note = {"count": None, "kept": self._keep_held_aside([path]), "at": now()}
+            # Which files the person was told were kept is in the note that
+            # didn't read, so every kept file there is now is named (review
+            # 9 of PR #199, L-3): pruning never deletes one of them.
+            own = self._keep_held_aside([path])
+            kept = [*own, *[name for name in self._held_kept_files() if name not in own]]
+            note = {"count": None, "kept": kept, "at": now()}
             self._write_file(path, json.dumps(note, ensure_ascii=False).encode("utf-8"))
             return note
         except OSError:
@@ -1688,9 +1704,13 @@ class ProjectStore:
 
     def _note_held_lost(self, count: int | None, kept: list[str]) -> None:
         """Held canvases that may be lost (``count``, None: unknown): added to
-        the note the person and agents are told, kept on disk."""
+        the note the person and agents are told, kept on disk. After the
+        person closed the note, a new loss is counted on its own (review 9,
+        nit 2); the files kept before stay named, so none is pruned."""
         previous = self._held_note
-        if previous is not None:
+        if previous is not None and previous.get("dismissedAt"):
+            kept = [*previous["kept"], *[name for name in kept if name not in previous["kept"]]]
+        elif previous is not None:
             count = None if count is None or previous["count"] is None else count + previous["count"]
             kept = [*previous["kept"], *[name for name in kept if name not in previous["kept"]]]
         self._held_note = {"count": count, "kept": kept, "at": now()}
@@ -1701,6 +1721,13 @@ class ProjectStore:
                              json.dumps(self._held_note, ensure_ascii=False).encode("utf-8"))
         except OSError as exc:
             _log(f"could not keep the note of the held canvases that couldn't be read: {exc}")
+
+    def _held_kept_files(self) -> list[str]:
+        """Every held canvases' kept file there is now (relative names)."""
+        candidates = [*(self.held_dir.iterdir() if self.held_dir.is_dir() else []),
+                      *self.root.glob(f"{CANVAS_HELD_NAME}*")]
+        return sorted(str(path.relative_to(self.root)) for path in candidates
+                      if _HELD_KEPT.search(path.name) is not None and not path.is_symlink())
 
     def _prune_held_kept(self) -> None:
         """Delete the held canvases' kept files past the catalog's own bound

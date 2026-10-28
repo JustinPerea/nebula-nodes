@@ -51,6 +51,60 @@ export function canvasSavedOverLimitLine(name: string): string {
 }
 const ONE_OVER = "It's over the save limit, so new changes won't save until it's smaller.";
 
+/** A canvas saved as its own project, as the listing gives it: `filedAt`
+ * when it was saved, `agentCopy` when it is an agent's copy of the person's
+ * canvas (GM r11 on PR #199, 4), never said as "the canvas you had open". */
+export interface SavedCanvasRow {
+  id?: string; name: string; overSaveLimit?: boolean; filedAt?: string | null;
+  agentCopy?: { agent?: string | null } | null;
+}
+
+/** The number a saved name ends in ("Recovered canvas 2": 2; none: 1), so
+ * canvases saved together are named in number order. */
+function nameNumber(name: string): number {
+  const found = / (\d+)$/.exec(name);
+  return found ? Number(found[1]) : 1;
+}
+
+/** GM r10: canvases are named in the order they were saved, which is also
+ * number order ("Recovered canvas" before "Recovered canvas 2"), in the
+ * notice, the toast and the counted forms. */
+export function savedOrder<R extends SavedCanvasRow>(rows: R[]): R[] {
+  const at = (row: R) => {
+    const parsed = row.filedAt ? Date.parse(row.filedAt) : Number.NaN;
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  return rows.map((row, index) => ({ row, index })).sort((left, right) => {
+    const a = at(left.row);
+    const b = at(right.row);
+    if (a !== null && b !== null && a !== b) return a - b;
+    const byNumber = nameNumber(left.row.name) - nameNumber(right.row.name);
+    return byNumber !== 0 ? byNumber : left.index - right.index;
+  }).map(({ row }) => row);
+}
+
+/** GM r11, 4: the agent named as the copy's ("Codex’s"), "An agent’s"
+ * when it isn't known; curly ’ throughout. */
+function agentPossessive(agent: string | null | undefined): string {
+  return agent && agent.trim() ? `${agent.trim()}’s` : 'An agent’s';
+}
+
+/** GM r11, 4, verbatim: an agent's copy saved as its own project, on its
+ * own line after the person's. Over the save limit adds the singular tail. */
+export function agentCopySavedLine(agent: string | null | undefined, name: string, overSaveLimit = false): string {
+  return `${agentPossessive(agent)} changes were saved as their own project, ${quoted(name)}.${overSaveLimit ? ` ${ONE_OVER}` : ''}`;
+}
+
+/** GM r11, 4, verbatim: an agent's copy that waits to be saved. */
+export function agentCopyWaitingLine(agent: string | null | undefined, reason: CanvasLimit,
+  context: Pick<CanvasLimitContext, 'projectLimit' | 'trashHasItems'>): string {
+  const opening = `${agentPossessive(agent)} copy of your canvas isn't saved as a project yet because`;
+  if (reason === 'projects') {
+    return `${opening} you've reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST} Delete a project and Nebula will save it.`;
+  }
+  return `${opening} Nebula's project list is full. ${NOTHING_LOST} ${sizeCapAdvice(context.trashHasItems)}`;
+}
+
 /** GM r9 (1): every canvas saved is over the save limit. */
 const EVERY_ONE_OVER = "They're over the save limit, so new changes to them won't save until they're smaller.";
 
@@ -61,7 +115,8 @@ const EVERY_ONE_OVER = "They're over the save limit, so new changes to them won'
  * singular over-limit line drops it). ``another``: the toast for a filing
  * after the restore notice named one ("Other canvases you had open…";
  * builder's plural, for GM). */
-function canvasesSavedLine(rows: { name: string; overSaveLimit?: boolean }[], lost: boolean, another = false): string {
+function canvasesSavedLine(given: { name: string; overSaveLimit?: boolean; filedAt?: string | null }[], lost: boolean, another = false): string {
+  const rows = savedOrder(given);
   const counted = rows.length > RESTORE_NAMED_MAX;
   const everyOver = rows.every((row) => row.overSaveLimit === true);
   const who = counted
@@ -99,7 +154,7 @@ export type CanvasLimit = 'projects' | 'storage';
  * name of the project it was when known; review 6 of PR #199, N-2). */
 export interface CanvasLimitContext {
   projectLimit: number; trashHasItems: boolean;
-  canvases?: { name?: string | null }[];
+  canvases?: { name?: string | null; agentCopy?: { agent?: string | null } | null }[];
   /** How many projects to delete before every waiting canvas is saved (the
    * listing's `canvasNotFiled.deletes`): GM's answer 3, the real number. */
   deletes?: number | null;
@@ -157,6 +212,23 @@ const NOTHING_LOST_MANY = 'Nothing in them is lost.';
  * canvas survives restarts, so both say nothing in it is lost. Several
  * canvases waiting are counted or named (N-2). */
 export function canvasLimitLine(reason: CanvasLimit, context: CanvasLimitContext): string {
+  return withAgentCopies(reason, context, personsLimitLine);
+}
+
+/** The person's canvases' line, then each agent's copy on its own line
+ * (GM r11, 4: "the canvas you had open" only ever means the person's own). */
+function withAgentCopies(reason: CanvasLimit, context: CanvasLimitContext,
+  persons: (reason: CanvasLimit, context: CanvasLimitContext) => string): string {
+  const all = context.canvases ?? [];
+  const copies = all.filter((canvas) => canvas.agentCopy);
+  if (copies.length === 0) return persons(reason, context);
+  const own = all.filter((canvas) => !canvas.agentCopy);
+  const lines = own.length > 0 ? [persons(reason, { ...context, canvases: own })] : [];
+  for (const copy of copies) lines.push(agentCopyWaitingLine(copy.agentCopy?.agent, reason, context));
+  return lines.join(' ');
+}
+
+function personsLimitLine(reason: CanvasLimit, context: CanvasLimitContext): string {
   const many = manyCanvases(context);
   if (many) {
     const opening = `${many} couldn't be saved as their own projects because`;
@@ -178,6 +250,10 @@ export function canvasLimitLine(reason: CanvasLimit, context: CanvasLimitContext
  * (held aside, and the live one) are counted or named: GM's (a), "2
  * canvases you had open aren't saved as projects yet because…" (N-2). */
 export function canvasWaitingLine(reason: CanvasLimit, context: CanvasLimitContext): string {
+  return withAgentCopies(reason, context, personsWaitingLine);
+}
+
+function personsWaitingLine(reason: CanvasLimit, context: CanvasLimitContext): string {
   const many = manyCanvases(context);
   if (many) {
     const opening = `${many} aren't saved as projects yet because`;
@@ -281,9 +357,25 @@ export function canvasHoldRefusedLogLine(agent: string | null | undefined, actio
 /** GM r4/r5, the toast once a waiting canvas is saved: the project's real
  * name, and no "nothing in it is lost". GM's answer 2 to review 6: it names
  * each canvas it filed (up to 3; a count from 4). */
-export function canvasSavedToast(name: string, filed?: { name: string; overSaveLimit?: boolean }[] | null,
-  overSaveLimit = false, another = false): string {
-  const rows = filed && filed.length > 1 ? filed : null;
+export function canvasSavedToast(name: string, filed?: SavedCanvasRow[] | null,
+  overSaveLimit = false, another = false, agentCopy?: { agent?: string | null } | null): string {
+  // GM r11, 4: "the toast follows the same split": the person's canvases,
+  // then each agent's copy on its own line.
+  const all = filed && filed.length > 0 ? savedOrder(filed)
+    : [{ name, ...(overSaveLimit ? { overSaveLimit: true } : {}), ...(agentCopy ? { agentCopy } : {}) }];
+  const copies = all.filter((row) => row.agentCopy);
+  const own = all.filter((row) => !row.agentCopy);
+  const lines: string[] = [];
+  if (own.length > 0) {
+    const last = own[own.length - 1];
+    lines.push(personsSavedToast(last.name, own.length > 1 ? own : [last], last.overSaveLimit === true, another));
+  }
+  for (const copy of copies) lines.push(agentCopySavedLine(copy.agentCopy?.agent, copy.name, copy.overSaveLimit === true));
+  return lines.join(' ');
+}
+
+function personsSavedToast(name: string, filed: SavedCanvasRow[], overSaveLimit: boolean, another: boolean): string {
+  const rows = filed.length > 1 ? filed : null;
   if (!rows) {
     const over = overSaveLimit || filed?.[0]?.overSaveLimit === true;
     // GM's answer 1 to review 8: a later filing on its own, after the
@@ -302,7 +394,7 @@ export function canvasSavedToast(name: string, filed?: { name: string; overSaveL
 export interface NoticeNow {
   projects: { id: string; name: string }[];
   trash: { id: string; name?: string }[];
-  canvasNotFiled?: { reason: CanvasLimit; projectLimit?: number; canvases?: { name?: string | null }[]; deletes?: number | null } | null;
+  canvasNotFiled?: { reason: CanvasLimit; projectLimit?: number; canvases?: CanvasLimitContext['canvases']; deletes?: number | null } | null;
 }
 
 function namedList(names: string[]): string {
@@ -391,7 +483,7 @@ function holding<R extends { id?: string; trashed?: boolean }>(rows: R[] | undef
 type NoticeInput = Pick<CatalogRestore, 'kind' | 'addedBack' | 'addedBackCount' | 'notAddedBackCount'>
   & Partial<Pick<CatalogRestore, 'source' | 'copyAt' | 'damagedFile' | 'setAside' | 'notAddedBack' | 'reverted'
     | 'revertedCount' | 'cameBack' | 'cameBackCount' | 'backInTrash' | 'backInTrashCount' | 'recoveredCanvas'
-    | 'canvasNotFiled' | 'damagedReadWhole' | 'openProjectMissing' | 'alsoFiled'>>;
+    | 'canvasNotFiled' | 'damagedReadWhole' | 'openProjectMissing' | 'alsoFiled' | 'agentCopies'>>;
 
 /** What else the restore notice says while it shows (GM r9): held canvases
  * that couldn't be read, merged in as one more outcome before the closing. */
@@ -406,17 +498,23 @@ export interface NoticeExtras { heldUnreadable?: { count: number | null } | null
 function canvasOutcome(restore: NoticeInput, current?: NoticeNow): { lines: string[]; kind: 'saved' | 'limit' } | null {
   const lines: string[] = [];
   const seen = new Set<string>();
-  const rows: { name: string; overSaveLimit?: boolean }[] = [];
-  for (const saved of [restore.recoveredCanvas, ...(restore.alsoFiled ?? [])]) {
+  const rows: SavedCanvasRow[] = [];
+  const copies: SavedCanvasRow[] = [];
+  for (const saved of [restore.recoveredCanvas, ...(restore.alsoFiled ?? []), ...(restore.agentCopies ?? [])]) {
     if (!saved || typeof saved.id !== 'string' || seen.has(saved.id)) continue;
     seen.add(saved.id);
     const now = current ? current.projects.find((project) => project.id === saved.id)
       ?? current.trash.find((entry) => entry.id === saved.id) : null;
     if (current && !now) continue;
-    rows.push({ name: now?.name || saved.name, ...(saved.overSaveLimit === true ? { overSaveLimit: true } : {}) });
+    (saved.agentCopy ? copies : rows).push({ name: now?.name || saved.name, filedAt: saved.filedAt ?? null,
+      ...(saved.overSaveLimit === true ? { overSaveLimit: true } : {}),
+      ...(saved.agentCopy ? { agentCopy: saved.agentCopy } : {}) });
   }
+  // GM r10: in the order they were saved; GM r11, 4: the person's canvases,
+  // then each agent's copy on its own line.
   if (rows.length === 1) lines.push(recoveredCanvasSentence(rows[0].name, rows[0].overSaveLimit === true));
   else if (rows.length > 1) lines.push(canvasesSavedLine(rows, true));
+  for (const copy of savedOrder(copies)) lines.push(agentCopySavedLine(copy.agentCopy?.agent, copy.name, copy.overSaveLimit === true));
   const recorded = restore.canvasNotFiled?.reason;
   const waits = (recorded === 'projects' || recorded === 'storage') && !(current && !current.canvasNotFiled);
   // A canvas the restore's record saved isn't said waiting too (it was the restore's).
@@ -587,7 +685,7 @@ export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.no
   if (!readWhole && kept) outcomes.push(NOT_READ_WHOLE);
   // "No projects were missing." only when the restore had nothing else to
   // say, never because the other lines have since gone.
-  const filedSince = (restore.alsoFiled ?? []).length > 0;
+  const filedSince = (restore.alsoFiled ?? []).length > 0 || (restore.agentCopies ?? []).length > 0;
   const saidAtFirst = recordedLiveAdded > 0 || recordedTrashedAdded.length > 0 || recordedFailed > 0
     || recordedReverted > 0 || recordedCameBack > 0 || recordedBackInTrash > 0
     || Boolean(restore.recoveredCanvas) || Boolean(restore.canvasNotFiled) || filedSince || (!readWhole && kept);

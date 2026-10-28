@@ -7,7 +7,7 @@ import type { ExecutionEvent } from '../src/lib/wsClient';
 // params_outdated (lib/paramsOutdated.ts). Unsaved work is saved once as a
 // recovered copy first; a clean tab just reloads.
 const socket = vi.hoisted(() => ({ handlers: [] as Array<(event: ExecutionEvent) => void> }));
-vi.mock('../src/lib/wsClient', () => ({ wsClient: {
+vi.mock('../src/lib/wsClient', () => ({ wsClient: { setViewing: () => {},
   connect: vi.fn(), disconnect: vi.fn(),
   subscribe: vi.fn((handler) => { socket.handlers.push(handler); return () => {
     socket.handlers = socket.handlers.filter((item) => item !== handler);

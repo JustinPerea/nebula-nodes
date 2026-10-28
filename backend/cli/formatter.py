@@ -975,11 +975,28 @@ def format_proposal(view: dict[str, Any], *, created: bool = False, now_ms: floa
     return "\n".join(lines)
 
 
+def saved_canvas_message(result: Any) -> str | None:
+    """GM's agent reply when Nebula saved the person's canvas as its own
+    project before this write (PR #199, GM's rule (a)): the reply's
+    `savedCanvas.message`, or None. Every printer of a canvas write prints it
+    after its action line (review 9, M-2), so an agent on the CLI learns
+    what the JSON says: a project was made, and where its write went."""
+    saved = result.get("savedCanvas") if isinstance(result, dict) else None
+    message = saved.get("message") if isinstance(saved, dict) else None
+    return message if isinstance(message, str) and message.strip() else None
+
+
+def with_saved_canvas(line: str, result: Any) -> str:
+    """``line``, then GM's saved-canvas reply on its own line when there is one."""
+    message = saved_canvas_message(result)
+    return f"{line}\n{message}" if message else line
+
+
 def format_applied(result: dict[str, Any], *, undo: bool = True) -> str:
     """`nebula apply`'s result: what changed, then each new node's id for the
     next command, then how to undo it (a steps plan prints one undo line for
     all its steps instead, so `undo=False` there)."""
-    lines = [f"Applied: {result.get('summary') or 'no change'}."]
+    lines = [with_saved_canvas(f"Applied: {result.get('summary') or 'no change'}.", result)]
     refs = {node_id: ref for ref, node_id in (result.get("idMap") or {}).items()}
     for node in result.get("added") or []:
         node_id = str(node.get("id") or "")

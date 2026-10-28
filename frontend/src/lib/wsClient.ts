@@ -393,8 +393,32 @@ class WebSocketClient {
       }
       if (this.ws === socket && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'hello', personToken }));
+        // After the hello on the same socket, so the backend reads it from
+        // the person's promoted socket (it ignores it from any other).
+        this.greeted = socket;
+        this.sendViewing(socket);
       }
     });
+  }
+
+  /** The project this tab shows on its canvas (null: none, or Projects
+   * home), as the person's tab says it to the backend: a project filed from
+   * the person's waiting canvas is theirs again once their tab is on it and
+   * connected (GM r11 on PR #199, 2). Sent after every hello, and on change;
+   * undefined until the store says it. */
+  private viewing: string | null | undefined = undefined;
+  private greeted: WebSocket | null = null;
+
+  setViewing(projectId: string | null): void {
+    if (this.viewing === projectId) return;
+    this.viewing = projectId;
+    if (this.ws) this.sendViewing(this.ws);
+  }
+
+  private sendViewing(socket: WebSocket): void {
+    if (this.viewing === undefined || this.greeted !== socket || this.ws !== socket
+      || socket.readyState !== WebSocket.OPEN) return;
+    socket.send(JSON.stringify({ type: 'viewing', projectId: this.viewing }));
   }
 
   private personConnected(): void {

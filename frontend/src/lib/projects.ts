@@ -73,10 +73,13 @@ export interface CatalogRestore {
   backInTrash?: { id: string; name: string }[]; backInTrashCount?: number;
   /** The live canvas filed as its own project (it wasn't one in the restored
    * list): "<project> (recovered)", numbered, or "Recovered canvas". */
-  recoveredCanvas?: { id: string; name: string; overSaveLimit?: boolean } | null;
+  recoveredCanvas?: SavedCanvas | null;
   /** Other canvases filed as their own projects while the notice showed
    * (GM's answer 1 to review 8: the notice names them, no toast does). */
-  alsoFiled?: { id: string; name: string; overSaveLimit?: boolean }[];
+  alsoFiled?: SavedCanvas[];
+  /** Agents' copies of the person's canvas filed while the notice showed:
+   * each its own line (GM r11 on PR #199, 4). */
+  agentCopies?: SavedCanvas[];
   /** It couldn't be filed: the list is at a limit (review 2 of PR #199, L4). */
   canvasNotFiled?: { reason: 'projects' | 'storage'; current?: boolean } | null;
   /** The open project that didn't come back, and its name when a file had it. */
@@ -86,6 +89,13 @@ export interface CatalogRestore {
    * damage is unknown, so the notice never says nothing was missing. */
   damagedReadWhole?: boolean;
   projectCount?: number; note?: string;
+}
+/** A canvas saved as its own project (backend main._saved_row): when it
+ * was saved (`filedAt`, GM r10's order), and `agentCopy` when it is an
+ * agent's copy of the person's canvas (GM r11, 4). */
+export interface SavedCanvas {
+  id: string; name: string; overSaveLimit?: boolean; filedAt?: string;
+  agentCopy?: { agent?: string | null };
 }
 export interface ProjectList {
   projects: ProjectSummary[]; trash?: TrashedProject[]; activeProjectId: string | null;
@@ -103,7 +113,7 @@ export interface ProjectList {
     note?: string; live?: boolean; held?: number;
     /** Each canvas that waits (held ones, then the live one), with the name
      * of the project it was when known (review 6 of PR #199, N-2). */
-    canvases?: { name?: string | null }[];
+    canvases?: { name?: string | null; agentCopy?: { agent?: string | null } | null }[];
     /** How many projects to delete before every waiting canvas is saved (GM's answer 3). */
     deletes?: number;
     /** Held canvases that couldn't be read (review 6, L-1). */
@@ -113,7 +123,8 @@ export interface ProjectList {
   canvasSaved?: { id: string; name: string; at?: string; overSaveLimit?: boolean;
     /** Filed after a restore notice named a canvas: "Another canvas…" (GM). */
     another?: boolean;
-    filed?: { id: string; name: string; overSaveLimit?: boolean }[] };
+    filedAt?: string; agentCopy?: { agent?: string | null };
+    filed?: SavedCanvas[] };
   /** The backend's verdict on a restore from Recently deleted now, held
    * canvases counted (review 6 of PR #199, L-3): absent when it passes. */
   restoreRoom?: { refused: 'projects'; deletes: number | null; heldTakesPlace: boolean; waiting?: number };

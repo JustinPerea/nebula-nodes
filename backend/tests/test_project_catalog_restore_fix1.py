@@ -157,7 +157,9 @@ def test_h1_the_review_probe_never_saves_betas_canvas_into_alpha(app):
     assert _values(recovered[0]) == ["beta-1"]
     assert after["activeProjectId"] == recovered[0]["id"]
     assert json.loads(state.read_text())["projectId"] == recovered[0]["id"]
-    assert body["catalogRestore"]["recoveredCanvas"] == {"id": recovered[0]["id"], "name": "Recovered canvas"}
+    saved = dict(body["catalogRestore"]["recoveredCanvas"])
+    assert saved.pop("filedAt") == recovered[0]["createdAt"]  # GM r10's order
+    assert saved == {"id": recovered[0]["id"], "name": "Recovered canvas"}
     assert "Recovered canvas" in body["catalogRestore"]["note"]
     # Listing again files nothing more.
     again = client.get("/api/projects", headers=PERSON).json()

@@ -681,10 +681,14 @@ def test_n5_restore_room_measures_each_canvas_once(app, monkeypatch):
 
 
 # -- GM answer 7: the person's own clear and load ----------------------------------------
+# GM r11 #3 (fix round 9) dropped the person's lines: the tab never reaches the
+# refusal (a waiting canvas leaves the tab on Projects home, where clear and
+# load aren't offered). A person request that gets here anyway is refused in
+# the agents' lines, with no `audience`.
 
 
 @pytest.mark.parametrize("route", ["clear", "load"])
-def test_gm7_the_persons_own_clear_or_load_at_the_limit_says_why_and_the_way_out(app, monkeypatch, route):
+def test_gm7_a_person_request_at_the_limit_is_still_refused(app, monkeypatch, route):
     client, store, graph, state = app
     _waiting(client, store, graph, state, monkeypatch)
     if route == "clear":
@@ -693,18 +697,7 @@ def test_gm7_the_persons_own_clear_or_load_at_the_limit_says_why_and_the_way_out
         response = client.post("/api/graph/import", headers=PERSON, json={"nodes": [], "edges": []})
     assert response.status_code == 409
     body = response.json()
-    assert body["code"] == "canvas_waiting" and body["audience"] == "person"
-    assert body["detail"] == ("It isn't saved as a project yet because you've reached the limit of 3 projects. "
-                              "Delete a project and Nebula will save it, or open an existing project to work in.")
+    assert body["code"] == "canvas_waiting" and "audience" not in body
     agent = client.request("DELETE", "/api/graph?force=true", headers=CODEX)
     assert agent.json()["detail"] == main_module.CANVAS_WAITING_REFUSAL and "audience" not in agent.json()
-
-
-def test_gm7_the_size_cap_forms():
-    assert main_module.canvas_waiting_person_reason("storage", trash_has_items=True) == (
-        "It isn't saved as a project yet because Nebula's project list is full. Permanently delete a project in "
-        "Recently deleted and Nebula will save it, or open an existing project to work in.")
-    # GM r9 (3), fix round 8: the empty-Recently-deleted form, verbatim.
-    assert main_module.canvas_waiting_person_reason("storage", trash_has_items=False) == (
-        "It isn't saved as a project yet because Nebula's project list is full. Delete a project, then remove it "
-        "from Recently deleted too, and Nebula will save it. You can also open an existing project to work in.")
+    assert not hasattr(main_module, "canvas_waiting_person_reason")

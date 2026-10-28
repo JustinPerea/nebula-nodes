@@ -55,12 +55,3 @@ export function modelKeyMissingText(name: string, keys: readonly string[]): stri
 export const MODEL_SETTINGS_FAILURE_HEADER = 'X-Nebula-Failure';
 export const MODEL_SETTINGS_FAILURE = 'model-settings';
 export const MISSING_KEY_FAILURE = 'missing-key';
-
-/** GM's answer 7 to review 6 (fix round 7 of PR #199): the person's own Load
- * graph refused because the open canvas waits to be saved as a project
- * (409 `canvas_waiting`) names the file: "Couldn't load “file.json”." over
- * the backend's reason. Any other failure keeps the surface's own heading. */
-export function loadRefusedHeading(error: unknown, fileName: string | null | undefined, heading: string): string {
-  const code = typeof error === 'object' && error !== null ? (error as { code?: unknown }).code : null;
-  return code === 'canvas_waiting' && fileName ? `Couldn't load “${fileName}”.` : heading;
-}

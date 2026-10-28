@@ -409,17 +409,19 @@ def test_gm_r9_the_held_canvases_notice_is_closed_by_the_person_only(app, monkey
     _restart(monkeypatch, state, store)
     assert client.get("/api/projects", headers=PERSON).json().get("canvasHeldUnreadable") is None
     assert json.loads((store.held_dir / store_module.CANVAS_HELD_NOTE_NAME).read_text())["kept"]
-    # A new loss is a new note, shown again.
+    # A new loss is a new note, shown again, counting only itself (review 9,
+    # nit 2, fix round 9: the person closed the one before).
     store._note_held_lost(1, ["x"])
-    assert client.get("/api/projects", headers=PERSON).json()["canvasHeldUnreadable"]["count"] == 2
+    assert client.get("/api/projects", headers=PERSON).json()["canvasHeldUnreadable"]["count"] == 1
 
 
 # -- GM's answer 1 to review 8: the restore notice names every canvas filed --
 
 def test_gm_answer1_a_canvas_filed_while_the_notice_shows_joins_it_with_no_toast(app, monkeypatch):
     """The restore's own canvas is its recoveredCanvas; the copy an agent's
-    edit made, filed while the notice shows, joins alsoFiled and gets no
-    toast. Once the notice is closed, a later filing's toast says "Another"."""
+    edit made, filed while the notice shows, is the agent's (GM r11, 4:
+    `agentCopies`, never `alsoFiled`) and gets no toast. Once the notice is
+    closed, a later filing's toast says "Another"."""
     client, store, graph, state = app
     _restored_unsettled(client, store, state, monkeypatch)
     first = client.post("/api/graph/node", headers=CODEX, json={"definitionId": "text-input", "params": {"value": "e1"}})
@@ -432,27 +434,15 @@ def test_gm_answer1_a_canvas_filed_while_the_notice_shows_joins_it_with_no_toast
     second = client.post("/api/graph/node", headers=CODEX, json={"definitionId": "text-input", "params": {"value": "e2"}})
     assert second.status_code == 200, second.text
     listing = client.get("/api/projects", headers=PERSON).json()
-    assert [row["name"] for row in listing["catalogRestore"]["alsoFiled"]] == ["Recovered canvas copy"]
+    assert listing["catalogRestore"].get("alsoFiled") in (None, [])
+    assert [(row["name"], row["agentCopy"]) for row in listing["catalogRestore"]["agentCopies"]] == [
+        ("Recovered canvas copy", {"agent": "Codex"})]
     assert listing.get("canvasSaved") is None
     assert client.post("/api/projects/catalog-restore/dismiss", headers=PERSON, json={"id": restore["id"]}).json() == {"dismissed": True}
     # A later filing on its own: the toast's record carries `another`.
     main_module._note_canvases_saved([{"id": "e" * 32, "name": "Recovered canvas 2"}])
     saved = client.get("/api/projects", headers=PERSON).json().get("canvasSaved")
     assert saved and saved["name"] == "Recovered canvas 2" and saved.get("another") is True
-
-
-def test_gm_r9_the_persons_three_refusal_forms_verbatim():
-    reason = main_module.canvas_waiting_person_reason
-    assert store_module.MAX_PROJECTS == 500
-    assert reason("projects") == (
-        "It isn't saved as a project yet because you've reached the limit of 500 projects. Delete a project and "
-        "Nebula will save it, or open an existing project to work in.")
-    assert reason("storage", trash_has_items=True) == (
-        "It isn't saved as a project yet because Nebula's project list is full. Permanently delete a project in "
-        "Recently deleted and Nebula will save it, or open an existing project to work in.")
-    assert reason("storage", trash_has_items=False) == (
-        "It isn't saved as a project yet because Nebula's project list is full. Delete a project, then remove it "
-        "from Recently deleted too, and Nebula will save it. You can also open an existing project to work in.")
 
 
 def test_high1_a_copy_the_agent_emptied_takes_no_number(app, monkeypatch):

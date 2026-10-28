@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { ArrowUpRight, Check, ChevronRight, ImageIcon, Pencil, Plus, RotateCcw, Search, Settings, Trash2, X } from 'lucide-react';
 import { backendAssetUrlSync } from '../../lib/backend';
-import { coverImages, type CatalogRestore, type CoverChoices, type ProjectCover } from '../../lib/projects';
+import { coverImages, type CatalogRestore, type CoverChoices, type ProjectCover, type SavedCanvas } from '../../lib/projects';
 import {
   canvasHeldUnreadableLine, canvasSavedToast, canvasWaitingLine, catalogRestoreNotice, DEFAULT_PROJECT_LIMIT, OPEN_RECENTLY_DELETED,
-  restoreAtLimitTooltip, type CanvasLimit, type NoticeNow, type RestoreRoom,
+  restoreAtLimitTooltip, type CanvasLimit, type CanvasLimitContext, type NoticeNow, type RestoreRoom,
 } from './catalogRestoreCopy';
 import { actorLabel } from '../../lib/trash';
 import { removalNote } from './trashDays';
@@ -95,11 +95,11 @@ export interface ProjectHomeProps {
   onDismissCatalogRestore?: () => void;
   /** The live canvas isn't a project and the list had no room to save it
    * (the listing's `canvasNotFiled`): GM r5's waiting line, until it is saved. */
-  canvasNotFiled?: { reason: CanvasLimit; projectLimit?: number; canvases?: { name?: string | null }[]; deletes?: number | null } | null;
+  canvasNotFiled?: { reason: CanvasLimit; projectLimit?: number; canvases?: CanvasLimitContext['canvases']; deletes?: number | null } | null;
   /** A waiting canvas was saved as this project (the listing's `canvasSaved`):
    * GM's toast, once per tab, naming each canvas filed with it (`filed`). */
-  canvasSaved?: { id: string; name: string; overSaveLimit?: boolean; another?: boolean;
-    filed?: { id: string; name: string; overSaveLimit?: boolean }[] } | null;
+  canvasSaved?: { id: string; name: string; overSaveLimit?: boolean; another?: boolean; agentCopy?: { agent?: string | null };
+    filed?: SavedCanvas[] } | null;
   /** The backend's verdict on a restore now (the listing's `restoreRoom`,
    * review 6 of PR #199, L-3): Restore greys on it, held canvases counted. */
   restoreRoom?: RestoreRoom | null;
@@ -525,7 +525,7 @@ function CanvasHeldUnreadableNotice({ count, onDismiss, heading }: {
  * can't be dismissed while the canvas waits and goes once it is saved. The
  * size cap's adds "Open Recently deleted" (only a delete for good frees it). */
 function CanvasWaitingNotice({ waiting, trashCount, onOpenRecentlyDeleted }: {
-  waiting: { reason: CanvasLimit; projectLimit?: number; canvases?: { name?: string | null }[]; deletes?: number | null }; trashCount: number;
+  waiting: { reason: CanvasLimit; projectLimit?: number; canvases?: CanvasLimitContext['canvases']; deletes?: number | null }; trashCount: number;
   onOpenRecentlyDeleted: () => void;
 }) {
   const line = canvasWaitingLine(waiting.reason, {
@@ -543,8 +543,8 @@ function CanvasWaitingNotice({ waiting, trashCount, onOpenRecentlyDeleted }: {
 
 /** GM r5: "Once saved: the normal toast", with the project's real name. */
 function CanvasSavedToast({ project, onDismiss }: {
-  project: { id: string; name: string; overSaveLimit?: boolean; another?: boolean;
-    filed?: { id: string; name: string; overSaveLimit?: boolean }[] };
+  project: { id: string; name: string; overSaveLimit?: boolean; another?: boolean; agentCopy?: { agent?: string | null };
+    filed?: SavedCanvas[] };
   onDismiss: () => void;
 }) {
   const [paused, setPaused] = useState(false);
@@ -558,7 +558,7 @@ function CanvasSavedToast({ project, onDismiss }: {
       <div className="project-home__toast" role="status" aria-live="polite"
         onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
         onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
-        <span className="project-home__toast-text">{canvasSavedToast(project.name, project.filed, project.overSaveLimit === true, project.another === true)}</span>
+        <span className="project-home__toast-text">{canvasSavedToast(project.name, project.filed, project.overSaveLimit === true, project.another === true, project.agentCopy)}</span>
         <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
       </div>
     </InNoticeRegion>

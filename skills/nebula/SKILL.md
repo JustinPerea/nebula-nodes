@@ -85,9 +85,15 @@ and your change never touches it: `nebula clear` and `nebula load` then work
 on a new canvas ("Nebula saved the open canvas as its own project, “X”, and
 cleared a new canvas." / "…and loaded “file.json” into a new canvas."), and
 any other change works on a copy of it ("…and made your change on a copy of
-it."), saved as "X copy" on the next listing or your next change, which then
-lands on it. The same holds right after a listing saved and opened the
-waiting canvas, until it changes. A canvas bigger
+it."), saved as "X copy" ("X copy 2" when that name is taken) on the next
+listing or your next change, which then lands on it. When only the person's
+canvas fits, the reply adds "The copy isn't saved as a project yet because the
+project limit is reached." (or "…because Nebula's project list is full."):
+the copy waits, and the person sees it as your copy, not theirs. The CLI
+prints this reply under its own line (`nebula clear` prints it in place of
+the Undo sentence: the person's canvas wasn't cleared). The same holds right
+after a listing saved and opened the waiting canvas, until the person's own
+tab is on that project; opening it yourself doesn't end it. A canvas bigger
 than a project can be saved is never held for you: that change is refused
 (409 `canvas_held_full`, "This canvas is too big for Nebula to keep aside, so
 nothing was changed. Work in an existing project, or make the canvas smaller

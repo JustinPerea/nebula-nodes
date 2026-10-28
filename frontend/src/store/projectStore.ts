@@ -781,6 +781,8 @@ function keepReplacedCanvasAsCopy(): Promise<{ id: string; name: string } | null
  * each test starts from this. A handling of a params-version change still in
  * flight from an earlier test is superseded, so its late answer writes nothing. */
 export function resetProjectStoreForTests(): void {
+  syncedRestore = undefined;
+  restoredSinceSync = false;
   dismissedRestores.clear();
   dismissedHeldNotes.clear();
   loggedRestores.clear();
@@ -1151,7 +1153,9 @@ function listingNotices(list: ProjectList): ListingNotices {
     canvasNotFiled: waiting && (waiting.reason === 'projects' || waiting.reason === 'storage')
       ? { reason: waiting.reason, projectLimit: waiting.projectLimit,
         ...(Array.isArray(waiting.canvases) ? { canvases: waiting.canvases.map((canvas) => ({
-          name: typeof canvas?.name === 'string' ? canvas.name : null })) } : {}),
+          name: typeof canvas?.name === 'string' ? canvas.name : null,
+          ...(canvas?.agentCopy && typeof canvas.agentCopy === 'object'
+            ? { agentCopy: { agent: typeof canvas.agentCopy.agent === 'string' ? canvas.agentCopy.agent : null } } : {}) })) } : {}),
         ...(typeof waiting.deletes === 'number' && waiting.deletes > 0 ? { deletes: waiting.deletes } : {}) }
       : null,
     restoreRoom: room && room.refused === 'projects'
@@ -1167,20 +1171,26 @@ function listingNotices(list: ProjectList): ListingNotices {
     toastedCanvases.add(saved.id);
     const all = Array.isArray(saved.filed) && saved.filed.length > 0
       ? saved.filed.filter((row) => typeof row?.id === 'string' && typeof row?.name === 'string')
-      : [{ id: saved.id, name: saved.name, ...(saved.overSaveLimit === true ? { overSaveLimit: true } : {}) }];
+      : [{ id: saved.id, name: saved.name, ...(saved.overSaveLimit === true ? { overSaveLimit: true } : {}),
+        ...(saved.agentCopy ? { agentCopy: saved.agentCopy } : {}) }];
     // GM r8 (a) and GM's answer 1 to review 8: the saved line shows once. A
     // filing the restore notice says (its canvas lines, on screen now) gets
     // no toast; the toast is for a filing the notice doesn't say. A canvas
     // is named once (GM, review 7).
     const restore = notices.catalogRestore;
-    const said = new Set([restore?.recoveredCanvas?.id, ...(restore?.alsoFiled ?? []).map((row) => row?.id)]
+    const said = new Set([restore?.recoveredCanvas?.id, ...(restore?.alsoFiled ?? []).map((row) => row?.id),
+      ...(restore?.agentCopies ?? []).map((row) => row?.id)]
       .filter((id): id is string => typeof id === 'string'));
     const seen = new Set<string>();
     const filed = all.filter((row) => !said.has(row.id) && !seen.has(row.id) && (seen.add(row.id), true))
-      .map((row) => ({ id: row.id, name: row.name, ...(row.overSaveLimit === true ? { overSaveLimit: true } : {}) }));
+      .map((row) => ({ id: row.id, name: row.name, ...(row.overSaveLimit === true ? { overSaveLimit: true } : {}),
+        ...(typeof row.filedAt === 'string' ? { filedAt: row.filedAt } : {}),
+        ...(row.agentCopy && typeof row.agentCopy === 'object'
+          ? { agentCopy: { agent: typeof row.agentCopy.agent === 'string' ? row.agentCopy.agent : null } } : {}) }));
     if (filed.length > 0) {
       const last = filed[filed.length - 1];
       notices.canvasSaved = { id: last.id, name: last.name, ...(last.overSaveLimit ? { overSaveLimit: true } : {}),
+        ...(last.agentCopy ? { agentCopy: last.agentCopy } : {}),
         ...(saved.another === true ? { another: true } : {}), ...(filed.length > 1 ? { filed } : {}) };
     }
   }
@@ -1998,6 +2008,17 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
 // canvas project (lib/currentProject): this store is its only source.
 useProjectStore.subscribe((state) => publishOpenProject(currentProjectOf(state)));
 
+/** The restore notice's id the last graphSync carried (undefined: no sync
+ * yet), and whether a new one came since this tab last matched its revision
+ * (GM r11 on PR #199, 5). */
+let syncedRestore: string | null | undefined;
+let restoredSinceSync = false;
+/** GM r11, 5, verbatim: a tab that can't move on by itself after a restore. */
+export const RESTORED_LIST_RELOAD = 'Nebula restored its project list. Reload projects to continue.';
+/** The same with edits this tab hasn't saved (builder's, for GM): the
+ * conflict's own second sentence. */
+export const RESTORED_LIST_UNSAVED = 'Nebula restored its project list. Try again to save your unsaved edits as a recovered project.';
+
 /** One coordinator stays mounted across Home, Canvas and all studios. */
 export function subscribeProjectAutosave(): () => void {
   const graph = useGraphStore.subscribe((state, previous) => {
@@ -2012,6 +2033,12 @@ export function subscribeProjectAutosave(): () => void {
     else if (moved || state.createSessionId !== previous.createSessionId) noteChange();
   });
   const drafts = useCreateDraftStore.subscribe(() => markDirty());
+  // The person's tab says which project its canvas shows (GM r11 on PR #199,
+  // 2): the backend ends the protection of a project filed from the person's
+  // waiting canvas once their tab is on it.
+  const viewingOf = (state: ProjectState) => (state.screen === 'workspace' && state.activeProject ? state.activeProject.id : null);
+  wsClient.setViewing(viewingOf(useProjectStore.getState()));
+  const viewing = useProjectStore.subscribe((state) => wsClient.setViewing(viewingOf(state)));
   // GM's line after an import names the project open then.
   useGraphStore.getState().setCanvasProjectName(() => useProjectStore.getState().activeProject?.name ?? null);
   // GM round 23: a replacement with no agent keeps what it cut off as a copy.
@@ -2050,6 +2077,13 @@ export function subscribeProjectAutosave(): () => void {
       return;
     }
     if (event.type !== 'graphSync') return;
+    // The restore notice the backend shows now (GM r11 on PR #199, 5): a new
+    // one since the last sync means Nebula restored its project list, which
+    // is why the workspace revision moved, not another window.
+    const restoreNow = (event as unknown as { catalogRestore?: unknown }).catalogRestore;
+    const restoreId = typeof restoreNow === 'string' ? restoreNow : null;
+    if (restoreId !== null && syncedRestore !== undefined && restoreId !== syncedRestore) restoredSinceSync = true;
+    syncedRestore = restoreId;
     // A reconnect starts with one: a listing that failed meanwhile goes again.
     relistIfStale();
     // A sync without a version is from a backend older than the gate (0).
@@ -2091,6 +2125,7 @@ export function subscribeProjectAutosave(): () => void {
       return;
     }
     if (revision === context.revision) {
+      restoredSinceSync = false;
       // A change to the open project: an agent's edit saves at once.
       applyingSync(event as { edit?: EditOrigin; arranged?: unknown });
       return;
@@ -2111,12 +2146,22 @@ export function subscribeProjectAutosave(): () => void {
     }
     const snapshot = captureProjectSnapshot();
     const unsaved = JSON.stringify(snapshot) !== lastSaved;
+    const restored = restoredSinceSync;
+    restoredSinceSync = false;
     // On Projects with everything saved there is nothing to protect: let go
     // of the project still loaded from before (another window opened another
     // one, or it was deleted) instead of stopping the screen with a conflict.
-    if (state.screen === 'home' && !unsaved && useGraphStore.getState().canSwitchProject()) {
+    // After a restore the tab goes to Projects home the same way, with no
+    // line: home already shows the restore (GM r11 on PR #199, 5).
+    if ((state.screen === 'home' || restored) && !unsaved && useGraphStore.getState().canSwitchProject()) {
       releaseLoadedProject();
+      if (state.screen !== 'home') useProjectStore.setState({ screen: 'home', error: null, errorRetry: null });
       void relistProjects();
+      return;
+    }
+    if (restored) {
+      // It can't move on by itself (edits not saved, or a run it waits on).
+      preserveWorkspaceConflict(unsaved ? RESTORED_LIST_UNSAVED : RESTORED_LIST_RELOAD, undefined, snapshot);
       return;
     }
     // The person changed the active project in another tab. Keep our local
@@ -2134,7 +2179,7 @@ export function subscribeProjectAutosave(): () => void {
   };
   window.addEventListener('beforeunload', beforeUnload);
   return () => {
-    graph(); ui(); drafts(); socket(); outdated(); clearTimeout(relistTimer);
+    graph(); ui(); drafts(); viewing(); socket(); outdated(); clearTimeout(relistTimer);
     setReplacedCanvasKeeper(null);
     window.removeEventListener('beforeunload', beforeUnload);
     for (const type of ['focus', 'online']) window.removeEventListener(type, relistIfStale);
