@@ -109,7 +109,7 @@
 }
 
 .prompt-dialog__actions .prompt-dialog__destructive:hover:not(:disabled) {
-  background: rgba(255, 70, 60, 0.14);
+  background: var(--sr-danger-tint);
   color: var(--sr-danger-ink-hover, #ff9a91);
 }
 

@@ -30,6 +30,7 @@ import { CharacterTestPanel } from './CharacterTestPanel';
 import { failureCopy, oneLine } from '../../lib/errorCopy';
 import { FailureLines } from '../failure/FailureLines';
 import '../../styles/character-studio.css';
+import { NoticeLeave } from '../../lib/noticeLeave';
 
 /** Local editable shape — a Character minus the server-owned fields. The draft
  *  survives workspace navigation in the session draft store until valid (≥3 views + name), at which
@@ -503,10 +504,10 @@ export function CharacterStudioView() {
           </>
         )}
       </main>
-      {deleting.lastDeleted && (
-        <UndoDeleteToast key={deleting.lastDeleted.id} name={deleting.lastDeleted.name} busy={deleting.busy}
-          error={deleting.undoError} onDismiss={deleting.dismiss} onUndo={() => { void undoDelete(); }} />
-      )}
+      <NoticeLeave value={deleting.lastDeleted}>{(last, leave) => (
+        <UndoDeleteToast key={last.id} name={last.name} busy={deleting.busy}
+          error={deleting.undoError} onDismiss={deleting.dismiss} onUndo={() => { void undoDelete(); }} leave={leave} />
+      )}</NoticeLeave>
     </div>
   );
 }

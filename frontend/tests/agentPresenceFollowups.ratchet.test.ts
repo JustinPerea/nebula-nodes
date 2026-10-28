@@ -692,8 +692,10 @@ function guardMask(condition: ts.Expression, scope: Scope, seen: Set<string> = n
     const masks = helpers.map((helper) => {
       if (!(ts.isArrowFunction(helper) || ts.isFunctionExpression(helper) || ts.isFunctionDeclaration(helper)) || !helper.body) return 0;
       if (!ts.isBlock(helper.body)) return again(helper.body);
-      const [only] = helper.body.statements;
-      return helper.body.statements.length === 1 && ts.isReturnStatement(only) && only.expression ? again(only.expression) : 0;
+      // Review 7 N-1: a helper of several statements returns the refusal when
+      // every return that can be truthy does so only when G holds
+      // (`{ if (refuse()) return true; return false; }`).
+      return truthyReturnsOnlyWhen(helper.body, scope, seen);
     });
     return masks.length ? masks.reduce((all, mask) => all & mask, LOCKED) : 0;
   }
@@ -729,6 +731,46 @@ function guardMask(condition: ts.Expression, scope: Scope, seen: Set<string> = n
   }
   return 0;
 }
+const falsy = (expression: ts.Expression | undefined): boolean => !expression
+  || expression.kind === ts.SyntaxKind.FalseKeyword || expression.kind === ts.SyntaxKind.NullKeyword
+  || (ts.isIdentifier(expression) && expression.text === 'undefined');
+/** What every truthy return of a helper's block needs to hold: each `return
+ * true` (or any value) is in the then-branch of `if (G)`, the else of `if
+ * (!G)`, or after `if (!G) return false`, or returns a guard itself. Returns
+ * of falsy values, and falling off the end, give nothing. */
+function truthyReturnsOnlyWhen(body: ts.Block, scope: Scope, seen: Set<string>): number {
+  const returns: ts.ReturnStatement[] = [];
+  const walk = (node: ts.Node) => {
+    if (ts.isFunctionLike(node)) return;
+    if (ts.isReturnStatement(node)) returns.push(node);
+    ts.forEachChild(node, walk);
+  };
+  body.statements.forEach(walk);
+  const truthy = returns.filter((statement) => !falsy(statement.expression));
+  if (!truthy.length) return 0;
+  return truthy.reduce((all, statement) => {
+    const value = statement.expression!;
+    const itself = value.kind === ts.SyntaxKind.TrueKeyword ? 0 : guardMask(value, scope, seen);
+    let when = 0;
+    for (let cur: ts.Node = statement; cur !== body && cur.parent; cur = cur.parent) {
+      const up = cur.parent;
+      if (ts.isIfStatement(up)) {
+        if (cur === up.thenStatement) when |= guardMask(up.expression, scope, seen);
+        else if (cur === up.elseStatement) when |= negatedGuard(up.expression, scope);
+      } else if (ts.isBlock(up) && ts.isStatement(cur as ts.Statement)) {
+        const list = up.statements as ts.NodeArray<ts.Statement>;
+        for (const earlier of list.slice(0, list.indexOf(cur as ts.Statement))) {
+          if (ts.isIfStatement(earlier) && exits(earlier.thenStatement)) when |= negatedGuard(earlier.expression, scope);
+        }
+      }
+    }
+    return all & (itself | when);
+  }, LOCKED);
+}
+/** A `switch (G)` whose `case true:` exits (review 7 N-1). */
+const switchExitsOnTrue = (statement: ts.SwitchStatement): boolean => statement.caseBlock.clauses.some((clause) =>
+  ts.isCaseClause(clause) && clause.expression.kind === ts.SyntaxKind.TrueKeyword
+  && clause.statements.length > 0 && exits(clause.statements[clause.statements.length - 1]));
 /** The refusals a condition's && chain negates (`!refuseCanvasEdit()`, `ok &&
  * !refuse…()`): true only when nothing refused. */
 function negatedGuard(condition: ts.Expression, scope: Scope): number {
@@ -751,6 +793,7 @@ function guardsAround(site: ts.Node, root: ts.Node, scope: Scope): number {
       const list = up.statements as ts.NodeArray<ts.Statement>;
       for (const earlier of list.slice(0, list.indexOf(cur as ts.Statement))) {
         if (ts.isIfStatement(earlier) && exits(earlier.thenStatement)) mask |= guardMask(earlier.expression, scope);
+        else if (ts.isSwitchStatement(earlier) && switchExitsOnTrue(earlier)) mask |= guardMask(earlier.expression, scope);
       }
     } else if (ts.isIfStatement(up)) {
       if (cur === up.thenStatement) mask |= negatedGuard(up.expression, scope);
@@ -1255,6 +1298,31 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
     const loud = Object.entries(quiet).filter(([form, body]) => unlockedControls(head + body, `components/${form}.tsx`).length !== 0)
       .map(([form]) => form);
     expect(loud, 'correct guards G flags').toEqual([]);
+  });
+
+  // Fix round 7 of PR #200: review 7 N-1, the two correct guards G flagged,
+  // and their wrong twins, which it must still catch.
+  it('G corpus (review 7, N-1): a helper of several statements returning the refusal, and switch (G) { case true: return }', () => {
+    const head = 'const run = useGraphStore((s) => s.executeGraph);\n';
+    const quiet: Record<string, string> = {
+      helper_returns_refusal: 'const stop = () => { if (refuseCanvasEdit()) return true; return false; };\nexport const A = () => <div role="button" onClick={() => { if (stop()) return; run(); }}>Run</div>;',
+      helper_function_declaration: 'function stop() { if (!refuseCanvasEdit()) return false; return true; }\nexport const A = () => <div role="button" onClick={() => { if (stop()) return; run(); }}>Run</div>;',
+      helper_redraws_then_returns: 'const stop = () => { if (refuseCanvasEdit()) { console.log(1); return true; } return false; };\nexport const A = () => <div role="button" onClick={() => { if (stop()) return; run(); }}>Run</div>;',
+      switch_case_true: 'export const A = () => <div role="button" onClick={() => { switch (refuseCanvasEdit()) { case true: return; } run(); }}>Run</div>;',
+    };
+    const loud = Object.entries(quiet).filter(([form, body]) => unlockedControls(head + body, `components/${form}.tsx`).length !== 0)
+      .map(([form]) => form);
+    expect(loud, 'correct guards G flags').toEqual([]);
+    const forms: Record<string, string> = {
+      helper_returns_true_anyway: 'const stop = () => { if (refuseCanvasEdit()) return true; return true; };\nexport const A = () => <div role="button" onClick={() => { if (stop()) return; run(); }}>Run</div>;',
+      helper_returns_negated: 'const stop = () => { if (refuseCanvasEdit()) return false; return true; };\nexport const A = () => <div role="button" onClick={() => { if (stop()) return; run(); }}>Run</div>;',
+      helper_multi_false: 'const stop = () => { refuseCanvasEdit(); return false; };\nexport const A = () => <div role="button" onClick={() => { if (stop()) return; run(); }}>Run</div>;',
+      switch_case_false: 'export const A = () => <div role="button" onClick={() => { switch (refuseCanvasEdit()) { case false: return; } run(); }}>Run</div>;',
+      switch_case_true_no_exit: 'export const A = () => <div role="button" onClick={() => { switch (refuseCanvasEdit()) { case true: console.log(1); } run(); }}>Run</div>;',
+    };
+    const missed = Object.entries(forms).filter(([form, body]) => unlockedControls(head + body, `components/${form}.tsx`).length !== 1)
+      .map(([form]) => form);
+    expect(missed, 'forms G lets through').toEqual([]);
   });
 
   it('the palette is allowlisted control by control, never tag-wide (review 4 LOW-4)', () => {
@@ -2041,3 +2109,108 @@ function disabledLooks() {
   }
   return rows;
 }
+
+// Fix round 7 of PR #200 (GM r11 answer 3, verbatim: "Grep for any other
+// hard-coded reds or orange on destructive actions, so the rule is enforced
+// in code (a ratchet), not by eye."). A destructive control (a class naming
+// danger, destructive, delete, purge, remove, trash, discard or clear) draws
+// its red only from the danger tokens (styles/disabled-buttons.css:
+// --sr-danger-ink, -ink-hover, -fill, -fill-hover, -tint, -edge,
+// --sr-on-danger), never a hard-coded red or orange, and never the accent
+// (--sr-danger, --sr-error and --sr-accent are the orange).
+const DESTRUCTIVE_CLASS = /\.[\w-]*(danger|destructive|delete|purge|remove|trash|discard|clear)[\w-]*/i;
+const DANGER_TOKEN = /var\(--sr-(?:danger-(?:ink|ink-hover|fill|fill-hover|tint|edge)|on-danger)\b[^()]*(?:\([^()]*\)[^()]*)*\)/g;
+const ACCENT_TOKEN = /var\(--sr-(?:danger|error|accent)(?:-border|-soft)?(?![\w-])/;
+function warmColours(value: string): string[] {
+  const out: string[] = [];
+  for (const match of value.matchAll(/#([0-9a-f]{3,8})\b|rgba?\(([^)]*)\)|\b(red|orange|orangered|tomato|crimson|coral)\b/gi)) {
+    if (match[3]) { out.push(match[0]); continue; }
+    let rgb: number[];
+    if (match[1]) {
+      const hex = match[1].length <= 4 ? [...match[1].slice(0, 3)].map((c) => c + c).join('') : match[1].slice(0, 6);
+      rgb = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    } else rgb = match[2].split(/[\s,/]+/).filter(Boolean).slice(0, 3).map(Number);
+    const [r, g, b] = rgb.map((v) => v / 255);
+    const max = Math.max(r, g, b); const min = Math.min(r, g, b); const d = max - min;
+    if (!d) continue;
+    const l = (max + min) / 2; const s = d / (1 - Math.abs(2 * l - 1));
+    let h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    h = (h * 60 + 360) % 360;
+    if (s > 0.35 && (h <= 45 || h >= 340)) out.push(match[0]);
+  }
+  return out;
+}
+/** Each destructive rule's red or orange that isn't a danger token. */
+function destructiveColours(css: string, file: string): string[] {
+  const text = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const found: string[] = [];
+  for (const rule of text.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const selector = rule[1].trim().replace(/\s+/g, ' ');
+    // Text about a failure (`__error`) is no control.
+    if (!selector.split(',').some((part) => DESTRUCTIVE_CLASS.test(part) && !/__error\b/.test(part))) continue;
+    for (const declaration of rule[2].split(';')) {
+      const at = declaration.indexOf(':');
+      if (at < 0) continue;
+      const property = declaration.slice(0, at).trim();
+      if (!/color|background|border|fill|stroke|outline|shadow/.test(property)) continue;
+      const value = declaration.slice(at + 1).replace(DANGER_TOKEN, 'TOKEN');
+      const bad = [...warmColours(value), ...(ACCENT_TOKEN.test(value) ? [value.trim()] : [])];
+      if (bad.length) found.push(`${file} ${selector} { ${property}: ${bad.join(' ')} }`);
+    }
+  }
+  return found;
+}
+
+/**
+ * A button whose label starts with a destructive verb but whose class names
+ * none, so the stylesheet check above can't see its rules (the Commons
+ * keyword chip's × hovered the accent orange this way).
+ */
+function unnamedDestructiveButtons(tsx: string, file: string): string[] {
+  const found: string[] = [];
+  for (const match of tsx.matchAll(/<button\b([^>]*?)>/gs)) {
+    const label = match[1].match(/aria-label=(?:"([^"]*)"|\{`([^`]*)`\}|\{'([^']*)'\})/);
+    const text = label && (label[1] ?? label[2] ?? label[3]);
+    if (!text || !/^(Remove|Delete|Clear|Discard|Purge|Trash)\b/.test(text)) continue;
+    const className = match[1].match(/className=(?:"[^"]*"|\{[^}]*\})/)?.[0] ?? '';
+    if (DESTRUCTIVE_CLASS.test(`.${className.replace(/^className=["{]/, '').replace(/\s+/g, ' .')}`)) continue;
+    found.push(`${file}:${tsx.slice(0, match.index).split('\n').length} ${text}`);
+  }
+  return found;
+}
+
+describe('GM r11 answer 3: orange never marks a destructive action, and its red comes from the danger tokens', () => {
+  it('every button labelled Remove, Delete, Clear, Discard, Purge or Trash names it in its class', () => {
+    const found = walk(SRC, /\.tsx$/).flatMap((path) => unnamedDestructiveButtons(readFileSync(path, 'utf8'), relative(SRC, path)));
+    expect(found).toEqual([]);
+    expect(unnamedDestructiveButtons('<button type="button" aria-label={`Remove ${k}`}>×</button>', 'probe.tsx')).not.toEqual([]);
+    expect(unnamedDestructiveButtons('<button className="x__action" aria-label="Delete it">', 'probe.tsx')).not.toEqual([]);
+    expect(unnamedDestructiveButtons('<button className="x__action x__action--delete" aria-label="Delete it">', 'probe.tsx')).toEqual([]);
+    expect(unnamedDestructiveButtons('<button className="x__action" aria-label="Add it">', 'probe.tsx')).toEqual([]);
+  });
+  it('no stylesheet gives a destructive control a hard-coded red or orange, or the accent', () => {
+    const found = walk(SRC, /\.css$/).flatMap((path) => destructiveColours(readFileSync(path, 'utf8'), relative(SRC, path)));
+    expect(found).toEqual([]);
+  });
+  it('the check catches the forms review 7 found, and passes the tokens', () => {
+    const bad = [
+      '.toolbar__action--danger { color: var(--sr-error, #fb8a80); }',
+      '.commons-button--danger { border-color: var(--sr-danger-border); color: var(--sr-danger); }',
+      '.result-card__btn--danger:hover { background: rgba(220, 50, 50, 0.45); }',
+      '.asset-trash__button:hover { color: #f59e0b; }',
+      '.x-delete:hover { color: tomato; }',
+      '.panel__remove:hover { border-color: var(--sr-accent); }',
+      '.commons-chip__remove:hover { color: var(--sr-danger); }',
+    ];
+    for (const css of bad) expect(destructiveColours(css, 'probe.css'), css).not.toEqual([]);
+    const good = [
+      '.x__danger { background: var(--sr-danger-fill, #ff887d); color: var(--sr-on-danger, #1f1f1f); }',
+      '.x--danger:hover { background: var(--sr-danger-tint); border-color: var(--sr-danger-edge); color: var(--sr-danger-ink, #ff887d); }',
+      '.x__delete:active { color: var(--sr-danger-ink-hover, #ff9a91); }',
+      '.x__remove { color: var(--sr-ink); border-color: var(--sr-edge); }',
+      '.asset-trash__error { color: var(--sr-danger); }',
+      '.save:hover { color: var(--sr-accent); }',
+    ];
+    for (const css of good) expect(destructiveColours(css, 'probe.css'), css).toEqual([]);
+  });
+});

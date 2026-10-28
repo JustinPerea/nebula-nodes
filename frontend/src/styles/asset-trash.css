@@ -120,7 +120,10 @@ body.app-slava-restraint .asset-trash__button {
 }
 
 body.app-slava-restraint .asset-trash__button svg { width: 12px; height: 12px; }
-body.app-slava-restraint .asset-trash__button:hover:not(:disabled) { border-color: #f59e0b; color: #f59e0b; }
+/* Fix round 7 of PR #200 (GM r11 answer 3): Restore, Delete forever and
+   Empty hover neutral, as Projects' Recently deleted does; amber (#f59e0b)
+   marked the destructive ones orange. */
+body.app-slava-restraint .asset-trash__button:hover:not(:disabled) { background: var(--sr-surface-control-hover); }
 body.app-slava-restraint .asset-trash__button:disabled { opacity: var(--sr-disabled-opacity); cursor: default; }
 
 /* GM r8 (fix round 6 of PR #200): the red fill, near-black ink; hover lighter. */

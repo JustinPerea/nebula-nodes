@@ -12,6 +12,7 @@ import { wsClient } from '../../lib/wsClient';
 import { failureMessage, oneLine, shortReason, type FailureCopy } from '../../lib/errorCopy';
 import '../../styles/asset-trash.css';
 import { useCurrentProjectId } from '../../lib/currentProject';
+import type { LeaveProps } from '../../lib/noticeLeave';
 
 /**
  * Recently deleted, inside Moodboard Studio and Character Studio, and under
@@ -203,10 +204,12 @@ export interface UndoDeleteToastProps {
   error?: string | FailureCopy | null;
   onUndo: () => void;
   onDismiss: () => void;
+  /** Its leave (lib/noticeLeave NoticeLeave), when its parent draws one. */
+  leave?: LeaveProps;
 }
 
 /** "Moved “X” to Recently deleted · Undo", for a few seconds after a delete. */
-export function UndoDeleteToast({ name, busy = false, error = null, onUndo, onDismiss }: UndoDeleteToastProps) {
+export function UndoDeleteToast({ name, busy = false, error = null, onUndo, onDismiss, leave }: UndoDeleteToastProps) {
   const [paused, setPaused] = useState(false);
   useEffect(() => {
     if (paused || busy || error) return;
@@ -216,7 +219,7 @@ export function UndoDeleteToast({ name, busy = false, error = null, onUndo, onDi
   // In the app's notice region, like every toast (GM - Design, 2026-10-23).
   return (
     <InNoticeRegion slot="asset-trash">
-      <div className="asset-trash__toast" role="status" aria-live="polite"
+      <div className="asset-trash__toast" role="status" aria-live="polite" {...leave}
         onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
         onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
         <span className="asset-trash__toast-text">{error ? (typeof error === 'string' ? error : oneLine({ ...error, reason: shortReason(error.reason) })) : `Moved “${name || 'Untitled'}” to Recently deleted`}</span>

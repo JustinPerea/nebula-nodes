@@ -7,6 +7,7 @@ import { useCanvasPinsStore } from '../../store/canvasPinsStore';
 import { useProjectStore } from '../../store/projectStore';
 import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 import { InNoticeRegion } from '../InNoticeRegion';
+import { useLeave, useLeavingRows } from '../../lib/noticeLeave';
 import '../../styles/canvasPins.css';
 
 /** The "Note for agents" dialog, opened from the context menu or the selection toolbar.
@@ -75,6 +76,14 @@ export function PinComposer() {
     next.delete(project);
     return next;
   });
+  // Fix round 7 (GM r10 and r11 answer 2): the reverse. A note that goes
+  // collapses in place, and the rows around it close up; when the last one
+  // goes, the stack scales out as a surface, with its last note still in it
+  // (lib/noticeLeave.ts). The open list re-sizes after a collapse ends (its
+  // row count changes then), never at its start.
+  const stackLeave = useLeave(kept.length > 0 ? true : null);
+  const { rows, rowProps } = useLeavingRows(shown, (note) => note.project, { hold: stackLeave.leaving });
+  const errorLeave = useLeave(error && !composer && (errorProject === null || errorProject === here) ? error : null);
 
   // Back to the newest two once no note is hidden (the next one kept starts
   // collapsed again).
@@ -88,8 +97,11 @@ export function PinComposer() {
   // tops (canvasPins.css), so every position it rests at starts on a note.
   // A note cut at the bottom edge while it rests mid-list is accepted by
   // design (fix round 6, GM r9 answer 1: it's the usual sign there's more
-  // below); it is sized once on open and on a new note, never after a
-  // scroll, so it never jumps under the person's wheel.
+  // below); it is sized once on open, when a note arrives and after a
+  // note's collapse ends, never after a scroll, so it never jumps under the
+  // person's wheel. A note arriving while it is open fades in place (fix
+  // round 7, GM r11 answer 1), and this runs in the same layout pass, so the
+  // list rests on whole rows in the very frame the note appears.
   useLayoutEffect(() => {
     const list = listRef.current;
     if (!open || !list) return;
@@ -120,7 +132,7 @@ export function PinComposer() {
     place();
     window.addEventListener('resize', place);
     return () => window.removeEventListener('resize', place);
-  }, [open, shown.length]);
+  }, [open, rows.length]);
 
   // Review 5 N-1 (GM r7): the × of a kept note moves focus to the next note's
   // ×, or the previous one's when it was the last, or, once none is left, back
@@ -193,19 +205,22 @@ export function PinComposer() {
         />
       )}
       {/* In the app's notice region, like every toast (GM - Design, 2026-10-23). */}
-      {error && !composer && (errorProject === null || errorProject === here) && (
+      {errorLeave.shown && (
         <InNoticeRegion slot="pin">
-          <div className="canvas-pin-toast canvas-pin-toast--error" role="alert">
-            <span>{error}</span>
+          <div className="canvas-pin-toast canvas-pin-toast--error" role="alert" {...errorLeave.props}>
+            <span>{errorLeave.shown}</span>
             <button type="button" onClick={clearError} aria-label="Dismiss">×</button>
           </div>
         </InNoticeRegion>
       )}
       {/* Kept notes, one per project, oldest first (newest at the bottom);
           beside the open dialog too (GM 2026-10-28 answer 1). */}
-      {kept.length > 0 && (
+      {stackLeave.shown && (
         <InNoticeRegion slot="pin">
-          <div ref={stackRef} className="canvas-pin-kept-stack" data-open={open || undefined}
+          <div className="canvas-pin-kept-stack" data-open={open || undefined}
+            ref={(node) => { stackRef.current = node; stackLeave.props.ref(node); }}
+            data-leaving={stackLeave.props['data-leaving']} inert={stackLeave.props.inert}
+            onAnimationEnd={stackLeave.props.onAnimationEnd}
             onFocus={(event) => {
               const from = event.relatedTarget as HTMLElement | null;
               if (from && !event.currentTarget.contains(from)) openerRef.current = from;
@@ -215,11 +230,15 @@ export function PinComposer() {
                 onClick={() => setShowAll(!open)}>{open ? KEPT_FEWER : keptMoreLabel(hidden)}</button>
             )}
             <div ref={listRef} className="canvas-pin-kept-list">
-              {shown.map((note) => (
-                <div key={note.project} className="canvas-pin-toast canvas-pin-toast--kept" role="status" data-project={note.project}
-                  data-entering={entering.has(note.project) || undefined}
+              {rows.map(({ key, item: note, leaving }) => {
+                const leave = rowProps(key, leaving);
+                return (
+                <div key={key} className="canvas-pin-toast canvas-pin-toast--kept" role="status" data-project={note.project}
+                  data-entering={(!leaving && entering.has(note.project)) || undefined}
+                  ref={leave.ref} data-leaving={leave['data-leaving']} inert={leave.inert}
                   onAnimationEnd={(event) => {
-                    if (event.target === event.currentTarget) entered(note.project);
+                    leave.onAnimationEnd(event);
+                    if (event.target === event.currentTarget && !leaving) entered(note.project);
                   }}>
                   <span className="canvas-pin-toast__text">
                     {keptNoteLine(note, here, nameOf(note.project))}
@@ -231,7 +250,8 @@ export function PinComposer() {
                   <button type="button" className="canvas-pin-toast__copy" onClick={() => copyKept(note)}>{NOTE_KEPT_COPY}</button>
                   <button type="button" onClick={() => dismiss(note.project)} aria-label="Dismiss">×</button>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </InNoticeRegion>

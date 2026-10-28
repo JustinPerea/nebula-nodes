@@ -140,7 +140,7 @@
 /* The Delete red (fix round 5 of PR #200, review 5 N-4: one red for every Delete). */
 .canvas-pin__delete:hover,
 .canvas-pin__delete:focus-visible {
-  background: rgba(255, 70, 60, 0.14);
+  background: var(--sr-danger-tint);
   color: var(--sr-danger-ink, #ff887d);
 }
 
@@ -188,8 +188,34 @@
   animation: notice-row-in 420ms var(--notice-spring) both;
 }
 
-.canvas-pin-kept-list[data-measuring] > .canvas-pin-toast--kept[data-entering] {
+.canvas-pin-kept-list[data-measuring] > .canvas-pin-toast--kept[data-entering]:not([data-leaving]) {
   animation: none;
+}
+
+/* Fix round 7 (GM r11 answer 1, verbatim: "In the open list, a newly kept
+   note FADES IN PLACE; the list's scroll position adjusts in the same frame
+   so the top row stays whole and nothing jumps. Outside the open list, rows
+   still expand."). PinComposer re-places the list in the same layout pass
+   the note arrives in. */
+.canvas-pin-kept-stack[data-open] .canvas-pin-kept-list > .canvas-pin-toast--kept[data-entering]:not([data-leaving]) {
+  overflow: visible;
+  animation: notice-fade-in 200ms ease-out both;
+}
+
+/* A kept note that leaves closes the 6 px gap above it as it collapses. */
+.canvas-pin-toast--kept[data-leaving] {
+  --notice-row-gap: 6px;
+}
+
+/* In the open list a note leaves as it arrives there, the mirror of GM r11
+   answer 1: it fades out in place, and when the fade ends PinComposer
+   removes it and re-places the list in the same layout pass. A collapse
+   there shrank the content under the list's fixed height, and the scroll,
+   held at the bottom, slid the top row under the edge for most of the
+   spring (live: up to 78 px at 1280x800). */
+.notice-region .canvas-pin-kept-stack[data-open] .canvas-pin-kept-list > [data-leaving='row'] {
+  overflow: visible;
+  animation: notice-fade-out 200ms ease-out both;
 }
 
 /* Round 23 (review 22, M-1): a note that wasn't added because its canvas

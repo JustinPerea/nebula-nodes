@@ -58,6 +58,12 @@
   --sr-danger-fill: var(--sr-danger-ink);
   --sr-danger-fill-hover: var(--sr-danger-ink-hover);
   --sr-on-danger: #1f1f1f;
+  /* A ghost Delete's hover: the red tint under its #ff887d label, and its
+     edge where it has one (fix round 7 of PR #200, GM r11 answer 3: every
+     destructive control reads these tokens; the ratchet's destructive-colour
+     check fails on a hard-coded red or orange). */
+  --sr-danger-tint: rgba(255, 70, 60, 0.14);
+  --sr-danger-edge: rgba(255, 70, 60, 0.34);
 }
 
 /* Ghost and outline buttons: unfilled, label and outline grey. First, so a

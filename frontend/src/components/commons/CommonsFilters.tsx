@@ -100,7 +100,7 @@ export function CommonsFilters({ filters, collections, onChange }: Props) {
             <span key={keyword} className="commons-chip">
               {keyword}
               <button
-                type="button" aria-label={`Remove ${keyword}`}
+                type="button" className="commons-chip__remove" aria-label={`Remove ${keyword}`}
                 onClick={() => set({ keywords: filters.keywords.filter((k) => k !== keyword) })}
               >
                 ×

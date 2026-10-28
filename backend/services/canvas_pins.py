@@ -57,7 +57,16 @@ def _epoch(value: Any) -> float | None:
         return None
 
 
-_ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x9b[0-?]*[ -/]*[@-~]")
+# Terminal escape sequences, each dropped whole: CSI (7- and 8-bit), OSC
+# (ended by BEL or ST) and, fix round 7 of PR #200 (review 7 N-3), DCS
+# (ESC P ... ST, or 8-bit 0x90 ... 0x9c), so no "Pq#0;2;0;0;0\\" is left.
+_ANSI = re.compile(
+    r"\x1b\[[0-?]*[ -/]*[@-~]"
+    r"|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)"
+    r"|\x1bP[^\x1b\x9c]*(?:\x1b\\|\x9c)"
+    r"|\x90[^\x1b\x9c]*(?:\x1b\\|\x9c)"
+    r"|\x9b[0-?]*[ -/]*[@-~]"
+)
 
 
 def clean_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = False) -> str:

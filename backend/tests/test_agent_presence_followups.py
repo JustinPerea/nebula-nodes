@@ -415,3 +415,13 @@ def test_r6_N4_a_terminal_colour_code_goes_whole():
     assert clean_text("\x1b[31mred\x1b[0m text", limit=280, multiline=True) == "red text"
     assert clean_text("\x1b]0;title\x07note", limit=280) == "note"
     assert clean_text("a\x1b[1;32mb", limit=280) == "ab"
+
+
+def test_r7_N3_a_dcs_sequence_goes_whole():
+    """Review 7 N-3: DCS (ESC P ... ST, and its 8-bit form) is dropped whole,
+    like CSI and OSC; no "Pq#0;2;0;0;0\\" is left in the note."""
+    from services.canvas_pins import clean_text
+
+    assert clean_text("warmer\x1bPq#0;2;0;0;0\x1b\\ sky", limit=280) == "warmer sky"
+    assert clean_text("warmer\x90q#0;2\x9c sky", limit=280, multiline=True) == "warmer sky"
+    assert clean_text("a\x1bP1$r0m\x1b\\b\x1b[0m", limit=280) == "ab"

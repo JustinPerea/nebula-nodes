@@ -488,7 +488,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
             {keywords.map((k) => (
               <span key={k} className="commons-chip">
                 {k}
-                <button type="button" aria-label={`Remove ${k}`} onClick={() => void correct('keywords', 'remove', k)}>×</button>
+                <button type="button" className="commons-chip__remove" aria-label={`Remove ${k}`} onClick={() => void correct('keywords', 'remove', k)}>×</button>
               </span>
             ))}
           </div>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { onPersonConnected, onPersonRequired, personRequiredMessage } from '../lib/personSession';
 import { InNoticeRegion } from './InNoticeRegion';
+import { useLeave } from '../lib/noticeLeave';
 
 /**
  * Says why Settings, proposals and chats are locked in this tab: it isn't
@@ -19,13 +20,15 @@ export function PersonRequiredBanner() {
     return () => { stopRequired(); stopConnected(); };
   }, []);
 
-  if (!message) return null;
+  // It leaves as it entered, a surface (fix round 7, GM r11 answer 2).
+  const leave = useLeave(message);
+  if (!leave.shown) return null;
 
   // In the app's notice region, like every toast (GM - Design, 2026-10-23).
   return (
     <InNoticeRegion slot="person-required">
-      <div className="person-required" role="status" aria-live="polite">
-        <span>{message}</span>
+      <div className="person-required" role="status" aria-live="polite" {...leave.props}>
+        <span>{leave.shown}</span>
         <button type="button" className="person-required__dismiss" aria-label="Dismiss" onClick={() => setMessage(null)}>
           ×
         </button>

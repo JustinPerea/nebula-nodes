@@ -35,7 +35,7 @@ import '../../styles/mask-painter.css';
 import { failureMessage } from '../../lib/errorCopy';
 import { extractPaletteFromImage, paletteNotice } from '../../lib/paletteExtract';
 import { fileNameParam, inputFileName } from '../../lib/fileName';
-import { useCanvasLock } from '../../lib/canvasLock';
+import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 
 type InspectorParamDefinition = ParamDefinition | DynamicParamDefinition;
 
@@ -746,6 +746,10 @@ export function Inspector({ embedded = false }: InspectorProps) {
                 disabled={extracting || readOnly}
                 {...lock.mark}
                 onChange={(e) => {
+                  // Fix round 7 of PR #200 (review 7 N-2): refused here too, so
+                  // a file set on the input from outside, or picked just before
+                  // the lock, uploads nothing (no orphan in output/).
+                  if (refuseCanvasEdit()) { e.target.value = ''; return; }
                   const file = e.target.files?.[0];
                   if (!file) return;
                   // Reset the input so the same file can be picked again later.
@@ -809,6 +813,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
               disabled={readOnly} {...lock.mark}
               className="inspector__file-input"
               onChange={(e) => {
+                // Review 7 N-2: refused here too (see Extract's onChange).
+                if (refuseCanvasEdit()) { e.target.value = ''; return; }
                 const file = e.target.files?.[0];
                 if (!file) return;
                 const formData = new FormData();

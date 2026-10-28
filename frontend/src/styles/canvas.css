@@ -199,7 +199,7 @@ body.app-slava-restraint .react-flow__minimap {
 }
 
 .selection-toolbar__button--danger:hover:not(:disabled) {
-  background: rgba(255, 70, 60, 0.14);
+  background: var(--sr-danger-tint);
   color: var(--sr-danger-ink-hover, #ff9a91);
 }
 

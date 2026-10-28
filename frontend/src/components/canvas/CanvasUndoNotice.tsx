@@ -4,6 +4,7 @@ import { isForeignEdit } from '../../lib/canvasUndo';
 import { useNoticeHold } from '../../hooks/useNoticeHold';
 import { OpenCopyButton } from './OpenCopyButton';
 import { useCanvasLock } from '../../lib/canvasLock';
+import { useLeave } from '../../lib/noticeLeave';
 
 /** How long a notice with Undo or Redo stays up. Long enough to reach the button. */
 export const UNDO_NOTICE_MS = NOTICE_HOLD_MS;
@@ -48,31 +49,34 @@ export function CanvasUndoNotice({ messagesOnly = false }: { messagesOnly?: bool
   // Open copy only look.
   const lock = useCanvasLock();
 
-  if (!notice) return null;
+  // It leaves as it entered (fix round 7 of PR #200, GM r11 answer 2).
+  const leave = useLeave(notice);
+  if (!leave.shown) return null;
+  const shown = leave.shown;
   const act = () => {
     const state = useGraphStore.getState();
-    if (notice.offer === 'undo') state.undo();
-    else if (notice.offer === 'redo') state.redo();
+    if (shown.offer === 'undo') state.undo();
+    else if (shown.offer === 'redo') state.redo();
   };
 
   return (
     <div
-      key={notice.id}
-      className={notice.offer ? 'canvas-undo-notice' : 'canvas-undo-notice canvas-undo-notice--message'}
-      role={notice.tone === 'error' ? 'alert' : 'status'}
-      aria-live={notice.tone === 'error' ? 'assertive' : 'polite'}
-      style={notice.agentColor ? { ['--agent-color' as string]: notice.agentColor } : undefined}
-      {...holdHandlers}
+      key={shown.id}
+      className={shown.offer ? 'canvas-undo-notice' : 'canvas-undo-notice canvas-undo-notice--message'}
+      role={shown.tone === 'error' ? 'alert' : 'status'}
+      aria-live={shown.tone === 'error' ? 'assertive' : 'polite'}
+      style={shown.agentColor ? { ['--agent-color' as string]: shown.agentColor } : undefined}
+      {...holdHandlers} {...leave.props}
     >
-      {notice.agentColor && <span className="canvas-undo-notice__dot" aria-hidden="true" />}
-      <span className="canvas-undo-notice__text">{noticeText(notice.text, notice.mono)}</span>
+      {shown.agentColor && <span className="canvas-undo-notice__dot" aria-hidden="true" />}
+      <span className="canvas-undo-notice__text">{noticeText(shown.text, shown.mono)}</span>
       {actionable && (
         <button type="button" className="canvas-undo-notice__action" onClick={act} {...lock.act()}
-          aria-keyshortcuts={notice.offer === 'undo' ? 'Meta+Z Control+Z' : 'Meta+Shift+Z Control+Shift+Z'}>
-          {notice.offer === 'undo' ? 'Undo' : 'Redo'}
+          aria-keyshortcuts={shown.offer === 'undo' ? 'Meta+Z Control+Z' : 'Meta+Shift+Z Control+Shift+Z'}>
+          {shown.offer === 'undo' ? 'Undo' : 'Redo'}
         </button>
       )}
-      {notice.copy && <OpenCopyButton projectId={notice.copy.projectId} onOpen={dismiss} />}
+      {shown.copy && <OpenCopyButton projectId={shown.copy.projectId} onOpen={dismiss} />}
       <button type="button" className="canvas-undo-notice__close" aria-label="Dismiss" onClick={dismiss}>
         ×
       </button>

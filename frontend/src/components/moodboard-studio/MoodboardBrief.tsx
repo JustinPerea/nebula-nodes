@@ -279,7 +279,7 @@ export function BriefFields({
               {avoid.map((item) => (
                 <li key={item} className="moodboard-chip">
                   <span>{item}</span>
-                  <button type="button" aria-label={`Remove ${item}`}
+                  <button type="button" className="moodboard-chip__remove" aria-label={`Remove ${item}`}
                     onClick={() => onChange({ avoid: avoid.filter((other) => other !== item) })}>×</button>
                 </li>
               ))}
@@ -370,7 +370,7 @@ function PinnedColorRow({
             <li key={color} className="moodboard-chip">
               <span className="moodboard-chip__swatch" style={{ backgroundColor: color }} />
               <span>{color}</span>
-              <button type="button" aria-label={`Remove ${color}`}
+              <button type="button" className="moodboard-chip__remove" aria-label={`Remove ${color}`}
                 onClick={() => onChange(colors.filter((other) => other !== color))}>×</button>
             </li>
           ))}

@@ -200,7 +200,7 @@ export function PersonalAgentsSection() {
                   onChange={(event) => void run(() => updatePersonalAgent(agent.id, { enabled: event.target.checked }))} />
               )}
               {agent.kind === 'custom' && (
-                <button type="button" className="settings__button" disabled={busy}
+                <button type="button" className="settings__button settings__button--remove" disabled={busy}
                   aria-label={`Remove ${agent.displayName}`} onClick={() => void run(() => deletePersonalAgent(agent.id))}>
                   Remove
                 </button>

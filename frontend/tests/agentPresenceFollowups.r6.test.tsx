@@ -293,7 +293,7 @@ describe('GM r9 answer 2: motion by kind', () => {
     expect(row('a')).not.toHaveAttribute('data-entering');
     // The open list measures with the expand held, then lets it run.
     expect(container.querySelector('.canvas-pin-kept-list')).not.toHaveAttribute('data-measuring');
-    expect(css('styles/canvasPins.css')).toMatch(/\.canvas-pin-kept-list\[data-measuring\] > \.canvas-pin-toast--kept\[data-entering\] \{\s*animation: none;\s*\}/);
+    expect(css('styles/canvasPins.css')).toMatch(/\.canvas-pin-kept-list\[data-measuring\] > \.canvas-pin-toast--kept\[data-entering\]:not\(\[data-leaving\]\) \{\s*animation: none;\s*\}/);
   });
 
   it('the pin error is its own box, marked as one', () => {

@@ -716,7 +716,7 @@ body.app-slava-restraint .context-menu__item:disabled {
 /* Fix round 5 of PR #200 (review 5 N-4, GM r7 answer 2): every Delete hovers
    to the danger red (#ff887d), pressed #ff9a91; orange is never destructive. */
 body.app-slava-restraint .context-menu__item--danger:hover:not(:disabled) {
-  background: rgba(255, 70, 60, 0.14);
+  background: var(--sr-danger-tint);
   color: var(--sr-danger-ink, #ff887d);
 }
 
@@ -2183,8 +2183,8 @@ body.app-slava-restraint .inspector__action-button:hover:not(:disabled) {
 /* Fix round 5 of PR #200 (review 5 N-4, GM r7 answer 2): every Delete hovers
    to the danger red (#ff887d), pressed #ff9a91; orange is never destructive. */
 body.app-slava-restraint .inspector__action-button--danger:hover:not(:disabled) {
-  border-color: rgba(255, 70, 60, 0.34);
-  background: rgba(255, 70, 60, 0.14);
+  border-color: var(--sr-danger-edge);
+  background: var(--sr-danger-tint);
   color: var(--sr-danger-ink, #ff887d);
 }
 

@@ -868,3 +868,130 @@ destructive confirms) and GM r9's three answers.
   paid, the proposal dismissed): pickers, confirms, motion (frozen mid-spring
   with the Web Animations API) and timeline sections, 17 of 17; blocked
   requests the 2 canaries only.
+
+## Fix round 7
+
+Review 7 (LOW-1 to LOW-3, N-1 to N-4) with GM's r10 approval and r11
+answers. GM r10 approved round 6 from the design side ("You can extract a
+palette when Nebula reconnects." included).
+
+### What changed, per item
+
+- **GM r11 answer 2 and LOW-1, every leave.** `lib/noticeLeave.ts` is the one
+  place a notice-region item leaves:
+  - `useLeave(value, kind)` keeps the last value drawn after it goes, the
+    element `inert` and marked `data-leaving="surface"` or `"row"`, until an
+    animation whose name ends in `-out` ends on it; with none running (no
+    region CSS, jsdom) it goes in the same commit, as before. A new value
+    mid-leave brings it straight back.
+  - `NoticeLeave` does the same for a toast its parent draws as
+    `{x && <Toast />}` (project home's Undo, the asset trash's Undo in the
+    Assets panel, Character and Moodboard studios, the board's Undo).
+  - `useLeavingRows` keeps a row that went in its place among the rest, and
+    re-renders when its collapse ends; `hold` keeps rows unmarked while their
+    surface leaves with them.
+  - noticeRegion.css draws every leave from three rules: a surface runs
+    `notice-surface-out` (to scale 0.96 and opacity 0) on `--notice-exit`, a
+    critically damped curve x(t) = 1 - (1 + 7t)e^(-7t) over 294 ms (70% of
+    the 420 ms entry, no overshoot); a row runs `notice-row-out` (height,
+    padding, border and the gap above to 0, with opacity), so the rows
+    around it close up on the same curve; reduced motion runs
+    `notice-fade-out` (140 ms) for both.
+  - Wired: the proposal bar (and its error line, as a row), the run-later
+    notice, person-required, the canvas notice and its late, message and
+    save-paused lines (and the Studio notice, which is the canvas notice),
+    the project-switch toast, the pin error, the kept stack (a surface when
+    its last note goes, with that note still in it) and each kept note (a
+    row), project home's, the asset trash's and the board's Undo toasts.
+    Timed toasts leave the same way as ones closed with ×: the leave starts
+    from the value going, whatever made it go.
+  - Focus moves at the start: a leaving item is inert from its first frame,
+    and the kept notes' × moves focus in the same commit.
+  - The open kept list re-sizes when a note's leave ends (its row count
+    changes then), never at its start. In the open list a note leaves as it
+    arrives there, the mirror of answer 1: it fades out in place, then goes
+    and the list is re-placed in the same layout pass. Surprise, live: a
+    collapse there shrank the content under the list's fixed height, and the
+    scroll, held at the bottom, slid the top row under the edge for most of
+    the spring (up to 78 px at 1280x800). Outside the open list a note
+    collapses.
+- **GM r11 answer 1 and LOW-2, a note kept into the open list.** It fades in
+  place (`notice-fade-in`, 200 ms, no height change) and PinComposer
+  re-places the list in the same layout pass, so the list rests on whole
+  rows in the frame the note appears. Outside the open list a new note
+  still expands.
+- **GM r11 answer 3, LOW-3 and N-4, destructive colours.**
+  - "Clear canvas…" is neutral at rest, `--sr-danger-ink` (#ff887d) on a red
+    tint on hover, #ff9a91 pressed (it was `--sr-error`, the accent orange).
+  - Commons "Delete and purge" is a neutral outline at rest, its edge and
+    label #ff887d on hover (over the accent hover every Commons button has),
+    #ff9a91 pressed.
+  - A result card's Delete hovers #ff887d (edge and icon) on the tint,
+    #ff9a91 pressed (it was rgba(220, 50, 50, .45)).
+  - The sweep found more and fixed them: the asset trash's buttons hovered
+    amber (#f59e0b), now neutral; a character reference's × hovered the
+    accent; the moodboard panel's remove #e0796b; the Remotion toolbar's
+    Delete the accent; Settings' armed Remove key the accent; the legacy
+    theme's three #F44336 rules; and the hard-coded tint and edge
+    (rgba(255, 70, 60, .14 and .34)) are now `--sr-danger-tint` and
+    `--sr-danger-edge`.
+  - Two more surfaced late, both missed by a class-only scan because their
+    class named no destructive word: a Commons keyword chip's × hovered
+    `--sr-danger` (an alias of the accent orange), and the Assets panel's
+    Delete shared `.assets-item__action`, whose hover is the accent. The
+    chip's × is now `.commons-chip__remove` (danger ink on hover, ink-hover
+    pressed); Delete adds `.assets-item__action--delete` (tint, danger
+    ink). Every other button labelled Remove, Delete, Clear, Discard, Purge
+    or Trash now names it in its class too (moodboard chips, the results
+    comparison, a personal agent's Remove).
+  - The ratchet holds it: every rule on a destructive class (danger,
+    destructive, delete, purge, remove, trash, discard, clear) draws its red
+    only from the danger tokens; a hard-coded red or orange, or
+    `--sr-danger`, `--sr-error` or `--sr-accent`, fails. A second check
+    reads the components: a button labelled with one of those verbs must
+    carry a class naming it, so the stylesheet check can see its rules.
+- **N-1, ratchet G.** A helper of several statements counts as a refusal
+  when every truthy return happens only when G holds; `switch (G) { case
+  true: return; }` guards what follows. Corpus: those two (and two more
+  quiet twins) stay quiet; five wrong twins are caught. Review 7 is right
+  that round 6's RemotionTimeline "finding" was a false flag: the old
+  `refused()` helper was correct, and inlining it changed no behaviour.
+- **N-2.** Both Inspector pickers refuse in their own onChange, so a file
+  set on the input from outside, or picked just before the lock, uploads
+  and extracts nothing.
+- **N-3.** DCS sequences (ESC P … ST, and 8-bit 0x90 … 0x9c) are dropped
+  whole, like CSI and OSC.
+
+### Left
+
+- The wording batch (not this PR): "Run This Node" → "Run this node",
+  platform shortcut labels, toasts built as sentences end with a period,
+  "Choose File" → "Choose file".
+- A destructive button still takes the colours of any shared class it
+  carries; the Assets Delete overrides the shared accent hover, but the
+  ratchet doesn't check that a shared rule is overridden.
+- Whole-folder md5 check: five pairs from earlier rounds are byte-identical
+  (fix4 mask-stroke before/after at 1280 and at 1440, which suggests the
+  stroke never drew in those shots; fix5 delete-inspector-hover 1280/1440,
+  the same crop; r14 chat-clear failed/no-answer 1440; r11 modal
+  Lightbox/ModelPicker 1440). Reported, not deleted. Round 7's 82 shots
+  have none.
+
+### Fix round 7 gates
+
+- tsc -b: clean. Full lint (inline-styles, slava scope, eslint): clean.
+- Focused frontend: 199 files, 2818 of 2833 passed; the 15 failures were
+  in 10 files under load, and those files pass alone (267 of 267). After the
+  late chip and Assets Delete change: the ratchet, r7 and the 35 suites that
+  render or read the touched components, 608 of 608.
+- Ratchet file alone: about 10.7 s.
+- Backend (iso_presence.sh): 340 passed across followups, channel, pins,
+  CLI commands, agent_start and proposals.
+- vite build plus check-build-budget: 412,833 B raw and 125,537 B gzip
+  (limit 512,000).
+- Live (backend 8795, Vite 5795 with VITE_NEBULA_BACKEND_PORT=8795, nothing
+  paid): exits 5 of 5 (surfaces scale 1 to 0.96 monotonically by 294 ms,
+  inert from the first frame; a row collapses 80 to under 1 px with no
+  transform; reduced motion fades at full height), open list 3 of 3 (0 px
+  cut in every frame, on arrival and on leave), colours 4 of 4; blocked
+  requests the 2 canaries only.
