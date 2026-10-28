@@ -653,13 +653,14 @@ def test_m3_below_the_limit_a_clear_or_load_holds_the_canvas_first(app, monkeypa
     else:
         response = client.request("DELETE", "/api/graph?force=true", headers=AGENT)
     assert response.status_code == 200, response.text
-    assert response.json().get("heldCanvas") is True
-    (held,) = _held(store)
-    assert ONLY_W in _held_values(held)
+    # Fix round 8 (GM's rule (a)): filed untouched first, never opened.
+    assert response.json()["savedCanvas"]["name"] == "Recovered canvas"
+    assert _held(store) == []
     events = [call.args[0] for call in sent.call_args_list if call.args and call.args[0].get("type") == "projectsChanged"]
     action = "replaced" if route == "import" else "cleared"
     # The agent's own row from fix round 6 on (GM r7): its id and colour too.
-    assert any(event.get("change") == "canvasHeld" and {"action": action, "agent": "Probe", "agentId": "ext:probe"}.items()
+    assert any(event.get("change") == "canvasHeld" and {"action": action, "agent": "Probe", "agentId": "ext:probe",
+                                                        "savedAs": "Recovered canvas"}.items()
                <= (event.get("canvasHeld") or {}).items() for event in events)
     listing = client.get("/api/projects", headers=PERSON).json()
     assert listing["canvasSaved"]["name"] == "Recovered canvas"
@@ -800,11 +801,12 @@ def test_m3_undo_across_the_hold_never_reaches_the_held_canvas(app, monkeypatch)
     applied = client.post("/api/graph/apply", headers=AGENT,
                           json={"note": "x", "nodes": [{"ref": "+a", "definitionId": "text-input", "params": {"value": "applied"}}]})
     assert applied.status_code == 200, applied.text
-    (held,) = _held(store)
-    assert ONLY_W in _held_values(held) and "applied" not in _held_values(held)
+    # Fix round 8 (GM's rule (a)): the person's canvas is filed first, and
+    # the apply is on a copy (waiting: the free place went to the canvas).
+    assert _held(store) == []
+    assert _projects_holding(client, store, ONLY_W) == ["Recovered canvas"]
     token = applied.json()["undo"]["token"]
     client.post("/api/graph/apply/undo", headers=AGENT, json={"token": token})
-    assert _held(store) == [held]
     client.get("/api/projects", headers=PERSON)
     assert _projects_holding(client, store, ONLY_W) == ["Recovered canvas"]
     assert _projects_holding(client, store, "applied") == []

@@ -150,7 +150,10 @@ export interface ProjectsChangedEvent {
    * 'cleared' | 'replaced' | 'changed'), or was refused at the limit
    * ('clear' | 'replace' | 'change'); agent null when unnamed. `agentId` and
    * `color` (the agent's cursor's) make the Agent log row the agent's (N-3). */
-  canvasHeld?: { action: string; agent: string | null; agentId?: string; color?: string };
+  canvasHeld?: { action: string; agent: string | null; agentId?: string; color?: string;
+    /** GM's rule (a): the person's canvas was saved first as this project,
+     * untouched; `copy` when the agent's write changed a copy of it. */
+    savedAs?: string; copy?: boolean };
 }
 
 /** The active project's pins, sent after graphSync and on every pin change. */

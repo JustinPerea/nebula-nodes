@@ -400,6 +400,8 @@ ALLOWLIST: dict[tuple[str, str], str] = {
     # Projects: each names its project by id or checks the body's workspaceRevision (_project_revision).
     ("POST", "/api/projects/recover"): "saves a recovered copy as a new project; never the live graph",
     ("POST", "/api/projects/catalog-restore/dismiss"): "closes the restore notice on the Projects home; writes no graph",
+    ("POST", "/api/projects/canvas-held-unreadable/dismiss"): (
+        "closes the notice that held canvases couldn't be read; writes no graph"),
     ("POST", "/api/projects"): "the person's or an agent's create: checked by the body's workspaceRevision",
     ("POST", "/api/projects/{project_id}/open"): "the person's or an agent's open: checked by the body's workspaceRevision",
     ("PUT", "/api/projects/{project_id}"): (

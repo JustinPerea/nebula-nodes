@@ -37,7 +37,7 @@ from services import project_store as store_module  # noqa: E402
 from services.cli_graph import CLIGraph  # noqa: E402
 from services.project_store import ProjectStore  # noqa: E402
 from tests.conftest import PERSON  # noqa: E402
-from tests.test_project_catalog_restore_fix2 import _add_text, _create, _rev, app  # noqa: E402,F401
+from tests.test_project_catalog_restore_fix2 import _add_text, _create, _rev, _values, app  # noqa: E402,F401
 from tests.test_project_catalog_restore_fix3 import _restart  # noqa: E402
 from tests.test_project_catalog_restore_fix5 import (  # noqa: E402
     ONLY_W, _free_a_slot, _held, _held_values, _live_values, _make_room_without_listing, _projects_holding, _waiting,
@@ -123,11 +123,13 @@ def test_m1_the_refusal_after_a_restore_is_codex_s_agent_log_line(app, monkeypat
 
 
 def test_m1_below_the_limit_the_persons_canvas_is_saved_first_then_the_write_goes_on(app, monkeypatch):
-    """Room for the canvas: the guard settles it as a listing would, so the
-    person's canvas is saved intact as its own project before the agent's
-    write lands on it (and the agent's own undo brings it back)."""
+    """Room for the canvas: the guard files the person's canvas untouched as
+    its own project, never opened, and the agent's write goes on a copy (GM's
+    rule (a), fix round 8, replacing "lands on it"); the agent's own undo
+    works on the copy and never reaches the filed project."""
     client, store, _graph, state = app
-    _restored_with_the_open_project_gone(client, store, state, monkeypatch, limit=4)
+    _restored_with_the_open_project_gone(client, store, state, monkeypatch, limit=5)
+    before = _live_values(main_module.cli_graph)
     main_module.manager.broadcast_raw.reset_mock()
     nodes = list(main_module.cli_graph.nodes)
     applied = client.post("/api/graph/apply", headers=CODEX, json={"note": "fresh", "remove": nodes, "nodes": [
@@ -140,8 +142,10 @@ def test_m1_below_the_limit_the_persons_canvas_is_saved_first_then_the_write_goe
     undone = client.post("/api/graph/apply/undo", headers=CODEX, json={"token": applied.json()["undo"]["token"]})
     assert undone.status_code == 200, undone.text
     client.get("/api/projects", headers=PERSON)
-    assert ONLY_W in _live_values(main_module.cli_graph)
-    assert _projects_holding(client, store, ONLY_W) == [restore["recoveredCanvas"]["name"]]
+    catalog = json.loads(store.path.read_text())
+    original = catalog["projects"][filed[0]["projectId"]]
+    assert sorted(_values(original)) == sorted(before)
+    assert _projects_holding(client, store, "codex-scratch") == []
 
 
 def test_m1_mcp_and_the_cli_say_the_refusal_after_a_restore(app, monkeypatch, capsys):
@@ -700,6 +704,7 @@ def test_gm7_the_size_cap_forms():
     assert main_module.canvas_waiting_person_reason("storage", trash_has_items=True) == (
         "It isn't saved as a project yet because Nebula's project list is full. Permanently delete a project in "
         "Recently deleted and Nebula will save it, or open an existing project to work in.")
+    # GM r9 (3), fix round 8: the empty-Recently-deleted form, verbatim.
     assert main_module.canvas_waiting_person_reason("storage", trash_has_items=False) == (
         "It isn't saved as a project yet because Nebula's project list is full. Delete a project, then remove it "
-        "from Recently deleted too, and Nebula will save it, or open an existing project to work in.")
+        "from Recently deleted too, and Nebula will save it. You can also open an existing project to work in.")

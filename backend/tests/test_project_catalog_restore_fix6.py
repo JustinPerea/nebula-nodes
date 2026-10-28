@@ -145,12 +145,15 @@ def test_m1_below_the_limit_an_agent_write_holds_the_canvas_first(app, monkeypat
     main_module.manager.broadcast_raw.reset_mock()
     response = client.request(method, path, headers=CODEX, **kwargs)
     assert response.status_code == 200, response.text
-    (held,) = _held(store)
-    assert ONLY_W in _held_values(held) and "c1" in _held_values(held)
+    # GM's rule (a) (fix round 8): the person's canvas is filed untouched
+    # first, never opened, and the write goes on a copy (here the copy waits:
+    # the one free place went to the person's canvas).
+    assert response.json()["savedCanvas"]["name"] == "Recovered canvas"
+    assert _held(store) == []
     (event,) = _events("canvasHeld")
-    assert {"action": "changed", "agent": "Codex", "agentId": "ext:codex"}.items() <= event["canvasHeld"].items()
-    listing = client.get("/api/projects", headers=PERSON).json()
-    assert listing["canvasSaved"]["name"] == "Recovered canvas"
+    assert {"action": "changed", "agent": "Codex", "agentId": "ext:codex", "savedAs": "Recovered canvas",
+            "copy": True}.items() <= event["canvasHeld"].items()
+    client.get("/api/projects", headers=PERSON)
     assert _projects_holding(client, store, ONLY_W) == ["Recovered canvas"]
     for agents in ("codex-scratch", "restored-by-agent", "added"):
         assert _projects_holding(client, store, agents) == []
@@ -161,11 +164,16 @@ def test_m1_two_agent_writes_at_once_hold_the_canvas_once(app, monkeypatch):
     client, store, graph, state = app
     ids = _waiting(client, store, graph, state, monkeypatch)
     _make_room_without_listing(client, store, ids[0])
+    statuses = []
     for value in ("one", "two"):
         response = client.post("/api/graph/node", headers=CODEX,
                                json={"definitionId": "text-input", "params": {"value": value}})
-        assert response.status_code == 200, response.text
-    assert len(_held(store)) == 1
+        statuses.append(response.status_code)
+    # Fix round 8 (GM's rule (a)): the first files the person's canvas once;
+    # the second is on the copy, which waits at the limit, so it is refused.
+    assert statuses == [200, 409]
+    assert _held(store) == []
+    assert _projects_holding(client, store, ONLY_W) == ["Recovered canvas"]
 
 
 def test_m1_the_persons_own_writes_are_never_blocked(app, monkeypatch):

@@ -131,10 +131,15 @@ interface ProjectState {
   restoreRoom: RestoreRoom | null;
   /** Held canvases that couldn't be read (the listing's
    * `canvasHeldUnreadable`, review 6, L-1): the person's line. */
-  canvasHeldUnreadable: { count: number | null } | null;
+  canvasHeldUnreadable: { count: number | null; at?: string } | null;
+  /** The person's × on that line (GM r9: a one-time report): hides it and
+   * tells the backend not to list it again. */
+  dismissCanvasHeldUnreadable: () => void;
   /** A waiting canvas was saved as this project (the listing's
-   * `canvasSaved`): GM's toast, shown once per tab. */
-  canvasSaved: { id: string; name: string; overSaveLimit?: boolean; filed?: { id: string; name: string; overSaveLimit?: boolean }[] } | null;
+   * `canvasSaved`): GM's toast, shown once per tab. `another`: a restore
+   * notice named a canvas before it ("Another canvas…"). */
+  canvasSaved: { id: string; name: string; overSaveLimit?: boolean; another?: boolean;
+    filed?: { id: string; name: string; overSaveLimit?: boolean }[] } | null;
   dismissCanvasSaved: () => void;
   workspaceRevision: string; error: string | null;
   /** What `error`'s Details toggle holds, for that line (projectErrorDetails). */
@@ -777,6 +782,7 @@ function keepReplacedCanvasAsCopy(): Promise<{ id: string; name: string } | null
  * flight from an earlier test is superseded, so its late answer writes nothing. */
 export function resetProjectStoreForTests(): void {
   dismissedRestores.clear();
+  dismissedHeldNotes.clear();
   loggedRestores.clear();
   followingSwitch = null;
   initializing = null;
@@ -1104,6 +1110,8 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
 
 /** Restores this tab closed the notice of, or wrote the Agent log line for. */
 const dismissedRestores = new Set<string>();
+/** Notes of held canvases that couldn't be read this tab closed (by `at`). */
+const dismissedHeldNotes = new Set<string>();
 const loggedRestores = new Set<string>();
 
 /** The listing's restore notice, unless the person closed it here already
@@ -1151,24 +1159,29 @@ function listingNotices(list: ProjectList): ListingNotices {
         heldTakesPlace: room.heldTakesPlace === true, ...(typeof room.waiting === 'number' ? { waiting: room.waiting } : {}) }
       : null,
     canvasHeldUnreadable: unreadable && typeof unreadable === 'object'
-      ? { count: typeof unreadable.count === 'number' ? unreadable.count : null } : null,
+      && !(typeof unreadable.at === 'string' && dismissedHeldNotes.has(unreadable.at))
+      ? { count: typeof unreadable.count === 'number' ? unreadable.count : null,
+        ...(typeof unreadable.at === 'string' ? { at: unreadable.at } : {}) } : null,
   };
   if (saved && typeof saved.id === 'string' && !toastedCanvases.has(saved.id)) {
     toastedCanvases.add(saved.id);
     const all = Array.isArray(saved.filed) && saved.filed.length > 0
       ? saved.filed.filter((row) => typeof row?.id === 'string' && typeof row?.name === 'string')
       : [{ id: saved.id, name: saved.name, ...(saved.overSaveLimit === true ? { overSaveLimit: true } : {}) }];
-    // GM r8 (a): the saved line shows once. A filing the restore notice says
-    // (its canvas line, on screen now) gets no toast; the toast is for a
-    // filing the notice doesn't say. A canvas is named once (GM, review 7).
-    const said = notices.catalogRestore?.recoveredCanvas?.id ?? null;
+    // GM r8 (a) and GM's answer 1 to review 8: the saved line shows once. A
+    // filing the restore notice says (its canvas lines, on screen now) gets
+    // no toast; the toast is for a filing the notice doesn't say. A canvas
+    // is named once (GM, review 7).
+    const restore = notices.catalogRestore;
+    const said = new Set([restore?.recoveredCanvas?.id, ...(restore?.alsoFiled ?? []).map((row) => row?.id)]
+      .filter((id): id is string => typeof id === 'string'));
     const seen = new Set<string>();
-    const filed = all.filter((row) => row.id !== said && !seen.has(row.id) && (seen.add(row.id), true))
+    const filed = all.filter((row) => !said.has(row.id) && !seen.has(row.id) && (seen.add(row.id), true))
       .map((row) => ({ id: row.id, name: row.name, ...(row.overSaveLimit === true ? { overSaveLimit: true } : {}) }));
     if (filed.length > 0) {
       const last = filed[filed.length - 1];
       notices.canvasSaved = { id: last.id, name: last.name, ...(last.overSaveLimit ? { overSaveLimit: true } : {}),
-        ...(filed.length > 1 ? { filed } : {}) };
+        ...(saved.another === true ? { another: true } : {}), ...(filed.length > 1 ? { filed } : {}) };
     }
   }
   return notices;
@@ -1758,6 +1771,17 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
     set({ catalogRestore: null });
     // Closed in this tab either way; a dismiss that didn't land shows it again on the next load.
     void api.dismissCatalogRestore(restore.id).catch(() => undefined);
+    // GM r9: the held canvases' line was merged into this notice, so its ×
+    // closes that report too.
+    if (get().canvasHeldUnreadable) get().dismissCanvasHeldUnreadable();
+  },
+  dismissCanvasHeldUnreadable: () => {
+    const note = get().canvasHeldUnreadable;
+    if (!note) return;
+    set({ canvasHeldUnreadable: null });
+    if (typeof note.at !== 'string') return;
+    dismissedHeldNotes.add(note.at);
+    void api.dismissCanvasHeldUnreadable(note.at).catch(() => undefined);
   },
   goHome: async () => {
     // The person's own way to Projects: refused, as the corner's Review is.
@@ -2000,7 +2024,8 @@ export function subscribeProjectAutosave(): () => void {
       const held = event.canvasHeld;
       if (held && typeof window !== 'undefined') {
         const message = event.change === 'canvasHeld'
-          ? canvasHeldLogLine(held.agent, held.action === 'cleared' || held.action === 'replaced' ? held.action : 'changed')
+          ? canvasHeldLogLine(held.agent, held.action === 'cleared' || held.action === 'replaced' ? held.action : 'changed',
+            typeof held.savedAs === 'string' && held.savedAs ? held.savedAs : null, held.copy === true)
           : event.change === 'canvasHoldRefused'
             ? canvasHoldRefusedLogLine(held.agent, held.action === 'clear' || held.action === 'replace' ? held.action : 'change')
             : null;

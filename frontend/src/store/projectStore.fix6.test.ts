@@ -79,7 +79,8 @@ describe("the listing's round 6 fields reach the store", () => {
     const state = useProjectStore.getState();
     expect(state.restoreRoom).toEqual({ refused: 'projects', deletes: 2, heldTakesPlace: false, waiting: 1 });
     expect(state.canvasNotFiled?.canvases).toEqual([{ name: 'Delta' }, { name: null }]);
-    expect(state.canvasHeldUnreadable).toEqual({ count: null });
+    // `at` keys the person's × (GM r9, fix round 8).
+    expect(state.canvasHeldUnreadable).toEqual({ count: null, at: '2026-10-28T10:00:00Z' });
     expect(state.canvasSaved?.filed?.map((row) => row.name)).toEqual(['Recovered canvas', 'Recovered canvas 2']);
   });
 });

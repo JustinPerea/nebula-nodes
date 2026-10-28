@@ -48,7 +48,7 @@ import zlib
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Callable, Iterator, NamedTuple
+from typing import Any, Callable, Iterator, Mapping, NamedTuple
 from uuid import uuid4
 
 from services import catalog_recovery, project_cover
@@ -94,6 +94,14 @@ RESTORES_KEPT = 10
 # `since` and its one journal event (review 4 of PR #199, N-1).
 CANVAS_WAITING_NAME = "canvas-waiting.json"
 CANVAS_WAITING_BACKUP_NAME = CANVAS_WAITING_NAME + ".bak"
+# What main keeps about the person's canvas once an agent's write filed it
+# first (review 8 of PR #199, HIGH-1; GM's rule (a)): the project a settle
+# filed and opened from the waiting canvas, with the canvas's digest then
+# (``fresh``: until the canvas changes, an agent's write closes it first and
+# works elsewhere), and the copies an agent's change was made on, by the id
+# each will be filed under, with the name it takes (``copies``).
+CANVAS_PENDING_NAME = "canvas-pending.json"
+CANVAS_PENDING_BACKUP_NAME = CANVAS_PENDING_NAME + ".bak"
 # The projects deleted for good as the latest commit that changed them left
 # them (its `purged`): .bak is one commit behind, so a delete for good as the
 # last commit, then a catalog.json damaged past its head, brought the project
@@ -202,6 +210,9 @@ def _log(message: str) -> None:
 # A kept damaged file's name says when it was kept: ``<name>.damaged-<UTC>-<id>``.
 _STAMP_FORMAT = "%Y%m%dT%H%M%SZ"
 _KEPT_AT = re.compile(r"\.damaged-(\d{8}T\d{6}Z)")
+# The held canvases' kept files (review 8 of PR #199, N-1): damaged copies,
+# canvases that couldn't be filed, and the moved canvas-held.json.
+_HELD_KEPT = re.compile(r"\.(damaged|unfileable|migrated)-(\d{8}T\d{6}Z)-[0-9a-f]{8}$")
 
 
 def _stamp(moment: datetime) -> str:
@@ -448,7 +459,9 @@ def _waiting_record(found: Any) -> dict[str, Any] | None:
         if isinstance(saved, dict) and isinstance(saved.get("id"), str) and isinstance(saved.get("name"), str) \
                 and catalog_recovery.dated(saved.get("at")):
             record = {"id": saved["id"], "name": saved["name"], "at": saved["at"],
-                      **({"overSaveLimit": True} if saved.get("overSaveLimit") is True else {})}
+                      **({"overSaveLimit": True} if saved.get("overSaveLimit") is True else {}),
+                      # After a restore notice named a canvas (GM's answer 1 to review 8).
+                      **({"another": True} if saved.get("another") is True else {})}
             # Every canvas filed together (review 6 of PR #199, N-2), each
             # marked when it is over the save limit (GM, review 7).
             filed = saved.get("filed")
@@ -466,6 +479,26 @@ def _waiting_record(found: Any) -> dict[str, Any] | None:
     return {"reason": found["reason"], "from": owner, "since": found["since"], "journaled": found["journaled"]}
 
 
+def _pending_record(found: Any) -> dict[str, Any] | None:
+    """canvas-pending.json's record when its fields are what main writes:
+    {fresh: {projectId, digest} or None, copies: {id: name}}; else None."""
+    if not isinstance(found, dict):
+        return None
+    fresh, copies = found.get("fresh"), found.get("copies")
+    if fresh is not None and not (isinstance(fresh, dict) and _is_hex_id(fresh.get("projectId"))
+                                  and isinstance(fresh.get("digest"), str) and len(fresh["digest"]) == 64):
+        return None
+    if not isinstance(copies, dict) or not all(_is_hex_id(key) and isinstance(name, str) and 0 < len(name) <= 200
+                                               for key, name in copies.items()):
+        return None
+    return {"fresh": None if fresh is None else {"projectId": fresh["projectId"], "digest": fresh["digest"]},
+            "copies": dict(copies)}
+
+
+def _is_hex_id(value: Any) -> bool:
+    return isinstance(value, str) and len(value) == 32 and all(c in "0123456789abcdef" for c in value)
+
+
 def _held_unreadable_note(found: Any) -> dict[str, Any] | None:
     """canvas-held.json's ``unreadable`` note ({count: int or None for
     unknown, kept: [file names], at}) when its fields are what this writes."""
@@ -476,7 +509,10 @@ def _held_unreadable_note(found: Any) -> dict[str, Any] | None:
         return None
     if not isinstance(kept, list) or not all(isinstance(name, str) for name in kept):
         return None
-    return {"count": count, "kept": list(kept), "at": found["at"]}
+    # The person closed its notice (×, GM r9): kept, but not shown again
+    # until a new loss writes a new note.
+    dismissed = {"dismissedAt": found["dismissedAt"]} if catalog_recovery.dated(found.get("dismissedAt")) else {}
+    return {"count": count, "kept": list(kept), "at": found["at"], **dismissed}
 
 
 def _held_id(found: Any) -> str | None:
@@ -524,6 +560,41 @@ def held_entry_check(entry: dict[str, Any]) -> str:
     option): a copy whose bytes still parse after a flip loses to the other."""
     return hashlib.sha256(json.dumps(entry, sort_keys=True, ensure_ascii=False, separators=(",", ":"),
                                      default=str).encode("utf-8")).hexdigest()
+
+
+def held_items_digest(nodes: Any, edges: Any) -> str:
+    """The digest of a held canvas's content, its nodes and connections as
+    held (review 8 of PR #199, L-1): written with the canvas, so a copy
+    salvaged when neither copy passes its whole check is filed only when its
+    content is still exactly what was held."""
+    return hashlib.sha256(json.dumps({"nodes": nodes, "edges": edges}, sort_keys=True, ensure_ascii=False,
+                                     separators=(",", ":"), default=str).encode("utf-8")).hexdigest()
+
+
+def held_items_intact(entry: Mapping[str, Any]) -> bool | None:
+    """Whether a held entry's content matches its ``itemsDigest``; None when
+    it carries none (held before fix round 8)."""
+    digest = entry.get("itemsDigest")
+    if not isinstance(digest, str):
+        return None
+    return digest == held_items_digest(entry.get("nodes"), entry.get("edges"))
+
+
+def _held_salvage_choice(candidates: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Which salvaged copy of one held canvas may be filed (review 8, L-1):
+    one whose content matches the items digest it was held with; with no
+    digest to check (an entry held before fix round 8), only when both
+    copies salvage to the same content. Else None: the canvas is said lost
+    and its files kept, never filed with altered content unsaid."""
+    for candidate in candidates:
+        if held_items_intact(candidate) is True:
+            return candidate
+    if any(held_items_intact(candidate) is False for candidate in candidates):
+        return None
+    if len(candidates) == 2 and held_items_digest(candidates[0]["nodes"], candidates[0]["edges"]) \
+            == held_items_digest(candidates[1]["nodes"], candidates[1]["edges"]):
+        return candidates[0]
+    return None
 
 
 def _held_entry_salvaged(found: Any) -> dict[str, Any] | None:
@@ -1476,6 +1547,38 @@ class ProjectStore:
         for path in paths:
             self._write_file(path, encoded)
 
+    def canvas_pending(self) -> dict[str, Any]:
+        """main's record of the person's canvas an agent's write filed first
+        and the copies an agent works on (CANVAS_PENDING_NAME), from either
+        copy that reads; an empty record when neither does."""
+        for name in (CANVAS_PENDING_NAME, CANVAS_PENDING_BACKUP_NAME):
+            try:
+                found = json.loads((self.root / name).read_text(encoding="utf-8"))
+            except FileNotFoundError:
+                continue
+            except (OSError, ValueError) as exc:
+                _log(f"{name} could not be read ({exc})")
+                continue
+            record = _pending_record(found)
+            if record is not None:
+                return record
+            _log(f"{name} doesn't hold the pending canvases' record; not using it")
+        return {"fresh": None, "copies": {}}
+
+    def set_canvas_pending(self, value: dict[str, Any]) -> None:
+        """Write canvas_pending's record, both copies (removed when empty).
+        Raises OSError."""
+        paths = (self.root / CANVAS_PENDING_NAME, self.root / CANVAS_PENDING_BACKUP_NAME)
+        if not value.get("fresh") and not value.get("copies"):
+            for path in paths:
+                path.unlink(missing_ok=True)
+            return
+        self._ensure_root()
+        encoded = json.dumps({"fresh": value.get("fresh"), "copies": value.get("copies") or {}},
+                             ensure_ascii=False, indent=1).encode("utf-8")
+        for path in paths:
+            self._write_file(path, encoded)
+
     # -- the canvases held aside (one file per canvas: review 7 of PR #199, L-3) --
 
     @property
@@ -1599,6 +1702,40 @@ class ProjectStore:
         except OSError as exc:
             _log(f"could not keep the note of the held canvases that couldn't be read: {exc}")
 
+    def _prune_held_kept(self) -> None:
+        """Delete the held canvases' kept files past the catalog's own bound
+        (DAMAGED_KEPT_*: the newest DAMAGED_KEPT_MIN of each kind always, up
+        to DAMAGED_KEPT_MAX within DAMAGED_KEPT_DAYS), by when each was kept
+        (its name); never one the note of lost canvases names while it is
+        said. Each kind on its own: damaged copies, unfileable canvases, and
+        the moved canvas-held.json (review 8 of PR #199, N-1)."""
+        named = set((self._held_note or {}).get("kept") or [])
+        cutoff = datetime.now(timezone.utc) - timedelta(days=DAMAGED_KEPT_DAYS)
+        found: dict[str, list[tuple[datetime, Path]]] = {}
+        candidates = [*(self.held_dir.iterdir() if self.held_dir.is_dir() else []),
+                      *self.root.glob(f"{CANVAS_HELD_NAME}*")]
+        for path in candidates:
+            match = _HELD_KEPT.search(path.name)
+            if match is None or path.is_symlink():
+                continue
+            try:
+                kept_at = datetime.strptime(match.group(2), _STAMP_FORMAT).replace(tzinfo=timezone.utc)
+            except ValueError:
+                continue
+            found.setdefault(match.group(1), []).append((kept_at, path))
+        for kind, files in found.items():
+            files.sort(reverse=True)  # newest first
+            for index, (kept_at, path) in enumerate(files):
+                if str(path.relative_to(self.root)) in named:
+                    continue
+                if index < DAMAGED_KEPT_MIN or (kept_at >= cutoff and index < DAMAGED_KEPT_MAX):
+                    continue
+                try:
+                    path.unlink()
+                    _log(f"deleted the old kept file {path.name}")
+                except OSError as exc:
+                    _log(f"could not delete the old kept file {path.name}: {exc}")
+
     def canvas_held(self) -> list[dict[str, Any]]:
         """The live canvases held aside while they wait to be saved as their
         own projects (main._hold_live_canvas), oldest first. [] for none.
@@ -1614,6 +1751,7 @@ class ProjectStore:
         canvas never costs another. canvas-held.json from before is moved in
         first (_migrate_legacy_held)."""
         self._held_note = self._read_held_note()
+        self._prune_held_kept()
         entries = self._migrate_legacy_held()
         on_disk = {entry["projectId"] for entry in entries}
         lost: list[str] = []
@@ -1624,11 +1762,11 @@ class ProjectStore:
                 self._read_held_file(main, project_id), self._read_held_file(backup, project_id))
             entry = main_found if main_status == "read" else backup_found if backup_status == "read" else None
             if entry is None:
-                for found in (main_found, backup_found):
-                    if isinstance(found, dict):
-                        entry = _held_entry_salvaged({**found, "projectId": project_id})
-                        if entry is not None:
-                            break
+                # Neither copy passes its whole check: a copy's content is
+                # filed only when it is exactly what was held (L-1).
+                candidates = [salvaged for found in (main_found, backup_found) if isinstance(found, dict)
+                              if (salvaged := _held_entry_salvaged({**found, "projectId": project_id})) is not None]
+                entry = _held_salvage_choice(candidates)
             damaged = [path for path, status in ((main, main_status), (backup, backup_status)) if status == "damaged"]
             if entry is None:
                 kept += self._keep_held_aside(damaged)
@@ -1771,7 +1909,26 @@ class ProjectStore:
             age = (datetime.now(timezone.utc) - datetime.fromisoformat(note["at"])).total_seconds()
         except (TypeError, ValueError):
             return None
-        return dict(note) if 0 <= age <= HELD_UNREADABLE_SECONDS else None
+        if note.get("dismissedAt"):
+            return None
+        return {key: note[key] for key in ("count", "kept", "at")} if 0 <= age <= HELD_UNREADABLE_SECONDS else None
+
+    def dismiss_held_unreadable(self, at: str) -> bool:
+        """The person closed the notice that held canvases may be lost (×,
+        GM r9): it isn't shown again. False when ``at`` isn't the note shown
+        (already closed, or a newer loss came). Read canvas_held first."""
+        note = getattr(self, "_held_note", None)
+        if note is None or note.get("at") != at or note.get("dismissedAt"):
+            return False
+        closed = {**note, "dismissedAt": now()}
+        try:
+            with self._locked():
+                self._ensure_held_dir()
+                self._write_file(self.held_dir / CANVAS_HELD_NOTE_NAME, json.dumps(closed, ensure_ascii=False).encode("utf-8"))
+        except OSError as exc:
+            raise ProjectStoreError("Project storage is unavailable; the canvas was preserved") from exc
+        self._held_note = closed
+        return True
 
     def take_held_damage(self) -> dict[str, Any] | None:
         """The unreadable note canvas_held just made (once), for main's journal."""

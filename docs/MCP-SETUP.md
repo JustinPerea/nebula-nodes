@@ -3013,10 +3013,30 @@ Nebula process restores the same folder. The restore:
    adding, removing or changing nodes and connections, `apply`, `restore`, runs,
    uploads that add a node, a clear, a graph load), and again in the write
    step of a route that waits on something first. Whether the canvas waits
-   is read from the canvas itself: right after a restore, before anything
-   has listed the projects, your first write settles it as a listing would
-   (saved as its own project when there is room, and your write then lands
-   on that project; at the limit, waiting, and your write refused). At the limit it is
+   is read from the canvas itself, so right after a restore, before anything
+   has listed the projects, your first write is guarded too. Below the limit
+   (there is room for the person's canvas), Nebula first saves the person's
+   canvas, untouched, as its own project and doesn't open it; your write
+   never changes that project. A clear or a load then works on a new canvas
+   with no project; any other write (adding, removing or changing nodes,
+   `apply`, a run) works on a copy of the canvas, which the next listing (or
+   your next write) saves as its own project, "<name> copy" ("<name> copy
+   2" and on), opened, and your later writes land on it. The same holds
+   when a listing (yours, or the load client's own list before it loads)
+   has just saved and opened the waiting canvas: until the canvas changes,
+   that project is the person's, so a clear or load closes it and starts a
+   new canvas and an edit works on a copy. The reply says so
+   (`savedCanvas`, `{id, name, copy (the copy's name, edits only), message}`;
+   `message` is "Nebula saved the open canvas as its own project, “X”, and
+   cleared a new canvas." / "…and loaded “file.json” into a new canvas."
+   (HTTP without a file: "…and loaded the graph into a new canvas.") /
+   "…and made your change on a copy of it."; `nebula load` and the MCP
+   `load_graph_file` reply with the same line and `project: null`). If only
+   the person's canvas fits, the copy waits like any canvas, and your next
+   write is refused at the limit. A write sent while the project list is
+   in a transaction is refused as busy (507, `code: "project_store"`, "The
+   project list is busy, so nothing was changed. Try again."), never as the
+   limit. At the limit it is
    refused, changing nothing (409, `code: "canvas_waiting"`, `reason`,
    `action` (`change`, `clear` or `replace`), `projectLimit`). A clear or a
    load says "The project limit is reached, so a new canvas can't be saved.
@@ -3031,12 +3051,15 @@ Nebula process restores the same folder. The restore:
    Open an existing project to work in, or ask the person to permanently
    delete a project in Recently deleted."). Every MCP tool passes it on with
    "(409, canvas_waiting)" at the end; the CLI adds "(canvas_waiting)".
-   Below the limit the canvas is held aside first and the write works
-   (a clear or load says `heldCanvas: true`); the canvas it leaves has no
-   project and is never saved as the person's (open or make a project to
-   keep your work). The person's own writes are never blocked. Each held
-   or refused change is one line in the person's Agent log, on your row
-   (your name and colour). There is no cap on the held canvases together.
+   When the canvas can't be saved now for another reason (storage), it is
+   held aside first and the write works (a clear or load says `heldCanvas:
+   true`); the canvas it leaves has no project and is never saved as the
+   person's (open or make a project to keep your work). The person's own
+   writes are never blocked. Each saved-first, held or refused change is one
+   line in the person's Agent log, on your row (your name and colour):
+   "Codex changed a copy of the canvas you had open. The original was saved
+   as its own project, “X”." / "Codex cleared the canvas. The one you had
+   open was saved as its own project, “X”." (a load: "replaced"). There is no cap on the held canvases together.
    Your write that would hold a canvas bigger than a project can be saved
    (16 MiB, measured as a project) is refused (409, `code:
    "canvas_held_full"`, `scope: "canvas"`, `sizeBytes`, `limitBytes`) with
@@ -3050,20 +3073,33 @@ Nebula process restores the same folder. The restore:
    Each held canvas is read on its own: a copy that doesn't read whole (its
    nodes and connections are checked item by item, and its check must
    match) loses to the other and is kept as
-   `<projectId>.json.damaged-<UTC time>-<id>` before anything rewrites it, a
+   `<projectId>.json.damaged-<UTC time>-<id>` before anything rewrites it
+   (the held canvas also carries `itemsDigest`, a SHA-256 of its nodes and
+   connections written with it: a canvas whose content no longer matches it
+   when it is about to be saved is kept aside as `….unfileable-…` and said,
+   never saved with other content; held canvases from before it are saved
+   only when both copies agree), a
    damaged entry whose canvas still reads is still saved, one that can't be
    saved as a project is kept as `….unfileable-…` and said, and one damaged
    canvas never costs another or fails a listing. The `canvas-held.json` of
    earlier versions is moved into `canvas-held/` once (kept as
    `canvas-held.json.migrated-<UTC time>-<id>`; a cut copy still gives its
-   complete leading entries). When a held canvas may be lost the listing says so for a week
-   (`canvasHeldUnreadable`, `{count (null: unknown), kept, at}`, also in
-   `canvasNotFiled.heldUnreadable`, and one `project.canvasHeldUnreadable`
-   event). For 10 minutes after, the listing carries `canvasSaved` (`{id,
-   name, at, filed, overSaveLimit}`: `filed` names every canvas saved
-   together, each once, and `overSaveLimit` marks one saved over the save
-   limit; the person sees a toast unless the restore notice on screen says
-   it);
+   complete leading entries). Kept held files (`damaged`, `unfileable`,
+   `migrated`) are pruned by the same bound as the catalog's damaged copies
+   (below), never one the note names. When a held canvas may be lost the
+   listing says so for a week (`canvasHeldUnreadable`, `{count (null:
+   unknown), kept, at}`, also in `canvasNotFiled.heldUnreadable`, and one
+   `project.canvasHeldUnreadable` event), until the person closes its notice
+   (×; `POST /api/projects/canvas-held-unreadable/dismiss {at}`, the
+   person's only, 403 for agents; a new loss is a new note). While the
+   restore notice shows, that line is part of it. For 10 minutes after,
+   the listing carries `canvasSaved` (`{id, name, at, filed, overSaveLimit,
+   another}`: `filed` names every canvas saved together, each once,
+   `overSaveLimit` marks one saved over the save limit, and `another` that
+   a restore notice named a canvas before it). While the restore notice
+   shows, it names every canvas saved (`recoveredCanvas`, then `alsoFiled`
+   rows, `{id, name, overSaveLimit}`) and no toast does; a later filing on
+   its own gets the toast;
 4. keeps the damaged file as `catalog.json.damaged-<UTC time>-<id>` beside it
    (a hard link, or a copy), and any damaged copy as
    `catalog.json.bak.damaged-…`, before it writes anything. Nebula deletes old
@@ -3108,7 +3144,7 @@ setAside, addedBack, addedBackCount, updatedFromDisk, updatedFromDiskCount,
 notAddedBack, notAddedBackCount, reverted, revertedCount, cameBack,
 cameBackCount, backInTrash, backInTrashCount, keptDeleted, keptDeletedCount,
 projectCount, trashCount, openProject, openFrom, openProjectMissing,
-openProjectName, recoveredCanvas, canvasNotFiled, damagedReadWhole, note}`:
+openProjectName, recoveredCanvas, alsoFiled, canvasNotFiled, damagedReadWhole, note}`:
 
 - `kind` is `restored` (from the copy named in `source`, saved at `copyAt`)
   or `rebuilt` (`source` null); `reason` is `corrupt` (not JSON, or a value
@@ -3130,7 +3166,10 @@ openProjectName, recoveredCanvas, canvasNotFiled, damagedReadWhole, note}`:
   didn't come back, `openProjectName` its name when a file had it;
 - `recoveredCanvas` (`{id, name}`) is set only when this restore is why the
   canvas was saved as its own project; a later filing (a crash between two
-  files weeks on) is its own `project.canvasFiled` event;
+  files weeks on) is its own `project.canvasFiled` event. `alsoFiled` rows
+  (`{id, name, overSaveLimit?}`) are the other canvases saved as projects
+  while the notice showed (a held canvas, an agent's copy), which the notice
+  names with it;
 - every row is marked `current: false` once it no longer holds (its project
   was restored, deleted or deleted for good since; `recoveredCanvas` once
   that project is gone, with `nameNow` after a rename; `canvasNotFiled`

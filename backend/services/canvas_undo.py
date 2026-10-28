@@ -901,6 +901,17 @@ class CanvasUndoBook:
         self._epochs[project_id] = epoch
         self._save_epochs(self._epochs, exact=(project_id,))
 
+    def rehome(self, project_id: str | None, to_project: str, project_name: str) -> None:
+        """The canvas with no project these edits were made on was just saved
+        as ``to_project`` and opened, the same canvas with the same node ids
+        (an agent's copy, PR #199 GM's rule (a)): its undo tokens and "ran
+        since" marks go with it, so the agent can still undo its edits there."""
+        for record in self._records.values():
+            if record.project_id == project_id:
+                record.project_id, record.project_name = to_project, project_name
+        for key in [key for key in self._node_runs if key[0] == project_id]:
+            self._node_runs[(to_project, key[1])] = self._node_runs.pop(key)
+
     def forget_project(self, project_id: str | None, why: str, *, advance: bool = True) -> None:
         """The project's node ids start again: its epoch moves (unless the
         caller moved it already, ``advance=False``) and its undo tokens end."""

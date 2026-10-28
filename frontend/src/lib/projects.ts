@@ -74,6 +74,9 @@ export interface CatalogRestore {
   /** The live canvas filed as its own project (it wasn't one in the restored
    * list): "<project> (recovered)", numbered, or "Recovered canvas". */
   recoveredCanvas?: { id: string; name: string; overSaveLimit?: boolean } | null;
+  /** Other canvases filed as their own projects while the notice showed
+   * (GM's answer 1 to review 8: the notice names them, no toast does). */
+  alsoFiled?: { id: string; name: string; overSaveLimit?: boolean }[];
   /** It couldn't be filed: the list is at a limit (review 2 of PR #199, L4). */
   canvasNotFiled?: { reason: 'projects' | 'storage'; current?: boolean } | null;
   /** The open project that didn't come back, and its name when a file had it. */
@@ -108,6 +111,8 @@ export interface ProjectList {
   /** A waiting canvas was saved as its own project, recently: GM's toast.
    * `filed` names every canvas saved with it (review 6, N-2). */
   canvasSaved?: { id: string; name: string; at?: string; overSaveLimit?: boolean;
+    /** Filed after a restore notice named a canvas: "Another canvas…" (GM). */
+    another?: boolean;
     filed?: { id: string; name: string; overSaveLimit?: boolean }[] };
   /** The backend's verdict on a restore from Recently deleted now, held
    * canvases counted (review 6 of PR #199, L-3): absent when it passes. */
@@ -188,6 +193,9 @@ export const purgeTrashedProject = (id: string) =>
 export const emptyProjectTrash = (ids: string[]) =>
   request<{ trash: TrashedProject[] }>("Couldn't empty Recently deleted.", '/api/projects/trash/empty', json('POST', { ids })).then((result) => result.trash);
 /** The person closed the restore notice (×): the backend doesn't list it again. */
+/** The person closed the notice that held canvases couldn't be read (GM r9). */
+export const dismissCanvasHeldUnreadable = (at: string) =>
+  request<{ dismissed: boolean }>("Couldn't close the notice.", '/api/projects/canvas-held-unreadable/dismiss', json('POST', { at }));
 export const dismissCatalogRestore = (id: string) =>
   request<{ dismissed: boolean }>("Couldn't close the notice.", '/api/projects/catalog-restore/dismiss', json('POST', { id }));
 export const listCoverChoices = (id: string) =>

@@ -339,8 +339,22 @@ def load(api: NebulaAPI, source: str, *, headers: dict[str, str] | None = None, 
             reply["size"] = size
         return reply
 
+    def saved_first(imported: dict[str, Any]) -> dict[str, Any] | None:
+        """GM's rule (a) of PR #199: the person's canvas was saved as its own
+        project first (never opened), and the file went into a new canvas."""
+        saved = imported.get("savedCanvas") if isinstance(imported, dict) else None
+        if not isinstance(saved, dict) or not isinstance(saved.get("name"), str):
+            return None
+        reply = result(imported, None, new=False)
+        reply["savedCanvas"] = {"id": saved.get("id"), "name": saved["name"]}
+        reply["note"] = (f"Nebula saved the open canvas as its own project, “{saved['name']}”, "
+                         f"and loaded “{name}” into a new canvas.")
+        return reply
+
     if active is None:
         imported = call("POST", "/api/graph/import", json=body, timeout=600.0)
+        if (first := saved_first(imported)) is not None:
+            return first
         reply = result(imported, None, new=False)
         reply["note"] = f"Loaded {name} onto the canvas (no project was open): {_counts(imported, reply['filesRestored'])}."
         return reply
@@ -353,6 +367,8 @@ def load(api: NebulaAPI, source: str, *, headers: dict[str, str] | None = None, 
         if exc.status != 413 or payload.get("limit") != "size":
             raise GraphFileError(f"{source}: {_refused(exc)}") from exc
         return _open_as_new_project(api, source, prepared, active, payload, headers, words, call, result)
+    if (first := saved_first(imported)) is not None:
+        return first
     reply = result(imported, active, new=False)
     reply["note"] = (f"Loaded {name} into {active.get('name')}, replacing its canvas: "
                      f"{_counts(imported, reply['filesRestored'])}.")

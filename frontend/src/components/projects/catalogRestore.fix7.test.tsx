@@ -64,7 +64,8 @@ describe('Review 7, N-2: a Restore no count of deletes frees', () => {
   it('says no false "after you delete a project"', () => {
     const line = restoreAtLimitTooltip(3, { refused: 'projects', deletes: null, heldTakesPlace: true, waiting: 3 });
     expect(line).not.toContain('after you delete');
-    expect(line).toBe('You can restore it once the canvases you had open are saved. The canvases you had open are holding the last places.');
+    // GM r9 (2), verbatim (fix round 8).
+    expect(line).toBe("You can restore it once the canvases you had open are saved as projects. They're holding the last places.");
   });
   it('GM answer 6: the real count, plural', () => {
     expect(restoreAtLimitTooltip(3, { refused: 'projects', deletes: 4, heldTakesPlace: true, waiting: 3 })).toBe(

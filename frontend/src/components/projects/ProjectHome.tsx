@@ -98,12 +98,15 @@ export interface ProjectHomeProps {
   canvasNotFiled?: { reason: CanvasLimit; projectLimit?: number; canvases?: { name?: string | null }[]; deletes?: number | null } | null;
   /** A waiting canvas was saved as this project (the listing's `canvasSaved`):
    * GM's toast, once per tab, naming each canvas filed with it (`filed`). */
-  canvasSaved?: { id: string; name: string; overSaveLimit?: boolean; filed?: { id: string; name: string; overSaveLimit?: boolean }[] } | null;
+  canvasSaved?: { id: string; name: string; overSaveLimit?: boolean; another?: boolean;
+    filed?: { id: string; name: string; overSaveLimit?: boolean }[] } | null;
   /** The backend's verdict on a restore now (the listing's `restoreRoom`,
    * review 6 of PR #199, L-3): Restore greys on it, held canvases counted. */
   restoreRoom?: RestoreRoom | null;
   /** Held canvases canvas-held.json couldn't read (review 6, L-1). */
   canvasHeldUnreadable?: { count: number | null } | null;
+  /** Its × (GM r9: a one-time report, closed like the restore notice). */
+  onDismissCanvasHeldUnreadable?: () => void;
   onDismissCanvasSaved?: () => void;
   /** How many projects the list may hold (the listing's `projectLimit`):
    * at it, Restore in Recently deleted is disabled with GM r7's tooltip. */
@@ -463,8 +466,10 @@ function restoreRefusedNow(count: number, projectLimit: number | undefined, pass
  * filled after it mounts, so screen readers announce it (a live region
  * reads changes, not what it held when it appeared: review 1 of PR #199,
  * L8). × closes it and puts focus on the page heading. */
-function CatalogRestoreNotice({ restore, current, onDismiss, onOpenRecentlyDeleted, heading }: {
+function CatalogRestoreNotice({ restore, current, heldUnreadable = null, onDismiss, onOpenRecentlyDeleted, heading }: {
   restore: CatalogRestore | null; current: NoticeNow; onDismiss: () => void;
+  /** GM r9: held canvases that couldn't be read, merged in as one more line. */
+  heldUnreadable?: { count: number | null } | null;
   onOpenRecentlyDeleted: (ids: string[]) => void;
   heading: RefObject<HTMLHeadingElement | null>;
 }) {
@@ -474,7 +479,7 @@ function CatalogRestoreNotice({ restore, current, onDismiss, onOpenRecentlyDelet
   const attached = useCallback((region: HTMLDivElement | null) => { if (region) setReady(true); }, []);
   // Only the lines that still hold against the list now (GM r4), so a
   // restore or delete by the person or an agent updates it as it lands.
-  const notice = ready && restore ? catalogRestoreNotice(restore, undefined, current) : null;
+  const notice = ready && restore ? catalogRestoreNotice(restore, undefined, current, { heldUnreadable }) : null;
   return (
     // A polite live region rather than role="status": the page keeps one
     // status per notice it shows (the loading line, the saved-file line),
@@ -494,6 +499,23 @@ function CatalogRestoreNotice({ restore, current, onDismiss, onOpenRecentlyDelet
           onDismiss();
         }}><X aria-hidden="true" /></button>
       </>}
+    </div>
+  );
+}
+
+/** GM r9: the held canvases that couldn't be read, when no restore notice
+ * shows to say it: its own notice, styled like the restore notice, closed
+ * with × (a one-time report; only the waiting line has no ×). */
+function CanvasHeldUnreadableNotice({ count, onDismiss, heading }: {
+  count: number | null; onDismiss: () => void; heading: RefObject<HTMLHeadingElement | null>;
+}) {
+  return (
+    <div className="project-home__notice project-home__restore" role="status">
+      <span className="project-home__restore-text">{canvasHeldUnreadableLine(count)}</span>
+      <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={() => {
+        heading.current?.focus();
+        onDismiss();
+      }}><X aria-hidden="true" /></button>
     </div>
   );
 }
@@ -521,7 +543,8 @@ function CanvasWaitingNotice({ waiting, trashCount, onOpenRecentlyDeleted }: {
 
 /** GM r5: "Once saved: the normal toast", with the project's real name. */
 function CanvasSavedToast({ project, onDismiss }: {
-  project: { id: string; name: string; overSaveLimit?: boolean; filed?: { id: string; name: string; overSaveLimit?: boolean }[] };
+  project: { id: string; name: string; overSaveLimit?: boolean; another?: boolean;
+    filed?: { id: string; name: string; overSaveLimit?: boolean }[] };
   onDismiss: () => void;
 }) {
   const [paused, setPaused] = useState(false);
@@ -535,7 +558,7 @@ function CanvasSavedToast({ project, onDismiss }: {
       <div className="project-home__toast" role="status" aria-live="polite"
         onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
         onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
-        <span className="project-home__toast-text">{canvasSavedToast(project.name, project.filed, project.overSaveLimit === true)}</span>
+        <span className="project-home__toast-text">{canvasSavedToast(project.name, project.filed, project.overSaveLimit === true, project.another === true)}</span>
         <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
       </div>
     </InNoticeRegion>
@@ -568,7 +591,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
   settingsOpen = false, onToggleSettings, loadCoverChoices, onPinCover,
   catalogRestore = null, onDismissCatalogRestore = noop,
   canvasNotFiled = null, canvasSaved = null, onDismissCanvasSaved = noop, projectLimit, restorePassesLimit = false,
-  restoreRoom = null, canvasHeldUnreadable = null,
+  restoreRoom = null, canvasHeldUnreadable = null, onDismissCanvasHeldUnreadable = noop,
   unsavedEdits = null, editsSavedAs = null, onDownloadEdits = noop, onContinueWithoutEdits = noop }: ProjectHomeProps) {
   const [query, setQuery] = useState('');
   // Offline is read-only (round 15 of PR #114): create, open, rename,
@@ -613,11 +636,11 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
         </section>
 
         <CatalogRestoreNotice restore={catalogRestore} current={current} onDismiss={onDismissCatalogRestore} heading={heading}
-          onOpenRecentlyDeleted={openTrash} />
+          heldUnreadable={canvasHeldUnreadable} onOpenRecentlyDeleted={openTrash} />
         {canvasNotFiled && !restoreSaysLimit && <CanvasWaitingNotice waiting={canvasNotFiled} trashCount={trash.length}
           onOpenRecentlyDeleted={() => openTrash()} />}
-        {canvasHeldUnreadable && <div className="project-home__notice project-home__restore project-home__waiting" role="status">
-          <span className="project-home__restore-text">{canvasHeldUnreadableLine(canvasHeldUnreadable.count)}</span></div>}
+        {canvasHeldUnreadable && !catalogRestore && <CanvasHeldUnreadableNotice count={canvasHeldUnreadable.count}
+          onDismiss={onDismissCanvasHeldUnreadable} heading={heading} />}
 
         {/* GM's WRAP rule: where "Try again" redoes the failure it is the retry, so the
             reason drops its own; where it only reloads, or can't help, the line stays whole. */}

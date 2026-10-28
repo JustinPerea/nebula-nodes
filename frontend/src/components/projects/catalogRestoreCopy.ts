@@ -47,7 +47,27 @@ export function recoveredCanvasSentence(name: string | null | undefined, overSav
  * limit (the person's own act holds a canvas whatever its size), in the
  * toast and the restore notice alike. It replaces the plain line. */
 export function canvasSavedOverLimitLine(name: string): string {
-  return `The canvas you had open was saved as its own project, ${quoted(name)}. It's over the save limit, so new changes won't save until it's smaller.`;
+  return `The canvas you had open was saved as its own project, ${quoted(name)}. ${ONE_OVER}`;
+}
+const ONE_OVER = "It's over the save limit, so new changes won't save until it's smaller.";
+
+/** GM r9 (1): every canvas saved is over the save limit. */
+const EVERY_ONE_OVER = "They're over the save limit, so new changes to them won't save until they're smaller.";
+
+/** Several canvases saved as their own projects, named up to 3, a count
+ * from 4 (GM's answer 1 to review 8: the restore notice names every canvas
+ * filed while it shows). ``lost`` adds "so nothing in them is lost" unless
+ * every one is over the save limit (its tail takes that place, as the
+ * singular over-limit line drops it). ``another``: the toast for a filing
+ * after the restore notice named one ("Other canvases you had open…";
+ * builder's plural, for GM). */
+function canvasesSavedLine(rows: { name: string; overSaveLimit?: boolean }[], lost: boolean, another = false): string {
+  const counted = rows.length > RESTORE_NAMED_MAX;
+  const everyOver = rows.every((row) => row.overSaveLimit === true);
+  const who = counted
+    ? `${rows.length} ${another ? 'other ' : ''}canvases you had open were saved as their own projects`
+    : `${another ? 'Other' : 'The'} canvases you had open were saved as their own projects, ${namedList(rows.map((row) => row.name))}`;
+  return `${who}${lost && !everyOver ? ', so nothing in them is lost.' : '.'}${overLimitTail(rows, counted)}`;
 }
 
 /** Several canvases saved, some over the save limit: only those are marked
@@ -55,6 +75,8 @@ export function canvasSavedOverLimitLine(name: string): string {
 function overLimitTail(rows: { name: string; overSaveLimit?: boolean }[], counted: boolean): string {
   const over = rows.filter((row) => row.overSaveLimit === true);
   if (over.length === 0) return '';
+  // GM r9 (1): when every saved canvas is over, they aren't named again.
+  if (over.length === rows.length && rows.length > 1) return ` ${EVERY_ONE_OVER}`;
   if (counted) {
     return over.length === 1
       ? ' One of them is over the save limit, so new changes to it won\'t save until it\'s smaller.'
@@ -174,15 +196,20 @@ export function canvasWaitingLine(reason: CanvasLimit, context: CanvasLimitConte
 /** The person's line when canvas-held.json couldn't be read and a canvas
  * held aside may be lost (the listing's `canvasHeldUnreadable`; review 6 of
  * PR #199, L-1). Default wording until GM answers. */
-export function canvasHeldUnreadableLine(count: number | null | undefined): string {
+export function canvasHeldUnreadableLine(count: number | null | undefined, kept = true): string {
+  const end = kept ? ` ${KEPT}` : '';
   if (count === 1) {
-    return "Nebula couldn't read a canvas you had open that was waiting to be saved, so it may be lost. The damaged file was kept.";
+    return `Nebula couldn't read a canvas you had open that was waiting to be saved, so it may be lost.${end}`;
   }
   if (typeof count === 'number' && count > 1) {
-    return `Nebula couldn't read ${count} canvases you had open that were waiting to be saved, so they may be lost. The damaged file was kept.`;
+    return `Nebula couldn't read ${count} canvases you had open that were waiting to be saved, so they may be lost.${end}`;
   }
-  return "Nebula couldn't read the file that kept the canvases you had open, so some may be lost. The damaged file was kept.";
+  return `Nebula couldn't read the file that kept the canvases you had open, so some may be lost.${end}`;
 }
+
+/** GM r9: the closing line when the restore notice also says the held
+ * canvases that couldn't be read (two damaged files kept). */
+const KEPT_BOTH = 'The damaged files were kept.';
 
 /** GM r6 (bug 3 and its addition): a restore from Recently deleted refused
  * by the project limit, from the Undo toast (in its place) or the list,
@@ -208,9 +235,13 @@ export function restoreAtLimitTooltip(projectLimit: number, room?: RestoreRoom |
     ? 'The canvases you had open are holding the last places.' : 'The canvas you had open is holding the last place.';
   if (room && room.deletes === null) {
     // Review 7 of PR #199, N-2: deleting can't make room (what waits doesn't
-    // fit by size), so no count of deletes is true (wording for GM).
-    const saved = (room.waiting ?? 1) > 1 ? 'the canvases you had open are saved' : 'the canvas you had open is saved';
-    return `You can restore it once ${saved}. ${room.heldTakesPlace ? holding : `You've reached the limit of ${projectLimit} projects.`}`;
+    // fit by size), so no count of deletes is true. GM r9 (2), verbatim: the
+    // canvas isn't named twice.
+    const many = (room.waiting ?? 1) > 1;
+    const saved = many ? 'the canvases you had open are saved as projects' : 'the canvas you had open is saved as a project';
+    const why = !room.heldTakesPlace ? `You've reached the limit of ${projectLimit} projects.`
+      : many ? "They're holding the last places." : "It's holding the last place.";
+    return `You can restore it once ${saved}. ${why}`;
   }
   const deletes = room?.deletes ?? 1;
   const first = deletes === 1 ? 'You can restore it after you delete a project.'
@@ -223,8 +254,21 @@ export function restoreAtLimitTooltip(projectLimit: number, room?: RestoreRoom |
  * agent's write made Nebula hold the waiting canvas aside (``action``
  * "cleared", "replaced", or "changed" for any other write: review 6 of PR
  * #199, M-1; ``agent`` null: "An agent"). */
-export function canvasHeldLogLine(agent: string | null | undefined, action: 'cleared' | 'replaced' | 'changed'): string {
-  return `${agent || 'An agent'} ${action} the canvas. The one you had open is kept until Nebula can save it as a project.`;
+export function canvasHeldLogLine(agent: string | null | undefined, action: 'cleared' | 'replaced' | 'changed',
+  savedAs?: string | null, copy = false): string {
+  const who = agent || 'An agent';
+  if (savedAs) return canvasSavedFirstLogLine(who, action, savedAs, copy);
+  return `${who} ${action} the canvas. The one you had open is kept until Nebula can save it as a project.`;
+}
+
+/** GM's rule (a) for an agent's write while a canvas waits (2026-10-28):
+ * Nebula saved the person's canvas untouched as its own project first; a
+ * clear or load started a new canvas, any other write changed a copy. */
+function canvasSavedFirstLogLine(who: string, action: 'cleared' | 'replaced' | 'changed', savedAs: string, copy: boolean): string {
+  if (copy || action === 'changed') {
+    return `${who} changed a copy of the canvas you had open. The original was saved as its own project, ${quoted(savedAs)}.`;
+  }
+  return `${who} ${action} the canvas. The one you had open was saved as its own project, ${quoted(savedAs)}.`;
 }
 
 /** GM round 5 and GM's answer 1 to review 6, the Agent log line when Nebula
@@ -238,16 +282,18 @@ export function canvasHoldRefusedLogLine(agent: string | null | undefined, actio
  * name, and no "nothing in it is lost". GM's answer 2 to review 6: it names
  * each canvas it filed (up to 3; a count from 4). */
 export function canvasSavedToast(name: string, filed?: { name: string; overSaveLimit?: boolean }[] | null,
-  overSaveLimit = false): string {
+  overSaveLimit = false, another = false): string {
   const rows = filed && filed.length > 1 ? filed : null;
   if (!rows) {
     const over = overSaveLimit || filed?.[0]?.overSaveLimit === true;
+    // GM's answer 1 to review 8: a later filing on its own, after the
+    // restore notice named the canvas it saved.
+    if (another) {
+      return `Another canvas you had open was saved as its own project, ${quoted(name)}.${over ? ` ${ONE_OVER}` : ''}`;
+    }
     return over ? canvasSavedOverLimitLine(name) : `The canvas you had open was saved as its own project, ${quoted(name)}.`;
   }
-  if (rows.length > RESTORE_NAMED_MAX) {
-    return `${rows.length} canvases you had open were saved as their own projects.${overLimitTail(rows, true)}`;
-  }
-  return `The canvases you had open were saved as their own projects, ${namedList(rows.map((row) => row.name))}.${overLimitTail(rows, false)}`;
+  return canvasesSavedLine(rows, false, another);
 }
 
 /** The projects and Recently deleted as they are now, and the canvas
@@ -345,32 +391,46 @@ function holding<R extends { id?: string; trashed?: boolean }>(rows: R[] | undef
 type NoticeInput = Pick<CatalogRestore, 'kind' | 'addedBack' | 'addedBackCount' | 'notAddedBackCount'>
   & Partial<Pick<CatalogRestore, 'source' | 'copyAt' | 'damagedFile' | 'setAside' | 'notAddedBack' | 'reverted'
     | 'revertedCount' | 'cameBack' | 'cameBackCount' | 'backInTrash' | 'backInTrashCount' | 'recoveredCanvas'
-    | 'canvasNotFiled' | 'damagedReadWhole' | 'openProjectMissing'>>;
+    | 'canvasNotFiled' | 'damagedReadWhole' | 'openProjectMissing' | 'alsoFiled'>>;
+
+/** What else the restore notice says while it shows (GM r9): held canvases
+ * that couldn't be read, merged in as one more outcome before the closing. */
+export interface NoticeExtras { heldUnreadable?: { count: number | null } | null }
 
 /** The open canvas's outcome (GM r3: the last outcome line before the
- * not-read-whole line), if any, as it holds now: the saved project under
- * its name now, dropped once it is gone; the limit line only while the
- * canvas still waits (the listing's `canvasNotFiled`, its limit now). */
-function canvasOutcome(restore: NoticeInput, current?: NoticeNow): { line: string; kind: 'saved' | 'limit' } | null {
-  const saved = restore.recoveredCanvas;
-  if (saved) {
-    if (!current) return { line: recoveredCanvasSentence(saved.name, saved.overSaveLimit === true), kind: 'saved' };
-    const now = current.projects.find((project) => project.id === saved.id) ?? current.trash.find((entry) => entry.id === saved.id);
-    return now ? { line: recoveredCanvasSentence(now.name || saved.name, saved.overSaveLimit === true), kind: 'saved' } : null;
+ * not-read-whole line), if any, as it holds now: the saved projects under
+ * their names now, each dropped once it is gone; the limit line only while
+ * the canvas still waits (the listing's `canvasNotFiled`, its limit now).
+ * GM's answer 1 to review 8: the notice names every canvas filed while it
+ * shows (`recoveredCanvas`, then `alsoFiled`), in one sentence. */
+function canvasOutcome(restore: NoticeInput, current?: NoticeNow): { lines: string[]; kind: 'saved' | 'limit' } | null {
+  const lines: string[] = [];
+  const seen = new Set<string>();
+  const rows: { name: string; overSaveLimit?: boolean }[] = [];
+  for (const saved of [restore.recoveredCanvas, ...(restore.alsoFiled ?? [])]) {
+    if (!saved || typeof saved.id !== 'string' || seen.has(saved.id)) continue;
+    seen.add(saved.id);
+    const now = current ? current.projects.find((project) => project.id === saved.id)
+      ?? current.trash.find((entry) => entry.id === saved.id) : null;
+    if (current && !now) continue;
+    rows.push({ name: now?.name || saved.name, ...(saved.overSaveLimit === true ? { overSaveLimit: true } : {}) });
   }
+  if (rows.length === 1) lines.push(recoveredCanvasSentence(rows[0].name, rows[0].overSaveLimit === true));
+  else if (rows.length > 1) lines.push(canvasesSavedLine(rows, true));
   const recorded = restore.canvasNotFiled?.reason;
-  if (recorded !== 'projects' && recorded !== 'storage') return null;
-  if (current && !current.canvasNotFiled) return null;
-  const reason = current?.canvasNotFiled?.reason ?? recorded;
-  return {
-    line: canvasLimitLine(reason, {
+  const waits = (recorded === 'projects' || recorded === 'storage') && !(current && !current.canvasNotFiled);
+  // A canvas the restore's record saved isn't said waiting too (it was the restore's).
+  if (waits && !restore.recoveredCanvas) {
+    const reason = current?.canvasNotFiled?.reason ?? recorded;
+    lines.push(canvasLimitLine(reason, {
       projectLimit: current?.canvasNotFiled?.projectLimit ?? DEFAULT_PROJECT_LIMIT,
       trashHasItems: (current?.trash.length ?? 0) > 0,
       canvases: current?.canvasNotFiled?.canvases,
       deletes: current?.canvasNotFiled?.deletes,
-    }),
-    kind: 'limit',
-  };
+    }));
+    return { lines, kind: 'limit' };
+  }
+  return lines.length > 0 ? { lines, kind: 'saved' } : null;
 }
 
 /** Whether a limit line asks the person to look in Recently deleted (the
@@ -381,7 +441,7 @@ function limitOpensTrash(restore: NoticeInput, canvas: { kind: string } | null, 
   return reason === 'storage' && (current?.trash.length ?? 0) > 0;
 }
 
-function rebuiltNotice(restore: NoticeInput, current?: NoticeNow): CatalogRestoreNotice {
+function rebuiltNotice(restore: NoticeInput, current?: NoticeNow, extras?: NoticeExtras): CatalogRestoreNotice {
   // GM: "Lost Recently deleted entries: not in the notice; log them."
   const all = (restore.notAddedBack ?? []).filter((row) => row.trashed !== true);
   const trashedRows = (restore.notAddedBack ?? []).length - all.length;
@@ -397,9 +457,11 @@ function rebuiltNotice(restore: NoticeInput, current?: NoticeNow): CatalogRestor
     outcomes.push(`${who} couldn't be recovered, and others may be missing too.`);
   }
   const canvas = canvasOutcome(restore, current);
-  if (canvas) outcomes.push(canvas.line);
+  if (canvas) outcomes.push(...canvas.lines);
+  const held = extras?.heldUnreadable;
+  if (held) outcomes.push(canvasHeldUnreadableLine(held.count, false));
   const opensTrash = limitOpensTrash(restore, canvas, current);
-  return layout(REBUILT, outcomes, KEPT, opensTrash, [], canvas?.kind ?? null);
+  return layout(REBUILT, outcomes, held ? KEPT_BOTH : KEPT, opensTrash, [], canvas?.kind ?? null);
 }
 
 /** The notice for `restore`: GM's sentences in GM's order. With `current`
@@ -409,8 +471,9 @@ function rebuiltNotice(restore: NoticeInput, current?: NoticeNow): CatalogRestor
  * says around them (the copy's age, "The damaged file was kept.") follows
  * what the restore did, so when every outcome has gone the opening and
  * that line remain until the person closes it. */
-export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.now(), current?: NoticeNow): CatalogRestoreNotice {
-  if (restore.kind === 'rebuilt') return rebuiltNotice(restore, current);
+export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.now(), current?: NoticeNow,
+  extras?: NoticeExtras): CatalogRestoreNotice {
+  if (restore.kind === 'rebuilt') return rebuiltNotice(restore, current, extras);
   const addedRows = restore.addedBack ?? [];
   const recordedTrashedAdded = addedRows.filter((row) => row.trashed === true);
   const recordedLiveAdded = Math.max(0, total(restore.addedBackCount, addedRows) - recordedTrashedAdded.length);
@@ -515,7 +578,7 @@ export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.no
   // The open canvas, saved as its own project (GM r3 string 1), or the
   // limit it waits on (GM r5).
   const canvas = canvasOutcome(restore, current);
-  if (canvas) outcomes.push(canvas.line);
+  if (canvas) outcomes.push(...canvas.lines);
 
   // GM r3 string 4: a damaged file that wasn't read to its end (cut,
   // zeroed, or a key damaged): what it held past that is unknown. Only
@@ -524,14 +587,20 @@ export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.no
   if (!readWhole && kept) outcomes.push(NOT_READ_WHOLE);
   // "No projects were missing." only when the restore had nothing else to
   // say, never because the other lines have since gone.
+  const filedSince = (restore.alsoFiled ?? []).length > 0;
   const saidAtFirst = recordedLiveAdded > 0 || recordedTrashedAdded.length > 0 || recordedFailed > 0
     || recordedReverted > 0 || recordedCameBack > 0 || recordedBackInTrash > 0
-    || Boolean(restore.recoveredCanvas) || Boolean(restore.canvasNotFiled) || (!readWhole && kept);
+    || Boolean(restore.recoveredCanvas) || Boolean(restore.canvasNotFiled) || filedSince || (!readWhole && kept);
   if (!saidAtFirst && readWhole) outcomes.push('No projects were missing.');
+  // GM r9: held canvases that couldn't be read, merged in as one more
+  // outcome before the closing line, which then names both files.
+  const held = extras?.heldUnreadable;
+  if (held) outcomes.push(canvasHeldUnreadableLine(held.count, false));
   // Only when the file really is kept AND something may be lost (as the
   // restore found it: it stays when the lines that called for it go).
-  const closing = kept && (recordedFailed > 0 || recordedReverted > 0 || Boolean(restore.recoveredCanvas)
-    || Boolean(restore.canvasNotFiled) || !readWhole) ? KEPT : null;
+  const restoreKept = kept && (recordedFailed > 0 || recordedReverted > 0 || Boolean(restore.recoveredCanvas)
+    || Boolean(restore.canvasNotFiled) || filedSince || !readWhole);
+  const closing = held ? (kept ? KEPT_BOTH : KEPT) : restoreKept ? KEPT : null;
   // "Open Recently deleted" while Recently deleted holds one of the notice's
   // items, and opens to them (GM r4); the size cap's line adds it too (GM r5).
   const recentlyDeletedIds = current

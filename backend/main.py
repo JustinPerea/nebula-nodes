@@ -362,7 +362,7 @@ def _catalog_restore_note(record: Mapping[str, Any]) -> str:
     if isinstance(recovered, Mapping) and recovered.get("id") and recovered.get("current") is not False:
         parts.append(f"The live canvas wasn't a project in the restored list, so it was filed as its own project "
                      f"\"{recovered.get('nameNow') or recovered.get('name') or RECOVERED_CANVAS_NAME}\" "
-                     f"({recovered['id']}) and opened; nothing on it is lost.")
+                     f"({recovered['id']}); nothing on it is lost.")
     elif isinstance(waiting, Mapping) and waiting.get("current") is not False:
         parts.append(f"The live canvas wasn't a project in the restored list and couldn't be filed as its own: the "
                      f"list is at its {waiting.get('reason')} limit (canvasNotFiled). Nothing in it is lost. The "
@@ -432,6 +432,15 @@ def _restore_as_it_holds(record: Mapping[str, Any], catalog: Mapping[str, Any]) 
             stale += 1
         elif isinstance(now.get("name"), str) and now["name"] != canvas.get("name"):
             canvas["nameNow"] = now["name"]  # renamed since
+    also = [row for row in view.get("alsoFiled") or [] if isinstance(row, dict) and row.get("id")]
+    for row in also:
+        now = (catalog.get("projects") or {}).get(row["id"]) or (catalog.get("trash") or {}).get(row["id"])
+        if not isinstance(now, Mapping):
+            row["current"] = False
+            stale += 1
+        elif isinstance(now.get("name"), str) and now["name"] != row.get("name"):
+            row["nameNow"] = now["name"]
+    view["alsoFiled"] = also
     waiting = view.get("canvasNotFiled")
     if isinstance(waiting, dict):
         # Still waiting live, or held aside (opening a project held it: M-3).
@@ -460,7 +469,8 @@ def _catalog_restore_view(record: Mapping[str, Any] | None,
             "addedBackCount", "updatedFromDisk", "updatedFromDiskCount", "notAddedBack", "notAddedBackCount",
             "reverted", "revertedCount", "cameBack", "cameBackCount", "backInTrash", "backInTrashCount",
             "keptDeleted", "keptDeletedCount", "projectCount", "trashCount", "openProject", "openFrom",
-            "openProjectMissing", "openProjectName", "recoveredCanvas", "canvasNotFiled", "damagedReadWhole")
+            "openProjectMissing", "openProjectName", "recoveredCanvas", "alsoFiled", "canvasNotFiled",
+            "damagedReadWhole")
     view = {key: copy.deepcopy(record.get(key)) for key in keys}
     for key in ("reverted", "cameBack", "backInTrash", "keptDeleted"):
         view[key] = view[key] if isinstance(view[key], list) else []
@@ -1594,6 +1604,36 @@ _canvas_guard_note: ContextVar[dict[str, Any] | None] = ContextVar("canvas_guard
 _canvas_guard_action: ContextVar[str] = ContextVar("canvas_guard_action", default="change")
 
 
+def _saved_canvas_reply(note: Mapping[str, Any] | None) -> dict[str, Any]:
+    """The agent's reply's ``savedCanvas`` when its write filed the person's
+    canvas first (GM's rule (a)): {id, name, copy?, message}."""
+    saved = (note or {}).get("saved")
+    if not saved:
+        return {}
+    action = (note or {}).get("action") or "change"
+    return {"savedCanvas": {"id": saved["id"], "name": saved["name"],
+                            **({"copy": note["copy"]} if note.get("copy") else {}),
+                            "message": canvas_saved_for_agent(action, saved["name"])}}
+
+
+async def _with_canvas_saved(response: Any, note: Mapping[str, Any]) -> Any:
+    """Add ``savedCanvas`` to a JSON object reply that doesn't carry it (an
+    agent's edit, any route): the agent reads what Nebula did first."""
+    if "application/json" not in (response.headers.get("content-type") or ""):
+        return response
+    body = b"".join([chunk async for chunk in response.body_iterator])
+    try:
+        found = json.loads(body)
+    except ValueError:
+        found = None
+    if isinstance(found, dict) and "savedCanvas" not in found:
+        found.update(_saved_canvas_reply(note))
+        body = json.dumps(found, ensure_ascii=False).encode("utf-8")
+    headers = {key: value for key, value in response.headers.items() if key.lower() != "content-length"}
+    return Response(content=body, status_code=response.status_code, headers=headers,
+                    media_type=response.media_type)
+
+
 def _refuse_tab_write_without_revision() -> None:
     """For a FENCE_IN_ROUTE route when this request writes the graph: a canvas
     tab's write that says no project (sent while the tab held none) is
@@ -1655,8 +1695,11 @@ async def project_workspace_fence(request: Request, call_next):
                 await _tell_canvas_settled(guard_note)
         response = await call_next(request)
         await _tell_canvas_settled(guard_note)
-        if guard_note.get("refused") or (guard_note.get("held") and 200 <= response.status_code < 300):
+        if guard_note.get("refused") or ((guard_note.get("held") or guard_note.get("saved"))
+                                          and 200 <= response.status_code < 300):
             await _tell_canvas_guarded(guard_note)
+        if guard_note.get("saved") and 200 <= response.status_code < 300:
+            response = await _with_canvas_saved(response, guard_note)
         return response
     finally:
         _canvas_guard_action.reset(action_token)
@@ -13338,7 +13381,8 @@ async def clear_graph(force: bool = False) -> dict:
         await _broadcast_pins()
     await _broadcast_closed_proposals(closed)
     held = await _note_waiting_canvas_guarded(hold, "cleared")
-    return {"status": "cleared", "canvasRevision": _canvas_revision(), **({"heldCanvas": True} if held else {})}
+    return {"status": "cleared", "canvasRevision": _canvas_revision(), **({"heldCanvas": True} if held else {}),
+            **_saved_canvas_reply(_canvas_guard_note.get())}
 
 
 @app.delete("/api/provider-recoveries/{run_id}/{node_id}")
@@ -15306,6 +15350,7 @@ async def import_graph(body: dict[str, Any]) -> dict:
     held = await _note_waiting_canvas_guarded(hold, "replaced")
     return {
         **({"heldCanvas": True} if held else {}),
+        **_saved_canvas_reply(_canvas_guard_note.get()),
         "status": "imported",
         "canvasRevision": _canvas_revision(),
         "idMap": id_map,
@@ -15923,6 +15968,10 @@ def _filed_canvas_name(catalog: dict[str, Any], owner: Any) -> str:
     it back), numbered from "(recovered 2)" like #195's copies; else
     "Recovered canvas"."""
     name = None
+    copy_name = (_canvas_pending().get("copies") or {}).get(owner) if isinstance(owner, str) else None
+    if copy_name:
+        # A copy an agent's change was made on (GM's rule (a)): its own name.
+        return copy_name
     if isinstance(owner, str):
         trashed = (catalog.get("trash") or {}).get(owner)
         if isinstance(trashed, dict):
@@ -15973,9 +16022,102 @@ CANVAS_SAVED_SECONDS = 600
 def _forget_canvas_waiting_cache() -> None:
     """Read the waiting record and the held canvases from disk again (a new
     process does; tests)."""
-    global _canvas_waiting_cache, _canvas_held_cache
+    global _canvas_waiting_cache, _canvas_held_cache, _canvas_pending_cache
     _canvas_waiting_cache = None
     _canvas_held_cache = None
+    _canvas_pending_cache = None
+
+
+# GM's rule (a) for PR #199 (review 8, HIGH-1): while the person's canvas
+# waits, every agent write first files it untouched, never opened, and the
+# write goes on a new canvas (a clear or a load) or a copy of it (any other).
+# Kept across restarts (project_store.canvas_pending): ``fresh``, the project
+# a settle filed and opened from the waiting canvas and the canvas's digest
+# then (until the canvas changes it is still the person's canvas as it
+# waited, so an agent's write closes it first); ``copies``, the canvases an
+# agent's change was made on, by the id each is filed under, with its name.
+_canvas_pending_cache: tuple[Any, dict[str, Any]] | None = None
+
+
+def _canvas_pending() -> dict[str, Any]:
+    global _canvas_pending_cache
+    cached = _canvas_pending_cache
+    if cached is None or cached[0] is not project_store:
+        cached = _canvas_pending_cache = (project_store, project_store.canvas_pending())
+    return cached[1]
+
+
+def _write_canvas_pending(value: dict[str, Any]) -> None:
+    """Keep the pending record: memory now, the file as well as it can (a
+    failed write is logged; the protection it carries then ends at a restart,
+    and the copies are filed as "Recovered canvas")."""
+    global _canvas_pending_cache
+    _canvas_pending_cache = (project_store, value)
+    try:
+        project_store.set_canvas_pending(value)
+    except OSError as exc:
+        print(f"[projects] could not keep the pending canvases' record: {exc}", flush=True)
+
+
+def _note_fresh_filing(project_id: str | None) -> None:
+    """The live canvas waiting to be saved was just filed as ``project_id``
+    and opened (a listing's settle, or an open's): until it changes, it is
+    still the person's canvas as it waited. None: no such project."""
+    current = _canvas_pending()
+    fresh = {"projectId": project_id, "digest": _canvas_digest(cli_graph)} if project_id else None
+    if current.get("fresh") != fresh:
+        _write_canvas_pending({**current, "fresh": fresh})
+
+
+def _fresh_filing_open(catalog: Mapping[str, Any]) -> dict[str, Any] | None:
+    """The project a settle filed and opened from the waiting canvas, when it
+    is still open, live and unchanged since; else None."""
+    fresh = _canvas_pending().get("fresh")
+    if not fresh:
+        return None
+    project_id = fresh["projectId"]
+    if cli_graph.owner != project_id or catalog["activeProjectId"] != project_id \
+            or project_id not in catalog["projects"] or _canvas_digest(cli_graph) != fresh["digest"]:
+        return None
+    return catalog["projects"][project_id]
+
+
+def _note_canvas_copy(copy_id: str | None, name: str | None = None, *, drop: str | None = None) -> None:
+    """Remember (or, ``drop``, forget) the name an agent's copy is filed under."""
+    current = _canvas_pending()
+    copies = dict(current.get("copies") or {})
+    if drop is not None:
+        copies.pop(drop, None)
+    if copy_id is not None and name:
+        copies[copy_id] = name
+    if copies != (current.get("copies") or {}):
+        _write_canvas_pending({**current, "copies": copies})
+
+
+def _canvas_copy_name(source_name: str, catalog: Mapping[str, Any]) -> str:
+    """The name the copy an agent's change was made on takes (GM, rule (a)):
+    "<name> copy", then "copy 2", 3 and so on, one past the highest in the
+    list or Recently deleted. Nebula has no duplicate-project convention to
+    follow (its only copies are a stale tab's "(recovered)"), so this is the
+    builder's, for GM to set."""
+    stem = f"{source_name[:100]} copy"
+    pattern = re.compile(re.escape(stem) + r"(?: (\d+))?")
+    highest = 0
+    for listing in (catalog.get("projects") or {}, catalog.get("trash") or {}):
+        for project in listing.values():
+            match = pattern.fullmatch(str((project or {}).get("name") or ""))
+            if match:
+                highest = max(highest, int(match.group(1) or 1))
+    # Only copies that still exist: the live canvas, or one held aside from
+    # it. A copy the agent emptied is never filed, so it doesn't take a number.
+    alive = {cli_graph.owner, *(entry.get("from") for entry in _held_canvases())}
+    for copy_id, name in (_canvas_pending().get("copies") or {}).items():
+        if copy_id not in alive:
+            continue
+        match = pattern.fullmatch(name)
+        if match:
+            highest = max(highest, int(match.group(1) or 1))
+    return stem if highest == 0 else f"{stem} {highest + 1}"
 
 
 # The waiting canvases held aside (review 5 of PR #199, M-3; GM's held
@@ -16024,10 +16166,12 @@ def canvas_waiting_person_reason(reason: str, *, trash_has_items: bool = False) 
         return (f"It isn't saved as a project yet because you've reached the limit of "
                 f"{project_store_module.MAX_PROJECTS} projects. Delete a project and Nebula will save it, or open an "
                 "existing project to work in.")
-    advice = ("Permanently delete a project in Recently deleted and Nebula will save it" if trash_has_items else
-              "Delete a project, then remove it from Recently deleted too, and Nebula will save it")
-    return (f"It isn't saved as a project yet because Nebula's project list is full. {advice}, or open an existing "
-            "project to work in.")
+    # GM r9 (3): the three forms, verbatim.
+    if trash_has_items:
+        return ("It isn't saved as a project yet because Nebula's project list is full. Permanently delete a "
+                "project in Recently deleted and Nebula will save it, or open an existing project to work in.")
+    return ("It isn't saved as a project yet because Nebula's project list is full. Delete a project, then remove "
+            "it from Recently deleted too, and Nebula will save it. You can also open an existing project to work in.")
 
 
 class CanvasWaitingRefusal(HTTPException):
@@ -16184,6 +16328,9 @@ def _hold_live_canvas(exported: dict[str, Any], *, capped: bool = False) -> dict
              "since": waiting.get("since") or project_now(), "heldAt": project_now(),
              "digest": digest, "counter": int(cli_graph._counter),
              "nodes": copy.deepcopy(exported["nodes"]), "edges": copy.deepcopy(exported["edges"])}
+    # Its content's own digest (review 8 of PR #199, L-1): checked before a
+    # salvaged copy is filed, and again at the filing.
+    entry["itemsDigest"] = project_store_module.held_items_digest(entry["nodes"], entry["edges"])
     if capped and (size := _held_snapshot_bytes(entry)) > MAX_PROJECT_BYTES:
         print(f"[projects] refused to hold the waiting canvas aside for an agent: it is {size} bytes, over a "
               f"project's {MAX_PROJECT_BYTES}; nothing replaced it", flush=True)
@@ -16277,12 +16424,13 @@ def _settle_in_step() -> tuple[str, Any] | None:
     So no request ever acts on a restored catalog with the live canvas
     unsettled: an agent's write right after a restore finds it saved (and
     goes on, on that project, as after a listing) or waiting (and refused
-    at the limit). None when this thread already holds the catalog's lock
-    (a nested transaction would lose a commit): the caller refuses then.
+    at the limit). Inside a held catalog transaction (a nested one would
+    lose a commit) it refuses with the busy line (507), never a false
+    limit (review 8 of PR #199, N-2); no guard call runs inside one today.
     The filing's broadcast is the fence's, after the route
     (_canvas_guard_note's ``filed``)."""
     if getattr(project_store._local, "depth", 0):
-        return None
+        raise ProjectStoreError("The project list is busy, so nothing was changed. Try again.")
     exported = _graph_canvas_export(cli_graph)
     with project_store.transaction() as catalog:
         if not _live_canvas_unsettled(catalog):
@@ -16337,8 +16485,7 @@ def _waiting_canvas_plan() -> tuple[str, Any] | None:
             return None
         if not _live_canvas_unsettled(catalog):
             return None
-        if _settle_in_step() is None:
-            return "refuse", "projects"
+        _settle_in_step()
         if _canvas_not_filed_now() is None:
             return None
     exported = _graph_canvas_export(cli_graph)
@@ -16398,6 +16545,111 @@ async def _refuse_a_waiting_canvas_change(action: str) -> None:
     raise CanvasWaitingRefusal(plan[1], action)
 
 
+CANVAS_SAVED_FOR_AGENT = {
+    "clear": "Nebula saved the open canvas as its own project, “{name}”, and cleared a new canvas.",
+    "replace": "Nebula saved the open canvas as its own project, “{name}”, and loaded the graph into a new canvas.",
+    "change": "Nebula saved the open canvas as its own project, “{name}”, and made your change on a copy of it.",
+}
+
+
+def canvas_saved_for_agent(action: str, name: str, file_name: str | None = None) -> str:
+    """GM's agent reply when its write filed the person's canvas first (rule
+    (a)); a load names its file when the caller knows it (graph_file_client)."""
+    if action == "replace" and file_name:
+        return f"Nebula saved the open canvas as its own project, “{name}”, and loaded “{file_name}” into a new canvas."
+    return CANVAS_SAVED_FOR_AGENT.get(action, CANVAS_SAVED_FOR_AGENT["change"]).format(name=name)
+
+
+def _protect_persons_canvas(action: str) -> dict[str, Any] | None:
+    """An agent's write while the live canvas is the person's canvas waiting
+    to be saved as a project (GM's rule (a), review 8 of PR #199, HIGH-1):
+    the waiting canvas (its record, or a restore that left it unsettled) or
+    the project a settle filed and opened from it, unchanged since. The
+    person's canvas is filed untouched as its own project and never opened
+    (or that project closed), in this step, and the write goes on a new
+    canvas with no project (a clear or a load: owner None) or on a copy of
+    the canvas (any other write: owned by the copy's own id, filed under
+    "<name> copy" by the next settle). So the agent never changes the
+    project the person's canvas went into, and no clear or load forgets that
+    project's undo history (it isn't the open project when they run).
+
+    Returns {saved: {id, name}, copy: the copy's name or None}; None when
+    there is nothing to protect, or no room to file it by size (the caller's
+    hold path then holds it aside) or at the projects limit (the caller's
+    plan marks it waiting and refuses). Past a project's size it refuses
+    (CanvasHeldFull). Synchronous: no await from the check to the
+    write; never inside a catalog transaction (ProjectStoreError: N-2)."""
+    if not (cli_graph.nodes or cli_graph.edges):
+        return None
+    owner = cli_graph.owner
+    if isinstance(owner, str) and owner in (_canvas_pending().get("copies") or {}):
+        # The agent's own copy: settled as any canvas (filed and opened when
+        # there is room), and the write lands on it.
+        return None
+    try:
+        catalog = project_store.read_unlocked()
+    except ProjectStoreError:
+        return None
+    fresh = _fresh_filing_open(catalog)
+    if fresh is None and _canvas_not_filed_now() is None and not _live_canvas_unsettled(catalog):
+        return None
+    if getattr(project_store._local, "depth", 0):
+        raise ProjectStoreError("The project list is busy, so nothing was changed. Try again.")
+    exported = _graph_canvas_export(cli_graph)
+    copy_id = None if action in ("clear", "replace") else uuid4().hex
+    # The per-canvas cap, agents only (review 7, L-3): a canvas bigger than
+    # a project can be saved is never filed or copied for an agent's write;
+    # a clear or load of the project already filed closes it, copying nothing.
+    if (copy_id or fresh is None) and (size := _held_snapshot_bytes(exported)) > MAX_PROJECT_BYTES:
+        print(f"[projects] refused an agent's {action}: the person's canvas is {size} bytes, over a project's "
+              f"{MAX_PROJECT_BYTES}; nothing changed", flush=True)
+        raise CanvasHeldFull(size)
+    with project_store.transaction() as catalog:
+        fresh = _fresh_filing_open(catalog)
+        previous_owner = cli_graph.owner
+        if fresh is not None:
+            project, filed = fresh, None
+            catalog["activeProjectId"] = None
+            catalog["workspaceRevision"] = uuid4().hex
+        else:
+            if not (_canvas_not_filed_now() is not None or _live_canvas_unsettled(catalog)):
+                return None
+            if len(catalog["projects"]) + len(_held_distinct()) + 1 > project_store_module.MAX_PROJECTS:
+                # At the limit: the plan marks it waiting and refuses, as before.
+                return None
+            if _filing_room(catalog, exported) is not None:
+                return None
+            _drop_held_copies_of_live()
+            project = _file_live_canvas(catalog, exported, name=_filed_canvas_name(catalog, previous_owner))
+            filed = ("filed", (project, previous_owner))
+            catalog["activeProjectId"] = None
+            catalog["workspaceRevision"] = uuid4().hex
+        copy_name = _canvas_copy_name(project["name"], catalog) if copy_id else None
+        try:
+            project_store.commit(catalog)
+        except Exception:
+            _undo_canvas_filing(filed)
+            raise
+    # The project is committed and closed; the live canvas is now the new
+    # canvas or the copy. If state.json can't say so, the write stops here
+    # (507): the next settle would open the project again, and the write
+    # must never land on it.
+    if copy_id:
+        _note_canvas_copy(copy_id, copy_name)
+    _set_canvas_owner(copy_id)
+    _note_fresh_filing(None)
+    if filed is not None:
+        _note_canvas_settled(filed)
+    _canvas_settled_off_waiting()
+    note = _canvas_guard_note.get()
+    if note is not None:
+        note["filed"] = project["id"]
+    print(f"[projects] an agent's {action} of the person's canvas: it was saved as \"{project['name']}\" "
+          f"{project['id']} first (not opened), and the {action} goes on "
+          f"{'a copy, ' + repr(copy_name) if copy_id else 'a new canvas'}", flush=True)
+    return {"saved": {"id": project["id"], "name": project["name"]}, "copy": copy_name}
+
+
 def _guard_waiting_canvas(action: str) -> dict[str, Any] | None:
     """In the step of a write that changes a waiting canvas (``action``,
     CANVAS_ACTIONS): the canvas is held aside (on disk) and no longer the
@@ -16405,7 +16657,20 @@ def _guard_waiting_canvas(action: str) -> dict[str, Any] | None:
     unfiled one, never filed as the person's), or refused at the limit.
     Returns the hold, for _undo_waiting_canvas_guard on failure. A hold is
     never taken back (review 6 of PR #199, L-2): if the write fails, the
-    copy equal to the live canvas goes at the next settle, by its digest."""
+    copy equal to the live canvas goes at the next settle, by its digest.
+
+    An agent's write first files the person's canvas untouched (GM's rule
+    (a): _protect_persons_canvas); only a canvas that can't be filed for its
+    size is held aside, as before."""
+    if not _is_person_request():
+        note = _canvas_guard_note.get()
+        if note is not None and note.get("saved"):
+            return None
+        protected = _protect_persons_canvas(action)
+        if protected is not None:
+            if note is not None:
+                note.update(protected)
+            return None
     plan = _waiting_canvas_plan()
     if plan is None:
         return None
@@ -16451,7 +16716,7 @@ def _fence_waiting_canvas(action: str) -> None:
     (_tell_canvas_guarded). Synchronous: no await between the check and the
     hold."""
     note = _canvas_guard_note.get()
-    if note is None or note.get("held") or note.get("refused"):
+    if note is None or note.get("held") or note.get("refused") or note.get("saved"):
         return
     if is_person(current_request_headers()):
         return
@@ -16462,6 +16727,9 @@ def _fence_waiting_canvas(action: str) -> None:
         print(f"[projects] refused an agent's {action} of the canvas: it waits to be saved as a project and the "
               f"list is at its {exc.reason} limit", flush=True)
         raise
+    if note.get("saved"):
+        note.update({"action": action, **_canvas_agent()})
+        return
     if hold is None:
         return
     # The live canvas is no longer the waiting one: its held copy is. At
@@ -16488,12 +16756,17 @@ async def _tell_canvas_guarded(note: dict[str, Any]) -> None:
     "Codex tried to change the canvas you had open. Nebula stopped it …"
     (canvasHoldRefused) or "Codex changed the canvas. The one you had open is
     kept …" (canvasHeld), as the agent's row. No toast."""
-    if note.get("told") or not (note.get("refused") or note.get("held")):
+    if note.get("told") or not (note.get("refused") or note.get("held") or note.get("saved")):
         return
     note["told"] = True
     action = note.get("action") or "change"
     who = {key: note[key] for key in ("agent", "agentId", "color") if key in note}
-    if note.get("refused"):
+    if note.get("saved"):
+        # GM's rule (a): the person's canvas was saved first, untouched.
+        await _broadcast_projects_changed("canvasHeld", None, canvasHeld={
+            "action": _HELD_PAST.get(action, action), "savedAs": note["saved"]["name"],
+            **({"copy": True} if note.get("copy") else {}), **who})
+    elif note.get("refused"):
         await _broadcast_projects_changed("canvasHoldRefused", None, canvasHeld={"action": action, **who})
     else:
         await _broadcast_projects_changed("canvasHeld", None, canvasHeld={"action": _HELD_PAST.get(action, action), **who})
@@ -16566,6 +16839,12 @@ def _file_held_canvases(catalog: dict[str, Any]) -> list[tuple[dict[str, Any] | 
                 continue
         if _held_room(catalog, entry, adding) is not None:
             break
+        if project_store_module.held_items_intact(entry) is False:
+            # Its content isn't what was held (review 8, L-1): kept aside and said.
+            print(f"[projects] the held canvas {project_id} doesn't match what was held: kept aside, not saved",
+                  flush=True)
+            _set_aside_unfileable(project_id)
+            continue
         try:
             owner = OWNER_UNPROVEN if entry.get("unproven") else entry.get("from")
             project = make_project(_filed_canvas_name(catalog, owner),
@@ -16620,20 +16899,40 @@ def _note_held_filed(filed: list[tuple[dict[str, Any] | None, dict[str, Any]]]) 
             if project is None:
                 continue
             owner = OWNER_UNPROVEN if entry.get("unproven") else entry.get("from")
+            if isinstance(owner, str):
+                _note_canvas_copy(None, drop=owner)
             notice = project_store.restore_notice()
             restore_id = notice["id"] if _restore_of(notice, owner) else None
-            if restore_id:
-                project_store.note_restore(restore_id, recoveredCanvas=_saved_row(project),
-                                           canvasNotFiled=None)
             _journal("project.canvasFiled", data={"projectId": project["id"], "name": project["name"],
                                                   "from": entry.get("from"), "restoreId": restore_id, "held": True},
                      summary=f'saved the canvas held aside as its own project "{project["name"]}"',
                      actor={"kind": "system"})
-            saved.append(project)
+            if not _note_on_restore_notice(project, owner):
+                saved.append(project)
         if saved and _canvas_not_filed_now() is None:
             _note_canvases_saved(saved)
     except Exception as exc:  # noqa: BLE001 - bookkeeping on a commit that landed
         print(f"[projects] could not note the held canvases saved: {exc}", flush=True)
+
+
+def _note_on_restore_notice(project: dict[str, Any], owner: Any) -> bool:
+    """GM's answer 1 to review 8 (one saved line): while the restore notice
+    shows (not dismissed), it names every canvas filed, and no toast does.
+    The restore's own canvas is its ``recoveredCanvas``; any other canvas
+    filed while it shows joins ``alsoFiled``. False when no notice shows:
+    the caller's toast says it."""
+    notice = project_store.restore_notice()
+    if notice is None:
+        return False
+    row = _saved_row(project)
+    if not notice.get("recoveredCanvas") and _restore_of(notice, owner):
+        project_store.note_restore(notice["id"], recoveredCanvas=row, canvasNotFiled=None)
+    else:
+        also = [dict(item) for item in notice.get("alsoFiled") or [] if isinstance(item, dict)]
+        if not any(item.get("id") == row["id"] for item in also) and \
+                (notice.get("recoveredCanvas") or {}).get("id") != row["id"]:
+            project_store.note_restore(notice["id"], alsoFiled=[*also, row])
+    return True
 
 
 # Filings this close together are one listing's (the live canvas, then the
@@ -16661,7 +16960,12 @@ def _note_canvases_saved(projects: list[dict[str, Any]]) -> None:
     seen = {row["id"] for row in filed}
     filed += [_saved_row(project) for project in projects if project["id"] not in seen]
     last = projects[-1]
-    _write_canvas_waiting({"saved": {**_saved_row(last), "at": project_now(), "filed": filed}})
+    # A filing after a restore notice named the canvas it saved: "Another
+    # canvas you had open…" (GM's answer 1 to review 8).
+    latest = project_store.latest_restore() or {}
+    another = bool(latest.get("recoveredCanvas") or latest.get("alsoFiled"))
+    _write_canvas_waiting({"saved": {**_saved_row(last), "at": project_now(), "filed": filed,
+                                     **({"another": True} if another else {})}})
 
 
 def _saved_row(project: dict[str, Any]) -> dict[str, Any]:
@@ -16921,12 +17225,24 @@ def _note_canvas_settled(settled: tuple[str, Any] | None) -> None:
         notice = project_store.restore_notice()
         if settled[0] == "filed":
             project, owner = settled[1]
-            restore_id = notice["id"] if _restore_of(notice, owner) else None
-            if restore_id:
-                project_store.note_restore(restore_id, recoveredCanvas=_saved_row(project),
-                                           canvasNotFiled=None)
-            # After its commit landed: a waiting canvas leaves {saved} for the toast.
-            _canvas_settled_off_waiting(project)
+            copy = isinstance(owner, str) and owner in (_canvas_pending().get("copies") or {})
+            if copy:
+                _note_canvas_copy(None, drop=owner)
+                if cli_graph.owner == project["id"]:
+                    # The agent's edits on the copy were made with no project
+                    # open: their undo goes with the copy into its project.
+                    canvas_undo_book.rehome(None, project["id"], project["name"])
+            elif cli_graph.owner == project["id"]:
+                # Filed and opened: still the person's canvas until it changes.
+                _note_fresh_filing(project["id"])
+            restore_id = notice["id"] if _restore_of(notice, owner) and not copy else None
+            # After its commit landed: the restore notice names it while it
+            # shows (GM's answer 1 to review 8), else a waiting canvas
+            # leaves {saved} for the toast.
+            if _note_on_restore_notice(project, owner):
+                _canvas_settled_off_waiting()
+            else:
+                _canvas_settled_off_waiting(project)
             _journal("project.canvasFiled", data={"projectId": project["id"], "name": project["name"],
                                                   "from": owner if isinstance(owner, str) else None,
                                                   "restoreId": restore_id},
@@ -17294,6 +17610,21 @@ async def dismiss_catalog_restore(body: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(record_id, str) or not record_id:
         raise HTTPException(status_code=400, detail="id must be the restore's id (GET /api/projects catalogRestore.id)")
     return {"dismissed": project_store.dismiss_restore(record_id)}
+
+
+@app.post("/api/projects/canvas-held-unreadable/dismiss")
+async def dismiss_canvas_held_unreadable(body: dict[str, Any]) -> dict[str, Any]:
+    """The person closed the notice that canvases held aside couldn't be
+    read (×, GM r9: a one-time report). The person's only, like the restore
+    notice's ×. ``at`` is the listing's ``canvasHeldUnreadable.at``;
+    ``dismissed`` is false when it isn't the note shown."""
+    if not _is_person_request():
+        raise _person_only_refusal("Only the person closes the notice about canvases that couldn't be read.")
+    at = body.get("at") if isinstance(body, dict) else None
+    if not isinstance(at, str) or not at:
+        raise HTTPException(status_code=400, detail="at must be the note's time (GET /api/projects canvasHeldUnreadable.at)")
+    _held_canvases()
+    return {"dismissed": project_store.dismiss_held_unreadable(at)}
 
 
 @app.get("/api/projects/{project_id}")
@@ -18239,8 +18570,17 @@ def _refuse_a_restore_past_the_limit(catalog: dict[str, Any]) -> None:
     (review 5 of PR #199, M-3)."""
     if project_store_module.RESTORE_MAY_PASS_THE_PROJECT_LIMIT:
         return
-    if len(catalog["projects"]) + len(_held_canvases()) >= project_store_module.MAX_PROJECTS:
+    if len(catalog["projects"]) + _canvases_waiting_count() >= project_store_module.MAX_PROJECTS:
         raise ProjectLimitError("Project limit reached", "projects")
+
+
+def _canvases_waiting_count() -> int:
+    """How many canvases wait for a place in the list: the held ones (each
+    once) and the live one while it waits (review 8 of PR #199, L-2: a
+    restore counted only the held, and took the place the live one waited
+    on). restoreRoom counts the same."""
+    live = _canvas_not_filed_now() is not None and bool(cli_graph.nodes or cli_graph.edges)
+    return len(_held_distinct()) + (1 if live else 0)
 
 
 def _restore_room(catalog: dict[str, Any]) -> dict[str, Any] | None:
@@ -18260,7 +18600,7 @@ def _restore_room(catalog: dict[str, Any]) -> dict[str, Any] | None:
         return None
     limit = project_store_module.MAX_PROJECTS
     projects = len(catalog["projects"])
-    if projects + len(_held_canvases()) < limit:
+    if projects + _canvases_waiting_count() < limit:
         return None
     held = _held_distinct()
     waiting = _canvas_not_filed_now()

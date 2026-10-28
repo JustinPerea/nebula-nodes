@@ -275,7 +275,8 @@ export default function App() {
       catalogRestore={projects.catalogRestore} onDismissCatalogRestore={projects.dismissCatalogRestore}
       canvasNotFiled={projects.canvasNotFiled} canvasSaved={projects.canvasSaved} onDismissCanvasSaved={projects.dismissCanvasSaved}
       projectLimit={projects.projectLimit} restorePassesLimit={projects.restorePassesLimit}
-      restoreRoom={projects.restoreRoom} canvasHeldUnreadable={projects.canvasHeldUnreadable} />;
+      restoreRoom={projects.restoreRoom} canvasHeldUnreadable={projects.canvasHeldUnreadable}
+      onDismissCanvasHeldUnreadable={projects.dismissCanvasHeldUnreadable} />;
   } else if (isCanvas) {
     mainView = <Canvas />;
   } else if (isCommons) {

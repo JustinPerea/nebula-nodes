@@ -79,9 +79,15 @@ limit is reached, so a new canvas can't be saved. Open an existing project to
 work in, or ask the person to delete a project.", and any other edit
 (`nebula apply`, adding or removing nodes, a run) with "The open canvas isn't
 saved as a project yet because the project limit is reached, so it can't be
-changed. …". Open an existing project to work in. Below the limit a change
-holds the canvas aside first and then lands on a canvas with no project that
-is never saved, so open or make a project before you build. A canvas bigger
+changed. …". Open an existing project to work in. Below the limit Nebula
+first saves the person's canvas, untouched, as its own project (not opened),
+and your change never touches it: `nebula clear` and `nebula load` then work
+on a new canvas ("Nebula saved the open canvas as its own project, “X”, and
+cleared a new canvas." / "…and loaded “file.json” into a new canvas."), and
+any other change works on a copy of it ("…and made your change on a copy of
+it."), saved as "X copy" on the next listing or your next change, which then
+lands on it. The same holds right after a listing saved and opened the
+waiting canvas, until it changes. A canvas bigger
 than a project can be saved is never held for you: that change is refused
 (409 `canvas_held_full`, "This canvas is too big for Nebula to keep aside, so
 nothing was changed. Work in an existing project, or make the canvas smaller
