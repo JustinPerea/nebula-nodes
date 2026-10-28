@@ -36,6 +36,7 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import main as main_module  # noqa: E402
+from services import project_store as store_module  # noqa: E402
 from services.cli_graph import CLIGraph  # noqa: E402
 from services.execution_runs import ExecutionRunRegistry  # noqa: E402
 from services.project_store import (  # noqa: E402
@@ -344,17 +345,33 @@ def test_a_project_moved_to_recently_deleted_after_the_copy_stays_there(tmp_path
     assert record["updatedFromDisk"] == [{"id": beta, "name": "Beta", "trashed": True}]
 
 
-def test_a_project_deleted_for_good_after_the_copy_comes_back_rather_than_being_dropped(tmp_path, monkeypatch):
+def test_a_project_deleted_for_good_after_the_copy_stays_deleted_by_the_side_file(tmp_path, monkeypatch):
+    """A delete for good as the latest commit, then a catalog.json that can't
+    be read at all: catalog-purged.json, written right after that commit,
+    proves it (review 4 of PR #199, L-3), so it stays deleted and says so.
+    Before it, nothing proved it and the project came back from the copy."""
+    store = _store(tmp_path)
+    _alpha, beta = _add(store, "Alpha", "Beta")
+
+    _commit_without_copy(store, monkeypatch, lambda catalog: catalog["projects"].pop(beta))
+    store.path.write_text("{not json", encoding="utf-8")
+
+    assert _names(store.read()) == {"Alpha"}
+    assert [row["id"] for row in _records(store)[-1]["keptDeleted"]] == [beta]
+
+
+def test_a_project_deleted_for_good_comes_back_when_nothing_proves_it(tmp_path, monkeypatch):
     """Every project's data lives in the catalog itself, so a project the copy
-    holds is never "gone". A damaged file that can't be read at all can't
-    prove it was purged, so it comes back (to delete again) instead of being
-    dropped on that evidence. (A readable head remembers the purge, and it
+    holds is never "gone". With catalog.json unreadable and the side file
+    gone too, nothing proves the purge, so it comes back (to delete again)
+    instead of being dropped. (A readable head remembers the purge, and it
     stays deleted: test_project_catalog_restore_fix1.py.)"""
     store = _store(tmp_path)
     _alpha, beta = _add(store, "Alpha", "Beta")
 
     _commit_without_copy(store, monkeypatch, lambda catalog: catalog["projects"].pop(beta))
     store.path.write_text("{not json", encoding="utf-8")
+    (store.root / store_module.PURGED_NAME).unlink()
 
     assert _names(store.read()) == {"Alpha", "Beta"}
 

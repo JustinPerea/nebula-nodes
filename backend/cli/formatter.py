@@ -489,7 +489,8 @@ def format_start(start: dict[str, Any]) -> str:
     waiting = start.get("canvasNotFiled") or {}
     if waiting.get("note"):
         # The live canvas isn't a project and the list had no room to save it.
-        lines.append(f"CANVAS NOT SAVED AS A PROJECT ({waiting.get('reason')} limit): {waiting['note']}")
+        state = "room now" if waiting.get("roomNow") else f"{waiting.get('reason')} limit"
+        lines.append(f"CANVAS NOT SAVED AS A PROJECT ({state}): {waiting['note']}")
     canvas = start.get("canvas") or {}
     project = canvas.get("project") or {}
     watching = "no browser watching" if (canvas.get("view") or {}).get("stale") else "open in the browser"

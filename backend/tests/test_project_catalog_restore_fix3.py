@@ -438,7 +438,7 @@ def test_l5_the_listing_and_start_here_carry_the_unfiled_canvas_with_an_agents_n
     _unfiled_at_the_limit(client, store, graph, state, monkeypatch, "e" * 32)
     waiting = client.get("/api/projects", headers=PERSON).json()["canvasNotFiled"]
     assert waiting["reason"] == "projects" and waiting["projectLimit"] == 3
-    assert "Recently deleted" in waiting["note"] and "nothing in it is lost" in waiting["note"]
+    assert "Recently deleted" in waiting["note"] and "Nothing in it is lost" in waiting["note"]
     start = client.get("/api/agent/start", headers=PERSON).json()
     assert start["canvasNotFiled"]["reason"] == "projects"
     assert start["canvasNotFiled"]["note"] == waiting["note"]

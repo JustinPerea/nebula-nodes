@@ -26,11 +26,17 @@ asks this module:
     rolls a project back;
   - a record the copy lacks is added back (to Recently deleted when it
     carries deletedAt);
-  - a project deleted for good (``purged``, in a file's head) stays
-    deleted when that file is the newest that says anything of it: a
-    record in a newer file (the same id made again) wins over an older
-    file's tombstone. File order decides, never a record's createdAt (a
-    clock that ran ahead writes one later than the delete);
+  - a project deleted for good (``purged``, in a file's head, and in
+    catalog-purged.json beside it, written with every commit so a damaged
+    head doesn't lose the last delete: review 4, L-3) stays deleted when
+    that file is the newest that says anything of it: a record in a newer
+    file (the same id made again) wins over an older file's tombstone. File
+    order decides, never a record's createdAt (a clock that ran ahead
+    writes one later than the delete), except that a file whose newest date
+    is older than the tombstone can't bring it back (an older damaged
+    catalog.json: review 4, L-2);
+  - no date ahead of the restore's own clock counts (``until``): a copy or
+    a record with a future date is never "newer" for it (review 4, M-3);
   - everything else the copy holds stays, and what that decided is
     reported: a record the damage cut off goes back to the copy's version
     (``reverted``), unless what is left of it shows it unchanged; one the
@@ -42,8 +48,15 @@ and the copy (review 2 of PR #199, M2): a bit flip in a key, an id or a
 section name leaves the file valid JSON, and trusting the structure filed a
 record under the wrong id and called the real one deleted. In a file that
 doesn't parse, a record whose key the damage broke is found by its own
-leading ``{"id":"<hex>"`` (review 3, M-A), and nothing nested deeper than a
-record is ever counted as one (review 3, L-2).
+leading ``{"id":"<hex>"`` (review 3, M-A), or, when the flip took its
+opening brace, by ``"<hex>":X"id":"<the same hex>"`` (review 4, M-2), and
+nothing nested deeper than a record is ever counted as one (review 3, L-2):
+its depth is counted both forward from it and from the last point known to
+sit between records, and where damage makes neither readable it isn't taken
+(review 4, L-5). A record whose key and id both changed and land one
+character off a copy record keeps the copy's version (L-5's two-flip set),
+and a record in Recently deleted's group without deletedAt (a changed key)
+is never "in Recently deleted again" (review 4, L-4).
 
 Nothing here writes; nothing here decides wording.
 """
@@ -64,11 +77,21 @@ _ENTRY_KEY = re.compile(r'"([a-f0-9]{32})"\s*:\s*(?=\{)')
 # A record's own first member (make_project writes "id" first): how salvage
 # finds a record whose key the damage broke (review 3 of PR #199, M-A).
 _RECORD_OPEN = re.compile(r'\{\s*"id"\s*:\s*"([a-f0-9]{32})"')
+# A record whose own opening brace the damage changed (review 4 of PR #199,
+# M-2: one bit turns "{" into "z", "y", "s", "k", "[", ";", 0x7f or a byte
+# that isn't UTF-8, and both anchors above hang on that byte): its key, one
+# byte that isn't a brace, then its own id, the same as the key. The second
+# group is where the brace was.
+_BROKEN_OPEN = re.compile(r'"([a-f0-9]{32})"\s*:\s*([^\s{"])\s*"id"\s*:\s*"\1"')
 # The members every project record opens with, in this order (make_project;
 # a rename or a move to Recently deleted keeps their places).
 _RECORD_HEAD = ("id", "name", "createdAt")
 # The two groups a record sits in, right before the first record of each.
 _GROUP_OPEN = re.compile(r'"(projects|trash)"\s*:\s*\{\s*$')
+# A group's key, right before the colon the head's read stopped at.
+_GROUP_KEY = re.compile(r'"(projects|trash)"\s*$')
+# The same before a record whose key the damage broke (up to its colon).
+_GROUP_BEFORE_KEY = re.compile(r'"(projects|trash)"\s*:\s*\{[^{}\[\]]{0,40}$')
 _SPACE = re.compile(r"\s*")
 # Every field metadata() reads without a default, so a record without one
 # would break the listing.
@@ -151,8 +174,12 @@ class Salvage:
     # id): (the key as an id or None, the record's id, the record, its
     # group). reconcile decides which id is theirs, with the copy's ids.
     misfiled: list[tuple[str | None, str, dict[str, Any], str | None]] = field(default_factory=list)
+    # The group each entry sat in, where the file says ("projects", "trash"),
+    # so a record is said to be back in Recently deleted only when this file
+    # had it in the list (review 4, L-4).
+    entry_groups: dict[str, str] = field(default_factory=dict)
 
-    def take(self, entry_id: str, entry: dict[str, Any]) -> bool:
+    def take(self, entry_id: str, entry: dict[str, Any], group: str | None = None) -> bool:
         """Keep ``entry`` (entry_ok) unless the store couldn't write it back."""
         if entry_id in self.entries:
             return True
@@ -161,7 +188,11 @@ class Salvage:
             return False
         self.entries[entry_id] = entry
         self.sizes[entry_id] = size
+        if group is not None:
+            self.entry_groups[entry_id] = group
         self.failed.pop(entry_id, None)
+        self.groups.pop(entry_id, None)
+        self.partial.pop(entry_id, None)
         return True
 
     @property
@@ -190,6 +221,14 @@ def entry_ok(entry_id: Any, entry: Any) -> bool:
         except ValueError:
             return False
     return True
+
+
+def fits_group(entry: dict[str, Any], group: str | None) -> bool:
+    """A record in Recently deleted's group carries when it was deleted
+    (ProjectStore._check): one that lacks it there is damaged (a flipped
+    bit in the key "deletedAt"), never a record restored since (review 4 of
+    PR #199, L-4: it read as "is in Recently deleted again")."""
+    return group != "trash" or "deletedAt" in entry
 
 
 def trashed(entry: dict[str, Any]) -> bool:
@@ -246,6 +285,15 @@ def _members(text: str, start: int, *, stop_at: tuple[str, ...] = ()) -> tuple[d
 
 _TOKEN = re.compile(r'["{}\[\]]')
 _IN_STRING = re.compile(r'["\\]')
+# What JSON allows between its tokens outside strings: a damaged quote reads
+# the text around it inside out, and that text (a name, a key) isn't this.
+_BETWEEN = re.compile(r'(?:[\s,:0-9.eE+\-]|true|false|null)*')
+# The same at a file's end, which a cut may leave inside a literal ("nu").
+_BETWEEN_AT_END = re.compile(r'(?:[\s,:0-9.eE+\-]|true|false|null)*(?:tru|tr|t|fals|fal|fa|f|nul|nu|n)?')
+# Filler a torn page leaves (zeros, bytes that aren't UTF-8): it hides what
+# was there, but isn't text read inside out.
+_FILLER = re.compile(r'[\x00\ufffd]')
+CLEAN, FILLER, BROKEN = 0, 1, 2
 
 
 def _complete_keyed_objects(text: str, start: int, stop: int) -> list[tuple[str, int]]:
@@ -354,7 +402,7 @@ def _salvage_whole(found: Salvage, whole: dict[str, Any]) -> None:
                 continue
             # The key identifies it (its own id agrees, or is unreadable).
             held.add(key_id)
-            if not (entry_ok(key_id, entry) and found.take(key_id, entry)):
+            if not (entry_ok(key_id, entry) and fits_group(entry, group) and found.take(key_id, entry, group)):
                 found.failed.setdefault(key_id, "invalid")
                 found.groups.setdefault(key_id, group)
                 found.partial.setdefault(key_id, _scalars(entry) if isinstance(entry, dict) else {})
@@ -398,27 +446,40 @@ def _record_shaped(members: dict[str, Any]) -> bool:
         and _moment(members.get("createdAt")) is not None
 
 
-def _at_record_depth(text: str, start: int) -> bool:
-    """Whether the object opening at ``text[start]`` sits no deeper than a
-    record does (inside the catalog and one of its groups). Read forward
-    from it: past a record, what follows closes at most its group and the
-    catalog, two levels; past an object nested in a record (a snapshot, a
-    node's params), more closes before the file ends. A cut file closes
-    fewer, so it never makes a record look nested. Read from the object
-    itself, so damage before it (a broken key's stray quote, a torn page)
-    can't throw the count."""
-    depth = 0
+def _scan(text: str, start: int, stop: int | None = None, depth: int = 0) -> tuple[int, int, bool]:
+    """Read the structure of ``text[start:stop]``: (its depth at the end,
+    how the bytes between tokens outside strings read: CLEAN as JSON allows,
+    FILLER with a torn page's zeros among them, BROKEN with text JSON
+    doesn't allow there (a broken quote reads the text around it inside
+    out), whether a string was still open at the end), from ``depth``.
+    Stops early, with the depth so far, at -3 or where it is BROKEN, and at
+    a torn page (two zeros in a row, which no single flip makes): past one
+    the bytes are another page's, so nothing after it can be counted, and
+    what was read up to it is FILLER (fix round 4's run: a torn record after
+    a whole one read its leftover text as broken, so the whole record looked
+    nested and was lost)."""
     index = start
+    limit = len(text) if stop is None else stop
+    torn = text.find("\x00\x00", start, limit)
+    if torn != -1:
+        limit = torn
+    state = CLEAN if torn == -1 else FILLER
     while True:
-        match = _TOKEN.search(text, index)
+        match = _TOKEN.search(text, index, limit)
+        between = _BETWEEN_AT_END if match is None and (limit == len(text) or torn != -1) else _BETWEEN
+        end = match.start() if match else limit
+        if not between.fullmatch(text, index, end):
+            if not between.fullmatch(_FILLER.sub("", text[index:end])):
+                return depth, BROKEN, False
+            state = FILLER
         if match is None:
-            return True
+            return depth, state, False
         char, index = match.group(), match.end()
         if char == '"':
             while True:
-                inner = _IN_STRING.search(text, index)
+                inner = _IN_STRING.search(text, index, limit)
                 if inner is None:
-                    return True
+                    return depth, state, True
                 index = inner.end() + (1 if inner.group() == "\\" else 0)
                 if inner.group() == '"':
                     break
@@ -427,7 +488,59 @@ def _at_record_depth(text: str, start: int) -> bool:
         else:
             depth -= 1
             if depth <= -3:
-                return False
+                return depth, state, False
+
+
+def _depth_after(text: str, start: int) -> bool | None:
+    """Whether the object opening at ``text[start]`` sits no deeper than a
+    record does, read forward from it: past a record, what follows closes
+    at most its group and the catalog, two levels; past an object nested in
+    a record (a snapshot, a node's params), more closes before the file
+    ends. A cut file closes fewer, so it never makes a record look nested.
+    None when it can't be told: text JSON doesn't allow between tokens comes
+    first (a broken quote after the object reads every brace that closes it
+    as text, and the text around it as structure: review 4 of PR #199, L-5).
+    A torn page's zeros are read past, as before. ``text[start]`` may be the
+    byte that took a record's opening brace (M-2): the scan then starts
+    inside it."""
+    opened = text.startswith(("{", "["), start)
+    depth, state, _open_string = _scan(text, start, depth=0) if opened else _scan(text, start + 1, depth=1)
+    if depth <= -3:
+        return False
+    return None if state == BROKEN else True
+
+
+def _depth_before(text: str, start: int, anchors: list[int]) -> int | None:
+    """How deep ``text[start]`` sits below the group a record sits in,
+    counted from the nearest point before it known to be between two
+    records (a group's opening, a record's key where one belongs, the end
+    of a record taken whole). None when there is none, or when what lies
+    between doesn't read as JSON (the damage is there: a broken key, a torn
+    record) and so can't be counted."""
+    at = bisect.bisect_right(anchors, start) - 1
+    if at < 0:
+        return None
+    depth, state, open_string = _scan(text, anchors[at], start)
+    if state != CLEAN or open_string:
+        return None
+    return depth
+
+
+def _at_record_place(text: str, start: int, anchors: list[int]) -> bool:
+    """Whether the object opening at ``text[start]`` sits where a record
+    does, by both counts: forward from it (_depth_after) and from the last
+    point before it known to be between records (_depth_before). Damage on
+    one side of it can throw one count, never both (a single flip); when
+    one can't be read, the other decides; when neither can, it isn't taken
+    (review 4 of PR #199, L-5: a broken quote after a whole record-shaped
+    object nested in a record made the forward count call it a record)."""
+    after = _depth_after(text, start)
+    if after is False:
+        return False
+    before = _depth_before(text, start, anchors)
+    if before is not None and before != 0:
+        return False
+    return after is True or before == 0
 
 
 def _misfiled(found: Salvage, key_id: str | None, entry: dict[str, Any], group: str | None) -> bool:
@@ -459,8 +572,18 @@ def salvage(raw: bytes, parsed: Any = _UNKNOWN) -> Salvage:
     # The head ProjectStore.prepare writes first (files saved before it put
     # activeProjectId last): readable even when the rest is cut.
     opening = _SPACE.match(text).end()
+    # Points known to sit between two records in a group (a group's opening,
+    # a record's key where one belongs, the end of a record taken whole):
+    # where _at_record_place counts a candidate's depth from (review 4, L-5).
+    anchors: list[int] = []
+    anchor_groups: dict[int, str | None] = {}  # the group each anchor sits in, where known
     if text.startswith("{", opening):
-        head, _end, _stop = _members(text, opening, stop_at=("projects", "trash"))
+        head, _end, stop = _members(text, opening, stop_at=("projects", "trash"))
+        group_at = _SPACE.match(text, stop + 1).end() if text.startswith(":", stop) else None
+        if group_at is not None and text.startswith("{", group_at):
+            anchors.append(group_at + 1)
+            named = _GROUP_KEY.search(text, max(0, stop - 24), stop)
+            anchor_groups[group_at + 1] = named.group(1) if named else None
         found.version = head.get("version", _UNKNOWN)
         if "activeProjectId" in head:
             active = head["activeProjectId"]
@@ -487,10 +610,13 @@ def salvage(raw: bytes, parsed: Any = _UNKNOWN) -> Salvage:
             expected, group = True, last_group
         else:
             expected, group = False, None
+        if expected:
+            bisect.insort(anchors, match.start())
+            anchor_groups[match.start()] = group
         members, end, stopped = _members(text, match.end())
         read_from.add(match.end())
         spans.append((match.end(), end if end is not None else max(stopped, match.end() + 1)))
-        nested = not expected and end is not None and not _at_record_depth(text, match.end())
+        nested = not expected and end is not None and not _at_record_place(text, match.end(), anchors)
         if nested:
             # Whole, but deeper than a record sits: an object a record holds
             # (review 3, L-2), whatever its members say.
@@ -514,14 +640,19 @@ def salvage(raw: bytes, parsed: Any = _UNKNOWN) -> Salvage:
                     or (isinstance(inner, dict) and _misfiled(found, inner_id, inner, None)):
                 del members[inner_id]
         entry = members if end is not None else None
-        if entry is not None and ((entry_ok(entry_id, entry) and found.take(entry_id, entry))
-                                  or _misfiled(found, entry_id, entry, group)):
+        # Where the structure puts it, for Recently deleted's rule (L-4).
+        placed = group if group is not None else _group_at(text, match.start(), anchors, anchor_groups)
+        if entry is not None and ((entry_ok(entry_id, entry) and fits_group(entry, placed)
+                                   and found.take(entry_id, entry, group))
+                                  or (fits_group(entry, placed) and _misfiled(found, entry_id, entry, group))):
             # A whole record says its own group (only Recently deleted's carry
             # deletedAt), so a record the damage cut right after it gets the
             # right one even when no group opener was read before it (a
             # record found past an earlier cut).
             last_end, position = end, end
             last_group = group or ("trash" if trashed(entry) else "projects")
+            bisect.insort(anchors, end)
+            anchor_groups[end] = last_group
             continue
         if expected and entry_id not in found.entries:
             found.failed[entry_id] = "incomplete" if entry is None else "invalid"
@@ -541,11 +672,23 @@ def salvage(raw: bytes, parsed: Any = _UNKNOWN) -> Salvage:
             if inner_end is not None and not (entry_ok(inner_id, members) and found.take(inner_id, members)):
                 _misfiled(found, inner_id, members, None)
         position = stop if stop > match.start() else match.start() + 1
-    _salvage_by_own_id(found, text, read_from, spans)
+    _salvage_by_own_id(found, text, read_from, spans, anchors, anchor_groups)
     return found
 
 
-def _salvage_by_own_id(found: Salvage, text: str, read_from: set[int], spans: list[tuple[int, int]]) -> None:
+def _group_at(text: str, start: int, anchors: list[int], anchor_groups: dict[int, str | None]) -> str | None:
+    """The group the structure says a record found by its own id sits in:
+    the group opening right before its (broken) key, else the nearest point
+    before it known to be in a group. None when neither says."""
+    opener = _GROUP_BEFORE_KEY.search(text, max(0, start - 80), start)
+    if opener is not None:
+        return opener.group(1)
+    at = bisect.bisect_right(anchors, start) - 1
+    return anchor_groups.get(anchors[at]) if at >= 0 else None
+
+
+def _salvage_by_own_id(found: Salvage, text: str, read_from: set[int], spans: list[tuple[int, int]],
+                       anchors: list[int], anchor_groups: dict[int, str | None]) -> None:
     """The records the key scan couldn't anchor on: a bit flip in a key's
     quote, colon or brace, or a hex digit turned into a control byte, a
     quote or a byte that isn't UTF-8, makes the file fail to parse and hides
@@ -557,6 +700,10 @@ def _salvage_by_own_id(found: Salvage, text: str, read_from: set[int], spans: li
       its own id (reconcile files it as a misfiled record with no key);
     - cut, but opening as a record does (id, name, createdAt): reported as
       a record the damage cut, its group told only by its deletedAt.
+    And each ``"<hex>":X"id":"<the same hex>"``, a record whose opening
+    brace the damage changed into X (review 4, M-2): read as if the brace
+    were there, under its key (key and id agree), by the same rules.
+    Either is a record only where both depth counts allow (_at_record_place).
     Anything else (an object a record holds) is not a record."""
     starts = sorted(spans)
     opens = [start for start, _end in starts]
@@ -568,16 +715,31 @@ def _salvage_by_own_id(found: Salvage, text: str, read_from: set[int], spans: li
 
     claimed = set(found.entries) | set(found.failed) | {own for _key, own, _entry, _group in found.misfiled}
     taken: list[tuple[int, int]] = []
-    for match in _RECORD_OPEN.finditer(text):
-        start, own = match.start(), match.group(1)
+    candidates = sorted([(match.start(), match.group(1), False) for match in _RECORD_OPEN.finditer(text)]
+                        + [(match.start(2), match.group(1), True) for match in _BROKEN_OPEN.finditer(text)])
+    for start, own, keyed in candidates:
         if start in read_from or own in claimed or inside(start) \
                 or any(opened < start < closed for opened, closed in taken):
             continue
         members, end, _stopped = _members(text, start)
         if end is not None:
-            if not entry_ok(own, members) or not _at_record_depth(text, start):
+            if not entry_ok(own, members) or not _at_record_place(text, start, anchors):
                 continue
-            found.misfiled.append((None, own, members, "trash" if trashed(members) else "projects"))
+            placed = _group_at(text, start, anchors, anchor_groups)
+            if not fits_group(members, placed):
+                # In Recently deleted's group without deletedAt: a key the
+                # damage changed ("d%letedAt"), never a restore (review 4, L-4).
+                found.failed[own] = "invalid"
+                found.groups[own] = placed
+                found.partial[own] = _scalars(members)
+                claimed.add(own)
+                continue
+            group = "trash" if trashed(members) else "projects"
+            if keyed:
+                if not found.take(own, members, group):
+                    continue
+            else:
+                found.misfiled.append((None, own, members, group))
             taken.append((start, end))
         elif _record_shaped(members):
             found.failed[own] = "incomplete"
@@ -588,6 +750,11 @@ def _salvage_by_own_id(found: Salvage, text: str, read_from: set[int], spans: li
         claimed.add(own)
 
 
+def dated(value: Any) -> bool:
+    """Whether ``value`` is a time with its zone, as Nebula writes them."""
+    return _moment(value) is not None
+
+
 def _moment(value: Any) -> datetime | None:
     try:
         moment = datetime.fromisoformat(value) if isinstance(value, str) else None
@@ -596,37 +763,59 @@ def _moment(value: Any) -> datetime | None:
     return moment if moment is not None and moment.tzinfo is not None else None
 
 
-def freshness(entry: dict[str, Any]) -> datetime | None:
+def _until(moment: datetime | None, until: datetime | None) -> datetime | None:
+    """``moment``, unless it is later than ``until`` (the restore's clock): a
+    date from the future was written while the clock ran ahead, and says
+    nothing about which version is newer (review 4 of PR #199, M-3)."""
+    return None if moment is None or (until is not None and moment > until) else moment
+
+
+def freshness(entry: dict[str, Any], until: datetime | None = None) -> datetime | None:
     """When a record last changed, as far as it says: its edit, its last
-    open, its move to Recently deleted or back, whichever is latest."""
-    moments = [moment for moment in (_moment(entry.get(key)) for key in _STAMPS) if moment is not None]
+    open, its move to Recently deleted or back, whichever is latest. A date
+    after ``until`` is left out."""
+    moments = [moment for moment in (_until(_moment(entry.get(key)), until) for key in _STAMPS)
+               if moment is not None]
     return max(moments) if moments else None
 
 
-def catalog_freshness(catalog: dict[str, Any]) -> datetime | None:
+def catalog_freshness(catalog: dict[str, Any], until: datetime | None = None) -> datetime | None:
     """When a catalog last changed, by what it holds: the latest date on any
     record, or on a delete for good (ProjectStore._restore picks the newest
-    copy by it, not by its name or mtime: review 2, L3)."""
-    moments = [freshness(entry) for section in ("projects", "trash")
+    copy by it, not by its name or mtime: review 2, L3), leaving out the
+    dates after ``until`` (a clock that ran ahead: review 4, M-3)."""
+    moments = [freshness(entry, until) for section in ("projects", "trash")
                for entry in (catalog.get(section) or {}).values() if isinstance(entry, dict)]
-    moments.extend(_moment(at) for at in purged_map(catalog.get("purged")).values())
+    moments.extend(_until(_moment(at), until) for at in purged_map(catalog.get("purged")).values())
     found = [moment for moment in moments if moment is not None]
     return max(found) if found else None
 
 
-def newer(candidate: dict[str, Any], current: dict[str, Any]) -> bool:
-    found, kept = freshness(candidate), freshness(current)
+def salvage_freshness(found: Salvage, until: datetime | None = None) -> datetime | None:
+    """The latest date a damaged file still shows: on a record it holds
+    whole, on what was read of one it couldn't finish, or on a delete for
+    good in its head (dates after ``until`` left out)."""
+    moments = [freshness(entry, until) for source in (found.entries, found.partial) for entry in source.values()]
+    moments.extend(_until(_moment(at), until) for at in found.purged.values())
+    known = [moment for moment in moments if moment is not None]
+    return max(known) if known else None
+
+
+def newer(candidate: dict[str, Any], current: dict[str, Any], until: datetime | None = None) -> bool:
+    found, kept = freshness(candidate, until), freshness(current, until)
     return found is not None and kept is not None and found > kept
 
 
 def _unchanged(partial: dict[str, Any], current: dict[str, Any]) -> bool:
     """What is left of a cut record shows it as the copy has it: both its
-    dates read, and every top-level value that read matches. Every change
-    Nebula makes to a project moves one of them (refresh_metadata, an open,
-    a move to or from Recently deleted)."""
+    dates read, and every top-level value that read and that the copy's
+    record has matches. Every change Nebula makes to a project moves one of
+    them (refresh_metadata, an open, a move to or from Recently deleted),
+    so a key the copy's record lacks is a key name the damage changed
+    ("deletedQt": review 4, L-4), not a change."""
     if "updatedAt" not in partial or "lastOpenedAt" not in partial:
         return False
-    return all(current.get(key) == value for key, value in partial.items())
+    return all(current.get(key) == value for key, value in partial.items() if key in current)
 
 
 @dataclass
@@ -651,6 +840,16 @@ def _row(entry: dict[str, Any]) -> dict[str, Any]:
     return {"id": entry["id"], "name": entry["name"], "trashed": trashed(entry)}
 
 
+def _one_off_copy_id(found: Salvage, ids: set[str], copy_ids: set[str]) -> str | None:
+    """The one copy id, not read from the damaged file, a single character
+    away from one of ``ids``. Two random ids are never that close, so one
+    that is was that record's id before a flip changed it. None when no
+    single one is."""
+    near = {copy_id for copy_id in copy_ids - set(found.entries) - set(found.failed) for one in ids
+            if sum(a != b for a, b in zip(copy_id, one)) == 1}
+    return near.pop() if len(near) == 1 else None
+
+
 def _resolve_misfiled(found: Salvage, copy_ids: set[str]) -> list[dict[str, Any]]:
     """File each of ``found``'s misfiled records under the id that is its
     (changes ``found``): its own id, unless the copy holds the key's and not
@@ -660,6 +859,18 @@ def _resolve_misfiled(found: Salvage, copy_ids: set[str]) -> list[dict[str, Any]
     for each record filed."""
     filed: list[dict[str, Any]] = []
     for key_id, own, entry, group in found.misfiled:
+        if own not in copy_ids and (key_id is None or key_id not in copy_ids):
+            damaged = _one_off_copy_id(found, {own, key_id} - {None}, copy_ids)
+            if damaged is not None:
+                # Neither id is the copy's, but one is a single character
+                # off a copy record the damage left unread: the damage hit
+                # both its key and its id (review 4, L-5's @2896/@2846 filed
+                # "Old" under a new id as a project added back). Which bytes
+                # are its own can't be told, so it keeps the copy's version.
+                found.failed.setdefault(damaged, "invalid")
+                found.groups.setdefault(damaged, group)
+                found.partial.setdefault(damaged, _scalars({**entry, "id": damaged}))
+                continue
         if key_id is not None and key_id in copy_ids and own in copy_ids:
             for either in (own, key_id):
                 if either not in found.entries:
@@ -671,7 +882,7 @@ def _resolve_misfiled(found: Salvage, copy_ids: set[str]) -> list[dict[str, Any]
         if true_id in found.entries:
             continue  # a record whose key and id agree already holds it
         record = entry if entry.get("id") == true_id else {**entry, "id": true_id}
-        if entry_ok(true_id, record) and found.take(true_id, record):
+        if entry_ok(true_id, record) and found.take(true_id, record, group):
             filed.append({"id": true_id, "key": key_id})
         else:
             found.failed.setdefault(true_id, "invalid")
@@ -715,14 +926,20 @@ def _made_after(entry_id: str, at: str, salvages: list[Salvage], *places: dict[s
 
 
 def reconcile(base: dict[str, Any], salvages: Iterable[Salvage], *, max_projects: int,
-              room_bytes: int, open_project: Any = _UNKNOWN) -> Reconciled:
+              room_bytes: int, open_project: Any = _UNKNOWN, until: datetime | None = None,
+              side_purged: dict[str, str] | None = None, side_index: int = 1) -> Reconciled:
     """``base`` (validated; changed in place and returned as ``catalog``)
     with what ``salvages`` hold, newest first. ``max_projects`` bounds the
     live list (ProjectStore's limit) and ``room_bytes`` how many encoded
     bytes may be added (each added record costs RECORD_OVERHEAD more); a
     record past either is left out and reported (it stays in the damaged
     file). ``open_project``: the project the live canvas is (main, from
-    state.json), None for no project's, UNKNOWN when it isn't recorded."""
+    state.json), None for no project's, UNKNOWN when it isn't recorded.
+    ``until``: the restore's clock; a date after it decides nothing (review
+    4, M-3). ``side_purged``: catalog-purged.json's tombstones, the latest
+    commit's, written right after it (review 4, L-3): ordered after the
+    damaged catalog.json (``side_index`` 1; 0 when catalog.json is missing,
+    so ``salvages`` are all damaged copies) and before every copy."""
     result = base
     projects: dict[str, Any] = result["projects"]
     trash: dict[str, Any] = result.setdefault("trash", {})
@@ -751,16 +968,30 @@ def reconcile(base: dict[str, Any], salvages: Iterable[Salvage], *, max_projects
     # made writes a createdAt after a later delete, and brought a project
     # deleted for good back with no row (review 3, L-3). Within one file a
     # record wins (a commit never holds both).
+    #
+    # One exception keeps file order honest (review 4, L-2): a file whose own
+    # newest date is older than a later file's tombstone for an id predates
+    # that delete (a catalog.json a sync tool or a one-file restore rolled
+    # back), so its record of the id doesn't decide; the tombstone does.
+    # That mirrors newer() for records, and a record made again after the
+    # delete (a recover retry) is newer than it, so it still wins.
+    side = Salvage(purged=purged_map(side_purged or {}))
+    sources: list[tuple[list[str], dict[str, str], datetime | None]] = [
+        ([*found.entries, *found.failed], found.purged, salvage_freshness(found, until))
+        for found in [*salvages[:side_index], *([side] if side.purged else []), *salvages[side_index:]]]
+    sources.append((list(copy_ids), purged_map(result.get("purged")), None))
     decided: dict[str, str | None] = {}  # id -> the tombstone's time, or None for a record
-    for found in salvages:
-        for entry_id in (*found.entries, *found.failed):
-            decided.setdefault(entry_id, None)
-        for entry_id, at in found.purged.items():
+    for index, (ids, tombstones, newest_date) in enumerate(sources):
+        for entry_id in ids:
+            if entry_id in decided:
+                continue
+            if newest_date is not None and any(
+                    (when := _until(_moment(later.get(entry_id)), until)) is not None and when > newest_date
+                    for _ids, later, _date in sources[index + 1:]):
+                continue  # this file is older than that delete: the tombstone decides
+            decided[entry_id] = None
+        for entry_id, at in tombstones.items():
             decided.setdefault(entry_id, at)
-    for entry_id in copy_ids:
-        decided.setdefault(entry_id, None)
-    for entry_id, at in purged_map(result.get("purged")).items():
-        decided.setdefault(entry_id, at)
     purged: dict[str, str] = {entry_id: at for entry_id, at in decided.items() if at is not None}
     if purged:
         result["purged"] = purged
@@ -788,11 +1019,12 @@ def reconcile(base: dict[str, Any], salvages: Iterable[Salvage], *, max_projects
             if current is not None:
                 if entry == current:
                     continue
-                if newer(current, entry):
+                if newer(current, entry, until):
                     # The copy's is newer by its dates (a damaged file older
                     # than its copy, or a restore from Recently deleted saved
-                    # before restores were dated): the copy's stays.
-                    if trashed(current) and not trashed(entry):
+                    # before restores were dated): the copy's stays. Never
+                    # by a date from the future (review 4, M-3).
+                    if trashed(current) and not trashed(entry) and found.entry_groups.get(entry_id) != "trash":
                         back_in_trash.append({"id": entry_id, "name": current["name"]})
                     continue
             size = found.sizes.get(entry_id)

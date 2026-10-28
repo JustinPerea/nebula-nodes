@@ -377,8 +377,10 @@ def start_here(ctx: Context | None = None) -> str:
     again, and whether the damaged file was read to its end, only those
     that still hold; list_projects has it in full), then `canvasNotFiled`
     while the live canvas isn't a saved project because the list is at a
-    limit ({reason, since, projectLimit, note}: tell the person what
-    `note` says frees room; don't free it yourself):
+    limit ({reason, since, projectLimit, roomNow, note}: nothing in it is
+    lost, but the person can't see or open it until it is saved, so never
+    say it is open; tell them what `note` says frees room, or, with
+    `roomNow`, that the next listing saves it; don't free it yourself):
     - `canvas`: the project, `view.stale` (no browser watching), the
       selection, other agents' cursors, and the nodes (id, name,
       definitionId, state, onScreen, inputsFrom, up to 8 params cut to 60
@@ -1327,10 +1329,13 @@ def list_projects(ctx: Context | None = None) -> dict[str, Any]:
     person's notice does. Project ids from before it may be stale; ask the
     person before deleting a project that came back.
     `canvasNotFiled` (top level, {reason: projects | storage, since,
-    projectLimit, note}) means the live canvas isn't a saved project and
-    the list had no room to save it as one, whether or not a restore
-    notice is open: no project is open, and open_project / new_project are
-    refused (413) until the person frees room; `note` says what frees it
+    projectLimit, roomNow, note}) means the live canvas isn't a saved
+    project and the list had no room to save it as one, whether or not a
+    restore notice is open: nothing in it is lost, but no project is open
+    and the person can't see or open it until it is saved (never say it is
+    open); open_project / new_project are refused (413) until the person
+    frees room, and `roomNow` true means room is free and the next listing
+    saves it; `projectLimit` (top level) is the list's limit; `note` says what frees it
     for that limit (the project limit: a move to Recently deleted; the size
     limit: only a delete for good). Don't free it for them. `canvasSaved`
     ({id, name, at}, for 10 minutes) says such a canvas was then saved."""
@@ -1706,7 +1711,10 @@ def restore_from_trash(kind: str, id: str, ctx: Context | None = None) -> dict[s
 
     It comes back with the same id and contents, so a Moodboard or Character
     node that points at it runs again. A project comes back closed. Any
-    agent may restore; only the person can delete for good."""
+    agent may restore; only the person can delete for good. A project
+    restore into a list at its project limit is refused (413, limit
+    "projects", projectLimit) and changes nothing: it stays in Recently
+    deleted until the person frees room."""
     from urllib.parse import quote
 
     return _canvas_call("POST", f"/api/trash/{quote(kind, safe='')}/{quote(id, safe='')}/restore", ctx)

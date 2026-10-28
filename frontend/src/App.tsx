@@ -261,7 +261,7 @@ export default function App() {
       error={projects.error} errorDetails={projectErrorDetails(projects)} onCreate={(name) => void projects.createProject(name)}
       onOpen={(id) => void projects.open(id)} onRename={(id, name) => void projects.rename(id, name)}
       onDelete={(id) => void projects.remove(id)} trash={projects.trash} lastDeleted={projects.lastDeleted}
-      onRestore={(id) => void projects.restore(id)} onPurge={(id) => void projects.purge(id)}
+      onRestore={(id, from) => void projects.restore(id, from)} onPurge={(id) => void projects.purge(id)}
       onEmptyTrash={() => void projects.emptyTrash()} onDismissUndo={projects.dismissUndo}
       onRetry={() => void projects.retry()} retry={projectRetryOffer(projects)} settingsOpen={homeSettings.open} onToggleSettings={homeSettings.toggle}
       loadCoverChoices={listCoverChoices} onPinCover={(id, url) => void projects.pinCover(id, url)}

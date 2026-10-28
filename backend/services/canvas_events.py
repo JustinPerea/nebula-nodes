@@ -155,9 +155,11 @@ EVENT_KINDS = frozenset({
     # (main._note_canvas_settled): data {projectId, name, from (the project
     # it was, or null), restoreId (the restore it came from, or null)}.
     "project.canvasFiled",
-    # It couldn't be: the list is at a limit. It stays the live canvas, no
-    # project is open, and the next listing with room files it: data
-    # {reason (projects | storage), from, restoreId}.
+    # It couldn't be: the list is at a limit. Nothing in it is lost (Nebula
+    # keeps it, also across restarts), no project is open, the person can't
+    # see or open it, and the next listing with room files it: data
+    # {reason (projects | storage), from, restoreId, since (when it began
+    # waiting)}.
     "project.canvasNotFiled",
     # A paid start Nebula holds (World Labs recovery checkpoints and starts it
     # couldn't confirm) and its clearing: data {hold, change, runId, ...}.

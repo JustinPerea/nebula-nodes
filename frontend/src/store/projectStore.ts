@@ -30,7 +30,7 @@ import {
 } from '../lib/errorCopy';
 import { WORLD_LABS_NEEDS_CHECK } from '../lib/worldLabsWaiting';
 import type { CatalogRestore, ProjectList, ProjectSnapshot, ProjectSummary, SavedProject, TrashedProject } from '../lib/projects';
-import { catalogRestoreLogLine } from '../components/projects/catalogRestoreCopy';
+import { catalogRestoreLogLine, DEFAULT_PROJECT_LIMIT, restoreRefusedLine } from '../components/projects/catalogRestoreCopy';
 
 /** An agent (or a script) opened or made a project and this tab followed it.
  * Shown as a toast with the way back. */
@@ -102,8 +102,13 @@ interface ProjectState {
   projects: ProjectSummary[]; activeProject: ProjectSummary | null;
   /** Recently deleted, newest first. Restorable until each entry's purgeAt. */
   trash: TrashedProject[];
-  /** The project the Undo toast offers to bring back. */
-  lastDeleted: { id: string; name: string } | null;
+  /** The project the Undo toast offers to bring back; ``refused`` is the
+   * line that takes the toast's place when its Undo was refused by the
+   * project limit (GM r6), with no Undo button. */
+  lastDeleted: { id: string; name: string; refused?: string } | null;
+  /** How many projects the list may hold (the listing's `projectLimit`), for
+   * the lines that name it. */
+  projectLimit: number;
   /** Nebula restored a damaged project list (backend catalog restore): the
    * Projects home notice, until the person closes it with ×. */
   catalogRestore: CatalogRestore | null;
@@ -186,7 +191,8 @@ interface ProjectState {
   createProject: (name?: string, then?: () => Promise<void>) => Promise<void>;
   rename: (id: string, name: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
-  restore: (id: string) => Promise<void>;
+  /** `from` 'undo': the Undo toast's button (a refusal then takes the toast's place). */
+  restore: (id: string, from?: 'undo') => Promise<void>;
   purge: (id: string) => Promise<void>;
   emptyTrash: () => Promise<void>;
   dismissUndo: () => void;
@@ -548,6 +554,15 @@ function showError(error: unknown, retry: ProjectRetry | null = null): void {
   const line = failureMessage(error, RETRY_HEADINGS[retry?.action ?? 'save']);
   useProjectStore.setState({ error: line, errorDetails: detailsFor(line, error),
     errorRetry: refusedForGood(error) ? null : retry });
+}
+/** GM r6's line for a restore the project limit refused, or null for any
+ * other failure. The name is the project's own (Recently deleted's entry,
+ * or the Undo toast's), the limit the listing's. */
+function restoreRefusal(error: unknown, id: string): string | null {
+  if (!(error instanceof RequestFailedError) || error.status !== 413 || error.storageLimit !== 'projects') return null;
+  const state = useProjectStore.getState();
+  const name = state.trash.find((entry) => entry.id === id)?.name ?? (state.lastDeleted?.id === id ? state.lastDeleted.name : null);
+  return name ? restoreRefusedLine(name, state.projectLimit) : null;
 }
 /** What counts as unsaved work when the tab stops for a params version: run
  * records that never ran are left out, and so is node run state (queued,
@@ -1048,11 +1063,15 @@ const toastedCanvases = new Set<string>();
  * canvas waiting to be saved, and a waiting canvas just saved (its toast
  * once per tab; a later listing that still carries it keeps it showing
  * until it is dismissed or times out). */
-function listingNotices(list: ProjectList): Pick<ProjectState, 'catalogRestore' | 'canvasNotFiled'> & { canvasSaved?: ProjectState['canvasSaved'] } {
+function listingNotices(list: ProjectList): Pick<ProjectState, 'catalogRestore' | 'canvasNotFiled'> & { canvasSaved?: ProjectState['canvasSaved'] }
+  & { projectLimit?: number } {
   const waiting = list.canvasNotFiled;
   const saved = list.canvasSaved;
-  const notices: Pick<ProjectState, 'catalogRestore' | 'canvasNotFiled'> & { canvasSaved?: ProjectState['canvasSaved'] } = {
+  const notices: Pick<ProjectState, 'catalogRestore' | 'canvasNotFiled'> & { canvasSaved?: ProjectState['canvasSaved'] }
+    & { projectLimit?: number } = {
     catalogRestore: restoreFrom(list),
+    ...(typeof list.projectLimit === 'number' && Number.isFinite(list.projectLimit) && list.projectLimit > 0
+      ? { projectLimit: list.projectLimit } : {}),
     canvasNotFiled: waiting && (waiting.reason === 'projects' || waiting.reason === 'storage')
       ? { reason: waiting.reason, projectLimit: waiting.projectLimit } : null,
   };
@@ -1395,7 +1414,7 @@ async function emptyTrashOf(ids: string[]): Promise<void> {
 // Projects waits while the Commons holds unsaved labels (lib/commonsUnsaved).
 export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectState>(holdProjects, (set, get) => ({
   screen: 'home', initialized: false, loading: true, busy: false,
-  projects: [], activeProject: null, trash: [], lastDeleted: null, catalogRestore: null, canvasNotFiled: null, canvasSaved: null, workspaceRevision: '', error: null, errorDetails: null,
+  projects: [], activeProject: null, trash: [], lastDeleted: null, projectLimit: DEFAULT_PROJECT_LIMIT, catalogRestore: null, canvasNotFiled: null, canvasSaved: null, workspaceRevision: '', error: null, errorDetails: null,
   errorRetry: null, saveError: null, saveStatus: 'saved', dirty: false, switchNotice: null,
   unsavedEdits: null, editsSavedAs: null, savePaused: null, sizeNotice: null, sizePanelOpen: false,
   openSizePanel: () => { if (get().savePaused) set({ sizePanelOpen: true }); },
@@ -1546,7 +1565,7 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
       markDirty(true);
     }
   },
-  restore: async (id) => {
+  restore: async (id, from) => {
     if (get().busy) return;
     set({ busy: true, error: null, errorRetry: null });
     try {
@@ -1561,6 +1580,22 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
       if (error instanceof api.ProjectRequestError && error.status === 404) {
         set((current) => ({ trash: current.trash.filter((entry) => entry.id !== id),
           lastDeleted: current.lastDeleted?.id === id ? null : current.lastDeleted }));
+      }
+      // The list is at its project limit (the waiting canvas took the slot
+      // the delete freed, or it is just full): GM r6's line, with the real
+      // name and limit, in the Undo toast's place when it came from there
+      // (no Undo left up to fail again), else where failures show, closing
+      // a toast still up for it so the line is never said twice and a press
+      // never goes unanswered (fix round 4's live check: Restore in the list
+      // under a refused toast changed nothing on screen). Nothing is lost:
+      // it stays in Recently deleted.
+      const refused = restoreRefusal(error, id);
+      if (refused) {
+        const current = get();
+        if (from === 'undo' && current.lastDeleted?.id === id) set({ lastDeleted: { ...current.lastDeleted, refused } });
+        else set({ error: refused, errorDetails: null, errorRetry: null,
+          lastDeleted: current.lastDeleted?.id === id ? null : current.lastDeleted });
+        return;
       }
       showError(error, { action: 'restore', id });
     } finally { set({ busy: false }); }

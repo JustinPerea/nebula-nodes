@@ -47,8 +47,11 @@ project restored, deleted or deleted for good since drops its row and its
 count). It has no budget of its own and stays under about 300 tokens. Then,
 while the live canvas isn't a saved project because the list is at a limit,
 whether or not a restore notice is open, a `canvasNotFiled` part
-(`{reason, from, since, projectLimit, note}`, about 150 tokens): `note`
-says what frees room for that limit. Tell the person; don't free it
+(`{reason, from, since, projectLimit, roomNow, note}`, about 150 tokens):
+`note` says what frees room for that limit, and once room is free
+(`roomNow: true`) that the next listing saves it. Nothing in the canvas is
+lost, but the person can't see or open it until it is saved: never say it
+is open or that they can reach it. Tell the person; don't free room
 yourself. `nebula context` prints it as `CANVAS NOT SAVED AS A PROJECT`.
 
 No private note, image note, board note or pin reply history goes in. The
@@ -618,7 +621,7 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `project.renamed` | a project's name changed (saving the same name again isn't journaled) | `projectId`, `from`, `to` |
 | `project.catalogRestored` | Nebula found the project list damaged and restored it ([A damaged project list](#a-damaged-project-list)); by `system` | `id`, `kind` (`restored` or `rebuilt`), `reason`, `source`, `copyAt`, `folder`, `damagedFile` and `setAside` (file names in that folder), `addedBack` (up to 20 `{id, name}`), `addedBackCount`, `notAddedBackCount`, `revertedCount`, `cameBackCount`, `backInTrashCount`, `keptDeletedCount`, `projectCount` |
 | `project.canvasFiled` | The live canvas wasn't a project in the list (after a restore, or a crash between `state.json` and `catalog.json`) and was saved as its own, "<project> (recovered)" or "Recovered canvas" ([A damaged project list](#a-damaged-project-list)); by `system` | `projectId`, `name`, `from` (the project it was, or null), `restoreId` (the restore it came from, or null) |
-| `project.canvasNotFiled` | It couldn't be saved as its own project: the list is at a limit. No project is open and opening or making one is refused until there is room; by `system`, once per wait (across restarts), and again only if the limit it waits on changes | `reason` (`projects` or `storage`), `from`, `restoreId` |
+| `project.canvasNotFiled` | It couldn't be saved as its own project: the list is at a limit. No project is open and opening or making one is refused until there is room; by `system`, once per wait (across restarts), and again only if the limit it waits on changes | `reason` (`projects` or `storage`), `from`, `restoreId`, `since` (when the wait began) |
 | `provider.hold` | a paid start was held (a World Labs recovery checkpoint, or a start Nebula couldn't confirm) or cleared, attributed to whoever started the run or cleared it | `hold` (`recovery` or `startAmbiguity`), `change` (`held` or `cleared`), `runId`, `kind`, `durable` |
 | `edit.undone` / `edit.redone` | a whole edit was undone (an agent's `undo_canvas_edit`, or the person's Cmd+Z of a step the canvas knew the edit of) or redone; after the node and connection events it made and the pins it put back (`pin.reattached`), and before any `proposal.reopened` of the same undo, which can follow it | `editId` (the edit reverted), `of` (whose), `editKind`, `events` (that edit's event cursors, oldest first: every event journaled under it but its own `edit.undone`, its `pin.*` and `proposal.*` ones always, and at most 50 of the rest), `eventsTruncated: true` and `eventsTotal` (how many it had) when that cut some, `undid` (for an undo of an undo), `counts`, `skipped` |
 | `note.posted` | an agent posted an update to the person (Updates, `post_note`) | `surface` (canvas or board), `noteId`, `about`, `refs` (up to 12), `text`; `boardId`, `boardName` on a board |
@@ -2381,7 +2384,9 @@ A transaction (a save, a create) still waits on the lock while another
 Nebula process restores the same folder. The restore:
 
 1. reads both copies and starts from the valid one that holds the newest
-   catalog by its own dates (`.bak` when they agree), not by its name;
+   catalog by its own dates (`.bak` when they agree), not by its name. A
+   date ahead of the restore's own clock never counts (a copy saved by a
+   clock that ran ahead isn't "newer" for it), here or in step 2;
 2. takes from the damaged file every project record that still reads whole:
    added back when the copy lacks it (to Recently deleted when it was
    there), and replacing the copy's unless the copy's is newer by its dates
@@ -2389,15 +2394,29 @@ Nebula process restores the same folder. The restore:
    filed under its own `id`, checked against its key and the copy, so a
    damaged key, id or section name never files it under another id or
    reports it as deleted. In a file that doesn't parse, a record is found
-   by its key and also by its own leading `{"id":"<id>"`, so a key the
-   damage broke (a quote, the colon, a hex digit turned into a control
-   byte) never drops a record that still holds its id. A record cut short
+   by its key, by its own leading `{"id":"<id>"`, and by its key followed
+   by its own `"id"` with the same id when the damage took the opening
+   brace between them. So one flipped bit in any structural byte (a brace,
+   a bracket, a colon, a comma or a quote: tested for all 8 bits of each)
+   never reverts a project to the copy's version without a `reverted` row
+   saying so, and never files it under another id. A record whose key and
+   id both changed, landing one character off a copy record, keeps the
+   copy's version (reported). A record in Recently deleted's group that
+   has no `deletedAt` (its key changed) is never reported as in Recently
+   deleted again. A record cut short
    is still noticed where nothing else says a record sits there (right
    after another cut record) when it opens as a record does (`id`, `name`,
    `createdAt`), so it is reported by name; nothing nested deeper than a
-   record (a node's params, a snapshot) is ever counted as a project. A
-   project deleted for good (`purged`, remembered for a week) stays deleted
-   when the file that says so is the newest that says anything of that id:
+   record (a node's params, a snapshot) is ever counted as a project: a
+   record's depth is counted both forward from it and from the last point
+   known to sit between records, and where the damage makes neither
+   readable it isn't taken. A project deleted for good (`purged`,
+   remembered for a week, in each catalog's head and in
+   `projects/catalog-purged.json`, which every commit rewrites, so a delete
+   for good survives a damaged head even when it was the last commit)
+   stays deleted when the file that says so is the newest that says
+   anything of that id. An older damaged file (all its dates before the
+   delete) never brings it back:
    a record in a newer file (the same id made again, as a retried recovery
    does) wins. File order decides, never a record's `createdAt`: a clock
    that ran ahead when the project was made writes a `createdAt` after the
@@ -2412,13 +2431,16 @@ Nebula process restores the same folder. The restore:
    "Recovered canvas" ("Recovered canvas 2" and on) (`recoveredCanvas`).
    When the list is at its project limit (500) or its size limit (the
    whole list is capped at 128 MiB; only a delete for good frees that) it
-   can't: the canvas stays the live canvas with no project open, and
-   nothing in it is lost, across restarts too. The listing and `start_here`
-   carry `canvasNotFiled` (`{reason: projects | storage, from, since,
-   projectLimit, note}`; `since` and the one `project.canvasNotFiled`
-   event hold across restarts, in `projects/canvas-waiting.json`) whether
-   or not a restore notice is open; `note` says what frees room for that
-   limit. Opening or making a project is refused (413, `limit`) so nothing
+   can't. Nothing in the canvas is lost (Nebula keeps it, across restarts
+   too), but no project is open and the person can't see or open it until
+   it is saved. The listing and `start_here` carry `canvasNotFiled`
+   (`{reason: projects | storage, from, since, projectLimit, roomNow,
+   note}`; `since` and the one `project.canvasNotFiled` event hold across
+   restarts, in `projects/canvas-waiting.json` and its `.bak` copy, so a
+   damaged or missing record doesn't restart the wait) whether or not a
+   restore notice is open; `note` says what frees room for that limit, and
+   `roomNow` is true once room is free and the next listing will save it.
+   Every listing carries `projectLimit` (500). Opening or making a project is refused (413, `limit`) so nothing
    replaces it, a create that would file it and then pass the limit is
    refused before anything is filed, and the next listing with room saves
    it. For 10 minutes after, the listing carries `canvasSaved` (`{id,
@@ -2445,8 +2467,9 @@ contradicts it: `catalog.json`'s own head says version 1 (a newer Nebula
 writes `catalog.json` first), or the other copy can do the restore (one bit
 turns version 1 into 3, 5 or 9). A `catalog.json` this process saved whose
 version changed in place (same inode, size and time) is damage too: a newer
-Nebula replaces the file. A file rewritten in place that keeps its inode,
-size and time is noticed by its bytes (a checksum) and read strictly.
+Nebula replaces the file. A file rewritten in place is noticed by its
+change time (ctime), and one that keeps even that by its bytes (a
+checksum), and is read strictly.
 
 Upgrade day: a `state.json` saved before it recorded `projectId`, beside a
 catalog already damaged at startup. When the damaged file's head still says
@@ -2519,7 +2542,11 @@ unnamed client) and when. Agents may delete boards, characters and Styles
 - `POST /api/trash/{kind}/{id}/restore` brings one back with the same id and
   contents, so a Moodboard or Character node that points at it runs again. A
   project comes back closed. Agents may restore. Restoring one that is already
-  back is a no-op (200, `alreadyRestored: true`). MCP: `list_trash` (with
+  back is a no-op (200, `alreadyRestored: true`). A project restore into a
+  list at its project limit is refused before anything changes (413,
+  `limit: "projects"`, `projectLimit`); it stays in Recently deleted, and the
+  person sees "Couldn't restore “<name>”. You've reached the limit of 500
+  projects." (in the Undo toast's place when it came from Undo). MCP: `list_trash` (with
   `kind`, `scope` and `project_id`), `restore_from_trash`. CLI: `nebula trash list`
   (`--kind`, `--scope`, `--project`: list_trash's three; `--json` prints its
   result), `nebula trash restore [kind] <id>`.

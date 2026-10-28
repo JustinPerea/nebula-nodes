@@ -63,8 +63,12 @@ export interface ProjectHomeProps {
    * 'none' hides Try again (the whole line). */
   retry?: 'redo' | 'reload' | 'none';
   trash?: TrashedProject[];
-  lastDeleted?: { id: string; name: string } | null;
-  onRestore?: (id: string) => void;
+  /** The project the person just moved to Recently deleted (the Undo
+   * toast); ``refused`` is the line that replaces it when its Undo was
+   * refused by the project limit (GM r6), with no Undo button. */
+  lastDeleted?: { id: string; name: string; refused?: string } | null;
+  /** `from` 'undo' when the Undo toast's button asked. */
+  onRestore?: (id: string, from?: 'undo') => void;
   onPurge?: (id: string) => void;
   onEmptyTrash?: () => void;
   onDismissUndo?: () => void;
@@ -377,23 +381,35 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash, openRe
 }
 
 function UndoToast({ project, busy, onUndo, onDismiss }: {
-  project: { id: string; name: string }; busy: boolean; onUndo: () => void; onDismiss: () => void;
+  project: { id: string; name: string; refused?: string }; busy: boolean; onUndo: () => void; onDismiss: () => void;
 }) {
   const [paused, setPaused] = useState(false);
+  // The refusal starts its own time in the same spot (GM r6: it replaces
+  // the toast, so a dead Undo never stays up to be pressed again).
   useEffect(() => {
     if (paused) return;
     const timer = window.setTimeout(onDismiss, UNDO_VISIBLE_MS);
     return () => window.clearTimeout(timer);
-  }, [paused, onDismiss, project.id]);
+  }, [paused, onDismiss, project.id, project.refused]);
+  // The Undo button goes with the refusal: when it had focus, focus stays in
+  // the toast (its ×) rather than dropping to the page.
+  const close = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!project.refused) return;
+    const active = document.activeElement;
+    if (!active || active === document.body || !active.isConnected) close.current?.focus();
+  }, [project.refused]);
   // In the app's notice region, like every toast (GM - Design, 2026-10-23).
   return (
     <InNoticeRegion slot="project-home">
       <div className="project-home__toast" role="status" aria-live="polite"
         onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
         onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
-        <span className="project-home__toast-text">Moved “{project.name}” to Recently deleted</span>
-        <button type="button" className="project-home__toast-undo" disabled={busy} onClick={onUndo}>Undo</button>
-        <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
+        {project.refused
+          ? <span className="project-home__toast-text">{project.refused}</span>
+          : <><span className="project-home__toast-text">Moved “{project.name}” to Recently deleted</span>
+            <button type="button" className="project-home__toast-undo" disabled={busy} onClick={onUndo}>Undo</button></>}
+        <button ref={close} type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
       </div>
     </InNoticeRegion>
   );
@@ -441,8 +457,8 @@ function CatalogRestoreNotice({ restore, current, onDismiss, onOpenRecentlyDelet
   );
 }
 
-/** GM r5's waiting line: the live canvas isn't saved as a project yet,
- * the list is at a limit. A slim notice where the restore notice sits; it
+/** GM r5's waiting line (r6's wording): the canvas isn't saved as a
+ * project yet, the list is at a limit, nothing in it is lost. A slim notice where the restore notice sits; it
  * can't be dismissed while the canvas waits and goes once it is saved. The
  * size cap's adds "Open Recently deleted" (only a delete for good frees it). */
 function CanvasWaitingNotice({ waiting, trashCount, onOpenRecentlyDeleted }: {
@@ -581,7 +597,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
         {!loading && trash.length > 0 && <RecentlyDeleted trash={trash} busy={locked} onRestore={onRestore} onPurge={onPurge} onEmptyTrash={onEmptyTrash} openRequest={trashOpenRequest} onOpened={trashOpened} fromNotice={trashFromNotice} />}
       </main>
       {lastDeleted && <UndoToast key={lastDeleted.id} project={lastDeleted} busy={locked}
-        onUndo={() => onRestore(lastDeleted.id)} onDismiss={onDismissUndo} />}
+        onUndo={() => onRestore(lastDeleted.id, 'undo')} onDismiss={onDismissUndo} />}
       {canvasSaved && <CanvasSavedToast key={canvasSaved.id} project={canvasSaved} onDismiss={onDismissCanvasSaved} />}
     </div>
   );

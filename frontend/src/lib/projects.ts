@@ -99,6 +99,8 @@ export interface ProjectList {
     note?: string };
   /** A waiting canvas was saved as its own project, recently: GM's toast. */
   canvasSaved?: { id: string; name: string; at?: string };
+  /** How many projects the list may hold (the backend's MAX_PROJECTS). */
+  projectLimit?: number;
 }
 export interface ProjectActivation {
   project: SavedProject; workspaceRevision: string;

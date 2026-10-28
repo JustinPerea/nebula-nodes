@@ -62,26 +62,39 @@ function sizeCapAdvice(trashHasItems: boolean): string {
     : 'Delete a project, then remove it from Recently deleted too, and Nebula will save it.';
 }
 
-/** GM r5, the limit lines: in the restore notice, in the canvas line's
+/** GM r6: what every limit and waiting line says of the canvas. Never that
+ * it "stays open": the Projects home can't show a canvas that isn't a
+ * project, so the person can't reach it until it is saved (review 4, M-1;
+ * GM dropped "Open canvas" for good). */
+const NOTHING_LOST = 'Nothing in it is lost.';
+
+/** GM r5/r6, the limit lines: in the restore notice, in the canvas line's
  * place, while the open canvas couldn't be saved as its own project. The
  * canvas survives restarts, so both say nothing in it is lost. */
 export function canvasLimitLine(reason: CanvasLimit, context: CanvasLimitContext): string {
   const opening = "The canvas you had open couldn't be saved as its own project because";
   if (reason === 'projects') {
-    return `${opening} you've reached the limit of ${context.projectLimit} projects. It stays open and nothing in it is lost. Delete a project and Nebula will save it.`;
+    return `${opening} you've reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST} Delete a project and Nebula will save it.`;
   }
-  return `${opening} Nebula's project list is full. It stays open and nothing in it is lost. ${sizeCapAdvice(context.trashHasItems)}`;
+  return `${opening} Nebula's project list is full. ${NOTHING_LOST} ${sizeCapAdvice(context.trashHasItems)}`;
 }
 
-/** GM r5 (1), the waiting line: the Projects home's slim notice while the
- * canvas waits, whether or not a restore notice is open; it can't be
+/** GM r5 (1)/r6, the waiting line: the Projects home's slim notice while
+ * the canvas waits, whether or not a restore notice is open; it can't be
  * dismissed and goes once the canvas is saved. */
 export function canvasWaitingLine(reason: CanvasLimit, context: CanvasLimitContext): string {
   const opening = "The canvas you had open isn't saved as a project yet because";
   if (reason === 'projects') {
-    return `${opening} you've reached the limit of ${context.projectLimit} projects. Delete a project and Nebula will save it.`;
+    return `${opening} you've reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST} Delete a project and Nebula will save it.`;
   }
-  return `${opening} Nebula's project list is full. ${sizeCapAdvice(context.trashHasItems)}`;
+  return `${opening} Nebula's project list is full. ${NOTHING_LOST} ${sizeCapAdvice(context.trashHasItems)}`;
+}
+
+/** GM r6 (bug 3 and its addition): a restore from Recently deleted refused
+ * by the project limit, from the Undo toast (in its place) or the list,
+ * with the project's real name and the limit. */
+export function restoreRefusedLine(name: string, projectLimit: number): string {
+  return `Couldn't restore ${quoted(name)}. You've reached the limit of ${projectLimit} projects.`;
 }
 
 /** GM r4/r5, the toast once a waiting canvas is saved: the project's real
@@ -153,11 +166,21 @@ export interface CatalogRestoreNotice {
   canvasLine: 'saved' | 'limit' | null;
 }
 
-/** The notice from its parts: inline for one outcome or none, stacked for more. */
+/** The notice from its parts: inline for one outcome or none, stacked for
+ * more. ``stacked``: the notice was stacked as the restore said it, so it
+ * stays one outcome per line however many remain after lines drop (GM r6,
+ * bug 1: the lines left ran together as one paragraph). */
 function layout(opening: string, outcomes: string[], closing: string | null, openRecentlyDeleted: boolean,
-  recentlyDeletedIds: string[] = [], canvasLine: CatalogRestoreNotice['canvasLine'] = null): CatalogRestoreNotice {
+  recentlyDeletedIds: string[] = [], canvasLine: CatalogRestoreNotice['canvasLine'] = null,
+  stacked = false): CatalogRestoreNotice {
   const all = [opening, ...outcomes, ...(closing ? [closing] : [])];
-  return { text: all.join(' '), lines: outcomes.length > 1 ? all : null, openRecentlyDeleted, recentlyDeletedIds, canvasLine };
+  return { text: all.join(' '), lines: stacked || outcomes.length > 1 ? all : null, openRecentlyDeleted, recentlyDeletedIds, canvasLine };
+}
+
+/** Whether the notice for ``restore`` is stacked as the restore said it
+ * (every row as recorded): then it stays stacked as its lines drop. */
+function stackedAtFirst(restore: NoticeInput, current: NoticeNow | undefined, now: number): boolean {
+  return current !== undefined && catalogRestoreNotice(restore, now).lines !== null;
 }
 
 /** Each row as it holds now (GM r4): ``where`` says where its line puts the
@@ -216,7 +239,7 @@ function limitOpensTrash(restore: NoticeInput, canvas: { kind: string } | null, 
   return reason === 'storage' && (current?.trash.length ?? 0) > 0;
 }
 
-function rebuiltNotice(restore: NoticeInput, current?: NoticeNow): CatalogRestoreNotice {
+function rebuiltNotice(restore: NoticeInput, current?: NoticeNow, now: number = Date.now()): CatalogRestoreNotice {
   // GM: "Lost Recently deleted entries: not in the notice; log them."
   const all = (restore.notAddedBack ?? []).filter((row) => row.trashed !== true);
   const trashedRows = (restore.notAddedBack ?? []).length - all.length;
@@ -234,7 +257,7 @@ function rebuiltNotice(restore: NoticeInput, current?: NoticeNow): CatalogRestor
   const canvas = canvasOutcome(restore, current);
   if (canvas) outcomes.push(canvas.line);
   const opensTrash = limitOpensTrash(restore, canvas, current);
-  return layout(REBUILT, outcomes, KEPT, opensTrash, [], canvas?.kind ?? null);
+  return layout(REBUILT, outcomes, KEPT, opensTrash, [], canvas?.kind ?? null, stackedAtFirst(restore, current, now));
 }
 
 /** The notice for `restore`: GM's sentences in GM's order. With `current`
@@ -245,7 +268,7 @@ function rebuiltNotice(restore: NoticeInput, current?: NoticeNow): CatalogRestor
  * what the restore did, so when every outcome has gone the opening and
  * that line remain until the person closes it. */
 export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.now(), current?: NoticeNow): CatalogRestoreNotice {
-  if (restore.kind === 'rebuilt') return rebuiltNotice(restore, current);
+  if (restore.kind === 'rebuilt') return rebuiltNotice(restore, current, now);
   const addedRows = restore.addedBack ?? [];
   const recordedTrashedAdded = addedRows.filter((row) => row.trashed === true);
   const recordedLiveAdded = Math.max(0, total(restore.addedBackCount, addedRows) - recordedTrashedAdded.length);
@@ -375,7 +398,8 @@ export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.no
   const openRecentlyDeleted = current
     ? recentlyDeletedIds.length > 0 || limitOpensTrash(restore, canvas, current)
     : trashedAdded.length > 0 || backInTrash > 0;
-  return layout(opening, outcomes, closing, openRecentlyDeleted, recentlyDeletedIds, canvas?.kind ?? null);
+  return layout(opening, outcomes, closing, openRecentlyDeleted, recentlyDeletedIds, canvas?.kind ?? null,
+    stackedAtFirst(restore, current, now));
 }
 
 /** The notice's text for `restore`. */

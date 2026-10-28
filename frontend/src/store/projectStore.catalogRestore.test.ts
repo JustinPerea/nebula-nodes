@@ -86,6 +86,13 @@ describe('the catalog restore notice', () => {
     expect(useProjectStore.getState().catalogRestore).toBeNull();
   });
 
+  it('keeps the project limit the listing names (GM r6: a refused restore says it)', async () => {
+    listProjects.mockResolvedValue({ ...(listing() as object), projectLimit: 3 } as never);
+    relist();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(useProjectStore.getState().projectLimit).toBe(3);
+  });
+
   it('is gone once the backend no longer lists it', async () => {
     listProjects.mockResolvedValueOnce(listing(RESTORE)).mockResolvedValue(listing());
     relist();

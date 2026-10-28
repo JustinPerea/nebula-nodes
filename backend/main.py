@@ -353,9 +353,9 @@ def _catalog_restore_note(record: Mapping[str, Any]) -> str:
                      f"({recovered['id']}) and opened; nothing on it is lost.")
     elif isinstance(waiting, Mapping) and waiting.get("current") is not False:
         parts.append(f"The live canvas wasn't a project in the restored list and couldn't be filed as its own: the "
-                     f"list is at its {waiting.get('reason')} limit (canvasNotFiled). It stays the live canvas with no "
-                     "project open; opening or making a project is refused until the person frees room, and the "
-                     "next listing then files it.")
+                     f"list is at its {waiting.get('reason')} limit (canvasNotFiled). Nothing in it is lost. No "
+                     "project is open and the person can't see or open that canvas until it is saved; opening or "
+                     "making a project is refused until the person frees room, and the next listing then files it.")
     elif record.get("openProjectMissing"):
         parts.append("The project that was open didn't come back, so none is open.")
     stale = record.get("noLongerHold")
@@ -1089,7 +1089,10 @@ def _storage_error_body(exc: ProjectStoreError) -> dict[str, Any]:
     call a full store "too large" when it can't keep a tab's unsaved edits
     (Q116 a)."""
     return {"detail": str(exc), **({"storage": "full"} if _storage_full(exc) else {}),
-            **({"limit": exc.limit} if isinstance(exc, ProjectLimitError) else {})}
+            **({"limit": exc.limit} if isinstance(exc, ProjectLimitError) else {}),
+            # The limit's number, beside the project limit (GM r6's refused restore names it).
+            **({"projectLimit": project_store_module.MAX_PROJECTS}
+               if isinstance(exc, ProjectLimitError) and exc.limit == "projects" else {})}
 
 
 # Which store a 507 came from (round 17 of PR #114, review 16 L5), so the
@@ -5946,7 +5949,7 @@ async def agent_start_here(request: Request, via: str = "mcp") -> dict[str, Any]
         lambda: [_agent_node_row(definition, context) for definition in context["definitions"].values()])
     spend = await agent_spend_status(request)
     restore = _catalog_restore_view(project_store.restore_notice(), catalog)
-    waiting = _canvas_not_filed_view()
+    waiting = _canvas_not_filed_view(room_now=await _canvas_has_room_now(catalog))
     return agent_start.build(
         **({"canvasNotFiled": waiting} if waiting else {}),
         **({"catalogRestore": agent_start.catalog_restore_part(restore)} if restore else {}),
@@ -14828,8 +14831,8 @@ def _filing_room(catalog: dict[str, Any], exported: dict[str, Any]) -> str | Non
 
 # The live canvas couldn't be filed as its own project because the list is
 # at a limit (review 2 of PR #199, L4): {reason, from, since, journaled}. It
-# stays the live canvas and no project is open, so nothing replaces or
-# overlays it; opening or making a project is refused until there is room,
+# is still state.json's canvas and no project is open, so nothing replaces or
+# overlays it (the person can't see it until it is saved: GM r6); opening or making a project is refused until there is room,
 # and the next listing with room files it. Kept beside the catalog
 # (ProjectStore.canvas_waiting), so `since` and the one journal event hold
 # across restarts (review 3, L-5); this is only its cache in this process.
@@ -14888,28 +14891,56 @@ def _canvas_saved_now() -> dict[str, Any] | None:
     return saved if 0 <= age <= CANVAS_SAVED_SECONDS else None
 
 
-def _canvas_not_filed_note(reason: str) -> str:
-    """The agents' line for the live canvas waiting to be filed (the
-    person's is GM's waiting line, frontend catalogRestoreCopy.ts)."""
+def _canvas_not_filed_note(reason: str, *, room_now: bool = False) -> str:
+    """The agents' line for the canvas waiting to be saved as a project (the
+    person's is GM's waiting line, frontend catalogRestoreCopy.ts). Never
+    says it is open or that the person can reach it: no project is open,
+    and the Projects home can't show a canvas that isn't a project (GM r6;
+    review 4, M-1). ``room_now``: the list has room again (an agent's
+    delete, and no listing since: review 4, N-2)."""
+    if room_now:
+        return ("The canvas the person had open isn't saved as a project yet, but the project list has room now: "
+                "the next listing (the person's Projects home, `nebula projects`, list_projects), open or create "
+                "saves it as its own project first. Nothing in it is lost. The person can't see or open it until "
+                "then.")
     if reason == "projects":
         room = (f"the project list is at its limit of {project_store_module.MAX_PROJECTS} projects. Moving a project "
                 "to Recently deleted frees a slot")
     else:
         room = ("the project list is full (its size limit). Only deleting a project for good (removing it from "
                 "Recently deleted) frees room; moving one to Recently deleted doesn't")
-    return (f"The live canvas isn't a saved project and couldn't be saved as one: {room}, and the next listing then "
-            "saves it as its own project. It stays the live canvas and nothing in it is lost, also across restarts; "
-            "no project is open, and opening or making one is refused (413) until then. Freeing room is the "
-            "person's choice: tell them, don't delete projects to make room.")
+    return (f"The canvas the person had open isn't a saved project and couldn't be saved as one: {room}, and the "
+            "next listing then saves it as its own project. Nothing in it is lost, also across restarts. No project "
+            "is open, the person can't see or open this canvas until it is saved, and opening or making a project "
+            "is refused (413) until then. Freeing room is the person's choice: tell them, don't delete projects to "
+            "make room.")
 
 
-def _canvas_not_filed_view() -> dict[str, Any] | None:
-    """`canvasNotFiled` as the listing, start_here and `nebula context` carry it."""
+def _canvas_not_filed_view(room_now: bool = False) -> dict[str, Any] | None:
+    """`canvasNotFiled` as the listing, start_here and `nebula context` carry
+    it. ``room_now`` (start_here, which doesn't settle the canvas): the list
+    has room for it again, so the next listing, open or create saves it."""
     waiting = _canvas_not_filed_now()
     if waiting is None:
         return None
     return {"reason": waiting["reason"], "from": waiting.get("from"), "since": waiting.get("since"),
-            "projectLimit": project_store_module.MAX_PROJECTS, "note": _canvas_not_filed_note(waiting["reason"])}
+            "projectLimit": project_store_module.MAX_PROJECTS,
+            **({"roomNow": True} if room_now else {}),
+            "note": _canvas_not_filed_note(waiting["reason"], room_now=room_now)}
+
+
+async def _canvas_has_room_now(catalog: dict[str, Any]) -> bool:
+    """Whether a waiting canvas would be saved by the next listing: the list
+    has room for it again (an agent deleted a project, and nothing listed
+    since). start_here reads, never settles, so it says so instead of the
+    refusal that no longer holds (review 4, N-2)."""
+    if _canvas_not_filed_now() is None:
+        return False
+    try:
+        exported = await _projects_live_export()
+    except Exception:  # noqa: BLE001 - unknown: say it waits, as before
+        return False
+    return _filing_room(catalog, exported) is None
 
 
 def _mark_canvas_not_filed(limit: str, owner: Any) -> None:
@@ -14920,7 +14951,7 @@ def _mark_canvas_not_filed(limit: str, owner: Any) -> None:
     first = current is None or current.get("reason") != limit
     if first:
         print(f"[projects] the live canvas isn't a project in the list (it was {owner!r}) and the list is "
-              f"at its {limit} limit: it stays the live canvas, unfiled, until there is room", flush=True)
+              f"at its {limit} limit: it waits, unfiled and unchanged, until there is room", flush=True)
     value = {"reason": limit, "from": owner if isinstance(owner, str) else None,
              "since": project_now() if first else (current or {}).get("since"),
              "journaled": False if first else bool((current or {}).get("journaled"))}
@@ -15034,7 +15065,7 @@ def _note_canvas_settled(settled: tuple[str, Any] | None) -> None:
         if restore_id:
             project_store.note_restore(restore_id, canvasNotFiled={"reason": settled[1]})
         _journal("project.canvasNotFiled", data={"reason": settled[1], "from": waiting.get("from"),
-                                                 "restoreId": restore_id},
+                                                 "since": waiting.get("since"), "restoreId": restore_id},
                  summary=f"couldn't save the live canvas as its own project: the project list is at its {settled[1]} limit",
                  actor={"kind": "system"})
     except Exception as exc:  # noqa: BLE001 - bookkeeping on a commit that landed
@@ -15330,6 +15361,9 @@ async def list_projects() -> dict[str, Any]:
             # The canvas reloads instead of loading a project when it differs
             # from its own (frontend/src/store/projectStore.ts).
             "paramsVersion": PARAMS_VERSION,
+            # How many projects the list may hold, for the person's lines
+            # that name it (a refused restore: GM r6).
+            "projectLimit": project_store_module.MAX_PROJECTS,
             **({"migratedProjectId": catalog["migratedProjectId"]} if catalog.get("migratedProjectId") else {}),
         }
         if settled and settled[0] == "waiting" and (waiting := _canvas_not_filed_view()):
@@ -16091,11 +16125,26 @@ def _trashed_or_404(project_id: str, catalog: dict[str, Any]) -> dict[str, Any]:
 
 # Trash routes never touch the live canvas, so unlike delete they don't
 # need the workspace revision: a gone entry is a plain 404.
+def _refuse_a_restore_past_the_limit(catalog: dict[str, Any]) -> None:
+    """A restore from Recently deleted (the person's Undo, Restore in the
+    list, an agent's restore_project) into a list at its project limit:
+    refused with the limit's 413 and its number (`projectLimit`) before
+    anything changes, unless RESTORE_MAY_PASS_THE_PROJECT_LIMIT, the one
+    switch for letting it through (GM r6 prefers that; Justin hasn't
+    decided). Before, prepare refused it at the commit with the same 413,
+    and the person's Undo stayed up to fail again (review 4, L-1)."""
+    if project_store_module.RESTORE_MAY_PASS_THE_PROJECT_LIMIT:
+        return
+    if len(catalog["projects"]) >= project_store_module.MAX_PROJECTS:
+        raise ProjectLimitError("Project limit reached", "projects")
+
+
 @app.post("/api/projects/{project_id}/restore")
 async def restore_saved_project(project_id: str) -> dict[str, Any]:
     with project_store.transaction() as catalog:
         expired = purge_expired_trash(catalog)
         _trashed_or_404(project_id, catalog)
+        _refuse_a_restore_past_the_limit(catalog)
         project = restore_from_trash(catalog, project_id)
         project_store.commit(catalog)
         result = {"project": project_metadata(project), "workspaceRevision": catalog["workspaceRevision"]}

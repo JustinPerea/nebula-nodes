@@ -89,8 +89,26 @@ _ORPHAN_PATTERNS = (".catalog.*.tmp", ".catalog-backup.*.tmp", ".catalog-bak.*.t
 # Restores, newest last, for the notice and support (ProjectStore._record_restore).
 RESTORE_RECORD_NAME = "catalog-restore.json"
 RESTORES_KEPT = 10
-# The live canvas waiting to be filed (main._mark_canvas_not_filed), across restarts.
+# The live canvas waiting to be filed (main._mark_canvas_not_filed), across
+# restarts; a second copy (".bak") so a damaged or missing one keeps its
+# `since` and its one journal event (review 4 of PR #199, N-1).
 CANVAS_WAITING_NAME = "canvas-waiting.json"
+CANVAS_WAITING_BACKUP_NAME = CANVAS_WAITING_NAME + ".bak"
+# The projects deleted for good as the latest commit left them (its
+# `purged`), written right after each commit that changes them: .bak is one
+# commit behind, so a delete for good as the last commit, then a catalog.json
+# damaged past its head, brought the project back to Recently deleted with no
+# line (review 4 of PR #199, L-3). Read by a restore only.
+PURGED_NAME = "catalog-purged.json"
+PURGED_FILE_MAX_BYTES = 1024 * 1024
+# Whether a restore from Recently deleted (the person's Undo, or Restore in
+# the list) may take the list past MAX_PROJECTS. GM (r6) prefers yes, since
+# the limit is for new projects; Justin hasn't decided, so it is refused
+# with the limit's 413 (main._refuse_a_restore_past_the_limit). This is the
+# one switch: with it on, that refusal goes, and prepare's cap counts only
+# projects new to the list, so later saves of the list past the limit still
+# land and a new project is still refused.
+RESTORE_MAY_PASS_THE_PROJECT_LIMIT = False
 RECORD_ROWS = 100  # names listed per restore; the counts are whole
 # The fields prepare writes first, so a cut file still says which project was open.
 _HEAD_KEYS = ("version", "activeProjectId", "workspaceRevision", "migratedProjectId", "purged")
@@ -373,11 +391,41 @@ class Projection(NamedTuple):
     digest: int | None = None
 
 
+def file_signature(info: os.stat_result) -> tuple[int, int, int, int]:
+    """A catalog file's (inode, mtime, size, ctime). Every commit replaces
+    the file, so the inode says when; ctime is set by the kernel on every
+    write and every change of times, so a rewrite in place that puts the
+    mtime back (rsync --inplace -t, cp -p onto it) changes it too, and
+    needs_reading() and projection() see it without reading the file
+    (review 4 of PR #199, N-3). Bit rot changes none of them: _load's crc
+    of the bytes catches it at the next read under the lock."""
+    return (info.st_ino, info.st_mtime_ns, info.st_size, info.st_ctime_ns)
+
+
 def _projection(catalog: dict[str, Any], signature: tuple[int, int, int] | None) -> Projection:
     project_id = catalog.get("activeProjectId")
     project = catalog["projects"].get(project_id) if project_id else None
     pins = tuple(pin for pin in (project or {}).get("pins") or [] if isinstance(pin, dict))
     return Projection(signature, project_id, catalog["workspaceRevision"], str((project or {}).get("name") or ""), pins)
+
+
+def _waiting_record(found: Any) -> dict[str, Any] | None:
+    """canvas-waiting.json's record when its fields are what main writes:
+    {reason (projects | storage), from (an id or None), since (a dated
+    time), journaled (a bool)}, or {saved: {id, name, at}}; else None."""
+    if not isinstance(found, dict):
+        return None
+    saved = found.get("saved")
+    if "saved" in found:
+        if isinstance(saved, dict) and isinstance(saved.get("id"), str) and isinstance(saved.get("name"), str) \
+                and catalog_recovery.dated(saved.get("at")):
+            return {"saved": {"id": saved["id"], "name": saved["name"], "at": saved["at"]}}
+        return None
+    owner = found.get("from")
+    if found.get("reason") not in ("projects", "storage") or not catalog_recovery.dated(found.get("since")) \
+            or not isinstance(found.get("journaled"), bool) or not (owner is None or isinstance(owner, str)):
+        return None
+    return {"reason": found["reason"], "from": owner, "since": found["since"], "journaled": found["journaled"]}
 
 
 class ProjectStore:
@@ -424,6 +472,11 @@ class ProjectStore:
         # version 1 (its signature): a version above 1 in that very file was
         # written in place, which a newer Nebula never does (review 3, L-1).
         self._own_signature: tuple[int, int, int] | None = None
+        # The purged map the commit being prepared carries (its temporary
+        # file, the map), and catalog-purged.json as last read or written
+        # here (its signature, its map): kept in step after each commit.
+        self._prepared_purged: tuple[Path, dict[str, str]] | None = None
+        self._side_purged: tuple[Any, dict[str, str]] | None = None
         # This thread's hold on .lock: its depth (only _recover reads inside
         # a hold: flock from a second descriptor would wait on itself), the
         # restores to announce once it is let go, the catalog file this hold
@@ -523,8 +576,10 @@ class ProjectStore:
         except OSError as exc:
             raise ProjectStoreError(UNREADABLE) from exc
         cached = self._projection
-        signature = (info.st_ino, info.st_mtime_ns, info.st_size)
-        ours = self._own_signature == signature
+        signature = file_signature(info)
+        # This process's own file, rewritten in place or not: ctime (the
+        # signature's last part) changes with any write, so it is left out.
+        ours = self._own_signature is not None and self._own_signature[:3] == signature[:3]
         digest = zlib.crc32(raw)
         # The fast read only for the very bytes this process wrote or read:
         # a rewrite in place that kept the signature (rsync --inplace -t,
@@ -562,7 +617,7 @@ class ProjectStore:
         self._own_signature = signature
         if getattr(self._local, "depth", 0):
             # Read and validated under this hold: .bak may become this file.
-            self._local.validated = (info.st_ino, info.st_mtime_ns, info.st_size)
+            self._local.validated = signature
             self._local.ids = set(result["projects"]) | set(result.get("trash") or {})
         # Every reader gets upgraded params (services/saved_graph_upgrades.py).
         # The version marker is set with them, so the first commit stores
@@ -774,12 +829,16 @@ class ProjectStore:
         source: str | None = None
         copy_at: str | None = None
         damaged_copies: list[tuple[Path, bytes, Any]] = []
-        # Every copy is read: the base is the valid one that holds the newest
-        # catalog by its own dates (catalog_recovery.catalog_freshness; every
-        # change Nebula makes moves one), .bak when they agree (review 2, L3:
-        # a .bak that stopped following, as where hard links fail, was
-        # chosen by its name). Not by mtime: a copy made by hand or a sync
-        # tool has a new one.
+        # Every copy is read: the base is .bak, the newer by construction (a
+        # link of the catalog the last commit replaced, or a copy of every
+        # commit where links fail), unless .bak.1 holds later dates (a .bak a
+        # sync tool or a person put back: review 2, L3). Dates are the
+        # copies' own (catalog_recovery.catalog_freshness; every change
+        # Nebula makes moves one), never one after this restore's clock: a
+        # clock that ran ahead when .bak.1 was written made it the base, and
+        # the next commit erased a project only .bak held (review 4, M-3).
+        # Not by mtime: a copy made by hand or a sync tool has a new one.
+        clock = datetime.now(timezone.utc)
         valid: list[tuple[Any, float, int, Path, bytes, dict[str, Any]]] = []
         newer_copies: list[tuple[Path, bytes, Any]] = []
         mtimes: dict[Path, float] = {}
@@ -809,7 +868,7 @@ class ProjectStore:
                 _log(f"{path.name} is damaged too ({exc})")
                 damaged_copies.append((path, raw, candidate))
                 continue
-            freshest = catalog_recovery.catalog_freshness(candidate)
+            freshest = catalog_recovery.catalog_freshness(candidate, until=clock)
             valid.append((freshest.timestamp() if freshest else float("-inf"), -order, path, raw, candidate))
         if valid:
             *_order, chosen, base_raw, base = max(valid, key=lambda row: row[:2])
@@ -862,7 +921,7 @@ class ProjectStore:
                 _log(f"the damaged {path.name} says it is from a newer Nebula: not restoring over it")
                 raise ProjectStoreError(NEWER_VERSION)
         kind = "restored" if base is not None else "rebuilt"
-        moment = datetime.now(timezone.utc)
+        moment = clock
         stamp = _stamp(moment)
         if base is None and not any(found.entries for found in salvages):
             if damage.raw is None:
@@ -901,7 +960,8 @@ class ProjectStore:
         # (purged, at most PURGED_KEPT_MAX short entries) and a margin.
         room = MAX_CATALOG_BYTES - base_bytes - PURGED_KEPT_MAX * 80 - 4096
         merged = catalog_recovery.reconcile(base, salvages, max_projects=MAX_PROJECTS, room_bytes=room,
-                                            open_project=owner)
+                                            open_project=owner, until=clock,
+                                            side_purged=self._read_purged_file(), side_index=1 if head is not None else 0)
         catalog = merged.catalog
         catalog["version"] = 1
         # Open tabs hold the list as it was: a new revision makes them reload.
@@ -1177,24 +1237,40 @@ class ProjectStore:
         """main's record of the live canvas that isn't a project and couldn't
         be filed as one (the list at a limit), or of the one filed last after
         waiting: {reason, from, since, journaled} or {saved: {id, name, at}}.
-        Kept beside the catalog so it outlives a restart (review 3, L-5)."""
-        try:
-            found = json.loads((self.root / CANVAS_WAITING_NAME).read_text(encoding="utf-8"))
-        except FileNotFoundError:
-            return None
-        except (OSError, ValueError) as exc:
-            _log(f"{CANVAS_WAITING_NAME} could not be read ({exc})")
-            return None
-        return found if isinstance(found, dict) else None
+        Kept beside the catalog so it outlives a restart (review 3, L-5), in
+        two copies: a missing or damaged one, or one whose fields have the
+        wrong types, is passed over for the other (review 4, N-1). Within a
+        process main keeps it in memory, so only a restart reads it; with
+        both copies gone the wait starts again (a new process's journal
+        never had its event)."""
+        for name in (CANVAS_WAITING_NAME, CANVAS_WAITING_BACKUP_NAME):
+            path = self.root / name
+            try:
+                found = json.loads(path.read_text(encoding="utf-8"))
+            except FileNotFoundError:
+                continue
+            except (OSError, ValueError) as exc:
+                _log(f"{name} could not be read ({exc})")
+                continue
+            record = _waiting_record(found)
+            if record is None:
+                _log(f"{name} doesn't hold a waiting canvas's record; not using it")
+                continue
+            return record
+        return None
 
     def set_canvas_waiting(self, value: dict[str, Any] | None) -> None:
-        """Write (or, for None, remove) canvas_waiting's record. Raises OSError."""
-        path = self.root / CANVAS_WAITING_NAME
+        """Write (or, for None, remove) canvas_waiting's record, both
+        copies. Raises OSError."""
+        paths = (self.root / CANVAS_WAITING_NAME, self.root / CANVAS_WAITING_BACKUP_NAME)
         if value is None:
-            path.unlink(missing_ok=True)
+            for path in paths:
+                path.unlink(missing_ok=True)
             return
         self._ensure_root()
-        self._write_file(path, json.dumps(value, ensure_ascii=False, indent=1).encode("utf-8"))
+        encoded = json.dumps(value, ensure_ascii=False, indent=1).encode("utf-8")
+        for path in paths:
+            self._write_file(path, encoded)
 
     # -- the last good copy -------------------------------------------------------
 
@@ -1210,6 +1286,48 @@ class ProjectStore:
             os.replace(temporary, target)
         finally:
             temporary.unlink(missing_ok=True)
+
+    def _keep_purged(self, purged: dict[str, str]) -> None:
+        """catalog-purged.json as the commit that just landed left
+        ``purged`` (written only when it changes: a delete for good, a
+        project made again, a tombstone aged out). Never fails the commit."""
+        path = self.root / PURGED_NAME
+        try:
+            try:
+                signature: Any = file_signature(path.stat())
+            except FileNotFoundError:
+                signature = None
+            cached = self._side_purged
+            held = cached[1] if cached is not None and cached[0] == signature else self._read_purged_file()
+            if held == purged:
+                self._side_purged = (signature, held)
+                return
+            if purged:
+                self._write_file(path, json.dumps({"version": 1, "purged": purged}, separators=(",", ":")).encode("utf-8"))
+            else:
+                path.unlink(missing_ok=True)
+            try:
+                self._side_purged = (file_signature(path.stat()), dict(purged))
+            except FileNotFoundError:
+                self._side_purged = (None, {})
+        except OSError as exc:
+            self._side_purged = None
+            _log(f"could not keep {PURGED_NAME}: {exc}")
+
+    def _read_purged_file(self) -> dict[str, str]:
+        """catalog-purged.json's tombstones, or {} (missing, damaged: logged)."""
+        path = self.root / PURGED_NAME
+        try:
+            if path.is_symlink() or path.stat().st_size > PURGED_FILE_MAX_BYTES:
+                _log(f"{PURGED_NAME} is not a file Nebula wrote; not using it")
+                return {}
+            found = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return {}
+        except (OSError, ValueError) as exc:
+            _log(f"{PURGED_NAME} could not be read ({exc}); not using it")
+            return {}
+        return catalog_recovery.purged_map(found.get("purged") if isinstance(found, dict) else None)
 
     def _write_older_backup(self, encoded: bytes) -> None:
         """Keep ``encoded`` (a catalog _check accepted, as committed) as the
@@ -1346,7 +1464,7 @@ class ProjectStore:
             return None
         except OSError as exc:
             raise ProjectStoreError("Project storage is unavailable; the canvas was preserved") from exc
-        return (info.st_ino, info.st_mtime_ns, info.st_size)
+        return file_signature(info)
 
     def advance_params_version(self, *, live_graph_advanced: bool) -> bool:
         """Boot step after a one-time params upgrade (main.py). When the
@@ -1391,6 +1509,16 @@ class ProjectStore:
         if getattr(self._local, "depth", 0):
             self._local.pending_ids = holds
 
+    def _past_the_limit_by_restores_only(self, catalog: dict[str, Any]) -> bool:
+        """With RESTORE_MAY_PASS_THE_PROJECT_LIMIT on: whether every project
+        in ``catalog`` is one this hold read (in the list or in Recently
+        deleted), so a list past the limit got there by restores, and the
+        commit adds no new project. Off (today): never."""
+        if not RESTORE_MAY_PASS_THE_PROJECT_LIMIT:
+            return False
+        known = getattr(self._local, "ids", None)
+        return bool(known) and set(catalog["projects"]) <= known
+
     def prepare(self, catalog: dict[str, Any]) -> Path:
         """Write/fsync a private temporary catalog before any live graph edit.
 
@@ -1399,7 +1527,7 @@ class ProjectStore:
         bug behind the person's restore notice (review 1, L7), or one that
         can't be encoded."""
         self._ensure_root()
-        if len(catalog["projects"]) > MAX_PROJECTS:
+        if len(catalog["projects"]) > MAX_PROJECTS and not self._past_the_limit_by_restores_only(catalog):
             raise ProjectLimitError("Project limit reached", "projects")
         try:
             self._check(catalog, fill=False)
@@ -1424,6 +1552,7 @@ class ProjectStore:
         if len(encoded) > MAX_CATALOG_BYTES:
             raise ProjectLimitError("Project storage limit reached", "storage")
         temporary = self.root / f".catalog.{uuid4().hex}.tmp"
+        self._prepared_purged = (temporary, catalog_recovery.purged_map(catalog.get("purged")))
         try:
             fd = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
             with os.fdopen(fd, "wb") as handle:
@@ -1511,6 +1640,11 @@ class ProjectStore:
                         # prepare validated it: the next commit in this hold may keep it as .bak.
                         self._local.validated = landed
                         self._local.ids = getattr(self._local, "pending_ids", None)
+            purged, self._prepared_purged = self._prepared_purged, None
+            if purged is not None and purged[0] == temporary:
+                # After the rename, never before: a tombstone written for a
+                # commit that didn't land would drop a project that exists.
+                self._keep_purged(purged[1])
             try:
                 os.fsync(fd)
             except OSError as exc:
