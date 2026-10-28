@@ -1316,6 +1316,14 @@ Ask the agent for a new one.", so propose again against the canvas as it is
 now); Stop (`DELETE /api/executions/…`)
 stays open while the canvas follows an agent's switch.
 
+The check runs twice: before the request reaches the route, and again as the
+route starts, in the same step as whatever the route writes before it
+waits on anything (a follow-up to PR #195, review 23 L-1). A project open
+that commits in between, which can happen in the few event-loop turns
+between the two, gets the write refused with the same 409, never applied
+to the project just opened. So a note the person wrote for one project's n1
+is never pinned to the next project's n1.
+
 A write that carries `X-Nebula-Tab` (only the canvas sends it) to one of
 those routes must also carry `X-Nebula-Workspace-Revision`; without it, the
 same 409. A tab that has let go of its project (it is following an agent's

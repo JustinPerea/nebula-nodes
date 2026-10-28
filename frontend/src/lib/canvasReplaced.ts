@@ -7,9 +7,18 @@
  * Its own module so a store can listen without importing graphStore.
  */
 const listeners = new Set<() => void>();
+let replacements = 0;
 
 export function noteCanvasReplaced(): void {
+  replacements += 1;
   for (const listener of [...listeners]) listener();
+}
+
+/** How many times the canvas was replaced since the page loaded: a holder of
+ * a node id stamps it with this and lets the id go once it moved (the chat's
+ * "Apply to @n2", follow-up to PR #195). */
+export function canvasReplacements(): number {
+  return replacements;
 }
 
 export function subscribeCanvasReplaced(listener: () => void): () => void {

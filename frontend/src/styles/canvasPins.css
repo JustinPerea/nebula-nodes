@@ -174,9 +174,15 @@
   overflow-wrap: anywhere;
 }
 
+/* GM r24 item 1: the note on its own line, in quotes (the <q>'s own marks),
+   clamped to 2 lines with "…". Copy note copies the full text. */
 .canvas-pin-toast__note {
-  display: block;
+  display: -webkit-box;
   margin-top: 2px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   color: #f2f2f2;
 }
 

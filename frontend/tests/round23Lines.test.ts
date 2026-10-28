@@ -38,9 +38,9 @@ describe('GM round 23: the failed-save counted forms', () => {
     expect(changesNotSavedLine([...on('A', 'x'), ...on('B', 'x'), ...on('C', 'x'), ...on('D', 'x')]))
       .toBe("Couldn't save your changes to 4 nodes.");
   });
-  it('two nodes with the same title are two nodes', () => {
+  it('two nodes with the same title are two nodes, grouped with a count (GM, 2026-10-27)', () => {
     expect(changesNotSavedLine([{ nodeId: 'n1', node: 'Text', setting: 'Text' }, { nodeId: 'n2', node: 'Text', setting: 'Text' }]))
-      .toBe("Couldn't save your changes to “Text” and “Text”.");
+      .toBe("Couldn't save your changes to 2 “Text” nodes.");
   });
   it('none it can name', () => {
     expect(changesNotSavedLine([{ node: null, setting: null }])).toBe("Couldn't save your last change.");

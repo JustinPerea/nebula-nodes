@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { PromptDialog, type PromptRequest } from '../PromptDialog';
-import { MAX_PIN_TEXT, NOTE_KEPT_COPY, NOTE_KEPT_LINE } from '../../lib/canvasPins';
+import { MAX_PIN_TEXT, NOTE_KEPT_COPY } from '../../lib/canvasPins';
 import { useCanvasPinsStore } from '../../store/canvasPinsStore';
 import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 import { InNoticeRegion } from '../InNoticeRegion';
@@ -13,7 +13,8 @@ import '../../styles/canvasPins.css';
  * "Wait for “X” to open." while following); offline the dialog stays open
  * with the text, as before. A follow or a replacement closes it (its target
  * is a node of the canvas that went), and what was typed comes back in a
- * notice with a Copy button, never pinned to the canvas that replaced it. */
+ * notice with a Copy button, never pinned to the canvas that replaced it.
+ * Follow-up (GM, 2026-10-27): opening Note again starts with that text. */
 export function PinComposer() {
   const composer = useCanvasPinsStore((s) => s.composer);
   const submit = useCanvasPinsStore((s) => s.submit);
@@ -25,8 +26,10 @@ export function PinComposer() {
   const dismissKept = useCanvasPinsStore((s) => s.dismissKept);
   const lock = useCanvasLock();
 
+  // The dialog starts with the kept note, or the draft × or Esc left (GM,
+  // 2026-10-27): compose put it in `draft` as it opened.
   const request = useMemo<PromptRequest | null>(
-    () => (composer ? { label: 'Note for agents', initial: '', resolve: () => {} } : null),
+    () => (composer ? { label: 'Note for agents', initial: useCanvasPinsStore.getState().draft, resolve: () => {} } : null),
     [composer],
   );
 
@@ -63,8 +66,10 @@ export function PinComposer() {
         <InNoticeRegion slot="pin">
           <div className="canvas-pin-toast canvas-pin-toast--kept" role="status">
             <span className="canvas-pin-toast__text">
-              {NOTE_KEPT_LINE}
-              <q className="canvas-pin-toast__note">{kept.text}</q>
+              {kept.line}
+              {/* GM r24: the note on its own line, in quotes, clamped to 2
+                  lines with "…"; Copy note copies all of it. */}
+              <q className="canvas-pin-toast__note" title={kept.text}>{kept.text}</q>
             </span>
             <button type="button" className="canvas-pin-toast__copy" onClick={copyKept}>{NOTE_KEPT_COPY}</button>
             <button type="button" onClick={dismissKept} aria-label="Dismiss">×</button>

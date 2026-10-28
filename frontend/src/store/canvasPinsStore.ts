@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { wsClient, type CanvasPinsEvent, type Pin } from '../lib/wsClient';
-import { createPin, deletePin, fetchPins, MAX_PIN_TEXT } from '../lib/canvasPins';
+import { createPin, deletePin, fetchPins, MAX_PIN_TEXT, noteKeptLine } from '../lib/canvasPins';
 import { failureMessage, RequestFailedError } from '../lib/errorCopy';
 import { refuseCanvasEdit } from '../lib/canvasLock';
 import { subscribeFollowingSwitch, followingSwitch } from '../lib/canvasFollow';
@@ -18,12 +18,17 @@ interface CanvasPinsState {
    * target belongs to (its node id names a node of that canvas only). The
    * note is sent for it, so Nebula refuses it once that canvas has gone. */
   composerCanvas: ProjectContext | null;
-  /** What the person has typed in the open dialog. */
+  /** What the person has typed in the dialog. GM (2026-10-27, the
+   * follow-up to PR #195): closing the dialog with × or Esc keeps it as the
+   * draft for the next open; only sending drops it, or clearing the field
+   * and then closing. */
   draft: string;
   /** A note that couldn't be added because its canvas went before it was
    * sent (a follow, a replacement, Nebula's out-of-date refusal): its text,
-   * kept for the person, never anchored anywhere. */
-  kept: { text: string } | null;
+   * kept for the person, never anchored anywhere, and GM's line saying why
+   * (lib/canvasPins noteKeptLine). The next dialog starts with it, and the
+   * notice closes; the notice's own × drops it. */
+  kept: { text: string; line: string } | null;
   /** Deletes sent but not yet confirmed: hidden even if a stale update still lists them. */
   removing: Record<string, true>;
   error: string | null;
@@ -112,9 +117,14 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
   // switch and while offline, and nothing is sent.
   compose: (target) => {
     if (refuseCanvasEdit()) return;
-    set({ composer: target, composerCanvas: getProjectContext(), draft: '', error: null, kept: null });
+    // GM (2026-10-27): the kept note, else the draft left by × or Esc, starts
+    // the dialog; once it is in the dialog the kept-note notice closes.
+    const { kept, draft } = get();
+    set({ composer: target, composerCanvas: getProjectContext(), draft: kept?.text ?? draft, error: null, kept: null });
   },
-  cancelCompose: () => set({ composer: null, composerCanvas: null, draft: '' }),
+  // × or Esc: the text stays as the draft for the next open (an emptied
+  // field leaves an empty draft).
+  cancelCompose: () => set({ composer: null, composerCanvas: null }),
   setDraft: (text) => set({ draft: text }),
   submit: async (text) => {
     const target = get().composer;
@@ -141,10 +151,12 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
     } catch (error) {
       if (canvasWentFor(error)) {
         // That canvas has gone: the text is kept, not anchored elsewhere.
-        set({ composer: null, composerCanvas: null, draft: '', kept: { text: trimmed } });
+        set({ composer: null, composerCanvas: null, draft: '', kept: { text: trimmed, line: noteKeptLine(followingSwitch()) } });
         return false;
       }
-      set({ composer: null, composerCanvas: null, draft: '', error: failureMessage(error, "Couldn't add the pin.") });
+      // Not sent: the text stays as the draft for the next open (GM: only
+      // sending drops it).
+      set({ composer: null, composerCanvas: null, draft: text, error: failureMessage(error, "Couldn't add the pin.") });
       return false;
     }
   },
@@ -186,17 +198,21 @@ function canvasWentFor(error: unknown): boolean {
  * going (a follow started) or went (a replacement): the dialog closes, and
  * what the person typed is kept (round 23, review 22 M-1). Its target is
  * never re-anchored: the canvas that replaces it reuses the same ids. */
-function closeComposerForGoneCanvas(): void {
+function closeComposerForGoneCanvas(following: ReturnType<typeof followingSwitch>): void {
   const { composer, draft } = useCanvasPinsStore.getState();
   if (!composer) return;
   const text = draft.trim();
-  useCanvasPinsStore.setState({ composer: null, composerCanvas: null, draft: '', ...(text ? { kept: { text } } : {}) });
+  useCanvasPinsStore.setState({ composer: null, composerCanvas: null, draft: '',
+    ...(text ? { kept: { text, line: noteKeptLine(following) } } : {}) });
 }
 
 subscribeFollowingSwitch(() => {
-  if (followingSwitch()) closeComposerForGoneCanvas();
+  const following = followingSwitch();
+  if (following) closeComposerForGoneCanvas(following);
 });
-subscribeCanvasReplaced(closeComposerForGoneCanvas);
+// A replacement with no follow (a clear, an import, a reconnect) says the
+// canvas changed; one that ends a follow finds the dialog already closed.
+subscribeCanvasReplaced(() => closeComposerForGoneCanvas(followingSwitch()));
 
 wsClient.subscribe((event) => {
   if (event.type === 'canvasPins') useCanvasPinsStore.getState().apply(event);

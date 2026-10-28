@@ -1,0 +1,54 @@
+/* GM - Design, r24 item 2 (2026-10-27, the follow-up to PR #195): one
+   disabled rule, app-wide. A disabled button is neutral grey whatever the
+   reason (following an agent's switch, offline, a run limit, a missing
+   reference, nothing to send); its tooltip gives the reason. Never orange
+   but disabled.
+
+   Every button style that fills with the accent (or the danger colour,
+   which is the accent) is listed here, and only here gets its disabled look;
+   tests/agentPresenceFollowups.ratchet.test.ts fails when a new accent-filled
+   button style isn't. A control that keeps focus and its tooltip while
+   refused uses aria-disabled="true" and is covered the same way.
+   !important: these styles live in many sheets with their own specificity
+   (and some load with their studio's chunk); the disabled look wins over
+   each of them, its hover included. PR #198's [data-offline-neutral] says the
+   same for its offline actions. */
+:is(
+  .cinema-shot-panel__action--primary,
+  .create-composer__generate,
+  .selection-toolbar__button--primary,
+  .onboarding__cta--primary,
+  .asset-trash__button--danger,
+  .remotion-properties-panel__anchor-button,
+  .chat-panel__send,
+  .chat-panel__send--stop,
+  .mesh-modal__download,
+  .editor-transport__btn--render,
+  .editor-transport__btn--export,
+  .remotion-editor-toolbar__export,
+  .final-export__download,
+  .final-export__start,
+  .edit-node__open
+):is(:disabled, [aria-disabled='true']),
+:is(
+  .cinema-shot-panel__action--primary,
+  .create-composer__generate,
+  .selection-toolbar__button--primary,
+  .onboarding__cta--primary,
+  .asset-trash__button--danger,
+  .remotion-properties-panel__anchor-button,
+  .chat-panel__send,
+  .chat-panel__send--stop,
+  .mesh-modal__download,
+  .editor-transport__btn--render,
+  .editor-transport__btn--export,
+  .remotion-editor-toolbar__export,
+  .final-export__download,
+  .final-export__start,
+  .edit-node__open
+):is(:disabled, [aria-disabled='true']):hover {
+  background: var(--sr-surface-control, rgba(0, 0, 0, 0.3)) !important;
+  border-color: var(--sr-edge, rgba(255, 255, 255, 0.06)) !important;
+  color: var(--sr-ink-light, rgba(255, 255, 255, 0.55)) !important;
+  box-shadow: none !important;
+}

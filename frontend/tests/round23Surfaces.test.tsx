@@ -374,17 +374,13 @@ describe('L-3 rendered: every control that acts is locked', () => {
 });
 
 describe('L-3: a locked primary action looks neutral, never orange (GM blocker A)', () => {
-  const css = (file: string) => readFileSync(join(__dirname, '../src/styles', file), 'utf8');
+  // GM r24 item 2 made this one rule for every reason a button is disabled
+  // (styles/disabled-buttons.css); agentPresenceFollowups.ratchet holds it
+  // for every accent-filled button. Here: the two GM named are in it.
   it('Cinema\'s Generate shot and Create\'s Generate, while following or offline', () => {
-    for (const [file, selector] of [['cinema-studio.css', '.cinema-shot-panel__action--primary'], ['create-studio.css', '.create-composer__generate']]) {
-      const source = css(file);
-      for (const mark of ['data-following-disabled', 'data-offline-disabled']) {
-        const at = source.indexOf(`${selector}[${mark}]`);
-        expect(at, `${file} ${mark}`).toBeGreaterThan(-1);
-        const block = source.slice(source.indexOf('{', at), source.indexOf('}', at));
-        expect(block, file).not.toMatch(/--sr-accent/);
-        expect(block, file).toMatch(/background:/);
-      }
-    }
+    const shared = readFileSync(join(__dirname, '../src/styles/disabled-buttons.css'), 'utf8');
+    for (const selector of ['.cinema-shot-panel__action--primary', '.create-composer__generate']) expect(shared).toContain(selector);
+    expect(shared).toMatch(/:is\(:disabled, \[aria-disabled='true'\]\)/);
+    expect(shared).not.toMatch(/background:[^;]*--sr-accent/);
   });
 });

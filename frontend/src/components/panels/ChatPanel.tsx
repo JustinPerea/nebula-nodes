@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { refuseEditWhileFollowing } from '../../lib/canvasFollow';
+import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
+import { canvasReplacements, subscribeCanvasReplaced } from '../../lib/canvasReplaced';
 import { ArrowUp, ChevronDown, ChevronRight, ExternalLink, LogIn, Square, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
@@ -172,6 +174,10 @@ type ChatMessage =
       // id of the text-input node so we can render "Apply to this node"
       // buttons next to any code blocks in the reply.
       enhanceTargetId?: string;
+      /** The canvas that id belongs to (canvasReplacements() when Enhance
+       * was pressed). Node ids start again at n1 after a clear or a load, so
+       * Apply goes once the canvas is replaced (follow-up to PR #195). */
+      enhanceCanvas?: number;
     }
   | {
       role: 'system';
@@ -282,9 +288,16 @@ function AssistantBubble({ message, agentName, onPermission }: {
   onPermission: (requestId: string, decision: 'allow' | 'deny') => void;
 }) {
   const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
+  // Apply writes the canvas: it takes the canvas lock (disabled, marked,
+  // GM's tooltip while following; offline too), and goes once the canvas
+  // its node id was read on is replaced (that id may name another node now).
+  const lock = useCanvasLock();
+  const canvasNow = useSyncExternalStore(subscribeCanvasReplaced, canvasReplacements, canvasReplacements);
+  const canApply = Boolean(message.enhanceTargetId) && message.enhanceCanvas === canvasNow;
 
   const applyToTarget = (content: string) => {
-    if (!message.enhanceTargetId) return;
+    if (!message.enhanceTargetId || message.enhanceCanvas !== canvasReplacements()) return;
+    if (refuseCanvasEdit()) return;
     const { nodes, updateNodeData } = useGraphStore.getState();
     const target = nodes.find((n) => n.id === message.enhanceTargetId);
     if (!target) return;
@@ -314,12 +327,12 @@ function AssistantBubble({ message, agentName, onPermission }: {
                 ) : (
                   <div key={i} className="chat__codeblock">
                     <pre className="chat__codeblock-body">{seg.content}</pre>
-                    {message.enhanceTargetId && (
+                    {canApply && (
                       <button
                         type="button"
                         className="chat__codeblock-apply"
                         onClick={() => applyToTarget(seg.content)}
-                        title="Paste this into the text-input node that triggered Enhance"
+                        {...lock.act({ title: 'Paste this into the text-input node that triggered Enhance' })}
                       >
                         {applyLabel}
                       </button>
@@ -844,7 +857,7 @@ export function ChatPanel() {
   // Holds the text-input node id for the next outgoing message, set by the
   // Enhance button just before send. Cleared when the message leaves so it
   // only attaches to the one assistant response it triggered.
-  const pendingEnhanceTargetRef = useRef<string | null>(null);
+  const pendingEnhanceTargetRef = useRef<{ id: string; canvas: number } | null>(null);
 
   const uploadFile = useCallback(
     async (file: File, chipId: string) => {
@@ -1335,7 +1348,8 @@ export function ChatPanel() {
       setInput(msg);
       // Remember which node triggered this so the Apply button knows where to
       // paste the reply's code blocks. Cleared inside send() once attached.
-      pendingEnhanceTargetRef.current = detail?.sourceNodeId ?? null;
+      pendingEnhanceTargetRef.current = detail?.sourceNodeId
+        ? { id: detail.sourceNodeId, canvas: canvasReplacements() } : null;
       // Defer so the input state and possibly the WS connection settle first.
       setTimeout(() => {
         const ws = wsRef.current;
@@ -1485,7 +1499,9 @@ export function ChatPanel() {
     if (raw === '/clear') {
       // Offline is read-only (GM, round 14 of PR #114): the clear is refused
       // whole, chat and canvas, and the banner pulses; the command stays typed.
-      if (refuseEditWhileOffline()) return;
+      // Following an agent's switch the same (the canvas lock, follow-up to
+      // PR #195): the project bar pulses.
+      if (refuseCanvasEdit()) return;
       if (personal && sessionId) closePersonalSessionRef.current(sessionId);
       setSessionId(null);
       // Also wipe Nebula's graph, under one undo step (lib/chatCanvasClear.ts).
@@ -1529,7 +1545,7 @@ export function ChatPanel() {
     finally { authorityPendingRef.current = false; if (commonsEnabled) setAuthorizing(false); }
     if (busyRef.current || ws.readyState !== WebSocket.OPEN || useUIStore.getState().commonsEnabled !== commonsEnabled) return;
 
-    const enhanceTargetId = pendingEnhanceTargetRef.current ?? undefined;
+    const enhanceTarget = pendingEnhanceTargetRef.current;
     pendingEnhanceTargetRef.current = null;
     // Stash thumbs for the user-message bubble history rendering (Task 9
     // will make the bubble actually render them).
@@ -1546,7 +1562,8 @@ export function ChatPanel() {
         id: newId(),
         images: attachedImages.length ? attachedImages : undefined,
       },
-      { role: 'assistant', id: newId(), streaming: true, parts: [], enhanceTargetId },
+      { role: 'assistant', id: newId(), streaming: true, parts: [],
+        enhanceTargetId: enhanceTarget?.id, enhanceCanvas: enhanceTarget?.canvas },
     ]);
     applyCancellationEvent({ type: 'send' });
     setInput((current) => current.trim() === raw ? '' : current);

@@ -2136,8 +2136,18 @@ function replaceCanvasByClear(agentClear?: { agent: string | null }, options: { 
   const parked = takeParkedParamSaves();
   const editing = agentClear || options.reconnect ? [...editingNow(), ...parked] : [];
   // GM round 23: with no agent, what it cuts off is kept as a copy, from the
-  // canvas as it is now (before this sync replaces it).
-  const keeping = options.reconnect && !agentClear && editing.length > 0 ? keepReplacedCanvas?.() ?? null : null;
+  // canvas as it is now (before this sync replaces it). Follow-up to PR #195
+  // (review 23, L-5): saves already sent on this canvas count too. Nebula
+  // refuses them now (they carry this canvas's header), so the copy is sent
+  // once one of them is refused or goes unanswered; if they all land (Nebula
+  // took them before the replacement) none is made, and no line is shown.
+  const sentHere = options.reconnect && !agentClear ? landingsOfThisCanvas() : [];
+  const prepared = options.reconnect && !agentClear && (editing.length > 0 || sentHere.length > 0)
+    ? keepReplacedCanvas?.() ?? null : null;
+  const keeping = !prepared ? null
+    : editing.length > 0 ? prepared()
+      : Promise.all(sentHere.map((landing) => landing.settled))
+        .then((landed) => (landed.every(Boolean) ? null : prepared()));
   // GM (review 21, G-a): Undo on an agent's clear line puts the canvas back
   // as Nebula last saved it, never with the typing the line says wasn't saved.
   clearedAsSaved = agentClear ? lastSavedView() : null;
@@ -2145,6 +2155,7 @@ function replaceCanvasByClear(agentClear?: { agent: string | null }, options: { 
   // Round 23 (review 22, M-1): what still holds an id of this canvas (the
   // note dialog) lets it go.
   noteCanvasReplaced();
+  forgetLandingsOfReplacedCanvas();
   // A run started before it is no longer this canvas's, and its refused
   // start marks nothing on the new n1 (round 12 of PR #114).
   forgetRunsOfReplacedGraph();
@@ -2184,9 +2195,11 @@ function replaceCanvasByClear(agentClear?: { agent: string | null }, options: { 
  * held it, typing included, is saved as a recovered copy (a whole project in
  * Projects, as a failed handoff's is), and GM's line names it with Open
  * copy. projectStore registers how (it owns snapshots and copies); null
- * when there is no project to copy from. Read before the canvas changes.
+ * when there is no project to copy from. Read before the canvas changes:
+ * it takes the snapshot then and returns the call that sends the copy, so a
+ * copy for saves still on their way is sent only once one is refused (L-5).
  */
-let keepReplacedCanvas: (() => Promise<{ id: string; name: string } | null> | null) | null = null;
+let keepReplacedCanvas: (() => (() => Promise<{ id: string; name: string } | null>) | null) | null = null;
 export function setReplacedCanvasKeeper(keeper: typeof keepReplacedCanvas): void {
   keepReplacedCanvas = keeper;
 }
@@ -2206,6 +2219,10 @@ let clearedAsSaved: LastSavedView | null = null;
  */
 interface PendingLanding {
   nodeId: string;
+  /** The canvas it was sent on (canvasReplacementRevision). Follow-up to PR
+   * #195 (review 23, L-2): node ids start again at n1 on every canvas, so a
+   * landing only ever counts for the canvas it was sent on. */
+  graph: number;
   /** Send order: a later write of the same node wins. */
   order: number;
   apply: (node: Node<NodeData>) => Node<NodeData>;
@@ -2217,7 +2234,7 @@ let landingSeq = 0;
 /** A write going out: its landing, and the call that settles it (once). */
 function watchLanding(nodeId: string, apply: PendingLanding['apply']): (landed: boolean) => void {
   let settle: (landed: boolean) => void = () => {};
-  const landing: PendingLanding = { nodeId, order: ++landingSeq, apply,
+  const landing: PendingLanding = { nodeId, graph: canvasReplacementRevision, order: ++landingSeq, apply,
     settled: new Promise<boolean>((resolve) => { settle = resolve; }) };
   landingsOut.add(landing);
   let done = false;
@@ -2233,6 +2250,19 @@ interface LastSavedView {
   nodes: Map<string, { params: Record<string, unknown>; label: string | undefined }>;
   /** The writes still on their way for the nodes it covers (L-1). */
   pending: PendingLanding[];
+}
+
+/** The saves on their way that were sent on the canvas shown now. */
+function landingsOfThisCanvas(): PendingLanding[] {
+  return [...landingsOut].filter((landing) => landing.graph === canvasReplacementRevision);
+}
+
+/** The canvas was replaced (a clear, an import, a load, a sync that brought
+ * another canvas): the saves sent on the one that went stop counting as on
+ * their way here. A step already held for one keeps its own reference (its
+ * `settled` still answers); nothing new takes it. */
+function forgetLandingsOfReplacedCanvas(): void {
+  for (const landing of [...landingsOut]) if (landing.graph !== canvasReplacementRevision) landingsOut.delete(landing);
 }
 
 function lastSavedView(): LastSavedView {
@@ -2255,7 +2285,10 @@ function lastSavedView(): LastSavedView {
     }
     view.set(node.id, { params, label: renamedFrom ?? (node.data.label as string | undefined) });
   }
-  return { nodes: view, pending: [...landingsOut].filter((landing) => onCanvas.has(landing.nodeId)) };
+  // Only the canvas being cleared (read before canvasReplacementRevision
+  // moves): a landing sent on an earlier canvas names another node by the
+  // same id (review 23, L-2: TWOCLEARS).
+  return { nodes: view, pending: landingsOfThisCanvas().filter((landing) => onCanvas.has(landing.nodeId)) };
 }
 
 /** The writes on their way when the canvas of the next foreign step was
@@ -6819,6 +6852,7 @@ function applyGraphSync(event: ExecutionEvent, options: { fromExport?: boolean }
   if (graphReplaced) {
     canvasReplacementRevision += 1;
     noteCanvasReplaced();
+    forgetLandingsOfReplacedCanvas();
     forgetRunsOfReplacedGraph();
     newWriteQueue();
     // An agent's import into this project (a switch comes through
@@ -10243,6 +10277,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     canvasReplacementRevision += 1;
     canvasLoadedOverHttp();
     noteCanvasReplaced();
+    forgetLandingsOfReplacedCanvas();
     forgetRunsOfReplacedGraph();
     newWriteQueue();
     // Typing still in its debounce was for the graph this replaces: its
@@ -10368,6 +10403,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     // Round 23 (review 22, L-2 and M-1): another canvas, loaded over HTTP.
     canvasLoadedOverHttp();
     noteCanvasReplaced();
+    forgetLandingsOfReplacedCanvas();
     newWriteQueue();
     const droppedPresses = forgetStepsInFlight();
     pendingNodeCreationAttempt = null;

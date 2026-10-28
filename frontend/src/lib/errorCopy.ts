@@ -496,3 +496,22 @@ export async function requestError(heading: string, response: Response,
     storageFull: body.storageFull, storageLimit: body.storageLimit, code: body.code,
     overSaveLimit: body.overSaveLimit, sizeBytes: body.sizeBytes });
 }
+
+/**
+ * A list of node names in a line (GM - Design, 2026-10-27, the follow-up to
+ * PR #195), shared by every line that names several nodes: the failed-save
+ * lines (lib/savingCutOff) and the multi-delete toasts (lib/deleteCopy).
+ * - Up to 3 nodes by name: "“A”", "“A” and “B”", "“A”, “B” and “C”".
+ * - Nodes with the same title are grouped with a count, never repeated:
+ *   "2 “Text” nodes"; a mix, "“Brief” and 2 “Text” nodes".
+ * - The rule counts nodes, not groups: from 4 nodes in total, "4 nodes".
+ * - No node ids: the Agent log keeps those.
+ * Groups keep the order their first node came in.
+ */
+export function nodeNameList(names: string[]): string {
+  if (names.length >= 4) return `${names.length} nodes`;
+  const groups = new Map<string, number>();
+  for (const name of names) groups.set(name, (groups.get(name) ?? 0) + 1);
+  const parts = [...groups].map(([name, count]) => (count === 1 ? `“${name}”` : `${count} “${name}” nodes`));
+  return parts.length <= 1 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+}

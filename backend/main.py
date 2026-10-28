@@ -11,7 +11,9 @@ _env_check.run_startup_checks()
 import asyncio
 import copy
 import errno
+import functools
 import hashlib
+import inspect
 import json
 import logging
 import math
@@ -1159,13 +1161,42 @@ FENCE_BEFORE_ROUTE = "before-route"
 FENCE_IN_ROUTE = "in-route"
 
 
+# Set on a FENCE_BEFORE_ROUTE route by graph_write: its body starts with the
+# check (tests/test_agent_presence_followups.py walks every route for it).
+GRAPH_FENCE_RECHECK_ATTR = "__nebula_graph_fence_recheck__"
+
+
 def graph_write(endpoint: Any = None, *, checks_in_route: bool = False) -> Any:
     """Mark a route that changes the graph or starts work on the canvas. Put
-    it right under ``@app.post(...)`` (or put, delete): it sets an attribute
-    and returns the same function, so FastAPI reads the signature as before."""
+    it right under ``@app.post(...)`` (or put, delete).
+
+    A FENCE_IN_ROUTE route is returned as it is (it checks in the step that
+    writes). A FENCE_BEFORE_ROUTE route is wrapped so its body starts with
+    the check again (follow-up to PR #195, review 23 L-1): between the
+    middleware's check and the route body the event loop turns a few times,
+    and an agent's open waiting at its last await can commit a switch there.
+    The wrapper runs the check and then the body in the same synchronous step
+    (awaiting a coroutine runs it up to its first await), so a route that
+    writes before its first await, as the pin routes do, writes only to the
+    canvas its request was made for; a route that awaits first still checks
+    again in the step that writes. ``functools.wraps`` keeps the signature,
+    so FastAPI reads the route's parameters as before. Only async routes can
+    be marked: a sync one runs on a worker thread after an unknown wait."""
     def mark(function: Any) -> Any:
-        setattr(function, GRAPH_FENCE_ATTR, FENCE_IN_ROUTE if checks_in_route else FENCE_BEFORE_ROUTE)
-        return function
+        if checks_in_route:
+            setattr(function, GRAPH_FENCE_ATTR, FENCE_IN_ROUTE)
+            return function
+        if not inspect.iscoroutinefunction(function):
+            raise TypeError(f"graph_write needs an async route: {getattr(function, '__name__', function)!r}")
+
+        @functools.wraps(function)
+        async def fenced(*args: Any, **kwargs: Any) -> Any:
+            _check_workspace_revision()
+            return await function(*args, **kwargs)
+
+        setattr(fenced, GRAPH_FENCE_ATTR, FENCE_BEFORE_ROUTE)
+        setattr(fenced, GRAPH_FENCE_RECHECK_ATTR, True)
+        return fenced
     return mark(endpoint) if endpoint is not None else mark
 
 
