@@ -148,9 +148,9 @@ async def test_the_cinema_shot_merge_sync_carries_the_run_id(monkeypatch) -> Non
 # -- L4: a stopped run's id, reused ----------------------------------------------
 
 
-STOPPED = "run '{id}' was already stopped, so this id can't start again. Start a new run with a new id."
-RAN = "run '{id}' already ran, so this id can't start again. Start a new run with a new id."
-STOP_RECORDED = "run '{id}' was stopped, so this id can't start again. Start a new run with a new id."
+STOPPED = "run '{id}' was already stopped, so this id can’t start again. Start a new run with a new id."
+RAN = "run '{id}' already ran, so this id can’t start again. Start a new run with a new id."
+STOP_RECORDED = "run '{id}' was stopped, so this id can’t start again. Start a new run with a new id."
 
 
 def _text() -> GraphNode:

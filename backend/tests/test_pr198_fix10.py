@@ -1,11 +1,12 @@
 """PR #198 fix round 10 (review 9): the agent rule across MCP and the CLI,
 and ``onlyIfFree`` on inputs that take several connections.
 
-- M-1: a read under a session (MCP sends one) is also the name's, so a
-  write that sends no session (``nebula set``, a plain PUT) is held to the
-  newest read by any session of that name; a CLI write on top of a fresh
-  MCP read is taken; a session that never read falls back to the name's.
-  A verified token stays its own reader.
+- M-1: a write that sends no session (``nebula set``, a plain PUT) and
+  never read is held to the newest read by any session of that name, so an
+  MCP read guards it; a session that never read falls back to the name's.
+  A verified token stays its own reader. Fix round 11 (review 10, L-1): a
+  writer's own read comes first, so a CLI write built on its older read is
+  refused even after a fresh MCP read.
 - N-1: ``onlyIfFree`` refuses only an input that takes one connection.
 """
 from __future__ import annotations
@@ -35,15 +36,22 @@ def test_m1_an_mcp_read_guards_a_cli_write(api):  # noqa: F811
     assert _prompts(api, node) == ["the person typed this", "a busy street"]
 
 
-def test_m1_a_cli_write_on_a_fresh_mcp_read_is_taken(api):  # noqa: F811
+def test_m1_a_cli_write_on_a_fresh_mcp_read_is_held_to_its_own_older_read(api):  # noqa: F811
+    # Fix round 11 (review 10, L-1; probe B8): the CLI's own read comes first,
+    # so an MCP read never refreshes it. A refusal the agent recovers from
+    # (`nebula look`, then redo), never a write over the person's typing.
     node = _cinema(api)
     assert api.client.get("/api/graph/export", headers=CODEX).status_code == 200
     assert _put(api, node, CODEX, _scene("a quiet street", "codex first")).status_code == 200
     _person_types(api, node)
     assert api.client.get("/api/canvas/snapshot", headers=MCP).status_code == 200
     on_top = _put(api, node, CODEX, _scene("the person typed this", "codex on top of the mcp read"))
-    assert on_top.status_code == 200, on_top.text
-    assert _prompts(api, node) == ["the person typed this", "codex on top of the mcp read"]
+    assert on_top.status_code == 409 and on_top.json()["code"] == "scene_changed"
+    assert _prompts(api, node) == ["the person typed this", "a busy street"]
+    # `nebula look`, then the redo: taken.
+    assert api.client.get("/api/graph", headers=CODEX).status_code == 200
+    redo = _put(api, node, CODEX, _scene("the person typed this", "codex redo"))
+    assert redo.status_code == 200, redo.text
 
 
 def test_m1_a_session_that_never_read_is_held_to_the_names_read(api):  # noqa: F811
@@ -93,6 +101,8 @@ def test_docs_say_when_mcp_and_the_cli_share_a_read():
     repo = Path(__file__).resolve().parents[2]
     setup = " ".join((repo / "docs/MCP-SETUP.md").read_text(encoding="utf-8").split())
     skill = " ".join((repo / "skills/nebula/SKILL.md").read_text(encoding="utf-8").split())
-    for line in ("newest read by any session of that name", "same `NEBULA_AGENT_SESSION`", "single-connection input"):
+    for line in ("newest read by any session of that name", "same `NEBULA_AGENT_SESSION`", "single-connection input",
+                 "an MCP look never refreshes a CLI read"):
         assert line in setup, line
     assert "newest read by any session of that name" in skill
+    assert "An MCP look never refreshes a `nebula look`" in " ".join(skill.split())

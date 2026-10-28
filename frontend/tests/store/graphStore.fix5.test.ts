@@ -59,7 +59,7 @@ const unsaved = (id = 'n1') => (useGraphStore.getState() as { unsavedScenes?: Re
 let said: string[] = [];
 let logged: string[] = [];
 
-const REMOVE_LINE = "Couldn't remove “Shot 2”. It's still running. Stop the run first.";
+const REMOVE_LINE = "Couldn’t remove “Shot 2”. It’s still running. Stop the run first.";
 const PAID = '/api/outputs/paid-s2.png';
 const RENDERING_409 = { detail: REMOVE_LINE, code: 'rendering_shots', rendering: { shotIds: ['s2'], shots: [2], stoppable: true } };
 

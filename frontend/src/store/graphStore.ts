@@ -80,7 +80,7 @@ import {
   rewriteExecutionAssetUrls,
 } from '../lib/backend';
 import {
-  isBackendOffline, isOfflineRefusal, noteBackendBootId, OfflineRefusal, refuseEditWhileOffline, requestHealthProbe,
+  isBackendOffline, isOfflineRefusal, isRetiredBackendBoot, noteBackendBootId, OfflineRefusal, refuseEditWhileOffline, requestHealthProbe,
   subscribeBackendConnection, subscribeBackendRestart,
 } from '../lib/backendConnection';
 import { AGENT_CURSOR_SPRING, isAtRest, stepSpring, type SpringState } from '../lib/agentCursorMotion';
@@ -94,7 +94,7 @@ import {
   warnFailure, nodeNameList,
 } from '../lib/errorCopy';
 import { CANVAS_NOTICE_EVENT, showNotice, type CanvasNoticeDetail } from '../lib/canvasNotice';
-import { BAD_SAVE, DELETED_ELSEWHERE, KEPT_AND_RETRYING, sceneStoppedLine, KEPT_UNTIL_RUN_ENDS, SWITCHED_UNNAMED, sceneClashLine,
+import { BAD_SAVE, DELETED_ELSEWHERE, KEPT_AND_RETRYING, sceneStoppedLine, sceneOutpacedLine, type SceneOutpacedBy, KEPT_UNTIL_RUN_ENDS, SWITCHED_UNNAMED, sceneClashLine,
   sceneReorderedLine, sceneSaveHeading, sceneTooBigLine, shotBackWithoutLine, shotsRemovedLine, switchedFirst } from '../lib/sceneSaveCopy';
 import { ORDER, PRESENCE, WHOLE, mergeScenes, stillClashing, unionFields, withFields, type SceneField } from '../lib/cinemaSceneMerge';
 import { cleanPending, pendingSkipLine, type PendingAgent, type PendingSkipSummary } from '../lib/pendingNodes';
@@ -2924,6 +2924,11 @@ interface CinemaScenePersistence {
   /** The line said for that refusal: a retry refused the same way says nothing new. */
   refusedLine: string | null;
   retryTimer: ReturnType<typeof setTimeout> | null;
+  /** GM r16: a stopped save's one retry of its own, about 2 s after the
+   * last change another writer brought (evidence saving works again). */
+  quietTimer: ReturnType<typeof setTimeout> | null;
+  /** That retry is out: a failure goes back to the stopped state quietly. */
+  quietRetry: boolean;
   retries: number;
   lastKick: number;
   /** H2 (GM r9 decision 2): the backend's scene these edits are on top of.
@@ -2974,6 +2979,10 @@ interface CinemaScenePersistence {
   /** GM r11 answer 3: the timed retries stopped; the next change, a
    * reconnect or [Try again] sends again. */
   stopped: boolean;
+  /** GM r18 answer 2: who kept changing the scene when another writer's
+   * refusals stopped the save (its line names them); null for a stop by
+   * server errors. */
+  stoppedBy: SceneOutpacedBy | null;
   /** Review 7, M2: the wires the other side's removal took off a shot the
    * person kept (a PRESENCE clash), held on the card while the choice waits
    * and sent again after Keep mine's save (GM r11 answer 4). */
@@ -3080,6 +3089,7 @@ export function clearCinemaScenePersistence(nodeId?: string): void {
     }
     if (entry?.settleTimer) clearTimeout(entry.settleTimer);
     if (entry?.retryTimer) clearTimeout(entry.retryTimer);
+    if (entry?.quietTimer) clearTimeout(entry.quietTimer);
     entry?.inFlight?.abort();
     for (const hold of entry?.wireHolds.splice(0) ?? []) hold.done(false);
     for (const hold of entry?.presenceWires.splice(0) ?? []) hold.done(false);
@@ -3097,6 +3107,10 @@ function setSceneClash(nodeId: string, clash: { line: string; agent: string | nu
   if (clash) next[nodeId] = { id: ++undoNoticeSeq, line: clash.line, agent: clash.agent };
   else delete next[nodeId];
   useGraphStore.setState({ sceneClashes: next });
+  // GM r17: a stopped save waits behind the clash; its [Try again] comes
+  // back if the clash goes and the save is still stopped.
+  const entry = cinemaScenePersistence.get(nodeId);
+  if (entry) markSceneStopped(nodeId, entry.stopped);
 }
 
 /** The person chose (GM r9): Keep mine saves the card's values over the
@@ -3158,7 +3172,9 @@ function retrySceneSave(nodeId: string): void {
 function sceneKeptLine(nodeId: string, entry: CinemaScenePersistence): string | null {
   if (entry.refused === 'server' && entry.stopped) {
     const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
-    return sceneStoppedLine(node ? cardTitle([node], nodeId) : 'Scene');
+    const scene = node ? cardTitle([node], nodeId) : 'Scene';
+    // GM r18 answer 2: another writer's refusals name that writer.
+    return entry.stoppedBy ? sceneOutpacedLine(scene, entry.stoppedBy) : sceneStoppedLine(scene);
   }
   return entry.refusedLine;
 }
@@ -3214,9 +3230,16 @@ function markSceneUnsaved(nodeId: string, line: string | null): void {
  * [Try again]); kept with the entry's `stopped`. */
 function setSceneStopped(nodeId: string, entry: CinemaScenePersistence, stopped: boolean): void {
   entry.stopped = stopped;
+  if (!stopped) entry.stoppedBy = null;
+  // Out of the stopped state (a save, the next change, [Try again]): its one
+  // quiet retry (GM r16) has nothing left to do.
+  if (!stopped) clearQuietRetry(entry);
   markSceneStopped(nodeId, stopped);
 }
 function markSceneStopped(nodeId: string, stopped: boolean): void {
+  // GM r17: while a clash waits, the clash prompt asks and the mark carries
+  // its line; the stopped state (the mark's [Try again]) waits behind it.
+  if (stopped && nodeId in useGraphStore.getState().sceneClashes) stopped = false;
   const shown = useGraphStore.getState().stoppedScenes;
   if ((nodeId in shown) === stopped) return;
   const next = { ...shown };
@@ -3266,6 +3289,37 @@ function resumeCinemaScenePersistence(): void {
 let sceneRetryDelays = [2000, 4000, 8000, 15000];
 export function setSceneRetryDelaysForTests(delays: number[]): void {
   sceneRetryDelays = delays.length > 0 ? delays : [2000];
+}
+
+/** GM r16: how long a stopped save waits after the last change another
+ * writer brought before it tries once by itself. */
+const SCENE_QUIET_RETRY_MS = 2000;
+let sceneQuietRetryMs = SCENE_QUIET_RETRY_MS;
+export function setSceneQuietRetryForTests(ms: number | null): void {
+  sceneQuietRetryMs = ms ?? SCENE_QUIET_RETRY_MS;
+}
+
+function clearQuietRetry(entry: CinemaScenePersistence): void {
+  if (entry.quietTimer) clearTimeout(entry.quietTimer);
+  entry.quietTimer = null;
+}
+
+/** GM r16: a stopped save tries once by itself, but only on evidence that
+ * saving works again: a change from another writer arriving in the scene
+ * (as good as a reconnect). It goes about 2 s after the last such change,
+ * so a writer still at work keeps pushing it back: one try per quiet
+ * stretch, never a loop. While it is out the save stays stopped (the mark,
+ * its popover and [Try again] stay); a success clears them as any save
+ * does, and a failure goes back to the stopped state with no new toast. */
+function scheduleQuietRetry(nodeId: string, entry: CinemaScenePersistence): void {
+  clearQuietRetry(entry);
+  entry.quietTimer = setTimeout(() => {
+    entry.quietTimer = null;
+    if (cinemaScenePersistence.get(nodeId) !== entry || !entry.stopped || entry.clash || entry.inFlight) return;
+    entry.quietRetry = true;
+    entry.pending = true;
+    void flushCinemaScenePersistence(nodeId, entry);
+  }, sceneQuietRetryMs);
 }
 
 /** The stopped state (GM r11 answer 3): the edits stay "Unsaved" with GM's
@@ -3488,7 +3542,7 @@ type SceneAnswer =
   | { kind: 'aborted' }
   | { kind: 'rendering'; shotIds: string[]; line: string }
   | { kind: 'gone' | 'moved'; line: string }
-  | { kind: 'changed'; scene: CinemaSceneSpec; key: string | null; agent: string | null; rev: number | null }
+  | { kind: 'changed'; scene: CinemaSceneSpec; key: string | null; agent: string | null; rev: number | null; by: SceneOutpacedBy }
   | { kind: 'kept'; refused: SceneRefusalKind; line: string | null; log?: string };
 
 /** Reads a refused scene write: which part, or what clears it (GM r7 item 1). */
@@ -3505,7 +3559,11 @@ async function sceneRefusal(nodeId: string, response: Response): Promise<SceneAn
     return { kind: 'changed', scene: rewriteBackendAssetUrls(changedScene),
       key: typeof body.sceneKey === 'string' ? body.sceneKey : null,
       agent: by?.kind === 'agent' && typeof by.name === 'string' && by.name.trim() ? by.name : null,
-      rev: typeof body.sceneRev === 'number' ? body.sceneRev : null };
+      rev: typeof body.sceneRev === 'number' ? body.sceneRev : null,
+      // GM r18 answer 2: who kept changing it, for the stopped line.
+      by: by?.kind === 'agent'
+        ? { kind: 'agent', name: typeof by.name === 'string' && by.name.trim() ? by.name : null }
+        : { kind: 'window' } };
   }
   warnFailure("Couldn’t save the scene.", response.status, body.detail);
   const status = response.status;
@@ -3655,6 +3713,10 @@ async function flushCinemaScenePersistence(nodeId: string, entry: CinemaScenePer
  */
 function settleSceneAnswer(nodeId: string, entry: CinemaScenePersistence, answer: SceneAnswer): void {
   const state = useGraphStore.getState();
+  // GM r16: the stopped save's own retry is answered (a nested settle, as
+  // 'rendering' makes, keeps reading it).
+  const quiet = entry.quietRetry;
+  if (answer.kind !== 'aborted') entry.quietRetry = false;
   switch (answer.kind) {
     case 'ok': {
       entry.refused = null;
@@ -3706,8 +3768,35 @@ function settleSceneAnswer(nodeId: string, entry: CinemaScenePersistence, answer
         // save's round trip): the edits stay on the card, "Unsaved", with
         // the stopped line and [Try again]; the next change, a reconnect or
         // [Try again] sends them again, merged onto what Nebula has then.
+        // Review 10, L-2: the 21st refusal's scene is merged first (after the
+        // stop, so the merge sends nothing), so the next send (a reconnect,
+        // the quiet try, [Try again]) builds on what Nebula has now and isn't
+        // refused for an old base. GM r18 answer 2: the line names who kept
+        // changing it. The refusal is that writer's change arriving: once
+        // they're quiet, the save tries once (GM r16), unless a clash asks.
         entry.pending = false;
+        entry.stoppedBy = answer.by;
         stopSceneSave(nodeId, entry);
+        rebaseOnto(nodeId, entry, answer.scene, answer.key, answer.agent, true,
+          typeof answer.rev === 'number' ? answer.rev : null);
+        if (!entry.clash) scheduleQuietRetry(nodeId, entry);
+        return;
+      }
+      if (quiet && entry.stopped) {
+        // GM r16: the one try was refused as changed: Nebula's scene is
+        // merged into the card (a stopped save sends nothing for it), and the
+        // save stays stopped, quietly. The refusal is another writer's change
+        // arriving, so it starts a new quiet stretch: one more try once that
+        // writer is quiet (a change at each try is a writer at work, never a
+        // loop of the tab's own).
+        entry.pending = false;
+        // GM r17: "nothing new shown" holds only for a silent merge. If the
+        // change overlaps the person's fields, the clash prompt asks as
+        // usual (settleRebasedScene) and the stopped state waits behind it;
+        // the person's answer sends the save, so no quiet try is due.
+        rebaseOnto(nodeId, entry, answer.scene, answer.key, answer.agent, true,
+          typeof answer.rev === 'number' ? answer.rev : null);
+        if (!entry.clash) scheduleQuietRetry(nodeId, entry);
         return;
       }
       if (!answer.key) {
@@ -3764,6 +3853,15 @@ function settleSceneAnswer(nodeId: string, entry: CinemaScenePersistence, answer
       return;
     case 'kept':
       holdRemovedWires(nodeId, entry);
+      if (quiet && entry.stopped && (answer.refused === 'server' || answer.refused === 'run-lock')) {
+        // GM r16: the one try failed: stopped as before, no new toast, and
+        // the mark's popover keeps [Try again].
+        entry.refused = 'server';
+        entry.pending = false;
+        const line = sceneKeptLine(nodeId, entry);
+        if (line) markSceneUnsaved(nodeId, line);
+        return;
+      }
       entry.refused = answer.refused;
       // GM r10: while a clash waits, its prompt is the line; nothing retries.
       if (entry.clash) {
@@ -3816,7 +3914,8 @@ function rebaseOnto(nodeId: string, entry: CinemaScenePersistence, incoming: Cin
   const shown = mergeInto(entry, sceneFromNode(node), incoming, incomingKey, key, agent, rev);
   if (!shown) return false;
   applySceneToNode(useGraphStore.setState, nodeId, shown);
-  settleRebasedScene(nodeId, entry);
+  // A refusal's scene is the save's own answer, not a sync's change.
+  settleRebasedScene(nodeId, entry, !refused);
   return true;
 }
 
@@ -3930,7 +4029,7 @@ function clashLineFor(clash: SceneClash, scene: string, shown: CinemaSceneSpec, 
  * its ports follow the merged scene, shots it brought back get their wires,
  * a clash asks the person, and what the person has that the backend doesn't
  * is saved (the clashing fields as the backend has them). */
-function settleRebasedScene(nodeId: string, entry: CinemaScenePersistence): void {
+function settleRebasedScene(nodeId: string, entry: CinemaScenePersistence, fromSync = true): void {
   const rebased = entry.rebased!;
   entry.rebased = null;
   if (rebased.back.length > 0) restoreShots(nodeId, entry, rebased.back, { shown: true });
@@ -3947,6 +4046,8 @@ function settleRebasedScene(nodeId: string, entry: CinemaScenePersistence): void
   } else {
     setSceneClash(nodeId, null);
     if (entry.refused === null) markSceneUnsaved(nodeId, null);
+    // GM r17: a stopped save that waited behind a clash gets its own line back.
+    else if (entry.stopped) markSceneUnsaved(nodeId, sceneKeptLine(nodeId, entry));
   }
   if (entry.unanswered) return; // the unanswered branch sends it
   const sendable = entry.clash ? withFields(shown, entry.clash.fields, held) : shown;
@@ -3968,8 +4069,13 @@ function settleRebasedScene(nodeId: string, entry: CinemaScenePersistence): void
   // sync's change shows on the card and the edits stay "Unsaved" with the
   // stopped line; nothing goes until the next change, a reconnect or
   // [Try again] (GM r11 answer 3), so a writer that keeps writing can't pace
-  // a resend per sync.
-  if (entry.stopped) return;
+  // a resend per sync. GM r16: another writer's change arriving by a sync
+  // is evidence saving works again; once that writer is quiet for about
+  // 2 s, the save tries once by itself (scheduleQuietRetry).
+  if (entry.stopped) {
+    if (fromSync && !entry.clash) scheduleQuietRetry(nodeId, entry);
+    return;
+  }
   entry.pending = true;
   if (entry.inFlight) return; // its answer sends what is pending
   if (entry.retryTimer) clearTimeout(entry.retryTimer);
@@ -3988,6 +4094,14 @@ function resendKeptScenes(): void {
     if (entry.retryTimer) clearTimeout(entry.retryTimer);
     entry.retryTimer = null;
     entry.changedInRow = 0;
+    // Review 10, L-2: a reconnect sends a stopped save again as [Try again]
+    // does (retrySceneSave): out of the stopped state, so a refusal's merge
+    // that follows is sent too.
+    if (entry.stopped) {
+      entry.retries = 0;
+      setSceneStopped(nodeId, entry, false);
+      entry.refusedLine = null;
+    }
     entry.pending = true;
     void flushCinemaScenePersistence(nodeId, entry);
   }
@@ -4090,7 +4204,7 @@ function persistSceneParam(nodeId: string, scene: CinemaSceneSpec, debounceMs = 
       // The removal's own step (pushed just before) is the last one that
       // still has the shot: the steps after it are the ones to rewrite.
       since: lastStepSeq, removed: new Map(), unanswered: false, refused: null, refusedLine: null,
-      retryTimer: null, retries: 0, lastKick: 0,
+      retryTimer: null, quietTimer: null, quietRetry: false, stoppedBy: null, retries: 0, lastKick: 0,
       base: backendScenes.has(nodeId) ? cloneScene(backendScenes.get(nodeId)!) : null,
       clash: null, rebased: null, sendSeq: 0, rebaseSeq: 0,
       baseKey: backendSceneKeys.get(nodeId) ?? null, baseRev: backendSceneRevs.get(nodeId) ?? null,
@@ -7975,7 +8089,7 @@ function sendRestore(
     if (admission.graph !== canvasReplacementRevision) return;
     set((state) => {
       // A refusal written for the person already says what couldn't be
-      // done ("Couldn't undo. It would remove “Shot 2”, …"; PR #198 GM r3 item 3).
+      // done ("Couldn’t undo. It would remove “Shot 2”, …"; PR #198 GM r3 item 3).
       const line = how.quiet ? {} : { undoNotice: { id: ++undoNoticeSeq, text: how.text ?? headedLine(`Couldn’t ${action} that.`, reason), offer: null,
         ...(isForeignEdit(entry) ? { agentColor: entry.agentColor, entry } : {}) } };
       if (how.text) timeoutNoticeId = undoNoticeSeq;
@@ -8330,10 +8444,14 @@ function releaseUnresolvedCreates(): void {
 wsClient.subscribe((event) => {
   if (event.type === 'socketReconnected') firstSyncAfterReconnect = true;
   if (event.type === 'graphSync') {
+    const boot = (event as { bootId?: unknown }).bootId;
+    // Review 10, N-4: a sync from a process this tab has already seen
+    // replaced (it named itself, or it is a broadcast on that process's
+    // socket) arrived late; it would put its older scene back on the card.
+    if (isRetiredBackendBoot(typeof boot === 'string' && boot ? boot : socketBoot)) return;
     // Before any check of whose graph it is: the hello arrives before this
     // tab has a project (review 15, M4).
-    noteBackendBootId((event as { bootId?: unknown }).bootId);
-    const boot = (event as { bootId?: unknown }).bootId;
+    noteBackendBootId(boot);
     if (typeof boot === 'string' && boot) socketBoot = boot;
     if (firstSyncAfterReconnect) {
       // A reopened socket's first message proves the backend answers

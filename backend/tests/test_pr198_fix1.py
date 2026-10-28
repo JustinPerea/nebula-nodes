@@ -115,7 +115,7 @@ def test_a_bare_cursor_move_has_nothing_to_log():
 # -- N1: the World Labs claim's Stop ----------------------------------------------
 
 
-STOP_RECORDED = "run '{id}' was stopped, so this id can't start again. Start a new run with a new id."
+STOP_RECORDED = "run '{id}' was stopped, so this id can’t start again. Start a new run with a new id."
 
 
 def test_a_stop_that_lands_at_the_world_labs_claim_says_what_every_reused_id_says(monkeypatch):

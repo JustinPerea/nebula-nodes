@@ -73,7 +73,7 @@ beforeEach(async () => {
 
 // -- H1-new: a refused shot removal -------------------------------------------------------
 
-const REMOVE_LINE = "Couldn't remove “Shot 2”. It's still running. Stop the run first.";
+const REMOVE_LINE = "Couldn’t remove “Shot 2”. It’s still running. Stop the run first.";
 const PAID = '/api/outputs/paid-s2.png';
 
 function backendGraph(s2: Shot = { id: 's2', prompt: 'b' }) {

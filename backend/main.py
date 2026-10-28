@@ -998,15 +998,23 @@ def _scene_scope() -> str:
         return token
 
 
-def _reader_agent() -> tuple[str, ...] | None:
-    """The agent session behind this request, for services/scene_keys.py, as
-    its reader keys, its own first (fix round 9, M-2: a session, never a name
-    shared by several): a verified token's chat session or the token itself;
-    else the name with the ``X-Nebula-Agent-Session`` it sent (the MCP server
-    sends one per process), then the bare name (fix round 10, M-1: a write
-    without a session, a CLI's or a plain PUT, is checked against the newest
-    read by any session of that name, so an MCP read guards it); else the
-    name alone. None for the person and anonymous callers."""
+def _agent_readers() -> tuple[tuple[str, ...], tuple[str, ...]] | None:
+    """The agent session behind this request, for services/scene_keys.py:
+    the keys its reads are kept under, and the keys its writes are checked
+    against, in order. None for the person and anonymous callers.
+
+    - A verified token: its chat session, or the token itself (fix round 9,
+      M-2), for both; never a name's reader.
+    - A name with the ``X-Nebula-Agent-Session`` the MCP server sends (one per
+      process): read under its session and under the name's newest session
+      read; a write checks its own session's read, else the newest session
+      read, else the name's session-less read.
+    - A name alone (the CLI, a plain PUT): read under the bare name; a write
+      checks its own read first, and the newest session read only when it
+      never read (fix round 11, review 10 L-1). So an MCP read still guards
+      a CLI write that never read, but never refreshes a CLI read: a CLI
+      write built on its own older read is refused, even after a fresh MCP
+      read (the agent runs ``nebula look`` and redoes it)."""
     try:
         actor = _canvas_change_actor()
     except Exception:  # noqa: BLE001 - reads never fail over this
@@ -1024,11 +1032,28 @@ def _reader_agent() -> tuple[str, ...] | None:
         except Exception:  # noqa: BLE001 - the token alone still names the session
             record = None
         session = (record or {}).get("session") if isinstance(record, dict) else None
-        if session:
-            return (f"chat:{session}",)
-        return ("token:" + hashlib.sha256(token.encode("utf-8")).hexdigest()[:20],)
+        own = (f"chat:{session}",) if session else ("token:" + hashlib.sha256(token.encode("utf-8")).hexdigest()[:20],)
+        return own, own
     session = str(headers.get("x-nebula-agent-session") or "").strip()[:80]
-    return (f"name:{name}:{session}", f"name:{name}") if session else (f"name:{name}",)
+    bare, newest = f"name:{name}", f"newest:{name}"
+    if session:
+        own = f"name:{name}:{session}"
+        return (own, newest), (own, newest, bare)
+    return (bare,), (bare, newest)
+
+
+def _reader_agent() -> tuple[str, ...] | None:
+    """The keys this agent's reads (and its writes, as reads) are kept under
+    (``_agent_readers``)."""
+    readers = _agent_readers()
+    return readers[0] if readers else None
+
+
+def _writer_chain() -> tuple[str, ...] | None:
+    """The reads this agent's scene write is checked against, its own first
+    (``_agent_readers``)."""
+    readers = _agent_readers()
+    return readers[1] if readers else None
 
 
 def _scene_changed_refusal(node_id: str, node: dict[str, Any]) -> CodedRefusal:
@@ -5565,7 +5590,7 @@ def _scene_shot_ids(node: Mapping[str, Any]) -> list[str]:
 
 def _removal_person_line(action: str | None, numbers: list[int], stoppable: bool) -> str:
     """The person's line for a write that would remove a rendering shot.
-    GM, PR #198 r3 item 3, an undo or redo: "Couldn't undo. It would remove
+    GM, PR #198 r3 item 3, an undo or redo: "Couldn’t undo. It would remove
     “Shot 2”, which is still running. Stop the run first." ("…Wait for it to
     finish." when there's no Stop for it). Several shots, and a studio edit
     that isn't an undo, are builder's forms on GM's pattern."""
@@ -5573,9 +5598,9 @@ def _removal_person_line(action: str | None, numbers: list[int], stoppable: bool
     end = "Stop the run first." if stoppable else "Wait for it to finish."
     if action in RESTORE_ACTIONS:
         if len(numbers) >= 4:
-            return f"Couldn't {action}. It would remove {what} that are still running. {end}"
-        return f"Couldn't {action}. It would remove {what}, which {'are' if several else 'is'} still running. {end}"
-    return f"Couldn't remove {what}. {'They' if several else 'It'}{chr(39)}{'re' if several else 's'} still running. {end}"
+            return f"Couldn’t {action}. It would remove {what} that are still running. {end}"
+        return f"Couldn’t {action}. It would remove {what}, which {'are' if several else 'is'} still running. {end}"
+    return f"Couldn’t remove {what}. {'They' if several else 'It'}’{'re' if several else 's'} still running. {end}"
 
 
 def _refuse_removing_rendering_shots(node_id: str, node: dict[str, Any], current: Mapping[str, Any],
@@ -5597,7 +5622,7 @@ def _refuse_removing_rendering_shots(node_id: str, node: dict[str, Any], current
     name = _quoted(_node_label(node_id)) if node_id in cli_graph.nodes else _quoted(str(node.get("label") or "Cinema Scene"))
     specific = (
         f"Shot {order.index(shot_id) + 1} ({shot_id}) of {name} ({node_id}) is still rendering (run {run_id}), "
-        f"so it can't be removed. Stop the run first (cancel_run, or `nebula cancel {run_id}`; a run the "
+        f"so it can’t be removed. Stop the run first (cancel_run, or `nebula cancel {run_id}`; a run the "
         "person started is theirs to stop) or wait for it to finish, then try again. Nothing changed.")
     # Pinned to its shots (PR #198 review 5, GM question 3): the canvas puts
     # back only ``shotIds`` and sends the rest of the save again.
@@ -5622,9 +5647,9 @@ class _RenderingSceneRefusal(CodedRefusal):
 
 def _refuse_deleting_rendering_scene(node_id: str, node: Mapping[str, Any], *, action: str | None = None) -> None:
     """409 for deleting a Cinema scene while one of its shots renders (GM,
-    PR #198 r3 item 1: "refuse for agents and the person"). Agents: "Couldn't
+    PR #198 r3 item 1: "refuse for agents and the person"). Agents: "Couldn’t
     delete “Scene”, node n4. “Shot 2” is still running, run <id>." The
-    person: "Couldn't delete “Scene”. “Shot 2” is still running. Stop the run
+    person: "Couldn’t delete “Scene”. “Shot 2” is still running. Stop the run
     first." ("Wait for it to finish." with no Stop); an undo or redo that
     would delete it reads the undo line (_removal_person_line)."""
     if node.get("definitionId") != "cinema-scene":
@@ -5638,12 +5663,12 @@ def _refuse_deleting_rendering_scene(node_id: str, node: Mapping[str, Any], *, a
     verb = "are" if several else "is"
     name = _quoted(_node_label(node_id)) if node_id in cli_graph.nodes else _quoted(str(node.get("label") or "Cinema Scene"))
     runs = f"run {run_ids[0]}" if len(run_ids) == 1 else "runs " + ", ".join(run_ids[:-1]) + " and " + run_ids[-1]
-    specific = f"Couldn't delete {name}, node {node_id}. {what} {verb} still running, {runs}."
+    specific = f"Couldn’t delete {name}, node {node_id}. {what} {verb} still running, {runs}."
     if action in RESTORE_ACTIONS:
         person = _removal_person_line(action, numbers, stoppable)
     else:
         end = "Stop the run first." if stoppable else "Wait for it to finish."
-        person = f"Couldn't delete {name}. {what} {verb} still running. {end}"
+        person = f"Couldn’t delete {name}. {what} {verb} still running. {end}"
     # The Agent log says it too, under the agent's name (GM: "Agent log +
     # agent refusal"); a no-op for the person's own request.
     _log_agent_refusal(specific)
@@ -9735,9 +9760,9 @@ def _validate_cinema_base_models(nodes: list[GraphNode]) -> None:
 # A start refused because a Stop was recorded for its run id (review 17 L4):
 # worded by what this process knows about the id, never more. The registry
 # and the durable guard know only that a Stop was recorded.
-RUN_ID_STOPPED = "run '{id}' was already stopped, so this id can't start again. Start a new run with a new id."
-RUN_ID_RAN = "run '{id}' already ran, so this id can't start again. Start a new run with a new id."
-RUN_ID_STOP_RECORDED = "run '{id}' was stopped, so this id can't start again. Start a new run with a new id."
+RUN_ID_STOPPED = "run '{id}' was already stopped, so this id can’t start again. Start a new run with a new id."
+RUN_ID_RAN = "run '{id}' already ran, so this id can’t start again. Start a new run with a new id."
+RUN_ID_STOP_RECORDED = "run '{id}' was stopped, so this id can’t start again. Start a new run with a new id."
 RUN_ID_STOPPED_BEFORE_START = "run '{id}' was cancelled before it started"
 
 
@@ -12587,7 +12612,7 @@ async def connect_graph_nodes(body: dict[str, Any]) -> dict:
                 and (edge.get("source"), edge.get("sourceHandle")) != (body.get("source"), body.get("sourceHandle"))]
         if held:
             raise _coded(HTTPException(status_code=409, detail=(
-                f"Couldn't connect to {_quoted(_node_label(body['target']))}, node {body['target']}. "
+                f"Couldn’t connect to {_quoted(_node_label(body['target']))}, node {body['target']}. "
                 f"Its {body.get('targetHandle')} input is connected to something else now, so nothing was changed.")),
                 "input_taken")
     _validate_connect_handles(
@@ -13064,7 +13089,7 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
         # so it is never refused (fix round 9, L-2).
         if scene_key_before is not None and "scene" in params and scene_keys.scene_key(params.get("scene")) != scene_key_before:
             if_key = body.get("ifSceneKey")
-            expected = if_key if isinstance(if_key, str) and if_key else scene_keys.last_read(_scene_scope(), writing_agent, node_id)
+            expected = if_key if isinstance(if_key, str) and if_key else scene_keys.last_read(_scene_scope(), _writer_chain(), node_id)
             if expected is not None and expected != scene_key_before:
                 raise _scene_changed_refusal(node_id, node)
         _validate_params(node.get("definitionId", ""), params)

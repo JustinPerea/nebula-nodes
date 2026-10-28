@@ -400,7 +400,7 @@ def test_the_persons_undo_that_removes_a_rendering_shot_reads_gms_line(api, rend
             "remove": [], "wire": [], "unwire": []})
         assert response.status_code == 409, response.text
         assert response.json()["detail"] == (
-            f"Couldn't {verb}. It would remove “Shot 2”, which is still running. Stop the run first.")
+            f"Couldn’t {verb}. It would remove “Shot 2”, which is still running. Stop the run first.")
     # An agent's restore keeps the specific detail, run id and all.
     response = client.post("/api/graph/restore", headers=AGENT, json={"action": "undo", "nodes": [
         {"id": node, "definitionId": "cinema-scene", "params": {"scene": _scene("s1")}}],
@@ -432,7 +432,7 @@ def test_deleting_a_scene_while_its_shot_renders_is_refused(api, rendering, pers
     rendering.add("run-x")
     agent = client.delete(f"/api/graph/node/{node}", headers=AGENT)
     assert agent.status_code == 409, agent.text
-    line = f"Couldn't delete “Scene”, node {node}. “Shot 2” is still running, run run-x."
+    line = f"Couldn’t delete “Scene”, node {node}. “Shot 2” is still running, run run-x."
     assert agent.json()["detail"] == line
     # GM: the Agent log says the same, under the agent's name.
     assert [event.get("say") for event in _presence_events(sent)].count(line) == 1
@@ -440,7 +440,7 @@ def test_deleting_a_scene_while_its_shot_renders_is_refused(api, rendering, pers
     person_reply = client.delete(f"/api/graph/node/{node}", headers=PERSON)
     assert person_reply.status_code == 409
     assert person_reply.json()["detail"] == (
-        "Couldn't delete “Scene”. “Shot 2” is still running. Stop the run first.")
+        "Couldn’t delete “Scene”. “Shot 2” is still running. Stop the run first.")
     assert _presence_events(sent) == []
     applied = client.post("/api/graph/apply", headers=AGENT, json={"remove": [node]})
     assert applied.status_code == 409, applied.text
@@ -449,7 +449,7 @@ def test_deleting_a_scene_while_its_shot_renders_is_refused(api, rendering, pers
                                                                   "remove": [node], "wire": [], "unwire": []})
     assert undo.status_code == 409
     assert undo.json()["detail"] == (
-        "Couldn't undo. It would remove “Shot 2”, which is still running. Stop the run first.")
+        "Couldn’t undo. It would remove “Shot 2”, which is still running. Stop the run first.")
     assert node in graph.nodes
     rendering.discard("run-x")
     assert client.delete(f"/api/graph/node/{node}", headers=AGENT).status_code == 200
@@ -468,7 +468,7 @@ def test_a_scene_rendering_several_shots_names_or_counts_them(api, rendering, pe
     rendering.add("whole")
     response = client.delete(f"/api/graph/node/{node}", headers=PERSON)
     assert response.status_code == 409
-    assert response.json()["detail"] == f"Couldn't delete “Scene”. {line}. Stop the run first."
+    assert response.json()["detail"] == f"Couldn’t delete “Scene”. {line}. Stop the run first."
 
 
 # -- L3: a shot that adopts a late image ---------------------------------------------

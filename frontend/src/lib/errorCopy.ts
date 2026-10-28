@@ -190,7 +190,7 @@ export function isGenericHeading(heading: string): boolean {
  *    ("Couldn't delete 3 nodes." over "Couldn't delete “Agent scene”. …"),
  *    or, under a generic save, a line that names the part it refused (a
  *    “…” name in its first sentence: "Couldn't save “Scene” for “Opening”."
- *    over "Couldn't remove “Shot 2”. It's still running. …"; the save
+ *    over "Couldn’t remove “Shot 2”. It’s still running. …"; the save
  *    carried the removal).
  * Otherwise both. A heading that names a thing keeps its place over a
  * reason that names another, whatever the verbs: "Couldn't run the graph.

@@ -171,7 +171,9 @@ const setPrompt = (shots: Shot[], id: string, prompt: string) => shots.map((s) =
 const S3 = [{ id: 's1', prompt: 'a' }, { id: 's2', prompt: 'b' }, { id: 's3', prompt: 'c' }];
 
 
-const STOPPED = 'Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again with your next change.';
+// GM r18 answer 2 (fix round 11): a stop by another writer's refusals names
+// that writer; round 10 showed the server-failure line here.
+const STOPPED = 'Codex kept changing “Opening”, so your changes aren’t saved yet. Nebula will try again when Codex stops.';
 const offersRetry = () => {
   const state = useGraphStore.getState() as unknown as { undoNotice: { text: string; retryScene?: { nodeId: string } } | null };
   return state.undoNotice?.text === STOPPED && state.undoNotice.retryScene?.nodeId === 'n1';
@@ -246,9 +248,9 @@ describe('M-2: a save another writer keeps refusing stops, never silently', () =
     expect(unsaved()).toBe(STOPPED);
     expect(useGraphStore.getState().stoppedScenes).toEqual({ n1: true });
     useGraphStore.getState().retrySceneSave('n1');
-    await sleep(120);
+    // Review 10, N-2: wait for the save, not a fixed time (it flaked under load).
+    await vi.waitFor(() => expect(unsaved()).toBeNull(), { timeout: 3000, interval: 5 });
     expect(h.backendBrief()).toEqual(['s1:p1', 's2:late3', 's3:c']);
-    expect(unsaved()).toBeNull();
   });
 
   it('fewer than 20 refusals in a row: it saves by itself, with no line', async () => {
@@ -281,8 +283,7 @@ describe('L-1: a restart forgets the revisions the tab has seen', () => {
     await sleep(10);
     expect(brief()).toEqual(['s1:a', 's2:c3', 's3:c2']);
     typeIn('s1', 'p1');
-    await sleep(120);
-    expect(h.puts.map((put) => put.status)).toEqual([200]);
+    await vi.waitFor(() => expect(h.puts.map((put) => put.status)).toEqual([200]), { timeout: 3000, interval: 5 });
     expect(h.backendBrief()).toEqual(['s1:p1', 's2:c3', 's3:c2']);
     expect(unsaved()).toBeNull();
   });

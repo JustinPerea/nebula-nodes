@@ -130,7 +130,7 @@ def test_variation_pass_2_keeps_the_upstream_scene_protected(engine):
     person_delete = http.delete(f"/api/graph/node/{up}", headers=PERSON)
     assert person_delete.status_code == 409
     assert person_delete.json()["detail"] == (
-        "Couldn't delete “Upstream”. “Shot 1” and “Shot 2” are still running. Stop the run first.")
+        "Couldn’t delete “Upstream”. “Shot 1” and “Shot 2” are still running. Stop the run first.")
     assert up in graph.nodes
     release.set()
     assert _wait(lambda: _status(http, "fix4-var") not in ("running", "cancelling", None))
@@ -251,7 +251,7 @@ def test_the_persons_refused_scene_delete_names_the_rendering_shots(api, renderi
     reply = client.delete(f"/api/graph/node/{node}", headers=PERSON)
     assert reply.status_code == 409
     body = reply.json()
-    assert body["detail"] == "Couldn't delete “Agent scene”. “Shot 2” is still running. Stop the run first."
+    assert body["detail"] == "Couldn’t delete “Agent scene”. “Shot 2” is still running. Stop the run first."
     # Review 5 added ``shotIds`` (and ``code``) beside the numbers.
     assert body["rendering"] == {"shotIds": ["s2"], "shots": [2], "stoppable": True}
     agent = client.delete(f"/api/graph/node/{node}", headers=AGENT)

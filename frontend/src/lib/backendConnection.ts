@@ -206,12 +206,24 @@ export function waitUntilOnline(): Promise<void> {
  */
 let knownBootId: string | null = null;
 const restartListeners = new Set<() => void>();
+/** Review 10, N-4: the processes this tab has seen replaced. Each process
+ * has its own id and never comes back, so a late message from one is not a
+ * restart, and its syncs are dropped (isRetiredBackendBoot). */
+const retiredBootIds = new Set<string>();
 
 export function noteBackendBootId(bootId: unknown): void {
-  if (typeof bootId !== 'string' || !bootId) return;
+  if (typeof bootId !== 'string' || !bootId || retiredBootIds.has(bootId)) return;
   const previous = knownBootId;
   knownBootId = bootId;
-  if (previous !== null && previous !== bootId) for (const listener of [...restartListeners]) listener();
+  if (previous !== null && previous !== bootId) {
+    retiredBootIds.add(previous);
+    for (const listener of [...restartListeners]) listener();
+  }
+}
+
+/** Whether `bootId` names a backend process already replaced by another. */
+export function isRetiredBackendBoot(bootId: unknown): boolean {
+  return typeof bootId === 'string' && retiredBootIds.has(bootId);
 }
 
 export function backendBootId(): string | null {
@@ -247,5 +259,6 @@ export function resetBackendConnectionForTests(): void {
   newestApplied = 0;
   lastPulseAt = Number.NEGATIVE_INFINITY;
   knownBootId = null;
+  retiredBootIds.clear();
   for (const listener of [...listeners]) listener();
 }

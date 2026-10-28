@@ -1085,13 +1085,13 @@ awaited in between, so a start that began before the Stop landed is refused
 with 409 "run '<id>' was cancelled before it started" and nothing is sent or
 spent. A start under an id a Stop was recorded for is always refused the
 same way (409); its `detail` says only what this process knows (review 17
-L4): "run '<id>' was already stopped, so this id can't start again. Start a
+L4): "run '<id>' was already stopped, so this id can’t start again. Start a
 new run with a new id." for a run that registered here and was stopped;
-"run '<id>' already ran, so this id can't start again. …" for one that
+"run '<id>' already ran, so this id can’t start again. …" for one that
 ended before its Stop; "… was cancelled before it started" only when the
 Stop reached the id while this process was admitting its start; otherwise
 (a run from before a restart, a Stop for an id never seen) "run '<id>' was
-stopped, so this id can't start again. Start a new run with a new id."
+stopped, so this id can’t start again. Start a new run with a new id."
 A Stop that lands at a World Labs node's paid-start claim, the last step
 before the run registers, is refused in the same words (PR #198 review 1).
 Agents and the CLI never pick a run id (`run_nodes`, `/api/graph/run` and
@@ -3506,19 +3506,19 @@ While protected:
 
 - a write that would remove a rendering shot is refused with 409 and changes
   nothing: "Shot 2 (s2) of “Opening” (n4) is still rendering (run <id>), so
-  it can't be removed. Stop the run first (cancel_run, or `nebula cancel
+  it can’t be removed. Stop the run first (cancel_run, or `nebula cancel
   <id>`; a run the person started is theirs to stop) or wait for it to
   finish, then try again. Nothing changed." The person reads GM's line
-  instead: an undo or redo reads "Couldn't undo. It would remove “Shot 2”,
-  which is still running. Stop the run first." ("Couldn't redo. …"; "…Wait
+  instead: an undo or redo reads "Couldn’t undo. It would remove “Shot 2”,
+  which is still running. Stop the run first." ("Couldn’t redo. …"; "…Wait
   for it to finish." while the run is still being admitted), and the canvas
   refuses that undo itself before sending it;
 - deleting the scene (`remove_from_canvas`, `edit_canvas` `remove`, `DELETE
-  /api/graph/node/{id}`, an undo of its add) is refused with 409: "Couldn't
+  /api/graph/node/{id}`, an undo of its add) is refused with 409: "Couldn’t
   delete “Scene”, node n4. “Shot 2” is still running, run <id>." (two or
   three shots are named, four or more counted: "4 shots are still
   running"). The Agent log shows the same line under the agent's name. The
-  person reads "Couldn't delete “Scene”. “Shot 2” is still running. Stop
+  person reads "Couldn’t delete “Scene”. “Shot 2” is still running. Stop
   the run first." ("…Wait for it to finish." with no Stop for it), alone:
   never after a generic "Couldn't delete the node.". The 409 body carries
   `rendering: {"shots": [2], "stoppable": true}` beside `detail` (the shot
@@ -3580,20 +3580,25 @@ nothing in the scene; its other params are saved).
 everyone else; otherwise the name in `X-Nebula-Agent` together with
 `X-Nebula-Agent-Session`. The MCP server sends a session of its own (one per
 server process; set `NEBULA_AGENT_SESSION` to choose it), and the CLI sends
-`NEBULA_AGENT_SESSION` only when it is set. A read under a session is also
-kept as the name's read, and a write is checked:
+`NEBULA_AGENT_SESSION` only when it is set. A write is checked against its
+own channel's read first, and falls back only when that channel never read
+the scene:
 
-- with a session that has read the scene, against that session's own read
-  (two lanes with their own sessions never share a read);
-- otherwise (no session, as `nebula set` and a plain PUT send by default,
-  or a session that never read the scene), against the newest read by any
-  session of that name.
+- with a session, against that session's own read (two lanes with their own
+  sessions never share a read); if that session never read it, against the
+  newest read by any session of that name, else the name's read with no
+  session;
+- with no session (as `nebula set` and a plain PUT send by default), against
+  the name's own read with no session (`nebula look`); if it never read the
+  scene, against the newest read by any session of that name.
 
-So MCP and the CLI share a read exactly when both send the same
-`NEBULA_AGENT_SESSION`, or when the write sends none: a scene you looked at
-over MCP guards a later `nebula set` with no session, and a `nebula set` on
-top of a fresh MCP look is taken. A lane that writes with its own session
-must read with that session too.
+So a scene you looked at over MCP guards a later `nebula set` that never
+read it, but an MCP look never refreshes a CLI read: a `nebula set` built
+on an older `nebula look` is refused even after a fresh MCP look, though
+the MCP look saw the current scene. That refusal is the safe failure: run
+`nebula look`, then redo your change on what it shows. MCP and the CLI share
+one read only when both send the same `NEBULA_AGENT_SESSION`. A lane that
+writes with its own session must read with that session too.
 
 **What counts as a read.** The export, the snapshot and `GET /api/graph`
 (`nebula look`), every time: a loop that polls the export as an agent keeps
@@ -3636,11 +3641,17 @@ were editing them."; for shots you removed that they were editing "Codex
 removed “Shot 2” and “Shot 3” while you were editing them."; when a removed
 shot comes back with other text, "Codex changed “Shot 2” while you were
 editing it."). It is never a "Couldn't save" line and never counts toward
-the canvas's retries (when a writer refuses it 20 times in a row the save
-stops, "Unsaved" with [Try again], until the person's next change). The
-canvas ignores any scene below a revision it has already seen from the same
-backend process (a sync that arrives late); a restarted Nebula starts the
-count again. So when you change a scene the
+the canvas's retries. When a writer refuses it 20 times in a row the save
+stops, "Unsaved" with [Try again], and the line names you: "Codex kept
+changing “Opening”, so your changes aren’t saved yet. Nebula will try
+again when Codex stops." ("An agent kept changing…" with no name; "…kept
+changing in another window…" for the person's other window). It goes
+again with the person's next change, [Try again] or a reconnect, and once
+by itself about 2 s after the last change another writer brings, so stop
+writing that scene for a moment and their edits land. The canvas ignores
+any scene below a revision it has already seen from the same backend
+process (a sync that arrives late), and any sync from a process it has
+seen replaced; a restarted Nebula starts the count again. So when you change a scene the
 person is editing, your change stays unless they changed the same field and
 choose Keep mine; read the scene again before a second write.
 
@@ -3684,8 +3695,8 @@ How a delete or an undo reads depends on whose run it is:
   canvas until it ends (the toolbar's are disabled, titled "Wait for the
   active run to finish."). The Delete key, the menu's Delete and Undo/Redo
   are never silent: a selection of only rendering scenes reads GM's scene
-  line ("Couldn't delete “Scene”. “Shot 2” is still running. Stop the run
-  first."), an undo that would remove a rendering shot reads "Couldn't undo.
+  line ("Couldn’t delete “Scene”. “Shot 2” is still running. Stop the run
+  first."), an undo that would remove a rendering shot reads "Couldn’t undo.
   It would remove “Shot 2”, which is still running. Stop the run first.",
   and anything else reads the lock's own reason: "Couldn't delete “Brief”.
   Wait for the active run to finish.", "Couldn't delete 3 nodes. Wait for

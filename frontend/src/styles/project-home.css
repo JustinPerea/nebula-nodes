@@ -185,12 +185,14 @@ body.app-slava-restraint .project-home__notice-close svg { width: 14px; height: 
 body.app-slava-restraint .project-home__notice-restore:focus-visible,
 body.app-slava-restraint .project-home__notice-close:focus-visible { outline: var(--sr-focus-outline); outline-offset: 2px; }
 /* Focus lands in the stack, or on "Recent projects" once it is empty
-   (ProjectHome useNoticeStackFocus): the saved line, or an error with no
-   Try again, takes the neutral ring
-   from the keyboard; the heading is a focus target only, never ringed (GM r15). */
+   (ProjectHome useNoticeStackFocus). A target with no control of its own
+   (the saved line, an error with no Try again, the heading) takes focus
+   itself (tabindex -1). Like every target it rings from :focus-visible only,
+   so a notice closed from the keyboard rings what takes focus next and one
+   closed with a click rings nothing (GM r17). */
 body.app-slava-restraint .project-home__notice:focus-visible,
-body.app-slava-restraint .project-home__error:focus-visible { outline: var(--sr-focus-outline); outline-offset: 4px; }
-body.app-slava-restraint .project-home #recent-projects-title:focus { outline: none; }
+body.app-slava-restraint .project-home__error:focus-visible,
+body.app-slava-restraint .project-home #recent-projects-title:focus-visible { outline: var(--sr-focus-outline); outline-offset: 4px; }
 body.app-slava-restraint .project-home__notice { padding: 14px 16px; margin-bottom: 28px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-node-media-radius); background: var(--sr-canvas-elevated); color: var(--sr-ink); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
 body.app-slava-restraint .project-home__sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 @media (max-width: 1000px) {

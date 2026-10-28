@@ -38,6 +38,23 @@ export const KEPT_UNTIL_NEXT_CHANGE = "They’re kept and Nebula will try again 
 export function sceneStoppedLine(scene: string): string {
   return `${sceneSaveHeading(scene)} ${KEPT_UNTIL_NEXT_CHANGE}`;
 }
+
+/** Who kept changing a scene while its save was refused (review 9, M-2): an
+ * agent by name, an agent with none, or another window (the person's own
+ * other tab; also a change with no named writer, as the clash lines say). */
+export type SceneOutpacedBy = { kind: 'agent'; name: string | null } | { kind: 'window' };
+
+/** GM r18 answer 2: the save stopped because another writer kept changing
+ * the scene, not because saving failed. The line names the writer and says
+ * when Nebula tries again (verbatim, ’ per the sweep): "Codex kept changing
+ * “Opening”, so your changes aren’t saved yet. Nebula will try again when
+ * Codex stops." A real server failure keeps sceneStoppedLine. */
+export function sceneOutpacedLine(scene: string, by: SceneOutpacedBy): string {
+  const notYet = 'so your changes aren’t saved yet.';
+  if (by.kind === 'window') return `“${scene}” kept changing in another window, ${notYet} Nebula will try again when it stops.`;
+  if (by.name) return `${by.name} kept changing “${scene}”, ${notYet} Nebula will try again when ${by.name} stops.`;
+  return `An agent kept changing “${scene}”, ${notYet} Nebula will try again when it stops.`;
+}
 export const TRY_AGAIN = 'Try again';
 
 /** 404, the node was deleted elsewhere (GM r7, verbatim): no promise. */

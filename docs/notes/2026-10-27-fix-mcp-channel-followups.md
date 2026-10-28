@@ -572,3 +572,45 @@ Live, fix round 10: the first run passed 15 of 17 checks. The 2 failures were th
 - An MCP read (session header) then a CLI write with no session: 409 `scene_changed`, the typing kept. A fresh MCP read, then the write: 200.
 - Projects home: the copy's notice inline above the error; × from the keyboard moved focus to the error box; with the stack empty, to "Recent projects" with no ring. [Restore] by mouse opened the copy. The error line in these shots was set from the page, since a real list failure can't be held while the copy's notice shows.
 - Not live: the backward clock across a restart (it needs a second backend process with a lower clock); the store tests cover it.
+
+## Fix round 11 (CI on f3e28e91, GM's pr198 r16)
+
+- **CI: CreateView (23 tests across draft, lifecycle, reuse and bottomBar; review 10 M-1a).** Round 10's bar selector reads `state.unsavedScenes`, and those four files mock the graph store with a state that has no `unsavedScenes`, so the bar threw "Cannot convert undefined or null to object". The mocks now carry `unsavedScenes: {}` like the real store (and CreateView.save's already did). A first try guarded the selector with `?? {}`; the store's type guarantees the map, so the guard only hid the mocks' gap, and it is gone.
+- **CI: focusRingCss.** Round 10 added `:focus:not(:focus-visible){outline:none}` on the popover's [Try again], which the test forbids, and it was unneeded: the browser only rings `:focus-visible` there. The rule is gone. Round 10's `#recent-projects-title:focus { outline: none; }` broke the same rule.
+- **GM r17: rings follow the input (corrects r15's wording).** Focus moved by a keyboard action rings; focus moved by a click, or by nothing (page load, a scripted move), doesn't. That is `:focus-visible` with the browser's own heuristic, never forced either way. The app has no input-modality helper: its programmatic moves are plain `focus()` calls left to that heuristic, and `useNoticeStackFocus` is one of them. So the saved line, the error box and now the "Recent projects" heading ring from `:focus-visible` with the token ring (`project-home.css`), and no rule touches their plain `:focus`. A first attempt this round turned those rings off with `outline: none` and two NO_OUTLINE entries; GM r17 called that a regression, and both are gone. Closing a notice from the keyboard rings whatever takes focus next; closing it with a click rings nothing.
+- **CI: chatCancellation, graphStore.fix2, graphStore.followups (6 tests).** They pinned the straight-apostrophe wording that round 10's ’ sweep changed (GM r15 approved it): "Couldn’t stop the reply.", "Couldn’t save a setting on “Flux”. It’s back…", "Nebula can’t read its project list…". Expectations updated, sources untouched.
+- **CI stderr `key.split is not a function` (AgentNodeMarkLayer.tsx:60).** Not from round 10: the passing 17f57bad run logs it 72 times. `tests/Canvas.fileDrop.test.tsx` mocks React Flow's `useStore` as `() => 1`, so `useBoxes` gets a number where it expects its key string. It doesn't fail a test; left for a test cleanup.
+- **GM r16: a stopped save tries once by itself.** A change from another writer arriving in the scene counts as evidence that saving works again. About 2 s after the last one (`SCENE_QUIET_RETRY_MS`, `scheduleQuietRetry`), the stopped save sends once.
+  - Success: the "Unsaved" mark, the bar and the toast clear as on any save.
+  - Failure (Nebula refuses it, or a run holds the scene): it stays stopped with the same line, no new toast, and the popover keeps [Try again].
+  - Refused because the scene changed: that refusal is itself another writer's change, so the try merges it and waits for the next quiet stretch.
+  - Each new change restarts the 2 s wait, so a busy writer gets at most one try per quiet stretch, never a loop. An agent event with no scene change isn't evidence. [Try again] or the person's own edit sends at once and cancels the wait.
+  - MCP-SETUP says an agent that stops writing for a moment lets the person's stopped edits land.
+  - GM r17's condition on the refused try: "nothing new shown" holds only when the merge is silent. If Codex's change overlaps a field the person changed, the clash prompt asks as usual and the stopped state waits behind it. While the clash waits, the mark carries the clash line and no [Try again] (`markSceneStopped` reads the clash), the stopped toast leaves (as any clash does), and no quiet try is scheduled. The person's answer sends the save, as any clash answer does. If the clash clears without an answer and the save is still stopped, its line and [Try again] come back.
+- **Tests.**
+  - `graphStore.fix11` (15): GM r16's quiet try (success, quiet failure, one try per stretch, no change no try, Try again first, M-2 stop then save), GM r17's refused try (silent merge, overlap), L-2 (P3, a reconnect while Codex still writes), GM r18's four lines (named agent, unnamed agent, another window, server failure) and N-4 (the reviewer's P1). On f3e28e91, 12 fail; the 3 that pass are guards (no try without a change, no double save after Try again, the server-failure line). The overlap test also fails on this round's code without the r17 change.
+  - `test_pr198_fix11.py` (9): review 10's probes B1, C1 (with the `nebula look` recovery), C1b, C2, C3, C4, C5, and L-3's lines. On f3e28e91, 3 fail (C1 and both L-3 tests); the others are guards that held in round 10 too. Round 10's B8 test is now the refusal test.
+  - `pr198Fix10Ui`: keyboard and click closes move focus with a plain `focus()`, every target rings from `:focus-visible` only (no plain `:focus` rule), and N-1's press released off the mark. jsdom has no `:focus-visible` heuristic, so the ring itself is checked live.
+  - Tests changed because they pinned behaviour GM or the coordinator changed: the wording tests above (’ sweep), round 10's three M-2 store tests (GM r18's named line), round 10's B8 backend test (L-1), round 10's ring CSS assertions (GM r17), and the backend tests that pin this PR's refusal lines (fix1, fix2, fix3, fix4, fix5, mcp_channel_followups; GM r18 answer 1).
+
+Gates, fix round 11 (after review 10 and GM r18):
+- tsc -b and lint: clean.
+- Full vitest (not a focused list): 588 files, 7,673 passed, also after the last fixture edits.
+- Full backend: 12,038 passed, 71 skipped. The first full run had one real failure, `test_provider_start_admission`, which pins the run-id line L-3 changed; it failed alone too, and passes now.
+- vite build plus the budget: 424,636 bytes raw.
+
+Live, GM r16 quiet try: 6 of 6 checks, same isolation as round 10 (backend 8797, Vite 5797, 8000–8010 and 5173 blocked, 0 attempts). A save stopped by server errors made no try of its own; Codex's change brought one try about 2 s later, which the still-failing backend refused quietly (still "Unsaved", no save toast); once saves went through, Codex's next change brought one try that saved both changes, cleared the mark, and the bar said "Saved".
+
+Live, review 10 and GM r18: 10 of 10 checks, same isolation.
+- Codex writing during each of the tab's slow saves stopped it with "Codex kept changing “Opening”, so your changes aren’t saved yet. Nebula will try again when Codex stops." in the toast (with [Try again]), the mark's tooltip and its popover; no PUT while Codex kept writing.
+- Once Codex stopped, one try about 2 s later saved both changes with no [Try again], the mark cleared and the bar said "Saved" (L-2 with GM r16).
+- A press on the mark dragged off and released on the card selected nothing, opened nothing and moved nothing; the next plain click on the card selected it (N-1).
+- L-1, probe C1 over HTTP: a `nebula look` with no session, the person's typing, a fresh MCP read, then the CLI's stale write: 409 `scene_changed`, the typing kept; `nebula look` and the redo: 200.
+- In the shot after the save, the project bar reads "Unsaved changes": each shot's prep re-centres the canvas, and the camera is part of the project, so the project's own autosave is due. The check before the shot read "Saved".
+
+Live, GM r17 rings: 12 of 12 checks, same isolation. For each target that takes focus when the recovered copy's notice closes (the error box with no Try again, the saved line, and the "Recent projects" heading once the stack is empty):
+- after page load nothing had a ring;
+- Tab to × and Enter: focus moved to it, `:focus-visible`, with the solid token ring;
+- a real mouse click on ×: focus moved to it with no ring.
+
+Four of this round's ring shots are byte-identical to round 10 shots of the same states (keyboard close onto the error box, ringed both rounds; the heading with no ring, from the keyboard in round 10 and from a click now). They come from separate runs on different code, with the state checked each time, so they are identical renders, not reused frames.

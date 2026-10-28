@@ -8,8 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  *   notices (then the held edits or where they went, then the error).
  * - GM r15 answer 2: closing a notice moves focus to the next notice in the
  *   stack, onto its first control; if it was the last, to the one before;
- *   with the stack empty, to the "Recent projects" heading (tabindex -1, no
- *   ring). Never to the body.
+ *   with the stack empty, to the "Recent projects" heading (tabindex -1).
+ *   Never to the body. GM r17: it rings from :focus-visible like any target.
  * - GM r15 answer 3: a click on the "Unsaved" mark opens the popover and does
  *   nothing else: no selection, no drag start.
  * - Review 9 M-3 (GM r14: the bar follows the card): the project bar says
@@ -153,11 +153,47 @@ describe('GM r15 answer 2: where focus goes when a notice closes', () => {
     expect(document.activeElement).toBe(elsewhere);
   });
 
-  it('the heading never shows a ring; the saved line and the notice’s buttons ring from the keyboard only', () => {
+  // GM r17: focus moved by a keyboard action rings, by a click or by nothing
+  // doesn't; that is :focus-visible, the browser's heuristic, never forced
+  // either way. jsdom has no heuristic, so this pins the two halves it can
+  // see: the move is a plain focus() (no focusVisible option, no class) and
+  // every target rings from :focus-visible only. The ring itself is checked
+  // live in Chrome (notes, fix round 11).
+  it.each([
+    ['from the keyboard', (button: HTMLElement) => { fireEvent.keyDown(button, { key: 'Enter' }); }],
+    ['with a click', (button: HTMLElement) => { fireEvent.pointerDown(button); fireEvent.click(button); }],
+  ])('closing a notice %s moves focus with a plain focus(); the browser decides the ring (GM r17)', async (_how, press) => {
+    const focusSpy = vi.spyOn(HTMLElement.prototype, 'focus');
+    try {
+      for (const [next, target] of [
+        [{ editsSavedAs: { name: 'Alpha.nebula', reopens: true } }, () => document.querySelector('.project-home__notice')],
+        [{ retry: 'none' as const, error: 'Couldn’t load your projects.' }, () => screen.getByRole('alert')],
+        [{}, () => screen.getByRole('heading', { name: 'Recent projects' })],
+      ] as const) {
+        const view = render(<Home {...props({ copyNotice: copyNotice(), ...next })} />);
+        const dismiss = screen.getByRole('button', { name: 'Dismiss' });
+        dismiss.focus();
+        press(dismiss);
+        focusSpy.mockClear();
+        view.rerender(<Home {...props({ copyNotice: null, ...next })} />);
+        await waitFor(() => expect(document.activeElement).toBe(target()));
+        expect(focusSpy).toHaveBeenCalledTimes(1);
+        const options = focusSpy.mock.calls[0][0] as FocusOptions & { focusVisible?: boolean } | undefined;
+        expect(options?.focusVisible).toBeUndefined();
+        expect(document.activeElement?.className ?? '').not.toMatch(/focus/i);
+        view.unmount();
+      }
+    } finally {
+      focusSpy.mockRestore();
+    }
+  });
+
+  it('every focus target rings from :focus-visible only: the saved line, the error box, the heading, the buttons (GM r17)', () => {
     const css = readFileSync(resolve(__dirname, '../src/styles/project-home.css'), 'utf8');
-    expect(css).toMatch(/#recent-projects-title:focus \{ outline: none; \}/);
+    expect(css).toMatch(/\.project-home__notice:focus-visible,\s*body\.app-slava-restraint \.project-home__error:focus-visible,\s*body\.app-slava-restraint \.project-home #recent-projects-title:focus-visible \{ outline: var\(--sr-focus-outline\)/);
     expect(css).toMatch(/\.project-home__notice-restore:focus-visible,\s*body\.app-slava-restraint \.project-home__notice-close:focus-visible \{ outline: var\(--sr-focus-outline\)/);
-    expect(css).not.toMatch(/project-home__notice-(restore|close):focus \{/);
+    // Nothing forces it either way: no outline rule on plain :focus for any of them.
+    expect(css).not.toMatch(/(project-home__notice(-restore|-close)?|project-home__error|recent-projects-title|tabindex="-1"\])(:not\([^)]*\))?:focus(?!-visible)[^{]*\{/);
   });
 });
 
@@ -197,6 +233,32 @@ describe('GM r15 answer 3: a click on the "Unsaved" mark does nothing else', () 
     expect(card.click).not.toHaveBeenCalled();
   });
 
+  it('review 10, N-1: a press on the mark released off it does nothing: the card never gets that click; a later click does', async () => {
+    const card = { click: vi.fn() };
+    render(<div data-testid="card" onClick={card.click}><span data-testid="title">Opening</span><SceneUnsavedMark nodeId="n1" line={STOPPED} stopped /></div>);
+    const mark = screen.getByRole('button', { name: 'Unsaved' });
+    const title = screen.getByTestId('title');
+    // The browser's order: press on the mark, release on the title, then the
+    // click at their common ancestor, the card.
+    fireEvent.pointerDown(mark);
+    fireEvent.mouseDown(mark);
+    fireEvent.pointerUp(title);
+    fireEvent.mouseUp(title);
+    fireEvent.click(screen.getByTestId('card'));
+    expect(card.click).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    // Only that release's click: the next one reaches the card as usual.
+    await new Promise((done) => setTimeout(done, 5));
+    fireEvent.click(title);
+    expect(card.click).toHaveBeenCalledTimes(1);
+    // A press released on the mark is its own click: the popover opens.
+    fireEvent.pointerDown(mark);
+    fireEvent.pointerUp(mark);
+    fireEvent.click(mark);
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(card.click).toHaveBeenCalledTimes(1);
+  });
+
   it('Enter and Space on the mark stay with it too (React Flow’s node selects on them)', () => {
     const keyDown = vi.fn();
     render(<div onKeyDown={keyDown}><SceneUnsavedMark nodeId="n1" line={STOPPED} stopped /></div>);
@@ -211,7 +273,8 @@ describe('GM r15 answer 3: a click on the "Unsaved" mark does nothing else', () 
   it('the popover’s [Try again] rings from :focus-visible only, never a forced ring (GM r14 FOCUS)', () => {
     const css = readFileSync(resolve(__dirname, '../src/styles/canvasProposals.css'), 'utf8');
     expect(css).toMatch(/\.scene-unsaved-popover \.canvas-undo-notice__action:focus-visible \{/);
-    expect(css).toMatch(/\.scene-unsaved-popover \.canvas-undo-notice__action:focus:not\(:focus-visible\) \{\s*outline: none;/);
+    // No rule clears it on :focus: the browser rings :focus-visible only.
+    expect(css).not.toMatch(/scene-unsaved-popover[^{]*:focus(?!-visible)[^{]*\{/);
   });
 });
 

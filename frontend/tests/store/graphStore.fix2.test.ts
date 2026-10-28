@@ -334,7 +334,7 @@ describe('GM ask 3: an unlabeled setting is "a setting on “<node>”"; the Age
   });
 
   it('the save-failed toast', () => {
-    expect(paramSaveFailedLine([null], 'Flux', true)).toBe("Couldn't save a setting on “Flux”. It's back to its last saved value.");
-    expect(paramSaveFailedLine(['Prompt', null], 'Flux', false)).toBe("Couldn't save 2 settings for “Flux”.");
+    expect(paramSaveFailedLine([null], 'Flux', true)).toBe("Couldn’t save a setting on “Flux”. It’s back to its last saved value.");
+    expect(paramSaveFailedLine(['Prompt', null], 'Flux', false)).toBe("Couldn’t save 2 settings for “Flux”.");
   });
 });

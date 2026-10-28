@@ -66,7 +66,7 @@ def test_the_persons_scene_put_names_the_rendering_shots_by_id(api, rendering, p
     reply = client.put(f"/api/graph/node/{node}", headers=PERSON, json={"params": {"scene": _scene("s1", "s3")}})
     assert reply.status_code == 409
     body = reply.json()
-    assert body["detail"] == "Couldn't remove “Shot 2”. It's still running. Stop the run first."
+    assert body["detail"] == "Couldn’t remove “Shot 2”. It’s still running. Stop the run first."
     assert body["code"] == "rendering_shots"
     assert body["rendering"] == {"shotIds": ["s2"], "shots": [2], "stoppable": True}
 
@@ -106,7 +106,7 @@ def test_the_persons_undo_or_redo_carries_the_shots_too(api, rendering, person, 
         "remove": [], "wire": [], "unwire": []})
     assert reply.status_code == 409
     body = reply.json()
-    assert body["detail"] == f"Couldn't {action}. It would remove “Shot 2”, which is still running. Stop the run first."
+    assert body["detail"] == f"Couldn’t {action}. It would remove “Shot 2”, which is still running. Stop the run first."
     assert body["code"] == "rendering_shots"
     assert body["rendering"] == {"shotIds": ["s2"], "shots": [2], "stoppable": True}
 

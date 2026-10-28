@@ -65,14 +65,14 @@ describe('GM: the project store\'s 507 (storage case)', () => {
   const STORE = { detail: 'Project catalog could not be read; the existing file was preserved', code: 'project_store' };
 
   it('the reason, exactly', () => {
-    expect(PROJECT_LIST_REASON).toBe("Nebula can't read its project list, so nothing was started. Check that the drive Nebula saves to is connected and has space, then try again.");
+    expect(PROJECT_LIST_REASON).toBe("Nebula can’t read its project list, so nothing was started. Check that the drive Nebula saves to is connected and has space, then try again.");
   });
 
   it('one node: named, with the storage line', async () => {
     refuseWith('/api/execute-node', STORE);
     await useGraphStore.getState().executeNode('n1');
     expect(notices).toEqual([
-      "Couldn't run “Brief”. Nebula can't read its project list, so nothing was started. Check that the drive Nebula saves to is connected and has space, then try again.",
+      "Couldn't run “Brief”. Nebula can’t read its project list, so nothing was started. Check that the drive Nebula saves to is connected and has space, then try again.",
     ]);
     expect(useGraphStore.getState().isExecuting).toBe(false);
   });
@@ -81,7 +81,7 @@ describe('GM: the project store\'s 507 (storage case)', () => {
     refuseWith('/api/execute', STORE);
     await useGraphStore.getState().executeGraph();
     expect(notices).toEqual([
-      "Couldn't start the run. Nebula can't read its project list, so nothing was started. Check that the drive Nebula saves to is connected and has space, then try again.",
+      "Couldn't start the run. Nebula can’t read its project list, so nothing was started. Check that the drive Nebula saves to is connected and has space, then try again.",
     ]);
   });
 

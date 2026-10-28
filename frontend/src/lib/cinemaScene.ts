@@ -156,7 +156,7 @@ function shotList(numbers: readonly number[]): { text: string; several: boolean 
 }
 
 /** GM, PR #198 r3 item 3: an undo or redo that would remove a shot still
- * rendering, refused before it is sent. "Couldn't undo. It would remove
+ * rendering, refused before it is sent. "Couldn’t undo. It would remove
  * “Shot 2”, which is still running. Stop the run first." ("Couldn't redo.
  * …"; "…Wait for it to finish." with no Stop). Never the run id. Several
  * shots are builder's, on GM's pattern. The backend's 409 says the same

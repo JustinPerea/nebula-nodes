@@ -309,7 +309,7 @@ before it started, so nothing ran and nothing was spent." To run the same
 nodes again, start a new run. A run id that was stopped can never start
 again, whether or not it ran: a request re-sent with that id is refused
 (409) with a line saying so, such as "run '<id>' was already stopped, so
-this id can't start again. Start a new run with a new id."
+this id can’t start again. Start a new run with a new id."
 
 If Nebula has no record of the id at all (it may have run before Nebula
 restarted, or the id is wrong), both commands print "Nebula has no record
@@ -429,8 +429,11 @@ refusal is not a read: run `nebula look`, then redo your change on what it
 shows; sending the same copy again is refused again. A scene you never read
 is written as you send it, and a write whose scene is already Nebula's is
 never refused. A write with no session (`nebula set` by default) is held
-to the newest read by any session of that name, your MCP looks included;
-set `NEBULA_AGENT_SESSION` to a name of your own when two lanes of one agent
+to your own last `nebula look`; only if you never looked is it held to the
+newest read by any session of that name, your MCP looks included. An MCP
+look never refreshes a `nebula look`: after one, a `nebula set` built on an
+older `nebula look` is refused, so run `nebula look` and redo it. Set
+`NEBULA_AGENT_SESSION` to a name of your own when two lanes of one agent
 work on the same canvas, and use it for both reading and writing. The person's canvas merges your change
 into theirs and only asks them when you both changed the same thing. A shot run holds the
 scenes upstream of it too, until it ends. A saved project, a graph file you

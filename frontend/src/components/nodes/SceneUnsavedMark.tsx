@@ -16,10 +16,29 @@ import '../../styles/canvasProposals.css';
  * answer 3): no selection, no drag start. The node's own handlers (React
  * Flow selects on its click) never see the press; `nodrag` keeps the drag
  * off, and the popover, a portal still inside the card in React's tree,
- * stops its presses the same way.
+ * stops its presses the same way. A press released off the mark does
+ * nothing (review 10, N-1).
  */
 const keepToItself = (event: SyntheticEvent) => event.stopPropagation();
 const OWN_PRESSES = { onPointerDown: keepToItself, onMouseDown: keepToItself, onDoubleClick: keepToItself } as const;
+
+/** Review 10, N-1: a press on the mark released off it is cancelled, as on
+ * any button. The browser sends that click to the common ancestor (the node,
+ * which React Flow would select), so the one click of that release is
+ * stopped before anything sees it. Only that release's click: the guard
+ * goes in the same task. */
+function cancelReleaseOffMark(mark: HTMLElement) {
+  const onRelease = (up: PointerEvent) => {
+    window.removeEventListener('pointercancel', onCancel, true);
+    if (up.target instanceof Node && mark.contains(up.target)) return;
+    const swallow = (click: MouseEvent) => { click.stopPropagation(); click.preventDefault(); };
+    window.addEventListener('click', swallow, { capture: true, once: true });
+    setTimeout(() => window.removeEventListener('click', swallow, true), 0);
+  };
+  const onCancel = () => window.removeEventListener('pointerup', onRelease, true);
+  window.addEventListener('pointerup', onRelease, { capture: true, once: true });
+  window.addEventListener('pointercancel', onCancel, { capture: true, once: true });
+}
 /** Enter and Space press the mark's buttons; React Flow's node selects on
  * them too, so they stay here as well. */
 const keepActivationKeys = (event: ReactKeyboardEvent) => {
@@ -36,6 +55,7 @@ export function SceneUnsavedMark({ nodeId, line, stopped }: { nodeId: string; li
       <button ref={markRef} type="button" title={line} aria-haspopup="dialog" aria-expanded={open}
         className="cinema-scene-node__unsaved cinema-scene-node__unsaved--button nodrag nopan"
         {...OWN_PRESSES} onKeyDown={keepActivationKeys}
+        onPointerDown={(event) => { event.stopPropagation(); cancelReleaseOffMark(event.currentTarget); }}
         onClick={(event) => { event.stopPropagation(); setOpen((was) => !was); }}>
         {UNSAVED_MARK}
       </button>

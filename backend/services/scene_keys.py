@@ -24,13 +24,16 @@ another's unasked:
 - A reader is a session, not a name (fix round 9, M-2): a verified agent
   token's chat session (or the token itself), else the name plus the
   ``X-Nebula-Agent-Session`` the MCP server sends, else the name alone.
-  A named session's read is also kept under the bare name (fix round 10,
-  M-1), and a write is checked against its own session's read when it has
-  one, else against the name's: the newest read by any session of that
-  name. So an MCP read guards a later ``nebula set`` or PUT that sends no
-  session (MCP has no scene write), and a CLI write on top of a fresh MCP
-  read is taken. Readers are given as a tuple, own key first
-  (``main._scene_readers``).
+  A write is checked against its own channel's read first (fix round 11,
+  review 10 L-1): a session's own read, or for a writer with no session
+  (the CLI, a plain PUT) the name's session-less read. Only a channel that
+  never read falls back, to the newest read by any session of that name
+  (kept apart, under ``newest:<name>``), and a session then to the name's
+  session-less read. So an MCP read guards a ``nebula set`` that never read
+  (MCP has no scene write), but never refreshes a CLI read: a CLI write
+  built on its own older read is refused even after a fresh MCP read.
+  ``main._agent_readers`` gives the keys a read is kept under and the keys
+  a write is checked against, in order.
 
 Reads and writers are kept per canvas (``scope``: the live graph, its
 project and canvas epoch), so a node id another canvas uses never matches;

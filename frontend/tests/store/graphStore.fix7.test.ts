@@ -334,7 +334,7 @@ describe('L2-L5', () => {
   it('L3: Undo while the removal is out, then its 409: no late line, no mark', async () => {
     let release: () => void = () => {};
     const gate = new Promise<void>((resolve) => { release = resolve; });
-    const rendering = async () => { await gate; return json({ detail: "Couldn't remove “Shot 2”. It's still running. Stop the run first.",
+    const rendering = async () => { await gate; return json({ detail: "Couldn’t remove “Shot 2”. It’s still running. Stop the run first.",
       code: 'rendering_shots', rendering: { shotIds: ['s2'] } }, 409); };
     backend([rendering, ok]);
     useGraphStore.getState().removeShot('n1', 's2');
@@ -349,12 +349,12 @@ describe('L2-L5', () => {
   });
 
   it('L4: a rendering 409 whose resend is refused the same way says it once', async () => {
-    const rendering = () => json({ detail: "Couldn't remove “Shot 2”. It's still running. Stop the run first.",
+    const rendering = () => json({ detail: "Couldn’t remove “Shot 2”. It’s still running. Stop the run first.",
       code: 'rendering_shots', rendering: { shotIds: ['s2'], shots: [2], stoppable: true } }, 409);
     backend([rendering]);
     useGraphStore.getState().removeShot('n1', 's2');
     await sleep(300);
-    expect(said).toEqual(["Couldn't remove “Shot 2”. It's still running. Stop the run first."]);
+    expect(said).toEqual(["Couldn’t remove “Shot 2”. It’s still running. Stop the run first."]);
   });
 
   it('L5: the person\'s own switch in another window', async () => {
