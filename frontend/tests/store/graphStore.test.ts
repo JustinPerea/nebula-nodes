@@ -67,13 +67,16 @@ function resetStore() {
 let localNodeSeq = 0;
 async function addNode(definitionId: string, position: { x: number; y: number }) {
   const definition = NODE_DEFINITIONS[definitionId];
-  useGraphStore.getState().beginUndoStep();
+  // Round 21 (the #195 merge): a step taken before a change is on its way
+  // until it ends; an undo pressed meanwhile waits for it.
+  const step = useGraphStore.getState().beginUndoStep();
   const id = `local-${++localNodeSeq}`;
   const params: Record<string, unknown> = {};
   for (const param of definition.params) if (param.default !== undefined) params[param.key] = param.default;
   useGraphStore.setState((state) => ({ nodes: [...state.nodes, {
     id, type: 'model-node', position, data: { label: definition.displayName, definitionId, params, state: 'idle', outputs: {} },
   } as Node<NodeData>] }));
+  useGraphStore.getState().endUndoStep(step);
   return id;
 }
 
@@ -872,7 +875,9 @@ describe('graphStore', () => {
 
     useGraphStore.getState().onNodesChange([{ type: 'remove', id: cliNode.id }]);
 
-    expect(useGraphStore.getState().nodes).toEqual([cliNode]);
+    // GM r18, option (c): it leaves the canvas when Delete is pressed, and
+    // the refusal puts it back as it was, with the failure line.
+    expect(useGraphStore.getState().nodes).toEqual([]);
     await vi.waitFor(() => expect(alert).toHaveBeenCalledWith(expect.stringContaining(
       'Cannot delete while provider recovery is unresolved.',
     )));

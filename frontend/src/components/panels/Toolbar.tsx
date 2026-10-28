@@ -33,11 +33,13 @@ import { usePricingStore } from '../../store/pricingStore';
 import { useInputSizeStore } from '../../store/inputSizeStore';
 import type { NodeData } from '../../types';
 import { useFitCanvasView } from '../../hooks/useFitCanvasView';
+import { adoptCanvasRevisionFrom } from '../../lib/projectContext';
+import { refuseEditWhileFollowing, waitToOpenTooltip } from '../../lib/canvasFollow';
 import type { Edge, Node } from '@xyflow/react';
 import '../../styles/panels.css';
 import '../../styles/canvas-toolbar.css';
 import { refuseEditWhileOffline } from '../../lib/backendConnection';
-import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { useCanvasLock } from '../../lib/canvasLock';
 
 const CLEAR_CANVAS = "Couldn't clear the canvas.";
 
@@ -53,13 +55,17 @@ export function Toolbar() {
   const executeGraph = useGraphStore((s) => s.executeGraph);
   const cancelExecution = useGraphStore((s) => s.cancelExecution);
   const isExecuting = useGraphStore((s) => s.isExecuting);
+  // A run waiting for its inputs counts as starting (review 15, M-B).
+  const runStarting = useGraphStore((s) => s.runStarting);
   const isImportingGraph = useGraphStore((s) => s.isImportingGraph);
   const isCancelling = useGraphStore((s) => s.isCancelling);
-  // Offline is read-only (GM, round 15 of PR #114): Run (and Stop) and the
+  // Offline is read-only (GM, round 15 of PR #114), and so is following an
+  // agent's switch (GM round 22, A: one state, lib/canvasLock): Run and the
   // canvas actions that edit are disabled and look it; Save graph (a
   // download), zoom and Reset panels stay.
-  const offline = useBackendOffline();
-  const off = offlineMark(offline);
+  const lock = useCanvasLock();
+  const offline = lock.offline;
+  const following = lock.following;
   const canSave = useGraphStore(canSaveGraph);
   const canLoad = useGraphStore(canLoadGraph);
   const isPreparing = useGraphStore((s) => s.createLaunchingIds.length > 0);
@@ -178,18 +184,23 @@ export function Toolbar() {
       nodes.length > 0
         ? `Clear the canvas? ${nodes.length} node${nodes.length === 1 ? '' : 's'} will be removed, and the stored canvas used by connected tools will be reset. Save your graph first to keep a copy.`
         : 'Reset the stored canvas used by connected tools? The visible canvas is already empty.';
+    if (refuseEditWhileFollowing()) return;
     if (!window.confirm(msg)) return;
     if (!canLoadGraph(useGraphStore.getState())) return;
+    // Round 20 (M1): an agent's switch seen while the confirm was up.
+    if (refuseEditWhileFollowing()) return;
     // Confirm the backend clear before replacing the local graph. The backend
     // rejects this while any tracked execution owns provider lifecycle state.
     // One undo step for the clear, taken before the backend's graphSync can
     // empty the canvas.
-    const undoStep = useGraphStore.getState().beginUndoStep();
+    const undoStep = useGraphStore.getState().beginUndoStep({ clear: true });
     try {
       // force: the person just confirmed, and a project with nodes needs it
       // (the backend refuses a clear without it, 409).
       // GM, error-copy round 2: "Couldn't clear the canvas." then the reason.
-      await apiRequest(CLEAR_CANVAS, '/api/graph?force=true', { method: 'DELETE' });
+      const response = await apiRequest(CLEAR_CANVAS, '/api/graph?force=true', { method: 'DELETE' });
+      // The canvas Nebula holds now (round 19): writes to it carry it.
+      await adoptCanvasRevisionFrom(response);
       // A successful backend clear proves no provider safety record remains;
       // unlike ordinary snapshot hydration, this is authoritative removal.
       useGraphStore.setState({ providerRecoveries: [], providerStartAmbiguities: [] });
@@ -197,6 +208,9 @@ export function Toolbar() {
     } catch (error) {
       useGraphStore.getState().cancelUndoStep(undoStep);
       showNotice(failureMessage(error, CLEAR_CANVAS));
+    } finally {
+      // An undo pressed while the clear was on its way now undoes it (review 10, L-2).
+      useGraphStore.getState().endUndoStep(undoStep);
     }
   }, []);
 
@@ -224,7 +238,8 @@ export function Toolbar() {
   }, [resetPanelLayout]);
 
   const handleImportCLI = useCallback(async () => {
-    if (!canLoadGraph(useGraphStore.getState())) return;
+    // Round 22 (review 21): it replaces the canvas, so it waits for a follow too.
+    if (refuseEditWhileFollowing() || !canLoadGraph(useGraphStore.getState())) return;
     try {
       const data = await fetchCLIGraph();
       if (!mounted.current || !canLoadGraph(useGraphStore.getState())) return;
@@ -275,12 +290,18 @@ export function Toolbar() {
       ) : (
         <button
           type="button"
-          className="toolbar__button toolbar__button--primary"
-          onClick={() => executeGraph()}
-          disabled={nodeCount === 0 || isImportingGraph || offline}
-          {...off}
+          className={`toolbar__button toolbar__button--primary${following ? ' toolbar__button--waiting' : ''}`}
+          // Round 20 (GM follow-up 3): disabled while the tab follows an
+          // agent's switch, with its tooltip (aria-disabled keeps the tooltip
+          // and the focus; a click only pulses the project bar). Offline it
+          // is disabled outright (round 15 of PR #114).
+          onClick={() => { if (refuseEditWhileFollowing()) return; void executeGraph(); }}
+          disabled={nodeCount === 0 || isImportingGraph || runStarting || offline}
+          aria-disabled={following ? true : undefined}
+          {...lock.mark}
           aria-describedby={nodeCount > 0 ? runScopeId : undefined}
-          title={isImportingGraph ? 'Wait for the graph import to finish' : `Run graph. ${describeRunScope(runScope)} (${displayKey('Mod')}${displayKey('Enter')})`}
+          title={following ? waitToOpenTooltip(following.projectName)
+            : isImportingGraph ? 'Wait for the graph import to finish' : `Run graph. ${describeRunScope(runScope)} (${displayKey('Mod')}${displayKey('Enter')})`}
         >
           <ToolbarIcon name="run" />
           <span className="toolbar__label">Run</span>
@@ -314,29 +335,29 @@ export function Toolbar() {
                 aria-keyshortcuts="Control+s Meta+s" onClick={() => runSecondaryAction(requestGraphSave)}>
                 <ToolbarIcon name="save" /><span>Save graph</span><kbd aria-hidden="true">Ctrl / ⌘ S</kbd>
               </button>
-              <button type="button" className="toolbar__action" disabled={!canLoad || offline} {...off}
+              <button type="button" className="toolbar__action"
+                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Load graph (Ctrl+O or ⌘O)' })}
                 aria-describedby={!canLoad ? blockedId : undefined}
-                title={!canLoad ? loadBlockedReason : 'Load graph (Ctrl+O or ⌘O)'}
                 aria-keyshortcuts="Control+o Meta+o" onClick={() => runSecondaryAction(requestGraphLoad)}>
                 <ToolbarIcon name="load" /><span>Load graph</span><kbd aria-hidden="true">Ctrl / ⌘ O</kbd>
               </button>
-              <button type="button" className="toolbar__action" disabled={!canLoad || offline} {...off}
+              <button type="button" className="toolbar__action"
+                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Import graph built by Nebula CLI' })}
                 aria-describedby={!canLoad ? blockedId : undefined}
-                title={!canLoad ? loadBlockedReason : 'Import graph built by Nebula CLI'}
                 onClick={() => runSecondaryAction(() => void handleImportCLI())}>
                 <ToolbarIcon name="cli" /><span>Import CLI graph</span>
               </button>
-              <button type="button" className="toolbar__action toolbar__action--danger" disabled={!canLoad || offline} {...off}
+              <button type="button" className="toolbar__action toolbar__action--danger"
+                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Clear canvas — asks for confirmation' })}
                 aria-describedby={!canLoad ? blockedId : undefined}
-                title={!canLoad ? loadBlockedReason : 'Clear canvas — asks for confirmation'}
                 onClick={() => runSecondaryAction(() => void handleClear())}>
                 <ToolbarIcon name="clear" /><span>Clear canvas…</span>
               </button>
             </div>
             <div className="toolbar__action-group" role="group" aria-label="Canvas layout">
               <h2 className="toolbar__action-heading">Layout</h2>
-              <button type="button" className="toolbar__action" disabled={nodeCount === 0 || offline} {...off}
-                title="Arrange nodes by dependency" onClick={() => runSecondaryAction(autoLayout)}>
+              <button type="button" className="toolbar__action"
+                {...lock.act({ disabled: nodeCount === 0, title: 'Arrange nodes by dependency' })} onClick={() => runSecondaryAction(autoLayout)}>
                 <ToolbarIcon name="layout" /><span>Arrange nodes</span>
               </button>
               <button type="button" className="toolbar__action" title="Reset panel positions and sizes"

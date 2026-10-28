@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Home } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
 import { useGraphStore } from '../../store/graphStore';
 import { shortLine } from '../../lib/errorCopy';
 import { HEADER_TOOLTIP, headerLine } from '../../lib/savePausedCopy';
+import { followingSwitch, openingLine, subscribeFollowingSwitch, subscribeFollowPulse, useFollowingSwitch } from '../../lib/canvasFollow';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { isBackendOffline, refuseEditWhileOffline } from '../../lib/backendConnection';
 import './ProjectWorkspaceControls.css';
@@ -22,6 +23,20 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
   // banner says it); a retry couldn't reach Nebula anyway.
   const offline = useBackendOffline();
   const [draft, setDraft] = useState<string | null>(null);
+  // Round 20 (GM follow-up 1): while the tab follows an agent's switch the
+  // bar says "Opening “<project>”…" where the save state is, and keeps the
+  // width it had (measured as the follow starts), so it never jumps.
+  const following = useFollowingSwitch();
+  const bar = useRef<HTMLDivElement | null>(null);
+  const [lockedWidth, setLockedWidth] = useState<number | null>(null);
+  // Measured when the follow starts, before the bar redraws with the line.
+  useEffect(() => subscribeFollowingSwitch(() => {
+    const measured = bar.current?.getBoundingClientRect().width ?? null;
+    setLockedWidth((width) => (followingSwitch() ? width ?? measured : null));
+  }), []);
+  // A refused edit nudges the line (lib/canvasFollow.ts pulseFollowing).
+  const [pulse, setPulse] = useState(0);
+  useEffect(() => subscribeFollowPulse(() => setPulse((count) => count + 1)), []);
   if (!project || screen !== 'workspace') return null;
   const finishRename = (save: boolean) => {
     const name = draft?.trim() ?? '';
@@ -30,14 +45,28 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
   };
   const label = status === 'saving' ? 'Saving…' : status === 'error' ? 'Save failed' : status === 'unsaved' ? 'Unsaved changes' : 'Saved';
   return (
-    <div className="project-workspace-controls">
+    <div ref={bar} className={`project-workspace-controls${following ? ' project-workspace-controls--following' : ''}`}
+      // GM round 22 (B): while following, the whole bar names the project
+      // being opened in full (its tooltip and label); the slot may cut it.
+      {...(following ? { role: 'group', title: openingLine(following.projectName), 'aria-label': openingLine(following.projectName) } : {})}
+      style={following && lockedWidth ? { width: lockedWidth, maxWidth: lockedWidth } : undefined}>
       <button type="button" className="project-workspace-controls__home" aria-label={homeBusy ? 'Saving…' : 'Back to projects'}
         aria-busy={homeBusy || undefined} title="Projects" disabled={busy}
         onClick={(event) => (onHome ? onHome(event.currentTarget) : void useProjectStore.getState().goHome())}>
         <Home size={16} aria-hidden="true" />
         {homeBusy && <span className="project-workspace-controls__busy">Saving…</span>}
       </button>
-      {draft !== null
+      {following
+        // GM round 21 (item 1): the old project's name goes; the name slot
+        // reads "Opening “<project>”…". A long name is cut inside itself,
+        // keeping the closing quote and ellipsis; the bar never widens.
+        ? <span key={pulse} className={`project-workspace-controls__opening${pulse > 0 ? ' project-workspace-controls__opening--pulse' : ''}`}
+            role="status" title={openingLine(following.projectName)} aria-label={openingLine(following.projectName)}>
+            <span className="project-workspace-controls__opening-fixed" aria-hidden="true">Opening “</span>
+            <span className="project-workspace-controls__opening-name" aria-hidden="true">{following.projectName}</span>
+            <span className="project-workspace-controls__opening-fixed" aria-hidden="true">”…</span>
+          </span>
+        : draft !== null
         ? <input className="project-workspace-controls__name project-workspace-controls__name-input" aria-label="Project name"
             autoFocus maxLength={120} value={draft} onFocus={(event) => event.target.select()}
             // Offline (round 15 of PR #114): disabled with its draft kept, as a node's rename.
@@ -56,7 +85,9 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
                 if (!refuseEditWhileOffline()) setDraft(project.name);
               }
             }}>{project.name}</button>}
-      {status === 'paused' && pausedBytes !== null
+      {following
+        ? null
+        : status === 'paused' && pausedBytes !== null
         // Q118 (GM): the persistent state, where "Saved" usually is, in Save
         // failed's warning colour; it opens the "what's large" panel.
         ? <button type="button" className="project-workspace-controls__retry project-workspace-controls__paused"
@@ -70,7 +101,9 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
             onClick={() => void useProjectStore.getState().retrySave()}>Save failed · Retry</button>
         : <span className={`project-workspace-controls__status${status === 'saved' ? ' project-workspace-controls__status--settled' : ''}`}
             role="status">{label}</span>}
-      <span className="project-workspace-controls__count">{nodeCount} {nodeCount === 1 ? 'node' : 'nodes'}</span>
+      {/* While following, the save state and the count (the canvas that is going) give their room to the
+          opening line, which takes the whole slot at the locked width (GM round 22, B). */}
+      {!following && <span className="project-workspace-controls__count">{nodeCount} {nodeCount === 1 ? 'node' : 'nodes'}</span>}
     </div>
   );
 }

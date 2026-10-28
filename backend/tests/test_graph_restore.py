@@ -19,11 +19,11 @@ from services.cli_graph import CLIGraph
 from services.project_store import ProjectStore, make_project
 from services.provider_recovery import ProviderRecoveryStore
 from services.provider_start_guard import ProviderStartGuard
-from tests.conftest import CANVAS_PARAMS_VERSION, PERSON
+from tests.conftest import CANVAS_PARAMS_VERSION, PERSON, TabHeaders
 
 AGENT = {"X-Nebula-Agent": "Claude"}
 TAB = "tab-0123456789abcdef"
-CANVAS = {**PERSON, "X-Nebula-Tab": TAB}
+CANVAS = TabHeaders({**PERSON, "X-Nebula-Tab": TAB})
 
 
 @pytest.fixture
@@ -110,7 +110,7 @@ def test_a_canvas_edit_carries_its_tab_so_that_tab_skips_its_echo(api):
 
 def test_a_malformed_tab_header_is_left_out(api):
     prompt, _ = _seed(api)
-    api.client.put(f"/api/graph/node/{prompt}", headers={**PERSON, "X-Nebula-Tab": "<script>"},
+    api.client.put(f"/api/graph/node/{prompt}", headers=TabHeaders({**PERSON, "X-Nebula-Tab": "<script>"}),
                    json={"params": {"value": "x"}})
     assert "tab" not in _syncs(api)[-1]["edit"]
 
@@ -139,7 +139,7 @@ def test_every_direct_edit_route_marks_its_sync_as_an_edit(api):
 def test_an_agent_cannot_pass_its_edit_off_as_a_tab_echo(api):
     prompt, _ = _seed(api)
     # A tab id an agent read off an earlier graphSync, sent with its own name.
-    api.client.put(f"/api/graph/node/{prompt}", headers={**AGENT, "X-Nebula-Tab": TAB},
+    api.client.put(f"/api/graph/node/{prompt}", headers=TabHeaders({**AGENT, "X-Nebula-Tab": TAB}),
                    json={"params": {"value": "x"}})
     edit = _syncs(api)[-1]["edit"]
     assert edit["actor"]["name"] == "Claude"
@@ -147,9 +147,9 @@ def test_an_agent_cannot_pass_its_edit_off_as_a_tab_echo(api):
 
 
 @pytest.mark.parametrize("headers", [
-    {"X-Nebula-Tab": TAB},
-    {"X-Nebula-Tab": TAB, "Origin": "http://localhost:5173", **CANVAS_PARAMS_VERSION},
-    {"X-Nebula-Tab": TAB, "X-Nebula-Person": "not-this-launch"},
+    TabHeaders({"X-Nebula-Tab": TAB}),
+    TabHeaders({"X-Nebula-Tab": TAB, "Origin": "http://localhost:5173", **CANVAS_PARAMS_VERSION}),
+    TabHeaders({"X-Nebula-Tab": TAB, "X-Nebula-Person": "not-this-launch"}),
 ])
 def test_only_the_person_can_mark_an_edit_as_a_tab_echo(api, headers):
     # A missing X-Nebula-Agent header, an Origin or a made-up token prove
@@ -268,7 +268,7 @@ def test_an_agents_forced_clear_is_one_undo_step_that_restore_puts_back(api):
     assert set(api.graph.nodes) == {prompt, image} and len(_syncs(api)) == before
 
     # A tab id sent by the agent can't make the clear pass as a tab's echo.
-    cleared = api.client.delete("/api/graph?force=true", headers={**AGENT, "X-Nebula-Tab": TAB})
+    cleared = api.client.delete("/api/graph?force=true", headers=TabHeaders({**AGENT, "X-Nebula-Tab": TAB}))
     assert cleared.status_code == 200, cleared.text
     assert api.graph.nodes == {} and api.graph.edges == []
     sync = _syncs(api)[-1]

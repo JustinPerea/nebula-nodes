@@ -1,8 +1,11 @@
 import { create } from 'zustand';
 import { wsClient, type CanvasPinsEvent, type Pin } from '../lib/wsClient';
 import { createPin, deletePin, fetchPins, MAX_PIN_TEXT } from '../lib/canvasPins';
-import { failureMessage } from '../lib/errorCopy';
-import { refuseEditWhileOffline } from '../lib/backendConnection';
+import { failureMessage, RequestFailedError } from '../lib/errorCopy';
+import { refuseCanvasEdit } from '../lib/canvasLock';
+import { subscribeFollowingSwitch, followingSwitch } from '../lib/canvasFollow';
+import { subscribeCanvasReplaced } from '../lib/canvasReplaced';
+import { getProjectContext, STALE_CANVAS_DETAIL, type ProjectContext } from '../lib/projectContext';
 
 /** Where the person is about to leave a note: on a node, or at a flow-space spot. */
 export type PinComposerTarget = { nodeId: string } | { position: { x: number; y: number } };
@@ -11,6 +14,16 @@ interface CanvasPinsState {
   projectId: string | null;
   pins: Pin[];
   composer: PinComposerTarget | null;
+  /** Round 23 (review 22, M-1): the project and canvas the open dialog's
+   * target belongs to (its node id names a node of that canvas only). The
+   * note is sent for it, so Nebula refuses it once that canvas has gone. */
+  composerCanvas: ProjectContext | null;
+  /** What the person has typed in the open dialog. */
+  draft: string;
+  /** A note that couldn't be added because its canvas went before it was
+   * sent (a follow, a replacement, Nebula's out-of-date refusal): its text,
+   * kept for the person, never anchored anywhere. */
+  kept: { text: string } | null;
   /** Deletes sent but not yet confirmed: hidden even if a stale update still lists them. */
   removing: Record<string, true>;
   error: string | null;
@@ -18,9 +31,11 @@ interface CanvasPinsState {
   apply: (event: Pick<CanvasPinsEvent, 'projectId' | 'pins'>) => void;
   compose: (target: PinComposerTarget) => void;
   cancelCompose: () => void;
+  setDraft: (text: string) => void;
   submit: (text: string) => Promise<boolean>;
   remove: (id: string) => Promise<void>;
   clearError: () => void;
+  dismissKept: () => void;
 }
 
 const SAFE_COLOR = /^#[0-9a-fA-F]{6}$/;
@@ -74,6 +89,9 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
   projectId: null,
   pins: [],
   composer: null,
+  composerCanvas: null,
+  draft: '',
+  kept: null,
   removing: {},
   error: null,
   hydrate: async () => {
@@ -88,33 +106,50 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
     projectId: typeof event.projectId === 'string' ? event.projectId : null,
     pins: sanitizeAll(event.pins).filter((pin) => !state.removing[pin.id]),
   })),
-  compose: (target) => set({ composer: target, error: null }),
-  cancelCompose: () => set({ composer: null }),
+  // Round 23 (review 22, M-1): the dialog is part of the canvas's read-only
+  // state (lib/canvasLock, the one source every surface reads): opening it,
+  // sending it and deleting a note are refused while following an agent's
+  // switch and while offline, and nothing is sent.
+  compose: (target) => {
+    if (refuseCanvasEdit()) return;
+    set({ composer: target, composerCanvas: getProjectContext(), draft: '', error: null, kept: null });
+  },
+  cancelCompose: () => set({ composer: null, composerCanvas: null, draft: '' }),
+  setDraft: (text) => set({ draft: text }),
   submit: async (text) => {
     const target = get().composer;
+    const canvas = get().composerCanvas;
     const trimmed = text.trim();
     if (!target || !trimmed) {
-      set({ composer: null });
+      set({ composer: null, composerCanvas: null, draft: '' });
       return false;
     }
     // Offline is read-only (round 15 of PR #114): nothing is sent; the note
-    // stays open and the banner pulses.
-    if (refuseEditWhileOffline()) return false;
+    // stays open and the banner pulses. Following the same (round 23).
+    if (refuseCanvasEdit()) return false;
     try {
-      const pin = sanitize(await createPin(trimmed.slice(0, MAX_PIN_TEXT), target));
+      // For the canvas it was written on (round 23): never the one open now.
+      const pin = sanitize(await createPin(trimmed.slice(0, MAX_PIN_TEXT), target, canvas));
       set((state) => ({
         composer: null,
+        composerCanvas: null,
+        draft: '',
         error: null,
         pins: pin && !state.pins.some((p) => p.id === pin.id) ? [pin, ...state.pins] : state.pins,
       }));
       return true;
     } catch (error) {
-      set({ composer: null, error: failureMessage(error, "Couldn't add the pin.") });
+      if (canvasWentFor(error)) {
+        // That canvas has gone: the text is kept, not anchored elsewhere.
+        set({ composer: null, composerCanvas: null, draft: '', kept: { text: trimmed } });
+        return false;
+      }
+      set({ composer: null, composerCanvas: null, draft: '', error: failureMessage(error, "Couldn't add the pin.") });
       return false;
     }
   },
   remove: async (id) => {
-    if (refuseEditWhileOffline()) return;
+    if (refuseCanvasEdit()) return;
     const previous = get().pins;
     set((state) => ({
       pins: state.pins.filter((pin) => pin.id !== id),
@@ -138,7 +173,30 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
     }
   },
   clearError: () => set({ error: null }),
+  dismissKept: () => set({ kept: null }),
 }));
+
+/** Nebula refused a pin write as made for a canvas that has gone. */
+function canvasWentFor(error: unknown): boolean {
+  return error instanceof RequestFailedError && error.status === 409
+    && [error.message, error.reason, error.detail].some((text) => typeof text === 'string' && text.includes(STALE_CANVAS_DETAIL));
+}
+
+/** The open dialog's target was a node or a spot of the canvas that is
+ * going (a follow started) or went (a replacement): the dialog closes, and
+ * what the person typed is kept (round 23, review 22 M-1). Its target is
+ * never re-anchored: the canvas that replaces it reuses the same ids. */
+function closeComposerForGoneCanvas(): void {
+  const { composer, draft } = useCanvasPinsStore.getState();
+  if (!composer) return;
+  const text = draft.trim();
+  useCanvasPinsStore.setState({ composer: null, composerCanvas: null, draft: '', ...(text ? { kept: { text } } : {}) });
+}
+
+subscribeFollowingSwitch(() => {
+  if (followingSwitch()) closeComposerForGoneCanvas();
+});
+subscribeCanvasReplaced(closeComposerForGoneCanvas);
 
 wsClient.subscribe((event) => {
   if (event.type === 'canvasPins') useCanvasPinsStore.getState().apply(event);

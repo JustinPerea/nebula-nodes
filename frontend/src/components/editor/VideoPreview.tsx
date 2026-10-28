@@ -12,6 +12,7 @@ import {
 import { formatSmpte } from '../../lib/editor/timecode';
 import { floatingBottomLimit } from '../../lib/bottomBar';
 import type { NodeData } from '../../types';
+import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
 
 const EMPTY_CLIPS: EditClip[] = [];
 /** How far the rendered picture stops above the preview's foot (the notice band's reach), in px. */
@@ -113,6 +114,8 @@ export function VideoPreview({ sourceUrl, editNode }: Props) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.defaultPrevented || e.key !== ' ' || e.repeat || e.altKey || e.ctrlKey || e.metaKey) return;
+      // Never plays behind a modal dialog (review 8, L-d).
+      if (keyBlockedByModal()) return;
       const target = e.target;
       // Native activation/typing owns Space on controls, including a child
       // icon inside the shared Back button and rendered video controls.

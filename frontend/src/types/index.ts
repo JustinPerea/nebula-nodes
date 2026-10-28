@@ -814,6 +814,10 @@ export interface NodeData {
    *  (answered no, 0.12)", and the gate node that caused it. */
   skipReason?: string;
   skipGateNodeId?: string;
+  /** An agent's placeholder (Q125 item 3): the backend's flag with its
+   *  owner, while the agent sets the node up. Runs skip it; only the backend
+   *  changes it (lib/pendingNodes.ts). */
+  pending?: import('../lib/pendingNodes').PendingFlag;
   /** UI-only: output ports the latest run withheld (port -> reason). Wires
    *  from them draw as inactive. */
   withheldPorts?: Record<string, string>;

@@ -195,20 +195,32 @@ function canonicalJson(value: unknown): string {
   return JSON.stringify(value) ?? 'null';
 }
 
+// engine._maybe_probe_video_output adds these observed output facts after
+// admission. They configure downstream editing UI, never the saved model run.
+const OUTPUT_METADATA_KEYS = new Set(['_sourceDuration', '_sourceFps', '_sourceIsVfr']);
+
+/** A node's params as its recipe: without observed output facts or a Paper source's runtime metadata. */
+function recipeParams(definitionId: string, params: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(params ?? {})
+    .filter(([key]) => !OUTPUT_METADATA_KEYS.has(key) && (definitionId !== 'paper-source' || key !== '_paperSource')));
+}
+
+/** Whether a node's live params are the recipe a saved run holds for it (the
+ * same comparison as paperRunOutOfDateReasons, one node): a replay sends the
+ * saved ones, so a difference means the replay doesn't run what the node is now. */
+export function sameRecipeParams(definitionId: string, saved: Record<string, unknown>, live: Record<string, unknown>): boolean {
+  return canonicalJson(recipeParams(definitionId, saved)) === canonicalJson(recipeParams(definitionId, live));
+}
+
 /** Canonical saved graph/settings; runtime source metadata is input, not recipe. */
 export function paperRecipeContent(snapshot: RunGraphSnapshot, targetNodeId?: string): string {
-  // engine._maybe_probe_video_output adds these observed output facts after
-  // admission. They configure downstream editing UI, never the saved model run.
-  const outputMetadataKeys = new Set(['_sourceDuration', '_sourceFps', '_sourceIsVfr']);
   const nodes = nodesInRunScope(snapshot, targetNodeId);
   const ids = new Set(nodes.map((node) => node.id));
   return canonicalJson({
     nodes: nodes.map((node) => ({
       id: node.id,
       definitionId: node.definitionId,
-      params: Object.fromEntries(Object.entries(node.params)
-        .filter(([key]) => !outputMetadataKeys.has(key)
-          && (node.definitionId !== 'paper-source' || key !== '_paperSource'))),
+      params: recipeParams(node.definitionId, node.params),
     })).sort((left, right) => left.id.localeCompare(right.id)),
     edges: snapshot.edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target))
       .map(({ source, sourceHandle, target, targetHandle }) => ({ source, sourceHandle, target, targetHandle }))

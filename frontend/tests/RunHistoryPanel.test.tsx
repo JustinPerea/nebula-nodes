@@ -254,7 +254,8 @@ describe('RunHistoryPanel replay actions', () => {
     const dialog = screen.getByRole('alertdialog', { name: 'Forget the recovery ID for “Harbor world”?' });
     expect(dialog).toHaveAccessibleDescription(
       "Only do this after you've checked the run in Marble. Without the ID, Nebula can't stop you from paying for the same run twice.");
-    expect(dialog.parentElement?.parentElement).toBe(document.body);
+    // On the page body, through ModalPortal (the round 21 merge with #195).
+    expect(dialog.closest('.modal-portal')?.parentElement).toBe(document.body);
     // GM, round 14: Cancel on the left, the action on the right, in the
     // destructive style (the trash's red text, never orange primary).
     expect(within(dialog).getAllByRole('button').map((button) => button.textContent)).toEqual(['Cancel', 'Forget ID']);

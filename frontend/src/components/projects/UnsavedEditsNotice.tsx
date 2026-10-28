@@ -1,10 +1,10 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
-import { createPortal } from 'react-dom';
 import '../../styles/prompt-dialog.css';
 import {
   CONFIRM_LINE, EDITS_DOWNLOAD_HEADING, EDITS_NOT_WRITTEN, UNSAVED_EDITS_HEADING, agentOpeningLine, keptConfirmLine,
 } from './unsavedEditsCopy';
 import { TOO_BIG_TO_DOWNLOAD } from '../../lib/graphFileShared';
+import { ModalPortal } from '../ModalPortal';
 
 /**
  * Q116 a) (Justin, 2026-10-23): "a): "Download your edits" plus "Continue
@@ -89,7 +89,8 @@ function ContinueWithoutEditsConfirm({ line, onCancel, onConfirm }: {
       }
     }
   };
-  return createPortal(
+  return (
+    <ModalPortal>
     <div className="prompt-dialog">
       <div ref={card} className="prompt-dialog__card" role="alertdialog" aria-modal="true" aria-labelledby={lineId}
         onKeyDown={onKeyDown}>
@@ -99,7 +100,7 @@ function ContinueWithoutEditsConfirm({ line, onCancel, onConfirm }: {
           <button type="button" ref={cancel} onClick={onCancel}>Cancel</button>
         </div>
       </div>
-    </div>,
-    document.body,
+    </div>
+    </ModalPortal>
   );
 }

@@ -6,6 +6,7 @@ import { useCinemaUploadStore } from '../../store/cinemaUploadStore';
 import { shortLine } from '../../lib/errorCopy';
 import type { CinemaSceneSpec } from '../../types';
 import { CinemaLookControls, CinemaPaletteControls } from './CinemaArtDirectionControls';
+import { useCanvasLock } from '../../lib/canvasLock';
 
 interface CinemaSharedControlsProps {
   cinemaNodeId: string;
@@ -30,6 +31,8 @@ const BASE_MODELS: Array<{ id: string; label: string }> = [
 const ASPECT_RATIOS = ['16:9', '2.39:1', '4:5', '1:1', '9:16'];
 
 export function CinemaSharedControls({ cinemaNodeId, scene, connectedRefs = [], onChange }: CinemaSharedControlsProps) {
+  // Round 23 (review 22, L-3): the scene's settings edit the canvas: the lock.
+  const lock = useCanvasLock();
   const controlId = useId();
   const refInputRef = useRef<HTMLInputElement>(null);
   const uploads = useCinemaUploadStore((state) => state.uploads);
@@ -83,7 +86,7 @@ export function CinemaSharedControls({ cinemaNodeId, scene, connectedRefs = [], 
           <section className="cinema-shared-controls__section">
             <label htmlFor={`${controlId}-model`} className="cinema-shared-controls__label">Base model</label>
             <select id={`${controlId}-model`} className="cinema-shared-controls__select" value={scene.base.model}
-              onChange={(event) => setBase(event.target.value)}>
+              onChange={(event) => setBase(event.target.value)} {...lock.act()}>
               {!model && <option value={scene.base.model}>{scene.base.model || 'No model selected'}</option>}
               {BASE_MODELS.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.label}</option>)}
             </select>
@@ -92,7 +95,7 @@ export function CinemaSharedControls({ cinemaNodeId, scene, connectedRefs = [], 
           <section className="cinema-shared-controls__section">
             <label htmlFor={`${controlId}-aspect`} className="cinema-shared-controls__label">Aspect ratio</label>
             <select id={`${controlId}-aspect`} className="cinema-shared-controls__select" value={scene.aspectRatio}
-              onChange={(event) => setAspect(event.target.value)}>
+              onChange={(event) => setAspect(event.target.value)} {...lock.act()}>
               {!ASPECT_RATIOS.includes(scene.aspectRatio) && <option value={scene.aspectRatio}>{scene.aspectRatio || 'No aspect ratio selected'}</option>}
               {ASPECT_RATIOS.map((ratio) => <option key={ratio} value={ratio}>{ratio}</option>)}
             </select>
@@ -111,12 +114,12 @@ export function CinemaSharedControls({ cinemaNodeId, scene, connectedRefs = [], 
               {characterRefs.map((url, index) => (
                 <div key={`${url}-${index}`} className="cinema-shared-controls__ref">
                   <img src={backendAssetUrlSync(url)} alt={`Character reference ${index + 1}`} draggable={false} />
-                  <button type="button" className="cinema-shared-controls__ref-remove" title="Remove reference"
+                  <button type="button" className="cinema-shared-controls__ref-remove" {...lock.act({ title: 'Remove reference' })}
                     aria-label={`Remove character reference ${index + 1}`} onClick={() => removeCharacterRef(url)}>×</button>
                 </div>
               ))}
               <button type="button" className="cinema-shared-controls__ref-add" onClick={() => refInputRef.current?.click()}
-                aria-label="Attach character references">+</button>
+                aria-label="Attach character references" {...lock.act()}>+</button>
               <input ref={refInputRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp"
                 aria-label="Character reference images" multiple hidden onChange={(event) => {
                   handleFiles(event.target.files);
@@ -150,7 +153,8 @@ export function CinemaSharedControls({ cinemaNodeId, scene, connectedRefs = [], 
               </span>
               <div className="cinema-reference-upload__actions">
                 {upload.status === 'error' && upload.canRetry && (
-                  <button type="button" onClick={() => retryCinemaReferenceUpload(upload.id)} aria-label={`Retry ${upload.name}`}>Retry</button>
+                  <button type="button" onClick={() => retryCinemaReferenceUpload(upload.id)} aria-label={`Retry ${upload.name}`}
+                    {...lock.act()}>Retry</button>
                 )}
                 <button type="button" onClick={() => removeCinemaReferenceUpload(upload.id)} aria-label={`Remove upload ${upload.name}`}>Remove</button>
               </div>

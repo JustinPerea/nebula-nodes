@@ -6,6 +6,8 @@ import { PORT_COLORS } from '../../lib/portCompatibility';
 import { useUIStore } from '../../store/uiStore';
 import { useSlavaNodeEntranceClass } from '../../hooks/useSlavaNodeEntrance';
 import { NodeError } from './NodeError';
+import { PlaceholderLine } from './PlaceholderLine';
+import { pendingAttr } from '../../lib/pendingNodes';
 import '../../styles/batch-node.css';
 
 function BatchNodeComponent({ id, data, selected }: NodeProps) {
@@ -30,7 +32,7 @@ function BatchNodeComponent({ id, data, selected }: NodeProps) {
 
   return (
     <div className={`batch-node${isSelected ? ' batch-node--selected' : ''}${entranceClass}`}
-      onClick={() => selectNode(id)}>
+      data-pending={pendingAttr(nodeData.pending)} onClick={() => selectNode(id)}>
       <div className="batch-node__header">
         <strong className="batch-node__name">{name}</strong>
         <span className="batch-node__count">{items.length} item{items.length === 1 ? '' : 's'}</span>
@@ -49,6 +51,7 @@ function BatchNodeComponent({ id, data, selected }: NodeProps) {
         </div>)}
         {items.length > 8 && <span className="batch-node__overflow">+ {items.length - 8} more</span>}
       </div>
+      <PlaceholderLine pending={nodeData.pending} />
       <p className="batch-node__guidance">Cap {cap} · Run explicitly. Editing does not generate.</p>
       {authoringError && <p className="batch-node__warning" role="alert">{authoringError}</p>}
       {items.length > cap && !stoppedOnCap && <p className="batch-node__warning" role="alert">

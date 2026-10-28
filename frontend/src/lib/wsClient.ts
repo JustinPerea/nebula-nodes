@@ -48,6 +48,10 @@ export interface AgentPresenceEvent {
   from?: AgentCursorAnchor;
   action: 'move' | 'click' | 'drag' | 'look';
   say: string;
+  /** The Agent log's words when they differ from the cursor's (GM - Design,
+   * round 16): a field the card shows no label for, which the bubble leaves
+   * out, is named here by its key. Absent: the log uses `say`. */
+  log?: string;
   /** Backend wall-clock milliseconds. */
   at: number;
   /** The project open when it happened (the Agents panel lists it only there). */
@@ -67,6 +71,23 @@ export interface AgentStatusEvent {
   change: 'set' | 'cleared' | 'expired' | 'unanchored';
   /** Rises with every change; a roster read says the one it saw. */
   rev: number;
+}
+
+/**
+ * A node of a run an agent started began or stopped running (Q125 item 3;
+ * backend services/run_done_cards.py AgentRunBook): the agent's mark on it.
+ */
+export interface AgentRunEvent {
+  type: 'agentRun';
+  agent: { id: string; name: string; color: string; verified: boolean };
+  runId: string;
+  nodeId: string;
+  /** The model as its provider spells it ("FLUX.2 [pro]"), or the node's name. */
+  model: string | null;
+  projectId: string | null;
+  change: 'started' | 'ended';
+  /** How long the node has run (when it started, for `started`: about 0). */
+  secondsAgo: number;
 }
 
 /** A short note the person pinned for agents (backend services/canvas_pins.py). */
@@ -212,6 +233,9 @@ export interface ProposalView {
     /** Run nodes that can't run here as set up, when the proposal was made
      * (backend main._not_ready_nodes, in find_nodes' words). Accept still runs. */
     notReady?: ProposalNotReady[];
+    /** Agents' placeholders (and what needs them) its run will skip, left out
+     * of the counts above (backend main._proposal_cost, Q125 item 3). */
+    pendingSkipped?: import('./pendingNodes').PendingSkipSummary;
     note: string;
   };
   references: string[];
@@ -313,6 +337,7 @@ export type ExecutionEvent = (
     }
   | AgentPresenceEvent
   | AgentStatusEvent
+  | AgentRunEvent
   | CanvasPinsEvent
   | AgentNotesEvent
   | StoredAssetChangedEvent

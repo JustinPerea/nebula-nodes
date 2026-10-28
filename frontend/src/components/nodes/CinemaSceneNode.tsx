@@ -6,6 +6,8 @@ import { shotPortId } from '../../constants/ports';
 import { missingKeyTitle } from '../../lib/nodeKeys';
 import type { CinemaSceneSpec, CinemaShot, NodeData } from '../../types';
 import { NodeRunError } from './NodeError';
+import { PlaceholderLine } from './PlaceholderLine';
+import { pendingAttr } from '../../lib/pendingNodes';
 import '../../styles/cinema-node.css';
 
 interface CinemaSceneNodeData {
@@ -42,7 +44,7 @@ export function CinemaSceneNode({ id, data, selected }: NodeProps) {
     .join(' · ');
 
   return (
-    <div className={`cinema-scene-node ${selected ? 'cinema-scene-node--selected' : ''}`}>
+    <div className={`cinema-scene-node ${selected ? 'cinema-scene-node--selected' : ''}`} data-pending={pendingAttr(data.pending)}>
       <div className="cinema-scene-node__title">
         <span>⛭ Cinema Scene</span>
         {keyStatus === 'missing' && (
@@ -58,6 +60,8 @@ export function CinemaSceneNode({ id, data, selected }: NodeProps) {
           <div className="cinema-scene-node__thumb-placeholder">storyboard</div>
         )}
       </div>
+
+      <PlaceholderLine pending={data.pending} />
 
       <div className="cinema-scene-node__summary">{summary}</div>
 

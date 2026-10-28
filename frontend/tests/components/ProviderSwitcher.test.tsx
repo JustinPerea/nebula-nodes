@@ -418,6 +418,20 @@ describe('hidden settings: a provider shows only what it offers (PR 5)', () => {
     }
   });
 
+  // Review 9, M-1's path for popovers: the chip's popover is portalled from
+  // inside the node card, so its keys bubble (React) to React Flow's node,
+  // which moved the node on ArrowLeft/ArrowRight and selected it on Enter or
+  // Space from a menu item. React Flow ignores keys from inside `.nokey`.
+  it("the chip popover's keys never reach React Flow's node (nokey)", () => {
+    withKeys({ FAL_KEY: KEY });
+    const node: Node<NodeData> = { id: 'n1', type: 'model-node', position: { x: 0, y: 0 },
+      data: { definitionId: 'flux-2-pro', label: 'FLUX.2', params: {}, state: 'idle', outputs: {} } };
+    useGraphStore.setState({ nodes: [node], edges: [] });
+    render(<ModelNode {...({ id: 'n1', data: node.data, selected: false } as NodeProps)} />);
+    fireEvent.click(screen.getByRole('button', { name: /^Provider for FLUX\.2/ }));
+    expect(document.querySelector('.provider-switcher__popover')?.closest('.nokey')).not.toBeNull();
+  });
+
   it('the chip popover offers the same reset row, and it writes the node', () => {
     withKeys({ FAL_KEY: KEY });
     const node: Node<NodeData> = { id: 'n1', type: 'model-node', position: { x: 0, y: 0 },

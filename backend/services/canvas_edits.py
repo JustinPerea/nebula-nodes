@@ -13,6 +13,11 @@ the person reviews them item by item.
 
 `arrange` asks the open canvas to lay out this edit's new nodes once it has
 drawn them (decision C3; services/canvas_arrange.py).
+
+`pending: true` makes this edit's new nodes the agent's placeholders (Q125
+item 3, services/pending_nodes.py); `pending: false` with `nodeIds` makes
+the agent's own placeholders ready. Never an existing node: `pending: true`
+needs new nodes and takes no `nodeIds`.
 """
 from __future__ import annotations
 
@@ -35,7 +40,8 @@ from services.canvas_proposals import (
 from services.node_route import BILLING_PARAMS
 
 MAX_LABEL = 80
-_ALLOWED_KEYS = frozenset({"note", "nodes", "edges", "params", "rename", "move", "remove", "unwire", "arrange"})
+_ALLOWED_KEYS = frozenset({"note", "nodes", "edges", "params", "rename", "move", "remove", "unwire", "arrange",
+                           "pending", "nodeIds"})
 ARRANGE_DIRECTIONS = ("right", "down")
 DEFAULT_ARRANGE_GAP = 120.0
 MAX_ARRANGE_GAP = 2000.0
@@ -69,11 +75,16 @@ class EditSpec:
     remove: tuple[str, ...] = ()
     unwire: tuple[ProposedEdge, ...] = ()
     arrange: ArrangeRequest | None = None
+    # True: the new nodes are the agent's placeholders. False: `ready` (its own
+    # placeholders) turn normal. None: placeholders are not part of this edit.
+    pending: bool | None = None
+    ready: tuple[str, ...] = ()
 
     @property
     def empty(self) -> bool:
         a = self.additions
-        return not (a.nodes or a.edges or a.params or self.rename or self.move or self.remove or self.unwire)
+        return not (a.nodes or a.edges or a.params or self.rename or self.move or self.remove or self.unwire
+                    or self.ready)
 
 
 def _node_id(raw: Any, label: str) -> str:
@@ -109,6 +120,25 @@ def parse_arrange(raw: Any) -> ArrangeRequest | None:
     if isinstance(gap, bool) or not isinstance(gap, (int, float)) or not 0 <= gap <= MAX_ARRANGE_GAP:
         raise ProposalError(422, f"arrange.gap must be a number of pixels from 0 to {int(MAX_ARRANGE_GAP)}")
     return ArrangeRequest(direction=str(direction), gap=float(gap))
+
+
+def parse_pending(body: Mapping[str, Any], *, has_new_nodes: bool) -> tuple[bool | None, tuple[str, ...]]:
+    """`pending` (true, false or absent) and `nodeIds` (with false only)."""
+    pending = body.get("pending")
+    if pending is not None and not isinstance(pending, bool):
+        raise ProposalError(422, "pending must be true (this edit's new nodes are placeholders) or false "
+                                 "(with nodeIds: your placeholders are ready)")
+    raw_ids = body.get("nodeIds")
+    if raw_ids is not None and pending is not False:
+        raise ProposalError(422, "nodeIds names your placeholders to make ready, with pending: false")
+    if pending is True and not has_new_nodes:
+        raise ProposalError(422, "pending: true marks the new nodes this edit adds, and it adds none; "
+                                 "no agent marks a node that is already on the canvas")
+    if pending is not False:
+        return pending, ()
+    if not isinstance(raw_ids, list) or not raw_ids:
+        raise ProposalError(422, "pending: false needs nodeIds: the ids of your placeholders that are ready")
+    return False, tuple(dict.fromkeys(_node_id(item, "nodeIds[]") for item in raw_ids))
 
 
 def _target(raw: Any, refs: set[str], label: str) -> str:
@@ -176,11 +206,12 @@ def parse_edit(body: Any, *, ports: PortLookup | None = None) -> EditSpec:
     if arrange is not None and not additions.nodes:
         raise ProposalError(422, "arrange lays out the new nodes this edit adds, and it adds none")
 
+    pending, ready = parse_pending(body, has_new_nodes=bool(additions.nodes))
     spec = EditSpec(additions=additions, rename=rename, move=move, remove=remove, unwire=tuple(unwire),
-                    arrange=arrange)
+                    arrange=arrange, pending=pending, ready=ready)
     if spec.empty:
         raise ProposalError(422, "an edit needs at least one node, connection, param change, rename, move, removal or unwire")
     return spec
 
 
-__all__ = ["ArrangeRequest", "EditSpec", "INTERNAL_OK", "parse_arrange", "parse_edit"]
+__all__ = ["ArrangeRequest", "EditSpec", "INTERNAL_OK", "parse_arrange", "parse_edit", "parse_pending"]

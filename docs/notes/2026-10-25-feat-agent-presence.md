@@ -1,0 +1,2215 @@
+# 2026-10-25 — Agent presence: the mark on a node, placeholders and done cards
+
+Branch `feat/agent-presence`, from main at 5a80a15c (#193 merged). Q125 item 3 (Justin, 2026-10-24, merge-oks Q125: "The agent's mark stays on its node with a status line ("Running FLUX.2 [pro] · 0:41") ... A finished run posts a card with a thumbnail and Show on canvas, without the agent having to remember to."), built to GM - Design's rulings of 2026-10-25, verbatim.
+
+## What changed and why
+
+- **The mark on a node (frontend `components/canvas/AgentNodeMarkLayer.tsx`, `agentNodeMarks.ts`, `agentNodeMarks.css`).** A pill 6 px above the node's card, left-aligned: the agent's dot (a ring when it named itself), its name, then its status. It shows while the agent has a status on that node (`set_status` with a node) or while a run it started is on that node ("Running FLUX.2 [pro] · 0:41", m:ss, ticking once a second only while a run is shown). The pill is truncated at the node's width, with the full text as its tooltip. With two or more agents on a node, the most recent one's pill comes first, then a "+N" chip that lists the others on hover or focus. Below 60% zoom it collapses to the dot alone, kept at 22 px on screen; the words show on hover or keyboard focus, and the "+N" chip stays so every agent can still be found. It is drawn in a `ViewportPortal`, deferred (`DEFERRED_MODULES`), and runs on the spring tokens (reduced motion keeps only the fade).
+- **Run marks (backend `services/run_done_cards.py` `AgentRunBook`).** Covers each run an identified agent starts on any route: `/api/graph/run` (MCP `run_nodes`, `nebula run`), `/api/execute` and `/api/execute-node`. It records who started the run, in which project, the planned nodes in run order, and which of them are running now. Each change is an `agentRun` socket event (started or ended). The roster read (`GET /api/canvas/agents`) carries each agent's `running` and `pending`, so a tab that loads mid-run still gets the marks. Runs the person starts get no mark and no card.
+- **Placeholders (backend `services/pending_nodes.py`).**
+  - `edit_canvas` / `POST /api/graph/apply` with `pending: true` marks the call's new nodes as pending, owned by the caller. `pending: false` with `nodeIds` clears the caller's own.
+  - Another agent gets a 403 and can't clear or claim one. No agent can mark an existing node (422 "new nodes").
+  - The flag is a node key (`pending: {agent, at}`). It is saved with the project and the handoff, exported as `data.pending`, and carried through undo and redo (a person's restore sets the cleaned flag or drops it).
+  - A placeholder turns normal when:
+    - its owner runs it;
+    - its owner sets pending false;
+    - its owner has been idle for 10 minutes (the status book's `last_seen`; one `call_later` timer, no polling);
+    - the person edits it (params, label, wiring, a real move);
+    - the person runs it directly.
+  - Nothing is ever deleted.
+  - Every run path (`/api/execute`, `/api/execute-node`, `/api/graph/run`) skips placeholders and their downstream nodes before the pre-call check and the spend check, so nothing is spent on them. Each skipped node gets a `skipped` event with a reason, and the reply carries `skipped` and `pendingSkipped`.
+- **Placeholder look.** A dashed outline in the owner's colour around the card, and the line "Codex is setting this up." in the preview area, which is dimmed while the header stays put (`PlaceholderLine`, on every card since round 3). After Run, the canvas shows GM's skip line: "Skipped 1 node Codex is still setting up.", "Skipped 3 nodes Codex is still setting up." or "Skipped 3 nodes agents are still setting up."
+- **Done cards.**
+  - When an agent's run ends (not when it is cancelled, and not when nothing ran), Nebula posts one Update per run as the agent (`source: "nebula"`, `about: "run"`).
+  - The copy is GM's, word for word:
+    - Success: "Codex finished “Hero shots”." or "Codex finished 3 nodes."
+    - Partial: "Codex finished 2 of 3 nodes. “Upscale” failed." or "… 3 failed."
+    - Failure: "Codex's run of “Hero shots” failed."
+  - Each card has one button, Show on canvas, and the agent's colour on its left edge. A failure card gets the error icon and no red edge.
+  - Thumbnail: 96 px tall, natural aspect, capped at the card's width. It shows the last node's first output, or for a partial run the last output that succeeded. Only images and videos Nebula keeps in its output folder get one; a video shows its first frame with its length in mono. Text, audio and failures get no thumbnail.
+  - Flood guard: a new card for the same node from the same agent replaces the old one.
+  - A run that ends partial or failed also gets an Agent log line.
+- **Agent support (Justin: "Every feature we add needs to make sure we include MCP support for agents").**
+  - MCP `edit_canvas(pending, node_ids)`, plus the INSTRUCTIONS step-2 line. INSTRUCTIONS is 2271 characters; the full instructions are 2995 of the 3000 budget.
+  - Docstrings for `list_agents` (running, pending), `list_notes` (done cards) and `run_nodes` (placeholders in `skipped`).
+  - CLI `nebula apply --pending` and `--ready nX`, and steps files. `nebula agents` prints "Running {model} ({nodeId}) · m:ss" and "N placeholder(s) (runs skip them)".
+  - Docs: `docs/MCP-SETUP.md` ("Placeholders, the run mark and done cards") and `skills/nebula/SKILL.md` ("Placeholders while you set nodes up", plus a paragraph on the run mark and done cards).
+
+## Decisions not in the spec
+
+- The pill anchors on the drawn card (`nodeMarkBox`), not the React Flow node box. The node box starts about 38 px above the card, which leaves room for the floating settings bar. The first live run showed a 40 px gap instead of 6 px. While the settings bar is up (multi-select), the pill sits above the bar.
+- (Superseded in round 3: the pill is now a fixed screen size at every zoom.) The pill lived in flow units, so it scaled with the canvas down to 60%.
+- One mark per agent per node: a run beats a status line (it says more and it ticks).
+- A run's model name is the label of the node's enum model option, else the universal model id, else the node's display name. Utility nodes read the node name, quoted since round 3: "Running “Video Edit” · 0:04".
+- A failed run's card uses ⚠ by the message (`aria-hidden` since round 3); the partial card has no icon (GM named the icon for failure only).
+- A whole-canvas Run by the person skips every agent's placeholder. A direct run of a node (execute-node on it) runs it and everything that feeds it, so every placeholder in that run turns normal and runs ("the person runs it directly"; see Review).
+- `/api/graph/run` pre-seeds `outcome["skipped"]` with the pending reasons, so `nebula run` and `run_nodes` list them like a gate's skips.
+
+## Tradeoffs
+
+- Run marks and the run book are memory-only, like statuses and cursors: a restart ends every run anyway.
+- `nodeCardBox`/`nodeMarkBox` read the DOM inside a React Flow store selector, so they re-measure on store changes, not on every layout change inside a card. The outline did follow the card when the Skipped badge grew it (live).
+
+## Surprises
+
+- The fake engines in the first tests ran nodes downstream of a failure. The real engine never starts them, so the failure card read as partial until both fixtures skipped downstream nodes.
+- Socket `skipped` events are camelCase (`nodeId`).
+- With TestClient, each request runs on its own event loop, so a later request can't await a run task. The tests read `_cli_runs[...]["task"].result()` instead.
+- svg-rasterize accepts the SVG type only, not Text. The live check used combine-text for the placeholder.
+- This canvas pans on scroll (`panOnScroll`); zooming in the live check needed ctrl+wheel.
+
+## Tests
+
+- Tests first. Backend `test_pending_nodes.py`, `test_run_done_cards.py` and `test_agent_presence_agents.py` failed at collection (ImportError) before the modules existed. After that, the route tests failed on the missing `main.AgentRunBook`.
+- Frontend `pendingNodes`, `agentNodeMarks`, `AgentNodeMarkLayer` and `PlaceholderLine` failed to resolve their modules. `agentRunCards` had 5 failures and `graphStore.pendingNodes` had 3; only its "says nothing" case passed before the code existed.
+- `nodeMarkBox.test.ts` (3 tests) was written after the live check found the 40 px gap. All 3 failed before `nodeMarkBox` existed.
+- Gates: see the end of this file.
+
+## Live check
+
+- Isolated backend on 8795 and Vite on 5795 (`VITE_NEBULA_BACKEND_PORT=8795`). `/api/health` through Vite matched the backend directly. The backend ran with a temp HOME and every NEBULA_* root under scratch; the person token came over stdin.
+- Two agents:
+  - Codex, verified with an app token made through the person's `POST /api/agent/spend/apps`;
+  - "Claude Code", self-named.
+- Free local nodes only: text, image and video inputs, combine-text and image-compare. The media was made with ffmpeg inside the isolated output folder. No provider call.
+- 24 of 24 checks passed:
+  - The pill is 6 px above the card (5.1 px at 85% zoom), left-aligned, with no chip.
+  - With two agents, Claude Code (ring) comes first with "+1". Focusing "+1" lists Codex.
+  - At 49% zoom the pill is a 22 px dot with no words or chip, and still 22 px at 28%.
+  - The placeholder has a dashed outline in Codex blue and "Codex is setting this up."
+  - Claude Code got a 403 trying to clear Codex's placeholder.
+  - The toolbar Run showed "Skipped 1 node Codex is still setting up." and left the placeholder pending.
+  - Codex running its placeholder made it normal.
+  - Run pills appeared ("Running Video Input · 0:00", and others).
+  - Cards:
+    - "Codex finished “Hero still”." with a 96 px image;
+    - "Codex finished “Teaser clip”." with a first frame and "1:23";
+    - "Codex finished 1 of 3 nodes. “Old still” failed." with the image that succeeded;
+    - "Codex's run of “Old still” failed." with ⚠ and Codex's edge, not red;
+    - "Claude Code finished “Hero prompt”."
+  - The flood guard left one card per node.
+  - The Agent log has the failed and partial lines.
+  - Show on canvas from the partial card selected "Compare stills".
+- Screenshots at 1440x900 and 1280x800 are in the scratchpad (`agent-presence/01..10`).
+- Blocking: CDP `Network.setBlockedURLs` for 8000-8010 and 5173, plus a dead proxy.
+  - 3 blocked in all: 2 were the canaries (8794 through the dead proxy, 8000 blocked).
+  - The third was the browser's ORB block of the missing `gone.png` preview on 8795.
+  - 0 requests went toward Justin's ports. The only console error was the canary's.
+- Servers stopped by PID and the state dir deleted.
+
+## Review
+
+- Review fixes (2026-10-25, each test first, failing before the fix):
+  - A project switch brought back a placeholder cleared since the last save: `_overlaid_snapshot` merged the old snapshot's `data.pending` under the live node. Now the live graph decides the flag for every node it holds. Test: `test_a_project_switch_never_brings_back_a_placeholder_made_ready_since_the_last_save` (failed: the stored snapshot still had the flag).
+  - An agent's run refused before it started (pre-call check, cycle, spend check) had already turned its placeholders normal. `_skip_placeholders` now only works out which placeholders the run makes ready (`run_skips(..., ready=)` counts them as normal for the skip); `_make_ready` clears them after the last gate on `/api/execute`, `/api/execute-node` and `/api/graph/run`. Tests: `test_the_owning_agents_refused_run_leaves_its_placeholders_pending` (3 routes x pre-call/spend, 6 failed) and `test_the_persons_refused_direct_run_leaves_it_pending` (2 failed).
+  - The person picking a placeholder's model (`POST /api/graph/node/{id}/model`) didn't turn it normal. It now calls `_person_touched`, even for the same model. Test: `test_the_persons_model_pick_turns_it_normal` (failed: still pending).
+  - The person's direct Run of a node fed by placeholders cleared only the target and then skipped all three. GM: "it turns normal and runs". Now every placeholder in that run's scope (the node and its ancestors) turns normal and runs. Tests: `test_the_person_running_a_node_downstream_of_placeholders_runs_them_all` and `..._leaves_placeholders_outside_its_scope` (both failed). This was a choice between two readings, so it is listed for GM below.
+  - The person's undo of an unrelated step put back a placeholder the agent had since made ready (the step's whole-canvas snapshot held the flag). A graphSync that clears flags and isn't this tab's own echo now strips them from every undo and redo step (`forgetClearedPlaceholders` in `lib/canvasUndo.ts`, in place like `foldArrange`). Undoing the person's own edit of a placeholder still brings it back. Test: `graphStore.pendingNodes` "stays normal when the person undoes or redoes an unrelated step" (failed); the own-edit case passed before and after.
+  - Run selected and an accepted proposal's run (`executeCluster`) didn't show the skip line. Test failed, then `announcePendingSkips(result)` added.
+  - Below 60% zoom the "+N" chip was `display: none` and the dot couldn't take focus. The chip stays, the dot is `tabIndex=0` when collapsed and shows its words on `:focus-visible` with a focus ring, and the others' list (from the chip) keeps its words and sits above the scaled row. Tests: `AgentNodeMarkLayer` (tabIndex, chip) and the new `agentNodeMarksCss.test.ts` (4 rules; all failed first). The live check found the last one: the list showed dots only, because the low-zoom rule hid every name.
+  - Live check again on 8795/5795, 12 of 12: low-zoom dot + "+1" chip, keyboard focus on the dot, the others' list at low zoom, Run selected's skip line, the person's direct Run of a two-placeholder chain (both normal, it ran, no skip line), Codex's refused run (still a placeholder), and Cmd+Z of the person's unrelated edit after Codex's `pending: false` (stays normal). Blocked requests: 2, both the canaries; 0 toward 8000-8010 or 5173. Screenshots `agent-presence/11..18`. The model picker wasn't checked live (it needs provider model data); the switch fix is covered by its test. In the headless browser a node drag made no undo step, so the undo check used a typed edit.
+
+## Round 3: GM - Design's rulings of 2026-10-25 (built verbatim)
+
+- **Accessible names** (GM: sentences, no semicolons, the panel's "{agent}, {status}" form; `agentNodeMarks.ts` `markLabel`, `othersLabel`):
+  - Pill: "Codex, Writing the hero prompt"; an agent that named itself: "Codex, unverified, Writing the hero prompt".
+  - "+N" chip: "2 more agents. Codex, Writing the hero prompt. Claude Code, Checking the crop." ("1 more agent." for one). A status that already ends in a full stop gets no second one.
+  - The done card's failure icon is `aria-hidden` (the message says "failed").
+  - The Skipped badge on a skipped placeholder: "Skipped: Codex is still setting this up." The backend's skip reason is now "Codex is still setting this up." (`pending_nodes.pending_reason`; agents read the same words in `skipped`), and the canvas puts "Skipped: " before it.
+- **Failure icon:** the node's own error block has no icon (text with a red edge or rail). The only glyph a node shows for a failure is ⚠ (a failed Cinema shot, `CinemaSceneNode`, and the shots rail), so the card keeps ⚠.
+- **The pill is a fixed screen size at every zoom** (GM: "like the cursor labels: always 22 px tall"). The layer sets `--anm-scale` to 1/zoom and `--anm-max` to the node's on-screen width; the row and the others' list use the CSS `scale` property (not `transform`, which the entrance keyframes replace while they run), and the 6 px gap is on screen too. Below 60% it is the 22 px dot, as before.
+- **Below 60% only:** `isLowZoom` reads the zoom at the whole percent the toolbar shows (`Math.round(zoom * 100) < 60`), so React Flow's 0.5999… counts as 60% and shows the full pill.
+- **Run pill:** a node name is quoted, "Running “Video Edit” · 0:04" (`_run_model_name` quotes the type-name fallback; `model` carries the quotes, so `nebula agents` prints them too); a provider model name stays unquoted. The pill shows only once the node has run 1 s (`RUN_MARK_DELAY_MS`), so an instant local run never flashes one.
+- **The cost before a run matches what runs** (GM: "Find every place the person sees a cost before a run"). `runScope.summarizeRunScope` mirrors the backend's `_skip_placeholders` with `pendingNodes.runSkips` (a port of `pending_nodes.run_skips`):
+  - the whole-canvas Run (toolbar chip, its description, the confirm), Run selected (the selection toolbar with several nodes, the confirm) and an accepted proposal's run (`executeNode`/`executeCluster` with `approvalId`, the confirm) leave out each placeholder and everything downstream of it, and report `pendingSkipped`;
+  - the person's direct run of a node (the selection toolbar with one node, the node's context menu, the Inspector, the Cinema Studio run) counts them and says so: "Includes 2 nodes Codex is still setting up." (or "… agents are still setting up."), the line directly under "This run could cost up to $0.43 at list prices." in the confirm, and the last sentence of the Run button's description. The count includes the nodes downstream that the run also makes run, like the skip line.
+  - The proposal bar's own estimate comes from the backend: `_proposal_run_scope` now leaves the run's skipped placeholders (and what needs them) out of `chosen` and `scope`, so the proposal's `cost` (and its "Accept & run (N paid)") prices only what runs, and adds `pendingSkipped`. It is worked out when the proposal is made; the confirm after Accept reads the canvas as it is then.
+- **The placeholder rule wins over Skipped** (`gating.css`): a skipped placeholder dims only its preview (0.4); the header, the line, the Skipped badge and the ports stay at 1 with no desaturation, and the card keeps a solid edge (its own dashed outline says pending).
+- **The skip line names the agent** when every skipped node is one agent's (downstream nodes count toward the agent whose placeholder blocked them), "agents" only for several: "Skipped 1 node Codex is still setting up.", "Skipped 3 nodes Codex is still setting up.", "Skipped 3 nodes agents are still setting up." The backend has the same line (`pending_nodes.skip_line`).
+- **The placeholder line on every card:** Edit, Remotion, Character, Cinema Scene, Moodboard, Paper Source, Batch, Camera Rig and Reference Set now render `PlaceholderLine` (ModelNode, DynamicNode and Video QC, which is a ModelNode, had it) and set `data-pending` (`lib/pendingNodes` `pendingAttr`). Each dims only its preview: Edit's preview, Character's and Cinema Scene's thumb, Moodboard's preview, Paper Source's preview, Camera Rig's diagram, Reference Set's preview (one rule list in `nodes.css`). Remotion has no preview and Batch's body is the list of items the person typed, so nothing on them dims. A **Reroute** has no body: its line hangs below the dot at a card's width, where its run error already hangs (`.reroute-node__pending`).
+  - One shared place was tried first: a wrapper in `canvasTypes.ts` can only add the line after the card, outside its border, and can't reach each card's preview. So each card renders the one shared component, and `tests/placeholderEveryNode.test.tsx` renders every type in `CANVAS_NODE_TYPES`: a new card type without the line fails there.
+- **Agent log:** the run's line (`publish_action` in `_execute_cli_run`) counted a gate's skips only. It now ends with GM's skip line: "Ran 1 node(s) cleanly in 0.0s. Skipped 3 nodes Claude Code is still setting up." (with a gate's skips too: "…, 1 skipped by a gate. Skipped …").
+- **An agent's own undo restores the flag** as the person's undo does (`services/canvas_undo.py`): a removed placeholder comes back as one (the kept copy has its flag), and an agent's `pending: false` edit now gets an undo token whose undo makes those nodes placeholders again, unless the node is one already or someone else ran it since (left as "ran since"). The restore applies a flag only for the person or for the server's own kept inverse (`trusted`); an agent can still never send one. The reply lists `placeholders`, and the message says "Undone: made pending 1." An undo of the edit that *made* the placeholders removes them (they were that edit's new nodes), as before; there is no flag to put back there.
+- Agent support: MCP `undo_canvas_edit` docstring (placeholders), `docs/MCP-SETUP.md` (the reason, the skip line, the cost, the agent's undo, the quoted run name), `skills/nebula/SKILL.md` (`nebula undo` of `--ready`).
+- Not touched: the cursor-bubble strings in `backend/main.py` (fix/connected-copy changes them). The live check shows the bubble still says "Running Video Edit" unquoted beside the pill's "Running “Video Edit”".
+
+### Round 3 tests (first, each seen failing)
+
+- Frontend, 37 failures before the code: `agentNodeMarks` (labels missing, `isLowZoom(0.5999)` true, no 1 s delay), `AgentNodeMarkLayer` (aria-labels "Codex: …", `--anm-max` 240px at 150%), `agentNodeMarksCss` (no `scale:` on the row; `transform: scale(...)` rules), `agentRunCards` (no `aria-hidden`), `pendingNodes` (skip line said "agents" for one agent; `pendingIncludedLine`, `runSkips`, `skipSummaryOf` missing), `runScope.placeholders` (5, the summary priced skipped nodes and said nothing), `graphStore.runCostConfirm` (4: the confirm priced $1.80 for a whole Run, asked for an accepted proposal's run, had no line), `placeholderEveryNode` (9 card types without the line; the two CSS rules). The ModelNode, DynamicNode and Video QC cases passed before.
+- Backend, 8 failures before the code: `skip_line` missing; the reason was "pending: Codex is still setting this node up"; the Agent log line had no skip count; the proposal's cost listed `['n1', '+c', '+free']`; the agent's undo of its removal brought the node back without the flag; `pending: false` had no undo token (2 tests); `_run_model_name` gave `Text Input` unquoted.
+
+### Round 3 live check
+
+- Isolated backend 8795 (temp HOME and every NEBULA_* root under scratch, no keys; `/opt/homebrew/bin` added to its PATH for ffmpeg) and Vite 5795 (`VITE_NEBULA_BACKEND_PORT=8795`); `/api/health` through Vite matched. Codex verified (an app token made through the person's `POST /api/agent/spend/apps`); "Claude Code" and "Cursor" self-named. Free local nodes only, plus one GPT Image 2 node that was never run: its cost confirm was declined, and the backend had no key for it anyway.
+- 23 of 23 checks passed:
+  - The pill at 151%: 22 px tall, 6 px gap, the full pill. At 50%: the 22 px dot. At 102%: 22 px, 6 px gap.
+  - Read live: the pill "Codex, Writing the hero prompt"; "Cursor, unverified, Reading the brief"; the chip "2 more agents. Claude Code, unverified, Checking the crop. Codex, Writing the hero prompt."
+  - Codex's Text Input run (0.04 s) showed no pill (polled every 16 ms). A Video Edit re-encode (28 s, ffmpeg) showed "Running “Video Edit” · 0:02" and on.
+  - The selection Run of a GPT Image 2 node fed by Codex's placeholder: chip "$0.0047–0.43", description ending "Includes 2 nodes Codex is still setting up", and the confirm (read from the dialog, declined): "This run could cost up to $0.43 at list prices.\nIncludes 2 nodes Codex is still setting up.\n\n• Hero image: $0.0047–0.43\n\nRun it?". The toolbar's whole-canvas chip showed no cost (the paid node is skipped), and that Run asked no confirm.
+  - A Video Edit placeholder: "Codex is setting this up." in its card, preview 0.4, title 1.
+  - Codex's own undo of its `pending: false` made the node a placeholder again ("Undone: made pending 1.").
+  - The person's whole-canvas Run: "Skipped 6 nodes Codex is still setting up."
+  - The skipped image placeholder: preview 0.4; header, file name, line, Skipped badge and ports at 1, no filter; the badge's title "Skipped: Codex is still setting this up."
+- Blocked requests: 2, both the canaries; 0 toward 8000-8010 or 5173. The one console error was the canary's. Servers stopped by PID; the state dir deleted.
+- Screenshots (1440x900) in the scratchpad `agent-presence/`: `r3-pill-150.png`, `r3-pill-50.png`, `r3-plus-chip.png`, `r3-run-pill.png`, `r3-cost-line.png`, `r3-skip-line.png`, `r3-skipped-placeholder.png`, `r3-edit-placeholder.png`. The confirm is the browser's own dialog, which a screenshot can't show; `r3-cost-line.png` shows the selection's cost chip and the placeholder, and the dialog's text is above.
+
+## Q133: the person confirms running paid placeholders (Justin, 2026-10-25, option b)
+
+Justin kept option A (the person's direct Run of a node runs the placeholders feeding it and turns them normal), and added: Nebula always asks first when any of them calls a paid model, whatever "Ask before costly runs" says, even off. Free placeholders just run, with GM's "Includes …" line under the cost. GM - Design's copy, built verbatim:
+
+- `lib/placeholderRunConfirm.ts` builds the dialog's words from the run's own summary (`summarizeRunScope`, node scope, direct): heading counting every placeholder in the run, paid or free ("Run 2 nodes Codex is still setting up?" / "Run 3 nodes agents are still setting up?", the skip line's naming rule); the line under it ("Codex hasn't finished these, so their settings may not be final." / "Agents haven't …"); one row per paid placeholder, “Hero still” · model · price (the model is the chosen model option's label, as `main._run_model_name`; the price from the run's cost line for that node, now keyed by `nodeId`); "Plus 1 free node." / "Plus 2 free nodes."; the whole run's total in the costly-run confirm's own line ("This run could cost up to $0.43 at list prices."), its notes (`runCostNotes`, split out of `runCostConfirmMessage`), and "Run for $0.43" / "Cancel". "Paid" is `!isLocalRun` (backend `model_pricing.is_local`); an unknown type counts as paid.
+- `components/PlaceholderRunDialog.tsx`: the app's own dialog (`role="alertdialog"`, modal, named by its heading, described by its body), on the prompt-dialog styles. Each row has the agent's dot (a ring when it named itself), hidden from screen readers. Focus starts on Cancel so Enter never spends; Escape is Cancel; Tab stays inside. `components/askPlaceholderRun.tsx` mounts it and resolves with the answer. Both are deferred: `lib/placeholderRunDialogModule.ts` loads them when the run asks and `DEFERRED_PRELOADS` fetches them on idle. A dialog that can't load runs nothing.
+- `graphStore.executeNode`: the person's direct run (no `approvalId`) builds the dialog first; when there is one it replaces the costly-run confirm (one dialog, never two). Cancel returns before anything changes. After Run it re-reads the canvas: if another run started it stops; if an agent changed which paid placeholders are in the run it asks again over the new set. The run sends `confirmedPlaceholders` (sorted ids). An accepted proposal's run never asks (it skips placeholders).
+- Backend: `ExecuteNodeRequest.confirmedPlaceholders`; `main._require_placeholder_confirmation` runs right after `_skip_placeholders` in `/api/execute-node`. For the person's direct run (no agent identity, the person's token) it takes the paid ones among `ready` (`_paid_placeholders`, from the params this run sends) and refuses with 409 `{code: "placeholder_confirm_required", message, placeholders}` unless the request names exactly those, before validation, pricing or `_make_ready`, and forgets the run. Free-only runs and agents' runs are unchanged. Not tied to `run_approvals`: those are one-time approvals the backend mints on Accept for a proposal's exact run, and this confirmation is made on the canvas just before the same request, so the request carrying the ids is the check; a missed dialog, a stale tab (no field) or another client gets the 409.
+- Docs: `docs/MCP-SETUP.md` (the placeholder section, a "The person confirms paid ones" bullet) and `skills/nebula/SKILL.md` (agents: leave the model and params as they should be; the person is asked).
+
+### Q133 tests (first, each seen failing)
+
+- Frontend, 7 failures before the code: `tests/lib/placeholderRunConfirm.test.ts` (4: one agent's copy, several agents' copy with "Plus 2 free nodes.", only this run's placeholders, still asks with no price table; the module had no `runCostNotes` to call), `graphStore.runCostConfirm` (3: always asks with the setting off and Cancel changes nothing; one dialog when both apply, no `window.confirm`; the confirmed run sends `['a']`). `tests/PlaceholderRunDialog.test.tsx` failed to import (no component): GM's copy and rows with dot/ring, Cancel/Escape/Run, focus on Cancel, `askPlaceholderRun` resolves and unmounts. The free-placeholder case (no dialog, the "Includes" line) and the proposal case passed before and still pass. `runScope.test.ts`'s two exact cost-line assertions gained `nodeId`.
+- Backend, 5 failures before the code: `test_the_persons_direct_run_of_a_paid_placeholder_needs_their_confirmation` (no field, `[]`, the free one only, an extra id, a wrong id: each 409, nothing ran or was priced, both still placeholders). Passing before and after: the confirmed run runs and turns them normal; free placeholders need nothing; an agent's run of its own paid placeholder is unchanged.
+
+### Q133 live check
+
+- Same isolated stack (8795/5795, temp state, no keys). Codex verified (app token through the person's route), Cursor self-named. Two GPT Image 2 placeholders priced with no key; the dialog was opened, read, shot and cancelled each time. Run was never clicked on a paid node.
+- 17 of 17 checks passed:
+  - One agent, "Ask before costly runs" off: the dialog asked anyway, no native confirm. Read live: alertdialog named "Run 2 nodes Codex is still setting up?"; "Codex hasn't finished these, so their settings may not be final."; row "“Hero still” · GPT Image 2 · $0.0047–0.43" with a filled dot; "Plus 1 free node."; "This run could cost up to $0.43 at list prices."; buttons "Cancel" / "Run for $0.43"; focus on Cancel. Cancel: both still placeholders, no outputs.
+  - The backend, sent the person's direct run without the confirmation: 409 `placeholder_confirm_required`, "Nothing ran: this run includes 1 paid node Codex is still setting up, and Nebula asks before running those. Click Run again to see them.", `placeholders: ["n3"]`; nothing changed.
+  - Several agents with a free node, the setting on at $0.001 too: one dialog, no native confirm. "Run 3 nodes agents are still setting up?", "Agents haven't finished these, so their settings may not be final.", rows "“Hero still” · GPT Image 2 · $0.0047–0.43" (Codex, filled) and "“Alt still” · GPT Image 2 · $0.0047–0.43" (Cursor, ring), "Plus 1 free node.", "This run could cost up to $0.86 at list prices.", "Run for $0.86". Cancel changed nothing.
+- Blocked requests: 2, both canaries; 0 toward 8000-8010 or 5173. Servers stopped, state deleted.
+- Screenshots: `r3-q133-one-agent.png`, `r3-q133-several-agents.png` (scratchpad `agent-presence/`).
+
+## Open items
+
+- For GM:
+  - A Text Input never runs for 1 s, so its run pill never shows now; the live shot of a quoted node name is Video Edit ("Running “Video Edit” · 0:04").
+  - The cursor bubble beside the pill still reads "Running Video Edit" unquoted (fix/connected-copy owns those strings).
+  - The costly-run confirm (free placeholders only, or none) is still the browser's dialog: "Includes …" is its second line, under the cost. The Run chip itself ("$0.0047–0.43") has no room for a line; its description (tooltip and screen readers) ends with it.
+  - A proposal whose whole run waits on placeholders reads "runs 0 free nodes" in its bar (its cost leaves them out; `cost.pendingSkipped` says why). No copy for that yet.
+  - The reason on a node downstream of a placeholder still reads "Skipped: needs n3 (“Hero prompt”), which Codex is still setting up" (GM ruled only the placeholder's own).
+  - A node downstream of two agents' placeholders counts toward the one reached first (as the backend's skip order does), so the line can name one agent when two blocked it.
+  - The person's direct Run of a node whose inputs are placeholders runs them all (Justin kept it, Q133); paid ones ask first.
+  - Q133 copy GM didn't give: the intro for a single placeholder ("Codex hasn't finished this, so its settings may not be final."); a row's price when there's no list price ("no list price") or it's billed to a Krea plan ("Krea plan"); "Run" with no price table loaded; the backend's 409 message ("Nothing ran: this run includes 1 paid node Codex is still setting up, and Nebula asks before running those. Click Run again to see them."), which the node shows as its run error.
+- No card is posted for a cancelled run or for an agent's CLI run refused by the pre-call check (nothing ran).
+- A proposal's cost is worked out when it is made; a placeholder made or cleared later changes what Accept & run will run, and only the confirm after Accept sees that.
+- A roster read can race with `agentRun` events; the next event or read corrects it.
+
+## Gates
+
+After Q133 (the last code change):
+
+- Backend, the whole suite (`iso.sh .venv/bin/python -m pytest -q -p no:cacheprovider`): 10864 passed, 71 skipped (5 min 31 s).
+- Frontend `npx vitest run`: 446 of 446 files, 5730 of 5730 tests passed.
+- errorCopy ratchet (`tests/errorCopy.*`): 14 files, 173 tests passed.
+- `npx tsc -b`: clean.
+- `npm run -s lint`: clean (inline style guard, Slava CSS scope guard).
+- `npx vite build && node scripts/check-build-budget.mjs`: passed, 389,002 bytes raw and 117,136 gzip.
+- Surprise on the way: importing the dialog's loader from `lib/deferredChunks.ts` into the store hung `DeferredHeldIntentFailure.test.tsx` (its `vi.doMock` of deferredChunks imports the store graph inside the mock factory). The loader moved to its own `lib/placeholderRunDialogModule.ts`.
+
+## Round 4: review 3 and GM - Design's round-4 rulings (2026-10-25)
+
+Justin, Q133 b: the person's direct run makes the placeholders it needs normal and runs them, "but if any is a paid model Nebula always asks first", whatever the costly-run setting. Review 3 found paths that skipped that rule, and GM gave the copy that was still open. Each fix below was test-first.
+
+### What changed and why
+
+- **Every route that runs or prices canvas nodes now keeps the Q133 rule (finding 1).** The Cinema shot route (`POST /api/cinema/generate-shot`) skipped every placeholder rule: a paid placeholder feeding a Cinema Scene was priced and run with no dialog and no 409. A shot is the person's direct run of the scene, so the route now does what `/api/execute-node` does:
+  - `_skip_placeholders(direct=nodeId)`;
+  - `_require_placeholder_confirmation` with `confirmedPlaceholders`/`confirmedCost` on `GenerateShotRequest`;
+  - skipped nodes left out of the spend check;
+  - `_make_ready` only after the last gate.
+  An agent's shot skips other agents' placeholders. When that skips the scene itself, the reply is `{"status": "skipped", skipped, pendingSkipped}` and nothing is priced. On the canvas, `executeShot` asks through the same helper as a node's Run (below).
+- **The route table** (every caller of `execute_graph`, plus the routes that price a run). Each row has a test in `tests/test_pending_nodes_round4.py`:
+
+  | Route | Who | Placeholders | Test |
+  |---|---|---|---|
+  | `POST /api/execute` (toolbar Run, Run selected, replay of a whole run) | person | skipped with what needs them | `route_table_..._for_the_person[execute-skips]` |
+  | same | agent | other agents' skipped; its own run | `route_table_another_agent...[execute]` |
+  | `POST /api/execute-node` (a node's Run, Inspector, context menu, replay of a node run) | person | asks: 409 `placeholder_confirm_required` without the confirmation | `...[execute-node-asks]`, Q133 tests |
+  | same, with `approvalId` (accepted proposal) | person | skipped (even a made-up id) | `route_table_an_approved_proposal_run_with_a_made_up_approval_skips` |
+  | `POST /api/cinema/generate-shot` (Generate, shot replay) | person | asks: 409 without the confirmation | `...[cinema-shot-asks]`, `test_the_persons_shot_over_a_paid_placeholder_needs_their_confirmation` |
+  | same | agent | other agents' skipped (`status: skipped`); its own run and turn normal | `test_another_agents_shot_skips...`, `test_the_owning_agents_shot_runs_its_own_placeholders` |
+  | `POST /api/graph/run` (MCP `run_nodes`, `nebula run`) | person token | skipped (not the canvas's direct Run) | `...[graph-run-skips]` |
+  | same | agent | other agents' skipped; its own run | `...another_agent...[graph-run]` |
+  | `POST /api/quick` | anyone | n/a: temp nodes only, never a canvas node | (no canvas node to hold a flag) |
+  | proposal create (`_proposal_cost`), Accept, the approved run | person/agent | priced without them; Accept and the run refuse once one turned normal (finding 3) | `test_accept_refuses_...`, `test_the_approved_run_refuses_...` |
+
+- **The dialog's re-check compares everything it said (finding 2).** It compared only the placeholder ids before, so these two cases slipped through:
+  - Same ids at a new cost (an agent connected another paid node, or changed the placeholder's model) ran at the new cost with no second ask.
+  - An agent clearing `pending` meanwhile skipped even the costly-run confirm.
+
+  Now `confirmDirectRun` in `graphStore.ts` asks again when anything the dialog said changed: the rows (model and price), the total, the free line, the button. When no paid placeholder is left, the costly-run setting decides over what runs now. The run sends `confirmedCost` (the total the dialog showed). The backend (`_run_estimate_high`, the same estimator as the proposal's cost) refuses with the same 409 and copy when its own estimate is higher. For a shot, that estimate is one shot times its variations.
+- **One helper for every direct run on the canvas.** `confirmDirectRun(read, nodeId, {passes, costly})` serves a node's Run, the Inspector, a Cinema shot and a replay. When no dialog is needed it answers in the same turn, so a second click can't slip in, as before.
+- **Replays (finding 7).** A replay of a node run or a shot over a live paid placeholder sent no confirmation, so it got a 409 whose words led back to the same 409. Replays now ask in the same dialog, over what the replay sends: its snapshot's params, with the live canvas's names and flags, since the backend reads the flags live. A whole-canvas replay skips placeholders, as before. Replays still never ask the costly-run question.
+- **A proposal's run goes stale once a placeholder turns normal (finding 3).** I chose to put the placeholder's owner into the run fingerprint (`run_approvals.fingerprint`), rather than storing the skip set on the proposal, because it covers every case:
+  - proposal to Accept: `_refuse_changed_runs` gives the existing "what it runs changed after it was proposed" 409;
+  - Accept to the run starting: `_check_run_approval` gives "changed since you accepted";
+  - while an approved run waits: `_refuse_agent_change_to_approved_runs` refuses the owner's `pending: false` (409);
+  - the idle sweep turning one normal is caught by both checks.
+
+  A stored skip set would only have covered the first window.
+- **INSTRUCTIONS (finding 4).** They were at 3,039 of 3,000 characters after the merge. Cuts:
+  - the `pending` clause (edit_canvas's docstring covers it);
+  - "the person accepts or rejects it in Nebula" → "the person decides in Nebula";
+  - "picks the image a board opens on" → "sets its cover".
+
+  Now 2,957 with the commons guide (43 to spare); INSTRUCTIONS alone are 2,233.
+- **An agent's undo vs the person's later edit (finding 5).** `canvas_undo` ready entries now keep the node's params, label, position and connections as the `pending: false` edit left it. The agent's undo leaves a node anyone changed since: it is `skipped` with reason "changed since", like params, names and moves.
+- **"Connected" wording (finding 6).** Fixed in `pending_nodes.py`, `main._person_touched` and `docs/MCP-SETUP.md`. The ratchet in `test_connected_copy_sweep.py` now also reads the prose of `docs/MCP-SETUP.md` and `skills/nebula/SKILL.md`. It leaves out fenced code, backtick spans, the `--wire` flags and the one line that names the old word to retire it. It found exactly the one hit.
+- **Pill keyboard access (finding 8).** A node's own keyboard focus (`:focus-visible` on the React Flow node or a control in it) sets `data-focused` on its mark. The pill then shows its whole status instead of cutting it at the node's width, and the low-zoom dot shows its words. There is no new tab stop, and a pointer's focus changes nothing. The "+N" chip's accessible name now starts with its visible text ("+2 more agents. …", WCAG 2.5.3).
+- **GM round 4, built verbatim:**
+  1. One placeholder: "Codex hasn't finished this, so its settings may not be final." The code already said this; its test passed before any change.
+  2. Rows: "price not listed" and "on your Krea plan". Any "price not listed" row makes the button just "Run"; Krea-plan rows don't count as missing. The total line is unchanged.
+  3. "Run for up to $0.86" when the total is a range, "Run for $0.12" when it is fixed.
+  4. The backend refusal: "Nothing ran. This run includes 1 paid node Codex is still setting up, and Nebula asks before running those. Click “Run” again to review it." (plural "…them", "agents are" for several).
+  5. The proposal bar: "runs nothing until Codex finishes 2 nodes" / "runs nothing until agents finish 3 nodes" (`proposalSummary`, from `cost.pendingSkipped`).
+  6. Downstream reason: `needs “Hero prompt”, which Codex is still setting up.`, the type's name only when there's no label. Proposals now use the same fallback (`_node_label(id, candidate)`).
+- **Agent support:** MCP `undo_canvas_edit` docstring ("changed since"); `docs/MCP-SETUP.md` (the routes that enforce the confirmation, `confirmedCost`, the refusal's words, the re-ask, replays and shots, the fingerprint, the proposal line, the downstream reason); `skills/nebula/SKILL.md` (undo after a change, proposals that wait on your placeholders). No CLI change: `nebula run` already skips, and the confirmation is the person's alone.
+
+### Decisions not in the spec
+
+- A Cinema shot now asks the costly-run question too, when no paid placeholder is in it. It never asked before. Justin's setting says "Ask before costly runs", and the store's own comment says every run path checks it. It is priced as the one shot it makes, times its variations. Replays keep not asking it.
+- The backend's cost check is skipped when the dialog showed no total (no price table loaded): the person confirmed the rows without one.
+- A size-priced node isn't measured for the person's runs, so the backend counts it as unpriced (lower), never higher than the canvas. The check can't refuse a run for a price the canvas couldn't show.
+
+### Tests (first, each seen failing)
+
+- **Backend:** 25 failed first.
+  - Cinema: 8. Each shot returned 200 "started" instead of 409, or left the placeholders pending; an agent's shot returned "started", not "skipped".
+  - Cost check: 3. A 200 where a 409 belonged, and `_run_estimate_high` missing.
+  - Proposals: 3. Accept returned 200, and `pending: false` under an approval returned 200.
+  - Undo: 5. Still a placeholder after the person's edit, and the ready entry had no `params`.
+  - GM refusal: 2 (the old words).
+  - Downstream reason: 3.
+  - `test_first_turn_instructions` (3,039).
+  - Then the docs ratchet (1 hit).
+
+  Two downstream tests first failed for a fixture reason: the whole chain was pending. I fixed their setup before the code.
+- **Frontend:** 22 failed first.
+  - `placeholderRunConfirm`: 4 ("no list price", "Krea plan", no `confirmCost`).
+  - The store: 10. Shots asked nothing; replays asked nothing; the re-ask, the model-change re-ask and the fall-through each asked once; no `confirmedCost`.
+  - `proposalPendingSummary`: 3.
+  - The pill: 5 (2 CSS rules, 2 chip labels, node focus).
+
+  Passing before and after: the one-placeholder intro, the setting-off fall-through with no confirmation to send, the replay with no placeholder left, and "keeps its old line when something still runs".
+
+### Live check (1280x800)
+
+- Isolated backend on 8795 (temp HOME and every NEBULA_* root under scratch, no keys) and Vite on 5795 (`VITE_NEBULA_BACKEND_PORT=8795`); `/api/health` through Vite matched. Codex verified (an app token made through the person's route); Cursor and Claude Code self-named. No key was set, so nothing paid could run. Run was clicked once, in the re-ask check, and the dialog asked again (then Cancel).
+- 23 of 23 checks passed (script `agent-presence/live-r4.mjs`):
+  - **One agent:** "“Hero still” · GPT Image 2 · $0.0047–0.43", "Run for up to $0.43", the total line unchanged, Cancel changed nothing.
+  - **The re-ask:** Codex set quality low while the dialog was open. Run then opened a second dialog: "$0.0047–0.012", "Run for up to $0.012".
+  - **The backend's 409:** GM's exact words, and the same 409 for a `confirmedCost` below Nebula's estimate.
+  - **Several agents:** one dialog, "Run for up to $0.44".
+  - **Downstream badge:** "Skipped: needs “Hero still”, which Codex is still setting up."
+  - **The pill:** cut off at the node's width at rest (186 px). The node's keyboard focus showed the whole status (419 px). Blur and a click changed nothing. The chip read "+1 more agent. Claude Code, unverified, Checking the crop."
+  - **The proposal bar:** "Adds 1 node · 1 connection · runs nothing until Codex finishes 2 nodes".
+- Blocked requests: 2, both the canaries; 0 toward 8000-8010 or 5173. The one console error was the canary's. Servers stopped by PID; the state dir deleted.
+- Screenshots in the scratchpad `agent-presence/`: `r4-q133-one-agent.png`, `r4-q133-several-agents.png`, `r4-q133-reask.png`, `r4-pill.png`, `r4-pill-node-focus.png`, `r4-downstream-reason.png`, `r4-proposal-waits.png`.
+- Not checked live: a Cinema shot's dialog (opening the Cinema panel headless wasn't worth the time; the store and route tests cover it).
+
+### Open items (round 4)
+
+- For GM:
+  - The chip's accessible name now starts "+2 more agents." (GM's words were "2 more agents."). The "+" is the visible text, for WCAG 2.5.3.
+  - The node's keyboard focus widens its pill past the node, up to 480 px: new visible behaviour, no new words.
+  - A proposal that runs nothing still has the button "Accept & run" (`acceptLabel`).
+  - The shot's costly-run confirm is the browser's dialog, as for the other runs (GM's item 7 moves those later).
+- A screen reader reaches the pill by its own label, not from the node's focus. React Flow owns the node's `aria-describedby`.
+
+### Gates (round 4)
+
+- Backend full suite: 10,979 passed, 71 skipped (14 min 31 s).
+- Vitest full: 450 files, 5,761 tests. The first run, during the backend suite, had 29 failures in 10 files, all timeouts under load ("Test timed out in 5000ms" and findBy/focus waits). Rerun alone, those 10 files passed: 200 of 200. None of them is a file this round touched.
+- errorCopy ratchets: 14 files, 173 tests passed.
+- `tsc` clean, lint clean.
+- Build budget: 389,238 bytes raw entry, 117,227 gzip (limit 512,000 raw).
+- MCP instructions: 2,957 characters with the commons guide (limit 3,000); `INSTRUCTIONS` alone 2,233.
+
+## Round 5: review 4 and GM - Design's round-5 rulings (2026-10-25)
+
+Justin, Q133 b, again the rule this round holds: a paid placeholder never runs without the person's confirmation, and what runs never costs more than the person was shown. Review 4 found three ways the second half could break: a price read from an input's size, a tab and server pricing with different keys, and a confirmation sent without a total. GM ruled the copy that was open. Each fix below was test-first.
+
+### What changed and why
+
+- **H1: a size-priced placeholder is priced at its measured input.** Before, Video Input → Codex's FLUX Video Upscale showed "price not listed" and "Run", sent `confirmedCost: 0`, and the backend counted the node as unpriced, so any cost passed. A 1080p minute at 2x is about $35.
+  - Backend: `_require_placeholder_confirmation` is now async. It measures the run's inputs off the event loop (`_measure_confirmed_run`, the same `input_sizes.measure_run` the spending check uses; a project switch meanwhile refuses), then compares with `_run_estimate(..., sizes=...)`. Shots and replays go through the same function, so they measure too.
+  - Canvas: the dialog asks for the sizes of the files its price reads (`directRunConfirm` requests `summary.cost.sizeRefs`). The open dialog updates in place when they arrive (see "the dialog watches" below). Seen live: "“Upscale” · SeedVR2 Video Upscale · price not listed" turned into "$9.95" and "Run for $9.95" while it was open.
+- **M1: Nebula's refusal carries its own estimate, and the canvas asks again with it.** A tab with no keys loaded priced FLUX.2 [pro] as "price not listed" and confirmed $0; the server priced it $0.03 and refused forever, with "Click “Run” again".
+  - The 409 now has `estimate` (`_run_estimate`: `low`, `high`, per-node `nodes`, `unpriced`, `plan`, `plus`, `unavailable`, `awaitingInput`, for this run times its passes) and `agents` (each paid placeholder's owner, for a tab that hasn't heard of the flag yet).
+  - The canvas (`sendDirectRun`) catches that 409 on a node's Run, a Cinema shot and a replay. It re-opens GM's dialog priced at Nebula's numbers (`withRunEstimate`, `withRefusalFlags`), with GM's "This run changed since you last reviewed it." when the person had confirmed before, and sends the same run (same run id) again with `estimate.high`. It never shows the refusal's words; those are for a tab too old to ask again. Cancel closes the run as cancelled, nodes back to idle, the placeholder untouched.
+  - The canvas also reads the keys again when the dialog opens (`nebula:settings-refresh`, App.tsx reuses the settings-saved handler), so the first dialog is usually right already.
+- **M4: `confirmedCost` is required with `confirmedPlaceholders`** whenever Nebula can price the run. Missing, it gets the same 409, which the canvas answers by asking again. When nothing in the run has a list price, there is nothing to hold it to, and the confirmed rows are enough. docs/MCP-SETUP.md now says exactly this.
+- **L1: the same arithmetic on both sides.** `_run_estimate` multiplies each node's price by the passes and then rounds the total to 6 places; the canvas sends its total rounded to 6 places (`roundUsd`). The check allows $0.000001. Review 4's probe (a $0.00001256 price, 4 variations) refused before and runs now.
+- **M2: "runs nothing until Codex finishes N nodes" counts the placeholders.** `skip_summary` adds `placeholders` (entries whose root is themselves) beside `count` (the skip line still counts what needs them). `proposalSummary` uses `placeholders`, falling back to `count` for an older backend. Live: "runs nothing until Codex finishes 1 node" where it said 2.
+- **M3 and GM's re-ask rules.** `PlaceholderRunDialog` takes `changed` (the line above the rows) and holds Run for 500 ms (`RUN_CLICK_GUARD_MS`) when it opens as a re-ask and whenever a row, the free line, the total, a note or the button changes while it is open. Cancel is never held. The buttons re-render in place, so focus stays where it was.
+- **The dialog watches** (new, needed for H1 and M1 to be honest). `askPlaceholderRun(model, {changed, watch})`: the store subscribes to the graph, the price table, measured sizes and the keys, recomputes the dialog's words and pushes newer ones. They are drawn at once (`flushSync`), so the guard starts with them and a click can't land on the old ones. The watch stops the moment the dialog is answered. The store keeps the last words it pushed and compares those with the run after the click, so a click confirms only what was on screen. Because of this, a change while the dialog is open now updates it in place; "This run changed…" shows when the run changed after the click (or Nebula refused).
+- **GM item 4: one dialog.** Every path checked (node Run, Inspector, context menu, Run selected of one node, Cinema "Generate shot" and "Generate N", Cinema "Generate all", replays): when the placeholder dialog shows, the browser's costly-run confirm doesn't. The one way it still could: an agent makes its placeholders normal while the dialog is open. Now the run goes ahead without a second dialog when the total the person confirmed covers it (`coveredBy`); only a run that now costs more than that falls to the costly-run setting (review 3's case 2). That last case is in Open items.
+- **GM item 3: "Accept" for a proposal that runs nothing.** I checked what Accept does there: it starts the proposal's run at once (`canvasProposalsStore.accept` → `runNodes`), and that run skips every node (the placeholders and everything needing them), so nothing runs, and nothing is queued for when the agent finishes. So the button reads "Accept" (`acceptLabel`, `runsNothing`). The skip notice and the nodes' "Skipped: needs …" badges still show what waited.
+- **GM item 2: the focused pill wraps past 480 px.** With the node's keyboard focus the pill grows up from its bottom edge (the row is anchored there), 11 px corners, the dot on the first line, status `white-space: normal`. Live: 480 px wide, 40 px tall, bottom edge unmoved, nothing cut.
+- **L3 (GM's answer): a shot's refusal ends "Generate again to review it."** Node runs keep "Click “Run” again to review it." (`_placeholder_confirm_refusal(shot=True)`).
+- **L2 (GM's answer): a dollar amount only when it covers every paid row.** Only Krea-plan rows, or every row "price not listed": no total line, button "Run". Krea-plan rows plus priced ones: the usual line and "Run for (up to) $X". A "price not listed" row plus priced ones: "The listed prices total up to $0.43." (or "…total $0.43." when fixed), button "Run" (`totalLineFor`, `runLabelFor`).
+- **L4:** an agent's undo of `pending: false` calls a node "changed since" only after a real move (8 px, `MOVE_THRESHOLD_PX`, as the layout route counts one), not a 0.5 px nudge (`canvas_undo._moved_far`).
+- **L5:** the pill widens on the node's keyboard focus only when a key was pressed since the last pointer press, not on `:focus-visible`, which a text field clicked with the mouse matches too. Tabbing into a field still widens it.
+- **L6:** "+2 more agents." approved by GM; no change.
+- **Agent support:** docs/MCP-SETUP.md (the dialog's lines, the live update and the 500 ms hold, `confirmedCost` required, measured sizes, the 409's `estimate` and `agents`, the shot's words, `pendingSkipped.placeholders`, "Accept", a move of 8 px for undo). No MCP tool or CLI change: confirming is the person's alone, agents already get `pendingSkipped` in a proposal's cost, and INSTRUCTIONS are untouched (2,233 characters).
+
+### Decisions not in the spec
+
+- The refusal re-ask resends the same run (same id, same snapshot) rather than starting a new one: nothing ran under that id, and the run history keeps one record. While the person decides, that record is "starting" and its nodes show Queued (visible behind the dialog in `r5-q133-reask.png`).
+- The canvas sends `confirmedCost` even when the dialog shows no total ($0, or just the listed prices), so Nebula can hold the run to it and ask again with its own numbers.
+- A Krea-plan placeholder can't be made by an agent today (agents can't choose plan billing, `_refuse_agent_billing_change`), so the live screenshot of that row flags a person-made Krea node as Codex's in that tab only. The rows' words are covered by unit tests either way.
+
+### Tests (first, each seen failing)
+
+- **Backend** (`tests/test_pending_nodes_round5.py`, 14 tests): 12 failed first, 2 passed (the node run's "Click “Run”" wording and "a real move still leaves the node"). How they failed:
+  - H1 (3): 200 "started" where a 409 belonged, then `KeyError: 'detail'`/`'estimate'`.
+  - M1 (2): `KeyError: 'estimate'`.
+  - M4 (2): 200 instead of 409.
+  - L1 (2): `5.2e-05 != 5e-05`, and the probe's `KeyError: 'estimate'`.
+  - L3: "Click “Run” again…" instead of "Generate again…".
+  - M2: `KeyError: 'placeholders'`.
+  - L4: still normal after the undo (`None is not None`).
+  - Then existing tests that sent placeholders without a total (2) and the `pendingSkipped` equalities (3) were updated to the new contract; GM_SHOT for the shot refusal (3 parametrized cases).
+- **Frontend:** 26 failed first.
+  - `lib/placeholderRunConfirm.round5.test.ts` (7): the old "This run could cost up to $0" lines, an unrounded total, `placeholderRefusalOf`/`withRunEstimate` missing.
+  - `PlaceholderRunDialog.round5.test.tsx` (4): no changed line, Run taken at once, no watch.
+  - `graphStore.placeholderRuns.round5.test.ts` (9): the 409 shown as the node's error with no second ask (node Run, shot, replay, unknown placeholder), no `changed` on a re-ask, no size request, the browser confirm after the dialog, no settings refresh.
+  - `lib/proposalPendingSummary.round5.test.ts` (2), `AgentNodeMarkLayer` L5 (1), `agentNodeMarksCss` wrap (2), and the round-4 "price not listed" case's total line (GM's new words).
+  - Passing before and after: a first ask has no changed line, Cancel is never held, the same words hold nothing back, Krea plus priced keeps its line, $0 is still sent, any other refusal still shows, tabbing into a field widens the pill, "Accept & run" when something runs.
+
+### Live check (1280x800)
+
+- Isolated backend on 8795 (temp HOME and every NEBULA_* root under scratch, no keys) and Vite on 5795 (`VITE_NEBULA_BACKEND_PORT=8795`); `/api/health` through Vite matched. Codex verified (an app token), Claude Code self-named. No key was set, so nothing paid could run. Run was clicked once (the re-ask): Nebula refused it with a 409, and nothing ran.
+- 21 of 21 checks passed (script `agent-presence/live-r5.mjs`):
+  - "· price not listed", "· on your Krea plan", no dollar line, plain "Run", no native dialog.
+  - "The listed prices total up to $0.43." with plain "Run".
+  - The re-ask: the tab couldn't price GPT Image 2 (its entry taken out of the tab's table) and showed "price not listed" and "Run"; Run → one 409 → the dialog came back with "This run changed since you last reviewed it.", "$0.0047–0.43" and "Run for up to $0.43". A click right after it reopened was held (no second request). Cancel: no refusal text anywhere, still a placeholder.
+  - Size: "price not listed" → "$9.95", "Run for $9.95" in the open dialog (SeedVR2 Video Upscale; FLUX Video Upscale has no price without a BFL key, which the backend test covers).
+  - Cinema "Generate shot" over a paid placeholder, with "Ask before costly runs" at $0.001: GM's dialog only, no browser confirm; Cancel left the shot as it was.
+  - The focused pill: 480 px, 40 px tall (wrapped), bottom edge unmoved, nothing cut; a mouse click into the node's text field left it at rest.
+  - The proposal: "runs nothing until Codex finishes 1 node", buttons Show / Reject / Accept.
+- Blocked requests: 2, both the canaries; 0 toward 8000-8010 or 5173. Console errors: the canary's and the expected 409. Servers stopped by PID; the state dir deleted.
+- Screenshots in the scratchpad `agent-presence/`: `r5-q133-unlisted-krea.png`, `r5-q133-mixed-unlisted.png`, `r5-q133-reask.png`, `r5-size-priced-before.png`, `r5-size-priced.png`, `r5-cinema-shot-dialog.png`, `r5-pill-wrap.png`, `r5-proposal-runs-nothing.png`.
+
+### Open items (round 5)
+
+- GM: a shot's refusal says "Generate again to review it." for one or several paid nodes; GM gave only that form ("them" for several would be new words).
+- GM: the one remaining two-dialog case: an agent makes its placeholders normal while the dialog is open AND the run now costs more than the person confirmed. The costly-run setting then asks in the browser's confirm (review 3's ruling). Moving that to the Nebula dialog is GM's item 7 follow-up.
+- While a refusal's re-ask is open, the run's nodes show Queued behind it.
+
+### Gates (round 5)
+
+- Backend full suite: 10,993 passed, 71 skipped (9 min 2 s).
+- Vitest full: 454 files, 5,796 tests. The first run had 21 failures in 10 files, all load timeouts and focus/findBy waits ("Test timed out in 5000ms", `toHaveFocus`, a role not found in time); none of them is a file this round touched. Rerun alone, those 10 files passed: 200 of 200.
+- errorCopy ratchets: 14 files, 173 tests passed.
+- `tsc -b` clean, lint clean.
+- Build budget: 389,437 bytes raw entry, 117,275 gzip (limit 512,000 raw).
+- MCP INSTRUCTIONS: 2,233 characters, unchanged (2,957 with the commons guide, limit 3,000).
+
+## Round 6: review 5 and GM - Design's round-6 rulings (2026-10-26)
+
+Justin, Q133 b, again the rule: a paid placeholder never runs without the person's confirmation, and what runs never costs more than the person was shown. Review 5 found the one way left around the second half (H1): an agent finishing its placeholders while the dialog was open turned the run into an ordinary one, which then fell to the costly-run setting (off by default) and to a backend with nothing to hold it to. The coordinator chose both halves of the fix; GM ruled the copy. Every fix was test-first.
+
+### What changed and why
+
+- **H1 (a), the canvas: the dialog stays in charge once it has shown.** `askUntilSettled` (graphStore.ts) keeps every placeholder a dialog of this run showed (`shown`), and `placeholderRunConfirm` never returns "no dialog" while it has some. When their agents finish them while it is open, the open dialog updates in place to GM's words: "Run with Codex's changes?" / "Codex finished setting up these nodes." ("Run with the agents' changes?" / "The agents finished setting up these nodes." for several), then the changed line, the rows, the total and the button as usual. If some placeholders are left, the first heading counts only those. After the click the run is read again: the same words run at what was shown; a run with no placeholder left that the shown total still covers (no higher, and no row without a price the dialog didn't show) runs, sending the total the person saw; anything else asks again. The costly-run setting and the browser's confirm never follow the dialog any more (`coveredBy`/`costlyOk` fall-through removed).
+- **H1 (b), the backend: a confirmed total holds with no placeholder left.** `_require_placeholder_confirmation` (main.py) now checks whenever the request carries `confirmedCost`, not only when a paid placeholder is left: above Nebula's estimate it refuses with the same 409 `placeholder_confirm_required`, `placeholders: []`, the estimate, and (for a tab too old to re-ask) "Nothing ran. This run changed since you last reviewed it. Click “Run” again to review it." ("Generate again to review it." for a shot). The ids confirmed don't matter then. The canvas answers that 409 with GM's dialog in the finished form. Agents' requests are never held to it.
+- **L1: Accept on a proposal that runs nothing starts no run.** `canvasProposalsStore.accept` skips `runNodes` and the deferred "Run them when the current run finishes." when `runsNothing(view)` (what made the button "Accept"), and releases the approval. No Run history entry, no Queued, no skip line.
+- **L2 and GM item 4: a refused run leaves the canvas as it was.** `sendDirectRun` takes the start back before it asks again (`withdrawRunStart`): no Run history record (an older record the new one pushed past the cap comes back), no owner, no Stop, isExecuting off, and each node's state, error and progress as they were (a "complete" node stays complete). After a yes it registers the same run again (`begin`), unless another run started meanwhile. A Cinema shot gets its output back too. Every direct path does this: node Run (and Inspector, context menu, Run selected of one, Generate all), Generate shot / Generate N, replays.
+- **L3:** left as the item-7 known gap (see Open items); not fixable without asking Nebula before the browser confirm.
+- **L4: one measuring for inline images.** `POST /api/pricing/input-sizes` measures a `data:` image as the run's checks do (`input_sizes.measure(ref, kind)`, inline on), so the canvas no longer shows "price not listed", the "can't read the size" note, and a forced re-ask for one.
+- **L5 and GM item 3: every dollar in the total has a row.** Each paid node of the run that is no placeholder gets a muted row with no dot ("“Shot 1” · Nano Banana · $0.067"), after the agents' rows and above "Plus 1 free node.". A normal paid node with no list price reads "price not listed", makes the button plain "Run" and is in the footnote. The backend counts an unpriced node as nothing, as the canvas does (pinned by a test).
+- **L6: the dialog hands back what it showed.** `PlaceholderRunDialog` calls `onDone(ok, model)` with the model it had rendered; `askPlaceholderRun` resolves with it (or null), and the store sends that model's cost. A newer model still waiting to be drawn can't be confirmed.
+- **L7: the change is announced.** A visually hidden `aria-live="polite"` region says "This run changed since you last reviewed it." at each in-place change (a no-break space alternates, so a second change is read again). No new words.
+- **L8:** left as is: the refusal's words can still show when the person stopped the run mid-request or the canvas can't build a model.
+- **GM item 1: footnotes.** No total line, no footnote. With one: "“Flux still” has no list price, so the run may cost more.", "“Flux still” and “Upscale” have no list price, so the run may cost more.", "3 nodes have no list price, so the run may cost more." The old "No list price for …" note is gone from the dialog (`runCostNotes(..., { prices: false })`; the browser's costly-run confirm keeps it).
+- **GM item 2:** a price waiting on its input reads "“Upscale” · SeedVR2 Video Upscale · price depends on its input"; "Priced when its input is known: …" and the unreadable-size note are gone from the dialog. The row updates in place to the real price.
+- **GM item 3, Cinema's button:** "Generate for $X", "Generate for up to $0.50", plain "Generate", from Generate shot, Generate N and Generate all (`executeNode(id, { verb: 'Generate' })` from the toolbar). Heading unchanged. Replays from Run history keep "Run".
+- **GM item 5: the pill.** It already wraps every line. What stopped it after 2 lines was the status itself: Nebula keeps 140 characters (the documented limit), and the round-5 check sent 172, cut mid-word. A cut status now ends in "…" (`clean_status_text`), so the pill never ends as if that were all. Raising the limit would change the agents' contract, so I didn't.
+- **GM note 2:** the changed line shows for in-place updates too, whenever the heading, the intro, a row, a price, the total or the button changes after the dialog first shows, and stays.
+- **Rows by node, not name.** `RunCost` gains `ids` (unpriced, plan, awaitingInput by node id) so two nodes with one name get their own prices.
+- **Agent support:** docs/MCP-SETUP.md (the muted rows, the footnotes, "price depends on its input", Generate, the dialog staying in charge, "Run with Codex's changes?", `confirmedCost` held with no placeholder left, `placeholders: []` and its message, the canvas taking the start back, inline images measured, Accept starting no run, the status cut with "…"); skills/nebula/SKILL.md (finishing or changing placeholders while the person decides; the status cut); the `set_status` MCP docstring (the cut). INSTRUCTIONS unchanged: 2,233 characters. No CLI change: confirming is the person's alone.
+
+### Decisions not in the spec
+
+- In "Run with Codex's changes?" the nodes Codex finished keep its dot (they are "these nodes" the body names); the run's other paid nodes are muted. GM's rule for muted rows is "paid nodes that aren't placeholders"; strictly those finished nodes aren't placeholders any more. Listed for GM.
+- The footnote names only "price not listed" rows. A row that reads "price depends on its input" says so itself, and "has no list price" would be wrong for it.
+- A run that got cheaper or stayed the same after its agent finished goes ahead without a second ask, sending the total the person saw (the coordinator's ruling). A change that adds a row with no price, or a different set of placeholders, asks again.
+- The shot's row is named "Shot N" (its place in the scene, as the Cinema panel numbers it) and its model is the scene's base model's display name ("Nano Banana"), as in GM's example.
+- After the refusal re-ask, the run's id stays the same (its record is removed and made again), as round 5 decided.
+
+### Tests (first, each seen failing)
+
+- **Backend** (`tests/test_pending_nodes_round6.py`, 10 tests): 5 failed first, 5 passed.
+  - H1 (3): 200 "started" where a 409 belonged (node run below the estimate with no placeholder left, stale ids, a shot).
+  - L4: `None == {'height': 480, 'width': 640}` from the size endpoint.
+  - GM item 5: the cut status didn't end in "…".
+  - Passing before and after (they pin what must not change): a covered total runs, no confirmation and no placeholder runs as before, an agent's run is never held, L5's unpriced node counts nothing on both sides, a status that fits is kept whole.
+- **Frontend:** 33 failed first, 12 passed.
+  - `lib/placeholderRunConfirm.round6.test.ts` (16): 14 failed (the old notes, "price not listed" instead of "price depends on its input", no muted rows, "Run for" from Cinema, no finished heading, prices by name); 2 passed (no dialog when nothing was shown and no paid placeholder is in the run, and the "some still left" heading).
+  - `PlaceholderRunDialog.round6.test.tsx` (6): all failed (no muted row class, no changed line in place, no live region, `onDone`/`askPlaceholderRun` gave a boolean).
+  - `graphStore.placeholderRuns.round6.test.ts` (13): 12 failed (no second ask after the agent finished, `confirmedPlaceholders` undefined, a "cancelled" history record and a "complete" node turned idle, the shot's output left "idle", "Run for" in Cinema), 1 passed (a yes on the re-ask makes one record).
+  - `canvasProposalsStore.test.ts` L1: `executeNode` was called.
+  - Added after the first pass: "a full Run history keeps every record it had" (the withdrawn record had pushed the oldest one past the 100-record cap; only those come back, so a history the person cleared meanwhile stays cleared).
+  - Updated to the new rules: round-3/4/5 cases where a paid node of the person's sat beside the placeholders (it now has a muted row), the shot's button ("Generate for $2.40"), the awaiting row's words, the ask mocks (the dialog now resolves with the model), and the two round-5 tests that pinned the costly-run fall-through H1 removes.
+
+### Live check (1280x800)
+
+- Isolated backend on 8795 (temp HOME and every NEBULA_* root under scratch, no keys) and Vite on 5795 (`VITE_NEBULA_BACKEND_PORT=8795`); `/api/health` through Vite matched. Codex verified (an app token), Claude Code self-named. No key was set, so nothing paid could run. Run was clicked once (the re-ask check): Nebula refused it with a 409, and nothing ran.
+- 24 of 24 checks passed (script `agent-presence/live-r6.mjs`):
+  - Cinema Generate shot: "“Hero still” · GPT Image 2 · $0.0047–0.43", the muted "“Shot 1” · Nano Banana · $0.067", "Plus 1 free node.", "This run could cost up to $0.50 at list prices.", "Generate for up to $0.50"; the rows add up to the total; no browser confirm.
+  - The canvas dialog with the scene's muted row ("“Cinema Scene” · Nano Banana · $0.13"), "The listed prices total up to $0.56.", plain "Run", and each footnote: one name, two names, "3 nodes".
+  - "“Upscale” · SeedVR2 Video Upscale · price depends on its input" with no note, then "$9.95", "Run for $9.95" and the changed line, in place.
+  - Codex changed the quality while the dialog was open: the changed line in place (and in the live region). Then Codex set high quality and finished both nodes: "Run with Codex's changes?", "Codex finished setting up these nodes.", the changed line, "$0.16–0.43", "Run for up to $0.43". Cancel ran nothing.
+  - The refusal's re-ask: behind it no Stop, nothing Queued, the Agent log not "streaming", no run, no Run history record; Cancel left none.
+  - The pill: a 172-character status shows whole, cut by Nebula to "…then checki…", wrapped on two lines at 480 px, nothing clipped.
+  - A proposal that runs nothing: "runs nothing until Codex finishes 1 node", Show / Reject / Accept; Accept added its node and started nothing (Run history "No saved runs yet.").
+- Blocked requests: 2, both the canaries; 0 toward 8000-8010 or 5173. Console errors: the canary's and the expected 409. Servers stopped by PID; the state dir deleted.
+- Screenshots in the scratchpad `agent-presence/`: `r6-cinema-generate.png`, `r6-footnote-1.png`, `r6-footnote-2.png`, `r6-footnote-3.png`, `r6-depends-before.png`, `r6-depends-after.png`, `r6-changed-inplace.png`, `r6-h1-codex-changes.png`, `r6-reask-canvas-clear.png`, `r6-pill-wrap.png`, `r6-proposal-accepted-no-run.png`.
+
+### Open items (round 6)
+
+- For GM:
+  - The backend's refusal with no placeholder left: "Nothing ran. This run changed since you last reviewed it. Click “Run” again to review it." (a shot's ends "Generate again to review it."). Put together from GM's existing lines; the canvas never shows it, only a tab too old to re-ask.
+  - In "Run with Codex's changes?" the finished nodes keep Codex's dot (see Decisions).
+  - The footnote leaves out "price depends on its input" rows.
+  - The pill: the 2-line stop was the 140-character status limit, now marked with "…". A longer limit is a contract change for Justin.
+- Known gaps (item 7 follow-up, for the PR body):
+  - Round 5's two-dialog case (an agent clears its placeholders mid-dialog and the run costs more) is gone: H1 asks again in GM's dialog and never falls to the browser's confirm.
+  - The one two-dialog case left: the tab hasn't heard of an agent's placeholder yet and "Ask before costly runs" is on. The browser's costly-run confirm shows, then Nebula's 409 brings GM's dialog (review 5, L3). Avoiding it would need asking Nebula before the browser confirm; item 7 moves that confirm into Nebula's dialog. No new browser-confirm path was added.
+  - A free-placeholder run's costly-run confirm is still the browser's (GM round 4, item 7).
+- L8 as is: the refusal's words can show if the person stopped the run mid-request or the canvas can't build the dialog.
+
+### Gates (round 6)
+
+- Backend full suite: 11,003 passed, 71 skipped (13 min 25 s).
+- Vitest full: 457 files, 5,833 tests. The first run, during the backend suite, had 22 failures in 10 files, all load timeouts and focus/findBy waits ("Test timed out in 5000ms" 16 times, `toHaveFocus`, a role not found in time); none of them is a file this round touched. Rerun alone, those 10 files passed: 200 of 200.
+- errorCopy ratchets: 14 files, 173 tests passed.
+- `tsc -b` clean, lint clean.
+- Build budget: 389,508 bytes raw entry, 117,299 gzip (limit 512,000 raw).
+- MCP INSTRUCTIONS: 2,233 characters, unchanged.
+
+## Round 7: review 6 and GM - Design's round-7 rulings (2026-10-26)
+
+Justin, Q133 b, the same two rules: a paid placeholder never runs without the person's confirmation, and what runs never costs more than the person was shown. Review 6 found no high finding; one medium (many rows pushed Run off-screen) and five lows. GM ruled the copy for round 7 and answered the two open questions (placeholders that left the run; a yes dropped because another run started), plus M1 and the rounding. Every fix was test-first.
+
+### What changed and why
+
+- **M1: many rows scroll, everything else stays.** The card never grows past the window (`max-height: calc(100dvh - 32px)`); the heading, intro, changed line, total, footnotes and buttons keep their height, and only the rows list shrinks and scrolls (placeholder-run-dialog.css). GM: "rows scroll with everything else pinned: yes. The scroll area must be reachable by keyboard, and initial focus stays on Cancel." A list that overflows is a Tab stop named by the heading (`tabIndex=0`, `aria-labelledby`), part of the dialog's Tab cycle; a list that fits isn't. Focus still starts on Cancel. No new words.
+- **L-a: a cheaper run goes ahead only if everything in it was on screen.** After a yes, a run with no placeholder left runs without asking again only if its total is no higher than the one shown, every row (by node) was on screen, no row without a price is new, and no gate or "Not included" note is new (`coveredBy`, graphStore.ts; the model's new `costNotes`). Probe N1 (Codex finishes on a cheaper model and wires in a FLUX.2 node with "Not included: input images") now asks again with the new row.
+- **L-b: only this run's placeholders; one that left is never "finished".** The dialog remembers only placeholders in this run's scope (`runPlaceholders`), so another agent's placeholder elsewhere on the canvas never changes it. GM's words, verbatim: none finished, all left: "Run without the node Codex was setting up?" / "It's no longer in this run." ("Run without the nodes Codex was setting up?" / "They're no longer in this run."; several agents "Run without the nodes agents were setting up?"). Some finished, some left: "Run with Codex's changes?", the body counting only the finished, then "1 node Codex was setting up is no longer in this run." ("2 nodes Codex was setting up are no longer in this run.").
+- **L-c: a yes dropped because another run started first says so.** GM: "Nothing ran. Another run started first. Click “Run” again when it finishes." (Cinema: "Nothing ran. Another run started first. Generate again when it finishes."). Shown as the canvas notice on both places a yes can be dropped: the first dialog (the run can't be read any more because another run holds the canvas) and Nebula's re-ask (`begin` refused). The other run is left alone. It shows only when another run really holds it (`busy`: `isExecuting` for node runs, Generate all and replays; for a shot, the shot running or an active run over its nodes); a Cancel, or an import in progress, says nothing.
+- **L-d and GM item 2: rows priced by their input under a total.** The button already dropped the amount; the footnote is GM's: "“Upscale” is priced by its input, so the run may cost more." / "“Upscale” and “Grade” are priced by their input, so the run may cost more."; both kinds together, or three or more by input: "3 nodes have no price yet, so the run may cost more." Unlisted-only rows keep round 6's words.
+- **L-e: amounts the person confirms are in cents, rounded up.** GM: "ALWAYS show cents, rounded UP to the next cent, regardless of size: "$0.21", "$10.49", and "$0.01" for anything under a cent. Never whole dollars there. Row prices keep their current formatting. Send that shown amount as confirmedCost; the backend must not let a run exceed it." The button and the total line use `formatConfirmUsd`; `confirmCost` is `roundUpToCent` (read at 6 places first, so 0.07 never becomes 0.08). Nebula's refusal estimate is rounded up the same way before it is sent. Backend: `_CONFIRMED_COST_SLACK` is gone; any estimate above `confirmedCost` is refused.
+- **GM item 1:** "Codex finished setting up this node." for one, "these nodes" for two or more; "The agents finished setting up this node / these nodes."
+- **GM polish: the status cut lands on a word.** `clean_status_text` cuts after the last whole word that fits, then "…" ("…then…" not "…then checki…"); a word ending exactly at the cap is kept; with no space, a hard cut.
+- **The r6 zz-error question: reachable, fixed.** See "Surprises".
+- **Agent support:** docs/MCP-SETUP.md (cents and no slack for `confirmedCost`; "this node"; "Run without…"; the left line; only this run's placeholders; what lets a cheaper run go ahead; the "Another run started first" notice; input-priced footnotes; the rows scrolling; the status cut at a word); skills/nebula/SKILL.md (nothing runs that the person didn't see; a deleted or disconnected placeholder is "no longer in the run"; the status cut); the `set_status` MCP docstring. INSTRUCTIONS unchanged. No CLI change: confirming is the person's alone.
+
+### Decisions not in the spec
+
+- Several agents in the left line ("2 nodes agents were setting up are no longer in this run.") follows GM's "Run without the nodes agents were setting up?"; GM gave only Codex's forms for that line. Listed for GM.
+- A placeholder that left while others are still placeholders: the first heading counts only those left in the run (GM round 6) and no left line is added; GM ruled the left line only for the "changes" heading.
+- "Run for up to" now means the low and high differ in cents (rounded up), the same unit the button shows.
+- The L-c notice uses the canvas notice's error tone (announced as an alert), like the other "Nothing ran" lines.
+- A list that fits is not a Tab stop (it would be an empty stop for keyboard users); it becomes one when it overflows (measured on resize).
+
+### Tradeoffs
+
+- No slack in the backend: a tab whose arithmetic differs from Nebula's in the last place now gets a 409 and an immediate re-ask at Nebula's numbers instead of passing; with the canvas rounding up to the cent this only happens when the two prices really differ.
+- The left line and "Run without…" count shown placeholders by id; a placeholder deleted and re-added by its agent with a new id counts as one that left and a new one.
+
+### Surprises
+
+- **r6-zz-error-cinema.png was a real bug.** Reproduced live (r7, section Z, CPU throttled 8x as on a busy machine): back on the canvas from Cinema Studio, the notice region still sat where it sits with no bar (24 px up, the bar's own place) and sprang to its line above the bar on its 420 ms `bottom` transition; for that time a showing notice ("Codex changed the canvas" with Undo) covered Canvas actions and the zoom. The fade was the canvas coming back (and Run's price not computed yet), which is why it looked like a faded canvas. The earlier r6 attempt's screenshot was taken in that window. Fix: a bar that comes or goes is a screen switch; `publishBottomBarClearance`/`clearBottomBarClearance` mark the root (`data-bottom-bar-switch`) for two frames and the region jumps (`transition: none`); the bar growing (Canvas actions) keeps the spring. After the fix the region's line was above the bar in every sample; a notice remounting on return still plays its own 12 px rise from opacity 0, as every new notice does.
+- Probe N4's yes was not clobbering the shot (the node's `begin` already refused); it was only silent.
+
+### Tests (first, each seen failing)
+
+- **Backend** (`tests/test_pending_nodes_round7.py`, 7 tests): 4 failed first, 3 passed.
+  - L-e (2): 200 "started" for a `confirmedCost` 0.0000005 below Nebula's estimate (with and without a placeholder left).
+  - GM polish (2): the cut status ended "then checki…" (direct and over HTTP).
+  - Passing before and after: the canvas's cents rounded up runs; a word ending exactly at the cap is kept; no space, hard cut.
+- **Frontend:** 41 failed first, 8 passed.
+  - `lib/placeholderRunConfirm.round7.test.ts` (27): 24 failed (no `formatConfirmUsd`/`roundUpToCent`, "these nodes" for one, "Run with Codex's changes?" where GM's "Run without…" belongs, no left line, no input-priced footnotes, "$0.20" for $0.201 and "$10" for $10.481); 3 passed (two finished nodes, several agents, unlisted-only footnote).
+  - `PlaceholderRunDialog.round7.test.tsx` (5): 4 failed (the overflowing list not a Tab stop, no name, no max-height/overflow in the CSS, no left line); 1 passed (a list that fits is no Tab stop).
+  - `graphStore.placeholderRuns.round7.test.ts` (13): 10 failed (N1 ran f unasked, a new priced node ran unasked, "The agents finished…" after a delete or disconnect, no left line, no notice on any of the three dropped yeses, "Run for $0.20", "$1.20" for $1.2001); 3 passed (same rows cheaper goes ahead, another agent's placeholder elsewhere changes nothing, Cancel says nothing).
+  - `noticeRegionScreenSwitch.test.ts` (4): 3 failed (no mark on a bar arriving or leaving, no CSS rule); 1 passed (the bar growing keeps the spring).
+  - Updated to the new rulings: round 5's "rounded to 6 places" (now cents, rounded up: $0.00005 confirms $0.01), round 6's "$0.067" total line ("$0.07") and "these nodes" for one finished node ("this node", lib and store).
+
+### Live check (1280x800, and 1440x900 for many rows)
+
+- Isolated backend on 8795 (temp HOME and every NEBULA_* root under scratch, no keys) and Vite on 5795 (`VITE_NEBULA_BACKEND_PORT=8795`); `/api/health` through Vite matched. Codex verified (an app token), Claude Code self-named. No key was set, so nothing paid could run. Run was clicked once (the L-c check): another run held the canvas, the yes sent nothing, and the only run request was the free Video Edit's.
+- 18 of 18 checks passed on the final run (script `agent-presence/live-r7.mjs`). Two earlier runs: the first failed the zz check (the reproduction, before the fix); the second hit a Puppeteer "Promise was collected" error in the L-c section's async `waitForFunction`, replaced by a Node-side poll.
+  - Z: canvas → Cinema Studio → canvas at 8x CPU throttling, sampled every 80 ms. Before the fix: back on the canvas the region sat 730–776 over the bar's 728–776 (`r7-zz-repro-bug-before-fix.png`). After: the region's line stayed above the bar in every sample (674–720), and the notice ended above it.
+  - "Codex finished setting up this node." (one), "… these nodes." (two), "The agents finished setting up these nodes." (Codex and Claude Code).
+  - “Upscale” · SeedVR2 Upscale · price depends on its input (a remote input, never downloaded) under "The listed prices total $0.07.", plain "Run", "“Upscale” is priced by its input, so the run may cost more."; with a FLUX still and a second upscale: "3 nodes have no price yet, so the run may cost more.".
+  - Three rows at $0.067 ($0.201): "This run could cost up to $0.21 at list prices." and "Run for $0.21".
+  - 32 rows: at 1280x800 the heading at 33 px, the total ending at 717, Cancel and "Run for $2.15" at 729–767; at 1440x900 the same at 817 / 829–867. Focus on Cancel; Tab, Tab reached the rows; End scrolled them 245 px.
+  - Codex removed its placeholder while the dialog was open: "Run without the node Codex was setting up?" / "It's no longer in this run." and the changed line.
+  - A Video Edit run started while the dialog was open; Run in the dialog: "Nothing ran. Another run started first. Click “Run” again when it finishes.", no request for the placeholder's node.
+  - The 172-character status shows "…, then…" in the focused pill, nothing clipped.
+- Blocked requests: 2, both the canaries; 0 toward 8000-8010 or 5173. Console errors: the canary's only. Servers stopped by PID; the state dir deleted.
+- Screenshots in the scratchpad `agent-presence/`: `r7-finished-one.png`, `r7-finished-several.png`, `r7-finished-agents.png`, `r7-input-priced-footnote.png`, `r7-no-price-yet.png`, `r7-rounded-up.png`, `r7-many-rows.png`, `r7-many-rows-1440.png`, `r7-many-rows-scrolled.png`, `r7-left-run.png`, `r7-another-run-first.png`, `r7-pill-word-cut.png`, `r7-zz-repro-bug-before-fix.png`, `r7-zz-repro-before.png`, `r7-zz-repro-after.png`.
+
+### Open items (round 7)
+
+- For GM:
+  - The left line for several agents ("2 nodes agents were setting up are no longer in this run."), built on GM's "Run without the nodes agents were setting up?" pattern.
+  - A placeholder that left while others are still placeholders: no left line under "Run 1 node Codex is still setting up?" (GM ruled the line only under the "changes" heading).
+  - L-d: the dropped note "Nebula can't read the size of its input (a file on another host is never downloaded to price it)" said something GM's footnote doesn't: for a remote input the price will never be known before the run, so the row stays "price depends on its input" and won't update in place. Not restored.
+  - A yes dropped while a graph import is running says nothing (no words for that; "Another run started first" would be wrong).
+  - The browser's costly-run confirm (item 7) still shows whole dollars from $10 ("$10"); GM's cents rule was given for this dialog.
+- Known gaps unchanged (item 7 follow-up, for the PR body): the tab that hasn't heard of an agent's placeholder with "Ask before costly runs" on (browser confirm, then Nebula's dialog); free-placeholder runs still use the browser's costly-run confirm. No browser-confirm fallback added.
+- L8 as before.
+
+### Gates (round 7)
+
+- Backend full suite: 11,010 passed, 71 skipped (13 min 4 s).
+- Vitest full: 461 files, 5,882 tests. The first run, during the backend suite, had 21 failures in 8 files, all load-shaped: 16 "Test timed out", 2 `toHaveFocus` waits, 1 role not found in time, 1 leftover request from a timed-out test. None is a file this round touched. Rerun alone, those 8 files passed: 175 of 175.
+- errorCopy ratchets: 14 files, 173 tests passed.
+- `tsc -b` clean, lint clean.
+- Build budget: 389,865 bytes raw entry, 117,428 gzip (limit 512,000 raw).
+- MCP INSTRUCTIONS: 2,233 characters, unchanged (2,957 with the commons guide).
+
+## Round 8: review 7 and GM - Design's round-8 rulings (2026-10-26)
+
+Justin, Q133 b, the same two rules: a paid placeholder never runs without the person's confirmation, and what runs never costs more than the person was shown. Review 7 found no high finding: one medium (focus could fall out of the dialog, and canvas shortcuts then acted behind it) and five lows. GM signed off item 3 once its two round-8 items are in (the left line under the still-setting-up heading; the import notice). Every fix was test-first.
+
+### What changed and why
+
+- **M-1: focus stays in the dialog, and nothing acts behind it.** When the rows stop scrolling while the list has focus (an agent deletes placeholders, the window grows), focus moves to Cancel in the same commit that drops the list's Tab stop, before the browser can drop it on the page; any other slip to the page (a click on the backdrop, an element that went away) comes back to Cancel (PlaceholderRunDialog.tsx). Structural part: `isModalDialogOpen()` (lib/canvasShortcutScope.ts) reads whether any `[aria-modal="true"]` is on the page; while one is, `isCanvasShortcutTarget` is false for every target, the page included, so Cmd+Enter, Delete, Cmd+Z and the rest don't act behind any modal dialog, wherever focus is. The same check stops the app-wide keys that aren't canvas shortcuts but act on the graph: Cmd+O and Cmd+S (GraphFileActions: Cmd+O would open a file over the canvas) and Cmd+K (lib/commandPaletteKeys.ts: the palette's "Run graph" would run behind the dialog, even with focus correctly on Cancel, since the palette listens app-wide).
+- **L1: a replay words what runs.** A replay sends its saved copy of every node. `snapshotCanvas` now marks a saved node `gone` when its live node was deleted, or is another type and no placeholder; the dialog (`gone` option) never counts such a node as "finished": the agent's placeholder is one that left the run ("Run without the node Codex was setting up?" / "It's no longer in this run.", or the left line), and the saved copy runs as a muted row priced in the total (it is what runs, so its dollars need a row). The row keeps the name the dialog last showed. A live placeholder under another type is still flagged (by id, regardless of type), because Nebula reads placeholders by id (main._skip_placeholders) and would refuse the run otherwise; before, the tab dropped the flag and only Nebula's 409 brought the dialog back.
+- **L2 (coordinator's decision): a row counts as seen only if its node, model and price all match** what was drawn (`rowSeen`, graphStore.ts). A node switched to another model, or at another price, asks again with "This run changed since you last reviewed it.", even when cheaper. What still goes ahead without a second ask: every row unchanged (Codex finishes without changing anything), or rows dropped, at a total no higher.
+- **L3: a notice never takes an agent's Undo away.** `notify` (every caller: a failure, "Nothing ran. Another run started first.", the import notice) writes the canvas notice as before, except while it offers an Undo or Redo: then the line goes to `messageNotice`, shown by `CanvasMessageNotice` in a new region slot `message` above the late count and the canvas notice, so the notice with the button stays nearest the bar (GM round 4's rule for the late count). Same look, tone (alert for errors), Dismiss and reading-time hold; on every screen; a project open clears it. No new words.
+- **L4: any amount above zero confirms at least $0.01.** `roundUpToCent` floors a positive amount at a cent (it read under half a millionth as $0.00). Backend: `_six_places` (main.py) reads an estimate at 6 places as before, but a positive one never as 0 (under half a millionth it reads 0.000001), so `confirmedCost: 0` can't pass a run that costs something.
+- **L5 (coordinator's decision; GM did not override):** a status over 140 characters is cut at its last space only if that keeps at least 100 characters (`MIN_WORD_CUT_CHARS`), otherwise cut hard ("Reading https://example.com/ppp…", 139 characters and "…", not "Reading…"). A hard cut never splits a character: `services/text_cut.py` `safe_cut` backs off over combining marks (Mn, Mc, Me), ZWJ sequences, variation selectors, skin tones, emoji tags, Hangul medial vowels and finals, and regional-indicator pairs (counted from the start of the run). A cursor's `say` (cut at 140 with no "…") uses the same safe cut: the same kind of cut on the same kind of text.
+- **GM item 2:** the left line also shows under the still-setting-up heading: "Run 1 node Codex is still setting up?" / "Codex hasn't finished this, so its settings may not be final." / "1 node Codex was setting up is no longer in this run." / "This run changed since you last reviewed it." / rows (the dialog already drew lines in that order).
+- **GM item 4:** a yes dropped while a graph import runs: "Nothing ran. Nebula is still importing. Click “Run” again when it finishes." (Cinema: "Nothing ran. Nebula is still importing. Generate again when it finishes."). `announceDroppedYes` checks the import first (no run starts while one runs), then another run; on both places a yes can be dropped (the first dialog, Nebula's re-ask), for node runs, Generate all, replays and shots. Cancel still says nothing.
+- **Found in the live check: the dot's keyboard focus showed 320 px and "…".** Below 60% zoom the pill's dot is a Tab stop, but only the node's keyboard focus showed the whole status (wrapping past 480 px, GM round 5). With L5 a status now keeps a long URL, so the dot's keyboard focus now counts the same (AgentNodeMarkLayer.tsx `useKeyboardFocusedNode`); a pointer press still doesn't.
+- **Agent support:** docs/MCP-SETUP.md (the left line under the first heading; what a replay runs and says; "every row exactly as it is now" for going ahead; the import notice; a notice beside an Undo; focus and no shortcuts behind the dialog; an estimate above zero never reads 0; the status cut's 100-character rule and safe hard cut), skills/nebula/SKILL.md (a model or price change asks again; a replay runs its saved copy; the status cut), the `set_status` docstring. INSTRUCTIONS unchanged. No CLI change: confirming is the person's alone, and `nebula status` sends the text to the same cut.
+
+### Decisions not in the spec
+
+- The structural guard reads `aria-modal="true"` from the page rather than a registry, so every modal dialog counts, including later ones; all of the app's are rendered only while open (checked each). Cmd+K, Cmd+O and Cmd+S yield too: they act on the graph from app-wide listeners that never asked `isCanvasShortcutTarget`. Side effect: "?" on the page no longer closes the keyboard shortcuts dialog (its own keys still do; focus starts in it).
+- A replay's saved copy of a deleted placeholder still runs (replays run their saved recipe, unchanged); it is worded as a normal paid node, and its placeholder as one that left.
+- L2 makes the round-6 and round-7 "a cheaper run goes ahead" tests ask again (updated, with a comment); the round-8 suite pins the case that still goes ahead.
+- The message slot sits above the late count; the late count stays directly above the canvas notice, as its test and GM's rule have it.
+- `say` gets the safe hard cut but keeps its own rule otherwise (no "…", no word cut).
+
+### Tradeoffs
+
+- L2 asks again for a cheaper price too: one more click in that race, never a run at words the person didn't see.
+- `safe_cut` covers the grapheme rules that matter for one line of agent text, not all of UAX #29 (no package for one line; no installs).
+
+### Tests (first, each seen failing)
+
+- **Backend** (`tests/test_pending_nodes_round8.py`, 14 tests): 11 failed first, 3 passed.
+  - L4 (2 failed): the estimate's `high` and `low` read 0.0 for a run of 4e-7; `confirmedCost: 0` got 200 "started" for it. Passed before and after: $0.01 runs.
+  - L5 (9 failed): "Reading…" for the 228-character URL (direct and over HTTP); a word cut keeping 99 characters; hard cuts that split a combining accent, a ZWJ family, a flag, a variation selector, a skin tone (139 code points where a whole number of units fits in 138 or 135); a cursor `say` ending on a bare "e" before its accent. Passed before and after: word cuts keeping 100 and 110 characters; a flag run after a lone indicator.
+- **Frontend:** 28 failed first, 8 passed (the ⌘O control first failed for a missing ReactFlowProvider in the test, fixed before it counted), plus 1 from the live check.
+  - `lib/placeholderRunConfirm.round8.test.ts` (10): 8 failed (no left line under "Run 1 node Codex is still setting up?" for one or two left; a gone saved copy counted "finished" with its agent's dot; $0.00 for 4e-7, 4.9e-7, 1e-9 and the smallest double); 2 passed (nothing left, no line; zero stays zero, float noise kept out).
+  - `graphStore.placeholderRuns.round8.test.ts` (15): 11 failed (replay delete: "Run with Codex's changes?"; replay type change: same; a live placeholder under another type: no dialog at all; another model, and a lower price: ran unasked; the Undo notice replaced by "Another run started first" and by any notice; no import notice on node Run, Nebula's re-ask, a replay or Cinema); 4 passed (Codex finishing unchanged goes ahead; a notice with no Undo showing is the canvas notice; Cancel during an import says nothing; another run keeps its notice).
+  - `PlaceholderRunDialog.round8.test.tsx` (5): 4 failed (focus stayed on the list after it stopped scrolling; a slip to the page stayed there; the page and the canvas were shortcut targets with the dialog open); 1 passed (Escape cancels).
+  - `shortcutsBehindModal.round8.test.tsx` (3): 2 failed (⌘O loaded and ⌘S saved behind an open dialog; ⌘K opened the palette); 1 passed (⌘O with no dialog).
+  - `noticeMessageBesideUndo.round8.test.tsx` (3): 3 failed (no `message` slot; the line replaced the Undo, on the canvas and in Cinema).
+  - `AgentNodeMarkLayer.test.tsx` (+1, from the live check): failed first (the dot's keyboard focus set no `data-focused`).
+  - Updated to the new rules: round 6 "a run that got cheaper goes ahead" and round 7 "the same rows, cheaper" (now ask again, then run at the new total), and `lateRestoreCount`'s slot list (adds `message`).
+
+### Live check (1280x800)
+
+- Isolated backend on 8795 (temp HOME and every NEBULA_* root under scratch, no keys) and Vite on 5795 (`VITE_NEBULA_BACKEND_PORT=8795`); `/api/health` through Vite matched. Codex verified (an app token). No key was set, so nothing paid could run. Run was clicked in three dialogs, each a yes that sends nothing (an import holding the canvas, twice; another run holding it); the model-switch re-ask was cancelled. Run requests: one POST (and its OPTIONS) for the free Video Edit, nothing else.
+- 16 of 16 checks passed (script `agent-presence/live-r8.mjs`). The first run failed one check, which found a real gap: the dot's keyboard focus showed the URL status at 320 px with "…" (fixed and tested above; the script then focuses the dot from the keyboard, as Tab would).
+  - Codex removes one of two placeholders while the dialog is open: "Run 1 node Codex is still setting up?", the body, "1 node Codex was setting up is no longer in this run.", "This run changed since you last reviewed it.", the rows.
+  - 34 rows: Shift+Tab from Cancel puts focus on the list; Codex deletes 30: the list fits, no Tab stop, focus on Cancel; the dialog reads "Run 4 nodes Codex is still setting up?" with "30 nodes Codex was setting up are no longer in this run.". A blur to the page came back to Cancel. With focus on the page, Cmd+Enter, Ctrl+Enter, Cmd+K, Cmd+O and Cmd+A did nothing: no run request, no palette, the dialog still open. Escape cancelled.
+  - An import reserved through the store's own `reserveGraphImport` (as an Open or a project open does) while the dialog was open; Run: "Nothing ran. Nebula is still importing. Click “Run” again when it finishes.", no request. From a Cinema shot's Generate (the store's `executeShot`, which the Cinema panel calls; the dialog's button read "Generate for $0.14"): "Nothing ran. Nebula is still importing. Generate again when it finishes.". Both showed above "Codex changed the canvas · Undo", which kept its Undo.
+  - L2: the click on "Run for $0.14" and Codex's change in the same task (applied to the tab's store as a socket sync would: a socket message can't be timed into that window from outside): the dialog came back as "Run with Codex's changes?" with the changed line and "“a” · Nano Banana 2.1 · $0.034" (was "Nano Banana 2 (3.1 Flash) · $0.067"), "Run for $0.11"; nothing sent.
+  - L3: a free Video Edit run started while the dialog was open, Codex renamed a node (its notice with Undo), Run: "Nothing ran. Another run started first. Click “Run” again when it finishes." in the message slot above "Codex changed the canvas" with its Undo.
+  - L5: the 228-character status came back "Reading https://example.com/ppp…" (140 with "…"), and the dot's keyboard focus at 50% zoom shows it whole, wrapped over three lines.
+- Blocked requests: 2, both the canaries; 0 toward 8000-8010 or 5173. Console errors: the canary's only. No browser dialog. Servers stopped by PID; the state dir deleted.
+- Screenshots in the scratchpad `agent-presence/`: `r8-still-setting-up-left-line.png`, `r8-focus-cancel-after-shrink.png`, `r8-still-importing.png`, `r8-still-importing-cinema.png`, `r8-reask-model-switch.png`, `r8-another-run-with-undo.png`, `r8-status-url-cut.png`.
+
+### Open items (round 8)
+
+- For GM: the left line for several agents ("2 nodes agents were setting up are no longer in this run.") still follows GM's "Run without the nodes agents were setting up?" pattern (round 7 open item, now under both headings).
+- Known gaps unchanged (item 7 follow-up, for the PR body): the tab that hasn't heard of an agent's placeholder with "Ask before costly runs" on (browser confirm, then Nebula's dialog); free-placeholder runs still use the browser's costly-run confirm; the browser confirm's whole dollars from $10. No browser-confirm fallback added.
+- L8 as before.
+
+### Gates (round 8)
+
+- Backend full suite: 11,024 passed, 71 skipped (13 min 14 s).
+- Vitest full: 466 files, 5,919 tests. The first run, during the backend suite, had 21 failures in 10 files, all load-shaped: 15 "Test timed out", 2 `toHaveFocus` waits, 2 roles not found in time, and 2 more in the same files. Two of those files (CommandPalette, GraphFileActions) are near this round's change, so they were checked: rerun alone, all 10 files passed, 200 of 200.
+- errorCopy ratchets: 14 files, 173 tests passed.
+- `tsc -b` clean, lint clean.
+- Build budget: 389,993 bytes raw entry, 117,453 gzip (limit 512,000 raw).
+- MCP INSTRUCTIONS: 2,233 characters, unchanged.
+
+## Round 9: review 8 and GM - Design's ruling on L-b (2026-10-26)
+
+Justin, Q133 b, the same two rules: a paid placeholder never runs without the person's confirmation, and what runs never costs more than the person was shown; and nothing acts behind an open modal dialog. Review 8 found no high finding: one medium (Delete behind the dialog), four lows and a nit. GM - Design ruled the replay wording (L-b), replacing the coordinator's first decision ("no longer in this run" for it), and confirmed that OpenRouter / Nous Portal rows name the chosen model as the card shows it. Every fix was test-first.
+
+### What changed and why
+
+- **M-1: Delete and Backspace never act behind a modal dialog.** They were React Flow's own `deleteKeyCode`, which listens on the document, takes a focused button (the dialog's Cancel) as fair game and never asked whether a dialog is open. Live, review 8's LV1a deleted the selected node behind the dialog. The key is now the canvas's own (Canvas.tsx onKeyDown, `deleteKeyCode={null}`): it goes through the same guard as every canvas key (`isCanvasShortcutTarget`, false while any `aria-modal` dialog is open, wherever focus is) and keeps React Flow's rules (the bare key only, nothing inside `.nokey` or a text field, not while a run goes, one delete per press, selected nodes and wires), deleting through React Flow so `onBeforeDelete` (World Labs holds) and "Deleted the node." with Undo still apply. `onBeforeDelete` also refuses while a modal dialog is open, for any delete that would still reach React Flow. docs/MCP-SETUP.md said Delete was blocked; now it is.
+- **L-a: a row names the model a model param picks, as Nebula shows it.** `modelName` (lib/placeholderRunConfirm.ts) reads, in order: a Cinema scene's model; the chosen option of a select labelled Model (`model`, `model_id`, and Meshy's `ai_model`, "GPT Image 2"); the model id a free-text model param names, as the node card shows it (OpenRouter and Nous Portal `model`, Replicate `model_id`, fal's `endpoint_id`, Krea Agent's `model`: "“Writer” · openai/gpt-4o-mini · price not listed"); else the node type. A switch is then a changed row: the open dialog redraws with the changed line, and after the click it asks again (`rowSeen` compares it). The run pill (backend `main._run_model_name`) names the model the same way (the same two key lists), so the pill and the dialog agree.
+- **L-b (GM - Design, verbatim):** a replay's placeholder its agent changed after the run was saved (same type, live params differ from the saved ones; `snapshotCanvas` `changed`, compared with `sameRecipeParams` in lib/runHistory.ts, the comparison Run history already uses for "Recipe settings … changed") runs at the saved settings, so the dialog says so: heading "Replay the saved version?", body "Codex changed this node after the run was saved. The replay uses the saved settings." ("these nodes" for two or more; "The agents changed this node / these nodes …" for several agents), then the changed line if it applies, the saved versions as muted rows, the total and the button. If placeholders are still being set up, the still-setting-up heading wins and the sentence goes under its body (`savedLine`), before the left line and the changed line. Deleted or retyped placeholders keep round 8's "no longer in this run" handling; one finished with the saved settings keeps "Run with Codex's changes?".
+- **L-c: the keyboard shortcuts dialog is no dead end.** A click on its text put focus on the page, where "?" no longer reached it and Escape never had. It now has the placeholder dialog's focus return (`returnFocusOnSlip`, lib/modalFocus.ts, shared by both), and while it is open Escape or "?" close it from the page too, unless another modal dialog is on top of it.
+- **L-d: one guard for every document- and window-wide key listener.** `keyBlockedByModal(owner?)` (lib/canvasShortcutScope.ts): with no owner, any open modal dialog blocks the listener; with one (a dialog's or popup's own keys), only a modal dialog on top that isn't its own does: the one it sits in, or the one it holds (the tour's overlay holds its modal card) (the last `aria-modal` on the page is on top: dialogs portal to the end of the page in the order they open). Every listener checked is listed under "Keydown listeners" below. The mask painter covers the whole window, so it is now `aria-modal` with focus management (panels/maskPainterDialog.ts: focus on Close, Tab kept inside, Escape closes, a slip to the page comes back, focus returns to Paint Mask), for the painter and the shell shown while its chunk loads. The two direct writers that replaced an agent's Undo notice (a refused wire, a held delete) now go through notify's rule (`noticeLine`): beside the Undo, never over it.
+- **Nit:** `safe_cut` backs off over an Indic conjunct (a virama, combining class 9, and the letter after it), so "क्ष" is never split.
+- **Agent support:** docs/MCP-SETUP.md (rows naming a free-text model; the replay wording; no key at all behind a modal dialog, Delete included, nor Moodboard Studio's or the video editors'; the run pill's model name), skills/nebula/SKILL.md (a free-text model switch asks again; a replay of a placeholder changed after the save says it uses the saved settings). INSTRUCTIONS unchanged. No CLI change: confirming is the person's alone, and `nebula` shows no model names of its own.
+
+### Keydown listeners (every document or window listener, and how each is guarded)
+
+- Canvas.tsx (document): `isCanvasShortcutTarget` (modal check first); Delete and Backspace now here too.
+- React Flow's own keys: Delete off (`deleteKeyCode={null}`, above). Space (pan), Cmd/Ctrl (zoom) and Shift (add to the selection) only change what a pointer drag, wheel or click does on the pane; a modal dialog's backdrop or overlay takes the pointer, so they can't act behind it. Not turned off: changing React Flow's key props while a key is held leaves its pressed state stuck (found while testing: a toggled `deleteKeyCode` stopped Delete working after the dialog closed; a held Cmd would have left scroll zooming).
+- GraphFileActions (Cmd+S, Cmd+O) and the command palette's Cmd+K (CommandPalette, DeferredPanels via `isPaletteHotkey`): round 8's modal check.
+- KeyboardShortcuts (document): opening through `isCanvasShortcutTarget`; closing with `keyBlockedByModal(card)`.
+- WorkspaceRail Escape: `keyBlockedByModal()` (its old `[role="dialog"]` check missed the placeholder's `alertdialog`).
+- ContextMenu, ConnectionPopup, PresetLibrary (Escape): `keyBlockedByModal(own element)`.
+- Lightbox (arrows), ResultComparison (capture-phase containment), WorldPreview and MeshPreview (Escape, Tab), OnboardingOverlay (capture-phase containment): `keyBlockedByModal(own dialog)`, so a dialog on top keeps its keys.
+- Moodboard Studio (MoodboardStudioView: Cmd+Z, Shift+Cmd+Z, Cmd+Y, Cmd+S, Delete; BoardCanvas: Shift+1): `isStudioShortcutTarget` checks `keyBlockedByModal()` first.
+- Remotion editor (`useRemotionKeyboard`: Delete, Backspace, Cmd+D), trim editor (EditorView: Escape, Cmd+S, zoom, B, Cmd+K, Delete, M, I, O), VideoPreview (Space): `keyBlockedByModal()`.
+- Not guarded, by design: AgentNodeMarkLayer (records only that a key was pressed, for its keyboard-focus rule; acts on nothing), usePanelFocus and WorldEnvironmentViewer (listen on their own element, so they hear keys only with focus inside it), and React `onKeyDown` props (element-scoped).
+
+### Decisions not in the spec
+
+- Delete moved into the canvas's own handler rather than toggling React Flow's key props (stuck-key problem above). Side effect: like every canvas key, Delete no longer deletes nodes while focus is in a panel that owns its keys (the Inspector, chat); React Flow's did. A text field never deleted nodes, before or now.
+- Meshy's `ai_model` (labelled "Model") is named in the row and on the run pill ("GPT Image 2"), as its option label; before, both said "Meshy Text-to-Image".
+- A replay's placeholder still being set up whose settings already differ from the saved ones gets the sentence too (it was changed after the save, and the saved settings run).
+- Under "Replay the saved version?", a placeholder that finished with the saved settings keeps its dot and gets no sentence of its own; GM gave the body only for the changed ones.
+- `keyBlockedByModal` takes the last `aria-modal` on the page as the one on top. A modal rendered inside the page's tree (the mask painter, the 3D previews) that opened after a portalled one would read as below it; none can open that way today (the portalled dialogs keep focus and cover the window).
+
+### Tradeoffs
+
+- The canvas's Delete follows `isCanvasShortcutTarget`'s scope, which is narrower than React Flow's (see above): one guard for every canvas key, at the cost of Delete in panels that own their keys.
+- Krea's sub-model settings (Krea 2's Variant, Magnific's Engine, Topaz's enhancement and frame-interpolation models) are not named in a row: those nodes run on the Krea plan, and naming them would need a row format GM hasn't given. Listed for GM.
+
+### Tests (first, each seen failing)
+
+- **Backend** (`tests/test_pending_nodes_round9.py`, 9 tests): 4 failed first, 5 passed. Failed: the run pill named fal's node "“FAL”", Krea Agent "“Krea Agent”" and Meshy "“Meshy Text-to-Image”" instead of the model; `safe_cut("aक्षb", 3)` cut between the virama and ष (3, not 1). Passed before and after: OpenRouter, Nous Portal and Replicate model ids (the universal path already named them), no model yet ("“OpenRouter”"), and a 180-code-point run of conjuncts cut on whole conjuncts (kept as a guard for the status path; it passed on the old code too).
+- **Frontend:** 51 failed first, 5 passed, plus 1 added after.
+  - `lib/placeholderRunConfirm.round9.test.ts` (16): 15 failed (OpenRouter, Nous Portal, Replicate, fal and Krea Agent rows read the node type; Meshy read the type; no "Replay the saved version?", no `savedLine` in any form); 1 passed (no model chosen: the node type).
+  - `graphStore.placeholderRuns.round9.test.ts` (7): 7 failed (an OpenRouter switch after the click ran unasked; a switch while open didn't redraw; the replay said "Run with Codex's changes?"; no `savedLine` from the first dialog or after; a refused wire and a held delete replaced Codex's Undo).
+  - `canvasDeleteBehindModal.round9.test.tsx` (the real Canvas with React Flow, 6): 5 failed (Backspace and Delete on Cancel and on the page deleted the node; Delete after the dialog closed — first failing behind the dialog, then, with toggled key props, failing to delete at all: the stuck key that decided the design); 1 passed (control: no dialog, Backspace deletes). Added after the fix and passing: a selected wire alone goes, a text field keeps Backspace, a repeat doesn't delete.
+  - `components/KeyboardShortcuts.round9.test.tsx` (4): 3 failed (focus stayed on the page after a click on its text; Escape and "?" on the page left it open); 1 passed (another modal dialog on top keeps it open on Escape).
+  - `keysBehindModal.round9.test.tsx` (16): 14 failed (no shared guard; the rail closed its drawer behind the alertdialog; the Studio's undo, redo, save, delete and fit acted; the Remotion editor deleted and duplicated; the trim editor muted, trimmed, cut, removed a clip and exited; Space played; the context menu closed behind the dialog); 2 passed (controls with no dialog).
+  - `components/MaskPainterModal.round9.test.tsx` (5): 5 failed (no `aria-modal`, canvas keys acted, no initial focus, no Tab loop, no focus return).
+  - `PlaceholderRunDialog.round9.test.tsx` (2): 2 failed (no replay sentence in the order body, sentence, left line, changed line, rows; a change to it alone wasn't a change in place).
+- Review 8's probes, rerun on this code: P1 asks twice and runs nothing; P1b redraws once (the yes then runs what it showed, the new model); P2 reads "Replay the saved version?" with the saved row ($0.10) and sends the saved params; K2 closes on "?" and on Escape from the page. K1 builds a bare React Flow with its own `deleteKeyCode` (not Nebula's canvas), so it still deletes there; the real-canvas test above covers it. `probe_cut.py`: the conjunct line now ends on whole conjuncts.
+
+### Live check (1280x800)
+
+- Isolated backend on 8795 (temp HOME and every NEBULA_* root under scratch, no keys) and Vite on 5795 (`VITE_NEBULA_BACKEND_PORT=8795`); `/api/health` through Vite matched. Codex verified (an app token). No key was set, so nothing paid could run. Run was clicked in one dialog (the OpenRouter re-ask: the run changed in the same task, so the yes sent nothing). Run requests: none.
+- 21 of 21 checks passed (script `agent-presence/live-r9.mjs`). The first run passed 20 of 21: the script's "Delete works again after the dialog closes" step ran right after Cmd+A had selected all three nodes, so Delete deleted three ("Deleted 3 nodes.", Undo put them back): the key worked, the script's selection was wrong. Fixed in the script (select n1 alone first); the second run passed it ("Deleted the node.", Cmd+Z back).
+  - Review 8's LV1a, as it ran there: with focus on Cancel, Backspace and then Delete left n1 on the canvas and selected, the dialog open, the notice still "Codex changed the canvas" (review 8: `{"nodes":false,"undo":"Deleted the node."}`). Every other key it tried on Cancel (Cmd+Enter, Cmd+A, Cmd+Z, Shift+Cmd+Z, Cmd+K, Cmd+O, Cmd+S, Cmd+D, Cmd+=, Shift+1, "?", F2, ArrowRight) changed nothing behind it. On the page (blur, then the key in the same task): Cmd+Enter, Cmd+A, Delete and Backspace changed nothing, and focus came back to Cancel. After it closed: no `aria-modal` left, Cmd+A selected all three, Delete deleted n1 and Cmd+Z put it back.
+  - Review 8's LV3, as it ran there: "?" opened Keyboard shortcuts; after a click on a group heading focus was on Close (review 8: BODY), and "?" closed it (review 8: stayed open). Opened again, a click on a shortcut's name, then Escape closed it.
+  - L-a: "“Writer” · openai/gpt-4o-mini · price not listed"; Codex switched it while open: the row redrew to anthropic/claude-opus-4.1 with the changed line; the click and a switch to google/gemini-2.5-pro in the same task: asked again over the new model, nothing sent.
+  - L-b: a saved run of “Wide”, then Codex changed “Hero still”'s aspect ratio: the replay's first dialog read "Run 2 nodes Codex is still setting up?", the body, then "Codex changed this node after the run was saved. The replay uses the saved settings."; Codex finished both: "Replay the saved version?", the sentence, the changed line, “Hero still” muted with no dot, “Grade” (finished unchanged) with its dot, "Run for $0.21". A second replay whose placeholder Codex deleted: "Run without the node Codex was setting up?" / "It's no longer in this run.", “Plate” muted. Both cancelled; nothing sent.
+- Blocked requests: 2, both the canaries; 0 toward 8000-8010 or 5173. Console errors: the canary's only. No browser dialog. Servers stopped by PID; the state dir deleted.
+- Screenshots in the scratchpad `agent-presence/`: `r9-backspace-on-cancel.png`, `r9-shortcuts-after-text-click.png`, `r9-shortcuts-escape-closed.png`, `r9-openrouter-row.png`, `r9-openrouter-reask.png`, `r9-replay-still-setting-up.png`, `r9-replay-saved-version.png`, `r9-replay-left-run.png`.
+
+### Open items (round 9)
+
+- For GM: Krea's sub-model settings (Krea 2's Variant, Magnific's Engine, Topaz's enhancement and frame-interpolation models) aren't named in a row, so switching one while the dialog is open doesn't redraw or ask again (they run on the Krea plan; no dollar changes). Naming them needs a row format.
+- For GM: under "Replay the saved version?", a placeholder finished with the saved settings has no sentence of its own (its row keeps its dot).
+- For GM (from round 7, unchanged): the left line for several agents.
+- Known gaps unchanged (item 7 follow-up, for the PR body): the tab that hasn't heard of an agent's placeholder with "Ask before costly runs" on (browser confirm, then Nebula's dialog); free-placeholder runs still use the browser's costly-run confirm; the browser confirm's whole dollars from $10.
+- L8 as before.
+
+### Surprise from the full suite
+
+- The full vitest run caught a regression of my own: the onboarding tour stopped containing keys when its card had lost focus (`OnboardingOverlay.test.tsx`, "captures background keyboard events even when the browser has dropped card focus": Ctrl+Enter on the page was not prevented). The tour's listener passes its overlay as the owner, and the overlay holds the `aria-modal` card instead of sitting inside it, so the first `keyBlockedByModal` took the tour's own card for a dialog over it. The helper now counts a modal dialog the owner holds as its own too. Test first: `keysBehindModal.round9.test.tsx`, "an owner that holds its own modal dialog … keeps its keys until one opens over it", failed (`expected true to be false`), then passed with the onboarding file (14 of 14). Every other owner (Keyboard shortcuts, Lightbox, ResultComparison, World and Mesh previews) is the `aria-modal` element itself; PresetLibrary and the menus aren't modal.
+
+### Gates (round 9)
+
+- Backend full suite: 11,033 passed, 71 skipped (20 min 30 s, under machine load ~30).
+- Vitest full suite (run beside the backend suite, load average 27-41 from other sessions): 473 files, 5,976 tests: 416 files passed, 57 failed (144 tests; 124 "Test timed out" lines). Rerun of the 57 together: 22 passed, 35 failed (116 tests, 90 timeouts, the rest `findBy`/`waitFor` misses), one of them the onboarding regression above (fixed). The other 34 run one file at a time (`--no-file-parallelism`): 34 files, 545 tests passed. After the fix: `keysBehindModal.round9` 17 of 17, OnboardingOverlay 14 of 14.
+- errorCopy ratchets: 14 files, 173 tests passed.
+- tsc: clean. Lint: clean (after the last change).
+- Build budget: 391,266 bytes raw / 117,762 gzip (limit 512,000).
+- INSTRUCTIONS: 2,233 characters (2,957 with the Commons guide), unchanged.
+
+
+## Round 10: review 9 and GM - Design's round-10 rulings (2026-10-26)
+
+### What changed and why
+
+- **One way to render a modal (M-1, M-2, nit b).** New `components/ModalPortal.tsx`; all 15 `aria-modal="true"` dialogs render through it. It renders onto `document.body` inside a `div.modal-portal.nokey[data-modal-layer]` (`display: contents`).
+  - On the body, a modal covers the window wherever it opened from.
+  - `nokey`: React Flow ignores keys coming from inside it. Before this, a modal opened from a node card (the Mesh and World previews) passed its keys up to the node through React's portal bubbling: arrows moved the node, Enter and Space selected it, Escape deselected it.
+  - Clicks, double clicks and context menus stop at the wrapper, so the node behind doesn't select itself or open its menu.
+  - `data-modal-layer` records the order modals opened in, so the guard knows which one is on top.
+  - A test (`modalStructure.round10.test.tsx`) lists every `aria-modal` file and fails if any of them still calls `createPortal` itself.
+- **Mask painter (M-2).** It rendered inside the Inspector popover. Under Slava restraint, the popover's backdrop-filter made it the containing block of the painter's fixed overlay, so the "modal" was the popover's 260x300 box. The painter and its loading shell now go through ModalPortal (`DeferredPanels.tsx`).
+- **Command palette (L-1).** It is now a labelled modal dialog. Its label, "Search commands and nodes", is copy that already exists: the rail button and the shortcuts list use it.
+  - Tab stays inside, and focus that slips out comes back to the search field (`returnFocusOnSlip`).
+  - Cmd+K still closes it: `isPaletteHotkey` uses `keyBlockedByModal(palette)`, so the palette's own key passes while a modal on top of it blocks.
+- **Delete is one undo step (L-4).** The canvas's Delete and Backspace now call a new `deleteCanvasElements` in the graph store. It takes one undo step for the selected nodes, their wires and any other selected wires.
+  - Before, the key went through React Flow's `deleteElements`, which removed wires and nodes as two steps.
+  - `onNodesChange` and `onEdgesChange` are split into module functions so the delete can share one step.
+  - Every other delete path was checked: see the list below.
+- **Model switch hidden by a label (L-3).** A row now carries `modelKey`, the raw model name, even when it hides the model because it equals the node's label. The "seen" key and the unpriced key read it, so a switch asks again.
+- **The modal guard (nits a, b).** `canvasShortcutScope.ts` now counts only shown dialogs: none under `[hidden]` or `[inert]`, none with `display: none` (`checkVisibility` where the browser has it).
+  - The dialog on top is the last one opened, by `data-modal-layer`.
+  - A dialog without a layer counts as above anything before it in page order. That keeps a raw `aria-modal` element appended later on top, which the round-9 KeyboardShortcuts test relies on.
+- **Focus isolation.** ResultComparison and the onboarding tour now leave a modal opened over them alone:
+  - their sibling isolation skips their own portal wrapper and later layers (`sitsBehind` in `modalFocus.ts`);
+  - their focus trap stands down while a modal sits on top (`keyBlockedByModal`).
+- **Provider switcher popover.** Also portalled from inside the node card. It gets `nokey`, so arrows in its menu don't move the node.
+- **CommonsPrompt.** It is portalled now, so it left `.commons-view`, which defined `--commons-spring`. Its own rule now defines that token, and it keeps its spring.
+- **GM r10 item 1.** The replay sentence names the changed nodes, verbatim:
+  - one: "Codex changed “Grade” …";
+  - two: "“Grade” and “Wide”";
+  - three or more: "3 nodes";
+  - several agents: "The agents changed …".
+  
+  It applies under "Replay the saved version?" and as the still-setting-up `savedLine`. The names are the rows' names (Cinema names included), in the rows' order.
+- **GM r10 item 2.** A Krea node's sub-model setting is named in its row, using the card's labels, even at its default:
+  - "“Hero” · Krea 2 · Variant: Medium · on your Krea plan";
+  - Magnific "Engine: …", Topaz "Model: …", krea-node-app "Version: …".
+  
+  The setting is part of the row's seen key, so a switch while the dialog is open redraws it, and a switch in the moment of the click asks again. These settings are no longer taken for the model name.
+- **Krea Style Search (nit c).** Its free-text `model` is a search filter. Neither the row nor the run pill presents it as the model (`NOT_A_MODEL` in the frontend, `_NOT_A_MODEL` in `main.py`).
+- **The 80-character cut (nit d).** The JS cut now counts code points (`Array.from`), as Python does, so an astral character is never cut in half.
+- **Docs.** `docs/MCP-SETUP.md` and `skills/nebula/SKILL.md` now cover:
+  - the Krea setting rows and Style Search;
+  - the named replay sentence;
+  - the seen key ("same node, model, Krea setting and price");
+  - every modal covering the window and containing clicks and keys;
+  - `remove_from_canvas` and the person's delete each being one undo step with the connections;
+  - the L-2 sentence.
+
+### Decisions not in the spec
+
+- **L-2 is kept (the coordinator's decision).** Delete and Backspace act only with focus on the canvas or its bars, never in the Inspector, the chat or behind a modal. Panels own their keys, like every other canvas shortcut. MCP-SETUP says so.
+- **Keys are not stopped at a modal's root; only `nokey` is added.** React's synthetic `stopPropagation` would also stop the native event at the portal container (body), before the window and document listeners the modals themselves use (Escape, Tab, "?"). `nokey` is the scoped switch React Flow provides. Clicks, double clicks and context menus are stopped, because no window or document listener reads those from inside a modal.
+- **Names follow the rows' order.** Live, the target “Wide” was added before “Grade”, so the dialog read "Codex changed “Wide” and “Grade” …" over rows listing “Wide” first. GM's example order is "“Grade” and “Wide”"; the sentence follows the list under it.
+- **Label choices for Topaz and krea-node-app.**
+  - Topaz video names its two settings by the card's labels: "Enhancement model: …" and "Frame interpolation model: …". GM wrote "Model: …", which is the single-setting Topaz image node's card label.
+  - krea-node-app uses GM's "Version", although its card label is "Node app version ID".
+- **The backend run pill is unchanged except for Style Search.** For Topaz on Krea it still names the chosen model option (for example "Redefine") as the model. The row splits the same information into node type and setting.
+
+### Tradeoffs
+
+- The selection toolbar's action slot is also portalled from inside the node, and keys from it still bubble to React Flow (arrows move the node with focus on a toolbar button). Adding `nokey` there would also change Delete with focus on the toolbar, so it stays as it was and is listed below.
+- A modal with no `data-modal-layer` (none in the app; only a raw element in a test) is taken as on top of anything before it in page order.
+
+### Tests (first, each seen failing)
+
+- `lib/placeholderRunConfirm.round10.test.ts`: 16 tests, all 16 failed first:
+  - GM1: the sentence still read "this node / these nodes";
+  - GM2: no `setting` field, so Krea rows were unnamed;
+  - L-3: no `modelKey`;
+  - nit c: the Style Search row read "flux";
+  - nit d: `.slice` cut a surrogate pair.
+- `graphStore.placeholderRuns.round10.test.ts`: 5 tests, all 5 failed first:
+  - a model switch on a node labelled with its model id ran unasked;
+  - the Krea row had no setting;
+  - a Variant switch ran unasked and didn't redraw;
+  - the replay `savedLine` read "this node".
+- `canvasShortcutScope.round10.test.ts`: 4 tests, all 4 failed first:
+  - nit a (3): a dialog under `hidden`, under `inert` and under `display: none` still blocked;
+  - nit b (1): an inline modal opened later read as below a portalled one.
+- `modalsInsideNodes.round10.test.tsx`: the real React Flow canvas with the Mesh and World previews, 16 tests, all 16 failed first:
+  - arrows moved the node (for example to 905,160);
+  - Enter and Space selected it, and Escape deselected it;
+  - a context menu inside the preview reached `onNodeContextMenu`.
+- `modalStructure.round10.test.tsx`: the inventory of 15 files, plus ModalPortal's behaviour. It failed first on the import, because ModalPortal didn't exist.
+- `commandPaletteModal.round10.test.tsx`: the real Canvas with the palette, 5 tests. 4 failed first:
+  - no dialog role or label;
+  - focus wasn't returned after a click on a group label;
+  - Backspace on the page deleted node "a" (`['b']` left);
+  - Tab walked out.
+  
+  "Cmd+K still closes it" passed before, as a control.
+- `canvasDeleteUndo.round10.test.tsx`: 8 tests. 3 failed first: the Delete key with canvas-only ids, the Delete key with n1/n2 ids, and a node plus a separate selected wire each made 2 undo steps. 5 controls passed before and after: a wire alone, `deleteSelected`, `deleteNode` (context menu and Inspector), and an agent's `remove_from_canvas` arriving as one graphSync.
+- `components/MaskPainterPortal.round10.test.tsx`: 2 tests, both failed first: the loading shell and the painter both rendered inside the popover.
+- `components/ProviderSwitcher.test.tsx`: added one test, the popover carries `nokey`, which failed first.
+- Backend `tests/test_pending_nodes_round10.py`: 2 tests.
+  - The Style Search test failed first: the pill named "flux".
+  - The 80-code-point test passed first: Python already counts code points. It stays as the other half of nit d.
+- Updated to the new wording and fields: the round-9 placeholder tests (the named sentences, the `SAVED` constant) and `placeholderRunConfirm.test.ts` (rows carry `modelKey` and `setting`).
+
+### Every modal
+
+The 15 `aria-modal="true"` dialogs below render through ModalPortal: on `document.body`, `nokey`, clicks contained, layered. The mask painter's shell and painter count as one.
+
+- PlaceholderRunDialog (alertdialog)
+- PromptDialog
+- KeyboardShortcuts
+- CommandPalette (new modal)
+- ResultComparison
+- ModelPicker
+- Lightbox
+- MeshPreview
+- WorldPreview
+- the mask painter (`DeferredPanels` shell + `panels/MaskPainterModal`)
+- CommonsPrompt
+- UnsavedEditsNotice (alertdialog)
+- PersonalAgentWarning
+- OnboardingOverlay
+
+Panels with `role="dialog"` that aren't modal are unchanged: Settings, ChatPanel, AgentQuestionsForm, AgentNotesList, ConnectionPopup, PresetLibrary, ChatModelPicker, ProjectSizePanel, the final-export popovers, CommonsLeavePopover (`aria-modal="false"`) and CommonsCloseBatch.
+
+### Every delete path and its undo step
+
+- **Delete or Backspace on the canvas:** `deleteCanvasElements`, one step for the nodes, their wires and other selected wires.
+- **Selection toolbar:** `deleteSelected` → `onNodesChange`, one step.
+- **Context menu and Inspector:** `deleteNode`, one step.
+- **A generation:** `deleteGeneration`, one step.
+- **An agent's `remove_from_canvas`:** one `graphSync` per apply, so one foreign step with the node and its wires.
+
+All are tested in `canvasDeleteUndo.round10`.
+
+### Live check (1280x800 and 1440x900)
+
+- **Setup.**
+  - Isolated backend on 8795 (temp HOME, every NEBULA_* root under scratch, no keys) and Vite on 5795 (`VITE_NEBULA_BACKEND_PORT=8795`). `/api/health` through Vite matched.
+  - Codex and Claude were verified agents (app tokens). No key was set, so nothing paid could run.
+  - Run was clicked once, in the Krea re-ask: the run changed in the same task, so the yes sent nothing. Run requests: none.
+- **The skins.** The app has one skin, Slava restraint (`DEFAULT_SKIN`), so "the default skin" and "slava-restraint" are the same. The painter was also checked with that skin's body class removed (the base styles).
+- **Review 9's probes, adapted to 8795/5795** (`agent-presence/r10probes/`): live-rv9 passed 22 of 22, live-rv9b 4 of 4.
+  - LA1 to LA7 passed.
+  - LA6 (Delete with focus on an Inspector button) deleted nothing, as kept for L-2.
+  - LB1: Backspace with the palette open left the node; focus stayed in the search field.
+  - LC1 to LC7 passed.
+  - LD1: arrows with focus on the Mesh preview's Close left the node at 900,160 (review 9: it moved to 920,165).
+  - LD2: Escape closed the preview and the node stayed selected (review 9: deselected).
+  - LE1 passed.
+  - LF: one Cmd+Z brought back the node and its wire together. The second Cmd+Z undid Codex's earlier edit, as expected.
+  - LG: the painter is 0,0,1440,900 and 0,0,1280,800, not inside the popover. A click at a node's place hit the painter, and Delete deleted nothing (review 9: the overlay was the popover's 260x300 box).
+- **Round 10's own script** (`agent-presence/live-r10.mjs`): 33 of 33.
+  - Delete on a node with a wire added one undo step: the stack went from 1 (Codex's own foreign step from adding the pair) to 2. One Cmd+Z put back the node and its wire.
+  - The palette: a labelled modal on the body; Backspace and Delete with focus on the page left the canvas.
+  - The Mesh preview is on the body. Arrows, then Enter and Space on the dialog, left the node in place and selected; Escape closed it with the node still selected.
+  - The painter covered the window at both sizes under Slava restraint and under the base styles, with Close in view and every probe point hitting the painter.
+  - The replay sentence, from real agent edits:
+    - one: "Codex changed “Grade”";
+    - two: "Codex changed “Wide” and “Grade”";
+    - three: "Codex changed 3 nodes";
+    - several agents: "The agents changed “Wide” and “Grade”" and "The agents changed 3 nodes".
+    
+    Each read the same under the still-setting-up heading and under "Replay the saved version?". All were cancelled, and nothing was sent.
+  - Krea 2:
+    - "“Hero” · Krea 2 · Variant: Medium · on your Krea plan" showed at the default.
+    - Codex's switch to Large while the dialog was open redrew the row with the changed line.
+    - The click and a switch back in the same task asked again ("Run with Codex's changes?"), and nothing was sent.
+    - The Krea placeholder is Codex's in the tab only, as in rounds 5 and 9: agents can't choose plan billing.
+- **Blocked requests and console.** Every run blocked 2 requests, both the canaries; 0 went toward 8000-8010 or 5173.
+  - Undo toasts were dismissed before every screenshot (0 shown).
+  - The Mesh step's fake output (`none.glb`) makes the project save answer 400 ("Save failed · Retry" in the header). That is the probe's doing, as in review 9's run.
+  - Servers were stopped by PID and the state dirs deleted.
+- **Screenshots:** in the scratchpad `agent-presence/`, the `r10-*.png` files:
+  - replay: one, two, three, agents and agents-three, each still-setting-up and saved, at 1440 and 1280;
+  - `krea-row`, `krea-redrawn`, `krea-reask`;
+  - `painter-{slava,base}-{1440,1280}`;
+  - `palette-backspace`;
+  - `mesh-arrows`;
+  - `delete-1-before`, `delete-2-deleted`, `delete-3-one-undo`.
+
+### Open items (round 10)
+
+- **For GM:**
+  - Topaz video's two settings are named by their card labels ("Enhancement model", "Frame interpolation model"), not "Model".
+  - krea-node-app uses "Version", not its card label "Node app version ID".
+  - Magnific Precise's "Flavor" and Topaz's "Grain model" aren't named.
+  - Topaz Standard with no model chosen shows no setting.
+  - The replay sentence names nodes in the rows' order; GM's example had the upstream node first.
+- **The run pill** still names Topaz-on-Krea by its model option, so the pill and the row split it differently.
+- **The selection toolbar's action slot** still passes keys to React Flow (see Tradeoffs).
+- **For GM, from round 7, unchanged:** the left line for several agents.
+- **Known gaps, unchanged** (item 7 follow-up, for the PR body):
+  - the tab that hasn't heard of an agent's placeholder, with "Ask before costly runs" on, shows the browser confirm and then Nebula's dialog;
+  - free-placeholder runs still use the browser's costly-run confirm;
+  - the browser confirm shows whole dollars from $10.
+- L8 as before.
+
+### Gates (round 10)
+
+- Backend full suite: 11,035 passed, 71 skipped (16 min 16 s).
+- Vitest full suite, run beside the backend suite: 481 files and 6,053 tests. 464 files passed and 17 failed (43 tests, 35 of them "Test timed out").
+  - The 17 rerun one file at a time (`--no-file-parallelism`): 17 files, 289 tests passed.
+- Lint, first run: 2 errors, both in my own new test (`modalsInsideNodes.round10`, `react-hooks/globals`: its harness reassigned module variables during render). The harness now assigns them in an effect. Lint is clean after that, and the file passes 16 of 16.
+- errorCopy ratchets: 14 files, 173 tests passed.
+- tsc: clean.
+- Build budget: 392,133 bytes raw / 118,097 gzip (limit 512,000).
+- INSTRUCTIONS: 2,233 characters (2,957 with the Commons guide), unchanged (`mcp_server.py` untouched).
+
+## Round 11: review 10 and GM - Design's round-11 rulings (2026-10-26)
+
+Branch feat/agent-presence, base main (head de9909bd before this round).
+
+### What changed and why
+
+- **M-1, the Commons prompt lost its styling on the body.** ModalPortal moved Commons' prompt ("New collection…", "Why?", "Label this region", "Rename region") out of `.commons-view`, and its field, button-focus and type rules were scoped to that view. On the body its field became the browser's white box (no padding, 11px uppercase meta ink from a looser rule, black focus ring).
+  - Fix: a scope class the prompt carries itself. `body.app-slava-restraint .commons-scope` holds the ink, type and spring that `.commons-view` used to set (`styles/commons.css`); the field, focus-visible, textarea and range rules now select `.commons-scope` instead of `.commons-view`. `CommonsView` and `CommonsPrompt` both carry the class. No rule is duplicated.
+  - `.commons-view` keeps only its own layout, its detail width and its background.
+- **M-1, every portalled modal checked.** 15 modals render through ModalPortal. A static scan of every stylesheet (no rule targets a body child, a sibling of a modal, `.nokey` or the wrapper beyond `display: contents` and the `*` reset) and a live sweep per modal (below) compare the rules and computed styles where each renders now with where it rendered before the move.
+  - 12 were already portalled to the body before ModalPortal; only the `display: contents` wrapper is new.
+  - 2 really moved: the Commons prompt (from `.commons-view`, fixed above) and the mask painter (from the Inspector's `.inspector__section`; its geometry changed on purpose in round 10).
+  - PlaceholderRunDialog was new on this branch and always on the body.
+- **L-1, the palette with focus on an item.** Escape, ArrowDown and ArrowUp are handled on the dialog root when focus is on an item or on Clear search (`CommandPalette.tsx` `onDialogKeyDown`), not only in the search field. Escape in agent mode goes back to commands; otherwise it closes. Arrows move focus and the active row together and stop at the ends, passing over disabled rows. An item that gets focus (Tab) becomes the active row.
+- **L-2, Cmd+Z while a delete is on its way.** A generic hold at the undo-step level (`graphStore.ts`, `holdStep` / `settleStep` / `holdsHistory`).
+  - A step whose backend request is still on its way is "in flight". Cmd+Z on top of it waits (and later presses queue in order) until the answer is on the canvas, then replays. A delete that went through is then undone by the usual restore (`POST /api/graph/restore`), so Nebula's graph and the canvas match, and Redo deletes again.
+  - A refused or cancelled step drops the first held undo, so the press doesn't undo an earlier step the person didn't mean.
+  - A 15 s limit releases a stuck hold.
+  - Callers end their step with the new `endUndoStep` (in a `finally`) or cancel it with `cancelUndoStep`; a test reads every file that begins a step and checks it.
+- **Delete paths covered:** Delete/Backspace on the canvas (`deleteCanvasElements`), the toolbar's delete (`deleteSelected`), the context menu and Inspector (`deleteNode`), `deleteGeneration`, the toolbar's Clear canvas, and chat `/clear`. Chat `/clear` now also takes its canvas side locally (`clearBackendNodes`: the CLI nodes and their wires go, local nodes stay), as Toolbar's clear did, so the step it begins holds a real change.
+  - Also every other `beginUndoStep` caller: file drop, chat upload, proposal accept, and the OpenRouter and Replicate model configures.
+  - remove_from_canvas (an agent's delete) has no in-flight window in the tab: it arrives as one graphSync, one foreign step (round 10's test covers it).
+- **GM r11, the replay sentence.** Names up to three nodes ("Codex changed “Wide”, “Hero still” and “Grade” after the run was saved. …"), a count from four ("Codex changed 4 nodes …"); the agents form follows the same rule. Names are sorted by row order explicitly; the price footnotes keep their count from 3.
+- **GM r11 item 4.** "Grain model" is named only while Grain is on (`KREA_SETTING_WHEN`); Flavor is not named.
+- **GM r11 item 5.** A model-picking setting with nothing chosen reads "Model: default" (Topaz Standard is the only such node today).
+- **GM r11 item 6.** "the agents" in the heading and the left line: "Run 3 nodes the agents are still setting up?", "Run without the nodes the agents were setting up?", "2 nodes the agents were setting up are no longer in this run." The body and "The agents changed…" are unchanged.
+- **GM r11 items 1-3:** row order kept, Topaz video keeps its card labels, krea-node-app keeps "Version". No code change.
+- **Docs:** `docs/MCP-SETUP.md` (the in-flight Cmd+Z on remove_from_canvas, the three-name and count rule, the full Krea setting list including Training Model, Grain model and the Topaz video nodes by name, "Model: default", the agents wording) and `skills/nebula/SKILL.md` (the setting list, "up to three; a count from four"). MCP tools and the CLI are unchanged (nothing an agent can call changed); INSTRUCTIONS unchanged.
+
+### Decisions and tradeoffs
+
+- **The hold, not a per-path patch.** One mechanism for every step with a request in flight, rather than special-casing the delete. Cost: an undo pressed in that window waits for the answer (normally well under a second; at most 15 s).
+- **The row-naming inventory (review 10):**
+  - Meshy's Mesh Type ("Smart Topology (Meshy T2)") is not named: it reads like a model, so it's a question for GM.
+  - krea-node-app with no version is refused (the backend never picks one), so no "Version: default".
+  - Krea Style Train's "Training Model" was already named.
+- **The test-side cascade (`tests/helpers/cssCascade.ts`).** jsdom's `getComputedStyle` drops shorthands that hold a `var()` and mis-resolves `font: inherit`, so the modal-style test reads the app's stylesheets with postcss, matches each selector, and keeps the winning declaration per state and property.
+
+### Tests (each failed first on the current code)
+
+- `tests/lib/placeholderRunConfirm.round11.test.ts`, 18 tests. 9 failed first: the three-name sentences (got "3 nodes"), the agents heading and left line (got "nodes agents"), Grain model (not named), "Model: default" (no setting). 9 controls passed.
+- `tests/commandPaletteKeys.round11.test.tsx`, 7 tests. 5 failed first: Escape on an item and on Clear search (the palette stayed open), Tab made no item active, the arrows on an item did nothing, passing over a disabled item. 2 controls passed.
+- `tests/canvasDeleteInFlightUndo.round11.test.tsx`, 13 tests. 12 failed first: with the delete held, Cmd+Z left nodes [n1] with stacks undo 1 / redo 1 and no restore sent; `endUndoStep` and `clearBackendNodes` were not functions. 1 control passed (a refused delete with a separate wire).
+- `tests/undoStepEnds.round11.test.ts`, 6 tests. 5 failed first: no caller ended its step.
+- `tests/modalStyles.round11.test.tsx`, 4 tests. 3 failed first, on HEAD's CSS (input padding 0, ink `--sr-ink-meta`, 11px uppercase, no Slava border, background or focus ring). The spring control passed.
+- Updated to the new wording or the hold: `placeholderRunConfirm.round10` (the count case uses 4 nodes), `round7`, `placeholderRunConfirm.test`, `PlaceholderRunDialog.test`, `graphStore.agentUndo` (an undo before `endUndoStep` waits, then applies), and the mocks in `canvasProposalsStore.test`, `ProposalBar.test` and `components/Toolbar.test` (which now also checks the step is ended on success and on refusal).
+
+### Live check (round 11)
+
+- Isolated backend on 8795 and Vite on 5795, no keys, 8000-8010 and 5173 blocked. 45 of 45 checks passed. 6 attempts were blocked: the 2 canaries, plus 4 ORB blocks of a missing thumbnail on the isolated backend (the World preview fixture). None went toward Justin's ports.
+- **L-2:** with Nebula's delete answer held 2.5 s, Delete then Cmd+Z brought back the node and its wire. Stacks were undo 1 / redo 1 (as before the delete), Nebula's graph had the node and the wire, and the notice read "Restored the node."
+- **L-1:** Tab to an item, then the arrows moved focus and the active row together (Run graph → Save graph → Run graph). Escape with focus on the item closed the palette.
+- **GM r11:**
+  - the three-name and four-count replay sentences, Codex and agents forms, still setting up and saved;
+  - "the agents" heading, left line and "Run without…";
+  - "Topaz Standard (Krea) · Model: default" and "Topaz Bloom 2 (Krea) · Grain model: gaussian".
+  - Cancel sent nothing in every case.
+- **The modal sweep, at 1440:** for each modal, the rules that match every element and the full computed style (with ::before, ::after and ::placeholder), measured where it renders now and where it rendered before the move. The subtree is moved there and back, and both placements are measured right after a move, with focus put back and entry animations finished.
+  - All 15 have 0 rules lost, 0 rules gained and 0 style differences.
+  - Mask painter: 40 geometry values differ, as intended in round 10. Two inherited values have no effect in the painter: the Inspector's scrollbar colour (nothing in the painter scrolls) and `--scroll-fade-size` (no rule in it reads it).
+  - Commons prompt: the view's `--commons-detail-w` differs, and no rule in the prompt reads it.
+  - The real Commons field on the body matches review 10's in-view measurement: rgba(0,0,0,.3) background, 0.92 ink, 1px edge, 12px Inter, 5px 7px padding. Focused, it shows the Slava 2px ring.
+- **Review 10's probes, on 8795/5795:**
+  - rv9: 22 of 22.
+  - rv9b: 4 of 4.
+  - rv9c: 23 of 23.
+  - rv9d: 6 of 6.
+  - rv10rv: 10 of 12, the same two failures as in review 10's own run. P1a types "fit", which leaves one item, so the arrows can't move. P1e expects a graph selection, but Enter focuses the node in the Inspector (rv10rv2 Q1b passes). Its mesh-clicks section can't find the preview, as in review 10; rv9c's RV10-Q2 covers it and passes.
+  - rv10rv2: 7 of 8. Q3a builds the prompt's old markup by hand, without `commons-scope`. Q3b, the real prompt, is now the Slava field: in review 10 it was the white Arial box.
+  - The first runs of rv9, rv9b and rv9c, beside the full vitest suite, had "Promise was collected" section errors. Rerun with the machine quieter, they are clean.
+- **Screenshots:** under `scratchpad/agent-presence/`:
+  - `r11-inflight-{1-before,2-undo-pressed-while-deleting,3-restored}-1440`;
+  - `r11-palette-{1-focus-on-item,2-closed-on-escape}-1440`;
+  - `r11-replay-{three,four,agents-three,agents-four}-{still-setting-up,saved}-{1440,1280}`;
+  - `r11-the-agents-{heading,left-line,run-without}-{1440,1280}`;
+  - `r11-topaz-rows-{1440,1280}`;
+  - `r11-modal-<name>-1440` for every modal, and `r11-modal-CommonsPrompt-{focused,unfocused}-1440` plus `unfocused-1280`.
+
+### Open items (round 11)
+
+- **For GM:**
+  - Three lines still read "nodes agents", not "the agents": the skip line ("Skipped 3 nodes agents are still setting up."), the included line ("Includes 3 nodes agents …") and the backend's refusal ("…2 paid nodes agents are still setting up…"). r11 ruled only the heading and the left line.
+  - Meshy's Mesh Type ("Smart Topology (Meshy T2)"): is it a model setting to name?
+  - A changed node with no row (a free one) is named after the rowed names. Is that the right place?
+- **The held undo for uploads and drops:** their node arrives only with the echo sync. If the HTTP answer lands before the echo, a held undo finds nothing to undo, and the step ends as a no-op. Not seen live.
+  - *Corrected in round 12 (review 11, L-2):* this understated it. The press was not a no-op: the undo was lost, a stray redo stayed, and Redo then deleted the upload on the canvas and in Nebula's graph (probe H7). Round 12 fixes it: such a step settles only once both its answer and its echo are in.
+- **The UnsavedEditsNotice sweep** used a stand-in reason line (no real project state).
+- **From round 10, unchanged:**
+  - the run pill names Topaz-on-Krea by its model option;
+  - the selection toolbar's action slot passes keys to React Flow.
+- **Known gaps, unchanged** (item 7 follow-up, for the PR body):
+  - the tab that hasn't heard of an agent's placeholder, with "Ask before costly runs" on, shows the browser confirm and then Nebula's dialog;
+  - free-placeholder runs still use the browser's costly-run confirm;
+  - the browser confirm shows whole dollars from $10.
+
+### Gates (round 11)
+
+- Backend full suite: 11,034 passed, 71 skipped, 1 failed (19 min 10 s), run beside the vitest suite and the live checks. The failure was `test_acp_session.py::test_opening_a_gemini_agent_never_blocks_the_event_loop`, a timing test; it passes alone. The backend is untouched this round.
+- Vitest full suite, run beside the review probes: 486 files and 6,101 tests. 444 files passed and 42 failed (105 tests, 93 of them "Test timed out").
+  - The 42 rerun one file at a time (`--no-file-parallelism`): 42 files, 629 tests passed.
+- errorCopy ratchets: 14 files, 173 tests passed.
+- tsc: clean.
+- Lint: clean (the inline-style and Slava-scope guards passed).
+- Build budget: 392,261 bytes raw / 118,126 gzip (limit 512,000).
+- INSTRUCTIONS: 2,233 characters (2,957 with the Commons guide), unchanged.
+
+## Round 12: review 11 and GM - Design's round-12 rulings (2026-10-26)
+
+Branch feat/agent-presence, base main (head 942a375c before this round).
+
+### What changed and why
+
+- **M-1, a held Cmd+Z is bound to its step.** Round 11's hold replayed a held press against whatever was on top when the step settled, so an agent's or the person's newer edit could be undone instead (H2 upload, H8 model configure, H9 accept, live S1 clear). Now each held press records its target (`graphStore.ts` `PressTarget`, ~3145): the undo entry it was pressed for, or the inverse of an earlier held press (`{ inverseOf }`).
+  - On settle (`runHeldPresses`, ~3275), a press applies only to its own step or to a delete's re-pushed successor of that step (`stepSuccessors`, recorded in `applyCanvasNodeChanges` ~2049).
+  - If a newer step is on top, every held press is dropped and GM's notice shows: "Nothing was undone. Your last change was still saving." (`lib/deleteNotice.ts` `DROPPED_UNDO_TEXT`).
+  - A step that was cancelled or refused drops its press silently: the failure notice already says what happened.
+- **M-1 root cause, a clear covers only the ids it sent.** `clearGraph` (~7017) and `clearBackendNodes` (~7052) remove only nodes that the step's snapshot holds and that did not arrive while it was in flight (`clearedBy`, `arrivedSince` filled by `noteSyncArrivals` in both graphSync branches). A node an agent added mid-clear stays. A clear whose step is already on the stack folds into it instead of pushing a second step. Chat `/clear` uses the same path (L-6).
+- **L-2, a step whose change arrives by echo.** Chat upload (`ChatPanel.tsx` ~846-921) and file drop (`canvasFileDrop.ts` ~203-215) pass the node id from the answer: `endUndoStep(step, { arrives })`. The step settles only once that node is on the canvas (`awaitArrival`, ~3195), and the line ~1021 note above is corrected.
+- **L-3, the 15 s limit drops, never applies late.** At the limit the held presses go with the notice. A later answer is a normal sync: no stray redo, canvas and Nebula's graph agree.
+- **L-4, a project switch.** `loadGraph`, `loadProjectGraph` and a graphReplaced sync call `forgetStepsInFlight` (~3238): the old project's presses are dropped with the notice, and its steps no longer hold anything, so a press in the new project never waits.
+- **L-5, an accept that was undone runs nothing.** `canvasProposalsStore.ts` ~225: if any of the run's nodes is gone from the canvas after the accept settles, the approval is released and no run is sent.
+- **Proposal accept, no empty step.** `adoptAcceptedProposal` (~6428) adds no step when nothing changed and folds into the accept's step when it is on the stack (H9: no no-op step, no stray redo).
+- **L-1, L-7, docs.** "Model: default … Krea picks it" was wrong (Krea requires Topaz Standard's model) and is gone from `docs/MCP-SETUP.md`. `skills/nebula/SKILL.md` lists Topaz video's Enhancement model and Frame interpolation model.
+- **The palette.** "Ask the agent…" closed the palette, so agent mode was unreachable. `agent:ask` now has `keepsOpen` (`lib/commandPalette.ts` 61; `CommandPalette.tsx` 210). Escape and Enter are ignored while composing (`isComposing` or keyCode 229, `composing()` at 27). Focus follows the mode.
+- **GM r12, rows wrap only at " · " (bug r11-topaz-rows).** `PlaceholderRunDialog.tsx` `RowSegments` (83) renders each row as whole segments (`rowSegments` in `placeholderRunConfirm.ts` 310). Each segment is an inline-block that keeps its trailing " ·", and the lead holds the dot and the name. `styles/placeholder-run-dialog.css` 77-90: segments get `text-indent: 0`, and a dotted row's lead keeps the 16px hanging indent. Every row kind (dotted and muted) and every node kind.
+- **GM r12 item 1, "the agents".** The skip line, the included line (`pendingNodes.ts` 70) and the backend's paid-placeholder refusal (`main.py` 8816, `services/pending_nodes.py` 228).
+- **GM r12 item 2, Meshy.** "Mesh type: Smart Topology (Meshy T2)" for Meshy text- and image-to-3D, named at its default too (`placeholderRunConfirm.ts` 169-170), so a switch re-asks.
+- **GM r12 item 3.** A changed free node stays named in the replay sentence, after the names with rows (already so; a test now holds it).
+- **Addendum (a).** The dropped-undo notice is GM's sentence for all three cases (newer step on top, the 15 s limit, a project switch). No button.
+- **Addendum (b), a model nobody chose.**
+  - Inventory (`backend/services/model_choice.py` `required_model_settings`): Krea definitions whose model-choosing setting is required with no default. These are Topaz Standard's Model and a node app's Version. Every other Krea model setting has a default.
+  - Canvas: a required setting with nothing in it reads "Model: not chosen" ("Version: not chosen") and keeps the rest of the row (`SETTING_NOT_CHOSEN`, 164).
+  - Before any dialog, `refuseUnchosenModel` (`graphStore.ts` ~3907) shows "Nothing ran. Choose a model for “Clean plate” first." and sends nothing. It runs on every run path: a node's Run (Inspector and context menu included) through `confirmDirectRun` (~4046), an accepted proposal's run (~5858), Run selected (~6175), the toolbar's Run (~5777), Creator Studio's cluster (~6266), and replays from Run history (~2712). Cinema shots go through `confirmDirectRun`.
+  - Backend: `engine.unchosen_model_errors` (810) runs first in `validate_graph`, with the node's name (`name_of=_run_names(...)` at every call). A direct run over placeholders is refused before its placeholder confirmation (`_refuse_unchosen_models`, 4818, called at 9099 and 9758).
+  - Agents' `run_nodes` and `nebula run` read "Nothing ran, so nothing was spent. n7 (Clean plate): Choose a model for “Clean plate” first."
+  - Docs: MCP-SETUP.md's "A model nobody chose" bullet; SKILL.md's Run section (with `nebula set`).
+- **INSTRUCTIONS unchanged:** 2,233 characters (2,957 with the Commons guide).
+
+### Every beginUndoStep caller under the bound press
+
+- **Deletes** (Delete key, `deleteSelected`, `deleteNode`, `deleteGeneration`, `deleteCanvasElements`): the press applies to the step or to its re-pushed successor. A newer step on top drops it with the notice.
+- **Toolbar Clear canvas, chat /clear:** fold into their own step and clear only the ids they sent. A newer step on top drops the press with the notice.
+- **Chat upload, file drop:** settle once both the answer and the node's echo are in.
+- **Proposal accept:** the adopt folds into its step, with no empty step. A run is skipped if the accept was undone.
+- **OpenRouter and Replicate configures:** the local set happens at once, with no extra step. A newer step on top drops the press.
+- **A cancelled or refused step:** its press is dropped silently.
+- **The 15 s limit, a project switch:** drop with the notice.
+
+### Decisions and tradeoffs
+
+- **Drop, not redirect.** When a newer step is on top, the press is dropped rather than applied to the older step underneath. Undoing out of stack order would split the canvas from Nebula's graph. The person presses again, and the notice says why.
+- **"Version: not chosen" and "Choose a version for “X” first."** extend GM's Topaz ruling to krea-node-app. GM to confirm.
+- **The backend's card and agent line is "Choose a model for “X” first."** without "Nothing ran.", because run_nodes' frame already opens with "Nothing ran, so nothing was spent." The canvas notice is GM's full sentence.
+- **"Mesh type"** follows GM's casing; the card label is "Mesh Type".
+
+### Tests (each failed first on the current code)
+
+- `tests/heldUndoBound.round12.test.tsx`, 19 tests. 14 failed first, for example:
+  - H2: nodes [n1, n2], without Codex's n7;
+  - H3 and S1: redo 1, not 0;
+  - H6: the value 'NewProjectEdit';
+  - H7: n2 not removed;
+  - H9: undo 3, not 2;
+  - H10: nodes [n1] at 15 s;
+  - H13: only [local];
+  - clear-only-sent: [], not ['later'];
+  - delete echo + agent: undo 3.
+  - H8, H11 and H12 also failed when run on their own: H8 [n1], H11 [n1, n2], H12 redo 1.
+  - H1 and S1 answer-first failed only because `DROPPED_UNDO_TEXT` did not exist yet.
+  - H5 is a control: deletes already re-pushed.
+  - The source check that ChatPanel and canvasFileDrop pass `arrives` failed 3 ways on HEAD's files.
+- `tests/acceptUndoneNoRun.round12.test.ts` (H14 + control): HEAD sent 1 execute request.
+- `tests/commandPaletteAgentMode.round12.test.tsx`: 8 of 8 failed first.
+- `tests/lib/placeholderRunConfirm.round12.test.ts`: 10 failed first. Rows read 'Model: default'; the node app's Version was null; `modelNotChosenText` and `rowSegments` did not exist; Meshy's setting was null; the lines said "agents are". Item 3 and the chosen-model case passed as controls.
+- `tests/PlaceholderRunDialog.round12.test.tsx`: no segments existed (the length check guards against a vacuous pass).
+- `tests/graphStore.modelNotChosen.round12.test.ts`: 7 failed on HEAD's store; the control passed.
+- `backend/tests/test_model_not_chosen_round12.py`, 20 tests: 12 failed first. The runs got 'finished' or 'started' instead of validation_error, a direct run over a placeholder got 409 instead of the refusal, and the lines were worded wrong. The agent, whole-canvas and chosen-model runs use the real `validate_graph` (the `pend` fixture stubs it).
+- Updated:
+  - `Canvas.fileDrop.test` (arrives);
+  - `ProposalBar.test` and `canvasProposalsStore.test` (their adopt mock now puts the run's nodes on the canvas);
+  - `pendingNodes.test`, `runScope.placeholders.test`, `test_pending_nodes_round4.py`, `test_pending_nodes.py` ("the agents");
+  - `placeholderRunConfirm.round11.test` ("Model: not chosen").
+
+### Live check (round 12)
+
+- Isolated backend on 8795 and Vite on 5795, no keys, 8000-8010 and 5173 blocked. 19 of 19 checks passed. 2 attempts were blocked, both canaries; none went toward Justin's ports.
+- **S1, Clear canvas held while Codex adds a node:**
+  - Cmd+Z pressed during the clear was dropped with GM's notice. Canvas and backend were both [n1:Agent node], with redo 0.
+  - Three Cmd+Z presses then walked back Codex's label, Codex's node and the clear. Hero prompt and Second prompt came back on the canvas and in Nebula's graph.
+- **Rows, at 1440 and 1280:**
+  - The Bloom 2 row (Grain model: gaussian), the Meshy row ("Mesh type: Smart Topology (Meshy T2)") and the long-name row each wrap only between segments. Every continuation line starts at the 16px indent.
+  - The long name wraps inside its own segment because it is wider than the row.
+  - Cancel sent nothing.
+- **Model not chosen:** Topaz Standard as Codex's placeholder showed no dialog and GM's refusal, and nothing was sent. An agent's run_nodes read the refusal.
+- **"The agents":**
+  - "Skipped 3 nodes the agents are still setting up." (toast).
+  - "Includes 4 nodes the agents are still setting up" (the selection's Run title; the target counts as downstream).
+  - "Nothing ran. This run includes 2 paid nodes the agents are still setting up, …" (backend 409).
+- **Review 11's live-rv11.mjs on 8795/5795: 11 of 13.**
+  - S1 "brings back the cleared nodes" fails by design: under M-1 the press is dropped with the notice, and the later presses restore everything (above).
+  - S2's computed-style diff is only `--commons-detail-w`, which nothing in the prompt reads (as in round 11).
+  - S3a-e pass: agent mode is reachable, Escape goes back to commands.
+- **Screenshots** in `scratchpad/agent-presence/`: `r12-rows-wrap`, `r12-dropped-undo`, `r12-clear-restored`, `r12-model-not-chosen` and `r12-the-agents-skipped`, each at `-1440` and `-1280`.
+
+### Open items (round 12)
+
+- **For GM:**
+  - "Version: not chosen" and "Choose a version for “X” first." for a node app;
+  - "Mesh type" vs the card's "Mesh Type";
+  - the backend line without "Nothing ran." inside run_nodes' own "Nothing ran" frame.
+- **A cancelled step's held press is dropped silently.**
+- **The Commons prompt doesn't close on Escape when focus has left it** (the live script blurred it). This was the same before ModalPortal; not changed here.
+- **Known gaps, unchanged** (item 7 follow-up, for the PR body):
+  - the tab that hasn't heard of an agent's placeholder, with "Ask before costly runs" on, shows the browser confirm and then Nebula's dialog;
+  - free-placeholder runs still use the browser's costly-run confirm;
+  - the browser confirm shows whole dollars from $10.
+
+### Gates (round 12)
+
+- Backend full suite: 11,047 passed, 71 skipped and 8 failed (19 min 16 s), run beside the vitest suite.
+  - 7 failures were in `test_provider_start_admission.py`. Its `validate_graph` stubs (`lambda *_args`) didn't accept the new `name_of` keyword; they now take `**_kwargs`. That file plus the eighth failure's file, rerun alone: 53 passed.
+  - The eighth was `test_krea_mcp_server.py::test_stdio_bridge_process_connects_to_only_local_discovery_routes`, a timing test under load; it passes alone.
+- Vitest full suite: 492 files and 6,154 tests. 478 files passed and 14 failed (47 tests: 41 "Test timed out", 6 focus or find timeouts under load).
+  - The 14 rerun one file at a time (`--no-file-parallelism`): 214 tests passed.
+- errorCopy ratchets: 14 files, 173 tests passed.
+- tsc: clean.
+- Lint: clean (the inline-style and Slava-scope guards passed).
+- Build budget: 392,767 bytes raw / 118,192 gzip (limit 512,000).
+- INSTRUCTIONS: 2,233 characters (2,957 with the Commons guide), unchanged.
+
+## Round 13: review 12 and GM - Design's round-13 lines (2026-10-26)
+
+Branch feat/agent-presence, base main (head f9c407d1 before this round).
+
+### What changed and why
+
+- **M-1, a held press waits for its own step.** `runHeldPresses` (`graphStore.ts` ~3500): while the press's target is in `stepsInFlight` it waits, whatever settles meanwhile. Once the target has settled, the press applies when the target (or its delete successor, `successorOf`) is on top of its stack, or has only the person's steps still in flight above it. In that second case the undo applies beneath them (`applyHistory(..., target)` ~3575), and each of those snapshots takes in the change (`diffCanvas` + `applySlice`) plus the nodes it brought back as arrivals, so a clear's answer leaves them. A settled newer step on top drops the press: another actor's, or the person's own later step.
+- **M-1, where a delete's step goes when it lands** (`placeDeleteStep` ~3275):
+  - Only in-flight steps above it: it stays. It takes in what arrived while it was in flight (`renewWithArrivals`), and those steps lose the deleted nodes.
+  - Settled steps above it: a successor snapshot replaces it, above them and below the in-flight ones (L-5, no phantom step). The successor keeps the removals.
+  - Every redo snapshot loses the deleted nodes. A step taken clears redo, so all of them were made while the delete was in flight. Redo never brings a deleted node back.
+- **Found in the live check: the echo before the answer.** The backend's own graphSync for a delete can reach the tab before its HTTP answer. That always happens live, unlike the unit tests. The answer then found nothing to remove and left the step under an agent's edit that had landed before the echo, so P16 read "Nothing was undone." Now `noteEchoRemovals` (~3221, called from graphSync for own or unmarked syncs while steps are in flight) records, for each node it took off, the stack's top at that moment and the canvas just before. The answer places the step from that record (`applyCanvasNodeChanges` ~2073), so:
+  - an agent edit that landed before the echo is older than the delete;
+  - one that landed after the echo is newer.
+- **L-1, each press binds to its own step** (`nextPressTarget` ~3465). It replays the held presses against copies of the stacks: each press removes its target and the settled entries above it, keeps the in-flight ones, and pushes `{inverseOf}` on the other stack. This round adds keeping the in-flight steps above, so delete, Cmd+Z, delete, Cmd+Z undoes both deletes (H4b). A press with no target goes to nothing quietly.
+- **L-1, the notice follows what happened** (`announceDrop` ~3410):
+  - nothing applied: GM's "Nothing was undone. Your last change was still saving.";
+  - some applied: the restore's own line, then "1 undo was skipped while a change was saving." ("2 undos were …"), with Redo kept;
+  - a restore line still waiting for its backend answer takes the sentence when it shows (`ownLinesWaiting`/`skippedAfter`, `sendRestore`);
+  - a line already showing has it appended (`skippedShown`);
+  - with no line of its own, the sentence shows alone with Redo.
+- **L-2:** `loadGraph`, `loadProjectGraph` and a graphReplaced graphSync collect the drop first (`forgetStepsInFlight` returns it) and announce it after the new graph is on the canvas. P5/P5b get the line; P14 gets it as the message beside Codex's notice.
+- **L-3:** `/api/quick` (`main.py` ~15839) refuses an unchosen required field before `_measure_run_inputs` and `_require_spend_approval`: 400 "Nothing ran, so nothing was spent. Choose a width for “Topaz Standard (Krea)” first." The CLI's `_fail` prints it.
+- **L-4, failure lines:**
+  - Chat /clear (`lib/chatCanvasClear.ts`): a 4xx reads "Couldn't clear the canvas. Nothing was removed." because the backend refuses before clearing. A 5xx or no answer reads only "Couldn't clear the canvas." because it clears and then saves, so it can be partial. The step is cancelled in every failure case.
+  - OpenRouter and Replicate configure (`graphStore.ts` ~7348, ~7393): "Couldn't load the model settings for “X”." when the provider's settings couldn't be read. The backend marks that with the header `X-Nebula-Failure: model-settings`, exposed through CORS (`main.py` 874, 11501). Any other failure reads "Couldn't set up “X”." The node's params stay untouched and the step is cancelled.
+- **L-5:** the successor replaces the original in place (above).
+- **L-6:** `docs/MCP-SETUP.md` held-undo paragraph rewritten (waits for its own step; earlier delete and later in-flight steps are no newer edit; the mixed line; the dropped line on a project switch or an agent load).
+- **L-7, required fields:**
+  - `model_choice.required_fields()`: a Krea param counts when it is required, has no default, isn't hidden and has no input port of the same id. The list is in card order.
+  - `unchosen_field` names the first unset field. GM: name only the first.
+  - The canvas never fills a value in: `buildDefaultParams` stores null, and the Inspector shows "Choose…". Without a value the gateway refuses after the dialog. No silent default was added.
+  - The refusal now covers 23 definitions, on every frontend run path (`placeholderRunConfirm.ts` `requiredFields`) and the backend (`validate_graph`, `/api/execute-node`, `/api/quick`). The line is GM's "Nothing ran. Choose an aspect ratio for “X” first.", with "an" before a vowel.
+
+### Held presses, scenario → outcome → notice
+
+| Scenario | Outcome | Notice |
+|---|---|---|
+| P1 two deletes, one Cmd+Z, answers in order (or reversed) | second delete undone; next Cmd+Z restores the first | "Restored the node." |
+| P2 delete in flight, then an upload, Cmd+Z (for the upload), the delete answers first | the press waits and undoes the upload (the earlier delete is no newer edit) | "Deleted the node." |
+| P3 Cmd+Z then Cmd+Shift+Z while held | undone, then redone | "Deleted the node." |
+| P4/P4b upload + delete in flight, Cmd+Z ×2, either answer first | each press undoes its own step | own lines |
+| P5/P5b own project switch or loadGraph while held | dropped | "Nothing was undone. Your last change was still saving." |
+| P6 clear / P12 delete: own echo, then an agent edit, then the answer | dropped (the agent's edit is newer than the change); the next presses undo Codex, then the clear or delete | the dropped line beside "Codex changed the canvas" |
+| P8 two clears in flight, one Cmd+Z | undoes the second clear (nothing to bring back); the next Cmd+Z restores 2 nodes | no line, then "Restored 2 nodes." |
+| P9/H10/H11 no answer in 15 s | dropped; the late answer is an ordinary step | the dropped line |
+| P10 configure cancelled | that press goes to nothing quietly; the next press undoes the step below | the configure's own failure line |
+| P11/H5 the person types after Cmd+Z, then the answer | delete undone; the typing stays | "Restored the node." |
+| P13 own echo, then the answer | undone | "Restored the node." |
+| P14/P14b agent loads a graph into the project | dropped | the dropped line beside the agent's notice |
+| P15/P16 delete + an earlier edit, Cmd+Z ×2, agent edit lands before the delete's change | delete undone, edit press skipped | "Restored the node. 1 undo was skipped while a change was saving." + Redo |
+| P16 the echo after Codex's node (live order) | the same | the same |
+| 3 presses, 2 skipped | the first applied | "… 2 undos were skipped while a change was saving." |
+| H1 agent edit before the answer | delete undone (successor above Codex's step) | "Restored the node." |
+| H4 delete, Cmd+Z, delete again before the first answer | first delete undone beneath the second; redo never brings the second's node back | "Deleted the node." (the second delete's answer is the newer event) |
+| H4b the same + a second Cmd+Z | both deletes undone | "Restored the node." |
+| H12 refused delete | that press goes to nothing | "Couldn't delete the node. It is running." |
+
+### Backend run entry points
+
+- **Execute:**
+  - `POST /api/execute` (`validate_graph`);
+  - `/api/execute-node` (`_refuse_unchosen_models` + `validate_graph`);
+  - `/api/cinema/generate-shot` (the same; its base models are allowlisted and none is Krea);
+  - `/api/graph/run` (`run_nodes`, `nebula run`; `validate_graph`);
+  - `/api/quick` (`nebula quick`; refused now).
+- Batch and cinema handlers run inside `execute_graph`.
+- **Not executing:** `/api/cinema/promote-shot-variation` and `/api/cinema/send-to-motion`.
+
+### Krea required fields with no default (23)
+
+- **Width, height:** Magnific Creative and Precise; Topaz Bloom, Bloom 2, Generative and Wonder 3.5; FLUX 1.1 Pro; Seedream 4, 5 Lite and 5 Pro; Wan 2.1 and 2.2.
+- **Width, height, model:** Topaz Standard.
+- **Aspect ratio, resolution:** Krea 2 Large, Medium and Medium Turbo; GPT Image 2.5 Flare and Sunburst; Recraft V4.1 Flash; Grok Imagine 2; Z-Image.
+- **Version:** node app. **Name:** style training.
+
+### Tests (each failed first on the current code)
+
+- `tests/heldUndo.round13.test.tsx`, 31 tests:
+  - 24 written before the code: 22 failed first, for example P1 [n3] vs [n2, n3]; P5, P14 and P14b with no notice; P11 and H1 with a phantom step (undo 2); P15 and P16 reading "Nothing was undone".
+  - H4, H4 redo, H4b and H4c: all four failed with the apply-beneath fix taken out. The H4 redo test also fails without the redo strip.
+  - P16 echo first: fails with `noteEchoRemovals` taken out.
+  - The echo-first P1/H4 variant passes.
+- `tests/failureLines.round13.test.ts`: every case failed first (the lines didn't exist).
+- `tests/requiredFields.round13.test.ts`: the inventory had 2 of 23 entries, and the run paths ran.
+- `backend/tests/test_required_fields_round13.py`: 15 of 24 failed first (unchosen_field None or "model", "a aspect", run statuses started/409/200, no header); 9 controls passed.
+- Updated:
+  - Round-12 Topaz tests now set width and height (the card order names width first);
+  - `undoStepEnds.round11` inventory adds `lib/chatCanvasClear.ts`.
+
+### Live check (8795/5795, isolated, `scratchpad/agent-presence/r13/live/live-r13.mjs`): 15 of 15
+
+- **P1** (keyboard deletes, held answers): one Cmd+Z undid the second delete; canvas and backend held Second and Third; "Restored the node." with Redo. The next Cmd+Z brought First back, with no dead press.
+- **Mixed batch** (an edit, a held delete request, Cmd+Z ×2, Codex adds a node, then the answer): Draft back, the edit kept, "Restored the node. 1 undo was skipped while a change was saving." with Redo. The first two runs held only the response, so the echo came first; they showed "Nothing was undone." That is how the echo-first gap above was found.
+- **chat /clear refused** (a 409 stubbed in the page; nothing was removed): GM's two sentences; canvas and backend unchanged; no step.
+- **OpenRouter and Replicate configure** (real 400: no keys, nothing leaves the machine): GM's line; params untouched; no step.
+- **Krea 2 Medium "Hero" with no aspect ratio:** no dialog, nothing sent, GM's line. An agent's run_nodes got "Choose an aspect ratio for “Hero” first."
+- **Blocked requests:** 2, both the canaries; none toward 8000-8010 or 5173.
+- **Screenshots** `r13-p1-one-undo`, `r13-mixed-batch`, `r13-chat-clear-failed`, `r13-openrouter-settings-failed`, `r13-replicate-settings-failed` and `r13-aspect-ratio-refused`, each at -1440 and -1280. One toast each, leftovers dismissed first.
+
+### Open items (round 13)
+
+- **For GM:**
+  - Typed required fields ("Choose a width / height / name for “X” first."). Style training's handler already says "Fill in “Name”…".
+  - Chat /clear's system line still says "…with an empty canvas." when the clear failed (live screenshot). Suggest dropping that clause on failure.
+- **Port-fed required fields** (prompt, image_url, video_url, image_urls, reference_images, start_image, camera_trajectory) are still refused only at the gateway.
+- **"undos were skipped" counts redo presses too.**
+- **H4's restored line is covered** by the second delete's "Deleted the node." when that answer comes first. That answer is the newer event; the canvas shows n1 back.
+- **A rare case is dropped:** a successor of an older step lands above a settled target whose press waits behind another press.
+
+### Gates (round 13)
+
+- Backend full suite (after the last backend change): 11,079 passed, 71 skipped, 0 failed (14 min 32 s).
+- Vitest full suite: 495 files and 6,216 tests. 482 files passed and 13 failed (29 tests: 23 "Test timed out", 6 focus or find waits under load, run beside the backend suite).
+  - The 13 rerun one file at a time (`--no-file-parallelism`): 229 tests passed.
+- Held-undo files (13 files, round 8 to round 13): 161 tests passed. Review 11/12 probes rerun: hold 8, hold2 5, hold3 18, accept 1, krea 1 (all ran; outcomes in the table above).
+- errorCopy ratchets: 14 files, 173 tests passed.
+- tsc: clean.
+- Lint: clean (the inline-style and Slava-scope guards passed).
+- Build budget: 392,752 bytes raw / 118,194 gzip (limit 512,000).
+- INSTRUCTIONS: 2,233 characters (2,957 with the Commons guide), unchanged.
+
+## Round 14: review 13 and GM - Design's round-14 rulings (2026-10-26)
+
+Branch feat/agent-presence, base main (head f4c6f719 before this round).
+
+### What changed and why
+
+- **M-1, the refusal follows the route** (`backend/services/model_choice.py` `route_fields` ~161 and `unchosen` ~183; `frontend/src/lib/placeholderRunConfirm.ts` `unchosenOnRoute` ~355). A required field with nothing in it is refused only on the route that needs it:
+  - the Krea gateway (an API token, or the plan once signed in) needs every field;
+  - a maker's own API needs only what it sizes by (`directRoute.size`: Seedream on BytePlus needs width and height);
+  - GPT Image 2.5 Flare and Sunburst with an OpenAI key and Grok Imagine 2.0 with an xAI key run with no field set;
+  - a wire into a Krea-only port (Grok's style images) keeps the run on Krea, so its field is named.
+- **Single source of truth.** The route comes from the existing selector (`node_route.select_route` and `directRoute.ts selectRoute`, already pinned to each other by `route_cases.json`, with `with_wired_blockers`). The field-plus-route rule is pinned on both sides by a new shared case list, `backend/tests/fixtures/required_field_cases.json` (25 cases), read by the backend and the frontend tests.
+- **Every run path uses it:**
+  - backend `validate_graph` → `unchosen_model_errors(nodes, edges, api_keys)` (`execution/engine.py` ~810) with `_krea_plan_ready()` (~845); `_refuse_unchosen_models` (`main.py` ~4820) on `/api/execute-node` (~9104) and the Cinema shot (~9763); `/api/quick` (~15848);
+  - canvas `refuseUnchosenModel` (`graphStore.ts` ~4268) reads the loaded settings (keys, edges, plan state) and refuses nothing before the settings have loaded (the backend refuses on the route it knows).
+- **L-6:** with no usable route (no key, the plan not signed in) no field is named; the key or sign-in refusal comes first.
+- **A half-set size** (`_whole_sizes` / `wholeSizes`): a width without a height used to move the run off the direct route (`_size_block`), so Seedream on BytePlus with only a width wasn't refused. The route is now chosen with the half pair dropped, and the missing half is named.
+- **GM item 1:** "Set" for typed values ("Nothing ran. Set a width for “X” first.", height, name), "Choose" for pickers (model, version, aspect ratio, resolution). `field_verb` (~115) / `fieldVerb` (~305): Choose for an enum, a field with options, or a picked one (`node_app_version_id`); Set otherwise.
+- **M-2, echo-first:** the echo is now when a delete lands. `changeCanvasNodes` records the ids each in-flight delete removes (`removedBy`, `deletesInFlight`, ~1930). `placeEchoedDeletes` (~3248, called from graphSync ~4188) places the delete step when its echo takes the nodes off, not when the answer comes. A successor made then stays in flight until the answer (`succeed` ~3352). An undo applied beneath later steps leaves out every node a step above it removed and the canvas doesn't have (`withoutRemovedAbove` ~3717, `applyHistory` ~3661), so a restore body never names a node an in-flight or settled delete removed.
+- **L-1 (Q4):** the person's older delete re-pushed above the target when its answer came late is no newer edit for that press (`jumpedOver`, `staysAbove` ~3510), so the press goes through.
+- **L-2 (Q5):** a clear's step is marked (`beginUndoStep({ clear: true })` ~4743: Toolbar ~178 and chat /clear). A held press with a clear issued after it above its target is dropped with the dropped line (`runHeldPresses` ~3578). The canvas ends empty and the backend agrees.
+- **L-3 (Q6):** a step taken between a delete and its echo is below the delete once the echo places it; Cmd+Z then waits for and undoes the delete. Canvas = backend.
+- **L-4, GM item 3:** undos and redos are counted apart (`skippedPressText`, `deleteNotice.ts` ~53): "1 redo was skipped while a change was saving.", "2 undos and 1 redo were skipped while a change was saving." Undos first; a kind with 0 is left out. Nothing went through: redos only → "Nothing was redone. Your last change was still saving."; undos only or both → the undo line (`announceDrop` ~3458).
+- **L-5:** `X-Nebula-Failure` is set only when the read failed (`model-settings`) or the key is missing (`missing-key`; `main.py` ~11513). `LookupFailure` carries a kind (`universal_ports.py` ~423). A missing key reads "Couldn't set up “X”. Add your {key} in Settings." (`modelKeyMissingText`, `failureLines.ts` ~48); a malformed id reads "Couldn't set up “X”."
+- **L-7, GM item 2:** chat /clear's system line follows the outcome (`chatClearLine` ~26; `ChatPanel.tsx` ~1468): refused → "Session cleared. Next message starts a fresh conversation. The canvas wasn't cleared."; a server error or no answer → "… The canvas may not be fully cleared."
+- **Docs:** `docs/MCP-SETUP.md` (the required-field bullet ~1560: route-aware, Set/Choose, the key line first; the held-undo paragraph ~214: the older delete, the echo as landing, a later clear supersedes, the redo line and the counts) and `skills/nebula/SKILL.md` (~274). MCP tools and CLI unchanged; INSTRUCTIONS unchanged.
+
+### Decisions and tradeoffs
+
+- Seedream on BytePlus is still refused for width and height on the maker's route. That goes past "refuse only on the gateway", but it is true: ModelArk refuses a run with no size.
+- `/api/quick` gets the route-aware field check only. Full `validate_graph` there changed 15 CLI tests (no keys, fake handlers); left to the coordinator.
+- Q6: Cmd+Z after the echo undoes the delete (it landed after the typing), not the typing.
+- The missing-key picker line is composed from the existing key phrase, not a GM line (open item).
+
+### Held presses, round 14 cases → outcome
+
+| Case | Outcome |
+|---|---|
+| R1 / Q1 / Q1b | restore [n2] only |
+| R2 | restore [n2]; canvas = backend [n2] |
+| R3 | restore [remove n3]; canvas = backend [n2] |
+| R4 (H4 echo-first) | restore [n1]; canvas = backend [n1, n3]; the next Cmd+Z restores n2 |
+| R5 (control) | unchanged |
+| Q2 (echo before typing) | dropped |
+| Q2b | n2 back, the typing kept |
+| Q3 (delete, upload, Cmd+Z for the upload) | the press undoes the upload (restore [remove n3]); canvas = backend [n2]; the next Cmd+Z restores n1 |
+| Q4 / Q4b (older delete re-pushed) | the press goes through; restores [remove n3], [n2]; n1 stays gone; no skipped line |
+| Q5 / Q5b (clear after the press) | dropped with the dropped line; canvas = backend = empty; the next presses undo the clear, then the delete |
+| Q6 | the press waits; canvas = backend [n1, n2]; restore [n2] |
+| Q7 | "… 2 undos were skipped while a change was saving." |
+| Q8 | "Restored the node. 1 undo and 1 redo were skipped while a change was saving." |
+| Q9-Q13 (controls) | unchanged |
+
+### Run entry points and direct-route nodes
+
+- **Backend:** `/api/execute` (`validate_graph`); `/api/execute-node` (`_refuse_unchosen_models` + `validate_graph`); `/api/cinema/generate-shot` (the same); `/api/graph/run` (`run_nodes`, `nebula run`); `/api/quick` (`nebula quick`). Batch and cinema handlers run inside `execute_graph`.
+- **Canvas** (`refuseUnchosenModel`): `executeNode` (node Run, Inspector, context menu, an accepted proposal; Cinema shots through `confirmDirectRun`), `executeCluster`, `executeGraph`, `executeClusterConcurrent` (two sites), `rerunHistoryRecord`.
+- **Direct-route nodes among the 23:** GPT Image 2.5 Flare and Sunburst (OpenAI), Grok Imagine 2.0 (xAI), Seedream 4, 5 Lite and 5 Pro (BytePlus). No other route-table node has a required field without a default.
+
+### Tests (each failed first on the current code)
+
+- `frontend/tests/heldUndo.round14.test.tsx`, 24 tests (fake backend applying deletes, syncs, restores and clears in arrival order; every case asserts the restore bodies and canvas = backend): 11 failed first, for example `skippedPressText` not a function, Q8 "2 undos were skipped", R1 restored [n1, n2], R2/R3 canvas [n1, n2], R4 [n1, n2, n3] vs [n1, n3], Q4 one restore, Q5 "Restored the node.", Q6 [n1, n2] vs [n1].
+- `frontend/tests/requiredFields.round14.test.ts`, 56 tests (the shared cases, GM's lines, the Grok wire, every run path with OpenAI, xAI, Krea or no key, the plan, unloaded settings, a replay): 50 failed first.
+- `frontend/tests/failureLines.round14.test.ts`, 13 tests: 5 failed first (no key in the line, `modelKeyMissingText` missing).
+- `frontend/tests/ChatPanel.personal.test.tsx`, 4 new /clear tests (cleared, refused 409, 500, no answer): 2 failed first.
+- `backend/tests/test_route_aware_refusal_round14.py`, 63 tests (the shared cases; the 6 direct-route nodes; Set vs Choose; e2e with a recording transport: Flare, Sunburst and Grok start and reach the maker host, Seedream ×3 refused "Set a width" and run once sized, Krea refusals for all 6, Krea 2 with no key gives only the key line; review 13's B probes; the L-5 header): 50 failed first, 13 passed.
+- Updated: rounds 12/13 backend tests get a Krea token (an autouse fixture), their frontend tests a Krea context and "Set a width"; `graphStore.modelNotChosen.round12` uses `KREA_API_TOKEN`; the `undoStepEnds.round11` inventory takes `beginUndoStep({ clear: true })`.
+- Review 13's probes rerun, adapted (`scratchpad/agent-presence/r14/probes/`): frontend 41 of 41 ran (table above); backend 14 passed (e2e direct routes reach OpenAI/xAI; CORS: missing key → `missing-key`, bad id and missing model → no header; with no keys B4 and B7 show only the key line).
+
+### Live check (8795/5795, isolated, `scratchpad/agent-presence/r14/live/live-r14.mjs`): 22 of 22
+
+- Fake keys only, written into the temp settings file; the backend behind a dead proxy (`HTTPS_PROXY`/`HTTP_PROXY` to 127.0.0.1:9, loopback bypassed); every run request answered in the page (none were made). Nothing left the machine.
+- **H4 echo-first** (keyboard deletes, each echo landing before its held answer): the one restore named First only; canvas = backend = First, Third. The next Cmd+Z brought Second back; canvas = backend = all three.
+- **chat /clear:** refused (409) "… The canvas wasn't cleared."; 500 and no answer "… The canvas may not be fully cleared."; cleared "… with an empty canvas." One line each; canvas = backend each time.
+- **Set a width:** Topaz "Clean plate" on a Krea token: "Nothing ran. Set a width for “Clean plate” first.", no dialog, nothing sent; an agent's run_nodes got the same line.
+- **Direct key:** Codex's GPT Image 2.5 Flare and Grok Imagine 2.0 placeholders with OpenAI and xAI keys: no refusal, the placeholder dialog as usual, Cancel sent nothing. The same Flare on the Krea token only: "Nothing ran. Choose an aspect ratio for “Hero still” first.", no dialog.
+- **Blocked requests:** 2, both the canaries; none toward 8000-8010 or 5173.
+- **Screenshots** `r14-h4-echo-first`, `r14-h4-next-undo`, `r14-chat-clear-{refused,failed,no-answer,cleared}`, `r14-set-width`, `r14-direct-key-{flare,grok,flare-on-krea}`, each at -1440 and -1280. Leftover toasts dismissed before each action.
+- Found on the way: round 13's live helper clicked the bottom-right corner to focus the canvas, which is the chat button; the round-14 helper clicks empty canvas.
+
+### Open items (round 14)
+
+- `modelKeyMissingText` ("Couldn't set up “X”. Add your OpenRouter API key in Settings.") is composed, not GM-ruled.
+- "Couldn't clear the session." has no failure path: the session id is reset locally and a personal agent's close is fire-and-forget, so the line isn't wired.
+- `/api/quick` has no up-front key check (pre-existing); full `validate_graph` there is the coordinator's call.
+- The placeholder dialog names the Krea definitions ("Grok Imagine 2.0 (Krea) · $0.06") when the run goes to the maker on its own key (pre-existing naming).
+- Q1b/R1: D1's late "Deleted the node." covers the restore line (pre-existing).
+- Nous 401 still reads as model-settings.
+
+### Gates (round 14)
+
+- Backend full suite (after the last backend change): 11,140 passed, 71 skipped, 2 failed (20 min 6 s), run beside the vitest suite.
+  - `test_connected_copy_sweep` caught "A wire into" in this round's `docs/MCP-SETUP.md` text; now "A connection into". `test_agent_process::test_terminate_agent_process_tree_kills_setsid_grandchild` is a timing test in code this round didn't touch. Both files rerun: 76 passed.
+- Vitest full suite: 498 files and 6,313 tests. 468 files passed and 30 failed (42 tests: 36 "Test timed out", the rest focus or find waits under load, run beside the backend suite).
+  - The 30 rerun with `--no-file-parallelism`: 372 tests passed.
+- errorCopy ratchets: 14 files, 173 tests passed.
+- tsc: clean.
+- Lint: clean (the inline-style and Slava-scope guards passed).
+- Build budget: 392,757 bytes raw / 118,192 gzip (limit 512,000).
+- INSTRUCTIONS: 2,233 characters (2,957 with the Commons guide), unchanged.
+
+## Round 15: review 14 and GM - Design's round-15 items (2026-10-26)
+
+### What changed
+
+- **M-A, a multi-node delete comes back whole from one undo** (`graphStore.ts`). Before: one delete gesture had one undo step, and each echo re-placed that step on its own. An agent edit or typing between two echoes split it, so the second echo pushed a step that held only the second node, and the restore brought back one node. Now each delete step carries the nodes it removed (`removedBy`), and `keepRemovedNodes` puts them into whichever step the echo re-pushes (with their edges among held nodes). Held or not, edits between echoes, echoes in either order: one Cmd+Z restores every node that gesture deleted and says "Restored 2 nodes.". A DELETE that answers 500 with no echo keeps its node on the canvas, and the undo restores only the others.
+- **M-B, never let the person approve a run that can't go out** (`graphStore.ts`, `placeholderRunConfirm.ts`). The refusal used to be decided on whatever the page knew at that moment. Now:
+  - Before deciding, a run that could be refused (`mayBeRefused`: a model with a required field unset) waits, for at most 4 s (`RUN_INPUTS_WAIT_MS`), for the settings and, when the Krea plan decides the refusal (`planDecidesRefusal`), the plan's sign-in status. If neither can be read in time, it decides on what it has and the backend's refusal still holds, as before.
+  - On yes, `refuseUnchosenModel` runs again on the graph and keys as they are now. A route that changed while the dialog was open (Codex wired Style images, the OpenAI key was removed) refuses with no send.
+  - On Nebula's 409 re-ask, the same check runs after the yes; if the rows changed (`sameRoutes`: node, model and setting), the dialog asks again with the new rows.
+  - Paths covered: Run on a node, Run on the canvas, a cluster (both orders), the approval-id path, and a whole-canvas replay. The backend refusal, spend approval, the 409 order and run admission are unchanged.
+- **L-A:** an echo that empties the canvas goes through `placeEchoedDeletes` too (E2: deleting the last node, typing, the empty echo, Cmd+Z: it comes back as typed).
+- **L-B:** a clear drops only the held presses issued before it. A Cmd+Z pressed after the clear undoes the clear (C3). The dropped presses are counted in the one skipped line.
+- **L-C:** `stripClearedFromLaterSteps` takes the clear's ids out of every step taken while the clear was on its way (and out of redo), so undoing an upload made during a clear never brings a cleared node back (C5, held and not).
+- **L-D:** an undo restore takes off only nodes it put back. When a reconnect sync drops the deleted node and adds an agent node, the undo restores the deleted node and keeps the agent's (X1/X1b). A redo of that undo deletes only the restored node (`deleteTouches` / `redeletes` on the inverse step).
+- **L-E:** if the echo already removed the node, a failed DELETE answer (500) counts as done: no failure line, and the step stays undoable (F1, held and not). A 500 with no echo keeps the node and says so, as before.
+- **L-F / GM item 1:** the picker's key lines, verbatim. `PICKER_KEY_PHRASES` maps `REPLICATE_API_TOKEN` to "Replicate API key": "Couldn't set up “X”. Add your Replicate API key in Settings." (`failureLines.ts`).
+- **L-G:** the openrouter `model_cache` test-order flake. `backend/tests/conftest.py` has an autouse `empty_model_cache` fixture that clears `services.model_cache` before and after each test. Before: `test_pending_nodes*` then `test_*round14*` failed `test_l5_a_missing_key_is_marked_as_one[openrouter…]`. After: the same order, 67 passed.
+- **L-H:** `docs/MCP-SETUP.md` and `skills/nebula/SKILL.md` quote the lines agents get: "Missing API key: KREA_API_TOKEN", "Missing API key: XAI_API_KEY or KREA_API_TOKEN", and the plan line "Connect your Krea account in Settings before running this recipe".
+- **L-I / GM item 3, a confirm row names the route that runs, at that route's price:**
+  - `nameOnRoute` (`directRoute.ts`) swaps a gateway suffix "(Krea)" or "(FAL)" for the route's provider label, the one the running card uses ("Grok Imagine 2.0 (xAI)").
+  - `summarizeRunScope` records each node's route (`summary.routes`, through `selectRoute(withWiredBlockers)`), and the placeholder dialog, the costly-run confirm and the run summary all name it through `runNodeName`. The row's price is that route's, or "price not listed" with the usual footnote. Style images wired keeps the run on Krea, under the Krea name and never the xAI price.
+  - Backend: `cost_for` takes the wired ports and picks the provider with `node_route.select_route`, so a proposal's cost and label agree with the canvas ("paid · xai", $0.06 for Grok on an xAI key). `mcp_server.py`'s propose docstring and `docs/MCP-SETUP.md` say the label names the route.
+- **GM item 2:** "Couldn't clear the session." stays unwired. In `ChatPanel.tsx`, `/clear` resets the session id locally and a personal agent's close is fire-and-forget, so the session clear has no failure path to show.
+- MCP/CLI/docs: `docs/MCP-SETUP.md` (cost wording, the required-field lines, the re-check on yes, held undo: a multi-node delete is one step, a sync makes a delete done, undo puts back only what it removed, a Cmd+Z after a clear undoes the clear, a step during a clear never brings cleared nodes back) and `skills/nebula/SKILL.md` (the key refusal lines).
+
+### Tests written first, and how they failed on c04d1454
+
+- `frontend/tests/heldUndo.round15.test.tsx`, 20 tests (fake backend applying deletes, syncs, restores and clears in arrival order; each asserts the restore bodies, the line and canvas = backend): 18 failed, 2 passed. Examples: M2 restored only [n2]; E2 restored n1 without the typing; C3 sent no restore; C5 restored n1 and removed n2; X1 removed n3; F1 sent no restore and showed a failure line.
+- `frontend/tests/dialogRecheck.round15.test.ts`, 14 tests (D1 to D5 with controls, D1 on four other run paths, the route-change re-ask, the 409 re-ask): 10 failed, 4 passed. The failures: the dialog showed and the run was sent; the row read "(Krea)"; the 409 case asked three times.
+- `frontend/tests/routeLabels.round15.test.ts`, 12 tests: 10 failed (`nameOnRoute` not a function; rows, the costly confirm and the run summary named "(Krea)"). The two-row footnote test ("“GPT Image 2.5 Flare (OpenAI)” has no list price…") was written after the code: the single-row case has no total, so no footnote by design.
+- `frontend/tests/failureLines.round15.test.ts`, 3 tests: the Replicate case failed ("API token"). `failureLines.round14` updated to the ruled phrase.
+- `backend/tests/test_route_labels_round15.py`, 2 tests (`cost_for` and a propose e2e: Grok with xAI and Krea keys gives provider xai, "paid · xai", $0.06): both failed (krea).
+- L-G: the two files in the failing order, 1 failed before the fixture.
+- Review 14's probes rerun against the fix (`scratchpad/agent-presence/r15/probes/`, output redirected): 37 of 37 ran. M2, M3, M5 and M6 restore every node; E2/E3 keep the edits; C3 undoes the clear; C5/C5b keep the cleared node gone; X1/X1b keep n3; F1 restores with no failure line; D3, D4 and D5 send nothing. D1 and D2 still send in the probe because its mocked settings fetch rejects, so the bounded wait falls through by design; the backend refuses those.
+
+### Live check (8795/5795, isolated, `scratchpad/agent-presence/r15/live/live-r15.mjs`): 14 of 14
+
+- The backend had no keys: temp HOME and every `NEBULA_*` root under scratch, with every key, token, `NEBULA_*` and `VITE_*` variable dropped, behind a dead proxy. Keys existed only as a stubbed `GET /api/settings` answer inside the page: the backend's real answer with `apiKeys` swapped for masked stand-ins. Every run request was answered in the page; none was made. Nothing left the machine.
+- **M-A:** three text nodes. I selected First and Second and pressed Backspace; both DELETE answers were held while the backend deleted and the echoes landed. I pressed Cmd+Z while they were held, then released the answers in reverse order. Result: one restore naming both nodes, "Restored 2 nodes." with Redo, no failure line, and canvas = backend = all three.
+- **L-I:** Codex's Grok Imagine 2.0 placeholder "Alt still", with the stub showing an xAI key and a Krea token. The dialog row read "“Alt still” · Grok Imagine 2.0 (xAI) · $0.06" and the button "Run for $0.06". Cancel sent nothing.
+- **M-B:** Codex's GPT Image 2.5 Flare placeholder "Hero still", with no aspect ratio set. With the stub showing an OpenAI key, the dialog row read "“Hero still” · GPT Image 2.5 Flare (OpenAI) · price not listed". While the dialog was open I switched the stub to a Krea token only, then clicked Run. Result: "Nothing ran. Choose an aspect ratio for “Hero still” first.", the dialog closed, and nothing was sent.
+- **Blocked requests:** 2, both the canaries; none toward 8000-8010 or 5173.
+- **Screenshots** `r15-one-undo-two-nodes`, `r15-confirm-row-xai`, `r15-refused-after-yes`, each at -1440 and -1280.
+
+### Open items (round 15)
+
+- A held press made redundant by a later step (its `inverseOf` target superseded) still goes to nothing silently: no skipped line.
+- Delete answers that arrive after a clear has answered are not modelled beyond L-C; no reviewer probe covers that order.
+- The two-row footnote test in `routeLabels.round15` was written after the code (see above).
+- D1/D2 depend on the settings and plan reads succeeding within 4 s; if they can't be read, the dialog asks as before and the backend's refusal is the backstop.
+
+### Gates (round 15)
+
+- Backend full suite: 11,144 passed, 71 skipped (24 min 52 s), run beside the vitest suite.
+- Vitest full suite: 502 files and 6,362 tests. 466 files passed and 36 failed (96 tests: 79 "Test timed out in 5000ms", the rest find or focus waits under load, run beside the backend suite). The 36 rerun alone with `--no-file-parallelism`: 526 tests passed.
+- errorCopy ratchets: 14 files, 173 tests passed.
+- tsc: clean.
+- Lint: clean (the inline-style and Slava-scope guards passed).
+- Build budget: 392,757 bytes raw / 118,209 gzip (limit 512,000).
+
+## Round 16: review 15 and GM - Design's round-16 rulings (2026-10-26)
+
+### What changed
+
+- **M-A follow-up and L-1: an undo takes off only the nodes its own step added** (`graphStore.ts`). Before, an undo restore removed every canvas node its snapshot didn't hold, so a step taken between a delete's echoes (typing, an agent's edit) or a node a reconnect sync brought could be removed by the wrong Cmd+Z. Now:
+  - each step knows what it added. A delete or clear step added nothing (`markDeleteStep`, `stepAdds` = ∅); an undo's inverse added exactly the nodes it put back (`stepAdds` = those ids); an upload or an accepted proposal owns the nodes it brought (`ownArrivals`).
+  - Every other step removes "canvas minus its snapshot minus what arrived after it from elsewhere" (`arrivedAfter`, filled by `noteArrivedElsewhere` from syncs and from other steps' restores; `settleArrivals` resolves a step's in-flight arrivals when it settles).
+  - The replaced pieces: `deleteTouches` / `redeletes`. The reviewer's other idea (carry `keepRemovedNodes` into jumped-over steps) isn't needed under this rule: a jumped-over step never removes a node it didn't add.
+- **L-2: a Cmd+Z never silently does nothing.**
+  - A step that ends up changing nothing (its snapshot equals the canvas, apart from view and run fields: `changesNothing`) is dropped before and after each press (`dropDeadSteps`), so the press goes to the next real step. Example: a delete answering 404 after a clear already took its node.
+  - A held press whose step turned out to change nothing moves to the step below (unless a later press is already bound there); otherwise it counts in the skipped line.
+  - A held press whose step was taken back (a refused delete or clear) counts in the existing skipped line ("1 undo was skipped while a change was saving.").
+  - When a red failure line is showing, the skipped line goes beside it (`messageNotice`), never over it.
+  - A press made on an empty stack stays quiet, as before.
+- **M-B: a run waiting for its inputs counts as starting** (`graphStore.ts`).
+  - While a run waits (at most 4 s) for the settings or the Krea sign-in, a second Run on any entry does nothing: a node's Run, the canvas Run, Run selected, a replay, an accepted proposal's run, Creator's concurrent cluster (when its nodes overlap), and the same Cinema shot.
+  - The new store flag `runStarting` drives the existing disabled state, with no new copy. It is used by the Toolbar Run, Run selected, the context menu's "Run This Node", the held-run notice's Run, Cinema's Generate and the command palette.
+  - An agent's accepted run that arrives during the wait is kept for the person to run, as during a run (`canvasProposalsStore`).
+  - Mechanism: `waitForRunInputs` registers what the waiting run would hold ('canvas', `shot:<node>:<shot>`, or `node:<id>`) around `knowRunInputs`.
+  - Spend approval, the 409 order and run admission are otherwise unchanged.
+- **L-3:** a Krea sign-in that is still "connecting" counts as unknown (`kreaSignInUnknown`). The run reads it again every 500 ms within the same 4 s, then decides. If it never settles, the run asks as before and the backend refuses.
+- **L-4:** when the 409 re-ask asks again after a route change, it prices at the 409's own estimate (`refusal.estimate`, was `null`). The yes it sends then carries Nebula's amount and can't earn a third 409.
+- **GM (a), the re-ask line, verbatim.**
+  - `changedNodesLine` names the nodes whose route or price moved, in row order: "“Hero still” changed while this was open." for one; "“A” and “B” …" or "“A”, “B” and “C” …" for two or three; "4 nodes changed while this was open." for four or more.
+  - The line is the first line of the body, in place of the round-5 line, and the heading is kept.
+  - Run ignores clicks for its first 500 ms, and focus stays on Cancel.
+  - It shows on both re-asks: the canvas's own re-ask after a yes, and the 409 re-ask.
+- **GM (b), "via":** when the dialog builds the label, it reads "Grok Imagine 2.0 via xAI" or "GPT Image 2.5 Flare via OpenAI". Rows on Krea's gateway keep the card's name, "Grok Imagine 2.0 (Krea)". The backend matches:
+  - `node_route.name_on_route` mirrors `directRoute.nameOnRoute`;
+  - `canvas_proposals.cost_for` labels a maker-key run "paid · Grok Imagine 2.0 via xAI" and a gateway run "paid · krea".
+- **Cursor bubble (GM's chip fallback), verbatim** (`main.update_graph_node`, `_card_label`, `_set_words`).
+  - A params change names the card's labels in curly quotes, in the card's order: "Set “Aspect ratio”", "Set “Aspect ratio” and “Resolution”", "Set 3 settings".
+  - A field with no card label (hidden, or no label) is left out of the list and the count. With none labelled the bubble has no words, and the cursor still moves.
+  - The Agent log keeps the change: the presence event carries `log` when it differs from the bubble, and `agentLogStore` uses it ("Set “Aspect ratio” and seed_mode", "Set seed_mode").
+- MCP/CLI/docs:
+  - `docs/MCP-SETUP.md`: the cost wording and confirm rows in the "via" form, the re-ask line, the cursor and Agent log rule, and the held-undo rules (an undo takes off only what its step added; no silent Cmd+Z).
+  - `backend/mcp_server.py`: the `propose_change` docstring now has the "via" label.
+  - `skills/nebula/SKILL.md` quotes none of these lines, so it is unchanged.
+
+### Decisions not in the spec
+
+- **The Agent log's words for a mix of labels and keys:** "Set “Aspect ratio” and seed_mode" (labels in quotes, keys bare, card order, up to 4 names then "and N more"). GM gave the rule ("uses the param key"), not the exact wording.
+- **The re-ask line only on a re-ask.** When the open dialog updates in place (its own watch), it keeps the round-6 line "This run changed since you last reviewed it.", which GM ruled verbatim in round 6. I tried naming the moved nodes there too; two round-6 tests failed, so I took it back and list it below for GM.
+- **A held press whose step changed nothing** goes to the step below (r13 P8: a second clear while the first was on its way now undoes the first clear), or counts as skipped if a later press already holds that step.
+- **Creator's concurrent cluster** waits on its own nodes only (it never waited on `isExecuting`), so a canvas run's wait doesn't block it; the canvas run then finds the cluster running after its wait and stops, as before.
+
+### Tests written first, and how they failed (on ef53bc8a)
+
+- `frontend/tests/heldUndo.round16.test.tsx`, 16 tests (a fake backend that applies deletes, syncs, restores and clears in arrival order; each test asserts the restore bodies and canvas = backend). The first 14 all failed. Examples:
+  - P1/P1b: the second restore removed the typed step's node;
+  - X3/X4: the typing's undo removed the agent's n3;
+  - Q1/Q1b: the first Cmd+Z hit a dead delete step;
+  - C7: the refused clear's press said nothing.
+  The last two (r14 C1, r14 D1 control) were written after the code; review 14's C1 probe failed on the old code.
+- `heldUndo.round13`: P8 and P9 were updated to the L-2 behaviour (the press now reaches the real step), with comments.
+- `frontend/tests/runWait.round16.test.ts`, now 14 tests. 8 failed first:
+  - MB1 sent twice (two dialogs);
+  - `runStarting` undefined;
+  - the held agent run timed out;
+  - the Cinema shot asked twice;
+  - MB5 read the sign-in 0 times; its bound had no `runStarting`;
+  - the 409 case asked twice, not three times;
+  - no `movedLine`.
+  Later fixes to the tests:
+  - The 409 case first moved the route by wiring Style images. The 409 re-ask prices the graph the refused run sent, so a wire can't move it; it now moves by the keys. It fails on the old code with "price not listed" instead of $0.06.
+  - The Cinema test first had no refusable node feeding the scene, so it never waited. It now has one: it asks twice without the shot guard and once with it.
+  - Added afterwards: a concurrent-cluster control, which passes without the guard (the second wait always met the first's owner), and the Krea-to-xAI direction of the 409 case.
+- `frontend/tests/runStartingControls.round16.test.tsx`, 2 tests (the Toolbar Run and the held-run notice's Run are disabled while starting). Both fail with the component change taken out.
+- `frontend/tests/PlaceholderRunDialog.round16.test.tsx`, 7 tests: `changedNodesLine` (1, 2, 3 and 4+ nodes, a price-only move, nothing moved), plus the dialog's top line, the 500 ms guard and focus on Cancel. They were written before the helper and the `movedLine` prop existed. The first run's output wasn't kept.
+- `frontend/tests/agentLogSetWords.round16.test.ts`, 3 tests: 2 failed (the log used `say`).
+- `backend/tests/test_round16_labels.py`, 12 tests: 11 failed:
+  - `name_on_route` was missing;
+  - `cost_for` said "paid · xai";
+  - the bubble said "Set aspect_ratio";
+  - `_card_label` was missing.
+  `test_route_labels_round15.py`, `test_agent_presence.py` ("Set “Quality”") and `test_connected_copy.py` ("Set “Text”") were updated to the new words. `routeLabels.round15` and `dialogRecheck.round15` were updated to "via"; their verbatim r15 quotes stay, with an r16 note.
+
+### Live check (8795/5795, isolated, `scratchpad/agent-presence/r16/live/live-r16.mjs`): 14 of 14
+
+- Same isolation as round 15:
+  - temp HOME, every `NEBULA_*` root under scratch, and every key, token, `NEBULA_*` and `VITE_*` variable dropped, behind a dead proxy;
+  - keys only as a stubbed `GET /api/settings` answer inside the page;
+  - every run request answered in the page.
+- **GM (a), (b) and L-4:** Codex's Grok Imagine 2.0 placeholder "Alt still", with aspect ratio and resolution set.
+  - With only a Krea token, the first confirm's row read "“Alt still” · Grok Imagine 2.0 (Krea) · price not listed".
+  - Run sent once. The page answered Nebula's 409 with a $0.06 estimate, and the canvas asked again ("This run changed since you last reviewed it.", "Run for $0.06").
+  - While that was open, an xAI key appeared (stub). Its yes asked once more:
+    - the first body line: "“Alt still” changed while this was open.";
+    - the row: "“Alt still” · Grok Imagine 2.0 via xAI · $0.06".
+  - A click as it appeared did nothing, and focus was on Cancel. After Cancel, only the one refused send had gone out.
+- **Cursor bubble:** Codex set Grok's aspect ratio over `PUT /api/graph/node/{id}`. The bubble and the Agent log read "Set “Aspect ratio”", with no raw key. Two fields read "Set “Aspect ratio” and “Resolution”".
+  - The log's "name" and "hero" rows are the script's own edit-batch notes (`note: 'name'`), not param keys.
+- **Blocked requests:** 2, both the canaries; none toward 8000-8010 or 5173.
+- **Screenshots** `r16-reask-via-xai` and `r16-cursor-set-aspect-ratio`, each at -1440 and -1280. The optional delete-and-type undo sequence was left to the unit tests (P1, P1b, P7) and not run live.
+
+### Open items (round 16)
+
+- **For GM:** should the open dialog's in-place update name the moved nodes too ("“X” changed while this was open.")? It now keeps round 6's "This run changed since you last reviewed it." for in-place updates.
+- **For GM:** the Agent log wording for mixed labels and keys (above).
+- `skills/nebula/SKILL.md` has no passage on proposal cost labels or cursor words. If agents should know the "via" label or the bubble rule, a line could go there.
+
+### Gates (round 16)
+
+- Backend full suite: 11,156 passed and 71 skipped (13 min 54 s).
+- Vitest full suite: 504 files and 6,376 tests. 488 files passed and 16 failed (45 tests: 38 "Test timed out in 5000ms", worker start timeouts, and focus or find waits under load). Three files never started a worker.
+  - Those 19 files rerun alone with `--no-file-parallelism`: 266 tests passed.
+- errorCopy ratchets: 14 files and 173 tests passed.
+- tsc: clean.
+- Lint: clean (the inline-style and Slava-scope guards passed).
+- Build budget: 392,924 bytes raw / 118,309 gzip (limit 512,000).
+
+## Round 17: review 16 and GM - Design's round-17 rulings (2026-10-26)
+
+### What changed
+
+- **H1: a node an undo puts back stays its adding step's** (`graphStore.ts`). Round 16 marked every node an undo put back as "arrived from elsewhere" for every step, so the paste, duplicate, connect or upload that made it lost it and was dropped as dead. Following the coordinator's decision, "elsewhere" is now relative to time:
+  - A step's additions are fixed once its change is complete (`fixAdds`, run by the store listener `fixAddsBelowNewSteps` when a newer step lands above it). A step whose request was on its way fixes them when it settles: exactly what its answer named (`ownArrivals`).
+  - A node an undo or redo puts back counts as arrived elsewhere only for the steps above the undone one and the steps its re-pushed delete jumped over. An older step is never told.
+- **M1: every path that adds nodes is its own undo step.** Each takes `beginUndoStep()` before its request and ends it with `endUndoStep(step, { arrives: [ids] })` in a `finally`, or `cancelUndoStep` when nothing was made. The paths swept:
+  - `addNode`: the node library, a canvas drop and the command palette;
+  - `addNodeAndConnect`;
+  - `addDynamicNode` (its step follows the node's renumbered id);
+  - `addCharacterNode` and `addMoodboardNode` (drops);
+  - `authorGenerationCluster` (Creator's inserts, one step for the cluster).
+  Paste, duplicate, file drops, chat uploads and accepted proposals already had their own steps. An import or template replaces the graph and stays a clear-type step.
+  - When an add-and-connect's answer names the node Nebula made, the step owns it even if the canvas refuses the answer (the origin was deleted meanwhile, or the pair isn't confirmed). Nebula made the node, so its undo must take it off. An answer that is itself invalid (an id the canvas has, another node kind) leaves the outcome uncertain, with no step, as before.
+- **M2: the re-ask prices each row on its own route.** Rows still on the route Nebula refused take the 409's `estimate`. Rows whose route moved since take the canvas's route-aware numbers (`mergeRunEstimates`, `routeKey`, `canvasRunSummary`). An unpriced move shows "price not listed" and sends cost 0; a move onto a priced route shows the canvas's price. `runWait.round16`'s L-4 tests now expect this.
+- **L-1 / GM (1): the in-place dialog line names the nodes that moved**, as their rows read now.
+  - The dialog tracks which rows' route or price moved since it opened (`movedRowIds`; a node that moves back still counts) and shows `movedNodesLine` with GM's wording, in place of round 6's line.
+  - A node joining or leaving adds no changed line; the left line covers it.
+  - The live region announces each change. The 500 ms guard holds whenever Run's price changes in place.
+  - A re-ask passes its moved ids in (`moved`), and nodes that move in place join them.
+- **GM (2): the Agent log's words for mixed fields** (`main._set_words`). Labelled fields come first in card order, then raw keys, with no serial comma. At most four names, then "and N more". The cursor bubble is unchanged.
+  - The log time never wraps: `white-space: nowrap`, and the Slava grid's time column is `max-content`. Checked at 1280 and 1440.
+- **L-2: accepted runs deferred during a run or wait queue in order** (`canvasProposalsStore.deferredQueue`). None is dropped, and each runs once. A graph replacement releases every held approval.
+- **L-3, investigated: the value isn't lost.** Nebula has the write. A sync it sent before the PUT's answer reached the tab after it and showed the old value, so the typing's step changed nothing and was dropped; the echo then brought the value back with no step.
+  - Now a write Nebula took is kept until a sync shows it (`sent`, `noteParamEcho`), for up to `PARAM_ECHO_WAIT_MS` (5 s), so the step survives.
+  - An undo that sets the param meanwhile updates what is awaited (`noteRestoredParams`, A11b).
+- **New this round, found by the property test: the person's writes reach Nebula in the order made** (`graphMutationFetch`). Before, an undo's restore queued behind a slow one while the person's next write (typing, a delete, an added node) went out at once. The write could then reach a node the queued restore hadn't put back yet (a 404), be overwritten by the restore, or have its echo take the undo back off the canvas.
+  - Now, while any restore is queued (`restoresPending`), every other graph write waits for `restoreQueue`.
+  - This replaced a narrower fix from earlier in the round, which dropped from a queued restore any node deleted after it was queued (`deletedAt`). That fix could make a later delete of a re-created node miss.
+  - The waiting write counts as a graph mutation, so a project switch still waits for it.
+  - Tradeoff: a restore that never answers holds the person's later writes too (undo and redo already waited the same way). With the local backend this is milliseconds. A delete's line now comes after the restore it waited for (`lateRestoreCount` updated).
+- **Also found by the property test: a waiting undo's nodes hold on the canvas** (`holdNode`, `heldNodes`, the node counterpart of `holdWire`/`heldWires`). An echo Nebula sent before a queued restore reached it still shows the nodes that restore puts back or takes off as they were. Before, that echo undid the undo on the canvas, and a step taken in that moment kept the node (seed 266: a node no undo took off).
+  - Now, until every restore naming a node has answered, a sync leaves that node as this tab has it: off, or there with this tab's copy (params included). The wires on a node held off stay off too.
+  - Unlike a wire, the hold ends at the answer and doesn't wait for a sync that agrees. Nebula sends the restore's own echo, and every older one, before answering.
+  - Two earlier versions failed:
+    - The wire rule (hold until a sync agrees, or one more sync) left holds behind when a restore was answered with no echo, as in earlier rounds' test harnesses, and those held the next test's syncs.
+    - Counting "the node is there" as agreement let an older echo's params through (seed 914, P-11).
+  - A graph replacement clears the holds.
+- **Also found by the property test: deleting a node again while its delete is on its way does nothing for that node** (`changeCanvasNodes`). The node stays on the canvas until Nebula answers its delete, so the person could delete it again. This is pre-existing: it fails on the store from before this round's fixes.
+  - Two steps then claimed the same delete. Undoing either brought the node back, and the other's Cmd+Z did nothing, without a word (seed 320).
+  - Now the second press leaves the node to the delete on its way.
+- MCP/docs:
+  - `docs/MCP-SETUP.md`: the Agent log wording; the in-place dialog line; re-ask pricing on moved routes; an undo always takes off what its step added (the add paths are each a step); writes after a waiting undo reach Nebula after it.
+  - `skills/nebula/SKILL.md` quotes none of these, so it is unchanged.
+
+### Property test (`tests/heldUndo.property.round17.test.tsx`)
+
+- Each seed runs a random sequence over a fake Nebula that applies every request (`tests/helpers/undoFakeBackend.ts`), with echoes and answers held, released or reordered at random. The operations are:
+  - add from the library, add and connect, paste, duplicate, upload;
+  - delete, type, undo, redo.
+- Invariant: undoing to the start restores the start, canvas = Nebula, and no Cmd+Z is silent while the stack has steps.
+- Failures found and fixed (each now a deterministic test in `heldUndo.round17`, written failing first):
+  - Seeds 5, 11, 20, 40, 52, 55, 77, 88, 91, 107 and 118 (P-1): the add-and-connect step was taken only on success, so a node made from an origin deleted before the answer was left with no step.
+  - A leaked pending attempt refused the next add ("Another node-create request…") (P-2).
+  - Seeds 16 and 118 (P-2, P-2b): a silent Cmd+Z. `endUndoStep` waited for a node that had come and been deleted.
+  - Seed 50 (P-3): a delete step placed beneath an in-flight add took in its node (`stripOwnArrivalsBelow`).
+  - Seed 16, upload (P-5, sized and unsized cards): a dead step was dropped while a step above held its node (`handAddsUp`, plus the strip in `applyHistory`).
+  - Seed 31 (P-4): a restore waiting behind a delete brought back a node deleted after the undo.
+  - Seeds 147, 1624 and 1728 (P-6, P-7, P-8): out-of-order writes, above.
+  - Seeds 266, 315 and 355 (P-9): an echo from before a waiting undo brought back the node that undo took off. These seeds fail on the store from before ordering too.
+  - Seed 320 (P-10): a second delete of a node whose delete was on its way.
+  - Seed 914 (P-11): an older echo's param overwrote a waiting undo's value on the canvas. It fails on the old store too.
+  - Seed 492 failed once, in a block whose other chunk timed out under load. It passes alone and in its block after these fixes.
+- The property test's per-chunk limit went from 120 s to 300 s. A 30-seed chunk takes about 3 s alone, but when three streams ran beside the live check and pytest, one chunk passed 120 s, and the chunks after it in that process failed with it.
+- Test-clock fix: fake `Date` restarted at real time in each test, so it ran backwards across tests. `maybePushUndo` (`now - lastUndoPush < 500`) then merged a new test's typing into the last one's. Both round-17 files now move the clock forward per test or block.
+- **Final run, on the final store: 3,000 seeds (1-3000, blocks of 250, two serial streams). 2,993 pass. The 7 that fail (637, 1000, 1259, 2220, 2276, 2563, 2572) are all the one class left open below:** the person types into, or undoes typing on, a node whose delete is still on its way. Each one's log shows "delete nX" followed by typing on nX while that delete waits.
+- Earlier runs on intermediate stores found the fixed classes above. Seeds 147, 266, 315, 320, 355, 492, 914, 1624 and 1728 now pass.
+
+### Tests written first, and how they failed
+
+- `heldUndo.round17.test.tsx`, 32 tests. The first 16 all failed:
+  - A2, A3 and A10 kept the pasted or duplicated node;
+  - A4 and U1 sent no restore;
+  - A1 and A1b: the library add had no step;
+  - the Character, Moodboard and Creator tests: no step;
+  - A11 and A11b: the step was dropped.
+  - P-1 to P-11 each failed before their fix. P-11 read 'A' instead of 'n1' on both earlier stores. On the pre-ordering store, P-6 kept 'n1' instead of 'C', P-7's second restore was missing, and P-8 kept 'n3'. P-9 showed n3 back on the canvas after the stale echo. P-10's second Cmd+Z changed nothing, on both stores.
+- `PlaceholderRunDialog.round17.test.tsx`, 11 tests. 9 failed first. The 500 ms in-place guard and the round-5 re-ask line already passed. Round 6, 9 and 16 dialog tests were updated to GM's ruling.
+- `runWait.round16.test.ts` (M2): on the old store, xAI to Krea read '$0.07' instead of 'price not listed', and Krea to xAI read 'price not listed' instead of '$0.06'. A new control (an unmoved row keeps $0.07) passes on both.
+- `mergeRunEstimates.round17.test.ts`, 5 tests (the helper didn't exist).
+- `backend/tests/test_round17_log_words.py`, 7 tests. 5 failed first.
+- `agentLogTimeCss.round17.test.ts`, 2 tests. Both failed first.
+- `deferredRunQueue.round17.test.ts`, 4 tests. All failed first.
+- Updated to M1:
+  - `store/graphStore.connectedStep.test.ts`: four cases expected no step when Nebula's answer names a new node the canvas refused. Now the step owns n3.
+  - `undoStepEnds.round11`: the attempt cleanup moved into `settleConnectedAttempt` so the `finally` ends the step.
+- Updated to the ordering:
+  - `heldUndo.round17` P-4 now expects the later delete to reach Nebula after the restore, with restore bodies `[n2=n2]`, then DELETE n2, and its undo.
+  - `lateRestoreCount`'s quick-delete case now expects the delete's line after the restore answers.
+
+### Live check (8795/5795, isolated, `scratchpad/agent-presence/r17/live/live-r17.mjs`): 22 of 22, rerun on the final code
+
+- Same isolation as round 16:
+  - temp HOME, every `NEBULA_*` root under scratch, and every key, token, `NEBULA_*` and `VITE_*` variable dropped, behind a dead proxy;
+  - keys only as a stubbed `GET /api/settings` answer inside the page;
+  - every run request answered in the page, so no paid call.
+- **GM (1):** Codex's Grok placeholder "Alt still". The dialog opened on the Krea row ("price not listed"). The page's settings stub then gained an xAI key, and in place the row read "“Alt still” · Grok Imagine 2.0 via xAI · $0.06" with "“Alt still” changed while this was open." above it. The live region said the same line, a click right after the change did nothing, and Cancel sent no run.
+- **L-1 three strings:** an unnamed Grok node, read the same way (open item below).
+- **GM (2):** Codex PUTs on a Meshy node.
+  - The Agent log read "Set “Topology”", "Set “AI Model”, “Topology” and symmetry_mode" and "Set “AI Model”, “Remesh”, “Topology”, “Polycount” and 2 more".
+  - Every time is one line (height 17 = line-height) at 1440 and 1280.
+- **H1/M1:** the store's addNode, then Delete, then Cmd+Z twice. Canvas and Nebula ended at the start state.
+- **Blocked requests:** 2, both the canaries; none toward 8000-8010 or 5173.
+
+### Open items (round 17)
+
+- **Not fixed, needs a decision: edits to a node whose delete is on its way** (seed 1000; it fails on the old store too, with a silent Cmd+Z). A node stays visible and editable until Nebula answers its delete, which now can wait behind a slow restore. Typing into it, or undoing that typing, sends writes that reach Nebula after the delete: an undo's restore re-creates the node, and a typed value sent with it no longer matches the canvas. Options:
+  - lock a node while its delete is on its way (a visible "deleting" state);
+  - ignore edits to it, as a second Delete is now ignored (P-10);
+  - drop queued writes to it when its delete lands.
+  This is GM's call (the first two change what the person sees).
+
+- **For GM: what an unnamed Grok node is called in three places.** The node is on Krea, then xAI appears in place. They differ, and no winner is picked:
+  - changed line: "“Grok Imagine 2.0 via xAI” changed while this was open."
+  - dialog row: "“Grok Imagine 2.0 via xAI” · $0.06" (before the move: "“Grok Imagine 2.0 (Krea)” · price not listed")
+  - card title on the canvas: "Grok Imagine 2.0 (Krea)" (`data.label`; hover: "Double-click to rename")
+- `maybePushUndo` merges typing when the clock runs backwards (a system clock change). This is pre-existing and only fixed in the tests.
+- The skipped-press line can be covered by a later delete's "Deleted the node." (pre-existing).
+- The live check's apply notes ("name", "mesh") show as Agent log rows. They are the script's own edit-batch notes, as in round 16.
+
+### Gates (round 17, on the final code)
+
+- Backend full suite (iso.sh): 11,163 passed and 71 skipped (12 min 56 s).
+  - An earlier `-x` run under heavy load stopped on `test_iterator_execution.py::test_cancelled_batch_cancels_active_handler_and_keeps_completed_items` (an asyncio timeout). It passed alone and in this full run.
+- Vitest full suite: 513 files and 6,463 tests. 503 files passed and 10 failed (20 tests: 15 "Test timed out in 5000ms" and 2 focus waits, under load).
+  - Those 10 files rerun alone with `--no-file-parallelism`: 182 tests passed.
+- Undo-related files (75 files, 1,122 tests) and the round-16 probes (15 tests, canvas = Nebula in all 92 snapshots): passed.
+- errorCopy ratchets: 15 files and 192 tests passed.
+- tsc: clean.
+- Lint: clean (the inline-style and Slava-scope guards passed).
+- Build budget: 393,248 bytes raw / 118,372 gzip (limit 512,000).
+
+## Round 18: review 17 and GM - Design's round-18 rulings (2026-10-26)
+
+### What changed
+
+- **H-1: a write that waited behind an undo is checked against the canvas it was made for** (`graphStore.graphMutationFetch`, `admitWrite`, `stillAdmitted`; `backend.apiFetch` takes `{ project }`).
+  - Each graph write captures the open project (id and revision) and `canvasReplacementRevision` when it is made. After its wait, if either changed (another project opened, an import or template replaced the canvas), it is not sent. It gets the same answer Nebula gives a write to a replaced canvas, `STALE_CANVAS_DETAIL` ("This canvas is out of date. Open the current project before editing or running it.", main.py:739 word for word), so the person reads the existing line.
+  - A write that did wait sends the revision it captured, never one read later. `sendRestore` captures at the Cmd+Z and checks again before its fetch.
+  - Writes queue first in, first out (`writesWaiting`, `waitingTail`) behind `restoreQueue`, so a write never overtakes an earlier one (seed 286). An undo's restore also waits for the writes already waiting when it was pressed (seed 55: typing flushed by the Cmd+Z went out after the restore that undid it, and Nebula kept the typing).
+  - The backend still lets a request with no revision header through (`_check_workspace_revision`). Not changed, as decided; flagged to the coordinator.
+- **M-1: a step that can't be popped owns nothing** (`cancelUndoStep`: `stepAdds.set(step, new Set())`), so `dropDeadSteps` drops it and a Cmd+Z never takes off a node someone else added (Z1, Z2). The repo property test has a foreign-add variant: an agent, a reconnect sync and another tab add nodes while steps are on their way.
+- **M-2: a node held by a waiting undo keeps the newest synced copy** (`heldCopies`, `noteHeldCopies`, `applyHeldCopies`; `holdNode`'s release returns whether it ended the hold). When the hold ends, the copy is applied. An agent's edit keeps its Agent log row and its own undo step, and a run's outputs are never dropped (W3, run-output test).
+- **L-1: the first sync after a PUT's answer releases the typing's hold**, whatever value it carries (`answered`, `before` on `UnsavedParamEdit`). One guard stays: a sync that still shows every key at its pre-edit value doesn't release it, which keeps r17 A11/A11b passing. Residue: the canvas can show " A " while Nebula has "A" until the next sync (L3x).
+- **L-2: an undo's restore is bounded by `HOLD_LIMIT_MS` (15 s)** (`RestoreTimeout`). On timeout it fails with the existing undo failure line plus the no-answer reason: "Couldn't undo that. Nebula's server isn't answering. Make sure it's running, then try again." (composed from existing strings; for GM). The writes it held go out in order under the H-1 check. A pending restore no longer blocks a project switch (`restoreBoundMutationCount`).
+- **W5: a refused undo leaves the canvas equal to Nebula** (`refused`, `revertRestoreOnCanvas`, `revertRestorePresence`), with the existing failure line, even when newer steps sit on top.
+- **GM (2), option (c): a delete leaves at once** (`changeCanvasNodes`, `applyDeleteAnswers`, `putBackFailedDeletes`, `pressHitsDeleteInFlight`, `noteDeletesGoneBySync`).
+  - The node and its wires leave the canvas when Delete is pressed. A sync that still shows it while its delete is on its way leaves it off.
+  - A Cmd+Z aimed at a delete on its way shows "Nothing was undone. Your last change was still saving." and is not applied later. Once the delete lands, one Cmd+Z restores it.
+  - Typing still waiting for the node (`deferredParamPushes`) and held copies are dropped when the delete lands, and sent if it fails.
+  - A failed delete puts the original node back at its old place in the node order, with its wires, not selected, with the existing failure line. Its step is removed wherever it is when nothing was deleted, and newer steps' snapshots get the node back.
+  - Agent deletes arrive by sync and take the same path.
+  - Ten older test files were updated to these rules (rounds 11-17, `lateRestoreCount`, `graphStore.test`, `SelectionToolbar`; each changed expectation has a round-18 comment). No store bug turned up.
+- **GM (1): an unnamed node's canvas title drops the gateway** (`directRoute.canvasTitle`, `isDefaultTitle`, `nodeTitle`, `routeDependsOnKeys`; backend `node_route.canvas_title`, `is_default_title`).
+  - Only for the 44 nodes whose name ends with their own gateway and whose routes name more than one provider. The catalog, library and search keep the full names; nothing is migrated.
+  - Unnamed = the label is either form. `NodeLabel` shows the canvas title; the add paths, a rename to nothing and the backend's sync default (`_cli_node_to_rf`) use it; `_custom_node_label` stores neither form.
+  - Dialog row for an unnamed node whose name is its model: `“Grok Imagine 2.0” · via xAI · $0.06` (on Krea: `· via Krea · price not listed`). A named node keeps the full form. The changed line, the price footnote and the "saved" sentence use the row's name. `runNodeName` (cost lines) still says "Grok Imagine 2.0 via xAI".
+  - Accepted limit (GM): two unnamed nodes of a colliding pair read the same on the canvas (#196).
+- **m2stale: the 409 re-ask reads the keys again first** (`rereadRunKeys`, bounded by `RUN_INPUTS_WAIT_MS`, the first ask's wait). Each row's name and price then come from one route resolution.
+  - If the keys can't be read in that time, the re-ask keeps Nebula's numbers, as before (review 4, M1), so the yes it sends passes. A first version priced with the canvas's numbers instead; Nebula then refuses every yes and the person can never run, so it was dropped. Residue: in that case a row is named by the route the tab last knew.
+- **Screen reader: an update brings both lines.** When a node moves and another leaves in one update, the live region reads the changed line and then the left line.
+- **Nit: an in-place price change moves focus to Cancel.** For GM: this replaces round 5's verbatim "keep focus where it was" for price changes.
+- **Nit: a universal node's fields follow the card order** in the Agent log (`_set_words` reads `dynamicParams` after the definition's params).
+- **GM (3): the cursor bubble for three or more labelled fields reads "Changed N settings"**; one or two keep "Set “…”". The Agent log still names them.
+- Docs: MCP-SETUP (delete, held edits, stale writes, the bubble, the canvas title), SKILL.md and `remove_from_canvas`'s docstring.
+
+### Person write paths that can go out with no revision header while a project is open
+
+`apiFetch` adds `X-Nebula-Workspace-Revision` to every non-GET request whenever a project context is set, and the context is set from the first project load on (`projectStore.applyProject`) and never cleared. So no canvas or graph write made through `apiFetch` goes out without it. What does:
+- The chat WebSocket's messages (`ChatPanel.tsx`: `close_session`, `personal_option`, `permission`, `cancel`) and the canvas socket's `hello` (`wsClient.ts`). None writes the graph; a `permission` answer lets an agent act, and the agent's own write carries no header by design.
+- Any write sent before the first project has loaded at startup (no context yet).
+- No `apiFetch` call passes `{ project: null }` except a write admitted while no context was set.
+- Raw `fetch`/`fetchUrl` calls in `src/` are GETs of assets.
+A write built for one project but sent after a switch through `apiFetch` outside `graphMutationFetch` would carry the new revision. The debounced param pushes are cleared on a project load (`clearAllParamPushTimers`); no other such path was found.
+
+### Tests first (round 18)
+
+- `heldUndo.round18` (23 tests: H-1 W1/W2 and queued restores, M-1 Z1/Z2, M-2 W3 and run outputs, L-1 L3x, L-2 W4, W5, option (c)): 18 failed on 47be7b2b, all pass.
+- `canvasTitle.round18` (15): 12 failed on 47be7b2b. `rerunKeys.round18` (3): 2 failed (the third guards the unreadable-keys case, unchanged). `PlaceholderRunDialog.round18` (4): 2 failed.
+- Backend `test_round18_words` (4) and `test_round18_titles` (4): 6 of 8 failed on 47be7b2b.
+- Property test: plain seeds 1-6000 and foreign-add seeds 1-600, 0 failures (110 blocks of 60 seeds, one process each). Seed 55 failed during the round and is fixed (the restore ordering above). The harness slows quadratically inside one process (240 seeds: 86 s on 47be7b2b and on this branch), so blocks stay small.
+
+### Live check (round 18, 1440 and 1280)
+
+- Isolated backend 8795 and Vite 5795, temp HOME, no keys (masked stand-ins in the page's settings answer), every run request answered in the page: 23 of 23 checks passed.
+- Unnamed Grok: card "Grok Imagine 2.0"; rows "“Grok Imagine 2.0” · via Krea · price not listed" then "· via xAI · $0.06"; changed line "“Grok Imagine 2.0” changed while this was open."; focus moved to Cancel. Named: "“Alt still” · Grok Imagine 2.0 via xAI · $0.06". A node added from the library is saved as "Grok Imagine 2.0" in the tab and in Nebula.
+- Delete with its answer held: off at once; Cmd+Z said "Nothing was undone. Your last change was still saving."; after the answer one Cmd+Z restored it; canvas and Nebula ended at the start.
+- Cursor bubble "Changed 3 settings"; two fields "Set “AI Model” and “Topology”"; the Agent log names all three.
+- Blocked requests: 2, both the canaries; none toward 8000-8010 or 5173.
+
+### Gates (round 18, on the final code)
+
+- Backend full suite (iso.sh): 11,171 passed, 71 skipped (22 min 37 s).
+- Vitest full suite: 517 files, 6,510 tests; 506 files passed and 11 failed (24 tests, 18 of them "Test timed out" under load). Those 11 files rerun alone with `--no-file-parallelism`: 196 tests passed.
+- errorCopy ratchets: 21 files, 475 tests passed. tsc clean. Lint clean.
+- Build budget: 393,365 bytes raw / 118,439 gzip (limit 512,000).
+
+### Open items (round 18)
+
+- For GM: the focus rule above, and the timeout line "Couldn't undo that. Nebula's server isn't answering. …".
+- For GM (wording PR, not #195): Meshy's "AI Model" → "AI model".
+- The backend's no-header rule (flagged, not changed).
+- The re-ask with unreadable keys can still name a row by the route the tab last knew (m2stale residue above).
+
+## Round 19: review 18 and GM - Design's round-19 rulings (2026-10-27)
+
+### What changed (main lane)
+
+- **H-A, the canvas revision.** Nebula's canvas revision is the per-project id epoch (`canvas_undo_book.epoch(project)`, `main._canvas_revision()`), the counter #114's `_graph_fence` reads too. A clear now moves it in the same step as the clear (`_forget_canvas_undo` inside `_paid_graph_mutation`), and an import moves it as before. It rides on every graphSync (`canvasRevision`), `GET /api/graph/export`, and the answers of `DELETE /api/graph`, `POST /api/graph/import`, and open and create. The tab keeps it in its project context (`ProjectContext.canvas`, `adoptCanvasRevision`, `adoptCanvasRevisionFrom`) and sends it as `X-Nebula-Canvas-Revision` on every write; `_check_workspace_revision` refuses a write for another canvas with `CANVAS_OUT_OF_DATE`. In the tab, a sync whose canvas revision moved (an agent's clear; an empty sync from someone else on a backend that doesn't say it) replaces the canvas (`replaceCanvasByClear`: a per-canvas write queue, held node and wire writes, debounced typing and held copies all go). The person's own clear does the same in `clearGraph`, and now the chat's /clear too (`clearBackendNodes`). Probes C1, C2 and C3 pass.
+- **H-B, the header rule.** See "The backend's new refusal rule" below. In the tab, an agent's switch closes the write gate first (`beginAgentSwitch`, called in the socket handler before the snapshot, and by `followProjectSwitch` itself for a tab with no project): no graph write goes out until the new canvas is loaded. Debounced typing is never sent: it goes into the handoff.
+- **G-1, the person's switch and import wait (GM).** `activate` (open and create) and Load graph call `drainGraphWrites`: new writes wait at the gate, debounced typing goes out at once, and writes already admitted are waited for, 15 s at most (`HOLD_LIMIT_MS`, as undo), with "Saving…" on the project bar. Drained writes keep their admission (old project, old revision, old canvas). Once they land the switch goes through silently; one that failed or didn't answer in time is named on the new canvas in GM's words (`lib/savingCutOff.ts`) instead of the out-of-date line, and the out-of-date answers that arrive for the replaced canvas are kept quiet (2 s grace). Writes made while it waited go after, under their own admission: sent if nothing was replaced, dropped and named if it was.
+- **An agent's switch (coordinator's direction).** No backend handshake this round. The handoff save into the project left (by its id, `PUT /api/projects/{id}`, which the header rule doesn't touch) now carries every value the person typed that Nebula may not have: it is sent when the snapshot differs from the last save or when any write was still out or an undo was dropped (`beginAgentSwitch().force`). An undo or redo still on its way is dropped and taken off the canvas before the snapshot (not folded in). GM's agent line shows only when that handoff fails, for open_project and new_project alike, naming the agent as presence does ("an agent" when unknown).
+- **M-A.** Typing held behind a node's delete is dropped only once the delete lands (a waiting write to a node whose delete is still on its way is sent). Probe D1 and refusal seed 271.
+- **M-B.** A failed delete puts back the wires Nebula actually has (`applyHeldCopies(ids, { wires: true })` merges the synced wires), so an agent's wire made meanwhile stays and one it took off stays off. Seeds 264, 900, 1223.
+- **M-C and L-C.** The canvas's param PUT names only the keys the person changed (`unsavedParamEdits`); the backend already merges per key (`cli_graph.update_params`). A refused restore puts back its own keys per key when the person changed the node since. Documented in MCP-SETUP ("Canvas writes"), SKILL.md and the `edit_canvas` docstring.
+- **L-B.** A restore that timed out and then landed counts as undone (the step moves to redo) and GM's timeout line goes.
+- **L-D.** The 409 re-ask passes `routeUnknown` when the keys couldn't be read in time (until a read lands meanwhile), and a key read that lands after the limit is ignored (review 18's optional fix: no spurious "changed while this was open").
+- **GM undo timeout line:** "Nothing was undone. Nebula isn't answering. Make sure it's running, then try again." For a redo, "undone" reads "redone" (derived, not GM's; listed below).
+
+### The backend's new refusal rule (for the PR body)
+
+`project_workspace_fence` (backend/main.py): a request that is not GET, HEAD or OPTIONS, to a path starting with `/api/graph`, `/api/execute`, `/api/cinema` or `/api/quick`, that carries `X-Nebula-Tab` and no `X-Nebula-Workspace-Revision`, gets 409 `{"detail": "This canvas is out of date. Open the current project before editing or running it."}` before the route runs. Why: only the canvas sends `X-Nebula-Tab`, and its `apiFetch` sends the revision whenever it holds a project, so a tab write without one was made while the tab held no project (following an agent's switch, between letting go of one project and loading the next). Before, the no-header pass let it land on whatever was open. What it refuses: exactly those tab writes, and a script that sends `X-Nebula-Tab` itself. What it doesn't touch: agents, the CLI, MCP and scripts that send no `X-Nebula-Tab` (unchanged: no revision needed); GET reads; `/api/projects/…` (project saves name their project by id, so the handoff after an agent's switch still saves into the project left); every other route. Beside it, `X-Nebula-Canvas-Revision` (sent by the tab when it knows the canvas) must match `_canvas_revision()` or the same 409.
+
+### Where this meets #114's `_graph_fence` at merge
+
+- Both read `canvas_undo_book.epoch(project_id)`: #114's `_graph_fence()` = (workspace revision, project, epoch); this PR's `_canvas_revision()` = that epoch as a string. No code was copied. A clear and an import bump it in both (here the clear's bump moved into the clear's own step; #114 relies on the same).
+- `_check_workspace_revision` is the meeting point. #114's version returns early on no revision and lets a tab still on the unfiled canvas's revision through when that canvas was filed (`_filed_canvases`, round 13). At merge keep #114's filed-canvas translation and add this PR's canvas check after it, comparing a filed revision's canvas header against the filed epoch (`filed[0]`), not the new project's, or a tab on a just-filed canvas is refused. `_refuse_if_graph_moved` calls `_check_workspace_revision()` first, so the canvas header check also covers #114's fenced routes.
+- `CANVAS_OUT_OF_DATE` is defined in both with the same text: keep one.
+- The middleware: #114's `project_workspace_fence` (main.py ~1085 there) has no header rule; add this PR's `x-nebula-tab` check and the `_request_canvas_revision` ContextVar set/reset. #114 strips `x-nebula-tab` from forwarded headers in one place (~8368): unaffected.
+
+### Tests written first, and how they failed
+
+- backend tests/test_round19_fence.py (now 20 with parameters): 11 failed first (a tab write with no revision passed; `canvasRevision` missing from sync, export, clear and import answers). Older backend tests that write as a tab now send the revision (`conftest.TabHeaders`: test_graph_restore, test_canvas_undo, test_undo_restores_deletes, test_graph_apply); test_execution_cancellation and test_provider_start_admission expect `canvasRevision` in the export and the clear answer.
+- frontend tests/heldUndo.round19.test.tsx: 23 of 25 failed first (C1-C3, the canvas revision, the drain and GM's switch and import lines, D1, M-B, M-C/M2a/M2b, W5b, L-B's line and T1). One more since, "C3 from chat", failed with the chat's /clear not replacing the canvas.
+- tests/projectSwitchSaves.round19.test.ts (the projectStore side): 10 of 11 failed first (no drain before open, no "Saving…", the switch refused while saves were out, a Delete sent during the follow, the handoff skipped when the autosave had already saved, a pending undo folded into the handoff, no agent lines).
+- tests/GraphFileActions.test.tsx, two Load graph tests: both failed first (the import went out before the typed save; no import line).
+- tests/rerunKeys.round18.test.ts, the late key read: failed first (the late answer rewrote the keys under the open dialog).
+- tests/heldUndo.property.round17.test.tsx: the 30%-refused-deletes variant (`fake.refuseDelete`); seeds 264, 271, 900 and 1223 failed first.
+- Updated to the new rulings: heldUndo.round18 (W4 expects GM's timeout line), graphStore.universalModel (key-level bodies), rerunKeys.round18 (L-D: "Grok Imagine 2.0|$0.06").
+
+### Review 18 probes on the final code
+
+- h1 8/8, m2 8/8, w5 4/4, sw 1/1, krea 1/1, titles 1/1; backend titles.py 0 diffs over 308 definitions; names.py: every name agents see is the canvas title ("Grok Imagine 2.0"). names.py's person add now gets the new 409 (it sends `X-Nebula-Tab` with no revision, exactly what the rule refuses); a copy that sends the revision (scratchpad r19/probes/names-r19.py) runs through.
+- nohdr: N1 and N2 fail as written (the debounced PUT and the DELETE still go out with no project). The probe models the start of following a switch as `setProjectContext(null)` alone. In round 19 the switch starts with `beginAgentSwitch` (the gate closes and debounced typing is cleared before the context is let go), so the real flow holds every write: projectSwitchSaves.round19 "typing still in its debounce: never sent" and "N2: a Delete pressed while the tab follows is never sent" drive the real socket handler. Holding every write whenever the context goes null was tried and reverted: it strands writes in test files that run with and without a project, and admits a write made with no project if the context is set and cleared again before it runs. Nebula refuses any such write anyway (the header rule).
+
+### Live check (8795/5795, isolated, scratchpad r19/live/live-r19.mjs)
+
+- 1440x900 and 1280x800. The named Krea row reads "“Alt still” · Grok Imagine 2.0 via Krea · price not listed"; the cursor bubble starts fading about 2.7 s after it shows and is gone after the fade (the picture slows the fade tenfold so it can be caught at 30% opacity); a refused delete brings the node back with its wire and "Couldn't delete the node. Nebula didn't respond. Try again."; an undo whose restore never answers shows GM's timeout line after 14.7 s; Open of another project with a typed save refused shows "Couldn't save “Text” for “Hero prompt” in “Round r19”. It was still saving when you switched." and no out-of-date line. None of the person's graph writes got the header rule's 409.
+- Requests toward 8000-8010 and 5173: 2 blocked, both the canaries; 0 after. Screenshots: scratchpad agent-presence/r19-*.png.
+
+### Gates (round 19, on the final code)
+
+- Backend: 11,200 passed, 71 skipped (full suite, isolated).
+- Frontend: full vitest 6,525 of 6,565 passed under heavy machine load; the 40 failures were in 12 files, 31 of them 5 s timeouts, and those 12 files rerun alone passed 209 of 209. errorCopy ratchets: 21 files, 475 tests passed. tsc clean. Lint clean.
+- Build: first load 394,692 bytes raw (118,881 gzip), under 512,000.
+- Property test, 60-seed blocks, one process each: plain 1-6000 (100 blocks), foreign 1-600 (10), 30%-refused-deletes 1-1800 (30): 0 seed failures. Nine blocks first hit the 300 s per-chunk limit while four ran at once on the loaded machine; rerun two at a time, all passed.
+
+### Open items (round 19)
+
+- GM wording to confirm: the redo form of the timeout line ("Nothing was redone. …", derived); no line for writes a clear dropped (silent, as before); writes the person makes while the tab follows an agent's switch are dropped silently when the handoff succeeds.
+- The out-of-date answers for a replaced canvas are kept quiet for 2 s after the last one lands (time-bounded).
+- An agent's switch has no handshake: Nebula has switched before the tab hears it; the handoff save is what keeps the person's typing.
+- From the lanes: `route_unavailable_message` still says the catalog name (both sides); `get_selected_nodes`' `displayName` is the catalog name by design.
+
+### Frontend lane: route names, unknown routes, dialog focus, cursor bubble (2026-10-27)
+
+- L-A (GM, round 19): a node whose route depends on keys names the gateway as a route too: "“Alt still” · Grok Imagine 2.0 via Krea · price not listed", never "Grok Imagine 2.0 (Krea)". `nameOnRoute` (lib/directRoute.ts) does it for every provider, or none, when `routeDependsOnKeys`; `runNodeName` (cost notes, "No list price for …", the run summary) gets it through `nameOnRoute`. Definitions whose route doesn't depend on keys keep round 15's behaviour. The backend twin `node_route.name_on_route` is the other lane's.
+- L-D (GM, verbatim): "when the keys can't be read … the dialog row drops only the route, never naming a possibly old one. Unnamed: "“Grok Imagine 2.0” · $0.06". Named: "“Alt still” · Grok Imagine 2.0 · $0.06"." The row builder takes a new `routeUnknown` option (PlaceholderRunOptions). graphStore's re-ask has to pass `routeUnknown: !(await rereadRunKeys())`; this lane couldn't edit graphStore, so until it does the unreadable-keys re-ask still names the route the tab last knew (rerunKeys.round18 pins today's "Grok Imagine 2.0 via Krea|$0.06", which becomes "Grok Imagine 2.0|$0.06").
+- Focus (GM, verbatim): "focus moves to Cancel ONLY when the run button's price changes in place. Every other in-place update keeps focus where it was." The dialog compared `runLabel` and `confirmCost`; now only `runLabel`, the button's own words. The round-5 test covers both sides and the aria-live "changed while this was open" line.
+- Cursor bubble (GM, verbatim): "fades out about 3 s after the agent's last event". AGENT_SAY_MS 6,000 → 3,000; at 3 s the bubble gets `agent-cursor__say--leaving` (a 320 ms fade on the repo's k 500, c 36 spring as linear(), token `--agent-cursor-say-fade`), stays mounted, then goes (AGENT_SAY_FADE_MS = 320 must match the token). Reduced motion removes it at once. A new event clears both timers, so a fade in progress stops and the bubble shows again.
+- Tests first: tests/routeNames.round19.test.ts (6 of 8 failed first: "(Krea)" where "via Krea" was due, and the route still shown with `routeUnknown`), PlaceholderRunDialog.round5 (the new test failed: a confirmCost-only change moved focus to Cancel), tests/agentCursorBubble.round19.test.tsx (4 of 5 failed: AGENT_SAY_MS was 6000, no leaving class, no fade rule). Updated to GM's ruling: routeLabels.round15, dialogRecheck.round15, rerunKeys.round18, runWait.round16 ("(Krea)" → "via Krea").
+- Done in the main lane: graphStore passes `routeUnknown`, and a key read that lands after the limit is ignored.
+
+### Backend names lane: agents name a node as the canvas does (2026-10-27)
+
+- M-D (review 18): an unnamed key-routed node reached agents, the cursor bubble, the Agent log and run refusals by its catalog name ("Grok Imagine 2.0 (Krea)") while the canvas showed "Grok Imagine 2.0". One helper now names a canvas node everywhere: `node_route.node_name(definition, label, fallback)`: the label when it is a name of its own, else `canvas_title` (unnamed = no label, or either default form, `is_default_title`). `_node_label`, `_run_node_name`, the not-ready rows, the run pill's node fallback, the rename journal line, staged labels (graph import and retired-node migration), project-size rows, `redacted_node` (look_at_canvas / get_project `name`; `model` only for a node with a name of its own), project_view's custom-label check, a proposal node's `name`, the spending refusal's node names and `instance_missing_line`'s fallback title all go through it. The catalog (find_nodes, describe_node, `nebula nodes`/`info`, did-you-mean) and the spending limits' per-model names keep catalog names.
+- L-A, backend twin (GM, round 19: "“Alt still” · Grok Imagine 2.0 via Krea · price not listed"): `name_on_route` names the gateway too for nodes whose canvas title drops the gateway ("Grok Imagine 2.0 via Krea"); with no provider it drops only the route ("Grok Imagine 2.0"). So the proposal cost label on Krea reads "paid · Grok Imagine 2.0 via Krea" (was "paid · krea"). Other definitions unchanged.
+- Decision: the "via" form applies only where `canvas_title` strips a gateway (44 definitions). 35 more definitions depend on keys but their names name no gateway ("Veo 3.1"); they keep their display name on every route, as before, so the gateway and non-gateway rows stay alike.
+- Superseded in the main lane: backend `name_on_route(def, None)` now names the gateway's route like the frontend ("Grok Imagine 2.0 via Krea"); only the canvas drops the route, when it couldn't read the keys (`routeUnknown`).
+- Tests first: tests/test_round19_node_names.py (9 tests, all 9 failed first: `node_name` missing, and "Grok Imagine 2.0 (Krea)" / "paid · krea" where the canvas title and "via Krea" were due). Parity across all 308 definitions for the helper, `_node_label` and `_run_node_name`. Updated to GM's ruling: test_round16_labels (gateway "(Krea)" → "via Krea", no route → "Grok Imagine 2.0").
+- Docs: MCP-SETUP.md (which names agents see; the proposal entry's unnamed `name`; cost wording on Krea's gateway) and SKILL.md (one paragraph after the single-edit commands).
+- Open: `node_route.route_unavailable_message`/`_line` still say the catalog name, because their frontend twin (directRoute.ts routeUnavailableMessage) does too; `get_selected_nodes`' `displayName` field is the type's catalog name by design. (tests/test_canvas_undo.py's 11 failures from the fence work were fixed in the main lane: its tab requests now send the revision, TabHeaders.)
+
+## Round 20: review 19 and GM - Design's round-20 rulings (2026-10-27)
+
+### What changed
+
+- **H1, the handoff keeps the typing.** When an agent switches projects, the tab's handoff save (`PUT /api/projects/{id}`) now carries `pendingParams: {nodeId: {key: value}}` and `pendingLabels: {nodeId: name | null}`. These come from `graphStore.handoffPending`, which reads the debounced typing, typing still on its way, renames on their way, and rename drafts (`NodeLabel` reports its draft through `noteRenameDraft`; `beginAgentSwitch` commits the drafts into the store first).
+  - Nebula merges exactly those top-level keys onto its own copy of the node, taking the values from the saved snapshot (`_save_handoff`, `_merge_handoff_node`). Everything else keeps Nebula's copy.
+  - The whole save is refused with 409 (`HANDOFF_MERGE_REFUSED`) and the tab saves a copy when the merge can't be made: a listed node is missing, a node is another kind, or a list is malformed.
+  - MCP-SETUP's line-975 claim is replaced by the real rule.
+- **H2, a fence by route marker.** `graph_write` marks every route that changes the graph or starts canvas work (24 routes), and `project_workspace_fence` reads the marker of the route the request matches (`_graph_fence_of`), not a path prefix.
+  - Newly fenced: `DELETE /api/provider-recoveries/{run_id}/{node_id}`, and `POST /api/uploads` when it creates a node. The upload checks inside the route, once at the top and again right before `add_node`, after the file read and probe.
+  - `tests/test_round20_fence.py` walks every non-GET route. Each one is either marked or on the commented allowlist (128 entries, each with its reason). A new unmarked route fails the test, and so does a stale or marked allowlist entry. U1 and U2 now get 409.
+- **M1, read-only while following an agent's switch** (`lib/canvasFollow.ts`). The read-only state runs from the socket handler's first sight of the switch until the new canvas is loaded. During it:
+  - `FOLLOW_GATES` (shaped like #114's `EDIT_GATES`) refuses every graph edit and run in the store.
+  - File drop, Load graph, import, the chat's upload, Clear and Run are gated at their entry points.
+  - `useFollowingReadOnly` stops typing, paste and drop in the canvas and inspector (capture phase) and sets `body.nebula-following`, which shows fields as disabled.
+  - Any attempt pulses the project bar, at most once a second, on the k500/c36 spring.
+  - The bar shows GM's "Opening “<project>”…" in place of Saved or Unsaved and keeps its width: the width is measured as the follow starts, and the text ellipsizes.
+  - Run is aria-disabled with "Wait for “<project>” to open.". A press that still gets through says "Couldn't run “<node>”. <agent> is opening “<project>”."
+  - Probe A1: nothing typed during the window lands anywhere.
+- **M2, the revision survives a restart.** `canvas-revisions.json` lives in the state dir (`{"version": 1, "projects": {id: n}, "unfiled": n}`). It is written atomically (temp file, fsync, `os.replace`, mode 0600) before memory or the canvas changes, and loaded at start.
+  - A clear moves the epoch before `cli_graph.clear()`. An import moves it before its commit and puts it back if the commit raises.
+  - A boot whose state.json fails to load moves the open project's epoch.
+  - In the tab, a sync whose revision moved, with no origin and the same backend canvas (`sameBackendCanvas`: same CLI ids and definitionIds), adopts the new revision and keeps everything. That is probe RST as written: the typing lands and no line shows. A different canvas with no origin is replaced silently. The agent-clear line never follows a restart.
+- **M3.** A delete's answer now checks the canvas revision before it touches the debounced typing, unsent edits or held copies. `replaceCanvasByClear` drops the old canvas's in-flight deletes. The property test gained the reviewer's agent-clear variant; seeds 84 and 1123 always run with it.
+- **L1.** A failed delete comes back unselected, and the inspector closes if it showed that node. A delete also clears the inspector when it names a removed node.
+- **L2 and GM 4, the agent-clear line.** `agentClearedLine` takes the settings the person was editing when an agent's clear (or any outside source's) replaced the canvas: typing, renames on their way, and rename drafts ("Name"). The line is shown after the sync's own announcement, so the announcement doesn't replace it. The person's own clear and the agent-switch handoff stay silent, as GM ruled.
+- **L3.** A run notes (project, epoch) at admission. Its write-backs (params, outputs, provider-recovery params, cinema shot merges) are dropped once that canvas was cleared or replaced, with one log line per run.
+- **L4.** Drains are a set: every drain waiting is told when a write settles, and each returns its own saves.
+- **GM A.** The cursor's say-line is a solid dark pill (#18181b) under the name tag: the same 16px line and 2px padding, radius 999px, one line with an ellipsis, and the pill and its text fade together.
+- **GM 1.** A failed delete whose cause is no answer (`isBackendUnreachable`) uses GM's line. Any other cause keeps its reason (a 500 still reads "Couldn't delete the node. Nebula didn't respond. Try again.").
+- **GM follow-up 2.** A failed handoff shows one line plus an "Open copy" button. The copy is a whole new project named "<old project> (recovered)" (`POST /api/projects/recover`, not opened, listed in Projects), and Open copy opens it. The toast says only "<agent> opened “<project>”.".
+
+### Strings (new or changed)
+
+GM's, verbatim:
+- "Opening “<project>”…"
+- "Wait for “<project>” to open."
+- "Couldn't run “<node>”. <agent> is opening “<project>”."
+- "Couldn't save “<setting>” for “<node>” in “<old project>” when <agent> switched projects. Your edits were saved as a copy, “<copy name>”."; several settings: "Couldn't save N changes in “<old project>” when …"
+- "<Agent> cleared the canvas while you were editing “<s>” for “<node>”. That change wasn't saved."; "“a” and “b”" or "“a”, “b” and “c”" with "Those changes weren't saved."; "… editing <N> settings. Those changes weren't saved."; "An agent cleared …"
+- "Couldn't delete “<node>”. Nebula isn't answering. Make sure it's running, then try again."; "“A” and “B”", "“A”, “B” and “C”", "Couldn't delete <N> nodes. …"
+- Button: "Open copy".
+
+Derived (not GM's own):
+- "Couldn't run the canvas. <agent> is opening “<project>”." (a whole-canvas or multi-node run)
+- "Couldn't save your last change in “<old project>” when <agent> switched projects. …" (a change it can't name)
+- "when an agent switched projects" (agent unknown)
+
+Backend:
+- `HANDOFF_MERGE_REFUSED`, "Nebula couldn't keep this save's unsent changes in the project ({why}), so nothing was saved.", with five `{why}` forms.
+- The log line "[run] run {run_id} started on a canvas that was cleared or replaced since; dropped its {what} (and any later write-back)".
+
+### Tests written first
+
+- Backend `tests/test_round20_fence.py`: 32 of 40 failed first (H1 11, H2 6 plus U1/U2/in-route, M2 9 including the two-boot restart, L3 5). The 8 that passed are controls.
+- `tests/heldUndo.round20.test.tsx`: 14 of 19 failed first. `tests/projectSwitchSaves.round20.test.ts`: 6 of 7. `tests/round20Copy.test.ts`: failed at import. Property seeds 84 and 1123: both failed ("seed 84, step 21: canvas n3=v2 vs Nebula n3=v1"). `tests/agentCursorBubble.round20.test.ts`: 2 of 3.
+- `tests/followingControls.round20.test.tsx` (bar text, width lock, Run's state, Open copy) was written after the code and passed at once.
+- Updated: projectSwitchSaves.round19 (three handoff-failure lines to GM's one-line form).
+
+### Where this meets #114
+
+#114 was still open when round 20 was written (checked with `git fetch` on 2026-10-27), so nothing was merged then. The merge came in round 21 (below), which follows review 20's clash list (C1-C8). Corrected in round 21 (review 20, L-10): the prefix list is main's, not #114's; #114 already calls `_refuse_if_graph_moved` before registering a run; and the list below missed C1-C8. At merge:
+- **Run write-backs:** replace `_admitted_canvas_moved(what)` with #114's `_run_canvas_moved(run_id, what)`, and the ContextVar with `_register_run(canvas=)`. `_run_canvas_now` already has #114's name and meaning.
+- **Fence:** take this PR's marker middleware over main's prefix list, and keep #114's `_filed_canvases` translation ahead of the canvas check.
+- **Uploads:** #114's `_refuse_if_graph_moved(fence)` can replace the second `_check_workspace_revision()`.
+- **Gates:** `FOLLOW_GATES` and `EDIT_GATES` both wrap the same actions. Keep both, or fold the follow check into #114's gate as a second reason (round 21: folded, one table).
+
+### Probes, live check and gates
+
+- Review 19 probes:
+  - RST, SEL and DR pass. CLR1 and CLR2 now get the agent-clear line where they expected `[]`. A1 now gets nothing typed and nothing handed off where it expected the typing in the handoff (M1's ruling).
+  - propclear: seeds 84, 1123 and 1-60 pass.
+  - h1, m2, w5, sw, krea and titles pass. nohdr N1/N2 still fail as written, as in round 19.
+  - Backend: the adapted P1 with `pendingParams` passes (KEPT and LIVE are both "typed"). The original P1 fails by design (no pending list, so the stored copy wins). U1 and U2 get 409, race has no bad values, and titles.py shows 0 diffs.
+- Live check (8795/5795, isolated, scratchpad r20/live/live-r20.mjs): 35 of 35 at 1440x900 and 1280x800.
+  - The pill reads over a long title at 390%.
+  - A refused delete comes back unselected with the inspector closed.
+  - The no-answer delete line shows.
+  - An agent clear shows the line with the PUT on its way and with typing in its debounce, and nothing lands.
+  - The revision is "2" before and after a real backend restart; the PUT held over the restart answered 200 and the typing landed, with no line.
+  - In the switch, typing was handed off and saved in the project left. The bar showed "Opening “Second canvas”…" at the same width (278 px), Run was disabled with GM's tooltip, a typed edit changed nothing, and the run line showed.
+  - A refused handoff showed the one line, and Open copy opened "Round r20 (recovered)".
+  - 2 blocked requests (both canaries) and 0 toward 8000-8010 or 5173.
+
+### Gates (round 20, on the final code)
+
+- **Backend:** the full suite passed 11,240 with 71 skipped (isolated). The docs and MCP docstring edits came after that run, so the 71 test files that read MCP-SETUP, SKILL.md or `mcp_server` were run again: 1,976 passed, 9 skipped.
+- **Frontend:** the full vitest run passed 6,598 of 6,620 under load. The 22 failures were in 12 files, 17 of them 5 s timeouts; those 12 files run alone passed 203 of 203. tsc, lint and both style guards are clean.
+- **Build:** first load is 396,783 bytes raw (119,638 gzip), under 512,000.
+- **Property test:** 160 blocks of 60 seeds, two at a time, with 0 seed failures:
+  - plain 1-6000 (100 blocks);
+  - foreign 1-600 (10);
+  - refused deletes 1-1800 (30);
+  - agent clear 1-1200 (20).
+
+  Two refused-delete blocks (841 and 961) first hit the 300 s limit while the backend suite and live check ran; run again alone, both passed.
+
+### Open items (round 20)
+
+- **For GM:**
+  - An agent's clear shows two notices at once: the sync's "Codex changed the canvas" with Undo, and the agent-clear line.
+  - At the locked width the bar ellipsizes both the project name and "Opening “…”…" (for example "Roun… Opening “Second …").
+  - The derived strings listed above.
+- **Typing while Nebula is down (no hold) is lost silently** when it comes back. The PUT fails with no answer, and the reconnect sync brings Nebula's value. This already happened before round 20. It isn't a clear and no line shows. #114's offline gate (read-only while offline) prevents it.
+- **Fences and admission:**
+  - Pins and selection are on the allowlist, not fenced: they are written by node id onto the project record.
+  - A run whose canvas is cleared during its admission awaits still starts; only its write-backs are dropped. #114's `_refuse_if_graph_moved` before registering is the full fix.
+- **A handoff could be refused by mistake:** if it names a node that `_migrate_rf_graph` folds into a new id, the whole save is refused and the tab saves a copy.
+
+## Round 21: the merge of main (#114), review 20 and GM - Design's round-21 rulings (2026-10-27)
+
+### The merge (Part A, its own commit: 2675e4c2)
+
+origin/main at c1e7338c (#114) merged by hand into c898138e, keeping both sides' intent. Review 20's clash list (C1-C8) was the checklist:
+- **Run admission (C3):** in execute, execute-node, generate-shot and graph/run nothing awaits between the final fence, the canvas read and `_register_run`. `_admit_registered_run` (placeholders made normal, then `_start_agent_run`) runs after registration, so a run refused at the last fence leaves its placeholders and keeps no agent-run record (`tests/test_round21_merge.py`).
+- **Silent leftovers (C1):** `_execution_canvas`, `_admitted_canvas_moved`, the second `_run_canvas_now`, the outputs check, `_synchronous_workspace_runs` and `_track_synchronous_project_run` are gone; #114's `_emit_and_sync` guards outputs.
+- **`_check_workspace_revision` (C2):** restructured: with a filed revision the canvas header is compared with the filed canvas's epoch, otherwise with the live one; the early return no longer skips it.
+- **Epoch base:** revisions that can't be restored after a restart (the file unreadable, missing while a canvas was saved before, or memory only) start from a boot-unique base (ms since the epoch), never 0; the base is saved at once, and the sync and export say `canvasRevisionRestored: false` for that run.
+- **Clear (C4, C5):** #114's no-clear-while-a-run-is-registered guard is kept; only #195's epoch move remains, after it. The five L3 tests in `test_round20_fence.py` were rewritten around `_register_run(canvas=)`. #114's delete of the open project moves the epoch before `_commit_project_workspace`.
+- **`applyGraphSync` (C6, C7):** the export on a first add adopts the revision without a clear or the clear line; `isSliceStep` is in the refused-undo put-back and every snapshot-only spot.
+- **Gates:** one `EDIT_GATES` table, each entry with an optional `follow` override; the wrapper asks following first, then offline. `onNodesChange` applies `followingChanges`, then `readOnlyChanges`.
+- **C8:** read-only stays on while #114's queue of switch notices holds one (cleared only when the follow that set it ends).
+- `fence=` with `approval_scope=`; the param-push bodies combined; #114's OwnAdd slice steps used for Accept, paste, duplicate and the dynamic and cinema adds, with #195's in-flight steps elsewhere.
+- **Deviation:** `noteOwnAdd` is not called beside `arrives` in the file drop: it made a second undo step for the same add (the in-flight step already holds it). Canvas.fileDrop's test says so.
+- **Copy where the two sides disagreed (for GM):** the generic model-picker failure takes #114's "Couldn't change the model for “<node>”." (the settings and missing-key lines stay #195's); chat /clear takes #114's lines (all or nothing; the step stays on a 5xx or no answer).
+- `ForgetRecoveryConfirm` (#114) renders through `ModalPortal`, per #195's modal rule.
+
+### Review 20 (Part B)
+
+- **M-1:** `_save_handoff` returns the nodes it merged; when the project left is the open one again (an agent reopened it), `_apply_handoff_live` puts the same keys and names on the live graph in the same step (journaled as the person's `node.params`), and the route broadcasts a graphSync (the tab's own echo).
+- **L-1:** `deleteCanvasElements`, `clearBackendNodes` and `adoptAcceptedProposal` are in `EDIT_GATES`; proposal Accept asks `refuseEditWhileFollowing` first. `gatedGraphActions()` and `NOT_GRAPH_EDITS` let a store test walk every action (each is gated or listed as not an edit).
+- **L-2:** `.node-inspector-popover` is in `EDITABLE_AREA` (exported) and in `canvas-follow.css`.
+- **L-3:** a proposal records `_canvas_revision()` in the step that makes it; `_ensure_still_decidable` refuses Accept once it moved ("This proposal was made before the canvas was cleared or replaced"); Reject still closes it. The allowlist reason is corrected.
+- **L-4:** a no-origin sync whose revision moved is the same canvas only when it says `canvasRevisionRestored: false` (and carries the same ids and definitions).
+- **L-5:** the old to new revision of such an adoption is kept; a held write goes out under the adopted one. The revisions file is saved as a merge (re-read, max per project); `restore_epoch` writes its own project exactly.
+- **L-6:** `pendingParams` and `pendingLabels` are honoured only from the person's tab (person token and `X-Nebula-Tab`); otherwise 409 "…because the change came from an agent…".
+- **L-7:** a later switch during a follow updates the bar and Run's tooltip; the toast names the project loaded and the last agent.
+- **L-8:** `CutOffSave.nodeId`; `distinctSaves` and the node count key on it (the title when there is none).
+- **L-9:** MCP-SETUP (the reviewed list's wording, the reopen, numbered copies, the G4 refusal, the restored flag, Accept after a clear), `mcp_server.py` (`new_project`, `open_project`), SKILL.md. The CLI needed nothing (`nebula project open` of the open project says it's already open).
+- **L-10:** round 20's merge section corrected above.
+
+### GM's round-21 rulings (Part C), verbatim
+
+- The failed handoff's line: non-breaking spaces inside the quoted project names (the left project and the copy).
+- The cursor pill: `inset 0 0 0 1px rgb(255 255 255 / 0.12)` beside its shadow (inset, so the height stays).
+- A delete answered with a server error, when the node is back on the canvas: "Couldn't delete “<node>”. Nebula ran into an error, so it's back on the canvas. Try again, and if it keeps happening, restart Nebula." (several: up to 3 names, then "<N> nodes", "…so they're back on the canvas."). The status goes to the Agent log ("Delete of “<node>” (<id>) failed: Nebula answered HTTP 500."). Nebula's answers carry no error id.
+- The bar while following: the old name, the save state and the node count go (the count is my call, for room: for GM); the name slot reads "Opening “<project>”…", the name cut inside itself (the words around it never shrink), at the locked width.
+- An agent's clear is one toast: the clear line takes the place of "<agent> changed the canvas" and keeps its Undo.
+- Derived: "Couldn't run <N> nodes. <agent> is opening “<project>”." (several), "the canvas" only for a whole-canvas run, "An agent" when unknown.
+- G1: Create rejects with a `FailureNotice` under its heading: "Couldn't start the generation. <agent> is opening “<project>”." ("Another project is opening." when nothing is known); never "Nebula is opening another project." bare.
+- G4: `HANDOFF_MERGE_REFUSED` "Nebula couldn't keep this save's unsent changes in the project because <why>, so nothing was saved." with "a node's type changed", "the node was removed", "“<key>” isn't a setting on that node", "the project can't be read" (a malformed list), "the change came from an agent". A pending key the staged node lacks now refuses the save with the key form (it was dropped silently; the tab keeps a copy instead).
+- G5: recovered copies are "<project> (recovered)", then one past the highest number the project's copies have in Projects or the trash ("(recovered 2)", 3…); a retry of the same copy is the same copy.
+
+### Tests written first, and how they failed
+
+- Merge: `backend/tests/test_round21_merge.py` (16) was written against the resolved merge and passed at once (the resolution was in place); it pins C2, C3, the epoch base and the sync flag.
+- `backend/tests/test_round21_review20.py`: 11 of 14 failed first (M-1 three: the live graph and the export kept "a"; L-6 three: 200 instead of 409; G4 two: the old wording; L-3: no `canvas_revision`; L-5: the second book moved p back to 0; G5: two "Active (recovered)"). One test's own fixture was wrong (its params didn't match the new definition, a 400) and was fixed.
+- `frontend/tests/round21Lines.test.ts` and `round21Store.test.ts`: 15 of 17 failed first (the missing exports, the old counting by title, no non-breaking spaces, "the canvas" for three nodes, the Delete key, clear and Accept going through, `following` still naming beta, the held typing not re-admitted, two toasts on an agent clear, no 500 line). The M-1 reopen case moved to `projectSwitchSaves.round20` (the same harness).
+- Changed on purpose: `test_H1_a_key_the_staged_node_lacks_refuses_the_save` (was "is dropped"; G4), round20Copy and projectSwitchSaves.round20's handoff lines (non-breaking spaces), heldUndo.round20's restart cases (they send `canvasRevisionRestored: false`), followingControls.round20 (the opening line is three spans; the popover).
+
+### Live check (8795/5795, isolated; scratchpad r21/live/live-r21.mjs)
+
+- First full run: 26 of 29. The three misses were the script's: the popover never opened (`selectNode` alone doesn't show it), the reopen's typing went out as a plain PUT before the switch (so no `pendingParams` to see), and the Undo click used a bad selector. Fixed and run again (follow, reopen, agentclear): 18 of 18.
+- Following plus the Delete key: the node stays and no DELETE is sent; the project left keeps it. The popover's textarea shows opacity 0.55 and `not-allowed`, and typed " XYZ" changed nothing.
+- The bar at 1440 and 1280: "Opening “Second canvas with a name far too long for the project bar”…" cut inside the name, both fixed parts whole, the old name gone, never wider. The first run's checks passed, but its screenshot showed the name cut to nothing and the closing "”…" clipped: at the locked width (173 px) the node count left no room. While following, the count (of the canvas that is going) is now hidden; run again (11 of 11) the bar reads "Opening “Secon…”…" (the name 48 px at 1440, 60 px at 1280; at 1280 the bar was 4 px narrower than before, never wider), and the check now asks for a visible name and closing part.
+- The reopen (PUT held in the page): the handoff carried `pendingParams`; the canvas, Nebula's live graph and the stored project all keep "a lighthouse at dusk in fog". (Unheld, the PUT lands first and the typing is kept that way.)
+- An agent's clear: one toast, GM's line with Undo, no "Codex changed the canvas"; Undo put the node back.
+- A 500 on delete: GM's LOCKED line, the node back, "Delete of “Hero prompt” (n1) failed: Nebula answered HTTP 500." in the Agent log.
+- A refused agent run (a canvas header that isn't this canvas's): 409, its two placeholders still placeholders. The last-fence path itself is covered by `test_round21_merge.py`.
+- Offline plus following (the backend stopped mid-follow): read-only, nothing sent, both states on; back online the follow finished on "Second canvas".
+- Blocked: 2 requests in each run, both the canaries; 0 toward 8000-8010 or 5173.
+
+### Gates (round 21, on the final code)
+
+- **Backend:** the full suite passed 11,655 with 71 skipped (isolated). On the merge alone, five real failures showed first and were fixed before the merge commit (a `validate_graph` stub without `**kwargs` in conftest, four tests; "wired" in a journal row of MCP-SETUP.md, from main). Four more failed only under load and passed alone: the guardian race, `test_journal_write_project`'s reopened proposal, two `test_mcp_channel` listener tests and one `test_mcp_nonblocking` cancel.
+- **Frontend:** the full vitest run, 6,919 of 6,930 under load. 11 failures in 8 files: 6 were mine (3 handoff lines in projectSwitchSaves.round19 without the non-breaking spaces; 3 deletes answered 500 in heldUndo.round15/18 still expecting "Couldn't delete the node.", now GM's LOCKED line) and were updated; the other 5 (Settings, CommonsDetail, ResultsGallery, PlaceholderRunDialog.round12, modalStyles.round11) were 5 s timeouts and passed alone. The 10 files run again: 171 of 171 after the updates. The errorCopy ratchets: 15 files, 192 of 192. tsc, lint and both style guards are clean.
+- **Build:** first load 400,973 bytes raw (121,007 gzip), under 512,000.
+
+### Open items (round 21)
+
+- **For GM:**
+  - The two copy choices in the merge (the model picker's generic line, chat /clear's lines).
+  - The Agent log's wording for a 500 ("Delete of “<node>” (<id>) failed: Nebula answered HTTP 500.") and Accept's new refusal ("This proposal was made before the canvas was cleared or replaced"; agents and logs read it, the canvas shows "Couldn't accept the proposal." over it).
+  - Hiding the node count while following, so the cut name has room at the locked width.
+  - The 500 line is used only when every failed node has a card title and is back on the canvas; otherwise the old line shows.
+- Nebula's 500 answers carry no error id, so the Agent log has the status only.
+- `noteOwnAdd` is not used beside `arrives` in the file drop (it would make a second step).
+- A rename still in flight from an earlier test leaked into a later test's handoff labels in projectSwitchSaves.round20 (module state outlives a test); the reopen test checks params only. In the app it would carry the node's current name, which changes nothing.
+- The refused-run live check uses a wrong canvas header (refused at the first fence); the last-fence refusal is tested in the backend only.
+
+## Round 22: review 21 and GM - Design's round-22 rulings (2026-10-27)
+
+### GM's blockers (verbatim) and the toasts
+
+- **A, one read-only state:** `lib/canvasLock.ts` (`useCanvasLock`, `canvasLockOf`) is the only place a surface reads following and offline. `lock.act({disabled, title})` gives a control that acts `disabled`, the marks (`data-following-disabled`, `data-offline-disabled`) and, while following, "Wait for “<project>” to open." in place of its own tooltip. Converted: the selection toolbar (Ask, Note, Run, Duplicate, Arrange, Delete; Settings, Copy and Download stay), the Inspector (panel and popover: Run, Duplicate, Delete, every field), the context menu, the connection popup, the bottom toolbar (Run keeps `aria-disabled` so a press still pulses; Load, Import CLI, Clear, Arrange), node cards (NodeLabel, ModelNode's next step and Enhance, ReferenceSet, PaperSource, JevCardField, CameraRig, VideoEditAction, StoredAssetPicker), the node library, CinemaShotPanel, the proposal bar and Run history. A press on any `[data-following-disabled]` control pulses the bar (`useFollowingReadOnly`). The neutral disabled look: the primary Run's `:disabled` and `:disabled:hover` are transparent at 0.34, and every hover on an action button is guarded with `:not(:disabled)`. `tests/round22Surfaces` renders each surface following and offline+following, and ratchets the one source (only an allowlist of files may call `useBackendOffline`; the listed surfaces must use `useCanvasLock`).
+- **B, the bar while following:** the save status and the node count are hidden (as in round 21); "Opening “X”…" takes the slot at the locked width; the bar itself now carries `role="group"`, `title` and `aria-label` with the full line, so the name is whole even when the slot cuts it. Tested for every save status, offline, paused and a long name.
+- **Toasts:** `.canvas-undo-notice__text` wraps (`white-space: pre-line`, `overflow-wrap: anywhere`, no ellipsis); Undo and × are centred vertically on the right. The class is shared by the agent-clear line, the 500 delete line, CanvasMessageNotice, CanvasLateNotice and SavePausedNotice. ProjectSwitchToast already wrapped (only its Back button's label is cut); the asset-trash, project-home and moodboard toasts are other components and weren't changed.
+- **Wording:** the Agent log line for a delete answered 500 is GM's ("Couldn't delete “Hero prompt”, node n1. Nebula returned HTTP 500.", one entry per node; `deleteServerErrorLogLine`). Accept after a clear or replace: Nebula answers 409 with `code: "proposal_canvas_replaced"` and "Couldn't accept this proposal: the canvas was cleared or replaced after it was made. Make a new proposal for the canvas as it is now."; the canvas reads the code and shows GM's line ("Couldn't accept this proposal. The canvas was cleared or replaced after it was made. Ask the agent for a new one."). Create's wording was already GM's (round 21's G1 test).
+- **G-a:** Undo on the agent-clear line puts the canvas back as last saved: `lastSavedView()` (unsaved keys back to their saved values, names in flight back to the name saved before) is what the foreign step records (`asLastSaved`). Tested for typing in its debounce, typing held then refused, and a landed control.
+
+### Review 21
+
+- **L-a:** a param PUT refused as out of date while the tab saw no replacement is parked (`parkParamSave`, at most 15 s) instead of dropped. When the tab already holds a newer revision it is sent again at once; otherwise the next sync decides: adopted as the same canvas (a restart) or no replacement, it goes out again under the tab's revision; a replacement names it in the cut-off line. A resend refused again is a failed save with its line. Never lost with no line.
+- **L-b:** the same-canvas adoption needs an actual restart: the socket's hello sync carries #114's `bootId`, and `applyGraphSync` adopts only when the sync's boot differs from the one the canvas last synced with (`canvasSyncBoot`). After that, in the same boot, a missed agent clear that re-adds the same ids is a replacement (the reconnect ending). A broadcast without a `bootId` is the same process.
+- **L-c:** `beginAgentSwitch` drops the drafts it folded into `labelsInFlight` once the handoff is sent; `loadProjectGraph` clears drafts, names in flight and parked saves. projectSwitchSaves.round20's M-1 checks the labels again (`labels: {}`).
+- **L-d:** Cinema's "Send to motion" refuses while following (with the bar pulse) and offline.
+- **L-e:** `_admit_registered_run` reads first (`_agent_run_plan`: identity, plan and models, from the canvas the run registered on) and then makes the one write (`_clear_pending`), then starts the agent run. A 507 "nothing started" now leaves the placeholders as they were.
+- **Agents:** MCP-SETUP (the reviewed list and proposal paragraphs name the new code, detail and the person's line; the restored-flag paragraph says adoption is once per restart and resends refused typing, and that a missed clear in the same boot is a replacement), `mcp_server.py` (get_proposal), SKILL.md. The CLI has no proposal Accept (person-only), so nothing changed there.
+
+### New copy for GM (derived, not ruled)
+
+- `changesNotSavedLine`: across nodes "Couldn't save N settings."; two on one node "Couldn't save “a” and “b” for “node”."; three or more "Couldn't save N settings for “node”."; none named "Couldn't save your last change.".
+- A replacement found by a sync with no origin (the reconnect after a gap, or a restart that brought another canvas) names the typing with that failed-save form, with no agent named.
+
+### Tests written first, and how they failed
+
+- `backend/tests/test_round22.py`: 8 of 11 failed first (the three L-e routes answered 507 with storage read after registration; `_agent_run_plan` didn't exist, three; Accept had no `code`; the docs test). The three failing-save controls passed on the old code too.
+- `frontend/tests/round22Store.test.ts`: 5 of 7 failed (G-a debounce and held, L-c's leak, L-d following, the Agent log line); the landed G-a control and offline Cinema passed.
+- `frontend/tests/round22Restart.test.tsx`: 6 of 7 failed (L5W three, the debounce on another canvas, L4P two); RSTB (a control) passed.
+- `frontend/tests/round22Surfaces.test.tsx`: 28 of 32 failed. `canvasProposalsStore`'s new case failed.
+- Changed on purpose: round16OfflineUi (the neutral Run is transparent), round21Store L-4/L-5 (a hello on boot a, then the restored:false sync on boot b), heldUndo.round20 (the restart cases carry boot ids; the empty-canvas restart now names "Couldn't save “Text” for “n2”."), projectSwitchSaves.round20 M-1 (labels checked again).
+
+### Live check (8795/5795, isolated; scratchpad agent-presence/r22/live/live-r22.mjs)
+
+- First full run: 35 of 39. The four misses were the script's: Settings (allowed to stay) wasn't in its list of untouched toolbar buttons (three checks) and the right-click missed the node (the context menu read nothing). Fixed (the menu opened through the store) and follow + offline run again: 26 of 26.
+- Following, the popover open: the selection toolbar's Ask, Note, Run, Duplicate, Arrange and Delete disabled with "Wait for “Second canvas” to open." (Settings and Copy enabled); the popover's Run, Duplicate, Delete disabled the same way and its field read-only; typing changed nothing; a press on Run pulsed the bar and sent no run. The pinned Inspector and the context menu (Run This Node, Leave a note, Duplicate, Delete) the same. The Delete key removed nothing and sent no DELETE.
+- The bar (popover open, the Delete key, offline + following): no status, no count, the line using 91-93% of the slot after the home button, the bar's title and aria-label "Opening “Second canvas”…", the width unchanged (217 px).
+- Offline + following, Run hovered: transparent background, opacity 0.34, `not-allowed`, the Wait tooltip; the follow finished on "Second canvas" once Nebula was back.
+- The agent-clear toast: the whole line on two lines, nothing clipped, Undo and × 0 px off centre on the right; Undo put the node back with "a lighthouse at dusk" (the saved value) on the canvas and in Nebula. The 500 toast wraps; the Agent log has GM's line.
+- L-a (review 20's repro: the PUT held over a SIGKILL, canvas-revisions.json deleted, restart): restored false, the tab adopted the boot base, the held PUT got 409 under the old canvas and went out again (200) under the adopted one; the typing is in Nebula and on the canvas, no line.
+- L-b (then, same boot): the socket closed, Codex cleared and re-added n1 = "AG", the held typing refused (409); on reconnect the tab took the new revision, no PUT landed, n1 reads "AG" in Nebula and on the canvas, and the line says "Couldn't save “Text” for “Hero prompt”.".
+- Blocked: 2 requests in each run, both the canaries; 0 toward 8000-8010 or 5173.
+
+### Gates (round 22, on the final code)
+
+- **Backend:** the full suite passed 11,666 with 71 skipped (isolated, 34 min). A first run with `-x` was stopped by its own 40-minute limit at 79% under load with no failure; the full run was then repeated without `-x`.
+- **Frontend:** the full vitest run under heavy load (load average near 40; other lanes running): 6,822 of 6,851 passed in 533 files; 29 failed in 13 files (23 of them 5 s timeouts, the rest focus and find-by-role misses), and 15 files never started ("Failed to start forks worker"). Those 28 files run again (3 workers): 332 of 351; the 11 files still failing then each passed alone (GraphFileActions 35, NodeLibrary 20, ChatPanel.clear 12, CommandPalette 3, PlaceholderRunDialog.round12 3, modalStyles.round11 4, CommonsDetail 8, ModelDiscovery 4, ResultsGallery 8, ModelPicker 11, Settings 75). The errorCopy ratchets (`tests/errorCopy.*`): 14 files, 173 of 173. tsc -b and lint (with both style guards) are clean.
+- **Build:** first load 402,013 bytes raw (121,505 gzip), under 512,000.
+
+### Open items (round 22)
+
+- **For GM:** the derived `changesNotSavedLine` forms above (across nodes, two settings, none named), and that a no-origin replacement (a reconnect after a gap, or a restart that brought another canvas) names the lost typing with the failed-save line and no agent.
+- The agent-clear screenshot also shows the earlier section's "Codex opened “Second canvas”." toast stacked above (a real toast the live script left; not part of the frame's subject).
+- Parked saves wait at most 15 s for a sync; past that they are sent once more under the same revision and, if refused again, become a failed save with its line.
+- The full vitest run was taken under heavy machine load; every file that failed or didn't start there passed alone or in the rerun.
+
+## Round 23: review 22 and GM - Design's failed-save wording (2026-10-27)
+
+Branch feat/agent-presence, base b74d4466. Justin: "I want to do complete fixes as soon as we run into them"; "implement the correct and better choice - not the easy now choice".
+
+### What changed
+
+- **M-1, the "Note for agents" dialog:**
+  - The pin store's compose, submit and delete ask the same gate every canvas surface reads (`refuseCanvasEdit()` in lib/canvasLock: following first, then offline). The dialog's OK takes `lock.act()`. Delete on a note (PinLayer) is locked too.
+  - When a follow starts, or the canvas is replaced (a clear, a sync that replaced the canvas, loadGraph, loadProjectGraph: the new `noteCanvasReplaced()` in lib/canvasReplaced), the dialog closes.
+  - What the person typed is kept, not re-anchored: a notice in the pin slot shows it with "Copy note" and ×.
+    - Why not re-anchor: the anchor is a node id of the canvas that went, and ids start again on a new or cleared canvas. The person may also never come back to that project. Showing the text costs nothing and puts nothing in the wrong place.
+    - Its two lines are pending constants for GM: `NOTE_KEPT_LINE` "Your note wasn’t added: the canvas changed before it was sent." and `NOTE_KEPT_COPY` "Copy note".
+  - The POST names the project and canvas the note was composed on (`createPin(text, target, project)` sends its revision headers). A 409 for a moved canvas keeps the text the same way.
+  - **Backend:**
+    - The pin create, delete and resolve routes are `@graph_write`, out of the fence allowlist. A tab write whose canvas moved, or a tab write with no revision, is refused 409 and nothing is pinned or journaled.
+    - Resolve's 404 now tells agents the note "isn't in the open project (it may have changed since you read it)" and to read the canvas again.
+    - There is no PATCH pin route.
+- **L-1:**
+  - Undo's restore after an agent clear is resolved lazily for saves in flight. Each PUT (params and rename) registers a landing.
+  - The Undo step taken "as last saved" holds (the existing `holdStep` path, so an Undo pressed meanwhile waits) until those landings settle. It then applies the ones that landed (200), in send order, and drops the refused ones.
+  - Both orders are tested and checked live: the broadcast before the 200, and the 200 before the broadcast.
+- **L-2:** `canvasSyncBoot` is set to null on every canvas load over HTTP (loadGraph, loadProjectGraph, clearGraph, clearBackendNodes) and on a sync that replaced the canvas.
+  - Why null and not `socketBoot`: no HTTP load answer says which boot served it. With null, a restart in that window reads as a named replacement, which is the safe side.
+- **L-3:**
+  - **Locked through `useCanvasLock`:**
+    - Cinema:
+      - CinemaShotPanel: Generate shot, −, +, Generate N, the variations, the refs and their file input, Retry, the override boxes and resets, and the prompt (read-only).
+      - CinemaShotsRail: move, remove, add and dragging.
+      - CinemaStudioToolbar: Generate all.
+      - CinemaArtDirectionControls and CinemaSharedControls.
+    - The command palette: a new `acts` flag on Run graph, Load graph, Ask the agent… and every node insert. Each is disabled with the Wait tooltip, and Enter or the agent prompt refuses it with a pulse.
+    - Create: Generate, including ⌘Enter, and ResultCard's Delete.
+    - Smaller controls: CanvasUndoNotice's Undo/Redo, CharacterTestPanel's Test on canvas, and AssetsPanel's Add to canvas and dragging.
+    - ProviderRecoveryStatus's unlocks: the store refuses them while following too, so it moved off offline-only.
+    - The video editors:
+      - EditorTransport: Cut, the speed and volume controls, Mute.
+      - RemotionEditorToolbar: add, order, Delete.
+      - RemotionPropertiesPanel: one disabled `<fieldset>`.
+      - RemotionTimeline: `disableDrag`.
+      - TimelineClip and SelectionBox: their drags refused at pointerdown.
+  - While following or offline, Generate shot and Create's Generate take the neutral disabled look, never orange (GM blocker A).
+  - **The new ratchet (tests/round23Surfaces.test.tsx):**
+    - Static: every component that reaches an EDIT_GATES action or a pin write reads the lock. The only exceptions are CinemaStudioView and CreateView, which hand their actions to named delegates that are rendered below.
+    - Every palette command says whether it acts.
+    - Rendered: 13 surfaces × following / offline / offline+following. Every button, input, select and textarea is disabled or read-only and marked, with GM's tooltip while following, unless it is on that surface's named list of controls that only look, copy or stop.
+- **L-4:** after admission, the placeholder broadcast is best effort (`_broadcast_admitted_run`).
+  - A failure is logged ("couldn't tell open canvases"), the answer is still 200 started with `canvasSync: "deferred"` and a detail, and the sync is owed: retried at 0.5, 2 and 5 s, and paid by any later sync.
+  - The other post-admission steps in `/api/graph/run` (skip notes, Agent log, cursor) can't turn the answer into a failure either.
+- **GM's failed-save wording, verbatim** (lib/savingCutOff):
+  - "Couldn't save “a” and “b” for “Hero still”." and "“a”, “b” and “c”" (one node, 2–3 settings).
+  - "Couldn't save 4 settings for “Hero still”." (one node, 4+ settings).
+  - "Couldn't save your changes to “Hero still” and “Hero prompt”." (two or three nodes).
+  - "Couldn't save your changes to 4 nodes." (four or more nodes).
+  - "Couldn't save your last change."
+  - The no-agent form: "Couldn't save “Text” for “Hero prompt”. Your edits were saved as a copy, “Round r20 (recovered)”."
+    - To say that truthfully, a replacement by a reconnect or restart (no agent) that cut off typing now makes a recovered copy (`keepReplacedCanvasAsCopy`). The line names it, with Open copy. If the copy fails, the line still names what wasn't saved.
+  - The canvas's own failed save (`paramSaveFailedLine`) uses the same counting, so three settings are now named rather than counted.
+- **Agents:**
+  - mcp_server.py: `run_nodes` shows `canvasSync`/`canvasSyncDetail`; `resolve_pin` explains the 404.
+  - CLI: `nebula run` prints a stderr note on a deferred sync.
+  - docs/MCP-SETUP.md and skills/nebula/SKILL.md cover the pin fence, the resolve 404 and the started answer with `canvasSync`.
+
+### Decisions and surprises
+
+- An agent's switch with an unnamed agent (actor kind "anonymous") still says "when an agent switched projects". Only a switch made by the person or by Nebula ("person", "system") uses the no-agent form.
+- In the live check, the project bar's name button stays enabled offline. Its rename is refused on double-click or Enter (PR #114's design), so it isn't a Cinema control.
+- The kept-note notice reuses the "pin" notice slot rather than a new slot.
+
+### Tests written first, and how they failed on b74d4466
+
+- **backend/tests/test_round23.py:** 14 of 15 failed by assertion. The failures:
+  - The pin routes had no fence.
+  - A note for A was accepted 201 after the switch to B.
+  - The cleared-canvas and no-revision cases were 201.
+  - The delete was 404 instead of 409, and the resolve detail was missing.
+  - Run routes answered 507 after admission (cli, execute and execute-node).
+  - `canvasSync` and `_graph_sync_owed` were missing, and the docs test failed.
+  - The control "a note for the canvas open now lands" passed.
+- **frontend:** 63 of 75 failed, all by assertion.
+  - round23Surfaces 40 of 43: the static scan listed 13 files. Rendered, every surface had unlocked controls, for example Cinema's Prompt, Generate shot, Fewer and More, and Generate 2. The controls that passed were the scan's self-test, ProviderRecoveryStatus offline, and "back to normal".
+  - round23Store 14 of 18: PIN-F, PIN-A, PIN-D, kept text, clear and load closing, POST context, 409 keeps text, GA-LATE, the waits, debounce behind a landed PUT, rename landed, and the copy cases. The controls that passed were offline gating (already on), GA-EARLY, Undo refused, and nothing cut off.
+  - round23Restart 2 of 3: STALEBOOT via loadProjectGraph and via loadGraph. The L-a control passed.
+  - round23Lines 7 of 11: the new 2–3 and node-count forms, and the copy line.
+  - The CSS test added after the live check (a locked primary looks neutral) fails on b74d4466 too.
+- **Changed on purpose:**
+  - graphStore.round15: three settings are now named, and four are counted.
+  - canvasPinsStore and PinComposer: createPin now gets the composed project (null with none).
+  - round22Surfaces: ProviderRecoveryStatus is out of OFFLINE_ONLY.
+
+### Gates (round 23, final code)
+
+- **Backend:** the full suite, isolated through iso_presence.sh, passed 11,681 with 71 skipped (6 min 35 s).
+- **Frontend vitest:**
+  - First full run: 7,046 of 7,052 passed. The 6 failures were real, not timeouts:
+    - The pin tests expected the old createPin arity.
+    - An anonymous agent got the no-agent line.
+    - A mocked recoverProject returning nothing threw synchronously.
+    - round15's old count.
+  - All 6 were fixed (the copy request is now wrapped so it can't throw). The rerun passed 7,052 of 7,052 in 552 files, and the final run, after the CSS test, passed 7,053 of 7,053.
+- **Other frontend gates:**
+  - errorCopy ratchets: 14 files, 173 of 173.
+  - tsc -b and lint are clean.
+  - Build: first load 404,121 bytes raw (122,090 gzip), +2,108 over b74d4466 and under 512,000.
+
+### Live check (8795/5795, isolated through iso_presence.sh; scratchpad agent-presence/r23/live/live-r23.mjs)
+
+- Full run: 20 of 20. Cinema was run again after the neutral-look CSS: 9 of 9.
+- **The note during a follow:**
+  - The follow closed the dialog. The notice shows the line, "Make the sky warmer", Copy note and ×.
+  - No pin write was sent, and no note landed on either project. A compose while following made no dialog.
+- **The palette while following:** 311 acting items (Run, Load, Ask, every node) were disabled with "Wait for “Second canvas” to open.". Fit view, the views and the panels stayed enabled. Enter on "Run graph" sent no run.
+- **Cinema:** offline and following, every control that acts was disabled and marked, with the Wait tooltip while following. A press on Generate shot sent no run. Back online, nothing was left locked.
+- **Agent clear with a landed PUT:**
+  - GA-LATE: the PUT was applied in Nebula, and its 200 was held until after the clear's broadcast. "Codex changed the canvas" showed with Undo. Undo restored "a lighthouse in rain" on the canvas, in Nebula and in the restore body.
+  - GA-EARLY did the same with "a lighthouse in fog".
+- **Blocked:** 2 requests in each run, both the canaries; 0 toward 8000-8010 or 5173.
+
+### Open items (round 23)
+
+- **For GM:**
+  - The kept-note words `NOTE_KEPT_LINE` and `NOTE_KEPT_COPY` (pending).
+  - Whether the neutral disabled look should also cover Generate when it is disabled for other reasons (max runs, references). It covers only the lock for now.
+- The paramSaveFailedLine change (three settings named) changes PR #114's round-15 copy, by GM's round-23 counting.
+- A recovered copy is made only when typing was cut off at replacement time.
+- The project bar's rename stays enabled offline (refused on use) by #114's design.

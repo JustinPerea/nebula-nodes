@@ -2,7 +2,7 @@ import { useId } from 'react';
 import type { ModelNodeDefinition } from '../../types';
 import { useGraphStore } from '../../store/graphStore';
 import type { JevCardField as JevCardFieldSpec } from '../../lib/jevView';
-import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { useCanvasLock } from '../../lib/canvasLock';
 
 interface JevCardFieldProps {
   nodeId: string;
@@ -25,7 +25,8 @@ const stop = (event: React.SyntheticEvent) => event.stopPropagation();
  * path the Inspector uses, so the two always show the same value. */
 export function JevCardField({ nodeId, definition, field, params, portWired = false, portLabel }: JevCardFieldProps) {
   const updateNodeData = useGraphStore((s) => s.updateNodeData);
-  const readOnly = useBackendOffline();
+  const lock = useCanvasLock(); // offline or following (GM round 22, A)
+  const readOnly = lock.locked;
   const inputId = useId();
   const param = definition.params.find((p) => p.key === field.key);
   const value = typeof params[field.key] === 'string' ? (params[field.key] as string) : '';
@@ -40,7 +41,7 @@ export function JevCardField({ nodeId, definition, field, params, portWired = fa
     id: inputId,
     value,
     disabled: readOnly,
-    ...offlineMark(readOnly),
+    ...lock.mark,
     onChange,
     onKeyDown: stop,
     onMouseDown: stop,

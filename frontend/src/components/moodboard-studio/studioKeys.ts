@@ -1,3 +1,5 @@
+import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
+
 /**
  * Moodboard Studio's own keys (plan section 5.4): Cmd+Z, Shift+Cmd+Z, Cmd+S
  * and, on the Board view, Delete and Shift+1. They listen on the document so
@@ -7,6 +9,9 @@
  * only to text boxes and dialogs.
  */
 export function isStudioShortcutTarget(target: EventTarget | null, action?: StudioKey): boolean {
+  // None acts while a modal dialog is open, wherever focus is, the page
+  // included (review 8, L-d, as the canvas's keys: lib/canvasShortcutScope.ts).
+  if (keyBlockedByModal()) return false;
   if (!(target instanceof Element)) return true;
   if (target === document.body || target === document.documentElement) return true;
   if (isTextEntry(target)) return false;

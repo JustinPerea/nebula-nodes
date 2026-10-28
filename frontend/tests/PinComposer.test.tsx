@@ -39,7 +39,8 @@ describe('PinComposer', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'OK' }));
     });
-    expect(api.createPin).toHaveBeenCalledWith('warmer', { nodeId: 'n4' });
+    // Round 23 (M-1): and the project it was composed on (none open here).
+    expect(api.createPin).toHaveBeenCalledWith('warmer', { nodeId: 'n4' }, null);
     expect(useCanvasPinsStore.getState().composer).toBeNull();
     expect(useCanvasPinsStore.getState().pins.map((p) => p.id)).toEqual(['pin_a']);
     expect(screen.queryByRole('dialog')).toBeNull();

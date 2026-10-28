@@ -1,0 +1,145 @@
+/* The dialog before the person's direct run of agents' paid placeholders
+   (components/PlaceholderRunDialog.tsx; Q133). Built on prompt-dialog.css. */
+
+/* Review 6, M1 (GM - Design: "rows scroll with everything else pinned"):
+   the card never grows past the window. The heading and the buttons keep
+   their height, the body shrinks, and inside it only the rows do, so the
+   heading, the changed line, the total, the footnotes and Run / Cancel stay
+   on screen however many paid nodes the run has. */
+.placeholder-run__card {
+  width: min(420px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+}
+
+.placeholder-run__card > * {
+  flex-shrink: 0;
+}
+
+.placeholder-run__card > .placeholder-run__body {
+  flex-shrink: 1;
+}
+
+.placeholder-run__heading {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.placeholder-run__body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.placeholder-run__body > * {
+  flex-shrink: 0;
+}
+
+/* The only part that scrolls. A Tab stop when it does (PlaceholderRunDialog
+   useScrolls), with the dialog's own focus ring. */
+.placeholder-run__body > .placeholder-run__rows {
+  flex-shrink: 1;
+}
+
+.placeholder-run__rows {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-height: 0;
+  margin: 2px 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.placeholder-run__rows:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid #f0f0f0);
+  outline-offset: var(--sr-focus-offset, 2px);
+  border-radius: 4px;
+}
+
+/* One line per placeholder; a long name wraps under its dot. */
+.placeholder-run__row {
+  padding-left: 16px;
+  text-indent: -16px;
+  overflow-wrap: anywhere;
+}
+
+/* GM - Design, round 12: a row wraps only between its segments, at the
+   " · ", never inside one ("Grain model: gaussian", "on your Krea plan",
+   “Name”), and its next line keeps the row's indent. Each segment is one
+   unit on the line; one longer than the row still wraps inside itself. */
+.placeholder-run__seg {
+  display: inline-block;
+  max-width: 100%;
+  text-indent: 0;
+  vertical-align: top;
+}
+
+/* A dotted row's first segment starts at the dot, out in the row's indent:
+   it may be that much wider, and a long name wrapping inside it keeps the
+   same hanging indent as the row. */
+.placeholder-run__row:not(.placeholder-run__row--muted) > .placeholder-run__seg--lead {
+  max-width: calc(100% + 16px);
+  padding-left: 16px;
+  text-indent: -16px;
+}
+
+/* The agent's dot, as on its node's pill; a ring when it named itself. */
+.placeholder-run__dot {
+  display: inline-block;
+  vertical-align: 1px;
+  text-indent: 0;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--prd-color);
+}
+
+.placeholder-run__dot[data-verified='false'] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--prd-color);
+}
+
+.placeholder-run__name {
+  font-weight: 600;
+}
+
+.placeholder-run__free,
+.placeholder-run__note {
+  color: var(--sr-ink-meta, #b5b5b5);
+}
+
+.placeholder-run__total {
+  font-weight: 600;
+}
+
+/* A paid node of the run that is no placeholder (GM - Design, round 6, item
+   3): muted, no dot, its name lined up with the agents' rows. */
+.placeholder-run__row--muted {
+  text-indent: 0;
+  color: var(--sr-ink-meta, #b5b5b5);
+}
+
+.placeholder-run__row--muted .placeholder-run__name {
+  font-weight: 500;
+}
+
+/* Read to a screen reader when the dialog's words change in place (review 5, L7). */
+.placeholder-run__live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

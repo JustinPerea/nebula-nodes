@@ -1,4 +1,4 @@
-import { getProjectContext } from './projectContext';
+import { getProjectContext, type ProjectContext } from './projectContext';
 import { refuseWriteWhileOffline } from './backendConnection';
 import { BACKEND_NOT_RUNNING_COPY, ConnectionLostError, isConnectionFailure } from './errorCopy';
 import { TAB_HEADER, TAB_ID } from './tabId';
@@ -392,9 +392,13 @@ function classifyBodyReads(response: Response, heading: string): Response {
   return response;
 }
 
-export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+/** `options.project`: the project the caller read when the person acted (a
+ * graph write that waited behind an undo: graphStore.graphMutationFetch,
+ * review 17 H-1). Its revision is the one sent, never one read later. */
+export async function apiFetch(path: string, init?: RequestInit,
+  options?: { project?: ProjectContext | null }): Promise<Response> {
   // Capture at admission, before discovery can await a later project switch.
-  const project = getProjectContext();
+  const project = options && 'project' in options ? options.project ?? null : getProjectContext();
   const method = String(init?.method ?? 'GET').toUpperCase();
   // Offline is read-only (round 15 of PR #114): a write is refused here,
   // before anything is sent, whichever path asked for it.
@@ -407,6 +411,8 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
   headers.set(PARAMS_VERSION_HEADER, String(GRAPH_PARAMS_VERSION));
   if (project && method !== 'GET' && method !== 'HEAD') {
     headers.set('X-Nebula-Workspace-Revision', project.revision);
+    // Which canvas it was made for (round 19): Nebula refuses it after a clear or an import.
+    if (project.canvas !== undefined) headers.set('X-Nebula-Canvas-Revision', project.canvas);
   }
   // Which tab wrote, so this tab can tell its own edits' graphSync echoes
   // from edits made elsewhere (lib/tabId.ts).

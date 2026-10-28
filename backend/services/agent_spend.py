@@ -138,7 +138,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
-from services import model_pricing
+from services import model_pricing, node_route
 from services.node_names import quoted
 from services.retired_nodes import merged_into
 
@@ -765,7 +765,8 @@ def decide(
     estimate = model_pricing.estimate_run(list(items), pricing, definitions, api_keys, multipliers,
                                           model_pricing.wired_counts(list(items), edges), sizes)
     definition_of = {str(item["id"]): str(item.get("definitionId") or "") for item in items}
-    labels = {node_id: str((definitions.get(def_id) or {}).get("displayName") or "") for node_id, def_id in definition_of.items()}
+    # A node by its canvas title (review 18 M-D: the name the canvas shows).
+    labels = {node_id: node_route.node_name(definitions.get(def_id), None) for node_id, def_id in definition_of.items()}
 
     by_model: dict[str, float] = {}
     per_node: dict[str, tuple[str, float]] = {}

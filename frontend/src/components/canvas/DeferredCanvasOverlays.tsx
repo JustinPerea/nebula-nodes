@@ -1,5 +1,6 @@
 import {
   DeferredAgentCursorLayer,
+  DeferredAgentNodeMarkLayer,
   DeferredPinLayer,
   DeferredProposalBar,
   DeferredProposalLayer,
@@ -25,5 +26,7 @@ export const ProposalBar = deferredAtOnce(DeferredProposalBar, 'ProposalBar');
 export const ProposalLayer = deferredAtOnce(DeferredProposalLayer, 'ProposalLayer');
 export const PinLayer = deferredAtOnce(DeferredPinLayer, 'PinLayer');
 export const AgentCursorLayer = deferredAtOnce(DeferredAgentCursorLayer, 'AgentCursorLayer');
+/** Agents on the nodes: each one's mark, and the placeholders' outlines (Q125 item 3). */
+export const AgentNodeMarks = deferredAtOnce(DeferredAgentNodeMarkLayer, 'AgentNodeMarks');
 /** The notice region's own notices (components/NoticeRegion.tsx mounts them on every screen but Projects). */
 export const RegionNotices = deferredAtOnce(DeferredRegionNotices, 'RegionNotices');

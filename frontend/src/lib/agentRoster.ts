@@ -24,6 +24,10 @@ export interface RosterEntry {
   needsYou: { questions: number; proposals: number };
   waitingSeconds: number | null;
   activeSecondsAgo: number | null;
+  /** Its placeholders on the open canvas (Q125 item 3). */
+  pending?: string[];
+  /** The nodes its runs are running now. */
+  running?: Array<{ runId: string; nodeId: string; model: string | null; secondsAgo: number }>;
 }
 
 export interface RosterListing {

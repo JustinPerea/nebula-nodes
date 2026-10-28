@@ -280,7 +280,7 @@ def instance_missing_line(
     need = instance_missing(definition, params, configured_keys, krea_signed_in, definitions, wired)
     if need is None:
         return None
-    title = name or str(definition.get("displayName") or "This node")
+    title = name or node_route.node_name(definition, None, "This node")
     sign_in = f"{title} needs your Krea account. Connect it in Settings."
     configured = set(configured_keys)
     if node_route.has_routes(definition):

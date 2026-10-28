@@ -1,4 +1,5 @@
 import { deferredModule, lazyWithPreload } from './lazyWithPreload';
+import { placeholderRunDialogModule } from './placeholderRunDialogModule';
 
 /**
  * Code that is not needed for the first paint of the canvas, split out of the
@@ -142,6 +143,14 @@ export const DeferredAgentCursorLayer = lazyWithPreload(
   (module) => module.AgentCursorLayer,
 );
 
+// Agents on the nodes (Q125 item 3): the mark above a node an agent is on
+// and the placeholder outline. It reads the roster when it mounts, so it
+// draws nothing before its chunk and misses nothing.
+export const DeferredAgentNodeMarkLayer = lazyWithPreload(
+  () => import('../components/canvas/AgentNodeMarkLayer'),
+  (module) => module.AgentNodeMarkLayer,
+);
+
 // The notice region's own notices (RegionNotices; the region itself,
 // components/NoticeRegion.tsx, is a few boxes in the entry so a toast always
 // has its slot): a notice arrives only after an edit, an undo or a failure,
@@ -154,6 +163,10 @@ export const DeferredRegionNotices = lazyWithPreload(
 // Graph save / open (lib/graphFile.ts): used only inside those two actions,
 // so GraphFileActions.tsx awaits it at the moment of use.
 export const graphFileModule = deferredModule(() => import('./graphFile'));
+
+// The dialog before the person's direct run of agents' paid placeholders
+// (Q133): lib/placeholderRunDialogModule.ts, preloaded with the rest.
+export { placeholderRunDialogModule } from './placeholderRunDialogModule';
 
 /** Fetch every deferred chunk; called once the canvas is idle after first paint. */
 export const DEFERRED_PRELOADS: readonly (() => Promise<unknown>)[] = [
@@ -175,18 +188,26 @@ export const DEFERRED_PRELOADS: readonly (() => Promise<unknown>)[] = [
   DeferredProposalLayer.preload,
   DeferredPinLayer.preload,
   DeferredAgentCursorLayer.preload,
+  DeferredAgentNodeMarkLayer.preload,
   DeferredRegionNotices.preload,
   graphFileModule.preload,
+  placeholderRunDialogModule.preload,
 ];
 
 /** Source paths (relative to src/) that must stay out of the startup entry. */
 export const DEFERRED_MODULES: readonly string[] = [
+  'components/PlaceholderRunDialog.tsx',
+  'components/askPlaceholderRun.tsx',
   'components/panels/AgentLog.tsx',
   'components/agent-notes/AgentNotesCorner.tsx',
   'components/agent-notes/AgentNoteCard.tsx',
   'components/agent-notes/AgentNotesList.tsx',
   'components/agent-notes/AgentNoteParts.tsx',
   'components/agent-notes/AgentNoteOutlineLayer.tsx',
+  // Agents on the nodes (Q125 item 3).
+  'components/canvas/AgentNodeMarkLayer.tsx',
+  'components/canvas/agentNodeMarks.ts',
+  'components/canvas/nodeCardBox.ts',
   'components/agent-notes/AgentQuestionsForm.tsx',
   'components/agent-notes/AgentQuestionsAnswers.tsx',
   // The Agents panel (Q125 item 2): its own chunk inside the corner's.

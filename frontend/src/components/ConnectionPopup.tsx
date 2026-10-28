@@ -16,8 +16,9 @@ import { ProviderReadinessBadge } from './ProviderReadinessBadge';
 import { ScrollFade } from './ScrollFade';
 import { floatingBottomLimit } from '../lib/bottomBar';
 import { isBackendOffline, isOfflineRefusal, refuseEditWhileOffline } from '../lib/backendConnection';
-import { offlineMark, useBackendOffline } from '../lib/useBackendOffline';
+import { useCanvasLock } from '../lib/canvasLock';
 import '../styles/canvas-next-steps.css';
+import { keyBlockedByModal } from '../lib/canvasShortcutScope';
 
 const CATEGORY_LABELS: Record<string, string> = {
   'image-gen': 'Image Generation',
@@ -44,7 +45,8 @@ export function ConnectionPopup() {
   const hideConnectionPopup = useUIStore((s) => s.hideConnectionPopup);
   const addNode = useGraphStore((s) => s.addNode);
   const addNodeAndConnect = useGraphStore((s) => s.addNodeAndConnect);
-  const readOnly = useBackendOffline();
+  // Offline or following an agent's switch: one read-only state (GM round 22, A).
+  const lock = useCanvasLock();
   const onConnect = useGraphStore((s) => s.onConnect);
   const nodes = useGraphStore((s) => s.nodes);
   const { screenToFlowPosition } = useReactFlow();
@@ -108,7 +110,8 @@ export function ConnectionPopup() {
     }
 
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
+      // A modal dialog over the popup owns Escape (review 8, L-d).
+      if (e.key === 'Escape' && !keyBlockedByModal(menuRef.current)) {
         hideConnectionPopup();
         if (opener.current?.isConnected) opener.current.focus();
       }
@@ -337,8 +340,7 @@ export function ConnectionPopup() {
               </button>
               {isOpen && nodes.map((node) => (
                 <div key={node.definition.id} className="next-step-choice">
-                <button type="button" disabled={pending || readOnly}
-                  {...offlineMark(readOnly)}
+                <button type="button" {...lock.act({ disabled: pending })}
                   className="connection-popup__item"
                   onClick={() => handleSelect(node)}
                 >

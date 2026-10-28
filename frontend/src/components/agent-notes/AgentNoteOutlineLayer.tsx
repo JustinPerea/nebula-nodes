@@ -3,40 +3,10 @@ import { useStore, useStoreApi, ViewportPortal, type Node, type ReactFlowState }
 import type { NodeData } from '../../types';
 import { selectActiveOutline, useAgentNotesStore, type OutlineSpec } from '../../store/agentNotesStore';
 import { springCssVars, springLinear, SPRING_SOFT } from '../../lib/springs';
+import { nodeCardBox as nodeBox, type NodeBox } from '../canvas/nodeCardBox';
 import './agentNotes.css';
 
 const zoomSelector = (state: ReactFlowState) => state.transform[2];
-
-interface NodeBox { x: number; y: number; width: number; height: number }
-
-/**
- * The node's card in flow units. A model node's box starts at its small
- * category label, about 38 px above the card (lib/canvasPins.ts), so the
- * outline measures the drawn `.model-node__card` inside it when there is one.
- */
-function nodeBox(state: Pick<ReactFlowState, 'nodeLookup' | 'transform'>, id: string): NodeBox | null {
-  const internal = state.nodeLookup.get(id);
-  if (!internal) return null;
-  const position = internal.internals?.positionAbsolute;
-  const width = internal.measured?.width ?? internal.width;
-  const height = internal.measured?.height ?? internal.height;
-  if (!position || !width || !height) return null;
-  const box = { x: position.x, y: position.y, width, height };
-  if (typeof document === 'undefined') return box;
-  const el = document.querySelector(`.react-flow__node[data-id="${CSS.escape(id)}"]`);
-  const card = el?.querySelector('.model-node__card');
-  if (!el || !card) return box;
-  const outer = el.getBoundingClientRect();
-  const inner = card.getBoundingClientRect();
-  const zoom = state.transform[2] || 1;
-  if (!outer.width || !inner.width || !inner.height) return box;
-  return {
-    x: box.x + (inner.left - outer.left) / zoom,
-    y: box.y + (inner.top - outer.top) / zoom,
-    width: inner.width / zoom,
-    height: inner.height / zoom,
-  };
-}
 
 /** The spec to draw, kept a moment after it goes so the outlines fade out. */
 function useShownOutline(): { spec: OutlineSpec | null; leaving: boolean } {

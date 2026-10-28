@@ -8,7 +8,9 @@ import { useSyncExternalStore } from 'react';
  * notice (its Undo or Redo, an error) right above the bar; then a restore's
  * late count, above the newer notice it arrived after (GM - Design, round 4:
  * "With two notices showing, put the late line above the newer one, so the
- * notice with a button stays nearest the bar."); then the toasts about the
+ * notice with a button stays nearest the bar."); then a written line that
+ * arrived while the canvas notice offers Undo or Redo (review 7, L3: it
+ * never replaces the offer; the same rule puts it above); then the toasts about the
  * person's own last action (an asset moved to the trash, a board step, a pin
  * that couldn't save, a project moved to the trash); then the lines about the
  * app and the agents (the project an agent switched to, a project over the
@@ -29,6 +31,7 @@ export const NOTICE_SLOTS = [
   'pin',
   'board',
   'asset-trash',
+  'message',
   'late',
   'notice',
 ] as const;

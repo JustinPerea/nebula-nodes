@@ -2,6 +2,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { getCinemaUploadIssue, useCinemaUploadStore } from '../../store/cinemaUploadStore';
 import { WorkspaceHeader } from '../WorkspaceHeader';
+import { useCanvasLock } from '../../lib/canvasLock';
 
 interface CinemaStudioToolbarProps {
   cinemaNodeId: string;
@@ -12,9 +13,15 @@ export function CinemaStudioToolbar({ cinemaNodeId }: CinemaStudioToolbarProps) 
   const exitCinemaEditor = useUIStore((s) => s.exitCinemaEditor);
   const executeNode = useGraphStore((s) => s.executeNode);
   const isExecuting = useGraphStore((s) => s.isExecuting);
+  // A run waiting for its inputs counts as starting (review 15, M-B).
+  const runStarting = useGraphStore((s) => s.runStarting);
   const isImportingGraph = useGraphStore((s) => s.isImportingGraph);
   const activeRuns = useGraphStore((s) => s.activeRuns);
   const cancelRun = useGraphStore((s) => s.cancelRun);
+  // Round 23 (review 22, L-3): Generate all acts, so it takes the canvas
+  // lock. Run history only looks and Stop scene stops a run already going
+  // (a stop is never refused), so both stay enabled.
+  const lock = useCanvasLock();
   useCinemaUploadStore((state) => state.uploads);
   const referenceIssue = getCinemaUploadIssue(cinemaNodeId, undefined, true);
   const sceneRuns = activeRuns.filter((run) => run.nodeIds.includes(cinemaNodeId));
@@ -44,10 +51,12 @@ export function CinemaStudioToolbar({ cinemaNodeId }: CinemaStudioToolbarProps) 
         type="button"
         className="cinema-studio-toolbar__action"
         onClick={() => {
-          if (!getCinemaUploadIssue(cinemaNodeId, undefined, true)) executeNode(cinemaNodeId);
+          if (!getCinemaUploadIssue(cinemaNodeId, undefined, true)) executeNode(cinemaNodeId, { verb: 'Generate' });
         }}
-        disabled={isExecuting || isImportingGraph || Boolean(referenceIssue)}
-        title={referenceIssue ?? 'Generate every shot using the current scene settings'}
+        {...lock.act({
+          disabled: isExecuting || runStarting || isImportingGraph || Boolean(referenceIssue),
+          title: referenceIssue ?? 'Generate every shot using the current scene settings',
+        })}
       >
         {sceneRuns.length > 0 ? 'Generating…' : 'Generate all'}
       </button>

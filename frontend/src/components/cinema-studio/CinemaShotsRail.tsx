@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { backendAssetUrlSync } from '../../lib/backend';
+import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 import { useGraphStore } from '../../store/graphStore';
 import type { CinemaSceneSpec, CinemaShot } from '../../types';
 
@@ -33,6 +34,9 @@ export function CinemaShotsRail({
   onReorder,
 }: CinemaShotsRailProps) {
   const [dragId, setDragId] = useState<string | null>(null);
+  // Round 23 (review 22, L-3): moving, removing and adding shots edit the
+  // canvas, so they take the canvas lock; selecting a shot only looks.
+  const lock = useCanvasLock();
   const selectorRefs = useRef(new Map<string, HTMLButtonElement>());
   const addRef = useRef<HTMLButtonElement>(null);
   const pendingFocus = useRef<{ shotId: string | null; removedId?: string } | null>(null);
@@ -60,6 +64,7 @@ export function CinemaShotsRail({
   }, [scene.shots]);
 
   const reorder = (shotId: string, targetIndex: number, focusSelector: boolean) => {
+    if (refuseCanvasEdit()) return;
     const shots = [...scene.shots];
     const from = shots.findIndex((shot) => shot.id === shotId);
     if (from < 0 || targetIndex < 0 || targetIndex >= shots.length || from === targetIndex) return;
@@ -122,7 +127,7 @@ export function CinemaShotsRail({
           <div
             key={shot.id}
             className={`cinema-shots-rail__shot ${selected ? 'cinema-shots-rail__shot--selected' : ''} ${dragId === shot.id ? 'cinema-shots-rail__shot--dragging' : ''}`}
-            draggable
+            draggable={!lock.locked}
             onDragStart={() => setDragId(shot.id)}
             onDragEnd={() => setDragId(null)}
             onDragOver={(event) => event.preventDefault()}
@@ -158,20 +163,23 @@ export function CinemaShotsRail({
             <div className="cinema-shots-rail__actions">
               {selected && <>
                 <button type="button" className="cinema-shots-rail__move"
-                  aria-label={`Move Shot ${idx + 1} earlier`} title="Move shot earlier"
-                  disabled={idx === 0} onClick={() => reorder(shot.id, idx - 1, true)}>←</button>
+                  aria-label={`Move Shot ${idx + 1} earlier`}
+                  {...lock.act({ disabled: idx === 0, title: 'Move shot earlier' })}
+                  onClick={() => reorder(shot.id, idx - 1, true)}>←</button>
                 <button type="button" className="cinema-shots-rail__move"
-                  aria-label={`Move Shot ${idx + 1} later`} title="Move shot later"
-                  disabled={idx === scene.shots.length - 1} onClick={() => reorder(shot.id, idx + 1, true)}>→</button>
+                  aria-label={`Move Shot ${idx + 1} later`}
+                  {...lock.act({ disabled: idx === scene.shots.length - 1, title: 'Move shot later' })}
+                  onClick={() => reorder(shot.id, idx + 1, true)}>→</button>
               </>}
               <button type="button" className="cinema-shots-rail__remove"
-                aria-label={`Remove Shot ${idx + 1}`} title="Remove shot"
+                aria-label={`Remove Shot ${idx + 1}`} {...lock.act({ title: 'Remove shot' })}
                 onClick={() => handleRemove(shot.id, idx)}>×</button>
             </div>
           </div>
         );
       })}
-      <button ref={addRef} type="button" className="cinema-shots-rail__add" onClick={onAddShot}>
+      <button ref={addRef} type="button" className="cinema-shots-rail__add"
+        {...lock.act()} onClick={() => { if (!refuseCanvasEdit()) onAddShot(); }}>
         + Add shot
       </button>
     </div>

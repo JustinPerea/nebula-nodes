@@ -849,6 +849,81 @@ export function providerLabel(provider: string | null | undefined): string {
   return provider && Object.hasOwn(PROVIDER_LABELS, provider) ? PROVIDER_LABELS[provider as APIProvider] : (provider || 'provider');
 }
 
+/**
+ * GM - Design, round 15, item 3 (review 14, L-I): a node's model as a run
+ * on `provider` shows it. A display name that ends by naming its own
+ * gateway ("Grok Imagine 2.0 (Krea)", "Nano Banana (FAL)") names the
+ * provider the run actually goes through instead, by the label the running
+ * card uses for that route ("xAI · 6s": providerLabel). GM - Design, round
+ * 16 (b), verbatim: "when the dialog builds the label, no parens: "Grok
+ * Imagine 2.0 via xAI", "GPT Image 2.5 Flare via OpenAI"". On the gateway
+ * itself it names the gateway the same way ("Grok Imagine 2.0 via Krea": round
+ * 19, review 18 L-A) when the route depends on keys; else, or for a name that
+ * names no provider, it is the display name (the card's own). A proposal's cost names the same route to agents (backend
+ * services/canvas_proposals.py cost_for; node_route.name_on_route).
+ */
+export function nameOnRoute(definition: RoutedDefinition & Pick<ModelNodeDefinition, 'displayName'>,
+  provider: string | null | undefined): string {
+  const stripped = gatewayStripped(definition);
+  if (!stripped) return definition.displayName;
+  // Review 18, L-A (GM - Design, round 19): a node whose route depends on the
+  // keys names the route on the gateway too ("Grok Imagine 2.0 via Krea"),
+  // never "Grok Imagine 2.0 (Krea)"; with no route, the gateway is the route.
+  if (routeDependsOnKeys(definition)) return `${stripped} via ${providerLabel(provider || definition.apiProvider)}`;
+  if (!provider || provider === definition.apiProvider) return definition.displayName;
+  return `${stripped} via ${providerLabel(provider)}`;
+}
+
+/** The model part of a display name that ends by naming its own gateway
+ * ("Grok Imagine 2.0" for "Grok Imagine 2.0 (Krea)"); null for a name that
+ * names no gateway. */
+function gatewayStripped(definition: Pick<ModelNodeDefinition, 'displayName' | 'apiProvider'>): string | null {
+  const own = /^(.*\S)\s+\(([^()]+)\)$/.exec(definition.displayName);
+  if (!own) return null;
+  const said = own[2].trim().toLowerCase();
+  const gateway = [definition.apiProvider, providerLabel(definition.apiProvider)].map((word) => String(word).toLowerCase());
+  return gateway.includes(said) ? own[1] : null;
+}
+
+/** Whether the provider a node runs on depends on the keys the person set:
+ * its routes name more than one provider (routesOf). */
+export function routeDependsOnKeys(definition: RoutedDefinition): boolean {
+  return new Set(routesOf(definition).map((route) => route.provider)).size > 1;
+}
+
+/**
+ * GM - Design, round 18, item 1 (verbatim): "Unnamed node: the default title
+ * drops the route. "Grok Imagine 2.0" in all three places" (the card title,
+ * the dialog's changed line and its row), "Only for nodes whose route depends
+ * on keys", canvas only: the library and search keep the catalog names
+ * (#196). A node's default title on the canvas: its display name without the
+ * gateway it names, when its route depends on keys; else the display name.
+ * Backend services/node_route.canvas_title is the same.
+ */
+export function canvasTitle(definition: RoutedDefinition & Pick<ModelNodeDefinition, 'displayName'>): string {
+  const stripped = gatewayStripped(definition);
+  return stripped && routeDependsOnKeys(definition) ? stripped : definition.displayName;
+}
+
+/** GM - Design, round 18: a node is unnamed when its saved label is either
+ * form of its own definition's default title, the catalog name or the
+ * canvas title (canvasTitle). A hand-typed "Grok Imagine 2.0" reads as
+ * unnamed too (GM: harmless). An empty label is unnamed. */
+export function isDefaultTitle(definition: (RoutedDefinition & Pick<ModelNodeDefinition, 'displayName'>) | undefined,
+  label: string | null | undefined): boolean {
+  if (!label) return true;
+  if (!definition) return false;
+  return label === definition.displayName || label === canvasTitle(definition);
+}
+
+/** A node's title as its card shows it: the person's name for it, else its
+ * canvas title (GM - Design, round 18). */
+export function nodeTitle(definition: (RoutedDefinition & Pick<ModelNodeDefinition, 'displayName'>) | undefined,
+  label: string | null | undefined): string {
+  if (!definition) return label ?? '';
+  return isDefaultTitle(definition, label) ? canvasTitle(definition) : label!;
+}
+
 function orList(items: string[]): string {
   return items.length === 1 ? items[0] : `${items.slice(0, -1).join(', ')} or ${items[items.length - 1]}`;
 }

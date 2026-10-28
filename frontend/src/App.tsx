@@ -194,9 +194,13 @@ export default function App() {
     }
 
     window.addEventListener('nebula:settings-saved', handleSettingsSaved);
+    // The placeholder run dialog reads the keys again before it prices a run
+    // (store/graphStore.ts refreshSettingsCache; review 4, M1).
+    window.addEventListener('nebula:settings-refresh', handleSettingsSaved);
     return () => {
       cancelled = true;
       window.removeEventListener('nebula:settings-saved', handleSettingsSaved);
+      window.removeEventListener('nebula:settings-refresh', handleSettingsSaved);
     };
   }, []);
 

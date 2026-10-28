@@ -6,6 +6,7 @@ import type { Pin } from '../../lib/wsClient';
 import { AGENT_CURSOR_SPRING, isAtRest, stepSpring, type SpringState } from '../../lib/agentCursorMotion';
 import { useCanvasPinsStore } from '../../store/canvasPinsStore';
 import { pinPoint, relativeTime } from '../../lib/canvasPins';
+import { useCanvasLock } from '../../lib/canvasLock';
 import '../../styles/canvasPins.css';
 
 /** A pin newer than this pops in when it first appears (older ones are just there). */
@@ -21,6 +22,9 @@ function prefersReducedMotion(): boolean {
 function PinBadge({ pin, slot, zoom }: { pin: Pin; slot: number; zoom: number }) {
   const store = useStoreApi<Node<NodeData>>();
   const remove = useCanvasPinsStore((s) => s.remove);
+  // Round 23 (review 22, M-1): Delete note is a pin write, refused while
+  // following or offline (the store gates it too); opening a note only looks.
+  const lock = useCanvasLock();
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const zoomRef = useRef(zoom);
   const scale = useRef<SpringState>({ x: 1, y: 0, vx: 0, vy: 0 });
@@ -151,6 +155,7 @@ function PinBadge({ pin, slot, zoom }: { pin: Pin; slot: number; zoom: number })
             type="button"
             className="canvas-pin__delete"
             aria-label="Delete note"
+            {...lock.act()}
             onClick={() => void remove(pin.id)}
           >
             <Trash2 size={12} aria-hidden="true" />

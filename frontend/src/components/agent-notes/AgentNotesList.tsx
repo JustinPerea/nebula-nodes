@@ -4,7 +4,7 @@ import { clockTime, noteDone, noteLabel, noteText, offersNotNow, questionSetId }
 import { useAgentQuestionsStore } from '../../store/agentQuestionsStore';
 import { AgentQuestionsAnswers } from './AgentQuestionsAnswers';
 import { ScrollFade } from '../ScrollFade';
-import { AuthorDot, BusyButton, NoteButtons, type AgentNotesAdapter } from './AgentNoteParts';
+import { AuthorDot, BusyButton, NoteButtons, RunOutcomeIcon, RunThumbnail, type AgentNotesAdapter } from './AgentNoteParts';
 
 /** One list in the opened Updates: its updates (newest first) and how to draw and run them. */
 export interface AgentNotesListSection {
@@ -90,6 +90,8 @@ export function AgentNotesList({
         data-note-id={note.id}
         className="agent-notes-entry"
         data-kind={note.author.kind}
+        data-about={note.about}
+        data-outcome={note.run?.outcome}
         data-state={done ? 'done' : undefined}
         data-showable={showable ? 'true' : undefined}
         style={{ '--an-author': note.author.color } as CSSProperties}
@@ -107,7 +109,8 @@ export function AgentNotesList({
           {label && <span className="agent-notes-entry__label">{label}</span>}
           <time className="agent-notes-entry__time" dateTime={note.at}>{clockTime(note.at, today)}</time>
         </div>
-        <p className="agent-notes-entry__text">{noteText(note, adapter.numberFor)}</p>
+        <p className="agent-notes-entry__text"><RunOutcomeIcon run={note.run} />{noteText(note, adapter.numberFor)}</p>
+        <RunThumbnail run={note.run} />
         <QuestionAnswersFor note={note} />
         <NoteButtons
           note={note}

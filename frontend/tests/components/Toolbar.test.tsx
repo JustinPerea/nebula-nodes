@@ -20,6 +20,7 @@ interface ToolbarGraph {
   loadGraph: (...args: unknown[]) => void;
   beginUndoStep: () => object;
   cancelUndoStep: (step: object) => void;
+  endUndoStep: (step: object) => void;
 }
 
 interface ToolbarUI {
@@ -36,7 +37,7 @@ const mocks = vi.hoisted(() => ({
   graph: null as UseBoundStore<StoreApi<ToolbarGraph>> | null,
   ui: null as UseBoundStore<StoreApi<ToolbarUI>> | null,
   execute: vi.fn(), cancel: vi.fn(), layout: vi.fn(), clear: vi.fn(), load: vi.fn(),
-  undoStep: { step: 'before clear' }, beginStep: vi.fn(), cancelStep: vi.fn(),
+  undoStep: { step: 'before clear' }, beginStep: vi.fn(), cancelStep: vi.fn(), endStep: vi.fn(),
   reset: vi.fn(), fit: vi.fn(), fetch: vi.fn(), cli: vi.fn(),
   zoomIn: vi.fn(), zoomOut: vi.fn(), zoomTo: vi.fn(),
   flow: { transform: [0, 0, 1] as [number, number, number], minZoom: 0.1, maxZoom: 4 },
@@ -57,6 +58,7 @@ vi.mock('../../src/store/graphStore', async () => {
     executeGraph: mocks.execute, cancelExecution: mocks.cancel, autoLayout: mocks.layout,
     clearGraph: mocks.clear, loadGraph: mocks.load,
     beginUndoStep: () => { mocks.beginStep(); return mocks.undoStep; }, cancelUndoStep: mocks.cancelStep,
+    endUndoStep: mocks.endStep,
   }));
   return { useGraphStore: mocks.graph };
 });
@@ -311,6 +313,8 @@ describe('Canvas toolbar hierarchy', () => {
     // One undo step, taken before the backend clear's graphSync can empty the canvas.
     expect(mocks.beginStep).toHaveBeenCalledTimes(1);
     expect(mocks.clear).toHaveBeenCalledWith({ undoStep: mocks.undoStep });
+    // Review 10, L-2: the step ends once the clear is on the canvas, so a Cmd+Z held meanwhile applies.
+    expect(mocks.endStep).toHaveBeenCalledWith(mocks.undoStep);
   });
 
   it('leaves canvas and provider recovery state intact after clear is refused', async () => {
@@ -323,6 +327,7 @@ describe('Canvas toolbar hierarchy', () => {
     await waitFor(() => expect(notices).toHaveBeenCalledWith("Couldn't clear the canvas. Provider is still settling."));
     expect(mocks.clear).not.toHaveBeenCalled();
     expect(mocks.cancelStep).toHaveBeenCalledWith(mocks.undoStep);
+    expect(mocks.endStep).toHaveBeenCalledWith(mocks.undoStep);
     expect(mocks.graph!.getState().providerRecoveries).toHaveLength(1);
     expect(mocks.graph!.getState().nodes).toHaveLength(1);
   });

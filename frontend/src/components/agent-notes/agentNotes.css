@@ -999,3 +999,57 @@ body.app-slava-restraint .agent-notes-root {
     animation-name: agent-notes-fade-out;
   }
 }
+
+/* =============== Done cards (Q125 item 3) ===============
+ * GM - Design, 2026-10-25: the agent's colour on the left edge, like the
+ * question form (the list's entries have it already); a failure gets the
+ * error icon by its message, never a red edge; the thumbnail sits below the
+ * message, 96 px tall, natural aspect, never cropped, capped at the card's
+ * width; a video's length in mono in its corner. */
+
+.agent-note-card[data-about='run'] {
+  box-shadow: var(--an-shadow), inset 4px 0 0 color-mix(in srgb, var(--an-author) 70%, transparent);
+}
+
+.agent-run-icon {
+  display: inline-block;
+  margin-right: 6px;
+  color: var(--an-muted);
+  font-size: 0.95em;
+  line-height: 1;
+}
+
+.agent-run-thumb {
+  position: relative;
+  display: inline-flex;
+  max-width: 100%;
+  margin-top: 10px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--an-edge);
+  background: rgb(0 0 0 / 0.2);
+  animation: agent-notes-fade-in var(--spring-soft-ms, 300ms) var(--spring-soft, ease-out) both;
+}
+
+.agent-run-thumb img,
+.agent-run-thumb video {
+  display: block;
+  height: 96px;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.agent-run-thumb__duration {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgb(0 0 0 / 0.62);
+  color: #f2f2f2;
+  font-family: var(--an-mono);
+  font-size: 10px;
+  line-height: 14px;
+  font-variant-numeric: tabular-nums;
+}

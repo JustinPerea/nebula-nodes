@@ -54,6 +54,12 @@ export function clockTime(at: string, now: Date): string {
   return sameDay ? time : `${MONTHS[when.getMonth()]} ${when.getDate()}, ${time}`;
 }
 
+/** A done card's video length in its thumbnail's corner (Q125 item 3): m:ss. */
+export function clipDuration(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
+
 /** The dot's label: an agent's initial ("C"), the reader's model name ("Ar" for Argon). */
 export function authorInitials(author: Pick<AgentNoteAuthor, 'kind' | 'name'>): string {
   const words = author.name.trim().split(/\s+/).filter(Boolean);

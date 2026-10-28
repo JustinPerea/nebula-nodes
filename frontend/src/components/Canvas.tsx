@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useFollowingReadOnly } from '../hooks/useFollowingReadOnly';
+import '../styles/canvas-follow.css';
 import {
   ReactFlow,
   Background,
@@ -7,6 +9,7 @@ import {
   useReactFlow,
   useInternalNode,
   useStore,
+  useStoreApi,
   type Connection,
   type OnConnectEnd,
   type OnConnectStart,
@@ -24,7 +27,7 @@ import { SelectionToolbar } from './SelectionToolbar';
 import { CanvasNavigation } from './CanvasNavigation';
 import { PinComposer } from './canvas/PinComposer';
 // Loaded after the first paint (lib/deferredChunks.ts); they draw only what the socket or a fetch brings in.
-import { AgentCursorLayer, PinLayer, ProposalBar, ProposalLayer } from './canvas/DeferredCanvasOverlays';
+import { AgentCursorLayer, AgentNodeMarks, PinLayer, ProposalBar, ProposalLayer } from './canvas/DeferredCanvasOverlays';
 import { CanvasViewReporter } from './canvas/CanvasViewReporter';
 import { ArrangeController } from './canvas/ArrangeController';
 import { selectMeasuring, useArrangeStore } from '../store/arrangeStore';
@@ -36,14 +39,14 @@ import { CANVAS_FIT_DURATION, CANVAS_ZOOM_DURATION, computeCanvasFitPadding } fr
 import { useFitCanvasView } from '../hooks/useFitCanvasView';
 import { cameraMoveIsCanvasOwn, cameraMoveStarted, claimCameraMove } from '../lib/canvasCameraOwner';
 import { CANVAS_LOD_ZOOM } from '../lib/canvasOverview';
-import { isCanvasShortcutTarget } from '../lib/canvasShortcutScope';
+import { isCanvasShortcutTarget, isModalDialogOpen } from '../lib/canvasShortcutScope';
 import { boundingRect, UNMEASURED_NODE_SIZE, type NodeRect } from '../lib/nodePlacement';
 import { visibleFlowRect } from '../lib/visibleFlowRect';
 import type { NodeData } from '../types';
 import { NODE_RENAME_EVENT } from '../lib/keyboardShortcuts';
 import { publishCanvasSelection, selectedNodeIds } from '../lib/canvasSelection';
 import '../styles/canvas.css';
-import { useBackendOffline } from '../lib/useBackendOffline';
+import { useCanvasLock } from '../lib/canvasLock';
 
 const nodeTypes = CANVAS_NODE_TYPES;
 const edgeTypes = CANVAS_EDGE_TYPES;
@@ -251,6 +254,8 @@ export function CanvasFocusController() {
 
 export function Canvas() {
   useSlavaHandleMagnetism();
+  // Round 20 (M1): read-only while the tab follows an agent's switch.
+  useFollowingReadOnly();
 
   const nodes = useGraphStore((s) => s.nodes);
   const edges = useGraphStore((s) => s.edges);
@@ -260,7 +265,11 @@ export function Canvas() {
   const executeGraph = useGraphStore((s) => s.executeGraph);
   const isExecuting = useGraphStore((s) => s.isExecuting);
   // Offline is read-only (GM, round 14 of PR #114).
-  const readOnly = useBackendOffline();
+  // Offline or following an agent's switch: one read-only state (GM round
+  // 22, A). Selecting stays local view state; it is published unless offline.
+  const lock = useCanvasLock();
+  const readOnly = lock.locked;
+  const offline = lock.offline;
   const isValidConnection = useIsValidConnection();
   const skin = useUIStore((s) => s.skin);
   const canvasPerfMode = useUIStore((s) => s.canvasPerfMode);
@@ -342,7 +351,7 @@ export function Canvas() {
   // Round 16 (L1): selecting while offline is local view state; nothing is
   // sent then, and the selection in hand goes out once Nebula answers again.
   useEffect(() => {
-    if (readOnly) return undefined;
+    if (offline) return undefined;
     const controller = new AbortController();
     const timeout = window.setTimeout(() => {
       publishCanvasSelection(liveSelectedNodeIds, controller.signal).catch((error) => {
@@ -354,7 +363,7 @@ export function Canvas() {
       window.clearTimeout(timeout);
       controller.abort();
     };
-  }, [liveSelectionKey, readOnly]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [liveSelectionKey, offline]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const reactFlow = useReactFlow();
   const { fitView, screenToFlowPosition, zoomIn, zoomOut, zoomTo } = reactFlow;
@@ -465,9 +474,14 @@ export function Canvas() {
   // anything, so its wires stay too; one notice per press. Otherwise it
   // deletes at once, and the store says "Deleted the node." with Undo: undo
   // puts back everything a delete removed (GM, 2026-10-23, lib/deleteNotice.ts).
+  // Never behind an open modal dialog (review 8, M-1): the Delete key is the
+  // canvas's own (onKeyDown below), and this refuses any delete that would
+  // still reach React Flow while one is open.
   const onBeforeDelete = useCallback(async ({ nodes: doomed }: { nodes: { id: string }[] }) => (
-    doomed.length === 0 || useGraphStore.getState().allowCanvasDelete(doomed.map((node) => node.id))
+    !isModalDialogOpen()
+    && (doomed.length === 0 || useGraphStore.getState().allowCanvasDelete(doomed.map((node) => node.id)))
   ), []);
+  const flowStore = useStoreApi();
 
   const onConnectStart: OnConnectStart = useCallback((_event, params) => {
     connectionSucceededRef.current = false;
@@ -612,8 +626,8 @@ export function Canvas() {
   );
 
   // Keyboard shortcuts: Ctrl+Enter, Ctrl+A, Ctrl+D, Ctrl+Z, Ctrl+Shift+Z, Ctrl+C, Ctrl+V,
-  // and zoom: Ctrl/⌘ = and −, Shift+1 to fit, Shift+0 for 100%. Ctrl+S and
-  // Ctrl+O belong to GraphFileActions, which listens app-wide.
+  // Delete and Backspace, and zoom: Ctrl/⌘ = and −, Shift+1 to fit, Shift+0
+  // for 100%. Ctrl+S and Ctrl+O belong to GraphFileActions, which listens app-wide.
   // On the document, not the wrapper, so they still work after a click on the
   // bottom bar, rail or header; isCanvasShortcutTarget keeps them out of text
   // fields, dialogs and other panels.
@@ -647,6 +661,30 @@ export function Canvas() {
       if (isCtrlOrCmd && event.key === 'Enter' && !isExecuting) {
         event.preventDefault();
         executeGraph();
+        return;
+      }
+
+      // Delete or Backspace — delete the selected nodes and wires. Review 8,
+      // M-1: this was React Flow's own deleteKeyCode, which listens on the
+      // document, takes a focused button (a dialog's Cancel) as fair game and
+      // never asked whether a modal dialog is open, so a node behind the
+      // placeholder dialog was deleted. Here it goes through the same guard as
+      // every canvas key (isCanvasShortcutTarget, above), keeps React Flow's
+      // rules (bare key only, nothing in `.nokey`, not while a run goes, one
+      // delete per press). Review 9, L-4: it deletes through the store in one
+      // undo step, nodes and wires together (React Flow's deleteElements took
+      // two: the wires, then the nodes); a node holding World Labs state
+      // stays (as onBeforeDelete had it), and "Deleted the node." with Undo
+      // still shows.
+      if ((event.key === 'Delete' || event.key === 'Backspace') && !isCtrlOrCmd && !event.altKey && !event.shiftKey) {
+        if (event.repeat || isExecuting) return;
+        if (event.target instanceof Element && event.target.closest('.nokey')) return;
+        const doomedNodes = reactFlow.getNodes().filter((node) => node.selected).map((node) => node.id);
+        const doomedEdges = reactFlow.getEdges().filter((edge) => edge.selected).map((edge) => edge.id);
+        if (doomedNodes.length === 0 && doomedEdges.length === 0) return;
+        event.preventDefault();
+        useGraphStore.getState().deleteCanvasElements(doomedNodes, doomedEdges);
+        flowStore.setState({ nodesSelectionActive: false });
         return;
       }
 
@@ -714,7 +752,7 @@ export function Canvas() {
         return;
       }
     },
-    [executeGraph, fitCanvasView, fitView, isExecuting, reactFlow, screenToFlowPosition, zoomIn, zoomOut, zoomTo]
+    [executeGraph, fitCanvasView, fitView, flowStore, isExecuting, reactFlow, screenToFlowPosition, zoomIn, zoomOut, zoomTo]
   );
 
   useEffect(() => {
@@ -756,7 +794,9 @@ export function Canvas() {
         maxZoom={4}
         defaultEdgeOptions={{ type: 'typed-edge' }}
         proOptions={{ hideAttribution: true }}
-        deleteKeyCode={isExecuting ? null : ['Backspace', 'Delete']}
+        // The Delete key is the canvas's own (onKeyDown): React Flow's never
+        // asked whether a modal dialog is open (review 8, M-1).
+        deleteKeyCode={null}
         onBeforeDelete={onBeforeDelete}
         {...CANVAS_INTERACTION_PROPS}
         nodesDraggable={!readOnly}
@@ -786,6 +826,7 @@ export function Canvas() {
         <CanvasNavigation />
         <CanvasViewReporter />
         <ArrangeController />
+        <AgentNodeMarks />
         <AgentCursorLayer />
         <AgentNoteOutlines />
         <PinLayer />
