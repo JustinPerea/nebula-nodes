@@ -129,9 +129,11 @@ describe('GM r3: the B layout', () => {
     expect(notice.openRecentlyDeleted).toBe(true);
   });
 
-  it('keeps a single outcome inline, as in A', () => {
+  // GM round 5 (fix round 5 of PR #199): always stacked, one outcome per
+  // line from the first render; GM r3's inline single outcome is retired.
+  it('stacks a single outcome too (GM round 5; was inline, as in A)', () => {
     const notice = catalogRestoreNotice(restore({ ...older, reverted: rows('Logo'), revertedCount: 1 }), NOW);
-    expect(notice.lines).toBeNull();
+    expect(notice.lines).toEqual([`${OPEN} from 2 days ago.`, "“Logo” went back to its version in that copy, so its latest edits aren't there.", KEPT]);
     expect(notice.text).toBe(`${OPEN} from 2 days ago. “Logo” went back to its version in that copy, so its latest edits aren't there. ${KEPT}`);
   });
 

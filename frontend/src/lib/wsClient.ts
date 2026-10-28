@@ -145,6 +145,11 @@ export interface ProjectsChangedEvent {
   change: 'created' | 'opened' | 'saved' | 'renamed' | 'cover' | 'deleted' | 'restored' | 'purged' | string;
   /** Null when several went at once (emptying Recently deleted). */
   projectId: string | null;
+  /** change 'canvasHeld' / 'canvasHoldRefused' (review 5 of PR #199, M-3):
+   * an agent's clear or graph load held the waiting canvas aside (action
+   * 'cleared' | 'replaced'), or was refused at the limit ('clear' |
+   * 'replace'); agent null when unnamed. */
+  canvasHeld?: { action: string; agent: string | null };
 }
 
 /** The active project's pins, sent after graphSync and on every pin change. */

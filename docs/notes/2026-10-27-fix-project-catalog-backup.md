@@ -143,3 +143,84 @@ Supersedes the bullets above where they disagree: `.bak` is now one commit behin
   - PROJECTS (limit 3): the listing and the waiting part say `projectLimit` 3; the agents' note says nothing is lost and never that the canvas is open; the limit line word for word, no Open canvas, 6px between lines; it fits one row at 1280 and 1440 and wraps to two at 1024 (extra shot), still 6px apart. Keyboard dismiss at 1280: heading, no ring; the waiting line with "Nothing in it is lost." at 1280 and 1440. Deleting Alpha (mouse) saves the canvas, which takes the slot; Undo (mouse) is refused: "Couldn't restore “Alpha”. You've reached the limit of 3 projects." replaces the Undo toast at the same center and top, no Undo, no banner, Alpha still in Recently deleted. Restore Alpha in the list (mouse): the same line in the banner, no Try again, the toast closed. The route: 413 `{limit: projects, projectLimit: 3}`.
   - STORAGE: the size-cap limit line word for word; keyboard dismiss to the heading, no ring; the waiting line with "Nothing in it is lost." and "Open Recently deleted" at 1280 and 1440.
 - **Open after round 4.** Whether a restore may pass the project limit is Justin's call (GM r6 prefers it); it is one switch, `RESTORE_MAY_PASS_THE_PROJECT_LIMIT`. GM's "limit line wrapped" shot: at 1280 and 1440 the line fits one row, so the wrapped shot is at 1024. The 507 for a newer catalog still names `.bak` only in the log. Damage beyond one bit per record (three or more flips, or a flip plus a cut in the same record) can still hide a record's newest version; the sweeps cover every single flip of every structural byte and the review's 1,500 two-flip pairs. `resetProjectStoreForTests` doesn't reset `lastDeleted` (the new store test sets it itself).
+
+## Fix round 5 (review 5: M-1, M-2, M-3, L-1-L-3, nits; GM r7 and round 5; the held model)
+
+- **M-1: JSON whitespace only.** Every salvage pattern in `catalog_recovery.py` matches JSON's own whitespace, `_WS = [ \t\n\r]`. Before, `\s` also took 0x1c-0x1f, 0x0b, 0x0c and 0x85, and bit 6 of a `]` is 0x1d, so a flipped bracket in Middle's `"nodes":[]` read as a space and Logo's newer record was silently reverted (review 5's live B). Covered: `_ENTRY_KEY`, `_RECORD_OPEN`, `_BROKEN_OPEN` (`[^ \t\n\r{"]`), `_GROUP_OPEN`, `_GROUP_KEY`, `_GROUP_BEFORE_KEY`, `_SPACE`, `_BETWEEN` and `_BETWEEN_AT_END`, plus the "right after a complete record" `strip()`, which is now `strip(_JSON_SPACE)`. Audit: no other `\s`/`\S`, bare `strip()`, `split()` or `isspace()` is left in the module (a test checks every compiled pattern). The structural sweep (all 8 bits of every structural byte) runs with the changed record first (fix round 4's sweep), in the middle and last: 0 silent reverts.
+- **M-2: future dates judged by file order.** `freshness`/`catalog_freshness`/`salvage_freshness` take `future`. In the newer file of a pair a date ahead of the restore's clock counts as now (`FUTURE_IS_NOW`); in the older it is ignored (`FUTURE_DROPS`). So a clock that ran ahead and was then corrected doesn't make the newest files lose: in review 5's C1 Gamma (only in `.bak`, made while ahead) survives, and in C2 the whole record edited while ahead wins, with an `updatedFromDisk` row. The base choice also needs the commit number: `.bak.1` wins only when it is newer by dates and, when both carry one, by `commitSeq`. A whole record that loses to an older copy by dates is now reported (`reverted`, `by: "dates"`); its version stays in the kept damaged file (tested: "Alpha v2 (newer, clock corrected)" is still in it). The clock case can lose a version outright only for copies written before `commitSeq` existed (a legacy `.bak.1` whose ahead-dates have since passed); with numbered commits both signals are required.
+- **L-1 / L-3: numbered commits, side file written first.**
+  - Every commit carries `commitSeq` (in the head, after `version`).
+  - `catalog-purged.json` is now `{version, commit, purged, previous: {commit, purged}}`, written (fsynced) before `catalog.json`'s rename and put back if the rename fails. Each layer is true of the commit it names. Reconcile places each layer in the files' order by its commit number, after any file of a later commit.
+  - Why write-first: two files can't be committed atomically. Folding the list into the catalog doesn't help, because the side file exists for when the catalog's head is unreadable. Every crash point is safe:
+    - before the side write, nothing changed;
+    - between the two writes, the side file is one commit ahead and its `previous` layer is the catalog's;
+    - after both, they agree.
+  - A failed side write never fails the commit. It is logged ("could not keep catalog-purged.json: …; it stays at commit N, and a restore lets the copies of later commits decide the projects they hold"). The stale file then names its own older commit, so a project made again with the same id is never deleted by it; the restore logs "catalog-purged.json is from commit X, older than a file of a later commit" and records `purgedFileBehind: true`.
+- **L-2.** MCP `restore_from_trash` passes the whole 413 on: `"<detail> (413, {"limit": "projects", "projectLimit": N})"`.
+- **M-3: the held model (coordinator's structural change and GM's copy).**
+  - Opening a project while the canvas waits no longer refuses (that locked the person out of every project). The waiting canvas is held aside whole first: `projects/canvas-held.json` and its `.bak`, fsynced with the folder before the open writes `state.json`, with its project id chosen then (`_hold_if_waiting`). Only that copy is ever saved as the person's canvas: on the next listing with room, each held canvas separately, never opened ("Recovered canvas", "Recovered canvas 2"; `_file_held_canvases`, `_note_held_filed`, journaled `project.canvasFiled` with `held: true`). A failed open takes the hold back (`_release_hold`).
+  - A crash between the hold and the open's commit leaves the copy equal to the live canvas: settle drops it by digest (`_drop_held_copies_of_live`), so it is filed once. A crash after `state.json` switched leaves B open and the copy held, filed once.
+  - Clear and graph load (`clear_graph`, `import_graph`, so `nebula clear`, `nebula load`, MCP `load_graph_file` and the person's Load graph) while the live canvas waits are handled per GM:
+    - **At the limit (GM (b)):** refused, changing nothing (409 `{code: "canvas_waiting", reason, projectLimit, detail}`). The detail is "The project limit is reached, so a new canvas can't be saved. Open an existing project to work in, or ask the person to delete a project." An agent's refusal is one Agent log line: "Codex tried to replace the canvas you had open. Nebula stopped it because that canvas isn't saved as a project yet."
+    - **Below it:** held first, the owner set to none, then the change goes ahead (`heldCanvas: true`). The new canvas is the ordinary unfiled canvas and is never saved as the person's. An agent's change is the Agent log line "Codex replaced the canvas. The one you had open is kept until Nebula can save it as a project." No toast either way.
+    - Why refuse at the limit rather than hold: the new canvas couldn't be saved either, and a second canvas waiting would be filed as the person's. Opening an existing project really works for agents (tested over MCP `open_project`).
+  - **Other changes:**
+    - Create stays refused (413) while what waits wouldn't fit, and the held canvases count.
+    - A restore from Recently deleted counts held canvases too.
+    - The listing's `canvasNotFiled` adds `live` and `held`, and its note says "held aside", that opening works, and the 409.
+    - `graph_file_client` adds "(409, canvas_waiting)" to its error; the CLI adds "(canvas_waiting)".
+    - A test enumerates every route in `main.py` that replaces or clears the canvas and fails until a new one says how it keeps a waiting canvas.
+  - "Nothing in it is lost." holds on every path, so every GM line stays as written.
+- **GM r7, the restore refusal.**
+  - Restore in Recently deleted is disabled at the limit, with `aria-disabled`, still focusable, in the shared grey (`--sr-disabled-opacity`, cursor default). Its tooltip is "You can restore it after you delete a project. You've reached the limit of 500 projects." with the real limit. It stays enabled when `RESTORE_MAY_PASS_THE_PROJECT_LIMIT` is on: the listing then says `restoreMayPassTheProjectLimit`.
+  - The race is the neutral toast "Couldn't restore “Alpha”. You've reached the limit of 500 projects.", taking the place of any toast, never the banner. The page then lists again, so Restore greys.
+  - **For the sweep:** the orange banner (`.project-home__error`) is Projects home's general error surface (every other project failure: save, open, rename, delete, purge, empty), so it is left as it is.
+- **Found in the gate run: a two-flip case.** Review 4's 1,500 two-flip set uses fresh random ids on every run, so the pairs land on different bytes each time. One run hit a case that also fails on 9b0af8ca (4 of 80 bases there):
+  - Old's key changed to another valid id one character off, and its id field to a non-id ("…9883=1f4…").
+  - The file still parsed, and Old was reported as deleted after the copy and back (`cameBack`).
+  - Fix: a record that failed under a key the copy lacks, one character off an unread copy record, is that copy record (`_resolve_misfiled`'s last step), and the file counts as holding it.
+  - Checks: a deterministic test (it fails on 9b0af8ca with FALSE-cameBack); the pair passes on 80 fresh bases; the whole set passes on 46.
+  - `CATALOG_FIELDS` now names `commitSeq`.
+- **Nits.**
+  - The toast hold is per notice (`${id}|${refused}`). After a mouse Undo the refusal leaves after 8 s even under the pointer; pointing at it again, or focusing it, holds it. Nebula's own focus move to × holds nothing.
+  - The restore notice is always stacked, one outcome per line, from the first render. `stackedAtFirst` is gone, and `lines` is never null.
+- **Old tests changed.**
+  - `test_project_catalog_restore_fix2.py`, L4: opening a project at the limit now holds the canvas and opens instead of a 413; the held copy is filed once a slot frees, and the open project stays open.
+  - `catalogRestore.fix2.test.tsx`: "keeps a single outcome inline" became "stacks a single outcome too".
+  - `catalogRestore.fix4.test.tsx`: "a notice that was one line at first stays one line" became "is stacked too".
+  - `projectStore.restoreRefused.test.ts`: from Recently deleted it is the toast, not the banner (three tests).
+- **Tests failed first** (on 9b0af8ca).
+  - Backend, `test_project_catalog_restore_fix5.py`: 36 of 46 failed, each on its bug:
+    - the `\s` pattern check and bit 6 of Middle's bracket;
+    - the middle and last sweeps;
+    - C1, C2 and the dated revert;
+    - no `commitSeq`, and the side file was written after the rename;
+    - a remade project was deleted by a stale side file;
+    - the MCP 413 bare;
+    - every M-3 test (open refused 413, no `canvas_held`, no 409 or constants).
+  - The 10 that passed are guards: the 7 other bits of the bracket, the trimmed-text test, the older copy needing a later commit, and a remake crash.
+  - Frontend: 12 of 15 failed (tooltip, disabled Restore, stacked ×3, the toast timeout, the race toast ×2, the log lines ×4). The 3 passes are guards: Restore below the limit, a re-hover still holding, and no toast for a log line.
+  - Changed after that run:
+    - `_hold_or_refuse` was renamed `_hold_if_waiting` in the AST test;
+    - the PowerLost test accepts Starlette's exception group;
+    - the one-outcome notice test asserts "stacked" (`lines` not null; still null on 9b0af8ca).
+- **Gates (final code).**
+  - Backend full suite (before the two-flip fix): 11,899 passed, 71 skipped, 1 failed (that two-flip case). After the fix, every catalog and project file including all sweeps: 279 of 279.
+  - Frontend: 45 related files (projects, project stores, errorCopy ratchets, the studios' errorCopy tests), 559 of 559. `tsc -b` and lint pass, `vite build` passes, and the budget is 418,771 bytes raw (limit 512,000).
+  - One full `vitest run` under a load of about 26: 7,044 of 7,149 passed. The 105 failures in 47 files were 94 timeouts plus lookups under load; those 47 files rerun alone pass, 685 of 685.
+- **Live check (2026-10-28): 31 of 31 checks.**
+  - Setup: backend 8799 via `iso_cat.sh` with a state dir per scenario, Vite 5799 with `VITE_NEBULA_BACKEND_PORT=8799`. CDP blocks 8000-8010 and 5173, and a dead proxy left only those two ports reachable (canary 8123 unreachable). Every click was real CDP mouse input.
+  - The app's blocked requests: 0. The driver's own canary to 8000 was blocked as intended.
+  - Driver and logs: scratchpad `catalog-build/fix5/live/`.
+  - **M-1:** bit 6 of Middle's bracket. Logo keeps "Logo v2" with no reverted row. The first-load notice is stacked (opening, not-read-whole, kept) at 1280 and 1440.
+  - **LIMIT (3):** Restore Gamma is aria-disabled with the tooltip, opacity 0.48 and cursor default, and a click does nothing.
+  - **RACE:** room freed, then another window's commit written beside the backend (no broadcast). Restore still looked enabled, and the click gives the neutral toast "Couldn't restore “Gamma”. You've reached the limit of 3 projects.", with no banner. The page then lists again and Restore greys. Tested at 1280 and 1440.
+  - **WAIT:** `nebula load` as Codex is refused with GM's line plus "(409, canvas_waiting)", exit 1, and nothing changes (CLI text in `fix5-cli-load-refused.txt`).
+    - The person opens Alpha with a real click: the canvas is held whole (delta-1 and the waiting-only node), and the Agent log shows "Codex tried to replace the canvas you had open. Nebula stopped it because that canvas isn't saved as a project yet." with no toast.
+    - Once Beta is deleted, the held copy is saved as "Recovered canvas" with both nodes, and Alpha stays open.
+- **Open after round 5 (for GM / Justin).**
+  - The size-limit refusal ("The project list is full, so a new canvas can't be saved. …") is GM's (b) line with "the project list is full" swapped in, and needs GM's wording.
+  - No person-facing line for an open that held the canvas: the waiting notice still covers it on the Projects home.
+  - The below-the-limit hold ("Codex replaced the canvas…") is covered by tests but wasn't shot live: any agent change that frees room makes the page list again, which saves the canvas first.
+  - The legacy-copy clock case above.
+  - The orange banner, for the sweep.

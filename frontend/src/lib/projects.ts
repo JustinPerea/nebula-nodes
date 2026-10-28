@@ -90,17 +90,21 @@ export interface ProjectList {
   /** The backend's params version (lib/savedParamsUpgrades.ts). */
   paramsVersion?: number;
   catalogRestore?: CatalogRestore;
-  /** The live canvas isn't a project and the list had no room to save it as
-   * one: no project is open, and opening or making one is refused (413). */
+  /** A canvas the person had open isn't a project and the list had no room
+   * to save it as one: the live canvas (`live`), and `held` more held aside
+   * (opening a project holds it first; making one is refused, 413). */
   canvasNotFiled?: { reason: 'projects' | 'storage'; from?: string | null; since?: string | null;
     /** The project limit (the backend's MAX_PROJECTS), for GM's line. */
     projectLimit?: number;
     /** The agents' line (GM's waiting line is the person's). */
-    note?: string };
+    note?: string; live?: boolean; held?: number };
   /** A waiting canvas was saved as its own project, recently: GM's toast. */
   canvasSaved?: { id: string; name: string; at?: string };
   /** How many projects the list may hold (the backend's MAX_PROJECTS). */
   projectLimit?: number;
+  /** The switch that lets a restore pass the limit is on (GM r6): Restore in
+   * Recently deleted stays enabled at the limit. */
+  restoreMayPassTheProjectLimit?: boolean;
 }
 export interface ProjectActivation {
   project: SavedProject; workspaceRevision: string;

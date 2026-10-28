@@ -70,15 +70,21 @@ Project ids from before it may be stale: list them again. Only the person
 closes that notice; tell them before you delete a project that came back.
 If `nebula context` or `nebula projects` says the live canvas isn't saved as
 a project because the list is full (`canvasNotFiled`, with or without a
-restore), opening or making a project is refused until the person frees
-room. Nothing in the canvas is lost, also across restarts, but the person
-can't see or open it until it is saved: never tell them it is open. Its
+restore), making a project is refused until the person frees room. Opening
+an existing project works: Nebula holds the waiting canvas aside first,
+whole, and saves that copy as its own project once there is room (`held`
+counts them). At the limit, `nebula clear` and `nebula load` are refused
+while the canvas waits ("The project limit is reached, so a new canvas can't
+be saved. Open an existing project to work in, or ask the person to delete a
+project.", 409 `canvas_waiting`); below it they hold the canvas aside first.
+Nothing in the canvas is lost, also across restarts, but the person can't
+see or open it until it is saved: never tell them it is open. Its
 note says what frees room: for the project limit, moving a project to
 Recently deleted; for the size limit, only deleting one for good. Once room
 is free (`roomNow`) the next listing saves it. Tell them, and don't delete
 anything to make room yourself. Restoring a project into a full list is
-refused too ("You've reached the limit of 500 projects."); it stays in
-Recently deleted.
+refused too ("You've reached the limit of 500 projects.", 413 with `limit`
+and `projectLimit`); it stays in Recently deleted.
 Start new work in a new project (`nebula project new "<name>"`) or open the
 right one (`nebula project open <id>`). The person's canvas follows (from
 their Projects screen too), names you, and offers them a button back.

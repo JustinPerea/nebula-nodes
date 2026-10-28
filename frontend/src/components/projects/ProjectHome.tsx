@@ -3,7 +3,7 @@ import { ArrowUpRight, Check, ChevronRight, ImageIcon, Pencil, Plus, RotateCcw, 
 import { backendAssetUrlSync } from '../../lib/backend';
 import { coverImages, type CatalogRestore, type CoverChoices, type ProjectCover } from '../../lib/projects';
 import {
-  canvasSavedToast, canvasWaitingLine, catalogRestoreNotice, DEFAULT_PROJECT_LIMIT, OPEN_RECENTLY_DELETED,
+  canvasSavedToast, canvasWaitingLine, catalogRestoreNotice, DEFAULT_PROJECT_LIMIT, OPEN_RECENTLY_DELETED, restoreAtLimitTooltip,
   type CanvasLimit, type NoticeNow,
 } from './catalogRestoreCopy';
 import { actorLabel } from '../../lib/trash';
@@ -98,6 +98,12 @@ export interface ProjectHomeProps {
    * GM's toast, once per tab. */
   canvasSaved?: { id: string; name: string } | null;
   onDismissCanvasSaved?: () => void;
+  /** How many projects the list may hold (the listing's `projectLimit`):
+   * at it, Restore in Recently deleted is disabled with GM r7's tooltip. */
+  projectLimit?: number;
+  /** The switch that lets a restore pass the limit is on (the listing's
+   * `restoreMayPassTheProjectLimit`): Restore stays enabled. */
+  restorePassesLimit?: boolean;
 }
 
 const UNDO_VISIBLE_MS = 8000;
@@ -308,8 +314,12 @@ function ConfirmInline({ label, confirmLabel, prompt, busy, onConfirm, className
   );
 }
 
-function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash, openRequest = 0, onOpened = noop, fromNotice = [] }: {
+function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash, openRequest = 0, onOpened = noop, fromNotice = [],
+  atLimit = null }: {
   trash: TrashedProject[]; busy: boolean;
+  /** The project limit when the list is at it (GM r7): Restore is disabled
+   * in the shared grey, focusable, its tooltip saying why. */
+  atLimit?: number | null;
   /** The restore notice's items it opened the list to (GM r4): marked, and
    * the first scrolled into view. */
   fromNotice?: string[];
@@ -367,7 +377,10 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash, openRe
                 <span className="project-home__trash-name">{entry.name}</span>
                 <span className="project-home__trash-meta">{deletedDate(entry.deletedAt)}{deletedByNote(entry)} · {removalNote(entry.purgeAt, now)}</span>
                 <span className="project-home__trash-actions">
-                  <button type="button" disabled={busy} aria-label={`Restore ${entry.name}`} onClick={() => onRestore(entry.id)}><RotateCcw aria-hidden="true" />Restore</button>
+                  {atLimit !== null
+                    ? <button type="button" disabled={busy} aria-disabled="true" title={restoreAtLimitTooltip(atLimit)}
+                      className="project-home__restore--at-limit" aria-label={`Restore ${entry.name}`}><RotateCcw aria-hidden="true" />Restore</button>
+                    : <button type="button" disabled={busy} aria-label={`Restore ${entry.name}`} onClick={() => onRestore(entry.id)}><RotateCcw aria-hidden="true" />Restore</button>}
                   <ConfirmInline label="Delete forever" confirmLabel="Delete forever" prompt="This can’t be undone." busy={busy}
                     onConfirm={() => onPurge(entry.id)} />
                 </span>
@@ -383,28 +396,40 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash, openRe
 function UndoToast({ project, busy, onUndo, onDismiss }: {
   project: { id: string; name: string; refused?: string }; busy: boolean; onUndo: () => void; onDismiss: () => void;
 }) {
-  const [paused, setPaused] = useState(false);
+  // A hold is per notice, as the app's other toasts (review 5 of PR #199,
+  // N-2): the pointer or focus that held "Moved…" doesn't hold the refusal
+  // that replaces it, so after a mouse Undo the refusal leaves on its own
+  // time even under the pointer; pointing at it again (or focusing it) holds it.
+  const notice = `${project.id}|${project.refused ?? ''}`;
+  const [heldFor, setHeldFor] = useState<string | null>(null);
+  const paused = heldFor === notice;
   // The refusal starts its own time in the same spot (GM r6: it replaces
   // the toast, so a dead Undo never stays up to be pressed again).
   useEffect(() => {
     if (paused) return;
     const timer = window.setTimeout(onDismiss, UNDO_VISIBLE_MS);
     return () => window.clearTimeout(timer);
-  }, [paused, onDismiss, project.id, project.refused]);
+  }, [paused, onDismiss, notice]);
   // The Undo button goes with the refusal: when it had focus, focus stays in
-  // the toast (its ×) rather than dropping to the page.
+  // the toast (its ×) rather than dropping to the page. That focus is
+  // Nebula's, not the person's, so it holds nothing.
   const close = useRef<HTMLButtonElement>(null);
+  const movingFocus = useRef(false);
   useEffect(() => {
     if (!project.refused) return;
     const active = document.activeElement;
-    if (!active || active === document.body || !active.isConnected) close.current?.focus();
+    if (!active || active === document.body || !active.isConnected) {
+      movingFocus.current = true;
+      close.current?.focus();
+      movingFocus.current = false;
+    }
   }, [project.refused]);
   // In the app's notice region, like every toast (GM - Design, 2026-10-23).
   return (
     <InNoticeRegion slot="project-home">
       <div className="project-home__toast" role="status" aria-live="polite"
-        onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
-        onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
+        onMouseEnter={() => setHeldFor(notice)} onMouseLeave={() => setHeldFor(null)}
+        onFocus={() => { if (!movingFocus.current) setHeldFor(notice); }} onBlur={() => setHeldFor(null)}>
         {project.refused
           ? <span className="project-home__toast-text">{project.refused}</span>
           : <><span className="project-home__toast-text">Moved “{project.name}” to Recently deleted</span>
@@ -521,7 +546,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
   trash = [], lastDeleted = null, onRestore = noop, onPurge = noop, onEmptyTrash = noop, onDismissUndo = noop,
   settingsOpen = false, onToggleSettings, loadCoverChoices, onPinCover,
   catalogRestore = null, onDismissCatalogRestore = noop,
-  canvasNotFiled = null, canvasSaved = null, onDismissCanvasSaved = noop,
+  canvasNotFiled = null, canvasSaved = null, onDismissCanvasSaved = noop, projectLimit, restorePassesLimit = false,
   unsavedEdits = null, editsSavedAs = null, onDownloadEdits = noop, onContinueWithoutEdits = noop }: ProjectHomeProps) {
   const [query, setQuery] = useState('');
   // Offline is read-only (round 15 of PR #114): create, open, rename,
@@ -594,7 +619,8 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
               : projects.length > 0 ? <div className="project-home__empty" role="status"><Search className="project-home__empty-search" aria-hidden="true" /><h3>No projects match “{query.trim()}”</h3><p>Try another name or clear your search.</p><button type="button" className="project-home__secondary" onClick={() => setQuery('')}>Clear search</button></div>
                 : !error && !unsavedEdits && <div className="project-home__empty"><div className="project-home__empty-graph"><NodeGraphPlaceholder /></div><h3>Your first project starts here.</h3><p>Connect ideas, models and media on a canvas of your own.</p><button type="button" className="project-home__secondary" disabled={locked} {...offlineMark(offline)} onClick={() => onCreate()}><Plus aria-hidden="true" />Create your first project</button></div>}
         </section>
-        {!loading && trash.length > 0 && <RecentlyDeleted trash={trash} busy={locked} onRestore={onRestore} onPurge={onPurge} onEmptyTrash={onEmptyTrash} openRequest={trashOpenRequest} onOpened={trashOpened} fromNotice={trashFromNotice} />}
+        {!loading && trash.length > 0 && <RecentlyDeleted trash={trash} busy={locked} onRestore={onRestore} onPurge={onPurge} onEmptyTrash={onEmptyTrash} openRequest={trashOpenRequest} onOpened={trashOpened} fromNotice={trashFromNotice}
+          atLimit={projectLimit !== undefined && !restorePassesLimit && projects.length >= projectLimit ? projectLimit : null} />}
       </main>
       {lastDeleted && <UndoToast key={lastDeleted.id} project={lastDeleted} busy={locked}
         onUndo={() => onRestore(lastDeleted.id, 'undo')} onDismiss={onDismissUndo} />}

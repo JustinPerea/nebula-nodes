@@ -292,6 +292,15 @@ def _counts(imported: dict[str, Any], files: int) -> str:
     return text
 
 
+def _refused(exc: NebulaAPIError) -> str:
+    """A refusal's detail, with its code when it carries one an agent acts
+    on: a canvas waiting to be saved as a project (409 canvas_waiting,
+    review 5 of PR #199, M-3), so an agent tells it from a stale revision."""
+    payload = exc.payload if isinstance(exc.payload, dict) else {}
+    code = payload.get("code")
+    return f"{exc.detail} ({exc.status}, {code})" if code == "canvas_waiting" else exc.detail
+
+
 def load(api: NebulaAPI, source: str, *, headers: dict[str, str] | None = None, via: str = "mcp") -> dict[str, Any]:
     """Open a .nebula, .json or .nebula.zip as the person's Load graph does.
     Returns {loaded, project, openedAsNewProject, previousProject (a new
@@ -306,7 +315,7 @@ def load(api: NebulaAPI, source: str, *, headers: dict[str, str] | None = None, 
         try:
             return api.request(method, path, headers=headers, **kwargs)
         except NebulaAPIError as exc:
-            raise GraphFileError(f"{source}: {exc.detail}") from exc
+            raise GraphFileError(f"{source}: {_refused(exc)}") from exc
 
     listing = call("GET", "/api/projects", timeout=30.0)
     active_id = listing.get("activeProjectId") if isinstance(listing, dict) else None
@@ -342,7 +351,7 @@ def load(api: NebulaAPI, source: str, *, headers: dict[str, str] | None = None, 
     except NebulaAPIError as exc:
         payload = exc.payload if isinstance(exc.payload, dict) else {}
         if exc.status != 413 or payload.get("limit") != "size":
-            raise GraphFileError(f"{source}: {exc.detail}") from exc
+            raise GraphFileError(f"{source}: {_refused(exc)}") from exc
         return _open_as_new_project(api, source, prepared, active, payload, headers, words, call, result)
     reply = result(imported, active, new=False)
     reply["note"] = (f"Loaded {name} into {active.get('name')}, replacing its canvas: "

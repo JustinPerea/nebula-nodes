@@ -152,12 +152,15 @@ EVENT_KINDS = frozenset({
     "project.catalogRestored",
     # The live canvas wasn't a project in the list (after a restore, or a
     # crash between state.json and catalog.json) and was saved as its own
-    # (main._note_canvas_settled): data {projectId, name, from (the project
-    # it was, or null), restoreId (the restore it came from, or null)}.
+    # (main._note_canvas_settled), or from its copy held aside when a
+    # project opened over it (main._note_held_filed, held true): data
+    # {projectId, name, from (the project it was, or null), restoreId (the
+    # restore it came from, or null), held?}.
     "project.canvasFiled",
     # It couldn't be: the list is at a limit. Nothing in it is lost (Nebula
     # keeps it, also across restarts), no project is open, the person can't
-    # see or open it, and the next listing with room files it: data
+    # see or open it, opening a project holds it aside first, and the next
+    # listing with room files it: data
     # {reason (projects | storage), from, restoreId, since (when it began
     # waiting)}.
     "project.canvasNotFiled",

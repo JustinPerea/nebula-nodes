@@ -55,31 +55,31 @@ describe('Undo refused past the project limit', () => {
     expect(state.trash.map((entry) => entry.id)).toEqual([ALPHA]);
   });
 
-  it('says the same line from Recently deleted while the list is still full', async () => {
+  // GM r7 (fix round 5 of PR #199): from Recently deleted too it is the
+  // neutral toast, never the banner (round 4 answered there with the banner).
+  it('says the same line from Recently deleted while the list is still full, as the toast', async () => {
     restoreProject.mockRejectedValueOnce(limitRefusal());
     await useProjectStore.getState().restore(ALPHA);
     const state = useProjectStore.getState();
-    expect(state.error).toBe(LINE);
+    expect(state.error).toBeNull();
     expect(state.errorRetry).toBeNull();
-    expect(state.lastDeleted).toBeNull();
+    expect(state.lastDeleted).toEqual({ id: ALPHA, name: 'Alpha', refused: LINE });
   });
 
-  it('answers Restore in the list with the banner even while a toast for it is up, and closes the toast', async () => {
-    // Fix round 4's live check: the refused toast was up, Restore in the list
-    // wrote the same line into it again and nothing changed on screen.
+  it('answers Restore in the list with the toast while a toast for it is up, never the banner', async () => {
     useProjectStore.setState({ lastDeleted: { id: ALPHA, name: 'Alpha', refused: LINE } });
     restoreProject.mockRejectedValueOnce(limitRefusal());
     await useProjectStore.getState().restore(ALPHA);
     const state = useProjectStore.getState();
-    expect(state.error).toBe(LINE);
-    expect(state.lastDeleted).toBeNull();
+    expect(state.error).toBeNull();
+    expect(state.lastDeleted).toEqual({ id: ALPHA, name: 'Alpha', refused: LINE });
   });
 
   it('names the limit the store holds', async () => {
     useProjectStore.setState({ projectLimit: 500 } as never);
     restoreProject.mockRejectedValueOnce(limitRefusal());
     await useProjectStore.getState().restore(ALPHA);
-    expect(useProjectStore.getState().error).toBe("Couldn't restore “Alpha”. You've reached the limit of 500 projects.");
+    expect(useProjectStore.getState().lastDeleted?.refused).toBe("Couldn't restore “Alpha”. You've reached the limit of 500 projects.");
   });
 
   it('keeps other refusals as they were', async () => {

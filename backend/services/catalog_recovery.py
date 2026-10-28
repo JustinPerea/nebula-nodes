@@ -27,21 +27,32 @@ asks this module:
   - a record the copy lacks is added back (to Recently deleted when it
     carries deletedAt);
   - a project deleted for good (``purged``, in a file's head, and in
-    catalog-purged.json beside it, written with every commit so a damaged
-    head doesn't lose the last delete: review 4, L-3) stays deleted when
+    catalog-purged.json beside it, written before every commit's rename
+    with its commit number and the layer before, so a damaged head doesn't
+    lose the last delete and a crash between leaves it true of a commit:
+    review 4, L-3; review 5, L-1/L-3; each layer is placed in the files'
+    order by its commit number, ``side_layers``) stays deleted when
     that file is the newest that says anything of it: a record in a newer
     file (the same id made again) wins over an older file's tombstone. File
     order decides, never a record's createdAt (a clock that ran ahead
     writes one later than the delete), except that a file whose newest date
     is older than the tombstone can't bring it back (an older damaged
     catalog.json: review 4, L-2);
-  - no date ahead of the restore's own clock counts (``until``): a copy or
-    a record with a future date is never "newer" for it (review 4, M-3);
+  - a date ahead of the restore's own clock (``until``) is judged by file
+    order (review 5, M-2): in the newer file it counts as now
+    (FUTURE_IS_NOW: a clock that ran ahead and was corrected wrote the
+    newest files), in the older it never counts (FUTURE_DROPS: a copy
+    saved ahead is never "newer": review 4, M-3); a whole record that loses
+    to an older copy by dates is reported (``reverted``, by "dates");
   - everything else the copy holds stays, and what that decided is
     reported: a record the damage cut off goes back to the copy's version
     (``reverted``), unless what is left of it shows it unchanged; one the
     damaged file had in the other group comes back from it (``came_back``:
     deleted after the copy, ``back_in_trash``: restored after the copy).
+
+Every pattern matches JSON's own whitespace (space, tab, newline, return:
+``_WS``), never ``\\s``, which also takes the bytes 0x1c-0x1f and 0x85 that
+one flipped bit makes of a structural byte (review 5, M-1).
 
 A record's id is what the record says (its ``id``), checked against its key
 and the copy (review 2 of PR #199, M2): a bit flip in a key, an id or a
@@ -72,27 +83,35 @@ from datetime import datetime
 from typing import Any, Iterable
 
 _ID = re.compile(r"^[a-f0-9]{32}$")
+# JSON's whitespace: space, tab, LF and CR, nothing else. Never Python's
+# ``\s``, which on a str also matches 0x1c-0x1f, 0x0b, 0x0c, 0x85 and the
+# Unicode spaces: one bit turns "]" (0x5d) into 0x1d, and reading that as a
+# space left a group's bracket open, so every record after it counted one
+# level deep and lost to the copy's older version with no row (review 5 of
+# PR #199, M-1). Every pattern below that means JSON whitespace uses _WS.
+_WS = r"[ \t\n\r]"
+_JSON_SPACE = " \t\n\r"
 # A record's key in a catalog file: a project id, then the record's object.
-_ENTRY_KEY = re.compile(r'"([a-f0-9]{32})"\s*:\s*(?=\{)')
+_ENTRY_KEY = re.compile(rf'"([a-f0-9]{{32}})"{_WS}*:{_WS}*(?=\{{)')
 # A record's own first member (make_project writes "id" first): how salvage
 # finds a record whose key the damage broke (review 3 of PR #199, M-A).
-_RECORD_OPEN = re.compile(r'\{\s*"id"\s*:\s*"([a-f0-9]{32})"')
+_RECORD_OPEN = re.compile(rf'\{{{_WS}*"id"{_WS}*:{_WS}*"([a-f0-9]{{32}})"')
 # A record whose own opening brace the damage changed (review 4 of PR #199,
 # M-2: one bit turns "{" into "z", "y", "s", "k", "[", ";", 0x7f or a byte
 # that isn't UTF-8, and both anchors above hang on that byte): its key, one
 # byte that isn't a brace, then its own id, the same as the key. The second
 # group is where the brace was.
-_BROKEN_OPEN = re.compile(r'"([a-f0-9]{32})"\s*:\s*([^\s{"])\s*"id"\s*:\s*"\1"')
+_BROKEN_OPEN = re.compile(rf'"([a-f0-9]{{32}})"{_WS}*:{_WS}*([^ \t\n\r{{"]){_WS}*"id"{_WS}*:{_WS}*"\1"')
 # The members every project record opens with, in this order (make_project;
 # a rename or a move to Recently deleted keeps their places).
 _RECORD_HEAD = ("id", "name", "createdAt")
 # The two groups a record sits in, right before the first record of each.
-_GROUP_OPEN = re.compile(r'"(projects|trash)"\s*:\s*\{\s*$')
+_GROUP_OPEN = re.compile(rf'"(projects|trash)"{_WS}*:{_WS}*\{{{_WS}*$')
 # A group's key, right before the colon the head's read stopped at.
-_GROUP_KEY = re.compile(r'"(projects|trash)"\s*$')
+_GROUP_KEY = re.compile(rf'"(projects|trash)"{_WS}*$')
 # The same before a record whose key the damage broke (up to its colon).
-_GROUP_BEFORE_KEY = re.compile(r'"(projects|trash)"\s*:\s*\{[^{}\[\]]{0,40}$')
-_SPACE = re.compile(r"\s*")
+_GROUP_BEFORE_KEY = re.compile(rf'"(projects|trash)"{_WS}*:{_WS}*\{{[^{{}}\[\]]{{0,40}}$')
+_SPACE = re.compile(rf"{_WS}*")
 # Every field metadata() reads without a default, so a record without one
 # would break the listing.
 _REQUIRED = ("name", "createdAt", "updatedAt", "lastOpenedAt", "nodeCount", "edgeCount", "thumbnail")
@@ -178,6 +197,8 @@ class Salvage:
     # so a record is said to be back in Recently deleted only when this file
     # had it in the list (review 4, L-4).
     entry_groups: dict[str, str] = field(default_factory=dict)
+    # The file's commit number (its head's ``commitSeq``), when it reads.
+    seq: int | None = None
 
     def take(self, entry_id: str, entry: dict[str, Any], group: str | None = None) -> bool:
         """Keep ``entry`` (entry_ok) unless the store couldn't write it back."""
@@ -287,9 +308,9 @@ _TOKEN = re.compile(r'["{}\[\]]')
 _IN_STRING = re.compile(r'["\\]')
 # What JSON allows between its tokens outside strings: a damaged quote reads
 # the text around it inside out, and that text (a name, a key) isn't this.
-_BETWEEN = re.compile(r'(?:[\s,:0-9.eE+\-]|true|false|null)*')
+_BETWEEN = re.compile(r'(?:[ \t\n\r,:0-9.eE+\-]|true|false|null)*')
 # The same at a file's end, which a cut may leave inside a literal ("nu").
-_BETWEEN_AT_END = re.compile(r'(?:[\s,:0-9.eE+\-]|true|false|null)*(?:tru|tr|t|fals|fal|fa|f|nul|nu|n)?')
+_BETWEEN_AT_END = re.compile(r'(?:[ \t\n\r,:0-9.eE+\-]|true|false|null)*(?:tru|tr|t|fals|fal|fa|f|nul|nu|n)?')
 # Filler a torn page leaves (zeros, bytes that aren't UTF-8): it hides what
 # was there, but isn't text read inside out.
 _FILLER = re.compile(r'[\x00\ufffd]')
@@ -342,8 +363,8 @@ def _scalars(members: dict[str, Any]) -> dict[str, Any]:
 
 
 # The top-level fields a catalog holds (ProjectStore.prepare, _HEAD_KEYS).
-CATALOG_FIELDS = frozenset(("version", "activeProjectId", "workspaceRevision", "migratedProjectId", "purged",
-                            "projects", "trash"))
+CATALOG_FIELDS = frozenset(("version", "commitSeq", "activeProjectId", "workspaceRevision", "migratedProjectId",
+                            "purged", "projects", "trash"))
 
 
 def holds_records(value: Any) -> bool:
@@ -410,6 +431,7 @@ def _salvage_whole(found: Salvage, whole: dict[str, Any]) -> None:
     found.complete = keys_whole
     found.active = _whole_active(whole, held)
     found.purged = purged_map(whole.get("purged"))
+    found.seq = _commit_of(whole.get("commitSeq"))
 
 
 def head_active(raw: bytes | None, parsed: Any = None) -> Any:
@@ -590,6 +612,7 @@ def salvage(raw: bytes, parsed: Any = _UNKNOWN) -> Salvage:
             if active is None or (isinstance(active, str) and _ID.fullmatch(active)):
                 found.active = active
         found.purged = purged_map(head.get("purged"))
+        found.seq = _commit_of(head.get("commitSeq"))
     position = 0
     last_end: int | None = None
     last_group: str | None = None
@@ -606,7 +629,7 @@ def salvage(raw: bytes, parsed: Any = _UNKNOWN) -> Salvage:
         opener = _GROUP_OPEN.search(text, max(0, match.start() - 40), match.start())
         if opener is not None:
             expected, group = True, opener.group(1)
-        elif last_end is not None and text[last_end:match.start()].strip() == ",":
+        elif last_end is not None and text[last_end:match.start()].strip(_JSON_SPACE) == ",":
             expected, group = True, last_group
         else:
             expected, group = False, None
@@ -763,47 +786,79 @@ def _moment(value: Any) -> datetime | None:
     return moment if moment is not None and moment.tzinfo is not None else None
 
 
-def _until(moment: datetime | None, until: datetime | None) -> datetime | None:
-    """``moment``, unless it is later than ``until`` (the restore's clock): a
-    date from the future was written while the clock ran ahead, and says
-    nothing about which version is newer (review 4 of PR #199, M-3)."""
-    return None if moment is None or (until is not None and moment > until) else moment
+# What a date ahead of the restore's clock (``until``) counts as, by file
+# order (review 5 of PR #199, M-2). A clock that ran ahead and was then
+# corrected leaves future dates in whichever files were written meanwhile,
+# and those are the newest files, not only an older copy.
+# - FUTURE_DROPS, in the older file of a comparison (.bak.1 against .bak, a
+#   copy's record against the damaged file's): left out, so a date from the
+#   future never makes the older file win (review 4, M-3);
+# - FUTURE_IS_NOW, in the newer file (catalog.json, then .bak): it counts as
+#   ``until``, so the newer file's change made while the clock was ahead is
+#   never older than the older file's (review 5's c1 and c2).
+FUTURE_DROPS, FUTURE_IS_NOW = "drop", "now"
 
 
-def freshness(entry: dict[str, Any], until: datetime | None = None) -> datetime | None:
+def _until(moment: datetime | None, until: datetime | None, future: str = FUTURE_DROPS) -> datetime | None:
+    """``moment``, unless it is later than ``until`` (the restore's clock):
+    then None (FUTURE_DROPS) or ``until`` (FUTURE_IS_NOW)."""
+    if moment is None or until is None or moment <= until:
+        return moment
+    return until if future == FUTURE_IS_NOW else None
+
+
+def freshness(entry: dict[str, Any], until: datetime | None = None, future: str = FUTURE_DROPS) -> datetime | None:
     """When a record last changed, as far as it says: its edit, its last
     open, its move to Recently deleted or back, whichever is latest. A date
-    after ``until`` is left out."""
-    moments = [moment for moment in (_until(_moment(entry.get(key)), until) for key in _STAMPS)
+    after ``until`` counts as ``future`` says."""
+    moments = [moment for moment in (_until(_moment(entry.get(key)), until, future) for key in _STAMPS)
                if moment is not None]
     return max(moments) if moments else None
 
 
-def catalog_freshness(catalog: dict[str, Any], until: datetime | None = None) -> datetime | None:
+def catalog_freshness(catalog: dict[str, Any], until: datetime | None = None,
+                      future: str = FUTURE_DROPS) -> datetime | None:
     """When a catalog last changed, by what it holds: the latest date on any
     record, or on a delete for good (ProjectStore._restore picks the newest
-    copy by it, not by its name or mtime: review 2, L3), leaving out the
-    dates after ``until`` (a clock that ran ahead: review 4, M-3)."""
-    moments = [freshness(entry, until) for section in ("projects", "trash")
+    copy by it, not by its name or mtime: review 2, L3), a date after
+    ``until`` counted as ``future`` says (a clock that ran ahead: review 4,
+    M-3; review 5, M-2)."""
+    moments = [freshness(entry, until, future) for section in ("projects", "trash")
                for entry in (catalog.get(section) or {}).values() if isinstance(entry, dict)]
-    moments.extend(_until(_moment(at), until) for at in purged_map(catalog.get("purged")).values())
+    moments.extend(_until(_moment(at), until, future) for at in purged_map(catalog.get("purged")).values())
     found = [moment for moment in moments if moment is not None]
     return max(found) if found else None
 
 
-def salvage_freshness(found: Salvage, until: datetime | None = None) -> datetime | None:
+def salvage_freshness(found: Salvage, until: datetime | None = None, future: str = FUTURE_DROPS) -> datetime | None:
     """The latest date a damaged file still shows: on a record it holds
     whole, on what was read of one it couldn't finish, or on a delete for
-    good in its head (dates after ``until`` left out)."""
-    moments = [freshness(entry, until) for source in (found.entries, found.partial) for entry in source.values()]
-    moments.extend(_until(_moment(at), until) for at in found.purged.values())
+    good in its head (a date after ``until`` counted as ``future`` says)."""
+    moments = [freshness(entry, until, future) for source in (found.entries, found.partial) for entry in source.values()]
+    moments.extend(_until(_moment(at), until, future) for at in found.purged.values())
     known = [moment for moment in moments if moment is not None]
     return max(known) if known else None
 
 
-def newer(candidate: dict[str, Any], current: dict[str, Any], until: datetime | None = None) -> bool:
-    found, kept = freshness(candidate, until), freshness(current, until)
+def newer(older_files: dict[str, Any], newer_files: dict[str, Any], until: datetime | None = None) -> bool:
+    """Whether the record from the older file (a copy) is strictly newer by
+    its dates than the newer file's (the damaged file): the older file's
+    future dates are left out, the newer file's count as now (M-2)."""
+    found = freshness(older_files, until, FUTURE_DROPS)
+    kept = freshness(newer_files, until, FUTURE_IS_NOW)
     return found is not None and kept is not None and found > kept
+
+
+def newer_copy(newer_copy_catalog: dict[str, Any], older_copy_catalog: dict[str, Any],
+               until: datetime | None = None) -> bool:
+    """Whether .bak.1 (``older_copy_catalog``, older by construction) holds
+    a later catalog than .bak by the dates: its own future dates left out,
+    .bak's counted as now (review 5, M-2: .bak written while the clock ran
+    ahead lost to .bak.1, and the next commit erased a project only .bak
+    held). Commit order decides beside it (ProjectStore._restore)."""
+    older = catalog_freshness(older_copy_catalog, until, FUTURE_DROPS)
+    newest = catalog_freshness(newer_copy_catalog, until, FUTURE_IS_NOW)
+    return older is not None and (newest is None or older > newest)
 
 
 def _unchanged(partial: dict[str, Any], current: dict[str, Any]) -> bool:
@@ -834,6 +889,9 @@ class Reconciled:
     # Records filed under their own id rather than a damaged key, or under
     # the key the copy agrees with when their id was damaged: {id, key}.
     rekeyed: list[dict[str, Any]] = field(default_factory=list)
+    # catalog-purged.json was older than a file that decided ids it names
+    # (its write failed, or a crash: review 5, L-1).
+    purged_file_behind: bool = False
 
 
 def _row(entry: dict[str, Any]) -> dict[str, Any]:
@@ -889,6 +947,20 @@ def _resolve_misfiled(found: Salvage, copy_ids: set[str]) -> list[dict[str, Any]
             found.groups.setdefault(true_id, group)
             found.partial.setdefault(true_id, _scalars(entry))
     found.misfiled = []
+    # A record that failed under a key the copy doesn't have, a single
+    # character off a copy record the damage left unread: the damage hit its
+    # key, and its own id too (else it was misfiled above), as in fix round
+    # 5's gate run of review 4's two-flip set (Old's key "9311…" -> "1311…",
+    # its id field "…9883=1f4…"). It is that copy record, unread: never a
+    # project of its own nor one deleted after the copy (cameBack).
+    for key_id in [key for key in found.failed if key not in copy_ids and key not in found.entries]:
+        damaged = _one_off_copy_id(found, {key_id}, copy_ids)
+        if damaged is None:
+            continue
+        found.failed.setdefault(damaged, found.failed.pop(key_id))
+        found.groups.setdefault(damaged, found.groups.pop(key_id, None))
+        found.partial.setdefault(damaged, {**found.partial.pop(key_id, {}), "id": damaged})
+        found.holds = {*(found.holds or ()), damaged} - {key_id}
     return filed
 
 
@@ -925,9 +997,16 @@ def _made_after(entry_id: str, at: str, salvages: list[Salvage], *places: dict[s
     return False
 
 
+def _commit_of(value: Any) -> int | None:
+    """A catalog's ``commitSeq`` (or a side file's ``commit``) when it reads
+    as one: a whole number, not a bool."""
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+
 def reconcile(base: dict[str, Any], salvages: Iterable[Salvage], *, max_projects: int,
               room_bytes: int, open_project: Any = _UNKNOWN, until: datetime | None = None,
-              side_purged: dict[str, str] | None = None, side_index: int = 1) -> Reconciled:
+              side_purged: dict[str, str] | None = None, side_index: int = 1,
+              side_layers: list[tuple[int | None, dict[str, str]]] | None = None) -> Reconciled:
     """``base`` (validated; changed in place and returned as ``catalog``)
     with what ``salvages`` hold, newest first. ``max_projects`` bounds the
     live list (ProjectStore's limit) and ``room_bytes`` how many encoded
@@ -937,9 +1016,15 @@ def reconcile(base: dict[str, Any], salvages: Iterable[Salvage], *, max_projects
     state.json), None for no project's, UNKNOWN when it isn't recorded.
     ``until``: the restore's clock; a date after it decides nothing (review
     4, M-3). ``side_purged``: catalog-purged.json's tombstones, the latest
-    commit's, written right after it (review 4, L-3): ordered after the
-    damaged catalog.json (``side_index`` 1; 0 when catalog.json is missing,
-    so ``salvages`` are all damaged copies) and before every copy."""
+    commit's (review 4, L-3), or ``side_layers``, its layers as
+    (the commit each is true of, its tombstones), newest first (review 5,
+    L-1 and L-3). A layer whose commit is unknown (a side file from before
+    commits were numbered) goes right after the damaged catalog.json
+    (``side_index`` 1; 0 when catalog.json is missing, so ``salvages`` are
+    all damaged copies) and before every copy; a numbered one goes there
+    too, then after every file numbered later than it (one whose side-file
+    write failed, or one that a crash left a commit ahead), so those files
+    decide the ids they hold. ``base``'s own number is its ``commitSeq``."""
     result = base
     projects: dict[str, Any] = result["projects"]
     trash: dict[str, Any] = result.setdefault("trash", {})
@@ -975,19 +1060,36 @@ def reconcile(base: dict[str, Any], salvages: Iterable[Salvage], *, max_projects
     # back), so its record of the id doesn't decide; the tombstone does.
     # That mirrors newer() for records, and a record made again after the
     # delete (a recover retry) is newer than it, so it still wins.
-    side = Salvage(purged=purged_map(side_purged or {}))
-    sources: list[tuple[list[str], dict[str, str], datetime | None]] = [
-        ([*found.entries, *found.failed], found.purged, salvage_freshness(found, until))
-        for found in [*salvages[:side_index], *([side] if side.purged else []), *salvages[side_index:]]]
-    sources.append((list(copy_ids), purged_map(result.get("purged")), None))
+    #
+    # A file's own newest date counts a future date as now (it is the newer
+    # file of that comparison), a later file's tombstone time leaves one out
+    # (review 5, M-2).
+    layers = list(side_layers) if side_layers is not None else [(None, side_purged or {})]
+    layers = [(commit, purged_map(tombstones)) for commit, tombstones in layers]
+    layers = [(commit, tombstones) for commit, tombstones in layers if tombstones]
+    files: list[tuple[list[str], dict[str, str], datetime | None, int | None]] = [
+        ([*found.entries, *found.failed], found.purged, salvage_freshness(found, until, FUTURE_IS_NOW), found.seq)
+        for found in salvages]
+    files.append((list(copy_ids), purged_map(result.get("purged")), None, _commit_of(result.get("commitSeq"))))
+    side_behind = False
+    placed: list[tuple[int, int, tuple[list[str], dict[str, str], datetime | None, int | None]]] = []
+    for rank, (commit, tombstones) in enumerate(layers):
+        at = min(side_index, len(files) - 1)
+        while commit is not None and at < len(files) and files[at][3] is not None and files[at][3] > commit:
+            at += 1  # that file is a later commit than this layer: it decides what it holds
+            side_behind = True
+        placed.append((at, rank, ([], tombstones, None, commit)))
+    sources = list(files)
+    for at, _rank, layer in sorted(placed, key=lambda row: (row[0], row[1]), reverse=True):
+        sources.insert(at, layer)
     decided: dict[str, str | None] = {}  # id -> the tombstone's time, or None for a record
-    for index, (ids, tombstones, newest_date) in enumerate(sources):
+    for index, (ids, tombstones, newest_date, _commit) in enumerate(sources):
         for entry_id in ids:
             if entry_id in decided:
                 continue
             if newest_date is not None and any(
                     (when := _until(_moment(later.get(entry_id)), until)) is not None and when > newest_date
-                    for _ids, later, _date in sources[index + 1:]):
+                    for _ids, later, _date, _seq in sources[index + 1:]):
                 continue  # this file is older than that delete: the tombstone decides
             decided[entry_id] = None
         for entry_id, at in tombstones.items():
@@ -1021,11 +1123,17 @@ def reconcile(base: dict[str, Any], salvages: Iterable[Salvage], *, max_projects
                     continue
                 if newer(current, entry, until):
                     # The copy's is newer by its dates (a damaged file older
-                    # than its copy, or a restore from Recently deleted saved
-                    # before restores were dated): the copy's stays. Never
-                    # by a date from the future (review 4, M-3).
+                    # than its copy, a restore from Recently deleted saved
+                    # before restores were dated, or a copy dated by a clock
+                    # that ran ahead, its dates since past): the copy's
+                    # stays, and says so. Never by a date from the future in
+                    # the copy; the damaged file's count as now (review 4,
+                    # M-3; review 5, M-2). The damaged file's version is in
+                    # the kept damaged file.
                     if trashed(current) and not trashed(entry) and found.entry_groups.get(entry_id) != "trash":
                         back_in_trash.append({"id": entry_id, "name": current["name"]})
+                    else:
+                        reverted.append({**_row(current), "by": "dates"})
                     continue
             size = found.sizes.get(entry_id)
             if size is None:
@@ -1100,4 +1208,4 @@ def reconcile(base: dict[str, Any], salvages: Iterable[Salvage], *, max_projects
         result.pop("migratedProjectId", None)
     open_name = _record_name(open_missing, salvages, trash) if open_missing else None
     return Reconciled(result, added, updated, list(not_added.values()), active_from, open_missing,
-                      reverted, came_back, back_in_trash, kept_deleted, open_name, rekeyed)
+                      reverted, came_back, back_in_trash, kept_deleted, open_name, rekeyed, side_behind)

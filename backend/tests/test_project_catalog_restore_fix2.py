@@ -466,7 +466,7 @@ def test_l4_filing_the_canvas_at_the_project_limit_never_fails_the_listing(app, 
     client, store, graph, state = app
     monkeypatch.setattr(store_module, "MAX_PROJECTS", 3)
     first = _create(client, "A")
-    _create(client, "B")
+    second = _create(client, "B")
     _create(client, "C")
     _add_text(client, "c1")
     client.get("/api/projects", headers=PERSON)
@@ -480,17 +480,20 @@ def test_l4_filing_the_canvas_at_the_project_limit_never_fails_the_listing(app, 
     assert listing["canvasNotFiled"]["reason"] == "projects"
     assert listing["activeProjectId"] is None
     assert [node["params"]["value"] for node in main_module.cli_graph.get_state()["nodes"]] == ["c1"]
-    # Opening another project would replace it: refused, nothing lost.
+    # Opening another project replaces it: held aside first, nothing lost
+    # (review 5 of PR #199, M-3: it was refused until round 5).
     opened = client.post(f"/api/projects/{first}/open", json={"workspaceRevision": listing["workspaceRevision"]},
                          headers=PERSON)
-    assert opened.status_code == 413 and opened.json()["limit"] == "projects"
-    assert len(main_module.cli_graph.nodes) == 1
-    # A slot freed: the next listing files it.
-    client.request("DELETE", f"/api/projects/{first}", headers=PERSON, json={"workspaceRevision": _rev(client)})
+    assert opened.status_code == 200, opened.text
+    assert len(store.canvas_held()) == 1
+    # A slot freed: the next listing files the held copy, not opened.
+    client.request("DELETE", f"/api/projects/{second}", headers=PERSON, json={"workspaceRevision": _rev(client)})
     listing = client.get("/api/projects", headers=PERSON).json()
     assert "canvasNotFiled" not in listing
-    filed = [project for project in listing["projects"] if project["id"] == listing["activeProjectId"]]
-    assert filed and filed[0]["name"] == "Recovered canvas"
+    assert listing["activeProjectId"] == first
+    filed = [project for project in listing["projects"] if project["name"] == "Recovered canvas"]
+    assert len(filed) == 1 and filed[0]["nodeCount"] == 1
+    assert store.canvas_held() == []
 
 
 # -- L5: a filing attaches to the restore it came from, and is journaled -------------

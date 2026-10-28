@@ -97,6 +97,26 @@ export function restoreRefusedLine(name: string, projectLimit: number): string {
   return `Couldn't restore ${quoted(name)}. You've reached the limit of ${projectLimit} projects.`;
 }
 
+/** GM r7: Restore in Recently deleted, disabled while the list is at its
+ * project limit, says why in its tooltip, with the real limit. */
+export function restoreAtLimitTooltip(projectLimit: number): string {
+  return `You can restore it after you delete a project. You've reached the limit of ${projectLimit} projects.`;
+}
+
+/** GM's held model (2026-10-28), the person's Agent log line when an
+ * agent's clear or graph load made Nebula hold the waiting canvas aside
+ * (``action`` "cleared" or "replaced"; ``agent`` null: "An agent"). */
+export function canvasHeldLogLine(agent: string | null | undefined, action: 'cleared' | 'replaced'): string {
+  return `${agent || 'An agent'} ${action} the canvas. The one you had open is kept until Nebula can save it as a project.`;
+}
+
+/** GM round 5, the Agent log line when Nebula refused an agent's clear or
+ * graph load at the limit while the canvas waited (``action`` "clear" or
+ * "replace"). */
+export function canvasHoldRefusedLogLine(agent: string | null | undefined, action: 'clear' | 'replace'): string {
+  return `${agent || 'An agent'} tried to ${action} the canvas you had open. Nebula stopped it because that canvas isn't saved as a project yet.`;
+}
+
 /** GM r4/r5, the toast once a waiting canvas is saved: the project's real
  * name, and no "nothing in it is lost". */
 export function canvasSavedToast(name: string): string {
@@ -166,21 +186,14 @@ export interface CatalogRestoreNotice {
   canvasLine: 'saved' | 'limit' | null;
 }
 
-/** The notice from its parts: inline for one outcome or none, stacked for
- * more. ``stacked``: the notice was stacked as the restore said it, so it
- * stays one outcome per line however many remain after lines drop (GM r6,
- * bug 1: the lines left ran together as one paragraph). */
+/** The notice from its parts, always stacked: the opening, one outcome per
+ * line, then the closing line, from the first render on, however many
+ * remain as lines drop (GM round 5, 3; GM r6, bug 1: lines ran together as
+ * one paragraph). */
 function layout(opening: string, outcomes: string[], closing: string | null, openRecentlyDeleted: boolean,
-  recentlyDeletedIds: string[] = [], canvasLine: CatalogRestoreNotice['canvasLine'] = null,
-  stacked = false): CatalogRestoreNotice {
+  recentlyDeletedIds: string[] = [], canvasLine: CatalogRestoreNotice['canvasLine'] = null): CatalogRestoreNotice {
   const all = [opening, ...outcomes, ...(closing ? [closing] : [])];
-  return { text: all.join(' '), lines: stacked || outcomes.length > 1 ? all : null, openRecentlyDeleted, recentlyDeletedIds, canvasLine };
-}
-
-/** Whether the notice for ``restore`` is stacked as the restore said it
- * (every row as recorded): then it stays stacked as its lines drop. */
-function stackedAtFirst(restore: NoticeInput, current: NoticeNow | undefined, now: number): boolean {
-  return current !== undefined && catalogRestoreNotice(restore, now).lines !== null;
+  return { text: all.join(' '), lines: all, openRecentlyDeleted, recentlyDeletedIds, canvasLine };
 }
 
 /** Each row as it holds now (GM r4): ``where`` says where its line puts the
@@ -239,7 +252,7 @@ function limitOpensTrash(restore: NoticeInput, canvas: { kind: string } | null, 
   return reason === 'storage' && (current?.trash.length ?? 0) > 0;
 }
 
-function rebuiltNotice(restore: NoticeInput, current?: NoticeNow, now: number = Date.now()): CatalogRestoreNotice {
+function rebuiltNotice(restore: NoticeInput, current?: NoticeNow): CatalogRestoreNotice {
   // GM: "Lost Recently deleted entries: not in the notice; log them."
   const all = (restore.notAddedBack ?? []).filter((row) => row.trashed !== true);
   const trashedRows = (restore.notAddedBack ?? []).length - all.length;
@@ -257,7 +270,7 @@ function rebuiltNotice(restore: NoticeInput, current?: NoticeNow, now: number = 
   const canvas = canvasOutcome(restore, current);
   if (canvas) outcomes.push(canvas.line);
   const opensTrash = limitOpensTrash(restore, canvas, current);
-  return layout(REBUILT, outcomes, KEPT, opensTrash, [], canvas?.kind ?? null, stackedAtFirst(restore, current, now));
+  return layout(REBUILT, outcomes, KEPT, opensTrash, [], canvas?.kind ?? null);
 }
 
 /** The notice for `restore`: GM's sentences in GM's order. With `current`
@@ -268,7 +281,7 @@ function rebuiltNotice(restore: NoticeInput, current?: NoticeNow, now: number = 
  * what the restore did, so when every outcome has gone the opening and
  * that line remain until the person closes it. */
 export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.now(), current?: NoticeNow): CatalogRestoreNotice {
-  if (restore.kind === 'rebuilt') return rebuiltNotice(restore, current, now);
+  if (restore.kind === 'rebuilt') return rebuiltNotice(restore, current);
   const addedRows = restore.addedBack ?? [];
   const recordedTrashedAdded = addedRows.filter((row) => row.trashed === true);
   const recordedLiveAdded = Math.max(0, total(restore.addedBackCount, addedRows) - recordedTrashedAdded.length);
@@ -398,8 +411,7 @@ export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.no
   const openRecentlyDeleted = current
     ? recentlyDeletedIds.length > 0 || limitOpensTrash(restore, canvas, current)
     : trashedAdded.length > 0 || backInTrash > 0;
-  return layout(opening, outcomes, closing, openRecentlyDeleted, recentlyDeletedIds, canvas?.kind ?? null,
-    stackedAtFirst(restore, current, now));
+  return layout(opening, outcomes, closing, openRecentlyDeleted, recentlyDeletedIds, canvas?.kind ?? null);
 }
 
 /** The notice's text for `restore`. */

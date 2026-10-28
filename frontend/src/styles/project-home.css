@@ -119,6 +119,10 @@ body.app-slava-restraint .project-home__trash-actions button,
 body.app-slava-restraint .project-home__trash-empty,
 body.app-slava-restraint .project-home__confirm button { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 10px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-radius-control); background: var(--sr-surface-control); color: var(--sr-ink); font-size: 12px; transition: background var(--sr-motion-fast), border-color var(--sr-motion-fast); }
 body.app-slava-restraint .project-home__trash-actions button svg { width: 13px; height: 13px; }
+/* GM r7: Restore at the project limit, in the shared disabled grey but still
+   focusable, so its tooltip says why (aria-disabled, as the toolbar's). */
+body.app-slava-restraint .project-home__trash-actions .project-home__restore--at-limit { opacity: var(--sr-disabled-opacity); cursor: default; }
+body.app-slava-restraint .project-home__trash-actions .project-home__restore--at-limit:hover { background: var(--sr-surface-control); }
 body.app-slava-restraint .project-home__trash-actions button:hover:not(:disabled),
 body.app-slava-restraint .project-home__trash-empty:hover:not(:disabled),
 body.app-slava-restraint .project-home__confirm button:hover:not(:disabled) { background: var(--sr-surface-control-hover); }

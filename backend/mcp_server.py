@@ -376,11 +376,15 @@ def start_here(ctx: Context | None = None) -> str:
     copy's version, came back after a delete or are in Recently deleted
     again, and whether the damaged file was read to its end, only those
     that still hold; list_projects has it in full), then `canvasNotFiled`
-    while the live canvas isn't a saved project because the list is at a
-    limit ({reason, since, projectLimit, roomNow, note}: nothing in it is
-    lost, but the person can't see or open it until it is saved, so never
-    say it is open; tell them what `note` says frees room, or, with
-    `roomNow`, that the next listing saves it; don't free it yourself):
+    while the live canvas, or a canvas held aside, isn't a saved project
+    because the list is at a limit ({reason, since, projectLimit, live,
+    held, roomNow, note}: nothing in it is lost, but the person can't see
+    or open it until it is saved, so never say it is open; opening an
+    existing project works, clearing the canvas (`nebula clear`) or loading
+    a graph onto it (load_graph_file) at the limit is refused (409, code
+    canvas_waiting); tell them what
+    `note` says frees room, or, with `roomNow`, that the next listing saves
+    it; don't free it yourself):
     - `canvas`: the project, `view.stale` (no browser watching), the
       selection, other agents' cursors, and the nodes (id, name,
       definitionId, state, onScreen, inputsFrom, up to 8 params cut to 60
@@ -1224,7 +1228,13 @@ def load_graph_file(path: str, ctx: Context | None = None) -> dict[str, Any]:
     `edgeCount`, `idMap` (the file's node ids to the canvas's), `filesRestored`,
     `warnings` (files a bundle lacked, links left out), `savingPaused`, `size`
     and `note`. An in-app chat's turn reads only its own workspace; a relative
-    path means that workspace."""
+    path means that workspace.
+
+    While the canvas waits to be saved as a project (list_projects
+    `canvasNotFiled`, live) and the list is at its limit, refused with
+    "... (409, canvas_waiting)": open an existing project (open_project) to
+    work in, or ask the person to delete a project. Below the limit the
+    waiting canvas is held aside first and the load works."""
     import graph_file_client
 
     try:
@@ -1359,13 +1369,19 @@ def list_projects(ctx: Context | None = None) -> dict[str, Any]:
     person's notice does. Project ids from before it may be stale; ask the
     person before deleting a project that came back.
     `canvasNotFiled` (top level, {reason: projects | storage, since,
-    projectLimit, roomNow, note}) means the live canvas isn't a saved
-    project and the list had no room to save it as one, whether or not a
-    restore notice is open: nothing in it is lost, but no project is open
-    and the person can't see or open it until it is saved (never say it is
-    open); open_project / new_project are refused (413) until the person
-    frees room, and `roomNow` true means room is free and the next listing
-    saves it; `projectLimit` (top level) is the list's limit; `note` says what frees it
+    projectLimit, live, held, roomNow, note}) means a canvas the person had
+    open isn't a saved project and the list had no room to save it as one,
+    whether or not a restore notice is open: the live canvas (`live`, no
+    project open), and `held` more held aside. Nothing in them is lost, but
+    the person can't see or open one until it is saved (never say it is
+    open). open_project works: the waiting canvas is held aside first,
+    whole, and saved from that copy later. new_project is refused (413)
+    until there is room; so are a clear (`nebula clear`) and load_graph_file
+    while the live canvas waits at the limit (409, code canvas_waiting: "The project
+    limit is reached, so a new canvas can't be saved. Open an existing
+    project to work in, or ask the person to delete a project."). Below the
+    limit they hold it aside first and work (`heldCanvas` true). `roomNow`
+    true means room is free and the next listing saves them; `projectLimit` (top level) is the list's limit; `note` says what frees it
     for that limit (the project limit: a move to Recently deleted; the size
     limit: only a delete for good). Don't free it for them. `canvasSaved`
     ({id, name, at}, for 10 minutes) says such a canvas was then saved."""
@@ -1416,6 +1432,9 @@ def open_project(project_id: str, ctx: Context | None = None) -> dict[str, Any]:
     new one loads; what they had typed is saved into the project left (or, if
     that fails, as a new project named after the project left, "<project
     left> (recovered)", then "(recovered 2)" and so on). Refused while a run is going.
+    A canvas waiting to be saved as a project (list_projects `canvasNotFiled`)
+    is held aside first, whole, and saved as its own project once there is
+    room, so opening works then too.
     """
     from urllib.parse import quote
 
@@ -1763,10 +1782,22 @@ def restore_from_trash(kind: str, id: str, ctx: Context | None = None) -> dict[s
     agent may restore; only the person can delete for good. A project
     restore into a list at its project limit is refused (413, limit
     "projects", projectLimit) and changes nothing: it stays in Recently
-    deleted until the person frees room."""
+    deleted until the person frees room. That refusal reaches you whole:
+    "<detail> (413, {"limit": "projects", "projectLimit": N})", as HTTP
+    answers it."""
     from urllib.parse import quote
 
-    return _canvas_call("POST", f"/api/trash/{quote(kind, safe='')}/{quote(id, safe='')}/restore", ctx)
+    try:
+        return _canvas_call("POST", f"/api/trash/{quote(kind, safe='')}/{quote(id, safe='')}/restore", ctx)
+    except NebulaAPIError as exc:
+        payload = exc.payload if isinstance(exc.payload, dict) else {}
+        if exc.status != 413:
+            raise
+        # The whole refusal, as HTTP gives it (review 5 of PR #199, L-2):
+        # the bare detail left out which limit and how many projects.
+        fields = {key: payload[key] for key in ("limit", "projectLimit", "scope", "code") if key in payload}
+        raise NebulaAPIError(f"{exc.detail} (413, {_json.dumps(fields)})", status=413, kind=exc.kind,
+                             headers=exc.headers, payload=exc.payload) from exc
 
 
 # -- commons (smart moodboard) ------------------------------------------------

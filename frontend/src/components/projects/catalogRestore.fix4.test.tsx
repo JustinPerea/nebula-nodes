@@ -122,9 +122,11 @@ describe('GM r6 bug 1: one outcome per line, however many remain', () => {
     expect([...lines].map((line) => line.textContent)).toEqual([`${OPEN}.`, NOT_WHOLE, KEPT]);
   });
 
-  it('keeps a notice that was one line at first on one line', () => {
+  // GM round 5 (fix round 5 of PR #199): stacked from the first render,
+  // so a notice that was short at first is stacked too (it was one line).
+  it('stacks a notice that was short at first too (GM round 5)', () => {
     const single = catalogRestoreNotice(restore(), NOW, now([project(LOGO, 'Logo')], []));
-    expect(single.lines).toBeNull();
+    expect(single.lines).toEqual([`${OPEN}.`, 'No projects were missing.']);
   });
 });
 

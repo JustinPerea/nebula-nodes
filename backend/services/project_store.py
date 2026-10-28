@@ -94,12 +94,24 @@ RESTORES_KEPT = 10
 # `since` and its one journal event (review 4 of PR #199, N-1).
 CANVAS_WAITING_NAME = "canvas-waiting.json"
 CANVAS_WAITING_BACKUP_NAME = CANVAS_WAITING_NAME + ".bak"
-# The projects deleted for good as the latest commit left them (its
-# `purged`), written right after each commit that changes them: .bak is one
-# commit behind, so a delete for good as the last commit, then a catalog.json
-# damaged past its head, brought the project back to Recently deleted with no
-# line (review 4 of PR #199, L-3). Read by a restore only.
+# The projects deleted for good as the latest commit that changed them left
+# them (its `purged`): .bak is one commit behind, so a delete for good as the
+# last commit, then a catalog.json damaged past its head, brought the project
+# back to Recently deleted with no line (review 4 of PR #199, L-3). Read by a
+# restore only. {version, commit, purged, previous: {commit, purged}}:
+# `commit` is the catalog's `commitSeq` it is true of, `previous` the
+# tombstones that commit took away, true of the commit before. Written
+# before the catalog's rename (review 5, L-3): a crash between the two
+# leaves it one commit ahead, which its layers say, never a landed delete
+# without it. A write that fails leaves it at its older commit; the copies
+# numbered later than it then decide the ids they hold (review 5, L-1).
 PURGED_NAME = "catalog-purged.json"
+# The live canvas held aside while it waits to be saved as its own project
+# (main._hold_live_canvas: an open, a create, or below the limit an agent's
+# clear or graph load replaced it), in two copies: [{projectId, nodes,
+# edges, ...}] (review 5 of PR #199, M-3; GM's held model, 2026-10-28).
+CANVAS_HELD_NAME = "canvas-held.json"
+CANVAS_HELD_BACKUP_NAME = CANVAS_HELD_NAME + ".bak"
 PURGED_FILE_MAX_BYTES = 1024 * 1024
 # Whether a restore from Recently deleted (the person's Undo, or Restore in
 # the list) may take the list past MAX_PROJECTS. GM (r6) prefers yes, since
@@ -111,7 +123,7 @@ PURGED_FILE_MAX_BYTES = 1024 * 1024
 RESTORE_MAY_PASS_THE_PROJECT_LIMIT = False
 RECORD_ROWS = 100  # names listed per restore; the counts are whole
 # The fields prepare writes first, so a cut file still says which project was open.
-_HEAD_KEYS = ("version", "activeProjectId", "workspaceRevision", "migratedProjectId", "purged")
+_HEAD_KEYS = ("version", "commitSeq", "activeProjectId", "workspaceRevision", "migratedProjectId", "purged")
 # Every read refuses NaN, Infinity and -Infinity (parse_constant: free on the
 # C decoder). A file this process didn't commit (or a copy) is also read
 # strictly: a number past float's range and a lone surrogate are refused too
@@ -428,6 +440,23 @@ def _waiting_record(found: Any) -> dict[str, Any] | None:
     return {"reason": found["reason"], "from": owner, "since": found["since"], "journaled": found["journaled"]}
 
 
+def _held_entry(found: Any) -> dict[str, Any] | None:
+    """One canvas-held.json entry when its fields are what main writes, else None."""
+    if not isinstance(found, dict):
+        return None
+    project_id, owner = found.get("projectId"), found.get("from")
+    if not (isinstance(project_id, str) and len(project_id) == 32 and all(c in "0123456789abcdef" for c in project_id)):
+        return None
+    if not isinstance(found.get("nodes"), list) or not isinstance(found.get("edges"), list):
+        return None
+    if found.get("reason") not in ("projects", "storage") or not catalog_recovery.dated(found.get("since")) \
+            or not catalog_recovery.dated(found.get("heldAt")) or not (owner is None or isinstance(owner, str)) \
+            or not isinstance(found.get("unproven"), bool) or not isinstance(found.get("digest"), str) \
+            or not isinstance(found.get("counter"), int):
+        return None
+    return dict(found)
+
+
 class ProjectStore:
     def __init__(self, root: Path) -> None:
         self.root = root
@@ -475,8 +504,11 @@ class ProjectStore:
         # The purged map the commit being prepared carries (its temporary
         # file, the map), and catalog-purged.json as last read or written
         # here (its signature, its map): kept in step after each commit.
-        self._prepared_purged: tuple[Path, dict[str, str]] | None = None
-        self._side_purged: tuple[Any, dict[str, str]] | None = None
+        self._prepared_purged: tuple[Path, dict[str, str], int] | None = None
+        self._side_purged: tuple[Any, dict[str, Any]] | None = None
+        # The highest commit number this store wrote or a restore saw
+        # (commitSeq): every commit's is above it.
+        self._last_seq = 0
         # This thread's hold on .lock: its depth (only _recover reads inside
         # a hold: flock from a second descriptor would wait on itself), the
         # restores to announce once it is let go, the catalog file this hold
@@ -832,14 +864,17 @@ class ProjectStore:
         # Every copy is read: the base is .bak, the newer by construction (a
         # link of the catalog the last commit replaced, or a copy of every
         # commit where links fail), unless .bak.1 holds later dates (a .bak a
-        # sync tool or a person put back: review 2, L3). Dates are the
-        # copies' own (catalog_recovery.catalog_freshness; every change
-        # Nebula makes moves one), never one after this restore's clock: a
-        # clock that ran ahead when .bak.1 was written made it the base, and
-        # the next commit erased a project only .bak held (review 4, M-3).
-        # Not by mtime: a copy made by hand or a sync tool has a new one.
+        # sync tool or a person put back: review 2, L3) and, when both are
+        # numbered, a later commit. Dates are the copies' own
+        # (catalog_recovery.newer_copy; every change Nebula makes moves one),
+        # judged by file order: a date ahead of this restore's clock is left
+        # out in .bak.1 and counts as now in .bak, so neither a .bak.1 nor a
+        # .bak written while the clock ran ahead loses the newer copy (review
+        # 4, M-3; review 5, M-2's c1). Never by mtime: a copy made by hand or
+        # a sync tool has a new one. Two signals, so one flipped digit in a
+        # valid copy's dates or number never makes the older copy the base.
         clock = datetime.now(timezone.utc)
-        valid: list[tuple[Any, float, int, Path, bytes, dict[str, Any]]] = []
+        valid: list[tuple[int, Path, bytes, dict[str, Any]]] = []
         newer_copies: list[tuple[Path, bytes, Any]] = []
         mtimes: dict[Path, float] = {}
         for order, path in enumerate((self.backup_path, self.older_backup_path)):
@@ -868,10 +903,18 @@ class ProjectStore:
                 _log(f"{path.name} is damaged too ({exc})")
                 damaged_copies.append((path, raw, candidate))
                 continue
-            freshest = catalog_recovery.catalog_freshness(candidate, until=clock)
-            valid.append((freshest.timestamp() if freshest else float("-inf"), -order, path, raw, candidate))
+            valid.append((order, path, raw, candidate))
         if valid:
-            *_order, chosen, base_raw, base = max(valid, key=lambda row: row[:2])
+            pick = valid[0]
+            if len(valid) > 1:
+                (_o, _p, _r, newest_copy), (_o1, _p1, _r1, older_copy) = valid[0], valid[1]
+                newer_seq = catalog_recovery._commit_of(newest_copy.get("commitSeq"))
+                older_seq = catalog_recovery._commit_of(older_copy.get("commitSeq"))
+                later_commit = older_seq is not None and (newer_seq is None or older_seq > newer_seq) \
+                    or (older_seq is None and newer_seq is None)
+                if later_commit and catalog_recovery.newer_copy(newest_copy, older_copy, until=clock):
+                    pick = valid[1]
+            _order, chosen, base_raw, base = pick
             source = chosen.name
             if len(valid) > 1:
                 _log(f"both copies are good; {source} holds the newer catalog")
@@ -959,9 +1002,18 @@ class ProjectStore:
         # Room for what is added back: the limit less the copy, its head
         # (purged, at most PURGED_KEPT_MAX short entries) and a margin.
         room = MAX_CATALOG_BYTES - base_bytes - PURGED_KEPT_MAX * 80 - 4096
+        # Commit numbers go on above every number this restore saw (the
+        # damaged head's when it reads, the side file's, the copies').
+        seen_seqs = [found.seq for found in salvages if found.seq is not None]
+        seen_seqs += [catalog_recovery._commit_of(row[3].get("commitSeq")) or 0 for row in valid]
+        self._last_seq = max([self._last_seq, *seen_seqs])
         merged = catalog_recovery.reconcile(base, salvages, max_projects=MAX_PROJECTS, room_bytes=room,
                                             open_project=owner, until=clock,
-                                            side_purged=self._read_purged_file(), side_index=1 if head is not None else 0)
+                                            side_layers=self._purged_layers(), side_index=1 if head is not None else 0)
+        if merged.purged_file_behind:
+            side_commit = self._side_file().get("commit")
+            _log(f"{PURGED_NAME} is from commit {side_commit}, older than a file of a later commit: that file decides "
+                 "the projects it holds (the side file couldn't be rewritten, or a crash came between)")
         catalog = merged.catalog
         catalog["version"] = 1
         # Open tabs hold the list as it was: a new revision makes them reload.
@@ -1038,8 +1090,9 @@ class ProjectStore:
             _log(f"could not add back {row['id']} ({row['reason']}){' from Recently deleted' if row.get('trashed') else ''}; "
                  "it stays in the damaged file")
         for row in merged.reverted:
-            _log(f"{row['id']} \"{row['name']}\" went back to its version in {source}: its record in the damaged "
-                 "file couldn't be read whole")
+            why = ("its record in the damaged file is older by its dates (the damaged file keeps it)"
+                   if row.get("by") == "dates" else "its record in the damaged file couldn't be read whole")
+            _log(f"{row['id']} \"{row['name']}\" went back to its version in {source}: {why}")
         for row in merged.came_back:
             _log(f"{row['id']} \"{row['name']}\" was deleted after {source} ({row['how']}) and is back from it")
         for row in merged.back_in_trash:
@@ -1091,6 +1144,9 @@ class ProjectStore:
             # destroyed), what it held past the damage is unknown, so nobody
             # may say nothing was lost (live check of fix round 1).
             "damagedReadWhole": bool(damage.raw is not None and salvages and salvages[0].complete),
+            # catalog-purged.json was older than a file that decided ids it
+            # names (review 5, L-1): its write had failed, or a crash.
+            "purgedFileBehind": merged.purged_file_behind,
         }
         try:
             self._record_restore(record)
@@ -1272,6 +1328,47 @@ class ProjectStore:
         for path in paths:
             self._write_file(path, encoded)
 
+    def canvas_held(self) -> list[dict[str, Any]]:
+        """The live canvases held aside while they wait to be saved as their
+        own projects (main._hold_live_canvas), oldest first: canvas-held.json,
+        or its .bak copy when that one is missing or damaged. [] for none."""
+        for name in (CANVAS_HELD_NAME, CANVAS_HELD_BACKUP_NAME):
+            path = self.root / name
+            try:
+                found = json.loads(path.read_text(encoding="utf-8"))
+            except FileNotFoundError:
+                continue
+            except (OSError, ValueError) as exc:
+                _log(f"{name} could not be read ({exc})")
+                continue
+            entries = found.get("held") if isinstance(found, dict) else None
+            checked = [_held_entry(entry) for entry in entries] if isinstance(entries, list) else None
+            if checked is None or any(entry is None for entry in checked):
+                _log(f"{name} doesn't hold the held canvases' records; not using it")
+                continue
+            return [entry for entry in checked if entry is not None]
+        return []
+
+    def set_canvas_held(self, entries: list[dict[str, Any]]) -> None:
+        """Write canvas_held's list (both copies, each fsynced, then the
+        folder), or remove it when empty. Raises OSError: a hold that isn't
+        on disk must not let anything replace the canvas."""
+        paths = (self.root / CANVAS_HELD_NAME, self.root / CANVAS_HELD_BACKUP_NAME)
+        self._ensure_root()
+        if not entries:
+            for path in paths:
+                path.unlink(missing_ok=True)
+        else:
+            encoded = json.dumps({"version": 1, "held": entries}, ensure_ascii=False, separators=(",", ":"),
+                                 default=str).encode("utf-8")
+            for path in paths:
+                self._write_file(path, encoded)
+        fd = os.open(self.root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+
     # -- the last good copy -------------------------------------------------------
 
     def _write_file(self, target: Path, encoded: bytes) -> None:
@@ -1287,35 +1384,26 @@ class ProjectStore:
         finally:
             temporary.unlink(missing_ok=True)
 
-    def _keep_purged(self, purged: dict[str, str]) -> None:
-        """catalog-purged.json as the commit that just landed left
-        ``purged`` (written only when it changes: a delete for good, a
-        project made again, a tombstone aged out). Never fails the commit."""
+    def _side_file(self) -> dict[str, Any]:
+        """catalog-purged.json as {commit, purged, previous: {commit,
+        purged}} (commit None for a file from before commits were numbered),
+        cached by its signature; {} when missing or damaged (logged)."""
         path = self.root / PURGED_NAME
         try:
-            try:
-                signature: Any = file_signature(path.stat())
-            except FileNotFoundError:
-                signature = None
-            cached = self._side_purged
-            held = cached[1] if cached is not None and cached[0] == signature else self._read_purged_file()
-            if held == purged:
-                self._side_purged = (signature, held)
-                return
-            if purged:
-                self._write_file(path, json.dumps({"version": 1, "purged": purged}, separators=(",", ":")).encode("utf-8"))
-            else:
-                path.unlink(missing_ok=True)
-            try:
-                self._side_purged = (file_signature(path.stat()), dict(purged))
-            except FileNotFoundError:
-                self._side_purged = (None, {})
-        except OSError as exc:
-            self._side_purged = None
-            _log(f"could not keep {PURGED_NAME}: {exc}")
+            signature: Any = file_signature(path.stat())
+        except FileNotFoundError:
+            signature = None
+        except OSError:
+            signature = False
+        cached = self._side_purged
+        if cached is not None and signature is not False and cached[0] == signature:
+            return cached[1]
+        found = self._read_side_file() if signature is not None else {}
+        if signature is not False:
+            self._side_purged = (signature, found)
+        return found
 
-    def _read_purged_file(self) -> dict[str, str]:
-        """catalog-purged.json's tombstones, or {} (missing, damaged: logged)."""
+    def _read_side_file(self) -> dict[str, Any]:
         path = self.root / PURGED_NAME
         try:
             if path.is_symlink() or path.stat().st_size > PURGED_FILE_MAX_BYTES:
@@ -1327,7 +1415,86 @@ class ProjectStore:
         except (OSError, ValueError) as exc:
             _log(f"{PURGED_NAME} could not be read ({exc}); not using it")
             return {}
-        return catalog_recovery.purged_map(found.get("purged") if isinstance(found, dict) else None)
+        if not isinstance(found, dict):
+            return {}
+        previous = found.get("previous") if isinstance(found.get("previous"), dict) else {}
+        return {"commit": catalog_recovery._commit_of(found.get("commit")),
+                "purged": catalog_recovery.purged_map(found.get("purged")),
+                "previous": {"commit": catalog_recovery._commit_of(previous.get("commit")),
+                             "purged": catalog_recovery.purged_map(previous.get("purged"))}}
+
+    def _read_purged_file(self) -> dict[str, str]:
+        """catalog-purged.json's tombstones (its latest layer), or {}."""
+        return dict(self._side_file().get("purged") or {})
+
+    def _purged_layers(self) -> list[tuple[int | None, dict[str, str]]]:
+        """The side file's layers for a restore (catalog_recovery.reconcile's
+        ``side_layers``), newest first."""
+        side = self._side_file()
+        if not side:
+            return []
+        layers = [(side.get("commit"), dict(side.get("purged") or {}))]
+        previous = side.get("previous") or {}
+        if previous.get("purged"):
+            layers.append((previous.get("commit"), dict(previous["purged"])))
+        return layers
+
+    def _write_side_ahead(self, purged: dict[str, str], seq: int) -> bytes | None | bool:
+        """Before a commit's rename: catalog-purged.json as that commit
+        (``seq``) leaves the projects deleted for good, with the tombstones
+        it takes away as the layer before it, when that changes the file.
+        Returns the bytes it replaced (None: there was none), for
+        _undo_side_file if the rename then fails, or False when nothing was
+        written. Never fails the commit: a failed write is logged, and the
+        file stays at its older commit, which a restore can tell (L-1)."""
+        side = self._side_file()
+        held = dict(side.get("purged") or {})
+        if held == purged:
+            return False
+        path = self.root / PURGED_NAME
+        try:
+            try:
+                before: bytes | None = path.read_bytes()
+            except FileNotFoundError:
+                before = None
+            taken = {project_id: at for project_id, at in held.items() if project_id not in purged}
+            body: dict[str, Any] = {"version": 1, "commit": seq, "purged": purged}
+            if taken:
+                body["previous"] = {"commit": side.get("commit"), "purged": taken}
+            self._write_file(path, json.dumps(body, separators=(",", ":")).encode("utf-8"))
+            self._side_purged = None
+            return before
+        except OSError as exc:
+            self._side_purged = None
+            _log(f"could not keep {PURGED_NAME}: {exc}; it stays at commit {side.get('commit')}, and a restore lets "
+                 "the copies of later commits decide the projects they hold")
+            return False
+
+    def _undo_side_file(self, before: bytes | None | bool) -> None:
+        """The rename the side file was written ahead of failed: put back
+        what it held (best effort; if this fails too, the file is one commit
+        ahead, which its own commit number says)."""
+        if before is False:
+            return
+        path = self.root / PURGED_NAME
+        try:
+            if before is None:
+                path.unlink(missing_ok=True)
+            else:
+                self._write_file(path, before)
+        except OSError as exc:
+            _log(f"could not put {PURGED_NAME} back after a failed commit: {exc}")
+        self._side_purged = None
+
+    def _side_after_commit(self, purged: dict[str, str]) -> None:
+        """After the rename landed: a side file left with no tombstones goes."""
+        if purged:
+            return
+        try:
+            (self.root / PURGED_NAME).unlink(missing_ok=True)
+        except OSError as exc:
+            _log(f"could not remove the empty {PURGED_NAME}: {exc}")
+        self._side_purged = None
 
     def _write_older_backup(self, encoded: bytes) -> None:
         """Keep ``encoded`` (a catalog _check accepted, as committed) as the
@@ -1535,6 +1702,13 @@ class ProjectStore:
             _log(f"refusing to write a catalog that wouldn't read back ({exc})")
             raise ProjectStoreError("Project catalog could not be saved: it wouldn't read back. Nothing changed.") from exc
         self._remember_purged(catalog)
+        # Every commit is numbered, above every number this store wrote or
+        # its restore saw and the side file's: the copies and the side file
+        # then say which commit each is of (review 5, L-1).
+        seq = catalog_recovery._commit_of(catalog.get("commitSeq")) or 0
+        side_seq = self._side_file().get("commit") or 0
+        catalog["commitSeq"] = max(seq, self._last_seq, side_seq) + 1
+        self._last_seq = catalog["commitSeq"]
         # Which project is open goes first, so a file cut short still says
         # (services/catalog_recovery.py); the rest keep their order.
         ordered = {key: catalog[key] for key in _HEAD_KEYS if key in catalog}
@@ -1552,7 +1726,7 @@ class ProjectStore:
         if len(encoded) > MAX_CATALOG_BYTES:
             raise ProjectLimitError("Project storage limit reached", "storage")
         temporary = self.root / f".catalog.{uuid4().hex}.tmp"
-        self._prepared_purged = (temporary, catalog_recovery.purged_map(catalog.get("purged")))
+        self._prepared_purged = (temporary, catalog_recovery.purged_map(catalog.get("purged")), catalog["commitSeq"])
         try:
             fd = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
             with os.fdopen(fd, "wb") as handle:
@@ -1611,10 +1785,22 @@ class ProjectStore:
                 pass  # the rename below says what is wrong
         fd = os.open(self.root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
         link, link_failed = self._link_backup()
+        purged, self._prepared_purged = self._prepared_purged, None
+        if purged is not None and purged[0] != temporary:
+            purged = None
+        # The side file first, before the commit point (review 5, L-3): a
+        # crash after it leaves it one commit ahead (its own number says so,
+        # and each of its layers is true of a commit), never a delete for
+        # good that landed without it.
+        side_before = self._write_side_ahead(purged[1], purged[2]) if purged is not None else False
         # A successful atomic rename is the commit point. A post-commit
         # directory fsync warning must not report a failed, unadopted canvas.
         try:
-            os.replace(temporary, self.path)
+            try:
+                os.replace(temporary, self.path)
+            except BaseException:
+                self._undo_side_file(side_before)
+                raise
             self._local.validated = None
             if link is not None:
                 # The catalog just replaced becomes .bak. Never fails the
@@ -1640,11 +1826,8 @@ class ProjectStore:
                         # prepare validated it: the next commit in this hold may keep it as .bak.
                         self._local.validated = landed
                         self._local.ids = getattr(self._local, "pending_ids", None)
-            purged, self._prepared_purged = self._prepared_purged, None
-            if purged is not None and purged[0] == temporary:
-                # After the rename, never before: a tombstone written for a
-                # commit that didn't land would drop a project that exists.
-                self._keep_purged(purged[1])
+            if purged is not None and side_before is not False:
+                self._side_after_commit(purged[1])
             try:
                 os.fsync(fd)
             except OSError as exc:

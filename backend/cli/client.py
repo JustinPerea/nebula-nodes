@@ -54,6 +54,11 @@ class NebulaClient:
                        "backend; `nebula graph` shows what finished.")
         else:
             message = exc.detail
+            payload = exc.payload if isinstance(exc.payload, dict) else {}
+            if payload.get("code") == "canvas_waiting":
+                # The canvas waits to be saved as a project and the list is at
+                # its limit (review 5 of PR #199, M-3): the code, for scripts.
+                message = f"{message} (canvas_waiting)"
         print(f"error: {message}", file=sys.stderr)
         sys.exit(1)
 
