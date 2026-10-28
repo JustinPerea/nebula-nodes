@@ -167,7 +167,7 @@ const agentClear = () => emit({ type: 'graphSync', workspaceRevision: 'rev-a', p
 import { useCanvasPinsStore } from '../src/store/canvasPinsStore';
 
 const resetPins = () => useCanvasPinsStore.setState({ projectId: null, pins: [], composer: null, removing: {}, error: null,
-  composerCanvas: null, draft: '', kept: null } as never);
+  composerCanvas: null, draft: '', drafts: {}, kept: null } as never);
 const pins = useCanvasPinsStore;
 const lines = () => [useGraphStore.getState().undoNotice?.text, useGraphStore.getState().messageNotice?.text].filter(Boolean);
 const sentPut = () => vi.waitFor(() => expect(graphWrites.sent.some((write) => write.path === '/api/graph/node/n1')).toBe(true), { timeout: 2000 });
@@ -276,7 +276,7 @@ describe('L-3: the kept note', () => {
     pins.getState().setDraft('during a follow');
     agentOpens({ kind: 'agent', name: 'Codex' });
     await vi.waitFor(() => expect(pins.getState().kept).not.toBeNull());
-    expect(pins.getState().kept).toEqual({ text: 'during a follow',
+    expect(pins.getState().kept).toMatchObject({ text: 'during a follow',
       line: 'Your note wasn’t sent because Codex started opening “beta”.' });
     release();
     await vi.waitFor(() => expect(useProjectStore.getState().activeProject?.id).toBe('beta'));
@@ -285,7 +285,7 @@ describe('L-3: the kept note', () => {
     graphWrites.answer = () => Promise.resolve(answer(409, { detail: STALE }));
     pins.getState().compose({ nodeId: 'n1' });
     expect(await pins.getState().submit('refused')).toBe(false);
-    expect(pins.getState().kept).toEqual({ text: 'refused', line: 'Your note wasn’t sent because the canvas changed first.' });
+    expect(pins.getState().kept).toMatchObject({ text: 'refused', line: 'Your note wasn’t sent because the canvas changed first.' });
   });
 
   it('an unknown agent reads "an agent"', async () => {
@@ -342,27 +342,20 @@ describe('fix round 1, GM 2026-10-27 answer 1 (review N-1): the draft belongs to
   beforeEach(() => resetPins());
   afterEach(() => resetPins());
 
-  it('a draft closed with × on one canvas never prefills the next canvas\'s dialog: the kept-note notice holds it', async () => {
+  // Fix round 2 (GM 2026-10-28 answer 1): a draft closed on purpose gets no
+  // line; it waits for its own project (agentPresenceFollowups.r2store).
+  it('a draft closed with × on one project never prefills the next project\'s dialog, and gets no line', async () => {
     pins.getState().compose({ nodeId: 'n1' });
     pins.getState().setDraft('for alpha n1');
     pins.getState().cancelCompose();
     agentOpens({ kind: 'agent', name: 'Codex' });
     await vi.waitFor(() => expect(useProjectStore.getState().activeProject?.id).toBe('beta'));
+    expect(pins.getState().kept).toBeNull();
+    pins.getState().compose({ nodeId: 'n1' });
     expect(pins.getState().draft).toBe('');
-    expect(pins.getState().kept).toEqual({ text: 'for alpha n1', line: 'Your note wasn’t sent because Codex started opening “beta”.' });
   });
 
-  it('an emptied draft leaves nothing to keep; the failed-send toast goes with its canvas', async () => {
-    graphWrites.answer = () => Promise.resolve(answer(500, { detail: 'boom' }));
-    pins.getState().compose({ nodeId: 'n1' });
-    expect(await pins.getState().submit('failed note')).toBe(false);
-    expect(pins.getState().error).not.toBeNull();
-    expect(pins.getState().draft).toBe('failed note');
-    agentClear();
-    expect(pins.getState().error).toBeNull();
-    expect(pins.getState().draft).toBe('');
-    expect(pins.getState().kept).toEqual({ text: 'failed note', line: 'Your note wasn’t sent because the canvas changed first.' });
-    pins.getState().dismissKept();
+  it('an emptied draft leaves nothing to keep', () => {
     pins.getState().compose({ nodeId: 'n1' });
     pins.getState().setDraft('   ');
     pins.getState().cancelCompose();

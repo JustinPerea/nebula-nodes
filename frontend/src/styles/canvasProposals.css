@@ -577,7 +577,8 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   font-weight: 600;
 }
 
-.canvas-undo-notice__action:hover {
+/* Enabled only: a disabled one stays the shared grey (review 2 M-3). */
+.canvas-undo-notice__action:hover:not(:disabled) {
   background: #fff;
 }
 

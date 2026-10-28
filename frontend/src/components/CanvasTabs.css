@@ -4,7 +4,10 @@
   position: fixed;
   top: 24px;
   left: 50%;
-  transform: translateX(-50%);
+  /* While following, the project bar grows to fit the name being opened:
+     the pill grows to the left by it (half of it here, the centring takes
+     the other half), so the tabs after the bar stay put (review 2 N-3). */
+  transform: translateX(calc(-50% - var(--follow-grow, 0px) / 2));
   z-index: 100;
   display: flex;
   flex-direction: column;

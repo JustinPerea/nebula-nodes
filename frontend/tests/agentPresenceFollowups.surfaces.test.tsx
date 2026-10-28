@@ -225,6 +225,29 @@ describe('the chat: Apply and /clear follow the canvas lock', () => {
     expect(apply).toHaveAttribute('title', 'The canvas was cleared after this was written.');
   });
 
+  // Fix round 2 of PR #200 (review 2 N-6): offline, Apply says when it works
+  // again (offlineDisabledReason), not its "Paste this into …" tooltip.
+  it('offline: Apply is disabled with the reconnect tooltip', async () => {
+    const { noteBackendConnection, resetBackendConnectionForTests } = await import('../src/lib/backendConnection');
+    try {
+      const apply = await enhanceReply();
+      act(() => noteBackendConnection('offline'));
+      expect(apply).toBeDisabled();
+      expect(apply).toHaveAttribute('data-offline-disabled');
+      expect(apply).toHaveAttribute('title', 'This works again when Nebula reconnects.');
+    } finally {
+      act(() => resetBackendConnectionForTests());
+    }
+  });
+
+  // GM 2026-10-28 answer 2: enabled, normal ink with its outline; disabled, the shared grey.
+  it('enabled Apply reads in the normal ink with its outline, clearly apart from the grey', () => {
+    const css = readFileSync(join(__dirname, '../src/styles/slava-restraint.css'), 'utf8');
+    const rule = /body\.app-slava-restraint \.chat__codeblock-apply \{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(rule).toMatch(/color:\s*var\(--sr-ink\)/);
+    expect(rule).toMatch(/border-top:\s*1px solid var\(--sr-edge\)/);
+  });
+
   it('the Apply button is in the one disabled look', () => {
     const shared = readFileSync(join(__dirname, '../src/styles/disabled-buttons.css'), 'utf8');
     expect(shared).toMatch(/\.chat__codeblock-apply\b/);

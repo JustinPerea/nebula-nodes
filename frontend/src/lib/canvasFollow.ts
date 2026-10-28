@@ -78,11 +78,22 @@ export function openingLine(project: string): string {
 
 /** The project bar's name while following (fix round 1 of PR #200, GM bug
  * 1): in full up to OPENING_NAME_MAX characters; a longer one is cut to
- * fit with "…" (the bar's title and label keep all of it). */
+ * fit with "…" (the bar's title and label keep all of it). Characters are
+ * graphemes, what a person sees as one (fix round 2, review 2 N-2: a cut by
+ * code point split 👩🏽‍🎨 and left a dangling joiner). */
 export const OPENING_NAME_MAX = 24;
 export function openingName(project: string): string {
-  const characters = [...project];
+  const characters = graphemes(project);
   return characters.length <= OPENING_NAME_MAX ? project : `${characters.slice(0, OPENING_NAME_MAX - 1).join('').trimEnd()}…`;
+}
+
+type Segmenter = { segment(input: string): Iterable<{ segment: string }> };
+const segmenter: Segmenter | null = (() => {
+  const Ctor = (Intl as unknown as { Segmenter?: new (locale?: string, options?: { granularity: 'grapheme' }) => Segmenter }).Segmenter;
+  return Ctor ? new Ctor(undefined, { granularity: 'grapheme' }) : null;
+})();
+function graphemes(text: string): string[] {
+  return segmenter ? [...segmenter.segment(text)].map((part) => part.segment) : [...text];
 }
 
 export function waitToOpenTooltip(project: string): string {

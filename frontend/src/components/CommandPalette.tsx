@@ -18,16 +18,12 @@ import { claimIntent } from '../lib/heldIntents';
 import { returnFocusOnSlip } from '../lib/modalFocus';
 import { ModalPortal } from './ModalPortal';
 import { refuseCanvasEdit, useCanvasLock } from '../lib/canvasLock';
+import { composing } from '../lib/imeComposing';
 import '../styles/command-palette.css';
 
 const NO_NODE_FIELDS: readonly string[] = Object.freeze([]);
 const NO_COMMANDS: PaletteCommand[] = [];
 
-/** A key the input method is using to end or commit a composition (keyCode
- * 229 is how browsers mark such a keydown when isComposing isn't set). */
-function composing(event: React.KeyboardEvent): boolean {
-  return event.nativeEvent.isComposing || event.keyCode === 229;
-}
 
 /**
  * Global ⌘K / Ctrl+K command palette. Searches + inserts nodes, runs toolbar

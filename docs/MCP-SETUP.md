@@ -1430,8 +1430,14 @@ Rules:
   CLI and MCP server never have it.
 - `POST /api/canvas/pins/{id}/resolve` needs a named agent
   (`NEBULA_AGENT_NAME`, `--as`, or an in-app agent token).
-- Text is plain text: whitespace collapsed, control characters dropped, 1–280
-  characters for notes and replies. At most 100 open notes per project and
+- Text is plain text, control characters dropped, 1–280 characters for
+  notes and replies. A reply is one line (whitespace collapsed). A note keeps
+  the lines the person wrote (Shift+Enter in the note dialog): its newlines
+  reach agents as `\n` in `pins[].text` (look_at_canvas, start_here, the
+  snapshot JSON), and `nebula pins` and `nebula look` print each later line
+  indented under the first, inside the quotes. A tab reads as a space; each
+  line loses its trailing spaces. The Claude Code channel's wake-up line
+  still quotes a note on one line; read the pin for its lines. At most 100 open notes per project and
   200 in total (the oldest answered ones are dropped first).
 - Pins persist with the project (on the project record, beside the canvas
   snapshot, so autosave never touches them) and switch with it. Deleting a

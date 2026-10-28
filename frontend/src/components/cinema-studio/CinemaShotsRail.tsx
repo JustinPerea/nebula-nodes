@@ -4,10 +4,7 @@ import { backendAssetUrlSync } from '../../lib/backend';
 import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 import { useGraphStore } from '../../store/graphStore';
 import type { CinemaSceneSpec, CinemaShot } from '../../types';
-import { CATEGORY_COLORS } from '../../constants/ports';
-import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
-
-const CINEMA_CATEGORY_COLOR = CATEGORY_COLORS[NODE_DEFINITIONS['cinema-scene']?.category ?? 'cinematic'] ?? CATEGORY_COLORS.cinematic;
+import { CINEMA_CATEGORY_COLOR } from '../../lib/cinemaCategoryColor';
 
 interface CinemaShotsRailProps {
   cinemaNodeId: string;

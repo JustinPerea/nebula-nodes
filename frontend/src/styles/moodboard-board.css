@@ -470,7 +470,8 @@ html body .moodboard-board-panel .moodboard-def__row {
   font-weight: 600;
 }
 
-.moodboard-board-toast__action:hover {
+/* Enabled only: a disabled one stays the shared grey (review 2 M-3). */
+.moodboard-board-toast__action:hover:not(:disabled) {
   background: #fff;
 }
 

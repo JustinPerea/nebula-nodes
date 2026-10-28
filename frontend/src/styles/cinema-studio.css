@@ -284,6 +284,8 @@ body.app-slava-restraint .cinema-shared-controls__ref-link {
   pointer-events: none;
 }
 
+/* Review 2 M-1 (GM 2026-10-28 answer 2): the dashed outline stays faint;
+   the label is the normal ink, so the disabled grey reads dimmer. */
 body.app-slava-restraint .cinema-shared-controls__ref-add,
 body.app-slava-restraint .cinema-shot-panel__ref-add {
   width: 44px;
@@ -291,7 +293,7 @@ body.app-slava-restraint .cinema-shot-panel__ref-add {
   border: 1px dashed var(--sr-edge-strong);
   border-radius: 3px;
   background: none;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink);
   cursor: pointer;
   font-size: 18px;
 }
@@ -347,7 +349,7 @@ body.app-slava-restraint .cinema-shared-controls__swatch-add {
   border: 1px dashed var(--sr-edge-strong);
   border-radius: 3px;
   background: none;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink);
   cursor: pointer;
   font-size: 14px;
 }
@@ -370,9 +372,13 @@ body.app-slava-restraint .cinema-shared-controls__chip {
   font-size: 11px;
 }
 
+/* The selected film look: the shared selected style, the Cinema node's
+   category colour (the view sets --node-category-color), never the accent
+   (review 2 L-4, GM 2026-10-28 answer 6). */
 body.app-slava-restraint .cinema-shared-controls__chip--active {
-  border-color: var(--sr-accent);
-  color: var(--sr-accent);
+  border-color: var(--node-category-color, var(--sr-ink));
+  box-shadow: inset 0 0 0 1px var(--node-category-color, var(--sr-ink));
+  color: var(--sr-ink-bold, #fff);
 }
 
 body.app-slava-restraint .cinema-shared-controls__sliders {
@@ -509,7 +515,7 @@ body.app-slava-restraint .cinema-shots-rail__caption {
 body.app-slava-restraint .cinema-shots-rail__remove {
   background: none;
   border: none;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink);
   cursor: pointer;
   font-size: 14px;
   padding: 0 4px;
@@ -525,7 +531,7 @@ body.app-slava-restraint .cinema-shots-rail__add {
   border: 1px dashed var(--sr-edge-strong);
   border-radius: 4px;
   background: none;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink);
   cursor: pointer;
   font: inherit;
   font-size: 12px;
@@ -632,7 +638,11 @@ body.app-slava-restraint .cinema-shot-panel__variation {
 body.app-slava-restraint button.cinema-shot-panel__variation { cursor: pointer; }
 body.app-slava-restraint button.cinema-shot-panel__variation:hover { border-color: var(--sr-ink-meta); }
 
-body.app-slava-restraint .cinema-shot-panel__variation--active { border-color: var(--sr-accent); }
+/* The selected variation: the shared selected style, as the shot card (review 2 L-4). */
+body.app-slava-restraint .cinema-shot-panel__variation--active {
+  border-color: var(--node-category-color, var(--sr-ink));
+  box-shadow: 0 0 0 1px var(--node-category-color, var(--sr-ink));
+}
 
 body.app-slava-restraint .cinema-shot-panel__variations-control {
   display: flex;

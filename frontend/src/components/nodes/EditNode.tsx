@@ -6,7 +6,6 @@ import type { NodeData } from '../../types';
 import { NodeRunError } from './NodeError';
 import { PlaceholderLine } from './PlaceholderLine';
 import { pendingAttr } from '../../lib/pendingNodes';
-import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 
 interface EditClipShape {
   duration?: number;
@@ -17,11 +16,13 @@ interface EditClipShape {
 }
 
 export function EditNode({ id, data, selected }: NodeProps) {
-  const enterEditor = useUIStore((s) => s.enterEditor);
-  // Fix round 1 of PR #200 (review L-5): opening the trim editor makes or
-  // finds its edit node (uiStore enterEditor), which the store's gate refuses
-  // while following or offline; the button says so instead of doing nothing.
-  const lock = useCanvasLock();
+  // Fix round 2 of PR #200 (review 2 L-6, GM 2026-10-28 answer 4): this is
+  // the edit node, so Open Editor opens its own editor (uiStore
+  // openEditNode) and writes nothing. It stays available while following or
+  // offline; the editor opens read-only there (its keys, clips and
+  // transport take the canvas lock), and the follow bar or the offline row
+  // above it says why.
+  const openEditNode = useUIStore((s) => s.openEditNode);
   const params = ((data as { params?: Record<string, unknown> }).params ?? {}) as Record<string, unknown>;
   const clips = ((params.clips as EditClipShape[]) ?? []);
 
@@ -62,10 +63,10 @@ export function EditNode({ id, data, selected }: NodeProps) {
     .join(' · ');
 
   function handleOpenEditor() {
-    if (refuseCanvasEdit()) return;
+    // Only an edit node wired to a source has an editor to open (as before).
     const state = useGraphStore.getState();
     const edge = state.edges.find((e) => e.target === id && e.targetHandle === 'video_in');
-    if (edge) enterEditor(edge.source);
+    if (edge) openEditNode(id);
   }
 
   return (
@@ -79,7 +80,7 @@ export function EditNode({ id, data, selected }: NodeProps) {
       <PlaceholderLine pending={data.pending} />
       <div className="edit-node__summary">{summary || 'no edits yet'}</div>
       {selected && (
-        <button type="button" className="edit-node__open" onClick={handleOpenEditor} {...lock.act({ offline: 'open the editor' })}>
+        <button type="button" className="edit-node__open" onClick={handleOpenEditor}>
           Open Editor
         </button>
       )}

@@ -3,6 +3,7 @@ import { AutoGrowTextarea } from './AutoGrowTextarea';
 import '../styles/prompt-dialog.css';
 import { ModalPortal } from './ModalPortal';
 import type { ActProps } from '../lib/canvasLock';
+import { composing } from '../lib/imeComposing';
 
 export interface PromptRequest {
   label: string;
@@ -67,7 +68,11 @@ export function PromptDialog({ request, onDone, maxLength, onChange, confirm, on
     <ModalPortal>
     <div className="prompt-dialog" role="dialog" aria-modal="true" aria-label={request.label}>
       <form ref={form} className="prompt-dialog__card" onSubmit={submit} onKeyDown={(event) => {
-        if (event.key === 'Escape') {
+        if (event.key === 'Enter' && composing(event)) {
+          // The input method's Enter ends its composition (Safari: keyCode
+          // 229 after compositionend, review 2 L-1): it never sends.
+          event.preventDefault();
+        } else if (event.key === 'Escape') {
           event.preventDefault();
           event.stopPropagation();
           onDone(null);
@@ -91,7 +96,7 @@ export function PromptDialog({ request, onDone, maxLength, onChange, confirm, on
             ? <AutoGrowTextarea textareaRef={input as RefObject<HTMLTextAreaElement | null>} rows={1} value={value} maxLength={maxLength}
                 onChange={(event) => change(event.target.value)}
                 onKeyDown={(event) => {
-                  if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                  if (event.key === 'Enter' && !event.shiftKey && !composing(event)) {
                     event.preventDefault();
                     form.current?.requestSubmit();
                   }

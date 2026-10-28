@@ -18,19 +18,24 @@ interface CanvasPinsState {
    * target belongs to (its node id names a node of that canvas only). The
    * note is sent for it, so Nebula refuses it once that canvas has gone. */
   composerCanvas: ProjectContext | null;
-  /** What the person has typed in the dialog. GM (2026-10-27, the
-   * follow-up to PR #195): closing the dialog with × or Esc keeps it as the
-   * draft for the next open; only sending drops it, or clearing the field
-   * and then closing. Fix round 1 of PR #200 (GM: the draft belongs to its
-   * own canvas): when the canvas goes, a draft left closed becomes the kept
-   * note, with its line, so it never starts another canvas's dialog unseen. */
+  /** What the person has typed in the open dialog (the dialog starts with it). */
   draft: string;
+  /** Drafts the person closed with × or Esc, by the project they were
+   * written in (fix round 2 of PR #200, GM 2026-10-28 answer 1: a note
+   * written for project A never shows in project B's dialog). The next
+   * dialog on that project starts with its draft; only sending drops it, or
+   * clearing the field and closing. A closed draft is the person's own: it
+   * gets no line when the canvas changes, and waits for its project. A
+   * whitespace-only draft is no draft. */
+  drafts: Record<string, string>;
   /** A note that couldn't be added because its canvas went before it was
    * sent (a follow, a replacement, Nebula's out-of-date refusal): its text,
-   * kept for the person, never anchored anywhere, and GM's line saying why
-   * (lib/canvasPins noteKeptLine). The next dialog starts with it, and the
-   * notice closes; the notice's own × drops it. */
-  kept: { text: string; line: string } | null;
+   * kept for the person, never anchored anywhere, GM's line saying why
+   * (lib/canvasPins noteKeptLine) and the project it was written in. The
+   * next dialog on that project starts with it, and the notice closes; on
+   * another project the dialog starts empty and the notice (with Copy note)
+   * stays until its own × drops it. */
+  kept: { text: string; line: string; project: string } | null;
   /** Deletes sent but not yet confirmed: hidden even if a stale update still lists them. */
   removing: Record<string, true>;
   error: string | null;
@@ -98,6 +103,7 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
   composer: null,
   composerCanvas: null,
   draft: '',
+  drafts: {},
   kept: null,
   removing: {},
   error: null,
@@ -119,14 +125,21 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
   // switch and while offline, and nothing is sent.
   compose: (target) => {
     if (refuseCanvasEdit()) return;
-    // GM (2026-10-27): the kept note, else the draft left by × or Esc, starts
-    // the dialog; once it is in the dialog the kept-note notice closes.
-    const { kept, draft } = get();
-    set({ composer: target, composerCanvas: getProjectContext(), draft: kept?.text ?? draft, error: null, kept: null });
+    // GM (2026-10-28 answer 1): the kept note, else the draft × or Esc left,
+    // starts the dialog, on the project it was written in only. Elsewhere the
+    // dialog starts empty, and the kept note's notice stays.
+    const canvas = getProjectContext();
+    const here = projectKey(canvas);
+    const { kept, drafts } = get();
+    const keptHere = kept && kept.project === here ? kept : null;
+    const { [here]: draftHere = '', ...otherDrafts } = drafts;
+    set({ composer: target, composerCanvas: canvas, draft: keptHere?.text ?? draftHere, drafts: otherDrafts, error: null,
+      kept: keptHere ? null : kept });
   },
-  // × or Esc: the text stays as the draft for the next open (an emptied
-  // field leaves an empty draft).
-  cancelCompose: () => set({ composer: null, composerCanvas: null }),
+  // × or Esc: the text stays as its project's draft for the next open there
+  // (an emptied or whitespace-only field leaves none).
+  cancelCompose: () => set((state) => ({ composer: null, composerCanvas: null, draft: '',
+    drafts: keepDraft(state.drafts, projectKey(state.composerCanvas), state.draft) })),
   setDraft: (text) => set({ draft: text }),
   submit: async (text) => {
     const target = get().composer;
@@ -136,6 +149,7 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
       set({ composer: null, composerCanvas: null, draft: '' });
       return false;
     }
+    const project = projectKey(canvas);
     // Offline is read-only (round 15 of PR #114): nothing is sent; the note
     // stays open and the banner pulses. Following the same (round 23).
     if (refuseCanvasEdit()) return false;
@@ -153,12 +167,13 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
     } catch (error) {
       if (canvasWentFor(error)) {
         // That canvas has gone: the text is kept, not anchored elsewhere.
-        set({ composer: null, composerCanvas: null, draft: '', kept: { text: trimmed, line: noteKeptLine(followingSwitch()) } });
+        set({ composer: null, composerCanvas: null, draft: '', kept: { text: trimmed, line: noteKeptLine(followingSwitch()), project } });
         return false;
       }
-      // Not sent: the text stays as the draft for the next open (GM: only
-      // sending drops it).
-      set({ composer: null, composerCanvas: null, draft: text, error: failureMessage(error, "Couldn't add the pin.") });
+      // Not sent: the text stays as its project's draft for the next open
+      // there (GM: only sending drops it), and the toast says why.
+      set((state) => ({ composer: null, composerCanvas: null, draft: '', drafts: keepDraft(state.drafts, project, text),
+        error: failureMessage(error, "Couldn't add the pin.") }));
       return false;
     }
   },
@@ -196,24 +211,34 @@ function canvasWentFor(error: unknown): boolean {
     && [error.message, error.reason, error.detail].some((text) => typeof text === 'string' && text.includes(STALE_CANVAS_DETAIL));
 }
 
+/** Which project a note was written in: a note never starts another
+ * project's dialog (GM 2026-10-28 answer 1). A clear or an import of the same
+ * project keeps it: the person sees it in the dialog and chooses again. */
+function projectKey(canvas: ProjectContext | null): string {
+  return canvas?.id ?? '';
+}
+
+/** `drafts` with `text` kept as `project`'s draft; a whitespace-only text drops it (review 2 N-4). */
+function keepDraft(drafts: Record<string, string>, project: string, text: string): Record<string, string> {
+  const { [project]: _gone, ...rest } = drafts;
+  void _gone;
+  return text.trim() ? { ...rest, [project]: text } : rest;
+}
+
 /** The open dialog's target was a node or a spot of the canvas that is
  * going (a follow started) or went (a replacement): the dialog closes, and
- * what the person typed is kept (round 23, review 22 M-1). Its target is
- * never re-anchored: the canvas that replaces it reuses the same ids. */
+ * what the person typed is kept, with GM's line saying why (round 23,
+ * review 22 M-1). Its target is never re-anchored: the canvas that replaces
+ * it reuses the same ids. Fix round 2 of PR #200 (GM 2026-10-28 answer 1):
+ * only an open dialog's note is cut off. A draft the person closed on
+ * purpose gets no line; it stays their project's draft. A send that had
+ * already failed keeps its own failure line. */
 function closeComposerForGoneCanvas(following: ReturnType<typeof followingSwitch>): void {
-  const { composer, draft } = useCanvasPinsStore.getState();
+  const { composer, composerCanvas, draft } = useCanvasPinsStore.getState();
+  if (!composer) return;
   const text = draft.trim();
-  // Fix round 1 of PR #200 (GM, 2026-10-27: the draft belongs to its own
-  // canvas; review N-1): a draft left closed by × or Esc, or by a send that
-  // failed, goes with its canvas too, so it never starts another canvas's
-  // dialog unseen. The kept-note notice holds it, with the line saying why,
-  // as for an open dialog. A failed send's toast goes with it.
-  if (!composer && !text) {
-    if (useCanvasPinsStore.getState().error) useCanvasPinsStore.setState({ error: null });
-    return;
-  }
-  useCanvasPinsStore.setState({ composer: null, composerCanvas: null, draft: '', error: null,
-    ...(text ? { kept: { text, line: noteKeptLine(following) } } : {}) });
+  useCanvasPinsStore.setState({ composer: null, composerCanvas: null, draft: '',
+    ...(text ? { kept: { text, line: noteKeptLine(following), project: projectKey(composerCanvas) } } : {}) });
 }
 
 subscribeFollowingSwitch(() => {

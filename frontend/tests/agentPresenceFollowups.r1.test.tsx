@@ -67,7 +67,7 @@ afterEach(() => {
   useGraphStore.setState(initialGraph, true);
   useUIStore.setState(initialUI, true);
   useCinemaUploadStore.setState({ uploads: [] });
-  useCanvasPinsStore.setState({ composer: null, composerCanvas: null, draft: '', kept: null, error: null } as never);
+  useCanvasPinsStore.setState({ composer: null, composerCanvas: null, draft: '', drafts: {}, kept: null, error: null } as never);
 });
 
 // ── GM bug 1: the agent bar ─────────────────────────────────────────────────
@@ -119,7 +119,7 @@ describe('GM bug 1: the project bar names the project being opened in full', () 
 
 describe('GM bug 2 and review L-1: the note dialog', () => {
   it('starts with the caret at the end of the kept note, nothing selected, in a textarea that grows', () => {
-    useCanvasPinsStore.setState({ kept: { text: 'Make the sky warmer and the sea darker', line: NOTE_KEPT_LINE } } as never);
+    useCanvasPinsStore.setState({ kept: { text: 'Make the sky warmer and the sea darker', line: NOTE_KEPT_LINE, project: '' } } as never);
     act(() => useCanvasPinsStore.getState().compose({ nodeId: 'n1' }));
     render(<PinComposer />);
     const field = screen.getByRole('textbox', { name: 'Note for agents' }) as HTMLTextAreaElement;
@@ -134,7 +134,7 @@ describe('GM bug 2 and review L-1: the note dialog', () => {
   });
 
   it('typing adds to it; it never replaces it', () => {
-    useCanvasPinsStore.setState({ kept: { text: 'warmer sky', line: NOTE_KEPT_LINE } } as never);
+    useCanvasPinsStore.setState({ kept: { text: 'warmer sky', line: NOTE_KEPT_LINE, project: '' } } as never);
     act(() => useCanvasPinsStore.getState().compose({ nodeId: 'n1' }));
     render(<PinComposer />);
     const field = screen.getByRole('textbox', { name: 'Note for agents' }) as HTMLTextAreaElement;
@@ -357,15 +357,17 @@ describe('GM answers 3 and 4, review L-6: repeated names grouped, in canvas orde
 
 // ── Review L-5: EditNode's Open Editor ──────────────────────────────────────
 
-describe('review L-5: EditNode\'s Open Editor takes the canvas lock', () => {
-  it('following: disabled, marked, GM\'s tooltip', () => {
+// Fix round 2 (review 2 L-6, GM 2026-10-28 answer 4): opening this node's
+// own editor writes nothing, so it stays available while following and
+// offline; the editor opens read-only (agentPresenceFollowups.r2).
+describe('review L-5 and review 2 L-6: EditNode\'s Open Editor', () => {
+  it('following: still enabled, unmarked (it opens the editor read-only)', () => {
     const props = { id: 'e1', data: { params: { clips: [] } }, selected: true } as never;
     const root = at(<ReactFlowProvider><EditNode {...(props as object)} /></ReactFlowProvider>);
     const open = button(root, 'Open Editor');
     expect(open).toBeEnabled();
     act(() => setFollowingSwitch({ projectName: 'beta', agent: 'Codex' }));
-    expect(open).toBeDisabled();
-    expect(open).toHaveAttribute('data-following-disabled');
-    expect(open).toHaveAttribute('title', 'Wait for “beta” to open.');
+    expect(open).toBeEnabled();
+    expect(open).not.toHaveAttribute('data-following-disabled');
   });
 });

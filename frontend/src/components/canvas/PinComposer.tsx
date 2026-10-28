@@ -14,7 +14,10 @@ import '../../styles/canvasPins.css';
  * with the text, as before. A follow or a replacement closes it (its target
  * is a node of the canvas that went), and what was typed comes back in a
  * notice with a Copy button, never pinned to the canvas that replaced it.
- * Follow-up (GM, 2026-10-27): opening Note again starts with that text. */
+ * Follow-up (GM, 2026-10-27): opening Note again starts with that text.
+ * Fix round 2 of PR #200 (GM 2026-10-28 answer 1): on its own project only.
+ * On another project the dialog starts empty and the notice stays (it is
+ * shown beside the open dialog too) until its × drops it. */
 export function PinComposer() {
   const composer = useCanvasPinsStore((s) => s.composer);
   const submit = useCanvasPinsStore((s) => s.submit);
@@ -27,7 +30,8 @@ export function PinComposer() {
   const lock = useCanvasLock();
 
   // The dialog starts with the kept note, or the draft × or Esc left (GM,
-  // 2026-10-27): compose put it in `draft` as it opened.
+  // 2026-10-27), of this project only (2026-10-28): compose put it in
+  // `draft` as it opened.
   const request = useMemo<PromptRequest | null>(
     () => (composer ? { label: 'Note for agents', initial: useCanvasPinsStore.getState().draft, resolve: () => {} } : null),
     [composer],
@@ -66,7 +70,9 @@ export function PinComposer() {
           </div>
         </InNoticeRegion>
       )}
-      {kept && !composer && (
+      {/* Kept on another project: the dialog open here started empty, so the
+          notice stays beside it (GM 2026-10-28 answer 1). */}
+      {kept && (
         <InNoticeRegion slot="pin">
           <div className="canvas-pin-toast canvas-pin-toast--kept" role="status">
             <span className="canvas-pin-toast__text">

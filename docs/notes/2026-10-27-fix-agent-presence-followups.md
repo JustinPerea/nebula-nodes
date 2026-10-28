@@ -324,3 +324,110 @@ scanner.
 - tsc -b and lint: clean. Build: entry 405,787 B raw (limit 512,000).
 - Full vitest under machine load: 7,009 passed and 116 failed in 48 files (95 were 5 s timeouts). Each of the 48 files rerun alone: 588/588 passed.
 - Live (backend 8795, Vite 5795): 22/22 passed. 2 requests were blocked, both canaries, and none went toward 8000-8010 or 5173.
+
+## Fix round 2
+
+Review 2 of PR #200, built with GM's r3 answers (msgs/gm-pr200-r3.md).
+
+### What changed
+
+- **M-1, one grey.** Every listed dim label is raised to the normal ink
+  (`--sr-ink`): the Cinema rail's add and remove, the shared and shot
+  ref-add, swatch-add, chat Apply and the inspector button. "+ Add shot" keeps
+  its faint dashed outline, but its label is normal ink. `--sr-disabled-edge`
+  is now 0.06, the plain edge, so a disabled outline is never brighter than an
+  enabled one. The ratchet measures every listed class (`disabledLooks()`):
+  disabled label contrast must be lower than enabled, and the outline never
+  brighter. `NO_LABEL` holds the image buttons (the variation and the Remotion
+  anchor). `FILL_SHOWS_STATE` holds the four filled buttons whose fill carries
+  the state (GM r2 answer 6). A test keeps each of them failing the label
+  check, so the list can't hide a real miss.
+- **M-2, the kept note and the draft belong to their canvas.** `kept` and
+  `drafts` are keyed by project id. The dialog prefills only on that project;
+  elsewhere it opens empty, and the interrupted note's notice (with Copy note)
+  stays beside it until dismissed. A draft closed on purpose gets no line, and
+  `DRAFT_LEFT_LINE` is gone. A send that had already failed keeps its own
+  error line. A whitespace-only draft is dropped.
+- **M-3.** `.canvas-undo-notice__action` and `.moodboard-board-toast__action`
+  are in the filled list, and their hover is gated with `:not(:disabled)`. The
+  ratchet's fill parser reads hex, rgb(), rgba(), hsl(), hsla() and gradients
+  (first stop). A translucent surface (alpha under 0.5) is not a fill.
+- **L-1.** `lib/imeComposing.ts` `composing()` covers `isComposing` and
+  keyCode 229. CommandPalette and PromptDialog share it. The one-line prompt
+  calls preventDefault on that Enter.
+- **L-2.** Newlines survive end to end: `clean_text(multiline=True)` for pin
+  text, `_cut_note` in agent_start, and `quote_note` in the CLI formatter. The
+  canvas pin uses `white-space: pre-line`. Documented in MCP-SETUP.md,
+  SKILL.md and the mcp_server docstrings. A reply stays one line.
+- **L-3.** When the undo slot already names another recovered copy, the
+  second copy's line goes to the message slot. Both copies stay named.
+- **L-4.** The selected film-look chip and the selected variation use
+  `--node-category-color`, which CinemaStudioView sets from
+  `lib/cinemaCategoryColor.ts`. Disabled, they use the shared unfilled look.
+  The checked Settings switch, disabled, uses the shared fill.
+- **L-5.** The G check is rewritten to follow scope: binding elements,
+  assignments, imports and one level into relative modules. The 17 bypass
+  forms from review 2 are a corpus test, with the quiet controls as controls.
+  The provider-switcher rows, the mask painter's Save and the Forget confirm
+  take the lock.
+- **L-6.** EditNode's Open Editor calls the new `uiStore.openEditNode`, which
+  makes no graph writes. It stays enabled while following or offline. Inside
+  the editor, the keys, clips and transport keep the lock. Live, the follow bar
+  (in WorkspaceHeader) and the offline row (fixed, z-index 10000) both show
+  above the editor. GM made the one-line read-only note conditional on both
+  being covered, so it isn't added.
+- **Nits:**
+  - The opening name is a `<bdi>`, so in RTL the "…" lands at the logical end.
+  - Names are cut by grapheme (Intl.Segmenter).
+  - The tabs stay put: the follow bar's growth is published as `--follow-grow`,
+    and the tabs offset by half of it.
+  - A 200 that lands after the 15 s limit withdraws the "Couldn't save" line.
+  - Apply's offline tooltip is offlineDisabledReason.
+  - Run History's Rerun and Retry show the wait or reconnect tooltip.
+- **Run history** stays live offline (checked live).
+
+### Decisions
+
+- The draft and kept keys are the project id, not the canvas revision, so a
+  clear on the same project keeps the draft. That matches "remember their
+  canvas" as a place.
+- The channel wake line stays one line. Only the pin text keeps its newlines.
+- BUTTONISH was not widened: it flagged swatches and dots.
+- The Rerun offline tooltip uses the generic verb.
+
+### Tests that failed first (on 4ba2e6b1)
+
+- Frontend: 33 of 95 failed across the 6 focused files. Among them: EditNode
+  enabled, 5 M-2 store tests, COPY-TWICE-BOTH, HANG-THEN-200, IME 229, the
+  one-line prompt, the shared helper (ENOENT), the 3 L-4 tests, provider rows,
+  mask Save, Forget, Run History, L-6, N-1/N-2/N-3 ('SPAN' vs 'BDI'), Apply
+  offline and ink, G, locked-components, filled-covered, the M-1 contrast
+  (disabled label 6.27 vs enabled 3.66) and the edge/hover test.
+- Backend: 3 failed (TypeError on `multiline`; text flattened twice).
+- Passed on head as controls: isComposing, the 409 refusal, hang-then-409.
+
+### Surprises
+
+- Under load, the M-1 contrast test passed alone but timed out in the full run
+  (7.9 s). Its describe now has the same 120 s timeout as the G describe.
+- In the editor, the offline row has `pointer-events: none`, so an
+  elementFromPoint probe reports it as covered. The screenshot shows it on top.
+
+### Fix round 2 gates
+
+- Backend full suite: 11,689 passed, 71 skipped.
+- Focused files: 95/95 (6 files). Wider focused set: 321/323 (the 2 pass
+  alone). errorCopy: 474/474 across 21 files.
+- tsc -b and lint: clean. Build: entry 406,778 B raw (limit 512,000).
+- Full vitest at load ~24-35: 7,133 passed and 28 failed in 13 files. The 13
+  files rerun serially: 208/222 (12 of the 14 were 5 s timeouts). Each
+  remaining file rerun alone with a 30 s timeout: all passed.
+- Live (backend 8795, Vite 5795): 13 of 16 checks passed, and all 3 misses
+  were probe artefacts:
+  - The variation buttons are images with no text, so their label contrast
+    reads 1.
+  - The first `.cinema-studio-toolbar__action` is Run history, which stays
+    live on purpose.
+  - The offline row has `pointer-events: none`, so elementFromPoint reports it
+    as covered. The shot shows it on top of the editor.
+- Blocked requests: 2, both canaries. None went toward 8000-8010 or 5173.

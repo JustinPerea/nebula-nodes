@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Home } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
 import { useGraphStore } from '../../store/graphStore';
@@ -36,6 +36,19 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
     const measured = bar.current?.getBoundingClientRect().width ?? null;
     setLockedWidth((width) => (followingSwitch() ? width ?? measured : null));
   }), []);
+  // Review 2 N-3: the canvas pill is centred, so a bar that grows would move
+  // the Canvas and Creator Studio tabs after it. While following, the pill
+  // grows to the left instead: it is shifted by half of what the bar grew
+  // (CanvasTabs.css --follow-grow), and the tabs stay put.
+  useLayoutEffect(() => {
+    const wrap = bar.current?.closest<HTMLElement>('.canvas-tabs-wrap');
+    if (!wrap) return;
+    const grew = following && lockedWidth !== null
+      ? Math.max(0, Math.round((bar.current?.getBoundingClientRect().width ?? lockedWidth) - lockedWidth)) : 0;
+    if (grew === 0) return;
+    wrap.style.setProperty('--follow-grow', `${grew}px`);
+    return () => { wrap.style.removeProperty('--follow-grow'); };
+  });
   // A refused edit nudges the line (lib/canvasFollow.ts pulseFollowing).
   const [pulse, setPulse] = useState(0);
   useEffect(() => subscribeFollowPulse(() => setPulse((count) => count + 1)), []);
@@ -66,7 +79,9 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
         ? <span key={pulse} className={`project-workspace-controls__opening${pulse > 0 ? ' project-workspace-controls__opening--pulse' : ''}`}
             role="status" title={openingLine(following.projectName)} aria-label={openingLine(following.projectName)}>
             <span className="project-workspace-controls__opening-fixed" aria-hidden="true">Opening “</span>
-            <span className="project-workspace-controls__opening-name" aria-hidden="true">{openingName(following.projectName)}</span>
+            {/* Its own direction (review 2 N-1): an RTL name, with its "…"
+                inside, reads cut at its logical end. */}
+            <bdi className="project-workspace-controls__opening-name" aria-hidden="true">{openingName(following.projectName)}</bdi>
             <span className="project-workspace-controls__opening-fixed" aria-hidden="true">”…</span>
           </span>
         : draft !== null

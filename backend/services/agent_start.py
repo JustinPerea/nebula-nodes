@@ -139,6 +139,14 @@ def _cut(text: Any, limit: int) -> str:
     return flat if len(flat) <= limit else flat[: limit - 1] + "…"
 
 
+def _cut_note(text: Any, limit: int) -> str:
+    """A pin's note, its lines kept (fix round 2 of PR #200: agents get the
+    note as written), each line's spacing collapsed, cut at `limit`."""
+    lines = [" ".join(line.split()) for line in str(text or "").split("\n")]
+    note = "\n".join(lines).strip()
+    return note if len(note) <= limit else note[: limit - 1].rstrip() + "…"
+
+
 def _short_value(value: Any) -> Any:
     if isinstance(value, bool) or value is None or isinstance(value, (int, float)):
         return value
@@ -239,11 +247,11 @@ def pins_part(pins: Iterable[Mapping[str, Any]], *, via: str) -> dict[str, Any]:
     cut = False
     for pin in open_pins[:MAX_PINS]:
         text = str(pin.get("text") or "")
-        row = {"id": pin.get("id"), "text": _cut(text, PIN_CHARS), "anchor": pin.get("anchor")}
+        row = {"id": pin.get("id"), "text": _cut_note(text, PIN_CHARS), "anchor": pin.get("anchor")}
         cost = size(row) + 2
         if used + cost > budget:
             break
-        cut = cut or row["text"] != " ".join(text.split())
+        cut = cut or row["text"] != _cut_note(text, len(text) + 1)
         part["open"].append(row)
         used += cost
     if cut or len(part["open"]) < len(open_pins):

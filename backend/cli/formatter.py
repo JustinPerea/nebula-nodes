@@ -479,7 +479,7 @@ def format_start(start: dict[str, Any]) -> str:
     for pin in pins.get("open") or []:
         anchor = pin.get("anchor") or {}
         at = anchor.get("nodeId") or f"({anchor.get('x')},{anchor.get('y')})"
-        lines.append(f"  {pin.get('id')} on {at}: {json.dumps(pin.get('text') or '', ensure_ascii=False)}")
+        lines.append(f"  {pin.get('id')} on {at}: {quote_note(pin.get('text'))}")
     if pins.get("more"):
         lines.append(f"  ({pins['more']})")
 
@@ -745,6 +745,14 @@ def _ago(iso: Any, now: float | None = None) -> str:
     return f"{seconds // 86400}d ago"
 
 
+def quote_note(text: Any, indent: str = "    ") -> str:
+    """A note in quotes, JSON-escaped, its lines kept: each line after the
+    first starts on its own line under it (fix round 2 of PR #200, GM
+    2026-10-28 answer 5: agents read the note as the person wrote it)."""
+    lines = str(text or "").split("\n")
+    return '"' + ("\n" + indent).join(json.dumps(line, ensure_ascii=False)[1:-1] for line in lines) + '"'
+
+
 def format_pin(pin: dict[str, Any], now: float | None = None) -> str:
     """One pin as `pin_8c41d2aa on n4: "warmer" (12m ago)`."""
     anchor = pin.get("anchor") or {}
@@ -757,7 +765,7 @@ def format_pin(pin: dict[str, Any], now: float | None = None) -> str:
             where = "on the canvas"
         if pin.get("detached") and pin.get("detachedFrom"):
             where += f" (its node {pin['detachedFrom']} was removed)"
-    text = json.dumps(str(pin.get("text") or ""), ensure_ascii=False)
+    text = quote_note(pin.get("text"))
     reply = pin.get("reply") or {}
     if pin.get("status") == "resolved" and reply:
         agent = (reply.get("agent") or {}).get("name") or "an agent"

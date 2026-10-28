@@ -121,7 +121,8 @@ export function CinemaSharedControls({ cinemaNodeId, scene, connectedRefs = [], 
               <button type="button" className="cinema-shared-controls__ref-add" onClick={() => refInputRef.current?.click()}
                 aria-label="Attach character references" {...lock.act({ offline: true })}>+</button>
               <input ref={refInputRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp"
-                aria-label="Character reference images" multiple hidden onChange={(event) => {
+                // Its + takes the lock; the field itself too, so nothing opens it while locked (review 2 L-5).
+                aria-label="Character reference images" multiple hidden disabled={lock.locked} onChange={(event) => {
                   handleFiles(event.target.files);
                   event.target.value = '';
                 }} />

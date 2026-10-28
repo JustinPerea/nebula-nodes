@@ -187,3 +187,53 @@ def test_L1_agents_and_the_person_still_write_through_the_recheck(api):
     assert r.status_code == 200, r.text
     r = api.client.delete(f"/api/canvas/pins/{pin}", headers=_hdr(main))
     assert r.status_code == 200, r.text
+
+
+# -- Fix round 2 of PR #200 (review 2 L-2, GM 2026-10-28 answer 5) ---------------
+# Shift+Enter makes lines in the note dialog; agents get the note exactly as
+# written: its newlines kept end to end (the store, look_at_canvas and
+# start_here, `nebula pins`), every other control character still dropped.
+
+def test_L2_a_note_keeps_its_newlines_and_drops_every_other_control_character():
+    from services.canvas_pins import clean_text
+
+    note = "first line\r\n\tsecond line\x00\x1b[31m‮\rthird  line  \n"
+    assert clean_text(note, limit=280, multiline=True) == "first line\n second line[31m\nthird  line"
+    # One line stays one line: a reply, and every caller that doesn't ask for lines.
+    assert clean_text("warmer\nplease", limit=280) == "warmer please"
+    for bad in ("\n\n", " \r\n\t"):
+        with pytest.raises(Exception):
+            clean_text(bad, limit=280, multiline=True)
+
+
+def test_L2_the_pin_store_keeps_the_lines_and_a_reply_stays_one_line(tmp_path):
+    from services.canvas_pins import CanvasPins
+    from services.project_store import ProjectStore
+
+    store = ProjectStore(tmp_path / "projects")
+    with store.transaction() as catalog:
+        project = make_project("Lines")
+        catalog["projects"][project["id"]] = project
+        catalog["activeProjectId"] = project["id"]
+        store.commit(catalog)
+    pins = CanvasPins(store)
+    pin = pins.add("first line\nsecond line", node_id="n1", graph_nodes={"n1": {}})
+    assert pin["text"] == "first line\nsecond line"
+    assert [p["text"] for p in pins.list()["pins"]] == ["first line\nsecond line"]
+
+
+def test_L2_agents_read_the_lines_in_start_here_mcp_and_the_cli():
+    from cli.formatter import format_pin, format_start
+    from services import agent_start
+
+    pin = {"id": "pin_1", "anchor": {"nodeId": "n4"}, "text": "first line\nsecond line", "status": "open",
+           "createdAt": "2026-10-28T10:00:00Z"}
+    for via in ("mcp", "cli"):
+        part = agent_start.pins_part([pin], via=via)
+        assert part["open"][0]["text"] == "first line\nsecond line", via
+        assert "more" not in part, via
+    # `nebula pins`: the second line under the first, inside the quotes.
+    assert format_pin(pin, now=None).startswith('pin_1 on n4: "first line\n    second line"')
+    start = {"pins": agent_start.pins_part([pin], via="cli")}
+    text = format_start(start)
+    assert '  pin_1 on n4: "first line\n    second line"' in text

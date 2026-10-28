@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import { WorkspaceHeader } from '../WorkspaceHeader';
 import { useUIStore } from '../../store/uiStore';
+import { CINEMA_CATEGORY_COLOR } from '../../lib/cinemaCategoryColor';
 import { useGraphStore } from '../../store/graphStore';
 import { CinemaStudioToolbar } from './CinemaStudioToolbar';
 import { CinemaSharedControls } from './CinemaSharedControls';
@@ -125,7 +126,8 @@ export function CinemaStudioView() {
   };
 
   return (
-    <div className="cinema-studio-view">
+    // The shared selected style for the film look and the variation too (review 2 L-4).
+    <div className="cinema-studio-view" style={{ ['--node-category-color' as string]: CINEMA_CATEGORY_COLOR }}>
       <CinemaStudioToolbar cinemaNodeId={cinemaNodeId} />
 
       <div className="cinema-studio-view__body">

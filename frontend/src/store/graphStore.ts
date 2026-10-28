@@ -2050,10 +2050,27 @@ function showReplacementReport(report: ReplacementReport | null = replacementRep
       report.noticeId = state.undoNotice.id;
       return { undoNotice: { ...state.undoNotice, text: line } };
     }
-    const shown = plainLine(state, line, 'error', copy);
+    // Fix round 2 of PR #200 (review 2 L-3): two recovered copies that race
+    // each stay named. A copy's line never takes the place of the line that
+    // names another copy: it goes in the other slot beside it.
+    const namesOtherCopy = (notice: { copy?: NoticeCopy } | null | undefined) => Boolean(copy && notice?.copy
+      && notice.copy.projectId !== copy.projectId);
+    const shown = copy && !state.undoNotice?.offer && namesOtherCopy(state.undoNotice) && !namesOtherCopy(state.messageNotice)
+      ? { messageNotice: { id: ++undoNoticeSeq, text: line, tone: 'error' as const, copy } }
+      : plainLine(state, line, 'error', copy);
     report.noticeId = (shown.undoNotice ?? shown.messageNotice)?.id ?? null;
     return shown;
   });
+}
+
+/** Review 2 N-5: the line a report showed goes (a save it named as cut off
+ * landed after all). */
+function withdrawReplacementReport(report: ReplacementReport): void {
+  const id = report.noticeId;
+  if (id === null) return;
+  report.noticeId = null;
+  useGraphStore.setState((state) => (state.undoNotice?.id === id ? { undoNotice: null }
+    : state.messageNotice?.id === id ? { messageNotice: null } : {}));
 }
 
 /** The canvas was replaced (canvasReplacementRevision moved): the line for
@@ -2157,11 +2174,15 @@ function replaceCanvasByClear(agentClear?: { agent: string | null }, options: { 
   // as not landed once the hold limit passes (the undo hold's 15 s rule).
   // The saves that didn't land are named in the copy's line (review L-4).
   const unlandedSaves: CutOffSave[] = [];
+  // Review 2 N-5: saves released as unanswered at the hold limit (not
+  // refused): if they all land 200 later, the line naming them goes.
+  let unanswered: PendingLanding[] = [];
   const keeping = !prepared ? null
     : editing.length > 0 ? prepared()
-      : landingsWithin(sentHere, replacedCopyWaitMs).then((unlanded) => {
+      : landingsWithin(sentHere, replacedCopyWaitMs).then(({ unlanded, pending }) => {
         if (unlanded.length === 0) return null;
         unlandedSaves.push(...unlanded.flatMap((landing) => landing.saves));
+        unanswered = unlanded.length === pending.length ? pending : [];
         return prepared();
       });
   // GM (review 21, G-a): Undo on an agent's clear line puts the canvas back
@@ -2204,6 +2225,12 @@ function replaceCanvasByClear(agentClear?: { agent: string | null }, options: { 
       report.saves.push(...unlandedSaves);
       report.ending = { kind: 'reconnect', copy };
       showReplacementReport(report);
+      const late = unanswered;
+      if (late.length > 0) {
+        void Promise.all(late.map((landing) => landing.settled)).then((answers) => {
+          if (answers.every(Boolean)) withdrawReplacementReport(report);
+        });
+      }
     }, () => {});
   }
   return dropped;
@@ -2283,17 +2310,20 @@ export function setReplacedCopyWaitForTests(ms: number | null): void {
   replacedCopyWaitMs = ms ?? 15_000;
 }
 
-/** The landings among `landings` that didn't land: refused, unanswered, or
- * still out after `limitMs`. */
-async function landingsWithin(landings: PendingLanding[], limitMs: number): Promise<PendingLanding[]> {
+/** The landings among `landings` that didn't land (`unlanded`: refused,
+ * unanswered, or still out after `limitMs`), and of those the ones still out
+ * (`pending`, review 2 N-5: they may land later). */
+async function landingsWithin(landings: PendingLanding[], limitMs: number): Promise<{ unlanded: PendingLanding[]; pending: PendingLanding[] }> {
   const landed = new Set<PendingLanding>();
+  const answered = new Set<PendingLanding>();
   let timer: ReturnType<typeof setTimeout> | undefined;
   await Promise.race([
-    Promise.all(landings.map((landing) => landing.settled.then((ok) => { if (ok) landed.add(landing); }))),
+    Promise.all(landings.map((landing) => landing.settled.then((ok) => { answered.add(landing); if (ok) landed.add(landing); }))),
     new Promise<void>((resolve) => { timer = setTimeout(resolve, limitMs); }),
   ]);
   clearTimeout(timer);
-  return landings.filter((landing) => !landed.has(landing));
+  const unlanded = landings.filter((landing) => !landed.has(landing));
+  return { unlanded, pending: unlanded.filter((landing) => !answered.has(landing)) };
 }
 
 /** The saves on their way that were sent on the canvas shown now. */

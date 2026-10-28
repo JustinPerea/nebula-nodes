@@ -28,13 +28,18 @@
    offline actions. */
 :root {
   /* white at 0.55 (--sr-ink-light): 6.3:1 on the canvas's black, 5.6:1 on
-     the grey fill below; an enabled label (--sr-ink, 0.92) is 17.6:1. */
+     the grey fill below; an enabled label (--sr-ink, 0.92) is 17.6:1. One
+     shared grey (GM 2026-10-28 answer 2): every listed control's enabled
+     label is brighter (the dim ones were raised to --sr-ink), which
+     tests/agentPresenceFollowups.ratchet M-1 measures. */
   --sr-disabled-ink: rgba(255, 255, 255, 0.55);
   --sr-disabled-fill: rgba(255, 255, 255, 0.1);
   /* The outline of a disabled ghost or outline button: neutral, and never
-     brighter than an enabled button's own edge (in the label's grey it read
-     as more prominent than the live buttons beside it; asked of GM). */
-  --sr-disabled-edge: rgba(255, 255, 255, 0.12);
+     brighter than that button's enabled edge (GM 2026-10-28 answer 3). The
+     plain edge (--sr-edge, 0.06) is the faintest any listed button has
+     enabled; 0.12 doubled Cinema's outlines when they went disabled (review
+     2 M-1). */
+  --sr-disabled-edge: rgba(255, 255, 255, 0.06);
 }
 
 /* Ghost and outline buttons: unfilled, label and outline grey. First, so a
@@ -54,6 +59,8 @@
   .cinema-shared-controls__ref-remove,
   .cinema-shared-controls__swatch-add,
   .cinema-shared-controls__swatch-remove,
+  .cinema-shared-controls__chip,
+  .cinema-shot-panel__variation,
   .chat__codeblock-apply,
   .prompt-dialog__confirm,
   .prompt-dialog__destructive,
@@ -75,6 +82,8 @@
   .cinema-shared-controls__ref-remove,
   .cinema-shared-controls__swatch-add,
   .cinema-shared-controls__swatch-remove,
+  .cinema-shared-controls__chip,
+  .cinema-shot-panel__variation,
   .chat__codeblock-apply,
   .prompt-dialog__confirm,
   .prompt-dialog__destructive,
@@ -90,8 +99,9 @@
 }
 
 /* Filled buttons: the accent (orange), danger (which is the accent), white
-   primaries ("Back to …", "New project") and other solid fills (the mask
-   painter's blue Save): the fill turns neutral grey. */
+   primaries ("Back to …", "New project", the canvas toast's Undo, Redo and
+   Open copy) and other solid fills (the mask painter's blue Save): the fill
+   turns neutral grey, its hover included (review 2 M-3). */
 :is(
   .cinema-shot-panel__action--primary,
   .create-composer__generate,
@@ -115,7 +125,10 @@
   .mask-painter__save,
   .agent-notes-btn--primary,
   .asset-proposal__button--accept,
-  .settings__button--primary
+  .settings__button--primary,
+  .canvas-undo-notice__action,
+  .moodboard-board-toast__action,
+  .workspace-rail__item--primary
 ):is(:disabled, [aria-disabled='true']),
 :is(
   .cinema-shot-panel__action--primary,
@@ -140,7 +153,10 @@
   .mask-painter__save,
   .agent-notes-btn--primary,
   .asset-proposal__button--accept,
-  .settings__button--primary
+  .settings__button--primary,
+  .canvas-undo-notice__action,
+  .moodboard-board-toast__action,
+  .workspace-rail__item--primary
 ):is(:disabled, [aria-disabled='true']):hover {
   background: var(--sr-disabled-fill, rgba(255, 255, 255, 0.1)) !important;
   border-color: var(--sr-disabled-fill, rgba(255, 255, 255, 0.1)) !important;
@@ -157,4 +173,11 @@
   border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.12)) !important;
   color: var(--sr-disabled-ink, rgba(255, 255, 255, 0.55)) !important;
   opacity: 1 !important;
+}
+
+/* A checked switch that is disabled (Settings, while it saves): the grey fill,
+   never the accent (review 2 L-4, "never orange but disabled"). Its thumb
+   keeps its place, so it still reads as on. */
+body.app-slava-restraint .settings-switch:checked:is(:disabled, [aria-disabled='true']) {
+  background: var(--sr-disabled-fill, rgba(255, 255, 255, 0.1)) !important;
 }

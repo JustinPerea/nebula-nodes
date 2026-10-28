@@ -338,7 +338,9 @@ function AssistantBubble({ message, agentName, onPermission }: {
                         type="button"
                         className="chat__codeblock-apply"
                         onClick={() => applyToTarget(seg.content)}
-                        {...lock.act({ disabled: replacedSince, title: applyTitle })}
+                        // Offline: when it works again (review 2 N-6), unless
+                        // the canvas it was written for has gone for good.
+                        {...lock.act({ disabled: replacedSince, title: applyTitle, offline: replacedSince ? undefined : true })}
                       >
                         {applyLabel}
                       </button>

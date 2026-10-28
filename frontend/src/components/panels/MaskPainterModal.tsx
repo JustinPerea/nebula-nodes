@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCanvasLock } from '../../lib/canvasLock';
 import { Brush, Eraser, Trash2, X } from 'lucide-react';
 import '../../styles/mask-painter.css';
 import { useMaskPainterDialog } from './maskPainterDialog';
@@ -33,6 +34,7 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
   const [hasStrokes, setHasStrokes] = useState(false);
   const drawingRef = useRef(false);
   const dialog = useMaskPainterDialog(onClose);
+  const lock = useCanvasLock();
   const lastPointRef = useRef<{ x: number; y: number } | null>(null);
 
   // Load the image to learn its natural size (the canvas paints at full res).
@@ -238,7 +240,9 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
             type="button"
             className="mask-painter__save"
             onClick={saveMask}
-            disabled={!natural || !hasStrokes}
+            // Saving writes the node's mask (updateNodeData): the canvas lock
+            // (fix round 2 of PR #200, review 2 L-5; GM's sweep list).
+            {...lock.act({ disabled: !natural || !hasStrokes, offline: true })}
           >
             Save Mask
           </button>

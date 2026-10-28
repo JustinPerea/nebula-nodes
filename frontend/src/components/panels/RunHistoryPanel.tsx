@@ -262,18 +262,18 @@ export function RunHistoryPanel() {
                           if (r.status === 'failed') void retryFailedRun(r.id);
                           else void rerunHistoryRecord(r.id);
                         }}
-                        disabled={isExecuting || locked}
-                        {...off}
+                        // Review 2 N-7: disabled by the lock, it says why
+                        // (GM's tooltip following, the reconnect line offline).
+                        {...lock.act({ disabled: isExecuting, offline: true, title: isExecuting
+                          ? 'Wait for the run to finish first.'
+                          : recoveryReplayReady
+                            ? 'Resume this run from its saved checkpoint'
+                            : 'Run this again with the same nodes and settings' })}
                         aria-label={recoveryReplayReady
                           ? `Recover ${runTriggerLabel(r.trigger)} run`
                           : r.status === 'failed'
                           ? `Retry failed ${runTriggerLabel(r.trigger)} run`
                           : `Rerun ${runTriggerLabel(r.trigger)}`}
-                        title={isExecuting
-                          ? 'Wait for the run to finish first.'
-                          : recoveryReplayReady
-                            ? 'Resume this run from its saved checkpoint'
-                            : 'Run this again with the same nodes and settings'}
                       >
                         <RotateCcw size={11} strokeWidth={2} aria-hidden="true" focusable="false" />
                         {recoveryReplayReady ? 'Recover' : r.status === 'failed' ? 'Retry failed' : 'Rerun'}
@@ -282,15 +282,13 @@ export function RunHistoryPanel() {
                         <button
                           type="button"
                           className="run-history__replay"
-                          disabled={isExecuting || !latestSourceReady || locked}
-                          {...off}
-                          onClick={() => void rerunHistoryWithLatestPaperSource(r.id)}
-                          aria-label={`Rerun ${runTriggerLabel(r.trigger)} with latest source`}
-                          title={isExecuting
+                          {...lock.act({ disabled: isExecuting || !latestSourceReady, offline: true, title: isExecuting
                             ? 'Wait for the run to finish first.'
                             : latestSourceReady
                               ? 'Run again with the same settings and the latest artwork from Paper'
-                              : 'Refresh or reconnect the Paper source first.'}
+                              : 'Refresh or reconnect the Paper source first.' })}
+                          onClick={() => void rerunHistoryWithLatestPaperSource(r.id)}
+                          aria-label={`Rerun ${runTriggerLabel(r.trigger)} with latest source`}
                         >Rerun with latest source</button>
                       )}
                     </span>

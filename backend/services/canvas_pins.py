@@ -56,19 +56,34 @@ def _epoch(value: Any) -> float | None:
         return None
 
 
-def clean_text(raw: Any, *, limit: int, label: str = "Note") -> str:
-    """Plain, single-line text: control characters dropped, whitespace collapsed, 1..limit chars."""
+def clean_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = False) -> str:
+    """Plain text, 1..limit chars, control characters dropped.
+
+    One line by default (a reply): whitespace collapsed. ``multiline`` (the
+    person's note: Shift+Enter in the dialog makes lines, fix round 2 of PR
+    #200, GM 2026-10-28 answer 5): agents get it as written. Its newlines
+    stay (``\r\n`` and ``\r`` read as ``\n``), a tab reads as a space, each
+    line loses its trailing spaces and the note its leading and trailing
+    blank lines; every other control character is still dropped.
+    """
     if not isinstance(raw, str):
         raise PinError(422, f"{label} must be text")
-    # Cc covers C0, DEL and C1 controls. Format characters (Cf: bidi
-    # overrides, zero-width joiners) are dropped too so a note can't render
-    # differently from what agents read.
-    kept = "".join(
-        " " if char in "\t\n\r" else char
-        for char in raw
-        if char in "\t\n\r" or unicodedata.category(char) not in {"Cc", "Cf"}
-    )
-    text = " ".join(kept.split())
+
+    def plain(line: str) -> str:
+        # Cc covers C0, DEL and C1 controls. Format characters (Cf: bidi
+        # overrides, zero-width joiners) are dropped too so a note can't render
+        # differently from what agents read.
+        return "".join(
+            " " if char in "\t\n\r" else char
+            for char in line
+            if char in "\t\n\r" or unicodedata.category(char) not in {"Cc", "Cf"}
+        )
+
+    if multiline:
+        lines = [plain(line).rstrip() for line in raw.replace("\r\n", "\n").replace("\r", "\n").split("\n")]
+        text = "\n".join(lines).strip()
+    else:
+        text = " ".join(plain(raw).split())
     if not text:
         raise PinError(422, f"{label} can't be empty")
     if len(text) > limit:
@@ -241,7 +256,7 @@ class CanvasPins:
         position: Any = None,
         graph_nodes: Mapping[str, Any],
     ) -> tuple[str, dict[str, Any]]:
-        clean = clean_text(text, limit=MAX_PIN_TEXT)
+        clean = clean_text(text, limit=MAX_PIN_TEXT, multiline=True)
         if (node_id is None) == (position is None):
             raise PinError(422, "Pin a note to a node (nodeId) or to a canvas spot (position), not both")
         if node_id is not None:
