@@ -7,7 +7,7 @@ import { ReactFlow, ReactFlowProvider, type Node, type NodeProps } from '@xyflow
  * - A card or studio says "missing or damaged" only when the data check
  *   finds something wrong; otherwise GM's neutral line ("Nebula ran into a
  *   problem drawing it, but its data is fine. Reload Nebula to try again.")
- *   and the Agent log's "Couldn't draw “X”, node n4. <error message>".
+ *   and the Agent log's "Couldn’t draw “X”, node n4. <error message>".
  * - GM r4: a card keeps its header (icon and label) and replaces only the
  *   body; no "so Nebula can't show it." on cards.
  * - The studio boundary's own header can't take the app down: a header
@@ -89,17 +89,17 @@ describe('L3: a card that throws on data that checks out', () => {
     const lines = logged(() => render(<Flow nodes={[card({ label: 'Hero still', definitionId: 'text-input',
       params: { text: '' }, outputs: {} })]} />));
     const boundary = document.querySelector('[data-node-card-boundary]')!;
-    expect(boundary.querySelector('.node-card-boundary__line')!.textContent).toBe(`Couldn't show “Hero still”. ${NEUTRAL}`);
+    expect(boundary.querySelector('.node-card-boundary__line')!.textContent).toBe(`Couldn’t show “Hero still”. ${NEUTRAL}`);
     // GM r4: the header (icon and label) stays; only the body is replaced.
     const header = boundary.querySelector('.node-card-boundary__header')!;
     expect(header.textContent).toContain('Hero still');
     expect(header.querySelector('[role="img"]')).not.toBeNull();
     expect(boundary.textContent).not.toMatch(/missing or damaged|so Nebula can't show it/);
-    expect(lines).toEqual(["Couldn't draw “Hero still”, node n7. Cannot read properties of null (reading 'id')"]);
+    expect(lines).toEqual(["Couldn’t draw “Hero still”, node n7. Cannot read properties of null (reading 'id')"]);
   });
 
-  it('with no label: "Couldn\'t show this node. …"', () => {
-    expect(nodeCardBoundaryLine(null, false)).toBe(`Couldn't show this node. ${NEUTRAL}`);
+  it('with no label: "Couldn’t show this node. …"', () => {
+    expect(nodeCardBoundaryLine(null, false)).toBe(`Couldn’t show this node. ${NEUTRAL}`);
   });
 });
 
@@ -118,15 +118,15 @@ describe('L3: a card whose data is damaged', () => {
     const lines = logged(() => render(<Flow nodes={[card(data)]} />));
     const boundary = document.querySelector('[data-node-card-boundary]')!;
     expect(boundary.querySelector('.node-card-boundary__line')!.textContent)
-      .toBe('Couldn\'t show “Hero still”. Some of its data is missing or damaged.');
-    expect(lines).toEqual([`Couldn't open “Hero still”, node n7. ${field} is damaged.`]);
+      .toBe('Couldn’t show “Hero still”. Some of its data is missing or damaged.');
+    expect(lines).toEqual([`Couldn’t open “Hero still”, node n7. ${field} is damaged.`]);
   });
 
   it('a label that isn\'t text is damaged data, and the card says "this node"', () => {
     expect(nodeDataProblem({ label: { broken: true }, definitionId: 'text-input', params: {}, outputs: {} })).toEqual({ field: 'label', state: 'damaged' });
     render(<Flow nodes={[card({ label: { broken: true }, definitionId: 'text-input', params: {}, outputs: {} })]} />);
     expect(document.querySelector('.node-card-boundary__line')!.textContent)
-      .toBe("Couldn't show this node. Some of its data is missing or damaged.");
+      .toBe("Couldn’t show this node. Some of its data is missing or damaged.");
   });
 
   it('data that checks out is not damaged', () => {
@@ -139,7 +139,7 @@ describe('L3: a card whose data is damaged', () => {
   it('a header icon that throws doesn\'t take the canvas down: the card still says why', () => {
     flags.iconThrows = true;
     render(<Flow nodes={[card({ label: 'Hero still', definitionId: 'text-input', params: {}, outputs: {} })]} />);
-    expect(document.querySelector('.node-card-boundary__line')!.textContent).toBe(`Couldn't show “Hero still”. ${NEUTRAL}`);
+    expect(document.querySelector('.node-card-boundary__line')!.textContent).toBe(`Couldn’t show “Hero still”. ${NEUTRAL}`);
     expect(document.querySelector('.node-card-boundary__header')!.textContent).toContain('Hero still');
   });
 });
@@ -153,9 +153,9 @@ describe('L3: the studio boundary', () => {
     const lines = logged(() => render(<StudioBoundary studio="cinema-editor" node={{ id: 'n4', label: 'Opening' }}
       problem={() => null}><Throws /></StudioBoundary>));
     expect(document.querySelector('.studio-boundary__line')!.textContent)
-      .toBe("Couldn't open “Opening”. Nebula ran into a problem showing it, but its data is fine. Reload Nebula to try again.");
+      .toBe("Couldn’t open “Opening”. Nebula ran into a problem showing it, but its data is fine. Reload Nebula to try again.");
     // GM r6 item 5 (fix round 5): the studio's own neutral Agent log line.
-    expect(lines).toEqual(["Couldn't open “Opening” in Cinema, node n4. studio broke"]);
+    expect(lines).toEqual(["Couldn’t open “Opening” in Cinema, node n4. studio broke"]);
     fireEvent.click(screen.getByRole('button', { name: 'Back to canvas' }));
     expect(exit).toHaveBeenCalledTimes(1);
   });
@@ -164,10 +164,10 @@ describe('L3: the studio boundary', () => {
     render(<StudioBoundary studio="cinema-editor" node={{ id: 'n4', label: 'Opening' }}
       problem={() => 'scene.base'}><Throws /></StudioBoundary>);
     expect(document.querySelector('.studio-boundary__line')!.textContent)
-      .toBe("Couldn't open “Opening”. Some of its data is missing or damaged, so Nebula can't show it.");
-    expect(studioBoundaryLine('editor', null, true)).toBe("Couldn't open this clip. Some of its data is missing or damaged, so Nebula can't show it.");
+      .toBe("Couldn’t open “Opening”. Some of its data is missing or damaged, so Nebula can’t show it.");
+    expect(studioBoundaryLine('editor', null, true)).toBe("Couldn’t open this clip. Some of its data is missing or damaged, so Nebula can’t show it.");
     expect(studioBoundaryLine('editor', null, false))
-      .toBe("Couldn't open this clip. Nebula ran into a problem showing it, but its data is fine. Reload Nebula to try again.");
+      .toBe("Couldn’t open this clip. Nebula ran into a problem showing it, but its data is fine. Reload Nebula to try again.");
   });
 
   it('a header that throws stays inside the boundary: a plain header with the way back', () => {

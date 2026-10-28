@@ -199,6 +199,19 @@ def _valid_port_ids(
     ]
 
 
+def input_takes_one(
+    definition_id: str,
+    port_id: str | None,
+    params: Mapping[str, Any] | None,
+    definitions: Mapping[str, Mapping[str, Any]],
+) -> bool:
+    """Whether this input takes a single connection (fix round 10, N-1: an
+    ``onlyIfFree`` connect is refused only there; an input that takes several
+    is held to its own maxConnections, as any connect is)."""
+    port = _declared_port(definition_id, port_id, port_key="inputPorts", definitions=definitions, params=params).definition
+    return port is not None and _input_connection_limit(port) == 1
+
+
 def _input_connection_limit(port: Mapping[str, Any] | None) -> int | None:
     if port is None:
         return None

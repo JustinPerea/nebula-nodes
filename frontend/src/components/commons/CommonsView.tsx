@@ -373,14 +373,14 @@ export function CommonsView() {
         setCollections(list);
         setTarget((current) => current || list[0]?.id || '');
       },
-      (e: unknown) => { if (!cancelled) setLoadError(failureMessage(e, "Couldn't load the collections.")); },
+      (e: unknown) => { if (!cancelled) setLoadError(failureMessage(e, "Couldn’t load the collections.")); },
     );
     return () => { cancelled = true; };
   }, [collectionsKey]);
 
   useEffect(() => {
     let cancelled = false;
-    const poll = () => commonsApi.status().then((s) => { if (!cancelled) setStatus(s); }, (e: unknown) => { if (!cancelled) setLoadError(failureMessage(e, "Couldn't load the library status.")); });
+    const poll = () => commonsApi.status().then((s) => { if (!cancelled) setStatus(s); }, (e: unknown) => { if (!cancelled) setLoadError(failureMessage(e, "Couldn’t load the library status.")); });
     poll();
     const timer = window.setInterval(poll, STATUS_POLL_MS);
     return () => {
@@ -405,7 +405,7 @@ export function CommonsView() {
         },
         (e: unknown) => {
           if (cancelled) return;
-          setLoadError(failureMessage(e, "Couldn't search the library."));
+          setLoadError(failureMessage(e, "Couldn’t search the library."));
           setLoading(false);
         },
       );

@@ -276,7 +276,7 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     h.release();
     await sleep(150);
     expect(brief()).toEqual([`s1:${'x'.repeat(50)}`, 's2:second field']);
-    expect(said).toEqual(["Couldn't save “Opening”. The project is too big to save. Remove something and Nebula will save your changes."]);
+    expect(said).toEqual(["Couldn’t save “Opening”. The project is too big to save. Remove something and Nebula will save your changes."]);
     expect(unsaved()).toBe(said[0]);
     h.answerLater(() => json({ ok: true }));
     typeIn('s2', 'shorter');
@@ -293,7 +293,7 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     h.release();
     await sleep(60);
     expect(brief()).toEqual(['s1:during the run', 's2:b']);
-    expect(said).toEqual(["Couldn't save your changes to “Opening”. They're kept and will save when the run finishes."]);
+    expect(said).toEqual(["Couldn’t save your changes to “Opening”. They’re kept and will save when the run finishes."]);
     h.answerLater(() => json({ ok: true }));
     socketSends({ type: 'executionComplete', runId: 'other-run' });
     socketSends({ type: 'graphSync', ...base, empty: false, ...backendGraph(), runParams: 'other-run' });
@@ -311,7 +311,7 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     await sleep(20);
     h.release();
     await sleep(60);
-    expect(said[0]).toBe("Couldn't save your changes to “Opening”. They're kept and will save when the run finishes.");
+    expect(said[0]).toBe("Couldn’t save your changes to “Opening”. They’re kept and will save when the run finishes.");
     await sleep(200);
     expect(h.puts.at(-1)).toEqual(['s1:held', 's2:b']);
     expect(unsaved()).toBeNull();
@@ -323,7 +323,7 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     await sleep(20);
     h.release();
     await sleep(40);
-    expect(said).toEqual(["Couldn't save your changes to “Opening”. They're kept and Nebula will try again."]);
+    expect(said).toEqual(["Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again."]);
     expect(brief()[0]).toBe('s1:retry me');
     await sleep(200);
     expect(h.puts).toEqual([['s1:retry me', 's2:b'], ['s1:retry me', 's2:b']]);
@@ -336,7 +336,7 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     await sleep(20);
     h.release();
     await sleep(150);
-    expect(said).toEqual(["Couldn't save your changes to “Opening”. It was deleted in another window."]);
+    expect(said).toEqual(["Couldn’t save your changes to “Opening”. It was deleted in another window."]);
     expect(brief()[0]).toBe('s1:gone');
     expect(h.puts).toHaveLength(1);
   });
@@ -349,7 +349,7 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     await sleep(20);
     h.release();
     await sleep(120);
-    expect(said).toEqual(["Couldn't save your changes to “Opening”. Codex switched to “Moodboards” first."]);
+    expect(said).toEqual(["Couldn’t save your changes to “Opening”. Codex switched to “Moodboards” first."]);
     expect(h.puts).toHaveLength(1);
     said = [];
     useGraphStore.setState({ notify: (text: string) => { said.push(text); } } as never);
@@ -358,7 +358,7 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     await sleep(20);
     h.release();
     await sleep(120);
-    expect(said).toEqual(["Couldn't save your changes to “Opening”. Nebula switched to “Moodboards” first."]);
+    expect(said).toEqual(["Couldn’t save your changes to “Opening”. Nebula switched to “Moodboards” first."]);
   });
 
   it('400: our bug; kept on screen, the detail goes to the Agent log', async () => {
@@ -367,7 +367,7 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     await sleep(20);
     h.release();
     await sleep(120);
-    expect(said).toEqual(["Couldn't save your changes to “Opening”. Nebula ran into a problem saving them, so they're kept on screen but not saved."]);
+    expect(said).toEqual(["Couldn’t save your changes to “Opening”. Nebula ran into a problem saving them, so they’re kept on screen but not saved."]);
     expect(logged.some((line) => line.includes('params.scene nested too deeply') && line.includes('n1'))).toBe(true);
     expect(brief()[0]).toBe('s1:bad');
     expect(unsaved()).toBe(said[0]);
@@ -384,20 +384,20 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
   });
 
   it('any other refusal: kept, marked unsaved, the backend\'s line', async () => {
-    const h = harness({ first: () => json({ detail: "Couldn't save “Opening”. It's locked." }, 409) });
+    const h = harness({ first: () => json({ detail: "Couldn’t save “Opening”. It's locked." }, 409) });
     typeIn('s1', 'locked');
     await sleep(20);
     h.release();
     await sleep(120);
-    expect(said).toEqual(["Couldn't save “Opening”. It's locked."]);
+    expect(said).toEqual(["Couldn’t save “Opening”. It's locked."]);
     expect(brief()[0]).toBe('s1:locked');
     expect(unsaved()).toBe(said[0]);
   });
 
   it('the copy is in constants for GM', () => {
     expect(copy.SCENE_TOO_BIG).toBe('The project is too big to save. Remove something and Nebula will save your changes.');
-    expect(copy.KEPT_UNTIL_RUN_ENDS).toBe("They're kept and will save when the run finishes.");
-    expect(copy.KEPT_AND_RETRYING).toBe("They're kept and Nebula will try again.");
+    expect(copy.KEPT_UNTIL_RUN_ENDS).toBe("They’re kept and will save when the run finishes.");
+    expect(copy.KEPT_AND_RETRYING).toBe("They’re kept and Nebula will try again.");
   });
 
   it('a kept removal never goes out after a run paid for that shot\'s image', async () => {
@@ -515,18 +515,18 @@ describe('GM r6: the naming rule on both multi-delete lines', () => {
   it('own run: names up to 3, groups same titles, counts from 4', async () => {
     await ownRun([textNode('n5', 'Brief'), textNode('n6', 'Note'), textNode('n7', 'Text'), textNode('n8', 'Text')]);
     useGraphStore.getState().onNodesChange(['n5', 'n6'].map((id) => ({ id, type: 'remove' as const })));
-    expect(notice()).toBe("Couldn't delete “Brief” and “Note”. Wait for the active run to finish.");
+    expect(notice()).toBe("Couldn’t delete “Brief” and “Note”. Wait for the active run to finish.");
     useGraphStore.getState().onNodesChange(['n5', 'n7', 'n8'].map((id) => ({ id, type: 'remove' as const })));
-    expect(notice()).toBe("Couldn't delete “Brief” and 2 “Text” nodes. Wait for the active run to finish.");
+    expect(notice()).toBe("Couldn’t delete “Brief” and 2 “Text” nodes. Wait for the active run to finish.");
     useGraphStore.getState().onNodesChange(['n5', 'n6', 'n7', 'n8'].map((id) => ({ id, type: 'remove' as const })));
-    expect(notice()).toBe("Couldn't delete 4 nodes. Wait for the active run to finish.");
+    expect(notice()).toBe("Couldn’t delete 4 nodes. Wait for the active run to finish.");
     expect(notice()).not.toMatch(/n\d/);
   });
 
-  it('another window\'s run: "Deleted “A” and “B”. “Ref scene” wasn\'t deleted because “Shot 1” is still running."', async () => {
+  it('another window\'s run: "Deleted “A” and “B”. “Ref scene” wasn’t deleted because “Shot 1” is still running."', async () => {
     useGraphStore.setState({ nodes: [cinema('n4', [{ id: 's1', prompt: 'a' }], 'Ref scene'), textNode('n5', 'A'), textNode('n6', 'B'),
       textNode('n7', 'Text'), textNode('n8', 'Text')] } as never);
-    const sceneLine = "Couldn't delete “Ref scene”. “Shot 1” is still running. Stop the run first.";
+    const sceneLine = "Couldn’t delete “Ref scene”. “Shot 1” is still running. Stop the run first.";
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (init?.method === 'DELETE' && String(url).endsWith('/api/graph/node/n4')) {
         return json({ detail: sceneLine, rendering: { shots: [1], shotIds: ['s1'], stoppable: true } }, 409);
@@ -536,11 +536,11 @@ describe('GM r6: the naming rule on both multi-delete lines', () => {
     });
     useGraphStore.getState().onNodesChange(['n4', 'n5', 'n6'].map((id) => ({ id, type: 'remove' as const })));
     await sleep(80);
-    expect(notice()).toBe("Deleted “A” and “B”. “Ref scene” wasn't deleted because “Shot 1” is still running.");
+    expect(notice()).toBe("Deleted “A” and “B”. “Ref scene” wasn’t deleted because “Shot 1” is still running.");
     useGraphStore.setState({ undoNotice: null } as never);
     useGraphStore.getState().onNodesChange(['n4', 'n7', 'n8'].map((id) => ({ id, type: 'remove' as const })));
     await sleep(80);
-    expect(notice()).toBe("Deleted 2 “Text” nodes. “Ref scene” wasn't deleted because “Shot 1” is still running.");
+    expect(notice()).toBe("Deleted 2 “Text” nodes. “Ref scene” wasn’t deleted because “Shot 1” is still running.");
   });
 
   it('a plain multi-delete names its nodes; one node keeps "Deleted the node."', async () => {
@@ -557,12 +557,12 @@ describe('GM r6: the naming rule on both multi-delete lines', () => {
 });
 
 describe('N1: a wire-only Delete during the tab\'s run says why', () => {
-  it('"Couldn\'t delete the connection. Wait for the active run to finish."', async () => {
+  it('"Couldn’t delete the connection. Wait for the active run to finish."', async () => {
     await ownRun([textNode('n5', 'Brief')]);
     useGraphStore.setState({ edges: [{ id: 'e9', source: 'n4', sourceHandle: 'shot_s1', target: 'n5', targetHandle: 'text', selected: true }],
       nodes: useGraphStore.getState().nodes.map((node) => ({ ...node, selected: false })) } as never);
     useGraphStore.getState().deleteSelected();
-    expect(notice()).toBe("Couldn't delete the connection. Wait for the active run to finish.");
+    expect(notice()).toBe("Couldn’t delete the connection. Wait for the active run to finish.");
     expect(useGraphStore.getState().edges).toHaveLength(1);
   });
 });

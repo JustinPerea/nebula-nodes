@@ -111,7 +111,7 @@ describe('H1: a canvas replacement takes a scene\'s kept edits with it, and name
     expect(brief()).toEqual(['s1:other canvas', 's2:other s2']);
     expect(h.puts).toHaveLength(1);
     expect(unsaved()).toBeNull();
-    expect(notice()).toBe("Couldn't save “Scene” for “Opening”.");
+    expect(notice()).toBe("Couldn’t save “Scene” for “Opening”.");
   });
 
   it('1e: kept edits (500), then an agent clear that re-adds n1: the typing line, no retry onto the new n1', async () => {
@@ -125,7 +125,7 @@ describe('H1: a canvas replacement takes a scene\'s kept edits with it, and name
     expect(brief()).toEqual(['s1:fresh canvas', 's2:fresh s2']);
     expect(h.puts).toHaveLength(1);
     expect(unsaved()).toBeNull();
-    expect(notice()).toBe("Codex cleared the canvas while you were editing “Scene” for “Opening”. That change wasn't saved.");
+    expect(notice()).toBe("Codex cleared the canvas while you were editing “Scene” for “Opening”. That change wasn’t saved.");
   });
 
   it('1f: the same, then the person types in the new n1: only the new scene is sent', async () => {
@@ -148,7 +148,7 @@ describe('H1: a canvas replacement takes a scene\'s kept edits with it, and name
     await sleep(40);
     socketSends({ type: 'graphSync', ...base, empty: true, cleared: true, canvasRevision: 'c2', nodes: [], edges: [], ...AGENT });
     await sleep(80);
-    expect(notice()).toBe("Codex cleared the canvas while you were editing “Scene” for “Opening”. That change wasn't saved.");
+    expect(notice()).toBe("Codex cleared the canvas while you were editing “Scene” for “Opening”. That change wasn’t saved.");
     expect(useGraphStore.getState().unsavedScenes).toEqual({});
   });
 
@@ -174,7 +174,7 @@ describe('H1: a canvas replacement takes a scene\'s kept edits with it, and name
     const before = h.puts.length;
     expect(before).toBe(9); // the first try and 8 timed retries (L2), then it waits
     // GM r11 answer 3: stopped; the line says the next change sends them.
-    expect(unsaved()).toBe("Couldn't save your changes to “Opening”. They're kept and Nebula will try again with your next change.");
+    expect(unsaved()).toBe("Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again with your next change.");
     h.answer([ok]);
     noteBackendConnection('offline');
     noteBackendConnection('online');
@@ -216,7 +216,7 @@ describe('H2 (GM r9 decision 2): another change is merged in, never overwritten'
     typeIn('s2', 'person edits s2');
     await sleep(80);
     expect(h.puts.at(-1)).toEqual(['s1:mine', 's2:person edits s2', 's3:agent shot']);
-    expect(said).toEqual(["Couldn't save your changes to “Opening”. They're kept and Nebula will try again."]);
+    expect(said).toEqual(["Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again."]);
   });
 
   it('5c (control): with nothing kept, the same agent edit is simply shown', async () => {
@@ -302,7 +302,7 @@ describe('M1: canvas_replaced says no line of its own', () => {
     expect(unsaved()).toBeNull();
     socketSends({ type: 'graphSync', ...base, empty: true, cleared: true, canvasRevision: 'c2', nodes: [], edges: [], ...AGENT });
     await sleep(60);
-    expect(notice()).toBe("Codex cleared the canvas while you were editing “Scene” for “Opening”. That change wasn't saved.");
+    expect(notice()).toBe("Codex cleared the canvas while you were editing “Scene” for “Opening”. That change wasn’t saved.");
     expect(said.some((line) => line.includes('switched'))).toBe(false);
   });
 
@@ -326,7 +326,7 @@ describe('L2-L5', () => {
     expect(h.puts).toHaveLength(9);
     expect(said).toHaveLength(1);
     // GM r11 answer 3: the stopped line, with [Try again] on its toast.
-    const stopped = "Couldn't save your changes to “Opening”. They're kept and Nebula will try again with your next change.";
+    const stopped = "Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again with your next change.";
     expect(unsaved()).toBe(stopped);
     expect(useGraphStore.getState().undoNotice).toMatchObject({ text: stopped, retryScene: { nodeId: 'n1' } });
   });
@@ -362,6 +362,6 @@ describe('L2-L5', () => {
       switchedBy: { kind: 'person', name: 'You' } }, 409)]);
     typeIn('s1', 'typed');
     await sleep(80);
-    expect(said).toEqual(["Couldn't save your changes to “Opening”. You switched to “B” in another window first."]);
+    expect(said).toEqual(["Couldn’t save your changes to “Opening”. You switched to “B” in another window first."]);
   });
 });

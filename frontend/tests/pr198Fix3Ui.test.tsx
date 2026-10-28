@@ -128,16 +128,16 @@ describe('L4: a card whose data is damaged never takes the canvas down', () => {
     // Fix round 4 (review 4, L3; GM r4 and r5): data that checks out reads
     // the neutral line under the card's kept header, and the log names the error.
     expect(alert.querySelector('.node-card-boundary__line')!.textContent)
-      .toBe("Couldn't show “Hero still”. Nebula ran into a problem drawing it, but its data is fine. Reload Nebula to try again.");
+      .toBe("Couldn’t show “Hero still”. Nebula ran into a problem drawing it, but its data is fine. Reload Nebula to try again.");
     expect(alert.querySelectorAll('.react-flow__handle').length).toBeGreaterThan(0);
-    expect(logged).toEqual(["Couldn't draw “Hero still”, node n7. Cannot read properties of null (reading 'id')"]);
+    expect(logged).toEqual(["Couldn’t draw “Hero still”, node n7. Cannot read properties of null (reading 'id')"]);
     rerender(<Flow nodes={[node(false)]} nodeTypes={types} />);
     expect(screen.getByTestId('card-ok')).toBeTruthy();
     expect(document.querySelector('[data-node-card-boundary]')).toBeNull();
   });
 
   it('with no label: "this node"', () => {
-    expect(nodeCardBoundaryLine(null, true)).toBe("Couldn't show this node. Some of its data is missing or damaged.");
+    expect(nodeCardBoundaryLine(null, true)).toBe("Couldn’t show this node. Some of its data is missing or damaged.");
   });
 });
 

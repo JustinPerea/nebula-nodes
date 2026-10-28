@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * - L2: a run of the graph holds the scene's shots only while it is on the
  *   scene (its node queued or executing).
  * - G1 / GM 1: a scene with a shot rendering can't be deleted: one toast for
- *   it alone, "Deleted 3 nodes. “Scene” wasn't deleted because …" when the
+ *   it alone, "Deleted 3 nodes. “Scene” wasn’t deleted because …" when the
  *   rest goes, and the disabled Delete's tooltip.
  * - GM r3 items 5 and 7: the unknown-actor reorder lines and the unnamed
  *   settings in "Nothing was undone".
@@ -95,7 +95,7 @@ describe('M2 / GM 3: an undo or redo that would remove a rendering shot is refus
     useGraphStore.getState().undo();
     await sleep(30);
     expect(restoresSent()).toBe(0);
-    expect(notice()).toBe("Couldn't undo. It would remove “Shot 2”, which is still running. Stop the run first.");
+    expect(notice()).toBe("Couldn’t undo. It would remove “Shot 2”, which is still running. Stop the run first.");
     expect(shotsOf().map((shot) => shot.id)).toEqual(['s1', added]);
     expect((shotsOf()[1].output as { status: string }).status).toBe('running');
     expect(useGraphStore.getState().undoStack).toHaveLength(stacks.undo);
@@ -108,10 +108,10 @@ describe('M2 / GM 3: an undo or redo that would remove a rendering shot is refus
     useGraphStore.getState().undo();
     await sleep(30);
     expect(restoresSent()).toBe(0);
-    expect(notice()).toBe("Couldn't undo. It would remove “Shot 2”, which is still running. Wait for it to finish.");
+    expect(notice()).toBe("Couldn’t undo. It would remove “Shot 2”, which is still running. Wait for it to finish.");
   });
 
-  it('Redo of a remove-shot step after the shot is regenerated: "Couldn\'t redo. …"', async () => {
+  it('Redo of a remove-shot step after the shot is regenerated: "Couldn’t redo. …"', async () => {
     useGraphStore.setState({ nodes: [cinema('n1', [{ id: 's1', prompt: 'a' }, { id: 's2', prompt: 'b' }])] } as never);
     useGraphStore.getState().removeShot('n1', 's2');
     await sleep(20);
@@ -123,15 +123,15 @@ describe('M2 / GM 3: an undo or redo that would remove a rendering shot is refus
     useGraphStore.getState().redo();
     await sleep(30);
     expect(restoresSent()).toBe(0);
-    expect(notice()).toBe("Couldn't redo. It would remove “Shot 2”, which is still running. Stop the run first.");
+    expect(notice()).toBe("Couldn’t redo. It would remove “Shot 2”, which is still running. Stop the run first.");
     expect(shotsOf().map((shot) => shot.id)).toEqual(['s1', 's2']);
   });
 
   it('several shots: named up to three, counted from four', () => {
     expect(renderingRemovalLine('undo', { numbers: [2, 3], stoppable: true }))
-      .toBe("Couldn't undo. It would remove “Shot 2” and “Shot 3”, which are still running. Stop the run first.");
+      .toBe("Couldn’t undo. It would remove “Shot 2” and “Shot 3”, which are still running. Stop the run first.");
     expect(renderingRemovalLine('redo', { numbers: [1, 2, 3, 4], stoppable: false }))
-      .toBe("Couldn't redo. It would remove 4 shots that are still running. Wait for it to finish.");
+      .toBe("Couldn’t redo. It would remove 4 shots that are still running. Wait for it to finish.");
   });
 
   it('an undo that takes nothing rendering away is still sent', async () => {
@@ -151,7 +151,7 @@ describe('M2: a restore the backend refuses keeps the spinner and reads the back
     useGraphStore.setState({ nodes: [cinema('n1', [{ id: 's1', prompt: 'a' }])] } as never);
     const added = useGraphStore.getState().addShot('n1') as string;
     await sleep(20);
-    const line = "Couldn't undo. It would remove “Shot 2”, which is still running. Stop the run first.";
+    const line = "Couldn’t undo. It would remove “Shot 2”, which is still running. Stop the run first.";
     fetchMock.mockImplementation(async (url: string) => {
       if (String(url).includes('/api/graph/restore')) {
         // The shot's run starts in this tab before the answer comes.
@@ -169,7 +169,7 @@ describe('M2: a restore the backend refuses keeps the spinner and reads the back
     expect((back!.output as { status: string }).status).toBe('running');
   });
 
-  it('any other refusal keeps "Couldn\'t undo that." before the reason', async () => {
+  it('any other refusal keeps "Couldn’t undo that." before the reason', async () => {
     useGraphStore.setState({ nodes: [cinema('n1', [{ id: 's1', prompt: 'a' }])] } as never);
     useGraphStore.getState().addShot('n1');
     await sleep(20);
@@ -177,7 +177,7 @@ describe('M2: a restore the backend refuses keeps the spinner and reads the back
       ? json({ detail: 'The project changed.' }, 409) : json({})));
     useGraphStore.getState().undo();
     await sleep(60);
-    expect(notice()).toMatch(/^Couldn't undo that\. /);
+    expect(notice()).toMatch(/^Couldn’t undo that\. /);
   });
 });
 
@@ -200,7 +200,7 @@ describe('H1: a scene save the backend refuses keeps the person\'s typing', () =
     await sleep(80);
     // Round 5 (GM r7 item 1): a 400 is Nebula's bug; the typing stays on
     // screen, unsaved, and GM's line says so.
-    expect(said).toEqual(["Couldn't save your changes to “Opening”. Nebula ran into a problem saving them, so they're kept on screen but not saved."]);
+    expect(said).toEqual(["Couldn’t save your changes to “Opening”. Nebula ran into a problem saving them, so they’re kept on screen but not saved."]);
     expect(shotsOf('n31')[0].prompt).toBe('typed by the person');
   });
 
@@ -263,24 +263,24 @@ describe('G1 / GM 1: a scene with a shot rendering can\'t be deleted', () => {
     await sleep(20);
     expect(deletesSent()).toBe(0);
     expect(useGraphStore.getState().nodes.map((node) => node.id)).toContain('n4');
-    expect(notice()).toBe("Couldn't delete “Opening”. “Shot 2” is still running. Stop the run first.");
+    expect(notice()).toBe("Couldn’t delete “Opening”. “Shot 2” is still running. Stop the run first.");
     // The same through React Flow's own removal.
     useGraphStore.setState({ undoNotice: null } as never);
     useGraphStore.getState().onNodesChange([{ id: 'n4', type: 'remove' }]);
-    expect(notice()).toBe("Couldn't delete “Opening”. “Shot 2” is still running. Stop the run first.");
+    expect(notice()).toBe("Couldn’t delete “Opening”. “Shot 2” is still running. Stop the run first.");
   });
 
   it('no Stop here: "…Wait for it to finish."', () => {
     renderingScene(false);
     useGraphStore.getState().deleteNode('n4');
-    expect(notice()).toBe("Couldn't delete “Opening”. “Shot 2” is still running. Wait for it to finish.");
+    expect(notice()).toBe("Couldn’t delete “Opening”. “Shot 2” is still running. Wait for it to finish.");
   });
 
   it('several shots: named, and counted from four', () => {
     expect(sceneDeleteRefusedLine('Opening', { numbers: [2, 3], stoppable: true }))
-      .toBe("Couldn't delete “Opening”. “Shot 2” and “Shot 3” are still running. Stop the run first.");
+      .toBe("Couldn’t delete “Opening”. “Shot 2” and “Shot 3” are still running. Stop the run first.");
     expect(sceneDeleteRefusedLine('Opening', { numbers: [1, 2, 3, 4], stoppable: false }))
-      .toBe("Couldn't delete “Opening”. 4 shots are still running. Wait for it to finish.");
+      .toBe("Couldn’t delete “Opening”. 4 shots are still running. Wait for it to finish.");
   });
 
   it('multi-select: the rest is deleted, the scene stays, and the line says why', async () => {
@@ -290,7 +290,7 @@ describe('G1 / GM 1: a scene with a shot rendering can\'t be deleted', () => {
     await sleep(40);
     expect(useGraphStore.getState().nodes.map((node) => node.id)).toEqual(['n4']);
     // GM r6: the deleted nodes are named (up to 3).
-    expect(notice()).toBe("Deleted “Brief”, “Note” and “Logo”. “Opening” wasn't deleted because “Shot 2” is still running.");
+    expect(notice()).toBe("Deleted “Brief”, “Note” and “Logo”. “Opening” wasn’t deleted because “Shot 2” is still running.");
     expect(fetchMock.mock.calls.some(([url, init]) => String(url).includes('/n4') && (init as RequestInit | undefined)?.method === 'DELETE')).toBe(false);
   });
 

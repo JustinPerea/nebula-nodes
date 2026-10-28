@@ -29,7 +29,7 @@ const SUBJECT: Record<StudioScreen, string> = {
   'brand-showcase': 'the showcase',
 };
 
-const STUDIO_DAMAGED = "Some of its data is missing or damaged, so Nebula can't show it.";
+const STUDIO_DAMAGED = "Some of its data is missing or damaged, so Nebula can’t show it.";
 /** GM r4: a card's line has no "so Nebula can't show it." */
 const CARD_DAMAGED = 'Some of its data is missing or damaged.';
 /** GM r5: the data checks out, so the fault is Nebula's drawing. */
@@ -42,7 +42,7 @@ const STUDIO_NEUTRAL = 'Nebula ran into a problem showing it, but its data is fi
  * Reload Nebula to try again."; the studio's noun with no name. */
 export function studioBoundaryLine(studio: StudioScreen, label: string | null, damaged: boolean): string {
   const subject = label ? `“${label}”` : SUBJECT[studio];
-  return `Couldn't open ${subject}. ${damaged ? STUDIO_DAMAGED : STUDIO_NEUTRAL}`;
+  return `Couldn’t open ${subject}. ${damaged ? STUDIO_DAMAGED : STUDIO_NEUTRAL}`;
 }
 
 /** A canvas card's line (GM r4 and r5): "Couldn't show “<node>”. Some of
@@ -50,7 +50,7 @@ export function studioBoundaryLine(studio: StudioScreen, label: string | null, d
  * “<node>”. Nebula ran into a problem drawing it, but its data is fine.
  * Reload Nebula to try again."; "this node" with no name. */
 export function nodeCardBoundaryLine(label: string | null, damaged: boolean): string {
-  return `Couldn't show ${label ? `“${label}”` : 'this node'}. ${damaged ? CARD_DAMAGED : CARD_NEUTRAL}`;
+  return `Couldn’t show ${label ? `“${label}”` : 'this node'}. ${damaged ? CARD_DAMAGED : CARD_NEUTRAL}`;
 }
 
 /** What the data check knows about the field it names (GM r6 item 4):
@@ -81,9 +81,9 @@ const PROBLEM_TAIL: Record<DataProblemState, string> = {
 export function studioBoundaryLogLine(label: string | null, nodeId: string,
   problem: DataProblem | string | null, studio?: StudioScreen): string {
   const found = typeof problem === 'string' ? { field: problem, state: 'unknown' as const } : problem;
-  const what = found ? `${found.field} ${PROBLEM_TAIL[found.state]}` : "Its data couldn't be read.";
+  const what = found ? `${found.field} ${PROBLEM_TAIL[found.state]}` : "Its data couldn’t be read.";
   const where = studio ? ` in ${STUDIO_PLACE[studio]}` : '';
-  return `Couldn't open ${label ? `“${label}”` : 'a node'}${where}, node ${nodeId}. ${what}`;
+  return `Couldn’t open ${label ? `“${label}”` : 'a node'}${where}, node ${nodeId}. ${what}`;
 }
 
 const errorText = (error: unknown) => {
@@ -94,7 +94,7 @@ const errorText = (error: unknown) => {
 /** GM r5: a canvas card's Agent log line when the data checks out,
  * "Couldn't draw “<node>”, node n4. <error message>". */
 export function drawFailedLogLine(label: string | null, nodeId: string, error: unknown): string {
-  return `Couldn't draw ${label ? `“${label}”` : 'a node'}, node ${nodeId}. ${errorText(error)}`;
+  return `Couldn’t draw ${label ? `“${label}”` : 'a node'}, node ${nodeId}. ${errorText(error)}`;
 }
 
 /** Where a studio's Agent log line says the node failed to open, after
@@ -114,7 +114,7 @@ export const STUDIO_PLACE: Record<StudioScreen, string> = {
 /** GM r6 item 5: a studio's Agent log line when the data checks out,
  * "Couldn't open “<node>” in <studio>, node n4. <error message>". */
 export function studioDrawFailedLogLine(studio: StudioScreen, label: string | null, nodeId: string, error: unknown): string {
-  return `Couldn't open ${label ? `“${label}”` : 'a node'} in ${STUDIO_PLACE[studio]}, node ${nodeId}. ${errorText(error)}`;
+  return `Couldn’t open ${label ? `“${label}”` : 'a node'} in ${STUDIO_PLACE[studio]}, node ${nodeId}. ${errorText(error)}`;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>

@@ -197,7 +197,7 @@ describe('H2: Codex edits a scene while the person types in it, and nothing is l
     expect(said).toEqual([]);
   });
 
-  it('the same field: scene_changed asks with the field line, and no "Couldn\'t save" toast', async () => {
+  it('the same field: scene_changed asks with the field line, and no "Couldn’t save" toast', async () => {
     const h = backend();
     h.onPut(async (n) => { if (n === 1) h.other((shots) => setPrompt(shots, 's1', "codex's s1")); });
     typeIn('s1', 'mine');
@@ -294,7 +294,7 @@ describe('M1 (GM r10): while a clash waits, nothing retries and no retry line sh
     h.failNext(100);
     typeIn('s1', 'mine');
     await sleep(20);
-    expect(said).toEqual(["Couldn't save your changes to “Opening”. They're kept and Nebula will try again."]);
+    expect(said).toEqual(["Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again."]);
     useGraphStore.setState({ undoNotice: { id: 99, text: said[0], offer: null } } as never);
     h.other((shots) => setPrompt(shots, 's1', "codex's s1"));
     await sleep(10);
@@ -318,7 +318,7 @@ describe('M1 (GM r10): while a clash waits, nothing retries and no retry line sh
     h.failNext(1);
     useGraphStore.getState().resolveSceneClash('n1', 'mine');
     await sleep(15);
-    expect(said).toEqual(["Couldn't save your changes to “Opening”. They're kept and Nebula will try again."]);
+    expect(said).toEqual(["Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again."]);
     await sleep(80);
     expect(h.backendBrief()).toEqual(['s1:mine', 's2:b']);
     expect(unsaved()).toBeNull();
@@ -425,7 +425,7 @@ describe('the lines and the lows', () => {
     typeIn('s1', 'mine');
     await sleep(200);
     expect(h.puts).toHaveLength(9);
-    expect(unsaved()).toBe("Couldn't save your changes to “Opening”. They're kept and Nebula will try again with your next change.");
+    expect(unsaved()).toBe("Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again with your next change.");
     h.emit(AGENT);
     h.emit(AGENT);
     await sleep(40);

@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * - Canvas order for every name list (GM, #200 r2 item 3): both multi-delete
  *   lines name their nodes in the order the canvas holds them, not the order
  *   they were removed in.
- * - (superseded by fix round 7, GM r9 decision 2: a clash asks) CHANGED_ELSEWHERE (GM r8): "Couldn't save your changes to “X”.
+ * - (superseded by fix round 7, GM r9 decision 2: a clash asks) CHANGED_ELSEWHERE (GM r8): "Couldn’t save your changes to “X”.
  *   It was changed in another window first, so your changes are kept on
  *   screen but not saved." The edits stay on screen, marked "Not saved", and
  *   nothing sends them by itself; the person's next edit saves the scene as
@@ -154,10 +154,10 @@ describe('GM (#200 r2 item 3): the multi-delete lines read in canvas order', () 
     expect(notice()).toBe('Deleted “A” and “C”.');
   });
 
-  it('own run: "Couldn\'t delete “A” and “B”." in canvas order', async () => {
+  it('own run: "Couldn’t delete “A” and “B”." in canvas order', async () => {
     await ownRun([textNode('n5', 'A'), textNode('n6', 'B')]);
     useGraphStore.getState().onNodesChange(['n6', 'n5'].map((id) => ({ id, type: 'remove' as const })));
-    expect(notice()).toBe("Couldn't delete “A” and “B”. Wait for the active run to finish.");
+    expect(notice()).toBe("Couldn’t delete “A” and “B”. Wait for the active run to finish.");
   });
 
   it('another window\'s run: the deleted names and the kept scenes, both in canvas order', async () => {
@@ -166,7 +166,7 @@ describe('GM (#200 r2 item 3): the multi-delete lines read in canvas order', () 
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       const id = String(url).split('/').pop();
       if (init?.method === 'DELETE' && (id === 'n3' || id === 'n4')) {
-        return json({ detail: `Couldn't delete “${id === 'n3' ? 'First scene' : 'Ref scene'}”. “Shot 1” is still running. Stop the run first.`,
+        return json({ detail: `Couldn’t delete “${id === 'n3' ? 'First scene' : 'Ref scene'}”. “Shot 1” is still running. Stop the run first.`,
           rendering: { shots: [1], shotIds: ['s1'], stoppable: true } }, 409);
       }
       if (init?.method === 'DELETE') return json({ removal: null });
@@ -174,7 +174,7 @@ describe('GM (#200 r2 item 3): the multi-delete lines read in canvas order', () 
     });
     useGraphStore.getState().onNodesChange(['n6', 'n4', 'n5', 'n3'].map((id) => ({ id, type: 'remove' as const })));
     await sleep(120);
-    expect(notice()).toBe("Deleted “A” and “B”. “First scene” and “Ref scene” weren't deleted because their shots are still running.");
+    expect(notice()).toBe("Deleted “A” and “B”. “First scene” and “Ref scene” weren’t deleted because their shots are still running.");
   });
 });
 
@@ -188,7 +188,7 @@ describe('GM r9 decision 2: a clash with another window waits for the person', (
     await sleep(20);
     h.release();
     await sleep(60);
-    expect(unsaved()).toBe("Couldn't save your changes to “Opening”. They're kept and Nebula will try again.");
+    expect(unsaved()).toBe("Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again.");
     h.answerLater(() => json({ ok: true }));
     syncs(backendGraph({ id: 's1', prompt: 'from another window' }));
     await sleep(60);
@@ -214,6 +214,6 @@ describe('GM r9 decision 2: a clash with another window waits for the person', (
     await sleep(20);
     h.release();
     await sleep(120);
-    expect(said).toEqual(["Couldn't save your changes to “Opening”. The canvas switched to another project first."]);
+    expect(said).toEqual(["Couldn’t save your changes to “Opening”. The canvas switched to another project first."]);
   });
 });

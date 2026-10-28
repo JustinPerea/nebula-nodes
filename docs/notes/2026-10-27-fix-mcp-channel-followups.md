@@ -534,3 +534,41 @@ Live, fix round 9: 24 of 24 checks passed. The setup was an isolated backend on 
 - **Popover.** Saving stopped after 8 failures, then Codex's toast took the slot. The mark is a button, and its popover showed the line and [Try again]. [Try again] saved, and the mark went.
 - **Agent refusal.** A 409 with GM's detail. No Agent log row, no toast, and the typing stayed. After a read, the redo was taken and its row showed.
 - **Recovered copy.** Both notices are neutral toasts. The one for a copy deleted for good has × only; the one for a copy in Recently deleted has [Restore] and ×. Restore opened the copy with the usual notice.
+
+## Fix round 10 (PR #198 review 9, GM's pr198 r14 review and r15 answers)
+
+- **M-1: an MCP read guards a CLI or HTTP write again.** Round 9 split reads per session, so a write with no session found no read and went through unchecked. Now (`services/scene_keys.py`, `main._reader_agent`):
+  - a read under `name:<name>:<session>` is also recorded under `name:<name>`;
+  - a write is checked against its own session's read, and if it has none, against the name's, which is the newest read by any session of that name;
+  - so a CLI write (no session) on top of an MCP read is refused when the scene changed since that read, and taken on a fresh one;
+  - lanes that each send their own `NEBULA_AGENT_SESSION` stay apart, and a verified token (`chat:`, `token:`) is never the name's reader.
+
+  MCP-SETUP, SKILL.md and the MCP docstring say when MCP and the CLI share a read: when both send the same `NEBULA_AGENT_SESSION`, or when the write sends none.
+- **M-2: a save another writer refuses 20 times in a row stops, never silently.** It enters the stopped state (`stopSceneSave`): "Unsaved" with GM's stopped line, the toast and the mark's popover with [Try again]. The next change, a reconnect or [Try again] sends it again. A refusal with no key (a backend before round 8) is merged and sent once unconditionally, as the comment always said. Found live in this round: a sync that brings another writer's change no longer sends a stopped save (`settleRebasedScene`); the change shows on the card and the edits stay "Unsaved". Before, a busy agent paced a resend per sync.
+- **M-3 (GM r14: the bar follows the card).** `ProjectWorkspaceControls` says "Unsaved changes" while any scene is in `unsavedScenes`, over the project's own "Saving…" and "Saved"; "Save failed" still comes first. `beforeunload` also asks while `hasUnsavedSceneEdits()` (kept, stopped, unanswered, pending, in flight or in a clash).
+- **L-1.** `backendSceneRevs` is cleared when a sync comes from another backend process (`restarted`), on a graph replace, and when the socket's hello carries a new `bootId` (`subscribeBackendRestart`). Revisions start from the wall clock at boot, so they only go back across a restart, and a restart always brings a new `bootId` before the next save.
+- **L-2 (GM r15: approved).** ’ in every person-facing string this PR adds or touches (`fu10/curly.py` over the PR's added lines in `frontend/src`, string literals only), GM's r12 recovered-copy wording and the stopped line included. Two families that must read as one with those lines went whole: `lib/savingCutOff.ts` (its test says "one wording" with `paramSaveFailedLine`) and the other branch of `paramSaveFailedLine`. The rest of the app still uses straight apostrophes, so a line that joins a curly heading to an older reason mixes them (for example "Couldn’t connect the video node. Nebula didn't respond."). That is a question for GM, not fixed here.
+- **N-1.** `onlyIfFree` applies only to a single-connection input (`port_contracts.input_takes_one`); an input that takes several keeps its own `maxConnections`. MCP-SETUP says so.
+- **N-3.** The two round 9 store tests that passed on ff1f5968 now fail there and pass here: the stale 409 test asserts one refusal (`[409, 200]`, the second with the newest key) and that the card never shows the 409's older copy; the re-added shot test asserts the clash is really asked and the card's wires match Nebula's afterwards.
+- **GM r15 answer 3.** `SceneUnsavedMark` stops pointerdown, mousedown, click and double-click on the mark and on its popover (a portal, still inside the card in React's tree), and Enter/Space keydown, so React Flow neither selects nor starts a drag. `nodrag nopan` stays.
+- **GM r14 FOCUS.** The popover's [Try again] rings from `:focus-visible` only (`canvasProposals.css`). Live: a real mouse click on the mark gives focus with no ring; Escape gives focus back to the mark, and Enter opens it with the ring.
+- **GM r14 item 1, r15 answer 2: the notice stack.** The recovered copy's notice is no longer a toast. `CopyNotice` is the inline neutral notice at the top of Projects home, first in `.project-home__notices`, then the held edits or the line that says where they went, then the error. `useNoticeStackFocus` replaces `useFocusAfterHeldEdits`: when a notice goes and takes focus with it, focus moves to the notice now in its place, else the one before, onto its first control; a notice with no control (the saved line, an error with no Try again) takes focus itself. With the stack empty, focus goes to the "Recent projects" heading (`tabindex -1`, never ringed). React focus events bubble through portals, so the held edits' confirm counts as inside its notice. The h1 is no longer a focus target.
+- **Not this PR (GM r14):** the "Set scene" Agent log row goes to the wording batch.
+- **Tests.**
+  - Backend: `test_pr198_fix10.py`, 7 tests (M-1 four ways, verified tokens, N-1, the docs). On 17f57bad, 5 fail; the 2 that pass are the lanes and verified-token guards.
+  - Frontend: `graphStore.fix10` (9: M-2 five ways, L-1 three ways, M-3's unload prompt) and `pr198Fix10Ui` (20: the stack, the focus rules, the mark's presses, the CSS, the bar). On 17f57bad, 24 of the 29 fail; the 5 that pass are guards (no stack with no notice, focus never taken from elsewhere, "Save failed" first, fewer than 20 refusals, H-1 holds). The strengthened N-3 tests fail on ff1f5968.
+  - 40 earlier test files changed, almost all for the curly expectations (lines from untouched sources kept their straight apostrophes); the rest are the N-3 tests, the Recent projects focus target and a mock that lacked `unsavedScenes`.
+
+Gates, fix round 10:
+- tsc -b and lint: clean.
+- Focused vitest: 297 files, 4,744 passed (round 9's list plus the two new files).
+- Full backend: 12,029 passed, 71 skipped.
+- vite build plus the budget: 424,108 bytes raw.
+
+Live, fix round 10: the first run passed 15 of 17 checks. The 2 failures were the M-2 resend per sync and an error with no Try again taking no focus; both are fixed, and a rerun of those two sections passed 9 of 9, so all 17 checks pass. Isolated backend on 8797 (`fix9_server.py`, the free fake cinema handler), Vite on 5797, 8000–8010 and 5173 blocked (0 attempts after the canary).
+- The bar said "Unsaved changes" while the card was stopped, and "Saved" after [Try again] saved.
+- A real mouse click on the mark opened the popover with the curly line, selected nothing, and [Try again] had focus with no ring. From the keyboard the ring showed.
+- Codex wrote during each of the tab's slow saves: 21 refusals, then "Unsaved" with GM's line and the bar saying so, and no more PUTs while Codex kept writing. [Try again] once Codex stopped saved both changes.
+- An MCP read (session header) then a CLI write with no session: 409 `scene_changed`, the typing kept. A fresh MCP read, then the write: 200.
+- Projects home: the copy's notice inline above the error; × from the keyboard moved focus to the error box; with the stack empty, to "Recent projects" with no ring. [Restore] by mouse opened the copy. The error line in these shots was set from the page, since a real list failure can't be held while the copy's notice shows.
+- Not live: the backward clock across a restart (it needs a second backend process with a lower clock); the store tests cover it.

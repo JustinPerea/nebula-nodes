@@ -215,17 +215,17 @@ describe('M2: a scene without base opens; a studio that can\'t render is contain
     render(<StudioBoundary studio="cinema-editor" node={{ id: 'n4', label: 'Opening' }} problem={() => ({ field: 'scene.base', state: 'missing' })}><Boom /></StudioBoundary>);
     window.removeEventListener('nebula:agent-log-entry', listen);
     expect(screen.getByRole('alert').textContent).toContain(
-      "Couldn't open “Opening”. Some of its data is missing or damaged, so Nebula can't show it.");
+      "Couldn’t open “Opening”. Some of its data is missing or damaged, so Nebula can’t show it.");
     fireEvent.click(screen.getByRole('button', { name: 'Back to canvas' }));
     expect(exit).toHaveBeenCalled();
     // GM r8: a studio's line names the studio.
-    expect(logged).toEqual(['Couldn\'t open “Opening” in Cinema, node n4. scene.base is missing.']);
+    expect(logged).toEqual(['Couldn’t open “Opening” in Cinema, node n4. scene.base is missing.']);
   });
 
   it('with no label, the studio\'s noun', () => {
-    expect(studioBoundaryLine('cinema-editor', null, true)).toBe("Couldn't open this scene. Some of its data is missing or damaged, so Nebula can't show it.");
-    expect(studioBoundaryLine('editor', null, true)).toBe("Couldn't open this clip. Some of its data is missing or damaged, so Nebula can't show it.");
-    expect(studioBoundaryLine('remotion-editor', null, true)).toBe("Couldn't open this shot list. Some of its data is missing or damaged, so Nebula can't show it.");
+    expect(studioBoundaryLine('cinema-editor', null, true)).toBe("Couldn’t open this scene. Some of its data is missing or damaged, so Nebula can’t show it.");
+    expect(studioBoundaryLine('editor', null, true)).toBe("Couldn’t open this clip. Some of its data is missing or damaged, so Nebula can’t show it.");
+    expect(studioBoundaryLine('remotion-editor', null, true)).toBe("Couldn’t open this shot list. Some of its data is missing or damaged, so Nebula can’t show it.");
   });
 
   it('App puts every studio inside the boundary', () => {

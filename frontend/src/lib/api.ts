@@ -75,7 +75,7 @@ export const RUN_SAFEGUARDS_REASON = "Nebula couldn't save its run safeguards, s
  * (review 17 G1); a connected drive with space does. The heading names the
  * node ("Couldn't run “<node>”.") or the run ("Couldn't start the run."). A
  * corrupt catalog file is a separate gap (with Justin), not this line. */
-export const PROJECT_LIST_REASON = "Nebula can't read its project list, so nothing was started. Check that the drive Nebula saves to is connected and has space, then try again.";
+export const PROJECT_LIST_REASON = "Nebula can’t read its project list, so nothing was started. Check that the drive Nebula saves to is connected and has space, then try again.";
 /** The backend's codes for a 507 (main.py RUN_SAFETY_STORAGE_CODE, PROJECT_STORE_STORAGE_CODE). */
 export const RUN_SAFETY_STORAGE_CODE = 'run_safeguards';
 export const PROJECT_STORE_STORAGE_CODE = 'project_store';

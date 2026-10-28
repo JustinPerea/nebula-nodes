@@ -164,8 +164,8 @@ function shotList(numbers: readonly number[]): { text: string; several: boolean 
 export function renderingRemovalLine(action: 'undo' | 'redo', shots: RenderingShots): string {
   const { text, several } = shotList(shots.numbers);
   const end = shots.stoppable ? STOP_FIRST : WAIT_FOR_IT;
-  if (shots.numbers.length >= 4) return `Couldn't ${action}. It would remove ${text} that are still running. ${end}`;
-  return `Couldn't ${action}. It would remove ${text}, which ${several ? 'are' : 'is'} still running. ${end}`;
+  if (shots.numbers.length >= 4) return `Couldn’t ${action}. It would remove ${text} that are still running. ${end}`;
+  return `Couldn’t ${action}. It would remove ${text}, which ${several ? 'are' : 'is'} still running. ${end}`;
 }
 
 /** GM, PR #198 r4 item 3: the Delete over several scenes with shots
@@ -185,17 +185,17 @@ export const RUN_LOCK_REASON = 'Wait for the active run to finish.';
  * with no name), "Couldn't delete 3 nodes. …", "Couldn't undo. …",
  * "Couldn't redo. …". */
 export function runLockedLine(action: 'delete' | 'undo' | 'redo', count = 1, name?: string, names?: readonly string[]): string {
-  if (action !== 'delete') return `Couldn't ${action}. ${RUN_LOCK_REASON}`;
+  if (action !== 'delete') return `Couldn’t ${action}. ${RUN_LOCK_REASON}`;
   // GM r6: several nodes are named, up to 3, grouped by title, counted from 4.
   const what = names && names.length > 1 ? nodeNameList([...names]) : count === 1 ? name ?? 'the node' : `${count} nodes`;
-  return `Couldn't delete ${what}. ${RUN_LOCK_REASON}`;
+  return `Couldn’t delete ${what}. ${RUN_LOCK_REASON}`;
 }
 
 /** The run lock over a selection of only wires (PR #198 review 5, N1): the
  * Delete key is off during the run, and never silently. GM's pattern;
  * "connection" as the canvas's other wire lines say it. */
 export function runLockedWiresLine(count: number): string {
-  return `Couldn't delete ${count === 1 ? 'the connection' : `${count} connections`}. ${RUN_LOCK_REASON}`;
+  return `Couldn’t delete ${count === 1 ? 'the connection' : `${count} connections`}. ${RUN_LOCK_REASON}`;
 }
 
 /** GM, PR #198 r3 item 1: the scene's Delete, disabled while a shot
@@ -211,7 +211,7 @@ export function sceneDeleteBlockTitle(scene: string, shots: RenderingShots): str
  * "“Shot 2” and “Shot 3” are still running."; "4 shots are still running." */
 export function sceneDeleteRefusedLine(scene: string, shots: RenderingShots): string {
   const { text, several } = shotList(shots.numbers);
-  return `Couldn't delete “${scene}”. ${text} ${several ? 'are' : 'is'} still running. ${shots.stoppable ? STOP_FIRST : WAIT_FOR_IT}`;
+  return `Couldn’t delete “${scene}”. ${text} ${several ? 'are' : 'is'} still running. ${shots.stoppable ? STOP_FIRST : WAIT_FOR_IT}`;
 }
 
 /** GM, PR #198 r3 item 1, a multi-select delete that keeps the scene: the
@@ -223,11 +223,11 @@ export function sceneDeleteRefusedLine(scene: string, shots: RenderingShots): st
 export function scenesKeptLine(kept: readonly { scene: string; shots: RenderingShots }[]): string {
   if (kept.length === 1) {
     const { text, several } = shotList(kept[0].shots.numbers);
-    return `“${kept[0].scene}” wasn't deleted because ${text} ${several ? 'are' : 'is'} still running.`;
+    return `“${kept[0].scene}” wasn’t deleted because ${text} ${several ? 'are' : 'is'} still running.`;
   }
-  if (kept.length >= 4) return `${kept.length} scenes weren't deleted because their shots are still running.`;
+  if (kept.length >= 4) return `${kept.length} scenes weren’t deleted because their shots are still running.`;
   // GM r6: same titles grouped with a count ("2 “Scene” nodes").
-  return `${nodeNameList(kept.map((item) => item.scene))} weren't deleted because their shots are still running.`;
+  return `${nodeNameList(kept.map((item) => item.scene))} weren’t deleted because their shots are still running.`;
 }
 
 /** `wanted` (params an undo or redo puts back) with every shot that is

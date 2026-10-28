@@ -132,7 +132,7 @@ describe('a backend at a newer params version', () => {
     // GM r9 decision 1: never a reload by itself while edits are kept: the
     // line and [Reload Nebula] wait for the person.
     await vi.waitFor(() => expect(useProjectStore.getState().error).toBe(
-      "Couldn't save your changes because Nebula was updated. Reload Nebula and they'll open in a recovered copy of “alpha”."));
+      "Couldn’t save your changes because Nebula was updated. Reload Nebula and they’ll open in a recovered copy of “alpha”."));
     expect(projectRetryOffer(useProjectStore.getState())).toBe('reloadNebula');
     expect(reloadPage).not.toHaveBeenCalled();
     expect(JSON.parse(window.sessionStorage.getItem('nebula:recoveredForUpdate') ?? 'null')).toEqual({ id: 'recovered', name: 'recovered' });
@@ -575,7 +575,7 @@ describe('after a reload for an update', () => {
     const said = await reloadedTab([project(), { ...project('recovered'), name: 'alpha (recovered)' }]);
     await vi.waitFor(() => expect(projects.openProject).toHaveBeenCalledWith('recovered', expect.anything()));
     await vi.waitFor(() => expect(said).toEqual([
-      "These are the changes Nebula couldn't save before it updated. They're in “alpha (recovered)”."]));
+      "These are the changes Nebula couldn’t save before it updated. They’re in “alpha (recovered)”."]));
     expect(useProjectStore.getState().activeProject?.id).toBe('recovered');
     expect(window.sessionStorage.getItem('nebula:recoveredForUpdate')).toBeNull();
   });
@@ -586,7 +586,7 @@ describe('after a reload for an update', () => {
     const state = useProjectStore.getState();
     expect(state.error).toBeNull();
     expect(state.copyNotice).toEqual({ restore: null, line:
-      "Nebula couldn't save some changes before it updated. They were kept in “alpha (recovered)”, which was permanently deleted, so they can't be brought back." });
+      "Nebula couldn’t save some changes before it updated. They were kept in “alpha (recovered)”, which was permanently deleted, so they can’t be brought back." });
     const listed = vi.mocked(projects.listProjects).mock.calls.length;
     state.dismissCopyNotice();
     expect(useProjectStore.getState().copyNotice).toBeNull();
@@ -600,14 +600,14 @@ describe('after a reload for an update', () => {
     const state = useProjectStore.getState();
     expect(state.error).toBeNull();
     expect(state.copyNotice).toEqual({ restore: { id: 'recovered', name: 'alpha (recovered)' }, line:
-      "Nebula couldn't save some changes before it updated. They were kept in “alpha (recovered)”, which is in Recently deleted." });
+      "Nebula couldn’t save some changes before it updated. They were kept in “alpha (recovered)”, which is in Recently deleted." });
     vi.mocked(projects.restoreProject).mockResolvedValue({ ...project('recovered'), name: 'alpha (recovered)' } as never);
     await state.restoreCopyNotice();
     expect(useProjectStore.getState().copyNotice).toBeNull();
     expect(projects.restoreProject).toHaveBeenCalledWith('recovered');
     await vi.waitFor(() => expect(projects.openProject).toHaveBeenCalledWith('recovered', expect.anything()));
     await vi.waitFor(() => expect(said).toEqual([
-      "These are the changes Nebula couldn't save before it updated. They're in “alpha (recovered)”."]));
+      "These are the changes Nebula couldn’t save before it updated. They’re in “alpha (recovered)”."]));
     expect(useProjectStore.getState().activeProject?.id).toBe('recovered');
   });
 
@@ -624,7 +624,7 @@ describe('after a reload for an update', () => {
     vi.mocked(projects.openProject).mockRejectedValue(new Error('boom'));
     await useProjectStore.getState().initialize();
     await vi.waitFor(() => expect(useProjectStore.getState().error).toMatch(
-      /^These are the changes Nebula couldn't save before it updated\. They're in “alpha \(recovered\)”\. ./));
+      /^These are the changes Nebula couldn’t save before it updated\. They’re in “alpha \(recovered\)”\. ./));
     expect(useProjectStore.getState().errorRetry).toMatchObject({ reopen: 'recovered' });
   });
 });

@@ -98,19 +98,19 @@ describe('L2: a failed save names its own settings (GM, round 15)', () => {
   // failed-save line (lib/savingCutOff, tests/round23Lines).
   it('the exact one, two-or-three and four-or-more lines', () => {
     expect(graphStore.paramSaveFailedLine('Seed', 'Banana', true))
-      .toBe("Couldn't save “Seed” for “Banana”. It's back to its last saved value.");
+      .toBe("Couldn’t save “Seed” for “Banana”. It’s back to its last saved value.");
     expect(graphStore.paramSaveFailedLine(['Prompt', 'Seed'], 'Banana', true))
-      .toBe("Couldn't save “Prompt” and “Seed” for “Banana”. They're back to their last saved values.");
+      .toBe("Couldn’t save “Prompt” and “Seed” for “Banana”. They’re back to their last saved values.");
     expect(graphStore.paramSaveFailedLine(['Prompt', 'Seed', 'Size'], 'Banana', true))
-      .toBe("Couldn't save “Prompt”, “Seed” and “Size” for “Banana”. They're back to their last saved values.");
+      .toBe("Couldn’t save “Prompt”, “Seed” and “Size” for “Banana”. They’re back to their last saved values.");
     expect(graphStore.paramSaveFailedLine(['Prompt', 'Seed', 'Size', 'Steps'], 'Banana', true))
-      .toBe("Couldn't save 4 settings for “Banana”. They're back to their last saved values.");
+      .toBe("Couldn’t save 4 settings for “Banana”. They’re back to their last saved values.");
     expect(graphStore.paramSaveFailedLine(['Prompt', 'Seed'], 'Banana', false))
-      .toBe("Couldn't save “Prompt” and “Seed” for “Banana”.");
+      .toBe("Couldn’t save “Prompt” and “Seed” for “Banana”.");
     expect(graphStore.paramSaveFailedLine(['Prompt', 'Seed', 'Size'], 'Banana', false))
-      .toBe("Couldn't save “Prompt”, “Seed” and “Size” for “Banana”.");
+      .toBe("Couldn’t save “Prompt”, “Seed” and “Size” for “Banana”.");
     expect(graphStore.paramSaveFailedLine(['Prompt', 'Seed', 'Size', 'Steps'], 'Banana', false))
-      .toBe("Couldn't save 4 settings for “Banana”.");
+      .toBe("Couldn’t save 4 settings for “Banana”.");
   });
 
   it('probe P1: two requests, the first saved and the second refused, names only the second\'s key and reverts only it', async () => {
@@ -129,7 +129,7 @@ describe('L2: a failed save names its own settings (GM, round 15)', () => {
     firstAnswer.resolve?.(json({}));
     await settle(50);
     expect(notices.map((notice) => notice.line)).toEqual(
-      ["Couldn't save a setting on “Banana”. It's back to its last saved value."]);
+      ["Couldn’t save a setting on “Banana”. It’s back to its last saved value."]);
     expect(useGraphStore.getState().nodes[0].data.params).toMatchObject({ prompt: 'new prompt', seed: 1 });
   });
 
@@ -139,7 +139,7 @@ describe('L2: a failed save names its own settings (GM, round 15)', () => {
     useGraphStore.getState().updateNodeData('n5', { params: { prompt: 'new', seed: 7 } });
     await settle(PUSH_WAIT + 50);
     expect(notices.map((notice) => notice.line)).toEqual(
-      ["Couldn't save 2 settings for “Banana”. They're back to their last saved values."]);
+      ["Couldn’t save 2 settings for “Banana”. They’re back to their last saved values."]);
     expect(useGraphStore.getState().nodes[0].data.params).toMatchObject({ prompt: 'old', seed: 1 });
   });
 
@@ -152,7 +152,7 @@ describe('L2: a failed save names its own settings (GM, round 15)', () => {
     useGraphStore.getState().updateNodeData('n5', { params: { prompt: 'new', seed: 7, aspect_ratio: '16:9' } });
     await settle(PUSH_WAIT + 50);
     expect(notices.map((notice) => notice.line)).toEqual(
-      ["Couldn't save 3 settings for “Banana”. They're back to their last saved values."]);
+      ["Couldn’t save 3 settings for “Banana”. They’re back to their last saved values."]);
   });
 
   it('a key edited again while its save was out keeps the newer value, and the second sentence goes', async () => {
@@ -166,7 +166,7 @@ describe('L2: a failed save names its own settings (GM, round 15)', () => {
     answer.resolve?.(json({ detail: 'refused' }, 409));
     await settle(50);
     expect(notices.map((notice) => notice.line)).toEqual(
-      ["Couldn't save 2 settings for “Banana”."]);
+      ["Couldn’t save 2 settings for “Banana”."]);
     expect(useGraphStore.getState().nodes[0].data.params).toMatchObject({ prompt: 'newer', seed: 1 });
   });
 });
@@ -227,7 +227,7 @@ describe('L1: offline mid-drag, the node springs back to where the drag started'
   });
 });
 
-describe('held-delete lines (GM, round 15: "Couldn\'t delete “<node>”. <reason line>")', () => {
+describe('held-delete lines (GM, round 15: "Couldn’t delete “<node>”. <reason line>")', () => {
   it('one node, unconfirmed start or recovery ID', () => {
     expect(heldDeleteText(1, true, 1, '“Harbor world”')).toBe(
       "Couldn't delete “Harbor world”. A World Labs run needs your check first. Use the notice at the top of the screen.");

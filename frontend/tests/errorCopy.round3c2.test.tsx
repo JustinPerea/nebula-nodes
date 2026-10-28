@@ -182,6 +182,6 @@ describe('the motion handoff says "Couldn\'t …" and leaves the retry to its bu
 
   it('a refused request', async () => {
     const alert = await send(async () => ({ ok: false, status: 503, json: async () => ({}) }));
-    expect(alert.textContent).toBe("Couldn't connect the video node. Nebula didn't respond.");
+    expect(alert.textContent).toBe("Couldn’t connect the video node. Nebula didn't respond.");
   });
 });

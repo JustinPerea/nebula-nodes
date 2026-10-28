@@ -110,6 +110,7 @@ from services.port_contracts import (
     ContractEdge,
     ContractNode,
     cinema_output_ports,
+    input_takes_one,
     node_ports,
     validate_edge_contracts,
 )
@@ -997,12 +998,15 @@ def _scene_scope() -> str:
         return token
 
 
-def _reader_agent() -> str | None:
-    """The agent session behind this request, for services/scene_keys.py
-    (fix round 9, M-2: a session, never a name shared by several): a verified
-    token's chat session or the token itself; else the name with the
-    ``X-Nebula-Agent-Session`` it sent (the MCP server sends one per
-    process); else the name alone. None for the person and anonymous callers."""
+def _reader_agent() -> tuple[str, ...] | None:
+    """The agent session behind this request, for services/scene_keys.py, as
+    its reader keys, its own first (fix round 9, M-2: a session, never a name
+    shared by several): a verified token's chat session or the token itself;
+    else the name with the ``X-Nebula-Agent-Session`` it sent (the MCP server
+    sends one per process), then the bare name (fix round 10, M-1: a write
+    without a session, a CLI's or a plain PUT, is checked against the newest
+    read by any session of that name, so an MCP read guards it); else the
+    name alone. None for the person and anonymous callers."""
     try:
         actor = _canvas_change_actor()
     except Exception:  # noqa: BLE001 - reads never fail over this
@@ -1021,10 +1025,10 @@ def _reader_agent() -> str | None:
             record = None
         session = (record or {}).get("session") if isinstance(record, dict) else None
         if session:
-            return f"chat:{session}"
-        return "token:" + hashlib.sha256(token.encode("utf-8")).hexdigest()[:20]
+            return (f"chat:{session}",)
+        return ("token:" + hashlib.sha256(token.encode("utf-8")).hexdigest()[:20],)
     session = str(headers.get("x-nebula-agent-session") or "").strip()[:80]
-    return f"name:{name}:{session}" if session else f"name:{name}"
+    return (f"name:{name}:{session}", f"name:{name}") if session else (f"name:{name}",)
 
 
 def _scene_changed_refusal(node_id: str, node: dict[str, Any]) -> CodedRefusal:
@@ -12572,7 +12576,12 @@ async def connect_graph_nodes(body: dict[str, Any]) -> dict:
     # connected there now, nothing is added (409 ``input_taken``), so a
     # put-back never adds a second connection to a single input or replaces
     # one someone made since.
-    if body.get("onlyIfFree") is True and isinstance(body.get("target"), str):
+    target_node = cli_graph.nodes.get(body.get("target")) if isinstance(body.get("target"), str) else None
+    # Fix round 10, N-1: only an input that takes one connection is "taken";
+    # one that takes several is held to its maxConnections as any connect is.
+    if body.get("onlyIfFree") is True and target_node is not None and input_takes_one(
+            str(target_node.get("definitionId") or ""), body.get("targetHandle"), target_node.get("params"),
+            node_registry.get_all()):
         held = [edge for edge in cli_graph.edges
                 if edge.get("target") == body["target"] and edge.get("targetHandle") == body.get("targetHandle")
                 and (edge.get("source"), edge.get("sourceHandle")) != (body.get("source"), body.get("sourceHandle"))]

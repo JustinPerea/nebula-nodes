@@ -664,3 +664,14 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   z-index: var(--sr-layer-modal-control, 61);
   --notice-max-w: 360px;
 }
+
+/* GM r14 FOCUS: the popover's [Try again] takes focus when it opens. The
+   ring is :focus-visible only: none after a click on the mark, the neutral
+   ring when it was opened from the keyboard. Never a forced ring. */
+.scene-unsaved-popover .canvas-undo-notice__action:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid #fff);
+  outline-offset: var(--sr-focus-offset, 2px);
+}
+.scene-unsaved-popover .canvas-undo-notice__action:focus:not(:focus-visible) {
+  outline: none;
+}

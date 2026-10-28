@@ -1308,8 +1308,9 @@ def edit_canvas(
     (docs/MCP-SETUP.md, Cinema scenes over MCP); here you read the detail.
     MCP has no scene write: an existing scene can't be changed here (400).
     Its write over HTTP (PUT /api/graph/node/{id}, `nebula set`) is held to
-    the scene this session last read (this server sends its own
-    X-Nebula-Agent-Session, NEBULA_AGENT_SESSION to choose it): changed
+    what you read (this server sends its own X-Nebula-Agent-Session,
+    NEBULA_AGENT_SESSION to choose it; a write with no session is held to the
+    newest read by any session of your name, these looks included): changed
     since, it is refused with 409 `scene_changed` (`scene`, `sceneKey`,
     `sceneRev`, `changedBy`) and nothing is saved; read it again and redo
     your change (a refusal is not a read).

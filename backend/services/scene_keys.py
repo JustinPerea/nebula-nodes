@@ -23,8 +23,14 @@ another's unasked:
   must be refused again (fix round 9, L-1).
 - A reader is a session, not a name (fix round 9, M-2): a verified agent
   token's chat session (or the token itself), else the name plus the
-  ``X-Nebula-Agent-Session`` the MCP server sends, else the name alone (every
-  session of that name shares it).
+  ``X-Nebula-Agent-Session`` the MCP server sends, else the name alone.
+  A named session's read is also kept under the bare name (fix round 10,
+  M-1), and a write is checked against its own session's read when it has
+  one, else against the name's: the newest read by any session of that
+  name. So an MCP read guards a later ``nebula set`` or PUT that sends no
+  session (MCP has no scene write), and a CLI write on top of a fresh MCP
+  read is taken. Readers are given as a tuple, own key first
+  (``main._scene_readers``).
 
 Reads and writers are kept per canvas (``scope``: the live graph, its
 project and canvas epoch), so a node id another canvas uses never matches;
@@ -48,7 +54,7 @@ import json
 import time
 import weakref
 from collections import OrderedDict
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 RUNTIME_KEYS = ("output", "variations", "selectedVariation")
 MAX_READS = 4096
@@ -128,25 +134,41 @@ def revisions_of(scope: str, keys: Mapping[str, str]) -> dict[str, int]:
     return {node_id: revision(scope, node_id, key) for node_id, key in keys.items()}
 
 
-def note_read(scope: str, reader: str | None, keys: Mapping[str, str]) -> None:
-    """A reader (reader_key) read these scenes (``keys`` from keys_of)."""
+def _readers(reader: "str | Sequence[str] | None") -> tuple[str, ...]:
     if not reader:
-        return
-    for node_id, key in keys.items():
-        _keep(_reads, (scope, reader, node_id), key, MAX_READS)
+        return ()
+    if isinstance(reader, str):
+        return (reader,)
+    return tuple(key for key in reader if key)
 
 
-def last_read(scope: str, reader: str | None, node_id: str) -> str | None:
-    return _reads.get((scope, reader, node_id)) if reader else None
+def note_read(scope: str, reader: "str | Sequence[str] | None", keys: Mapping[str, str]) -> None:
+    """A reader read these scenes (``keys`` from keys_of): kept under each
+    of its keys (its session's, then its name's)."""
+    for name in _readers(reader):
+        for node_id, key in keys.items():
+            _keep(_reads, (scope, name, node_id), key, MAX_READS)
 
 
-def note_write(scope: str, node_id: str, actor: Mapping[str, Any] | None, key: str | None, reader: str | None) -> None:
+def last_read(scope: str, reader: "str | Sequence[str] | None", node_id: str) -> str | None:
+    """The scene the writer last read there: its own key's read first, else
+    the next key's (a session that never read falls back to its name's)."""
+    for name in _readers(reader):
+        found = _reads.get((scope, name, node_id))
+        if found is not None:
+            return found
+    return None
+
+
+def note_write(scope: str, node_id: str, actor: Mapping[str, Any] | None, key: str | None,
+               reader: "str | Sequence[str] | None") -> None:
     """A write changed the scene's authoring: who, and (for an agent) that
     it now knows this scene, as if it had read it."""
     if actor:
         _keep(_writers, (scope, node_id), dict(actor), MAX_WRITERS)
-    if reader and key:
-        _keep(_reads, (scope, reader, node_id), key, MAX_READS)
+    if key:
+        for name in _readers(reader):
+            _keep(_reads, (scope, name, node_id), key, MAX_READS)
 
 
 def writer(scope: str, node_id: str) -> dict[str, Any] | None:

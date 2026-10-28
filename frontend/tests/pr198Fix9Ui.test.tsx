@@ -28,7 +28,7 @@ import { copyDeletedAfterUpdateLine } from '../src/store/projectStore';
 
 afterEach(cleanup);
 
-const STOPPED = "Couldn't save your changes to “Opening”. They're kept and Nebula will try again with your next change.";
+const STOPPED = "Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again with your next change.";
 
 describe('GM r12 item 1: the stopped save\'s popover on the "Unsaved" mark', () => {
   it('before it stops: the mark is text with its tooltip, no button', () => {
@@ -93,14 +93,17 @@ const props = (overrides: Partial<ProjectHomeProps> = {}): ProjectHomeProps => (
 describe('GM r12 item 5: the recovered copy\'s notices', () => {
   it('in Recently deleted: GM\'s line, [Restore] and ×, never the error box', () => {
     const line = copyDeletedAfterUpdateLine('Alpha (recovered)', false);
-    expect(line).toBe("Nebula couldn't save some changes before it updated. They were kept in “Alpha (recovered)”, which is in Recently deleted.");
+    expect(line).toBe("Nebula couldn’t save some changes before it updated. They were kept in “Alpha (recovered)”, which is in Recently deleted.");
     const onRestoreCopy = vi.fn();
     const onDismissCopy = vi.fn();
     const { container } = render(<ProjectHome {...props({ copyNotice: { line, restore: { id: 'r', name: 'Alpha (recovered)' } },
       onRestoreCopy, onDismissCopy })} />);
     expect(container.querySelector('.project-home__error')).toBeNull();
     const notice = container.querySelector('[data-copy-notice]') as HTMLElement;
-    expect(notice.classList.contains('project-home__toast')).toBe(true);
+    // GM r14 item 1: not a toast; the inline notice in the notice stack.
+    expect(notice.classList.contains('project-home__notice')).toBe(true);
+    expect(notice.classList.contains('project-home__toast')).toBe(false);
+    expect(notice.closest('.project-home__notices')).toBeTruthy();
     expect(within(notice).getByText(line)).toBeTruthy();
     expect(within(notice).queryByRole('button', { name: 'Dismiss' })).toBeTruthy();
     fireEvent.click(within(notice).getByRole('button', { name: 'Restore' }));
@@ -111,7 +114,7 @@ describe('GM r12 item 5: the recovered copy\'s notices', () => {
 
   it('deleted for good: GM\'s line and × only', () => {
     const line = copyDeletedAfterUpdateLine('Alpha (recovered 2)', true);
-    expect(line).toBe("Nebula couldn't save some changes before it updated. They were kept in “Alpha (recovered 2)”, which was permanently deleted, so they can't be brought back.");
+    expect(line).toBe("Nebula couldn’t save some changes before it updated. They were kept in “Alpha (recovered 2)”, which was permanently deleted, so they can’t be brought back.");
     const { container } = render(<ProjectHome {...props({ copyNotice: { line, restore: null } })} />);
     const notice = container.querySelector('[data-copy-notice]') as HTMLElement;
     expect(within(notice).getAllByRole('button').map((button) => button.getAttribute('aria-label') ?? button.textContent)).toEqual(['Dismiss']);

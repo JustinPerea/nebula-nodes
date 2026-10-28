@@ -188,12 +188,12 @@ describe('the Run chip tooltip names each reason', () => {
   it('a missing key names the provider as the node\'s own line does', () => {
     const flux = priced('f', 'flux-2-pro', { _provider: 'fal' }, 'Flux');
     const summary = summarizeRunScope([priced('a', 'nano-banana'), flux], [], { kind: 'graph' }, context);
-    expect(runChipTitle(summary)).toBe('The priced part of this run costs about $0.05.\n“Flux” can\'t be priced until its fal.ai API key is added.');
+    expect(runChipTitle(summary)).toBe('The priced part of this run costs about $0.05.\n“Flux” can’t be priced until its fal.ai API key is added.');
     // The node's own route line (its card, the switcher and the run error) names it the same way.
     expect(routeUnavailable(NODE_DEFINITIONS['flux-2-pro'], { _provider: 'fal' }, {})!.message).toContain('your fal.ai API key');
     // Auto with no key at all: either provider's key.
     const auto = summarizeRunScope([priced('a', 'nano-banana'), priced('g', 'flux-2-pro', {}, 'Flux auto')], [], { kind: 'graph' }, context);
-    expect(runChipTitle(auto)).toContain('“Flux auto” can\'t be priced until its Black Forest Labs or fal.ai API key is added.');
+    expect(runChipTitle(auto)).toContain('“Flux auto” can’t be priced until its Black Forest Labs or fal.ai API key is added.');
   });
 
   it('a node priced only on a provider whose key is missing reads as a missing key, not as no listed price (live check)', () => {
@@ -203,7 +203,7 @@ describe('the Run chip tooltip names each reason', () => {
     const graph = [priced('a', 'nano-banana'), priced('s', 'cinema-scene', { scene: { shots: [{ id: 's1', prompt: 'a' }] } }, 'Opening'),
       priced('d', 'seedream-4-5', {}, 'Seedream')];
     expect(runChipTitle(summarizeRunScope(graph, [], { kind: 'graph' }, { ...seedream, apiKeys: {} }))).toBe('The priced part of this run costs '
-      + 'about $0.05.\n“Opening” and “Seedream” can\'t be priced until their BytePlus or fal.ai API key is added.');
+      + 'about $0.05.\n“Opening” and “Seedream” can’t be priced until their BytePlus or fal.ai API key is added.');
     // A fal.ai key alone: the run goes to fal.ai, which has no listed price.
     expect(runChipTitle(summarizeRunScope(graph, [], { kind: 'graph' }, { ...seedream, apiKeys: { FAL_KEY: 'set' } })))
       .toBe('The priced part of this run costs about $0.05.\n“Opening” and “Seedream” have no listed price.');
@@ -218,7 +218,7 @@ describe('the Run chip tooltip names each reason', () => {
     const wire: Edge[] = [{ id: 'w', source: 'in', sourceHandle: 'image', target: 'up', targetHandle: 'image' }];
     const keys = { FAL_KEY: 'set' };
     const summary = summarizeRunScope([priced('a', 'nano-banana'), upload, seedvr], wire, { kind: 'graph' }, { pricing, apiKeys: keys });
-    expect(runChipTitle(summary)).toBe('The priced part of this run costs about $0.05.\n“Upscale” is priced from its input, which isn\'t ready yet.');
+    expect(runChipTitle(summary)).toBe('The priced part of this run costs about $0.05.\n“Upscale” is priced from its input, which isn’t ready yet.');
     const unreadable = summarizeRunScope([priced('a', 'nano-banana'), upload, seedvr], wire, { kind: 'graph' },
       { pricing, apiKeys: keys, sizes: { '/out/a.png': null } });
     expect(runChipTitle(unreadable)).toContain('“Upscale”');
@@ -243,7 +243,7 @@ describe('the Run chip tooltip names each reason', () => {
       'The priced part of this run costs between $0.01 and $0.20.',
       '“Writer” and “Writer 2” have no listed price.',
       '“Edit” may cost more for its input images, which the estimate leaves out.',
-      '“Flux” can\'t be priced until its fal.ai API key is added.',
+      '“Flux” can’t be priced until its fal.ai API key is added.',
     ].join('\n'));
     expect(title).not.toContain(':');
     // GM r9 bug 2: one reason per line, under the priced part's.

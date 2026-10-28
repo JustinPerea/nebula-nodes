@@ -230,7 +230,7 @@ describe('Commons label drafts (GM line; review 17 L3)', () => {
   });
 
   it('the accents line says "changed"', () => {
-    expect(ACCENTS_CHANGED_ELSEWHERE).toBe("You changed this reference's accents in another window while Nebula was offline, so your changes here weren't saved.");
+    expect(ACCENTS_CHANGED_ELSEWHERE).toBe("You changed this reference’s accents in another window while Nebula was offline, so your changes here weren’t saved.");
   });
 
   async function draftThenReconnectTo(fresh: EvaluationBatch) {

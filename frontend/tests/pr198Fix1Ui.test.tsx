@@ -82,8 +82,8 @@ describe('GM (4): Commons, a replaced image or batch gets its own line', () => {
   });
 
   it('the two lines, verbatim', () => {
-    expect(IMAGE_REPLACED_ELSEWHERE).toBe("You replaced this reference's image in another window while Nebula was offline, so your changes here weren't saved.");
-    expect(BATCH_REPLACED_ELSEWHERE).toBe("You replaced this batch in another window while Nebula was offline, so your changes here weren't saved.");
+    expect(IMAGE_REPLACED_ELSEWHERE).toBe("You replaced this reference’s image in another window while Nebula was offline, so your changes here weren’t saved.");
+    expect(BATCH_REPLACED_ELSEWHERE).toBe("You replaced this batch in another window while Nebula was offline, so your changes here weren’t saved.");
   });
 
   async function draftThenReconnectTo(fresh: EvaluationBatch) {

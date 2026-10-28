@@ -231,12 +231,22 @@ describe('H-1: a sync older than what the tab knows is never merged as new', () 
       h.other((shots) => setPrompt(shots, 's3', 'w1'), 'window');
       await sleep(10);
     });
+    const seen: string[] = [];
+    const off = useGraphStore.subscribe(() => { const now = brief().join(' '); if (seen[seen.length - 1] !== now) seen.push(now); });
     typeIn('s1', 'p1');
     await sleep(120);
+    off();
     expect(h.backendBrief()).toEqual(['s1:p1', 's2:c1', 's3:w1']);
     expect(brief()).toEqual(['s1:p1', 's2:c1', 's3:w1']);
     expect(clash()).toBeNull();
     expect(said).toEqual([]);
+    // Review 9, N-3: what the revision changes. The old 409 is merged onto
+    // the newer scene the tab has, so the next save is the one that lands
+    // (never a second refusal from sending onto the 409's older copy), and
+    // the card never shows that older copy on the way.
+    expect(h.puts.map((put) => put.status)).toEqual([409, 200]);
+    expect(h.puts[1].ifKey).toBe(JSON.stringify([['s1', 'a'], ['s2', 'c1'], ['s3', 'w1']]));
+    expect(seen).not.toContain('s1:p1 s2:c1 s3:c');
   });
 
   it('every sync from the backend says its revision; one below what the tab has is dropped whole for the scene', async () => {
@@ -319,12 +329,19 @@ describe('M-3 (GM r13 answer 1): a removed shot put back while the choice waits'
     const h = await removed('agent');
     h.other((shots) => [...shots, { id: 's2', prompt: 'codex re-added' }]);
     await sleep(60);
+    // Review 9, N-3: the choice is really asked (the re-added shot is a
+    // clash of its own), so "Use Codex’s" is what settles it.
+    expect(clash()?.line).toBe('Codex changed “Shot 2” while you were editing it.');
+    expect(unsaved()).toBe('Codex changed “Shot 2” while you were editing it.');
     useGraphStore.getState().resolveSceneClash('n1', 'theirs');
     await sleep(80);
     expect(brief()).toEqual(['s1:a', 's2:codex re-added']);
     expect(h.backendBrief()).toEqual(['s1:a', 's2:codex re-added']);
     expect(clash()).toBeNull();
     expect(unsaved()).toBeNull();
+    // Codex's shot came back without the connection its removal took: the
+    // card has the connections Nebula has, none left over.
+    expect(wiresNow()).toEqual(h.state.edges.map(edgeName));
   });
 });
 

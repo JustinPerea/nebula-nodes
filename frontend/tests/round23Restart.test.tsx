@@ -128,7 +128,7 @@ describe('review 22 L-2: a loaded or replaced canvas never inherits the previous
     expect(puts('n1')).not.toContain('1793000000001');
     expect(nebula().valueOf('n1')).toBe('AG');
     expect(valueOf('n1')).toBe('AG');
-    expect(lines()).toEqual(["Couldn't save “Text” for “n1”."]);
+    expect(lines()).toEqual(["Couldn’t save “Text” for “n1”."]);
   });
 
   it('the same after an import (loadGraph) over the canvas', async () => {

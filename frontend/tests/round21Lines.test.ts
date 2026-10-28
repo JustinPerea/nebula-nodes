@@ -22,14 +22,14 @@ describe('L-8: cut-off saves count by node id', () => {
 
   it('two nodes with the same title and setting are two changes', () => {
     expect(agentClearedLine([twin('n1'), twin('n2')], 'Codex'))
-      .toBe('Codex cleared the canvas while you were editing 2 settings. Those changes weren\'t saved.');
+      .toBe('Codex cleared the canvas while you were editing 2 settings. Those changes weren’t saved.');
     expect(handoffFailedLine([twin('n1'), twin('n2')], 'Glass', 'Codex', 'Glass (recovered)'))
-      .toBe(`Couldn't save 2 changes in “Glass” when Codex switched projects. Your edits were saved as a copy, “Glass${NBSP}(recovered)”.`);
+      .toBe(`Couldn’t save 2 changes in “Glass” when Codex switched projects. Your edits were saved as a copy, “Glass${NBSP}(recovered)”.`);
   });
 
   it('the same node and setting twice is one change', () => {
     expect(agentClearedLine([twin('n1'), twin('n1')], 'Codex'))
-      .toBe('Codex cleared the canvas while you were editing “Text” for “Text Input”. That change wasn\'t saved.');
+      .toBe('Codex cleared the canvas while you were editing “Text” for “Text Input”. That change wasn’t saved.');
   });
 });
 
@@ -37,13 +37,13 @@ describe('GM (LOCKED): the failed handoff line keeps quoted project names whole'
   it('non-breaking spaces inside the quoted names only', () => {
     expect(handoffFailedLine([{ nodeId: 'n1', node: 'Hero prompt', setting: 'Text' }], 'Glass campaign', 'Claude Code',
       'Glass campaign (recovered 2)'))
-      .toBe(`Couldn't save “Text” for “Hero prompt” in “Glass${NBSP}campaign” when Claude Code switched projects. `
+      .toBe(`Couldn’t save “Text” for “Hero prompt” in “Glass${NBSP}campaign” when Claude Code switched projects. `
         + `Your edits were saved as a copy, “Glass${NBSP}campaign${NBSP}(recovered${NBSP}2)”.`);
   });
 
   it('an unknown agent and an unnamed change', () => {
     expect(handoffFailedLine([], 'Glass campaign', null, 'Glass campaign (recovered)'))
-      .toBe(`Couldn't save your last change in “Glass${NBSP}campaign” when an agent switched projects. `
+      .toBe(`Couldn’t save your last change in “Glass${NBSP}campaign” when an agent switched projects. `
         + `Your edits were saved as a copy, “Glass${NBSP}campaign${NBSP}(recovered)”.`);
   });
 });

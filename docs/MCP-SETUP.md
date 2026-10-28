@@ -3575,14 +3575,25 @@ back over the other's change):
 A write whose scene is the one Nebula has now is never refused (it changes
 nothing in the scene; its other params are saved).
 
-**Who a reader is.** A read belongs to a session, not a name: a verified
-agent token (`Authorization: Agent <token>`) is its chat session's reader;
-otherwise the name in `X-Nebula-Agent` together with
+**Who a reader is.** A read belongs to a session: a verified agent token
+(`Authorization: Agent <token>`) is its chat session's reader, apart from
+everyone else; otherwise the name in `X-Nebula-Agent` together with
 `X-Nebula-Agent-Session`. The MCP server sends a session of its own (one per
 server process; set `NEBULA_AGENT_SESSION` to choose it), and the CLI sends
-`NEBULA_AGENT_SESSION` when it is set. `X-Nebula-Agent` alone is one reader
-for every session of that name, so two lanes of one agent without a session
-share their reads; give each lane its own `NEBULA_AGENT_SESSION`.
+`NEBULA_AGENT_SESSION` only when it is set. A read under a session is also
+kept as the name's read, and a write is checked:
+
+- with a session that has read the scene, against that session's own read
+  (two lanes with their own sessions never share a read);
+- otherwise (no session, as `nebula set` and a plain PUT send by default,
+  or a session that never read the scene), against the newest read by any
+  session of that name.
+
+So MCP and the CLI share a read exactly when both send the same
+`NEBULA_AGENT_SESSION`, or when the write sends none: a scene you looked at
+over MCP guards a later `nebula set` with no session, and a `nebula set` on
+top of a fresh MCP look is taken. A lane that writes with its own session
+must read with that session too.
 
 **What counts as a read.** The export, the snapshot and `GET /api/graph`
 (`nebula look`), every time: a loop that polls the export as an agent keeps
@@ -3625,17 +3636,22 @@ were editing them."; for shots you removed that they were editing "Codex
 removed “Shot 2” and “Shot 3” while you were editing them."; when a removed
 shot comes back with other text, "Codex changed “Shot 2” while you were
 editing it."). It is never a "Couldn't save" line and never counts toward
-the canvas's retries. The canvas ignores any scene below a revision it has
-already seen (a sync that arrives late). So when you change a scene the
+the canvas's retries (when a writer refuses it 20 times in a row the save
+stops, "Unsaved" with [Try again], until the person's next change). The
+canvas ignores any scene below a revision it has already seen from the same
+backend process (a sync that arrives late); a restarted Nebula starts the
+count again. So when you change a scene the
 person is editing, your change stays unless they changed the same field and
 choose Keep mine; read the scene again before a second write.
 
 When Keep mine brings back a shot you removed, its connections go back
 with `POST /api/graph/connect` and `"onlyIfFree": true`: if that input
-holds another connection now (yours, say), Nebula refuses with 409
-`input_taken` and nothing changes; the card then says "“Shot 2” is back
-without its connection to “Edit A”." A connect without `onlyIfFree` is as
-before.
+takes one connection (a single-connection input) and holds another one now
+(yours, say), Nebula refuses with 409 `input_taken` and nothing changes;
+the card then says "“Shot 2” is back without its connection to “Edit A”."
+Into an input that takes several, `onlyIfFree` changes nothing: the connect
+is held to that input's `maxConnections`, as any connect is. A connect
+without `onlyIfFree` is as before.
 
 The other whole-write refusals of a scene write carry a `code` too, so a
 client picks its words by the cause, not the text (each `detail` is as it

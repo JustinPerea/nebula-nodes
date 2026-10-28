@@ -10,30 +10,30 @@ import { nodeNameList, quotedNames } from './errorCopy';
 /** "Couldn't save your changes to “Opening”." The heading of every line below
  * but the 413's, which is GM's own (r6 item 1). */
 export function sceneSaveHeading(scene: string): string {
-  return `Couldn't save your changes to “${scene}”.`;
+  return `Couldn’t save your changes to “${scene}”.`;
 }
 
 /** 413, the whole save (GM r6 item 1, verbatim): "Couldn't save “Scene”. The
  * project is too big to save. Remove something and Nebula will save your changes." */
 export const SCENE_TOO_BIG = 'The project is too big to save. Remove something and Nebula will save your changes.';
 export function sceneTooBigLine(scene: string): string {
-  return `Couldn't save “${scene}”. ${SCENE_TOO_BIG}`;
+  return `Couldn’t save “${scene}”. ${SCENE_TOO_BIG}`;
 }
 
 /** Clears by itself (a paid start, an approved run's inputs, any run lock;
  * GM r7, reworded r9): "…They're kept and will save when the run finishes." */
-export const KEPT_UNTIL_RUN_ENDS = "They're kept and will save when the run finishes.";
+export const KEPT_UNTIL_RUN_ENDS = "They’re kept and will save when the run finishes.";
 
 /** A server error, with the automatic retry the canvas makes (GM r9,
  * verbatim): "Couldn't save your changes to “Opening”. They're kept and
  * Nebula will try again."
  * After SCENE_SERVER_RETRIES timed tries the timer stops: KEPT_UNTIL_NEXT_CHANGE. */
-export const KEPT_AND_RETRYING = "They're kept and Nebula will try again.";
+export const KEPT_AND_RETRYING = "They’re kept and Nebula will try again.";
 
 /** The timed retries stopped (GM r11 answer 3, verbatim): "Couldn't save
  * your changes to “Opening”. They're kept and Nebula will try again with your
  * next change.", with [Try again]. A reconnect still sends them by itself. */
-export const KEPT_UNTIL_NEXT_CHANGE = "They're kept and Nebula will try again with your next change.";
+export const KEPT_UNTIL_NEXT_CHANGE = "They’re kept and Nebula will try again with your next change.";
 /** GM r11 answer 3: the line once the timed retries stopped. */
 export function sceneStoppedLine(scene: string): string {
   return `${sceneSaveHeading(scene)} ${KEPT_UNTIL_NEXT_CHANGE}`;
@@ -56,7 +56,7 @@ export const SWITCHED_UNNAMED = 'The canvas switched to another project first.';
 
 /** 400, a bad save, which is Nebula's bug (GM r7, verbatim). The detail goes
  * in the Agent log. */
-export const BAD_SAVE = "Nebula ran into a problem saving them, so they're kept on screen but not saved.";
+export const BAD_SAVE = "Nebula ran into a problem saving them, so they’re kept on screen but not saved.";
 
 /** The scene card's mark while its edits aren't saved (GM r9: "Unsaved", to
  * match the bar's "Unsaved changes"): a small label under the card's header,

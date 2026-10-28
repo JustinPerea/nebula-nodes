@@ -178,7 +178,7 @@ describe('L2 (probe X4): a param push refused just after the offline flip', () =
     noteBackendConnection('offline');
     await sleep(400);
     expect(sent().filter((line) => line.startsWith('PUT'))).toEqual([]);
-    expect(notices).toEqual(["Couldn't save “Text” for “Brief”. It's back to its last saved value."]);
+    expect(notices).toEqual(["Couldn’t save “Text” for “Brief”. It’s back to its last saved value."]);
     expect(useGraphStore.getState().nodes[0].data.params.value).toBe('saved');
   });
 });

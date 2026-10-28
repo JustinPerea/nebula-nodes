@@ -7,36 +7,36 @@ import { deleteRefusalText } from '../../src/lib/worldLabsWaiting';
 
 /**
  * GM, PR #198 r5 item 3: "one line only, the backend's named line …. Never
- * put the generic "Couldn't delete the node." in front of it. Rule: when a
+ * put the generic "Couldn’t delete the node." in front of it. Rule: when a
  * specific line exists, the generic one never shows as well."
  */
 
-const NAMED = "Couldn't delete “Agent scene”. “Shot 2” is still running. Stop the run first.";
+const NAMED = "Couldn’t delete “Agent scene”. “Shot 2” is still running. Stop the run first.";
 
 describe('the rule', () => {
   it('a named reason alone, under a generic heading or one with the same failure', () => {
     expect(isNamedLine(NAMED)).toBe(true);
     expect(isNamedLine('Stop the run first.')).toBe(false);
-    expect(headedLine("Couldn't delete the node.", NAMED)).toBe(NAMED);
-    expect(headedLine("Couldn't delete 2 nodes.", NAMED)).toBe(NAMED);
-    expect(headedLine("Couldn't delete “Agent scene”.", NAMED)).toBe(NAMED);
-    expect(oneLine({ heading: "Couldn't delete the node.", reason: NAMED })).toBe(NAMED);
+    expect(headedLine("Couldn’t delete the node.", NAMED)).toBe(NAMED);
+    expect(headedLine("Couldn’t delete 2 nodes.", NAMED)).toBe(NAMED);
+    expect(headedLine("Couldn’t delete “Agent scene”.", NAMED)).toBe(NAMED);
+    expect(oneLine({ heading: "Couldn’t delete the node.", reason: NAMED })).toBe(NAMED);
   });
 
   it('a heading that names something the reason doesn\'t stays', () => {
     expect(headedLine("Couldn't run “Hero still”.", "Couldn't reach Krea.")).toBe("Couldn't run “Hero still”. Couldn't reach Krea.");
-    expect(headedLine("Couldn't delete the node.", 'It is locked.')).toBe("Couldn't delete the node. It is locked.");
+    expect(headedLine("Couldn’t delete the node.", 'It is locked.')).toBe("Couldn’t delete the node. It is locked.");
     expect(headedLine('', NAMED)).toBe(NAMED);
-    expect(headedLine("Couldn't delete the node.", '')).toBe("Couldn't delete the node.");
+    expect(headedLine("Couldn’t delete the node.", '')).toBe("Couldn’t delete the node.");
   });
 
   it('a refused request\'s own message follows it', () => {
-    expect(new RequestFailedError("Couldn't delete the node.", 409, { detail: NAMED }).message).toBe(NAMED);
+    expect(new RequestFailedError("Couldn’t delete the node.", 409, { detail: NAMED }).message).toBe(NAMED);
   });
 
   it('the canvas\'s delete refusals', () => {
-    expect(deleteRefusalText("Couldn't delete the node.", 1, [NAMED])).toBe(NAMED);
-    expect(deleteRefusalText("Couldn't delete 2 nodes.", 2, [NAMED, NAMED])).toBe(NAMED);
+    expect(deleteRefusalText("Couldn’t delete the node.", 1, [NAMED])).toBe(NAMED);
+    expect(deleteRefusalText("Couldn’t delete 2 nodes.", 2, [NAMED, NAMED])).toBe(NAMED);
   });
 });
 
@@ -60,13 +60,13 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
     why: "GM's own World Labs line: the tail is a fixed sentence" },
   { file: 'lib/worldLabsWaiting.ts', text: '`Couldn\'t delete them. ${waiting} waiting on World Labs. Check Marble, then ${then}`',
     why: "GM's own World Labs line: the interpolations are its fixed words" },
-  { file: 'lib/cinemaScene.ts', text: '`Couldn\'t ${action}. ${RUN_LOCK_REASON}`', why: 'GM\'s run-lock line: the tail is a fixed sentence' },
-  { file: 'lib/cinemaScene.ts', text: '`Couldn\'t delete ${what}. ${RUN_LOCK_REASON}`', why: 'GM\'s run-lock line: the tail is a fixed sentence' },
-  { file: 'lib/cinemaScene.ts', text: '`Couldn\'t delete ${count === 1 ? \'the connection\' : `${count} connections`}. ${RUN_LOCK_REASON}`',
+  { file: 'lib/cinemaScene.ts', text: '`Couldn’t ${action}. ${RUN_LOCK_REASON}`', why: 'GM\'s run-lock line: the tail is a fixed sentence' },
+  { file: 'lib/cinemaScene.ts', text: '`Couldn’t delete ${what}. ${RUN_LOCK_REASON}`', why: 'GM\'s run-lock line: the tail is a fixed sentence' },
+  { file: 'lib/cinemaScene.ts', text: '`Couldn’t delete ${count === 1 ? \'the connection\' : `${count} connections`}. ${RUN_LOCK_REASON}`',
     why: 'GM\'s run-lock line for wires: the tail is a fixed sentence' },
   { file: 'store/graphStore.ts', text: '`${heading} ${REFUSED_FALLBACK_COPY}`', why: 'the fixed fallback after a heading' },
   { file: 'store/graphStore.ts', text: '`${heading} ${err.raw}`', why: "the Agent log's raw form (agents read the raw text)" },
-  { file: 'lib/cinemaScene.ts', text: '`Couldn\'t delete “${scene}”. ${text} ${several ? \'are\' : \'is\'} still running. ${shots.stoppable ? STOP_FIRST : WAIT_FOR_IT}`',
+  { file: 'lib/cinemaScene.ts', text: '`Couldn’t delete “${scene}”. ${text} ${several ? \'are\' : \'is\'} still running. ${shots.stoppable ? STOP_FIRST : WAIT_FOR_IT}`',
     why: "GM's own scene line: the interpolations are names and its fixed words" },
   // PR #195's lines, reviewed in the merge with #198: each tail is GM's own
   // fixed "is opening" or "isn't answering" sentence, never a failure line.
@@ -77,18 +77,18 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
   { file: 'lib/deleteCopy.ts', text: '`Couldn\'t delete ${what}. ${DELETE_NO_ANSWER_REASON}`',
     why: 'GM\'s no-answer delete line (#195): the tail is a fixed sentence' },
   { file: 'lib/canvasFileDrop.ts', text: '`Couldn\'t add ${quoted(failure.name)}. ${DROP_TYPES_LINE}`', why: 'the tail is a fixed sentence' },
-  { file: 'lib/sceneSaveCopy.ts', text: '`Couldn\'t save “${scene}”. ${SCENE_TOO_BIG}`', why: 'the tail is a fixed sentence' },
+  { file: 'lib/sceneSaveCopy.ts', text: '`Couldn’t save “${scene}”. ${SCENE_TOO_BIG}`', why: 'the tail is a fixed sentence' },
   { file: 'lib/directRoute.ts', text: '`${name} can\'t run on ${providerLabel(spec.provider)}${whyPerson(definition, spec, block, params)}. ${fix}${also}`',
     why: 'GM\'s direct-route line: the tail is its own fixed "fix" sentences' },
   { file: 'store/providerReadinessStore.ts', text: '`${CHECK_HEADING} ${REFUSED_FALLBACK_COPY}`', why: 'the fixed fallback after a heading' },
-  { file: 'lib/studioBoundary.ts', text: '`Couldn\'t open ${subject}. ${damaged ? STUDIO_DAMAGED : STUDIO_NEUTRAL}`', why: 'the tail is one of two fixed sentences' },
-  { file: 'lib/studioBoundary.ts', text: '`Couldn\'t show ${label ? `“${label}”` : \'this node\'}. ${damaged ? CARD_DAMAGED : CARD_NEUTRAL}`',
+  { file: 'lib/studioBoundary.ts', text: '`Couldn’t open ${subject}. ${damaged ? STUDIO_DAMAGED : STUDIO_NEUTRAL}`', why: 'the tail is one of two fixed sentences' },
+  { file: 'lib/studioBoundary.ts', text: '`Couldn’t show ${label ? `“${label}”` : \'this node\'}. ${damaged ? CARD_DAMAGED : CARD_NEUTRAL}`',
     why: 'the tail is one of two fixed sentences' },
-  { file: 'lib/studioBoundary.ts', text: '`Couldn\'t open ${label ? `“${label}”` : \'a node\'}${where}, node ${nodeId}. ${what}`',
+  { file: 'lib/studioBoundary.ts', text: '`Couldn’t open ${label ? `“${label}”` : \'a node\'}${where}, node ${nodeId}. ${what}`',
     why: 'Agent log: the tail is a field sentence ("scene.base is missing.")' },
-  { file: 'lib/studioBoundary.ts', text: '`Couldn\'t draw ${label ? `“${label}”` : \'a node\'}, node ${nodeId}. ${errorText(error)}`',
+  { file: 'lib/studioBoundary.ts', text: '`Couldn’t draw ${label ? `“${label}”` : \'a node\'}, node ${nodeId}. ${errorText(error)}`',
     why: "Agent log: the tail is the error's own message, for agents" },
-  { file: 'lib/studioBoundary.ts', text: '`Couldn\'t open ${label ? `“${label}”` : \'a node\'} in ${STUDIO_PLACE[studio]}, node ${nodeId}. ${errorText(error)}`',
+  { file: 'lib/studioBoundary.ts', text: '`Couldn’t open ${label ? `“${label}”` : \'a node\'} in ${STUDIO_PLACE[studio]}, node ${nodeId}. ${errorText(error)}`',
     why: "Agent log: the tail is the error's own message, for agents" },
   // Round 5's whole-save refusals (GM r7 item 1, lib/sceneSaveCopy.ts): GM's
   // heading over one of GM's own fixed suffixes, never a backend line (the
@@ -101,7 +101,7 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
   // PR #198 fix round 8 (GM r11 answer 3): the stopped-after-8 line.
   { file: 'lib/sceneSaveCopy.ts', text: '`${sceneSaveHeading(scene)} ${KEPT_UNTIL_NEXT_CHANGE}`', why: "GM's heading over GM's fixed suffix" },
     // The Agent log's raw save line: agents read the backend's own detail.
-  { file: 'store/graphStore.ts', text: '`Couldn\'t save “${label}”, node ${nodeId}. ${detail || `HTTP ${status}`}`',
+  { file: 'store/graphStore.ts', text: '`Couldn’t save “${label}”, node ${nodeId}. ${detail || `HTTP ${status}`}`',
     why: "the Agent log's raw form (agents read the raw text)" },
 ];
 
@@ -154,16 +154,16 @@ function handBuilt(text: string): string[] {
 
 describe('ratchet: no new hand-built "heading reason" lines', () => {
   it('the scanner sees each spelling the review named', () => {
-    expect(handBuilt('const a = `Couldn\'t connect the video node. ${shortReason(x)}`;')).toHaveLength(1);
+    expect(handBuilt('const a = `Couldn’t connect the video node. ${shortReason(x)}`;')).toHaveLength(1);
     expect(handBuilt('const a = `Couldn\'t ${action} that. ${reason}`;')).toHaveLength(1);
     expect(handBuilt('const a = `${heading} ${why}`;')).toHaveLength(1);
     expect(handBuilt('const a = `${addHeading(name)} ${why}`;')).toHaveLength(1);
-    expect(handBuilt("const a = \"Couldn't save the board. \" + reason;")).toHaveLength(1);
-    expect(handBuilt("const a = [\"Couldn't save the board.\", reason].join(' ');")).toHaveLength(1);
+    expect(handBuilt("const a = \"Couldn’t save the board. \" + reason;")).toHaveLength(1);
+    expect(handBuilt("const a = [\"Couldn’t save the board.\", reason].join(' ');")).toHaveLength(1);
     expect(handBuilt('const a = `Nebula can\'t read ${name}. ${tail}`;')).toHaveLength(1);
     // Not a heading-plus-reason: an interpolation inside the one sentence.
     expect(handBuilt('const a = `Couldn\'t upload ${name}.`;')).toHaveLength(0);
-    expect(handBuilt('const a = `Couldn\'t save ${what} for “${node}”.${tail}`;')).toHaveLength(0);
+    expect(handBuilt('const a = `Couldn’t save ${what} for “${node}”.${tail}`;')).toHaveLength(0);
   });
 
   it('only the reviewed ones', () => {

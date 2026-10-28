@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { runsThatNeverStarted, setReplacedCanvasKeeper, useGraphStore } from './graphStore';
+import { hasUnsavedSceneEdits, runsThatNeverStarted, setReplacedCanvasKeeper, useGraphStore } from './graphStore';
 import { useUIStore } from './uiStore';
 import { readDraft, useCreateDraftStore } from './createDraftStore';
 import { useArrangeStore } from './arrangeStore';
@@ -830,16 +830,16 @@ function takeCopyForUpdate(): { id: string; name: string } | null {
  * after the reload), verbatim but for “X”: the stop keeps a whole project's
  * edits, so the builder's form drops the scene's name. */
 export function reloadForUpdateLine(project: string): string {
-  return `Couldn't save your changes because Nebula was updated. Reload Nebula and they'll open in a recovered copy of “${project}”.`;
+  return `Couldn’t save your changes because Nebula was updated. Reload Nebula and they’ll open in a recovered copy of “${project}”.`;
 }
 export function openedAfterUpdateLine(copy: string): string {
-  return `These are the changes Nebula couldn't save before it updated. They're in “${copy}”.`;
+  return `These are the changes Nebula couldn’t save before it updated. They’re in “${copy}”.`;
 }
 /** GM r12 wording, verbatim but for “X”: the copy was deleted before the
  * reload opened it. */
 export function copyDeletedAfterUpdateLine(copy: string, permanently: boolean): string {
-  return `Nebula couldn't save some changes before it updated. They were kept in “${copy}”, which ${
-    permanently ? "was permanently deleted, so they can't be brought back" : 'is in Recently deleted'}.`;
+  return `Nebula couldn’t save some changes before it updated. They were kept in “${copy}”, which ${
+    permanently ? "was permanently deleted, so they can’t be brought back" : 'is in Recently deleted'}.`;
 }
 
 /** After a reload for an update: the copy the edits went to opens, with GM's
@@ -2095,7 +2095,9 @@ export function subscribeProjectAutosave(): () => void {
   const outdated = onParamsOutdated((backendVersion) => { void handleParamsVersionChange(backendVersion); });
   for (const type of ['focus', 'online']) window.addEventListener(type, relistIfStale);
   const beforeUnload = (event: BeforeUnloadEvent) => {
-    if (reloadingForParams || !useProjectStore.getState().dirty) return;
+    // Review 9, M-3: a scene card's unsaved edits count too (they are
+    // saved by their own request, not the project's autosave).
+    if (reloadingForParams || (!useProjectStore.getState().dirty && !hasUnsavedSceneEdits())) return;
     event.preventDefault();
     event.returnValue = '';
   };

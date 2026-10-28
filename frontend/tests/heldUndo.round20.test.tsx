@@ -146,7 +146,7 @@ describe('round 20 (review 19)', () => {
       await settle();
       await tick(6000);
       expect(writes()).not.toContain('PUT /api/graph/node/n2');
-      expect(lines()).toContain("Codex cleared the canvas while you were editing “Text” for “n2”. That change wasn't saved.");
+      expect(lines()).toContain("Codex cleared the canvas while you were editing “Text” for “n2”. That change wasn’t saved.");
     });
 
     it('CLR2: a PUT on its way that Nebula refuses for the old canvas is named', async () => {
@@ -161,7 +161,7 @@ describe('round 20 (review 19)', () => {
       await settle();
       while (nebula().releaseAnswer()) await settle();
       await tick(6000);
-      expect(lines()).toContain("Codex cleared the canvas while you were editing “Text” for “n2”. That change wasn't saved.");
+      expect(lines()).toContain("Codex cleared the canvas while you were editing “Text” for “n2”. That change wasn’t saved.");
       expect(lines().some((line) => String(line).includes(STALE_CANVAS_DETAIL))).toBe(false);
     });
 
@@ -173,7 +173,7 @@ describe('round 20 (review 19)', () => {
       await tick(200);
       agentClear();
       await settle();
-      expect(lines()).toContain("Codex cleared the canvas while you were editing 2 settings. Those changes weren't saved.");
+      expect(lines()).toContain("Codex cleared the canvas while you were editing 2 settings. Those changes weren’t saved.");
     });
 
     it('a rename on its way counts as "Name"', async () => {
@@ -195,7 +195,7 @@ describe('round 20 (review 19)', () => {
       await settle();
       answerRename();
       await settle();
-      expect(lines()).toContain("Codex cleared the canvas while you were editing “Name” for “n2”. That change wasn't saved.");
+      expect(lines()).toContain("Codex cleared the canvas while you were editing “Name” for “n2”. That change wasn’t saved.");
     });
 
     it('a rename draft open in the title counts as "Name"', async () => {
@@ -204,7 +204,7 @@ describe('round 20 (review 19)', () => {
       store().noteRenameDraft('n2', 'Hero');
       agentClear();
       await settle();
-      expect(lines()).toContain("Codex cleared the canvas while you were editing “Name” for “n2”. That change wasn't saved.");
+      expect(lines()).toContain("Codex cleared the canvas while you were editing “Name” for “n2”. That change wasn’t saved.");
     });
 
     it('an agent with no name: "An agent"', async () => {
@@ -214,7 +214,7 @@ describe('round 20 (review 19)', () => {
       await tick(200);
       agentClear('1', { kind: 'anonymous' });
       await settle();
-      expect(lines()).toContain("An agent cleared the canvas while you were editing “Text” for “n2”. That change wasn't saved.");
+      expect(lines()).toContain("An agent cleared the canvas while you were editing “Text” for “n2”. That change wasn’t saved.");
     });
 
     it("the person's own clear: no line", async () => {
@@ -283,7 +283,7 @@ describe('round 20 (review 19)', () => {
       // That canvas is gone: its typing never reaches a node that takes its id.
       expect(writes()).not.toContain('PUT /api/graph/node/n2');
       // Round 22 (review 21, L-a): and it is never lost with no line.
-      expect(lines()).toEqual(["Couldn't save “Text” for “n2”."]);
+      expect(lines()).toEqual(["Couldn’t save “Text” for “n2”."]);
     });
   });
 

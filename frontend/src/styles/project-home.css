@@ -168,11 +168,29 @@ body.app-slava-restraint .project-home__edits-actions { display: flex; flex-wrap
 body.app-slava-restraint .project-home__error .project-home__edits-primary { border-color: var(--sr-ink); background: var(--sr-ink); color: var(--sr-canvas); font-weight: 600; }
 body.app-slava-restraint .project-home__error .project-home__edits-primary:hover:not(:disabled) { border-color: var(--sr-ink-bold); background: var(--sr-ink-bold); }
 body.app-slava-restraint .project-home__error button:disabled { opacity: 0.55; cursor: default; }
-/* Focus lands on the saved line or the heading when the held edits' notice
-   goes (ProjectHome useFocusAfterHeldEdits): the neutral ring from the
-   keyboard; a click shows none, since the browser rings :focus-visible only. */
+/* The notice stack (GM r14 item 1): the recovered copy's notice first, then
+   the held edits or where they went, then the error, one gap apart. */
+body.app-slava-restraint .project-home__notices { display: grid; gap: 12px; margin-bottom: 28px; }
+body.app-slava-restraint .project-home__notices .project-home__notice,
+body.app-slava-restraint .project-home__notices .project-home__error { margin-bottom: 0; }
+body.app-slava-restraint .project-home__notice--copy { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 8px 8px 8px 16px; }
+body.app-slava-restraint .project-home__notice-text { min-width: 0; overflow-wrap: anywhere; }
+body.app-slava-restraint .project-home__notice-actions { display: flex; flex-shrink: 0; align-items: center; gap: 4px; }
+body.app-slava-restraint .project-home__notice-restore { min-height: 34px; padding: 0 12px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-radius-control); background: var(--sr-surface-control); color: var(--sr-ink); font-size: 12px; }
+body.app-slava-restraint .project-home__notice-restore:hover:not(:disabled) { background: var(--sr-surface-control-hover); }
+body.app-slava-restraint .project-home__notice-restore:disabled { opacity: 0.55; cursor: default; }
+body.app-slava-restraint .project-home__notice-close { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: var(--sr-radius-control); background: transparent; color: var(--sr-ink-meta); }
+body.app-slava-restraint .project-home__notice-close:hover { background: var(--sr-surface-control-hover); color: var(--sr-ink); }
+body.app-slava-restraint .project-home__notice-close svg { width: 14px; height: 14px; }
+body.app-slava-restraint .project-home__notice-restore:focus-visible,
+body.app-slava-restraint .project-home__notice-close:focus-visible { outline: var(--sr-focus-outline); outline-offset: 2px; }
+/* Focus lands in the stack, or on "Recent projects" once it is empty
+   (ProjectHome useNoticeStackFocus): the saved line, or an error with no
+   Try again, takes the neutral ring
+   from the keyboard; the heading is a focus target only, never ringed (GM r15). */
 body.app-slava-restraint .project-home__notice:focus-visible,
-body.app-slava-restraint .project-home #project-home-title:focus-visible { outline: var(--sr-focus-outline); outline-offset: 4px; }
+body.app-slava-restraint .project-home__error:focus-visible { outline: var(--sr-focus-outline); outline-offset: 4px; }
+body.app-slava-restraint .project-home #recent-projects-title:focus { outline: none; }
 body.app-slava-restraint .project-home__notice { padding: 14px 16px; margin-bottom: 28px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-node-media-radius); background: var(--sr-canvas-elevated); color: var(--sr-ink); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
 body.app-slava-restraint .project-home__sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 @media (max-width: 1000px) {
@@ -191,7 +209,8 @@ body.app-slava-restraint .project-home__sr-only { position: absolute; width: 1px
   body.app-slava-restraint .project-home__rename-form button { width: 44px; min-height: 44px; }
   body.app-slava-restraint .project-home__trash-row { grid-template-columns: minmax(0, 1fr); }
   body.app-slava-restraint .project-home__trash-actions { grid-row: auto; grid-column: 1; justify-content: flex-start; margin-top: 8px; }
-  body.app-slava-restraint .project-home__trash-actions button, body.app-slava-restraint .project-home__confirm button, body.app-slava-restraint .project-home__toast-undo, body.app-slava-restraint .project-home__toast-close { min-height: 44px; }
+  body.app-slava-restraint .project-home__trash-actions button, body.app-slava-restraint .project-home__confirm button, body.app-slava-restraint .project-home__toast-undo, body.app-slava-restraint .project-home__toast-close, body.app-slava-restraint .project-home__notice-restore { min-height: 44px; }
+  body.app-slava-restraint .project-home__notice-close { width: 44px; height: 44px; }
   body.app-slava-restraint .project-home__toast-close { width: 44px; }
   body.app-slava-restraint .project-home__error { align-items: flex-start; flex-direction: column; }
 }

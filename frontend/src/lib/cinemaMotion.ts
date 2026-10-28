@@ -93,7 +93,7 @@ export async function sendCinemaShotToMotion(nodeId: string, shotId: string): Pr
           ? 'The shot changed before it could be connected. Retry with the current result.'
           // headedLine (review 5, L4): a backend line that already says what
           // couldn't be done shows once, never under a second heading.
-          : headedLine("Couldn't connect the video node.", shortReason(await refusalReason(response))));
+          : headedLine("Couldn’t connect the video node.", shortReason(await refusalReason(response))));
       }
       const result = validatedResponse(await response.json(), handoff);
       if (!owns(handoff)) return;

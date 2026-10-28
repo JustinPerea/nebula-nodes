@@ -23,7 +23,7 @@ describe('GM r8: the scene save lines', () => {
     expect(scene.sceneClashLine('Opening', null)).toBe('“Opening” was changed in another window while you were editing it.');
     expect([scene.KEEP_MINE, scene.theirsLabel('Codex'), scene.theirsLabel(null)]).toEqual(['Keep mine', 'Use Codex’s', 'Use theirs']);
     expect(`${scene.sceneSaveHeading('X')} ${scene.SWITCHED_UNNAMED}`)
-      .toBe("Couldn't save your changes to “X”. The canvas switched to another project first.");
+      .toBe("Couldn’t save your changes to “X”. The canvas switched to another project first.");
   });
 });
 
@@ -34,31 +34,31 @@ describe('GM r8: the "+ unpriced" tooltip lines', () => {
   it('the plurals', () => {
     expect(two(unpriced.NO_LISTED_PRICE)).toBe('“A” and “B” have no listed price.');
     expect(unpriced.NO_LISTED_PRICE('4 nodes', true)).toBe('4 nodes have no listed price.');
-    expect(unpriced.MISSING_KEY('“A” and “B”', true, 'fal.ai API key')).toBe('“A” and “B” can\'t be priced until their fal.ai API key is added.');
-    expect(two(unpriced.AWAITING_INPUT)).toBe('“A” and “B” are priced from their inputs, which aren\'t ready yet.');
+    expect(unpriced.MISSING_KEY('“A” and “B”', true, 'fal.ai API key')).toBe('“A” and “B” can’t be priced until their fal.ai API key is added.');
+    expect(two(unpriced.AWAITING_INPUT)).toBe('“A” and “B” are priced from their inputs, which aren’t ready yet.');
   });
 
   it('a missing key with no provider', () => {
-    expect(unpriced.MISSING_KEY('“X”', false, unpriced.MISSING_KEY_UNNAMED)).toBe('“X” can\'t be priced until its API key is added.');
+    expect(unpriced.MISSING_KEY('“X”', false, unpriced.MISSING_KEY_UNNAMED)).toBe('“X” can’t be priced until its API key is added.');
   });
 
   it('a route that can\'t run, and a size Nebula couldn\'t read', () => {
-    expect(one(unpriced.ROUTE_CANT_RUN)).toBe('“X” can\'t run as it\'s set up now, so it has no price.');
-    expect(one(unpriced.SIZE_UNREADABLE)).toBe('“X” is priced by its input size, which Nebula couldn\'t read.');
+    expect(one(unpriced.ROUTE_CANT_RUN)).toBe('“X” can’t run as it’s set up now, so it has no price.');
+    expect(one(unpriced.SIZE_UNREADABLE)).toBe('“X” is priced by its input size, which Nebula couldn’t read.');
     // Builder's plurals of GM's singular lines, for GM to confirm.
-    expect(two(unpriced.ROUTE_CANT_RUN)).toBe('“A” and “B” can\'t run as they\'re set up now, so they have no price.');
-    expect(two(unpriced.SIZE_UNREADABLE)).toBe('“A” and “B” are priced by their input sizes, which Nebula couldn\'t read.');
+    expect(two(unpriced.ROUTE_CANT_RUN)).toBe('“A” and “B” can’t run as they’re set up now, so they have no price.');
+    expect(two(unpriced.SIZE_UNREADABLE)).toBe('“A” and “B” are priced by their input sizes, which Nebula couldn’t read.');
   });
 
   it('each cost the estimate leaves out, by name', () => {
     expect(one(unpriced.LEFT_OUT['input images'])).toBe('“X” may cost more for its input images, which the estimate leaves out.');
-    expect(one(unpriced.LEFT_OUT['thinking tokens'])).toBe('“X” may cost more for the model\'s thinking, which the estimate leaves out.');
+    expect(one(unpriced.LEFT_OUT['thinking tokens'])).toBe('“X” may cost more for the model’s thinking, which the estimate leaves out.');
     expect(one(unpriced.LEFT_OUT['input media and thinking tokens']))
-      .toBe('“X” may cost more for its input media and the model\'s thinking, which the estimate leaves out.');
+      .toBe('“X” may cost more for its input media and the model’s thinking, which the estimate leaves out.');
     expect(two(unpriced.LEFT_OUT['input images'])).toBe('“A” and “B” may cost more for their input images, which the estimate leaves out.');
-    expect(two(unpriced.LEFT_OUT['thinking tokens'])).toBe('“A” and “B” may cost more for the models\' thinking, which the estimate leaves out.');
+    expect(two(unpriced.LEFT_OUT['thinking tokens'])).toBe('“A” and “B” may cost more for the models’ thinking, which the estimate leaves out.');
     expect(two(unpriced.LEFT_OUT['input media and thinking tokens']))
-      .toBe('“A” and “B” may cost more for their input media and the models\' thinking, which the estimate leaves out.');
+      .toBe('“A” and “B” may cost more for their input media and the models’ thinking, which the estimate leaves out.');
   });
 
   it('a free priced part has no line: $0 is a price, not unpriced', () => {
@@ -87,10 +87,10 @@ describe('GM r8: the "+ unpriced" tooltip lines', () => {
 describe('GM r8 deviation 3: the studio\'s Agent log line names the studio', () => {
   it('damaged data opened in Cinema', () => {
     expect(studioBoundaryLogLine('X', 'n4', { field: 'scene.base', state: 'missing' }, 'cinema-editor'))
-      .toBe("Couldn't open “X” in Cinema, node n4. scene.base is missing.");
-    expect(studioBoundaryLogLine(null, 'n4', null, 'cinema-editor')).toBe("Couldn't open a node in Cinema, node n4. Its data couldn't be read.");
+      .toBe("Couldn’t open “X” in Cinema, node n4. scene.base is missing.");
+    expect(studioBoundaryLogLine(null, 'n4', null, 'cinema-editor')).toBe("Couldn’t open a node in Cinema, node n4. Its data couldn’t be read.");
     // A canvas card's line has no studio.
-    expect(studioBoundaryLogLine('X', 'n4', { field: 'scene.base', state: 'damaged' })).toBe("Couldn't open “X”, node n4. scene.base is damaged.");
+    expect(studioBoundaryLogLine('X', 'n4', { field: 'scene.base', state: 'damaged' })).toBe("Couldn’t open “X”, node n4. scene.base is damaged.");
   });
 });
 

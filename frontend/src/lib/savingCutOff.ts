@@ -46,8 +46,8 @@ export function savingCutOffLine(saves: CutOffSave[], project: string, how: CutO
   const [only] = saves;
   const named = saves.length === 1 && only.node && only.setting;
   const head = named
-    ? `Couldn't save “${only.setting}” for “${only.node}” in “${project}”.`
-    : `Couldn't save your last change in “${project}”.`;
+    ? `Couldn’t save “${only.setting}” for “${only.node}” in “${project}”.`
+    : `Couldn’t save your last change in “${project}”.`;
   return `${head} ${ending(how)}`;
 }
 
@@ -90,9 +90,9 @@ export function handoffFailedLine(saves: CutOffSave[], project: string, agent: s
   const [only] = changes;
   const left = keepTogether(project);
   const head = changes.length === 1 && only.node && only.setting
-    ? `Couldn't save “${only.setting}” for “${only.node}” in “${left}”`
-    : changes.length > 1 ? `Couldn't save ${changes.length} changes in “${left}”`
-      : `Couldn't save your last change in “${left}”`;
+    ? `Couldn’t save “${only.setting}” for “${only.node}” in “${left}”`
+    : changes.length > 1 ? `Couldn’t save ${changes.length} changes in “${left}”`
+      : `Couldn’t save your last change in “${left}”`;
   return `${head} when ${agent || 'an agent'} switched projects. Your edits were saved as a copy, “${keepTogether(copyName)}”.`;
 }
 
@@ -122,11 +122,11 @@ export function agentClearedLine(saves: CutOffSave[], agent: string | null): str
   const who = agent || 'An agent';
   const nodes = new Set(settings.map(nodeKey));
   if (nodes.size === 1 && settings.length <= 3) {
-    const tail = settings.length === 1 ? "That change wasn't saved." : "Those changes weren't saved.";
+    const tail = settings.length === 1 ? "That change wasn’t saved." : "Those changes weren’t saved.";
     return `${who} cleared the canvas while you were editing ${quotedList(settings.map((save) => save.setting!))} `
       + `for “${settings[0].node}”. ${tail}`;
   }
-  return `${who} cleared the canvas while you were editing ${settings.length} settings. Those changes weren't saved.`;
+  return `${who} cleared the canvas while you were editing ${settings.length} settings. Those changes weren’t saved.`;
 }
 
 /**
@@ -148,12 +148,12 @@ export function agentClearedLine(saves: CutOffSave[], agent: string | null): str
 export function changesNotSavedLine(saves: CutOffSave[]): string | null {
   if (saves.length === 0) return null;
   const settings = distinctSaves(saves.filter((save) => save.node && save.setting));
-  if (settings.length === 0) return "Couldn't save your last change.";
+  if (settings.length === 0) return "Couldn’t save your last change.";
   const nodes = new Map<string, string>();
   for (const save of settings) if (!nodes.has(nodeKey(save))) nodes.set(nodeKey(save), save.node!);
-  if (nodes.size > 3) return `Couldn't save your changes to ${nodes.size} nodes.`;
-  if (nodes.size > 1) return `Couldn't save your changes to ${quotedList([...nodes.values()])}.`;
-  return `Couldn't save ${settingsOnOneNode(settings.map((save) => save.setting!))} for “${settings[0].node}”.`;
+  if (nodes.size > 3) return `Couldn’t save your changes to ${nodes.size} nodes.`;
+  if (nodes.size > 1) return `Couldn’t save your changes to ${quotedList([...nodes.values()])}.`;
+  return `Couldn’t save ${settingsOnOneNode(settings.map((save) => save.setting!))} for “${settings[0].node}”.`;
 }
 
 /** One node's settings as GM counts them (round 23): “a”; “a” and “b”;
@@ -173,6 +173,6 @@ export function settingsOnOneNode(settings: string[]): string {
  * The head is the failed-save line above; the copy's name wraps as one piece.
  */
 export function changesSavedAsCopyLine(saves: CutOffSave[], copyName: string): string {
-  const head = changesNotSavedLine(saves) ?? "Couldn't save your last change.";
+  const head = changesNotSavedLine(saves) ?? "Couldn’t save your last change.";
   return `${head} Your edits were saved as a copy, “${keepTogether(copyName)}”.`;
 }

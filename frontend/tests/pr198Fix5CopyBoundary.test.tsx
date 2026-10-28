@@ -11,7 +11,7 @@ import { ReactFlow, ReactFlowProvider, type Node, type NodeProps } from '@xyflow
  * - GM r6 item 4: the damaged Agent log says what the code knows: "<field>
  *   is missing." when absent, "<field> is damaged." when present but
  *   malformed, "missing or damaged" only when the code can't tell.
- * - GM r6 item 5: the studio's neutral Agent log line, "Couldn't open “X” in
+ * - GM r6 item 5: the studio's neutral Agent log line, "Couldn’t open “X” in
  *   <studio>, node n4. <error message>".
  */
 
@@ -72,7 +72,7 @@ describe('L5: a card that keeps failing logs once per distinct error', () => {
       const view = render(<Flow nodes={[running(0)]} />);
       for (let i = 1; i <= 6; i += 1) act(() => { view.rerender(<Flow nodes={[running(i)]} />); });
     });
-    expect(lines).toEqual(["Couldn't draw “Hero”, node n9. draw bug"]);
+    expect(lines).toEqual(["Couldn’t draw “Hero”, node n9. draw bug"]);
   });
 
   it('a different error is a new line; the same one again is not', () => {
@@ -82,7 +82,7 @@ describe('L5: a card that keeps failing logs once per distinct error', () => {
       act(() => { view.rerender(<Flow nodes={[running(2, 'other bug')]} />); });
       act(() => { view.rerender(<Flow nodes={[running(3)]} />); });
     });
-    expect(lines).toEqual(["Couldn't draw “Hero”, node n9. draw bug", "Couldn't draw “Hero”, node n9. other bug"]);
+    expect(lines).toEqual(["Couldn’t draw “Hero”, node n9. draw bug", "Couldn’t draw “Hero”, node n9. other bug"]);
   });
 
   it('a card that draws again logs its next failure again', () => {
@@ -92,7 +92,7 @@ describe('L5: a card that keeps failing logs once per distinct error', () => {
       expect(document.querySelector('[data-testid="card-ok"]')).not.toBeNull();
       act(() => { view.rerender(<Flow nodes={[running(2)]} />); });
     });
-    expect(lines).toEqual(["Couldn't draw “Hero”, node n9. draw bug", "Couldn't draw “Hero”, node n9. draw bug"]);
+    expect(lines).toEqual(["Couldn’t draw “Hero”, node n9. draw bug", "Couldn’t draw “Hero”, node n9. draw bug"]);
   });
 });
 
@@ -119,7 +119,7 @@ describe('GM r6 item 4: missing, damaged, or the code can\'t tell', () => {
   ])('%s', (_name, data, field, state) => {
     expect(nodeDataProblem(data)).toEqual({ field, state });
     const lines = logged(() => render(<Flow nodes={[card(data)]} />));
-    expect(lines).toEqual([`Couldn't open “Hero”, node n4. ${field} is ${state}.`]);
+    expect(lines).toEqual([`Couldn’t open “Hero”, node n4. ${field} is ${state}.`]);
   });
 
   it('not an object at all', () => {
@@ -131,16 +131,16 @@ describe('GM r6 item 4: missing, damaged, or the code can\'t tell', () => {
     const data = { label: 'Hero', definitionId: 'text-input', outputs: {}, boom: 'x',
       get params(): unknown { throw new TypeError('trap'); } };
     const lines = logged(() => render(<Flow nodes={[{ id: 'n4', type: 'boom', position: { x: 0, y: 0 }, data }]} />));
-    expect(lines).toEqual(["Couldn't open “Hero”, node n4. data is missing or damaged."]);
+    expect(lines).toEqual(["Couldn’t open “Hero”, node n4. data is missing or damaged."]);
   });
 
   it('the line from each kind, and a bare field the code can\'t tell', () => {
     expect(studioBoundaryLogLine('Opening', 'n4', { field: 'scene.base', state: 'missing' }))
-      .toBe("Couldn't open “Opening”, node n4. scene.base is missing.");
+      .toBe("Couldn’t open “Opening”, node n4. scene.base is missing.");
     expect(studioBoundaryLogLine('Opening', 'n4', { field: 'scene.base', state: 'damaged' }))
-      .toBe("Couldn't open “Opening”, node n4. scene.base is damaged.");
-    expect(studioBoundaryLogLine('Opening', 'n4', 'node')).toBe("Couldn't open “Opening”, node n4. node is missing or damaged.");
-    expect(studioBoundaryLogLine(null, 'n4', null)).toBe("Couldn't open a node, node n4. Its data couldn't be read.");
+      .toBe("Couldn’t open “Opening”, node n4. scene.base is damaged.");
+    expect(studioBoundaryLogLine('Opening', 'n4', 'node')).toBe("Couldn’t open “Opening”, node n4. node is missing or damaged.");
+    expect(studioBoundaryLogLine(null, 'n4', null)).toBe("Couldn’t open a node, node n4. Its data couldn’t be read.");
   });
 
   it('the studio logs the kind its check found', () => {
@@ -148,22 +148,22 @@ describe('GM r6 item 4: missing, damaged, or the code can\'t tell', () => {
     const lines = logged(() => render(<StudioBoundary studio="cinema-editor" node={{ id: 'n4', label: 'Opening' }}
       problem={() => ({ field: 'scene.base', state: 'damaged' })}><Throws /></StudioBoundary>));
     // GM r8: a studio's line names the studio.
-    expect(lines).toEqual(["Couldn't open “Opening” in Cinema, node n4. scene.base is damaged."]);
+    expect(lines).toEqual(["Couldn’t open “Opening” in Cinema, node n4. scene.base is damaged."]);
   });
 });
 
 describe('GM r6 item 5: the studio\'s neutral Agent log line', () => {
   const Throws = () => { throw new TypeError('studio broke'); };
 
-  it('"Couldn\'t open “X” in <studio>, node n4. <error message>"', () => {
+  it('"Couldn’t open “X” in <studio>, node n4. <error message>"', () => {
     const lines = logged(() => render(<StudioBoundary studio="cinema-editor" node={{ id: 'n4', label: 'Opening' }}
       problem={() => null}><Throws /></StudioBoundary>));
-    expect(lines).toEqual(["Couldn't open “Opening” in Cinema, node n4. studio broke"]);
+    expect(lines).toEqual(["Couldn’t open “Opening” in Cinema, node n4. studio broke"]);
   });
 
   it('each studio by its name; a node with no name; an error with no message', () => {
-    expect(studioDrawFailedLogLine('create', 'Opening', 'n4', new Error('x'))).toBe("Couldn't open “Opening” in Creator Studio, node n4. x");
-    expect(studioDrawFailedLogLine('editor', 'Cut', 'n4', new Error('x'))).toBe("Couldn't open “Cut” in the video editor, node n4. x");
-    expect(studioDrawFailedLogLine('remotion-editor', null, 'n4', new Error(''))).toBe("Couldn't open a node in the composition editor, node n4. An error with no message.");
+    expect(studioDrawFailedLogLine('create', 'Opening', 'n4', new Error('x'))).toBe("Couldn’t open “Opening” in Creator Studio, node n4. x");
+    expect(studioDrawFailedLogLine('editor', 'Cut', 'n4', new Error('x'))).toBe("Couldn’t open “Cut” in the video editor, node n4. x");
+    expect(studioDrawFailedLogLine('remotion-editor', null, 'n4', new Error(''))).toBe("Couldn’t open a node in the composition editor, node n4. An error with no message.");
   });
 });

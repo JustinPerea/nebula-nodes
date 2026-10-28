@@ -31,7 +31,7 @@ export function chatCancellationNotice(
   if (status === 'requested') return { text: 'Cancellation requested…' };
   if (status === 'confirmed') return { text: 'Cancelled.' };
   return {
-    text: headedLine("Couldn't stop the reply.", reason || REFUSED_FALLBACK_COPY),
+    text: headedLine("Couldn’t stop the reply.", reason || REFUSED_FALLBACK_COPY),
     tone: 'error',
   };
 }

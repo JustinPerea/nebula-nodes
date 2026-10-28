@@ -165,12 +165,14 @@ describe('review: the line after a download, and where focus goes', () => {
     await waitFor(() => expect(document.activeElement).toBe(line));
   });
 
-  it('after Continue without them, focus moves to the page heading, not the page body', async () => {
+  // GM r15: with the notice stack empty, focus goes to the start of the
+  // page content, the "Recent projects" heading (no longer the page title).
+  it('after Continue without them, focus moves to the Recent projects heading, not the page body', async () => {
     const view = render(<Home {...props()} />);
     fireEvent.click(screen.getByRole('button', { name: 'Continue without them' }));
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Continue without them' }));
     view.rerender(<Home {...props({ unsavedEdits: null })} />);
-    const heading = screen.getByRole('heading', { level: 1 });
+    const heading = screen.getByRole('heading', { name: 'Recent projects' });
     await waitFor(() => expect(document.activeElement).toBe(heading));
   });
 

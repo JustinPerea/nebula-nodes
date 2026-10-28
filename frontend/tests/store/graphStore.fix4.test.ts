@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  *   and Undo/Redo say why: GM's scene and shot lines when that is the
  *   reason, else "… Wait for the active run to finish." (GM r5 item 2).
  * - M1: another window's run: one line, the backend's named one, never the
- *   generic "Couldn't delete the node." in front (GM r5 item 3); a
+ *   generic "Couldn’t delete the node." in front (GM r5 item 3); a
  *   multi-select keeps "Deleted 2 nodes." with Undo and GM's kept line.
  * - M2: a shot run's upstream scene is held on the canvas too.
  * - GM r4 items 2 and 3: four or more kept scenes are counted; the several-
@@ -114,7 +114,7 @@ describe('H1-new: a shot removal another window\'s run refuses (review 4, R3)', 
     await sleep(120);
     expect(shotsOf().map((shot) => shot.id)).toEqual(['s1', 's2']);
     expect(said).toEqual([REMOVE_LINE]);
-    expect(notice() ?? '').not.toMatch(/Couldn't save/);
+    expect(notice() ?? '').not.toMatch(/Couldn’t save/);
     // Its wire was never sent away: the scene write alone removes a shot's wires.
     expect(sent('DELETE', '/api/graph/edge')).toHaveLength(0);
     expect(useGraphStore.getState().edges.map((edge) => edge.sourceHandle)).toEqual(['shot_s2']);
@@ -157,7 +157,7 @@ describe('H1-new: a shot removal another window\'s run refuses (review 4, R3)', 
       shots: current.shots.map((shot) => (shot.id === 's1' ? { ...shot, prompt: 'very long' } : shot)) }));
     await sleep(120);
     expect(shotsOf()[0].prompt).toBe('very long');
-    expect(said).toEqual(["Couldn't save “Opening”. The project is too big to save. Remove something and Nebula will save your changes."]);
+    expect(said).toEqual(["Couldn’t save “Opening”. The project is too big to save. Remove something and Nebula will save your changes."]);
   });
 });
 
@@ -188,7 +188,7 @@ const select = (...which: string[]) => useGraphStore.setState((state) => ({
 describe('M1: during the tab\'s own run, every delete and undo path says why', () => {
   it('the scene, by the menu, the Delete key or deleteSelected: GM\'s scene line', async () => {
     await ownShotRun();
-    const line = "Couldn't delete “Opening”. “Shot 2” is still running. Stop the run first.";
+    const line = "Couldn’t delete “Opening”. “Shot 2” is still running. Stop the run first.";
     useGraphStore.getState().deleteNode('n4');
     expect(notice()).toBe(line);
     useGraphStore.setState({ undoNotice: null } as never);
@@ -206,25 +206,25 @@ describe('M1: during the tab\'s own run, every delete and undo path says why', (
     expect(ids()).toEqual(['n4', 'n5', 'n6', 'n7']);
   });
 
-  it('another node: "Couldn\'t delete “Brief”. Wait for the active run to finish."', async () => {
+  it('another node: "Couldn’t delete “Brief”. Wait for the active run to finish."', async () => {
     await ownShotRun();
     useGraphStore.getState().deleteNode('n5');
-    expect(notice()).toBe("Couldn't delete “Brief”. Wait for the active run to finish.");
+    expect(notice()).toBe("Couldn’t delete “Brief”. Wait for the active run to finish.");
     useGraphStore.setState({ undoNotice: null } as never);
     expect(useGraphStore.getState().allowCanvasDelete(['n5'])).toBe(false);
-    expect(notice()).toBe("Couldn't delete “Brief”. Wait for the active run to finish.");
+    expect(notice()).toBe("Couldn’t delete “Brief”. Wait for the active run to finish.");
     expect(ids()).toContain('n5');
   });
 
-  it('a multi-select with the scene: "Couldn\'t delete 4 nodes. Wait for the active run to finish."', async () => {
+  it('a multi-select with the scene: "Couldn’t delete 4 nodes. Wait for the active run to finish."', async () => {
     await ownShotRun();
     select('n4', 'n5', 'n6', 'n7');
     useGraphStore.getState().deleteSelected();
-    expect(notice()).toBe("Couldn't delete 4 nodes. Wait for the active run to finish.");
+    expect(notice()).toBe("Couldn’t delete 4 nodes. Wait for the active run to finish.");
     useGraphStore.setState({ undoNotice: null } as never);
     useGraphStore.getState().onNodesChange(['n5', 'n6'].map((id) => ({ id, type: 'remove' as const })));
     // GM r6: several nodes are named.
-    expect(notice()).toBe("Couldn't delete “Brief” and “Note”. Wait for the active run to finish.");
+    expect(notice()).toBe("Couldn’t delete “Brief” and “Note”. Wait for the active run to finish.");
     await sleep(20);
     expect(sent('DELETE')).toHaveLength(0);
     expect(ids()).toEqual(['n4', 'n5', 'n6', 'n7']);
@@ -235,12 +235,12 @@ describe('M1: during the tab\'s own run, every delete and undo path says why', (
     const added = await ownShotRun(true);
     useGraphStore.getState().undo();
     await sleep(20);
-    expect(notice()).toBe("Couldn't undo. It would remove “Shot 3”, which is still running. Stop the run first.");
+    expect(notice()).toBe("Couldn’t undo. It would remove “Shot 3”, which is still running. Stop the run first.");
     expect(restoresSent()).toBe(0);
     expect(shotsOf('n4').map((shot) => shot.id)).toEqual(['s1', 's2', added]);
   });
 
-  it('Undo or Redo of anything else: "Couldn\'t undo. Wait for the active run to finish."', async () => {
+  it('Undo or Redo of anything else: "Couldn’t undo. Wait for the active run to finish."', async () => {
     useGraphStore.setState({ nodes: [cinema('n4', [{ id: 's1', prompt: 'a' }, { id: 's2', prompt: 'b' }], 'Opening'),
       textNode('n5', 'Brief')] } as never);
     useGraphStore.getState().duplicateNode('n5');
@@ -257,9 +257,9 @@ describe('M1: during the tab\'s own run, every delete and undo path says why', (
     expect(stacks[0]).toBeGreaterThan(0);
     expect(stacks[1]).toBeGreaterThan(0);
     useGraphStore.getState().redo();
-    expect(notice()).toBe("Couldn't redo. Wait for the active run to finish.");
+    expect(notice()).toBe("Couldn’t redo. Wait for the active run to finish.");
     useGraphStore.getState().undo();
-    expect(notice()).toBe("Couldn't undo. Wait for the active run to finish.");
+    expect(notice()).toBe("Couldn’t undo. Wait for the active run to finish.");
     await sleep(20);
     expect(restoresSent()).toBe(0);
     expect([useGraphStore.getState().undoStack.length, useGraphStore.getState().redoStack.length]).toEqual(stacks);
@@ -274,17 +274,17 @@ describe('M1: during the tab\'s own run, every delete and undo path says why', (
 
   it('the line\'s parts are GM\'s (r5 item 2)', () => {
     expect(RUN_LOCK_REASON).toBe('Wait for the active run to finish.');
-    expect(runLockedLine('delete', 1, '“X”')).toBe("Couldn't delete “X”. Wait for the active run to finish.");
-    expect(runLockedLine('delete', 1)).toBe("Couldn't delete the node. Wait for the active run to finish.");
-    expect(runLockedLine('delete', 3)).toBe("Couldn't delete 3 nodes. Wait for the active run to finish.");
-    expect(runLockedLine('undo')).toBe("Couldn't undo. Wait for the active run to finish.");
-    expect(runLockedLine('redo')).toBe("Couldn't redo. Wait for the active run to finish.");
+    expect(runLockedLine('delete', 1, '“X”')).toBe("Couldn’t delete “X”. Wait for the active run to finish.");
+    expect(runLockedLine('delete', 1)).toBe("Couldn’t delete the node. Wait for the active run to finish.");
+    expect(runLockedLine('delete', 3)).toBe("Couldn’t delete 3 nodes. Wait for the active run to finish.");
+    expect(runLockedLine('undo')).toBe("Couldn’t undo. Wait for the active run to finish.");
+    expect(runLockedLine('redo')).toBe("Couldn’t redo. Wait for the active run to finish.");
   });
 });
 
 // -- M1: another window's run ---------------------------------------------------------------
 
-const SCENE_LINE = "Couldn't delete “Opening”. “Shot 2” is still running. Stop the run first.";
+const SCENE_LINE = "Couldn’t delete “Opening”. “Shot 2” is still running. Stop the run first.";
 
 describe('M1: a run this tab doesn\'t own: the backend\'s named line, once', () => {
   function otherWindowRun() {
@@ -314,17 +314,17 @@ describe('M1: a run this tab doesn\'t own: the backend\'s named line, once', () 
     expect(ids()).toEqual(['n4']);
     const shown = useGraphStore.getState().undoNotice;
     // GM r6: the deleted nodes are named.
-    expect(shown?.text).toBe("Deleted “Brief” and “Note”. “Opening” wasn't deleted because “Shot 2” is still running.");
+    expect(shown?.text).toBe("Deleted “Brief” and “Note”. “Opening” wasn’t deleted because “Shot 2” is still running.");
     expect(shown?.offer).toBe('undo');
     expect(said).toEqual([]);
   });
 
   it('a refusal with no shots named still reads its own line alone', async () => {
     useGraphStore.setState({ nodes: [textNode('n5', 'Brief')] } as never);
-    fetchMock.mockImplementation(async () => json({ detail: "Couldn't delete “Brief”. It's locked." }, 409));
+    fetchMock.mockImplementation(async () => json({ detail: "Couldn’t delete “Brief”. It's locked." }, 409));
     useGraphStore.getState().deleteNode('n5');
     await sleep(60);
-    expect(said).toEqual(["Couldn't delete “Brief”. It's locked."]);
+    expect(said).toEqual(["Couldn’t delete “Brief”. It's locked."]);
   });
 });
 
@@ -360,8 +360,8 @@ describe('GM r4: several scenes', () => {
     scene: `Scene ${index + 1}`, shots: { numbers: [1], stoppable: true } }));
 
   it('item 2: two or three are named; four or more are counted', () => {
-    expect(scenesKeptLine(kept(2))).toBe("“Scene 1” and “Scene 2” weren't deleted because their shots are still running.");
-    expect(scenesKeptLine(kept(4))).toBe("4 scenes weren't deleted because their shots are still running.");
+    expect(scenesKeptLine(kept(2))).toBe("“Scene 1” and “Scene 2” weren’t deleted because their shots are still running.");
+    expect(scenesKeptLine(kept(4))).toBe("4 scenes weren’t deleted because their shots are still running.");
   });
 
   it('item 3: the tooltip over several rendering scenes', () => {

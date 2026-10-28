@@ -428,9 +428,10 @@ Read it again and redo your change."; over HTTP 409 `scene_changed`, with
 refusal is not a read: run `nebula look`, then redo your change on what it
 shows; sending the same copy again is refused again. A scene you never read
 is written as you send it, and a write whose scene is already Nebula's is
-never refused. Reads are per session: set `NEBULA_AGENT_SESSION` to a name
-of your own when two lanes of one agent work on the same canvas, or they
-share one read. The person's canvas merges your change
+never refused. A write with no session (`nebula set` by default) is held
+to the newest read by any session of that name, your MCP looks included;
+set `NEBULA_AGENT_SESSION` to a name of your own when two lanes of one agent
+work on the same canvas, and use it for both reading and writing. The person's canvas merges your change
 into theirs and only asks them when you both changed the same thing. A shot run holds the
 scenes upstream of it too, until it ends. A saved project, a graph file you
 import (`nebula load`, also when you load it) and the person's own edits are

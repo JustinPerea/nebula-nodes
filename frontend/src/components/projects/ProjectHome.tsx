@@ -365,46 +365,76 @@ function UndoToast({ project, busy, onUndo, onDismiss }: {
   );
 }
 
-/** GM r12 item 5: the recovered copy's notice, in the notice region and in
- * the look of the toast that says where a restored copy's changes are: the
- * line, [Restore] while the copy is in Recently deleted, and ×. It stays
- * until the person closes it or restores. */
-function CopyNoticeToast({ notice, busy, onRestore, onDismiss }: {
+/** GM r12 item 5, r14 item 1: the recovered copy's notice. Not a toast: the
+ * inline notice at the top of Projects home, first in the notice stack.
+ * Neutral, the line, [Restore] while the copy is in Recently deleted, and ×;
+ * it stays until the person closes it or restores. */
+function CopyNotice({ notice, busy, onRestore, onDismiss }: {
   notice: { line: string; restore: { id: string; name: string } | null };
   busy: boolean; onRestore: () => void; onDismiss: () => void;
 }) {
   return (
-    <InNoticeRegion slot="project-home">
-      <div className="project-home__toast" role="status" aria-live="polite" data-copy-notice="">
-        <span className="project-home__toast-text">{notice.line}</span>
-        {notice.restore && <button type="button" className="project-home__toast-undo" disabled={busy} onClick={onRestore}>Restore</button>}
-        <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
-      </div>
-    </InNoticeRegion>
+    <div className="project-home__notice project-home__notice--copy" role="status" data-copy-notice="">
+      <span className="project-home__notice-text">{notice.line}</span>
+      <span className="project-home__notice-actions">
+        {notice.restore && <button type="button" className="project-home__notice-restore" disabled={busy} onClick={onRestore}>Restore</button>}
+        <button type="button" className="project-home__notice-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
+      </span>
+    </div>
   );
 }
 
 const noop = () => {};
 
-/** The held edits' notice goes when the person chooses, and takes the
- * focused button (or the confirm's) with it, which would drop focus to the
- * page body and send the next Tab back to the top. Focus moves to the line
- * that says where the file went, or, after Continue without them, to the
- * page heading. Only when focus was lost: never from something the person
- * moved to meanwhile (Q116 a review). */
-function useFocusAfterHeldEdits(held: boolean, savedLine: RefObject<HTMLElement | null>,
-  heading: RefObject<HTMLElement | null>): void {
-  const wasHeld = useRef(held);
+/** Which notice in the stack focus was in, by its key, and the keys of the
+ * stack as it was. React's focus events bubble through portals, so focus in
+ * a notice's own dialog (the held edits' confirm) counts as in the notice. */
+type NoticeKey = 'copy' | 'held' | 'saved' | 'error';
+
+/** The notice stack's focus rule (GM r15, as the kept notes do it): when a
+ * notice goes and takes focus with it, focus moves to the notice now in its
+ * place (the next one), else the one before, onto its first control (a
+ * notice with none, the saved line, takes focus itself); with the stack
+ * empty, to the "Recent projects" heading. Never the body. Only when focus
+ * was lost: never from something the person moved to meanwhile (Q116 a
+ * review). After the commit that removed the notice: no frame to wait for
+ * (a frame never comes in a background tab). */
+function useNoticeStackFocus(keys: NoticeKey[], stack: RefObject<HTMLElement | null>,
+  fallback: RefObject<HTMLElement | null>) {
+  const focused = useRef<NoticeKey | null>(null);
+  const previous = useRef<NoticeKey[]>(keys);
+  const joined = keys.join(' ');
   useEffect(() => {
-    const had = wasHeld.current;
-    wasHeld.current = held;
-    if (!had || held) return;
-    // After the commit that removed the notice: no frame to wait for (a
-    // frame never comes in a background tab).
+    const before = previous.current;
+    previous.current = keys;
+    const was = focused.current;
+    if (!was || keys.includes(was)) return;
+    focused.current = null;
     const active = document.activeElement;
     if (active && active !== document.body && active.isConnected) return;
-    (savedLine.current ?? heading.current)?.focus();
-  }, [held, savedLine, heading]);
+    const index = before.indexOf(was);
+    const notices = Array.from(stack.current?.querySelectorAll<HTMLElement>(':scope > [data-notice]') ?? []);
+    const target = notices[Math.min(index, notices.length - 1)];
+    if (!target) { fallback.current?.focus(); return; }
+    // Its first control; a notice with none (the saved line, an error with
+    // no Try again) is itself the focus target, by its tabindex.
+    const control = target.querySelector<HTMLElement>('button:not(:disabled), summary, [href]')
+      ?? target.querySelector<HTMLElement>('[tabindex="-1"]');
+    (control ?? fallback.current)?.focus();
+    // keys is read through `joined`: a new array each render, the same stack.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [joined, stack, fallback]);
+  return {
+    track: (key: NoticeKey) => ({
+      'data-notice': key,
+      onFocus: () => { focused.current = key; },
+      onBlur: (event: { relatedTarget: EventTarget | null }) => {
+        // Moving elsewhere forgets it; focus that goes with the element
+        // (no related target) is what the rule above catches.
+        if (event.relatedTarget) focused.current = null;
+      },
+    }),
+  };
 }
 
 export function ProjectHome({ projects, loading, busy, error, errorDetails = null, onCreate, onOpen, onRename, onDelete, onRetry, retry = 'redo',
@@ -418,9 +448,15 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
   // "Try again" (a read) still work.
   const offline = useBackendOffline();
   const locked = busy || offline;
-  const savedLine = useRef<HTMLDivElement>(null);
-  const heading = useRef<HTMLHeadingElement>(null);
-  useFocusAfterHeldEdits(Boolean(unsavedEdits), savedLine, heading);
+  const stack = useRef<HTMLDivElement>(null);
+  const recentHeading = useRef<HTMLHeadingElement>(null);
+  const showError = !unsavedEdits && Boolean(error);
+  const noticeKeys: NoticeKey[] = [
+    ...(copyNotice ? ['copy' as const] : []),
+    ...(unsavedEdits ? ['held' as const] : editsSavedAs ? ['saved' as const] : []),
+    ...(showError ? ['error' as const] : []),
+  ];
+  const { track } = useNoticeStackFocus(noticeKeys, stack, recentHeading);
   const visibleProjects = useMemo(() => projects
     .filter((project) => project.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
     .sort((left, right) => recentTimestamp(right) - recentTimestamp(left)), [projects, query]);
@@ -439,29 +475,36 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
       </header>
       <main className="project-home__main" aria-busy={loading || busy}>
         <section className="project-home__welcome" aria-labelledby="project-home-title">
-          <div><p className="project-home__eyebrow">Your workspace</p><h1 id="project-home-title" ref={heading} tabIndex={-1}>A place for your next idea.</h1><p className="project-home__intro">Start a new canvas or pick up where you left off.</p></div>
+          <div><p className="project-home__eyebrow">Your workspace</p><h1 id="project-home-title">A place for your next idea.</h1><p className="project-home__intro">Start a new canvas or pick up where you left off.</p></div>
           <button className="project-home__new" type="button" disabled={loading || locked || Boolean(unsavedEdits)} {...offlineMark(offline)} onClick={() => onCreate()}><Plus aria-hidden="true" />New project</button>
         </section>
 
-        {/* GM's WRAP rule: where "Try again" redoes the failure it is the retry, so the
-            reason drops its own; where it only reloads, or can't help, the line stays whole. */}
-        {unsavedEdits ? <UnsavedEditsNotice reason={unsavedEdits.reason} downloadFailed={unsavedEdits.downloadFailed}
-          downloadTooBig={unsavedEdits.downloadTooBig}
-          keptIn={unsavedEdits.keptIn} agentOpening={unsavedEdits.agentOpening} busy={locked}
-          onDownload={onDownloadEdits} onContinue={onContinueWithoutEdits} />
-          : editsSavedAs && <div ref={savedLine} tabIndex={-1} className="project-home__notice" role="status">
-            {editsSavedLine(editsSavedAs.name)}</div>}
-        {!unsavedEdits && error && <div className="project-home__error" role="alert">
-          {errorDetails ? <div className="project-home__error-text"><span>{retry === 'redo' ? shortLine(error) : error}</span>
-            <ErrorDetails raw={errorDetails} className="project-home__error-details" /></div>
-            : <span>{retry === 'redo' ? shortLine(error) : error}</span>}
-          {/* GM r9 decision 1: after an update, [Reload Nebula] in place of Try again. */}
-          {retry !== 'none' && <button type="button" disabled={loading || busy} onClick={onRetry}>
-            {retry === 'reloadNebula' ? 'Reload Nebula' : 'Try again'}</button>}</div>}
+        {/* The notice stack (GM r14 item 1): the recovered copy's notice first,
+            then the held edits or the line that says where they went, then
+            the error. GM's WRAP rule: where "Try again" redoes the failure it
+            is the retry, so the reason drops its own; where it only reloads,
+            or can't help, the line stays whole. */}
+        {noticeKeys.length > 0 && <div ref={stack} className="project-home__notices">
+          {copyNotice && <div {...track('copy')}><CopyNotice notice={copyNotice} busy={locked}
+            onRestore={onRestoreCopy} onDismiss={onDismissCopy} /></div>}
+          {unsavedEdits ? <div {...track('held')}><UnsavedEditsNotice reason={unsavedEdits.reason} downloadFailed={unsavedEdits.downloadFailed}
+            downloadTooBig={unsavedEdits.downloadTooBig}
+            keptIn={unsavedEdits.keptIn} agentOpening={unsavedEdits.agentOpening} busy={locked}
+            onDownload={onDownloadEdits} onContinue={onContinueWithoutEdits} /></div>
+            : editsSavedAs && <div {...track('saved')}><div tabIndex={-1} className="project-home__notice" role="status">
+              {editsSavedLine(editsSavedAs.name)}</div></div>}
+          {showError && <div {...track('error')}><div className="project-home__error" role="alert" tabIndex={-1}>
+            {errorDetails ? <div className="project-home__error-text"><span>{retry === 'redo' ? shortLine(error!) : error}</span>
+              <ErrorDetails raw={errorDetails} className="project-home__error-details" /></div>
+              : <span>{retry === 'redo' ? shortLine(error!) : error}</span>}
+            {/* GM r9 decision 1: after an update, [Reload Nebula] in place of Try again. */}
+            {retry !== 'none' && <button type="button" disabled={loading || busy} onClick={onRetry}>
+              {retry === 'reloadNebula' ? 'Reload Nebula' : 'Try again'}</button>}</div></div>}
+        </div>}
 
         <section className="project-home__projects" aria-labelledby="recent-projects-title">
           <div className="project-home__section-header">
-            <h2 id="recent-projects-title">Recent projects{projects.length > 0 && <span className="project-home__count" aria-hidden="true">{projects.length}</span>}</h2>
+            <h2 id="recent-projects-title" ref={recentHeading} tabIndex={-1}>Recent projects{projects.length > 0 && <span className="project-home__count" aria-hidden="true">{projects.length}</span>}</h2>
             {projects.length > 0 && <div className="project-home__search"><Search aria-hidden="true" /><label className="project-home__sr-only" htmlFor="project-home-search">Search projects</label><input id="project-home-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search projects" /></div>}
           </div>
           {loading ? <div className="project-home__loading" role="status"><span className="project-home__loading-dot" />Loading your projects…</div>
@@ -471,7 +514,6 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
         </section>
         {!loading && trash.length > 0 && <RecentlyDeleted trash={trash} busy={locked} onRestore={onRestore} onPurge={onPurge} onEmptyTrash={onEmptyTrash} />}
       </main>
-      {copyNotice && <CopyNoticeToast notice={copyNotice} busy={locked} onRestore={onRestoreCopy} onDismiss={onDismissCopy} />}
       {lastDeleted && <UndoToast key={lastDeleted.id} project={lastDeleted} busy={locked}
         onUndo={() => onRestore(lastDeleted.id)} onDismiss={onDismissUndo} />}
     </div>
