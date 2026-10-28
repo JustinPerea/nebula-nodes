@@ -20,6 +20,7 @@ from __future__ import annotations
 import copy
 import secrets
 import time
+import re
 import unicodedata
 from datetime import datetime, timezone
 from typing import Any, Callable, Mapping
@@ -56,6 +57,9 @@ def _epoch(value: Any) -> float | None:
         return None
 
 
+_ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x9b[0-?]*[ -/]*[@-~]")
+
+
 def clean_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = False) -> str:
     """Plain text, 1..limit chars, control characters dropped.
 
@@ -65,13 +69,18 @@ def clean_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = F
     stay (every line break, ``\r\n``, ``\r``, U+2028 and the rest, reads as
     ``\n``), a tab reads as a space, each
     line loses its trailing spaces, and the note loses its leading and
-    trailing blank lines; every other control character is still dropped.
+    trailing blank lines (the first line keeps its indent); a terminal colour
+    code goes whole; every other control character is still dropped.
     Blank lines inside the note stay as typed (fix round 5 of PR #200,
     review 5 N-3: agents read what the person wrote; only the canvas display
     folds a run of blank lines, and the 280-character cap bounds the rest).
     """
     if not isinstance(raw, str):
         raise PinError(422, f"{label} must be text")
+    # A terminal colour code pasted with the text goes whole, never as a
+    # stray "[31m" once its ESC is dropped (fix round 6 of PR #200, review 6
+    # N-4): CSI (ESC [ … final byte) and OSC (ESC ] … BEL or ESC \).
+    raw = _ANSI.sub("", raw)
 
     def plain(line: str) -> str:
         # Cc covers C0, DEL and C1 controls. Format characters (Cf: bidi
@@ -87,7 +96,13 @@ def clean_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = F
         # str.splitlines knows every line break: \r\n, \r, \v, \f, NEL and
         # U+2028/U+2029 (review 3 LOW-5), so each reads as \n on every surface.
         lines = [plain(line).rstrip() for line in raw.splitlines()]
-        text = "\n".join(lines).strip()
+        # Only blank lines go from the ends: the first line keeps its own
+        # leading spaces (review 6 N-2: "  indented first" stays indented).
+        while lines and not lines[0]:
+            lines.pop(0)
+        while lines and not lines[-1]:
+            lines.pop()
+        text = "\n".join(lines)
     else:
         text = " ".join(plain(raw).split())
     if not text:

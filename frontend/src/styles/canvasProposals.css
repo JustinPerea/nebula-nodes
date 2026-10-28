@@ -235,7 +235,9 @@
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 12px;
   pointer-events: auto;
-  animation: proposal-fade-in 180ms ease-out;
+  /* Its own surface in the notice region: it scales in on the toasts'
+     spring (GM r9 answer 2; noticeRegion.css). */
+  animation: notice-surface-in 420ms var(--notice-spring) both;
 }
 
 .proposal-bar--notice {
@@ -256,8 +258,12 @@
   outline-offset: var(--sr-focus-offset, 2px);
 }
 
+/* The entrance stays first in the list, so the flash neither restarts it
+   nor cuts it short. */
 .proposal-bar[data-review='true'] {
-  animation: proposal-bar-review 1600ms var(--agent-log-spring, cubic-bezier(0.2, 0.9, 0.3, 1.2)) both;
+  animation:
+    notice-surface-in 420ms var(--notice-spring) both,
+    proposal-bar-review 1600ms var(--agent-log-spring, cubic-bezier(0.2, 0.9, 0.3, 1.2)) both;
 }
 
 @keyframes proposal-bar-review {
@@ -464,6 +470,10 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 .proposal-bar__error {
   margin: 2px 0 0;
   color: #ff8a80;
+  /* An inline line inside the bar: it expands into place (GM r9 answer 2). */
+  overflow: clip;
+  interpolate-size: allow-keywords;
+  animation: notice-row-in 420ms var(--notice-spring) both;
 }
 
 .proposal-bar__actions {
@@ -612,11 +622,16 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .proposal-ghosts,
+  .proposal-ghosts {
+    animation: none;
+    transition: none;
+  }
+  /* Opacity only (GM r9 answer 2). */
   .proposal-bar,
   .proposal-bar[data-review='true'],
+  .proposal-bar__error,
   .canvas-undo-notice {
-    animation: none;
+    animation: notice-fade-in 180ms ease-out both;
     transition: none;
   }
   .proposal-bar[data-review='true'] {

@@ -54,6 +54,27 @@ export function PinComposer() {
   const hidden = Math.max(0, kept.length - KEPT_SHOWN);
   const open = showAll && hidden > 0;
   const shown = open ? kept : kept.slice(-KEPT_SHOWN);
+  // Fix round 6 (GM r9 answer 2, motion by kind): a note kept while the stack
+  // is already showing is content inside that surface, so its row expands
+  // into place (noticeRegion.css notice-row-in); the stack's first note is
+  // the surface arriving, which scales in. Rows "Show 7 more" reveals were
+  // already kept, so they don't expand. A row stays marked until its own
+  // expand ends, so a re-render mid-spring never cuts it short.
+  const [keptBefore, setKeptBefore] = useState(kept);
+  const [entering, setEntering] = useState<ReadonlySet<string>>(() => new Set());
+  if (keptBefore !== kept) {
+    setKeptBefore(kept);
+    const had = new Set(keptBefore.map((note) => note.project));
+    const added = had.size ? kept.filter((note) => !had.has(note.project)).map((note) => note.project) : [];
+    const still = [...entering].filter((project) => kept.some((note) => note.project === project));
+    if (added.length || still.length !== entering.size) setEntering(new Set([...still, ...added]));
+  }
+  const entered = (project: string) => setEntering((now) => {
+    if (!now.has(project)) return now;
+    const next = new Set(now);
+    next.delete(project);
+    return next;
+  });
 
   // Back to the newest two once no note is hidden (the next one kept starts
   // collapsed again).
@@ -65,13 +86,23 @@ export function PinComposer() {
   // answer 3: snap). Its height is the newest notes that fit the cap, whole,
   // so its last scroll position is a row's top, and the rows snap to their
   // tops (canvasPins.css), so every position it rests at starts on a note.
+  // A note cut at the bottom edge while it rests mid-list is accepted by
+  // design (fix round 6, GM r9 answer 1: it's the usual sign there's more
+  // below); it is sized once on open and on a new note, never after a
+  // scroll, so it never jumps under the person's wheel.
   useLayoutEffect(() => {
     const list = listRef.current;
     if (!open || !list) return;
     const place = () => {
       list.style.removeProperty('--kept-list-h');
+      // A row still expanding measures its whole height, not its spring's
+      // first frame (the expand restarts from its start, before any paint).
+      list.dataset.measuring = 'true';
       const rows = [...list.children] as HTMLElement[];
-      if (!rows.length) return;
+      if (!rows.length) {
+        delete list.dataset.measuring;
+        return;
+      }
       const cap = Math.min(window.innerHeight * 0.4, 360);
       const gap = parseFloat(getComputedStyle(list).rowGap) || 0;
       let height = 0;
@@ -84,6 +115,7 @@ export function PinComposer() {
       }
       list.style.setProperty('--kept-list-h', `${Math.ceil(height)}px`);
       list.scrollTop = top - rows[0].offsetTop;
+      delete list.dataset.measuring;
     };
     place();
     window.addEventListener('resize', place);
@@ -163,7 +195,7 @@ export function PinComposer() {
       {/* In the app's notice region, like every toast (GM - Design, 2026-10-23). */}
       {error && !composer && (errorProject === null || errorProject === here) && (
         <InNoticeRegion slot="pin">
-          <div className="canvas-pin-toast" role="alert">
+          <div className="canvas-pin-toast canvas-pin-toast--error" role="alert">
             <span>{error}</span>
             <button type="button" onClick={clearError} aria-label="Dismiss">×</button>
           </div>
@@ -184,7 +216,11 @@ export function PinComposer() {
             )}
             <div ref={listRef} className="canvas-pin-kept-list">
               {shown.map((note) => (
-                <div key={note.project} className="canvas-pin-toast canvas-pin-toast--kept" role="status" data-project={note.project}>
+                <div key={note.project} className="canvas-pin-toast canvas-pin-toast--kept" role="status" data-project={note.project}
+                  data-entering={entering.has(note.project) || undefined}
+                  onAnimationEnd={(event) => {
+                    if (event.target === event.currentTarget) entered(note.project);
+                  }}>
                   <span className="canvas-pin-toast__text">
                     {keptNoteLine(note, here, nameOf(note.project))}
                     {/* GM r24 and round 5 answer 5: the note on its own line, in

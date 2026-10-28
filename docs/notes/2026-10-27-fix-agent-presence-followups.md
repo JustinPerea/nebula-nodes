@@ -765,3 +765,106 @@ Review 5 (LOW-1 to LOW-4, N-1 to N-5) with GM's r6 bug and r7 answers.
   - Swatch ×, Inspector ×, Send note offline, every Delete hover and the
     timeline all passed.
   - Blocked requests: the 2 canaries only.
+
+## Fix round 6
+
+CI's red ratchet, review 6 (LOW-1 to LOW-3, N-1 to N-5), GM r8 (filled
+destructive confirms) and GM r9's three answers.
+
+### What changed, per item
+
+- **CI, ratchet G over 120 s.** Each file is parsed once; `reachOf` is
+  memoised per statement node (keyed by depth, own names and resolver), and
+  the guard walk (`refuseCoverage`) per node and resolver. The whole ratchet
+  file runs in about 10.5 s alone. The timeout is unchanged.
+- **LOW-3, ratchet G misses and false positives.** A refusal now covers a
+  gated call by where it sits, not only by a top `if (refuse()) return`:
+  an earlier `if (G) exit` sibling, the else of `if (!G)`, the then of
+  `if (G)` when the gate is negated, the false side of `G ? … : …`, the right
+  of `G || …` and `!G && …`. G reads `!!`, `await`, `||`/`&&`, one-line local
+  helpers, aliases (`const off = refuse()`, a binding of `canvasLockNow()`)
+  and a lock's `.following`/`.offline`. Component forwarding counts only from
+  a spread of the whole props or of a rest binding (minus the names pulled out
+  beside it), onto a control, a fieldset or a component; type annotations no
+  longer count as reads. The corpus test holds review 6's 5 misses and 10 more
+  that must flag, and its 6 false positives (the helper form included) and 9
+  more that must stay quiet.
+  - Two real findings: Canvas `onDrop` had no handler guard (library,
+    character and moodboard drops relied on the store gate alone); it now
+    refuses first. RemotionTimeline's multi-statement `refused()` helper is
+    inlined, so the guard is read where it gates.
+- **LOW-1 and GM r9 answer 3, the Inspector's locked pickers.** "+ Add" takes
+  `lock.act` ("Add a swatch" live, the follow reason, "You can add swatches
+  when Nebula reconnects."). "Extract from reference" and every "Choose File"
+  are labels around a disabled input: locked they carry `aria-disabled`, the
+  lock mark (no pointer) and the lock's reason ("You can extract a palette
+  …", "You can choose a file when Nebula reconnects."). `.inspector__file-button`
+  is in the shared ghost grey, and its slava hover is off while
+  `aria-disabled`. The order is follow, then offline: the Inspector has no
+  run state, so there is no run form to put first (the run copy elsewhere is
+  "Wait for the run to finish first.").
+- **GM r8, filled destructive confirms.** Home's Delete, Delete forever and
+  "Continue without them" rest on `--sr-danger-fill` (#ff887d) with
+  `--sr-on-danger` (#1f1f1f, 7.1:1) ink, hover `--sr-danger-fill-hover`
+  (#ff9a91, 8.1:1); disabled is the shared grey fill. Round 2's white on the
+  orange is gone, and so are its three ratchet exceptions.
+- **LOW-2 and N-1, accepted by design (GM r9 answer 1).** A note cut at the
+  bottom edge of the open list while it rests mid-list stays: it is the
+  usual sign there's more below. Only the top edge snaps. The list is sized
+  once on open and when a note is added, never after a scroll and with no
+  fade. So N-1's height change when a new note arrives in the open list is
+  that re-size, by design.
+- **GM r9 answer 2, motion by kind.** noticeRegion.css holds the toasts'
+  spring (`--notice-spring`) and three keyframes:
+  - `notice-surface-in` (scale 0.96 and fade, 420 ms): the proposal bar (and
+    the run-later notice, which is one), the person-required notice, the pin
+    error (now `.canvas-pin-toast--error`) and the kept stack when its first
+    note arrives. The review flash keeps the entrance first in its list, so
+    it neither restarts nor cuts it.
+  - `notice-row-in` (height, padding, border and the gap above from nothing,
+    with opacity; never a scale): a note kept while the stack shows, and the
+    proposal bar's inline error line. PinComposer marks only newly kept
+    notes (`data-entering`, until that row's own animationend), not the
+    notes "Show N more" reveals; while it measures the open list it holds
+    the expand, so the list is sized to whole rows.
+  - `notice-fade-in`: under reduced motion every one of these and the five
+    toasts fade (opacity only) instead of `animation: none`.
+  - agentPresenceFollowups.r6 pins each surface to its kind and the
+    reduced-motion fade.
+- **N-2.** A multi-line note keeps its first line's leading spaces (only
+  blank lines at either end go), in the store and the channel.
+- **N-3.** The CLI's answered note: one line keeps
+  `pin_1 on n4: "warmer" — resolved by Claude: "done"`; a multi-line note puts
+  `— resolved by …` on its own line after the note, at the row's indent.
+  MCP-SETUP.md and SKILL.md show both.
+- **N-4.** ANSI and OSC escape sequences (and 8-bit CSI) are dropped whole
+  before control characters are, so no `[31m` is left.
+- **N-5.** The timeline keeps its horizontal scroll across a redraw (its key
+  changes on a refused drop and on the lock). The old timeline's scroll is
+  taken as it unmounts and set on the new one; the new grid's own report of
+  0 as it mounts is ignored. Surprise, live: restoring from the last
+  `onScroll` alone found 0, because the new grid reports before the parent's
+  layout effect runs. The r6 test's mock now reports 0 on mount too.
+
+### Left
+
+- The wording batch from GM r8 ("Run This Node" → "Run this node", platform
+  shortcut labels) is not in this PR.
+
+### Fix round 6 gates
+
+- tsc -b: clean. Full lint (inline-styles, slava scope, eslint): clean.
+- Focused frontend: 118 files (the PR's suites, everything that renders the
+  changed components or reads the changed CSS, Canvas, errorCopy). 1647 of
+  1650 passed; the 3 failures were Settings.test.tsx under load, and that
+  file passes alone (75 of 75). After the last timeline change the ratchet,
+  r5, r6 and the timeline suites: 52 of 52.
+- Ratchet file alone: about 10.5 s.
+- Backend (iso_presence.sh): 339 passed across followups, channel, pins,
+  CLI commands, agent_start and proposals.
+- vite build plus check-build-budget: 410,355 B raw and 124,675 B gzip
+  (limit 512,000); the built CSS keeps `interpolate-size` and the keyframes.
+- Live (backend 8795, Vite 5795 with VITE_NEBULA_BACKEND_PORT=8795, nothing
+  paid, the proposal dismissed): pickers, confirms, motion (frozen mid-spring
+  with the Web Animations API) and timeline sections, 17 of 17; blocked
+  requests the 2 canaries only.

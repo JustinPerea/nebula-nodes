@@ -509,7 +509,8 @@ html body .moodboard-board-panel .moodboard-def__row {
     transition: none;
   }
 
+  /* Opacity only (GM r9 answer 2). */
   .moodboard-board-toast {
-    animation: none;
+    animation: notice-fade-in 180ms ease-out both;
   }
 }

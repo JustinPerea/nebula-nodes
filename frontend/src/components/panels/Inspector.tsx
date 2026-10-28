@@ -68,6 +68,14 @@ export function Inspector({ embedded = false }: InspectorProps) {
   // open." while following.
   const lock = useCanvasLock();
   const readOnly = lock.locked;
+  // A file picker is a <label> around a hidden input: the input is disabled,
+  // and the label carries the lock's look and reason (follow, then offline;
+  // GM r9 answer 3: "You can choose a file when Nebula reconnects.").
+  const lockedPicker = (title: string | undefined, offline: string) => ({
+    ...lock.mark,
+    title: lock.title({ title, offline }),
+    'aria-disabled': readOnly || undefined,
+  });
   const panelVisible = useUIStore((s) => s.panels.inspector.visible);
   const position = useUIStore((s) => s.panels.inspector.position);
   const selectedNodeId = useUIStore((s) => s.selectedNodeId);
@@ -705,8 +713,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
             <button
               type="button"
               className="inspector__action-button"
-              title="Add a swatch"
-              disabled={readOnly} {...lock.mark}
+              // Fix round 6 of PR #200 (review 6 LOW-1, GM r8): the lock's
+              // reason, not "Add a swatch", while it can't add.
+              {...lock.act({ title: 'Add a swatch', offline: 'add swatches' })}
               onClick={() => writeSwatches([...swatches, '#808080'])}
             >
               <Plus
@@ -718,7 +727,10 @@ export function Inspector({ embedded = false }: InspectorProps) {
               />
               <span>Add</span>
             </button>
-            <label className="inspector__file-button" title="Extract a palette from an image">
+            {/* A <label> can't be disabled: locked, it says so itself (the
+                shared grey, the lock's reason, no hover; fix round 6 of PR
+                #200, review 6 LOW-1, GM r9 answer 3). */}
+            <label className="inspector__file-button" {...lockedPicker('Extract a palette from an image', 'extract a palette')}>
               <Upload
                 className="inspector__action-icon"
                 size={14}
@@ -782,7 +794,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           : 'image/*,video/*,audio/*';
       return (
         <div className="inspector__control-stack">
-          <label className="inspector__file-button">
+          <label className="inspector__file-button" {...lockedPicker(undefined, 'choose a file')}>
             <Upload
               className="inspector__action-icon"
               size={14}

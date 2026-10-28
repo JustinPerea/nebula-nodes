@@ -553,40 +553,58 @@ function componentDefinition(tag: string, scope: Scope, resolve: Resolve | undef
   return module ? exportedTarget(scopeOf(module.source, module.file), imported.imported, resolve) : null;
 }
 
-/** Which props a component reads: every name its definition spells (a
- * destructured `disabled`, `props.disabled`), and, when it forwards its
- * props onto an element (`<button {...rest}>`, `<button {...props}>`),
- * every prop. A wrapper (`memo(Inner)`, `forwardRef(Inner)`) is followed
- * one name in. */
+/** Which props a component reads (fix rounds 5 and 6 of PR #200): a name
+ * its definition reads (`disabled={disabled}`, `props.disabled`; a
+ * destructured name it never uses reads nothing), or every prop it forwards
+ * onto an element that takes it (`<button {...props}>`; `{...rest}` forwards
+ * all but the names destructured beside it; a `<div>` or `<span>` takes no
+ * `disabled`). A wrapper (`memo(Inner)`, `forwardRef(Inner)`) is followed one
+ * name in. */
 function componentReads(tag: string, scope: Scope, resolve: Resolve | undefined): Reads {
   const found = componentDefinition(tag, scope, resolve);
   if (!found) return () => false;
   const spelled = new Set<string>();
-  let forwards = false;
+  let forwardsAll = false;
+  const forwardedBut: Array<Set<string>> = [];
   const visit = (node: ts.Node, at: Scope, hops: number) => {
+    const fn = ts.isFunctionLike(node) ? node : null;
+    const param = fn?.parameters[0]?.name;
+    // The spreads that forward props: the props parameter, or its rest.
+    const whole = param && ts.isIdentifier(param) ? param.text : null;
+    let rest: string | null = null;
+    const beside = new Set<string>();
+    if (param && ts.isObjectBindingPattern(param)) {
+      for (const element of param.elements) {
+        if (element.dotDotDotToken && ts.isIdentifier(element.name)) rest = element.name.text;
+        else beside.add((element.propertyName ?? element.name).getText(at.root));
+      }
+    }
     const walk = (current: ts.Node) => {
-      // A name it spells, never an attribute it sets (`<button disabled={busy}>`
-      // reads no `disabled` prop).
-      if (ts.isIdentifier(current) && !(current.parent && ts.isJsxAttribute(current.parent))) spelled.add(current.text);
+      // A type names no value (`(p: { disabled?: boolean })` reads nothing).
+      if (ts.isTypeNode(current)) return;
+      if (ts.isIdentifier(current) && current.parent && (isReference(current)
+        || (ts.isPropertyAccessExpression(current.parent) && current.parent.name === current))) spelled.add(current.text);
       if (ts.isJsxSpreadAttribute(current) && ts.isIdentifier(current.expression)) {
-        const name = current.expression.text;
-        const local = at.locals.get(name);
-        // A parameter (`props`) or a rest binding (`...rest`) of the component.
-        if (!local || local.some((definition) => ts.isBindingElement(definition) && !!definition.dotDotDotToken)) forwards = true;
+        const element = current.parent?.parent;
+        const target = element && (ts.isJsxOpeningElement(element) || ts.isJsxSelfClosingElement(element)) ? element.tagName.getText(at.root) : '';
+        const takes = CONTROL_TAGS.has(target) || target === 'fieldset' || /^[A-Z]/.test(target);
+        if (takes && current.expression.text === whole) forwardsAll = true;
+        if (takes && current.expression.text === rest) forwardedBut.push(beside);
       }
       ts.forEachChild(current, walk);
     };
     walk(node);
     if (hops > 0 && ts.isCallExpression(node)) {
       for (const argument of node.arguments) {
-        if (!ts.isIdentifier(argument)) continue;
-        const inner = componentDefinition(argument.text, at, resolve);
-        if (inner) visit(inner.node, inner.scope, hops - 1);
+        if (ts.isIdentifier(argument)) {
+          const inner = componentDefinition(argument.text, at, resolve);
+          if (inner) visit(inner.node, inner.scope, hops - 1);
+        } else if (ts.isFunctionLike(argument)) visit(argument, at, hops - 1);
       }
     }
   };
   visit(found.node, found.scope, 1);
-  return (prop) => forwards || spelled.has(prop);
+  return (prop) => forwardsAll || spelled.has(prop) || forwardedBut.some((but) => !but.has(prop));
 }
 
 /** The states `aria-disabled` (an attribute, or a key of a spread object)
@@ -616,40 +634,103 @@ function ariaCoverage(attributes: ts.NodeArray<ts.JsxAttributeLike>, scope: Scop
   }, 0);
 }
 
-/** The states a handler's own refusal covers (fix round 5 of PR #200,
- * review 5 LOW-3: per handler, and only a refusal that gates). A refusal
- * counts when its result stops the handler: `if (refuseCanvasEdit())
- * return`, `if (canvasLockNow().locked) { endDrag(); return; }`, `if
- * (refuseEditWhileFollowing() || refuseEditWhileOffline()) return`, or the
- * call sits under `if (!refuseCanvasEdit()) …` (`ok && !refuse…() &&`). A
- * refusal whose result is dropped (`refuseCanvasEdit(); run();`), a lock read
- * into a local nobody tests, or `canvasLockNow().offline` (offline only)
- * covers that much and no more. Followed like reachOf: the handler, the
- * file's own functions it calls, and imported ones. */
+/** Fix round 6 of PR #200 (CI timeout on 1841a21a, review 6 MEDIUM-1): the
+ * reach of a node from a fresh start is computed once per node and kept, so
+ * the guard check below asks it as often as it likes. `reachOf` with a shared
+ * `seen` (inside one traversal) is never cached: what it returns depends on
+ * what that traversal saw first. */
+const reachMemo = new WeakMap<ts.Node, Map<string, Set<string>>>();
+function reachCached(node: ts.Node, scope: Scope, resolve: Resolve | undefined, depth: number, ownNames: boolean): Set<string> {
+  let byKey = reachMemo.get(node);
+  if (!byKey) { byKey = new Map(); reachMemo.set(node, byKey); }
+  const key = `${depth}:${ownNames}:${resolve ? resolveIds.get(resolve) ?? resolveIds.set(resolve, resolveIds.size + 1).get(resolve) : 0}`;
+  let reach = byKey.get(key);
+  if (!reach) { reach = reachOf(node, scope, resolve, new Set(), depth, ownNames); byKey.set(key, reach); }
+  return reach;
+}
+const resolveIds = new Map<Resolve, number>();
+const ownMemo = new WeakMap<Scope, boolean>();
+const ownOf = (scope: Scope) => {
+  let own = ownMemo.get(scope);
+  if (own === undefined) { own = reachesGraphStore(scope.root.text, scope.file); ownMemo.set(scope, own); }
+  return own;
+};
+const reachesGated = (reach: Set<string>) => { for (const name of reach) if (GATED.has(name)) return true; return false; };
+
+/** The states a handler's own refusal covers (fix rounds 5 and 6 of PR
+ * #200, reviews 5 and 6 LOW-3). Each gated call the handler makes (a gated
+ * name, or a call of a local or imported function that reaches one) must be
+ * guarded where it sits:
+ * - an earlier statement of a block around it is `if (G) return` (or an if
+ *   block ending in return or throw);
+ * - it sits in the then-branch of `if (!G)` (or `ok && !G`), the else-branch
+ *   of `if (G)`, the false side of `G ? … : call()`, the right of `G ||` or of
+ *   `!G &&`;
+ * - or it calls a function of the file (or an import) whose own gated calls
+ *   are all guarded.
+ * G is a refusal (`refuseCanvasEdit()`, the following and offline ones),
+ * `canvasLockNow().locked` (`.offline` and `.following` cover that state
+ * only), a local made of one (`const r = refuse…()`, `const { locked } =
+ * canvasLockNow()`), a one-line helper returning one, `G || x` (either
+ * returns), or `G1 && G2`; `G && x` guards nothing (it returns only when x).
+ * A guard in a `catch`, after the call, inside a loop that `continue`s, or
+ * whose result is dropped guards nothing. The handler's coverage is what all
+ * its gated calls share. */
 const REFUSERS: Record<string, number> = { refuseCanvasEdit: LOCKED, refuseEditWhileFollowing: FOLLOWING, refuseEditWhileOffline: OFFLINE };
-function guardMask(condition: ts.Expression, scope: Scope): number {
-  const again = (node: ts.Expression) => guardMask(node, scope);
-  if (ts.isParenthesizedExpression(condition)) return again(condition.expression);
-  if (ts.isCallExpression(condition) && ts.isIdentifier(condition.expression)) return REFUSERS[condition.expression.text] ?? 0;
+function guardMask(condition: ts.Expression, scope: Scope, seen: Set<string> = new Set()): number {
+  const again = (node: ts.Expression) => guardMask(node, scope, seen);
+  if (ts.isParenthesizedExpression(condition) || ts.isAwaitExpression(condition)) return again(condition.expression);
+  if (ts.isPrefixUnaryExpression(condition) && condition.operator === ts.SyntaxKind.ExclamationToken
+    && ts.isPrefixUnaryExpression(condition.operand) && condition.operand.operator === ts.SyntaxKind.ExclamationToken) return again(condition.operand.operand);
+  if (ts.isCallExpression(condition) && ts.isIdentifier(condition.expression)) {
+    const name = condition.expression.text;
+    if (REFUSERS[name]) return REFUSERS[name];
+    // A one-line helper of the file: `const guard = () => refuseCanvasEdit()`.
+    if (seen.has(`call:${name}`)) return 0;
+    seen.add(`call:${name}`);
+    const helpers = scope.locals.get(name) ?? [];
+    const masks = helpers.map((helper) => {
+      if (!(ts.isArrowFunction(helper) || ts.isFunctionExpression(helper) || ts.isFunctionDeclaration(helper)) || !helper.body) return 0;
+      if (!ts.isBlock(helper.body)) return again(helper.body);
+      const [only] = helper.body.statements;
+      return helper.body.statements.length === 1 && ts.isReturnStatement(only) && only.expression ? again(only.expression) : 0;
+    });
+    return masks.length ? masks.reduce((all, mask) => all & mask, LOCKED) : 0;
+  }
   if (ts.isPropertyAccessExpression(condition)) {
     const state = LOCK_STATES[condition.name.text];
     return state && isLockValue(condition.expression, scope) ? state : 0;
+  }
+  if (ts.isIdentifier(condition)) {
+    // A local made of a guard: `const r = refuse…()`, `const { locked } = canvasLockNow()`.
+    if (seen.has(condition.text)) return 0;
+    seen.add(condition.text);
+    const definitions = scope.locals.get(condition.text) ?? [];
+    const masks = definitions.map((definition) => {
+      if (ts.isBindingElement(definition)) {
+        const declared = definition.parent?.parent;
+        const member = (definition.propertyName ?? definition.name).getText(scope.root);
+        return LOCK_STATES[member] && declared && ts.isVariableDeclaration(declared) && declared.initializer
+          && isLockValue(declared.initializer, scope) ? LOCK_STATES[member] : 0;
+      }
+      // `const { locked } = canvasLockNow()` also lists the initializer under
+      // `locked`: the element above reads it.
+      if (definition.parent && ts.isVariableDeclaration(definition.parent) && !ts.isIdentifier(definition.parent.name)) return null;
+      return ts.isFunctionLike(definition) ? 0 : again(definition as ts.Expression);
+    }).filter((mask): mask is number => mask !== null);
+    return masks.length ? masks.reduce((all, mask) => all & mask, LOCKED) : 0;
   }
   if (ts.isBinaryExpression(condition)) {
     const op = condition.operatorToken.kind;
     const [left, right] = [again(condition.left), again(condition.right)];
     if (op === ts.SyntaxKind.BarBarToken) return left | right;
-    // `cmd.acts && refuseCanvasEdit()`: the refusal, when the action is one
-    // that edits; two refusals joined by && refuse only together.
-    if (op === ts.SyntaxKind.AmpersandAmpersandToken) {
-      if (condition.left.kind === ts.SyntaxKind.FalseKeyword || condition.right.kind === ts.SyntaxKind.FalseKeyword) return 0;
-      return left && right ? left & right : left | right;
-    }
+    // `G1 && G2` refuses only when both do; `G && x` returns only when x (review 6).
+    if (op === ts.SyntaxKind.AmpersandAmpersandToken) return left & right;
   }
   return 0;
 }
-/** The refusals an `if` condition's && chain negates (`!refuseCanvasEdit()`):
- * its then-branch runs only when nothing refused. */
+/** The refusals a condition's && chain negates (`!refuseCanvasEdit()`, `ok &&
+ * !refuse…()`): true only when nothing refused. */
 function negatedGuard(condition: ts.Expression, scope: Scope): number {
   if (ts.isParenthesizedExpression(condition)) return negatedGuard(condition.expression, scope);
   if (ts.isPrefixUnaryExpression(condition) && condition.operator === ts.SyntaxKind.ExclamationToken) return guardMask(condition.operand, scope);
@@ -660,45 +741,74 @@ function negatedGuard(condition: ts.Expression, scope: Scope): number {
 }
 const exits = (statement: ts.Statement): boolean => ts.isReturnStatement(statement) || ts.isThrowStatement(statement)
   || (ts.isBlock(statement) && statement.statements.length > 0 && exits(statement.statements[statement.statements.length - 1]));
-function refuseCoverage(node: ts.Node, scope: Scope, resolve: Resolve | undefined, seen: Set<string> = new Set(), depth = 0): number {
+
+/** The guards around one spot, up to `root`. */
+function guardsAround(site: ts.Node, root: ts.Node, scope: Scope): number {
   let mask = 0;
-  // A guard after the gated call guards nothing: `run(); if (refuse…()) return;`.
-  const gatedBefore = (statement: ts.Statement): boolean => {
-    const list = ts.isBlock(statement.parent) || ts.isSourceFile(statement.parent) || ts.isCaseClause(statement.parent)
-      ? statement.parent.statements : null;
-    if (!list) return false;
-    const before = list.slice(0, list.indexOf(statement));
-    return before.some((earlier) => [...reachOf(earlier, scope, resolve, new Set(), depth)].some((name) => GATED.has(name)));
-  };
-  const visit = (current: ts.Node) => {
-    if (current !== node && (ts.isJsxElement(current) || ts.isJsxSelfClosingElement(current) || ts.isJsxFragment(current))) return;
-    if (ts.isIfStatement(current) && !gatedBefore(current)) {
-      if (exits(current.thenStatement)) mask |= guardMask(current.expression, scope);
-      mask |= negatedGuard(current.expression, scope);
+  for (let cur: ts.Node = site; cur !== root && cur.parent; cur = cur.parent) {
+    const up = cur.parent;
+    if ((ts.isBlock(up) || ts.isSourceFile(up) || ts.isCaseClause(up) || ts.isDefaultClause(up)) && ts.isStatement(cur as ts.Statement)) {
+      const list = up.statements as ts.NodeArray<ts.Statement>;
+      for (const earlier of list.slice(0, list.indexOf(cur as ts.Statement))) {
+        if (ts.isIfStatement(earlier) && exits(earlier.thenStatement)) mask |= guardMask(earlier.expression, scope);
+      }
+    } else if (ts.isIfStatement(up)) {
+      if (cur === up.thenStatement) mask |= negatedGuard(up.expression, scope);
+      else if (cur === up.elseStatement) mask |= guardMask(up.expression, scope);
+    } else if (ts.isConditionalExpression(up)) {
+      if (cur === up.whenFalse) mask |= guardMask(up.condition, scope);
+      else if (cur === up.whenTrue) mask |= negatedGuard(up.condition, scope);
+    } else if (ts.isBinaryExpression(up) && cur === up.right) {
+      if (up.operatorToken.kind === ts.SyntaxKind.BarBarToken) mask |= guardMask(up.left, scope);
+      else if (up.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) mask |= negatedGuard(up.left, scope);
     }
-    if (ts.isIdentifier(current) && isReference(current)) {
+    if (mask === LOCKED) break;
+  }
+  return mask;
+}
+
+const coverageMemo = new WeakMap<ts.Node, Map<number, number>>();
+const coverageBusy = new WeakSet<ts.Node>();
+function refuseCoverage(node: ts.Node, scope: Scope, resolve: Resolve | undefined, depth = 0): number {
+  const rid = resolve ? resolveIds.get(resolve) ?? resolveIds.set(resolve, resolveIds.size + 1).get(resolve)! : 0;
+  let byResolve = coverageMemo.get(node);
+  if (!byResolve) { byResolve = new Map(); coverageMemo.set(node, byResolve); }
+  const known = byResolve.get(rid);
+  if (known !== undefined) return known;
+  // A function that calls itself: its own calls add nothing.
+  if (coverageBusy.has(node)) return LOCKED;
+  coverageBusy.add(node);
+  const ownNames = ownOf(scope);
+  let mask = LOCKED;
+  const visit = (current: ts.Node) => {
+    if (mask === 0) return;
+    if (current !== node && (ts.isJsxElement(current) || ts.isJsxSelfClosingElement(current) || ts.isJsxFragment(current))) return;
+    let inner = -1; // -1: not a gated call; else the coverage of what it calls
+    if (ts.isIdentifier(current)) {
       const local = scope.locals.get(current.text);
-      const key = `${scope.file}#${current.text}`;
-      if (local && !seen.has(key)) {
-        seen.add(key);
-        for (const inner of local) mask |= refuseCoverage(inner, scope, resolve, seen, depth);
-        return;
-      }
       const imported = scope.imports.get(current.text);
-      const module = imported && resolve && imported.specifier.startsWith('.') ? resolve(imported.specifier, scope.file) : null;
-      if (imported && module && depth < IMPORT_DEPTH) {
-        const target = exportedTarget(scopeOf(module.source, module.file), imported.imported, resolve!);
-        const targetKey = target ? `${target.scope.file}#${imported.imported}` : '';
-        if (target && !seen.has(targetKey)) {
-          seen.add(targetKey);
-          mask |= refuseCoverage(target.node, target.scope, resolve, seen, depth + 1);
+      if (local && isReference(current)) {
+        if (local.some((definition) => reachesGated(reachCached(definition, scope, resolve, depth, ownNames)))) {
+          inner = local.reduce((all, definition) => all & refuseCoverage(definition, scope, resolve, depth), LOCKED);
         }
-      }
+      } else if (imported && isReference(current)) {
+        const module = resolve && imported.specifier.startsWith('.') ? resolve(imported.specifier, scope.file) : null;
+        const target = module && depth < IMPORT_DEPTH ? exportedTarget(scopeOf(module.source, module.file), imported.imported, resolve!) : null;
+        if (target && reachesGated(reachCached(target.node, target.scope, resolve, depth + 1, ownOf(target.scope)))) {
+          inner = refuseCoverage(target.node, target.scope, resolve, depth + 1);
+        } else if (GATED.has(current.text) && (ownNames || (module && reachesGraphStore(module.source, module.file)))) inner = 0;
+      } else if (ownNames && GATED.has(current.text)) inner = 0;
+    } else if (ownNames && ts.isElementAccessExpression(current) && ts.isStringLiteralLike(current.argumentExpression)
+      && GATED.has(current.argumentExpression.text)) inner = 0;
+    if (inner >= 0) {
+      mask &= inner === LOCKED ? LOCKED : inner | guardsAround(current, node, scope);
       return;
     }
     ts.forEachChild(current, visit);
   };
   visit(node);
+  coverageBusy.delete(node);
+  byResolve.set(rid, mask);
   return mask;
 }
 
@@ -759,7 +869,7 @@ function unlockedControls(source: string, file: string, resolve?: Resolve): stri
       // onClick) and whether it is a pointer handler.
       const gatedHandlers: Array<{ refuse: number; pointer: boolean }> = [];
       for (const handler of handlers) {
-        const reach = reachOf(handler, scope, resolve, new Set(), 0, ownNames);
+        const reach = reachCached(handler, scope, resolve, 0, ownNames);
         for (const name of reach) reached.add(name);
         if (![...reach].some((name) => GATED.has(name))) continue;
         const name = ts.isJsxAttribute(handler) ? handler.name.getText(root) : '';
@@ -1093,6 +1203,58 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
     const loud = Object.entries(quiet).filter(([form, body]) => unlockedControls(head + body, `components/${form}.tsx`).length !== 0)
       .map(([form]) => form);
     expect(loud, 'locked controls G flags').toEqual([]);
+  });
+
+  // Fix round 6 of PR #200: review 6's G probe (r6/fe/ratchet6.probe.test.ts,
+  // ratchet6.facts.json): a guard counts where the gated call sits, and a
+  // component's prop where it really lands.
+  it('G corpus (review 6, LOW-3): a guard counts where the call sits; 5 missed forms caught, 6 correct guards quiet', () => {
+    const head = 'const lock = useCanvasLock();\nconst run = useGraphStore((s) => s.executeGraph);\n';
+    const forms: Record<string, string> = {
+      // Review 6's five misses.
+      not_refuse_empty_block: 'export const A = () => <div role="button" onClick={() => { if (!refuseCanvasEdit()) {} run(); }}>Run</div>;',
+      refuse_and_other: 'export const A = () => <div role="button" onClick={() => { if (refuseCanvasEdit() && Math.random() > 2) return; run(); }}>Run</div>;',
+      fancy_destructures_unused: 'const Fancy = ({ disabled, ...p }: { disabled?: boolean; onClick?: () => void }) => <span {...p} />;\nexport const A = () => <Fancy disabled={lock.locked} onClick={() => run()} />;',
+      fancy_forwards_to_div: 'const Fancy = (p: { disabled?: boolean; onClick?: () => void }) => <div {...p} />;\nexport const A = () => <Fancy disabled={lock.locked} onClick={() => run()} />;',
+      refuse_in_catch: 'export const A = () => <div role="button" onClick={() => { try { run(); } catch { if (refuseCanvasEdit()) return; } }}>Run</div>;',
+      // The rest of its probe, which G already caught.
+      if_block_no_return: 'export const A = () => <div role="button" onClick={() => { if (refuseCanvasEdit()) { console.log(1); } run(); }}>Run</div>;',
+      guard_after_deferred: 'export const A = () => <div role="button" onClick={() => { setTimeout(() => run(), 0); if (refuseCanvasEdit()) return; }}>Run</div>;',
+      and_short_circuit: 'export const A = () => <div role="button" onClick={() => { refuseCanvasEdit() && run(); }}>Run</div>;',
+      refuse_other_handler2: 'export const A = () => <div role="button" onClick={() => { if (refuseCanvasEdit()) return; }} onDoubleClick={() => run()}>Run</div>;',
+      lockNow_following_only: 'export const A = () => <div role="button" onClick={() => { if (canvasLockNow().following) return; run(); }}>Run</div>;',
+      helper_always_false: 'const guard = () => { refuseCanvasEdit(); return false; };\nexport const A = () => <div role="button" onClick={() => { if (guard()) return; run(); }}>Run</div>;',
+      pointer_on_input_range: 'export const A = () => <input type="range" disabled={lock.locked} onPointerUp={() => run()} />;',
+      early_return_then_loop: 'export const A = () => <div role="button" onClick={() => { for (const x of [1]) { if (refuseCanvasEdit()) continue; } run(); }}>Run</div>;',
+      // Beyond the probe: a rest that keeps `disabled` out, a helper whose call isn't guarded.
+      rest_without_disabled: 'const Fancy = ({ disabled, ...p }: { disabled?: boolean; onClick?: () => void }) => <button {...p} />;\nexport const A = () => <Fancy disabled={lock.locked} onClick={() => run()} />;',
+      helper_unguarded: 'function go() { run(); }\nexport const A = () => <div role="button" onClick={() => { go(); }}>Run</div>;',
+    };
+    const missed = Object.entries(forms).filter(([form, body]) => unlockedControls(head + body, `components/${form}.tsx`).length !== 1)
+      .map(([form]) => form);
+    expect(missed, 'forms G lets through').toEqual([]);
+    const quiet: Record<string, string> = {
+      // Review 6's six false positives.
+      or_short_circuit: 'export const A = () => <div role="button" onClick={() => { refuseCanvasEdit() || run(); }}>Run</div>;',
+      local_flag: 'export const A = () => <div role="button" onClick={() => { const r = refuseCanvasEdit(); if (r) return; run(); }}>Run</div>;',
+      ternary: 'export const A = () => <div role="button" onClick={() => (refuseCanvasEdit() ? null : run())}>Run</div>;',
+      and_not: 'export const A = () => <div role="button" onClick={() => !refuseCanvasEdit() && run()}>Run</div>;',
+      helper_guard: 'const guard = () => refuseCanvasEdit();\nexport const A = () => <div role="button" onClick={() => { if (guard()) return; run(); }}>Run</div>;',
+      destructured_lockNow: 'export const A = () => <div role="button" onClick={() => { const { locked } = canvasLockNow(); if (locked) return; run(); }}>Run</div>;',
+      // And the forms it already passed.
+      not_refuse_call: 'export const A = () => <div role="button" onClick={() => { if (!refuseCanvasEdit()) run(); }}>Run</div>;',
+      or_in_if: 'export const A = () => <div role="button" onClick={() => { if (refuseCanvasEdit() || Math.random() > 2) return; run(); }}>Run</div>;',
+      async_guard: 'export const A = () => <div role="button" onClick={async () => { await Promise.resolve(); if (refuseCanvasEdit()) return; run(); }}>Run</div>;',
+      outer_param_in_map: 'export const A = ({ disabled }: { disabled: boolean }) => <>{[1].map((k) => <button key={k} disabled={disabled} onClick={() => run()}>Run</button>)}</>;',
+      fancy_forwards_button: 'const Fancy = (p: { disabled?: boolean; onClick?: () => void }) => <button {...p} />;\nexport const A = () => <Fancy disabled={lock.locked} onClick={() => run()} />;',
+      fancy_rest_button: 'const Fancy = ({ label, ...p }: { label: string; disabled?: boolean; onClick?: () => void }) => <button {...p}>{label}</button>;\nexport const A = () => <Fancy label="Run" disabled={lock.locked} onClick={() => run()} />;',
+      else_branch: 'export const A = () => <div role="button" onClick={() => { if (refuseCanvasEdit()) { return; } else { run(); } }}>Run</div>;',
+      try_guarded: 'export const A = () => <div role="button" onClick={() => { if (refuseCanvasEdit()) return; try { run(); } catch { /* shown */ } }}>Run</div>;',
+      following_and_offline: 'export const A = () => <div role="button" onClick={() => { if (refuseEditWhileFollowing() || refuseEditWhileOffline()) return; run(); }}>Run</div>;',
+    };
+    const loud = Object.entries(quiet).filter(([form, body]) => unlockedControls(head + body, `components/${form}.tsx`).length !== 0)
+      .map(([form]) => form);
+    expect(loud, 'correct guards G flags').toEqual([]);
   });
 
   it('the palette is allowlisted control by control, never tag-wide (review 4 LOW-4)', () => {
@@ -1808,9 +1970,6 @@ const OUTLINE_DROP = 1.25;
  * which the test checks is dimmer. */
 const FILL_SHOWS_STATE: Record<string, string> = {
   'create-composer__generate': 'white on the accent (2.9:1): GM r2 answer 6',
-  'asset-trash__button--danger': 'white on danger: GM r2 answer 6',
-  'project-home__danger': 'white on danger: GM r2 answer 6',
-  'prompt-dialog__danger': 'white on danger: GM r2 answer 6',
   // Fix round 3: in the filled rule now (GM r1 answer 2: a filled button keeps its fill, grey).
   'proposal-bar__button--primary': "white on the agent's colour: its fill shows the state (GM r4 answer 3)",
 };

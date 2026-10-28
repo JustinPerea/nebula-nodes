@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Timeline as XzdarcyTimeline } from '@xzdarcy/react-timeline-editor';
 import '@xzdarcy/react-timeline-editor/dist/react-timeline-editor.css';
 import type {
@@ -84,11 +84,6 @@ export function RemotionTimeline({
   // block where it was dropped).
   const [redraw, setRedraw] = useState(0);
   const editorData = useMemo(() => { void redraw; return manifestToEditorData(manifest); }, [manifest, redraw]);
-  const refused = () => {
-    if (!refuseCanvasEdit()) return false;
-    setRedraw((n) => n + 1);
-    return true;
-  };
 
   const updateTrackItemTime = useGraphStore((s) => s.updateTrackItemTime);
   // Round 23 (review 22, L-3): moving and resizing a layer edit the canvas;
@@ -99,6 +94,23 @@ export function RemotionTimeline({
   const toggleSelectedTrackItem = useUIStore((s) => s.toggleSelectedTrackItem);
   const selectedTrackItemId = useUIStore((s) => s.selectedTrackItemId);
   const selectedTrackItemIds = useUIStore((s) => s.selectedTrackItemIds);
+
+  // A redraw is a new mount, which starts scrolled to 0: it keeps where the
+  // person had scrolled (fix round 6 of PR #200, review 6 N-5). The old
+  // timeline's scroll is taken as it goes (this cleanup runs before the new
+  // one mounts); the new one reports 0 as it mounts, which is ignored, and
+  // is then scrolled back. Live: restoring from the last onScroll alone
+  // found 0, the new mount's own report.
+  const drawKey = `${redraw}:${lock.locked ? 'locked' : 'open'}`;
+  const scrolledLeft = useRef(0);
+  const restoring = useRef<number | null>(null);
+  useLayoutEffect(() => () => { restoring.current = scrolledLeft.current; }, [drawKey]);
+  useLayoutEffect(() => {
+    const left = restoring.current;
+    if (left === null) return;
+    restoring.current = null;
+    if (left > 0) timelineState.current?.setScrollLeft(left);
+  }, [drawKey, timelineState]);
 
   // data-selected-id is a hook for T10 CSS styling — gives the selected track
   // item's id to the DOM so the row highlight rule can target it.
@@ -113,7 +125,8 @@ export function RemotionTimeline({
         // off and drops the gesture without reporting its end (live: the block
         // stayed 96 px from where it is), so the lock starting or ending draws
         // it again too.
-        key={`${redraw}:${lock.locked ? 'locked' : 'open'}`}
+        key={drawKey}
+        onScroll={({ scrollLeft }) => { if (restoring.current === null) scrolledLeft.current = scrollLeft; }}
         ref={timelineState}
         editorData={editorData}
         effects={EFFECTS}
@@ -131,13 +144,13 @@ export function RemotionTimeline({
         // lock starts ends without writing (fix round 4 of PR #200, review 4
         // LOW-4).
         onActionMoveEnd={({ action, start }) => {
-          if (refused()) return;
+          if (refuseCanvasEdit()) { setRedraw((n) => n + 1); return; }
           updateTrackItemTime(remotionNodeId, action.id, {
             startFrame: Math.round(start * DEFAULT_FPS),
           });
         }}
         onActionResizeEnd={({ action, start, end }) => {
-          if (refused()) return;
+          if (refuseCanvasEdit()) { setRedraw((n) => n + 1); return; }
           updateTrackItemTime(remotionNodeId, action.id, {
             startFrame: Math.round(start * DEFAULT_FPS),
             durationInFrames: Math.round((end - start) * DEFAULT_FPS),

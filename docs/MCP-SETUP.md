@@ -1441,9 +1441,14 @@ Rules:
   one-line note inline in quotes (`pin_1 on n4: "warmer"`); a note of several
   lines goes under its pin's line (`pin_1 on n4 (12m ago):`), every line
   indented the same and a blank line left empty, so a list keeps its shape.
-  A tab reads as a space; each line loses its trailing spaces; blank lines
-  inside the note stay as typed (only the canvas display folds a run of
-  them); spacing inside a line is kept, the same in look_at_canvas and
+  An answered note puts the answer after the note, as on one line
+  (`pin_1 on n4: "warmer" — resolved by Codex: "Done"`); with several lines,
+  on its own line under the note at the row's indent
+  (`pin_1 on n4:`, the note's lines, then `— resolved by Codex: "Done"`).
+  A tab reads as a space; each line loses its trailing spaces (the first
+  keeps its leading ones); a terminal colour code pasted in goes whole;
+  blank lines inside the note stay as typed (only the canvas display folds a
+  run of them); spacing inside a line is kept, the same in look_at_canvas and
   start_here. Every line break Unicode knows (`\r\n`, `\r`, U+2028, U+2029
   and the rest) reads as `\n`. The Claude Code channel's push prints a note
   the same way: one line inline in `<pin …>warmer</pin>`; several lines on

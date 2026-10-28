@@ -2173,7 +2173,7 @@ body.app-slava-restraint .inspector__action-button:disabled {
   cursor: not-allowed;
 }
 
-body.app-slava-restraint .inspector__file-button:hover,
+body.app-slava-restraint .inspector__file-button:hover:not([aria-disabled='true']),
 body.app-slava-restraint .inspector__action-button:hover:not(:disabled) {
   border-color: var(--sr-edge-strong);
   background: var(--sr-surface-control-hover);

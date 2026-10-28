@@ -57,7 +57,7 @@ def _activate(store: ProjectStore, project_id: str) -> None:
 # -- text and caps ----------------------------------------------------------
 
 def test_text_is_plain_single_line_and_capped():
-    assert clean_text("  warmer\n\tplease\x00\x1b[31m ‮ ", limit=280) == "warmer please[31m"
+    assert clean_text("  warmer\n\tplease\x00\x1b[31m ‮ ", limit=280) == "warmer please"  # the colour code goes whole (PR #200 fix round 6, review 6 N-4)
     assert clean_text("x" * MAX_PIN_TEXT, limit=MAX_PIN_TEXT) == "x" * MAX_PIN_TEXT
     for bad in ("", "   \n", None, 42, "x" * (MAX_PIN_TEXT + 1)):
         with pytest.raises(PinError) as exc:

@@ -126,8 +126,9 @@ body.app-slava-restraint .project-home__trash-empty:hover:not(:disabled),
 body.app-slava-restraint .project-home__confirm button:hover:not(:disabled) { background: var(--sr-surface-control-hover); }
 body.app-slava-restraint .project-home__confirm { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
 body.app-slava-restraint .project-home__confirm-prompt { color: var(--sr-ink-light); font-size: 12px; }
-body.app-slava-restraint .project-home__confirm .project-home__danger { border-color: var(--sr-danger); background: var(--sr-danger); color: #fff; font-weight: 600; }
-body.app-slava-restraint .project-home__confirm .project-home__danger:hover:not(:disabled) { border-color: var(--sr-danger); background: var(--sr-danger); filter: brightness(1.08); }
+/* GM r8 (fix round 6 of PR #200): the red fill with near-black ink, never the orange. */
+body.app-slava-restraint .project-home__confirm .project-home__danger { border-color: var(--sr-danger-fill, #ff887d); background: var(--sr-danger-fill, #ff887d); color: var(--sr-on-danger, #1f1f1f); font-weight: 600; }
+body.app-slava-restraint .project-home__confirm .project-home__danger:hover:not(:disabled) { border-color: var(--sr-danger-fill-hover, #ff9a91); background: var(--sr-danger-fill-hover, #ff9a91); }
 /* Critically damped-ish spring (k 380, c 30, m 1): ~2% overshoot, settles in 420ms. */
 body.app-slava-restraint .project-home__toast { --project-home-spring: linear(0, 0.049, 0.163, 0.305, 0.452, 0.588, 0.705, 0.801, 0.876, 0.931, 0.97, 0.995, 1.011, 1.019, 1.022, 1.022, 1.02, 1.017, 1.014, 1.011, 1.008, 1.005, 1.003, 1.002, 1); display: flex; align-items: center; gap: 4px; max-width: min(var(--notice-max-w, 560px), calc(100vw - 32px)); padding: 6px 6px 6px 16px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-node-media-radius); background: var(--sr-canvas-elevated); color: var(--sr-ink); font-size: 13px; box-shadow: 0 12px 32px rgb(0 0 0 / 0.35); animation: project-home-toast-in 420ms var(--project-home-spring) both; }
 body.app-slava-restraint .project-home__toast-text { min-width: 0; margin-right: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -208,7 +209,7 @@ body.app-slava-restraint .project-home__sr-only { position: absolute; width: 1px
   body.app-slava-restraint .project-home__preview-open,
   body.app-slava-restraint .project-home__trash-toggle svg,
   body.app-slava-restraint .project-home__trash-actions button { transition: none; }
-  body.app-slava-restraint .project-home__toast { animation: none; }
+  body.app-slava-restraint .project-home__toast { animation: notice-fade-in 180ms ease-out both; /* opacity only (GM r9 answer 2) */ }
   body.app-slava-restraint .workspace-overlays--home .workspace-dock-panel.panel { animation: none; }
   body.app-slava-restraint .workspace-overlays--home .workspace-dock-panel.panel.panel--exiting { animation: workspace-dock-fade-out 120ms ease forwards; }
 }

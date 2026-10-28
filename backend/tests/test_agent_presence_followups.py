@@ -198,7 +198,7 @@ def test_L2_a_note_keeps_its_newlines_and_drops_every_other_control_character():
     from services.canvas_pins import clean_text
 
     note = "first line\r\n\tsecond line\x00\x1b[31m‮\rthird  line  \n"
-    assert clean_text(note, limit=280, multiline=True) == "first line\n second line[31m\nthird  line"
+    assert clean_text(note, limit=280, multiline=True) == "first line\n second line\nthird  line"
     # One line stays one line: a reply, and every caller that doesn't ask for lines.
     assert clean_text("warmer\nplease", limit=280) == "warmer please"
     for bad in ("\n\n", " \r\n\t"):
@@ -379,8 +379,11 @@ def test_r5_LOW4_the_cli_prints_the_note_the_same_way():
     assert "  pin_1 on n4:\n    Fix these:\n    - warmer key light\n      - not orange\n\n    - tighter crop" in text
     # One line stays inline and quoted.
     assert format_pin({**pin, "text": 'say "hi"'}, now=None) == 'pin_1 on n4: "say \\"hi\\""'
+    # Review 6 N-3: the answer after the note, as on one line.
     resolved = {**pin, "status": "resolved", "reply": {"text": "done", "agent": {"name": "Claude"}}}
-    assert format_pin(resolved, now=None).startswith('pin_1 on n4 — resolved by Claude: "done":\n    Fix these:')
+    assert format_pin(resolved, now=None) == ("pin_1 on n4:\n    Fix these:\n    - warmer key light\n      - not orange\n\n    - tighter crop\n"
+                                              '  — resolved by Claude: "done"')
+    assert format_pin({**resolved, "text": "warmer"}, now=None) == 'pin_1 on n4: "warmer" — resolved by Claude: "done"'
 
 
 def test_r5_N3_the_store_keeps_what_the_person_typed():
@@ -391,3 +394,24 @@ def test_r5_N3_the_store_keeps_what_the_person_typed():
     assert clean_text("a" + "\n" * 278 + "b", limit=280, multiline=True) == "a" + "\n" * 278 + "b"
     # Leading and trailing blank lines and trailing spaces still go; control characters still drop.
     assert clean_text("\n\na  \n\tb\x00\n\n", limit=280, multiline=True) == "a\n b"
+
+
+# -- Fix round 6 of PR #200 (review 6 N-2, N-4) -------------------------------
+# The first line keeps its indent end to end; a pasted terminal colour code
+# goes whole, never as a stray "[31m".
+
+def test_r6_N2_the_first_line_keeps_its_indent():
+    from services.canvas_pins import clean_text
+    import mcp_channel
+
+    assert clean_text("\n  indented first\nsecond  \n\n", limit=280, multiline=True) == "  indented first\nsecond"
+    assert mcp_channel.clean_text("  indented first\nsecond", 300, multiline=True) == "  indented first\nsecond"
+    assert mcp_channel._note_block("  indented first\nsecond") == "    indented first\n  second"
+
+
+def test_r6_N4_a_terminal_colour_code_goes_whole():
+    from services.canvas_pins import clean_text
+
+    assert clean_text("\x1b[31mred\x1b[0m text", limit=280, multiline=True) == "red text"
+    assert clean_text("\x1b]0;title\x07note", limit=280) == "note"
+    assert clean_text("a\x1b[1;32mb", limit=280) == "ab"

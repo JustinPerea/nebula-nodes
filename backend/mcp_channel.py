@@ -226,7 +226,14 @@ def clean_text(raw: Any, limit: int = MAX_TEXT, *, multiline: bool = False) -> s
 
     lines = [plain(line) for line in text.splitlines()]
     if multiline:
-        text = "\n".join(line.rstrip() for line in lines).strip()
+        # Blank lines go from the ends only; the first line keeps its indent
+        # (fix round 6 of PR #200, review 6 N-2).
+        kept = [line.rstrip() for line in lines]
+        while kept and not kept[0]:
+            kept.pop(0)
+        while kept and not kept[-1]:
+            kept.pop()
+        text = "\n".join(kept)
     else:
         text = " ".join(" ".join(lines).split())
     return text if len(text) <= limit else text[: limit - 1] + "…"

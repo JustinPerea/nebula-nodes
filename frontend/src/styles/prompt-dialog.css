@@ -73,9 +73,15 @@
 
 .prompt-dialog__actions .prompt-dialog__danger {
   font-weight: 600;
-  color: #fff;
-  border-color: var(--sr-danger, #c0392b);
-  background: var(--sr-danger, #c0392b);
+  /* GM r8 (fix round 6 of PR #200): the red fill, near-black ink. */
+  color: var(--sr-on-danger, #1f1f1f);
+  border-color: var(--sr-danger-fill, #ff887d);
+  background: var(--sr-danger-fill, #ff887d);
+}
+
+.prompt-dialog__actions .prompt-dialog__danger:hover:not(:disabled) {
+  border-color: var(--sr-danger-fill-hover, #ff9a91);
+  background: var(--sr-danger-fill-hover, #ff9a91);
 }
 
 .prompt-dialog__field input:focus-visible,

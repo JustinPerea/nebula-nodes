@@ -751,16 +751,20 @@ def quote_note(text: Any) -> str:
     return json.dumps(str(text or ""), ensure_ascii=False)
 
 
-def pin_line(head: str, text: Any, tail: str = "", indent: str = "    ") -> str:
-    """`head: "note"tail` for a one-line note. A note of several lines goes
-    under `head tail:`, each line indented the same (`indent`, two past the
-    two-space row it sits in), blank lines empty: the lines the person typed
-    keep their shape, lists included (fix round 5 of PR #200, review 5 LOW-4,
-    GM 2026-10-28 r7 answer 4). The channel push prints it the same way."""
+def pin_line(head: str, text: Any, tail: str = "", indent: str = "    ", after: str = "") -> str:
+    """`head: "note"tail after` for a one-line note. A note of several lines
+    goes under `head tail:`, each line indented the same (`indent`, two past
+    the two-space row it sits in), blank lines empty: the lines the person
+    typed keep their shape, lists included (fix round 5 of PR #200, review 5
+    LOW-4, GM 2026-10-28 r7 answer 4). The channel push prints it the same
+    way. `after` (an answer) follows the note, as on one line: under it, on
+    its own line at the row's indent, where no line of the note can start
+    (fix round 6, review 6 N-3)."""
     note = str(text or "")
     if "\n" not in note:
-        return f"{head}: {quote_note(note)}{tail}"
-    return f"{head}{tail}:\n" + note_block(note, indent)
+        return f"{head}: {quote_note(note)}{tail}{after}"
+    block = f"{head}{tail}:\n" + note_block(note, indent)
+    return block + (f"\n{indent[:-2]}{after.strip()}" if after else "")
 
 
 def format_pin(pin: dict[str, Any], now: float | None = None) -> str:
@@ -780,7 +784,7 @@ def format_pin(pin: dict[str, Any], now: float | None = None) -> str:
     if pin.get("status") == "resolved" and reply:
         agent = (reply.get("agent") or {}).get("name") or "an agent"
         answer = json.dumps(str(reply.get("text") or ""), ensure_ascii=False)
-        return pin_line(head, pin.get("text"), f" — resolved by {agent}: {answer}")
+        return pin_line(head, pin.get("text"), after=f" — resolved by {agent}: {answer}")
     ago = _ago(pin.get("createdAt"), now)
     return pin_line(head, pin.get("text"), f" ({ago})" if ago else "")
 

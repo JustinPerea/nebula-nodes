@@ -123,12 +123,18 @@ body.app-slava-restraint .asset-trash__button svg { width: 12px; height: 12px; }
 body.app-slava-restraint .asset-trash__button:hover:not(:disabled) { border-color: #f59e0b; color: #f59e0b; }
 body.app-slava-restraint .asset-trash__button:disabled { opacity: var(--sr-disabled-opacity); cursor: default; }
 
-body.app-slava-restraint .asset-trash__button--danger,
-body.app-slava-restraint .asset-trash__button--danger:hover:not(:disabled) {
-  border-color: var(--sr-danger);
-  background: var(--sr-danger);
-  color: #fff;
+/* GM r8 (fix round 6 of PR #200): the red fill, near-black ink; hover lighter. */
+body.app-slava-restraint .asset-trash__button--danger {
+  border-color: var(--sr-danger-fill, #ff887d);
+  background: var(--sr-danger-fill, #ff887d);
+  color: var(--sr-on-danger, #1f1f1f);
   font-weight: 600;
+}
+
+body.app-slava-restraint .asset-trash__button--danger:hover:not(:disabled) {
+  border-color: var(--sr-danger-fill-hover, #ff9a91);
+  background: var(--sr-danger-fill-hover, #ff9a91);
+  color: var(--sr-on-danger, #1f1f1f);
 }
 
 body.app-slava-restraint .asset-trash__confirm { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
@@ -202,6 +208,6 @@ body.app-slava-restraint .character-node__open-error {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  body.app-slava-restraint .asset-trash__toast { animation: none; }
+  body.app-slava-restraint .asset-trash__toast { animation: notice-fade-in 180ms ease-out both; /* opacity only (GM r9 answer 2) */ }
   body.app-slava-restraint .asset-trash__toggle svg { transition: none; }
 }

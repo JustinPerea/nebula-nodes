@@ -25,6 +25,9 @@
      width rule reads it too, so a narrower rule (a Studio's room) still wins
      and none is wider. */
   --notice-max-w: 560px;
+  /* The toasts' spring (ProjectSwitchToast.css and the others), for the
+     region's shared motion below. */
+  --notice-spring: linear(0, 0.049, 0.163, 0.305, 0.452, 0.588, 0.705, 0.801, 0.876, 0.931, 0.97, 0.995, 1.011, 1.019, 1.022, 1.022, 1.02, 1.017, 1.014, 1.011, 1.008, 1.005, 1.003, 1.002, 1);
   position: fixed;
   left: var(--page-gutter, 16px);
   right: var(--page-gutter, 16px);
@@ -87,6 +90,39 @@
    BOTTOM_BAR_SWITCH_ATTR; GM - Design, round 7). */
 :root[data-bottom-bar-switch] .notice-region {
   transition: none;
+}
+
+/* Motion by kind (fix round 6 of PR #200, GM r9 answer 2, verbatim:
+   "Anything that appears as its own surface in the notice region scales in
+   with the toasts' spring ... Content that appears inside a surface that's
+   already there (kept-note rows, an inline error line under a field) expands
+   into place: its height springs so the rows around it move smoothly, with
+   opacity. Rows don't scale. Reduced motion: everything uses opacity only.")
+   A surface uses notice-surface-in (the toasts' scale and fade); a row uses
+   notice-row-in, which springs its height, padding, border and the gap
+   above it from nothing, and never its scale. Each surface's own CSS names
+   one of the two (tests/agentPresenceFollowups.r6.test.tsx pins which). */
+@keyframes notice-surface-in {
+  from { opacity: 0; transform: scale(0.96); }
+  30% { opacity: 1; }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes notice-row-in {
+  from {
+    height: 0;
+    min-height: 0;
+    margin-block-start: calc(-1 * var(--notice-row-gap, 0px));
+    padding-block: 0;
+    border-block-width: 0;
+    opacity: 0;
+  }
+  40% { opacity: 1; }
+}
+
+/* Reduced motion: the same entrances as a fade, nothing that moves. */
+@keyframes notice-fade-in {
+  from { opacity: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

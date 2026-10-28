@@ -60,7 +60,7 @@
   to { opacity: 1; transform: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .project-switch-toast { animation: none; }
+  .project-switch-toast { animation: notice-fade-in 180ms ease-out both; /* opacity only (GM r9 answer 2) */ }
 }
 /* Over the Commons (a switch held behind unsaved labels, commons-leave) it
  * stays clear of the labeling panels' form column, where Save is (at most

@@ -783,7 +783,8 @@ nebula notes --unread          # your updates the person hasn't opened
 
 A note keeps the lines the person wrote: `nebula pins` prints a note of
 several lines under its pin's line, every line indented the same, so a list
-keeps its shape (over MCP, `pins[].text` holds `\n`; a channel push prints it
+keeps its shape, and an answer to it (`— resolved by …`) on its own line
+after the note (over MCP, `pins[].text` holds `\n`; a channel push prints it
 the same way inside `<pin>…</pin>`). `nebula watch`
 keeps each event on one line, so a break in a note shows there as ` ⏎ `. Read all of it before you act.
 

@@ -131,6 +131,14 @@ a {
   font-size: 12px;
   line-height: 1.35;
   letter-spacing: 0.01em;
+  /* Its own surface in the notice region (GM r9 answer 2; noticeRegion.css). */
+  animation: notice-surface-in 420ms var(--notice-spring) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .person-required {
+    animation: notice-fade-in 180ms ease-out both;
+  }
 }
 
 .person-required__dismiss {
