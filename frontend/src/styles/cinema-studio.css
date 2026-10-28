@@ -525,7 +525,8 @@ body.app-slava-restraint .cinema-shots-rail__remove {
 
 /* A destructive hover is the Delete red, never the accent orange (fix round 5
    of PR #200, review 5 N-4, GM r7 answer 2). */
-body.app-slava-restraint .cinema-shots-rail__remove:hover:not(:disabled) { color: var(--sr-danger-ink, #ff887d); }
+/* GM r12: taking a shot out is an edit the canvas Undo puts back, so neutral. */
+body.app-slava-restraint .cinema-shots-rail__remove:hover:not(:disabled) { color: var(--sr-ink-bold); }
 
 body.app-slava-restraint .cinema-shots-rail__add {
   flex: 0 0 auto;

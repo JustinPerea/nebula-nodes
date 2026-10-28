@@ -252,7 +252,7 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
               {...lock.act({ offline: true })}
             />
           </label>
-          <button type="button" className="mask-painter__tool" onClick={clearStrokes} {...lock.act({ offline: true })}>
+          <button type="button" className="mask-painter__tool mask-painter__tool--clear" onClick={clearStrokes} {...lock.act({ offline: true })}>
             <Trash2 size={14} /> Clear
           </button>
           <div className="mask-painter__spacer" />

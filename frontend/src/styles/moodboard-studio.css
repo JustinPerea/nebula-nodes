@@ -537,6 +537,12 @@ body.app-slava-restraint .moodboard-analysis .moodboard-chip button {
   line-height: 1;
 }
 
+/* GM r12: a chip's × is an edit, so neutral, the same as a Commons
+   keyword chip's (commons.css). */
+body.app-slava-restraint .moodboard-chip .moodboard-chip__remove:hover {
+  color: var(--sr-ink-bold);
+}
+
 body.app-slava-restraint .moodboard-inline {
   display: flex;
   gap: 6px;

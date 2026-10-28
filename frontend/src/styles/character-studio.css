@@ -81,6 +81,18 @@ body.app-slava-restraint .character-studio-toolbar__retry:hover {
   border-color: var(--sr-accent);
 }
 
+/* GM r12: Delete is red on hover, never the accent its Retry look takes. */
+body.app-slava-restraint .character-studio-toolbar__delete:hover:not(:disabled) {
+  border-color: var(--sr-danger-ink, #ff887d);
+  background: var(--sr-danger-tint);
+  color: var(--sr-danger-ink, #ff887d);
+}
+
+body.app-slava-restraint .character-studio-toolbar__delete:active:not(:disabled) {
+  border-color: var(--sr-danger-ink-hover, #ff9a91);
+  color: var(--sr-danger-ink-hover, #ff9a91);
+}
+
 body.app-slava-restraint .character-studio-toolbar__crumb {
   font-weight: 600;
   font-size: 13px;
@@ -456,7 +468,7 @@ body.app-slava-restraint .character-def__ref-remove {
 }
 
 body.app-slava-restraint .character-def__ref-remove:hover {
-  color: var(--sr-danger-ink, #ff887d); /* GM r11 answer 3: never the orange */
+  color: var(--sr-ink-bold); /* GM r12: taking a view out is an edit, so neutral */
 }
 
 body.app-slava-restraint .character-def__ref-add {

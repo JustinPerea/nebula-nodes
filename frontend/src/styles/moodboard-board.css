@@ -353,8 +353,7 @@ html body .moodboard-board-panel .moodboard-def__row {
 }
 
 .moodboard-board-panel__remove:hover {
-  border-color: var(--sr-danger-ink, #ff887d); /* GM r11 answer 3: the Delete red */
-  color: var(--sr-danger-ink, #ff887d);
+  border-color: var(--mb-board-ink); /* GM r12: Undo puts it back, so neutral */
 }
 
 /* The Board / List switch in the header. The thumb slides on a spring. */

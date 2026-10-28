@@ -246,11 +246,12 @@ describe('N-4: every Delete hovers red, never orange', () => {
     ['styles/slava-restraint.css', /\.context-menu__item--danger:hover[^{]*\{([^}]*)\}/],
     ['styles/slava-restraint.css', /\.inspector__action-button--danger:hover[^{]*\{([^}]*)\}/],
     ['styles/project-home.css', /\.project-home__delete:hover[^{]*\{([^}]*)\}/],
-    ['styles/cinema-studio.css', /\.cinema-shots-rail__remove:hover[^{]*\{([^}]*)\}/],
     ['styles/remotion-editor.css', /\.remotion-properties-panel__keyframe-delete:hover[^{]*\{([^}]*)\}/],
     ['styles/canvasPins.css', /\.canvas-pin__delete:focus-visible[^{]*\{([^}]*)\}/],
   ];
-  it('the context menu, the Inspector, project home, a shot\'s ×, a keyframe\'s and a pin\'s Delete: #ff887d on hover, no accent, no --sr-danger orange', () => {
+  // GM r12 (fix round 8): a shot's × left this list. Taking a shot out is an
+  // edit the canvas Undo puts back, so it hovers neutral (the test below).
+  it('the context menu, the Inspector, project home, a keyframe\'s and a pin\'s Delete: #ff887d on hover, no accent, no --sr-danger orange', () => {
     for (const [file, pattern] of hovers) {
       const body = pattern.exec(css(file))?.[1];
       expect(body, `${file} ${pattern}`).toBeDefined();
@@ -263,6 +264,16 @@ describe('N-4: every Delete hovers red, never orange', () => {
     const tokens = css('styles/disabled-buttons.css');
     expect(tokens).toMatch(/--sr-danger-ink:\s*#ff887d/i);
     expect(tokens).toMatch(/--sr-danger-ink-hover:\s*#ff9a91/i);
+  });
+  it('GM r12: a shot\'s × and the Inspector palette × hover neutral, never red or the accent', () => {
+    for (const [file, pattern] of [
+      ['styles/cinema-studio.css', /\.cinema-shots-rail__remove:hover[^{]*\{([^}]*)\}/],
+      ['styles/slava-restraint.css', /\.inspector__palette-remove:hover[^{]*\{([^}]*)\}/],
+    ] as Array<[string, RegExp]>) {
+      const body = pattern.exec(css(file))?.[1];
+      expect(body, `${file} ${pattern}`).toMatch(/--sr-ink-bold/);
+      expect(body, `${file} ${pattern}`).not.toMatch(/--sr-danger|--sr-error|--sr-accent/);
+    }
   });
 });
 

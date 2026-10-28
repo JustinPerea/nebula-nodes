@@ -651,7 +651,7 @@ body:not(.app-slava-restraint) .inspector__palette-remove {
 }
 
 body:not(.app-slava-restraint) .inspector__palette-remove:hover {
-  color: var(--sr-danger-ink, #ff887d);
+  color: #ddd; /* GM r12: removing a swatch is an edit, so neutral */
 }
 
 .inspector__palette-actions {

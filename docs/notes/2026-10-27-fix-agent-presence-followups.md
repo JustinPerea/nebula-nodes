@@ -995,3 +995,75 @@ palette when Nebula reconnects." included).
   transform; reduced motion fades at full height), open list 3 of 3 (0 px
   cut in every frame, on arrival and on leave), colours 4 of 4; blocked
   requests the 2 canaries only.
+
+## Fix round 8
+
+GM r12 approved round 7's exits and sweep, kept the open list's fade-out in
+place, approved the asset trash's neutral Restore, and set the rule for red.
+
+### What changed, per item
+
+- **The rule (GM r12 answer 3).** Red: Delete, Delete forever, Purge,
+  Clear, Discard, Trash, which remove something you can't get back just by
+  adding it again. Neutral: a × that takes an item out of a field or list
+  you're editing (chips, swatches, tags, references), because adding it
+  again or Undo puts it back.
+- **Ratchet.** "remove" is off the destructive list. A class naming
+  "remove" takes no red, no orange, no danger token and no accent (new
+  `removeColours`). The component check now reads a button's text when it
+  has no aria-label: a button named Delete, Clear, Discard, Purge or Trash
+  needs a destructive class, and one labelled Remove needs a remove class.
+  The two forms it found that the round 7 check missed: Character Studio's
+  Delete wore its Retry look (accent hover), and the mask painter's Clear
+  was neutral.
+- **Neutral now:** a Commons keyword chip's × (back from round 7's red) and
+  a moodboard chip's ×, the same at rest, on hover (white) and pressed; the
+  keyword ×s in Commons Evaluation and Review (they hovered the accent every
+  Commons button takes; now `commons-button--remove`, and each is labelled
+  "Remove <keyword>"); the Inspector palette × (--sr-ink, the ghost hover),
+  which reverses round 6, in both themes; a shot's ×, a character view's ×
+  and the board's "Remove from board", all of which Undo puts back (the
+  shot through canvas Undo, the board through its Undo toast). r5's test
+  that pinned a shot's × red now pins it and the palette × neutral.
+- **Red now:** Commons "Discard unsaved changes" and "Discard changes"
+  (`commons-button--danger`, they hovered the accent), the mask painter's
+  Clear, Character Studio's Delete. The Settings confirm that removes an API
+  key or revokes a connected app stays red (the key or the token can't come
+  back by adding again); its class is now `settings__confirm--danger`, so
+  the remove rule doesn't hold it, and it takes the lighter red pressed like
+  every other red.
+- **The square × beside "Delete and purge".** It isn't Commons: Commons'
+  actions are Re-analyze and Delete and purge only. In round 7's shot it was
+  the probe's result-card Delete, drawn beside the purge button with a "✕"
+  instead of the card's own trash icon. That Delete removes the result, so
+  it stays red. The harness now draws each control alone, with its real
+  icon, and crops it alone.
+- **Sweep.** Every button showing ×, ✕ or an X or Trash icon (68), and
+  every one named with Delete, Clear, Discard, Purge, Trash, Remove or
+  Revoke, checked against the rule. The rest are Close or Dismiss (neutral,
+  not removers) or already right.
+
+### Left
+
+- The wording batch (not this PR) gains GM r12's Graph menu "Ctrl / ⌘ S" →
+  one label per platform.
+- A personal agent's Remove deletes a custom agent's settings and is
+  neutral; it isn't a × in a field, and GM's lists don't name it.
+
+### Fix round 8 gates
+
+- tsc -b: clean. Full lint: clean.
+- Focused frontend: 189 files (everything that renders a touched component
+  or reads a touched stylesheet), 2802 of 2802. After the last CSS fix the
+  ratchet and r5 to r7: 70 of 70.
+- vite build plus check-build-budget: 412,833 B raw and 125,558 B gzip.
+- Live (backend 8795, Vite 5795, nothing paid): colours 11 of 11 at 1280
+  and 1440. Seven reds go #ff887d on hover and #ff9a91 pressed, seven
+  neutrals take no red or accent at rest, on hover or pressed, the two chips
+  match, and only the 2 blocked test requests went toward the dev ports.
+  Surprise: the moodboard chip's hover never applied, because the base rule
+  `.moodboard-analysis .moodboard-chip button` outranked it. The hover now
+  has the same reach.
+- Shots: 14, one per control (a cell crop is the same picture at every
+  width, so it is shot once and measured at both). No duplicates; the
+  whole-folder duplicates are round 7's five pairs from earlier rounds.

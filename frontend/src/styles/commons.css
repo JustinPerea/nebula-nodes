@@ -532,12 +532,17 @@ body.app-slava-restraint .commons-chip__remove {
   cursor: pointer;
 }
 
+/* GM r12: a keyword chip's × is an edit, so neutral, the same as a
+   moodboard chip's (moodboard-studio.css). */
 body.app-slava-restraint .commons-chip__remove:hover {
-  color: var(--sr-danger-ink, #ff887d);
+  color: var(--sr-ink-bold);
 }
 
-body.app-slava-restraint .commons-chip__remove:active {
-  color: var(--sr-danger-ink-hover, #ff9a91);
+/* A keyword's × in the evaluation and review forms: the same edit, so the
+   neutral hover, never the accent every other Commons button takes. */
+body.app-slava-restraint .commons-button--remove:hover:not(:disabled) {
+  border-color: var(--sr-edge-strong);
+  color: var(--sr-ink-bold);
 }
 
 /* -- grid --------------------------------------------------------------------- */

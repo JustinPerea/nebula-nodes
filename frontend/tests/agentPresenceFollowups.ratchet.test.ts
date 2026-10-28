@@ -2112,13 +2112,22 @@ function disabledLooks() {
 
 // Fix round 7 of PR #200 (GM r11 answer 3, verbatim: "Grep for any other
 // hard-coded reds or orange on destructive actions, so the rule is enforced
-// in code (a ratchet), not by eye."). A destructive control (a class naming
-// danger, destructive, delete, purge, remove, trash, discard or clear) draws
-// its red only from the danger tokens (styles/disabled-buttons.css:
-// --sr-danger-ink, -ink-hover, -fill, -fill-hover, -tint, -edge,
-// --sr-on-danger), never a hard-coded red or orange, and never the accent
-// (--sr-danger, --sr-error and --sr-accent are the orange).
-const DESTRUCTIVE_CLASS = /\.[\w-]*(danger|destructive|delete|purge|remove|trash|discard|clear)[\w-]*/i;
+// in code (a ratchet), not by eye."), with GM r12's rule (fix round 8):
+// - Red: Delete, Delete forever, Purge, Clear, Discard, Trash, which remove
+//   something you can't get back just by adding it again. A destructive
+//   control (a class naming danger, destructive, delete, purge, trash,
+//   discard or clear) draws its red only from the danger tokens
+//   (styles/disabled-buttons.css: --sr-danger-ink, -ink-hover, -fill,
+//   -fill-hover, -tint, -edge, --sr-on-danger), never a hard-coded red or
+//   orange, and never the accent (--sr-danger, --sr-error and --sr-accent
+//   are the orange).
+// - Neutral: a × that takes an item out of a field or list you're editing
+//   (keyword and moodboard chips, palette swatches, tags, references, a
+//   shot). That's an edit; adding again or Undo puts it back. Its class
+//   names "remove", and a remove class takes no red, no orange, no accent.
+const DESTRUCTIVE_CLASS = /\.[\w-]*(danger|destructive|delete|purge|trash|discard|clear)[\w-]*/i;
+const REMOVE_CLASS = /\.[\w-]*remove[\w-]*/i;
+const ANY_DANGER_TOKEN = /var\(--sr-(?:danger|error|accent|on-danger)(?![\w-])|var\(--sr-(?:danger|error|accent)-[\w-]+/;
 const DANGER_TOKEN = /var\(--sr-(?:danger-(?:ink|ink-hover|fill|fill-hover|tint|edge)|on-danger)\b[^()]*(?:\([^()]*\)[^()]*)*\)/g;
 const ACCENT_TOKEN = /var\(--sr-(?:danger|error|accent)(?:-border|-soft)?(?![\w-])/;
 function warmColours(value: string): string[] {
@@ -2161,32 +2170,79 @@ function destructiveColours(css: string, file: string): string[] {
   return found;
 }
 
-/**
- * A button whose label starts with a destructive verb but whose class names
- * none, so the stylesheet check above can't see its rules (the Commons
- * keyword chip's × hovered the accent orange this way).
- */
-function unnamedDestructiveButtons(tsx: string, file: string): string[] {
+/** Each remove rule's red, orange, danger token or accent (GM r12: a × remover stays neutral). */
+function removeColours(css: string, file: string): string[] {
+  const text = css.replace(/\/\*[\s\S]*?\*\//g, '');
   const found: string[] = [];
-  for (const match of tsx.matchAll(/<button\b([^>]*?)>/gs)) {
-    const label = match[1].match(/aria-label=(?:"([^"]*)"|\{`([^`]*)`\}|\{'([^']*)'\})/);
-    const text = label && (label[1] ?? label[2] ?? label[3]);
-    if (!text || !/^(Remove|Delete|Clear|Discard|Purge|Trash)\b/.test(text)) continue;
-    const className = match[1].match(/className=(?:"[^"]*"|\{[^}]*\})/)?.[0] ?? '';
-    if (DESTRUCTIVE_CLASS.test(`.${className.replace(/^className=["{]/, '').replace(/\s+/g, ' .')}`)) continue;
-    found.push(`${file}:${tsx.slice(0, match.index).split('\n').length} ${text}`);
+  for (const rule of text.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const selector = rule[1].trim().replace(/\s+/g, ' ');
+    if (!selector.split(',').some((part) => REMOVE_CLASS.test(part) && !DESTRUCTIVE_CLASS.test(part))) continue;
+    for (const declaration of rule[2].split(';')) {
+      const at = declaration.indexOf(':');
+      if (at < 0) continue;
+      const property = declaration.slice(0, at).trim();
+      if (!/color|background|border|fill|stroke|outline|shadow/.test(property)) continue;
+      const value = declaration.slice(at + 1);
+      const bad = [...warmColours(value), ...(ANY_DANGER_TOKEN.test(value) ? [value.trim()] : [])];
+      if (bad.length) found.push(`${file} ${selector} { ${property}: ${bad.join(' ')} }`);
+    }
   }
   return found;
 }
 
-describe('GM r11 answer 3: orange never marks a destructive action, and its red comes from the danger tokens', () => {
-  it('every button labelled Remove, Delete, Clear, Discard, Purge or Trash names it in its class', () => {
-    const found = walk(SRC, /\.tsx$/).flatMap((path) => unnamedDestructiveButtons(readFileSync(path, 'utf8'), relative(SRC, path)));
+const DESTRUCTIVE_VERB = /^(Delete|Clear|Discard|Purge|Trash)\b/;
+/**
+ * A button named (by its aria-label, or else its text) with a destructive
+ * verb whose class names none, or labelled Remove whose class doesn't name
+ * "remove", so the stylesheet checks above can't see its rules (the Commons
+ * keyword chip's × hovered the accent orange this way, and Character
+ * Studio's Delete took its Retry look's accent).
+ */
+function unnamedDestructiveButtons(tsx: string, file: string): string[] {
+  const found: string[] = [];
+  for (const match of tsx.matchAll(/<button\b([^>]*?)>([\s\S]*?)<\/button>/g)) {
+    const label = match[1].match(/aria-label=(?:"([^"]*)"|\{`([^`]*)`\}|\{'([^']*)'\})/);
+    const shown = match[2].replace(/<[^>]*>/g, ' ').replace(/\{[^{}]*\}/g, ' ').replace(/\s+/g, ' ').trim();
+    const name = (label && (label[1] ?? label[2] ?? label[3])) || shown;
+    const className = match[1].match(/className=(?:"[^"]*"|\{[^}]*\})/)?.[0] ?? '';
+    const classes = `.${className.replace(/^className=["{]/, '').replace(/\s+/g, ' .')}`;
+    const line = tsx.slice(0, match.index).split('\n').length;
+    if (DESTRUCTIVE_VERB.test(name) && !DESTRUCTIVE_CLASS.test(classes)) found.push(`${file}:${line} ${name} (no destructive class)`);
+    if (/^Remove\b/.test(name) && !REMOVE_CLASS.test(classes)) found.push(`${file}:${line} ${name} (no remove class)`);
+  }
+  return found;
+}
+
+describe('GM r11 answer 3 and r12: red marks only what adding again cannot bring back, a × remover stays neutral, and orange marks neither', () => {
+  it('every button named Delete, Clear, Discard, Purge or Trash has a destructive class, and every one labelled Remove a remove class', () => {
+    const found = walk(SRC, /\.tsx$/).filter((path) => !/\.test\.tsx$/.test(path))
+      .flatMap((path) => unnamedDestructiveButtons(readFileSync(path, 'utf8'), relative(SRC, path)));
     expect(found).toEqual([]);
     expect(unnamedDestructiveButtons('<button type="button" aria-label={`Remove ${k}`}>×</button>', 'probe.tsx')).not.toEqual([]);
-    expect(unnamedDestructiveButtons('<button className="x__action" aria-label="Delete it">', 'probe.tsx')).not.toEqual([]);
-    expect(unnamedDestructiveButtons('<button className="x__action x__action--delete" aria-label="Delete it">', 'probe.tsx')).toEqual([]);
-    expect(unnamedDestructiveButtons('<button className="x__action" aria-label="Add it">', 'probe.tsx')).toEqual([]);
+    expect(unnamedDestructiveButtons('<button className="x__action" aria-label="Delete it">x</button>', 'probe.tsx')).not.toEqual([]);
+    expect(unnamedDestructiveButtons('<button type="button" className="x__tool" onClick={clear}><Trash2 size={14} /> Clear</button>', 'probe.tsx')).not.toEqual([]);
+    expect(unnamedDestructiveButtons('<button className="x__remove" aria-label="Delete it">x</button>', 'probe.tsx'), 'remove is no longer destructive').not.toEqual([]);
+    expect(unnamedDestructiveButtons('<button className="x__action x__action--delete" aria-label="Delete it">x</button>', 'probe.tsx')).toEqual([]);
+    expect(unnamedDestructiveButtons('<button className="chip__remove" aria-label={`Remove ${k}`}>×</button>', 'probe.tsx')).toEqual([]);
+    expect(unnamedDestructiveButtons('<button className="x__action" aria-label="Add it">x</button>', 'probe.tsx')).toEqual([]);
+  });
+  it('no stylesheet gives a remove class red, orange, a danger token or the accent', () => {
+    const found = walk(SRC, /\.css$/).flatMap((path) => removeColours(readFileSync(path, 'utf8'), relative(SRC, path)));
+    expect(found).toEqual([]);
+    const bad = [
+      '.inspector__palette-remove:hover { color: var(--sr-danger-ink, #ff887d); }',
+      '.commons-chip__remove:hover { color: var(--sr-danger); }',
+      '.x__remove:hover { border-color: var(--sr-accent); }',
+      '.x__remove:hover { background: var(--sr-danger-tint); }',
+      '.x-remove:hover { color: #e0796b; }',
+    ];
+    for (const css of bad) expect(removeColours(css, 'probe.css'), css).not.toEqual([]);
+    const good = [
+      '.x__remove:hover { background: var(--sr-surface-control-hover); color: var(--sr-ink-bold); }',
+      '.x__remove { background: rgba(0, 0, 0, 0.6); color: #fff; }',
+      '.settings__confirm--danger { color: var(--sr-danger-ink, #ff887d); }',
+    ];
+    for (const css of good) expect(removeColours(css, 'probe.css'), css).toEqual([]);
   });
   it('no stylesheet gives a destructive control a hard-coded red or orange, or the accent', () => {
     const found = walk(SRC, /\.css$/).flatMap((path) => destructiveColours(readFileSync(path, 'utf8'), relative(SRC, path)));
@@ -2199,15 +2255,16 @@ describe('GM r11 answer 3: orange never marks a destructive action, and its red 
       '.result-card__btn--danger:hover { background: rgba(220, 50, 50, 0.45); }',
       '.asset-trash__button:hover { color: #f59e0b; }',
       '.x-delete:hover { color: tomato; }',
-      '.panel__remove:hover { border-color: var(--sr-accent); }',
-      '.commons-chip__remove:hover { color: var(--sr-danger); }',
+      '.panel__delete:hover { border-color: var(--sr-accent); }',
+      '.character-studio-toolbar__delete:hover { border-color: var(--sr-accent); }',
+      '.commons-button--danger:hover { color: var(--sr-danger); }',
     ];
     for (const css of bad) expect(destructiveColours(css, 'probe.css'), css).not.toEqual([]);
     const good = [
       '.x__danger { background: var(--sr-danger-fill, #ff887d); color: var(--sr-on-danger, #1f1f1f); }',
       '.x--danger:hover { background: var(--sr-danger-tint); border-color: var(--sr-danger-edge); color: var(--sr-danger-ink, #ff887d); }',
       '.x__delete:active { color: var(--sr-danger-ink-hover, #ff9a91); }',
-      '.x__remove { color: var(--sr-ink); border-color: var(--sr-edge); }',
+      '.x__clear { color: var(--sr-ink); border-color: var(--sr-edge); }',
       '.asset-trash__error { color: var(--sr-danger); }',
       '.save:hover { color: var(--sr-accent); }',
     ];
