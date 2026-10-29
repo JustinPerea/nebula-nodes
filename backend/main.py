@@ -197,7 +197,8 @@ from services.canvas_proposals import (
 # Proposals outside the graph: a project's cover, a board's Send notes (U16).
 from services.asset_proposals import AssetProposal, asset_proposals
 from services.asset_proposals import parse_change as parse_asset_change, summary as asset_proposal_summary
-from services.asset_proposals import RESTART_OUTCOME, outcome_line as asset_outcome_line, update_text as asset_update_text
+from services.asset_proposals import (RESTART_OUTCOME, outcome_line as asset_outcome_line,
+                                      update_detail as asset_update_detail, update_text as asset_update_text)
 # Each canvas proposal's Update too (Justin's Q112 a).
 from services.canvas_proposals import update_outcome as canvas_outcome_line, update_text as canvas_update_text
 # Questions an agent asks the person (Q125 item 1), modelled on proposals.
@@ -6203,12 +6204,15 @@ async def _asset_reopen_misfit(proposal: AssetProposal, exported: dict[str, Any]
         return "its target can't be read"
 
 
-async def _reopen_update(ref: Mapping[str, Any] | None, proposal_id: str) -> None:
-    """Its Update reviews the proposal again (op "changed", the note as it is now)."""
+async def _reopen_update(ref: Mapping[str, Any] | None, proposal_id: str,
+                         detail: Mapping[str, Any] | None = None) -> None:
+    """Its Update reviews the proposal again (op "changed", the note as it is now); an asset
+    proposal's ref carries its ``detail`` again (asset_proposals.update_detail)."""
     if not ref:
         return
     try:
-        result = await asyncio.to_thread(agent_notes.reopen_proposal, ref["projectId"], ref["id"], proposal_id)
+        result = await asyncio.to_thread(agent_notes.reopen_proposal, ref["projectId"], ref["id"], proposal_id,
+                                         detail)
     except (NoteError, ProjectStoreError):
         return
     if result is not None and result["projectId"] == _open_project_id():
@@ -6419,7 +6423,7 @@ async def _reopen_removed_proposals(plan: dict[str, Any], project_id: str | None
         else:
             out["notReopened"].append({"id": proposal.id, "reason": reason})
     for proposal in reopened_assets:
-        await _reopen_update(proposal.update, proposal.id)
+        await _reopen_update(proposal.update, proposal.id, asset_update_detail(proposal))
         _schedule_asset_expiry(proposal)
     if reopened_assets:
         try:
@@ -8167,7 +8171,8 @@ async def _post_asset_update(proposal: AssetProposal) -> None:
         result = await asyncio.to_thread(
             agent_notes.post_proposal, author={"kind": "agent", **proposal.agent.as_dict()},
             text=asset_update_text(proposal),
-            proposal={"id": proposal.id, "kind": proposal.kind, "targetId": proposal.target_id})
+            proposal={"id": proposal.id, "kind": proposal.kind, "targetId": proposal.target_id,
+                      **asset_update_detail(proposal)})
     except (NoteError, ProjectStoreError):
         return  # no project open: the Agent log line is the only notice, as before
     note = result["note"]
@@ -8201,7 +8206,8 @@ async def _follow_asset_updates(proposals: list[AssetProposal]) -> None:
         try:
             if waiting:
                 newest = max(waiting, key=lambda p: p.created_at)
-                result = await asyncio.to_thread(agent_notes.retarget_proposal, ref["projectId"], ref["id"], newest.id)
+                result = await asyncio.to_thread(agent_notes.retarget_proposal, ref["projectId"], ref["id"], newest.id,
+                                                 asset_update_detail(newest))
                 op, extra = "changed", {}
             else:
                 by = _RESOLVED_BY.get(proposal.status) or (

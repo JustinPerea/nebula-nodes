@@ -47,3 +47,18 @@ def test_several_edits_and_an_inbox_ask_use_the_lines_words(cx, canvas_project):
     texts = sorted(note["text"] for note in _proposal_notes(canvas_project))
     assert texts == ["Claude Code asks to make 2 changes to a reference in the Commons",
                      "Claude Code asks to take a reference out of the inbox"]
+
+
+def test_the_updates_ref_counts_the_edits_never_their_values(cx, canvas_project):
+    """PR #200 follow-up 2 (review 20 NIT-3): the count a held tab's placeholder
+    shows comes from the ref, not from the text an agent's name is part of."""
+    _propose(cx, {"edits": [
+        {"correction": {"field_path": "type_style.value", "value": "serif"}},
+        {"correction": {"field_path": "axes.quiet_loud", "value": -0.4}},
+        {"correction": {"field_path": "summary", "op": "set", "value": "A quiet grid poster"}},
+    ]})
+    (note,) = _proposal_notes(canvas_project)
+    assert note["proposal"]["changes"] == 3 and "cover" not in note["proposal"]
+    text = json.dumps(note["proposal"])
+    for private in ("serif", "-0.4", "A quiet grid poster", "type_style"):
+        assert private not in text

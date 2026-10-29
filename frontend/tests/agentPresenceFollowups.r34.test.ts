@@ -40,7 +40,6 @@ describe('review 19 NIT-3: never a bare "…"', () => {
   it.each([
     [',,,,,,,,,,', 5, ',,,,,…'],
     [',,,,,,,,,,', 0, ',…'],
-    ['…………', 2, '………'],
     ['-- -- --', 1, '-…'],
   ])('a name of only punctuation keeps a grapheme cut: %j at %i', (title, keep, name) => {
     expect(noteHeadingName(title, keep)).toBe(name);

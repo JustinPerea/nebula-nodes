@@ -2383,7 +2383,10 @@ generators", "Claude Code asks to change a reference in the Commons" (or
 "asks to make 3 changes to a reference in the Commons", "asks to take a
 reference out of the inbox"). Names only: never the agent's note, a board's
 notes, a private note or Commons text. It carries `proposal: {id, kind,
-targetId}` and one **Review** action (`proposal.review`), which takes the
+targetId}`, plus, for a cover, `cover`: `"automatic"` or `"image"` (which
+kind, never which image), and for a Commons ask `changes` (how many edits).
+A tab that isn't connected as the person sees only the Update, and its
+placeholder card reads these, never the text. It has one **Review** action (`proposal.review`), which takes the
 person to the Projects screen with that card's strip in view, to Moodboard
 Studio on that board, or to the Commons on that reference, from whichever
 screen they are on. One per agent and

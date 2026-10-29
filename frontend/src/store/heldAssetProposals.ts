@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { AgentNote } from '../lib/agentNotes';
+import type { AgentNote, AgentNoteProposal } from '../lib/agentNotes';
 import type { AssetProposalKind } from '../lib/assetProposals';
 import { selectCanvasList, useAgentNotesStore } from './agentNotesStore';
 import { proposalAgentColor, useAssetProposalsStore, type AssetProposalEntry } from './assetProposalsStore';
@@ -28,16 +28,17 @@ export const HELD_PROPOSAL_LINE = 'You can review this when this tab is connecte
 
 const NO_NOTES: readonly AgentNote[] = [];
 
-/** The real card's header for each kind, from what the Update carries. A
- * cover is always "proposes a new cover" (GM r34, verbatim); a Commons ask
- * counts its changes from the Update Nebula wrote (asset_proposals.update_text). */
-function headerFor(kind: AssetProposalKind, text: string): string {
+/** The real card's header for each kind, from the Update's structured ref
+ * (agent_notes.proposal_detail), never its text: review 20 NIT-3, an agent's
+ * name in the text could spoof a count. A cover says which kind (GM, PR #200
+ * follow-up 2); a ref without it keeps GM r34's "proposes a new cover". */
+function headerFor(kind: AssetProposalKind, ref: AgentNoteProposal | null | undefined): string {
   if (kind === 'moodboard') return 'asks to send these notes to generators';
   if (kind === 'commons') {
-    const count = Number(/asks to make (\d+) changes/.exec(text)?.[1] ?? 1);
-    return count > 1 ? `proposes ${count} changes to this reference` : 'proposes a change to this reference';
+    const count = ref?.changes ?? 1;
+    return count === 1 ? 'proposes a change to this reference' : `proposes ${count} changes to this reference`;
   }
-  return 'proposes a new cover';
+  return ref?.cover === 'automatic' ? 'proposes the automatic cover' : 'proposes a new cover';
 }
 
 /** The placeholders for one target: its open Updates whose proposal has no card here, oldest first. */
@@ -53,7 +54,7 @@ export function heldProposalsFor(notes: readonly AgentNote[], proposals: Readonl
     const at = Date.parse(note.at);
     // The Update's author is the proposal's agent (main._post_asset_update: proposal.agent), the
     // same identity, colour included, that the real card's view carries.
-    held.push({ proposalId, agentName: note.author.name, agentColor: proposalAgentColor(note.author.color), header: headerFor(kind, note.text), at: Number.isFinite(at) ? at : 0 });
+    held.push({ proposalId, agentName: note.author.name, agentColor: proposalAgentColor(note.author.color), header: headerFor(kind, note.proposal), at: Number.isFinite(at) ? at : 0 });
   }
   return held.sort((left, right) => left.at - right.at);
 }

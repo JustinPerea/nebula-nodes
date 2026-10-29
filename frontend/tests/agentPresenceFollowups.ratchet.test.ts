@@ -2403,6 +2403,35 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
       '.canvas-pin__edge::before { content: "\\1F525"; width: 3px; font-size: 4px; }',
       '.canvas-pin__edge::before { content: "|"; width: 3px; font-size: 4px; letter-spacing: 300px; }',
       '.canvas-pin__card { font-size: 1000px; } .canvas-pin__edge::before { content: "|"; width: 3px; }',
+      // Review 19 NIT-5 (PR #200 follow-up 2): paint past the glyph (a stroke,
+      // a text-shadow offset, its own, the edge's or inherited), a glyph that
+      // is wide at any size, and a face of its own.
+      '.canvas-pin__edge::before { content: "|"; width: 3px; font-size: 4px; -webkit-text-stroke: 40px var(--pin-color); }',
+      '.canvas-pin__edge::before { content: "|"; width: 3px; font-size: 4px; -webkit-text-stroke-width: thick; }',
+      '.canvas-pin__edge::before { content: "|"; width: 3px; font-size: 4px; text-shadow: 300px 0 0 var(--pin-color); }',
+      '.canvas-pin__edge { text-shadow: 300px 0 0 var(--pin-color); } .canvas-pin__edge::before { content: "|"; width: 3px; font-size: 4px; }',
+      '.canvas-pin__edge:hover { -webkit-text-stroke: 40px; } .canvas-pin__edge::before { content: "|"; width: 3px; font-size: 4px; }',
+      '.canvas-pin__card { text-shadow: 300px 0 0 var(--pin-color); } .canvas-pin__edge::before { content: "|"; width: 3px; font-size: 4px; }',
+      '.canvas-pin:hover { -webkit-text-stroke: 40px var(--pin-color); } .canvas-pin__edge::before { content: "|"; width: 3px; font-size: 4px; }',
+      '.canvas-pin__edge::before { content: "\\FDFD"; width: 3px; font-size: 4px; }',
+      '.canvas-pin__edge::before { content: "\\1242B"; width: 3px; font-size: 4px; }',
+      '.canvas-pin__edge::before { content: "﷽"; width: 3px; font-size: 4px; }',
+      '.canvas-pin__edge::before { content: "𒐫"; width: 3px; font-size: 4px; }',
+      '.canvas-pin__edge::before { content: "|\\20DD"; width: 3px; font-size: 4px; }',
+      '.canvas-pin__edge::before { content: "\\FF37"; width: 3px; font-size: 4px; }',
+      '.canvas-pin__edge::before { content: "|"; width: 3px; font-size: 4px; font-family: "Very Wide"; }',
+      '.canvas-pin__edge::before { content: "|"; width: 3px; font: 4px/1 "Very Wide", serif; }',
+      // Review 19 NIT-6 (PR #200 follow-up 2): a root size change reaches rem widths.
+      ':root { font-size: 1000px; } .canvas-pin__edge { width: 0.25rem; }',
+      'html { font-size: 1000px; } .canvas-pin__edge { width: 0.25rem; }',
+      ':root { font: 1000px/1 serif; } .canvas-pin__edge { width: 0.25rem; }',
+      ':root { font-size: 6250%; } .canvas-pin__edge { width: 0.25rem; }',
+      'html { font-size: 2em; } .canvas-pin__edge { width: 0.25rem; }',
+      ':root:hover { font-size: 1000px; } .canvas-pin__edge { width: 0.25rem; }',
+      ':root { font-size: var(--big); } .canvas-pin__edge { width: 0.25rem; }',
+      ':root { font-size: 1000px; } .canvas-pin__edge { min-width: 0.25rem; width: 2px; }',
+      ':root { font-size: 1000px; } .canvas-pin__edge::before { content: "|"; width: 3px; font-size: 0.25rem; }',
+      ':root { font-size: 1000px; } .canvas-pin__edge { font-size: 0.25rem; width: 1em; }',
     ]) expect(frameFindings(pinDelete, vars0, css), css).not.toEqual([]);
     // The edge in other units, and borders the fill stops short of, stay the edge.
     for (const css of [
@@ -2422,6 +2451,16 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
       '.canvas-pin__edge::before { content: "|"; width: 3px; font-size: 4px; }',
       // An ancestor's font that the card's own 12px stops.
       '.canvas-pin { font: 1000px/1 serif; } .canvas-pin__edge { width: .25em; }',
+      // Review 19 NIT-5/6 (PR #200 follow-up 2): no paint past the glyph, a
+      // generic family, and rems at a root size that keeps them narrow.
+      '.canvas-pin__edge::before { content: "|"; width: 3px; font-size: 4px; text-shadow: none; -webkit-text-stroke: 0; }',
+      '.canvas-pin__edge::before { content: "|"; width: 3px; font: 4px serif; }',
+      '.canvas-pin__edge::before { content: "\\7C"; width: 3px; font-size: 4px; }',
+      ':root { font-size: 16px; } .canvas-pin__edge { width: 0.25rem; }',
+      ':root { font-size: 12px; } .canvas-pin__edge { width: 0.3rem; }',
+      'html { font-size: 50%; } .canvas-pin__edge { width: 0.5rem; }',
+      ':root { font-size: 1000px; } .canvas-pin__edge { width: 3px; }',
+      ':root { font-size: 1000px; } .canvas-pin__edge { width: 0.25em; }',
     ]) expect(frameFindings(pinDelete, vars0, css), css).toEqual([]);
     // Resolved: the author's colour, with only its blue fallback.
     const resolvedDelete = { ...pinDelete, ancestors: [['div', ['canvas-pin', 'canvas-pin--resolved']], ['div', ['canvas-pin__card']]] as Array<[string, string[]]> };

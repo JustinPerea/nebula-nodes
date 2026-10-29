@@ -825,7 +825,7 @@ class AgentNotes:
         "every one")."""
         clean_author = _clean_author(author)
         ref = {"id": str(proposal["id"])[:64], "kind": str(proposal["kind"])[:16],
-               "targetId": str(proposal["targetId"])[:128]}
+               "targetId": str(proposal["targetId"])[:128], **proposal_detail(proposal)}
         actions = _clean_actions([{"label": "Review", "op": {
             "kind": "proposal.review", "proposalId": ref["id"], "target": ref["kind"], "targetId": ref["targetId"]}}])
         note = self._new_note(author=clean_author, source="nebula", about="proposal", text=clean_note_text(text),
@@ -938,14 +938,16 @@ class AgentNotes:
         project_id, (unread, removed) = self._write_project(mutate, project_id=project_id, keep_open=True)
         return {"note": note_view(note), "unread": unread, "projectId": project_id, "removed": removed}
 
-    def retarget_proposal(self, project_id: str, note_id: str, proposal_id: str) -> dict[str, Any] | None:
+    def retarget_proposal(self, project_id: str, note_id: str, proposal_id: str,
+                          detail: Mapping[str, Any] | None = None) -> dict[str, Any] | None:
         """The agent's other proposal on the same target is still open: the
-        Update now reviews that one. None when the update has left the list."""
+        Update now reviews that one, and its ref says that one's ``detail``
+        (``proposal_detail``). None when the update has left the list."""
         def mutate(notes: list[dict[str, Any]]) -> dict[str, Any] | None:
             note = next((n for n in notes if n.get("id") == note_id), None)
             if note is None or note.get("resolvedAt"):
                 return None
-            note["proposal"] = {**(note.get("proposal") or {}), "id": proposal_id[:64]}
+            note["proposal"] = _retargeted_ref(note.get("proposal"), proposal_id, detail)
             for action in note.get("actions") or []:
                 if (action.get("op") or {}).get("kind") == "proposal.review":
                     action["op"]["proposalId"] = proposal_id[:64]
@@ -954,7 +956,8 @@ class AgentNotes:
         _, note = self._write_project(mutate, project_id=project_id)
         return None if note is None else {"projectId": project_id, "note": note_view(note)}
 
-    def reopen_proposal(self, project_id: str, note_id: str, proposal_id: str) -> dict[str, Any] | None:
+    def reopen_proposal(self, project_id: str, note_id: str, proposal_id: str,
+                        detail: Mapping[str, Any] | None = None) -> dict[str, Any] | None:
         """The undo of a node delete reopened the proposal (GM, 2026-10-23):
         its Update reviews it again. The outcome line goes and Review is back;
         it stays read (the person's own undo brought it back). None when the
@@ -967,7 +970,7 @@ class AgentNotes:
                 return None
             for key in ("resolvedAt", "resolvedBy", "outcome"):
                 note.pop(key, None)
-            note["proposal"] = {**(note.get("proposal") or {}), "id": proposal_id[:64]}
+            note["proposal"] = _retargeted_ref(note.get("proposal"), proposal_id, detail)
             for action in note.get("actions") or []:
                 if (action.get("op") or {}).get("kind") == "proposal.review":
                     action["op"]["proposalId"] = proposal_id[:64]
@@ -1008,6 +1011,35 @@ class AgentNotes:
             return None
         note, unread = result
         return {"projectId": project_id, "note": note_view(note), "unread": unread}
+
+
+# What an asset proposal's Update says of its change beyond the target (GM,
+# PR #200 follow-up 2; services/asset_proposals.update_detail): a cover's kind,
+# a Commons ask's edit count. One exact word for a tab that sees only the
+# Update; never an image, an asset or a value.
+PROPOSAL_COVER_KINDS = ("automatic", "image")
+MAX_PROPOSAL_CHANGES = 999
+
+
+def proposal_detail(raw: Mapping[str, Any] | None) -> dict[str, Any]:
+    """The checked ``cover`` and ``changes`` of a proposal ref; anything else is dropped."""
+    detail: dict[str, Any] = {}
+    if not isinstance(raw, Mapping):
+        return detail
+    if raw.get("cover") in PROPOSAL_COVER_KINDS:
+        detail["cover"] = raw["cover"]
+    changes = raw.get("changes")
+    if isinstance(changes, int) and not isinstance(changes, bool) and 0 <= changes <= MAX_PROPOSAL_CHANGES:
+        detail["changes"] = changes
+    return detail
+
+
+def _retargeted_ref(old: Any, proposal_id: str, detail: Mapping[str, Any] | None) -> dict[str, Any]:
+    """The ref now about ``proposal_id``: the kind and target stay; the detail is the new proposal's
+    (an older caller that passes none keeps none, rather than the closed one's)."""
+    base = {key: value for key, value in (old if isinstance(old, Mapping) else {}).items()
+            if key not in ("cover", "changes")}
+    return {**base, "id": proposal_id[:64], **proposal_detail(detail)}
 
 
 def _same_ask(note: Mapping[str, Any], new: Mapping[str, Any]) -> bool:

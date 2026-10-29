@@ -914,12 +914,22 @@ export function fontShorthandSize(value: string): string | null {
   }
   return null;
 }
+/** The family part of a `font` shorthand ("" when there is none): whatever follows its size. */
+function fontShorthandFamily(value: string): string {
+  const v = value.trim();
+  if (!v) return '';
+  const size = fontShorthandSize(v);
+  if (!size) return '';
+  const at = v.toLowerCase().indexOf(size);
+  return at < 0 ? '' : v.slice(at + size.length).replace(/^\/\S+/, '').trim();
+}
 const FONT_KEYWORD_PX: Record<string, number> = {
   'xx-small': 9, 'x-small': 10, small: 13, medium: 16, large: 18, 'x-large': 24, 'xx-large': 32, 'xxx-large': 48,
 };
-/** A font size in px, given the parent's (null: unknown). larger, smaller
- * and anything else the check can't read are unknown. */
-export function resolveFontPx(value: string | null, parentPx: number | null): number | null {
+/** A font size in px, given the parent's (null: unknown) and the root's for
+ * rem (review 19 NIT-6, PR #200 follow-up 2: `rootFontPx`, 16 by default).
+ * larger, smaller and anything else the check can't read are unknown. */
+export function resolveFontPx(value: string | null, parentPx: number | null, remPx: number | null = 16): number | null {
   if (value === null) return null;
   const v = value.trim().toLowerCase();
   if (/^(?:inherit|unset|revert|revert-layer)$/.test(v)) return parentPx;
@@ -929,23 +939,43 @@ export function resolveFontPx(value: string | null, parentPx: number | null): nu
   if (!match) return null;
   const n = Number(match[1]);
   if (match[2] === 'px') return n;
-  if (match[2] === 'rem') return n * 16;
+  if (match[2] === 'rem') return remPx === null ? null : n * remPx;
   if (parentPx === null) return null;
   return match[2] === 'em' ? n * parentPx : (n / 100) * parentPx;
+}
+
+/**
+ * Review 19 NIT-6 (PR #200 follow-up 2): a rem is the root's font size, not
+ * always 16px. `:root { font-size: 1000px }`, `html { font: 1000px/1 serif }`
+ * made `width: 0.25rem` a 250px bar. The root's size in every state it takes
+ * (the largest counts), from the 16px initial value (a root rem or em is that
+ * initial 16px too); one the check can't read makes every rem unknown.
+ */
+export function rootFontPx(extraCss?: string): number | null {
+  const sizes: Array<number | null> = [];
+  for (const [key, won] of cascaded(document.documentElement, extraCss, { loose: true })) {
+    const prop = key.split('|')[1];
+    if (prop === 'font-size') sizes.push(resolveFontPx(won.value, 16, 16));
+    else if (prop === 'font') sizes.push(resolveFontPx(fontShorthandSize(won.value), 16, 16));
+  }
+  if (!sizes.length) return 16;
+  return sizes.some((n) => n === null) ? null : Math.max(...(sizes as number[]));
 }
 /** The font size an element inherits (review 17 NIT 2): its ancestors' own
  * sizes, root first, each in every state they take (the largest counts), from
  * a 16px base. One the check can't read makes it unknown. */
-function inheritedFontPx(element: Element, extraCss?: string): number | null {
+function inheritedFontPx(element: Element, extraCss?: string, remPx: number | null = 16): number | null {
   const chain: Element[] = [];
   for (let at = element.parentElement; at; at = at.parentElement) chain.unshift(at);
   let px: number | null = 16;
   for (const at of chain) {
     const sizes: Array<number | null> = [];
+    // The root's own rem is the initial 16px (rootFontPx); below it, the root's size.
+    const rem = at === document.documentElement ? 16 : remPx;
     for (const [key, won] of cascaded(at, extraCss, { loose: true })) {
       const prop = key.split('|')[1];
-      if (prop === 'font-size') sizes.push(resolveFontPx(won.value, px));
-      else if (prop === 'font') sizes.push(resolveFontPx(fontShorthandSize(won.value), px));
+      if (prop === 'font-size') sizes.push(resolveFontPx(won.value, px, rem));
+      else if (prop === 'font') sizes.push(resolveFontPx(fontShorthandSize(won.value), px, rem));
     }
     if (!sizes.length) continue;
     px = sizes.some((n) => n === null) ? null : Math.max(...(sizes as number[]));
@@ -982,7 +1012,41 @@ export const STATUS_EDGE_MAX_PX = 4;
  * border-box, the default) and its ::before/::after (sized past 4px, or
  * repainting the fill with `inherit`) widen it too.
  */
-export function narrowLeftEdge(styles: Map<string, { value: string }>, inheritedPx: number | null = 16): string | null {
+/** What the edge's ancestors give its text that paints past a glyph's own
+ * box (review 19 NIT-5, PR #200 follow-up 2): `text-shadow` and
+ * `-webkit-text-stroke` inherit, so one set on the card or the pin reaches a
+ * pseudo-element's glyph. Any state of any ancestor counts. */
+export function inheritedGlyphPaint(element: Element, extraCss?: string): string[] {
+  const found: string[] = [];
+  for (let at = element.parentElement; at; at = at.parentElement) {
+    for (const [key, won] of cascaded(at, extraCss, { loose: true })) {
+      const prop = key.split('|')[1];
+      if (GLYPH_PAINT.test(prop) && paintsPastGlyph(prop, won.value)) found.push(`${prop} ${won.value}`);
+    }
+  }
+  return found;
+}
+const GLYPH_PAINT = /^(?:text-shadow|-webkit-text-stroke(?:-width)?)$/;
+/** Whether a text-shadow or text-stroke declaration paints outside the glyph. */
+function paintsPastGlyph(prop: string, value: string): boolean {
+  const v = value.trim().toLowerCase();
+  if (/^(?:none|initial|unset|revert|revert-layer)$/.test(v)) return false;
+  // A stroke's width is its first length or keyword; 0 paints nothing.
+  if (prop !== 'text-shadow') return !/^(?:0|0px|0em|0rem)(?:\s|$)/.test(v);
+  return true;
+}
+/** Review 19 NIT-5 (PR #200 follow-up 2): the only glyphs the exemption
+ * trusts to be no wider than their font size: one printable ASCII character.
+ * Other graphemes can be several ems wide at any size (U+FDFD ﷽, U+1242B 𒐫,
+ * emoji, an enclosing or double-width combining mark), and only layout can
+ * measure them, which jsdom has none of; they fail closed. */
+const NARROW_GLYPH = /^[\x21-\x7e]$/;
+/** A family the edge or its pseudo-element may name: a plain generic one (a
+ * named or quoted face could map even ASCII to a wide glyph). */
+const GENERIC_FAMILY = /^(?:serif|sans-serif|monospace|system-ui|inherit|initial|unset)$/i;
+
+export function narrowLeftEdge(styles: Map<string, { value: string }>, inheritedPx: number | null = 16,
+  remPx: number | null = 16, ancestorGlyphPaint: readonly string[] = []): string | null {
   // Review 15 NIT 2 (fix round 18): rem and em are lengths too (16px base),
   // so `width: 0.25rem` is the 4px edge it is, not a finding.
   // Review 16 NIT 5 (fix round 19): an em is the element's own font size, so
@@ -996,7 +1060,8 @@ export function narrowLeftEdge(styles: Map<string, { value: string }>, inherited
     if (!match || match[2] === undefined) return null;
     const n = Number(match[1]);
     if (match[2] === 'px') return n;
-    if (match[2] === 'rem') return n * 16;
+    // Review 19 NIT-6: the root's size, not always 16px.
+    if (match[2] === 'rem') return remPx === null ? null : n * remPx;
     if (match[2] === 'em') return emPx === null ? null : n * emPx;
     return null;
   };
@@ -1011,7 +1076,7 @@ export function narrowLeftEdge(styles: Map<string, { value: string }>, inherited
       if (won) values.push(prop === 'font' ? fontShorthandSize(won.value) : won.value);
     }
     if (!values.length) return inheritedPx;
-    const sizes = values.map((value) => resolveFontPx(value, inheritedPx));
+    const sizes = values.map((value) => resolveFontPx(value, inheritedPx, remPx));
     return sizes.some((n) => n === null) ? null : Math.max(...(sizes as number[]));
   };
   let statePx = 16 as number | null;
@@ -1065,11 +1130,24 @@ export function narrowLeftEdge(styles: Map<string, { value: string }>, inherited
       // stand unclipped, as a 4 px box may: a single grapheme, not an emoji, at
       // a font size of at most 4 px, with no letter-spacing or indent to push it.
       const text = /^(["'])(.*)\1$/s.exec(value)?.[2]?.replace(/\\([0-9a-f]{1,6})\s?/gi, (_m, hex: string) => String.fromCodePoint(parseInt(hex, 16))) ?? null;
-      const one = text !== null && [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)].length === 1
-        && !/\p{Extended_Pictographic}|\p{Regional_Indicator}/u.test(text);
+      // Review 19 NIT-5 (PR #200 follow-up 2): one printable ASCII glyph only
+      // (NARROW_GLYPH), in the app's own fonts (no font-family of its own on
+      // the pseudo-element or the edge), and nothing painting past it: no
+      // text-shadow or -webkit-text-stroke, its own, the edge's or inherited.
+      const one = text !== null && NARROW_GLYPH.test(text);
       const glyphPx = fontPx(state);
       const pushed = !/^(?:|normal|0|0px)$/.test(own('letter-spacing')) || !/^(?:|0|0px)$/.test(own('text-indent'));
-      const narrowGlyph = one && glyphPx !== null && glyphPx <= STATUS_EDGE_MAX_PX && !pushed;
+      // Any state of the edge or of a pseudo-element counts (each inherits into the glyph).
+      const paintedPast = [...styles].some(([name, won]) => {
+        const what = name.split('|')[1];
+        return GLYPH_PAINT.test(what) && paintsPastGlyph(what, won.value);
+      }) || ancestorGlyphPaint.length > 0;
+      const ownFont = [...styles].some(([name, won]) => {
+        const what = name.split('|')[1];
+        return (what === 'font-family' && !GENERIC_FAMILY.test(won.value.trim()))
+          || (what === 'font' && fontShorthandFamily(won.value) !== '' && !GENERIC_FAMILY.test(fontShorthandFamily(won.value)));
+      });
+      const narrowGlyph = one && glyphPx !== null && glyphPx <= STATUS_EDGE_MAX_PX && !pushed && !paintedPast && !ownFont;
       if ((!block || !clips) && !narrowGlyph) return `${state} content ${value} that draws past its width (${block ? 'no overflow clip' : 'inline'})`;
     }
     // A pseudo-element painting the edge's own fill (inherit, currentColor)
@@ -1139,6 +1217,8 @@ export function frameFindings(control: Control, vars: Vars, extraCss?: string): 
   if (control.kind !== 'red' || !control.ancestors.length) return [];
   const [el, ancestors, done] = built(control);
   const found: string[] = [];
+  // Review 19 NIT-6 (PR #200 follow-up 2): rem widths are the root's size.
+  const remPx = rootFontPx(extraCss);
   // Review 12 NIT-2: a colour the test's own sheet aliases (--box-edge: var(--sr-accent)) resolves too.
   const allVars: Vars = new Map(vars);
   if (extraCss) for (const [name, values] of customProperties([{ css: extraCss }])) allVars.set(name, [...(allVars.get(name) ?? []), ...values]);
@@ -1166,7 +1246,8 @@ export function frameFindings(control: Control, vars: Vars, extraCss?: string): 
       // The one exemption (GM r22 Q2): the status edge's own fill, at rest,
       // in a presence colour. Its border, shadow or any other state isn't.
       if (edge && state === '' && /^background(?:-color)?$/.test(prop) && PRESENCE_COLOUR.test(winner.value.trim())
-        && winner.selector.split(',').some((part) => EDGE_SUBJECT.test(part.trim())) && narrowLeftEdge(styles, inheritedFontPx(element, extraCss)) === null) continue;
+        && winner.selector.split(',').some((part) => EDGE_SUBJECT.test(part.trim()))
+        && narrowLeftEdge(styles, inheritedFontPx(element, extraCss, remPx), remPx, inheritedGlyphPaint(element, extraCss)) === null) continue;
       // Review 13 NIT-4: currentColor is the element's own colour in that state.
       const value = /currentcolor/i.test(winner.value) ? `${winner.value} ${colourOf(state)}` : winner.value;
       const bad = [

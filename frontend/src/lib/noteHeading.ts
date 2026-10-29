@@ -51,6 +51,11 @@ export function noteHeadingName(title: string, keep?: number, graphemes: string[
     kept = first >= 0 ? graphemes.slice(0, first + 1).join('').trimStart()
       : graphemes.slice(0, Math.max(1, keep)).join('').trim()
         || (graphemes.find((g) => g.trim() !== '') ?? '');
+    // Review 20 NIT-5: never a run of "…". The name's own ones fold into one,
+    // and a kept part that already ends on "…" takes no second: a name of
+    // nothing but "…" shows one, its own (the tooltip has it whole).
+    kept = kept.replace(/…+/gu, '…');
+    if (kept.endsWith('…')) return kept;
   }
   return `${kept}…`;
 }

@@ -51,6 +51,16 @@ export interface AgentNote {
   questionsId?: string | null;
   /** A done card (Q125 item 3): the agent's run that ended, as Nebula posted it. */
   run?: AgentNoteRun | null;
+  /** A proposal's Update: what its structured ref says of the change (backend
+   * agent_notes.proposal_detail). Only the kind of cover and the edit count. */
+  proposal?: AgentNoteProposal | null;
+}
+
+/** A proposal Update's ref beyond its id and target (GM, PR #200 follow-up 2):
+ * a cover's kind, never which image; a Commons ask's count of edits. */
+export interface AgentNoteProposal {
+  cover?: 'automatic' | 'image';
+  changes?: number;
 }
 
 /** A done card's run (backend agent_notes.post_run_done). */
@@ -121,6 +131,17 @@ function sanitizeRun(raw: unknown): AgentNoteRun | null {
     outcome,
     ...(thumbnail ? { thumbnail } : {}),
   };
+}
+
+function sanitizeProposal(raw: unknown): AgentNoteProposal | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const ref = raw as Record<string, unknown>;
+  const out: AgentNoteProposal = {};
+  if (ref.cover === 'automatic' || ref.cover === 'image') out.cover = ref.cover;
+  if (typeof ref.changes === 'number' && Number.isInteger(ref.changes) && ref.changes >= 0 && ref.changes <= 999) {
+    out.changes = ref.changes;
+  }
+  return out;
 }
 
 function str(value: unknown): string | null {
@@ -197,6 +218,7 @@ export function sanitizeNote(raw: unknown): AgentNote | null {
     questionsId: note.questions && typeof note.questions === 'object'
       ? str((note.questions as Record<string, unknown>).id) : null,
     run: note.about === 'run' ? sanitizeRun(note.run) : null,
+    proposal: note.about === 'proposal' ? sanitizeProposal(note.proposal) : null,
   };
 }
 

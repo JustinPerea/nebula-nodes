@@ -242,6 +242,21 @@ def update_text(proposal: AssetProposal) -> str:
     return f"{agent} asks to change a reference in the Commons"
 
 
+def update_detail(proposal: AssetProposal) -> dict[str, Any]:
+    """What the Update's ``proposal`` ref says about the change beyond its
+    target (GM, PR #200 follow-up 2): for a cover, which kind (``cover``:
+    "automatic" or "image", never which image); for a Commons ask, how many
+    edits (``changes``). A tab that isn't connected as the person sees only
+    the Update, so its placeholder reads these, never the Update's text
+    (review 20 NIT-3: an agent's name could spoof a count parsed from text).
+    Never the image, the asset or any field value."""
+    if proposal.kind == "project":
+        return {"cover": "automatic" if proposal.change.get("cover") is None else "image"}
+    if proposal.kind == "commons":
+        return {"changes": len(proposal.change.get("edits") or [])}
+    return {}
+
+
 # An Update whose proposal was open when Nebula restarted (Justin's Q108 a,
 # 2026-10-21): proposals live in memory, Updates with the project. The agent
 # can ask again; a proposal that timed out still says "Expired".
