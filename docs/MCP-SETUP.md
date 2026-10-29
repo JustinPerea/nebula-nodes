@@ -3782,9 +3782,22 @@ change." (a server error that went on past the retries); "“Opening” and
 again." (413; from four, "4 scenes are too big to save. …"); "Nebula
 couldn’t save your changes to “Opening” and “Ref scene”. Try again, or
 reload if it keeps happening." (a refusal Nebula has no line of its own
-for, merged when the reason is the same; a line the backend wrote itself
-stays one per scene). One scene keeps its own line, and "…kept changing…"
-stays one line per scene. None of these lines has a ×. The
+for, when the backend gave no reason). A reason the backend wrote goes
+after the same heading but stays one line per scene, even when two scenes
+have the same text ("Nebula couldn’t save your changes to “Opening”. Shot
+2 has no model."), and so does a whole line the backend wrote. One scene
+keeps its own line, and "…kept changing…" stays one line per scene. None
+of these lines has a ×. Every line, and the "Unsaved" mark, names the
+scenes as their cards are named now: rename a scene while it is stopped,
+or while its Try again is on its way, and the line says the new name at
+once.
+
+A scene stopped by a refusal Nebula has no line of its own for differs
+from 400 and 413 in one way: when another writer (you, or another window)
+changes the scene, it makes one quiet try, since the scene as it is now
+might save. If that try fails, the scene is stopped again with its line
+and waits for the person (their edit or Try again); further changes from
+other writers send nothing more until the person acts. The
 line's Try again tries every scene it names once: those that save leave
 the line, those that fail stay in it, and no new round of retries starts.
 While those tries run, the line stays (marked busy) and Try again (there
@@ -3808,6 +3821,9 @@ run ends. If the save that a run held was a stopped scene's one try (Try
 again, the person's clash answer, Undo bringing a stopped scene back) and
 it still fails after the run, that is still the one try: the scene goes
 back to stopped with its line and Try again, with no new round of retries.
+That save has the same 15-second bound: with no answer by then the run's
+line gives way to the stop line (in one step) with Try again, and its late
+answer, if it comes, follows the same rule as any try's.
 A scene leaves its line whenever its stop clears: it saved, or your write
 made it match the person's values (then the stop, the line and the
 "Unsaved" mark go together, and nothing is said or sent).

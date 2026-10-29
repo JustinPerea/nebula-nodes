@@ -2936,6 +2936,11 @@ interface CinemaScenePersistence {
   refused: SceneRefusalKind | null;
   /** The line said for that refusal: a retry refused the same way says nothing new. */
   refusedLine: string | null;
+  /** GM r34: an "other" stop's reason (refusedLine is its line then). */
+  refusedReason?: OtherReason | null;
+  /** GM r34 Q2: an "other" stop's one quiet try was spent; another writer's
+   * change doesn't buy another until the person acts. */
+  quietSpent?: boolean;
   retryTimer: ReturnType<typeof setTimeout> | null;
   /** GM r16: a stopped save's one retry of its own, about 2 s after the
    * last change another writer brought (evidence saving works again). */
@@ -3173,7 +3178,8 @@ const deletedSceneEdits = new Map<string, { mine: CinemaSceneSpec; base: CinemaS
    * again with its line and [Try again], for every cause. */
   stop: DeletedSceneStop | null }>();
 /** A deleted scene's stop: why, who outpaced it, and the mark's line. */
-interface DeletedSceneStop { refused: 'server' | 'bad-save' | 'too-big' | 'other'; by: SceneOutpacedBy | null; line: string | null }
+interface DeletedSceneStop { refused: 'server' | 'bad-save' | 'too-big' | 'other'; by: SceneOutpacedBy | null; line: string | null;
+  reason?: OtherReason | null }
 /** A deleted scene's line, said or to say, for the sync that took the card
  * off (`said`: the save's 404 said it first). */
 interface DeletedSceneLine { nodeId: string; line: string; scene: string; said: boolean }
@@ -3237,7 +3243,8 @@ function stopToKeep(nodeId: string, entry: CinemaScenePersistence): DeletedScene
   const mark = useGraphStore.getState().unsavedScenes[nodeId] ?? null;
   const kind = entry.refused;
   const known = kind === 'server' || kind === 'bad-save' || kind === 'too-big' || kind === 'other' ? kind : null;
-  if (entry.stopped && known) return { refused: known, by: entry.stoppedBy, line: entry.refusedLine ?? mark };
+  if (entry.stopped && known) return { refused: known, by: entry.stoppedBy, line: entry.refusedLine ?? mark,
+    ...(known === 'other' ? { reason: entry.refusedReason ?? null } : {}) };
   // A clash waiting over the stop clears its refusal; the stop's cause stays
   // shown behind the prompt (sceneStops), and the mark carries the clash line.
   const shown = entry.stopped ? useGraphStore.getState().sceneStops[nodeId] : undefined;
@@ -3245,7 +3252,7 @@ function stopToKeep(nodeId: string, entry: CinemaScenePersistence): DeletedScene
     const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
     const scene = node ? cardTitle([node], nodeId) : 'Scene';
     if (shown.cause === 'outpaced') return { refused: 'server', by: shown.by, line: sceneOutpacedLine(scene, shown.by) };
-    if (shown.cause === 'other') return { refused: 'other', by: null, line: shown.line };
+    if (shown.cause === 'other') return { refused: 'other', by: null, line: shown.line, reason: { text: shown.reason, nebula: shown.nebula } };
     if (shown.cause === 'run-lock') return null;
     return { refused: shown.cause, by: null,
       line: shown.cause === 'bad-save' ? sceneCantSaveLine(scene) : shown.cause === 'too-big' ? sceneTooBigToSaveLine(scene) : sceneStoppedLine(scene) };
@@ -3255,10 +3262,12 @@ function stopToKeep(nodeId: string, entry: CinemaScenePersistence): DeletedScene
   if (cause) {
     return { refused: cause === 'bad-save' || cause === 'too-big' || cause === 'other' ? cause : 'server',
       by: entry.retrying?.cause === 'outpaced' ? entry.retrying.by : entry.clashAnswerStop.by,
-      line: entry.retrying?.cause === 'other' ? entry.retrying.line : entry.refusedLine ?? mark };
+      line: entry.retrying?.cause === 'other' ? entry.retrying.line : entry.refusedLine ?? mark,
+      ...(entry.retrying?.cause === 'other' ? { reason: { text: entry.retrying.reason, nebula: entry.retrying.nebula } } : {}) };
   }
   if (entry.restoredStop) return entry.restoredStop;
-  return { refused: known ?? 'server', by: entry.clashAnswerStop.by, line: entry.refusedLine ?? mark };
+  return { refused: known ?? 'server', by: entry.clashAnswerStop.by, line: entry.refusedLine ?? mark,
+    ...(known === 'other' ? { reason: entry.refusedReason ?? null } : {}) };
 }
 
 /** Review 14 LOW-1 (GM r25 answer 1): the person's own step took a scene
@@ -3387,6 +3396,7 @@ function restoreSceneSavingFirst(nodeId: string, scene: CinemaSceneSpec, back: C
   if (!entry) return;
   entry.clashAnswerStop = { by: stop.by };
   entry.restoredStop = stop;
+  if (stop.reason) entry.refusedReason = stop.reason;
   if (stop.line) markSceneUnsaved(nodeId, stop.line);
   entry.pending = true;
   void flushCinemaScenePersistence(nodeId, entry);
@@ -3566,6 +3576,7 @@ function answerSceneClash(nodeId: string, keep: 'mine' | 'theirs'): void {
   // GM r30: the prompt stays, held, while the answer's save is on its way
   // (endClashAnswer); an answer that sends nothing takes it off at once.
   markClashSending(nodeId, keep);
+  entry.quietSpent = false;
   // GM r19 answer 2: a clash that came while the save was stopped.
   const stopped = entry.stopped ? { by: entry.stoppedBy } : null;
   const fields = entry.clash.fields;
@@ -3734,6 +3745,7 @@ function retrySceneSave(nodeId: string): void {
   // failed), never a new round of timed retries.
   entry.clashAnswerStop = entry.stopped ? { by: entry.stoppedBy } : null;
   entry.runLockTry = null;
+  entry.quietSpent = false;
   entry.retries = 0;
   entry.changedInRow = 0;
   setSceneStopped(nodeId, entry, false);
@@ -3826,8 +3838,24 @@ function setSceneStopped(nodeId: string, entry: CinemaScenePersistence, stopped:
   // Out of the stopped state (a save, the next change, [Try again]): its one
   // quiet retry (GM r16) has nothing left to do.
   if (!stopped) clearQuietRetry(entry);
-  noteSceneStop(nodeId, stopped ? sceneStopOf(nodeId, entry) : null);
-  markSceneStopped(nodeId, stopped);
+  // Review 21 NIT-1: the stop and the stopped mark in one store update, so
+  // no update shows a stop with no line (or a run's line giving way to none).
+  const state = useGraphStore.getState();
+  const stop = stopped ? sceneStopOf(nodeId, entry) : null;
+  const patch: Partial<Pick<GraphState, 'sceneStops' | 'stoppedScenes'>> = {};
+  if (stop === null ? nodeId in state.sceneStops : JSON.stringify(state.sceneStops[nodeId]) !== JSON.stringify(stop)) {
+    const next = { ...state.sceneStops };
+    if (stop) next[nodeId] = stop; else delete next[nodeId];
+    patch.sceneStops = next;
+  }
+  // GM r17: while a clash waits, the prompt asks; the stopped mark waits behind it (markSceneStopped).
+  const marked = stopped && !(nodeId in state.sceneClashes);
+  if ((nodeId in state.stoppedScenes) !== marked) {
+    const next = { ...state.stoppedScenes };
+    if (marked) next[nodeId] = true; else delete next[nodeId];
+    patch.stoppedScenes = next;
+  }
+  if (patch.sceneStops || patch.stoppedScenes) useGraphStore.setState(patch);
   if (stopped) noteSceneTry(nodeId);
   // GM r30: the answer's save stopped: its prompt gives way to the stop.
   if (stopped && entry.answering != null) endClashAnswer(nodeId, entry);
@@ -3837,22 +3865,19 @@ function setSceneStopped(nodeId: string, entry: CinemaScenePersistence, stopped:
  * two more state lines. A run lock (`run-lock`) is no stop: it isn't in
  * `stoppedScenes` (no [Try again]) and clears when the save goes after the
  * run. A refusal Nebula has no line of its own for (`other`) is one, with
- * [Try again]; `reason` is what follows the heading, so scenes refused for
- * the same reason share a line (null: a line of the backend's own, said
- * alone). */
+ * [Try again]: `reason` follows GM's heading (null: a whole line the backend
+ * wrote, `line`, said as it is); `nebula` when Nebula wrote the reason, so
+ * scenes refused for it share a line (GM r34 Q3: a reason the backend wrote
+ * stays one line per scene). Every line reads the names live (GM r34). */
 export type SceneStop = { cause: SceneStopCause } | { cause: 'outpaced'; by: SceneOutpacedBy } | { cause: 'run-lock' }
-  | { cause: 'other'; reason: string | null; line: string };
-function sceneStopOf(nodeId: string, entry: CinemaScenePersistence): SceneStop {
+  | { cause: 'other'; reason: string | null; nebula: boolean; line: string };
+function sceneStopOf(_nodeId: string, entry: CinemaScenePersistence): SceneStop {
   if (entry.refused === 'bad-save' || entry.refused === 'too-big') return { cause: entry.refused };
-  if (entry.refused === 'other') return otherStopOf(nodeId, entry.refusedLine ?? '');
+  if (entry.refused === 'other') {
+    const reason = entry.refusedReason ?? { text: null, nebula: false };
+    return { cause: 'other', reason: reason.text, nebula: reason.nebula, line: entry.refusedLine ?? '' };
+  }
   return entry.stoppedBy ? { cause: 'outpaced', by: entry.stoppedBy } : { cause: 'server' };
-}
-/** An "other" refusal's stop: the reason after GM's heading, so the line
- * can name several scenes; a line of the backend's own stays alone. */
-function otherStopOf(nodeId: string, line: string): SceneStop {
-  const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
-  const heading = `${sceneSaveHeading(node ? cardTitle([node], nodeId) : 'Scene')} `;
-  return { cause: 'other', reason: line.startsWith(heading) ? line.slice(heading.length) : null, line };
 }
 function noteSceneStop(nodeId: string, stop: SceneStop | null): void {
   const shown = useGraphStore.getState().sceneStops;
@@ -3879,37 +3904,59 @@ export interface SceneStopLine { key: string; text: string; nodeIds: string[]; t
 export function sceneStopLines(state: Pick<GraphState, 'nodes' | 'stoppedScenes' | 'sceneStops' | 'scenePopover'>
   & Partial<Pick<GraphState, 'sceneTries' | 'sceneClashes'>>): SceneStopLine[] {
   const tries = state.sceneTries ?? {};
-  const clashes = state.sceneClashes ?? {};
-  const groups = new Map<string, { text: (names: string[]) => string; nodes: Node<NodeData>[]; retry: boolean }>();
+  const groups = new Map<string, { stop: SceneStop; nodes: Node<NodeData>[]; retry: boolean }>();
   const lines: SceneStopLine[] = [];
-  // A scene whose [Try again] is on its way keeps its line (GM r29 call 2).
-  const stopOf = (id: string): SceneStop | undefined => {
-    const stop = state.sceneStops[id];
-    if (state.stoppedScenes[id] === true) return stop ?? tries[id];
-    if (id in tries) return tries[id];
-    return stop?.cause === 'run-lock' && !(id in clashes) ? stop : undefined;
-  };
+  const stopOf = (id: string) => sceneStopShown(state, id);
   const stopped = readingOrder(state.nodes.filter((node) => stopOf(node.id) && state.scenePopover !== node.id));
   for (const node of stopped) {
     const stop = stopOf(node.id)!;
-    if (stop.cause === 'outpaced' || (stop.cause === 'other' && stop.reason === null)) {
-      lines.push({ key: `${stop.cause}:${node.id}`, text: stop.cause === 'outpaced' ? sceneOutpacedLine(cardTitle([node], node.id), stop.by) : stop.line,
+    // One line per scene: "kept changing" (who), a whole line the backend
+    // wrote, and a reason it wrote (GM r34 Q3). Only Nebula's own merge.
+    if (stop.cause === 'outpaced' || (stop.cause === 'other' && !stop.nebula)) {
+      lines.push({ key: `${stop.cause}:${node.id}`, text: stopLineText(stop, [cardTitle([node], node.id)]),
         nodeIds: [node.id], trying: node.id in tries, retry: true });
       continue;
     }
     const key = stop.cause === 'other' ? `other:${stop.reason}` : stop.cause;
-    const group = groups.get(key) ?? {
-      text: stop.cause === 'run-lock' ? (names: string[]) => sceneRunLockLine(names)
-        : stop.cause === 'other' ? (names: string[]) => sceneOtherStopLine(names, stop.reason!)
-          : (names: string[]) => sceneStopStateLine(stop.cause, names),
-      nodes: [], retry: stop.cause !== 'run-lock' };
+    const group = groups.get(key) ?? { stop, nodes: [], retry: stop.cause !== 'run-lock' };
     group.nodes.push(node);
     groups.set(key, group);
   }
   const rank = (key: string) => ['bad-save', 'server', 'too-big'].indexOf(key) + 1 || (key.startsWith('other:') ? 4 : 5);
+  // GM r34: names are read now, from the cards, never from when the save failed.
   return [...[...groups].sort(([a], [b]) => rank(a) - rank(b)).map(([key, group]) => ({ key,
-    text: group.text(group.nodes.map((node) => cardTitle([node], node.id))), nodeIds: group.nodes.map((node) => node.id),
+    text: stopLineText(group.stop, group.nodes.map((node) => cardTitle([node], node.id))), nodeIds: group.nodes.map((node) => node.id),
     trying: group.nodes.some((node) => node.id in tries), retry: group.retry })), ...lines];
+}
+
+/** The stop a scene's state line shows now, if any: its stop; while its
+ * [Try again] is on its way, the stop it came out of (GM r29 call 2); else
+ * a run waiting to end (GM r32), unless a clash asks for the scene. */
+function sceneStopShown(state: Pick<GraphState, 'stoppedScenes' | 'sceneStops'> & Partial<Pick<GraphState, 'sceneTries' | 'sceneClashes'>>,
+  id: string): SceneStop | undefined {
+  const tries = state.sceneTries ?? {};
+  const stop = state.sceneStops[id];
+  if (state.stoppedScenes[id] === true) return stop ?? tries[id];
+  if (id in tries) return tries[id];
+  return stop?.cause === 'run-lock' && !(id in (state.sceneClashes ?? {})) ? stop : undefined;
+}
+
+/** A stop's line for `names` (the scenes' names as the cards show them now). */
+function stopLineText(stop: SceneStop, names: string[]): string {
+  if (stop.cause === 'outpaced') return sceneOutpacedLine(names[0], stop.by);
+  if (stop.cause === 'run-lock') return sceneRunLockLine(names);
+  if (stop.cause === 'other') return stop.reason === null ? stop.line : sceneOtherStopLine(names, stop.reason);
+  return sceneStopStateLine(stop.cause, names);
+}
+
+/** GM r34: the "Unsaved" mark's line for a scene with a state line: its
+ * stop's line for this scene alone, with the name the card shows now (a
+ * rename shows at once). Null when it has none (the mark keeps its own). */
+export function sceneMarkLine(state: Pick<GraphState, 'nodes' | 'stoppedScenes' | 'sceneStops'>
+  & Partial<Pick<GraphState, 'sceneTries' | 'sceneClashes'>>, nodeId: string): string | null {
+  const stop = sceneStopShown(state, nodeId);
+  const node = stop ? state.nodes.find((candidate) => candidate.id === nodeId) : undefined;
+  return stop && node ? stopLineText(stop, [cardTitle([node], nodeId)]) : null;
 }
 
 /** GM r29 call 7: reading order on the canvas, top to bottom, then left to
@@ -4011,11 +4058,15 @@ function clearQuietRetry(entry: CinemaScenePersistence): void {
 function scheduleQuietRetry(nodeId: string, entry: CinemaScenePersistence): void {
   clearQuietRetry(entry);
   // GM #198 r12 answer 1: a save stopped for good (400, 413) waits for the
-  // person: their next change or [Try again].
-  if (stoppedForGood(entry)) return;
+  // person: their next change or [Try again]. GM r34 Q2: an "other" stop
+  // gets one quiet try (its cause is unknown, and the scene as it is now
+  // might save); after that it waits for the person too, however many more
+  // changes come (quietSpent, cleared when the person acts or a save lands).
+  if (stoppedForGood(entry) || entry.quietSpent) return;
   entry.quietTimer = setTimeout(() => {
     entry.quietTimer = null;
     if (cinemaScenePersistence.get(nodeId) !== entry || !entry.stopped || entry.clash || entry.inFlight) return;
+    if (entry.refused === 'other') entry.quietSpent = true;
     entry.quietRetry = true;
     entry.pending = true;
     void flushCinemaScenePersistence(nodeId, entry);
@@ -4115,10 +4166,18 @@ function stopSceneForGood(nodeId: string, entry: CinemaScenePersistence, refused
 
 /** GM r32 answer 2: a refusal Nebula has no line of its own for stops the
  * save, like 400 and 413: its line (GM's heading and the reason, or the
- * backend's own line) is a stop line with [Try again], one try. Nothing
- * more goes until the person edits or presses it. */
-function stopSceneOther(nodeId: string, entry: CinemaScenePersistence, line: string | null): void {
+ * backend's own line) is a stop line with [Try again], one try. GM r34 Q2:
+ * unlike 400 and 413, another writer's change to the scene sends one quiet
+ * try (the cause is unknown; the scene as it is now might save). Failing,
+ * it is stopped again and waits for the person: their edit or [Try again];
+ * further changes from others send nothing more (scheduleQuietRetry). */
+function stopSceneOther(nodeId: string, entry: CinemaScenePersistence, line: string | null, reason?: OtherReason | null): void {
   entry.clashAnswerStop = null;
+  entry.runLockTry = null;
+  // A refusal said again keeps the reason it had (a try that timed out, a
+  // restore's), unless the answer brought its own.
+  if (reason !== undefined) entry.refusedReason = reason;
+  else if (line !== null && line !== entry.refusedLine) entry.refusedReason = null;
   if (entry.retryTimer) clearTimeout(entry.retryTimer);
   entry.retryTimer = null;
   clearQuietRetry(entry);
@@ -4355,7 +4414,15 @@ type SceneAnswer =
   | { kind: 'rendering'; shotIds: string[]; line: string }
   | { kind: 'gone'; line: string }
   | { kind: 'changed'; scene: CinemaSceneSpec; key: string | null; rev: number | null; by: SceneWriter }
-  | { kind: 'kept'; refused: SceneRefusalKind; line: string | null; log?: string };
+  | { kind: 'kept'; refused: SceneRefusalKind; line: string | null; log?: string; reason?: OtherReason | null };
+
+/** GM r32, r34: why an "other" refusal stopped a save, as data, so its line
+ * reads the scene's name live: `text` follows GM's heading ("Nebula
+ * couldn’t save your changes to “Opening”."); null when the backend wrote a
+ * whole line of its own. `nebula`: Nebula wrote the reason (no detail came),
+ * so scenes with it share a line; a reason the backend wrote stays one line
+ * per scene (GM r34 Q3). */
+export interface OtherReason { text: string | null; nebula: boolean }
 
 /** Reads a refused scene write: which part, or what clears it (GM r7 item 1). */
 async function sceneRefusal(nodeId: string, response: Response): Promise<SceneAnswer> {
@@ -4419,7 +4486,17 @@ async function sceneRefusal(nodeId: string, response: Response): Promise<SceneAn
   }
   if (failureKind(status) === 'no-response') return { kind: 'kept', refused: 'server', line: sceneRetryingLine([label]) };
   if (status === 400) return { kind: 'kept', refused: 'bad-save', line: sceneCantSaveLine(label), log };
-  return { kind: 'kept', refused: 'other', line: isNamedLine(detail) ? detail : headedLine(heading, copyForAnswer(status, body.detail, code)) };
+  // GM r34 Q3: a whole line the backend wrote stays as it is; a reason it
+  // wrote goes after GM's heading, one line per scene; only Nebula's own
+  // reason (no detail came) merges.
+  if (isNamedLine(detail)) return { kind: 'kept', refused: 'other', line: detail, reason: { text: null, nebula: false } };
+  const reason = copyForAnswer(status, body.detail, code);
+  const headed = headedLine(heading, reason);
+  // headedLine puts the heading first unless one side is empty or the reason
+  // already says it whole; only a reason under the heading is kept as data.
+  const underHeading = Boolean(heading && reason) && headed !== reason;
+  return { kind: 'kept', refused: 'other', line: headed,
+    reason: underHeading ? { text: reason, nebula: reason !== detail } : { text: null, nebula: false } };
 }
 
 async function flushCinemaScenePersistence(nodeId: string, entry: CinemaScenePersistence): Promise<void> {
@@ -4464,8 +4541,10 @@ async function flushCinemaScenePersistence(nodeId: string, entry: CinemaScenePer
   const wires = entry.wireHolds.splice(0);
   const controller = new AbortController();
   entry.inFlight = controller;
-  // GM r31 LOW-2: a one try out of a stop that gets no answer in time counts as failed.
-  const tryTimer = entry.clashAnswerStop
+  // GM r31 LOW-2: a one try out of a stop that gets no answer in time counts
+  // as failed; review 21 LOW-1: so does the save after a run that is still
+  // that one try (GM r33 answer 3).
+  const tryTimer = entry.clashAnswerStop ?? entry.runLockTry
     ? setTimeout(() => sceneTryTimedOut(nodeId, entry, sendSeq, controller), sceneTryTimeoutMs) : null;
   let answer: SceneAnswer = { kind: 'ok' };
   let answerRev: number | null = null;
@@ -4544,7 +4623,7 @@ export function setSceneTryTimeoutForTests(ms: number | null): void {
  * every one, review 20 LOW-1): the next try may send; each late answer is
  * settleLateTry's. */
 function sceneTryTimedOut(nodeId: string, entry: CinemaScenePersistence, sendSeq: number, controller: AbortController): void {
-  if (cinemaScenePersistence.get(nodeId) !== entry || entry.sendSeq !== sendSeq || !entry.clashAnswerStop) return;
+  if (cinemaScenePersistence.get(nodeId) !== entry || entry.sendSeq !== sendSeq || !(entry.clashAnswerStop ?? entry.runLockTry)) return;
   const out = entry.inFlight === controller;
   if (!out && !entry.unanswered) return;
   if (out) {
@@ -4552,10 +4631,13 @@ function sceneTryTimedOut(nodeId: string, entry: CinemaScenePersistence, sendSeq
     (entry.lateTries ??= new Set()).add(sendSeq);
   }
   entry.unanswered = false;
-  const stop = stopToKeep(nodeId, entry);
+  // A run-lock try (the save after the run) goes back to stopped as a
+  // server stop would (backToStopped, with who outpaced it, if anyone).
+  const stop = entry.clashAnswerStop ? stopToKeep(nodeId, entry) : null;
   const refused = stop?.refused ?? 'server';
   if (!entry.refused && stop) entry.refusedLine = stop.line;
-  settleSceneAnswer(nodeId, entry, { kind: 'kept', refused, line: entry.refusedLine });
+  settleSceneAnswer(nodeId, entry, { kind: 'kept', refused, line: entry.refusedLine,
+    ...(stop?.reason !== undefined ? { reason: stop.reason } : {}) });
   if (entry.answering === sendSeq) endClashAnswer(nodeId, entry);
 }
 
@@ -4612,6 +4694,8 @@ function settleSceneAnswerNow(nodeId: string, entry: CinemaScenePersistence, ans
     case 'ok': {
       entry.refused = null;
       entry.refusedLine = null;
+      entry.refusedReason = null;
+      entry.quietSpent = false;
       entry.clashRefusal = null;
       entry.retries = 0;
       setSceneStopped(nodeId, entry, false);
@@ -4722,7 +4806,7 @@ function settleSceneAnswerNow(nodeId: string, entry: CinemaScenePersistence, ans
           settleSceneAnswer(nodeId, entry, { kind: 'ok' });
           return;
         }
-        settleSceneAnswer(nodeId, entry, { kind: 'kept', refused: 'other', line: answer.line });
+        settleSceneAnswer(nodeId, entry, { kind: 'kept', refused: 'other', line: answer.line, reason: { text: null, nebula: false } });
         return;
       }
       holdRemovedWires(nodeId, entry);
@@ -4739,119 +4823,135 @@ function settleSceneAnswerNow(nodeId: string, entry: CinemaScenePersistence, ans
       noteSceneDeleted(nodeId, entry, answer.line);
       clearCinemaScenePersistence(nodeId);
       return;
-    case 'kept':
+    case 'kept': {
       holdRemovedWires(nodeId, entry);
       // GM r32: a run's line is a state while the run holds the save; any
-      // other refusal says its own (or none), so it goes.
-      if (answer.refused !== 'run-lock') {
-        dropRunLockStop(nodeId);
-        entry.runLockTry = null;
+      // other answer says its own (or none), so it goes. Review 21 NIT-1:
+      // after the answer is handled, so a stop it sets takes the run line's
+      // place in the same store update (dropRunLockStop leaves a stop be).
+      const leavesRun = answer.refused !== 'run-lock';
+      if (leavesRun) entry.runLockTry = null;
+      try {
+        settleKeptAnswer(nodeId, entry, answer, quiet, answeredStop);
+      } finally {
+        if (leavesRun) dropRunLockStop(nodeId);
       }
-      if (answer.refused === 'moved') {
-        // GM r20 answer 3: another project opened. The switch's handling
-        // says it once; the edits wait for it, unsent and unsaid.
-        entry.refused = 'moved';
-        entry.clashAnswerStop = null;
-        if (entry.retryTimer) clearTimeout(entry.retryTimer);
-        entry.retryTimer = null;
-        clearQuietRetry(entry);
-        return;
-      }
-      if (((quiet && entry.stopped) || answeredStop) && answer.refused === 'run-lock') {
-        // GM r31 answer 2 (review 19 NIT-3): a run lock is no failure. The
-        // one try out of the stop gives way to the run: the stop goes, the
-        // run's own line shows, and the save goes again when the run ends,
-        // as any save a run locked does (below). GM r33 answer 3: that save
-        // is still the one try; failing after the run, it goes back to
-        // stopped with its line and [Try again].
-        entry.runLockTry = answeredStop ?? { by: entry.stoppedBy };
-        entry.clashAnswerStop = null;
-        entry.retrying = null;
-        entry.stoppedBy = null;
-        if (entry.stopped) setSceneStopped(nodeId, entry, false);
-      }
-      if (((quiet && entry.stopped) || answeredStop) && answer.refused === 'other') {
-        // GM r32 answer 2: the "other" line's one try refused the same way:
-        // stopped again with its line (the reason may have changed).
-        stopSceneOther(nodeId, entry, answer.line);
-        return;
-      }
-      if (((quiet && entry.stopped) || answeredStop) && (answer.refused === 'bad-save' || answer.refused === 'too-big')) {
-        // GM #198 r12 answer 1: a stopped save's own try refused 400 or 413
-        // can never succeed as it is: said once, and nothing tries again by
-        // itself until the person edits or presses [Try again].
-        stopSceneForGood(nodeId, entry, answer.refused, answer.log);
-        return;
-      }
-      if (((quiet && entry.stopped) || answeredStop) && answer.refused !== 'replaced' && answer.refused !== 'params-outdated'
-        && answer.refused !== 'run-lock') {
-        // GM r16 (review 11, L-2: whatever refused it, a 400 or a 413 too):
-        // the stopped save's one try failed. GM r19 answer 2: so did the
-        // save the person's clash answer sent while it was stopped. Either
-        // way: back to stopped with the same line, no new toast and no
-        // timed retries; the mark's popover keeps [Try again], and the next
-        // change another writer brings starts a quiet stretch again (GM r20
-        // answer 1). A refusal that hands off (a replaced canvas, an update)
-        // goes its own way below.
-        backToStopped(nodeId, entry, answeredStop ? answeredStop.by : entry.stoppedBy);
-        return;
-      }
-      entry.refused = answer.refused;
-      // GM r10: while a clash waits, its prompt is the line; nothing retries.
-      // Review 14 LOW-2 (GM r25 answer 2): refused 400 or 413 then, it is
-      // stopped for good behind the prompt (no line yet, nothing resent on
-      // another writer's change); the answer says the line (resolveSceneClash).
-      if (entry.clash && (answer.refused === 'bad-save' || answer.refused === 'too-big')) {
-        stopSceneForGood(nodeId, entry, answer.refused, answer.log);
-        return;
-      }
-      if (entry.clash) {
-        entry.refusedLine = answer.line;
-        return;
-      }
-      if (answer.refused === 'bad-save' || answer.refused === 'too-big') {
-        // GM r22 Q3: a save that wasn't stopped, refused 400 or 413, says
-        // the same line as a stopped one, with [Try again], and waits for
-        // the person the same way: it can't succeed as it is.
-        stopSceneForGood(nodeId, entry, answer.refused, answer.log);
-        return;
-      }
-      if (answer.refused === 'other') {
-        // GM r32 answers 2 and 3: a refusal Nebula has no line of its own
-        // for is a stop line (a state, no ×) with [Try again]; it clears on
-        // a try that saves or the person's next change.
-        stopSceneOther(nodeId, entry, answer.line);
-        return;
-      }
-      if (answer.refused === 'run-lock') {
-        // GM r32 answers 1 and 3: a run lock is no failure. Its line is a
-        // state (no ×) while the run holds the save, merged by cause; it
-        // clears when the save goes after the run ends.
-        entry.refusedLine = answer.line;
-        if (answer.line) markSceneUnsaved(nodeId, answer.line);
-        noteSceneStop(nodeId, { cause: 'run-lock' });
-        dropRetryingLine(nodeId);
-        scheduleSceneRetry(nodeId, entry);
-        return;
-      }
-      if (answer.line && answer.line !== entry.refusedLine) {
-        state.notify(answer.line);
-        if (answer.log && typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', { detail: { source: 'system', message: answer.log } }));
-        }
-      }
-      entry.refusedLine = answer.line;
-      if (answer.refused !== 'params-outdated' && answer.line) markSceneUnsaved(nodeId, answer.line);
-      if (answer.refused === 'replaced') {
-        // M1: the clear's sync names these edits and lets them go; if it
-        // never comes, the backend's graph is read once (a reconnect's sync).
-        const kept = entry;
-        setTimeout(() => {
-          if (cinemaScenePersistence.get(nodeId) === kept && kept.refused === 'replaced') void readBackendGraphAgain();
-        }, SCENE_REPLACED_WAIT_MS);
-      } else if (answer.refused === 'server') scheduleSceneRetry(nodeId, entry);
-      else if (entry.pending && answer.refused !== 'params-outdated') void flushCinemaScenePersistence(nodeId, entry);
+    }
   }
+}
+
+
+/** settleSceneAnswerNow's `kept` answer (a refusal that keeps the edits).
+ * `quiet`: the stopped save's own quiet try; `answeredStop`: the one try out
+ * of a stop this save was ([Try again], a clash answer, Undo's save first,
+ * or the save after a run that held one). */
+function settleKeptAnswer(nodeId: string, entry: CinemaScenePersistence, answer: Extract<SceneAnswer, { kind: 'kept' }>,
+  quiet: boolean, answeredStop: { by: SceneOutpacedBy | null } | null): void {
+  const state = useGraphStore.getState();
+  if (answer.refused === 'moved') {
+    // GM r20 answer 3: another project opened. The switch's handling
+    // says it once; the edits wait for it, unsent and unsaid.
+    entry.refused = 'moved';
+    entry.clashAnswerStop = null;
+    if (entry.retryTimer) clearTimeout(entry.retryTimer);
+    entry.retryTimer = null;
+    clearQuietRetry(entry);
+    return;
+  }
+  if (((quiet && entry.stopped) || answeredStop) && answer.refused === 'run-lock') {
+    // GM r31 answer 2 (review 19 NIT-3): a run lock is no failure. The
+    // one try out of the stop gives way to the run: the stop goes, the
+    // run's own line shows, and the save goes again when the run ends,
+    // as any save a run locked does (below). GM r33 answer 3: that save
+    // is still the one try; failing after the run, it goes back to
+    // stopped with its line and [Try again].
+    entry.runLockTry = answeredStop ?? { by: entry.stoppedBy };
+    entry.clashAnswerStop = null;
+    entry.retrying = null;
+    entry.stoppedBy = null;
+    if (entry.stopped) setSceneStopped(nodeId, entry, false);
+  }
+  if (((quiet && entry.stopped) || answeredStop) && answer.refused === 'other') {
+    // GM r32 answer 2: the "other" line's one try refused the same way:
+    // stopped again with its line (the reason may have changed).
+    stopSceneOther(nodeId, entry, answer.line, answer.reason);
+    return;
+  }
+  if (((quiet && entry.stopped) || answeredStop) && (answer.refused === 'bad-save' || answer.refused === 'too-big')) {
+    // GM #198 r12 answer 1: a stopped save's own try refused 400 or 413
+    // can never succeed as it is: said once, and nothing tries again by
+    // itself until the person edits or presses [Try again].
+    stopSceneForGood(nodeId, entry, answer.refused, answer.log);
+    return;
+  }
+  if (((quiet && entry.stopped) || answeredStop) && answer.refused !== 'replaced' && answer.refused !== 'params-outdated'
+    && answer.refused !== 'run-lock') {
+    // GM r16 (review 11, L-2: whatever refused it, a 400 or a 413 too):
+    // the stopped save's one try failed. GM r19 answer 2: so did the
+    // save the person's clash answer sent while it was stopped. Either
+    // way: back to stopped with the same line, no new toast and no
+    // timed retries; the mark's popover keeps [Try again], and the next
+    // change another writer brings starts a quiet stretch again (GM r20
+    // answer 1). A refusal that hands off (a replaced canvas, an update)
+    // goes its own way below.
+    backToStopped(nodeId, entry, answeredStop ? answeredStop.by : entry.stoppedBy);
+    return;
+  }
+  entry.refused = answer.refused;
+  // GM r10: while a clash waits, its prompt is the line; nothing retries.
+  // Review 14 LOW-2 (GM r25 answer 2): refused 400 or 413 then, it is
+  // stopped for good behind the prompt (no line yet, nothing resent on
+  // another writer's change); the answer says the line (resolveSceneClash).
+  if (entry.clash && (answer.refused === 'bad-save' || answer.refused === 'too-big')) {
+    stopSceneForGood(nodeId, entry, answer.refused, answer.log);
+    return;
+  }
+  if (entry.clash) {
+    entry.refusedLine = answer.line;
+    return;
+  }
+  if (answer.refused === 'bad-save' || answer.refused === 'too-big') {
+    // GM r22 Q3: a save that wasn't stopped, refused 400 or 413, says
+    // the same line as a stopped one, with [Try again], and waits for
+    // the person the same way: it can't succeed as it is.
+    stopSceneForGood(nodeId, entry, answer.refused, answer.log);
+    return;
+  }
+  if (answer.refused === 'other') {
+    // GM r32 answers 2 and 3: a refusal Nebula has no line of its own
+    // for is a stop line (a state, no ×) with [Try again]; it clears on
+    // a try that saves or the person's next change.
+    stopSceneOther(nodeId, entry, answer.line, answer.reason);
+    return;
+  }
+  if (answer.refused === 'run-lock') {
+    // GM r32 answers 1 and 3: a run lock is no failure. Its line is a
+    // state (no ×) while the run holds the save, merged by cause; it
+    // clears when the save goes after the run ends.
+    entry.refusedLine = answer.line;
+    if (answer.line) markSceneUnsaved(nodeId, answer.line);
+    noteSceneStop(nodeId, { cause: 'run-lock' });
+    dropRetryingLine(nodeId);
+    scheduleSceneRetry(nodeId, entry);
+    return;
+  }
+  if (answer.line && answer.line !== entry.refusedLine) {
+    state.notify(answer.line);
+    if (answer.log && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', { detail: { source: 'system', message: answer.log } }));
+    }
+  }
+  entry.refusedLine = answer.line;
+  if (answer.refused !== 'params-outdated' && answer.line) markSceneUnsaved(nodeId, answer.line);
+  if (answer.refused === 'replaced') {
+    // M1: the clear's sync names these edits and lets them go; if it
+    // never comes, the backend's graph is read once (a reconnect's sync).
+    const kept = entry;
+    setTimeout(() => {
+      if (cinemaScenePersistence.get(nodeId) === kept && kept.refused === 'replaced') void readBackendGraphAgain();
+    }, SCENE_REPLACED_WAIT_MS);
+  } else if (answer.refused === 'server') scheduleSceneRetry(nodeId, entry);
+  else if (entry.pending && answer.refused !== 'params-outdated') void flushCinemaScenePersistence(nodeId, entry);
 }
 
 const SCENE_REPLACED_WAIT_MS = 3_000;
@@ -5209,6 +5309,7 @@ function persistSceneParam(nodeId: string, scene: CinemaSceneSpec, debounceMs = 
   // answer's: its failure says its own line again.
   entry.clashAnswerStop = null;
   entry.runLockTry = null;
+  entry.quietSpent = false;
   noteSceneTry(nodeId);
   // GM r11 answer 3: the next change sends a stopped save again; not while
   // a clash waits after a 400 or 413 (review 14 LOW-2): the answer decides.

@@ -279,7 +279,7 @@ describe('GM r32 answers 2 and 3: the "other" line, a stop line with [Try again]
     await vi.waitFor(() => expect(stopLines()).toEqual([OTHER('“Opening”')]), { timeout: 3000, interval: 5 });
     expect(stopLineOf('n1')).toMatchObject({ retry: true, trying: false });
     expect(stopped().n1).toBe(true);
-    expect(useGraphStore.getState().sceneStops.n1).toEqual({ cause: 'other', reason: 'Try again, or reload if it keeps happening.',
+    expect(useGraphStore.getState().sceneStops.n1).toEqual({ cause: 'other', reason: 'Try again, or reload if it keeps happening.', nebula: true,
       line: OTHER('“Opening”') });
     expect(said).toEqual([]);
     expect(unsaved('n1')).toBe(OTHER('“Opening”'));

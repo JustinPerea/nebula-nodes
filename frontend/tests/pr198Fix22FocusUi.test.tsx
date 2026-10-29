@@ -69,6 +69,8 @@ describe('review 20 NIT-1: focus when an answered clash prompt goes', () => {
     const calls = await answer(asked({ undoNotice: { id: 9, text: 'Codex changed the canvas.', offer: null } }));
     // Codex changed it again during the answer's save: a new prompt for the same scene.
     set({ sceneClashes: { n1: { id: 72, line: CLASH, agent: 'Codex' } } });
+    // Review 21 NIT-6: the new prompt mounts, then takes focus.
+    await vi.waitFor(() => expect(document.activeElement?.getAttribute('data-scene-clash')).toBe('n1'), { timeout: 5000, interval: 5 });
     const active = document.activeElement as HTMLElement;
     expect(active.getAttribute('data-scene-clash')).toBe('n1');
     expect(active.tagName).toBe('DIV');

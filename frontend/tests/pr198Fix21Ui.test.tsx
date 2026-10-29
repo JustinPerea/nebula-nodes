@@ -39,7 +39,7 @@ const CLASH = 'Codex changed “Opening” while you were editing it.';
 const set = (state: Record<string, unknown>) => act(() => { useGraphStore.setState(state as never); });
 const advance = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
 const stopLine = () => document.querySelector('[data-scene-stop]') as HTMLElement;
-const stopButton = () => stopLine().querySelector('button') as HTMLButtonElement;
+const stopButton = () => stopLine()?.querySelector('button') as HTMLButtonElement;
 
 /** A stopped "Opening" with its line on screen, real timers until it shows, fake after. */
 async function stoppedLine(retry = vi.fn()) {
@@ -51,12 +51,18 @@ async function stoppedLine(retry = vi.fn()) {
   return retry;
 }
 const startTry = () => set({ stoppedScenes: {}, sceneTries: { n1: { cause: 'server' } } });
+/** Review 21 NIT-6: lets pending renders land (microtasks only: the fake
+ * clock doesn't move, so "no grey before 150 ms" still holds) until `ready`. */
+async function flushUntil(ready: () => boolean) {
+  for (let i = 0; i < 50 && !ready(); i += 1) await act(async () => { await Promise.resolve(); });
+}
 const backStopped = () => set({ stoppedScenes: { n1: true }, sceneTries: {} });
 
 describe('GM r30: a held [Try again] in the state slot', () => {
   it('aria-disabled and the line aria-busy at once; no grey before 150 ms, grey after; no reason tooltip; the label as it is', async () => {
     await stoppedLine();
     startTry();
+    await flushUntil(() => stopButton()?.getAttribute('aria-disabled') === 'true');
     expect(stopButton().getAttribute('aria-disabled')).toBe('true');
     expect(stopLine().getAttribute('aria-busy')).toBe('true');
     expect(stopButton().hasAttribute('data-held-look')).toBe(false);

@@ -57,6 +57,8 @@ describe('GM r32: the run-lock and "other" lines are state lines with no ×', ()
     expect(line.querySelectorAll('button')).toHaveLength(0);
     act(() => { useGraphStore.setState({ nodes: [scene('n1', 'Opening', 0), scene('n2', 'Ref scene', 300)],
       sceneStops: { n1: { cause: 'run-lock' }, n2: { cause: 'run-lock' } } } as never); });
+    // Review 21 NIT-6: wait for the merged line before reading the single one gone.
+    await screen.findByText(RUN_TWO, {}, LAZY);
     expect(screen.queryByText(RUN_ONE)).toBeNull();
     expect(lineOf(RUN_TWO).querySelectorAll('button')).toHaveLength(0);
     expect(document.querySelectorAll('[data-scene-stop]')).toHaveLength(1);
@@ -66,7 +68,7 @@ describe('GM r32: the run-lock and "other" lines are state lines with no ×', ()
   it('the "other" line: GM’s wording, [Try again] (one try for each scene it names), no ×', async () => {
     const retry = vi.fn();
     useGraphStore.setState({ ...base, nodes: [scene('n1', 'Opening', 0)], stoppedScenes: { n1: true },
-      sceneStops: { n1: { cause: 'other', reason: REASON, line: OTHER_ONE } }, retrySceneSave: retry } as never);
+      sceneStops: { n1: { cause: 'other', reason: REASON, nebula: true, line: OTHER_ONE } }, retrySceneSave: retry } as never);
     render(<NoticeRegion screen="canvas" />);
     await screen.findByText(OTHER_ONE, {}, LAZY);
     const line = lineOf(OTHER_ONE);
@@ -133,7 +135,7 @@ describe('GM r33: notice buttons read the one disabled token set', () => {
   it.each<'following' | 'offline'>(['following', 'offline'])('%s: every lock-state notice button is truly disabled and takes its kind’s look', async (lock) => {
     const step = { id: 'u1', label: 'Delete', before: { nodes: {}, edges: {} }, after: { nodes: {}, edges: {} } };
     useGraphStore.setState({ ...base, nodes: [scene('n1', 'Opening', 0), scene('n2', 'Ref scene', 300)],
-      stoppedScenes: { n1: true }, sceneStops: { n1: { cause: 'other', reason: REASON, line: OTHER_ONE } },
+      stoppedScenes: { n1: true }, sceneStops: { n1: { cause: 'other', reason: REASON, nebula: true, line: OTHER_ONE } },
       sceneClashes: { n2: { id: 81, line: 'Codex changed “Ref scene” while you were editing it.', agent: 'Codex' } },
       undoStack: [step], undoNotice: { id: 5, text: 'Deleted the node.', offer: 'undo', entry: step } } as never);
     act(() => { if (lock === 'following') setFollowingSwitch({ projectName: 'Second canvas', agent: 'Codex' }); else noteBackendConnection('offline'); });

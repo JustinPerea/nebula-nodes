@@ -1,6 +1,6 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useUIStore } from '../../store/uiStore';
-import { useGraphStore } from '../../store/graphStore';
+import { sceneMarkLine, useGraphStore } from '../../store/graphStore';
 import { SceneUnsavedMark } from './SceneUnsavedMark';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { PORT_COLORS } from '../../lib/portCompatibility';
@@ -28,7 +28,10 @@ export function CinemaSceneNode({ id, data, selected }: NodeProps) {
   const enterCinemaEditor = useUIStore((s) => s.enterCinemaEditor);
   // Edits on screen that the backend didn't take (GM, PR #198 r6 item 1):
   // the line that said why, kept as the mark's title.
-  const unsaved = useGraphStore((s) => s.unsavedScenes[id] ?? null);
+  const kept = useGraphStore((s) => s.unsavedScenes[id] ?? null);
+  // GM r34: a scene with a state line says it with the name the card shows now.
+  const live = useGraphStore((s) => (kept ? sceneMarkLine(s, id) : null));
+  const unsaved = kept ? live ?? kept : null;
   // A [Try again] on its way keeps the mark's popover and its button (GM r29 call 2).
   const stopped = useGraphStore((s) => s.stoppedScenes[id] === true || id in s.sceneTries);
   const { params, keyStatus } = data as CinemaSceneNodeData;

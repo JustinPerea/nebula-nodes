@@ -1196,3 +1196,54 @@ Four of this round's ring shots are byte-identical to round 10 shots of the same
   - The first batch of this round: a2 35/37, c 11/11, e 16/17, e3 14/17, f 35/35, g 22/22. Rerun alone, each failure passed: m1double 6/6; held21, clashsend21, timeout21 and clashfocus21 16/16; stack 7/7. They were order and timing flakes (review 20 NIT-3).
   - GM r33: held21, clashsend21, following22, twotries22, clashbound22 and runlockfail22 15/15. In twotries22, both tries were let go at 15 s. In clashbound22, the prompt went at about 15 s and the save landed later.
   - runlock21, runlock22, other22 and timeout21 15/15.
+
+## Fix round 23 (PR #198 review 21, GM's pr198 r34)
+
+- **Review 21 LOW-1: the save after a run that is still the one try has the 15 s bound.** Round 22 kept `runLockTry` for GM r33 answer 3, but armed the try's bound only for `clashAnswerStop`. A post-run save that hung (or got no answer) left "Nebula will save them when the run finishes." up after the run, with no [Try again].
+  - `flushCinemaScenePersistence` now arms the bound for `clashAnswerStop ?? runLockTry`.
+  - `sceneTryTimedOut` accepts a run-lock try and settles it as a server failure out of the one try, so `settleKeptAnswer` calls `backToStopped` with the try's `by`: the stop's line and [Try again].
+  - Its late answer goes through `lateTries` and `settleLateTry` like any try's.
+  - A run lock on an ordinary save (not a one try) still has no bound, as any ordinary save.
+- **Review 21 NIT-1: the run line gives way to a stop in one store update.**
+  - The kept branch is now `settleKeptAnswer`, called inside a try/finally. The run line drops (`dropRunLockStop`) after the answer is handled. It does nothing once a stop has replaced the run line, and still drops it for "moved", "replaced", params-outdated and the server retries.
+  - That alone didn't do it: `setSceneStopped` wrote `sceneStops` and `stoppedScenes` in two updates, and the first showed a stop with no line. It now writes both in one `setState`.
+  - Pinned at store level: the post-run 400 and "other" go [run line] → [stop line]; the post-run hang goes [run line] → [server stop line].
+- **GM r34 Q2: an "other" stop gets one quiet try per stop.** `stoppedForGood` still covers only 400 and 413, so another writer's change schedules the quiet try for an "other" stop. When it fires, `quietSpent` is set, and `scheduleQuietRetry` returns while it is. The person's edit, [Try again] or clash answer clears it, and so does a save that lands. Failing, the scene is stopped again and waits for the person, with no cycle. `stopSceneOther`'s comment says so.
+- **GM r34 Q3: only Nebula's own reason merges.**
+  - `sceneRefusal` now returns the "other" reason as data: `OtherReason { text, nebula }`.
+    - `text`: what follows GM's heading. It is null for a whole line the backend wrote, which stays as written.
+    - `nebula`: Nebula wrote the reason (no detail came, or the person-only copy).
+  - The data goes on the entry (`refusedReason`), into the stop (`{ cause: 'other', reason, nebula, line }`), the [Try again] snapshot (`retrying`), a deleted scene's stop (`DeletedSceneStop.reason`) and a restore.
+  - `sceneStopLines` merges "other" only when `nebula`. A backend reason gets a line per scene, even with identical text.
+  - `otherStopOf`, which re-parsed the reason from a line against the current heading, is gone. That re-parse caused review 21's NIT-3 rename split.
+- **GM r34: names read live.** `stopLineText(stop, names)` builds every state line from the cards' names at render, merged lines included, and so does `sceneStopShown`, the one stop-shown rule. `sceneMarkLine` gives the "Unsaved" mark its stop's line for that scene, with the live name. `CinemaSceneNode` uses it ahead of the stored text, which stays for lines that aren't states (the retrying event line, a clash's).
+  - A rename during a try: no store update shows the new card name with the old one in a line or the mark.
+  - A rename while stopped, and on a merged line.
+  - Live `rename23`: the line updates at once while still busy, and refused again it keeps the new name, in the line and the mark.
+- **Review 21 NIT-5: tests for the untested branches.**
+  - The run line dropped by another refusal: an ordinary save's post-run 500 gives the retrying line and no run line.
+  - "other" before the run line whatever the reading order.
+  - Focus onto a line with no button:
+    - from a stop line's [Try again];
+    - from an answered clash prompt, with another scene's 400 line ranked first in the slot, so the × rule alone would land elsewhere.
+- **Review 21 NIT-6: flaky tests made to wait.**
+  - `pr198Fix22Ui` waits for the merged run line before it reads the single one gone.
+  - `pr198Fix21Ui`'s 150 ms test flushes microtasks until the hold lands, without moving the fake clock.
+  - `pr198Fix22FocusUi`'s "asked again" waits for focus.
+  - I could not reproduce either of the latter two in 60 repeats under load. The waits make them depend on order, not timing.
+- **Mutations against the new tests:**
+  - Review 21's untested ones are now caught: `dropRunLockNone`, `rankSwap`, `lineFocusSelf` and `clashFocusLine` (after the 400 line was added).
+  - So are mine:
+    - the bound not armed, and `sceneTryTimedOut`'s guard without `runLockTry`;
+    - the drop moved back to the top (after the watch was seeded with the current lines; it had hidden a first empty frame);
+    - `setSceneStopped` split back into two updates;
+    - `quietSpent` unchecked, unset, or not cleared by [Try again];
+    - merging a backend reason, or a backend reason marked Nebula's;
+    - the mark not live;
+    - a merged line with stale names.
+- **Ratchet widening (review 21 NIT-4)** goes to the pressed-state sweep, as GM ruled.
+- **Tests changed because behaviour changed:** `graphStore.fix22` (the 422 stop now carries `nebula: true`); `pr198Fix22Ui`'s "other" states (`nebula: true`); the three NIT-6 waits.
+- **The full gate caught a ratchet hit the targeted runs missed.** `sceneRefusal` first told "a reason under the heading" from "a whole line" by comparing with a hand-built `` `${heading} ${reason}` ``, which `errorCopy.namedLine`'s ratchet forbids. It now asks the same thing without building the line: both sides non-empty and `headedLine` didn't return the reason alone. The behaviour is unchanged; the ratchet and the Q3 tests pass.
+- **Pinned on a3371c4d** (the new and changed tests copied onto the old commit): 15 of 51 fail there, all 13 of the fix23 store tests that test new behaviour, the live mark in `pr198Fix23Ui`, and `graphStore.fix22`'s 422 (now `nebula: true`). Five new tests pass there and stand as guards: the two NIT-5 focus paths, the rename-in-the-line UI test (the line was already built at render; the mark and the store lines weren't), Nebula's own reasons merging, and a quiet try again after the person acts.
+- **Gates.** `tsc -b` and `npm run lint` pass. Full vitest: 611 files, 7,915 tests. Full backend: 12,061 passed, 71 skipped. Build budget 426,128 bytes raw (128,922 gzip), up 59 from round 22.
+- **Live (8797/5797):** the round 23 sections (`runlockhang23`, `rename23`, `otherquiet23`) and round 22's run-lock and "other" ones 17/17, and again after the ratchet fix. The batch of round 12–22 sections: 41/41, 11/11, 20/20, 17/17, 35/35, 22/22, and h 12/14. h's two misses were `held21`'s 150 ms timing checks while tsc, lint and the a3371c4d run shared the machine; h alone passed them, then lost a page promise in `following22` (a Puppeteer protocol error), which passed 4/4 alone.
