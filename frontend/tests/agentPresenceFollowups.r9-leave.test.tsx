@@ -1,8 +1,8 @@
 /**
  * Fix round 9 of PR #200, review 8's leave NITs:
  * - NIT-1: a cancelled leave, or one whose events never come, still ends.
- * - NIT-2: × on a toast never leaves focus on <body> (GM: the next notice's
- *   first control, else the one before, else the start of the page content).
+ * - NIT-2: × on a toast never leaves focus on <body> (since round 10, GM r16
+ *   answer 2: the next notice's ×; tests/agentPresenceFollowups.r10.test.tsx).
  * - NIT-4 (GM r14): under reduced motion a leaving row fades out over 140 ms
  *   and keeps its space throughout; only after the fade does it go, in one
  *   step with no height transition. A row entering takes its space at once
@@ -12,7 +12,6 @@ import { act, cleanup, render, screen } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import postcss, { type AtRule, type Rule } from 'postcss';
-import { createPortal } from 'react-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LEAVE_SLACK_MS, useLeave, useLeavingRows } from '../src/lib/noticeLeave';
 
@@ -98,13 +97,21 @@ describe('review 8 NIT-1: a leave always ends', () => {
     expect(screen.queryByTestId('item')).toBeNull();
   });
 
-  it('a value coming back mid-leave stops the fallback', () => {
+  it('a value coming back mid-leave stops that leave\'s fallback, and the next leave has its own', () => {
     vi.useFakeTimers();
     const { rerender } = render(<Probe value="One" />);
     rerender(<Probe value={null} />);
+    act(() => { vi.advanceTimersByTime(100); });
     rerender(<Probe value="Two" />);
-    act(() => { vi.advanceTimersByTime(5000); });
-    expect(screen.getByTestId('item')).not.toHaveAttribute('data-leaving');
+    act(() => { vi.advanceTimersByTime(300); });
+    rerender(<Probe value={null} />);
+    // The first leave's timer (due at endTime + slack from its start) would
+    // end this second leave early if it were still armed (review 9 NIT-3).
+    act(() => { vi.advanceTimersByTime(endTime + LEAVE_SLACK_MS - 400 + 50); });
+    expect(screen.getByTestId('item')).toHaveAttribute('data-leaving', 'surface');
+    // Its own fallback still ends it.
+    act(() => { vi.advanceTimersByTime(400); });
+    expect(screen.queryByTestId('item')).toBeNull();
   });
 
   it('a row: cancel ends it, and so does the timeout', () => {
@@ -120,75 +127,7 @@ describe('review 8 NIT-1: a leave always ends', () => {
   });
 });
 
-describe('review 8 NIT-2: × on a toast never sends focus to <body>', () => {
-  function Region({ first, second, page = 'canvas' }: { first: string | null; second: string | null; page?: 'canvas' | 'main' | 'none' }) {
-    return (
-      <>
-        {page === 'canvas' && <div className="canvas-wrapper" tabIndex={0} data-testid="page" />}
-        {page === 'main' && <main data-testid="page">Projects</main>}
-        <div className="notice-region">
-          <div className="notice-region__slot" data-testid="slot-1" />
-          <div className="notice-region__slot" data-testid="slot-2" />
-        </div>
-        <Slotted slot="slot-1" value={first} label="First" />
-        <Slotted slot="slot-2" value={second} label="Second" />
-      </>
-    );
-  }
-  function Slotted({ slot, value, label }: { slot: string; value: string | null; label: string }) {
-    const leave = useLeave(value);
-    const target = document.querySelector(`[data-testid="${slot}"]`);
-    if (!target || !leave.shown) return null;
-    return createPortal(<div {...leave.props}><span>{leave.shown}</span><button type="button">{label} ×</button></div>, target);
-  }
-  const mount = (page?: 'canvas' | 'main' | 'none') => {
-    const view = render(<Region first={null} second={null} page={page} />);
-    return view;
-  };
-
-  it('goes to the next notice\'s first control', () => {
-    const { rerender } = mount();
-    rerender(<Region first="A" second="B" />);
-    screen.getByRole('button', { name: 'First ×' }).focus();
-    rerender(<Region first={null} second="B" />);
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Second ×' }));
-  });
-
-  it('else the one before\'s', () => {
-    const { rerender } = mount();
-    rerender(<Region first="A" second="B" />);
-    screen.getByRole('button', { name: 'Second ×' }).focus();
-    rerender(<Region first="A" second={null} />);
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'First ×' }));
-  });
-
-  it('else the start of the page content: the canvas, or the screen\'s <main>', () => {
-    const { rerender } = mount();
-    rerender(<Region first="A" second={null} />);
-    screen.getByRole('button', { name: 'First ×' }).focus();
-    rerender(<Region first={null} second={null} />);
-    expect(document.activeElement).toBe(screen.getByTestId('page'));
-    cleanup();
-    const second = render(<Region first={null} second={null} page="main" />);
-    second.rerender(<Region first="A" second={null} page="main" />);
-    screen.getByRole('button', { name: 'First ×' }).focus();
-    second.rerender(<Region first={null} second={null} page="main" />);
-    expect(document.activeElement).toBe(screen.getByTestId('page'));
-    expect(document.activeElement).not.toBe(document.body);
-  });
-
-  it('a leaving notice is skipped, and focus elsewhere is left alone', () => {
-    const { rerender } = mount();
-    rerender(<Region first="A" second="B" />);
-    screen.getByTestId('page').focus();
-    rerender(<Region first={null} second="B" />);
-    expect(document.activeElement).toBe(screen.getByTestId('page'));
-    screen.getByRole('button', { name: 'Second ×' }).focus();
-    rerender(<Region first={null} second={null} />);
-    // First is still leaving (inert): not a target.
-    expect(document.activeElement).toBe(screen.getByTestId('page'));
-  });
-});
+// Review 8 NIT-2's focus rule is now GM r16 answer 2: tests/agentPresenceFollowups.r10.test.tsx.
 
 describe('GM r14 (review 8 NIT-4): reduced motion keeps a leaving row\'s space until its fade ends', () => {
   const read = (file: string) => postcss.parse(readFileSync(join(__dirname, '..', 'src', 'styles', file), 'utf8'));

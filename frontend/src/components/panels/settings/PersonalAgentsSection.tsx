@@ -93,7 +93,7 @@ function DownloadAndSignIn({ agent, busy, run }: { agent: PersonalAgent; busy: b
             onClick={() => void run(() => antigravityAction('cancel-sign-in'))}>Cancel sign-in</button>
         )}
         {signIn?.state === 'signed_in' && (
-          <button type="button" className="settings__button" disabled={busy}
+          <button type="button" className="settings__button settings__button--neutral" disabled={busy}
             onClick={() => void run(() => antigravityAction('sign-out'))}>Sign out</button>
         )}
         {(install.state === 'installed' || install.state === 'changed') && (

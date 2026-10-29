@@ -6,7 +6,7 @@ from typing import Any
 # The readiness rule lives with the backend so the CLI and MCP server agree.
 from services.node_readiness import node_access  # noqa: F401 (re-exported for tests and callers)
 from services.agent_params import ASSET_PARAM_TYPES
-from services.canvas_pins import note_block, one_line  # an event is one line (PR #200 fix round 3, LOW-5)
+from services.canvas_pins import note_block, one_line, shown_text  # an event is one line (PR #200 fix round 3, LOW-5)
 from services.canvas_undo import UNDONE_VERBS, nothing_went_back
 from services.maker_sizes import rule_note
 from services import node_categories
@@ -760,7 +760,7 @@ def pin_line(head: str, text: Any, tail: str = "", indent: str = "    ", after: 
     way. `after` (an answer) follows the note, as on one line: under it, on
     its own line at the row's indent, where no line of the note can start
     (fix round 6, review 6 N-3)."""
-    note = str(text or "")
+    note = shown_text(text)  # an output path: no control byte (GM r15, PR #200 fix round 10)
     if "\n" not in note:
         return f"{head}: {quote_note(note)}{tail}{after}"
     block = f"{head}{tail}:\n" + note_block(note, indent)
@@ -783,7 +783,7 @@ def format_pin(pin: dict[str, Any], now: float | None = None) -> str:
     reply = pin.get("reply") or {}
     if pin.get("status") == "resolved" and reply:
         agent = (reply.get("agent") or {}).get("name") or "an agent"
-        answer = json.dumps(str(reply.get("text") or ""), ensure_ascii=False)
+        answer = json.dumps(shown_text(reply.get("text"), multiline=False), ensure_ascii=False)
         return pin_line(head, pin.get("text"), after=f" — resolved by {agent}: {answer}")
     ago = _ago(pin.get("createdAt"), now)
     return pin_line(head, pin.get("text"), f" ({ago})" if ago else "")

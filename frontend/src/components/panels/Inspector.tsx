@@ -492,8 +492,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
               type="button"
               className={
                 isFavorite
-                  ? 'inspector__favorite-button inspector__favorite-button--active'
-                  : 'inspector__favorite-button'
+                  ? 'inspector__favorite-button inspector__favorite-button--active inspector__favorite-remove'
+                  : 'inspector__favorite-button inspector__favorite-remove'
               }
               title={isFavorite ? 'Remove favorite' : 'Add favorite'}
               aria-label={isFavorite ? 'Remove model from favorites' : 'Add model to favorites'}

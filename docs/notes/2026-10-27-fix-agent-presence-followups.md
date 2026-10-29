@@ -1154,3 +1154,115 @@ the reduced-motion ruling), and review 8's LOW-1, LOW-2 and NIT-1 to NIT-4.
   gone" shot and round 7's stack at 0 ms show the same state (one kept
   note at 1280), and that is correct. The rest of the whole-folder pairs are
   earlier rounds'.
+
+## Fix round 10
+
+From 5e9df5ac. Review 9 (0 HIGH, 1 MEDIUM, 4 LOW, 3 NIT), GM r15 and GM
+r16 (built as written).
+
+- **MEDIUM-1, store raw, show stripped (GM r15 condition 1, r16 answer 3).**
+  A note and an agent's reply are stored exactly as typed
+  (`canvas_pins.typed_text`); `shown_text` strips them on every output: the
+  API's pins (`public_pin`, note and reply), the journal and its summaries,
+  the CLI (`pin_line`, `format_pin`'s answer, `note_block`, `one_line`), the
+  channel push, and the canvas display (`pinDisplayText` in
+  `lib/canvasPins.ts`: the card, the reply, the badge's label, the kept
+  note's title, plus the display's blank-line fold). The 280 cap counts the
+  shown text; the typed text may be 4× that (`RAW_TEXT_FACTOR`), so pasted
+  escape codes can't grow the store without bound. Going back to "store
+  stripped" is one line: `typed_text` returns `raw`. Review 9's fuzz is now
+  `test_pin_text_as_typed.py` (12 output paths × 3,000 cases, plus the store
+  byte for byte); the display's half is in the r10 frontend test.
+  Surprise: there is no edit field for a stored note. The note dialog and a
+  kept (unsent) note hold the person's own typed text, and Copy note copies
+  it raw; if an edit field comes, it should load the stored raw text.
+- **LOW-1 (GM r16 answer 4).** A kept shot carries a fingerprint of every
+  field but its media (`_shot_authoring`, sorted JSON). A returning shot id
+  gets its media back only on an equal fingerprint; otherwise it comes back
+  idle, and the kept entry is dropped either way. "Dropped" is only the
+  link: a test runs the whole loop and checks every file under the outputs
+  folder is still there. MCP-SETUP.md says so, and (NIT-1) that kept media
+  is lost when Nebula restarts.
+- **LOW-2 (GM r16 answer 2).** × from the keyboard puts focus on the next
+  notice's × (else the one before's), never on Undo, Run, Restore or
+  Delete. A notice with no × takes focus itself (`tabindex=-1`). An empty
+  stack goes to the "Recent projects" heading, else the canvas, else
+  `<main>`. The r17 keyboard ring is unchanged. A test presses Enter twice
+  and checks no action fires. #198's Projects stack needs the same rule
+  ("first control: [Restore]" goes); that is #198's change, not made here.
+- **LOW-3.** The leave fallback re-arms while an animation is still running
+  or pending (up to 8 times, each for the time it has left), so a busy main
+  thread can't cut an exit short. Tested with a fake clock and live with the
+  thread blocked for 400 ms at ×.
+- **LOW-4, the ratchet.** A control's words decide its kind first
+  (`wordKind`: RED_SAYS, NEUTRAL_SAYS, and a reviewed list for words that
+  mislead, like "Reset"); the class only confirms it. Added: `:focus` rules,
+  hwb, lab, lch and `color()`, logical border properties, accent-color,
+  -webkit-text-fill-color, colour inherited from a parent or a sibling or
+  descendant rule, i18n keys, labels from another file and spread props,
+  IconButton, MenuItem, `input type=button`, and labels where the action
+  word isn't first. It sees review 9's 10 controls: six Resets and the
+  Erase tool (neutral; the ones without a class saying so now have one,
+  like `toolbar__zoom-reset` and `mask-painter__tool--erase`), the
+  favourite toggle, Krea's Disconnect (red, GM r16 answer 1: the class was
+  ghost) and an agent's Sign out (neutral). 72 controls on the real tree.
+- **Sign out, checked.** `antigravity_agent.sign_out` stops Nebula using the
+  Google login, stops that agent's running sessions, and asks Google's
+  server to delete its stored login, the one thing signing in brings back.
+  No settings, history, sessions' records or files are deleted. So neutral
+  (`settings__button--neutral`).
+- **For GM.** The favourite star is a toggle: its on state and hover use the
+  accent, and the ratchet allows the accent for a neutral `aria-pressed`
+  toggle's state. Run History's "Forget ID" trigger is now red (it deletes
+  a recovery ID Nebula can't restore, like the key Remove trigger).
+- **NIT-2.** Remotion's toolbar Delete and keyframe Delete go to #ff9a91
+  pressed; so does the pin card's Delete note.
+- **NIT-3.** The three trivially passing tests now fail on the old code:
+  the two Cinema key tests check the handler fired before their negative
+  checks, and the "value coming back mid-leave" test drives a real leave.
+
+### Fix round 10 gates
+
+- tsc -b: clean. Full lint: clean (after dropping an unused `createPortal`
+  import left in the r9 leave test).
+- Full vitest (`--maxWorkers=6`, load 34 to 41 from other sessions):
+  7213 of 7279. The 66 failures were in 24 files, and 58 of them were
+  timeouts; all 24 files pass when rerun on their own (427 of 427). One was
+  this round's own: the r10 PinLayer render of 200 pins (about 1 s alone)
+  now has a 60 s timeout.
+- Full backend suite (no xdist): 11,726 passed, 71 skipped, 0 failed, in
+  54 min. The order-dependent `test_cli_apply` arrange test passed in this
+  order.
+- vite build plus check-build-budget and check-built-fonts: 415,464 B raw
+  (+680 on round 9) and 126,564 B gzip; 13 woff2 files, no font CDN.
+- Live (backend 8795, Vite 5795, nothing paid; exits, openlist, undo,
+  colours, leave9 and the new r10). Run 1: 36 of 40. Exits at 1440, the
+  open-list frame check and NIT-4's paused frames failed because the
+  harness pauses an exit's animation and steps through it, and under load
+  the stepping ran past the fallback, which (as in round 9) doesn't wait
+  for a paused animation. Undo stopped on two upload PNGs that an earlier
+  cleanup had deleted. Reruns: exits, openlist, undo and leave9 21 of 21
+  (exits needed a second try because the switch toast was slow to appear),
+  then r10 12 of 12.
+  - The stored note and reply match what was typed, byte for byte, in
+    `state/projects/catalog.json`. Create, list and resolve answers have no
+    control bytes. The card reads "Warmer sky at dusk / keep the beam crisp
+    / end" with the blank lines folded, and the reply reads "Done bold and
+    bell next line".
+  - After the person deletes a node, "Deleted the node." [Undo] [×] shows
+    beside the pin error. × then Enter puts focus on that notice's ×, with
+    the ring. The second Enter dismisses the notice, the node stays
+    deleted, and focus goes to the canvas.
+  - With the main thread blocked for 419 ms at ×, the exit still reaches
+    scale 0.96 and opacity 0 at 872 ms. The toast goes at 916 ms.
+  - Krea Disconnect, Forget ID, both Remotion Deletes and the pin's Delete
+    note are #ff887d on hover and #ff9a91 when pressed. Sign out, Erase,
+    the camera, editor and toolbar zoom resets, and Reset panels stay
+    neutral.
+  - Shot Undo still brings back the backend's image and variations: the
+    fingerprint matches the payload the canvas sends.
+- Shots: 60 fix10, each looked at (contact sheets). Within round 10, only
+  one pair is byte-identical: the key row's Remove and the armed Remove
+  confirm, which look the same. The other matches across the whole folder
+  are the same unchanged controls in round 8 and 9 crops, plus the shot
+  removed state, which is the same as round 9's.

@@ -71,26 +71,11 @@ _ANSI = re.compile(
 )
 
 
-def clean_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = False) -> str:
-    """Plain text, 1..limit chars, control characters dropped.
-
-    One line by default (a reply): whitespace collapsed. ``multiline`` (the
-    person's note: Shift+Enter in the dialog makes lines, fix round 2 of PR
-    #200, GM 2026-10-28 answer 5): agents get it as written. Its newlines
-    stay (every line break, ``\r\n``, ``\r``, U+2028 and the rest, reads as
-    ``\n``), a tab reads as a space, each
-    line loses its trailing spaces, and the note loses its leading and
-    trailing blank lines (the first line keeps its indent); a terminal colour
-    code goes whole; every other control character is still dropped.
-    Blank lines inside the note stay as typed (fix round 5 of PR #200,
-    review 5 N-3: agents read what the person wrote; only the canvas display
-    folds a run of blank lines, and the 280-character cap bounds the rest).
-    """
-    if not isinstance(raw, str):
-        raise PinError(422, f"{label} must be text")
+def _shown(raw: str, multiline: bool) -> str:
+    """The text with every control byte gone (see clean_text), never raising."""
     # A terminal colour code pasted with the text goes whole, never as a
     # stray "[31m" once its ESC is dropped (fix round 6 of PR #200, review 6
-    # N-4): CSI (ESC [ … final byte) and OSC (ESC ] … BEL or ESC \).
+    # N-4, and NIT-3 of review 8: every string sequence too).
     raw = _ANSI.sub("", raw)
 
     def plain(line: str) -> str:
@@ -113,14 +98,60 @@ def clean_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = F
             lines.pop(0)
         while lines and not lines[-1]:
             lines.pop()
-        text = "\n".join(lines)
-    else:
-        text = " ".join(plain(raw).split())
+        return "\n".join(lines)
+    return " ".join(plain(raw).split())
+
+
+def shown_text(raw: Any, *, multiline: bool = True) -> str:
+    """Note or reply text as every output shows it (GM r15 and r16, PR #200
+    fix round 10): the store keeps what was typed, and each output strips it,
+    the API's pins, the journal and its summaries, the CLI, the channel push
+    and the canvas display (frontend lib/canvasPins.ts pinDisplayText). No C0
+    but \n, no C1, no ESC, no format characters. A note keeps its lines; a
+    reply is one line."""
+    if raw is None:
+        return ""
+    return _shown(raw if isinstance(raw, str) else str(raw), multiline)
+
+
+# What the store keeps is the text as typed (GM r15 condition 1), bounded:
+# its shown form is capped at the limit, and the typed form at this many
+# times the limit (escape codes and controls pasted with it).
+RAW_TEXT_FACTOR = 4
+
+
+def clean_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = False) -> str:
+    """Checks text for the store, and answers its shown form: plain text,
+    1..limit chars, control characters dropped. The store keeps ``raw``
+    itself (``typed_text``); this is the form every output shows.
+
+    One line by default (a reply): whitespace collapsed. ``multiline`` (the
+    person's note: Shift+Enter in the dialog makes lines, fix round 2 of PR
+    #200, GM 2026-10-28 answer 5): agents get it as written. Its newlines
+    stay (every line break, ``\r\n``, ``\r``, U+2028 and the rest, reads as
+    ``\n``), a tab reads as a space, each
+    line loses its trailing spaces, and the note loses its leading and
+    trailing blank lines (the first line keeps its indent); a terminal colour
+    code goes whole; every other control character is still dropped.
+    Blank lines inside the note stay as typed (fix round 5 of PR #200,
+    review 5 N-3: agents read what the person wrote; only the canvas display
+    folds a run of blank lines, and the 280-character cap bounds the rest).
+    """
+    if not isinstance(raw, str):
+        raise PinError(422, f"{label} must be text")
+    text = _shown(raw, multiline)
     if not text:
         raise PinError(422, f"{label} can't be empty")
-    if len(text) > limit:
+    if len(text) > limit or len(raw) > limit * RAW_TEXT_FACTOR:
         raise PinError(422, f"{label} must be {limit} characters or fewer")
     return text
+
+
+def typed_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = False) -> str:
+    """What the store keeps: the text exactly as typed, once clean_text has
+    checked it (GM r15 condition 1, r16 answer 3: notes and replies alike)."""
+    clean_text(raw, limit=limit, label=label, multiline=multiline)
+    return raw
 
 
 def note_block(text: Any, indent: str) -> str:
@@ -132,7 +163,7 @@ def note_block(text: Any, indent: str) -> str:
     channel push both print a note this way, so a line the person typed never
     starts where a line of the surrounding output does.
     """
-    return "\n".join(f"{indent}{line}" if line.strip() else "" for line in str(text or "").split("\n"))
+    return "\n".join(f"{indent}{line}" if line.strip() else "" for line in shown_text(text).split("\n"))
 
 
 def _point(raw: Any, label: str = "position") -> dict[str, float]:
@@ -185,8 +216,15 @@ def pin_left(pin_id: str, reason: str) -> dict[str, str]:
 
 
 def public_pin(pin: Mapping[str, Any]) -> dict[str, Any]:
-    """A pin as the person's tabs and agents read it."""
-    return {key: copy.deepcopy(value) for key, value in pin.items() if key not in _UNDO_KEYS}
+    """A pin as the person's tabs and agents read it: its note and reply in
+    their shown form (shown_text); the store keeps them as typed."""
+    out = {key: copy.deepcopy(value) for key, value in pin.items() if key not in _UNDO_KEYS}
+    if "text" in out:
+        out["text"] = shown_text(out["text"])
+    reply = out.get("reply")
+    if isinstance(reply, dict) and "text" in reply:
+        reply["text"] = shown_text(reply["text"], multiline=False)
+    return out
 
 
 class CanvasPins:
@@ -300,7 +338,7 @@ class CanvasPins:
         position: Any = None,
         graph_nodes: Mapping[str, Any],
     ) -> tuple[str, dict[str, Any]]:
-        clean = clean_text(text, limit=MAX_PIN_TEXT, multiline=True)
+        typed = typed_text(text, limit=MAX_PIN_TEXT, multiline=True)
         if (node_id is None) == (position is None):
             raise PinError(422, "Pin a note to a node (nodeId) or to a canvas spot (position), not both")
         if node_id is not None:
@@ -313,7 +351,7 @@ class CanvasPins:
             anchor = dict(spot)
         pin = {
             "id": "pin_" + secrets.token_hex(4),
-            "text": clean,
+            "text": typed,
             "anchor": anchor,
             "position": spot,
             "status": "open",
@@ -353,7 +391,7 @@ class CanvasPins:
         return self.resolve_in(pin_id, reply, identity)[1]
 
     def resolve_in(self, pin_id: str, reply: Any, identity: AgentIdentity) -> tuple[str, dict[str, Any]]:
-        text = clean_text(reply, limit=MAX_REPLY, label="Reply")
+        text = typed_text(reply, limit=MAX_REPLY, label="Reply")
 
         def mutate(pins: list[dict[str, Any]]) -> dict[str, Any]:
             for pin in pins:
@@ -499,7 +537,7 @@ def one_line(text: Any) -> str:
     line break shows as " ⏎ " (fix round 3 of PR #200, review 3 LOW-5), so
     the note's second line never reads as the next event, and no two words
     are glued together."""
-    return LINE_BREAK_MARK.join(line.strip() for line in str(text or "").splitlines() if line.strip())
+    return LINE_BREAK_MARK.join(line.strip() for line in shown_text(text).splitlines() if line.strip())
 
 
 def _clip(text: str, limit: int) -> str:

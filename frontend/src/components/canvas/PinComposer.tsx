@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { PromptDialog, type PromptRequest } from '../PromptDialog';
-import { KEPT_FEWER, KEPT_SHOWN, keptMoreLabel, keptNoteDisplay, keptNoteLine, MAX_PIN_TEXT, NOTE_KEPT_COPY, type KeptNote } from '../../lib/canvasPins';
+import { KEPT_FEWER, KEPT_SHOWN, keptMoreLabel, keptNoteDisplay, keptNoteLine, MAX_PIN_TEXT, NOTE_KEPT_COPY, pinDisplayText, type KeptNote } from '../../lib/canvasPins';
 import { useCurrentProjectId } from '../../lib/currentProject';
 import { getProjectContext } from '../../lib/projectContext';
 import { useCanvasPinsStore } from '../../store/canvasPinsStore';
@@ -245,7 +245,7 @@ export function PinComposer() {
                     {/* GM r24 and round 5 answer 5: the note on its own line, in
                         quotes, with its line breaks, clamped to 2 lines with "…";
                         Copy note copies all of it. */}
-                    <q className="canvas-pin-toast__note" title={note.text}>{keptNoteDisplay(note.text)}</q>
+                    <q className="canvas-pin-toast__note" title={pinDisplayText(note.text, { fold: false })}>{keptNoteDisplay(note.text)}</q>
                   </span>
                   <button type="button" className="canvas-pin-toast__copy" onClick={() => copyKept(note)}>{NOTE_KEPT_COPY}</button>
                   <button type="button" onClick={() => dismiss(note.project)} aria-label="Dismiss">×</button>

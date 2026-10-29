@@ -127,7 +127,8 @@ describe('GM round 5 answer 5: a kept notice keeps the note\'s line breaks, clam
     const { container } = render(<PinComposer />);
     const quote = container.querySelector('.canvas-pin-toast__note')!;
     expect(quote.textContent).toBe('first line\nsecond line\nthird line');
-    expect(quote).toHaveAttribute('title', text);
+    // The tooltip is the whole note, stripped like every display (fix round 10, GM r16 answer 3): a line of only spaces is empty.
+    expect(quote).toHaveAttribute('title', 'first line\n\n\n\nsecond line\nthird line');
     const write = vi.fn(async () => {});
     Object.assign(navigator, { clipboard: { writeText: write } });
     fireEvent.click(screen.getByRole('button', { name: 'Copy note' }));
@@ -136,7 +137,8 @@ describe('GM round 5 answer 5: a kept notice keeps the note\'s line breaks, clam
 
   it('keptNoteDisplay collapses runs of blank lines and spaces-only lines, and trims', () => {
     expect(keptNoteDisplay('a' + '\n'.repeat(278) + 'b')).toBe('a\nb');
-    expect(keptNoteDisplay('\n\n a \n \t \nb\n\n')).toBe('a \nb');
+    // The first line keeps its indent and every line loses its trailing spaces, as the backend shows a note (review 6 N-2; fix round 10).
+    expect(keptNoteDisplay('\n\n a \n \t \nb\n\n')).toBe(' a\nb');
     expect(keptNoteDisplay('one line')).toBe('one line');
   });
 

@@ -316,7 +316,7 @@ function WorldPreviewComponent({ value, compact = false }: WorldPreviewProps) {
               </div>
               <button
                 type="button"
-                className="world-modal__icon-button"
+                className="world-modal__icon-button world-modal__camera-reset"
                 onClick={() => setResetToken((token) => token + 1)}
                 aria-label="Reset camera"
                 title="Reset camera"

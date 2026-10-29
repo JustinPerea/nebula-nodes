@@ -280,7 +280,7 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
         </button>
         <button
           type="button"
-          className="editor-transport__btn"
+          className="editor-transport__btn editor-transport__zoom-reset"
           onClick={() => useUIStore.getState().resetTimelineZoom()}
           title="Reset zoom (⌘0)"
         >

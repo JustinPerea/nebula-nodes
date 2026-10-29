@@ -5,7 +5,7 @@ import type { NodeData } from '../../types';
 import type { Pin } from '../../lib/wsClient';
 import { AGENT_CURSOR_SPRING, isAtRest, stepSpring, type SpringState } from '../../lib/agentCursorMotion';
 import { useCanvasPinsStore } from '../../store/canvasPinsStore';
-import { pinPoint, relativeTime } from '../../lib/canvasPins';
+import { pinDisplayText, pinPoint, relativeTime } from '../../lib/canvasPins';
 import { useCanvasLock } from '../../lib/canvasLock';
 import '../../styles/canvasPins.css';
 
@@ -132,14 +132,14 @@ function PinBadge({ pin, slot, zoom }: { pin: Pin; slot: number; zoom: number })
         type="button"
         className="canvas-pin__badge"
         aria-expanded={expanded}
-        aria-label={`Note for agents ${where}: ${pin.text}${resolved ? ' (answered)' : ''}`}
+        aria-label={`Note for agents ${where}: ${pinDisplayText(pin.text)}${resolved ? ' (answered)' : ''}`}
         onClick={() => setOpened((value) => !value)}
       >
         {resolved ? <Check size={12} aria-hidden="true" /> : <StickyNote size={12} aria-hidden="true" />}
       </button>
       {expanded && (
         <div className="canvas-pin__card nowheel" role="note">
-          <p className="canvas-pin__text">{pin.text}</p>
+          <p className="canvas-pin__text">{pinDisplayText(pin.text)}</p>
           <p className="canvas-pin__meta">
             {relativeTime(pin.createdAt)}
             {pin.detached && pin.detachedFrom ? ` · its node ${pin.detachedFrom} was removed` : ''}
@@ -148,7 +148,7 @@ function PinBadge({ pin, slot, zoom }: { pin: Pin; slot: number; zoom: number })
           {resolved && pin.reply && (
             <p className="canvas-pin__reply">
               <span className="canvas-pin__agent">{pin.reply.agent.name}</span>
-              <span>{pin.reply.text}</span>
+              <span>{pinDisplayText(pin.reply.text, { multiline: false })}</span>
             </p>
           )}
           <button

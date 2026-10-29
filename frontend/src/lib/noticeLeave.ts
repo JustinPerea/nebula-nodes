@@ -26,6 +26,21 @@ export function runsLeave(element: Element | null): boolean {
 
 /** Slack past a leave's own end before the fallback ends it. */
 export const LEAVE_SLACK_MS = 250;
+/** How many times the fallback waits again for a leave still running. */
+export const MAX_REARMS = 8;
+
+/** The longest time any of `animations` has left, from now. */
+function timeLeft(animations: Animation[]): number {
+  let left = 0;
+  for (const animation of animations) {
+    const timing = animation.effect?.getComputedTiming();
+    const total = Number(timing?.endTime ?? 0);
+    const now = Number(animation.currentTime ?? 0);
+    const rate = Math.abs(animation.playbackRate) || 1;
+    if (Number.isFinite(total)) left = Math.max(left, (total - now) / rate);
+  }
+  return Math.max(0, left);
+}
 
 /**
  * Review 8 NIT-1: a leave also ends when its animation is cancelled (by a
@@ -34,17 +49,26 @@ export const LEAVE_SLACK_MS = 250;
  * half-gone. Returns the cleanup.
  */
 export function watchLeave(element: HTMLElement, end: () => void): () => void {
-  let left = 0;
   const running = leaves(element);
-  for (const animation of running) {
-    const timing = animation.effect?.getComputedTiming();
-    const total = Number(timing?.endTime ?? 0);
-    const now = Number(animation.currentTime ?? 0);
-    const rate = Math.abs(animation.playbackRate) || 1;
-    if (Number.isFinite(total)) left = Math.max(left, (total - now) / rate);
-  }
   let ended = false;
+  let rearms = 0;
+  let timer = 0;
   const finish = () => { if (!ended) { ended = true; end(); } };
+  const arm = () => { timer = window.setTimeout(check, timeLeft(running) + LEAVE_SLACK_MS); };
+  // Review 9 LOW-3: the time left is read as of now. A leave whose first
+  // frame came late (a blocked main thread, slowed animations) is still
+  // running when the timer fires: the timer waits out what it has left
+  // instead of cutting it short. A paused or stuck one ends after
+  // MAX_REARMS waits.
+  const check = () => {
+    if (ended) return;
+    if (rearms < MAX_REARMS && running.some((animation) => animation.playState === 'running' || animation.pending)) {
+      rearms += 1;
+      arm();
+      return;
+    }
+    finish();
+  };
   const onCancel = (event: Event) => {
     if (event.target === element && isLeave((event as globalThis.AnimationEvent).animationName)) finish();
   };
@@ -53,7 +77,7 @@ export function watchLeave(element: HTMLElement, end: () => void): () => void {
   // cancel event (Chrome, live), so both are heard.
   element.addEventListener('animationcancel', onCancel);
   for (const animation of running) animation.addEventListener?.('cancel', finish);
-  const timer = window.setTimeout(finish, Math.max(0, left) + LEAVE_SLACK_MS);
+  arm();
   return () => {
     ended = true;
     element.removeEventListener('animationcancel', onCancel);
@@ -62,21 +86,25 @@ export function watchLeave(element: HTMLElement, end: () => void): () => void {
   };
 }
 
-const CONTROL = 'button:not(:disabled), a[href], input:not(:disabled):not([type="hidden"]), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
+// A notice's ×: every notice labels it "Dismiss…".
+const DISMISS = 'button[aria-label^="Dismiss"]:not(:disabled)';
 
-function firstControl(within: Element, leaving: Element): HTMLElement | null {
-  for (const control of within.querySelectorAll<HTMLElement>(CONTROL)) {
-    if (leaving.contains(control) || control.closest('[inert], [data-leaving]')) continue;
-    return control;
-  }
-  return null;
+const usable = (element: Element, leaving: Element) => !leaving.contains(element) && !element.closest('[inert], [data-leaving]');
+
+function focusOn(target: HTMLElement): void {
+  if (!target.matches('button, a[href], input, select, textarea, [tabindex]')) target.setAttribute('tabindex', '-1');
+  target.focus({ preventScroll: true });
 }
 
 /**
- * Review 8 NIT-2 (GM's focus rule): when what leaves holds focus, focus goes
- * to the next notice's first control, else the one before's, else the start
- * of the page content (the canvas, or the screen's <main>). Never <body>.
- * It runs as the leave starts, before the item's `inert` drops focus.
+ * Review 8 NIT-2, review 9 LOW-2, GM r16 answer 2: when what leaves holds
+ * focus, focus lands on the next notice's × (else the one before's), never
+ * on a primary or destructive action (Run, Restore, Undo, Delete), so a
+ * second Enter (a double press, key repeat) can only dismiss. A notice with
+ * no × takes focus itself. With no notice left, focus goes to the surface's
+ * start of page content: the Projects "Recent projects" heading, the canvas,
+ * or the screen's <main>. Never <body>. It runs as the leave starts, before
+ * the item's `inert` drops focus.
  */
 export function moveFocusFromLeave(leaving: HTMLElement): void {
   if (!leaving.contains(document.activeElement)) return;
@@ -84,7 +112,7 @@ export function moveFocusFromLeave(leaving: HTMLElement): void {
   const own = leaving.closest<HTMLElement>('.notice-region__slot > *');
   const at = own ? notices.indexOf(own) : -1;
   const ordered: HTMLElement[] = [];
-  // A row inside a notice that stays: that notice's other controls first.
+  // A row inside a notice that stays: that notice's own × first.
   if (own && own !== leaving) ordered.push(own);
   if (at >= 0) ordered.push(...notices.slice(at + 1), ...notices.slice(0, at).reverse());
   else {
@@ -93,15 +121,15 @@ export function moveFocusFromLeave(leaving: HTMLElement): void {
     ordered.push(...after, ...before.reverse());
   }
   for (const notice of ordered) {
-    if (notice !== own && notice.matches('[inert], [data-leaving]')) continue;
-    const control = firstControl(notice, leaving);
-    if (control) { control.focus({ preventScroll: true }); return; }
+    if (!usable(notice, leaving) && notice !== own) continue;
+    const close = [...notice.querySelectorAll<HTMLElement>(DISMISS)].find((button) => usable(button, leaving));
+    if (close) { close.focus({ preventScroll: true }); return; }
+    if (notice !== own) { focusOn(notice); return; }
   }
-  const start = document.querySelector<HTMLElement>('.canvas-wrapper')
+  const start = document.getElementById('recent-projects-title')
+    ?? document.querySelector<HTMLElement>('.canvas-wrapper')
     ?? [...document.querySelectorAll<HTMLElement>('main')].find((main) => !main.closest('[inert]')) ?? null;
-  if (!start) return;
-  if (!start.hasAttribute('tabindex')) start.setAttribute('tabindex', '-1');
-  start.focus({ preventScroll: true });
+  if (start) focusOn(start);
 }
 
 export interface LeaveProps {

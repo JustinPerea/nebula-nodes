@@ -144,6 +144,11 @@
   color: var(--sr-danger-ink, #ff887d);
 }
 
+/* Pressed, the lighter red, as every other red (fix round 10 of PR #200). */
+.canvas-pin__delete:active {
+  color: var(--sr-danger-ink-hover, #ff9a91);
+}
+
 /* Shown when a note couldn't be saved or deleted, in the app's notice region
    (NoticeRegion), which places it. */
 .canvas-pin-toast {

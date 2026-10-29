@@ -173,6 +173,7 @@ export function RunHistoryPanel() {
                     {checkpoint.durable !== false && (
                       <button
                         type="button"
+                        className="run-history__forget"
                         onClick={() => setConfirmingForget({ runId: checkpoint.runId, nodeId: checkpoint.nodeId })}
                         disabled={isExecuting || clearingRecovery === key || locked}
                         {...off}

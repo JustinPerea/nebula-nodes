@@ -84,12 +84,44 @@ export function keptNoteLine(note: KeptNote, here: string, currentName?: string 
   return noteKeptLine(note.following, name);
 }
 
+// Terminal escape sequences, each dropped whole: CSI (7- and 8-bit), then
+// OSC, DCS, APC, PM and SOS up to ST or BEL, or to the end of their line
+// (backend services/canvas_pins.py _ANSI, the same rule).
+// eslint-disable-next-line no-control-regex -- these are the bytes it removes
+const ESCAPES = /\x1b\[[0-?]*[ -/]*[@-~]|\x9b[0-?]*[ -/]*[@-~]|(?:\x1b[\]P_^X]|[\x90\x98\x9d\x9e\x9f])[^\r\n]*?(?:\x1b\\|\x9c|\x07|(?=[\r\n])|$)/g;
+// Every line break Python's str.splitlines knows, as the backend reads them.
+// eslint-disable-next-line no-control-regex -- line-break controls
+const LINE_BREAKS = /\r\n|[\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029]/;
+const plain = (line: string) => line.replace(/[\t\n\r]/g, ' ').replace(/[\p{Cc}\p{Cf}]/gu, '');
+
+/**
+ * Note text as the canvas shows it (PR #200 fix round 10, GM r16 answer 3:
+ * "Store raw, show stripped. The canvas display is an output path too"). The
+ * backend keeps a note and a reply as typed and strips every output; this is
+ * the display's own strip, the same rule (services/canvas_pins.py
+ * shown_text): no C0 but line breaks, no C1, no ESC, no format characters;
+ * each line loses its trailing spaces and the note its blank lines at the
+ * ends. A note also folds each run of blank lines to one break (review 4
+ * N-3) unless `fold: false` (a tooltip of the whole note). `multiline:
+ * false` (a reply) is one line, spaces collapsed.
+ */
+export function pinDisplayText(text: string | null | undefined, { multiline = true, fold = true }: { multiline?: boolean; fold?: boolean } = {}): string {
+  const raw = (text ?? '').replace(ESCAPES, '');
+  if (!multiline) return plain(raw).split(/\s+/).filter(Boolean).join(' ');
+  const lines = raw.split(LINE_BREAKS).map((line) => plain(line).replace(/\s+$/, ''));
+  while (lines.length && !lines[0]) lines.shift();
+  while (lines.length && !lines[lines.length - 1]) lines.pop();
+  const joined = lines.join('\n');
+  return fold ? joined.replace(/\n(?:\n)+/g, '\n') : joined;
+}
+
 /** A kept note as its notice shows it (GM, PR #200 round 5 answer 5): its
  * own line breaks, clamped to 2 lines by CSS, with each run of blank lines
  * (and a line of only spaces) collapsed to one break, so the two lines show
- * text (review 4 N-3). Copy note copies `note.text`, whole. */
+ * text (review 4 N-3), and stripped like every display of a note
+ * (pinDisplayText). Copy note copies `note.text`, whole, as typed. */
 export function keptNoteDisplay(text: string): string {
-  return text.replace(/\n[^\S\n]*(?:\n[^\S\n]*)+/g, '\n').trim();
+  return pinDisplayText(text);
 }
 
 /** How many kept notes show before "Show N more" (fix round 4 of PR #200,

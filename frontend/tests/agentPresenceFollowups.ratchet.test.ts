@@ -3,7 +3,7 @@ import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import ts from 'typescript';
 import { gatedGraphActions } from '../src/store/graphStore';
-import { appControls, appCss, appMenuItemFindings, cascadeFindings, controlsIn, customProperties, menuItemFindings, notRedFindings, ruleFindings } from './helpers/destructiveRule';
+import { appControls, appCss, appMenuItemFindings, cascadeFindings, controlsIn, controlsInFiles, customProperties, menuItemFindings, notRedFindings, pressedFindings, ruleFindings, wordFindings, wordKind } from './helpers/destructiveRule';
 
 /**
  * Follow-ups to PR #195, two static ratchets.
@@ -2117,9 +2117,13 @@ function disabledLooks() {
 // does, not how the control looks (GM r13, and r14's calls):
 // - Red: it deletes a standalone thing (project, node, asset, result, agent, API key, app token), or wipes a whole surface (Clear, Purge, Discard). Undo doesn't change this (node Delete stays red).
 // - Neutral: it takes an item out of a list inside the thing you're editing (chips, swatches, tags, a shot in a scene, an item on a board, a character view).
-// Controls are found by their words (review 8 LOW-2); the class says the
-// kind; the colours are checked per rule and per control through the
-// cascade. The machinery is tests/helpers/destructiveRule.ts.
+// GM r16 answer 1: Krea Disconnect is red; an agent's Sign out is neutral
+// (it deletes only the stored Google login, which signing in brings back).
+// Controls are found by their words (review 8 LOW-2, review 9 LOW-4); the
+// words say the kind first and the class must agree; the colours are checked
+// per rule (focus rules too, all but the ring) and per control through the
+// cascade, colour inherited from its ancestors included. The machinery is
+// tests/helpers/destructiveRule.ts.
 // It parses every stylesheet and walks every TSX file: a few seconds alone,
 // past vitest's 5 s default under the full suite (it timed out there).
 describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thing or wipes a surface, an edit stays neutral, and orange marks neither', { timeout: 120_000 }, () => {
@@ -2132,8 +2136,8 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
     expect(controls.filter((control) => !control.kind).map((c) => `${c.file}:${c.line} ${c.name}`)).toEqual([]);
     // Review 8's controls, each seen with GM r14's kind.
     const kindAt = (file: string, name: RegExp) => controls.filter((c) => c.file === file && name.test(c.name)).map((c) => c.kind);
-    expect(kindAt('components/moodboard-studio/MoodboardStudioView.tsx', /^Delete$/)).toEqual(['red']);
-    expect(kindAt('components/character-studio/CharacterStudioToolbar.tsx', /^Delete$/)).toEqual(['red']);
+    expect(kindAt('components/moodboard-studio/MoodboardStudioView.tsx', /^(Delete|Move to Recently deleted)$/)).toEqual(['red']);
+    expect(kindAt('components/character-studio/CharacterStudioToolbar.tsx', /^(Delete|Move to Recently deleted)$/)).toEqual(['red']);
     expect(kindAt('components/commons/CommonsDetail.tsx', /^Delete$/)).toEqual(['red']);
     expect(kindAt('components/commons/CommonsLeavePopover.tsx', /^Discard and leave$/)).toEqual(['red']);
     expect(kindAt('components/commons/CommonsEvaluation.tsx', /^Discard/)).toEqual(['red']);
@@ -2145,6 +2149,119 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
     expect(kindAt('components/commons/CommonsEvaluation.tsx', /^Remove accent/)).toEqual(['neutral']);
     expect(kindAt('components/projects/ProjectHome.tsx', /^Delete forever$/)).toEqual(['red', 'red']);
     expect(kindAt('components/asset-trash/AssetTrash.tsx', /^Delete forever$/)).toEqual(['red', 'red']);
+  });
+
+  it('review 9 LOW-4: the words say the kind first; the class must agree (a red word on a neutral class only where reviewed)', () => {
+    expect(controls.length).toBeGreaterThanOrEqual(72);
+    expect(controls.flatMap((control) => wordFindings(control))).toEqual([]);
+    const kindAt = (file: string, name: RegExp) => controls.filter((c) => c.file === file && name.test(c.name)).map((c) => c.kind);
+    // The ten review 9 found (GM r16 answer 1 for the last two).
+    expect(kindAt('components/cinema-studio/CinemaShotPanel.tsx', /^Reset shot (palette|look) to scene$/)).toEqual(['neutral', 'neutral']);
+    expect(kindAt('components/editor/EditorTransport.tsx', /^Reset zoom/)).toEqual(['neutral']);
+    expect(kindAt('components/nodes/WorldPreview.tsx', /^Reset camera$/)).toContain('neutral');
+    expect(kindAt('components/panels/Toolbar.tsx', /reset/i)).toEqual(['neutral', 'neutral']);
+    expect(kindAt('components/panels/MaskPainterModal.tsx', /^Erase$/)).toEqual(['neutral']);
+    expect(kindAt('components/panels/Inspector.tsx', /favorites/)).toEqual(['neutral']);
+    expect(kindAt('components/panels/settings/KreaSignInRow.tsx', /^Disconnect$/)).toEqual(['red']);
+    expect(kindAt('components/panels/settings/PersonalAgentsSection.tsx', /^Sign out$/)).toEqual(['neutral']);
+    // The two reviewed red words on neutral controls (GM r14), pinned.
+    expect(kindAt('components/commons/CommonsFilters.tsx', /^clear$/)).toEqual(['neutral']);
+    expect(kindAt('components/create-studio/ResultsGallery.tsx', /^Clear$/)).toEqual(['neutral']);
+    expect(wordKind('Clear', 'components/other/Elsewhere.tsx')).toBe('red');
+    expect(wordKind('Remove')).toBeNull();
+  });
+
+  it('review 9 NIT-2: pressed, every red control\'s text goes to the lighter red', () => {
+    expect(controls.flatMap((control) => pressedFindings(control))).toEqual([]);
+  });
+
+  it('corpus (review 9 LOW-4): every form that hid a control is found, and its words decide', () => {
+    const one = (tsx: string) => controlsIn(tsx, 'probe.tsx').map((c) => [c.name, c.kind]);
+    expect(one('const A = () => <button className="x__go" aria-label={t("actions.delete")}>x</button>;')).toEqual([['actions.delete', null]]);
+    expect(one('const A = () => <button className="x__go" aria-label={strings.deleteProject}>x</button>;')).toEqual([['delete Project', null]]);
+    expect(one('function A(props) { return <button className="x__go" aria-label={props.label}>x</button>; } const B = () => <A label="Delete" />;')).toEqual([['Delete', null]]);
+    expect(one('const A = (p) => <button className="x__go" {...p} />; const B = () => <A aria-label="Delete" />;')).toEqual([['Delete', null]]);
+    expect(one('const A = () => <IconButton className="x__go" aria-label="Delete" onClick={del} />;')).toEqual([['Delete', null]]);
+    expect(one('const A = () => <MenuItem className="x__go" onSelect={del}>Delete</MenuItem>;')).toEqual([['Delete', null]]);
+    expect(one('const A = () => <input type="button" className="x__go" value="Delete" />;')).toEqual([['Delete', null]]);
+    expect(one('const A = () => <a className="x__go" href="#" onClick={del}>Delete</a>;')).toEqual([['Delete', null]]);
+    expect(one('const A = () => <span className="x__go" onClick={del}>Delete</span>;')).toEqual([['Delete', null]]);
+    expect(one('const A = () => <button className="x__go"><>Del</>ete</button>;')).toEqual([['Delete', null]]);
+    expect(one('const A = () => <button className="x__go">Permanently delete</button>;')).toEqual([['Permanently delete', null]]);
+    expect(one('const A = () => <button className="x__go">Move to Recently deleted</button>;')).toEqual([['Move to Recently deleted', null]]);
+    expect(one('const A = () => <button className="x__go">Uninstall</button>;')).toEqual([['Uninstall', null]]);
+    expect(one('const A = () => <button className="x__go">Disconnect</button>;')).toEqual([['Disconnect', null]]);
+    expect(one('const A = () => <button className="x__go">Reset all settings</button>;')).toEqual([['Reset all settings', null]]);
+    expect(one('const A = () => <button aria-pressed={false} className="x__go">Delete</button>;')).toEqual([['Delete', null]]);
+    // A label from another file: the component is imported by name.
+    const across = controlsInFiles({
+      'components/a/Confirm.tsx': 'export function Confirm({ label }) { return <button className="x__go x__go--delete" aria-label={label}>x</button>; }',
+      'components/b/Use.tsx': "import { Confirm } from '../a/Confirm';\nexport const B = () => <Confirm label=\"Delete forever\" />;",
+      'components/c/Other.tsx': 'function Confirm({ label }) { return <button className="y__go" aria-label={label}>x</button>; }\nexport const C = () => <Confirm label="Delete" />;',
+    });
+    expect(across.map((c) => [c.file, c.name, c.kind])).toEqual([
+      ['components/b/Use.tsx', 'Delete forever', 'red'],
+      ['components/c/Other.tsx', 'Delete', null],
+    ]);
+    // A disclosure opens a section; a clickable card says only its own words.
+    expect(one('const A = () => <button aria-expanded={open}>Recently deleted</button>;')).toEqual([]);
+    expect(one('const A = () => <div className="card" onClick={pick}><button className="x__delete">Delete</button></div>;')).toEqual([['Delete', 'red']]);
+    // The words decide: a red word on a neutral class fails; Remove says neither.
+    const words = (tsx: string) => controlsIn(tsx, 'probe.tsx').flatMap((c) => wordFindings(c));
+    expect(words('const A = () => <button className="x__remove">Delete project</button>;')).not.toEqual([]);
+    expect(words('const A = () => <button className="x__delete">Reset zoom</button>;')).not.toEqual([]);
+    expect(words('const A = () => <button className="x__delete">Remove</button>;')).toEqual([]);
+    expect(words('const A = () => <button className="x__remove">Remove</button>;')).toEqual([]);
+    expect(words('const A = () => <button className="x__reset">Clear search</button>;')).toEqual([]);
+  });
+
+  it('corpus (review 9 LOW-4): every colour form that hid an orange is caught, focus rules and inherited colour included', () => {
+    const caught = (css: string) => ruleFindings(css, 'probe.css', customProperties([{ css }]));
+    for (const css of [
+      '.x__delete:focus-visible { color: #ff5a1f; background: #ff5a1f; }',
+      '.x__delete:hover:focus { color: #ff5a1f; }',
+      '.row:focus-within .x__delete { color: #ff5a1f; }',
+      '.x__delete:is(:hover, :focus-visible) { color: #ff5a1f; }',
+      '.x__delete:hover { color: hwb(20 0% 0%); }',
+      '.x__delete:hover { color: lab(62 52 62); }',
+      '.x__delete:hover { color: lch(62 80 50); }',
+      '.x__delete:hover { color: oklab(0.7 0.15 0.12); }',
+      '.x__delete:hover { color: color(display-p3 1 0.35 0.12); }',
+      '.x__delete:hover { color: color-mix(in srgb, var(--sr-accent) 60%, white); }',
+      '.x__delete:hover { color: hsl(0.04turn 90% 55%); }',
+      '.x__delete:hover { color: hsl(0.3rad 90% 55%); }',
+      '.x__delete:hover { border-inline-color: #ff5a1f; }',
+      '.x__delete:hover { border-block-end-color: #ff5a1f; }',
+      '.x__delete { accent-color: #ff5a1f; }',
+      '.x__delete:hover { -webkit-text-fill-color: #ff5a1f; }',
+      '.x__delete:hover { background: linear-gradient(#ff5a1f, #ff5a1f); }',
+      '@scope (.x__delete) { :scope:hover { color: #ff5a1f; } }',
+      '@layer a { .x__delete:hover { color: #ff5a1f; } }',
+      '@media (hover: hover) { .x__delete:hover { color: #ff5a1f; } }',
+      '.x__delete:hover svg { color: #ff5a1f; stroke: #ff5a1f; }',
+      '.x__delete:hover::before { background: #ff5a1f; }',
+      ':root { --hot: var(--sr-accent); } .x__delete:hover { color: var(--hot); }',
+      '.x__remove:hover { color: #ff3b30; }',
+      '.x__delete:hover + .label { color: #ff5a1f; }',
+      '.x__delete:hover ~ span { color: #ff5a1f; }',
+      '.x__erase:hover { color: var(--sr-danger-ink); }',
+    ]) expect(caught(css), css).not.toEqual([]);
+    for (const css of [
+      // A focus ring may be any colour the keyboard-ring rule gives it (r17).
+      '.x__delete:focus-visible { outline: 2px solid var(--sr-accent); box-shadow: 0 0 0 2px var(--sr-accent); }',
+      // Review 8's false flags still quiet: a classed descendant is its own control.
+      '.panel--danger .panel__run { color: var(--sr-accent); }',
+      '.x__delete .x__count { color: var(--sr-accent); }',
+      '.x__delete:hover { color: var(--sr-danger-ink,#FF887D); }',
+      '.canvas-pin__delete:hover, .canvas-pin__delete:focus-visible { background: var(--sr-danger-tint); color: var(--sr-danger-ink, #ff887d); }',
+    ]) expect(caught(css), css).toEqual([]);
+    // Colour a control doesn't set comes from its ancestors, in the same state.
+    const vars0 = customProperties(appCss());
+    const inside = { file: 'probe.tsx', line: 1, name: 'Delete', kind: 'red' as const, classes: ['x__delete'], ancestors: [['div', ['probe-toolbar']]] as Array<[string, string[]]> };
+    expect(cascadeFindings(inside, vars0, '.probe-toolbar { color: #ff5a1f; } .x__delete { color: inherit; }').join('\n')).toMatch(/#ff5a1f.*inherited/);
+    expect(cascadeFindings(inside, vars0, '.probe-toolbar:hover { color: #ff5a1f; }').join('\n')).toMatch(/:hover color: #ff5a1f/);
+    expect(cascadeFindings({ ...inside, kind: 'neutral', classes: ['x__remove'] }, vars0, '.probe-toolbar:hover { color: currentcolor; } .probe-toolbar { color: orange; }').join('\n')).toMatch(/orange/);
+    expect(cascadeFindings(inside, vars0, '.probe-toolbar { color: #ff5a1f; } .x__delete { color: var(--sr-danger-ink); } .x__delete:hover { color: var(--sr-danger-ink); }')).toEqual([]);
   });
 
   it('no stylesheet rule gives a kind the wrong colour: red only from the danger tokens, neutral never red, orange or a danger token', () => {
@@ -2180,8 +2297,8 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
     expect(found('<button><Trash2 size={14} /> Clear</button>')).toEqual(['Clear']);
     expect(found("function Confirm({ label }: { label: string }) { return <button className=\"x__go\">{label}</button>; }\nconst A = () => <Confirm label=\"Delete forever\" />;"))
       .toEqual(['Delete forever']);
-    // A toggle is a state, not an action.
-    expect(found('<button aria-pressed={on} aria-label={on ? "Remove from favorites" : "Add"}>★</button>')).toEqual([]);
+    // A toggle is seen too (review 9 LOW-4: the favourite star, the Erase tool); its words still need a kind.
+    expect(found('<button aria-pressed={on} aria-label={on ? "Remove from favorites" : "Add"}>★</button>')).toEqual(['Remove from favorites']);
     expect(controlsIn('<button className="x__action">Delete</button>', 'probe.tsx')[0].kind).toBeNull();
     expect(controlsIn('<button className="x__action x__action--delete">Delete</button>', 'probe.tsx')[0].kind).toBe('red');
     expect(controlsIn('<button className="chip__remove">×</button>', 'probe.tsx')).toEqual([]);

@@ -56,12 +56,18 @@ describe('GM r13: Undo in Cinema Studio', () => {
     fireEvent.keyDown(document.body, { key: 'z' });
     expect(undo).not.toHaveBeenCalled();
     expect(redo).not.toHaveBeenCalled();
+    // The same studio does answer Cmd+Z on the page (review 9 NIT-3: without
+    // the handler this test passed too), so the field's own undo was a choice.
+    fireEvent.keyDown(document.body, { key: 'z', metaKey: true });
+    expect(undo).toHaveBeenCalledTimes(1);
   });
 
   it('leaves the keys once the studio closes', () => {
     const { unmount } = render(<CinemaStudioView />);
+    fireEvent.keyDown(document.body, { key: 'z', metaKey: true });
+    expect(undo).toHaveBeenCalledTimes(1);
     unmount();
     fireEvent.keyDown(document.body, { key: 'z', metaKey: true });
-    expect(undo).not.toHaveBeenCalled();
+    expect(undo).toHaveBeenCalledTimes(1);
   });
 });

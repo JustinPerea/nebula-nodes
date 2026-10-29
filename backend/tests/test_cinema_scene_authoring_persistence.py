@@ -506,3 +506,78 @@ def test_r9_kept_media_is_capped_oldest_first():
     assert len(graph.removed_shot_media) == main._REMOVED_SHOT_MEDIA_CAP
     assert ("n1", "s0") not in graph.removed_shot_media
     assert ("n1", f"s{main._REMOVED_SHOT_MEDIA_CAP + 4}") in graph.removed_shot_media
+
+
+# PR #200 fix round 10 (review 9 LOW-1, GM r16 answer 4): a returning shot id
+# gets its media back only when its prompt and settings match what was taken
+# out; otherwise it starts idle, and only the kept link goes (no file).
+
+def test_r10_a_different_shot_reusing_a_removed_id_starts_idle_and_the_kept_link_goes(authoring_client):
+    client, graph, _, _ = authoring_client
+    before = _with_media(graph)
+    assert client.put("/api/graph/node/n1", json={"params": {"scene": _authored(before, {"a"})}}).status_code == 200
+    assert ("n1", "b") in graph.removed_shot_media
+    reused = _authored(before, {"a"})
+    reused["shots"].append({"id": "b", "prompt": "An agent's brand-new unrelated shot"})
+    assert client.put("/api/graph/node/n1", json={"params": {"scene": reused}}).status_code == 200
+    shot_b = graph.nodes["n1"]["params"]["scene"]["shots"][1]
+    assert shot_b["output"] == {"status": "idle"}
+    assert "variations" not in shot_b and "selectedVariation" not in shot_b
+    assert "shot_b" not in graph.nodes["n1"]["outputs"]
+    assert ("n1", "b") not in graph.removed_shot_media
+    # The Undo that comes later can't bring the old media back onto it either.
+    assert client.put("/api/graph/node/n1", json={"params": {"scene": _authored(before, {"a"})}}).status_code == 200
+    assert client.put("/api/graph/node/n1", json={"params": {"scene": _authored(before, {"a", "b"})}}).status_code == 200
+    assert graph.nodes["n1"]["params"]["scene"]["shots"][1]["output"] == {"status": "idle"}
+
+
+def test_r10_the_same_prompt_with_a_changed_setting_is_a_different_shot(authoring_client):
+    client, graph, _, _ = authoring_client
+    before = _with_media(graph)
+    assert client.put("/api/graph/node/n1", json={"params": {"scene": _authored(before, {"a"})}}).status_code == 200
+    changed = _authored(before, {"a", "b"})
+    changed["shots"][1]["aspectRatio"] = "9:16"
+    assert client.put("/api/graph/node/n1", json={"params": {"scene": changed}}).status_code == 200
+    assert graph.nodes["n1"]["params"]["scene"]["shots"][1]["output"] == {"status": "idle"}
+
+
+def test_r10_the_matching_shot_comes_back_whole_and_key_order_does_not_matter(authoring_client):
+    client, graph, _, _ = authoring_client
+    before = _with_media(graph)
+    before["shots"][1]["aspectRatio"] = "16:9"
+    graph.nodes["n1"]["params"]["scene"]["shots"][1]["aspectRatio"] = "16:9"
+    assert client.put("/api/graph/node/n1", json={"params": {"scene": _authored(before, {"a"})}}).status_code == 200
+    back = _authored(before, {"a", "b"})
+    back["shots"][1] = dict(reversed(list(back["shots"][1].items())))
+    assert client.put("/api/graph/node/n1", json={"params": {"scene": back}}).status_code == 200
+    shot_b = graph.nodes["n1"]["params"]["scene"]["shots"][1]
+    assert {key: shot_b[key] for key in RUN_MEDIA} == RUN_MEDIA
+    assert graph.nodes["n1"]["outputs"]["shot_b"] == {"type": "Image", "value": "https://fixture.example/b1.png"}
+
+
+def test_r10_dropping_kept_media_never_deletes_a_file(authoring_client):
+    """GM r16 answer 4: "Dropped" is only the link from the shot; generated
+    files stay in the outputs folder, as Projects promises."""
+    client, graph, _, _ = authoring_client
+    folder = main.OUTPUT_ROOT / "r10-shot-files"
+    folder.mkdir(parents=True, exist_ok=True)
+    files = [folder / "b0.png", folder / "b1.png"]
+    for item in files:
+        item.write_bytes(b"\x89PNG fixture")
+    before_listing = sorted(p for p in main.OUTPUT_ROOT.rglob("*"))
+    media = {
+        "output": {"status": "done", "imageUrl": "/api/outputs/r10-shot-files/b1.png"},
+        "variations": [{"url": "/api/outputs/r10-shot-files/b0.png"}, {"url": "/api/outputs/r10-shot-files/b1.png"}],
+        "selectedVariation": 1,
+    }
+    graph.nodes["n1"]["params"]["scene"]["shots"][1].update(copy.deepcopy(media))
+    before = copy.deepcopy(graph.nodes["n1"]["params"]["scene"])
+    assert client.put("/api/graph/node/n1", json={"params": {"scene": _authored(before, {"a"})}}).status_code == 200
+    reused = _authored(before, {"a"})
+    reused["shots"].append({"id": "b", "prompt": "Different"})
+    assert client.put("/api/graph/node/n1", json={"params": {"scene": reused}}).status_code == 200
+    for index in range(main._REMOVED_SHOT_MEDIA_CAP + 2):  # and the cap pushing entries out
+        main._keep_removed_shot_media(graph, "n1", f"s{index}", copy.deepcopy(media))
+    graph.clear()
+    assert all(item.read_bytes() == b"\x89PNG fixture" for item in files)
+    assert set(before_listing) <= set(main.OUTPUT_ROOT.rglob("*"))

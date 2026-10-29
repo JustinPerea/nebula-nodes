@@ -318,6 +318,11 @@ body.app-slava-restraint .remotion-editor-toolbar__delete:not(:disabled):hover {
   color: var(--sr-danger-ink, #ff887d);
 }
 
+/* Pressed, the lighter red, as every other red (review 9 NIT-2). */
+body.app-slava-restraint .remotion-editor-toolbar__delete:not(:disabled):active {
+  color: var(--sr-danger-ink-hover, #ff9a91);
+}
+
 body.app-slava-restraint .remotion-editor-toolbar__zorder:not(:disabled):hover {
   border-color: var(--sr-accent);
 }
@@ -506,4 +511,8 @@ body.app-slava-restraint .remotion-properties-panel__keyframe-delete {
 body.app-slava-restraint .remotion-properties-panel__keyframe-delete:hover:not(:disabled) {
   border-color: var(--sr-danger-edge);
   color: var(--sr-danger-ink, #ff887d);
+}
+
+body.app-slava-restraint .remotion-properties-panel__keyframe-delete:active:not(:disabled) {
+  color: var(--sr-danger-ink-hover, #ff9a91);
 }

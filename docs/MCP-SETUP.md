@@ -1208,11 +1208,16 @@ error* fields.
 
 A shot's run media (`output`, `variations`, `selectedVariation` and its
 port output) is Nebula's, not part of the scene you write. Since PR #200's
-fix round 9, a write that drops a shot keeps what it had, and the same shot
-id coming back in a later write (the person's Undo of a shot's ×, or yours)
-gets it back. Nebula keeps the last 128 removed shots in memory, until the
-canvas is cleared or another project opens. A shot id that comes back with
-none kept starts idle, as before.
+fix round 9, a write that drops a shot keeps what it had. Since fix round 10,
+a later write gets it back only when the returning shot is the same shot:
+the same id with the same prompt and settings (every field but the run
+media), as the person's Undo of a shot's × sends it. A different shot that
+reuses the id (yours, with a new prompt) starts idle, and the kept media is
+let go. Only the link goes: the generated files stay in the outputs folder.
+Nebula keeps the last 128 removed shots in memory only, until the canvas is
+cleared or another project opens. A restart forgets them: an Undo of a
+shot's × after one brings the shot back idle, with its prompt and settings
+but without its images (they are still in the outputs folder).
 
 Round 3d gives a provider's answer a line too, from one table: a 401 or 403
 reads "{Provider} didn't accept your API key. ...", a 402 or an exhausted
@@ -1442,7 +1447,12 @@ Rules:
 - `POST /api/canvas/pins/{id}/resolve` needs a named agent
   (`NEBULA_AGENT_NAME`, `--as`, or an in-app agent token).
 - Text is plain text, control characters dropped, 1–280 characters for
-  notes and replies. A reply is one line (whitespace collapsed). A note keeps
+  notes and replies. Nebula stores a note and a reply exactly as typed (PR
+  #200 fix round 10), and every place that shows one strips it: the API's
+  pins, events and their summaries, the CLI, the channel push and the
+  canvas. So what you read never carries a control byte (no C0 but `\n`, no
+  C1, no ESC). The 280 counts the text as shown; the text as typed may be up
+  to four times that, for codes pasted with it. A reply is one line (whitespace collapsed). A note keeps
   the lines the person wrote (Shift+Enter in the note dialog): its newlines
   reach agents as `\n` in `pins[].text` (look_at_canvas, start_here, the
   snapshot JSON). `nebula pins`, `nebula look` and `nebula start` print a

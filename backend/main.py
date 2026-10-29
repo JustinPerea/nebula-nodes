@@ -12335,6 +12335,15 @@ _SHOT_MEDIA_FIELDS = ("output", "variations", "selectedVariation")
 _REMOVED_SHOT_MEDIA_CAP = 128
 
 
+def _shot_authoring(shot: dict[str, Any]) -> str:
+    """A shot's prompt and settings (everything but its run media), as one
+    comparable string: a returning shot gets its media back only when this
+    matches what was taken out (PR #200 fix round 10, review 9 LOW-1, GM r16
+    answer 4)."""
+    return json.dumps({key: value for key, value in shot.items() if key not in _SHOT_MEDIA_FIELDS},
+                      sort_keys=True, default=str, ensure_ascii=False)
+
+
 def _keep_removed_shot_media(graph: CLIGraph, node_id: str, shot_id: str, kept: dict[str, Any]) -> None:
     store = graph.removed_shot_media
     store.pop((node_id, shot_id), None)
@@ -12384,6 +12393,7 @@ def _author_cinema_scene(graph: CLIGraph, node_id: str, node: dict[str, Any], pa
         if port is not None:
             kept["port"] = copy.deepcopy(port)
         if kept:
+            kept["authoring"] = _shot_authoring(canonical)
             _keep_removed_shot_media(graph, node_id, shot_id, kept)
     restored_ports: dict[str, Any] = {}
     for shot in authored_scene["shots"]:
@@ -12393,8 +12403,12 @@ def _author_cinema_scene(graph: CLIGraph, node_id: str, node: dict[str, Any], pa
             if canonical is not None and field in canonical:
                 shot[field] = copy.deepcopy(canonical[field])
         if canonical is None:
+            # Only the same shot comes back with its media: one whose prompt
+            # and settings match what was taken out (an Undo). A different
+            # shot that reuses the id starts idle, and the kept link goes;
+            # the generated files stay in the outputs folder either way.
             kept = graph.removed_shot_media.pop((node_id, shot["id"]), None)
-            if kept:
+            if kept and kept.get("authoring") == _shot_authoring(shot):
                 for field in _SHOT_MEDIA_FIELDS:
                     if field in kept:
                         shot[field] = kept[field]
