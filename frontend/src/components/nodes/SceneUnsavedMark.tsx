@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { useAnchoredPopover } from '../asset-move/anchoredPopover';
 import { RetrySceneButton } from '../canvas/RetrySceneButton';
 import { UNSAVED_MARK } from '../../lib/sceneSaveCopy';
-import { noteScenePopover } from '../../store/graphStore';
+import { noteScenePopover, useGraphStore } from '../../store/graphStore';
 import '../../styles/canvasProposals.css';
 
 /**
@@ -84,6 +84,8 @@ function SceneUnsavedPopover({ nodeId, line, anchorRef, onClose }: {
   const lineId = useId();
   const dismiss = useCallback(() => onClose(false), [onClose]);
   const position = useAnchoredPopover(anchorRef, panelRef, dismiss, 'start', 320);
+  // GM r30: busy while the scene's [Try again] is on its way.
+  const trying = useGraphStore((state) => nodeId in state.sceneTries);
 
   useEffect(() => {
     noteScenePopover(nodeId, true);
@@ -105,7 +107,7 @@ function SceneUnsavedPopover({ nodeId, line, anchorRef, onClose }: {
 
   const style = (position ? { left: position.left, top: position.top } : { visibility: 'hidden' }) as CSSProperties;
   return createPortal(
-    <div ref={panelRef} role="dialog" aria-modal="false" aria-labelledby={lineId} tabIndex={-1}
+    <div ref={panelRef} role="dialog" aria-modal="false" aria-labelledby={lineId} tabIndex={-1} aria-busy={trying || undefined}
       data-scene-unsaved-popover={nodeId} className="canvas-undo-notice scene-unsaved-popover nodrag nopan nowheel" style={style}
       onKeyDown={onKeyDown} {...OWN_PRESSES} onClick={keepToItself}>
       <span id={lineId} className="canvas-undo-notice__text">{line}</span>

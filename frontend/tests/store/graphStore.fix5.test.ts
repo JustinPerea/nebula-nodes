@@ -301,7 +301,7 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     h.release();
     await sleep(60);
     expect(brief()).toEqual(['s1:during the run', 's2:b']);
-    expect(said).toEqual(["Couldn’t save your changes to “Opening”. They’re kept and will save when the run finishes."]);
+    expect(said).toEqual(["Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula will save them when the run finishes."]);
     h.answerLater(() => json({ ok: true }));
     socketSends({ type: 'executionComplete', runId: 'other-run' });
     socketSends({ type: 'graphSync', ...base, empty: false, ...backendGraph(), runParams: 'other-run' });
@@ -319,7 +319,7 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     await sleep(20);
     h.release();
     await sleep(60);
-    expect(said[0]).toBe("Couldn’t save your changes to “Opening”. They’re kept and will save when the run finishes.");
+    expect(said[0]).toBe("Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula will save them when the run finishes.");
     await sleep(200);
     expect(h.puts.at(-1)).toEqual(['s1:held', 's2:b']);
     expect(unsaved()).toBeNull();
@@ -412,7 +412,7 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
   it('the copy is in constants for GM', () => {
     expect(copy.sceneTooBigToSaveLine('Opening')).toBe(TOO_BIG_LINE);
     expect(copy.sceneCantSaveLine('Opening')).toBe(CANT_LINE);
-    expect(copy.KEPT_UNTIL_RUN_ENDS).toBe("They’re kept and will save when the run finishes.");
+    expect(copy.KEPT_UNTIL_RUN_ENDS).toBe("They’re kept, and Nebula will save them when the run finishes.");
     expect(copy.KEPT_AND_TRYING).toBe('They’re kept, and Nebula is trying again.');
     expect(copy.sceneRetryingLine(['Opening'])).toBe('Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula is trying again.');
   });

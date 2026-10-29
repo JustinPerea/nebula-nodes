@@ -283,7 +283,10 @@ describe('review 12, L-1: a second clash during the answer’s save', () => {
     const saidBefore = [...said];
     const toasts = watchToasts();
     useGraphStore.getState().resolveSceneClash('n1', 'mine');
-    await vi.waitFor(() => expect(clashes().n1).toBeTruthy(), { timeout: 3000, interval: 5 });
+    // GM r30 (round 21): the answered prompt stays, sending, until its save is
+    // answered; the second clash is the prompt asked again (not sending).
+    await vi.waitFor(() => expect(clashes().n1?.sending).toBeUndefined(), { timeout: 3000, interval: 5 });
+    expect(clashes().n1).toBeTruthy();
     expect(h.puts.at(-1)!.status).toBe(409);
     h.onPut(async () => {});
     h.beforeAnswer(async () => {});

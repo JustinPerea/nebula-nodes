@@ -25,7 +25,7 @@ describe('GM r8: the scene save lines', () => {
     expect(scene.sceneClashLine('Opening', scene.UNKNOWN_WRITER)).toBe('“Opening” changed while you were editing it.');
     expect([scene.KEEP_MINE, scene.theirsLabel('Codex'), scene.theirsLabel(null)]).toEqual(['Keep mine', 'Use Codex’s', 'Use theirs']);
     expect(`${scene.sceneSaveHeading('X')} ${scene.SWITCHED_UNNAMED}`)
-      .toBe("Couldn’t save your changes to “X”. The canvas switched to another project first.");
+      .toBe("Nebula couldn’t save your changes to “X”. The canvas switched to another project first.");
   });
 });
 

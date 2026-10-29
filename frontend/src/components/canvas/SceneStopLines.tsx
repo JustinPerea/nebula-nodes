@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { sceneStopLines, useGraphStore } from '../../store/graphStore';
-import { useCanvasLock } from '../../lib/canvasLock';
-import { NOTICE_SLOTS } from '../../lib/noticeSlots';
+import { useCanvasLock, type ActProps } from '../../lib/canvasLock';
+import { canvasFocusTarget, nextNoticeTarget } from '../../lib/noticeFocus';
 import { TRY_AGAIN } from '../../lib/sceneSaveCopy';
+import { useHeldLook } from '../../hooks/useHeldLook';
 
 /**
  * GM r28: a scene's stop line is a state, never lost. The lines sit in
@@ -13,7 +14,8 @@ import { TRY_AGAIN } from '../../lib/sceneSaveCopy';
  * and a scene whose stop clears leaves it, so the line shrinks or goes.
  * While a try is on its way the line stays, its [Try again] disabled (GM
  * r29 call 2: aria-disabled, so focus stays on it), so a second press can't
- * queue another.
+ * queue another; GM r30: the line is aria-busy, the button greys after a
+ * moment (useHeldLook) and has no reason tooltip.
  * No hold and no ×: the line goes when the stop does. A scene whose clash
  * waits is asked by its prompt instead, and the scene whose "Unsaved"
  * popover is open is left out while it is (its line is there).
@@ -38,22 +40,33 @@ export function SceneStopLines() {
   return (
     <>
       {lines.map((line) => (
-        <div key={line.key} className="canvas-undo-notice scene-stop-line" role="status" aria-live="polite" data-scene-stop={line.key}
-          tabIndex={-1} {...track(line)}>
-          <span className="canvas-undo-notice__text">{line.text}</span>
-          {/* GM r29 call 2: disabled while its try is on its way, the label as it is. */}
-          <button type="button" className="canvas-undo-notice__action" {...lock.act()} aria-disabled={line.trying || undefined}
-            ref={buttonRef(line.key)}
-            onClick={() => { if (line.trying) return; for (const nodeId of line.nodeIds) retry(nodeId); }}>
-            {TRY_AGAIN}
-          </button>
-        </div>
+        <StopLine key={line.key} line={line} track={track(line)} buttonRef={buttonRef(line.key)} act={lock.act()}
+          onRetry={() => { for (const nodeId of line.nodeIds) retry(nodeId); }} />
       ))}
     </>
   );
 }
 
 type Line = ReturnType<typeof sceneStopLines>[number];
+
+/** One stop line. GM r29 call 2, r30: while its try is on its way it is
+ * aria-busy and its [Try again] is held (aria-disabled at once, grey after
+ * a moment, the label as it is); a press then does nothing. */
+function StopLine({ line, track, buttonRef, act, onRetry }: { line: Line; track: ReturnType<ReturnType<typeof useStopLineFocus>['track']>;
+  buttonRef: (element: HTMLButtonElement | null) => void; act: ActProps; onRetry: () => void }) {
+  const held = useHeldLook(line.trying);
+  return (
+    <div className="canvas-undo-notice scene-stop-line" role="status" aria-live="polite" data-scene-stop={line.key}
+      data-scene-ids={line.nodeIds.join(' ')}
+      aria-busy={line.trying || undefined} tabIndex={-1} {...track}>
+      <span className="canvas-undo-notice__text">{line.text}</span>
+      <button type="button" className="canvas-undo-notice__action" {...act} {...held} ref={buttonRef}
+        onClick={() => { if (!line.trying) onRetry(); }}>
+        {TRY_AGAIN}
+      </button>
+    </div>
+  );
+}
 
 /**
  * Review 18 LOW-1 (GM r29 approved): where focus goes when the stop line it
@@ -93,7 +106,7 @@ function useStopLineFocus(lines: Line[]) {
     const index = before.indexOf(was.key);
     const left = lines.map((line) => lineEls.current.get(line.key)).filter((el): el is HTMLDivElement => Boolean(el));
     if (left.length > 0) { left[Math.min(Math.max(index, 0), left.length - 1)].focus(); return; }
-    (otherNoticeTarget() ?? document.querySelector<HTMLElement>('.canvas-wrapper'))?.focus();
+    (nextNoticeTarget('scene-stop') ?? canvasFocusTarget())?.focus();
     // lines is read through `joined`: a new array each render, the same lines.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [joined]);
@@ -111,22 +124,4 @@ function useStopLineFocus(lines: Line[]) {
       if (element) buttons.current.set(key, element); else buttons.current.delete(key);
     },
   };
-}
-
-/** The notice the × rule hands focus to once no stop line is left: the
- * nearest one below the stop lines' slot, else above, onto its ×, else the
- * notice itself when it takes focus. Null when none can. */
-function otherNoticeTarget(): HTMLElement | null {
-  const at = NOTICE_SLOTS.indexOf('scene-stop');
-  const below = NOTICE_SLOTS.slice(at + 1);
-  const above = NOTICE_SLOTS.slice(0, at).reverse();
-  for (const slot of [...below, ...above]) {
-    const box = document.querySelector<HTMLElement>(`[data-notice-slot="${slot}"]`);
-    for (const notice of Array.from(box?.children ?? []) as HTMLElement[]) {
-      const close = notice.querySelector<HTMLElement>('button[aria-label="Dismiss"]:not(:disabled)');
-      if (close) return close;
-      if (notice.getAttribute('tabindex') === '-1') return notice;
-    }
-  }
-  return null;
 }

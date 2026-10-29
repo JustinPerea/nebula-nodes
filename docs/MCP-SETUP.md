@@ -3665,7 +3665,12 @@ seen replaced (the health answer and the socket's first `graphSync` carry
 so the newer of two processes wins whatever order their messages arrive
 in); a restarted Nebula starts the count again. So when you change a scene the
 person is editing, your change stays unless they changed the same field and
-choose Keep mine; read the scene again before a second write.
+choose Keep mine; read the scene again before a second write. Once the
+person answers, the prompt stays while the answer's save is on its way,
+its buttons held (they grey after a moment), and goes when that save is
+answered: saved, nothing more shows; failed, the line for that failure
+takes its place (a stopped scene's stop line in the same moment); a write
+of yours that clashes again asks again with a new prompt.
 
 When Keep mine brings back a shot you removed, its connections go back
 with `POST /api/graph/connect` and `"onlyIfFree": true`: if that input
@@ -3763,8 +3768,9 @@ A stopped save's line is a state, not an event: the canvas shows the stop
 lines in their own place above its toasts, one line per cause, and no toast
 pushes one out. Scenes stopped for the same cause share one line, named up
 to three in reading order on the canvas (top to bottom, then left to right;
-cards whose tops are within a quarter of the row's first card height read
-as one row), then counted: "Nebula can’t save your changes to “Opening” and
+cards whose tops are within a quarter of the smaller card's height read
+as one row, so a mirrored pair reads the same either way round), then
+counted: "Nebula can’t save your changes to “Opening” and
 “Ref scene”." (400); "Nebula couldn’t save your changes to “Opening” and
 “Ref scene”. They’re kept, and Nebula will try again with your next
 change." (a server error that went on past the retries); "“Opening” and
@@ -3773,9 +3779,18 @@ again." (413; from four, "4 scenes are too big to save. …"). One scene
 keeps its own line, and "…kept changing…" stays one line per scene. The
 line's Try again tries every scene it names once: those that save leave
 the line, those that fail stay in it, and no new round of retries starts.
-While those tries run, the line stays and Try again (there and in the
-"Unsaved" mark's popover) is disabled, its label unchanged, so a second
-press sends nothing.
+While those tries run, the line stays (marked busy) and Try again (there
+and in the "Unsaved" mark's popover) is disabled, its label unchanged, so a
+second press sends nothing; it greys only after about 150 ms, so a try that
+answers at once doesn't flicker. A try with no answer within 15 seconds
+counts as failed: the scene is stopped again with the same line and a live
+Try again. If that try's save lands late while the card still holds what it
+sent, the stop and the "Unsaved" mark go at once; after the person changed
+the scene the stop stays (their next change sends it), and a late failure
+changes nothing. A try refused because a run's inputs are locked (a paid
+start or an approved run) isn't a stop: the scene says the run's own line,
+"Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula
+will save them when the run finishes.", and saves when the run ends.
 A scene leaves its line whenever its stop clears: it saved, or your write
 made it match the person's values (then the stop, the line and the
 "Unsaved" mark go together, and nothing is said or sent).
@@ -3794,8 +3809,12 @@ lines. The person's own toasts ("Deleted the node.", "Restored the node.",
 "Undid Codex’s edit.") show the same way; when their own Undo leaves
 nothing unsaved (the card is Nebula's scene again), the stop and the
 "Unsaved" mark go. When the person deletes a stopped scene, "Deleted the
-node." with Undo is the only line. Undo (theirs, or any that puts the scene
-back) brings it back with its "Unsaved" mark and sends one save at once.
+node." with Undo is the only line. That holds in every state the stop can
+be in: stopped, a Try again or an earlier Undo's save still on its way, or
+a clash waiting over the stop. Undo (theirs, or any that puts the scene
+back) brings it back with its "Unsaved" mark and sends one save at once;
+when a clash was waiting, it is asked again instead and sends nothing, and
+the person's answer is that one save.
 If it saves, the mark goes and no stop line ever shows. If it fails,
 whatever the cause, the scene is stopped again, with its line and Try
 again, and nothing more goes until the person acts (no new round of

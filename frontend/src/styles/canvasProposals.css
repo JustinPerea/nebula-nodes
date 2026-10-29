@@ -594,6 +594,29 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   background: rgb(255 255 255 / 0.08);
 }
 
+/* GM r30: every notice button shares the app's disabled style
+   (--sr-disabled-opacity), the label unchanged. A button held while its
+   action is on its way (a [Try again], a clash answer being sent) is
+   aria-disabled at once and greys only once useHeldLook adds
+   data-held-look (~150 ms), so a fast try never flickers; a button the
+   canvas lock disables (following, offline) is :disabled. Hover leaves it
+   as it is. */
+body.app-slava-restraint .canvas-undo-notice button[aria-disabled='true'][data-held-look],
+body.app-slava-restraint .canvas-undo-notice button:disabled {
+  opacity: var(--sr-disabled-opacity);
+  cursor: default;
+}
+
+body.app-slava-restraint .canvas-undo-notice__action[aria-disabled='true']:hover,
+body.app-slava-restraint .canvas-undo-notice__action:disabled:hover {
+  background: rgb(255 255 255 / 0.9);
+}
+
+body.app-slava-restraint .canvas-undo-notice__action--quiet[aria-disabled='true']:hover,
+body.app-slava-restraint .canvas-undo-notice__action--quiet:disabled:hover {
+  background: transparent;
+}
+
 .canvas-undo-notice__close {
   width: 28px;
   border: 0;

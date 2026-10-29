@@ -7,11 +7,12 @@ import { nodeNameList, quotedNames } from './errorCopy';
  * generic one, never both.
  */
 
-/** "Couldn’t save your changes to “Opening”." The heading of the lines
- * below that keep their edits for a retry (not the 400 and 413 lines, which
- * are GM's own). */
+/** "Nebula couldn’t save your changes to “Opening”." The heading of the
+ * lines below that keep their edits for a retry (not the 400 and 413 lines,
+ * which are GM's own). GM r31 answer 5: "Nebula" as the subject, as the
+ * server-error line has it since r29. */
 export function sceneSaveHeading(scene: string): string {
-  return `Couldn’t save your changes to “${scene}”.`;
+  return `Nebula couldn’t save your changes to “${scene}”.`;
 }
 
 /** GM (2026-10-28, #198 r12 answer 1; r22 Q3: one line per status
@@ -29,8 +30,10 @@ export function sceneTooBigToSaveLine(scene: string): string {
 }
 
 /** Clears by itself (a paid start, an approved run's inputs, any run lock;
- * GM r7, reworded r9): "…They're kept and will save when the run finishes." */
-export const KEPT_UNTIL_RUN_ENDS = "They’re kept and will save when the run finishes.";
+ * GM r7, reworded r9; GM r31 answer 5: "Nebula" as the subject, and a comma
+ * between the two full clauses): "…They’re kept, and Nebula will save them
+ * when the run finishes." */
+export const KEPT_UNTIL_RUN_ENDS = 'They’re kept, and Nebula will save them when the run finishes.';
 
 /** A server error, with the automatic retry the canvas makes (GM r9; GM r29
  * Q1: the subject and the comma, and the present tense, since Nebula is
