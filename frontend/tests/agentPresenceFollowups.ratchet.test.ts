@@ -2344,6 +2344,17 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
       '.canvas-pin__card > span { background: var(--pin-color); }',
       '.canvas-pin__card span:first-child { background: var(--pin-color); }',
       '.canvas-pin__edge { background: var(--pin-color, #ff5a1f); }',
+      // Review 14 NIT-2 (fix round 16): a narrow left edge only. The presence
+      // fill stretched over the card, or widened in any state, fails.
+      '.canvas-pin__edge { position: absolute; inset: 0; background: var(--pin-color); }',
+      '.canvas-pin__edge { width: 100%; background: var(--pin-color); }',
+      '.canvas-pin__edge { right: 0; background: var(--pin-color); }',
+      '.canvas-pin__edge { width: 12px; background: var(--pin-color); }',
+      '.canvas-pin__edge:hover { width: 100%; }',
+      '.canvas-pin__edge { min-width: 40px; }',
+      '.canvas-pin__edge { padding-right: 200px; }',
+      '.canvas-pin__edge { transform: scaleX(80); }',
+      '.canvas-pin__edge { inset-inline: 0; }',
     ]) expect(frameFindings(pinDelete, vars0, css), css).not.toEqual([]);
     // Resolved: the author's colour, with only its blue fallback.
     const resolvedDelete = { ...pinDelete, ancestors: [['div', ['canvas-pin', 'canvas-pin--resolved']], ['div', ['canvas-pin__card']]] as Array<[string, string[]]> };

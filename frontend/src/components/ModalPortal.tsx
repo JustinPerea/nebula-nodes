@@ -1,4 +1,5 @@
-import { useState, type ReactNode, type SyntheticEvent } from 'react';
+import { useEffect, useState, type ReactNode, type SyntheticEvent } from 'react';
+import { holdNoticeTabbing } from '../lib/modalFocus';
 import { createPortal } from 'react-dom';
 
 let opened = 0;
@@ -25,12 +26,16 @@ const contain = (event: SyntheticEvent) => event.stopPropagation();
  *   document listener in the app reads those three from inside a modal.
  * - `data-modal-layer`: the order modals opened, so the one on top is the last
  *   opened wherever it sits on the page (keyBlockedByModal).
+ * - GM r25 (PR #200 fix round 16): the app's notices stay above the backdrop
+ *   and in the dialog's focus trap, as a second region (lib/modalFocus.ts
+ *   holdNoticeTabbing), for every modal alike.
  */
 export function ModalPortal({ children }: { children: ReactNode }) {
   const [layer] = useState(() => {
     opened += 1;
     return opened;
   });
+  useEffect(() => holdNoticeTabbing(), []);
   return createPortal(
     <div className="modal-portal nokey" data-modal-layer={layer}
       onClick={contain} onDoubleClick={contain} onContextMenu={contain}>

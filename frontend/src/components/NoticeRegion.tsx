@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { RegionNotices } from './canvas/DeferredCanvasOverlays';
 import { NOTICE_SLOTS, setNoticeSlot, type NoticeSlot } from '../lib/noticeSlots';
 import '../styles/noticeRegion.css';
@@ -29,13 +30,18 @@ export type NoticeRegionScreen = 'canvas' | 'studio' | 'home';
  * shows (lib/bottomBar.ts floatingBottomLimit; GM: "The panels never move
  * when a notice comes or goes, and a notice never covers Run / Duplicate /
  * Delete").
+ *
+ * GM r25 (PR #200 fix round 16): it is its own child of <body>, on a layer
+ * above every dialog's backdrop, so a modal that hides the page behind it
+ * (inert) never hides the notices, and a click on one never reaches a
+ * backdrop. lib/modalFocus.ts makes it the open dialog's second focus region.
  */
 export function NoticeRegion({ screen }: { screen: NoticeRegionScreen }) {
   const refs = useMemo(() => Object.fromEntries(NOTICE_SLOTS.map((name) => [
     name, (element: HTMLDivElement | null) => setNoticeSlot(name, element),
   ])) as Record<NoticeSlot, (element: HTMLDivElement | null) => void>, []);
 
-  return (
+  return createPortal(
     <div className="notice-region" data-notice-region="">
       <div className="notice-region__band" data-notice-band="" aria-hidden="true" />
       <div className="notice-region__stack">
@@ -44,6 +50,7 @@ export function NoticeRegion({ screen }: { screen: NoticeRegionScreen }) {
         ))}
       </div>
       {screen !== 'home' && <RegionNotices canvas={screen === 'canvas'} />}
-    </div>
+    </div>,
+    document.body,
   );
 }

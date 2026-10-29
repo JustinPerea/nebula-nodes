@@ -3595,12 +3595,16 @@ class ConnectionManager:
         data.update(_filed_context(_execution_workspace_context.get()) or _workspace_context())
         await self.broadcast_raw(data)
 
-    async def broadcast_raw(self, data: dict[str, Any]) -> None:
+    async def broadcast_raw(self, data: dict[str, Any], *, others: dict[str, Any] | None = None) -> None:
+        """Send `data` to every socket; with `others`, only the person's canvas
+        sockets (a verified hello) get `data` and every other socket gets
+        `others` (review 14 LOW-1 of PR #200: the pins' person form)."""
         message = json.dumps(data)
+        other_message = message if others is None else json.dumps(others)
         disconnected: list[WebSocket] = []
         for connection in self.active_connections:
             try:
-                await connection.send_text(message)
+                await connection.send_text(message if connection in self.browser_connections else other_message)
             except Exception:
                 disconnected.append(connection)
         for conn in disconnected:
@@ -3814,6 +3818,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         # backend restarted (a new bootId); after a mere reconnect the create
         # may still land, and a later sync shows it.
         await websocket.send_text(json.dumps({"type": "graphSync", **export, "bootId": BACKEND_BOOT_ID}))
+        # The agents' form until a verified hello promotes this socket (review 14 LOW-1).
         await websocket.send_text(json.dumps(_pins_message()))
         await _settle_proposal_updates()
         await websocket.send_text(json.dumps(_canvas_notes_message()))
@@ -3835,6 +3840,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 await websocket.send_text(json.dumps(await _asset_proposal_sync_message()))
                 # Open question sets with their answer keys (Q125 item 1), same rule.
                 await _send_questions_sync(websocket)
+                # Now the person's canvas: their pins with registered variants kept.
+                await websocket.send_text(json.dumps(_pins_message(person=True)))
             else:
                 await websocket.send_text(json.dumps({
                     "type": "personRequired",
@@ -5952,10 +5959,14 @@ async def get_canvas_events(request: Request) -> dict[str, Any]:
 
 # ---------- Pins: the person's notes for agents ----------
 
-def _pins_message() -> dict[str, Any]:
-    """The `canvasPins` WebSocket message for the active project (empty when unreadable)."""
+def _pins_message(*, person: bool = False) -> dict[str, Any]:
+    """The `canvasPins` WebSocket message for the active project (empty when unreadable).
+
+    `person=True` is the form for the person's canvas sockets only (a verified
+    hello): registered IVD variants kept (GM r23). Every other socket, an agent's
+    or a tab without the person token, gets the agents' form (review 14 LOW-1)."""
     try:
-        listing = canvas_pins.list(person=True)  # the person's canvas tabs: registered variants kept (GM r23)
+        listing = canvas_pins.list(person=person)
     except (PinError, ProjectStoreError):
         listing = {"projectId": None, "pins": []}
     return {"type": "canvasPins", **listing}
@@ -5963,7 +5974,7 @@ def _pins_message() -> dict[str, Any]:
 
 async def _broadcast_pins() -> None:
     try:
-        await manager.broadcast_raw(_pins_message())
+        await manager.broadcast_raw(_pins_message(person=True), others=_pins_message())
     except Exception:  # noqa: BLE001 - pins are already saved; a failed push heals on reconnect
         pass
 

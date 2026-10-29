@@ -918,6 +918,45 @@ export const PRESENCE_COLOUR = /^(?:var\(--pin-color\)|var\(--agent-color(?:,\s*
  * NIT-4): a wrapper's rule, or one for a lookalike class, that happens to
  * reach the edge element isn't the edge's own fill. */
 const EDGE_SUBJECT = new RegExp(`\\.${STATUS_EDGE_CLASS}(?![\\w-])[^\\s>+~]*$`);
+/** The widest the status edge may be drawn. */
+export const STATUS_EDGE_MAX_PX = 4;
+/**
+ * Review 14 NIT-2 (PR #200 fix round 16): the exemption is for a narrow
+ * left edge only. In every state the edge is at most 4px wide, anchored by
+ * `left`, never stretched by `inset`, `right` or an inline end, and never
+ * widened by a min-width, padding, a transform or `scale`. (`inset: 0` with
+ * the pin colour turned the whole card amber and still passed.)
+ */
+export function narrowLeftEdge(styles: Map<string, { value: string }>): string | null {
+  const px = (value: string) => {
+    const match = /^(-?\d*\.?\d+)px$/.exec(value.trim());
+    return match ? Number(match[1]) : value.trim() === '0' ? 0 : null;
+  };
+  let width = false;
+  let left = false;
+  for (const [key, winner] of styles) {
+    const [state, prop] = key.split('|');
+    if (/::?(before|after)\b/.test(state)) continue;
+    const value = winner.value.trim();
+    if (prop === 'width') {
+      const n = px(value);
+      if (n === null || n > STATUS_EDGE_MAX_PX) return `width ${value}`;
+      if (state === '') width = true;
+    } else if (prop === 'left' || prop === 'inset-inline-start') {
+      if (state === '') left = true;
+    } else if (/^(?:inset|inset-inline|inset-inline-end|right|inline-size|min-width|min-inline-size)$/.test(prop)) {
+      if (prop === 'min-width' || prop === 'min-inline-size' || prop === 'inline-size') {
+        const n = px(value);
+        if (n === null || n > STATUS_EDGE_MAX_PX) return `${prop} ${value}`;
+      } else if (value !== 'auto') return `${prop} ${value}`;
+    } else if (/^padding(?:-left|-right|-inline(?:-start|-end)?)?$/.test(prop)) {
+      if (!value.split(/\s+/).every((part) => px(part) === 0)) return `${prop} ${value}`;
+    } else if ((prop === 'transform' || prop === 'scale') && value !== 'none') return `${prop} ${value}`;
+  }
+  if (!width) return 'no width';
+  if (!left) return 'no left';
+  return null;
+}
 
 /**
  * GM r18 (PR #200 fix round 12): orange never frames a destructive action.
@@ -957,7 +996,7 @@ export function frameFindings(control: Control, vars: Vars, extraCss?: string): 
       // The one exemption (GM r22 Q2): the status edge's own fill, at rest,
       // in a presence colour. Its border, shadow or any other state isn't.
       if (edge && state === '' && /^background(?:-color)?$/.test(prop) && PRESENCE_COLOUR.test(winner.value.trim())
-        && winner.selector.split(',').some((part) => EDGE_SUBJECT.test(part.trim()))) continue;
+        && winner.selector.split(',').some((part) => EDGE_SUBJECT.test(part.trim())) && narrowLeftEdge(styles) === null) continue;
       // Review 13 NIT-4: currentColor is the element's own colour in that state.
       const value = /currentcolor/i.test(winner.value) ? `${winner.value} ${colourOf(state)}` : winner.value;
       const bad = [

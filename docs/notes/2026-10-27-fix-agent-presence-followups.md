@@ -1856,9 +1856,13 @@ GM r23:
   JS assets eval-free. Fonts: 53 @font-face rules, 13 woff2, 285,052 bytes.
 - Live (backend 8795, Vite 5795, 8000-8010 and 5173 blocked): 83 of 83, all
   sections. Run alone first, r23 passed 9 of 9. In the full run it timed
-  out waiting for its new node, because r14's tab had just been made to
-  act as a tab without the person token and stopped showing agents' edits.
-  So r23 now starts with a reload. Older checks that expected agent paths
+  out waiting for its new node. (Corrected in fix round 16, from review 14:
+  the cause was not r14's tab without the person token, whose 403 alone
+  never stalls a tab. It was r23's own 100-note burst just before: every
+  `canvasPins` push re-renders every PinBadge, so the tab ran 20-40 s
+  behind and the node showed after the 30 s wait. Main does the same; it
+  is filed apart. Round 14 added a reload, which only hid it; round 16
+  removed it and checks the removed node before the burst.) Older checks that expected agent paths
   to keep selectors (review 11 MEDIUM-1's FE0F, GM r19's hearts, GM r21's
   葛) were updated to GM r23's agent form; the card checks are unchanged.
   Shots: `fix14-person-only-line.png`, `fix14-open-notes-full-1440.png`,
@@ -1930,3 +1934,152 @@ GM r24 (head 26375c63).
   `fix15-no-banner-full-line-1440.png`, `fix15-banner-send-disabled-1440.png`,
   and `fix15-banner-neutral-slava-1440.png` /
   `fix15-banner-neutral-default-1440.png`. All five md5s differ.
+
+## Fix round 16
+
+GM r25 and review 14 (head 11c39e39).
+
+### GM r25: notices above every dialog's backdrop
+
+Done in the shared code, so every modal behaves the same.
+- The layer. NoticeRegion now portals to `<body>`, as its own stacking
+  context, out of the app root. `--sr-layer-notice` goes from 58 to 20010,
+  above the modal layer (60) and every raw z-index in `src/**/*.css` (the
+  world viewer's 20000 is the highest). `noticeRegionLayer.test.ts` reads
+  them all, so a future modal above it fails the build. The
+  topmost element at a notice's centre is the notice, so a click on a
+  notice or its × never reaches the backdrop. The dialog stays open with
+  the typed note.
+- `sitsBehind` (ResultComparison, OnboardingOverlay) never makes the region
+  inert. Their own `containFocus` lets focus sit on a notice.
+- The second Tab region. `holdNoticeTabbing()` (lib/modalFocus.ts) is a
+  refcounted window capture listener. ModalPortal installs it for every
+  modal; the mask painter, drawn outside ModalPortal, installs it itself.
+  While a modal is open and a notice shows, Tab runs through the dialog's
+  controls, then each notice's controls, then back to the start; Shift+Tab
+  runs it in reverse. With no notice showing, it does nothing, so each
+  dialog's own trap runs as before. `tabbablesIn` sorts by document
+  position (jsdom gave selector-list order) and skips disabled, inert,
+  hidden, aria-hidden and leaving items.
+- Focus after a ×. With a dialog open, `moveFocusFromLeave` goes to the next
+  notice's ×, as before. With none left, it goes to the dialog's field (its
+  first input, textarea or select, else its first control), never the
+  page's fallback heading. PinComposer's kept-stack dismiss does the same.
+- Other modals, checked live: the keyboard shortcuts dialog and the command
+  palette (which closes on its backdrop's mousedown). Both stay open on a
+  click on the banner, Tab reaches the banner's × and never the page, the ×
+  keeps the dialog, and Escape still closes them. The ModalPortal confirm
+  case is a unit test.
+- The r24 harness pressed the banner's × from the DOM because the backdrop
+  covered it. It now clicks it with the mouse.
+
+### Review 14
+
+- **MEDIUM-1, a failed Unicode chunk.** `lib/canvasPins.ts` keeps the data's
+  state: pending, loaded or failed. A failed import settles as failed, and
+  the strict fallbacks stand: no selector fits, no tag run is a flag, a
+  non-basic chain counts apart. `apply` waits only while the import is
+  pending. Settled either way, it applies at once, so nothing re-queues on
+  a settled promise. The import is tried once more, on the next pins push
+  (every reconnect starts with one) or the next `hydrate`. The dialog,
+  `hydrate` and `submit` wait on `pinTextSettling()`, the current attempt.
+  Test: `agentPresenceFollowups.chunkFail.test.tsx`. The import is mocked to
+  reject; pins apply in the fallback form, a 0 ms timer fires, there is one
+  retry, and the dialog opens. Live (`r16chunk`): a second tab with the
+  chunk blocked answers a 50 ms timer before and after a pin push.
+- **LOW-1, the person's form only to the person's sockets.** Exactly what
+  changed on the person-token path, all in backend/main.py:
+  - `_pins_message(*, person=False)`. It defaults to the agents' form; it
+    used to always be `list(person=True)`.
+  - `ConnectionManager.broadcast_raw(data, *, others=None)`. With `others`,
+    a socket in `browser_connections` gets `data` and every other socket
+    gets `others`. Without it, it is the same message to every socket, as
+    before. `browser_connections` is only ever filled by `promote`, that is
+    a hello with this launch's person token and no agent marker, unchanged.
+  - `_broadcast_pins` sends `(_pins_message(person=True), others=_pins_message())`.
+  - On connect, a socket gets the agents' form. That is every socket at
+    that point, because none has said hello yet.
+  - After a successful promote (the hello branch), the socket also gets
+    `_pins_message(person=True)`, after the proposal, asset proposal and
+    question syncs. A wrong token still gets only `personRequired`.
+  - Nothing else in `promote`, `is_browser` or the routes changed. GET
+    /api/canvas/pins already chose by `_is_person_request()`.
+  - Test hooks that stub `broadcast_raw` take `**kw` (and pass it on where
+    they wrap the real one).
+  Test: `test_low1_only_the_persons_sockets_get_the_persons_form`. Raw /ws
+  sockets with no headers, a forged Origin, the CLI marker or a wrong token
+  get only 葛 from 280 × 葛 + a selector. A verified hello gets the
+  person's form after the agents' form. On the real broadcast, a person
+  socket and an agent socket get each form.
+- **LOW-2, the node comes back.** The store's `targetReturned` clears
+  `targetGone`, and the "That node was removed, so the note wasn’t added."
+  error if that is the line showing (another line stays). PinComposer calls
+  it only on a real missing-to-present change of the dialog's node, after
+  the canvas lost it, or after a pin_node_gone refusal once the canvas lost
+  it. A refusal while the canvas still has the node changes nothing. The
+  toast leaves through `useLeave` with its normal exit. Nothing moves
+  focus, so it stays in the note field. Tests:
+  `agentPresenceFollowups.r16low2.test.tsx` (the Undo path, the refusal
+  path, the other line kept). Live: a restore (the canvas's Undo) with the
+  dialog open.
+- **NIT-1.** `mcp_channel.clean_text` drops tag characters in multiline
+  mode too; a ZWJ is still kept (agent_text leaves one only inside an RGI
+  sequence). The England, Scotland and Wales flags read as a plain black
+  flag in a channel push. MCP-SETUP.md says so, and says the raw /ws
+  socket gets the agents' form.
+- **NIT-2.** The ratchet's status-edge exemption now holds only for a
+  narrow left edge (`narrowLeftEdge` in tests/helpers/destructiveRule.ts).
+  In every state the edge is at most 4px wide and anchored by `left`; no
+  `inset`, `inset-inline`, `right` or inline end; no min-width or padding
+  that widens it; no transform or `scale`. Nine new failing cases are in
+  the corpus, `inset: 0` among them; the real sheet still passes.
+- **NIT-3.** The hidden announce region empties 5 s after it speaks, and at
+  once when the note is back above 30 left.
+- **NIT-4, the entry size.** It shrank 24.4 KB, not the ~27 KB the data took
+  up. The old entry minus its data would be 447,579 − 27,081 = 420,498 B,
+  and round 14's was 423,203 B, so about 2.7 KB of new code came in: `ivdPairs`,
+  the new refusal lines, the counter's fade and announce, `targetGone`, the
+  `tooLongRefusals` hold and the lazy re-queue. The data itself became a
+  101,168 B lazy chunk, because of the IVD.
+- **The stale tab.** The cause was a burst of pin pushes, each re-rendering
+  every PinBadge (main does it too; filed apart, not fixed here). The r23
+  and r24 harness reloads are gone. r23 now checks the removed node before
+  its 100-note burst. The round 14 gates' explanation is corrected above.
+- **Harness, seen this round.** r14's person-token check still expected the
+  full Q116a line in the toast. Round 15 changed that (the banner carries
+  the fix and the toast says "Your note wasn’t added."), but round 15 ran
+  only its r24 section live. The check now expects GM r24's pair. r14 also
+  clears the banner it raised, so later sends aren't held by it; the reload
+  used to clear it. With no reload, one full run still showed the backlog:
+  the agent's delete reached the tab after r23's fixed 10 s wait, so the
+  note was sent. r23 now waits up to 90 s for the node to leave the
+  canvas. It took 27 ms in the passing run.
+
+### Fix round 16 gates
+
+- Backend, the full suite (isolated, no xdist, `lg run --gate`): 11,801
+  passed, 71 skipped, none failed, in 6 min 31 s. The first attempt ran at
+  lg's default background priority and reached 9% in 45 min, so I stopped
+  it. The pin files with the new tests: 124 passed.
+- Frontend: `tsc -b` clean; `eslint .` clean.
+- Vitest, the full run with `--maxWorkers=6` (`--gate`): 580 files, 7,421
+  tests, all passed, none to rerun. New: `agentPresenceFollowups.r25.test.tsx`
+  (8), `.chunkFail` (2), `.r16low2` (4), the ratchet's nine geometry cases,
+  and `noticeRegionLayer.test.ts`.
+- Build into a scratch outDir: the entry is 424,914 bytes raw (130,351
+  gzip), under 512,000. The Unicode chunk is 101,168 B; 96 JS assets are
+  eval-free. Fonts: 53 @font-face rules, 13 woff2, 285,052 bytes.
+  `check-build-budget.mjs` reads `../dist` whatever its argument, so it ran
+  from a copy beside a `dist` link to the scratch build.
+- Live (backend 8795, Vite 5795, 8000-8010 and 5173 blocked): 96 of 96, all
+  sections, including the new r25 and r16chunk. Shots:
+  - `fix16-tab-on-notice-from-dialog-1440.png`: Tab focus on the banner's ×
+    from inside the note dialog;
+  - `fix16-banner-x-clicked-dialog-stays-1440.png`: the banner's × clicked
+    with the mouse, the dialog and its note still there;
+  - `fix16-focus-back-in-field-after-last-x-1440.png`;
+  - `fix16-node-back-send-live-1440.png`: Send note live after Undo;
+  - `fix16-chunk-blocked-tab-responsive-1280.png`;
+  - and the earlier sections' shots under the fix16 prefix.
+  The md5 check found only the two pairs that are meant to match (the 5xx
+  and no-answer toasts; the float shot before and after undo).

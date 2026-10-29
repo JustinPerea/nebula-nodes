@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { wsClient, type CanvasPinsEvent, type Pin } from '../lib/wsClient';
-import { createPin, deletePin, fetchPins, fitNote, NODE_GONE_CODE, noteKeptLine, PIN_REFUSAL_COPY, pinRefusalLine, pinTextIsLoaded, pinTextReady,
+import { createPin, deletePin, fetchPins, fitNote, NODE_GONE_CODE, noteKeptLine, PIN_REFUSAL_COPY, pinRefusalLine, pinTextSettled, pinTextSettling, retryPinText,
   TOO_LONG_CODE, type KeptNote } from '../lib/canvasPins';
 import { currentProject } from '../lib/currentProject';
 import { PERSON_REQUIRED_CODE, RequestFailedError } from '../lib/errorCopy';
@@ -63,6 +63,10 @@ interface CanvasPinsState {
   tooLongRefusals: number;
   /** The open dialog's node went from the canvas (PinComposer watches the graph). */
   targetRemoved: () => void;
+  /** The removed node came back (Undo or any other path) while the dialog is
+   * open: Send note is live again, and the "removed" line, no longer true,
+   * leaves (review 14 LOW-2 and GM, PR #200 fix round 16). */
+  targetReturned: () => void;
   hydrate: () => Promise<void>;
   apply: (event: Pick<CanvasPinsEvent, 'projectId' | 'pins'>) => void;
   compose: (target: PinComposerTarget) => void;
@@ -139,9 +143,12 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
   targetGone: false,
   tooLongRefusals: 0,
   hydrate: async () => {
+    // Review 14 MEDIUM-1: a failed chunk is tried once more (here, or on the
+    // next pins push, which every reconnect starts with).
+    retryPinText();
     try {
       // Review 13 L-2: the Unicode data is its own chunk; sanitize needs it.
-      const [listing] = await Promise.all([fetchPins(), pinTextReady]);
+      const [listing] = await Promise.all([fetchPins(), pinTextSettling()]);
       get().apply(listing);
     } catch {
       // The canvasPins push after graphSync heals this on the next connect.
@@ -150,8 +157,11 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
   apply: (event) => {
     // Review 13 L-2: a listing pushed before the Unicode data is in waits for
     // it (in arrival order), never dropped and never shown unsanitized.
-    if (!pinTextIsLoaded()) {
-      void pinTextReady.then(() => get().apply(event));
+    // Review 14 MEDIUM-1: only while the import is pending; a failed one
+    // applies at once in the strict fallback form (and is tried once more).
+    retryPinText();
+    if (!pinTextSettled()) {
+      void pinTextSettling().then(() => get().apply(event));
       return;
     }
     set((state) => ({
@@ -199,7 +209,7 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
       // backend refuses past that (fix round 11: a slice by code units cut a
       // note of flags or pasted codes, and sent the hidden-text refusal nothing).
       const answer = await createPin(trimmed, target, canvas);
-      await pinTextReady;  // review 13 L-2: sanitize needs the Unicode data
+      await pinTextSettling();  // review 13 L-2: sanitize needs the Unicode data (or its fallbacks)
       const pin = sanitize(answer);
       set((state) => ({
         composer: null,
@@ -256,6 +266,9 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
     }
   },
   clearError: () => set({ error: null, errorProject: null, errorPersonGate: false }),
+  targetReturned: () => set((state) => (state.targetGone
+    ? { targetGone: false, ...(state.error === PIN_REFUSAL_COPY.nodeGone ? { error: null, errorProject: null, errorPersonGate: false } : {}) }
+    : {})),
   targetRemoved: () => set((state) => (state.composer && !state.targetGone
     ? { targetGone: true, error: PIN_REFUSAL_COPY.nodeGone, errorPersonGate: false, errorProject: projectKey(state.composerCanvas) } : {})),
   dismissKept: (project) => set((state) => ({ kept: state.kept.filter((note) => note.project !== project) })),

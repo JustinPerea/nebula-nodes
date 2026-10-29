@@ -43,7 +43,7 @@
   left: var(--page-gutter, 16px);
   right: var(--page-gutter, 16px);
   bottom: calc(var(--bottom-bar-clearance, calc(var(--sr-space-6, 24px) - var(--notice-gap))) + var(--notice-gap));
-  z-index: var(--sr-layer-notice, 58);
+  z-index: var(--sr-layer-notice, 20010);
   display: flex;
   justify-content: center;
   pointer-events: none;

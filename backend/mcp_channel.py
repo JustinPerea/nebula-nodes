@@ -226,12 +226,14 @@ def clean_text(raw: Any, limit: int = MAX_TEXT, *, multiline: bool = False) -> s
     text = unicodedata.normalize("NFKC", str(raw or ""))
 
     def plain(line: str) -> str:
-        # A pin's note arrives already shown (services.canvas_pins.shown_text),
-        # where a zero-width joiner or tag character is left only inside an
-        # emoji sequence (a family, the England flag: GM r19 answer 1, PR #200
-        # fix round 12), so a note keeps them; everything else drops all Cf.
+        # A pin's note arrives in agents' form (services.canvas_pins.agent_text),
+        # where a zero-width joiner is left only inside an RGI sequence (a
+        # family: GM r19 answer 1, PR #200 fix round 12), so a note keeps it;
+        # everything else drops all Cf. Tag characters go in a note too (review
+        # 14 NIT-1, fix round 16): fed raw text they could carry a hidden
+        # message, so the England flag reads as a plain black flag in a push.
         line = "".join(ch for ch in line if unicodedata.category(ch) not in _HIDDEN
-                       or (multiline and (ch == "\u200d" or "\U000E0020" <= ch <= "\U000E007F")))
+                       or (multiline and ch == "\u200d"))
         # No variation selector reaches an agent (GM r23): the note arrives
         # in agents' form already (canvas_pins.agent_text); this holds for
         # any other canvas text a push quotes.

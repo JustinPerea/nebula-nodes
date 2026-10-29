@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { PromptDialog, type PromptRequest } from '../PromptDialog';
 import { KEPT_FEWER, KEPT_SHOWN, keptMoreLabel, keptNoteDisplay, keptNoteLine, MAX_PIN_TEXT, noteLength, NOTE_KEPT_COPY, PIN_REFUSAL_COPY,
-  pinDisplayText, pinTextIsLoaded, pinTextReady, type KeptNote } from '../../lib/canvasPins';
+  pinDisplayText, pinTextSettled, pinTextSettling, type KeptNote } from '../../lib/canvasPins';
 import { useGraphStore } from '../../store/graphStore';
 import { personBannerShown, subscribePersonBanner } from '../../lib/personSession';
 import { useCurrentProjectId } from '../../lib/currentProject';
@@ -10,6 +10,7 @@ import { useCanvasPinsStore } from '../../store/canvasPinsStore';
 import { useProjectStore } from '../../store/projectStore';
 import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 import { InNoticeRegion } from '../InNoticeRegion';
+import { dialogStart, openModalDialog } from '../../lib/modalFocus';
 import { useLeave, useLeavingRows } from '../../lib/noticeLeave';
 import '../../styles/canvasPins.css';
 
@@ -63,11 +64,11 @@ export function PinComposer() {
   const lock = useCanvasLock();
   // Review 13 L-2: the dialog counts only once the Unicode data is in (its
   // own chunk, fetched as lib/canvasPins loads; a few milliseconds at most).
-  const [textReady, setTextReady] = useState(pinTextIsLoaded);
+  const [textReady, setTextReady] = useState(pinTextSettled);
   useEffect(() => {
     if (textReady) return;
     let live = true;
-    void pinTextReady.then(() => { if (live) setTextReady(true); });
+    void pinTextSettling().then(() => { if (live) setTextReady(true); });
     return () => { live = false; };
   }, [textReady]);
   // GM r23 item 2: the node the dialog is for left the canvas (the person
@@ -78,11 +79,21 @@ export function PinComposer() {
   const targetNode = composer && 'nodeId' in composer ? composer.nodeId : null;
   const nodeHere = useGraphStore((s) => targetNode !== null && s.nodes.some((node) => node.id === targetNode));
   const sawNode = useRef<string | null>(null);
+  // Review 14 LOW-2: the node this dialog lost, so its return (Undo, an
+  // agent's restore, a sync) makes Send note live again; only a real
+  // missing -> present change, never a refusal while the canvas still has it.
+  const lostNode = useRef<string | null>(null);
+  const targetReturned = useCanvasPinsStore((s) => s.targetReturned);
   useEffect(() => {
-    if (targetNode === null) sawNode.current = null;
-    else if (nodeHere) sawNode.current = targetNode;
-    else if (sawNode.current === targetNode) targetRemoved();
-  }, [targetNode, nodeHere, targetRemoved]);
+    if (targetNode === null) { sawNode.current = null; lostNode.current = null; }
+    else if (nodeHere) {
+      sawNode.current = targetNode;
+      if (lostNode.current === targetNode) { lostNode.current = null; targetReturned(); }
+    } else if (sawNode.current === targetNode || targetGone) {
+      lostNode.current = targetNode;
+      targetRemoved();
+    }
+  }, [targetNode, nodeHere, targetGone, targetRemoved, targetReturned]);
   // Re-renders on a project change; the key is the canvas's own (projectKey).
   const openId = useCurrentProjectId();
   const here = getProjectContext()?.id ?? openId ?? '';
@@ -190,7 +201,11 @@ export function PinComposer() {
     const stackHasFocus = Boolean(stackRef.current?.contains(document.activeElement));
     const neighbour = shown[index + 1] ?? shown[index - 1] ?? kept.find((note) => note.project !== project) ?? null;
     focusAfter.current = stackHasFocus ? (neighbour ? neighbour.project : '') : null;
-    if (stackHasFocus && !neighbour) {
+    if (stackHasFocus && !neighbour && openModalDialog()) {
+      // GM r25: a dialog is open: back to its field.
+      dialogStart(openModalDialog())?.focus({ preventScroll: true });
+      focusAfter.current = null;
+    } else if (stackHasFocus && !neighbour) {
       const opener = openerRef.current;
       // <body> is no opener: focus that came from nowhere goes to the canvas.
       const back = opener?.isConnected && opener !== document.body ? opener : document.querySelector<HTMLElement>('.canvas-wrapper');

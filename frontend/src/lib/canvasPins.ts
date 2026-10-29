@@ -148,10 +148,12 @@ let variationBases = new Map<number, (code: number) => boolean>();
 let RGI_ZWJ = new Set<string>();
 let RGI_ZWJ_LONGEST = 1;
 let TAG_FLAGS = new Set<string>();
-let pinTextLoaded = false;
-/** Resolves once the generated Unicode data is in (it never rejects: a failed
- * fetch leaves the strict fallbacks above). */
-export const pinTextReady: Promise<void> = import('./pinTextUnicode.json').then(({ default: data }) => {
+// 'pending' until the import settles; 'failed' keeps the strict fallbacks
+// above (review 14 MEDIUM-1: every selector, tag run and chain hidden or
+// counted apart), and nothing waits on it any more.
+let pinTextState: 'pending' | 'loaded' | 'failed' = 'pending';
+let pinTextRetried = false;
+const loadPinText = (): Promise<void> => import('./pinTextUnicode.json').then(({ default: data }) => {
   const unicode = data as PinTextData;
   ivd = ivdPairs(unicode.ivd);
   mongolianLetter = within(unicode.mongolianLetters);
@@ -159,10 +161,27 @@ export const pinTextReady: Promise<void> = import('./pinTextUnicode.json').then(
   RGI_ZWJ = new Set(unicode.rgiZwj);
   RGI_ZWJ_LONGEST = unicode.rgiZwjLongest;
   TAG_FLAGS = new Set(unicode.tagFlags);
-  pinTextLoaded = true;
-}, () => undefined);
+  pinTextState = 'loaded';
+}, () => { pinTextState = 'failed'; });
+let pinTextCurrent: Promise<void> = loadPinText();
+/** Resolves once the generated Unicode data's import settles, loaded or
+ * failed (it never rejects: a failed fetch leaves the strict fallbacks). */
+export const pinTextReady: Promise<void> = pinTextCurrent;
+/** The import under way now (a retry's, after a failure). */
+export const pinTextSettling = (): Promise<void> => pinTextCurrent;
 /** Whether the Unicode data is in (see pinTextReady). */
-export const pinTextIsLoaded = () => pinTextLoaded;
+export const pinTextIsLoaded = () => pinTextState === 'loaded';
+/** Whether its import has settled, loaded or failed: only a pending one is
+ * waited for (review 14 MEDIUM-1: a settled failure re-queued forever). */
+export const pinTextSettled = () => pinTextState !== 'pending';
+/** After a failed import, try it once more (the next pin event or a
+ * reconnect calls this); the strict fallbacks stand meanwhile. */
+export function retryPinText(): void {
+  if (pinTextState !== 'failed' || pinTextRetried) return;
+  pinTextRetried = true;
+  pinTextState = 'pending';
+  pinTextCurrent = loadPinText();
+}
 const PICTOGRAPHIC: Array<[number, number]> = [
   [0x00a9, 0x00a9], [0x00ae, 0x00ae], [0x203c, 0x203c], [0x2049, 0x2049], [0x2122, 0x2122],
   [0x2139, 0x2139], [0x2194, 0x21aa], [0x231a, 0x23ff], [0x24c2, 0x24c2], [0x25aa, 0x25fe],

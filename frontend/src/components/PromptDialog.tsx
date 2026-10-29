@@ -113,8 +113,18 @@ export function PromptDialog({ request, onDone, maxLength, cap, revealCounter = 
     setLeftBefore(left);
     if (cap && left < leftBefore && ANNOUNCE_AT.some((mark) => leftBefore > mark && left <= mark)) {
       setAnnounced(`${left} ${left === 1 ? 'character' : 'characters'} left`);
+    } else if (cap && left > cap.showAt && announced) {
+      // Review 14 NIT-3: back above 30 left, the old words go at once.
+      setAnnounced('');
     }
   }
+  // Review 14 NIT-3: once spoken, the hidden region empties, so a virtual
+  // cursor never lands on a count that is no longer true.
+  useEffect(() => {
+    if (!announced) return;
+    const clear = window.setTimeout(() => setAnnounced(''), ANNOUNCE_CLEAR_MS);
+    return () => window.clearTimeout(clear);
+  }, [announced]);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -185,6 +195,9 @@ export function PromptDialog({ request, onDone, maxLength, cap, revealCounter = 
 
 /** Where screen readers hear "N left" (GM r23 item 4). */
 const ANNOUNCE_AT = [30, 10, 0];
+/** How long an announcement stays in the hidden region: long enough for a
+ * polite one to be read after the key that caused it. */
+const ANNOUNCE_CLEAR_MS = 5000;
 
 const end = (field: HTMLInputElement | HTMLTextAreaElement) => field.selectionEnd ?? field.value.length;
 

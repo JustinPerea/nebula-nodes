@@ -4,7 +4,7 @@ import { useUIStore } from '../../store/uiStore';
 import './onboarding.css';
 import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
 import { ModalPortal } from '../ModalPortal';
-import { sitsBehind } from '../../lib/modalFocus';
+import { inNoticeRegion, sitsBehind } from '../../lib/modalFocus';
 
 const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -59,7 +59,8 @@ export function OnboardingOverlay() {
     const containFocus = (event: FocusEvent) => {
       // A modal dialog opened over the tour keeps its own focus.
       if (keyBlockedByModal(overlay)) return;
-      if (event.target instanceof Node && !overlay.contains(event.target)) focusCard();
+      // The app's notices are the trap's second region (GM r25).
+      if (event.target instanceof Node && !overlay.contains(event.target) && !inNoticeRegion(event.target)) focusCard();
     };
     document.addEventListener('focusin', containFocus);
     const containUnfocusedKey = (event: globalThis.KeyboardEvent) => {

@@ -541,8 +541,8 @@ def test_a_write_fenced_before_a_clear_refuses_inside_the_clears_awaits(race, mo
     real_bcast = main.manager.broadcast_raw
     gate: dict[str, Any] = {}
 
-    async def bcast(data):
-        await real_bcast(data)
+    async def bcast(data, **kw):
+        await real_bcast(data, **kw)
         if gate.get("arm") and "status" in str(data.get("type", "")).lower():
             gate["arm"] = False
             gate["made"] = race.graph.add_node("openrouter-universal", {"model": "anthropic/claude-b"},

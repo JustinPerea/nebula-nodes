@@ -103,8 +103,11 @@ function expectInRegion(element: HTMLElement, root: HTMLElement) {
   expect(element.closest('.react-flow')).toBeNull();
   expect(element.closest('[data-testid="studio"]')).toBeNull();
   expect(element.closest('.panel')).toBeNull();
-  // Mounted by App itself, beside the screens, never inside one.
-  expect(region!.parentElement).toBe(root);
+  // Mounted by App itself, beside the screens, never inside one; GM r25
+  // (PR #200 fix round 16): portalled to <body>, outside the app's root, so
+  // a modal that makes the page inert never hides it.
+  expect(root.contains(region)).toBe(false);
+  expect(region!.parentElement).toBe(document.body);
   expect(document.querySelectorAll('[data-notice-region]')).toHaveLength(1);
 }
 

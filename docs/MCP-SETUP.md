@@ -1475,8 +1475,13 @@ Rules:
   (look_at_canvas, start_here, GET /api/canvas/pins without the person's
   token, the snapshot JSON), `nebula pins` / `nebula look` / `nebula
   start`, a resolve's answer, the events feed (`text`, `reply`,
-  `summary`) and the channel push. 280 ideographs whose selectors spell an
-  instruction reach you as 280 bare ideographs. Whitespace (and a byte order mark) at
+  `summary`), the channel push, and the `canvasPins` message on a raw
+  `/ws` socket (PR #200 fix round 16, review 14 LOW-1: only a socket whose
+  `{type: "hello"}` carried the person's token gets the shown form; every
+  other socket gets this form, on connect and on every push). The channel
+  push also drops every tag character from a note, so the England,
+  Scotland and Wales flags read there as a plain black flag. 280 ideographs
+  whose selectors spell an instruction reach you as 280 bare ideographs. Whitespace (and a byte order mark) at
   the ends of a note or reply is trimmed, and the note is stored trimmed;
   the spaces and blank lines inside are kept as typed and count. A note of
   only whitespace is empty (422, "Note can't be empty"). The 280 counts only

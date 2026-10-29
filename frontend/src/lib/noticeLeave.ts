@@ -1,4 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState, type AnimationEvent, type ReactNode } from 'react';
+import { dialogStart, openModalDialog } from './modalFocus';
 
 /**
  * The one place a notice-region item leaves (fix round 7 of PR #200, GM r11
@@ -147,7 +148,8 @@ function focusOn(target: HTMLElement): void {
  * focus, focus lands on the next notice's × (else the one before's), never
  * on a primary or destructive action (Run, Restore, Undo, Delete), so a
  * second Enter (a double press, key repeat) can only dismiss. A notice with
- * no × takes focus itself. With no notice left, focus goes to the surface's
+ * no × takes focus itself. With no notice left and a dialog open, focus goes
+ * back to the dialog's field (GM r25). Else it goes to the surface's
  * start of page content: the Projects "Recent projects" heading, the canvas,
  * or the screen's <main>. Never <body>. It runs as the leave starts, before
  * the item's `inert` drops focus.
@@ -172,6 +174,9 @@ export function moveFocusFromLeave(leaving: HTMLElement): void {
     if (close) { close.focus({ preventScroll: true }); return; }
     if (notice !== own) { focusOn(notice); return; }
   }
+  // GM r25: with a dialog open, back to the dialog's field, never the page behind it.
+  const dialog = document.querySelector('[aria-modal="true"]') ? openModalDialog() : null;
+  if (dialog) { focusOn(dialogStart(dialog) ?? dialog); return; }
   const start = document.getElementById('recent-projects-title')
     ?? document.querySelector<HTMLElement>('.canvas-wrapper')
     ?? [...document.querySelectorAll<HTMLElement>('main')].find((main) => !main.closest('[inert]')) ?? null;

@@ -210,7 +210,7 @@ def api(tmp_path, monkeypatch, person):
     journal = CanvasEventJournal()
     sent: list[dict] = []
 
-    async def capture(data):
+    async def capture(data, **kw):
         sent.append(data)
 
     monkeypatch.setattr(main_module, "cli_graph", graph)
@@ -683,7 +683,7 @@ def test_a_pin_added_between_a_switchs_commit_and_its_broadcast_wakes_claude(api
     added: dict = {}
     capture = main_module.manager.broadcast_raw
 
-    async def pin_mid_switch(data):
+    async def pin_mid_switch(data, **kw):
         await capture(data)
         if data.get("type") == "graphSync" and data.get("graphReplaced") and not added:
             added["at"] = store.read()["activeProjectId"]
@@ -726,7 +726,7 @@ def test_a_pin_route_journals_before_a_switch_can_overtake_it(api, monkeypatch, 
         assert first.status_code == 201, first.text
         first_id = first.json()["pin"]["id"]
 
-    async def switch_and_pin(data):
+    async def switch_and_pin(data, **kw):
         await capture(data)
         if data.get("type") == "canvasPins" and "armed" in done and "pin" not in done:
             done["pin"] = None
