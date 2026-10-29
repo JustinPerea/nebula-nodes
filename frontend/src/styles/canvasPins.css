@@ -182,6 +182,7 @@
    scales. While PinComposer measures the open list it holds the expand, so
    the list is sized to whole rows. */
 .canvas-pin-toast--error,
+.canvas-pin-toast--notice,
 .canvas-pin-kept-stack {
   animation: notice-surface-in 420ms var(--notice-spring) both;
 }
@@ -226,7 +227,8 @@
 /* Round 23 (review 22, M-1): a note that wasn't added because its canvas
    went keeps its text here, in the neutral notice colours (it is no error of
    the person's). The text wraps; Copy and × stay centred on the right. */
-.canvas-pin-toast--kept {
+.canvas-pin-toast--kept,
+.canvas-pin-toast--notice {
   border-color: #333;
   color: #d8d8d8;
 }
@@ -334,6 +336,7 @@
   }
   /* Opacity only (GM r9 answer 2). */
   .canvas-pin-toast--error,
+  .canvas-pin-toast--notice,
   .canvas-pin-kept-stack,
   .canvas-pin-toast--kept[data-entering] {
     animation: notice-fade-in 180ms ease-out both;

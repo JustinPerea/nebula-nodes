@@ -8,6 +8,7 @@ From the reviewer's probe (r9 be/fuzz9.py): its "raw store" half reached 2,409
 to 2,962 leaks per path before this round."""
 from __future__ import annotations
 
+import json
 import random
 import tempfile
 from pathlib import Path
@@ -128,7 +129,9 @@ def test_the_store_keeps_the_note_and_the_reply_byte_for_byte_and_its_outputs_st
             refused += 1
             continue
         stored = next(p for p in store.projection().pins if p["id"] == added["id"])
-        assert stored["text"] == raw and stored["text"].encode() == raw.encode()
+        # As typed but for whitespace at its ends (GM r19 answer 1: trimmed, so
+        # what is saved is what was counted).
+        assert stored["text"] == raw.strip() and stored["text"].encode() == raw.strip().encode()
         assert not bad(added["text"])
         reply = "re " + raw.replace("\n", " ")
         try:
@@ -137,7 +140,7 @@ def test_the_store_keeps_the_note_and_the_reply_byte_for_byte_and_its_outputs_st
             answered = None
         if answered is not None:
             stored = next(p for p in store.projection().pins if p["id"] == added["id"])
-            assert stored["reply"]["text"] == reply
+            assert stored["reply"]["text"] == reply.strip()
             assert not bad(answered["reply"]["text"])
         for listing in (pins.list()["pins"], pins.for_agents()["pins"]):
             for pin in listing:
@@ -204,6 +207,89 @@ def test_280_visible_characters_fit_whatever_their_code_points():
     assert ok["text"] == accented
 
 
+# Review 11 MEDIUM-1 and NIT-3, GM r19 answer 1 (fix round 12): the shared
+# corpus (the named cases GM asked for and a seeded fuzz). The frontend's
+# agentPresenceFollowups.r12text.test.ts checks its strip and count against
+# the same file.
+CORPUS = json.loads((Path(__file__).parent / "fixtures" / "pin_text_cases.json").read_text())["cases"]
+
+
+def test_the_shared_corpus_shows_and_counts_as_written():
+    off = [c["name"] for c in CORPUS
+           if shown_text(c["typed"]) != c["note"] or text_length(c["note"]) != c["noteLength"]
+           or shown_text(c["typed"], multiline=False) != c["reply"] or text_length(c["reply"]) != c["replyLength"]]
+    assert off == []
+    named = {c["name"]: c for c in CORPUS}
+    for name in ("family emoji", "England flag", "a scientist with a skin tone", "a keycap"):
+        assert named[name]["note"] == named[name]["typed"] and named[name]["noteLength"] == 1, name
+    assert named["text and emoji hearts"]["note"] == "\u2665\ufe0e\u2665\ufe0f"
+    assert named["a selector after a letter"]["note"] == "a"
+    assert named["an ideographic selector"]["note"] == "\u845b"  # GM r19: only FE0E/FE0F stay
+    assert named["a ZWJ between letters"]["note"] == "ab"
+    assert named["tags without the black flag"]["note"] == "a"
+    assert named["whitespace at the ends"]["note"] == "hi there"
+    assert named["blank lines inside"]["note"] == "one\n\n\n   \ntwo"
+
+
+def test_a_seeded_fuzz_leaves_no_stray_selector_joiner_or_tag_on_any_output():
+    rng = random.Random(1028)
+    pool = ["a", " ", "\n", "\u0301", "\ufe0e", "\ufe0f", "\ufe00", "\u034f", "\u200d", "\U0001F468", "\U0001F3FD",
+            "\U0001F3F4", "\U000E0067", "\U000E007F", "\U000E0100", "\u2665", "1", "\u845b", "\x1b[1m"]
+    for _ in range(3000):
+        typed = "".join(rng.choice(pool) for _ in range(rng.randint(1, 20)))
+        for shown in (shown_text(typed), shown_text(typed, multiline=False), one_line(typed)):
+            for index, char in enumerate(shown):
+                code = ord(char)
+                if 0xFE00 <= code <= 0xFE0F or 0xE0100 <= code <= 0xE01EF or code == 0x34F:
+                    assert code in (0xFE0E, 0xFE0F) and index and shown[index - 1] not in "\ufe0e\ufe0f\u200d", repr(typed)
+                if char == "\u200d":
+                    assert 0 < index < len(shown) - 1, repr(typed)
+                if 0xE0020 <= code <= 0xE007F:
+                    assert next(p for p in reversed(shown[:index]) if ord(p) < 0xE0020) == "\U0001F3F4", repr(typed)
+
+
+def test_whitespace_is_trimmed_and_stored_trimmed_and_whitespace_alone_is_empty(tmp_path):
+    store, _ = _store_with_projects(tmp_path, "Active")
+    pins = CanvasPins(store, clock=Clock())
+    _, made = pins.add_in("  \n  look here  \n\n  ", position={"x": 0, "y": 0}, graph_nodes={})
+    assert made["text"] == "look here"
+    assert store.projection().pins[0]["text"] == "look here"  # stored trimmed: saved is what was counted
+    for blank in (" ", "\n\n\t ", "\x1b[31m   \x1b[0m"):
+        with pytest.raises(PinError) as empty:
+            pins.add_in(blank, position={"x": 0, "y": 0}, graph_nodes={})
+        assert empty.value.detail == "Note can't be empty" and empty.value.extra == {}
+    # Spaces and blank lines inside are visible: 1,200 of them are too long, never hidden text.
+    with pytest.raises(PinError) as long:
+        pins.add_in("x" + " " * 1200 + "y", position={"x": 0, "y": 0}, graph_nodes={})
+    assert "280 characters or fewer" in long.value.detail
+    with pytest.raises(PinError) as lines:
+        pins.add_in("x" + "\n" * 1500 + "y", position={"x": 0, "y": 0}, graph_nodes={})
+    assert "280 characters or fewer" in lines.value.detail
+
+
+def test_a_payload_in_invisible_marks_is_hidden_text_and_never_reaches_an_agent(api):
+    client, graph, _journal, _sent, store, _ids = api
+    node = graph.add_node("text-input", {})
+    smuggled = "".join(chr(0x61 + i % 26) + "".join(chr(0xE0100 + (i * 32 + j) % 240) for j in range(32)) for i in range(MAX_PIN_TEXT))
+    refused = client.post("/api/canvas/pins", headers=PERSON, json={"text": smuggled, "nodeId": node})
+    assert refused.status_code == 422 and refused.json()["code"] == "note_hidden_too_long"
+    assert refused.json()["hiddenBytes"] == 4 * 32 * MAX_PIN_TEXT
+    cgj = client.post("/api/canvas/pins", headers=PERSON, json={"text": "x" + "\u034f" * 600, "nodeId": node})
+    assert cgj.status_code == 422 and cgj.json()["code"] == "note_hidden_too_long"
+    assert not store.projection().pins
+    # Under the cap, stored as typed, and no output carries a mark past the first.
+    typed = "go" + "\U000E0100" * 32 + " \u2764\ufe0f\ufe0f"
+    made = client.post("/api/canvas/pins", headers=PERSON, json={"text": typed, "nodeId": node})
+    assert made.status_code == 201 and made.json()["pin"]["text"] == "go \u2764\ufe0f"
+    assert client.get("/api/canvas/pins").json()["pins"][0]["text"] == "go \u2764\ufe0f"
+    assert text_length("go \u2764\ufe0f") == 4
+    family = "\U0001F468\u200d\U0001F469\u200d\U0001F467\u200d\U0001F466"
+    england = "\U0001F3F4\U000E0067\U000E0062\U000E0065\U000E006E\U000E0067\U000E007F"
+    whole = client.post("/api/canvas/pins", headers=PERSON, json={"text": f"{family} {england} \u2665\ufe0e\u2665\ufe0f", "nodeId": node})
+    assert whole.status_code == 201
+    assert whole.json()["pin"]["text"] == f"{family} {england} \u2665\ufe0e\u2665\ufe0f"
+
+
 def test_a_refused_hidden_text_answers_its_code_and_counts_beside_the_persons_line(api):
     client, graph, _journal, _sent, store, _ids = api
     node = graph.add_node("text-input", {})
@@ -227,10 +313,11 @@ def test_routes_store_as_typed_and_every_answer_journal_and_broadcast_is_strippe
     created = client.post("/api/canvas/pins", headers=PERSON, json={"text": typed, "nodeId": node})
     assert created.status_code == 201, created.text
     pin = created.json()["pin"]
-    assert pin["text"] == "say\nline two end\nx"  # \x85 is NEL, a line break
-    assert store.projection().pins[0]["text"] == typed
+    # \x85 is NEL, a line break; spaces inside show as typed (GM r19 answer 1).
+    assert pin["text"] == "say \nline two end \nx"
+    assert store.projection().pins[0]["text"] == typed.strip()
     listed = client.get("/api/canvas/pins").json()["pins"][0]
-    assert listed["text"] == "say\nline two end\nx"
+    assert listed["text"] == "say \nline two end \nx"
     reply = "done \x1b[1mbold\x1b[0m\x9b2J and \x07bell\nnext"
     answered = client.post(f"/api/canvas/pins/{pin['id']}/resolve", headers=AGENT, json={"reply": reply})
     assert answered.status_code == 200, answered.text
@@ -273,10 +360,10 @@ def test_detach_and_reattach_hand_back_the_shown_text_and_keep_the_typed_text(tm
             continue
         detached = pins.detach_node("n4", {"x": 1, "y": 2}, removal="rm_1", definition_id="text-input")
         assert detached and all(not bad(s) for pin in detached for s in _strings(pin)), (repr(raw), detached)
-        assert next(p for p in store.projection().pins if p["id"] == added["id"])["text"] == raw
+        assert next(p for p in store.projection().pins if p["id"] == added["id"])["text"] == raw.strip()
         back = pins.reattach([{"id": "rm_1", "nodeId": "n4", "pins": [added["id"]]}], {"n4": "text-input"}, project)
         assert all(not bad(s) for pin in back["reattached"] for s in _strings(pin)), (repr(raw), back)
-        assert next(p for p in store.projection().pins if p["id"] == added["id"])["text"] == raw
+        assert next(p for p in store.projection().pins if p["id"] == added["id"])["text"] == raw.strip()
         pins.remove_in(added["id"])
         checked += 1
     assert checked > 150

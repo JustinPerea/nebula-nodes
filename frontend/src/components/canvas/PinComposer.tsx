@@ -40,6 +40,7 @@ export function PinComposer() {
   const cancel = useCanvasPinsStore((s) => s.cancelCompose);
   const setDraft = useCanvasPinsStore((s) => s.setDraft);
   const error = useCanvasPinsStore((s) => s.error);
+  const errorTone = useCanvasPinsStore((s) => s.errorTone);
   const errorProject = useCanvasPinsStore((s) => s.errorProject);
   const clearError = useCanvasPinsStore((s) => s.clearError);
   const kept = useCanvasPinsStore((s) => s.kept);
@@ -83,7 +84,11 @@ export function PinComposer() {
   // row count changes then), never at its start.
   const stackLeave = useLeave(kept.length > 0 ? true : null);
   const { rows, rowProps } = useLeavingRows(shown, (note) => note.project, { hold: stackLeave.leaving });
-  const errorLeave = useLeave(error && !composer && (errorProject === null || errorProject === here) ? error : null);
+  // A red error shows once the dialog has closed; a neutral notice (GM r18
+  // Q1) shows beside the dialog it leaves open. The tone goes with the text,
+  // so a leaving toast keeps its look.
+  const toast = useMemo(() => (error ? { text: error, tone: errorTone } : null), [error, errorTone]);
+  const errorLeave = useLeave(toast && (!composer || toast.tone === 'notice') && (errorProject === null || errorProject === here) ? toast : null);
 
   // Back to the newest two once no note is hidden (the next one kept starts
   // collapsed again).
@@ -208,8 +213,9 @@ export function PinComposer() {
       {/* In the app's notice region, like every toast (GM - Design, 2026-10-23). */}
       {errorLeave.shown && (
         <InNoticeRegion slot="pin">
-          <div className="canvas-pin-toast canvas-pin-toast--error" role="alert" {...errorLeave.props}>
-            <span>{errorLeave.shown}</span>
+          <div className={`canvas-pin-toast canvas-pin-toast--${errorLeave.shown.tone === 'notice' ? 'notice' : 'error'}`}
+            role={errorLeave.shown.tone === 'notice' ? 'status' : 'alert'} {...errorLeave.props}>
+            <span>{errorLeave.shown.text}</span>
             <button type="button" onClick={clearError} aria-label="Dismiss">×</button>
           </div>
         </InNoticeRegion>

@@ -221,19 +221,19 @@ def clean_text(raw: Any, limit: int = MAX_TEXT, *, multiline: bool = False) -> s
     text = unicodedata.normalize("NFKC", str(raw or ""))
 
     def plain(line: str) -> str:
-        line = "".join(ch for ch in line if unicodedata.category(ch) not in _HIDDEN)
+        # A pin's note arrives already shown (services.canvas_pins.shown_text),
+        # where a zero-width joiner or tag character is left only inside an
+        # emoji sequence (a family, the England flag: GM r19 answer 1, PR #200
+        # fix round 12), so a note keeps them; everything else drops all Cf.
+        line = "".join(ch for ch in line if unicodedata.category(ch) not in _HIDDEN
+                       or (multiline and (ch == "\u200d" or "\U000E0020" <= ch <= "\U000E007F")))
         return line.replace("<", "‹").replace(">", "›").replace('"', "'")
 
     lines = [plain(line) for line in text.splitlines()]
     if multiline:
-        # Blank lines go from the ends only; the first line keeps its indent
-        # (fix round 6 of PR #200, review 6 N-2).
-        kept = [line.rstrip() for line in lines]
-        while kept and not kept[0]:
-            kept.pop(0)
-        while kept and not kept[-1]:
-            kept.pop()
-        text = "\n".join(kept)
+        # Whitespace goes from the ends; inside, spaces and blank lines stay
+        # as the note shows them (GM r19 answer 1, PR #200 fix round 12).
+        text = "\n".join(lines).strip()
     else:
         text = " ".join(" ".join(lines).split())
     return text if len(text) <= limit else text[: limit - 1] + "…"

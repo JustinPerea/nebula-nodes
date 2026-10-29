@@ -4,6 +4,7 @@ import '../styles/prompt-dialog.css';
 import { ModalPortal } from './ModalPortal';
 import type { ActProps } from '../lib/canvasLock';
 import { composing } from '../lib/imeComposing';
+import { fitEdit } from '../lib/fitEdit';
 
 export interface PromptRequest {
   label: string;
@@ -55,10 +56,25 @@ export function PromptDialog({ request, onDone, maxLength, fit, onChange, confir
     return () => { if (previous instanceof HTMLElement && previous.isConnected) previous.focus(); };
   }, [multiline]);
 
-  const change = (typed: string) => {
-    const next = fit ? fit(typed) : typed;
+  const change = (typed: string, field: HTMLInputElement | HTMLTextAreaElement) => {
+    if (!fit || fit(typed) === typed) {
+      setValue(typed);
+      onChange?.(typed);
+      return;
+    }
+    // Over the cap (review 11 LOW-1 of PR #200): only what was just typed or
+    // pasted is cut, where it went in; the rest of the note and the caret stay.
+    // Nothing of it fits in a full note: the keystroke is refused, as
+    // maxLength refuses it.
+    const fitted = fitEdit(value, typed, end(field), (text) => fit(text) === text);
+    const next = fitted?.text ?? (fit(value) === value ? value : fit(typed));
+    // The caret back where the edit went in. After React has put the
+    // controlled value back (it does so once this handler returns, and that
+    // moves the caret to the end), so in a microtask.
+    const at = fitted?.caret ?? (next === value ? Math.max(0, end(field) - (typed.length - value.length)) : next.length);
     setValue(next);
-    onChange?.(next);
+    if (next !== value) onChange?.(next);
+    queueMicrotask(() => { if (field.isConnected) field.setSelectionRange(at, at); });
   };
 
   const submit = (event: FormEvent) => {
@@ -99,7 +115,7 @@ export function PromptDialog({ request, onDone, maxLength, fit, onChange, confir
           {request.label}
           {multiline
             ? <AutoGrowTextarea textareaRef={input as RefObject<HTMLTextAreaElement | null>} rows={1} value={value} maxLength={maxLength}
-                onChange={(event) => change(event.target.value)}
+                onChange={(event) => change(event.target.value, event.target)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' && !event.shiftKey && !composing(event)) {
                     event.preventDefault();
@@ -107,7 +123,7 @@ export function PromptDialog({ request, onDone, maxLength, fit, onChange, confir
                   }
                 }} />
             : <input ref={input as RefObject<HTMLInputElement | null>} value={value} maxLength={maxLength}
-                onChange={(event) => change(event.target.value)} />}
+                onChange={(event) => change(event.target.value, event.target)} />}
         </label>
         <div className="prompt-dialog__actions">
           <button type="button" onClick={() => onDone(null)}>Cancel</button>
@@ -118,3 +134,6 @@ export function PromptDialog({ request, onDone, maxLength, fit, onChange, confir
     </ModalPortal>
   );
 }
+
+const end = (field: HTMLInputElement | HTMLTextAreaElement) => field.selectionEnd ?? field.value.length;
+

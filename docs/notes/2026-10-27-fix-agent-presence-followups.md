@@ -1379,3 +1379,160 @@ questions (gm-r12r10-answers.md items 3 to 5), built as written.
   - The neutral resets' hover and pressed crops. Nothing changes when
     pressed.
   - The key row's Remove and the armed Remove. They look the same.
+
+## Fix round 12
+
+GM r18 (head 2c3e95e8).
+
+- Q1, the hidden-text refusal. The toast now reads only "This note has too
+  much hidden text to save. Paste it as plain text, then try again." It is
+  a neutral status (`canvas-pin-toast--notice`, the kept note's #333 edge
+  and #d8d8d8 ink, role=status), not the red alert. The dialog stays open
+  with the note as typed. The store reads the refusal by its `code`
+  (note_hidden_too_long), never its words, and sets `errorTone: 'notice'`.
+  It doesn't also save the note as a draft: the open dialog holds it, and
+  × or Esc keeps it as one. (A draft saved alongside would have come back
+  after the plain-text send.)
+  - Every other pin refusal keeps the "Couldn't add the pin." / "Couldn't
+    save the note." / "Couldn't remove the pin." heading and the red
+    `canvas-pin-toast--error`: over 280 characters, other 4xx, 5xx, no
+    answer, and a failed delete. Reported to GM, not changed.
+- Capture 1: the shot was faithful. The armed confirm was the tint with red
+  ink, the same as its trigger's hover. `.settings__confirm--danger` is now
+  the filled confirm that the other destructive confirms use: the
+  `--sr-danger-fill` fill with `--sr-on-danger` ink, and the lighter fill on
+  hover and pressed.
+- Capture 2: the press was held (the red cells in the same pass changed
+  colour). Editor zoom reset, world camera reset and mask Erase had no
+  pressed state at all. They now take the toolbar's press: scale(0.96),
+  80 ms ease-out down. The other neutral cells in the sheet (chips, upload,
+  shot ×, the other resets) have no pressed state either; flagged to GM.
+- Forget ID's amber outline was not a focus ring. It was the World Labs
+  safeguards box's own warning border and tint, which the round-10 probe
+  cell hugged around the button. The box is now neutral in both skins
+  (`--sr-edge-strong` / `--sr-surface-control`; #383838 / #1e1e1e in the
+  legacy skin, its buttons too). Its title still says what it is.
+  - Ratchet: `frameFindings` builds each red control's JSX ancestors in
+    the app theme. It flags any border, outline, shadow or background, at
+    rest or on hover, drawn in the accent, warning amber, error orange, a
+    warm colour or an amber hue. It has a corpus test: the old safeguards
+    box, an amber row outline, an accent shadow and an amber left edge are
+    caught; neutral, danger-token and focus-ring frames stay quiet.
+  - One frame waits on GM (`FRAME_PENDING_GM`): the open pin card's amber
+    identity edge (`--pin-color` #e8a33d, the pin's own colour, as its
+    badge) around "Delete note". It is named by file and selector, so a
+    new frame is still a finding.
+- Wording batch (not this PR): the colons in "Using scene palette: No
+  palette", "Using scene film look: No film look" and "Selected:
+  openrouter/model".
+- Review 11 and GM r19 (both landed during this round; folded in):
+  - MEDIUM-1: marks that draw nothing (the variation selectors FE00-FE0F
+    and E0100-E01EF, U+034F, the Mongolian FVS, Khmer 17B4/17B5) are
+    category Mn. They passed the Cc/Cf strip, weren't counted as hidden
+    bytes, and folded into the letter before, so 32 per letter carried 36 KB
+    to every agent. Both strips (backend `_plain`, frontend `plain` in
+    `pinDisplayText`) now drop what draws nothing, with GM r19's three
+    guards:
+    - one FE0E/FE0F stays right after a character that takes it (an emoji
+      in the pictographic ranges, or a keycap's 0-9, # or *);
+    - a ZWJ stays inside an emoji ZWJ sequence (emoji, optional FE0F and
+      skin tone, ZWJ, emoji);
+    - tag characters stay only as a tag flag after U+1F3F4 (1-7 tags and
+      the cancel tag).
+    Every other selector (ideographic and Mongolian ones too, per GM),
+    joiner and tag is hidden text, so the 1,120-byte cap holds and no output
+    carries them. The count makes a ZWJ or tag sequence one character, its
+    parts counting toward the 32. Both sides use one explicit pictographic
+    range table (no `\p{Extended_Pictographic}`), so they can't drift.
+  - The channel's own clean_text keeps a ZWJ and tags in a pin note: it
+    arrives already shown, so they are valid there. Its multiline whitespace
+    matches the new rule.
+  - Shared corpus: `backend/tests/fixtures/pin_text_cases.json`, 423 cases.
+    It has GM's named cases (the family, the England flag, ♥︎/♥️, a
+    scientist with a skin tone, a keycap, 32 selectors on a letter, the
+    whitespace cases, Hangul, a mark after a break) and a seeded fuzz, each
+    as a note and as a reply. Both sides' tests check it.
+    - There is a fuzz on each side (3,000 backend, 2,000 frontend): no
+      output keeps a selector that isn't right after a base, a stray ZWJ,
+      or a tag outside a black-flag sequence.
+    - The 36 KB note is refused with hiddenBytes 35,840 (unit test and
+      live).
+  - NIT-2 (GM r19): whitespace at the ends is trimmed and the note or reply
+    is stored trimmed, the one exception to "as typed". This replaces review
+    6 N-2's kept first-line indent. Spaces and blank lines inside are kept
+    and count as visible (1,200 inner spaces is "280 characters or fewer",
+    not hidden text). A reply no longer collapses its spaces; a line break
+    in it reads as one space. Whitespace alone is "Note can't be empty".
+    Proposal notes (`canvas_proposals.clean_note`) still collapse to one
+    line: GM's rule is for notes and replies.
+  - NIT-3: no grapheme package is installed in the backend (no `regex`,
+    `grapheme` or ICU), so I didn't add one. Both counts now apply the UAX
+    #29 rules that matter after the strip: a mark after a line break is its
+    own character, Hangul L/V/T jamo join into one syllable (GB6-GB8), and
+    emoji ZWJ and tag sequences are one character. ZWJ sequences that the
+    strip breaks count per part on both sides, matching what shows. Those
+    cases are in the corpus.
+  - LOW-1: typing into a full note dropped its last character and threw the
+    caret to the end. The dialog now cuts only the inserted span, where it
+    went in (`lib/fitEdit.ts`). A full note refuses the keystroke or paste,
+    as maxLength did, and the caret goes back in a microtask, after React
+    has put the controlled value back. Live checks: the start, "MID" at 100,
+    a paste at 150 into a full note, and a paste into a note with room for
+    5.
+  - NIT-1: `fitNote` and `fitEdit` try up to 64 code points past the binary
+    search's answer and keep the longest that fits. A cut never stops inside
+    an escape code that a longer start keeps whole.
+  - NIT-4 (ratchet):
+    - The built control carries `aria-pressed` ("true" on, "false" off) and
+      an svg child. `[aria-pressed="false"]:hover` and `:hover svg { fill }`
+      accents are caught (svg rules only when they name the control's
+      class).
+    - `--fav`, `--favorite` and `is-on`/`is-active` are on-state names.
+    - It now reads nested (`L.a.del`) and bracket (`L["del"]`) properties,
+      camelCase keys (`t("deleteProject")`), `<Eraser />` (as "Erase"), and
+      `dangerouslySetInnerHTML={{ __html: html }}` from a const.
+    - A menu item's `label`, `title` and `text` are each read.
+    - Side effect: the filled `.settings__confirm--danger` joined the shared
+      filled-button disabled rule (disabled-buttons.css).
+  - Leaves (GM r19 answer 2): only a stalled leave is rescued. A running
+    leave planned past 2,300 ms logs a `console.warn` in development
+    (`import.meta.env.DEV`). The production bundle was checked: the string
+    isn't in it.
+- MCP: the 422 body is the same. MCP-SETUP.md now covers what draws nothing
+  (dropped except the three emoji guards), the trimmed storage, inner
+  whitespace that counts, a whitespace-only note being empty, and replies
+  not collapsing.
+
+### Fix round 12 gates
+
+- Backend, full suite (isolated): 11,750 passed, 71 skipped. The first
+  full run hit its 40-minute limit at 82% (with no failure) while the
+  frontend suite ran beside it; the rerun alone took 20m48s.
+- Frontend, full vitest (6 workers): 7,281 passed, 45 failed in 24 files,
+  almost all timeouts under load. Rerun alone (3 workers), 22 of those
+  files pass. The other 2 failed on old whitespace expectations
+  (r4 keptNoteDisplay and title, r10 pinDisplayText), updated to GM r19's
+  rule; they pass.
+- tsc -b clean, eslint clean. The vite build into a scratch outDir passes
+  the budget at 419,511 B raw / 128,438 B gzip and the font check. The
+  dev-only leave warning isn't in the production bundle.
+- The corpus generator is `backend/tests/fixtures/gen_pin_text_cases.py`;
+  rerunning it reproduces the fixture byte for byte.
+- Live (backend 8795, Vite 5795, nothing paid, 0 requests toward
+  8000-8010 or 5173):
+  - r11 and r12: 22 of 22. That covers the neutral notice over the open
+    dialog, the 36 KB selector note refused, the family / England / ♥︎♥️
+    whole through the API, GET /pins and `nebula pins`, whitespace alone
+    being empty and 1,200 inner spaces being too long, the full-note
+    keystroke and paste checks, the filled confirm, the three pressed
+    states and the neutral Forget ID box.
+  - exits, openlist, undo, colours, leave9 and r10: 42 of 42. The colours
+    and r10 harness checks now expect the filled armed confirm.
+  - Harness fixes:
+    - setPins sets errorTone 'error' with an error;
+    - the r11 hidden-text check reads the notice;
+    - one fetch retry for a keep-alive socket after a sync child process.
+- Shots: 24 fix12 and 60 fix12reg, each looked at. md5 duplicates:
+  - the float shot before and after Undo, the same state as in round 11;
+  - in an earlier pass, the r11 and r12 hidden-text toasts, the same
+    notice.

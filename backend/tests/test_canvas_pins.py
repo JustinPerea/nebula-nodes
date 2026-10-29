@@ -57,7 +57,8 @@ def _activate(store: ProjectStore, project_id: str) -> None:
 # -- text and caps ----------------------------------------------------------
 
 def test_text_is_plain_single_line_and_capped():
-    assert clean_text("  warmer\n\tplease\x00\x1b[31m ‮ ", limit=280) == "warmer please"  # the colour code goes whole (PR #200 fix round 6, review 6 N-4)
+    # A break and a tab read as spaces, kept inside (GM r19 answer 1, PR #200 fix round 12).
+    assert clean_text("  warmer\n\tplease\x00\x1b[31m ‮ ", limit=280) == "warmer  please"  # the colour code goes whole (PR #200 fix round 6, review 6 N-4)
     assert clean_text("x" * MAX_PIN_TEXT, limit=MAX_PIN_TEXT) == "x" * MAX_PIN_TEXT
     for bad in ("", "   \n", None, 42, "x" * (MAX_PIN_TEXT + 1)):
         with pytest.raises(PinError) as exc:
@@ -144,7 +145,7 @@ def test_resolve_detach_and_agent_view(tmp_path):
     other = pins.add("later", position={"x": 0, "y": 0}, graph_nodes=nodes)
     resolved = pins.resolve(pin["id"], "Warmed  the grade\non n7", CODEX)
     assert resolved["status"] == "resolved"
-    assert resolved["reply"]["text"] == "Warmed the grade on n7"
+    assert resolved["reply"]["text"] == "Warmed  the grade on n7"  # spaces inside as typed (GM r19)
     assert resolved["reply"]["agent"]["name"] == "Codex"
     again = pins.resolve(pin["id"], "Second answer", CODEX)
     assert again["reply"]["text"] == "Second answer"

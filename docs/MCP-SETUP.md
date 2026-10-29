@@ -1453,16 +1453,24 @@ Rules:
 - `POST /api/canvas/pins/{id}/resolve` needs a named agent
   (`NEBULA_AGENT_NAME`, `--as`, or an in-app agent token).
 - Text is plain text, control characters dropped, 1–280 characters for
-  notes and replies. Nebula stores a note and a reply exactly as typed (PR
-  #200 fix round 10), and every place that shows one strips it: the API's
+  notes and replies. Nebula stores a note and a reply as typed but trimmed at both ends (PR
+  #200 fix rounds 10 and 12), and every place that shows one strips it: the API's
   pins, events and their summaries, the CLI, the channel push and the
   canvas. So what you read never carries a control byte (no C0 but `\n`, no
-  C1, no ESC). The 280 counts only what shows: characters as a person sees
+  C1, no ESC, no format character). What draws nothing is dropped too:
+  variation selectors and the combining grapheme joiner, except one U+FE0E
+  or U+FE0F right after an emoji (or a keycap's digit); a zero-width joiner,
+  except inside an emoji ZWJ sequence (a family); tag characters, except an
+  emoji tag flag (England, Scotland, Wales). Real emoji reach you whole,
+  extra selectors never. Whitespace at the ends of a note or reply is
+  trimmed, and the note is stored trimmed; the spaces and blank lines inside
+  are kept as typed and count. A note of only whitespace is empty (422,
+  "Note can't be empty"). The 280 counts only what shows: characters as a person sees
   them (a letter with its accents, a flag) in the stripped text, the same
   count the note dialog uses. What the strip drops is hidden text; up to
   1,120 bytes of it (UTF-8) is kept as typed. Past that the note or reply is
   refused (422) with `"code": "note_hidden_too_long"`, `rawBytes`,
-  `hiddenBytes` and `limitBytes` beside `detail`. A reply is one line (whitespace collapsed). A note keeps
+  `hiddenBytes` and `limitBytes` beside `detail`. A reply is one line (a line break reads as a space). A note keeps
   the lines the person wrote (Shift+Enter in the note dialog): its newlines
   reach agents as `\n` in `pins[].text` (look_at_canvas, start_here, the
   snapshot JSON). `nebula pins`, `nebula look` and `nebula start` print a

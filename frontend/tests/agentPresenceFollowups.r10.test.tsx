@@ -305,10 +305,11 @@ describe('GM r16 answer 3: the canvas shows a note and a reply stripped, whateve
   });
 
   it('it matches the backend\'s shown form on the forms review 9 tried', () => {
-    expect(pinDisplayText('say \x1bPlease\tkeep  \nline two \x1b]0;t\x07end \x85x‮   ')).toBe('say\nline two end\nx');
+    // Spaces inside stay (GM r19 answer 1, fix round 12), as the backend now shows them.
+    expect(pinDisplayText('say \x1bPlease\tkeep  \nline two \x1b]0;t\x07end \x85x‮   ')).toBe('say \nline two end \nx');
     expect(pinDisplayText('done \x1b[1mbold\x1b[0m\x9b2J and \x07bell\nnext', { multiline: false })).toBe('done bold and bell next');
-    expect(pinDisplayText('  indented\n\n\n\nnext', { fold: false })).toBe('  indented\n\n\n\nnext');
-    expect(pinDisplayText('  indented\n\n\n\nnext')).toBe('  indented\nnext');
+    expect(pinDisplayText('  indented\n\n\n\nnext', { fold: false })).toBe('indented\n\n\n\nnext');
+    expect(pinDisplayText('  indented\n\n\n\nnext')).toBe('indented\nnext');
   });
 
   it('the pin card, its label and the reply show stripped text (200 raw notes and replies)', () => {

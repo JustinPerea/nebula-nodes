@@ -145,7 +145,10 @@ class ProposalSpec:
 
 def clean_note(raw: Any, *, limit: int = MAX_NOTE, label: str = "note") -> str:
     try:
-        return clean_text(raw, limit=limit, label=label)
+        # A proposal's note stays one line with its spaces collapsed: GM r19's
+        # "spaces inside show as typed" is for notes and replies (PR #200 fix
+        # round 12), not this summary line.
+        return " ".join(clean_text(raw, limit=limit, label=label).split())
     except PinError as exc:
         raise ProposalError(422, exc.detail) from exc
 

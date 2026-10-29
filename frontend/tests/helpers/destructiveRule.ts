@@ -326,17 +326,25 @@ const camelWords = (name: string) => name.replace(/([a-z])([A-Z])/g, '$1 $2').re
 function strings(node: ts.Node, source: ts.SourceFile, calls = true): string[] {
   const out: string[] = [];
   const visit = (n: ts.Node): void => {
-    if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) { out.push(n.text); if (KEY_LIKE.test(n.text)) out.push(keyWords(n.text)); }
+    if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) {
+      out.push(n.text);
+      // A key read as words: 'actions.delete', and camelCase too (review 11 NIT-4: t("deleteProject")).
+      if (KEY_LIKE.test(n.text) || CAMEL_KEY.test(n.text)) out.push(keyWords(n.text));
+    }
     else if (ts.isTemplateExpression(n)) out.push(n.head.text + n.templateSpans.map((span) => `…${span.literal.text}`).join(''));
     else if (ts.isJsxText(n)) { if (n.text.trim()) out.push(n.text.trim()); }
     // A nested element's attributes (its className, its own label) aren't the control's words.
     else if (ts.isJsxAttributes(n)) return;
     // i18n read as words: strings.deleteProject, messages.actions.clear (review 9 LOW-4).
-    else if (ts.isPropertyAccessExpression(n) && !ts.isCallExpression(n.parent)
-      && (ts.isJsxExpression(n.parent) || ts.isPropertyAccessExpression(n.parent))) {
-      out.push(camelWords(n.name.text));
-      // An object's property (review 10 NIT-4): const L = { del: 'Delete' }; {L.del}.
-      if (ts.isIdentifier(n.expression)) out.push(...objectStrings(n.expression.text, n.name.text, source));
+    else if ((ts.isPropertyAccessExpression(n) || ts.isElementAccessExpression(n)) && !ts.isCallExpression(n.parent)
+      && (ts.isJsxExpression(n.parent) || ts.isPropertyAccessExpression(n.parent) || ts.isElementAccessExpression(n.parent))) {
+      const path = accessPath(n);
+      if (path.length) out.push(camelWords(path[path.length - 1]));
+      // An object's property (review 10 NIT-4): const L = { del: 'Delete' }; {L.del}; nested and
+      // bracketed too (review 11 NIT-4): {L.a.del}, {L["del"]}. Only the whole access, once.
+      if (path.length > 1 && !ts.isPropertyAccessExpression(n.parent) && !ts.isElementAccessExpression(n.parent)) {
+        out.push(...objectStrings(path[0], path.slice(1), source));
+      }
     }
     // A label from a function (review 10 NIT-4): {label()}, {labelFor(x)}; its arguments too (t('actions.delete')).
     // Only a call that is the label itself (its arguments are data, not the
@@ -346,6 +354,9 @@ function strings(node: ts.Node, source: ts.SourceFile, calls = true): string[] {
       n.arguments.forEach((arg) => out.push(...strings(arg, source, false)));
     }
     else if (ts.isIdentifier(n) && ts.isJsxExpression(n.parent)) out.push(...constStrings(n.text, source));
+    // Markup from a variable (review 11 NIT-4): dangerouslySetInnerHTML={{ __html: html }}.
+    else if (ts.isIdentifier(n) && ts.isPropertyAssignment(n.parent) && n.parent.initializer === n
+      && n.parent.name.getText(source) === '__html') out.push(...constStrings(n.text, source));
     else ts.forEachChild(n, visit);
   };
   visit(node);
@@ -384,6 +395,8 @@ function constStrings(name: string, source: ts.SourceFile, depth = 0): string[] 
 
 /** A string that reads as an i18n key ('actions.delete', 'btn.rm', 'delete_project'). */
 const KEY_LIKE = /^[a-z][\w-]*(?:[._][\w-]+)+$/i;
+/** A camelCase key ('deleteProject'), review 11 NIT-4. */
+const CAMEL_KEY = /^[a-z]+(?:[A-Z][a-z0-9]+)+$/;
 /** Short forms a key uses for an action word (review 10 NIT-4: t("btn.rm")). */
 const SHORT_FORMS: Record<string, string> = { rm: 'remove', del: 'delete', rmv: 'remove', clr: 'clear', disc: 'disconnect' };
 /** A key's words: split on dots, underscores, dashes and case, short forms spelled out. */
@@ -420,13 +433,27 @@ function declarationsOf(name: string, source: ts.SourceFile, depth = 0): Array<[
   return out;
 }
 
-/** The strings an object's property holds: `const L = { del: 'Delete' }` gives L.del "Delete". */
-function objectStrings(object: string, property: string, source: ts.SourceFile): string[] {
-  return declarationsOf(object, source).flatMap(([init, file]) => {
+/** `L.a.del` and `L["a"]["del"]` as ["L", "a", "del"]; [] for anything else (a computed key, a call). */
+function accessPath(n: ts.Expression): string[] {
+  if (ts.isIdentifier(n)) return [n.text];
+  if (ts.isPropertyAccessExpression(n)) { const head = accessPath(n.expression); return head.length ? [...head, n.name.text] : []; }
+  if (ts.isElementAccessExpression(n) && (ts.isStringLiteral(n.argumentExpression) || ts.isNoSubstitutionTemplateLiteral(n.argumentExpression))) {
+    const head = accessPath(n.expression);
+    return head.length ? [...head, n.argumentExpression.text] : [];
+  }
+  return [];
+}
+
+/** The strings an object's property holds: `const L = { del: 'Delete' }` gives L.del "Delete"; a path goes down nested objects. */
+function objectStrings(object: string, path: string | string[], source: ts.SourceFile): string[] {
+  const keys = Array.isArray(path) ? path : [path];
+  const down = (init: ts.Expression, file: ts.SourceFile, rest: string[]): string[] => {
+    if (!rest.length) return strings(init, file);
     if (!ts.isObjectLiteralExpression(init)) return [];
-    return init.properties.flatMap((p) => (ts.isPropertyAssignment(p) && p.name.getText(file).replace(/^['"]|['"]$/g, '') === property
-      ? strings(p.initializer, file) : []));
-  });
+    return init.properties.flatMap((p) => (ts.isPropertyAssignment(p) && p.name.getText(file).replace(/^['"]|['"]$/g, '') === rest[0]
+      ? down(p.initializer, file, rest.slice(1)) : []));
+  };
+  return declarationsOf(object, source).flatMap(([init, file]) => (ts.isExpression(init) ? down(init, file, keys) : []));
 }
 
 /** The strings a function returns: `const label = () => 'Delete'`, `function label() { return 'Delete'; }`. */
@@ -450,12 +477,18 @@ function functionStrings(name: string, source: ts.SourceFile): string[] {
  * (review 10 NIT-4): its icons (<Trash2 /> is "Trash") and the handlers it
  * calls (onClick={() => deleteProject(id)} is "delete Project").
  */
+/** Icons named for a tool, not its action (review 11 NIT-4: <Eraser /> erases). */
+const ICON_WORDS: Record<string, string> = { Eraser: 'Erase', Trash: 'Trash', Delete: 'Delete', Remove: 'Remove' };
+
 function codeWords(open: Opening, source: ts.SourceFile): string[] {
   const out: string[] = [];
   const icons = (n: ts.Node): void => {
     if (ts.isJsxSelfClosingElement(n) || ts.isJsxOpeningElement(n)) {
       const tag = tagOf(n, source);
-      if (/^[A-Z]/.test(tag)) out.push(camelWords(tag.replace(/Icon$|\d+$/g, '')));
+      if (/^[A-Z]/.test(tag)) {
+        const icon = tag.replace(/Icon$|\d+$/g, '');
+        out.push(camelWords(ICON_WORDS[icon] ?? icon));
+      }
     }
     ts.forEachChild(n, icons);
   };
@@ -714,7 +747,7 @@ export function appControls(): Control[] {
 }
 
 /** The control built in the app's theme with its JSX ancestors: [the control, every ancestor nearest first, cleanup]. */
-function built(control: Control, classes: readonly string[] = control.classes): [HTMLElement, Element[], () => void] {
+function built(control: Control, classes: readonly string[] = control.classes, pressed?: 'true' | 'false'): [HTMLElement, Element[], () => void] {
   document.body.className = 'app-slava-restraint';
   let parent: Element = document.body;
   const made: Element[] = [];
@@ -725,6 +758,10 @@ function built(control: Control, classes: readonly string[] = control.classes): 
   }
   const el = document.createElement('button');
   el.className = classes.join(' ');
+  // A toggle carries its state (review 11 NIT-4: [aria-pressed="false"]:hover),
+  // and every control an icon (`:hover svg { fill }`).
+  if (pressed) el.setAttribute('aria-pressed', pressed);
+  el.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'svg'));
   parent.appendChild(el);
   return [el, [...made].reverse(), () => { (made[0] ?? el).remove(); document.body.className = ''; }];
 }
@@ -747,17 +784,18 @@ export function cascadeFindings(control: Control, vars: Vars, extraCss?: string)
   // not, at rest or on hover, so hovering never looks like "on".
   const off = control.classes.filter((name) => !TOGGLE_STATE.test(name));
   return [...new Set([
-    ...stateFindings(control, control.classes, vars, extraCss, true, ' (on)'),
-    ...stateFindings(control, off, vars, extraCss, false, ' (off)'),
+    ...stateFindings(control, control.classes, vars, extraCss, true, ' (on)', 'true'),
+    ...stateFindings(control, off, vars, extraCss, false, ' (off)', 'false'),
   ])];
 }
 
 /** A class that says a toggle is on. */
-export const TOGGLE_STATE = /--(?:active|on|selected|pressed|checked|current|starred)$/;
+// Review 11 NIT-4: `is-on` and `--fav` too.
+export const TOGGLE_STATE = /(?:--(?:active|on|selected|pressed|checked|current|starred|fav|favorite|favourite)|^is-(?:on|active|selected|pressed|checked))$/;
 
 function stateFindings(control: Control, classes: readonly string[], vars: Vars, extraCss: string | undefined,
-  accentAllowed: boolean, label: string): string[] {
-  const [el, ancestors, done] = built(control, classes);
+  accentAllowed: boolean, label: string, pressed?: 'true' | 'false'): string[] {
+  const [el, ancestors, done] = built(control, classes, pressed);
   const found: string[] = [];
   try {
     const own = cascaded(el, extraCss);
@@ -782,6 +820,78 @@ function stateFindings(control: Control, classes: readonly string[], vars: Vars,
         .filter((b) => !(accentAllowed && control.kind === 'neutral' && /^(?:[\w-]+: )*var\(--sr-accent[\w-]*[,)]/.test(b)));
       if (bad.length) found.push(`${control.file}:${control.line} "${control.name}"${label} ${state || 'rest'} ${prop}: ${bad.join(' ')} (from ${from}, ${control.kind})`);
     }
+    // Its icon (review 11 NIT-4: `.x:hover svg { fill: accent }`): what a rule
+    // gives the svg inside it, in each state, keeps its kind too.
+    const icon = el.querySelector('svg');
+    if (icon) {
+      for (const [key, winner] of cascaded(icon, extraCss)) {
+        const [state, prop] = key.split('|');
+        if (!CHECKED_STATES.includes(state) || !COLOUR_PROPERTY.test(prop)) continue;
+        if (/^:focus/.test(state) && FOCUS_RING.test(prop)) continue;
+        // A rule for every svg (svg { fill: currentColor }) isn't the control's.
+        if (!classes.some((c) => winner.selector.includes(`.${c}`))) continue;
+        const bad = badColours(winner.value, control.kind, vars)
+          .filter((b) => !(accentAllowed && control.kind === 'neutral' && /^(?:[\w-]+: )*var\(--sr-accent[\w-]*[,)]/.test(b)));
+        if (bad.length) found.push(`${control.file}:${control.line} "${control.name}"${label} ${state || 'rest'} svg ${prop}: ${bad.join(' ')} (from ${winner.selector}, ${control.kind})`);
+      }
+    }
+  } finally {
+    done();
+  }
+  return [...new Set(found)];
+}
+
+/** The warning amber: a frame colour as loud as the accent (GM r18). */
+const WARNING_VAR = /^--sr-warning(?:-[\w-]+)?$/;
+/** Amber and yellow-orange hues the warm check leaves out (#f5c518 is 48 degrees). */
+function amberColours(value: string): string[] {
+  const out: string[] = [];
+  for (const match of value.matchAll(/#([0-9a-f]{6}|[0-9a-f]{3})\b/gi)) {
+    const hex = match[1].length === 3 ? [...match[1]].map((c) => c + c).join('') : match[1];
+    const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+    const max = Math.max(r, g, b); const min = Math.min(r, g, b); const d = max - min;
+    if (!d) continue;
+    const l = (max + min) / 2; const sat = d / (1 - Math.abs(2 * l - 1));
+    const hue = ((max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4) * 60 + 360) % 360;
+    if (sat > 0.35 && hue > 0 && hue <= 60) out.push(match[0]);
+  }
+  return out;
+}
+
+/**
+ * Frames reviewed and waiting on GM: the open pin's card keeps its amber
+ * identity edge (the pin's own colour, as its badge) around "Delete note".
+ * Asked in PR #200 fix round 12; a new frame is a finding until added here.
+ */
+export const FRAME_PENDING_GM: Array<{ file: string; selector: RegExp }> = [
+  { file: 'components/canvas/PinLayer.tsx', selector: /^\.canvas-pin__card$/ },
+];
+
+/**
+ * GM r18 (PR #200 fix round 12): orange never frames a destructive action.
+ * Every element around a red control (its JSX ancestors, in the app's
+ * theme) draws its edge, outline, shadow and fill, at rest and on hover,
+ * without the accent, the warning amber, the error orange or any warm or
+ * amber colour. (Forget ID sat in an amber warning box.)
+ */
+export function frameFindings(control: Control, vars: Vars, extraCss?: string): string[] {
+  if (control.kind !== 'red' || !control.ancestors.length) return [];
+  const [, ancestors, done] = built(control);
+  const found: string[] = [];
+  try {
+    ancestors.forEach((ancestor) => {
+      for (const [key, winner] of cascaded(ancestor, extraCss)) {
+        const [state, prop] = key.split('|');
+        if (!['', ':hover'].includes(state) || !/^(border|outline|box-shadow|background)/.test(prop)) continue;
+        if (FRAME_PENDING_GM.some((f) => f.file === control.file && f.selector.test(winner.selector.trim()))) continue;
+        const bad = [
+          ...badColours(winner.value, 'red', vars),
+          ...varsIn(winner.value).filter((v) => WARNING_VAR.test(v.name)).map((v) => v.text),
+          ...amberColours(winner.value),
+        ];
+        if (bad.length) found.push(`${control.file}:${control.line} "${control.name}" is framed by ${winner.selector} ${state || 'rest'} ${prop}: ${[...new Set(bad)].join(' ')}`);
+      }
+    });
   } finally {
     done();
   }
@@ -840,9 +950,10 @@ export function menuItemFindings(tsx: string, file: string): string[] {
   const visit = (node: ts.Node): void => {
     if (ts.isObjectLiteralExpression(node)) {
       const prop = (name: string) => node.properties.find((p): p is ts.PropertyAssignment => ts.isPropertyAssignment(p) && p.name.getText(source) === name);
-      const label = prop('label') ?? prop('title') ?? prop('text');
-      // Any label form strings() reads (a const, an object's property, a function), review 10 NIT-4.
-      const text = label ? strings(label.initializer, source).find((t) => wordKind(t, file) === 'red') ?? null : null;
+      // Any label form strings() reads (a const, an object's property, a function), review 10 NIT-4;
+      // label, title or text, each of them (review 11 NIT-4: a `text:` beside a plain `title:`).
+      const labels = ['label', 'title', 'text'].map(prop).filter((p): p is ts.PropertyAssignment => Boolean(p));
+      const text = labels.flatMap((label) => strings(label.initializer, source)).find((t) => wordKind(t, file) === 'red') ?? null;
       const acts = ['action', 'onSelect', 'onClick', 'run', 'handler', 'perform'].some((name) => prop(name))
         || node.properties.some((p) => ts.isMethodDeclaration(p) && /^(action|onSelect|onClick|run)$/.test(p.name.getText(source)));
       if (text && acts && prop('danger')?.initializer.kind !== ts.SyntaxKind.TrueKeyword) {

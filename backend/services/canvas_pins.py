@@ -74,35 +74,117 @@ _ANSI = re.compile(
 )
 
 
+# Review 11 MEDIUM-1 of PR #200 and GM r19 answer 1: what draws nothing is
+# hidden text. Variation selectors, the combining grapheme joiner, Mongolian
+# free variation selectors and Khmer's inherent vowels are category Mn, so
+# they passed the Cc/Cf strip and folded into the character before: 32 per
+# letter carried a payload past the hidden-text cap to every agent. Each is
+# dropped from the shown form, with three guards so real emoji still work:
+# - one text/emoji presentation selector (FE0E, FE0F) stays directly after a
+#   character that takes it (an emoji, or a keycap's digit, # or *);
+# - a zero-width joiner stays inside an emoji ZWJ sequence (an emoji, its
+#   selector or skin tone, ZWJ, an emoji: a family, a profession);
+# - tag characters stay only as an emoji tag sequence after U+1F3F4 (the
+#   England, Scotland and Wales flags), up to TAG_SPEC_MAX of them and the
+#   cancel tag.
+# Every other selector, joiner and tag is hidden. The frontend's
+# pinDisplayText (lib/canvasPins.ts) is the same rule, range for range.
+_PICTOGRAPHIC = (
+    (0x00A9, 0x00A9), (0x00AE, 0x00AE), (0x203C, 0x203C), (0x2049, 0x2049), (0x2122, 0x2122),
+    (0x2139, 0x2139), (0x2194, 0x21AA), (0x231A, 0x23FF), (0x24C2, 0x24C2), (0x25AA, 0x25FE),
+    (0x2600, 0x27BF), (0x2934, 0x2935), (0x2B05, 0x2B55), (0x3030, 0x3030), (0x303D, 0x303D),
+    (0x3297, 0x3297), (0x3299, 0x3299), (0x1F000, 0x1F1E5), (0x1F200, 0x1F3FA), (0x1F400, 0x1FAFF),
+    (0x1FC00, 0x1FFFD),
+)
+ZWJ = "\u200d"
+BLACK_FLAG = "\U0001F3F4"
+TAG_SPEC_MAX = 7
+
+
+def _pictographic(char: str | None) -> bool:
+    if not char:
+        return False
+    code = ord(char)
+    return any(low <= code <= high for low, high in _PICTOGRAPHIC)
+
+
+def _skin_tone(char: str) -> bool:
+    return "\U0001F3FB" <= char <= "\U0001F3FF"
+
+
+def _invisible_mark(code: int) -> bool:
+    return (0xFE00 <= code <= 0xFE0F or 0xE0100 <= code <= 0xE01EF or code == 0x034F
+            or 0x180B <= code <= 0x180D or code == 0x180F or code in (0x17B4, 0x17B5))
+
+
+def _takes_selector(base: str | None) -> bool:
+    return _pictographic(base) or (base is not None and base in "0123456789#*")
+
+
+def _ends_in_emoji(out: list[str]) -> bool:
+    """The kept text ends in an emoji, maybe with its selector and skin tone."""
+    index = len(out) - 1
+    if index >= 0 and _skin_tone(out[index]):
+        index -= 1
+    if index >= 0 and out[index] == "\ufe0f":
+        index -= 1
+    return index >= 0 and _pictographic(out[index])
+
+
+def _plain(line: str) -> str:
+    """One line without control bytes, format characters or marks that draw
+    nothing (the guards above aside); a tab, CR or LF reads as a space."""
+    out: list[str] = []
+    index = 0
+    size = len(line)
+    while index < size:
+        char = line[index]
+        if char in "\t\n\r":
+            out.append(" ")
+            index += 1
+            continue
+        if char == BLACK_FLAG:
+            end = index + 1
+            while end < size and "\U000E0020" <= line[end] <= "\U000E007E":
+                end += 1
+            if 1 <= end - index - 1 <= TAG_SPEC_MAX and end < size and line[end] == "\U000E007F":
+                out.extend(line[index:end + 1])
+                index = end + 1
+                continue
+        if char == ZWJ:
+            if _ends_in_emoji(out) and index + 1 < size and _pictographic(line[index + 1]):
+                out.append(char)
+            index += 1
+            continue
+        code = ord(char)
+        if unicodedata.category(char) in {"Cc", "Cf"}:
+            index += 1
+            continue
+        if _invisible_mark(code):
+            if code in (0xFE0E, 0xFE0F) and out and _takes_selector(out[-1]):
+                out.append(char)
+            index += 1
+            continue
+        out.append(char)
+        index += 1
+    return "".join(out)
+
+
 def _shown(raw: str, multiline: bool) -> str:
     """The text with every control byte gone (see clean_text), never raising."""
     # A terminal colour code pasted with the text goes whole, never as a
     # stray "[31m" once its ESC is dropped (fix round 6 of PR #200, review 6
     # N-4, and NIT-3 of review 8: every string sequence too).
     raw = _ANSI.sub("", raw)
-
-    def plain(line: str) -> str:
-        # Cc covers C0, DEL and C1 controls. Format characters (Cf: bidi
-        # overrides, zero-width joiners) are dropped too so a note can't render
-        # differently from what agents read.
-        return "".join(
-            " " if char in "\t\n\r" else char
-            for char in line
-            if char in "\t\n\r" or unicodedata.category(char) not in {"Cc", "Cf"}
-        )
-
+    # GM r19 answer 1 (whitespace): leading and trailing whitespace goes
+    # (stored that way too: typed_text), and the spaces and blank lines
+    # inside count as typed, so they are never hidden text.
     if multiline:
         # str.splitlines knows every line break: \r\n, \r, \v, \f, NEL and
         # U+2028/U+2029 (review 3 LOW-5), so each reads as \n on every surface.
-        lines = [plain(line).rstrip() for line in raw.splitlines()]
-        # Only blank lines go from the ends: the first line keeps its own
-        # leading spaces (review 6 N-2: "  indented first" stays indented).
-        while lines and not lines[0]:
-            lines.pop(0)
-        while lines and not lines[-1]:
-            lines.pop()
-        return "\n".join(lines)
-    return " ".join(plain(raw).split())
+        return "\n".join(_plain(line) for line in raw.splitlines()).strip()
+    # One line: each line break reads as one space, never glued.
+    return _plain(" ".join(raw.splitlines())).strip()
 
 
 def shown_text(raw: Any, *, multiline: bool = True) -> str:
@@ -121,8 +203,8 @@ def shown_text(raw: Any, *, multiline: bool = True) -> str:
 # cap, in characters as a person sees them (grapheme clusters) of the shown
 # text, the same strip every output uses; the composer counts the same way
 # (frontend lib/canvasPins.ts noteLength), so the two never disagree. What the
-# shown form drops (escape codes, control and format characters) is the
-# hidden text: up to HIDDEN_TEXT_BYTES of it (UTF-8) is stored as typed.
+# shown form drops (escape codes, control and format characters, marks that
+# draw nothing past the one a base may take) is the hidden text: up to HIDDEN_TEXT_BYTES of it (UTF-8) is stored as typed.
 HIDDEN_TEXT_BYTES = 1120
 HIDDEN_TOO_LONG = "This note has too much hidden text to save. Paste it as plain text, then try again."
 HIDDEN_TOO_LONG_CODE = "note_hidden_too_long"
@@ -141,23 +223,61 @@ def _regional(char: str) -> bool:
     return "\U0001F1E6" <= char <= "\U0001F1FF"
 
 
+def _hangul(char: str) -> str:
+    """A Hangul jamo or syllable's part in a syllable (UAX #29): L, V, T, LV,
+    LVT, or "" for anything else."""
+    code = ord(char)
+    if 0x1100 <= code <= 0x115F or 0xA960 <= code <= 0xA97C:
+        return "L"
+    if 0x1160 <= code <= 0x11A7 or 0xD7B0 <= code <= 0xD7C6:
+        return "V"
+    if 0x11A8 <= code <= 0x11FF or 0xD7CB <= code <= 0xD7FB:
+        return "T"
+    if 0xAC00 <= code <= 0xD7A3:
+        return "LV" if (code - 0xAC00) % 28 == 0 else "LVT"
+    return ""
+
+
+# Hangul parts that join the one before (UAX #29 GB6-GB8): a leading consonant
+# takes any syllable start; a vowel continues with a vowel or a final; a final
+# with a final.
+_HANGUL_JOINS = {"L": {"L", "V", "LV", "LVT"}, "V": {"V", "T"}, "LV": {"V", "T"}, "T": {"T"}, "LVT": {"T"}}
+
+
 def text_length(shown: str) -> int:
     """Characters as a person sees them in already-shown text: a base and its
-    marks are one, two regional indicators (a flag) are one. The frontend's
-    noteLength is the same rule, code point for code point."""
+    marks are one (a mark after a line break is its own), two regional
+    indicators (a flag) are one, and Hangul jamo that make one syllable are
+    one (review 11 NIT-3: the grapheme rules of UAX #29 the strip leaves to
+    matter, with no segmentation package). The frontend's textLength is the
+    same rule, code point for code point."""
     count = 0
     marks = 0
     pending_flag = False
+    previous = ""
+    joined = False
     for char in shown:
-        if _extends(char) and count and marks < MAX_MARKS_PER_CHARACTER:
+        # An emoji ZWJ sequence and an emoji tag sequence are one character
+        # (the strip keeps only valid ones, GM r19 answer 1); their parts count
+        # toward the 32 like marks.
+        joins = (_extends(char) or char == ZWJ or "\U000E0020" <= char <= "\U000E007F"
+                 or (joined and _pictographic(char)))
+        joined = char == ZWJ
+        if joins and count and previous != "\n" and marks < MAX_MARKS_PER_CHARACTER:
             marks += 1
+            continue
+        part = _hangul(char)
+        if part and marks == 0 and part in _HANGUL_JOINS.get(_hangul(previous) if previous else "", ()):
+            previous = char
             continue
         if _regional(char) and pending_flag:
             pending_flag = False
+            previous = char
             continue
         count += 1
         marks = 0
         pending_flag = _regional(char)
+        previous = char
     return count
 
 
@@ -166,20 +286,22 @@ def clean_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = F
     1..limit chars, control characters dropped. The store keeps ``raw``
     itself (``typed_text``); this is the form every output shows.
 
-    One line by default (a reply): whitespace collapsed. ``multiline`` (the
-    person's note: Shift+Enter in the dialog makes lines, fix round 2 of PR
-    #200, GM 2026-10-28 answer 5): agents get it as written. Its newlines
-    stay (every line break, ``\r\n``, ``\r``, U+2028 and the rest, reads as
-    ``\n``), a tab reads as a space, each
-    line loses its trailing spaces, and the note loses its leading and
-    trailing blank lines (the first line keeps its indent); a terminal colour
-    code goes whole; every other control character is still dropped.
-    Blank lines inside the note stay as typed (fix round 5 of PR #200,
-    review 5 N-3: agents read what the person wrote; only the canvas display
-    folds a run of blank lines, and the 280-character cap bounds the rest).
+    One line by default (a reply): each line break reads as a space.
+    ``multiline`` (the person's note: Shift+Enter in the dialog makes lines,
+    fix round 2 of PR #200, GM 2026-10-28 answer 5): agents get it as
+    written. Its newlines stay (every line break, ``\r\n``, ``\r``, U+2028
+    and the rest, reads as ``\n``), a tab reads as a space, a terminal colour
+    code goes whole, and every other control character is dropped. Either
+    way, whitespace at the ends goes (the first line's indent too) and the
+    spaces and blank lines inside stay as typed and count (GM r19 answer 1,
+    PR #200 fix round 12; only the canvas display folds a run of blank lines).
     """
     if not isinstance(raw, str):
         raise PinError(422, f"{label} must be text")
+    # GM r19 answer 1: the note is kept trimmed (typed_text), so what is
+    # saved is what was counted; its hidden text is what the trimmed note
+    # holds past what shows.
+    raw = raw.strip()
     text = _shown(raw, multiline)
     if not text:
         raise PinError(422, f"{label} can't be empty")
@@ -194,10 +316,12 @@ def clean_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = F
 
 
 def typed_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = False) -> str:
-    """What the store keeps: the text exactly as typed, once clean_text has
-    checked it (GM r15 condition 1, r16 answer 3: notes and replies alike)."""
+    """What the store keeps: the text as typed, once clean_text has checked
+    it (GM r15 condition 1, r16 answer 3: notes and replies alike), trimmed
+    at both ends (GM r19 answer 1)."""
     clean_text(raw, limit=limit, label=label, multiline=multiline)
-    return raw
+    # Trimmed at both ends (GM r19 answer 1, the one change to "as typed").
+    return raw.strip()
 
 
 def note_block(text: Any, indent: str) -> str:

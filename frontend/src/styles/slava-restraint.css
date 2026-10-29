@@ -2345,6 +2345,20 @@ body.app-slava-restraint .toolbar__button--active .toolbar__icon {
   color: rgba(255, 255, 255, 0.96);
   filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.18));
 }
+/* GM r18 (PR #200 fix round 12): these three neutral controls had no
+   pressed state, so a held press looked like hover. They take the toolbar's
+   press: scale down fast on press, ease back on release. */
+body.app-slava-restraint .editor-transport__zoom-reset:active:not(:disabled),
+body.app-slava-restraint .world-modal__camera-reset:active:not(:disabled),
+body.app-slava-restraint .mask-painter__tool--erase:active:not(:disabled) {
+  transform: scale(0.96);
+  transition:
+    color 120ms ease,
+    background-color 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    transform 80ms ease-out;
+}
 body.app-slava-restraint .toolbar__button:active {
   transform: scale(0.96);
   /* On press DOWN: snap fast (80ms ease-out) so the press feels

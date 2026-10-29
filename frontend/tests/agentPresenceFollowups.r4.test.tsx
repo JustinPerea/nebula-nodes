@@ -128,7 +128,8 @@ describe('GM round 5 answer 5: a kept notice keeps the note\'s line breaks, clam
     const quote = container.querySelector('.canvas-pin-toast__note')!;
     expect(quote.textContent).toBe('first line\nsecond line\nthird line');
     // The tooltip is the whole note, stripped like every display (fix round 10, GM r16 answer 3): a line of only spaces is empty.
-    expect(quote).toHaveAttribute('title', 'first line\n\n\n\nsecond line\nthird line');
+    // The whole note: spaces inside kept as typed (GM r19 answer 1, PR #200 fix round 12).
+    expect(quote).toHaveAttribute('title', 'first line\n\n\n   \nsecond line\nthird line');
     const write = vi.fn(async () => {});
     Object.assign(navigator, { clipboard: { writeText: write } });
     fireEvent.click(screen.getByRole('button', { name: 'Copy note' }));
@@ -137,8 +138,9 @@ describe('GM round 5 answer 5: a kept notice keeps the note\'s line breaks, clam
 
   it('keptNoteDisplay collapses runs of blank lines and spaces-only lines, and trims', () => {
     expect(keptNoteDisplay('a' + '\n'.repeat(278) + 'b')).toBe('a\nb');
-    // The first line keeps its indent and every line loses its trailing spaces, as the backend shows a note (review 6 N-2; fix round 10).
-    expect(keptNoteDisplay('\n\n a \n \t \nb\n\n')).toBe(' a\nb');
+    // GM r19 answer 1 (fix round 12): whitespace at the ends goes, the first line's indent too; inside, a
+    // line's spaces stay, and a run of blank or spaces-only lines still folds in the display.
+    expect(keptNoteDisplay('\n\n a \n \t \nb\n\n')).toBe('a \nb');
     expect(keptNoteDisplay('one line')).toBe('one line');
   });
 

@@ -3,7 +3,7 @@ import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import ts from 'typescript';
 import { gatedGraphActions } from '../src/store/graphStore';
-import { appControls, appCss, appMenuItemFindings, cascadeFindings, controlsIn, controlsInFiles, customProperties, menuItemFindings, notRedFindings, pressedFindings, ruleFindings, wordFindings, wordKind } from './helpers/destructiveRule';
+import { appControls, appCss, appMenuItemFindings, cascadeFindings, controlsIn, controlsInFiles, customProperties, frameFindings, FRAME_PENDING_GM, menuItemFindings, notRedFindings, pressedFindings, ruleFindings, wordFindings, wordKind } from './helpers/destructiveRule';
 
 /**
  * Follow-ups to PR #195, two static ratchets.
@@ -2272,6 +2272,37 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
     expect(controls.flatMap((control) => cascadeFindings(control, vars))).toEqual([]);
   });
 
+  it('GM r18: no frame around a red control is amber, warning or accent (Forget ID sat in an amber box)', () => {
+    expect(controls.flatMap((control) => frameFindings(control, vars))).toEqual([]);
+    // The one frame left for GM (the open pin's amber identity edge) is named, never a pattern.
+    expect(FRAME_PENDING_GM.map((f) => f.file)).toEqual(['components/canvas/PinLayer.tsx']);
+  });
+
+  it('GM r18 corpus: an amber, warning, accent or warm frame is caught at rest and on hover; neutral and red frames stay quiet', () => {
+    const vars0 = customProperties(appCss());
+    const forget = { file: 'probe.tsx', line: 1, name: 'Forget ID', kind: 'red' as const, classes: ['x__forget'],
+      ancestors: [['section', ['probe-box']], ['div', ['probe-row']]] as Array<[string, string[]]> };
+    for (const css of [
+      // Round 11's own safeguards box, before this round.
+      '.probe-box { border: 1px solid color-mix(in srgb, var(--sr-warning, #f5c518) 40%, transparent); }',
+      '.probe-box { background: color-mix(in srgb, var(--sr-warning, #f5c518) 10%, transparent); }',
+      '.probe-box { border: 1px solid #66471f; }',
+      '.probe-row:hover { outline: 1px solid #f5c518; }',
+      '.probe-row { box-shadow: 0 0 0 1px var(--sr-accent); }',
+      '.probe-box { border-left: 3px solid #e8a33d; }',
+      '.probe-box:hover { border-color: #ff5a1f; }',
+    ]) expect(frameFindings(forget, vars0, css), css).not.toEqual([]);
+    for (const css of [
+      '.probe-box { border: 1px solid var(--sr-edge-strong); background: var(--sr-surface-control); }',
+      '.probe-box { border: 1px solid #383838; background: #1e1e1e; }',
+      '.probe-row { border-color: var(--sr-danger-edge); background: var(--sr-danger-tint); }',
+      // A focus ring is the keyboard-ring rule's to judge, not a frame.
+      '.probe-row:focus-visible { outline: 2px solid var(--sr-accent); }',
+    ]) expect(frameFindings(forget, vars0, css), css).toEqual([]);
+    // A neutral control may sit in a warning box; only red ones are framed.
+    expect(frameFindings({ ...forget, kind: 'neutral' }, vars0, '.probe-box { border: 1px solid #f5c518; }')).toEqual([]);
+  });
+
   it('every red control looks red: a danger token wins at rest or on hover', () => {
     expect(controls.flatMap((control) => notRedFindings(control))).toEqual([]);
   });
@@ -2381,6 +2412,34 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
     // Still quiet: a bare ×, a card's content, a call's arguments.
     expect(found('<button className="chip__remove">×</button>')).toEqual([]);
     expect(found('const A = () => <button className="x__go" aria-label={nameOf(removedNode())}>x</button>;')).toEqual([]);
+  });
+
+  it('review 11 NIT-4: the label forms and toggle states it still missed', () => {
+    const found = (tsx: string) => controlsIn(tsx, 'probe.tsx').map((c) => c.name);
+    expect(found('const L = { a: { del: "Delete" } }; const A = () => <button className="x__go" aria-label={L.a.del}>x</button>;')).toContain('Delete');
+    expect(found('const L = { del: "Delete" }; const A = () => <button className="x__go" aria-label={L["del"]}>x</button>;')).toContain('Delete');
+    expect(found('const A = () => <button className="x__go" aria-label={t("deleteProject")}>x</button>;')).toEqual(['delete Project']);
+    expect(found('const A = () => <button className="x__go" onClick={go}><Eraser /></button>;')).toEqual(['Erase']);
+    expect(found('const html = "<b>Delete</b>"; const A = () => <button className="x__go" dangerouslySetInnerHTML={{ __html: html }} />;')).toEqual(['Delete']);
+    expect(menuItemFindings('const items = [{ title: "More", text: "Delete", onSelect: del }];', 'p.tsx')).not.toEqual([]);
+    // Still quiet: a computed key, a camelCase word that names no action.
+    expect(found('const A = () => <button className="x__go" aria-label={L[key]}>x</button>;')).toEqual([]);
+    expect(found('const A = () => <button className="x__go" aria-label={t("openProject")}>x</button>;')).toEqual([]);
+
+    const vars0 = customProperties(appCss());
+    const star = { file: 'p.tsx', line: 1, name: 'Remove from favorites', kind: 'neutral' as const, toggle: true,
+      classes: ['x__star', 'x__star--fav', 'x__favorite-remove'], ancestors: [] };
+    // An off toggle's accent by its attribute, and on its icon.
+    expect(cascadeFindings(star, vars0, '.x__star[aria-pressed="false"]:hover { color: var(--sr-accent); }').some((f) => / \(off\) :hover color/.test(f))).toBe(true);
+    expect(cascadeFindings(star, vars0, '.x__star:not(.x__star--fav):hover svg { fill: var(--sr-accent); }').some((f) => / \(off\) :hover svg fill/.test(f))).toBe(true);
+    // --fav and is-on are on-state names: on, the accent is its state.
+    expect(cascadeFindings(star, vars0, '.x__star--fav { color: var(--sr-accent); }')).toEqual([]);
+    const isOn = { ...star, classes: ['x__star', 'is-on'] };
+    expect(cascadeFindings(isOn, vars0, '.x__star.is-on { color: var(--sr-accent); }')).toEqual([]);
+    expect(cascadeFindings(isOn, vars0, '.x__star:hover { color: var(--sr-accent); }').some((f) => / \(off\) :hover color/.test(f))).toBe(true);
+    // A red control's icon in the accent is caught too.
+    const del = { file: 'p.tsx', line: 1, name: 'Delete', kind: 'red' as const, classes: ['x__delete'], ancestors: [] };
+    expect(cascadeFindings(del, vars0, '.x__delete:hover svg { stroke: var(--sr-accent); }').join('\n')).toMatch(/:hover svg stroke/);
   });
 
   it('review 10 LOW-1 (GM r17 item 1): a toggle may be the accent only when on; off, hovering it can\'t look on', () => {

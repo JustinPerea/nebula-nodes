@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { wsClient, type CanvasPinsEvent, type Pin } from '../lib/wsClient';
-import { createPin, deletePin, fetchPins, fitNote, noteKeptLine, type KeptNote } from '../lib/canvasPins';
+import { createPin, deletePin, fetchPins, fitNote, HIDDEN_TEXT_CODE, HIDDEN_TEXT_COPY, noteKeptLine, type KeptNote } from '../lib/canvasPins';
 import { currentProject } from '../lib/currentProject';
 import { failureMessage, RequestFailedError } from '../lib/errorCopy';
 import { refuseCanvasEdit } from '../lib/canvasLock';
@@ -48,6 +48,10 @@ interface CanvasPinsState {
   /** Deletes sent but not yet confirmed: hidden even if a stale update still lists them. */
   removing: Record<string, true>;
   error: string | null;
+  /** How the toast reads: 'error' (red, "Couldn't …" first), or 'notice'
+   * (neutral: the note was refused for something the person can fix in the
+   * dialog that stays open, GM r18 Q1). */
+  errorTone: 'error' | 'notice';
   hydrate: () => Promise<void>;
   apply: (event: Pick<CanvasPinsEvent, 'projectId' | 'pins'>) => void;
   compose: (target: PinComposerTarget) => void;
@@ -120,6 +124,7 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
   errorProject: null,
   removing: {},
   error: null,
+  errorTone: 'error',
   hydrate: async () => {
     try {
       const listing = await fetchPins();
@@ -187,10 +192,18 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
           kept: keepNote(state.kept, trimmed, project, state.composerProjectName, followingSwitch()) }));
         return false;
       }
+      if (error instanceof RequestFailedError && error.code === HIDDEN_TEXT_CODE) {
+        // GM r18 Q1: too much hidden text. The dialog stays open with the
+        // note as typed (to paste it again as plain text), and a neutral
+        // toast says only what to do. (Not a draft yet: the dialog holds it,
+        // and × or Esc keeps it as one.)
+        set({ draft: text, error: HIDDEN_TEXT_COPY, errorTone: 'notice', errorProject: project });
+        return false;
+      }
       // Not sent: the text stays as its project's draft for the next open
       // there (GM: only sending drops it), and the toast says why.
       set((state) => ({ composer: null, composerCanvas: null, draft: '', drafts: keepDraft(state.drafts, project, text),
-        error: failureMessage(error, "Couldn't add the pin."), errorProject: project }));
+        error: failureMessage(error, "Couldn't add the pin."), errorTone: 'error', errorProject: project }));
       return false;
     }
   },
@@ -208,7 +221,7 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
       const restored = previous.find((pin) => pin.id === id);
       set((state) => ({
         pins: restored && !state.pins.some((p) => p.id === id) ? [...state.pins, restored] : state.pins,
-        error: failureMessage(error, "Couldn't remove the pin."),
+        error: failureMessage(error, "Couldn't remove the pin."), errorTone: 'error',
         errorProject: null,
       }));
     } finally {

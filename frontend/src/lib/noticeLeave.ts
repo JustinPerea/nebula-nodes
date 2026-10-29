@@ -121,7 +121,14 @@ export function watchLeave(element: HTMLElement, end: () => void): () => void {
   if (tabHidden()) { queueMicrotask(finish); return () => { ended = true; }; }
   listen(true);
   document.addEventListener('visibilitychange', onVisibility);
-  arm(timeLeft(running) + LEAVE_SLACK_MS);
+  const planned = timeLeft(running);
+  // GM r19 answer 2 (PR #200 fix round 12): a running leave longer than the
+  // limit plays out (only a stalled one is rescued), but it means a spring
+  // or keyframe needs tuning: say so in development, never in production.
+  if (import.meta.env.DEV && planned > STALL_LIMIT_MS) {
+    console.warn(`[noticeLeave] a leave runs ${Math.round(planned)} ms, past the ${STALL_LIMIT_MS} ms limit: tune its animation.`, element);
+  }
+  arm(planned + LEAVE_SLACK_MS);
   return () => { ended = true; stop(); fade?.removeEventListener('finish', finish); };
 }
 

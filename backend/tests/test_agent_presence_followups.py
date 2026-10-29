@@ -392,8 +392,9 @@ def test_r5_N3_the_store_keeps_what_the_person_typed():
     # Blank lines stay as typed (review 4's fold is reverted); the cap bounds them.
     assert clean_text("a\n\n\nb", limit=280, multiline=True) == "a\n\n\nb"
     assert clean_text("a" + "\n" * 278 + "b", limit=280, multiline=True) == "a" + "\n" * 278 + "b"
-    # Leading and trailing blank lines and trailing spaces still go; control characters still drop.
-    assert clean_text("\n\na  \n\tb\x00\n\n", limit=280, multiline=True) == "a\n b"
+    # Whitespace at the ends goes; spaces inside stay (GM r19 answer 1, PR #200
+    # fix round 12); control characters still drop.
+    assert clean_text("\n\na  \n\tb\x00\n\n", limit=280, multiline=True) == "a  \n b"
 
 
 # -- Fix round 6 of PR #200 (review 6 N-2, N-4) -------------------------------
@@ -404,8 +405,10 @@ def test_r6_N2_the_first_line_keeps_its_indent():
     from services.canvas_pins import clean_text
     import mcp_channel
 
-    assert clean_text("\n  indented first\nsecond  \n\n", limit=280, multiline=True) == "  indented first\nsecond"
-    assert mcp_channel.clean_text("  indented first\nsecond", 300, multiline=True) == "  indented first\nsecond"
+    # GM r19 answer 1 (PR #200 fix round 12) replaces review 6 N-2: whitespace
+    # at the ends goes, the first line's indent too; the note is stored trimmed.
+    assert clean_text("\n  indented first\nsecond  \n\n", limit=280, multiline=True) == "indented first\nsecond"
+    assert mcp_channel.clean_text("  indented first\nsecond", 300, multiline=True) == "indented first\nsecond"
     assert mcp_channel._note_block("  indented first\nsecond") == "    indented first\n  second"
 
 
