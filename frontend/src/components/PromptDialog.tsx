@@ -12,7 +12,7 @@ export interface PromptRequest {
 }
 
 /** Shared text-entry dialog for browser and desktop workflows. */
-export function PromptDialog({ request, onDone, maxLength, cap, onChange, confirm, onRefused, multiline = false, confirmLabel = 'OK' }: {
+export function PromptDialog({ request, onDone, maxLength, cap, revealCounter = 0, onChange, confirm, onRefused, multiline = false, confirmLabel = 'OK' }: {
   request: PromptRequest;
   onDone: (value: string | null) => void;
   /** Optional cap passed to the input (e.g. 280 for notes to agents). */
@@ -21,8 +21,14 @@ export function PromptDialog({ request, onDone, maxLength, cap, onChange, confir
    * PR #200 fix round 11). An edit that would pass it is refused whole, a
    * paste too (never cut to fit), with the caret kept; a neutral "N left"
    * shows under the field from `showAt` left, and at once, whatever is
-   * left, from the first refused edit on (GM r20 note 1 and its addendum). */
+   * left, after a refused edit (GM r20 note 1 and its addendum). GM r23
+   * item 3: the next edit that leaves more than `showAt` hides it again, with
+   * the row's fade. GM r23 item 4: screen readers hear it politely at 30, 10
+   * and 0 left only (the visible counter is not a live region). */
   cap?: { max: number; count: (value: string) => number; showAt: number };
+  /** Each change turns the counter on as a refused edit does (review 13
+   * NIT-3: the backend refused the note as too long). */
+  revealCounter?: number;
   /** Each change of the text (the note dialog keeps it: round 23 of PR #195). */
   onChange?: (value: string) => void;
   /** The OK button's state when something else decides it (the canvas lock's
@@ -57,8 +63,14 @@ export function PromptDialog({ request, onDone, maxLength, cap, onChange, confir
     return () => { if (previous instanceof HTMLElement && previous.isConnected) previous.focus(); };
   }, [multiline]);
 
-  // Once an edit has been refused, the counter stays for this dialog.
+  // After a refused edit the counter shows whatever is left, until an edit
+  // leaves more than `showAt` (GM r23 item 3).
   const [refused, setRefused] = useState(false);
+  const [revealed, setRevealed] = useState(revealCounter);
+  if (revealed !== revealCounter) {
+    setRevealed(revealCounter);
+    if (revealCounter > 0) setRefused(true);
+  }
   // Where the caret goes back to after a refused edit: set after the commit
   // that puts the value back (a render), and in a microtask for the case
   // with no render (React puts the controlled value back after the handler).
@@ -71,6 +83,7 @@ export function PromptDialog({ request, onDone, maxLength, cap, onChange, confir
   const change = (typed: string, field: HTMLInputElement | HTMLTextAreaElement) => {
     caret.current = null;
     if (!cap || cap.count(typed) <= cap.max || cap.count(typed) <= cap.count(value)) {
+      if (cap && cap.max - cap.count(typed) > cap.showAt) setRefused(false);
       setValue(typed);
       onChange?.(typed);
       return;
@@ -87,8 +100,21 @@ export function PromptDialog({ request, onDone, maxLength, cap, onChange, confir
   };
   const left = cap ? Math.max(0, cap.max - cap.count(value)) : 0;
   const counter = cap && (refused || left <= cap.showAt) ? `${left} left` : null;
+  // While it fades out it keeps its last words.
+  const [lastCounter, setLastCounter] = useState(counter);
+  if (counter !== null && counter !== lastCounter) setLastCounter(counter);
   const counterId = useId();
   const described = counter !== null ? counterId : undefined;
+  // GM r23 item 4: one polite announcement as the note reaches 30, 10 and 0
+  // left (the count then, should a paste jump past one), never each key.
+  const [announced, setAnnounced] = useState('');
+  const [leftBefore, setLeftBefore] = useState(left);
+  if (leftBefore !== left) {
+    setLeftBefore(left);
+    if (cap && left < leftBefore && ANNOUNCE_AT.some((mark) => leftBefore > mark && left <= mark)) {
+      setAnnounced(`${left} ${left === 1 ? 'character' : 'characters'} left`);
+    }
+  }
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -143,7 +169,11 @@ export function PromptDialog({ request, onDone, maxLength, cap, onChange, confir
           {/* Under the field, on the left of the buttons' row, so showing it
               moves nothing; outside the label, so it never joins the
               field's name (the field points at it while it shows). */}
-          {counter !== null && <span id={counterId} className="prompt-dialog__counter" aria-live="polite">{counter}</span>}
+          {cap && (
+            <span id={counterId} className="prompt-dialog__counter" data-shown={counter !== null || undefined}
+              aria-hidden={counter === null || undefined}>{counter ?? lastCounter}</span>
+          )}
+          {cap && <span className="prompt-dialog__announce" aria-live="polite" aria-atomic="true">{announced}</span>}
           <button type="button" onClick={() => onDone(null)}>Cancel</button>
           <button type="submit" className="prompt-dialog__confirm" {...confirm}>{confirmLabel}</button>
         </div>
@@ -152,6 +182,9 @@ export function PromptDialog({ request, onDone, maxLength, cap, onChange, confir
     </ModalPortal>
   );
 }
+
+/** Where screen readers hear "N left" (GM r23 item 4). */
+const ANNOUNCE_AT = [30, 10, 0];
 
 const end = (field: HTMLInputElement | HTMLTextAreaElement) => field.selectionEnd ?? field.value.length;
 

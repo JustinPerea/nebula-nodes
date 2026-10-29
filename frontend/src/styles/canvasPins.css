@@ -63,9 +63,10 @@
   left: 16px;
   top: -11px;
   width: 220px;
-  padding: 8px 10px;
+  /* 12px at the left: the status edge's 3px sits over the 1px border, so
+     the text keeps its place. */
+  padding: 8px 10px 8px 12px;
   border: 1px solid #333;
-  border-left: 3px solid var(--pin-color);
   border-radius: 6px;
   background: #1a1a1a;
   box-shadow: 0 4px 20px rgb(0 0 0 / 0.5);
@@ -82,8 +83,23 @@
   right: 16px;
 }
 
-.canvas-pin--resolved .canvas-pin__card {
-  border-left-color: var(--agent-color, #5b9dff);
+/* GM r22 Q2 (PR #200 fix round 14): the card's left status edge, its own
+   element, full height over the card's left border: the pin colour while
+   open, the author's colour once resolved. Nothing else on the card takes
+   it, so the Delete row is never tinted. */
+.canvas-pin__edge {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  left: -1px;
+  width: 3px;
+  border-radius: 6px 0 0 6px;
+  background: var(--pin-color);
+  pointer-events: none;
+}
+
+.canvas-pin--resolved .canvas-pin__edge {
+  background: var(--agent-color, #5b9dff);
 }
 
 .canvas-pin__text {

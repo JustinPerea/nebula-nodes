@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { wsClient, type CanvasPinsEvent, type Pin } from '../lib/wsClient';
-import { createPin, deletePin, fetchPins, fitNote, noteKeptLine, PIN_REFUSAL_COPY, pinRefusalLine, type KeptNote } from '../lib/canvasPins';
+import { createPin, deletePin, fetchPins, fitNote, NODE_GONE_CODE, noteKeptLine, PIN_REFUSAL_COPY, pinRefusalLine, pinTextIsLoaded, pinTextReady,
+  TOO_LONG_CODE, type KeptNote } from '../lib/canvasPins';
 import { currentProject } from '../lib/currentProject';
 import { RequestFailedError } from '../lib/errorCopy';
 import { refuseCanvasEdit } from '../lib/canvasLock';
@@ -49,6 +50,15 @@ interface CanvasPinsState {
   removing: Record<string, true>;
   /** A refusal's one neutral line (GM r20 Q1): what happened, then what to do. */
   error: string | null;
+  /** GM r23 item 2: the open dialog's node was removed (Nebula said so, or
+   * the canvas lost it): Send note is disabled with the line as its reason;
+   * Cancel and the typed text stay. */
+  targetGone: boolean;
+  /** Review 13 NIT-3: how many note_too_long refusals the open dialog has
+   * had; each one turns its "N left" on. */
+  tooLongRefusals: number;
+  /** The open dialog's node went from the canvas (PinComposer watches the graph). */
+  targetRemoved: () => void;
   hydrate: () => Promise<void>;
   apply: (event: Pick<CanvasPinsEvent, 'projectId' | 'pins'>) => void;
   compose: (target: PinComposerTarget) => void;
@@ -121,18 +131,29 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
   errorProject: null,
   removing: {},
   error: null,
+  targetGone: false,
+  tooLongRefusals: 0,
   hydrate: async () => {
     try {
-      const listing = await fetchPins();
+      // Review 13 L-2: the Unicode data is its own chunk; sanitize needs it.
+      const [listing] = await Promise.all([fetchPins(), pinTextReady]);
       get().apply(listing);
     } catch {
       // The canvasPins push after graphSync heals this on the next connect.
     }
   },
-  apply: (event) => set((state) => ({
-    projectId: typeof event.projectId === 'string' ? event.projectId : null,
-    pins: sanitizeAll(event.pins).filter((pin) => !state.removing[pin.id]),
-  })),
+  apply: (event) => {
+    // Review 13 L-2: a listing pushed before the Unicode data is in waits for
+    // it (in arrival order), never dropped and never shown unsanitized.
+    if (!pinTextIsLoaded()) {
+      void pinTextReady.then(() => get().apply(event));
+      return;
+    }
+    set((state) => ({
+      projectId: typeof event.projectId === 'string' ? event.projectId : null,
+      pins: sanitizeAll(event.pins).filter((pin) => !state.removing[pin.id]),
+    }));
+  },
   // Round 23 (review 22, M-1): the dialog is part of the canvas's read-only
   // state (lib/canvasLock, the one source every surface reads): opening it,
   // sending it and deleting a note are refused while following an agent's
@@ -148,11 +169,11 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
     const keptHere = kept.find((note) => note.project === here) ?? null;
     const { [here]: draftHere = '', ...otherDrafts } = drafts;
     set({ composer: target, composerCanvas: canvas, composerProjectName: projectNameOf(canvas), draft: keptHere?.text ?? draftHere,
-      drafts: otherDrafts, error: null, errorProject: null, kept: keptHere ? kept.filter((note) => note !== keptHere) : kept });
+      drafts: otherDrafts, error: null, errorProject: null, targetGone: false, tooLongRefusals: 0, kept: keptHere ? kept.filter((note) => note !== keptHere) : kept });
   },
   // × or Esc: the text stays as its project's draft for the next open there
   // (an emptied or whitespace-only field leaves none).
-  cancelCompose: () => set((state) => ({ composer: null, composerCanvas: null, draft: '',
+  cancelCompose: () => set((state) => ({ composer: null, composerCanvas: null, draft: '', targetGone: false,
     drafts: keepDraft(state.drafts, projectKey(state.composerCanvas), state.draft) })),
   setDraft: (text) => set({ draft: text }),
   submit: async (text) => {
@@ -172,7 +193,9 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
       // Whole: the dialog already holds it to 280 shown characters, and the
       // backend refuses past that (fix round 11: a slice by code units cut a
       // note of flags or pasted codes, and sent the hidden-text refusal nothing).
-      const pin = sanitize(await createPin(trimmed, target, canvas));
+      const answer = await createPin(trimmed, target, canvas);
+      await pinTextReady;  // review 13 L-2: sanitize needs the Unicode data
+      const pin = sanitize(answer);
       set((state) => ({
         composer: null,
         composerCanvas: null,
@@ -192,7 +215,10 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
       // the dialog open with the note as typed, and one neutral line says
       // what happened and what to do. (Not a draft yet: the dialog holds it,
       // and × or Esc keeps it as one.)
-      set({ draft: text, error: pinRefusalLine(error, 'add'), errorProject: project });
+      const code = error instanceof RequestFailedError ? error.code : null;
+      set((state) => ({ draft: text, error: pinRefusalLine(error, 'add'), errorProject: project,
+        targetGone: state.targetGone || code === NODE_GONE_CODE,
+        tooLongRefusals: state.tooLongRefusals + (code === TOO_LONG_CODE ? 1 : 0) }));
       return false;
     }
   },
@@ -223,6 +249,8 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
     }
   },
   clearError: () => set({ error: null, errorProject: null }),
+  targetRemoved: () => set((state) => (state.composer && !state.targetGone
+    ? { targetGone: true, error: PIN_REFUSAL_COPY.nodeGone, errorProject: projectKey(state.composerCanvas) } : {})),
   dismissKept: (project) => set((state) => ({ kept: state.kept.filter((note) => note.project !== project) })),
 }));
 

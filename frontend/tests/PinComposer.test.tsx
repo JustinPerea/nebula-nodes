@@ -87,7 +87,8 @@ describe('PinComposer', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Send note' }));
     });
-    expect(screen.getByRole('status').textContent).toBe('Nebula can’t add this pin. Try again in a moment.×');
+    // A person-gate 403: GM r22 Q1's line, no "try again".
+    expect(screen.getByRole('status').textContent).toBe('Notes can only be added from the Nebula canvas.×');
     expect((screen.getByRole('textbox', { name: 'Note for agents' }) as HTMLTextAreaElement).value).toBe('redo this one');
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
     expect(screen.queryByRole('status')).toBeNull();

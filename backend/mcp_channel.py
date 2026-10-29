@@ -205,6 +205,11 @@ class ChannelRefused(Exception):
     """A tool a gated turn may not call (Q42 a, Q51 a)."""
 
 
+def _variation_selector(ch: str) -> bool:
+    code = ord(ch)
+    return 0xFE00 <= code <= 0xFE0F or 0xE0100 <= code <= 0xE01EF or 0x180B <= code <= 0x180F
+
+
 def clean_text(raw: Any, limit: int = MAX_TEXT, *, multiline: bool = False) -> str:
     """Canvas text as a push quotes it: NFKC, no hidden characters, no angle
     brackets (so it can't close or open a tag), at most `limit`.
@@ -227,6 +232,10 @@ def clean_text(raw: Any, limit: int = MAX_TEXT, *, multiline: bool = False) -> s
         # fix round 12), so a note keeps them; everything else drops all Cf.
         line = "".join(ch for ch in line if unicodedata.category(ch) not in _HIDDEN
                        or (multiline and (ch == "\u200d" or "\U000E0020" <= ch <= "\U000E007F")))
+        # No variation selector reaches an agent (GM r23): the note arrives
+        # in agents' form already (canvas_pins.agent_text); this holds for
+        # any other canvas text a push quotes.
+        line = "".join(ch for ch in line if not _variation_selector(ch))
         return line.replace("<", "‹").replace(">", "›").replace('"', "'")
 
     lines = [plain(line) for line in text.splitlines()]

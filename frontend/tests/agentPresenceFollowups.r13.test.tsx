@@ -41,6 +41,9 @@ describe('GM r20 Q1: every pin refusal is one neutral line', () => {
       addNoAnswer: 'Nebula didn’t answer, so the pin wasn’t added. Try again in a moment.',
       saveNoAnswer: 'Nebula didn’t answer, so the note wasn’t saved. Try again in a moment.',
       deleteFailed: 'Nebula couldn’t delete this note. Try again in a moment.',
+      canvasOnly: 'Notes can only be added from the Nebula canvas.',
+      openNotesFull: 'This canvas has 100 open notes. Resolve or delete some, then add this one.',
+      nodeGone: 'That node was removed, so the note wasn’t added.',
     });
     for (const line of Object.values(PIN_REFUSAL_COPY)) {
       expect(line).not.toMatch(/'/);
@@ -51,7 +54,7 @@ describe('GM r20 Q1: every pin refusal is one neutral line', () => {
   it.each([
     ['over 280 (its code)', refused(422, 'note_too_long'), PIN_REFUSAL_COPY.tooLong],
     ['too much hidden text (its code)', refused(422, 'note_hidden_too_long'), HIDDEN_TEXT_COPY],
-    ['another 4xx', refused(403, 'person_required'), PIN_REFUSAL_COPY.addRefused],
+    ['another 4xx', refused(422), PIN_REFUSAL_COPY.addRefused],
     ['a 409 that isn\'t the canvas going', refused(409), PIN_REFUSAL_COPY.addRefused],
     ['a 5xx', refused(503), PIN_REFUSAL_COPY.addNoAnswer],
     ['no answer at all', new TypeError('Failed to fetch'), PIN_REFUSAL_COPY.addNoAnswer],
@@ -117,7 +120,11 @@ describe('GM r20 note 1 and addendum: the "N left" counter', () => {
       await Promise.resolve();
     });
   };
-  const counter = () => document.querySelector('.prompt-dialog__counter')?.textContent ?? null;
+  // Always laid out (it fades, GM r23 item 3): shown is data-shown.
+  const counter = () => {
+    const el = document.querySelector('.prompt-dialog__counter');
+    return el?.hasAttribute('data-shown') ? el.textContent : null;
+  };
 
   it('hidden with more than 30 left; "30 left" at 30, counting down to "0 left"; a label, no period', async () => {
     const field = open('a'.repeat(249));
@@ -147,15 +154,15 @@ describe('GM r20 note 1 and addendum: the "N left" counter', () => {
     expect(counter()).toBe('0 left');
   });
 
-  it('addendum: a refused paste with plenty of room shows "N left" at once, and it stays for the dialog', async () => {
+  it('addendum: a refused paste with plenty of room shows "N left" at once, until an edit leaves more than 30 (GM r23)', async () => {
     const field = open('b'.repeat(180));
     expect(counter()).toBeNull();
     await edit(field, `${'b'.repeat(10)}${'P'.repeat(150)}${'b'.repeat(170)}`, 160);
     expect(field.value).toBe('b'.repeat(180));
     expect(counter()).toBe('100 left');
-    // It stays as the note shrinks, and counts on into the 30-left rule.
+    // GM r23 item 3: the next edit that leaves more than 30 hides it again.
     await edit(field, 'b'.repeat(100), 100);
-    expect(counter()).toBe('180 left');
+    expect(counter()).toBeNull();
     await edit(field, 'b'.repeat(270), 270);
     expect(counter()).toBe('10 left');
   });

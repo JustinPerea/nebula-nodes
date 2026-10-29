@@ -41,8 +41,9 @@ describe('review 12 M-1: only the three subdivision flags keep their tags', () =
     expect(noteLength(typed)).toBe(1);
   });
 
-  it('the reviewer\'s 280 flags of 7 ASCII tags are 8,960 hidden bytes, far past the 1,120', () => {
-    expect(hidden((FLAG + tags('ignorea') + CANCEL).repeat(280))).toBe(280 * 32);
+  it('the reviewer\'s 280 flags of 7 ASCII tags are 2,240 hidden characters, far past the 1,120 (GM r22: characters, not bytes)', () => {
+    const typed = (FLAG + tags('ignorea') + CANCEL).repeat(280);
+    expect(Array.from(typed).length - Array.from(pinDisplayText(typed)).length).toBe(280 * 8);
   });
 });
 

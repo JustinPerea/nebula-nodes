@@ -15,6 +15,7 @@ first (from https://www.unicode.org/Public/):
   UCD/latest/ucd/StandardizedVariants.txt
   UCD/latest/ucd/PropList.txt
   UCD/latest/ucd/Scripts.txt
+  ivd/data/<latest>/IVD_Sequences.txt   (the Ideographic Variation Database)
 
 then run, from the repo root:
 
@@ -51,7 +52,12 @@ def file_version(path: Path) -> str:
     version = header(path, "Version")
     if version:
         return version
-    first = path.read_text(encoding="utf-8").splitlines()[0]
+    lines = path.read_text(encoding="utf-8").splitlines()
+    first = lines[0]
+    if first.startswith("# IVD_Sequences"):
+        # The IVD names its version by its newest registration's date.
+        dated = next((re.match(r"#\s*(\d{4}-\d{2}-\d{2})", line) for line in lines[:20] if re.match(r"#\s*\d{4}-\d{2}-\d{2}", line)), None)
+        return dated.group(1) if dated else ""
     match = re.search(r"-(\d[\d.]*\d)\.txt", first)
     return match.group(1) if match else ""
 
@@ -71,17 +77,47 @@ def ranges(codes: set[int]) -> list[list[int]]:
     return out
 
 
+def b36(number: int) -> str:
+    digits = "0123456789abcdefghijklmnopqrstuvwxyz"
+    out = ""
+    while True:
+        number, digit = divmod(number, 36)
+        out = digits[digit] + out
+        if not number:
+            return out
+
+
+def ivd_text(ivd: dict[int, set[int]]) -> str:
+    """The registered (base, selector) pairs, compact: one entry a base in code
+    point order, "<base minus the one before, base 36>:<selector offsets from
+    E0100, base 36, runs as a-b, joined by .>", entries joined by ",".
+    Both sides decode it (canvas_pins._ivd_pairs, canvasPins.ts ivdPairs)."""
+    out = []
+    previous = 0
+    for base in sorted(ivd):
+        runs = []
+        for low, high in ranges(ivd[base]):
+            runs.append(b36(low) if low == high else f"{b36(low)}-{b36(high)}")
+        out.append(f"{b36(base - previous)}:{'.'.join(runs)}")
+        previous = base
+    return ",".join(out)
+
+
 def main(source: Path) -> None:
     files = {name: source / name for name in (
         "emoji-zwj-sequences.txt", "emoji-sequences.txt", "emoji-variation-sequences.txt",
-        "StandardizedVariants.txt", "PropList.txt", "Scripts.txt")}
+        "StandardizedVariants.txt", "PropList.txt", "Scripts.txt", "IVD_Sequences.txt")}
 
-    # GM r21: E0100-E01EF only after a CJK unified ideograph (every extension block).
-    cjk: set[int] = set()
-    for fields in rows(files["PropList.txt"]):
-        if fields[1] == "Unified_Ideograph":
-            low, high = span(fields[0])
-            cjk.update(range(low, high + 1))
+    # GM r23 (review 13 M-1): E0100-E01EF only for a pair the Ideographic
+    # Variation Database registers (葛 has 10; most ideographs have none).
+    ivd: dict[int, set[int]] = {}
+    for line in files["IVD_Sequences.txt"].read_text(encoding="utf-8").splitlines():
+        line = line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        base, selector = (int(part, 16) for part in line.split(";")[0].split())
+        if 0xE0100 <= selector <= 0xE01EF:
+            ivd.setdefault(base, set()).add(selector - 0xE0100)
 
     # GM r21: 180B-180F only after a Mongolian letter (script Mongolian, a letter category).
     mongolian: set[int] = set()
@@ -131,7 +167,7 @@ def main(source: Path) -> None:
                  "Do not edit by hand.",
         "sources": {name: {"version": file_version(path),
                            "date": header(path, "Date")} for name, path in sorted(files.items())},
-        "cjkUnified": ranges(cjk),
+        "ivd": ivd_text(ivd),
         "mongolianLetters": ranges(mongolian),
         "variationBases": {"%X" % selector: ranges(bases) for selector, bases in sorted(pairs.items())},
         "rgiZwjLongest": longest,
@@ -142,7 +178,8 @@ def main(source: Path) -> None:
     for path in OUTPUTS:
         path.write_text(text, encoding="utf-8")
     print(f"{len(text):,} bytes; {len(zwj)} ZWJ keys (longest {longest}); flags {sorted(flags)}; "
-          f"{sum(len(b) for b in pairs.values())} variation pairs; {len(cjk):,} CJK; {len(mongolian)} Mongolian")
+          f"{sum(len(b) for b in pairs.values())} variation pairs; {sum(len(v) for v in ivd.values()):,} IVD pairs "
+          f"over {len(ivd):,} bases; {len(mongolian)} Mongolian")
 
 
 if __name__ == "__main__":

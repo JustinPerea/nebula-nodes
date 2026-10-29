@@ -1687,3 +1687,182 @@ GM r20, its addendum, review 12 and GM r21 (head 8bb9087d).
   intended:
   - the 5xx and no-answer toasts, which have the same line by spec;
   - the float shot before and after Undo.
+
+## Fix round 14
+
+GM r22, then review 13 and GM r23 (its answers), all on head 63a53994.
+
+- Q1: the person gate's 403 keeps its own line. A refused add with
+  `agent_refused` (a request that isn't the canvas's own) reads "Notes can
+  only be added from the Nebula canvas.", with no "try again"
+  (`PIN_REFUSAL_COPY.canvasOnly`). The backend is unchanged: the detail and
+  the 403 code agents get stay as they were.
+  - Review 13 L-1 and GM r23 item 2 changed one case: a tab not connected
+    as the person (`person_required`) reads the banner's own person-only
+    line (`personRequiredCopy()`, GM Q116a), the same line and code as
+    every other person-only refusal. Before this, live showed the
+    canvas-only toast beside the banner's other line; now they agree.
+- Q2: the status edge is its own element, `<span class="canvas-pin__edge">`
+  inside the card.
+  - It runs full height over the card's left border, 3px wide: `--pin-color`
+    while open, the author's `--agent-color` once resolved.
+  - The card's border is now the neutral #333 all round. Its left padding
+    is 12px, so the text keeps its place.
+  - The ratchet's one exemption is keyed to that element. Only the fill of
+    `.canvas-pin__edge`, at rest, in a presence-colour variable passes. Its
+    border, a glow, any other state, or the same colour on the card, the
+    text, the reply or Delete all fail.
+  - Each control now records `near`: the other non-control JSX elements
+    inside its parent, with what they hold. `frameFindings` builds them
+    beside the control and checks each one. Neighbouring buttons and links
+    (a toolbar's accent Export) are judged as controls, not as frames.
+  - The real Delete note sees the edge, text, meta and reply beside it.
+    The real app has no findings.
+  - "The Delete row is never tinted": Delete has no fill, and its row is
+    the card's neutral #1a1a1a. Live, the open edge is rgb(232, 163, 61) and
+    the resolved edge is the agent's #7AD3FF, both flush with the card's top
+    and bottom.
+- Q3: the hidden-text refusal counts hidden characters (code points), never
+  bytes: `HIDDEN_TEXT_CHARACTERS = 1120`. The 422 carries `hiddenCharacters`
+  and `limitCharacters`; `rawBytes`, `hiddenBytes` and `limitBytes` are gone.
+  - 280 emoji each with a stray FE0F (280 hidden characters) and 280
+    families (7,000 bytes, none hidden) both save. That holds in the
+    backend, the shared corpus (now 1,047 cases with a `saves` field and a
+    third seeded fuzz), a test-time fuzz of 200-280-token emoji notes, the
+    dialog, and live through the dialog, the API, the list, `nebula pins`
+    and the card.
+  - The limit stays 1,120, now in characters. Hidden text can be up to
+    4,480 bytes, and agents never see any of it.
+- Q3 audit, every cap on a note's path:
+  - backend `clean_text`: 280 visible characters and 1,120 hidden
+    characters; no byte count;
+  - the pins route: no request-size limit (uvicorn sets none; only the
+    restore upload has one);
+  - the project store: `MAX_PROJECT_BYTES` 16 MiB for a whole project,
+    refused with its own project-size 413 and line. Notes alone can't
+    reach it: a pin is at most about 41 KB, and 200 pins about 8 MB.
+  - the events feed (`canvas_events`): `MAX_EVENT_BYTES` 4,096 per event,
+    strings cut at 160 code points, summaries at 200. These cut previews
+    and never refuse. The cut used to fall wherever it landed, through a
+    family. A pin's event `text` and `reply` now arrive cut on a
+    character's edge (`event_text`, `clip_characters`). `pin_summary` and
+    `pin_resolved_summary` are cut on a character's edge within 200.
+  - `mcp_channel`: 200 or 300 code points. A pin's text arrives already
+    within that, so it isn't cut there.
+  - the dialog: visible characters; the note field has no `maxLength`.
+  - `fitNote` and the store's `sanitize`: visible characters.
+  - So no raw byte cap is left on a note. The one byte limit a note sits
+    under is the project's 16 MiB, which has its own line. A new line for
+    the hidden-text refusal is not needed.
+- `text_length` is now built on `_character_ends`, the same characters the
+  clips cut on. The 1,047-case corpus is unchanged in note and count.
+
+Review 13 (folded in):
+
+- L-2: the Unicode data is its own chunk. `lib/canvasPins.ts` has no static
+  import of `pinTextUnicode.json`; `pinTextReady` starts the dynamic import
+  as the module loads, and until it lands the rules fall back to strict
+  (no selector fits, no tag run is a flag, no ZWJ chain is RGI).
+  - The store's `apply` queues a listing that arrives first (in arrival
+    order) on `pinTextReady`; `hydrate` and `submit` await it before
+    `sanitize`. So an early pin is neither dropped nor shown unsanitized
+    (`agentPresenceFollowups.lazyText.test.tsx` holds the chunk back with a
+    mock and checks both).
+  - PinComposer renders the dialog only once the data is in, so it never
+    counts with the fallbacks.
+  - The entry size is in the gates below.
+- NIT-3: a `note_too_long` refusal turns the dialog's "N left" on
+  (`tooLongRefusals` in the store, `revealCounter` on PromptDialog). The
+  refusal-too-long shot is dropped: the dialog can't send past 280, so that
+  state is the store's. Its live check stays, now with the counter.
+- NIT-4, the ratchet: `amberColours` reads 8- and 4-digit hex
+  (`#f5c518cc`); a frame value with `currentColor` is checked against the
+  element's own `color` in that state, or the one it inherits. The
+  exemption is keyed to the element itself: the winning rule has to name
+  `.canvas-pin__edge` as its subject (a wrapper's `.canvas-pin__card > span`
+  or a lookalike `.canvas-pin__edge-glow` / `.canvas-pin__card-actions`
+  fails), and its value is `var(--pin-color)` with no fallback or
+  `var(--agent-color)` with only `#5b9dff` (`var(--pin-color, #ff5a1f)`
+  fails). Each is in the corpus.
+- NIT-5: no change.
+
+GM r23:
+
+- 1(a): E0100-E01EF stays only for a pair the Ideographic Variation
+  Database registers. The generator reads `IVD_Sequences.txt` (IVD
+  2026-08-03, from unicode.org/ivd/data) and writes it as `ivd`: 29,642
+  pairs over 15,304 bases, one entry a base, base-36 deltas and offset
+  runs (about 75 KB of the file's 101,682 bytes). `cjkUnified` is gone. Both sides
+  decode it the same way (`_ivd_pairs`, `ivdPairs`), and the two JSON files
+  are byte-identical (a test reads both). 葛 registers E0100-E0109, so
+  葛+E010A now goes; 一 registers only E0100.
+- 1(b): agents read no variation selector at all and a ZWJ only inside an
+  RGI sequence: `agent_text` (shown form, then the strip). It is what
+  `public_pin` gives by default, so every agent path gets it: GET
+  /api/canvas/pins without the person's token, the snapshot
+  (look_at_canvas), `for_agents`, `nebula pins` / `look` / `start`
+  (`format_pin`, `pin_line`, `note_block`, `one_line`), agent start
+  (`pins_part`), a resolve's answer, the events feed (`event_text`) and the
+  summaries, and the channel push (`mcp_channel.clean_text` drops every
+  selector too). MCP reads these same routes. Only the person's canvas
+  keeps the shown form: their GET (`list(person=_is_person_request())`),
+  the WebSocket (`_pins_message`) and their create's answer.
+  - The corpus (1,256 cases) carries `agent` and `agentReply`, with GM r23's
+    named cases (a registered pair kept on the card and stripped for
+    agents; 280 葛 whose selectors spell "ignore all previous
+    instructions…", once past E0109 and once in registered selectors
+    digit by digit) and a fourth seeded fuzz. `test_pin_text_r23.py` runs a
+    300-case smuggling fuzz through every agent path and the API.
+- 2: two codes and GM's lines. The 101st open note is a 409
+  `open_notes_full` (with `limit`): "This canvas has 100 open notes.
+  Resolve or delete some, then add this one." A node gone is a 404
+  `pin_node_gone`: "That node was removed, so the note wasn’t added."
+  - The removed node also holds the dialog: Send note is disabled in the
+    shared grey (`disabled-buttons.css`), its tooltip the line; Cancel stays
+    live and the text stays in the field (Cancel keeps it as the draft). It
+    happens on the 404, and when the canvas loses a node it had while the
+    dialog is open (an agent or the person removes it); a node the canvas
+    hasn't loaded yet is never "removed".
+  - The 100-notes refusal keeps Send note live: resolving or deleting one
+    makes room.
+- 3: once the person edits and more than 30 are left, the counter hides
+  again (the next accepted edit resets the refusal's hold). The counter is
+  always laid out and fades on the notice region's curves (in 240ms, out
+  294ms, off for reduced motion), keeping its last words while it fades.
+- 4: the visible counter is no longer a live region. One visually hidden
+  polite region says "30 characters left", "10 characters left" and "0
+  characters left" as the note reaches each (a paste that jumps past one
+  says the count it lands on). A refusal's line is spoken once, through
+  the toast's own `role="status"`; nothing else holds it (a test per
+  refusal counts the live regions with its line: one).
+
+### Fix round 14 gates
+
+- Backend, the full suite (isolated, no xdist): 11,798 passed, 71 skipped,
+  1 failed in 54 min. The failure,
+  `test_input_size_security.py::test_quick_measures_off_the_event_loop`, is
+  a timing test; that file alone passes (58 passed, 9 skipped). The pin
+  files on their own (23 files): 976 passed, including the new
+  `test_pin_text_r23.py`.
+- Frontend: `tsc -b` clean; `eslint .` clean.
+- Vitest, the full run with `--maxWorkers=6`: 7,379 passed and 21 failed
+  in 10 files, all timeouts or timing under load (r13's pressed-state
+  release, ResultsGallery, the moodboard undo, Settings and others). The 10
+  files rerun alone: 217 passed. New: `agentPresenceFollowups.r23.test.tsx`
+  (19) and `agentPresenceFollowups.lazyText.test.tsx` (2).
+- Build into a scratch outDir: the entry is 423,203 bytes raw (129,804
+  gzip), down from 447,554 at 63a53994 (24,351 bytes less: the Unicode data
+  left the entry, a little new code came in). Under the 512,000 budget; 95
+  JS assets eval-free. Fonts: 53 @font-face rules, 13 woff2, 285,052 bytes.
+- Live (backend 8795, Vite 5795, 8000-8010 and 5173 blocked): 83 of 83, all
+  sections. Run alone first, r23 passed 9 of 9. In the full run it timed
+  out waiting for its new node, because r14's tab had just been made to
+  act as a tab without the person token and stopped showing agents' edits.
+  So r23 now starts with a reload. Older checks that expected agent paths
+  to keep selectors (review 11 MEDIUM-1's FE0F, GM r19's hearts, GM r21's
+  葛) were updated to GM r23's agent form; the card checks are unchanged.
+  Shots: `fix14-person-only-line.png`, `fix14-open-notes-full-1440.png`,
+  `fix14-removed-node-send-disabled-1440.png`,
+  `fix14-ivd-card-and-nebula-pins-1440.png`, `fix14-saved-280-*`. The md5
+  check found only the two pairs that are meant to match (the 5xx and
+  no-answer toasts; the float shot before and after undo).

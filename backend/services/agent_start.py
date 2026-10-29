@@ -46,7 +46,7 @@ import json
 from typing import Any, Iterable, Mapping
 
 from services import node_categories
-from services.canvas_pins import shown_text
+from services.canvas_pins import agent_text
 
 CHARS_PER_TOKEN = 4
 BUDGETS: dict[str, int] = {
@@ -249,7 +249,7 @@ def pins_part(pins: Iterable[Mapping[str, Any]], *, via: str) -> dict[str, Any]:
     cut = False
     for pin in open_pins[:MAX_PINS]:
         # Stripped here too, whatever the caller passes (review 10 NIT-3).
-        text = shown_text(pin.get("text"))
+        text = agent_text(pin.get("text"))  # agents' form (GM r23)
         row = {"id": pin.get("id"), "text": _cut_note(text, PIN_CHARS), "anchor": pin.get("anchor")}
         cost = size(row) + 2
         if used + cost > budget:

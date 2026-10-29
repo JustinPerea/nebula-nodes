@@ -1460,13 +1460,23 @@ Rules:
   C1, no ESC, no format character). What draws nothing is dropped too
   (fix round 13 reads Unicode 18's own lists for this): a variation
   selector stays only when Unicode lists it for the character before it,
-  and only one: U+E0100–E01EF after a CJK unified ideograph, U+180B–180F
+  and only one: U+E0100–E01EF only for a pair the Ideographic Variation
+  Database registers (葛 has ten; most ideographs have none), U+180B–180F
   after a Mongolian letter, U+FE00–FE0F after a base StandardizedVariants
   or emoji-variation-sequences lists (an emoji's U+FE0E/U+FE0F, a keycap's
   digit); every other selector, the combining grapheme joiner, a
   zero-width joiner outside an emoji ZWJ sequence, and every tag character
-  except the England, Scotland and Wales flags is dropped. Real emoji reach
-  you whole, extra selectors never. Whitespace (and a byte order mark) at
+  except the England, Scotland and Wales flags is dropped. That shown form
+  is what the person's own canvas displays. What agents read goes one step
+  further (PR #200 fix round 14, GM r23): no variation selector at all
+  (U+FE00–FE0F, U+E0100–E01EF, U+180B–180F) and a zero-width joiner only
+  inside an RGI emoji ZWJ sequence, so a registered variant of 葛 reads as
+  葛, `❤️` as `❤`, and a family stays one family. That holds for `pins`
+  (look_at_canvas, start_here, GET /api/canvas/pins without the person's
+  token, the snapshot JSON), `nebula pins` / `nebula look` / `nebula
+  start`, a resolve's answer, the events feed (`text`, `reply`,
+  `summary`) and the channel push. 280 ideographs whose selectors spell an
+  instruction reach you as 280 bare ideographs. Whitespace (and a byte order mark) at
   the ends of a note or reply is trimmed, and the note is stored trimmed;
   the spaces and blank lines inside are kept as typed and count. A note of
   only whitespace is empty (422, "Note can't be empty"). The 280 counts only
@@ -1474,9 +1484,13 @@ Rules:
   or its variant selector, a flag, an RGI emoji ZWJ sequence such as a
   family) in the stripped text, the same count the note dialog uses; emoji
   joined into a chain that isn't an RGI sequence count one each. What the strip drops is hidden text; up to
-  1,120 bytes of it (UTF-8) is kept as typed. Past that the note or reply is
-  refused (422) with `"code": "note_hidden_too_long"`, `rawBytes`,
-  `hiddenBytes` and `limitBytes` beside `detail`. Past 280 characters the
+  1,120 hidden characters (code points, never bytes: 280 families of about
+  25 bytes each save) are kept as typed. Past that the note or reply is
+  refused (422) with `"code": "note_hidden_too_long"`, `hiddenCharacters`
+  and `limitCharacters` beside `detail`. No note limit counts bytes. An
+  event's `text` and `reply`, and a pin event's summary, are previews cut on
+  a character's edge (never half a family) to fit the events feed; read the
+  whole note from `pins`. Past 280 characters the
   422 carries `"code": "note_too_long"` and `"limit": 280` beside `detail`. A reply is one line (a line break reads as a space). A note keeps
   the lines the person wrote (Shift+Enter in the note dialog): its newlines
   reach agents as `\n` in `pins[].text` (look_at_canvas, start_here, the
@@ -1501,7 +1515,10 @@ Rules:
   surface shows a break as ` ⏎ `: an event's `summary` (`pinned "warmer ⏎
   bluer" on n4`) and each line of `nebula watch`, so one
   event is always one line. At most 100 open notes per project and
-  200 in total (the oldest answered ones are dropped first).
+  200 in total (the oldest answered ones are dropped first). The 101st open
+  note is refused (409) with `"code": "open_notes_full"` and `"limit": 100`;
+  a note for a node that is no longer on the canvas is refused (404) with
+  `"code": "pin_node_gone"` (the canvas then holds Send note and says so).
 - Pins persist with the project (on the project record, beside the canvas
   snapshot, so autosave never touches them) and switch with it. Deleting a
   pinned node leaves its pins where the node stood, marked detached; so does

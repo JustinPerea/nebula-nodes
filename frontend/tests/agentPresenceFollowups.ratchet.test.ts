@@ -3,7 +3,7 @@ import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import ts from 'typescript';
 import { gatedGraphActions } from '../src/store/graphStore';
-import { appControls, appCss, appMenuItemFindings, cascadeFindings, controlsIn, controlsInFiles, customProperties, frameFindings, PRESENCE_COLOUR_EDGE, menuItemFindings, notRedFindings, pressedFindings, ruleFindings, wordFindings, wordKind } from './helpers/destructiveRule';
+import { type JsxTree, appControls, appCss, appMenuItemFindings, cascadeFindings, controlsIn, controlsInFiles, customProperties, frameFindings, PRESENCE_COLOUR, menuItemFindings, notRedFindings, pressedFindings, ruleFindings, wordFindings, wordKind } from './helpers/destructiveRule';
 
 /**
  * Follow-ups to PR #195, two static ratchets.
@@ -2274,10 +2274,13 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
 
   it('GM r18: no frame around a red control is amber, warning or accent (Forget ID sat in an amber box)', () => {
     expect(controls.flatMap((control) => frameFindings(control, vars))).toEqual([]);
-    // GM r20 Q3: the presence-colour author edge on the pin card passes by its variable, whatever the colour.
-    expect(PRESENCE_COLOUR_EDGE.test('3px solid var(--pin-color)')).toBe(true);
-    expect(PRESENCE_COLOUR_EDGE.test('3px solid var(--agent-color, #5b9dff)')).toBe(true);
-    expect(PRESENCE_COLOUR_EDGE.test('3px solid #e8a33d')).toBe(false);
+    // GM r22 Q2: the status edge's fill passes by its presence variable, whatever the colour.
+    expect(PRESENCE_COLOUR.test('var(--pin-color)')).toBe(true);
+    expect(PRESENCE_COLOUR.test('var(--agent-color, #5b9dff)')).toBe(true);
+    expect(PRESENCE_COLOUR.test('#e8a33d')).toBe(false);
+    // The real Delete note sees the edge beside it (its `near`), and passes.
+    const pinDeleteReal = controls.find((c) => c.file.endsWith('PinLayer.tsx') && c.name === 'Delete note');
+    expect(pinDeleteReal?.near?.map((tree) => tree[1][0])).toEqual(expect.arrayContaining(['canvas-pin__edge', 'canvas-pin__text', 'canvas-pin__meta', 'canvas-pin__reply']));
   });
 
   it('GM r18 corpus: an amber, warning, accent or warm frame is caught at rest and on hover; neutral and red frames stay quiet', () => {
@@ -2311,22 +2314,54 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
       // The control's own pseudo-element drawing a frame round it.
       '.x__forget::after { content: ""; border: 1px solid #f5c518; }',
     ]) expect(frameFindings(forget, vars0, css), css).not.toEqual([]);
-    // Review 12 NIT-3: on the pin card only its left edge in a presence colour
-    // passes; a whole border, a glow, a literal colour or another element fails.
+    // GM r22 Q2 (fix round 14): near Delete note only the status edge's own
+    // fill may take the presence colour. The card's border or fill, the Delete
+    // row, the text, the reply, the edge's border or glow all fail.
     const pinDelete = { file: 'components/canvas/PinLayer.tsx', line: 1, name: 'Delete note', kind: 'red' as const, classes: ['canvas-pin__delete'],
-      ancestors: [['div', ['canvas-pin']], ['div', ['canvas-pin__card']]] as Array<[string, string[]]> };
+      ancestors: [['div', ['canvas-pin']], ['div', ['canvas-pin__card']]] as Array<[string, string[]]>,
+      near: [['span', ['canvas-pin__edge'], []], ['p', ['canvas-pin__text'], []], ['p', ['canvas-pin__meta'], []],
+        ['p', ['canvas-pin__reply'], [['span', ['canvas-pin__agent'], []]]]] as JsxTree[] };
     for (const css of [
+      '.canvas-pin__card { border-left: 3px solid var(--pin-color); }',
       '.canvas-pin__card { border: 2px solid var(--sr-accent); box-shadow: 0 0 0 4px #ff5a1f; }',
-      '.canvas-pin__card { border: 3px solid var(--pin-color); }',
       '.canvas-pin__card { box-shadow: 0 0 0 2px var(--pin-color); }',
-      '.canvas-pin__card { border-left: 3px solid #f5c518; }',
+      '.canvas-pin__card { background: var(--pin-color); }',
       'body.app-slava-restraint .canvas-pin__card { border-color: #ff5a1f; }',
       '.canvas-pin { outline: 2px solid #ff5a1f; }',
-      '.canvas-pin { border-left: 3px solid var(--pin-color); }',
+      '.canvas-pin__meta { background: color-mix(in srgb, var(--pin-color) 20%, transparent); }',
+      '.canvas-pin__text { border-bottom: 1px solid #f5c518; }',
+      '.canvas-pin__reply .canvas-pin__agent { background: #e8a33d; }',
+      '.canvas-pin__edge { background: #f5c518; }',
+      '.canvas-pin__edge { background: var(--pin-color); box-shadow: 0 0 8px var(--pin-color); }',
+      '.canvas-pin__edge:hover { background: var(--pin-color); }',
+      // Review 13 NIT-4: the 8-digit hex, currentColor over an amber colour,
+      // a rule that reaches the edge without naming it, a warm fallback.
+      '.canvas-pin__card { border: 1px solid #f5c518cc; }',
+      '.canvas-pin__card { box-shadow: 0 0 0 1px #fc1c; }',
+      '.canvas-pin__card { color: #f5c518; border: 1px solid currentColor; }',
+      '.canvas-pin__text { color: #f5c518; border-bottom: 1px solid currentColor; }',
+      '.canvas-pin__card:hover { color: #e8a33d; outline: 1px solid currentColor; }',
+      '.canvas-pin__card > span { background: var(--pin-color); }',
+      '.canvas-pin__card span:first-child { background: var(--pin-color); }',
+      '.canvas-pin__edge { background: var(--pin-color, #ff5a1f); }',
     ]) expect(frameFindings(pinDelete, vars0, css), css).not.toEqual([]);
+    // Resolved: the author's colour, with only its blue fallback.
+    const resolvedDelete = { ...pinDelete, ancestors: [['div', ['canvas-pin', 'canvas-pin--resolved']], ['div', ['canvas-pin__card']]] as Array<[string, string[]]> };
+    expect(frameFindings(resolvedDelete, vars0, '.canvas-pin--resolved .canvas-pin__edge { background: var(--agent-color, #ff5a1f); }')).not.toEqual([]);
+    expect(frameFindings(resolvedDelete, vars0, '.canvas-pin--resolved .canvas-pin__edge { background: var(--agent-color, #5b9dff); }')).toEqual([]);
+    // A lookalike class beside Delete note is no status edge.
+    const lookalike = { ...pinDelete, near: [['span', ['canvas-pin__edge-glow'], []], ['div', ['canvas-pin__card-actions'], []]] as JsxTree[] };
     for (const css of [
-      '.canvas-pin__card { --pin-color: #ff5a1f; border-left: 3px solid var(--pin-color); }',
-      '.canvas-pin__card { border-left-color: var(--agent-color, #5b9dff); }',
+      '.canvas-pin__edge-glow { background: var(--pin-color); }',
+      '.canvas-pin__card-actions { background: var(--pin-color); }',
+    ]) expect(frameFindings(lookalike, vars0, css), css).not.toEqual([]);
+    // The Delete row itself is never tinted: a presence fill on it is caught as its own colour.
+    expect(cascadeFindings(pinDelete, vars0, '.canvas-pin__delete:hover { background: var(--pin-color); }')).not.toEqual([]);
+    for (const css of [
+      '.canvas-pin__edge { --pin-color: #ff5a1f; background: var(--pin-color); }',
+      '.canvas-pin--resolved .canvas-pin__edge { background: var(--agent-color, #5b9dff); }',
+      '.canvas-pin__card .canvas-pin__edge { background: var(--pin-color); }',
+      '.canvas-pin__card { color: #e8e8e8; border: 1px solid currentColor; }',
     ]) expect(frameFindings(pinDelete, vars0, css), css).toEqual([]);
     for (const css of [
       '.probe-box { border: 1px solid var(--sr-edge-strong); background: var(--sr-surface-control); }',

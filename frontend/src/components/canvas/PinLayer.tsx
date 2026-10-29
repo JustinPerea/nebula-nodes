@@ -139,6 +139,10 @@ function PinBadge({ pin, slot, zoom }: { pin: Pin; slot: number; zoom: number })
       </button>
       {expanded && (
         <div className="canvas-pin__card nowheel" role="note">
+          {/* The status edge (GM r22 Q2): full height, the pin colour while
+              open, the author's once resolved; its own element, so nothing
+              else on the card, the Delete row included, takes that colour. */}
+          <span className="canvas-pin__edge" aria-hidden="true" />
           <p className="canvas-pin__text">{pinDisplayText(pin.text)}</p>
           <p className="canvas-pin__meta">
             {relativeTime(pin.createdAt)}

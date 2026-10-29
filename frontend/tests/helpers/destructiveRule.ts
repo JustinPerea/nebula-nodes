@@ -319,7 +319,13 @@ export interface Control {
   toggle?: boolean;
   /** The JSX elements around it, outermost first: [tag, classes]. */
   ancestors: Array<[string, string[]]>;
+  /** The other JSX elements inside its parent, with what they hold (GM r22
+   * Q2, PR #200 fix round 14: a frame near a red control, not only round it). */
+  near?: JsxTree[];
 }
+
+/** A JSX element as the ratchet builds it: [tag, classes, children]. */
+export type JsxTree = [string, string[], JsxTree[]];
 
 const camelWords = (name: string) => name.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_.]+/g, ' ');
 
@@ -593,6 +599,34 @@ function ancestorsOf(open: Opening, source: ts.SourceFile): Array<[string, strin
   return out;
 }
 
+/** The JSX elements a node holds that aren't controls, each with its own, through `{cond && (...)}` and maps. */
+function treesIn(node: ts.Node, source: ts.SourceFile, skip?: ts.Node): JsxTree[] {
+  const out: JsxTree[] = [];
+  const visit = (n: ts.Node): void => {
+    if (n === skip) return;
+    const open = ts.isJsxElement(n) ? n.openingElement : ts.isJsxSelfClosingElement(n) ? n : null;
+    // Another control beside it (a toolbar's accent Export) is judged as a
+    // control; `near` is what decorates the red one: an edge, a row, a text.
+    if (open && (controlKind(open, source) || /^(a|Link|select|textarea|input)$/.test(tagOf(open, source)))) return;
+    if (open) {
+      const t = tagOf(open, source);
+      const inner = ts.isJsxElement(n) ? n.children.flatMap((child) => treesIn(child, source, skip)) : [];
+      out.push([/^[a-z]/.test(t) ? t : 'div', classesOf(open, source), inner]);
+      return;
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(node);
+  return out;
+}
+/** The other elements inside a control's parent element. */
+function nearOf(open: Opening, source: ts.SourceFile): JsxTree[] {
+  const element: ts.Node = ts.isJsxOpeningElement(open) ? open.parent : open;
+  let parent: ts.Node | undefined = element.parent;
+  while (parent && !ts.isJsxElement(parent)) parent = parent.parent;
+  return parent && ts.isJsxElement(parent) ? parent.children.flatMap((child) => treesIn(child, source, element)) : [];
+}
+
 /** Whether an element is a control: buttons by any name, role=button, an input button ('button'), or anything clickable ('click'). */
 function controlKind(open: Opening, source: ts.SourceFile): 'button' | 'click' | null {
   const tag = tagOf(open, source);
@@ -627,7 +661,7 @@ function scan(tsx: string, file: string): { controls: Control[]; forwarders: For
       const name = said.find((text) => ACTION_WORD.test(text))
         ?? (silent && how === 'button' ? codeWords(open, source).find((text) => ACTION_WORD.test(text)) : undefined);
       const line = source.getLineAndCharacterOfPosition(open.getStart(source)).line + 1;
-      if (name) controls.push({ file, line, name, kind: kindOf(classes), classes, ancestors: ancestorsOf(open, source),
+      if (name) controls.push({ file, line, name, kind: kindOf(classes), classes, ancestors: ancestorsOf(open, source), near: nearOf(open, source),
         ...(attr(open, 'aria-pressed', source) ? { toggle: true } : {}) });
       else {
         const owner = how === 'button' ? componentOf(open) : null;
@@ -854,8 +888,10 @@ function amberRgb(red: number, green: number, blue: number): boolean {
 }
 function amberColours(value: string): string[] {
   const out: string[] = [];
-  for (const match of value.matchAll(/#([0-9a-f]{6}|[0-9a-f]{3})\b/gi)) {
-    const hex = match[1].length === 3 ? [...match[1]].map((c) => c + c).join('') : match[1];
+  // Review 13 NIT-4: the 8- and 4-digit forms too (#f5c518cc, #fc1c).
+  for (const match of value.matchAll(/#([0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{4}|[0-9a-f]{3})\b/gi)) {
+    const short = match[1].length <= 4;
+    const hex = short ? [...match[1].slice(0, 3)].map((c) => c + c).join('') : match[1].slice(0, 6);
     if (amberRgb(...([0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number]))) out.push(match[0]);
   }
   // Review 12 NIT-2: rgb() and rgba() too (a gradient of rgba(245,197,24,.2)).
@@ -867,13 +903,21 @@ function amberColours(value: string): string[] {
 }
 
 /**
- * The one frame GM allows round a red control (r20 Q3): the presence-colour
- * author edge on the pin card. It is the author's presence colour, it runs
- * the whole card, and it doesn't frame Delete, so whatever that colour is
- * (amber or orange too) it passes. Keyed to the presence-colour variables,
- * never to a hue: any other warm frame still fails.
+ * The one coloured element GM allows near a red control (r20 Q3, r22 Q2,
+ * PR #200 fix round 14): the pin card's left status edge, its own element
+ * (`.canvas-pin__edge`), full height, in the pin colour while open and the
+ * author's once resolved. Keyed to that element and its fill in a presence
+ * colour variable, never to a hue or a selector: amber anywhere else near a
+ * red control, the card's own border or fill included, still fails.
  */
-export const PRESENCE_COLOUR_EDGE = /^(?:\d+(?:\.\d+)?px\s+solid\s+)?var\(--(?:pin|agent)-color(?:,\s*#[0-9a-f]{3,8})?\)$/i;
+export const STATUS_EDGE_CLASS = 'canvas-pin__edge';
+// Review 13 NIT-4: the pin colour with no fallback, the author's with only
+// its blue one; a warm fallback (var(--pin-color, #ff5a1f)) isn't exempt.
+export const PRESENCE_COLOUR = /^(?:var\(--pin-color\)|var\(--agent-color(?:,\s*#5b9dff)?\))$/i;
+/** The rule that wins names the edge itself as its subject (review 13
+ * NIT-4): a wrapper's rule, or one for a lookalike class, that happens to
+ * reach the edge element isn't the edge's own fill. */
+const EDGE_SUBJECT = new RegExp(`\\.${STATUS_EDGE_CLASS}(?![\\w-])[^\\s>+~]*$`);
 
 /**
  * GM r18 (PR #200 fix round 12): orange never frames a destructive action.
@@ -890,24 +934,36 @@ export function frameFindings(control: Control, vars: Vars, extraCss?: string): 
   const allVars: Vars = new Map(vars);
   if (extraCss) for (const [name, values] of customProperties([{ css: extraCss }])) allVars.set(name, [...(allVars.get(name) ?? []), ...values]);
   const check = (element: Element, pseudoOnly: boolean) => {
+    const edge = element.classList.contains(STATUS_EDGE_CLASS);
     // Every state an ancestor can take (focus, pressed, [data-*] …) and
     // every pseudo-element it draws, not only rest and hover (review 12 NIT-2).
-    for (const [key, winner] of cascaded(element, extraCss, { loose: true })) {
+    const styles = cascaded(element, extraCss, { loose: true });
+    // Its `color` in a state, its own or the one it inherits.
+    const colourOf = (state: string): string => {
+      for (let at: Element | null = element; at; at = at.parentElement) {
+        const map = at === element ? styles : cascaded(at, extraCss, { loose: true });
+        const won = map.get(`${state}|color`) ?? map.get('|color');
+        if (won) return won.value;
+      }
+      return '';
+    };
+    for (const [key, winner] of styles) {
       const [state, prop] = key.split('|');
       if (pseudoOnly && !/::?(before|after)\b/.test(state)) continue;
       if (!/^(border|outline|box-shadow|background|filter)/.test(prop)) continue;
       // An ancestor's own keyboard ring (:focus, :focus-visible) is the ring
       // rule's to judge; :focus-within, drawn round the focused control, is a frame.
       if (/^:focus(?:-visible)?$/.test(state) && FOCUS_RING.test(prop)) continue;
-      // The one exemption (GM r20 Q3, review 12 NIT-3): the pin card's left
-      // edge in a presence colour, nothing else on it (a whole border or a
-      // glow still fails).
-      if (/^border-left(?:-color)?$/.test(prop) && /\.canvas-pin__card\b/.test(winner.selector)
-        && PRESENCE_COLOUR_EDGE.test(winner.value.trim())) continue;
+      // The one exemption (GM r22 Q2): the status edge's own fill, at rest,
+      // in a presence colour. Its border, shadow or any other state isn't.
+      if (edge && state === '' && /^background(?:-color)?$/.test(prop) && PRESENCE_COLOUR.test(winner.value.trim())
+        && winner.selector.split(',').some((part) => EDGE_SUBJECT.test(part.trim()))) continue;
+      // Review 13 NIT-4: currentColor is the element's own colour in that state.
+      const value = /currentcolor/i.test(winner.value) ? `${winner.value} ${colourOf(state)}` : winner.value;
       const bad = [
-        ...badColours(winner.value, 'red', allVars),
-        ...varsIn(winner.value).filter((v) => WARNING_VAR.test(v.name)).map((v) => v.text),
-        ...amberColours(winner.value),
+        ...badColours(value, 'red', allVars),
+        ...varsIn(value).filter((v) => WARNING_VAR.test(v.name)).map((v) => v.text),
+        ...amberColours(value),
       ];
       if (bad.length) found.push(`${control.file}:${control.line} "${control.name}" is framed by ${winner.selector} ${state || 'rest'} ${prop}: ${[...new Set(bad)].join(' ')}`);
     }
@@ -916,6 +972,16 @@ export function frameFindings(control: Control, vars: Vars, extraCss?: string): 
     ancestors.forEach((ancestor) => check(ancestor, false));
     // The control's own ::before and ::after can draw a frame round it too.
     check(el, true);
+    // What sits beside it in its parent, and what that holds (GM r22 Q2:
+    // amber anywhere near a red control, elsewhere on the pin card too).
+    const add = (tree: JsxTree, parent: Element): void => {
+      const made = document.createElement(tree[0]);
+      if (tree[1].length) made.className = tree[1].join(' ');
+      parent.appendChild(made);
+      check(made, false);
+      tree[2].forEach((child) => add(child, made));
+    };
+    if (el.parentElement) (control.near ?? []).forEach((tree) => add(tree, el.parentElement!));
   } finally {
     done();
   }

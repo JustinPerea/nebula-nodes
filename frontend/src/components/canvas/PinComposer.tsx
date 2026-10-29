@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { PromptDialog, type PromptRequest } from '../PromptDialog';
-import { KEPT_FEWER, KEPT_SHOWN, keptMoreLabel, keptNoteDisplay, keptNoteLine, MAX_PIN_TEXT, noteLength, NOTE_KEPT_COPY, pinDisplayText, type KeptNote } from '../../lib/canvasPins';
+import { KEPT_FEWER, KEPT_SHOWN, keptMoreLabel, keptNoteDisplay, keptNoteLine, MAX_PIN_TEXT, noteLength, NOTE_KEPT_COPY, PIN_REFUSAL_COPY,
+  pinDisplayText, pinTextIsLoaded, pinTextReady, type KeptNote } from '../../lib/canvasPins';
+import { useGraphStore } from '../../store/graphStore';
 import { useCurrentProjectId } from '../../lib/currentProject';
 import { getProjectContext } from '../../lib/projectContext';
 import { useCanvasPinsStore } from '../../store/canvasPinsStore';
@@ -48,7 +50,32 @@ export function PinComposer() {
   const clearError = useCanvasPinsStore((s) => s.clearError);
   const kept = useCanvasPinsStore((s) => s.kept);
   const dismissKept = useCanvasPinsStore((s) => s.dismissKept);
+  const targetGone = useCanvasPinsStore((s) => s.targetGone);
+  const targetRemoved = useCanvasPinsStore((s) => s.targetRemoved);
+  const tooLongRefusals = useCanvasPinsStore((s) => s.tooLongRefusals);
   const lock = useCanvasLock();
+  // Review 13 L-2: the dialog counts only once the Unicode data is in (its
+  // own chunk, fetched as lib/canvasPins loads; a few milliseconds at most).
+  const [textReady, setTextReady] = useState(pinTextIsLoaded);
+  useEffect(() => {
+    if (textReady) return;
+    let live = true;
+    void pinTextReady.then(() => { if (live) setTextReady(true); });
+    return () => { live = false; };
+  }, [textReady]);
+  // GM r23 item 2: the node the dialog is for left the canvas (the person
+  // or an agent removed it): Send note is disabled with the line as its
+  // reason, and the line shows once; Cancel and the typed text stay.
+  // A node the canvas had for this dialog and then lost: never one it
+  // hasn't loaded yet.
+  const targetNode = composer && 'nodeId' in composer ? composer.nodeId : null;
+  const nodeHere = useGraphStore((s) => targetNode !== null && s.nodes.some((node) => node.id === targetNode));
+  const sawNode = useRef<string | null>(null);
+  useEffect(() => {
+    if (targetNode === null) sawNode.current = null;
+    else if (nodeHere) sawNode.current = targetNode;
+    else if (sawNode.current === targetNode) targetRemoved();
+  }, [targetNode, nodeHere, targetRemoved]);
   // Re-renders on a project change; the key is the canvas's own (projectKey).
   const openId = useCurrentProjectId();
   const here = getProjectContext()?.id ?? openId ?? '';
@@ -193,19 +220,21 @@ export function PinComposer() {
 
   return (
     <>
-      {request && (
+      {request && textReady && (
         <PromptDialog
           request={request}
           // Only what shows counts (GM r12 answer 3), as the backend counts it;
           // a neutral "N left" from 30 left (GM r20 note 1).
           cap={NOTE_CAP}
+          // Review 13 NIT-3: a note_too_long refusal turns "N left" on.
+          revealCounter={tooLongRefusals}
           // GM bug 2 (fix round 1 of PR #200): a textarea that grows, the
           // caret at the end of a kept note, and "Send note".
           multiline
           confirmLabel="Send note"
           onChange={setDraft}
-          confirm={lock.act({ offline: 'send notes' })}
-          onRefused={() => { refuseCanvasEdit(); }}
+          confirm={lock.act({ offline: 'send notes', ...(targetGone ? { disabled: true, title: PIN_REFUSAL_COPY.nodeGone } : {}) })}
+          onRefused={() => { if (!targetGone) refuseCanvasEdit(); }}
           onDone={(value) => {
             if (value === null || !value.trim()) cancel();
             else void submit(value);

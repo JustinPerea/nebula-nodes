@@ -1,10 +1,9 @@
 import type { InternalNode, Node } from '@xyflow/react';
 import type { NodeData } from '../types';
 import { apiRequest } from './apiRequest';
-import { RequestFailedError } from './errorCopy';
+import { PERSON_REQUIRED_CODE, RequestFailedError, personRequiredCopy } from './errorCopy';
 import type { Pin } from './wsClient';
 import type { ProjectContext } from './projectContext';
-import UNICODE from './pinTextUnicode.json';
 
 export type { Pin } from './wsClient';
 
@@ -97,8 +96,8 @@ const LINE_BREAKS = /\r\n|[\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029]/;
 // Review 11 MEDIUM-1 and GM r19 answer 1: what draws nothing is hidden
 // text; only real emoji and real variants keep their invisible parts. GM r21
 // (fix round 13): at most one variation selector stays, and only when Unicode
-// lists it for the character before it (E0100-E01EF after a CJK unified
-// ideograph, 180B-180D/180F after a Mongolian letter, FE00-FE0F after a base
+// lists it for the character before it (E0100-E01EF for a pair the
+// Ideographic Variation Database registers, GM r23; 180B-180D/180F after a Mongolian letter, FE00-FE0F after a base
 // StandardizedVariants or emoji-variation-sequences lists for it); a
 // zero-width joiner stays inside an emoji ZWJ sequence; tag characters stay
 // only as the England, Scotland or Wales flag (review 12 M-1). The data is
@@ -115,13 +114,55 @@ const within = (spans: number[][]) => (code: number) => {
   }
   return false;
 };
-const cjkUnified = within(UNICODE.cjkUnified);
-const mongolianLetter = within(UNICODE.mongolianLetters);
-const variationBases = new Map(Object.entries(UNICODE.variationBases as Record<string, number[][]>)
-  .map(([selector, spans]) => [parseInt(selector, 16), within(spans)]));
-const RGI_ZWJ = new Set<string>(UNICODE.rgiZwj);
-const RGI_ZWJ_LONGEST: number = UNICODE.rgiZwjLongest;
-const TAG_FLAGS = new Set<string>(UNICODE.tagFlags);
+// Review 13 L-2 (fix round 14): the data is its own chunk, fetched as this
+// module loads, not part of the entry. Until it lands every rule here errs on
+// the side of hiding and counting more (no selector fits, no tag run is a
+// flag, no ZWJ chain is RGI), and nothing that needs it runs before it: the
+// store awaits it before it sanitizes a pin (hydrate, a pushed listing, a
+// sent note), and the note dialog before it counts.
+type PinTextData = { ivd: string; mongolianLetters: number[][]; variationBases: Record<string, number[][]>;
+  rgiZwj: string[]; rgiZwjLongest: number; tagFlags: string[] };
+// GM r23 (review 13 M-1): base code point to the selector offsets from
+// E0100 the Ideographic Variation Database registers for it.
+let ivd = new Map<number, Set<number>>();
+/** The generator's IVD text ("<base delta>:<offset runs>" in base 36, joined
+ * by ","): the backend's canvas_pins._ivd_pairs, the same decode. */
+const ivdPairs = (text: string) => {
+  const pairs = new Map<number, Set<number>>();
+  let base = 0;
+  for (const entry of text.split(',')) {
+    if (!entry) continue;
+    const [delta, runs] = entry.split(':');
+    base += parseInt(delta, 36);
+    const offsets = new Set<number>();
+    for (const run of runs.split('.')) {
+      const [low, high = low] = run.split('-');
+      for (let at = parseInt(low, 36); at <= parseInt(high, 36); at += 1) offsets.add(at);
+    }
+    pairs.set(base, offsets);
+  }
+  return pairs;
+};
+let mongolianLetter: (code: number) => boolean = () => false;
+let variationBases = new Map<number, (code: number) => boolean>();
+let RGI_ZWJ = new Set<string>();
+let RGI_ZWJ_LONGEST = 1;
+let TAG_FLAGS = new Set<string>();
+let pinTextLoaded = false;
+/** Resolves once the generated Unicode data is in (it never rejects: a failed
+ * fetch leaves the strict fallbacks above). */
+export const pinTextReady: Promise<void> = import('./pinTextUnicode.json').then(({ default: data }) => {
+  const unicode = data as PinTextData;
+  ivd = ivdPairs(unicode.ivd);
+  mongolianLetter = within(unicode.mongolianLetters);
+  variationBases = new Map(Object.entries(unicode.variationBases).map(([selector, spans]) => [parseInt(selector, 16), within(spans)]));
+  RGI_ZWJ = new Set(unicode.rgiZwj);
+  RGI_ZWJ_LONGEST = unicode.rgiZwjLongest;
+  TAG_FLAGS = new Set(unicode.tagFlags);
+  pinTextLoaded = true;
+}, () => undefined);
+/** Whether the Unicode data is in (see pinTextReady). */
+export const pinTextIsLoaded = () => pinTextLoaded;
 const PICTOGRAPHIC: Array<[number, number]> = [
   [0x00a9, 0x00a9], [0x00ae, 0x00ae], [0x203c, 0x203c], [0x2049, 0x2049], [0x2122, 0x2122],
   [0x2139, 0x2139], [0x2194, 0x21aa], [0x231a, 0x23ff], [0x24c2, 0x24c2], [0x25aa, 0x25fe],
@@ -145,7 +186,7 @@ const selectorFits = (base: string | undefined, code: number) => {
   if (base === undefined) return false;
   const point = base.codePointAt(0) ?? 0;
   if (code >= 0xfe00 && code <= 0xfe0f) return variationBases.get(code)?.(point) ?? false;
-  if (code >= 0xe0100 && code <= 0xe01ef) return cjkUnified(point);
+  if (code >= 0xe0100 && code <= 0xe01ef) return ivd.get(point)?.has(code - 0xe0100) ?? false;
   return mongolianLetter(point);
 };
 // The combining grapheme joiner and Khmer's inherent vowels draw nothing.
@@ -252,7 +293,16 @@ export const PIN_REFUSAL_COPY = {
   addNoAnswer: 'Nebula didn’t answer, so the pin wasn’t added. Try again in a moment.',
   saveNoAnswer: 'Nebula didn’t answer, so the note wasn’t saved. Try again in a moment.',
   deleteFailed: 'Nebula couldn’t delete this note. Try again in a moment.',
+  // GM r22 Q1 (fix round 14): the person gate's refusal keeps its own line,
+  // with no "try again": waiting won't fix it.
+  canvasOnly: 'Notes can only be added from the Nebula canvas.',
+  // GM r23 item 2.
+  openNotesFull: 'This canvas has 100 open notes. Resolve or delete some, then add this one.',
+  nodeGone: 'That node was removed, so the note wasn’t added.',
 } as const;
+/** The backend's codes for the 100-open-notes 409 and the removed-node 404 (GM r23). */
+export const OPEN_NOTES_FULL_CODE = 'open_notes_full';
+export const NODE_GONE_CODE = 'pin_node_gone';
 
 /** The line for a refused add (a new pin and its note) or save (a note's text). */
 export function pinRefusalLine(error: unknown, action: 'add' | 'save'): string {
@@ -260,6 +310,15 @@ export function pinRefusalLine(error: unknown, action: 'add' | 'save'): string {
   const status = error instanceof RequestFailedError ? error.status : 0;
   if (code === HIDDEN_TEXT_CODE) return PIN_REFUSAL_COPY.hidden;
   if (code === TOO_LONG_CODE) return PIN_REFUSAL_COPY.tooLong;
+  if (code === OPEN_NOTES_FULL_CODE) return PIN_REFUSAL_COPY.openNotesFull;
+  if (code === NODE_GONE_CODE) return PIN_REFUSAL_COPY.nodeGone;
+  // A tab that isn't connected as the person (403 person_required): the
+  // person-only line every such refusal reads, the banner's own (GM Q116 a;
+  // review 13 L-1), which says how to fix it.
+  if (code === PERSON_REQUIRED_CODE && status >= 400 && status < 500) return personRequiredCopy();
+  // Any other person-gate 403 (agent_refused: a request that isn't the
+  // canvas's own) keeps GM r22 Q1's line. Adding is the only person-only pin write.
+  if (status === 403 && action === 'add') return PIN_REFUSAL_COPY.canvasOnly;
   if (status >= 400 && status < 500) return action === 'add' ? PIN_REFUSAL_COPY.addRefused : PIN_REFUSAL_COPY.saveRefused;
   // A 5xx, or no answer at all.
   return action === 'add' ? PIN_REFUSAL_COPY.addNoAnswer : PIN_REFUSAL_COPY.saveNoAnswer;

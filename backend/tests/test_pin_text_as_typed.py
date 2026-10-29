@@ -21,7 +21,7 @@ from cli import formatter
 from services.agent_presence import AgentIdentity
 from services.canvas_pins import (
     _selector_fits,
-    HIDDEN_TEXT_BYTES,
+    HIDDEN_TEXT_CHARACTERS,
     HIDDEN_TOO_LONG,
     MAX_PIN_TEXT,
     CanvasPins,
@@ -161,14 +161,15 @@ def test_a_note_too_long_once_shown_or_as_typed_is_refused(tmp_path):
     with pytest.raises(PinError) as hidden:
         pins.add_in("x" + "\x1b[0m" * 281, position={"x": 0, "y": 0}, graph_nodes={})
     assert hidden.value.detail == HIDDEN_TOO_LONG
-    assert hidden.value.extra == {"code": "note_hidden_too_long", "rawBytes": 1 + 4 * 281,
-                                  "hiddenBytes": 4 * 281, "limitBytes": HIDDEN_TEXT_BYTES}
+    # GM r22 Q3 (fix round 14): counted in hidden characters, never bytes.
+    assert hidden.value.extra == {"code": "note_hidden_too_long", "hiddenCharacters": 4 * 281,
+                                  "limitCharacters": HIDDEN_TEXT_CHARACTERS}
     with pytest.raises(PinError):
         pins.add_in("\x1b[31m\x00", position={"x": 0, "y": 0}, graph_nodes={})
     _, ok = pins.add_in("x" * MAX_PIN_TEXT + "\x1b[0m", position={"x": 0, "y": 0}, graph_nodes={})
     assert ok["text"] == "x" * MAX_PIN_TEXT
     # Exactly the hidden limit is kept as typed.
-    _, edge = pins.add_in("y" + "\x1b[0m" * (HIDDEN_TEXT_BYTES // 4), position={"x": 0, "y": 0}, graph_nodes={})
+    _, edge = pins.add_in("y" + "\x1b[0m" * (HIDDEN_TEXT_CHARACTERS // 4), position={"x": 0, "y": 0}, graph_nodes={})
     assert edge["text"] == "y"
 
 
@@ -279,15 +280,17 @@ def test_a_payload_in_invisible_marks_is_hidden_text_and_never_reaches_an_agent(
     smuggled = "".join(chr(0x61 + i % 26) + "".join(chr(0xE0100 + (i * 32 + j) % 240) for j in range(32)) for i in range(MAX_PIN_TEXT))
     refused = client.post("/api/canvas/pins", headers=PERSON, json={"text": smuggled, "nodeId": node})
     assert refused.status_code == 422 and refused.json()["code"] == "note_hidden_too_long"
-    assert refused.json()["hiddenBytes"] == 4 * 32 * MAX_PIN_TEXT
-    cgj = client.post("/api/canvas/pins", headers=PERSON, json={"text": "x" + "\u034f" * 600, "nodeId": node})
+    assert refused.json()["hiddenCharacters"] == 32 * MAX_PIN_TEXT
+    cgj = client.post("/api/canvas/pins", headers=PERSON, json={"text": "x" + "\u034f" * 1200, "nodeId": node})
     assert cgj.status_code == 422 and cgj.json()["code"] == "note_hidden_too_long"
     assert not store.projection().pins
     # Under the cap, stored as typed, and no output carries a mark past the first.
     typed = "go" + "\U000E0100" * 32 + " \u2764\ufe0f\ufe0f"
     made = client.post("/api/canvas/pins", headers=PERSON, json={"text": typed, "nodeId": node})
     assert made.status_code == 201 and made.json()["pin"]["text"] == "go \u2764\ufe0f"
-    assert client.get("/api/canvas/pins").json()["pins"][0]["text"] == "go \u2764\ufe0f"
+    # The person's canvas keeps the emoji's FE0F; agents read the bare emoji (GM r23).
+    assert client.get("/api/canvas/pins", headers=PERSON).json()["pins"][0]["text"] == "go \u2764\ufe0f"
+    assert client.get("/api/canvas/pins").json()["pins"][0]["text"] == "go \u2764"
     assert text_length("go \u2764\ufe0f") == 4
     family = "\U0001F468\u200d\U0001F469\u200d\U0001F467\u200d\U0001F466"
     england = "\U0001F3F4\U000E0067\U000E0062\U000E0065\U000E006E\U000E0067\U000E007F"
@@ -304,9 +307,8 @@ def test_a_refused_hidden_text_answers_its_code_and_counts_beside_the_persons_li
     assert refused.status_code == 422
     body = refused.json()
     assert body["detail"] == HIDDEN_TOO_LONG
-    raw_bytes = len(typed.encode())
-    assert body == {"detail": HIDDEN_TOO_LONG, "code": "note_hidden_too_long", "rawBytes": raw_bytes,
-                    "hiddenBytes": raw_bytes - 2, "limitBytes": HIDDEN_TEXT_BYTES}
+    assert body == {"detail": HIDDEN_TOO_LONG, "code": "note_hidden_too_long", "hiddenCharacters": len(typed) - 2,
+                    "limitCharacters": HIDDEN_TEXT_CHARACTERS}
     assert not store.projection().pins
     over = client.post("/api/canvas/pins", headers=PERSON, json={"text": "x" * 281, "nodeId": node})
     assert over.status_code == 422

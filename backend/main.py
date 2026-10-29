@@ -158,7 +158,7 @@ from services.canvas_events import (
     param_changes,
     parse_kinds,
 )
-from services.canvas_pins import ANOTHER_PROJECT, CanvasPins, PinError, pin_left, pin_resolved_summary, pin_summary
+from services.canvas_pins import ANOTHER_PROJECT, CanvasPins, PinError, event_text, pin_left, pin_resolved_summary, pin_summary
 from services.node_removals import RemovalLedger
 from services.agent_notes import AgentNotes, NoteError, note_summary
 from services import person_session
@@ -5955,7 +5955,7 @@ async def get_canvas_events(request: Request) -> dict[str, Any]:
 def _pins_message() -> dict[str, Any]:
     """The `canvasPins` WebSocket message for the active project (empty when unreadable)."""
     try:
-        listing = canvas_pins.list()
+        listing = canvas_pins.list(person=True)  # the person's canvas tabs: registered variants kept (GM r23)
     except (PinError, ProjectStoreError):
         listing = {"projectId": None, "pins": []}
     return {"type": "canvasPins", **listing}
@@ -5979,7 +5979,7 @@ def _journal_detached(pins: list[dict[str, Any]], reason: str) -> None:
         _journal(
             "pin.detached",
             node_id=node_id if isinstance(node_id, str) else None,
-            data={"pinId": pin.get("id"), "text": pin.get("text"), "anchor": pin.get("anchor"), "reason": reason},
+            data={"pinId": pin.get("id"), "text": event_text(pin.get("text")), "anchor": pin.get("anchor"), "reason": reason},
             summary=f"note {pin.get('id')} lost its node {node_id} ({reason}); it stays where the node was",
         )
 
@@ -6271,7 +6271,7 @@ def _reattach_removed_pins(records: list[dict[str, Any]], back: Mapping[str, str
         _journal(
             "pin.reattached",
             node_id=node_id if isinstance(node_id, str) else None,
-            data={"pinId": pin.get("id"), "text": pin.get("text"), "anchor": pin.get("anchor")},
+            data={"pinId": pin.get("id"), "text": event_text(pin.get("text")), "anchor": pin.get("anchor")},
             summary=f"note {pin.get('id')} is back on {node_id}: the undo put its node back",
             project_id=project_id,
         )
@@ -6458,9 +6458,13 @@ def _pin_http_error(exc: PinError) -> HTTPException:
 
 @app.get("/api/canvas/pins")
 async def list_canvas_pins() -> dict[str, Any]:
-    """Notes the person pinned for agents in the open project (open first, newest first)."""
+    """Notes the person pinned for agents in the open project (open first, newest first).
+
+    GM r23: the person's canvas reads the shown form (a registered
+    ideographic variant kept); anyone else, agents, `nebula pins`, MCP and
+    the channel, reads agents' form, without any variation selector."""
     try:
-        return canvas_pins.list()
+        return canvas_pins.list(person=_is_person_request())
     except PinError as exc:
         raise _pin_http_error(exc) from exc
 
@@ -6501,7 +6505,7 @@ async def create_canvas_pin(body: dict[str, Any]) -> dict[str, Any]:
     _journal(
         "pin.added",
         node_id=anchor.get("nodeId"),
-        data={"pinId": pin["id"], "text": pin["text"], "anchor": anchor},
+        data={"pinId": pin["id"], "text": event_text(pin["text"]), "anchor": anchor},
         summary=pin_summary(pin),
         project_id=project_id,
     )
@@ -6523,7 +6527,7 @@ async def delete_canvas_pin(pin_id: str) -> dict[str, Any]:
     _journal(  # before any await, tagged with the write's project (see create_canvas_pin)
         "pin.removed",
         node_id=(pin.get("anchor") or {}).get("nodeId"),
-        data={"pinId": pin_id, "text": pin.get("text")},
+        data={"pinId": pin_id, "text": event_text(pin.get("text"))},
         summary=f"deleted the note {pin_id}",
         project_id=project_id,
     )
@@ -6551,7 +6555,7 @@ async def resolve_canvas_pin(pin_id: str, body: dict[str, Any]) -> dict[str, Any
     _journal(  # before any await, tagged with the write's project (see create_canvas_pin)
         "pin.resolved",
         node_id=anchor.get("nodeId"),
-        data={"pinId": pin_id, "text": pin.get("text"), "reply": reply},
+        data={"pinId": pin_id, "text": event_text(pin.get("text")), "reply": event_text(reply, multiline=False)},
         summary=pin_resolved_summary(pin_id, pin, reply),
         project_id=project_id,
     )
