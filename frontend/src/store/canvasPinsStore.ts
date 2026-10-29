@@ -3,7 +3,7 @@ import { wsClient, type CanvasPinsEvent, type Pin } from '../lib/wsClient';
 import { createPin, deletePin, fetchPins, fitNote, NODE_GONE_CODE, noteKeptLine, PIN_REFUSAL_COPY, pinRefusalLine, pinTextIsLoaded, pinTextReady,
   TOO_LONG_CODE, type KeptNote } from '../lib/canvasPins';
 import { currentProject } from '../lib/currentProject';
-import { RequestFailedError } from '../lib/errorCopy';
+import { PERSON_REQUIRED_CODE, RequestFailedError } from '../lib/errorCopy';
 import { refuseCanvasEdit } from '../lib/canvasLock';
 import { subscribeFollowingSwitch, followingSwitch } from '../lib/canvasFollow';
 import { subscribeCanvasReplaced } from '../lib/canvasReplaced';
@@ -50,6 +50,10 @@ interface CanvasPinsState {
   removing: Record<string, true>;
   /** A refusal's one neutral line (GM r20 Q1): what happened, then what to do. */
   error: string | null;
+  /** GM r24: `error` is the person gate's refusal of a send (person_required).
+   * While the banner shows, the toast says only "Your note wasn’t added."
+   * (PinComposer decides as it draws: the banner can come or go). */
+  errorPersonGate: boolean;
   /** GM r23 item 2: the open dialog's node was removed (Nebula said so, or
    * the canvas lost it): Send note is disabled with the line as its reason;
    * Cancel and the typed text stay. */
@@ -131,6 +135,7 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
   errorProject: null,
   removing: {},
   error: null,
+  errorPersonGate: false,
   targetGone: false,
   tooLongRefusals: 0,
   hydrate: async () => {
@@ -169,7 +174,7 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
     const keptHere = kept.find((note) => note.project === here) ?? null;
     const { [here]: draftHere = '', ...otherDrafts } = drafts;
     set({ composer: target, composerCanvas: canvas, composerProjectName: projectNameOf(canvas), draft: keptHere?.text ?? draftHere,
-      drafts: otherDrafts, error: null, errorProject: null, targetGone: false, tooLongRefusals: 0, kept: keptHere ? kept.filter((note) => note !== keptHere) : kept });
+      drafts: otherDrafts, error: null, errorProject: null, errorPersonGate: false, targetGone: false, tooLongRefusals: 0, kept: keptHere ? kept.filter((note) => note !== keptHere) : kept });
   },
   // × or Esc: the text stays as its project's draft for the next open there
   // (an emptied or whitespace-only field leaves none).
@@ -217,6 +222,7 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
       // and × or Esc keeps it as one.)
       const code = error instanceof RequestFailedError ? error.code : null;
       set((state) => ({ draft: text, error: pinRefusalLine(error, 'add'), errorProject: project,
+        errorPersonGate: code === PERSON_REQUIRED_CODE,
         targetGone: state.targetGone || code === NODE_GONE_CODE,
         tooLongRefusals: state.tooLongRefusals + (code === TOO_LONG_CODE ? 1 : 0) }));
       return false;
@@ -238,6 +244,7 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
         pins: restored && !state.pins.some((p) => p.id === id) ? [...state.pins, restored] : state.pins,
         // GM r20 Q1: the pin stays, and the line says so in its own words.
         error: PIN_REFUSAL_COPY.deleteFailed,
+        errorPersonGate: false,
         errorProject: null,
       }));
     } finally {
@@ -248,9 +255,9 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
       });
     }
   },
-  clearError: () => set({ error: null, errorProject: null }),
+  clearError: () => set({ error: null, errorProject: null, errorPersonGate: false }),
   targetRemoved: () => set((state) => (state.composer && !state.targetGone
-    ? { targetGone: true, error: PIN_REFUSAL_COPY.nodeGone, errorProject: projectKey(state.composerCanvas) } : {})),
+    ? { targetGone: true, error: PIN_REFUSAL_COPY.nodeGone, errorPersonGate: false, errorProject: projectKey(state.composerCanvas) } : {})),
   dismissKept: (project) => set((state) => ({ kept: state.kept.filter((note) => note.project !== project) })),
 }));
 

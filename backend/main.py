@@ -3838,7 +3838,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             else:
                 await websocket.send_text(json.dumps({
                     "type": "personRequired",
-                    "message": "This tab isn't connected as you, so it can't accept or reject proposals.",
+                    "message": "This tab isn’t connected as you, so it can’t accept or reject proposals.",
                 }))
     except WebSocketDisconnect:
         manager.disconnect(websocket)

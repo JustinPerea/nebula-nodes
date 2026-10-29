@@ -212,7 +212,7 @@ describe('canvas proposals store', () => {
 });
 
 describe("a person-only refusal on accept or reject (GM, Q116 a)", () => {
-  const GM_LINE = "This change needs your OK, and this tab isn't connected as you. Open the link Nebula printed when it started, then try again.";
+  const GM_LINE = "This change needs your OK, and this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.";
   it("says GM's line, not the accept-key line", async () => {
     const { ProposalRequestError } = await import('../src/lib/canvasProposals');
     emit({ type: 'proposalOpened', proposal: proposal('p_a'), acceptKey: 'key-a' });

@@ -299,6 +299,10 @@ export const PIN_REFUSAL_COPY = {
   // GM r23 item 2.
   openNotesFull: 'This canvas has 100 open notes. Resolve or delete some, then add this one.',
   nodeGone: 'That node was removed, so the note wasn’t added.',
+  // GM r24: a person-gate refusal while the banner shows: the banner carries the fix.
+  notAdded: 'Your note wasn’t added.',
+  // GM r24: Send note's lock reason while the banner shows.
+  sendWhenConnected: 'You can send notes when this tab is connected as you.',
 } as const;
 /** The backend's codes for the 100-open-notes 409 and the removed-node 404 (GM r23). */
 export const OPEN_NOTES_FULL_CODE = 'open_notes_full';

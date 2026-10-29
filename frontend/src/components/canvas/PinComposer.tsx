@@ -1,8 +1,9 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { PromptDialog, type PromptRequest } from '../PromptDialog';
 import { KEPT_FEWER, KEPT_SHOWN, keptMoreLabel, keptNoteDisplay, keptNoteLine, MAX_PIN_TEXT, noteLength, NOTE_KEPT_COPY, PIN_REFUSAL_COPY,
   pinDisplayText, pinTextIsLoaded, pinTextReady, type KeptNote } from '../../lib/canvasPins';
 import { useGraphStore } from '../../store/graphStore';
+import { personBannerShown, subscribePersonBanner } from '../../lib/personSession';
 import { useCurrentProjectId } from '../../lib/currentProject';
 import { getProjectContext } from '../../lib/projectContext';
 import { useCanvasPinsStore } from '../../store/canvasPinsStore';
@@ -53,6 +54,12 @@ export function PinComposer() {
   const targetGone = useCanvasPinsStore((s) => s.targetGone);
   const targetRemoved = useCanvasPinsStore((s) => s.targetRemoved);
   const tooLongRefusals = useCanvasPinsStore((s) => s.tooLongRefusals);
+  const errorPersonGate = useCanvasPinsStore((s) => s.errorPersonGate);
+  // GM r24: while the person-gate banner shows (it was up as the dialog
+  // opened, or came up while it was open), Send note waits, disabled in the
+  // shared style with its reason; a refused send's toast then leaves the fix
+  // to the banner.
+  const gateBanner = useSyncExternalStore(subscribePersonBanner, personBannerShown);
   const lock = useCanvasLock();
   // Review 13 L-2: the dialog counts only once the Unicode data is in (its
   // own chunk, fetched as lib/canvasPins loads; a few milliseconds at most).
@@ -116,7 +123,11 @@ export function PinComposer() {
   const { rows, rowProps } = useLeavingRows(shown, (note) => note.project, { hold: stackLeave.leaving });
   // A refusal is one neutral line (GM r20 Q1), beside the dialog it leaves
   // open, or alone after a failed delete.
-  const errorLeave = useLeave(error && (errorProject === null || errorProject === here) ? error : null);
+  // GM r24: a send the person gate refused says only "Your note wasn’t
+  // added." while the banner (which says how to fix it) shows; the full
+  // Q116a line when it doesn't.
+  const errorLine = errorPersonGate && gateBanner ? PIN_REFUSAL_COPY.notAdded : error;
+  const errorLeave = useLeave(errorLine && (errorProject === null || errorProject === here) ? errorLine : null);
 
   // Back to the newest two once no note is hidden (the next one kept starts
   // collapsed again).
@@ -233,8 +244,9 @@ export function PinComposer() {
           multiline
           confirmLabel="Send note"
           onChange={setDraft}
-          confirm={lock.act({ offline: 'send notes', ...(targetGone ? { disabled: true, title: PIN_REFUSAL_COPY.nodeGone } : {}) })}
-          onRefused={() => { if (!targetGone) refuseCanvasEdit(); }}
+          confirm={lock.act({ offline: 'send notes', ...(targetGone ? { disabled: true, title: PIN_REFUSAL_COPY.nodeGone }
+            : gateBanner ? { disabled: true, title: PIN_REFUSAL_COPY.sendWhenConnected } : {}) })}
+          onRefused={() => { if (!targetGone && !gateBanner) refuseCanvasEdit(); }}
           onDone={(value) => {
             if (value === null || !value.trim()) cancel();
             else void submit(value);

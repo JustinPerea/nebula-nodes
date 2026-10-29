@@ -16,7 +16,7 @@ describe('PersonRequiredBanner', () => {
     act(() => reportPersonRequired());
     // GM - Design, 2026-10-23 (round 4), verbatim.
     expect(screen.getByRole('status').textContent).toBe(
-      "This tab isn't connected as you. Open the link Nebula printed when it started.×");
+      "This tab isn’t connected as you. Open the link Nebula printed when it started.×");
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
     expect(screen.queryByRole('status')).toBeNull();
     act(() => reportPersonRequired());
@@ -33,6 +33,6 @@ describe('PersonRequiredBanner', () => {
     render(<PersonRequiredBanner />);
     act(() => reportPersonRequired());
     // GM - Design, 2026-10-23 (round 4), verbatim.
-    expect(screen.getByRole('status').textContent).toBe("This window isn't connected as you. Quit Nebula and open it again.×");
+    expect(screen.getByRole('status').textContent).toBe("This window isn’t connected as you. Quit Nebula and open it again.×");
   });
 });

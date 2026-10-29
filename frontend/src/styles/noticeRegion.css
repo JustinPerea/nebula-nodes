@@ -25,6 +25,12 @@
      width rule reads it too, so a narrower rule (a Studio's room) still wins
      and none is wider. */
   --notice-max-w: 560px;
+  /* The neutral notice (GM r24, PR #200 fix round 15): what a notice that is
+     no error of the person's draws, the pin toasts and the person-gate banner
+     alike, in both skins. */
+  --notice-neutral-fill: #1a1a1a;
+  --notice-neutral-edge: #333;
+  --notice-neutral-ink: #d8d8d8;
   /* The toasts' spring (ProjectSwitchToast.css and the others), for the
      region's shared motion below. */
   --notice-spring: linear(0, 0.049, 0.163, 0.305, 0.452, 0.588, 0.705, 0.801, 0.876, 0.931, 0.97, 0.995, 1.011, 1.019, 1.022, 1.022, 1.02, 1.017, 1.014, 1.011, 1.008, 1.005, 1.003, 1.002, 1);

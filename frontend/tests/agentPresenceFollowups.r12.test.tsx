@@ -80,8 +80,9 @@ describe('GM r18 Q1: too much hidden text', () => {
   it('the notice toast takes the kept note\'s neutral colours, never the error red', () => {
     const sheet = css('styles/canvasPins.css');
     const shared = /\.canvas-pin-toast--kept,\s*\.canvas-pin-toast--notice \{([^}]*)\}/.exec(sheet)?.[1] ?? '';
-    expect(shared).toMatch(/border-color: #333/);
-    expect(shared).toMatch(/color: #d8d8d8/);
+    // GM r24: the shared neutral notice tokens (noticeRegion.css), the same values.
+    expect(shared).toMatch(/border-color: var\(--notice-neutral-edge, #333\)/);
+    expect(shared).toMatch(/color: var\(--notice-neutral-ink, #d8d8d8\)/);
     expect(sheet).not.toMatch(/\.canvas-pin-toast--notice[^{]*\{[^}]*(danger|#ff|red)/i);
   });
 });

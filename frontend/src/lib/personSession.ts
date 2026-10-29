@@ -247,12 +247,12 @@ export function personRequiredMessage(reason: PersonUnavailableReason = personUn
     case 'debug-port':
       return 'Debug mode: a debugging port is open, so Settings, proposals and chats are off.';
     case 'dev-renderer':
-      return "Dev mode: the Vite renderer can't use your token. Set NEBULA_DESKTOP_DEV_PERSON=1 to allow it.";
+      return "Dev mode: the Vite renderer can’t use your token. Set NEBULA_DESKTOP_DEV_PERSON=1 to allow it.";
     case 'untrusted-sender':
     case 'desktop-unavailable':
       // GM, round 4 (2026-10-23), verbatim: one line, ending like the app
       // banner, since the window can close while Nebula keeps running in the Dock.
-      return "Nebula couldn't confirm this window is yours. Quit Nebula and open it again.";
+      return "Nebula couldn’t confirm this window is yours. Quit Nebula and open it again.";
     default:
       // The desktop app gets here when its backend refuses the token the
       // shell handed over (desktopReason stays null then): GM's app banner
@@ -260,11 +260,29 @@ export function personRequiredMessage(reason: PersonUnavailableReason = personUn
       // backend with a fresh token; a reload asks the same shell for the same
       // token, which the same backend refuses again.
       if (hasDesktopBridge()) {
-        return "This window isn't connected as you. Quit Nebula and open it again.";
+        return "This window isn’t connected as you. Quit Nebula and open it again.";
       }
       // GM - Design, round 4 (2026-10-23), verbatim.
-      return "This tab isn't connected as you. Open the link Nebula printed when it started.";
+      return "This tab isn’t connected as you. Open the link Nebula printed when it started.";
   }
+}
+
+// GM r24 (PR #200 fix round 15): whether the person-gate banner is showing
+// now, its line or null. PersonRequiredBanner keeps it; the note dialog
+// reads it (Send note waits for the tab to be connected, and a refused
+// send's toast leaves the fix to the banner).
+let personBannerLine: string | null = null;
+const personBannerListeners = new Set<() => void>();
+export function setPersonBannerLine(line: string | null): void {
+  if (line === personBannerLine) return;
+  personBannerLine = line;
+  personBannerListeners.forEach((listener) => listener());
+}
+export const personBannerShown = (): boolean => personBannerLine !== null;
+export const currentPersonBannerLine = (): string | null => personBannerLine;
+export function subscribePersonBanner(listener: () => void): () => void {
+  personBannerListeners.add(listener);
+  return () => { personBannerListeners.delete(listener); };
 }
 
 /** Tell the canvas a person-only action was refused here (shows the banner). */
@@ -292,6 +310,7 @@ if (typeof window !== 'undefined') {
 }
 
 export function resetPersonSessionForTests(): void {
+  setPersonBannerLine(null);
   memoryCredential = null;
   desktopLookup = null;
   desktopReason = null;

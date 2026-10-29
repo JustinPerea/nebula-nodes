@@ -55,17 +55,17 @@ export const PERSON_REQUIRED_CODE = 'person_required';
  * `code`, never its words. Round 2 (GM): "line 3 shouldn't depend on the
  * notice being there, since it can be dismissed", so it says the fix itself.
  * A browser tab's line; the desktop app says PERSON_REQUIRED_APP_COPY. */
-export const PERSON_REQUIRED_COPY = "This change needs your OK, and this tab isn't connected as you. "
+export const PERSON_REQUIRED_COPY = "This change needs your OK, and this tab isn’t connected as you. "
   + 'Open the link Nebula printed when it started, then try again.';
 /** GM - Design, 2026-10-23 (round 2), verbatim: line 3 in the desktop app. A
  * quit and reopen gives the app a fresh backend and a fresh person token. */
-export const PERSON_REQUIRED_APP_COPY = "This change needs your OK, and this window isn't connected as you. "
+export const PERSON_REQUIRED_APP_COPY = "This change needs your OK, and this window isn’t connected as you. "
   + 'Quit Nebula and open it again, then try again.';
 
 /** GM - Design, 2026-10-23 (round 3), verbatim: line 3 in the app's two
  * developer setups (a debug port, the dev renderer), where the banner already
  * gives the real fix. */
-export const PERSON_REQUIRED_DEV_COPY = "This change needs your OK, and this window isn't connected as you. "
+export const PERSON_REQUIRED_DEV_COPY = "This change needs your OK, and this window isn’t connected as you. "
   + 'The notice below says why.';
 
 /** Line 3 for where this page runs: `desktop` is personSession's

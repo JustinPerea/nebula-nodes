@@ -44,6 +44,8 @@ describe('GM r20 Q1: every pin refusal is one neutral line', () => {
       canvasOnly: 'Notes can only be added from the Nebula canvas.',
       openNotesFull: 'This canvas has 100 open notes. Resolve or delete some, then add this one.',
       nodeGone: 'That node was removed, so the note wasn’t added.',
+      notAdded: 'Your note wasn’t added.',
+      sendWhenConnected: 'You can send notes when this tab is connected as you.',
     });
     for (const line of Object.values(PIN_REFUSAL_COPY)) {
       expect(line).not.toMatch(/'/);

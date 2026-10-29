@@ -1866,3 +1866,67 @@ GM r23:
   `fix14-ivd-card-and-nebula-pins-1440.png`, `fix14-saved-280-*`. The md5
   check found only the two pairs that are meant to match (the 5xx and
   no-answer toasts; the float shot before and after undo).
+
+## Fix round 15
+
+GM r24 (head 26375c63).
+
+- The toast beside the person-gate banner. A send the gate refuses
+  (`person_required`) says only "Your note wasn’t added." while the banner
+  shows, since the banner carries the fix. With no banner showing (dismissed,
+  or a surface without one) it says the full Q116a line. PinComposer
+  decides as it draws (`errorPersonGate` in the store and the banner's
+  state), because the banner comes up from apiFetch's own reading of the
+  403, at about the same time the send fails.
+- Send note waits while the banner shows, whether it was up as the dialog
+  opened or arrived while it was open. It is disabled in the shared style,
+  with the lock reason "You can send notes when this tab is connected as
+  you." Enter sends nothing and Cancel stays live. So the toast only covers
+  a gate found on send. Once the tab connects (the banner goes), Send note
+  is live again.
+- The banner's state is shared: `personSession.ts` keeps its line
+  (`setPersonBannerLine`, `subscribePersonBanner`, `personBannerShown`).
+  PersonRequiredBanner writes it (on a refusal, on connect, on ×, and when
+  it unmounts) and reads it back; the dialog reads it.
+- ’ at the source: "isn’t" in the Q116a lines (`PERSON_REQUIRED_COPY`,
+  `_APP_COPY`, `_DEV_COPY` in errorCopy.ts), and the banner's lines in
+  personSession.ts, which also had "can’t" and "couldn’t". The backend's
+  proposals line on the socket ("This tab isn’t connected as you, so it
+  can’t accept or reject proposals.") got the same. Every test that pinned
+  the straight forms was updated: ProjectHome.unsavedEdits,
+  personRequiredCards, personRequiredLines, unsavedEdits.store,
+  canvasProposalsStore, ChatPanel.commons, PersonRequiredBanner,
+  enhancePrompt and graphStore.errorCopy.
+- The banner is neutral. PersonRequiredBanner.tsx is in this PR's diff, so
+  this is done here rather than in the wording batch. `.person-required`
+  (App.css) now uses the shared neutral notice colours, new tokens on
+  `.notice-region` (`--notice-neutral-fill` #1a1a1a, `--notice-neutral-edge`
+  #333, `--notice-neutral-ink` #d8d8d8), which the pin toasts read too. It
+  also takes the toast's radius, padding and shadow, so the two sit
+  together. No skin overrides it; live, both skins compute the same colours.
+- Seen live, not changed: the dialog's backdrop sits over the notice region,
+  so the banner's × can't be clicked while the dialog is open (the harness
+  presses it from the DOM). Cancel closes the dialog first.
+
+### Fix round 15 gates
+
+- Backend, the full suite (isolated, no xdist): 11,799 passed, 71 skipped,
+  none failed (45 min).
+- Frontend: `tsc -b` clean; `eslint .` clean.
+- Vitest, the full run with `--maxWorkers=6`: 72 failed in 29 files. Rerun
+  alone, 27 of those files passed (timeouts under load: Settings and
+  others), and two were real: r12's neutral-colour pin and r13's copy
+  pin, which read the old values. Both were updated for the shared tokens
+  and the two new lines, and pass (34). New: `agentPresenceFollowups.r24.test.tsx`
+  (7), plus the updated banner and person-line tests.
+- Build into a scratch outDir: the entry is 423,640 bytes raw (129,975
+  gzip), under 512,000; 95 JS assets eval-free. Fonts: 53 @font-face
+  rules, 13 woff2, 285,052 bytes.
+- Live (backend 8795, Vite 5795, 8000-8010 and 5173 blocked): the new r24
+  section, 7 of 7. The gate is found on send for real (the page's fetch
+  drops the person token, so the backend returns its 403 person_required).
+  Shots: `fix15-gate-on-send-not-added-1440.png` (the banner with "Your
+  note wasn’t added." under it, Send note grey),
+  `fix15-no-banner-full-line-1440.png`, `fix15-banner-send-disabled-1440.png`,
+  and `fix15-banner-neutral-slava-1440.png` /
+  `fix15-banner-neutral-default-1440.png`. All five md5s differ.
