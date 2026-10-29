@@ -2367,6 +2367,14 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
       '.canvas-pin__edge { border-right: 200px solid transparent; }',
       '.canvas-pin__edge { border-width: 0 10em 0 0; border-style: solid; border-color: transparent; }',
       '.canvas-pin__edge { width: 1rem; }',
+      // Review 16 NIT 5 (fix round 19): a pseudo-element's text with no width
+      // (as wide as its glyphs), and ems on the edge's own changed font size.
+      '.canvas-pin__edge::after { content: "a label as wide as its words"; position: absolute; left: 0; }',
+      '.canvas-pin__edge::before { content: attr(data-x); }',
+      '.canvas-pin__edge { font-size: 1000px; width: 0.25em; }',
+      '.canvas-pin__edge { font-size: 500%; width: 0.25em; }',
+      '.canvas-pin__edge { font-size: larger; width: 0.25em; }',
+      '.canvas-pin__edge::after { content: ""; font-size: 400px; width: 0.5em; }',
     ]) expect(frameFindings(pinDelete, vars0, css), css).not.toEqual([]);
     // The edge in other units, and borders the fill stops short of, stay the edge.
     for (const css of [
@@ -2375,6 +2383,9 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
       '.canvas-pin__edge { zoom: 1; filter: none; }',
       '.canvas-pin__edge { border-right: 200px solid transparent; background-clip: padding-box; }',
       '.canvas-pin__edge { border-left: 1px solid transparent; }',
+      '.canvas-pin__edge { font-size: 12px; width: 0.25em; }',
+      '.canvas-pin__edge::after { content: ""; }',
+      '.canvas-pin__edge::after { content: "x"; width: 2px; }',
     ]) expect(frameFindings(pinDelete, vars0, css), css).toEqual([]);
     // Resolved: the author's colour, with only its blue fallback.
     const resolvedDelete = { ...pinDelete, ancestors: [['div', ['canvas-pin', 'canvas-pin--resolved']], ['div', ['canvas-pin__card']]] as Array<[string, string[]]> };

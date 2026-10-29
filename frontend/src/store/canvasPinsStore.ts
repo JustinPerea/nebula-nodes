@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { wsClient, type CanvasPinsEvent, type Pin } from '../lib/wsClient';
-import { createPin, deletePin, fetchPins, fitNote, NODE_GONE_CODE, noteKeptLine, PIN_REFUSAL_COPY, pinRefusalLine, pinTextSettled, pinTextSettling, retryPinText,
+import { createPin, deletePin, fetchPins, fitNote, NODE_GONE_CODE, noteKeptLine, PIN_REFUSAL_COPY, onPinTextLoaded, pinDeleteLine, pinRefusalLine, pinTextSettled, pinTextSettling, retryPinText,
   TOO_LONG_CODE, type KeptNote } from '../lib/canvasPins';
 import { currentProject } from '../lib/currentProject';
 import { PERSON_REQUIRED_CODE, RequestFailedError } from '../lib/errorCopy';
@@ -101,7 +101,7 @@ function sanitize(raw: unknown): Pin | null {
   return {
     id: pin.id,
     // Bounded as the backend counts it (fix round 11: what shows, not code units).
-    text: fitNote(pin.text),
+    text: fitNote(rememberRaw(pin.id, pin.text)),
     anchor: safeAnchor,
     position: position && finite(position.x) && finite(position.y) ? { x: position.x, y: position.y } : null,
     status: pin.status === 'resolved' ? 'resolved' : 'open',
@@ -121,6 +121,15 @@ function sanitize(raw: unknown): Pin | null {
         }
       : null,
   };
+}
+
+/** Each pin's text as the backend sent it (review 16 NIT 2, fix round 19):
+ * fitNote and the card's form depend on the Unicode data, so when that comes
+ * in after the pins (a failed chunk loaded again) they are fitted again. */
+const rawTexts = new Map<string, string>();
+function rememberRaw(id: string, text: string): string {
+  rawTexts.set(id, text);
+  return text;
 }
 
 function sanitizeAll(raw: unknown): Pin[] {
@@ -164,6 +173,7 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
       void pinTextSettling().then(() => get().apply(event));
       return;
     }
+    rawTexts.clear();  // the listing is the whole set: forget pins no longer in it
     set((state) => ({
       projectId: typeof event.projectId === 'string' ? event.projectId : null,
       pins: sanitizeAll(event.pins).filter((pin) => !state.removing[pin.id]),
@@ -249,13 +259,16 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
     }));
     try {
       await deletePin(id);
-    } catch {
+    } catch (error) {
       // Put it back: the backend still has it.
       const restored = previous.find((pin) => pin.id === id);
       set((state) => ({
         pins: restored && !state.pins.some((p) => p.id === id) ? [...state.pins, restored] : state.pins,
         // GM r20 Q1: the pin stays, and the line says so in its own words.
-        error: PIN_REFUSAL_COPY.deleteFailed,
+        // Review 16 LOW-1 / GM r29 (fix round 19): refused because this tab
+        // isn't connected as the person, it's the Q116a line (how to fix it),
+        // never "try again in a moment", which can't work from this tab.
+        error: pinDeleteLine(error),
         errorPersonGate: false,
         errorProject: null,
       }));
@@ -348,4 +361,13 @@ wsClient.subscribe((event) => {
     // Another project (or an import) arrived: its pins come from the backend.
     void useCanvasPinsStore.getState().hydrate();
   }
+});
+
+// Review 16 NIT 2 (fix round 19): the Unicode data loaded (by the dialog
+// opening, a hydrate or a push): the pins on screen are fitted again from
+// their raw text and redrawn in the full form now, not at the next push.
+onPinTextLoaded(() => {
+  useCanvasPinsStore.setState((state) => ({
+    pins: state.pins.map((pin) => { const raw = rawTexts.get(pin.id); return raw === undefined ? { ...pin } : { ...pin, text: fitNote(raw) }; }),
+  }));
 });

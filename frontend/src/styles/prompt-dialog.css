@@ -158,3 +158,43 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* GM r29 item 1 (PR #200 fix round 19): the note dialog names its node.
+   One line: a long title truncates, its full name in the tooltip; a shared
+   title adds the node's bare id, styled like the card's id chip. */
+.prompt-dialog__heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.prompt-dialog__heading-text {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.prompt-dialog__node-id {
+  flex-shrink: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  font-weight: 500;
+  color: #777;
+  background: #252525;
+  border: 1px solid #333;
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+body.app-slava-restraint .prompt-dialog__node-id {
+  background: transparent;
+  color: var(--sr-ink-light);
+  border: none;
+  border-radius: 0;
+  font-family: var(--sr-mono);
+  font-size: var(--sr-type-meta);
+  font-weight: 400;
+  padding: 0;
+}

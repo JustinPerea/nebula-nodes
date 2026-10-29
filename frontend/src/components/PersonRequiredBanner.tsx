@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from 'react';
-import { currentPersonBannerLine, onPersonConnected, onPersonRequired, personRequiredMessage, setPersonBannerLine,
+import { currentPersonBannerLine, onPersonPromoted, onPersonRequired, personRequiredMessage, setPersonBannerLine,
   subscribePersonBanner } from '../lib/personSession';
 import { InNoticeRegion } from './InNoticeRegion';
 import { useLeave } from '../lib/noticeLeave';
@@ -9,7 +9,9 @@ import { useLeave } from '../lib/noticeLeave';
  * connected as the person (no launch token; see lib/personSession.ts). Shown
  * when the backend refuses a person-only action or the canvas socket can't
  * say hello as the person. Dismissible; the next refusal shows it again.
- * Hidden again when a person link connects the tab.
+ * Hidden again when the server promotes this tab as the person (GM r29
+ * item 3: the UI follows the server's state both ways; a link taken in isn't
+ * proof by itself).
  *
  * GM r24 (PR #200 fix round 15): whether it shows is shared
  * (personSession's banner line), so the note dialog can hold Send note while
@@ -20,8 +22,8 @@ export function PersonRequiredBanner() {
 
   useEffect(() => {
     const stopRequired = onPersonRequired(() => setPersonBannerLine(personRequiredMessage()));
-    // A fresh person link connected this tab: nothing is locked any more.
-    const stopConnected = onPersonConnected(() => setPersonBannerLine(null));
+    // The server promoted this tab as the person: nothing is locked any more.
+    const stopConnected = onPersonPromoted(() => setPersonBannerLine(null));
     // No banner on screen, nothing for the dialog to defer to.
     return () => { stopRequired(); stopConnected(); setPersonBannerLine(null); };
   }, []);

@@ -1,7 +1,7 @@
 // PR #200 fix round 18: GM r27 and review 15.
 // - GM r27 item 1: Escape on a focused notice closes that notice only (as its
 //   ×), focus follows the × rule, and the dialog stays; Escape from inside a
-//   dialog still closes it. One shared rule (lib/modalFocus noticeEscape,
+//   dialog still closes it. One shared rule (lib/modalFocus noticeKeys,
 //   installed by NoticeRegion), checked in all six modals.
 // - Review 15 LOW-A: in onboarding and the result comparison, a notice's keys
 //   are its own: Enter and Space aren't taken (no preventDefault, focus stays

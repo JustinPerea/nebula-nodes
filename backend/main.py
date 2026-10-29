@@ -3836,6 +3836,11 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 continue
             if manager.promote(websocket, frame.get("personToken")):
                 # Accept keys travel only to the person's canvas sockets.
+                # The tab also reads this proposalSync as "promoted": it is
+                # sent here, on a verified hello, and nowhere else, and it
+                # clears the tab's person hold and banner (GM r29 item 3 of
+                # PR #200; frontend lib/wsClient). personRequired below is the
+                # demote. Keep the two in step if this changes.
                 await websocket.send_text(json.dumps(_proposal_sync_message()))
                 await websocket.send_text(json.dumps(await _asset_proposal_sync_message()))
                 # Open question sets with their answer keys (Q125 item 1), same rule.

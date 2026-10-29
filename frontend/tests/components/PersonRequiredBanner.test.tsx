@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { PersonRequiredBanner } from '../../src/components/PersonRequiredBanner';
-import { reportPersonRequired, resetPersonSessionForTests } from '../../src/lib/personSession';
+import { notePersonPromoted, reportPersonRequired, resetPersonSessionForTests } from '../../src/lib/personSession';
 
 afterEach(() => {
   cleanup();
@@ -21,7 +21,11 @@ describe('PersonRequiredBanner', () => {
     expect(screen.queryByRole('status')).toBeNull();
     act(() => reportPersonRequired());
     expect(screen.getByRole('status')).toBeTruthy();
+    // GM r29 item 3 (PR #200 fix round 19): a link taken in isn't proof; the
+    // server promoting this tab (a verified hello) hides it.
     act(() => { window.dispatchEvent(new CustomEvent('nebula:person-connected')); });
+    expect(screen.getByRole('status')).toBeTruthy();
+    act(() => notePersonPromoted());
     expect(screen.queryByRole('status')).toBeNull();
   });
 

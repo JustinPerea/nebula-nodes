@@ -159,6 +159,14 @@ let pinTextFailedAt = 0;
 /** The least time between two loads after a failure, so a burst of pin
  * pushes asks for the chunk once, not once per push. */
 export const PIN_TEXT_RETRY_GAP_MS = 10_000;
+// Review 16 NIT 2 (fix round 19): told when the data comes in, by whatever
+// need loaded it (the dialog opening too), so text already on screen is
+// shown again in the full form at once, not at the next pins push.
+const pinTextLoadedListeners = new Set<() => void>();
+export function onPinTextLoaded(listener: () => void): () => void {
+  pinTextLoadedListeners.add(listener);
+  return () => { pinTextLoadedListeners.delete(listener); };
+}
 const applyPinText = (data: PinTextData) => {
   ivd = ivdPairs(data.ivd);
   mongolianLetter = within(data.mongolianLetters);
@@ -167,6 +175,7 @@ const applyPinText = (data: PinTextData) => {
   RGI_ZWJ_LONGEST = data.rgiZwjLongest;
   TAG_FLAGS = new Set(data.tagFlags);
   pinTextState = 'loaded';
+  pinTextLoadedListeners.forEach((listener) => listener());
 };
 // GM r26 check (fix round 17): after a failure, Chromium (Chrome, the
 // Electron app) keeps the failed import in its module map and rejects a
@@ -371,6 +380,16 @@ export function pinRefusalLine(error: unknown, action: 'add' | 'save'): string {
   if (status >= 400 && status < 500) return action === 'add' ? PIN_REFUSAL_COPY.addRefused : PIN_REFUSAL_COPY.saveRefused;
   // A 5xx, or no answer at all.
   return action === 'add' ? PIN_REFUSAL_COPY.addNoAnswer : PIN_REFUSAL_COPY.saveNoAnswer;
+}
+
+/** A refused pin delete's line (review 16 LOW-1, GM r29): the person-only
+ * line when this tab isn't connected as the person (403 person_required), as
+ * every person-gate refusal reads; otherwise the pin stays and Nebula says so. */
+export function pinDeleteLine(error: unknown): string {
+  const code = error instanceof RequestFailedError ? error.code : null;
+  const status = error instanceof RequestFailedError ? error.status : 0;
+  if (code === PERSON_REQUIRED_CODE && status >= 400 && status < 500) return personRequiredCopy();
+  return PIN_REFUSAL_COPY.deleteFailed;
 }
 
 // A Hangul jamo or syllable's part in a syllable (UAX #29): L, V, T, LV, LVT, or ''.

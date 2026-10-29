@@ -93,14 +93,26 @@
   font-size: 12px;
 }
 
+/* GM r28 nit 2 (PR #200 fix round 19): a real hit area, about 32 px tall
+   with 10 px at each side, and the ghost buttons' ring (offset 3px, as
+   .onboarding__cta). Its text keeps the hint's left edge (the padding sits
+   outside it), and in the welcome card it stands clear of the hint above, so
+   the ring never overlaps that line. */
 .onboarding__skip {
-  min-height: 40px;
-  padding: 8px 0;
+  min-height: 32px;
+  padding: 0 10px;
+  margin-inline-start: -10px;
+  border-radius: 6px;
   background: none;
   border: none;
   color: var(--sr-ink-light, #aaa);
   font-size: 12px;
   cursor: pointer;
+}
+
+.onboarding__welcome .onboarding__skip {
+  align-self: flex-start;
+  margin-top: 10px;
 }
 
 .onboarding__skip:hover {

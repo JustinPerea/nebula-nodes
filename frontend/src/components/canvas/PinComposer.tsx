@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalS
 import { PromptDialog, type PromptRequest } from '../PromptDialog';
 import { KEPT_FEWER, KEPT_SHOWN, keptMoreLabel, keptNoteDisplay, keptNoteLine, MAX_PIN_TEXT, noteLength, NOTE_KEPT_COPY, PIN_REFUSAL_COPY,
   pinDisplayText, pinTextSettled, pinTextSettling, type KeptNote } from '../../lib/canvasPins';
-import { useGraphStore } from '../../store/graphStore';
+import { nodeCardTitle, useGraphStore } from '../../store/graphStore';
 import { personBannerShown, personGateHeld, subscribePersonBanner, subscribePersonGate } from '../../lib/personSession';
 import { useCurrentProjectId } from '../../lib/currentProject';
 import { getProjectContext } from '../../lib/projectContext';
@@ -260,6 +260,26 @@ export function PinComposer() {
   // The dialog starts with the kept note, or the draft × or Esc left (GM,
   // 2026-10-27), of this project only (2026-10-28): compose put it in
   // `draft` as it opened.
+  // GM r29 item 1 (fix round 19): the heading names the node, by the title
+  // its card shows: "Note for agents on “Text Input”". Another node with the
+  // same title adds this one's bare id, styled like the card's id chip, so the
+  // heading points to one node. A long title stays one line (the full name in
+  // the tooltip). A note on a spot, or a node the canvas hasn't loaded, keeps
+  // "Note for agents".
+  const targetTitle = useGraphStore((s) => {
+    if (targetNode === null) return '';
+    return nodeCardTitle(s.nodes.find((node) => node.id === targetNode));
+  });
+  const titleShared = useGraphStore((s) => targetTitle !== ''
+    && s.nodes.some((node) => node.id !== targetNode && nodeCardTitle(node) === targetTitle));
+  const headingText = targetTitle ? `Note for agents on “${targetTitle}”` : 'Note for agents';
+  const heading = targetTitle ? (
+    <span className="prompt-dialog__heading">
+      <span className="prompt-dialog__heading-text" title={headingText}>{headingText}</span>
+      {titleShared && <span className="prompt-dialog__node-id">{targetNode}</span>}
+    </span>
+  ) : undefined;
+
   const request = useMemo<PromptRequest | null>(
     () => (composer ? { label: 'Note for agents', initial: useCanvasPinsStore.getState().draft, resolve: () => {} } : null),
     [composer],
@@ -282,6 +302,8 @@ export function PinComposer() {
           // GM bug 2 (fix round 1 of PR #200): a textarea that grows, the
           // caret at the end of a kept note, and "Send note".
           multiline
+          heading={heading}
+          headingLabel={titleShared ? `${headingText} ${targetNode}` : headingText}
           confirmLabel="Send note"
           onChange={setDraft}
           confirm={lock.act({ offline: 'send notes', ...(targetGone ? { disabled: true, title: PIN_REFUSAL_COPY.nodeGone }

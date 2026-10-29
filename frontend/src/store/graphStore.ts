@@ -1319,6 +1319,11 @@ function cardName(node: Node<NodeData> | undefined, fallback: string): string {
   return (definition ? nodeTitle(definition, node?.data.label) : node?.data.label) || fallback;
 }
 
+/** A node's title as its card shows it ('' when it has none). */
+export function nodeCardTitle(node: Node<NodeData> | undefined): string {
+  return node?.data ? cardName(node, '') : '';
+}
+
 /** The node's params and ports for `model`, from the backend; null when the
  * node is gone. Throws with the backend's reason (a missing key, say). */
 async function requestUniversalModel(nodeId: string, model: string): Promise<UniversalModelResult | null> {

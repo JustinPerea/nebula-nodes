@@ -95,8 +95,11 @@ describe('GM r24: Send note waits while the banner shows', () => {
     expect(api.createPin).not.toHaveBeenCalled();
     expect(toastText()).toBeNull();
     expect(screen.getByRole('button', { name: 'Cancel' })).not.toBeDisabled();
-    // Connected: Send note is live again.
+    // Connected: Send note is live again once the server promotes this tab
+    // (GM r29 item 3, fix round 19); a link taken in alone isn't enough.
     act(() => { window.dispatchEvent(new CustomEvent('nebula:person-connected')); });
+    expect(send().disabled).toBe(true);
+    act(() => session.notePersonPromoted());
     expect(send().disabled).toBe(false);
   });
 

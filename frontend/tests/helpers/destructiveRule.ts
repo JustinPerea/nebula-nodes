@@ -934,13 +934,31 @@ export const STATUS_EDGE_MAX_PX = 4;
 export function narrowLeftEdge(styles: Map<string, { value: string }>): string | null {
   // Review 15 NIT 2 (fix round 18): rem and em are lengths too (16px base),
   // so `width: 0.25rem` is the 4px edge it is, not a finding.
-  const px = (value: string) => {
+  // Review 16 NIT 5 (fix round 19): an em is the element's own font size, so
+  // `font-size: 1000px; width: 0.25em` is 250px, not 4. The font size a state
+  // gives (its own, else the edge's at rest), from a 16px base; one the check
+  // can't read makes every em unknown (a finding).
+  const length = (value: string, emPx: number | null) => {
     const v = value.trim().toLowerCase();
     if (v === '0') return 0;
-    const match = /^(-?\d*\.?\d+)(px|rem|em)$/.exec(v);
-    if (!match) return null;
-    return Number(match[1]) * (match[2] === 'px' ? 1 : 16);
+    const match = /^(-?\d*\.?\d+)(px|rem|em|%)?$/.exec(v);
+    if (!match || match[2] === undefined) return null;
+    const n = Number(match[1]);
+    if (match[2] === 'px') return n;
+    if (match[2] === 'rem') return n * 16;
+    if (match[2] === 'em') return emPx === null ? null : n * emPx;
+    return null;
   };
+  const fontPx = (state: string): number | null => {
+    const own = styles.get(`${state}|font-size`) ?? (state ? styles.get('|font-size') : undefined);
+    if (!own) return 16;
+    const v = own.value.trim().toLowerCase();
+    const pct = /^(\d*\.?\d+)%$/.exec(v);
+    if (pct) return Number(pct[1]) / 100 * 16;
+    return length(v, 16);
+  };
+  let statePx = 16 as number | null;
+  const px = (value: string) => length(value, statePx);
   const BORDER_KEYWORD: Record<string, number> = { thin: 1, medium: 3, thick: 5 };
   const borderWidth = (part: string) => BORDER_KEYWORD[part.toLowerCase()] ?? px(part);
   /** The width a border declaration paints on the left and right sides together. */
@@ -974,6 +992,10 @@ export function narrowLeftEdge(styles: Map<string, { value: string }>): string |
     const [state, prop] = key.split('|');
     const value = winner.value.trim();
     const pseudo = /::?(before|after)\b/.test(state);
+    statePx = fontPx(state);
+    // Review 16 NIT 5: a pseudo-element with text and no width of its own is
+    // as wide as its glyphs, painted in the edge's colour.
+    if (pseudo && prop === 'content' && !/^(?:none|normal|""|'')$/.test(value) && !styles.has(`${state}|width`)) return `${state} content ${value} with no width`;
     // A pseudo-element painting the edge's own fill (inherit, currentColor)
     // is a second edge with no width rule: it can't widen the first.
     if (pseudo && /^background(?:-color)?$/.test(prop) && /\b(?:inherit|currentcolor)\b/i.test(value)) return `${state} ${prop} ${value}`;
@@ -1011,6 +1033,7 @@ export function narrowLeftEdge(styles: Map<string, { value: string }>): string |
     if (n === 0) continue;
     const clip = (styles.get(`${state}|background-clip`) ?? styles.get('|background-clip'))?.value.trim() ?? 'border-box';
     if (/^(?:padding-box|content-box)$/.test(clip)) continue;
+    statePx = fontPx(state);
     const own = px(styles.get(`${state}|width`)?.value ?? styles.get('|width')?.value ?? '0') ?? 0;
     if (own + n > STATUS_EDGE_MAX_PX) return `${state ? `${state} ` : ''}border ${n}px with background-clip ${clip}`;
   }

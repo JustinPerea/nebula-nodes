@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { RegionNotices } from './canvas/DeferredCanvasOverlays';
 import { NOTICE_SLOTS, setNoticeSlot, type NoticeSlot } from '../lib/noticeSlots';
-import { keepNoticeFocus, noticeEscape } from '../lib/modalFocus';
+import { keepNoticeFocus, noticeKeys } from '../lib/modalFocus';
 import '../styles/noticeRegion.css';
 
 /** What a screen shows in the region besides the toasts. */
@@ -47,10 +47,10 @@ export function NoticeRegion({ screen }: { screen: NoticeRegionScreen }) {
   // Review 15 LOW-B: a replaced notice's focus goes back into the open dialog.
   const regionRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    window.addEventListener('keydown', noticeEscape, true);
+    window.addEventListener('keydown', noticeKeys, true);
     const region = regionRef.current;
     const stopKeeping = region ? keepNoticeFocus(region) : () => {};
-    return () => { window.removeEventListener('keydown', noticeEscape, true); stopKeeping(); };
+    return () => { window.removeEventListener('keydown', noticeKeys, true); stopKeeping(); };
   }, []);
 
   return createPortal(

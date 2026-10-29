@@ -134,22 +134,36 @@ function noticeOf(node: Element): Element | null {
 }
 
 /**
- * GM r27 item 1 (PR #200 fix round 18): the one rule for Escape on a notice,
- * whatever dialog is open (the note dialog, the palette, the mask painter,
- * the shortcuts, onboarding, the comparison) or none. Escape with focus on a
- * notice closes that notice only, as its × does (focus then follows the ×
- * rule: the next notice's ×, else the open dialog's field), and never reaches
- * the dialog. The nearest "Dismiss" inside that notice (a kept-note row's
- * own) is the one pressed; a notice without one keeps the key and does
- * nothing. Escape from inside a dialog is the dialog's own. NoticeRegion
- * installs it (window, capture: before any dialog's document handler).
+ * The one rule for a key pressed on a notice, whatever dialog is open (the
+ * note dialog, the palette, the mask painter, the shortcuts, onboarding, the
+ * comparison) or none. NoticeRegion installs it (window, capture: before any
+ * dialog's or the app's document handler).
+ * - GM r27 item 1 (PR #200 fix round 18): Escape closes that notice only, as
+ *   its × does (focus then follows the × rule: the next notice's ×, else the
+ *   open dialog's field), and never reaches the dialog. The nearest "Dismiss"
+ *   inside that notice (a kept-note row's own) is the one pressed; a notice
+ *   without one keeps the key and does nothing.
+ * - GM r28 (fix round 19): with a dialog open, only Escape and × act on a
+ *   notice. Every other key pressed there (`?`, Cmd+K, a letter, Enter) stops
+ *   here, so neither the dialog nor an app shortcut sees it: the shortcuts'
+ *   `?` and the palette's Cmd+K close nothing. Its default stays, so Enter and
+ *   Space still press the focused button and a field in a notice still types.
+ *   With no dialog open, the screen's own keys still work from a notice (the
+ *   Studio's Cmd+Z from its undo toast).
+ * - Tab is noticeTab's (the walk through the open dialog and the notices).
+ * Escape from inside a dialog is the dialog's own.
  */
-export function noticeEscape(event: KeyboardEvent): void {
-  if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return;
+export function noticeKeys(event: KeyboardEvent): void {
+  if (event.key === 'Tab' || event.isComposing) return;
   const target = event.target;
   if (!(target instanceof Element) || !inNoticeRegion(target)) return;
-  event.preventDefault();
+  if (event.key !== 'Escape') {
+    if (openModalDialog()) event.stopImmediatePropagation();
+    return;
+  }
+  if (event.defaultPrevented) return;
   event.stopImmediatePropagation();
+  event.preventDefault();
   const notice = noticeOf(target);
   if (!notice) return;
   for (let at: Element | null = target; at; at = at === notice ? null : at.parentElement) {

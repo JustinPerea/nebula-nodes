@@ -2294,3 +2294,147 @@ Review 15 (of 1d59f730) and GM r27, on 33eb5e1c.
     click or the app's Note button acting on a stale selection.
 - md5: one duplicate pair, the 5xx and no-answer toasts, which are meant
   to match.
+
+## Fix round 19
+
+Review 16 (of 073cdd93), GM r28 and GM r29.
+
+- **GM r29 item 3: the hold follows the server's state both ways.**
+  - **Promote.** The server sends no explicit ack. It does send the
+    person-only `proposalSync` on a verified hello, at a single send site
+    (`websocket_endpoint`, now commented there), and
+    `test_websocket_sync_sends_keys_only_after_a_person_hello` pins that.
+    `lib/wsClient` reads it as "promoted" and calls `notePersonPromoted()`,
+    which clears the hold and the banner. That covers every path:
+    - a new link;
+    - the same link reopened;
+    - an accepted reconnect hello;
+    - the desktop app's token.
+  - **Demote.** Two signals already existed, so I added none:
+    - `personRequired`, the frame for a refused hello, which every reconnect
+      re-tests;
+    - a 403 `person_required` on a request.
+    Both raise `PERSON_REQUIRED_EVENT`, which brings the hold and the banner
+    back. The server never demotes a live socket on its own: the token is
+    per launch, so a new launch means a new socket and a new hello.
+  - **A link taken in is no longer proof.** `nebula:person-connected` now
+    only makes the canvas say hello. It no longer clears the hold or the
+    banner.
+    - The same link reopened now fires it too; before, only a different
+      token did.
+    - The backend ignores a second hello on a socket it already promoted,
+      so in that case the canvas reconnects, and the new socket's hello is
+      what the server promotes.
+  - Tests (`tests/lib/personPromote.r29.test.tsx`): a promote by each path,
+    and a demote. All five fail on 073cdd93.
+  - Live (r29): the hold and banner are up after a refused delete; the same
+    link set in the hash brings the reconnect's promote, and both clear
+    (about 3 s, the reconnect delay).
+  - The banner test and r24's "connected" step now promote rather than fire
+    the link event. The harness clears the hold with `notePersonPromoted()`
+    (standing in for the server) in place of the link event, which would
+    now reconnect.
+- **GM r29 item 1: the note dialog names its node.**
+  - The heading reads "Note for agents on “Text Input”", using the card's
+    own title (`nodeCardTitle`, the person's name for the node, else its
+    canvas title).
+  - Another node with the same title adds the bare id after it
+    (`.prompt-dialog__node-id`, styled like the card's id chip in both
+    skins).
+  - A long title stays on one line, cut with an ellipsis, with the full
+    heading in the tooltip.
+  - The dialog's and the field's names are the same text, with the id when
+    shown.
+  - A note on a spot, or on a node the canvas hasn't loaded, keeps "Note for
+    agents".
+  - Tests (r29pin): a unique title, a shared title and a long title.
+  - Live (r29): shots `fix19-heading-unique-title-1440.png`,
+    `fix19-heading-shared-title-id-1440.png` and
+    `fix19-heading-long-title-truncated-1440.png`.
+- **GM r29 item 2:** the toast after × keeps the full Q116a line. No change.
+  r24's "with no banner showing (dismissed)" test already covers it.
+- **GM r28: only Escape and × act on a notice.**
+  - The shared rule (`noticeEscape`, now `noticeKeys`) stops every key
+    pressed on a notice except Tab before any document handler sees it,
+    while a dialog is open. So the shortcuts' `?` and the palette's Cmd+K
+    close nothing.
+  - The default action stays, so Enter and Space press the button and a
+    field in a notice still types.
+  - Tab stays `noticeTab`'s.
+  - With no dialog open, the screen's own keys still work from a notice.
+    The Studio's Cmd+Z from its undo toast is an existing tested rule, and
+    the blanket version broke it.
+  - Test (r29): `?`, Cmd+K, Ctrl+K, `/` and a letter in all six modals.
+  - Live: the shortcuts and the palette.
+- **GM r28 nit 2: Skip.**
+  - Before: 40 px tall, 0 side padding (23 px wide), and its ring overlapped
+    "Reopen the tour from Help on the canvas." by 5 px.
+  - After: 32 px tall with 10 px each side, text still on the hint's left
+    edge, the ghost buttons' ring offset (3 px, as `.onboarding__cta`), and
+    10 px clear of the hint, so the ring ends 5 px short of it.
+  - Live check `r28skip`. Shots: `fix19-onboarding-skip-before-1440.png`
+    and `fix19-onboarding-skip-after-1440.png`.
+- **Review 16 LOW-1 (GM r29: the Q116a line).**
+  - A pin delete refused 403 `person_required` now shows the Q116a line
+    (`pinDeleteLine`). Any other failure keeps "Nebula couldn’t delete this
+    note. Try again in a moment."
+  - Add and delete are the only person-gated pin writes. Add already reads
+    the code, and `fetchPins` is a read.
+  - Tests (r29pin). Live: r29, with the person header stripped from the
+    DELETE.
+- **Review 16 NIT 2: a load by the dialog's opening redraws the cards.**
+  - `canvasPins` tells listeners when the data loads (`onPinTextLoaded`).
+  - The store keeps each pin's raw text and re-fits the pins on screen from
+    it, so they show the full form at once, whatever need loaded the data.
+  - Test: `agentPresenceFollowups.r29chunk.test.tsx`.
+  - Production build: opening the dialog after the gap turns the collapsed
+    marker's name from "葛 warmer ❤" to the full form with no pins push
+    (5 of 5). Shot: `fix19-prod-dialog-load-redraws-card-1280.png`.
+- **Review 16 NIT 5: the ratchet's two remaining gaps.**
+  - An edge `::before` or `::after` with text and no width of its own (as
+    wide as its glyphs) is a finding.
+  - Ems are read against the state's own font size, so `font-size: 1000px;
+    width: 0.25em` is 250 px. A font size the check can't read (`larger`)
+    makes every em unknown, which is a finding.
+  - Corpus: six new failing cases and three new passing ones. Five of the
+    six failing cases pass the 073cdd93 helper.
+- **Harness r23.**
+  - Review 16 found the cause: a fixed click 16 px below the node's top
+    landed on the selection toolbar, so the old selection stood and Note
+    opened that node.
+  - `selectNode` now clicks a point `elementFromPoint` confirms is the node
+    itself, not a control on it, fitting the view once if none is free.
+    Then it requires the node to be selected, or throws.
+  - Round 18's retry is gone. r23 now throws if the dialog opened for
+    another node.
+- **GM r28 nit 1:** "Undid Codex’s edit." comes from #198, which is still
+  open. I'll check it once #198 is on main.
+- **MCP:** nothing agents see changed. The heading, the lines and the hold
+  are the person's UI. MCP-SETUP.md is unchanged.
+
+### Fix round 19 gates
+
+- Backend, the full suite (isolated, `lg run --gate`): 11,803 passed, 71
+  skipped, none failed (6 min 5 s).
+- Frontend: `tsc -b` clean; `eslint .` clean.
+- Vitest, the full run with `--maxWorkers=6` (`--gate`): 586 files, 7,452
+  tests, all passed.
+  - Three older tests changed for this round's rulings: the banner test and
+    r24's "connected" step now use the server's promote, and the Studio's
+    Cmd+Z from its toast led to the dialog-open scope.
+- Every new test fails on 073cdd93:
+  - personPromote.r29: 5 of 5;
+  - r29: 6 of 6;
+  - r29pin: 5 of 5;
+  - r29chunk: 1 of 1;
+  - the ratchet's new corpus: 5 of its 6 failing cases pass the old helper.
+- Build into a scratch outDir: the entry is 427,573 bytes raw (131,211
+  gzip), under 512,000, and 96 JS assets are eval-free. Fonts: 53
+  @font-face rules, 13 woff2, 285,052 bytes.
+- Production build (`vite preview` on 5795): 5 of 5, including the dialog's
+  load redrawing the card.
+- Live (backend 8795, Vite 5795, 8000-8010 and 5173 blocked): 112 of 112 in
+  two full runs. r23 opened its dialog on the right node in both, with the
+  confirmed-point click and no retry.
+- md5: one duplicate pair, the 5xx and no-answer toasts, which are meant to
+  match.

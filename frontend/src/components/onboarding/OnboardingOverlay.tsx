@@ -67,7 +67,7 @@ export function OnboardingOverlay() {
       if (event.target instanceof Node && overlay.contains(event.target)) return;
       // Review 15 LOW-A (fix round 18): a notice's keys are its own (Enter
       // and Space press its button, Shift+Tab leaves it; Escape: GM r27,
-      // lib/modalFocus noticeEscape), never the tour's.
+      // lib/modalFocus noticeKeys), never the tour's.
       if (inNoticeRegion(event.target)) return;
       // A modal dialog opened over the tour owns the keys (review 8, L-d).
       if (keyBlockedByModal(overlay)) return;

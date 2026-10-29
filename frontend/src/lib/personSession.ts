@@ -30,8 +30,13 @@ const TOKEN_SHAPE = /^[A-Za-z0-9_-]{16,128}$/;
 const DEFAULT_DEV_BACKEND = 'http://127.0.0.1:8000';
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 export const PERSON_REQUIRED_EVENT = 'nebula:person-required';
-/** A fresh person link was taken in by this tab (the canvas may re-say hello). */
+/** A person link was taken in by this tab (the canvas says hello again, or
+ * reconnects to). Not proof: only the server's promote clears the hold. */
 export const PERSON_CONNECTED_EVENT = 'nebula:person-connected';
+/** The server promoted this tab's canvas socket as the person (a verified
+ * hello, by any path: a new link, the same link reopened, a reconnect, the
+ * desktop app's token). See notePersonPromoted. */
+export const PERSON_PROMOTED_EVENT = 'nebula:person-promoted';
 
 export interface PersonCredential {
   token: string;
@@ -161,10 +166,11 @@ export function browserPersonCredential(): PersonCredential | null {
   const fromLink = consumeLink();
   if (fromLink) {
     // A fresh link supersedes whatever this tab held before.
-    const changed = memoryCredential?.token !== fromLink.token || memoryCredential?.backend !== fromLink.backend;
     memoryCredential = fromLink;
     writeStored(fromLink);
-    if (changed) window.dispatchEvent(new CustomEvent(PERSON_CONNECTED_EVENT));
+    // GM r29 item 3 (fix round 19): the same link reopened (the banner's own
+    // fix) is said hello with too, so the server can promote this tab again.
+    window.dispatchEvent(new CustomEvent(PERSON_CONNECTED_EVENT));
     return fromLink;
   }
   if (memoryCredential) return memoryCredential;
@@ -305,9 +311,26 @@ export function subscribePersonGate(listener: () => void): () => void {
   personGateListeners.add(listener);
   return () => { personGateListeners.delete(listener); };
 }
+// GM r29 item 3 (fix round 19): the hold follows the server's state both
+// ways. Demoted (a hello the server refuses, its `personRequired` frame, or a
+// person-only request refused 403 person_required, all PERSON_REQUIRED_EVENT):
+// the hold and the banner come back. Promoted (notePersonPromoted, from the
+// socket): both clear. A link the tab takes in isn't proof by itself.
 if (typeof window !== 'undefined') {
   window.addEventListener(PERSON_REQUIRED_EVENT, () => setPersonGateHeld(true));
-  window.addEventListener(PERSON_CONNECTED_EVENT, () => setPersonGateHeld(false));
+}
+
+/** The server promoted this tab's canvas socket as the person: its hello was
+ * verified (lib/wsClient sees the person-only `proposalSync` the backend sends
+ * on promote, and only then). Clears the hold and the banner. */
+export function notePersonPromoted(): void {
+  setPersonGateHeld(false);
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(PERSON_PROMOTED_EVENT));
+}
+
+export function onPersonPromoted(listener: () => void): () => void {
+  window.addEventListener(PERSON_PROMOTED_EVENT, listener);
+  return () => window.removeEventListener(PERSON_PROMOTED_EVENT, listener);
 }
 
 /** Tell the canvas a person-only action was refused here (shows the banner). */

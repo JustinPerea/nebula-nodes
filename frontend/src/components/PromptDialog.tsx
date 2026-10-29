@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type RefObject } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode, type RefObject } from 'react';
 import { AutoGrowTextarea } from './AutoGrowTextarea';
 import '../styles/prompt-dialog.css';
 import { ModalPortal } from './ModalPortal';
@@ -12,7 +12,7 @@ export interface PromptRequest {
 }
 
 /** Shared text-entry dialog for browser and desktop workflows. */
-export function PromptDialog({ request, onDone, maxLength, cap, revealCounter = 0, onChange, confirm, onRefused, multiline = false, confirmLabel = 'OK' }: {
+export function PromptDialog({ request, onDone, maxLength, cap, revealCounter = 0, onChange, confirm, onRefused, multiline = false, confirmLabel = 'OK', heading, headingLabel }: {
   request: PromptRequest;
   onDone: (value: string | null) => void;
   /** Optional cap passed to the input (e.g. 280 for notes to agents). */
@@ -44,6 +44,11 @@ export function PromptDialog({ request, onDone, maxLength, cap, revealCounter = 
   multiline?: boolean;
   /** The confirm button's words ("Send note" for the note). */
   confirmLabel?: string;
+  /** What the field's label shows, when more than `request.label` (GM r29
+   * item 1: the note dialog names its node). */
+  heading?: ReactNode;
+  /** The dialog's name for `heading` (its text, the node's full title). */
+  headingLabel?: string;
 }) {
   const [value, setValue] = useState(request.initial);
   const input = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
@@ -136,7 +141,7 @@ export function PromptDialog({ request, onDone, maxLength, cap, revealCounter = 
   };
   return (
     <ModalPortal>
-    <div className="prompt-dialog" role="dialog" aria-modal="true" aria-label={request.label}>
+    <div className="prompt-dialog" role="dialog" aria-modal="true" aria-label={headingLabel ?? request.label}>
       <form ref={form} className="prompt-dialog__card" onSubmit={submit} onKeyDown={(event) => {
         if (event.key === 'Enter' && composing(event)) {
           // The input method's Enter ends its composition (Safari: keyCode
@@ -161,7 +166,7 @@ export function PromptDialog({ request, onDone, maxLength, cap, revealCounter = 
         }
       }}>
         <label className="prompt-dialog__field">
-          {request.label}
+          {heading ?? request.label}
           {multiline
             ? <AutoGrowTextarea textareaRef={input as RefObject<HTMLTextAreaElement | null>} rows={1} value={value} maxLength={maxLength}
                 aria-describedby={described}
