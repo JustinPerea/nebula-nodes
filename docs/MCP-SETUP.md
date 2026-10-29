@@ -3741,8 +3741,8 @@ that kept changing it goes quiet, the save the person's clash answer
 sends, a Try again or an edit. There is one line per status: 400 "Nebula
 can’t save your changes to “Opening”.", 413 "“Opening” is too big to
 save. Remove something from it, then try again.". Neither promises a
-retry. The card says it once, with
-Try again (on the toast and in the "Unsaved" mark's popover), and nothing
+retry. The card shows it as the scene's stop line (below), with
+Try again (there and in the "Unsaved" mark's popover), and nothing
 more goes until the person edits the scene or presses Try again; one of
 those refused the same way again keeps the same line and Try again, and
 your writes meanwhile never send it. Refused while a clash waits for the
@@ -3754,25 +3754,48 @@ unsaved (Use Codex’s on the only changed field), when the stop and the
 the person's value into the clashing field): that counts as their answer,
 with the same two outcomes. Other scenes keep saving.
 
-While a scene has a line of its own (its stop line: "Couldn’t save your
-changes…", the 400 or 413 line, or "…kept changing…"; or a clash prompt,
-the first time or asked again), that line keeps its slot, and your edits
-about that scene alone go only to the Agent log, with no "Codex changed
+A stopped save's line is a state, not an event: the canvas shows the stop
+lines in their own place above its toasts, one line per cause, and no toast
+pushes one out. Scenes stopped for the same cause share one line, named up
+to three, then counted: "Nebula can’t save your changes to “Opening” and
+“Ref scene”." (400); "Nebula couldn’t save your changes to “Opening” and
+“Ref scene”. They’re kept, and Nebula will try again with your next
+change." (a server error that went on past the retries); "“Opening” and
+“Ref scene” are too big to save. Remove something from them, then try
+again." (413; from four, "4 scenes are too big to save. …"). One scene
+keeps its own line, and "…kept changing…" stays one line per scene. The
+line's Try again tries every scene it names once: those that save leave
+the line, those that fail stay in it, and no new round of retries starts.
+A scene leaves its line whenever its stop clears: it saved, or your write
+made it match the person's values (then the stop, the line and the
+"Unsaved" mark go together, and nothing is said or sent).
+
+While a scene has a line of its own (its stop line, or a clash prompt,
+the first time or asked again), your edits about that scene alone go only
+to the Agent log, with no "Codex changed
 the canvas." toast. Undo and Redo of them work from the keyboard. An edit
 to the clashed field rewrites the prompt to the latest state; one that
 makes it the person's value ends the clash (above). When your edit changes
 the situation, its own line replaces the scene's: you deleted the scene
 (the delete line above) or started a new clash (the clash prompt). Your
 edits about other nodes show their toast as usual, a connection from the scene
-into another node included (it changes that node's input), with the stop
-line beside it and its Try again. The person's own toasts ("Deleted the
-node.", "Restored the node.", "Undid Codex’s edit.") show the same way,
-with the stop line beside them; when their own Undo leaves nothing unsaved
-(the card is Nebula's scene again), the stop and the "Unsaved" mark go. While the
-person has that popover open, the toast with the same line leaves and
-doesn't come back. The Agent log's line for it carries the status and the
-code (`Couldn’t save “Opening”, node n1: HTTP 400 bad_params. <detail>`);
-the person's line never does.
+into another node included (it changes that node's input), below the stop
+lines. The person's own toasts ("Deleted the node.", "Restored the node.",
+"Undid Codex’s edit.") show the same way; when their own Undo leaves
+nothing unsaved (the card is Nebula's scene again), the stop and the
+"Unsaved" mark go. When the person deletes a stopped scene, "Deleted the
+node." with Undo is the only line. Undo (theirs, or any that puts the scene
+back) brings it back as it was: stopped, with its line and Try again,
+whatever the cause. Nothing is sent then and the retries don't start
+again; after a server error the one quiet try still goes on the next sign
+that saving works (the restore landing is one), and after a 400 or 413
+nothing goes until the person acts. A scene that comes back matching the
+person's values has no stop at all. While the person has a scene's
+"Unsaved" popover open, that scene leaves the stop line (its line is in
+the popover) and is back in it when the popover closes. The Agent log's
+line for a 400 or 413 carries the status and the code (`Couldn’t save
+“Opening”, node n1: HTTP 400 bad_params. <detail>`); the person's line
+never does.
 
 Ids and handles in details, run errors and CLI output take no quotes
 (`run run_ab12 already ran…`, `Node n4 not found`, `Required input port

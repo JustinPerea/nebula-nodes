@@ -30,6 +30,8 @@ vi.spyOn(console, 'error').mockImplementation(() => {});
 
 const store = await import('../../src/store/graphStore');
 const { useGraphStore } = store;
+// GM r28 item 2 (round 19): the stop line is a state, in its own slot.
+const stopLineOf = (nodeId: string) => store.sceneStopLines(useGraphStore.getState()).find((line) => line.nodeIds.includes(nodeId))?.text ?? null;
 const { GRAPH_PARAMS_VERSION } = await import('../../src/lib/savedParamsUpgrades');
 const { setProjectContext } = await import('../../src/lib/projectContext');
 const { noteBackendConnection, resetBackendConnectionForTests } = await import('../../src/lib/backendConnection');
@@ -174,7 +176,7 @@ describe('H1: a canvas replacement takes a scene\'s kept edits with it, and name
     const before = h.puts.length;
     expect(before).toBe(9); // the first try and 8 timed retries (L2), then it waits
     // GM r11 answer 3: stopped; the line says the next change sends them.
-    expect(unsaved()).toBe("Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again with your next change.");
+    expect(unsaved()).toBe("Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula will try again with your next change.");
     h.answer([ok]);
     noteBackendConnection('offline');
     noteBackendConnection('online');
@@ -326,9 +328,11 @@ describe('L2-L5', () => {
     expect(h.puts).toHaveLength(9);
     expect(said).toHaveLength(1);
     // GM r11 answer 3: the stopped line, with [Try again] on its toast.
-    const stopped = "Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again with your next change.";
+    const stopped = "Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula will try again with your next change.";
     expect(unsaved()).toBe(stopped);
-    expect(useGraphStore.getState().undoNotice).toMatchObject({ text: stopped, retryScene: { nodeId: 'n1' } });
+    // GM r28 item 2 (round 19): the line is a state, in its own slot.
+    expect(stopLineOf('n1')).toBe(stopped);
+    expect(useGraphStore.getState().undoNotice).toBeNull();
   });
 
   it('L3: Undo while the removal is out, then its 409: no late line, no mark', async () => {

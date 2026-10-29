@@ -203,7 +203,7 @@ afterEach(() => store.setSceneQuietRetryForTests(null));
 function watchSlots() {
   const texts = (state: unknown) => {
     const st = state as { undoNotice: { text: string } | null; messageNotice: { text: string } | null };
-    return [st.undoNotice?.text, st.messageNotice?.text].filter((text): text is string => Boolean(text));
+    return [st.undoNotice?.text, st.messageNotice?.text, ...stopTexts(state)].filter((text): text is string => Boolean(text));
   };
   // What shows now doesn't count; a line counts each time it appears.
   let shown = new Set(texts(useGraphStore.getState()));
@@ -226,7 +226,11 @@ const slots = () => {
     messageNotice: { text: string; retryScene?: { nodeId: string } } | null };
   return [g.undoNotice, g.messageNotice].filter((notice): notice is { text: string; retryScene?: { nodeId: string } } => Boolean(notice));
 };
-const retryToasts = () => slots().filter((notice) => notice.retryScene?.nodeId === 'n1');
+// GM r28 item 2 (round 19): the stop line with [Try again] is in the state
+// slot now; the event slots never carry it.
+const stopTexts = (state: unknown) => store.sceneStopLines(state as Parameters<typeof store.sceneStopLines>[0]).map((line) => line.text);
+const retryToasts = () => store.sceneStopLines(useGraphStore.getState()).filter((line) => line.nodeIds.includes('n1'))
+  .map((line) => ({ text: line.text, retryScene: { nodeId: 'n1' } }));
 
 /** The backend's POST /api/graph/restore and DELETE /api/graph/node, in
  * small: the node back with the params the restore sent (or taken off by a
@@ -276,7 +280,7 @@ async function clashOnS1(h: ReturnType<typeof backend>) {
 }
 const clashes16 = () => useGraphStore.getState().sceneClashes as Record<string, { line: string; focus?: true }>;
 
-const STOPPED = 'Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again with your next change.';
+const STOPPED = 'Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula will try again with your next change.';
 const messageSlot = () => (useGraphStore.getState() as unknown as { messageNotice: { text: string; retryScene?: { nodeId: string } } | null }).messageNotice;
 
 
@@ -400,33 +404,36 @@ describe('review 16 LOW-1 (GM r27 answer 1): while a clash waits, Codex’s edit
 });
 
 describe('review 16 LOW-2 (GM r27 answer 2): the person’s own toasts and the stop line show together', () => {
-  it('the person deletes another node: "Deleted the node." with [Undo], the stop line beside it with [Try again]; Undo: "Restored the node." with [Redo], the stop line still beside it', async () => {
+  it('the person deletes another node: "Deleted the node." with [Undo], the stop line above it (the state slot) with [Try again]; Undo: "Restored the node." with [Redo], the stop line still above it', async () => {
     const h = backend(S3);
     withRestoreAll(h);
     await stoppedByServer(h);
     useGraphStore.getState().deleteNode('n2');
+    // GM r28 item 2 (round 19): the stop line is in the state slot above the
+    // event slot, never in the message slot.
     await vi.waitFor(() => expect(toast()?.text).toBe('Deleted the node.'), { timeout: 3000, interval: 5 });
-    expect(messageSlot()?.text).toBe(STOPPED);
-    expect(messageSlot()?.retryScene?.nodeId).toBe('n1');
+    expect(messageSlot()).toBeNull();
+    expect(retryToasts().map((notice) => notice.text)).toEqual([STOPPED]);
     useGraphStore.getState().undo();
     await vi.waitFor(() => expect(toast()?.text).toBe('Restored the node.'), { timeout: 3000, interval: 5 });
-    expect(messageSlot()?.text).toBe(STOPPED);
-    expect(messageSlot()?.retryScene?.nodeId).toBe('n1');
+    expect(messageSlot()).toBeNull();
+    expect(retryToasts().map((notice) => notice.text)).toEqual([STOPPED]);
     expect(stopped()).toEqual({ n1: true });
   });
 
-  it('Cmd+Z on Codex’s quiet edit to the stopped scene: "Undid Codex’s edit." with [Redo], the stop line beside it; still stopped', async () => {
+  it('Cmd+Z on Codex’s quiet edit to the stopped scene: "Undid Codex’s edit." with [Redo], the stop line above it; still stopped', async () => {
     const h = backend(S3);
     withRestore(h);
     await stoppedByServer(h);
     h.other((shots) => setPrompt(shots, 's3', 'codex s3'), 'agent');
     await vi.waitFor(() => expect(briefOf()[2]).toBe('s3:codex s3'), { timeout: 3000, interval: 5 });
     await sleep(40);
-    expect(toast()?.text).toBe(STOPPED);
+    expect(toast()).toBeNull();
+    expect(retryToasts().map((notice) => notice.text)).toEqual([STOPPED]);
     useGraphStore.getState().undo();
     await vi.waitFor(() => expect(toast()?.text).toBe('Undid Codex’s edit.'), { timeout: 3000, interval: 5 });
     await sleep(60);
-    expect(messageSlot()?.text).toBe(STOPPED);
+    expect(messageSlot()).toBeNull();
     expect(retryToasts().map((notice) => notice.text)).toEqual([STOPPED]);
     expect(stopped()).toEqual({ n1: true });
     expect(unsaved()).toBe(STOPPED);
@@ -447,12 +454,12 @@ describe('review 16 LOW-2 (GM r27 answer 2): the person’s own toasts and the s
 });
 
 describe('GM r27 answer 3: a Codex wire from the stopped scene into another node', () => {
-  it('shows its toast; the stop line stays beside it with [Try again]', async () => {
+  it('shows its toast; the stop line stays above it (the state slot) with [Try again]', async () => {
     const h = backend(S3);
     await stoppedByServer(h);
     h.other((shots) => shots, 'agent', (edges) => [...edges, wire('s1', 'n2')]);
     await vi.waitFor(() => expect(toast()?.text).toBe(CODEX_TOAST), { timeout: 3000, interval: 5 });
-    expect(messageSlot()?.text).toBe(STOPPED);
+    expect(messageSlot()).toBeNull();
     expect(retryToasts().map((notice) => notice.text)).toEqual([STOPPED]);
     expect(useGraphStore.getState().edges.some((edge: { source: string; target: string }) => edge.source === 'n1' && edge.target === 'n2')).toBe(true);
   });

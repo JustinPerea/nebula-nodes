@@ -188,7 +188,7 @@ const typeIn = (shotId: string, prompt: string) => useGraphStore.getState().upda
 const setPrompt = (shots: Shot[], id: string, prompt: string) => shots.map((s) => (s.id === id ? { ...s, prompt } : s));
 const S3 = [{ id: 's1', prompt: 'a' }, { id: 's2', prompt: 'b' }, { id: 's3', prompt: 'c' }];
 
-const STOPPED = 'Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again with your next change.';
+const STOPPED = 'Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula will try again with your next change.';
 const QUIET = 80;
 const stopped = () => useGraphStore.getState().stoppedScenes;
 const toast = () => (useGraphStore.getState() as unknown as { undoNotice: { text: string; retryScene?: { nodeId: string } } | null }).undoNotice;
@@ -210,12 +210,14 @@ afterEach(() => store.setSceneQuietRetryForTests(null));
 
 const CANT = 'Nebula can’t save your changes to “Opening”.';
 const TOO_BIG = '“Opening” is too big to save. Remove something from it, then try again.';
-/** Both notice slots' lines from now on (a line beside an undo offer goes
- * in the message slot). */
+// GM r28 item 2 (round 19): the stop lines are a state, in their own slot.
+const stopTexts = (state: unknown) => store.sceneStopLines(state as Parameters<typeof store.sceneStopLines>[0]).map((line) => line.text);
+/** Both notice slots' lines, and the state slot's, from now on (a line
+ * beside an undo offer goes in the message slot). */
 function watchSlots() {
   const texts = (state: unknown) => {
     const st = state as { undoNotice: { text: string } | null; messageNotice: { text: string } | null };
-    return [st.undoNotice?.text, st.messageNotice?.text].filter((text): text is string => Boolean(text));
+    return [st.undoNotice?.text, st.messageNotice?.text, ...stopTexts(state)].filter((text): text is string => Boolean(text));
   };
   // What shows now doesn't count; a line counts each time it appears.
   let shown = new Set(texts(useGraphStore.getState()));
@@ -246,7 +248,10 @@ const slots = () => {
     messageNotice: { text: string; retryScene?: { nodeId: string } } | null };
   return [g.undoNotice, g.messageNotice].filter((notice): notice is { text: string; retryScene?: { nodeId: string } } => Boolean(notice));
 };
-const retryToasts = () => slots().filter((notice) => notice.retryScene?.nodeId === 'n1');
+// GM r28 item 2 (round 19): the stop line with [Try again] is in the state
+// slot now; the event slots never carry it.
+const retryToasts = () => store.sceneStopLines(useGraphStore.getState()).filter((line) => line.nodeIds.includes('n1'))
+  .map((line) => ({ text: line.text, retryScene: { nodeId: 'n1' } }));
 
 describe('GM r22 Q3: one line per status, a save that wasn’t stopped too', () => {
   it.each([
@@ -304,7 +309,9 @@ describe('GM r22 Q3: one line per status, a save that wasn’t stopped too', () 
 });
 
 describe('GM r22 Q1: the popover open, the matching toast steps aside', () => {
-  it('opening the popover takes the toast with that line and [Try again] away; closing it brings none back', async () => {
+  // GM r28 item 2 (round 19) changed "closing brings none back": a stop line
+  // is a state, so it is back once the popover closes.
+  it('opening the popover takes the line and [Try again] away; closing it brings the line back (a state, GM r28)', async () => {
     const h = backend(S3);
     await stoppedByServer(h);
     expect(retryToasts().map((notice) => notice.text)).toEqual([STOPPED]);
@@ -312,7 +319,7 @@ describe('GM r22 Q1: the popover open, the matching toast steps aside', () => {
     expect(retryToasts()).toEqual([]);
     store.noteScenePopover('n1', false);
     await sleep(40);
-    expect(retryToasts()).toEqual([]);
+    expect(retryToasts().map((notice) => notice.text)).toEqual([STOPPED]);
     expect(unsaved()).toBe(STOPPED);
   });
 
@@ -332,7 +339,9 @@ describe('GM r22 Q1: the popover open, the matching toast steps aside', () => {
     store.noteScenePopover('n1', false);
   });
 
-  it('a line that comes while the popover is open shows only there: no toast, the mark has it', async () => {
+  // GM r28 item 2 (round 19): the line is a state; it shows in the state slot
+  // once the popover closes (it was never said as a toast before).
+  it('a line that comes while the popover is open shows only there; closed, it is the state slot’s line', async () => {
     const h = backend(S3);
     await stoppedByServer(h);
     store.noteScenePopover('n1', true);
@@ -343,11 +352,12 @@ describe('GM r22 Q1: the popover open, the matching toast steps aside', () => {
     await vi.waitFor(() => expect(unsaved()).toBe(TOO_BIG), { timeout: 3000, interval: 5 });
     await sleep(30);
     expect(retryToasts()).toEqual([]);
+    expect(lines.lines.filter((line) => line === TOO_BIG)).toEqual([]);
     store.noteScenePopover('n1', false);
     await sleep(40);
     lines.off();
-    expect(lines.lines.filter((line) => line === TOO_BIG)).toEqual([]);
-    expect(retryToasts()).toEqual([]);
+    expect(lines.lines.filter((line) => line === TOO_BIG)).toEqual([TOO_BIG]);
+    expect(retryToasts().map((notice) => notice.text)).toEqual([TOO_BIG]);
   });
 
   it('another scene’s toast is left alone', async () => {

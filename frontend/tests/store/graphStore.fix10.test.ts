@@ -30,6 +30,8 @@ vi.spyOn(console, 'error').mockImplementation(() => {});
 
 const store = await import('../../src/store/graphStore');
 const { useGraphStore } = store;
+// GM r28 item 2 (round 19): the stop line is a state, in its own slot.
+const stopLineOf = (nodeId: string) => store.sceneStopLines(useGraphStore.getState()).find((line) => line.nodeIds.includes(nodeId))?.text ?? null;
 const { GRAPH_PARAMS_VERSION } = await import('../../src/lib/savedParamsUpgrades');
 const { setProjectContext } = await import('../../src/lib/projectContext');
 const { resetBackendConnectionForTests } = await import('../../src/lib/backendConnection');
@@ -174,10 +176,8 @@ const S3 = [{ id: 's1', prompt: 'a' }, { id: 's2', prompt: 'b' }, { id: 's3', pr
 // GM r18 answer 2 (fix round 11): a stop by another writer's refusals names
 // that writer; round 10 showed the server-failure line here.
 const STOPPED = 'Codex kept changing “Opening”, so your changes aren’t saved yet. Nebula will try again when Codex stops.';
-const offersRetry = () => {
-  const state = useGraphStore.getState() as unknown as { undoNotice: { text: string; retryScene?: { nodeId: string } } | null };
-  return state.undoNotice?.text === STOPPED && state.undoNotice.retryScene?.nodeId === 'n1';
-};
+// GM r28 item 2 (round 19): the stop line, with [Try again], is a state in its own slot.
+const offersRetry = () => stopLineOf('n1') === STOPPED;
 
 describe('M-2: a save another writer keeps refusing stops, never silently', () => {
   /** Codex commits during each of the tab's saves (the reviewer's R4: no

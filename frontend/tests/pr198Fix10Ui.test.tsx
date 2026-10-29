@@ -212,7 +212,7 @@ describe('GM r15 answer 2 (GM pr200 r16 #2): where focus goes when a notice clos
   });
 });
 
-const STOPPED = 'Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again with your next change.';
+const STOPPED = 'Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula will try again with your next change.';
 
 describe('GM r15 answer 3: a click on the "Unsaved" mark does nothing else', () => {
   it('the press and the click never reach the card (no selection, no drag start); the popover opens', () => {

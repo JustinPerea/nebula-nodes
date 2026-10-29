@@ -3,7 +3,6 @@ import { NOTICE_HOLD_MS } from '../../lib/canvasNoticeHold';
 import { isForeignEdit } from '../../lib/canvasUndo';
 import { useNoticeHold } from '../../hooks/useNoticeHold';
 import { OpenCopyButton } from './OpenCopyButton';
-import { RetrySceneButton } from './RetrySceneButton';
 import { useCanvasLock } from '../../lib/canvasLock';
 
 /** How long a notice with Undo or Redo stays up. Long enough to reach the button. */
@@ -74,7 +73,6 @@ export function CanvasUndoNotice({ messagesOnly = false }: { messagesOnly?: bool
         </button>
       )}
       {notice.copy && <OpenCopyButton projectId={notice.copy.projectId} onOpen={dismiss} />}
-      {notice.retryScene && <RetrySceneButton nodeId={notice.retryScene.nodeId} onRetry={dismiss} />}
       <button type="button" className="canvas-undo-notice__close" aria-label="Dismiss" onClick={dismiss}>
         ×
       </button>

@@ -7,8 +7,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
  *   banner's place holds a neutral notice with [Open] and ×: "Your latest
  *   edits were saved as their own project, “<name>”." Focus goes to its ×,
  *   never [Open]; [Open] opens that project.
- * - Q1: the "Unsaved" mark's popover, opened, takes the toast with the same
- *   line and [Try again] off the canvas; closed, it brings none back.
+ * - Q1: the "Unsaved" mark's popover, opened, takes the stop line with the
+ *   same line and [Try again] off the canvas; closed, it is back (GM r28:
+ *   the stop line is a state).
  * - GM r23 answer 2: the clash prompt asked again in place of the delete
  *   toast has no ×, so focus goes to the prompt itself, never [Keep mine].
  */
@@ -18,6 +19,7 @@ vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), disconnect
 
 import { SceneUnsavedMark } from '../src/components/nodes/SceneUnsavedMark';
 import { SceneClashNotices } from '../src/components/canvas/SceneClashNotice';
+import { SceneStopLines } from '../src/components/canvas/SceneStopLines';
 import { ProjectHome, type ProjectHomeProps } from '../src/components/projects/ProjectHome';
 import { useGraphStore } from '../src/store/graphStore';
 import { editsSavedAsProjectLine } from '../src/store/projectStore';
@@ -71,19 +73,26 @@ describe('GM r22 Q2: the saved-as notice takes the banner’s place', () => {
   });
 });
 
-describe('GM r22 Q1: the popover open, the matching toast steps aside', () => {
-  it('opening the mark’s popover clears the toast with its [Try again]; closing brings none back; other toasts stay', () => {
-    const LINE_STOPPED = 'Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again with your next change.';
-    useGraphStore.setState({ undoNotice: { id: 1, text: 'Codex changed the canvas.', offer: 'undo' },
-      messageNotice: { id: 2, text: LINE_STOPPED, tone: 'info', retryScene: { nodeId: 'n1' } } } as never);
-    render(<SceneUnsavedMark nodeId="n1" line={LINE_STOPPED} stopped />);
+describe('GM r22 Q1: the popover open, the matching stop line steps aside', () => {
+  // GM r28 item 2 (round 19) changed "closing brings none back": the stop
+  // line is a state in its own slot, so it is back once the popover closes.
+  it('opening the mark’s popover takes the stop line with its [Try again] away; closing brings it back; other toasts stay', () => {
+    const LINE_STOPPED = 'Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula will try again with your next change.';
+    useGraphStore.setState({ nodes: [{ id: 'n1', position: { x: 0, y: 0 }, data: { label: 'Opening', definitionId: 'cinema-scene', params: {} } }],
+      stoppedScenes: { n1: true }, sceneStops: { n1: { cause: 'server' } }, scenePopover: null,
+      undoNotice: { id: 1, text: 'Codex changed the canvas.', offer: 'undo' }, messageNotice: null } as never);
+    const stopLine = () => document.querySelector('[data-scene-stop]');
+    render(<><SceneStopLines /><SceneUnsavedMark nodeId="n1" line={LINE_STOPPED} stopped /></>);
+    expect(stopLine()?.textContent).toContain(LINE_STOPPED);
     fireEvent.click(screen.getByRole('button', { name: 'Unsaved' }));
     expect(document.querySelector('[data-scene-unsaved-popover="n1"]')).toBeTruthy();
-    expect(useGraphStore.getState().messageNotice).toBeNull();
+    expect(stopLine()).toBeNull();
     expect(useGraphStore.getState().undoNotice?.text).toBe('Codex changed the canvas.');
     act(() => { fireEvent.keyDown(document.querySelector('[data-scene-unsaved-popover="n1"]')!, { key: 'Escape' }); });
     expect(document.querySelector('[data-scene-unsaved-popover="n1"]')).toBeNull();
+    expect(stopLine()?.textContent).toContain(LINE_STOPPED);
     expect(useGraphStore.getState().messageNotice).toBeNull();
+    useGraphStore.setState({ nodes: [], stoppedScenes: {}, sceneStops: {}, undoNotice: null } as never);
   });
 });
 

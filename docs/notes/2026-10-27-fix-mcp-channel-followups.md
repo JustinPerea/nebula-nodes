@@ -1001,3 +1001,43 @@ Four of this round's ring shots are byte-identical to round 10 shots of the same
     - clash-codex-same-scene, clash-other-node, clash-dissolve, askedagain-codex-same-scene;
     - stopped-own-delete, stopped-own-restore, stopped-undid-codex;
     - ownundo-clears-stop, stopped-wire-out.
+
+## Fix round 19 (PR #198 review 17, GM's pr198 r28)
+
+- **GM r28 item 2: a stop line is a state, never lost.**
+  - The stop lines have their own slot in the notice region, `scene-stop`, between `scene-clash` and `message`: above both event slots. `SceneStopLines` renders it from `sceneStopLines(state)`, which reads `stoppedScenes` and a new `sceneStops` map (the cause per stopped scene, kept by `setSceneStopped` through `noteSceneStop`).
+  - One line per cause, in the order 400, server, 413. Scenes of the same cause share one line through `sceneStopStateLine`, naming them with the shared `quotedNames` (up to 3, then "4 scenes"), in reading order on the canvas (top to bottom, then left to right). The first live run showed why: a scene put back by Undo comes back last in the node list, which turned "“Opening” and “Ref scene”" around.
+  - "…kept changing…" (another writer outpaced the save) stays one line per scene: GM gave no merged wording for it.
+  - [Try again] retries every scene its line names. `retrySceneSave` now sets `clashAnswerStop` when the scene was stopped, so it is one try: a failure goes straight back to stopped (`backToStopped`), and the scene stays in the line. A scene whose stop clears leaves it.
+  - No × and no reading-time hold: the line goes when the stop does.
+  - The toasts no longer carry `retryScene`; `stopLineBeside` and its four call sites are gone, and so are the popover's toast clearing and `sceneInPopover`. The popover now sets `scenePopover`, which leaves that scene out of the lines while it is open. Closing it brings the line back.
+  - The transient line takes GM's subject-and-comma fix in the singular too: "Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula will try again with your next change." The mark and popover say it the same way.
+- **A clash that ends marks the stop once.** `withClashSettling` wraps `resolveSceneClash` and `settleRebasedScene`. While a clash ends, `setSceneClash(null)` doesn't mark the scene stopped again; the stop is marked once, after the end has decided. Without it the stop line showed for one store update before the answer's try, or before a clash that left nothing unsaved cleared it (graphStore.fix13 and fix17 caught both).
+- **LOW-1.** The person's own delete of a stopped scene takes its stop line with it (the line is drawn from the scenes on the canvas; `clearCinemaScenePersistence` also drops `sceneStops`). Event lines about its save (the retry line, the kept line) go through `dropSceneLines`, now shared by `keepOwnRemovedScene` and `noteSceneDeleted`, in either slot. "Deleted the node." [Undo] is the only line.
+- **LOW-2.** `settleRebasedScene` runs `settleIfNothingUnsaved` for a stopped scene with no clash before its "nothing to send" branch, so another writer's change that matches the person's values clears the stop, its line and the mark together.
+- **LOW-3 (GM r28 answer 1, c).** `keepDeletedScene` records the stop (`refused` and `by`) for a stopped scene with no clash. When the scene comes back and still differs, `restoreSceneStopped` sets the entry up held (no send, no timed retries; `retries` at the limit for a server stop) and stops it with its own line.
+  - After a server stop it schedules the quiet try: the restore's sync is a sign that saving works (GM r16's rule for a change by a sync). After 400 or 413 nothing goes until the person acts.
+  - A scene that comes back matching the person's values has no stop.
+  - This replaces the brief's "Undo with the server back saves": it now comes back stopped, and then the quiet try saves it.
+- **Harness** (`fix19_live.mjs`, from fix18's).
+  - `notices()` reads the state slot (`stop`, `stops`, `retry` from `sceneStopLines`); `watchLines` and `slotTexts` count its lines; toast selectors leave `.scene-stop-line` out. Checks that read the stop line from the toast slots now read it from the state slot.
+  - `stack` ends with a fresh load and the card (the reviewer's `stackback`), so m1double, toobig and bad400 run after it in the same run. Its counter install retries if the page drops the evaluate.
+  - The reviewer's `owndel` (fu15 `my_sections.mjs` and fu17 `live_r17.mjs`) seeds the watched lines with what shows before the delete, so a line said before it no longer matches. The section is ported into fix19 with that fix.
+  - `toobig`'s popover check now expects the line back after the popover closes (GM r28). `m1double`'s "nothing said" leaves out the stop line coming back in its slot (the state, not a new line), and its U+2019 check reads "Nebula couldn’t".
+- **Docs.** MCP-SETUP: the stop lines as a state with GM's merged wording, one try per [Try again], the person's delete and Undo of a stopped scene, LOW-2, and the popover rule.
+- **Tests.**
+  - New `graphStore.fix19` (23 tests) and `pr198Fix19Ui` (2). All 25 fail on 5042895b; most fail there because the state slot doesn't exist yet.
+    - To see which test real behaviour, I ran fix19 against 5042895b with a reader of the old toasts in place of `sceneStopLines`: 15 of the 21 then still fail (merging, the event under the slot, a partial [Try again], a shrinking line, LOW-1 for a server stop and beside another toast, LOW-3 for every cause, the late "Restored the node.", and LOW-2 for a server stop). Six pass on the old behaviour: LOW-1 for 400 and 413, "a merged line loses only the deleted scene", LOW-2 for 400 and 413, and the scene that comes back matching Nebula. These pin GM's edge cases.
+    - Mutation checks: without the reading-order sort, the reading-order test fails; without `dropSceneLines` in the person's delete, the retry-line test fails.
+  - Tests changed because behaviour changed (GM r28): every store and UI test that read the stop line from `undoNotice`/`messageNotice` and `retryScene` now reads it from `sceneStopLines` (fix3, 4, 5, 7, 10, 11, 12, 13, 14, 16, 17, 18; pr198Fix14Ui). The GM r22 Q1 popover tests now expect the line back after the popover closes. A 413 said while the popover is open shows in the state slot once it closes. "Beside" checks now expect the message slot empty and the line above. The transient line's new wording is in 12 test files. The slot order in `lateRestoreCount` adds `scene-stop`, and the copy ratchet lists the new line.
+- **Gates.**
+  - tsc -b and `npm run lint` are clean.
+  - Full vitest: 600 files, 7,808 tests passed.
+  - Full backend: 12,061 passed, 71 skipped.
+  - vite build plus `check-build-budget.mjs`: 425,651 bytes raw (budget 512,000), 128,724 gzip; `dist` deleted.
+- **Live** (`fix19_live.mjs`, ports 8797/5797, 0 blocked attempts in every run, no paid runs).
+  - Round 19 and owndel, 23/23: merged (a merged line, a partial [Try again], the line going), twocauses and eventunder, owndelstop for server, 400 and 413 (the delete's toast alone; Undo back stopped with its line, the mark and "Restored the node."; no new retries; [Try again] saves), codexmatch, and the reviewer's owndel.
+  - m1, unknown, deleted, escape, stack, m1double, toobig and bad400 in one run: 34/34. Two earlier tries broke in `stack`'s third reload ("Promise was collected", a harness evaluate, before the round 19 code ran there). One more failed m1double's two checks, which still expected the old toast and wording, and those are updated.
+  - deleted13, clashback, undoclash, moved, undodel, ownundo, redoclash and clash400b: 35/35.
+  - dissolve, onlyprompt, stopline, clashquiet, askedquiet, owntoasts, undidcodex, ownundoclear and wireout: 22/22.
+  - Shots `fix19-*` at 1280 and 1440, 24 files, all distinct: merged-line, merged-partial, two-causes, event-under-state-slot, own-delete-stopped-{server,400,413}, undo-back-stopped-{server,400,413}, codex-match-shrinks, owndel-nothing-left.

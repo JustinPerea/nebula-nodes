@@ -206,7 +206,7 @@ const TOO_BIG = '“Opening” is too big to save. Remove something from it, the
 function watchSlots() {
   const texts = (state: unknown) => {
     const st = state as { undoNotice: { text: string } | null; messageNotice: { text: string } | null };
-    return [st.undoNotice?.text, st.messageNotice?.text].filter((text): text is string => Boolean(text));
+    return [st.undoNotice?.text, st.messageNotice?.text, ...stopTexts(state)].filter((text): text is string => Boolean(text));
   };
   // What shows now doesn't count; a line counts each time it appears.
   let shown = new Set(texts(useGraphStore.getState()));
@@ -229,7 +229,11 @@ const slots = () => {
     messageNotice: { text: string; retryScene?: { nodeId: string } } | null };
   return [g.undoNotice, g.messageNotice].filter((notice): notice is { text: string; retryScene?: { nodeId: string } } => Boolean(notice));
 };
-const retryToasts = () => slots().filter((notice) => notice.retryScene?.nodeId === 'n1');
+// GM r28 item 2 (round 19): the stop line with [Try again] is in the state
+// slot now; the event slots never carry it.
+const stopTexts = (state: unknown) => store.sceneStopLines(state as Parameters<typeof store.sceneStopLines>[0]).map((line) => line.text);
+const retryToasts = () => store.sceneStopLines(useGraphStore.getState()).filter((line) => line.nodeIds.includes('n1'))
+  .map((line) => ({ text: line.text, retryScene: { nodeId: 'n1' } }));
 
 /** The backend's POST /api/graph/restore and DELETE /api/graph/node, in
  * small: the node back with the params the restore sent (or taken off by a

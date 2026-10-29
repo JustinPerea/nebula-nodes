@@ -259,7 +259,8 @@ describe('in the region', () => {
     expect([...NOTICE_SLOTS]).toEqual([
       'proposal', 'run-later', 'person-required', 'project-switch', 'save-paused', 'project-home',
       // Review 7, L3: a line beside an Undo has its own slot above the late count.
-      'pin', 'board', 'asset-trash', 'scene-clash', 'message', 'late', 'notice',
+      // GM r28 (PR #198 round 19): the scenes' stop lines, a state above every event.
+      'pin', 'board', 'asset-trash', 'scene-clash', 'scene-stop', 'message', 'late', 'notice',
     ]);
   });
 

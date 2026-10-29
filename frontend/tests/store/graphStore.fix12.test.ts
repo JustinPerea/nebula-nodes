@@ -193,12 +193,14 @@ const typeIn = (shotId: string, prompt: string) => useGraphStore.getState().upda
 const setPrompt = (shots: Shot[], id: string, prompt: string) => shots.map((s) => (s.id === id ? { ...s, prompt } : s));
 const S3 = [{ id: 's1', prompt: 'a' }, { id: 's2', prompt: 'b' }, { id: 's3', prompt: 'c' }];
 
-const STOPPED = 'Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again with your next change.';
+const STOPPED = 'Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula will try again with your next change.';
 const RETRYING = 'Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again.';
 const QUIET = 80;
 const stopped = () => useGraphStore.getState().stoppedScenes;
 const clashes = () => useGraphStore.getState().sceneClashes;
 const toast = () => (useGraphStore.getState() as unknown as { undoNotice: { text: string; retryScene?: { nodeId: string } } | null }).undoNotice;
+// GM r28 item 2 (round 19): the stop line, with [Try again], is a state in its own slot.
+const stopLineOf = (nodeId: string) => store.sceneStopLines(useGraphStore.getState()).find((line) => line.nodeIds.includes(nodeId))?.text ?? null;
 const UNKNOWN = { edit: { id: 'ed_unknown', actor: { kind: 'anonymous', name: 'Someone' } } };
 
 /** Every toast line from now on (the slot's text as it changes; what it
@@ -430,7 +432,8 @@ describe('L-1 (GM r19 answer 3, r20 answer 2): "another window" only for the per
     await vi.waitFor(() => expect(stopped()).toEqual({ n1: true }), { timeout: 3000, interval: 5 });
     const line = '“Opening” kept changing, so your changes aren’t saved yet. Nebula will try again when it stops.';
     expect(unsaved()).toBe(line);
-    expect(toast()?.text).toBe(line);
+    expect(stopLineOf('n1')).toBe(line);
+    expect(toast()).toBeNull();
     quiet();
   });
 });
@@ -464,6 +467,7 @@ describe('L-2 (GM r16, r20 answer 3): what the quiet try says when it is refused
     expect(h.puts.at(-1)!.status).toBe(404);
     expect(said.filter((line) => line === LINE)).toHaveLength(1);
     expect(toast()?.retryScene).toBeUndefined();
+    expect(stopLineOf('n1')).toBeNull();
     // The delete's sync: no second line.
     h.emit(AGENT);
     await sleep(30);

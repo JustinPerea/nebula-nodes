@@ -30,7 +30,7 @@ import { copyDeletedAfterUpdateLine } from '../src/store/projectStore';
 
 afterEach(cleanup);
 
-const STOPPED = 'Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again with your next change.';
+const STOPPED = 'Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula will try again with your next change.';
 
 describe('review 11, L-3: Escape on the "Unsaved" mark', () => {
   it('with no popover open: Escape stays with the mark (the card isn’t selected)', () => {

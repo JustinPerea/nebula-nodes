@@ -195,7 +195,7 @@ const typeIn = (shotId: string, prompt: string) => useGraphStore.getState().upda
 const setPrompt = (shots: Shot[], id: string, prompt: string) => shots.map((s) => (s.id === id ? { ...s, prompt } : s));
 const S3 = [{ id: 's1', prompt: 'a' }, { id: 's2', prompt: 'b' }, { id: 's3', prompt: 'c' }];
 
-const STOPPED = 'Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again with your next change.';
+const STOPPED = 'Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula will try again with your next change.';
 const QUIET = 80;
 const stopped = () => useGraphStore.getState().stoppedScenes;
 const clashes = () => useGraphStore.getState().sceneClashes;
@@ -233,12 +233,14 @@ const CANT = 'Nebula can’t save your changes to “Opening”.';
 const TOO_BIG = '“Opening” is too big to save. Remove something from it, then try again.';
 const DELETED = 'Codex deleted “Opening”, so your changes to it can’t be saved.';
 const CLASH = 'Codex changed “Opening” while you were editing it.';
-/** Both notice slots' lines from now on (a line beside an undo offer goes
- * in the message slot). */
+// GM r28 item 2 (round 19): the stop lines are a state, in their own slot.
+const stopTexts = (state: unknown) => store.sceneStopLines(state as Parameters<typeof store.sceneStopLines>[0]).map((line) => line.text);
+/** Both notice slots' lines, and the state slot's, from now on (a line
+ * beside an undo offer goes in the message slot). */
 function watchSlots() {
   const texts = (state: unknown) => {
     const st = state as { undoNotice: { text: string } | null; messageNotice: { text: string } | null };
-    return [st.undoNotice?.text, st.messageNotice?.text].filter((text): text is string => Boolean(text));
+    return [st.undoNotice?.text, st.messageNotice?.text, ...stopTexts(state)].filter((text): text is string => Boolean(text));
   };
   // What shows now doesn't count; a line counts each time it appears.
   let shown = new Set(texts(useGraphStore.getState()));
@@ -250,10 +252,8 @@ function watchSlots() {
   });
   return { lines, off };
 }
-const slotLine = (line: string) => [toast()?.text, (useGraphStore.getState() as unknown as { messageNotice: { text: string } | null })
-  .messageNotice?.text].includes(line);
-const slotRetry = () => toast()?.retryScene ?? (useGraphStore.getState() as unknown as { messageNotice: { retryScene?: { nodeId: string } } | null })
-  .messageNotice?.retryScene;
+const slotLine = (line: string) => stopTexts(useGraphStore.getState()).includes(line);
+const slotRetry = () => (store.sceneStopLines(useGraphStore.getState()).some((line) => line.nodeIds.includes('n1')) ? { nodeId: 'n1' } : undefined);
 const offer = () => (toast() as unknown as { offer?: string | null } | null)?.offer ?? null;
 
 /** The Agent log's lines from now on. */

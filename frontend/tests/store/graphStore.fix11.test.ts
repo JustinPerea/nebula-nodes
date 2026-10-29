@@ -167,10 +167,13 @@ const setPrompt = (shots: Shot[], id: string, prompt: string) => shots.map((s) =
 const S3 = [{ id: 's1', prompt: 'a' }, { id: 's2', prompt: 'b' }, { id: 's3', prompt: 'c' }];
 
 
-const STOPPED = 'Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again with your next change.';
+const STOPPED = 'Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula will try again with your next change.';
 const QUIET = 80;
 const stopped = () => useGraphStore.getState().stoppedScenes;
 const toast = () => (useGraphStore.getState() as unknown as { undoNotice: { text: string; retryScene?: { nodeId: string } } | null }).undoNotice;
+// GM r28 item 2 (round 19): the stop line, with [Try again], is a state in its own slot.
+const stopToast = () => { const line = store.sceneStopLines(useGraphStore.getState()).find((candidate) => candidate.nodeIds.includes('n1'));
+  return line ? { text: line.text, retryScene: { nodeId: 'n1' } } : undefined; };
 
 /** A save stopped after its 8 timed retries (the server keeps failing). */
 async function stoppedByServer(h: ReturnType<typeof backend>) {
@@ -199,7 +202,7 @@ describe('GM r16: a stopped save tries once after another writer’s change', ()
     expect(h.backendBrief()).toEqual(['s1:mine', 's2:codex', 's3:c']);
     expect(unsaved()).toBeNull();
     expect(stopped()).toEqual({});
-    expect(toast()?.retryScene).toBeUndefined();
+    expect(stopToast()?.retryScene).toBeUndefined();
   });
 
   it('it fails again: stopped as before, the same line, no new toast, and no more tries', async () => {
@@ -323,7 +326,7 @@ describe('GM r16: a stopped save tries once after another writer’s change', ()
   it('the one try refused as changed, and Codex’s change overlaps the person’s field: the clash prompt asks as usual, the stopped state waits behind it (GM r17)', async () => {
     const h = backend(S3);
     const before = await stoppedByServer(h);
-    expect(toast()?.retryScene).toEqual({ nodeId: 'n1' });
+    expect(stopToast()?.retryScene).toEqual({ nodeId: 'n1' });
     h.failNext(0);
     let once = true;
     // During the try, Codex writes the shot the person changed (s1).
@@ -342,7 +345,7 @@ describe('GM r16: a stopped save tries once after another writer’s change', ()
     // The stopped state waits behind it: the mark offers no [Try again] and
     // the stopped toast leaves; the save is still stopped underneath.
     expect(stopped()).toEqual({});
-    expect(toast()?.retryScene).toBeUndefined();
+    expect(stopToast()?.retryScene).toBeUndefined();
     // No quiet try while the clash waits, however long.
     await sleep(QUIET * 4);
     expect(h.puts.length).toBe(before + 1);
@@ -420,14 +423,15 @@ describe('GM r18 answer 2: a stop by another writer names that writer; a server 
     ['another window', { kind: 'person', name: 'You' },
       '“Opening” kept changing in another window, so your changes aren’t saved yet. Nebula will try again when it stops.'],
   ];
-  it.each(cases)('%s: the same line in the toast (with [Try again]) and on the mark (its tooltip and popover)', async (_who, writer, line) => {
+  it.each(cases)('%s: the same line in the state slot (with [Try again]) and on the mark (its tooltip and popover)', async (_who, writer, line) => {
     const h = backend(S3);
     const quiet = busyCodex(h, writer);
     typeIn('s1', 'p1');
     await vi.waitFor(() => expect(stopped()).toEqual({ n1: true }), { timeout: 3000, interval: 5 });
     expect(unsaved()).toBe(line);
-    expect(toast()?.text).toBe(line);
-    expect(toast()?.retryScene).toEqual({ nodeId: 'n1' });
+    expect(stopToast()?.text).toBe(line);
+    expect(toast()).toBeNull();
+    expect(stopToast()?.retryScene).toEqual({ nodeId: 'n1' });
     quiet();
     // [Try again] saves, and the line goes.
     useGraphStore.getState().retrySceneSave('n1');
@@ -439,8 +443,9 @@ describe('GM r18 answer 2: a stop by another writer names that writer; a server 
     const h = backend(S3);
     await stoppedByServer(h);
     expect(unsaved()).toBe(STOPPED);
-    expect(toast()?.text).toBe(STOPPED);
-    expect(toast()?.retryScene).toEqual({ nodeId: 'n1' });
+    expect(stopToast()?.text).toBe(STOPPED);
+    expect(toast()).toBeNull();
+    expect(stopToast()?.retryScene).toEqual({ nodeId: 'n1' });
   });
 });
 

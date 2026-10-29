@@ -31,6 +31,8 @@ vi.spyOn(console, 'error').mockImplementation(() => {});
 
 const store = await import('../../src/store/graphStore');
 const { useGraphStore } = store;
+// GM r28 item 2 (round 19): the stop line is a state, in its own slot.
+const stopLineOf = (nodeId: string) => store.sceneStopLines(useGraphStore.getState()).find((line) => line.nodeIds.includes(nodeId))?.text ?? null;
 const setSceneRetryDelaysForTests = (delays: number[]) => (store as { setSceneRetryDelaysForTests?: (d: number[]) => void }).setSceneRetryDelaysForTests?.(delays);
 const { GRAPH_PARAMS_VERSION } = await import('../../src/lib/savedParamsUpgrades');
 const { setProjectContext } = await import('../../src/lib/projectContext');
@@ -281,7 +283,7 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     await sleep(150);
     expect(brief()).toEqual([`s1:${'x'.repeat(50)}`, 's2:second field']);
     // GM r22 Q3: the one 413 line, with [Try again]; no promise of a retry.
-    expect((() => { const g = useGraphStore.getState(); return g.undoNotice?.retryScene?.nodeId === 'n1' ? g.undoNotice.text : g.messageNotice?.retryScene?.nodeId === 'n1' ? g.messageNotice.text : null; })()).toBe(TOO_BIG_LINE);
+    expect(stopLineOf('n1')).toBe(TOO_BIG_LINE);
     expect(said).toEqual([]);
     expect(unsaved()).toBe(TOO_BIG_LINE);
     h.answerLater(() => json({ ok: true }));
@@ -379,7 +381,7 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     h.release();
     await sleep(120);
     // GM r22 Q3: the one 400 line, with [Try again]; the status in the Agent log.
-    expect((() => { const g = useGraphStore.getState(); return g.undoNotice?.retryScene?.nodeId === 'n1' ? g.undoNotice.text : g.messageNotice?.retryScene?.nodeId === 'n1' ? g.messageNotice.text : null; })()).toBe(CANT_LINE);
+    expect(stopLineOf('n1')).toBe(CANT_LINE);
     expect(said).toEqual([]);
     expect(logged.some((line) => line.includes('params.scene nested too deeply') && line.includes('n1') && line.includes('HTTP 400'))).toBe(true);
     expect(brief()[0]).toBe('s1:bad');

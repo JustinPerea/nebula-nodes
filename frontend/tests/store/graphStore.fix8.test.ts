@@ -425,7 +425,7 @@ describe('the lines and the lows', () => {
     typeIn('s1', 'mine');
     await sleep(200);
     expect(h.puts).toHaveLength(9);
-    expect(unsaved()).toBe("Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again with your next change.");
+    expect(unsaved()).toBe("Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula will try again with your next change.");
     h.emit(AGENT);
     h.emit(AGENT);
     await sleep(40);

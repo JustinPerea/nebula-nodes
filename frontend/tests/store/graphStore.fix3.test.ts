@@ -29,7 +29,9 @@ globalThis.fetch = fetchMock as unknown as typeof fetch;
 vi.spyOn(console, 'warn').mockImplementation(() => {});
 vi.spyOn(console, 'error').mockImplementation(() => {});
 
-const { useGraphStore, renderingScenes, sceneDeleteDisabledTitle } = await import('../../src/store/graphStore');
+const { useGraphStore, renderingScenes, sceneDeleteDisabledTitle, sceneStopLines } = await import('../../src/store/graphStore');
+// GM r28 item 2 (round 19): the stop line is a state, in its own slot.
+const stopLineOf = (nodeId: string) => sceneStopLines(useGraphStore.getState()).find((line) => line.nodeIds.includes(nodeId))?.text ?? null;
 const { GRAPH_PARAMS_VERSION } = await import('../../src/lib/savedParamsUpgrades');
 const { setProjectContext } = await import('../../src/lib/projectContext');
 const { TAB_ID } = await import('../../src/lib/tabId');
@@ -200,8 +202,8 @@ describe('H1: a scene save the backend refuses keeps the person\'s typing', () =
     await sleep(80);
     // Round 5 (GM r7 item 1): a 400 is Nebula's bug; the typing stays on
     // screen, unsaved, and GM's line says so.
-    // GM r22 Q3: the one 400 line, with [Try again].
-    expect((() => { const g = useGraphStore.getState(); return g.undoNotice?.retryScene?.nodeId === 'n31' ? g.undoNotice.text : g.messageNotice?.retryScene?.nodeId === 'n31' ? g.messageNotice.text : null; })()).toBe('Nebula can’t save your changes to “Opening”.');
+    // GM r22 Q3: the one 400 line, with [Try again]; GM r28: in the state slot.
+    expect(stopLineOf('n31')).toBe('Nebula can’t save your changes to “Opening”.');
     expect(said).toEqual([]);
     expect(shotsOf('n31')[0].prompt).toBe('typed by the person');
   });

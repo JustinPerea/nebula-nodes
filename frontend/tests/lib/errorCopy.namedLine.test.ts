@@ -94,8 +94,9 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
   // backend's lines go through headedLine in sceneRefusal).
   { file: 'store/graphStore.ts', text: '`${heading} ${KEPT_UNTIL_RUN_ENDS}`', why: "GM's heading over GM's fixed suffix" },
   { file: 'store/graphStore.ts', text: '`${heading} ${KEPT_AND_RETRYING}`', why: "GM's heading over GM's fixed suffix" },
-  // PR #198 fix round 8 (GM r11 answer 3): the stopped-after-8 line.
-  { file: 'lib/sceneSaveCopy.ts', text: '`${sceneSaveHeading(scene)} ${KEPT_UNTIL_NEXT_CHANGE}`', why: "GM's heading over GM's fixed suffix" },
+  // PR #198 fix round 8 (GM r11 answer 3): the stopped-after-8 line. Round 19
+  // (GM r28 item 2): the state slot's merged line, with GM's subject-and-comma fix.
+  { file: 'lib/sceneSaveCopy.ts', text: '`Nebula couldn’t save your changes to ${names}. ${KEPT_UNTIL_NEXT_CHANGE}`', why: "GM's own line over GM's fixed suffix (GM r28 item 2)" },
     // The Agent log's raw save line: agents read the backend's own detail,
     // with the status and code (GM #198 r12 answer 1, round 13).
   { file: 'store/graphStore.ts', text: "`Couldn’t save “${label}”, node ${nodeId}: HTTP ${status}${code ? ` ${code}` : ''}. ${detail || 'No detail.'}`",

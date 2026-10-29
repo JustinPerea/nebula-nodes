@@ -30,7 +30,9 @@ globalThis.fetch = fetchMock as unknown as typeof fetch;
 vi.spyOn(console, 'warn').mockImplementation(() => {});
 vi.spyOn(console, 'error').mockImplementation(() => {});
 
-const { useGraphStore, sceneDeleteDisabledTitle } = await import('../../src/store/graphStore');
+const { useGraphStore, sceneDeleteDisabledTitle, sceneStopLines } = await import('../../src/store/graphStore');
+// GM r28 item 2 (round 19): the stop line is a state, in its own slot.
+const stopLineOf = (nodeId: string) => sceneStopLines(useGraphStore.getState()).find((line) => line.nodeIds.includes(nodeId))?.text ?? null;
 const { GRAPH_PARAMS_VERSION } = await import('../../src/lib/savedParamsUpgrades');
 const { setProjectContext } = await import('../../src/lib/projectContext');
 const { resetBackendConnectionForTests } = await import('../../src/lib/backendConnection');
@@ -157,8 +159,8 @@ describe('H1-new: a shot removal another window\'s run refuses (review 4, R3)', 
       shots: current.shots.map((shot) => (shot.id === 's1' ? { ...shot, prompt: 'very long' } : shot)) }));
     await sleep(120);
     expect(shotsOf()[0].prompt).toBe('very long');
-    // GM r22 Q3: the one 413 line, with [Try again].
-    expect((() => { const g = useGraphStore.getState(); return g.undoNotice?.retryScene?.nodeId === 'n1' ? g.undoNotice.text : g.messageNotice?.retryScene?.nodeId === 'n1' ? g.messageNotice.text : null; })()).toBe('“Opening” is too big to save. Remove something from it, then try again.');
+    // GM r22 Q3: the one 413 line, with [Try again]; GM r28: in the state slot.
+    expect(stopLineOf('n1')).toBe('“Opening” is too big to save. Remove something from it, then try again.');
     expect(said).toEqual([]);
   });
 });

@@ -38,13 +38,35 @@ export const KEPT_UNTIL_RUN_ENDS = "They’re kept and will save when the run fi
  * After SCENE_SERVER_RETRIES timed tries the timer stops: KEPT_UNTIL_NEXT_CHANGE. */
 export const KEPT_AND_RETRYING = "They’re kept and Nebula will try again.";
 
-/** The timed retries stopped (GM r11 answer 3, verbatim): "Couldn't save
- * your changes to “Opening”. They're kept and Nebula will try again with your
- * next change.", with [Try again]. A reconnect still sends them by itself. */
-export const KEPT_UNTIL_NEXT_CHANGE = "They’re kept and Nebula will try again with your next change.";
-/** GM r11 answer 3: the line once the timed retries stopped. */
+/** The timed retries stopped (GM r11 answer 3; r28: the subject and the
+ * comma): "Nebula couldn’t save your changes to “Opening”. They’re kept, and
+ * Nebula will try again with your next change.", with [Try again]. A
+ * reconnect still sends them by itself. */
+export const KEPT_UNTIL_NEXT_CHANGE = 'They’re kept, and Nebula will try again with your next change.';
+/** GM r11 answer 3, r28: the line once the timed retries stopped. */
 export function sceneStoppedLine(scene: string): string {
-  return `${sceneSaveHeading(scene)} ${KEPT_UNTIL_NEXT_CHANGE}`;
+  return sceneStopStateLine('server', [scene]);
+}
+
+/** Why a scene's save stopped, for its stop line (GM r28): 400 (can't
+ * save), 413 (too big), a server error that went on (still failing). A save
+ * another writer kept refusing says its own line, scene by scene. */
+export type SceneStopCause = 'bad-save' | 'too-big' | 'server';
+
+/** GM r28, verbatim: a stop line is a state, one line per cause, naming its
+ * scenes with the shared rule (up to 3 by name, from 4 a count). One scene
+ * keeps its singular line.
+ * - 400: "Nebula can’t save your changes to “Opening” and “Ref scene”."
+ * - Still failing: "Nebula couldn’t save your changes to “Opening” and “Ref
+ *   scene”. They’re kept, and Nebula will try again with your next change."
+ * - 413: "“Opening” and “Ref scene” are too big to save. Remove something
+ *   from them, then try again."; from 4, "4 scenes are too big to save. …" */
+export function sceneStopStateLine(cause: SceneStopCause, scenes: readonly string[]): string {
+  const names = quotedNames(scenes, 'scenes');
+  if (cause === 'bad-save') return `Nebula can’t save your changes to ${names}.`;
+  if (cause === 'server') return `Nebula couldn’t save your changes to ${names}. ${KEPT_UNTIL_NEXT_CHANGE}`;
+  if (scenes.length === 1) return sceneTooBigToSaveLine(scenes[0]);
+  return `${names} are too big to save. Remove something from them, then try again.`;
 }
 
 /** Who changed a scene the person was editing (review 11, L-1; GM r19 answer

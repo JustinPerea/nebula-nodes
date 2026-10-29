@@ -207,7 +207,7 @@ const TOO_BIG = '“Opening” is too big to save. Remove something from it, the
 function watchSlots() {
   const texts = (state: unknown) => {
     const st = state as { undoNotice: { text: string } | null; messageNotice: { text: string } | null };
-    return [st.undoNotice?.text, st.messageNotice?.text].filter((text): text is string => Boolean(text));
+    return [st.undoNotice?.text, st.messageNotice?.text, ...stopTexts(state)].filter((text): text is string => Boolean(text));
   };
   // What shows now doesn't count; a line counts each time it appears.
   let shown = new Set(texts(useGraphStore.getState()));
@@ -230,7 +230,11 @@ const slots = () => {
     messageNotice: { text: string; retryScene?: { nodeId: string } } | null };
   return [g.undoNotice, g.messageNotice].filter((notice): notice is { text: string; retryScene?: { nodeId: string } } => Boolean(notice));
 };
-const retryToasts = () => slots().filter((notice) => notice.retryScene?.nodeId === 'n1');
+// GM r28 item 2 (round 19): the stop line with [Try again] is in the state
+// slot now; the event slots never carry it.
+const stopTexts = (state: unknown) => store.sceneStopLines(state as Parameters<typeof store.sceneStopLines>[0]).map((line) => line.text);
+const retryToasts = () => store.sceneStopLines(useGraphStore.getState()).filter((line) => line.nodeIds.includes('n1'))
+  .map((line) => ({ text: line.text, retryScene: { nodeId: 'n1' } }));
 
 /** The backend's POST /api/graph/restore and DELETE /api/graph/node, in
  * small: the node back with the params the restore sent (or taken off by a
@@ -283,7 +287,7 @@ async function clashOnS1(h: ReturnType<typeof backend>) {
 const clashes16 = () => useGraphStore.getState().sceneClashes as Record<string, { line: string; focus?: true }>;
 
 const AGENT_UNDO = { edit: { id: 'ed_agent_undo', actor: { kind: 'agent', name: 'Codex' }, undoes: 'ed_agent' } };
-const STOPPED = 'Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again with your next change.';
+const STOPPED = 'Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula will try again with your next change.';
 const messageSlot = () => (useGraphStore.getState() as unknown as { messageNotice: { text: string; retryScene?: { nodeId: string } } | null }).messageNotice;
 
 /** A clash on s1, s3 unsaved too, and the save that goes refused `status`. */
@@ -319,7 +323,9 @@ describe('review 15 LOW-1 (GM r26 answer 1): Codex ends the clash itself while a
     lines.off();
     expect(clashes16()).toEqual({});
     expect(stopped()).toEqual({ n1: true });
-    expect([toast(), messageSlot()].filter((notice) => notice?.retryScene?.nodeId === 'n1').map((notice) => notice!.text)).toEqual([line]);
+    // GM r28 item 2 (round 19): in the state slot, never an event slot.
+    expect(retryToasts().map((notice) => notice.text)).toEqual([line]);
+    expect(slots().map((notice) => notice.text)).not.toContain(line);
     expect(lines.lines.filter((text) => text === line)).toEqual([line]);
     expect(h.puts.length).toBe(puts);
     // Nothing more goes on Codex's next write; [Try again] sends it.
@@ -416,7 +422,8 @@ describe('GM r26 answer 3: the stop line keeps its slot; Codex’s edits about t
     lines.off();
     expect(lines.lines.filter((text) => text === 'Codex changed the canvas.')).toEqual([]);
     expect(retryToasts().map((notice) => notice.text)).toEqual([STOPPED]);
-    expect(toast()?.text).toBe(STOPPED);
+    // GM r28 item 2 (round 19): the state slot holds it; the event slot is free.
+    expect(toast()).toBeNull();
     const top = useGraphStore.getState().undoStack.at(-1) as { kind?: string; agentName?: string };
     expect(top.kind).toBe('foreign');
     expect(top.agentName).toBe('Codex');
@@ -455,13 +462,14 @@ describe('GM r26 answer 3: the stop line keeps its slot; Codex’s edits about t
     expect(lines.lines.filter((text) => text === 'Codex changed the canvas.')).toEqual([]);
   });
 
-  it('Codex’s edit about another node: its toast shows as usual, the stop line moves beside it with [Try again]', async () => {
+  // GM r28 item 2 (round 19): the stop line stays in the state slot, above the event slot.
+  it('Codex’s edit about another node: its toast shows as usual, the stop line stays in the state slot above it with [Try again]', async () => {
     const h = backend(S3);
     await stoppedByServer(h);
     h.state.nodes = [editNode('n2', 'Edit B')];
     h.emit(AGENT);
     await vi.waitFor(() => expect(toast()?.text).toBe('Codex changed the canvas.'), { timeout: 3000, interval: 5 });
-    expect(messageSlot()?.text).toBe(STOPPED);
+    expect(messageSlot()).toBeNull();
     expect(retryToasts().map((notice) => notice.text)).toEqual([STOPPED]);
   });
 });
