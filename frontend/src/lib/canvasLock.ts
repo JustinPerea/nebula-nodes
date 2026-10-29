@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { followingSwitch, refuseEditWhileFollowing, useFollowingSwitch, waitToOpenTooltip, type FollowingSwitch } from './canvasFollow';
 import { isBackendOffline, refuseEditWhileOffline } from './backendConnection';
 import { OFFLINE_MARK, useBackendOffline } from './useBackendOffline';
+import { refuseEditWhileKept } from './keptCanvas';
 
 /**
  * Round 22 of PR #195 (GM - Design, blocker A): the one read-only state
@@ -76,5 +77,7 @@ export function canvasLockNow(): CanvasLock {
  * nothing.
  */
 export function refuseCanvasEdit(): boolean {
-  return refuseEditWhileFollowing() || refuseEditWhileOffline();
+  // And while the canvas is kept in this tab after a restore (GM r15 on PR
+  // #199, Q11): only typing joins the kept edits (the store's gates).
+  return refuseEditWhileFollowing() || refuseEditWhileKept() || refuseEditWhileOffline();
 }

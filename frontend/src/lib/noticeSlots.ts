@@ -26,6 +26,7 @@ export const NOTICE_SLOTS = [
   'run-later',
   'person-required',
   'project-switch',
+  'kept-edits',
   'save-paused',
   'project-home',
   'pin',

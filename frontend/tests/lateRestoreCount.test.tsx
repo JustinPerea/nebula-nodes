@@ -257,7 +257,8 @@ describe('in the region', () => {
 
   it('nothing else in the stack order moves (top to bottom)', () => {
     expect([...NOTICE_SLOTS]).toEqual([
-      'proposal', 'run-later', 'person-required', 'project-switch', 'save-paused', 'project-home',
+      // PR #199 review 11 (GM r15, Q11): the kept-edits line sits under the project switch.
+      'proposal', 'run-later', 'person-required', 'project-switch', 'kept-edits', 'save-paused', 'project-home',
       // Review 7, L3: a line beside an Undo has its own slot above the late count.
       'pin', 'board', 'asset-trash', 'message', 'late', 'notice',
     ]);

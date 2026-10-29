@@ -106,6 +106,11 @@ export interface ProjectHomeProps {
    * PR #199, 1): its toast names it. */
   editsRecoveredAs?: { id: string; name: string } | null;
   onDismissEditsRecovered?: () => void;
+  /** GM r14 on PR #199, 3: the line for a tab sent home after an agent's
+   * write closed its project ("Codex cleared the canvas. “X” is kept as its
+   * own project."), so it never goes home silently. */
+  agentClosedNote?: { id: string; text: string } | null;
+  onDismissAgentClosedNote?: () => void;
   /** The backend's verdict on a restore now (the listing's `restoreRoom`,
    * review 6 of PR #199, L-3): Restore greys on it, held canvases counted. */
   restoreRoom?: RestoreRoom | null;
@@ -604,6 +609,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
   settingsOpen = false, onToggleSettings, loadCoverChoices, onPinCover,
   catalogRestore = null, onDismissCatalogRestore = noop,
   canvasNotFiled = null, canvasSaved = null, onDismissCanvasSaved = noop, editsRecoveredAs = null, onDismissEditsRecovered = noop,
+  agentClosedNote = null, onDismissAgentClosedNote = noop,
   projectLimit, restorePassesLimit = false,
   restoreRoom = null, canvasHeldUnreadable = null, onDismissCanvasHeldUnreadable = noop,
   unsavedEdits = null, editsSavedAs = null, onDownloadEdits = noop, onContinueWithoutEdits = noop }: ProjectHomeProps) {
@@ -690,6 +696,8 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
       {canvasSaved && <CanvasSavedToast key={canvasSaved.id} project={canvasSaved} onDismiss={onDismissCanvasSaved} />}
       {editsRecoveredAs && !canvasSaved && <SavedToast key={editsRecoveredAs.id} text={editsRecoveredToast(editsRecoveredAs.name)}
         onDismiss={onDismissEditsRecovered} />}
+      {agentClosedNote && !canvasSaved && !editsRecoveredAs && <SavedToast key={agentClosedNote.id} text={agentClosedNote.text}
+        onDismiss={onDismissAgentClosedNote} />}
     </div>
   );
 }

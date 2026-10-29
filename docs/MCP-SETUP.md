@@ -2978,9 +2978,13 @@ Nebula process restores the same folder. The restore:
 3. opens the project the live canvas is, if it came back, and otherwise
    none: never the copy's open project. The next listing (or open, create
    or delete) then saves a live canvas that is no project in the list as
-   its own project, "<project> (recovered)" when the project it was is
-   known by name ("(recovered 2)" and on for later copies), otherwise
+   its own project, under the project's own name when it is known and free
+   again (nothing in the list or Recently deleted uses it), else "<project>
+   (recovered)" ("(recovered 2)" and on for later copies), otherwise
    "Recovered canvas" ("Recovered canvas 2" and on) (`recoveredCanvas`).
+   Names never stack: a name already in one of these families ("X
+   (recovered)", "Recovered canvas", "X copy") takes the next free number
+   in it ("X (recovered 2)", "Recovered canvas 2", "X copy 2").
    When the list is at its project limit (500) or its size limit (the
    whole list is capped at 128 MiB; only a delete for good frees that) it
    can't. Nothing in the canvas is lost (Nebula keeps it, across restarts
@@ -3051,7 +3055,12 @@ Nebula process restores the same folder. The restore:
    `message` is "Nebula saved the open canvas as its own project, “X”, and
    cleared a new canvas." / "…and loaded “file.json” into a new canvas."
    (HTTP without a file: "…and loaded the graph into a new canvas.") /
-   "…and made your change on a copy of it."; `nebula load` and the MCP
+   "…and made your change on a copy of it."; when the canvas already was a
+   project before it was protected (one a restore protected again), `kept:
+   true` and the line says it was kept: "Nebula kept “My film” as it was and
+   cleared a new canvas." / "…and loaded “file.json” into a new canvas."
+   (HTTP: "…and loaded the graph into a new canvas.") / "…and made your
+   change on a copy of it."; `nebula load` and the MCP
    `load_graph_file` reply with the same line and `project: null`; every CLI
    printer prints `message` under its own line, and `nebula clear` prints it
    in place of its Undo sentence). If only the person's canvas fits, the
@@ -3089,7 +3098,10 @@ Nebula process restores the same folder. The restore:
    line in the person's Agent log, on your row (your name and colour):
    "Codex changed a copy of the canvas you had open. The original was saved
    as its own project, “X”." / "Codex cleared the canvas. The one you had
-   open was saved as its own project, “X”." (a load: "replaced"). There is no cap on the held canvases together.
+   open was saved as its own project, “X”." (a load: "replaced"); for a
+   project that was kept: "Codex made its changes on a copy of “X”. “X” is
+   kept as it was." / "Codex cleared the canvas. “X” is kept as its own
+   project." (a load: "replaced"). There is no cap on the held canvases together.
    Your write that would hold a canvas bigger than a project can be saved
    (16 MiB, measured as a project) is refused (409, `code:
    "canvas_held_full"`, `scope: "canvas"`, `sizeBytes`, `limitBytes`) with
@@ -3220,6 +3232,13 @@ openProjectName, recoveredCanvas, alsoFiled, canvasNotFiled, damagedReadWhole, n
   changes made after the copy may be missing without a row saying so, the
   note says that, and the person's notice says so instead of "No projects
   were missing."
+
+A restore while Nebula runs reaches open canvases at once: a `graphSync`
+carrying the restore notice's id (`catalogRestore`) and a `projectsChanged`
+(`catalogRestored`). A canvas holding edits it hadn't saved keeps them where
+the person is, with [Save as a project]; nothing they type is refused or
+put back. A restore at startup is journaled once the server starts, so
+`project.catalogRestored` reaches `nebula watch` for it too.
 
 Project ids read before a restore may be stale: list the projects again.
 Only the person closes the notice (`POST /api/projects/catalog-restore/dismiss

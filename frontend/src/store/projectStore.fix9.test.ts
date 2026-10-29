@@ -27,7 +27,7 @@ import { setProjectContext } from '../lib/projectContext';
 import { GRAPH_PARAMS_VERSION } from '../lib/savedParamsUpgrades';
 import { wsClient } from '../lib/wsClient';
 import { useGraphStore } from './graphStore';
-import { RESTORED_LIST_RELOAD, RESTORED_LIST_UNSAVED, resetProjectStoreForTests, subscribeProjectAutosave, useProjectStore } from './projectStore';
+import { keptEditsLine, RESTORED_LIST_RELOAD, RESTORED_LIST_UNSAVED, resetProjectStoreForTests, subscribeProjectAutosave, useProjectStore } from './projectStore';
 import type { ProjectSnapshot, SavedProject } from '../lib/projects';
 
 const saveProject = vi.mocked(api.saveProject);
@@ -108,11 +108,13 @@ describe('GM r11, 5: after a restore, no "another window" line', () => {
     expect(RESTORED_LIST_RELOAD).toBe('Nebula restored its project list. Reload projects to continue.');
   });
 
-  it('edits not saved yet: the restore and the recovered copy', () => {
+  it('edits not saved yet: kept where the person is, with the restore line (GM r15, Q11)', () => {
     sync('r1');
     setPrompt('b');
     sync('r2', 'restore-new');
-    expect(useProjectStore.getState()).toMatchObject({ screen: 'home', dirty: true, error: RESTORED_LIST_UNSAVED });
+    const state = useProjectStore.getState();
+    expect(state).toMatchObject({ screen: 'workspace', dirty: true, error: null });
+    expect(keptEditsLine(state.keptEdits!)).toBe(RESTORED_LIST_UNSAVED);
   });
 
   it('a real other window keeps its line', () => {

@@ -1,0 +1,19 @@
+/* The canvas kept in this tab (GM r15 on PR #199, Q11): the line stays
+   until [Save as a project] files the edits. A refused edit meanwhile (a
+   move, an add, a run) nudges it once, on the repo's k 500 / c 36 spring
+   sampled as linear() (the same curve as the opening bar's pulse). */
+.kept-edits-notice__error {
+  display: block;
+  margin-top: 2px;
+  color: var(--sr-ink-meta, #9a9a96);
+}
+.kept-edits-notice--pulse .canvas-undo-notice__text {
+  animation: kept-edits-pulse 420ms linear(0, 0.079, 0.247, 0.434, 0.606, 0.744, 0.847, 0.919, 0.965, 0.992, 1.006, 1.013, 1.014, 1.012, 1.01, 1.007, 1);
+}
+@keyframes kept-edits-pulse {
+  0% { color: var(--sr-ink-bold, #fff); text-shadow: 0 0 10px rgb(255 255 255 / 0.55); }
+  100% { color: var(--sr-ink, #ecece9); text-shadow: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kept-edits-notice--pulse .canvas-undo-notice__text { animation-timing-function: steps(1, end); }
+}

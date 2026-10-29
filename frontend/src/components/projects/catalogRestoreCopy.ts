@@ -22,10 +22,27 @@ export const RESTORE_NAMED_MAX = 3;
 export const SAVE_AS_A_PROJECT = 'Save as a project';
 
 /** Its saved toast names the project the edits went into, under the
- * "(recovered)" name (builder's wording; GM: "the saved toast names the
- * project"). */
+ * "(recovered)" name (GM r14 on PR #199, 1, verbatim). */
 export function editsRecoveredToast(name: string): string {
-  return `Your edits were saved as their own project, ${quoted(name)}.`;
+  return `Your latest edits were saved as their own project, ${quoted(name)}.`;
+}
+
+/** GM r14, 3 (and r12, 1): the second half of a kept-in-this-tab line, for
+ * edits a closed project never got. */
+export const LATEST_EDITS_KEPT = "Your latest edits weren't saved yet. They're kept in this tab.";
+/** GM r14, 3: added where the tab can't go home by itself. */
+export const RELOAD_TO_CONTINUE = 'Reload projects to continue.';
+
+/** GM r14 on PR #199, 3, verbatim: the agent and what it did to the
+ * person's canvas when its write closed the project the tab showed ("An
+ * agent" when unknown). `name` is that project's: it was kept, untouched.
+ * The same words are the person's Agent log row for a canvas that already
+ * was a project (GM r15, Q10). */
+export function agentClosedLine(agent: string | null | undefined, action: 'clear' | 'replace' | 'change', name: string): string {
+  const who = agent && agent.trim() ? agent.trim() : 'An agent';
+  if (action === 'clear') return `${who} cleared the canvas. ${quoted(name)} is kept as its own project.`;
+  if (action === 'replace') return `${who} replaced the canvas. ${quoted(name)} is kept as its own project.`;
+  return `${who} made its changes on a copy of ${quoted(name)}. ${quoted(name)} is kept as it was.`;
 }
 
 /** The button the notice shows when something is in Recently deleted. */
@@ -282,10 +299,14 @@ function personsLimitLine(reason: CanvasLimit, context: CanvasLimitContext): str
   }
   const opening = "The canvas you had open couldn't be saved as its own project because";
   if (reason === 'projects') {
-    return `${opening} you've reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST} ${deleteToSaveIt(ownCount(context))}`;
+    return `${opening} you've reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST} ${DELETE_A_PROJECT}`;
   }
   return `${opening} Nebula's project list is full. ${NOTHING_LOST} ${sizeCapAdvice(context.trashHasItems)}`;
 }
+
+/** GM r14 on PR #199, 2: one canvas of the person's always gets "Delete a
+ * project"; "Delete N projects" is only for several of theirs waiting. */
+const DELETE_A_PROJECT = 'Delete a project and Nebula will save it.';
 
 /** GM r5 (1)/r6, the waiting line: the Projects home's slim notice while
  * the canvas waits, whether or not a restore notice is open; it can't be
@@ -307,7 +328,7 @@ function personsWaitingLine(reason: CanvasLimit, context: CanvasLimitContext): s
   }
   const opening = "The canvas you had open isn't saved as a project yet because";
   if (reason === 'projects') {
-    return `${opening} you've reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST} ${deleteToSaveIt(ownCount(context))}`;
+    return `${opening} you've reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST} ${DELETE_A_PROJECT}`;
   }
   return `${opening} Nebula's project list is full. ${NOTHING_LOST} ${sizeCapAdvice(context.trashHasItems)}`;
 }
@@ -374,8 +395,13 @@ export function restoreAtLimitTooltip(projectLimit: number, room?: RestoreRoom |
  * "cleared", "replaced", or "changed" for any other write: review 6 of PR
  * #199, M-1; ``agent`` null: "An agent"). */
 export function canvasHeldLogLine(agent: string | null | undefined, action: 'cleared' | 'replaced' | 'changed',
-  savedAs?: string | null, copy = false): string {
+  savedAs?: string | null, copy = false, kept = false): string {
   const who = agent || 'An agent';
+  // GM r15 on PR #199, Q10: the canvas already was a project, so it was
+  // kept as it was, not "saved as its own project" (r14's words).
+  if (savedAs && kept) {
+    return agentClosedLine(agent, copy || action === 'changed' ? 'change' : action === 'cleared' ? 'clear' : 'replace', savedAs);
+  }
   if (savedAs) return canvasSavedFirstLogLine(who, action, savedAs, copy);
   return `${who} ${action} the canvas. The one you had open is kept until Nebula can save it as a project.`;
 }

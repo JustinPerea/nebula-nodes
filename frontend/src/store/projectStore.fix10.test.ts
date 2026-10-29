@@ -35,7 +35,8 @@ import { GRAPH_PARAMS_VERSION } from '../lib/savedParamsUpgrades';
 import { wsClient } from '../lib/wsClient';
 import type { ProjectSwitch } from '../lib/wsClient';
 import { useGraphStore } from './graphStore';
-import { PERSONS_CANVAS_SAVED_UNSAVED, projectRetryOffer, RESTORED_LIST_UNSAVED, resetProjectStoreForTests, subscribeProjectAutosave, useProjectStore } from './projectStore';
+import { keptEditsLine, RESTORED_LIST_UNSAVED, resetProjectStoreForTests, subscribeProjectAutosave, useProjectStore } from './projectStore';
+import { editsRecoveredToast } from '../components/projects/catalogRestoreCopy';
 import type { ProjectSnapshot, ProjectSummary, SavedProject } from '../lib/projects';
 
 const summary = (id: string, name: string): ProjectSummary => ({
@@ -164,15 +165,16 @@ describe("a followed tab when the agent's next write closes the person's project
     expect(useProjectStore.getState().switchNotice).toBeNull();
   });
 
-  it('with edits not saved yet: the builder\'s line and [Save as a project]', async () => {
+  it("with edits not saved yet: kept in the tab with GM r14, 3's line and [Save as a project] (fix round 11)", async () => {
     socket()({ type: 'graphSync', workspaceRevision: 'r1', paramsVersion: GRAPH_PARAMS_VERSION } as never);
     await follow();
     vi.mocked(api.saveProject).mockImplementation(() => new Promise(() => {}));
     setPrompt('typed-before-codex-cleared');
     codexClears();
     const state = useProjectStore.getState();
-    expect(state).toMatchObject({ error: PERSONS_CANVAS_SAVED_UNSAVED, errorRetry: { action: 'saveRecovered' } });
-    expect(projectRetryOffer(state)).toBe('save');
+    expect(state).toMatchObject({ screen: 'workspace', error: null, keptEdits: { sourceId: 'po' } });
+    expect(keptEditsLine(state.keptEdits!)).toBe("An agent made its changes on a copy of “Recovered canvas”. "
+      + "“Recovered canvas” is kept as it was. Your latest edits weren't saved yet. They're kept in this tab.");
   });
 
   it('a sync that carries the same closed project again changes nothing', async () => {
@@ -194,27 +196,36 @@ describe('GM r12, 1: the edits a restore stopped, kept in the tab, with [Save as
     socket()({ type: 'graphSync', workspaceRevision: 'r9', paramsVersion: GRAPH_PARAMS_VERSION, catalogRestore: 'new' } as never);
   }
 
-  it("GM's line, verbatim, with the button; closing the tab gets the unload warning", async () => {
+  it("GM's line, verbatim, kept where the person is (GM r15, Q11); closing the tab gets the unload warning", async () => {
     await stoppedByARestore();
     const state = useProjectStore.getState();
     expect(RESTORED_LIST_UNSAVED).toBe("Nebula restored its project list before your latest edits were saved. They're kept in this tab.");
-    expect(state).toMatchObject({ screen: 'home', dirty: true, error: RESTORED_LIST_UNSAVED, errorRetry: { action: 'saveRecovered' } });
-    expect(projectRetryOffer(state)).toBe('save');
+    expect(state).toMatchObject({ screen: 'workspace', dirty: true, error: null });
+    expect(keptEditsLine(state.keptEdits!)).toBe(RESTORED_LIST_UNSAVED);
     const unload = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(unload);
     expect(unload.defaultPrevented).toBe(true);
   });
 
-  it('the button saves them under the "(recovered)" name and the toast names that project', async () => {
+  it('the button saves them under the "(recovered)" name, opens that project and the toast names it', async () => {
     await stoppedByARestore();
-    vi.mocked(api.recoverProject).mockResolvedValue({ id: 'pr', name: 'Recovered canvas copy (recovered)' } as never);
-    vi.mocked(api.listProjects).mockResolvedValue({ projects: [original, copy], trash: [], activeProjectId: null,
+    const recovered = summary('pr', 'Recovered canvas copy (recovered)');
+    vi.mocked(api.recoverProject).mockResolvedValue(saved(recovered) as never);
+    vi.mocked(api.listProjects).mockResolvedValue({ projects: [original, copy, recovered], trash: [], activeProjectId: null,
       workspaceRevision: 'r9', paramsVersion: GRAPH_PARAMS_VERSION } as never);
-    await useProjectStore.getState().retry();
-    const [source, snapshot] = vi.mocked(api.recoverProject).mock.calls[0];
+    vi.mocked(api.openProject).mockResolvedValue({ project: saved(recovered), workspaceRevision: 'r10', canvasRevision: '1',
+      paramsVersion: GRAPH_PARAMS_VERSION } as never);
+    const notices: string[] = [];
+    const listen = (event: Event) => notices.push((event as CustomEvent<{ text: string }>).detail.text);
+    window.addEventListener('nebula:canvas-notice', listen);
+    await useProjectStore.getState().saveKeptEdits();
+    window.removeEventListener('nebula:canvas-notice', listen);
+    const [source, snapshot, , , name] = vi.mocked(api.recoverProject).mock.calls[0];
     expect(source).toBe('pc');
+    expect(name).toBe('Recovered canvas copy');
     expect(snapshot.nodes[0]?.data.params.prompt).toBe('b');
-    expect(useProjectStore.getState()).toMatchObject({ error: null, dirty: false,
-      editsRecoveredAs: { id: 'pr', name: 'Recovered canvas copy (recovered)' } });
+    expect(useProjectStore.getState()).toMatchObject({ screen: 'workspace', activeProject: { id: 'pr' }, error: null,
+      keptEdits: null });
+    expect(notices).toContain(editsRecoveredToast('Recovered canvas copy (recovered)'));
   });
 });

@@ -85,7 +85,8 @@ and your change never touches it: `nebula clear` and `nebula load` then work
 on a new canvas ("Nebula saved the open canvas as its own project, “X”, and
 cleared a new canvas." / "…and loaded “file.json” into a new canvas."), and
 any other change works on a copy of it ("…and made your change on a copy of
-it."), saved as "X copy" ("X copy 2" when that name is taken) on the next
+it."; for a project the person already had, which a restore protected
+again: "Nebula kept “My film” as it was and …"), saved as "X copy" ("X copy 2" when that name is taken) on the next
 listing or your next change, which then lands on it. When only the person's
 canvas fits, the reply adds "The copy isn't saved as a project yet because the
 project limit is reached." (or "…because Nebula's project list is full."):

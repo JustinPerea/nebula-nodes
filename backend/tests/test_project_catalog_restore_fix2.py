@@ -555,7 +555,8 @@ def test_l5_a_filing_right_after_its_restore_goes_in_that_restores_record(app):
     listing = client.get("/api/projects", headers=PERSON).json()
     restore = listing["catalogRestore"]
     assert restore["openProjectMissing"] == beta
-    assert restore["recoveredCanvas"]["name"] == "Beta (recovered)"
+    # GM r14 on PR #199, 4: the lost row's own name is free again, so it is reused as it was.
+    assert restore["recoveredCanvas"]["name"] == "Beta"
 
 
 
@@ -613,7 +614,8 @@ def test_m2_the_open_project_torn_after_another_torn_record_is_filed_under_its_n
     restore = listing["catalogRestore"]
     assert restore["openProjectMissing"] == scratch
     assert restore["openProjectName"] == "Scratch"
-    assert restore["recoveredCanvas"]["name"] == "Scratch (recovered)"
+    # GM r14 on PR #199, 4: the lost row's own name is free again, so it is reused as it was.
+    assert restore["recoveredCanvas"]["name"] == "Scratch"
 
 
 # -- naming: "<project> (recovered)", numbered ---------------------------------------

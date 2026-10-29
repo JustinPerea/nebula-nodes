@@ -128,6 +128,7 @@ import { agentClearedLine, changesNotSavedLine, changesSavedAsCopyLine, distinct
   settingsOnOneNode, type CutOffEnding, type CutOffSave } from '../lib/savingCutOff';
 import { deleteNoAnswerLine, deleteServerErrorLine } from '../lib/deleteCopy';
 import { followingReason, followingSwitch, refuseEditWhileFollowing, runWhileFollowingLine } from '../lib/canvasFollow';
+import { isCanvasKept, keptCanvasTakesTyping, pulseKeptCanvas, setCanvasKept } from '../lib/keptCanvas';
 import { noteCanvasReplaced } from '../lib/canvasReplaced';
 import { boundingRect, findOpenGroupOffset, UNMEASURED_NODE_SIZE, type NodeRect } from '../lib/nodePlacement';
 import { withParamDefaults } from '../lib/paramDefaults';
@@ -2606,7 +2607,7 @@ function parkParamSave(nodeId: string, saves: CutOffSave[]): void {
 
 function resendParkedParamSave(nodeId: string): void {
   const parked = parkedParamSaves.get(nodeId);
-  if (!parked) return;
+  if (!parked || isCanvasKept()) return;
   clearTimeout(parked.timer);
   parkedParamSaves.delete(nodeId);
   // Typing since then is on its own timer and goes with it.
@@ -2639,7 +2640,28 @@ function forgetParkedParamSaves(): void {
   takeParkedParamSaves();
 }
 
+/** GM r15 on PR #199, Q11 (review 11, HIGH-1): the canvas is kept in this
+ * tab. Parked saves stop waiting for a resend (one would be refused and put
+ * back); typing stays on the canvas only (updateNodeData, pushNodeParams). */
+export function keepCanvasLocally(): void {
+  setCanvasKept(true);
+  forgetParkedParamSaves();
+}
+
+/** The kept canvas was saved as its own project (or let go): what this
+ * tab tracked as unsaved for the old project goes, since the project it
+ * opens next brings its own. */
+export function releaseKeptCanvas(): void {
+  if (!isCanvasKept()) return;
+  setCanvasKept(false);
+  forgetParkedParamSaves();
+  clearAllParamPushTimers();
+}
+
 function pushNodeParams(nodeId: string, options: { resent?: boolean } = {}): Promise<void> {
+  // Kept in this tab (GM r15, Q11): nothing is sent; the typing waits for
+  // [Save as a project] with the rest of the canvas.
+  if (isCanvasKept()) return Promise.resolve();
   const node = useGraphStore.getState().nodes.find((n) => n.id === nodeId);
   if (!node) {
     if (deletesInFlight.has(nodeId) && unsavedParamEdits.has(nodeId)) deferredParamPushes.add(nodeId);
@@ -2711,7 +2733,15 @@ function pushNodeParams(nodeId: string, options: { resent?: boolean } = {}): Pro
     // canvas replaced since: its own lines say what was cut off.
     const outOfDate = err instanceof ParamSaveRefused && err.outOfDate;
     const sameGraph = graphAtPush === canvasReplacementRevision;
-    if (outOfDate && sameGraph && !options.resent && unsavedParamEdits.get(nodeId) === edits) {
+    if (isCanvasKept() && sameGraph) {
+      // Review 11 of PR #199, HIGH-1: refused because Nebula restored its
+      // project list (or an agent's write closed the project) while it was on
+      // its way. The canvas is kept in this tab now, so the typing stays:
+      // never put back, never sent again; [Save as a project] files it.
+      parked = true;
+      const pushes = paramPushesOut.get(nodeId);
+      if (pushes) paramPushesOut.set(nodeId, pushes.filter((entry) => entry !== push));
+    } else if (outOfDate && sameGraph && !options.resent && unsavedParamEdits.get(nodeId) === edits) {
       // Round 22 (review 21, L-a): kept for what the next sync says
       // (parkParamSave). Its keys are this save's again for the resend.
       parked = true;
@@ -8519,7 +8549,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     // rapid typing in a text-input doesn't hammer the backend — the final
     // value is what matters. Execution state updates (outputs/state/progress)
     // don't need to sync.
-    if (isParamChange && CLI_ID_RE.test(nodeId)) {
+    // Kept in this tab after a restore (GM r15 on PR #199, Q11): the typing
+    // stays on the canvas only, for [Save as a project]; nothing is sent.
+    if (isParamChange && CLI_ID_RE.test(nodeId) && !isCanvasKept()) {
       const currentNode = get().nodes.find((node) => node.id === nodeId);
       const currentScene = currentNode?.data.params.scene as CinemaSceneSpec | undefined;
       if (currentNode?.data.definitionId === 'cinema-scene' && currentScene?.shots) {
@@ -11169,10 +11201,20 @@ const FOLLOW_RUN = (ids: (...args: never[]) => string[]): FollowGate => ({
 /** React Flow's changes minus the edits while following: selection and
  * measured sizes pass; a move, removal or add is refused (one pulse). */
 function followingChanges<C extends { type: string }>(changes: C[]): C[] {
-  if (!followingSwitch()) return changes;
+  if (!followingSwitch()) return keptCanvasChanges(changes);
   const kept = changes.filter((change) => change.type === 'select' || change.type === 'dimensions');
   if (kept.length < changes.length) refuseEditWhileFollowing();
   return kept;
+}
+
+/** The same while the canvas is kept in this tab after a restore (GM r15,
+ * Q11): a move, removal or add would need Nebula, so it is refused and the
+ * kept line pulses; selection and measured sizes pass. */
+function keptCanvasChanges<C extends { type: string }>(changes: C[]): C[] {
+  if (!isCanvasKept()) return changes;
+  const passing = changes.filter((change) => change.type === 'select' || change.type === 'dimensions');
+  if (passing.length < changes.length) pulseKeptCanvas();
+  return passing;
 }
 
 /**
@@ -11414,7 +11456,17 @@ subscribeBackendConnection(() => {
         if (!isRun) refuseEditWhileFollowing();
         return (follow.refused as (...a: unknown[]) => unknown)(...args);
       }
-      if ((!gate.blocks || (gate.blocks as (...a: unknown[]) => boolean)(...args)) && refuseEditWhileOffline()) {
+      const blocks = !gate.blocks || (gate.blocks as (...a: unknown[]) => boolean)(...args);
+      // Kept in this tab after a restore (GM r15, Q11): typing joins the kept
+      // edits; any other edit or run is refused, and the kept line pulses.
+      if (blocks && isCanvasKept()) {
+        const typing = name === 'updateNodeData' && keptCanvasTakesTyping();
+        if (!typing) {
+          pulseKeptCanvas();
+          return gate.refused();
+        }
+      }
+      if (blocks && refuseEditWhileOffline()) {
         return gate.refused();
       }
       return action(...args);

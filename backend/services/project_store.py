@@ -364,57 +364,106 @@ def purge_expired_trash(catalog: dict[str, Any], *, at: datetime | None = None) 
     return bool(expired)
 
 
-def recovered_name(source_name: str, catalog: dict[str, Any]) -> str:
-    """A recovered copy's name (GM - Design, round 21 of PR #195, G5; and
-    the live canvas filed after a restore, PR #199 GM r3): "<project>
-    (recovered)", then "(recovered 2)", 3 and so on, one past the highest
-    the project's copies have in the list or Recently deleted, so a new copy
-    never takes an earlier one's name."""
-    stem = f"{source_name[:100]} (recovered"
-    pattern = re.compile(re.escape(stem) + r"(?: (\d+))?\)")
-    highest = 0
-    for listing in (catalog.get("projects") or {}, catalog.get("trash") or {}):
-        for project in listing.values():
-            match = pattern.fullmatch(str((project or {}).get("name") or ""))
-            if match:
-                highest = max(highest, int(match.group(1) or 1))
-    return f"{stem})" if highest == 0 else f"{stem} {highest + 1})"
+RECOVERED_CANVAS_NAME = "Recovered canvas"
+
+# Nebula's three name families (GM r14 of PR #199, 4): a canvas filed when
+# which project it was isn't known ("Recovered canvas", "Recovered canvas 2"),
+# a recovered copy ("Alpha (recovered)", "Alpha (recovered 2)") and a
+# duplicate ("Alpha copy", "Alpha copy 2"). One rule for all three: a name
+# already in the family gets the next free number in it (never "Recovered
+# canvas (recovered)" or "Alpha copy copy"), and a number freed is used again.
+_NAME_FAMILIES: dict[str, tuple[re.Pattern[str], Callable[[str, int], str]]] = {
+    "canvas": (re.compile(rf"(?P<stem>{re.escape(RECOVERED_CANVAS_NAME)})(?: (?P<n>[2-9]|[1-9]\d+))?"),
+               lambda stem, n: stem if n == 1 else f"{stem} {n}"),
+    "recovered": (re.compile(r"(?P<stem>.+?) \(recovered(?: (?P<n>[2-9]|[1-9]\d+))?\)"),
+                  lambda stem, n: f"{stem} (recovered)" if n == 1 else f"{stem} (recovered {n})"),
+    "copy": (re.compile(r"(?P<stem>.+?) copy(?: (?P<n>[2-9]|[1-9]\d+))?"),
+             lambda stem, n: f"{stem} copy" if n == 1 else f"{stem} copy {n}"),
+}
+
+
+def _names_in_use(catalog: Mapping[str, Any], taken: Iterable[str] = ()) -> set[str]:
+    """Every project name in the list and Recently deleted, and ``taken``
+    (names promised to copies not filed yet): none of them is free."""
+    names = {str((project or {}).get("name") or "")
+             for listing in (catalog.get("projects") or {}, catalog.get("trash") or {})
+             for project in listing.values()}
+    return names | {str(name) for name in taken}
+
+
+def name_family(name: str) -> tuple[str, str] | None:
+    """(family, stem) when ``name`` is already in one of the three families,
+    else None. "Recovered canvas 2" is the canvas family's, "Alpha (recovered
+    3)" the recovered family's with stem "Alpha", "Alpha copy" the copy's."""
+    for family, (pattern, _form) in _NAME_FAMILIES.items():
+        match = pattern.fullmatch(name)
+        if match:
+            return family, match.group("stem")
+    return None
+
+
+def _next_free(family: str, stem: str, names: set[str]) -> str:
+    form = _NAME_FAMILIES[family][1]
+    number = 1
+    while form(stem, number) in names:
+        number += 1
+    return form(stem, number)
+
+
+def family_name(source_name: str, family: str, catalog: Mapping[str, Any], taken: Iterable[str] = ()) -> str:
+    """The next free name in ``family`` for something made from
+    ``source_name`` (GM r14, 4): from the source's own stem when the source
+    is already in that family (never a suffix twice), else from its name.
+    Free: no project in the list or Recently deleted and nothing in ``taken``
+    has it, so a number freed is used again."""
+    names = _names_in_use(catalog, taken)
+    member = name_family(source_name)
+    stem = member[1] if member is not None and member[0] == family else source_name[:100]
+    return _next_free(family, stem, names)
+
+
+def recovered_name(source_name: str, catalog: Mapping[str, Any]) -> str:
+    """A recovered copy's name (GM - Design, round 21 of PR #195, G5; GM
+    r14 of PR #199, 4): "<project> (recovered)", then "(recovered 2)" and on,
+    the next free number. A name already in a recovery family gets the next
+    free number in that family: "Alpha (recovered)" gives "Alpha (recovered
+    2)", and "Recovered canvas" gives "Recovered canvas 2"."""
+    member = name_family(source_name)
+    if member is not None and member[0] in ("canvas", "recovered"):
+        return _next_free(member[0], member[1], _names_in_use(catalog))
+    return family_name(source_name, "recovered", catalog)
+
+
+def lost_row_name(name: str, catalog: Mapping[str, Any]) -> str:
+    """The name a canvas whose project row is gone is filed under (GM r14,
+    4): that row's own name when it is free again (the row is gone and
+    nothing else has it); else the next free number in the family the name
+    is already in ("Recovered canvas" gives "Recovered canvas 2"); else
+    "<name> (recovered)" and on."""
+    names = _names_in_use(catalog)
+    if name not in names:
+        return name
+    member = name_family(name)
+    if member is not None:
+        return _next_free(member[0], member[1], names)
+    return _next_free("recovered", name[:100], names)
 
 
 def duplicate_name(source_name: str, catalog: Mapping[str, Any], taken: Iterable[str] = ()) -> str:
-    """Nebula's duplicate naming (GM r10, 1; the Mac Finder convention):
-    "<name> copy", then "<name> copy 2", 3 and so on, one past the highest
-    in the list, Recently deleted or ``taken`` (names already promised to
-    copies not yet filed). The one helper for every duplicate: an agent's
-    copy of the person's canvas (PR #199) and a future Duplicate project."""
-    stem = f"{source_name[:100]} copy"
-    pattern = re.compile(re.escape(stem) + r"(?: (\d+))?")
-    highest = 0
-    names = [str((project or {}).get("name") or "") for listing in (catalog.get("projects") or {}, catalog.get("trash") or {})
-             for project in listing.values()]
-    for name in [*names, *taken]:
-        match = pattern.fullmatch(name)
-        if match:
-            highest = max(highest, int(match.group(1) or 1))
-    return stem if highest == 0 else f"{stem} {highest + 1}"
+    """Nebula's duplicate naming (GM r10, 1; the Mac Finder convention; GM
+    r14, 4): "<name> copy", then "<name> copy 2" and on, the next free number
+    in the list, Recently deleted and ``taken`` (names already promised to
+    copies not yet filed); "Alpha copy" gives "Alpha copy 2". The one helper
+    for every duplicate: an agent's copy of the person's canvas (PR #199) and
+    a future Duplicate project."""
+    return family_name(source_name, "copy", catalog, taken)
 
 
-RECOVERED_CANVAS_NAME = "Recovered canvas"
-
-
-def recovered_canvas_name(catalog: dict[str, Any]) -> str:
+def recovered_canvas_name(catalog: Mapping[str, Any]) -> str:
     """The name of a live canvas filed when which project it was isn't
-    known (GM r5 of PR #199): "Recovered canvas", then "Recovered canvas 2",
-    3 and so on, one past the highest in the list or Recently deleted, so two
-    such filings are never named alike."""
-    pattern = re.compile(re.escape(RECOVERED_CANVAS_NAME) + r"(?: (\d+))?")
-    highest = 0
-    for listing in (catalog.get("projects") or {}, catalog.get("trash") or {}):
-        for project in listing.values():
-            match = pattern.fullmatch(str((project or {}).get("name") or ""))
-            if match:
-                highest = max(highest, int(match.group(1) or 1))
-    return RECOVERED_CANVAS_NAME if highest == 0 else f"{RECOVERED_CANVAS_NAME} {highest + 1}"
+    known (GM r5 of PR #199): "Recovered canvas", then "Recovered canvas 2"
+    and on, the next free number (GM r14, 4)."""
+    return _next_free("canvas", RECOVERED_CANVAS_NAME, _names_in_use(catalog))
 
 
 def make_project(name: str, snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -529,7 +578,12 @@ def canvas_pending_of(catalog: Mapping[str, Any]) -> dict[str, Any]:
         kept[key] = {"name": name, "agent": agent,
                      "mark": mark if isinstance(mark, int) and not isinstance(mark, bool) else None,
                      "boot": boot if isinstance(boot, str) else None}
-    return {"fresh": None if fresh is None else {"projectId": fresh["projectId"], "digest": fresh["digest"]},
+    # ``filed``: the project was made from the person's waiting canvas (a
+    # listing's filing, or the agent's write filing it first); absent for a
+    # project protected again after a restore, which already was a project
+    # (GM r15 on PR #199, Q10: its replies say "kept", not "saved").
+    return {"fresh": None if fresh is None else {"projectId": fresh["projectId"], "digest": fresh["digest"],
+                                                 **({"filed": True} if fresh.get("filed") is True else {})},
             "copies": kept}
 
 
@@ -1453,6 +1507,14 @@ class ProjectStore:
             said = canvas_pending_of({CANVAS_PENDING_FIELD: found.pending})
             fresh = said["fresh"] or fresh
             copies.update(said["copies"])
+        listed = catalog.get("projects") or {}
+        if fresh is not None and fresh["projectId"] not in listed:
+            # A protection for a project the restored list doesn't have (a
+            # copy older than the filing): it protects nothing, so it goes,
+            # unless the copy's own record names a project that is listed
+            # (review 11 of PR #199, nit 3).
+            base = pending["fresh"]
+            fresh = base if base is not None and base["projectId"] in listed else None
         set_canvas_pending_in(catalog, {"fresh": fresh, "copies": copies})
         if read_whole or self.protect_after_restore is None:
             return

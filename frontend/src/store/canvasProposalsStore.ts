@@ -19,6 +19,7 @@ import { useGraphStore, watchGraphSyncs } from './graphStore';
 import { PERSON_REQUIRED_CODE, failureMessage } from '../lib/errorCopy';
 import { refuseEditWhileOffline } from '../lib/backendConnection';
 import { refuseEditWhileFollowing } from '../lib/canvasFollow';
+import { refuseEditWhileKept } from '../lib/keptCanvas';
 
 /** How long a closed proposal's ghosts fade before they go. Matches canvasProposals.css. */
 /** The answer's code for an Accept refused because the canvas was cleared or
@@ -229,6 +230,8 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
     // store's gates ask it first. Offline is read-only (round 15 of PR
     // #114): nothing is sent or marked; the banner pulses.
     if (refuseEditWhileFollowing()) return;
+    // Kept in this tab after a restore (GM r15 on PR #199, Q11): only typing.
+    if (refuseEditWhileKept()) return;
     if (refuseEditWhileOffline()) return;
     set((state) => ({ pending: { ...state.pending, [id]: 'accept' }, errors: without(state.errors, id) }));
     // Accepting is one undo step: the canvas before the proposal's nodes

@@ -482,31 +482,28 @@ def _catalog_restore_view(record: Mapping[str, Any] | None,
     return {**view, "note": _catalog_restore_note(record)}
 
 
+# Restores made while main.py is still importing (the boot read of the
+# catalog, _resolve_canvas_owner_at_boot): the journal isn't defined yet, so
+# each record waits here and is journaled at startup (_journal_boot_restores;
+# review 11 of PR #199, LOW-1).
+_boot_restores: list[dict[str, Any]] = []
+
+
 def _on_catalog_restore(record: dict[str, Any]) -> None:
     """ProjectStore restored a damaged catalog (services/project_store.py,
     after it let go of the lock): journal it for agents
     (`project.catalogRestored`, with where it came from and where the
-    damaged file is kept) and tell open tabs to list again, which shows the
-    person's notice. On the serving loop; a restore at boot has none yet and
-    is only journaled."""
+    damaged file is kept) and tell open tabs (_tell_catalog_restore). On the
+    serving loop. A restore during the import, at boot, is printed now and
+    journaled at startup."""
     view = _catalog_restore_view(record) or {}
     print(f"[projects] {view.get('note')}", flush=True)
+    if "_journal" not in globals():
+        _boot_restores.append(copy.deepcopy(record))
+        return
 
     def tell() -> None:
-        data = {key: view.get(key) for key in ("id", "kind", "reason", "source", "copyAt", "addedBackCount",
-                                               "notAddedBackCount", "revertedCount", "cameBackCount",
-                                               "backInTrashCount", "keptDeletedCount", "projectCount")}
-        # By name in their folder: the journal cuts strings at 160 characters.
-        kept = [Path(path) for path in view.get("setAside") or [] if path]
-        data["folder"] = str(kept[0].parent) if kept else None
-        data["damagedFile"] = Path(view["damagedFile"]).name if view.get("damagedFile") else None
-        data["setAside"] = [path.name for path in kept]
-        data["addedBack"] = [{"id": row.get("id"), "name": row.get("name")} for row in (view.get("addedBack") or [])[:20]]
-        _journal("project.catalogRestored", data=data, summary=view.get("note", ""), actor={"kind": "system"})
-        try:
-            asyncio.get_running_loop().create_task(_broadcast_projects_changed("catalogRestored"))
-        except RuntimeError:
-            pass  # no loop (boot): tabs list on load anyway
+        _tell_catalog_restore(view)
 
     try:
         running = asyncio.get_running_loop()
@@ -518,6 +515,32 @@ def _on_catalog_restore(record: dict[str, Any]) -> None:
         _main_loop.call_soon_threadsafe(tell)
     else:
         tell()
+
+
+def _tell_catalog_restore(view: dict[str, Any]) -> None:
+    """Journal a restore (`project.catalogRestored`) and, on a running loop,
+    tell open tabs. A restore while Nebula runs moves the workspace revision
+    under a tab that may hold edits not saved yet: it gets a graphSync
+    carrying the restore notice's id (export_graph_for_frontend), the same
+    way a reconnect after a boot restore does, so it keeps those edits and
+    says so instead of having its writes refused (review 11 of PR #199,
+    HIGH-1). And `projectsChanged` lists again."""
+    data = {key: view.get(key) for key in ("id", "kind", "reason", "source", "copyAt", "addedBackCount",
+                                           "notAddedBackCount", "revertedCount", "cameBackCount",
+                                           "backInTrashCount", "keptDeletedCount", "projectCount")}
+    # By name in their folder: the journal cuts strings at 160 characters.
+    kept = [Path(path) for path in view.get("setAside") or [] if path]
+    data["folder"] = str(kept[0].parent) if kept else None
+    data["damagedFile"] = Path(view["damagedFile"]).name if view.get("damagedFile") else None
+    data["setAside"] = [path.name for path in kept]
+    data["addedBack"] = [{"id": row.get("id"), "name": row.get("name")} for row in (view.get("addedBack") or [])[:20]]
+    _journal("project.catalogRestored", data=data, summary=view.get("note", ""), actor={"kind": "system"})
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return  # no loop (boot): tabs list on load anyway
+    loop.create_task(_broadcast_graph_sync())
+    loop.create_task(_broadcast_projects_changed("catalogRestored"))
 
 
 project_store.on_restore = _on_catalog_restore
@@ -537,6 +560,16 @@ def _canvas_owner_for_restore() -> Any:
 
 
 project_store.canvas_owner = _canvas_owner_for_restore
+
+
+def _fresh_digest() -> str:
+    """The live canvas's nodes and wires as the graph holds them, as a
+    digest (what it was when protected; kept with the record for the logs:
+    no longer a condition). Defined before the boot read of the catalog: a
+    restore there protects again with it (review 11 of PR #199, nit 4: the
+    export it used came later in the file, so a boot restore stored zeros)."""
+    return hashlib.sha256(json.dumps(cli_graph.get_state(), sort_keys=True,
+                                     default=str).encode("utf-8")).hexdigest()
 
 
 def _protect_after_restore(catalog: dict[str, Any]) -> None:
@@ -1645,12 +1678,14 @@ def _saved_canvas_reply(note: Mapping[str, Any] | None) -> dict[str, Any]:
     if not saved:
         return {}
     action = (note or {}).get("action") or "change"
-    message = canvas_saved_for_agent(action, saved["name"])
+    kept = bool(note.get("kept"))
+    message = canvas_saved_for_agent(action, saved["name"], kept=kept)
     waits = _copy_waits() if note.get("copy") else None
     if waits is not None:
         # GM r10, 3: the agent is told at the time that its copy waits.
         message += f" {CANVAS_COPY_WAITS[waits]}"
     return {"savedCanvas": {"id": saved["id"], "name": saved["name"],
+                            **({"kept": True} if kept else {}),
                             **({"copy": note["copy"]} if note.get("copy") else {}),
                             **({"copyWaits": waits} if waits else {}),
                             "message": message}}
@@ -3644,6 +3679,19 @@ async def _personal_agents_startup() -> None:
 async def _personal_agents_shutdown() -> None:
     """Kill every personal agent's process tree and revoke its token."""
     await acp_sessions.shutdown()
+
+
+@app.on_event("startup")
+async def _journal_boot_restores() -> None:
+    """The restores made while main.py imported (_boot_restores): journaled
+    now that the journal exists, so an agent watching events sees a boot
+    restore too (`project.catalogRestored`, review 11 of PR #199, LOW-1)."""
+    while _boot_restores:
+        record = _boot_restores.pop(0)
+        try:
+            _tell_catalog_restore(_catalog_restore_view(record) or {})
+        except Exception as exc:  # noqa: BLE001 - telling is decoration on a restore that happened
+            print(f"[projects] announcing the boot restore failed: {exc}", flush=True)
 
 
 @app.on_event("startup")
@@ -16067,7 +16115,9 @@ def _filed_canvas_name(catalog: dict[str, Any], owner: Any) -> str:
     if not isinstance(name, str) or not name.strip():
         # "Recovered canvas", then "Recovered canvas 2" and on (GM r5).
         return project_store_module.recovered_canvas_name(catalog)
-    return project_store_module.recovered_name(name, catalog)
+    # GM r14, 4: the lost row's own name when it is free again, else the next
+    # free number in its family (never "Recovered canvas (recovered)").
+    return project_store_module.lost_row_name(name, catalog)
 
 
 def _filing_room(catalog: dict[str, Any], exported: dict[str, Any]) -> str | None:
@@ -16137,7 +16187,7 @@ def _mark_fresh_filing(catalog: dict[str, Any], project_id: str | None) -> None:
     is filed as ``project_id`` (None: no such project now). Until the canvas
     changes or the person's tab is on it, it is still the person's canvas."""
     pending = project_store_module.canvas_pending_of(catalog)
-    fresh = {"projectId": project_id, "digest": _fresh_digest()} if project_id else None
+    fresh = {"projectId": project_id, "digest": _fresh_digest(), "filed": True} if project_id else None
     project_store_module.set_canvas_pending_in(catalog, {**pending, "fresh": fresh})
 
 
@@ -16156,13 +16206,6 @@ def _fresh_filing_open(catalog: Mapping[str, Any]) -> dict[str, Any] | None:
             or project_id not in catalog["projects"]:
         return None
     return catalog["projects"][project_id]
-
-
-def _fresh_digest() -> str:
-    """The live canvas as a project stores it, as a digest (what it was when
-    protected; kept with the record for the logs: no longer a condition)."""
-    return hashlib.sha256(json.dumps(_graph_canvas_export(cli_graph), sort_keys=True,
-                                     default=str).encode("utf-8")).hexdigest()
 
 
 def _copy_records(catalog: Mapping[str, Any] | None = None) -> dict[str, dict[str, Any]]:
@@ -16702,18 +16745,34 @@ CANVAS_SAVED_FOR_AGENT = {
 }
 
 
-def canvas_saved_for_agent(action: str, name: str, file_name: str | None = None) -> str:
-    """GM's agent reply when its write filed the person's canvas first (rule
-    (a)); a load names its file when the caller knows it (graph_file_client)."""
+# GM r15 (Q10): when the canvas already was that project (a listing filed
+# it, or a restore protected the person's project again), it is kept, not
+# saved: the "saved as its own project" forms stay for a canvas that wasn't
+# a project yet.
+CANVAS_KEPT_FOR_AGENT = {
+    "clear": "Nebula kept “{name}” as it was and cleared a new canvas.",
+    "replace": "Nebula kept “{name}” as it was and loaded the graph into a new canvas.",
+    "change": "Nebula kept “{name}” as it was and made your change on a copy of it.",
+}
+
+
+def canvas_saved_for_agent(action: str, name: str, file_name: str | None = None, kept: bool = False) -> str:
+    """GM's agent reply when its write saved or kept the person's canvas
+    first (rule (a); "kept" when it already was that project, GM r15); a load
+    names its file when the caller knows it (graph_file_client)."""
     if action == "replace" and file_name:
+        if kept:
+            return f"Nebula kept “{name}” as it was and loaded “{file_name}” into a new canvas."
         return f"Nebula saved the open canvas as its own project, “{name}”, and loaded “{file_name}” into a new canvas."
-    return CANVAS_SAVED_FOR_AGENT.get(action, CANVAS_SAVED_FOR_AGENT["change"]).format(name=name)
+    lines = CANVAS_KEPT_FOR_AGENT if kept else CANVAS_SAVED_FOR_AGENT
+    return lines.get(action, lines["change"]).format(name=name)
 
 
 # The last project an agent's write closed to keep the person's canvas in it
-# (_protect_persons_canvas): {id, projectId}, on every graphSync from then
+# (_protect_persons_canvas): {id, projectId, name, action, agent, copy}, on
+# every graphSync from then
 # (export_graph_for_frontend), like the restore notice's id.
-_persons_canvas_saved: dict[str, str] = {}
+_persons_canvas_saved: dict[str, Any] = {}
 
 
 def _protect_persons_canvas(action: str) -> dict[str, Any] | None:
@@ -16760,21 +16819,16 @@ def _protect_persons_canvas(action: str) -> dict[str, Any] | None:
         print(f"[projects] refused an agent's {action}: the person's canvas is {size} bytes, over a project's "
               f"{MAX_PROJECT_BYTES}; nothing changed", flush=True)
         raise CanvasHeldFull(size)
+    filed = None
     with project_store.transaction() as catalog:
-        fresh = _fresh_filing_open(catalog)
         previous_owner = cli_graph.owner
-        if fresh is not None:
-            # Closed in this commit; its protection stays with it (review 9,
-            # M-1): if the owner write below fails, the next settle opens it
-            # again still protected, and an agent's next write closes it again.
-            project, filed = fresh, None
-            # The live canvas is this project's: saved into it first, so a
-            # change no person act ended the protection for (a tab's sync
-            # echo) is kept in it (GM r13, 1).
-            _overlay_live_project(project, exported)
-            catalog["activeProjectId"] = None
-            catalog["workspaceRevision"] = uuid4().hex
-        else:
+        if _fresh_filing_open(catalog) is None:
+            # The person's canvas isn't a project yet (it waits, or a restore
+            # left it unsettled): filed, opened and protected in a commit of
+            # its own first, as a listing files it (review 11 of PR #199,
+            # MEDIUM-1). The agent's write below is the next commit, so the
+            # catalog.json.bak it rotates holds the filing: a second damage
+            # right after it restores a list with the person's canvas in it.
             if not (_canvas_not_filed_now() is not None or _live_canvas_unsettled(catalog)):
                 return None
             if len(catalog["projects"]) + len(_held_distinct()) + 1 > project_store_module.MAX_PROJECTS:
@@ -16783,29 +16837,52 @@ def _protect_persons_canvas(action: str) -> dict[str, Any] | None:
             if _filing_room(catalog, exported) is not None:
                 return None
             _drop_held_copies_of_live()
-            project = _file_live_canvas(catalog, exported, name=_filed_canvas_name(catalog, previous_owner))
-            filed = ("filed", (project, previous_owner))
-            catalog["activeProjectId"] = None
-            catalog["workspaceRevision"] = uuid4().hex
+            filed_project = _file_live_canvas(catalog, exported, name=_filed_canvas_name(catalog, previous_owner))
+            filed = ("filed", (filed_project, previous_owner))
             # Its protection in the same commit as the filing (review 9,
             # M-1): state.json says this project owns the live canvas now
-            # (_file_live_canvas), so a failed owner write below or a crash
-            # leaves it to be opened again by the next settle, protected.
-            _mark_fresh_filing(catalog, project["id"])
+            # (_file_live_canvas), so a crash before the agent's write
+            # leaves it open and protected, as a listing's filing does.
+            _mark_fresh_filing(catalog, filed_project["id"])
+            try:
+                project_store.commit(catalog)
+            except Exception:
+                _undo_canvas_filing(filed)
+                raise
+    if filed is not None:
+        _note_canvas_settled(filed)
+    with project_store.transaction() as catalog:
+        fresh = _fresh_filing_open(catalog)
+        if fresh is None:
+            # Something moved between the two commits (the filing stays, open
+            # and protected): nothing of the agent's is done.
+            raise ProjectStoreError("The project list is busy, so nothing was changed. Try again.")
+        # Made from the person's waiting canvas in this protection (this
+        # write's own filing, or a listing's just before): "saved as its own
+        # project". A project protected again after a restore already was
+        # one: "kept" (GM r15 on PR #199, Q10).
+        was_filed = filed is not None or bool((project_store_module.canvas_pending_of(catalog)["fresh"] or {}).get("filed"))
+        # Closed in this commit; its protection stays with it (review 9,
+        # M-1): if the owner write below fails, the next settle opens it
+        # again still protected, and an agent's next write closes it again.
+        project = fresh
+        # The live canvas is this project's: saved into it first, so a
+        # change no person act ended the protection for (a tab's sync echo)
+        # is kept in it (GM r13, 1).
+        _overlay_live_project(project, exported)
+        catalog["activeProjectId"] = None
+        catalog["workspaceRevision"] = uuid4().hex
         copy_name = _canvas_copy_name(project["name"], catalog) if copy_id else None
         copy_note = None
+        agent = _canvas_agent().get("agent")
+        agent = agent if isinstance(agent, str) and agent else None
         if copy_id:
             # The copy's name and agent in the same commit: never a copy filed
             # as "Recovered canvas N" or said as the person's.
-            agent = _canvas_agent().get("agent")
-            copy_note = {"name": copy_name, "agent": agent if isinstance(agent, str) and agent else None}
+            copy_note = {"name": copy_name, "agent": agent}
             _set_canvas_copies(catalog, prune=True, add=(copy_id, {
                 **copy_note, "mark": canvas_undo_book.mark(), "boot": BACKEND_BOOT_ID}))
-        try:
-            project_store.commit(catalog)
-        except Exception:
-            _undo_canvas_filing(filed)
-            raise
+        project_store.commit(catalog)
     # The project is committed, closed and still protected; the live canvas
     # becomes the new canvas or the copy. If state.json can't say so, the
     # write stops here (507), and the next settle opens the project again,
@@ -16813,22 +16890,24 @@ def _protect_persons_canvas(action: str) -> dict[str, Any] | None:
     # state.json too (L-1 of review 10): a catalog the damage took them from
     # still names it as the agent's.
     _set_canvas_owner(copy_id, copy_note)
-    if filed is not None:
-        _note_canvas_settled(filed)
-    else:
-        # The open project closed under the tab showing it (one that followed
-        # an agent there): each sync says so, so the tab goes to Projects home
-        # instead of saying another window changed it.
-        _persons_canvas_saved.clear()
-        _persons_canvas_saved.update({"id": uuid4().hex, "projectId": project["id"]})
+    # The open project closed under any tab showing it (one that followed an
+    # agent there): each sync says so, and what the agent did, so that tab
+    # goes to Projects home with GM's line (GM r14, 3).
+    _persons_canvas_saved.clear()
+    _persons_canvas_saved.update({"id": uuid4().hex, "projectId": project["id"], "name": project["name"],
+                                  "action": action if action in ("clear", "replace") else "change",
+                                  "agent": agent, "copy": copy_name})
     _canvas_settled_off_waiting()
     note = _canvas_guard_note.get()
     if note is not None:
         note["filed"] = project["id"]
-    print(f"[projects] an agent's {action} of the person's canvas: it was saved as \"{project['name']}\" "
-          f"{project['id']} first (not opened), and the {action} goes on "
-          f"{'a copy, ' + repr(copy_name) if copy_id else 'a new canvas'}", flush=True)
-    return {"saved": {"id": project["id"], "name": project["name"]}, "copy": copy_name}
+    kept = not was_filed
+    print(f"[projects] an agent's {action} of the person's canvas: it was "
+          f"{'kept as' if kept else 'saved as'} \"{project['name']}\" {project['id']} first (not opened), and the "
+          f"{action} goes on {'a copy, ' + repr(copy_name) if copy_id else 'a new canvas'}", flush=True)
+    # `kept`: the canvas was already that project before this protection (a
+    # project a restore protected again), so the replies say "kept" (GM r15).
+    return {"saved": {"id": project["id"], "name": project["name"]}, "copy": copy_name, "kept": kept}
 
 
 def _guard_waiting_canvas(action: str) -> dict[str, Any] | None:
@@ -16946,7 +17025,7 @@ async def _tell_canvas_guarded(note: dict[str, Any]) -> None:
         # GM's rule (a): the person's canvas was saved first, untouched.
         await _broadcast_projects_changed("canvasHeld", None, canvasHeld={
             "action": _HELD_PAST.get(action, action), "savedAs": note["saved"]["name"],
-            **({"copy": True} if note.get("copy") else {}), **who})
+            **({"copy": True} if note.get("copy") else {}), **({"kept": True} if note.get("kept") else {}), **who})
     elif note.get("refused"):
         await _broadcast_projects_changed("canvasHoldRefused", None, canvasHeld={"action": action, **who})
     else:
@@ -17989,8 +18068,12 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         # The source may have been deleted in another window while this tab
         # held unsaved edits to it. Those edits still deserve a copy.
+        # A restore while the tab held them can take the source's row too
+        # (review 11 of PR #199, HIGH-1): the tab says the name it showed.
+        shown = body.get("sourceName")
         source = catalog["projects"].get(source_id) or (catalog.get("trash") or {}).get(source_id) or {
-            "id": source_id, "name": "Deleted project", "snapshot": empty_snapshot(),
+            "id": source_id, "snapshot": empty_snapshot(),
+            "name": shown.strip()[:100] if isinstance(shown, str) and shown.strip() else "Deleted project",
         }
         # Hash the submitted JSON, before canonical coercion. A retry of the
         # same request remains idempotent even if source metadata changes.
@@ -18029,19 +18112,11 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
 
 
 def _recovered_copy_name(source_name: str, catalog: Mapping[str, Any]) -> str:
-    """A new recovered copy's name (GM - Design, round 21 of PR #195, G5):
-    "<project> (recovered)", then "(recovered 2)", 3 and so on, one past the
-    highest the project's copies have (in Projects or the trash), so a new
-    copy never takes an earlier copy's name."""
-    stem = f"{source_name[:100]} (recovered"
-    pattern = re.compile(re.escape(stem) + r"(?: (\d+))?\)")
-    highest = 0
-    for listing in (catalog.get("projects") or {}, catalog.get("trash") or {}):
-        for project in listing.values():
-            match = pattern.fullmatch(str((project or {}).get("name") or ""))
-            if match:
-                highest = max(highest, int(match.group(1) or 1))
-    return f"{stem})" if highest == 0 else f"{stem} {highest + 1})"
+    """A new recovered copy's name (GM - Design, round 21 of PR #195, G5; GM
+    r14 of PR #199, 4): "<project> (recovered)", then "(recovered 2)" and on,
+    the next free number; a copy of "Alpha (recovered)" is "Alpha (recovered
+    2)" (project_store.recovered_name, the shared family rule)."""
+    return project_store_module.recovered_name(source_name, catalog)
 
 
 def _switch_actor() -> dict[str, Any] | None:

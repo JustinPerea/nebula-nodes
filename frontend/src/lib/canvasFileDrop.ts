@@ -17,6 +17,7 @@
  */
 import { apiRequest } from './apiRequest';
 import { refuseEditWhileFollowing } from './canvasFollow';
+import { refuseEditWhileKept } from './keptCanvas';
 import { failureCopy, failureMessage } from './errorCopy';
 import { useGraphStore } from '../store/graphStore';
 import { refuseEditWhileOffline } from './backendConnection';
@@ -173,7 +174,7 @@ export function fileDropInFlight(): boolean {
  * has settled. */
 export async function addDroppedFiles(files: readonly File[], origin: { x: number; y: number }): Promise<void> {
   // Round 20 (M1): nothing lands on a canvas that's about to go away.
-  if (refuseEditWhileFollowing()) return;
+  if (refuseEditWhileFollowing() || refuseEditWhileKept()) return;
   // Offline is read-only (GM, round 14 of PR #114): nothing uploads, no
   // notice; the banner pulses (review 13, L6: a drop still sent).
   if (refuseEditWhileOffline()) return;

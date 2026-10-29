@@ -153,7 +153,10 @@ export interface ProjectsChangedEvent {
   canvasHeld?: { action: string; agent: string | null; agentId?: string; color?: string;
     /** GM's rule (a): the person's canvas was saved first as this project,
      * untouched; `copy` when the agent's write changed a copy of it. */
-    savedAs?: string; copy?: boolean };
+    savedAs?: string; copy?: boolean;
+    /** GM r15 on PR #199, Q10: the canvas already was that project, so it
+     * was kept as it was (not "saved as its own project"). */
+    kept?: boolean };
 }
 
 /** The active project's pins, sent after graphSync and on every pin change. */

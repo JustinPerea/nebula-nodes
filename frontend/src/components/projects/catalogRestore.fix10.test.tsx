@@ -81,6 +81,7 @@ describe('GM r12, 1: [Save as a project] after a restore stopped this tab’s ed
   it('the saved toast names the project', () => {
     render(<ProjectHome {...base} editsRecoveredAs={{ id: 'p', name: 'Delta (recovered)' }} />);
     expect(screen.getByText(editsRecoveredToast('Delta (recovered)'))).toBeTruthy();
-    expect(editsRecoveredToast('Delta (recovered)')).toBe('Your edits were saved as their own project, “Delta (recovered)”.');
+    // GM r14 on PR #199, 1, verbatim.
+    expect(editsRecoveredToast('Delta (recovered)')).toBe('Your latest edits were saved as their own project, “Delta (recovered)”.');
   });
 });

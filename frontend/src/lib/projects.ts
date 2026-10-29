@@ -218,5 +218,10 @@ export const pinProjectCover = (id: string, url: string | null) =>
   request<{ project: ProjectSummary }>("Couldn't set the cover.", `/api/projects/${encodeURIComponent(id)}/cover`, json('PUT', { url })).then((result) => result.project);
 /** `paramsVersion`: the one-time param upgrades the tab's canvas had when it
  * loaded (lib/savedParamsUpgrades.ts). The backend upgrades the copy from it. */
-export const recoverProject = (sourceProjectId: string, snapshot: ProjectSnapshot, recoveryId: string, paramsVersion: number) =>
-  request<ProjectActivation>("Couldn't recover the project.", '/api/projects/recover', json('POST', { sourceProjectId, snapshot, recoveryId, paramsVersion })).then((result) => result.project);
+/** `sourceName`: the project's name as this tab knew it, for a copy whose
+ * project is no longer listed (a restore took it away: GM r15 on PR #199,
+ * Q11), so the copy is "<name> (recovered)", not "Deleted project". */
+export const recoverProject = (sourceProjectId: string, snapshot: ProjectSnapshot, recoveryId: string, paramsVersion: number,
+  sourceName?: string) =>
+  request<ProjectActivation>("Couldn't recover the project.", '/api/projects/recover', json('POST', { sourceProjectId, snapshot, recoveryId, paramsVersion,
+    ...(sourceName ? { sourceName } : {}) })).then((result) => result.project);
