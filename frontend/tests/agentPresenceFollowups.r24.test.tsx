@@ -57,7 +57,7 @@ describe('GM r24: the toast beside the person-gate banner', () => {
     expect(live).toHaveLength(1);
   });
 
-  it('with no banner showing (dismissed), the toast is the full Q116a line', async () => {
+  it('with no banner showing (dismissed), the toast is the full Q116a line; Send note stays held (GM r27 item 2)', async () => {
     api.createPin.mockImplementation(async () => { session.reportPersonRequired(); throw gate(); });
     useCanvasPinsStore.getState().compose({ nodeId: 'n1' });
     render(<><PersonRequiredBanner /><PinComposer /></>);
@@ -66,7 +66,11 @@ describe('GM r24: the toast beside the person-gate banner', () => {
     await act(async () => { fireEvent.click(document.querySelector('.person-required button[aria-label="Dismiss"]')!); });
     expect(bannerText()).toBeNull();
     expect(toastText()).toBe(PERSON_REQUIRED_COPY);
-    expect(send().disabled).toBe(false);
+    // × hides the banner, not the condition: Send note waits with its reason.
+    expect(send().disabled).toBe(true);
+    expect(send().title).toBe(PIN_REFUSAL_COPY.sendWhenConnected);
+    await act(async () => { fireEvent.submit(field().closest('form')!); });
+    expect(api.createPin).toHaveBeenCalledTimes(1);
   });
 
   it('a surface with no banner at all says the full line', async () => {

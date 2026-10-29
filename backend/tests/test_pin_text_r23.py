@@ -270,3 +270,20 @@ def test_gm_r26_each_flag_arrives_whole_in_the_channel_push():
     assert f"  flags {FLAGS['gbeng']} {FLAGS['gbsct']} {FLAGS['gbwls']}\n  fake {BLACK} stray\n" in push.content
     kept = [ch for ch in push.content if "\U000E0020" <= ch <= "\U000E007F"]
     assert len(kept) == 3 * 6
+
+
+def test_review15_nit4_a_stray_zwj_never_reaches_the_raw_channel_push():
+    """Review 15 NIT 4 (fix round 18): round 17's shared agent_line drops a
+    ZWJ outside an RGI sequence in the raw channel push too (not only in
+    clean_text), and keeps the ones that join a family or a flag."""
+    from tests.test_mcp_channel import pin, resp, take
+
+    family = "\U0001F468‍\U0001F469‍\U0001F467"
+    state = mcp_channel.ChannelState(now=0.0)
+    note = f"x‍y {family} ‍\U0001F600‍\U0001F600 end‍\nnext‍ line {FLAGS['gbsct']}"
+    state.observe(resp(pin(1, text=note)), now=10.0)
+    push = take(state, 11.0)
+    assert push is not None
+    assert f"  xy {family} \U0001F600\U0001F600 end\n  next line {FLAGS['gbsct']}\n" in push.content
+    # Only the family's two joiners are left, anywhere in the push.
+    assert push.content.count("‍") == 2

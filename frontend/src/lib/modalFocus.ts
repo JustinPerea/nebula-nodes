@@ -118,3 +118,77 @@ export function holdNoticeTabbing(): () => void {
     if (noticeTabbing === 0) window.removeEventListener('keydown', noticeTab, true);
   };
 }
+
+/** A notice's own close control: every notice's × is a "Dismiss" button. */
+const NOTICE_DISMISS = 'button[aria-label="Dismiss"]';
+
+/** The notice that holds `node`: the region's item it belongs to (a slot's
+ * child, or the region's own), never the whole stack. */
+function noticeOf(node: Element): Element | null {
+  for (let at: Element | null = node; at; at = at.parentElement) {
+    const parent = at.parentElement;
+    if (!parent) return null;
+    if (parent.matches('[data-notice-slot]') || parent.matches(NOTICE_REGION)) return at;
+  }
+  return null;
+}
+
+/**
+ * GM r27 item 1 (PR #200 fix round 18): the one rule for Escape on a notice,
+ * whatever dialog is open (the note dialog, the palette, the mask painter,
+ * the shortcuts, onboarding, the comparison) or none. Escape with focus on a
+ * notice closes that notice only, as its × does (focus then follows the ×
+ * rule: the next notice's ×, else the open dialog's field), and never reaches
+ * the dialog. The nearest "Dismiss" inside that notice (a kept-note row's
+ * own) is the one pressed; a notice without one keeps the key and does
+ * nothing. Escape from inside a dialog is the dialog's own. NoticeRegion
+ * installs it (window, capture: before any dialog's document handler).
+ */
+export function noticeEscape(event: KeyboardEvent): void {
+  if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return;
+  const target = event.target;
+  if (!(target instanceof Element) || !inNoticeRegion(target)) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  const notice = noticeOf(target);
+  if (!notice) return;
+  for (let at: Element | null = target; at; at = at === notice ? null : at.parentElement) {
+    const dismiss = at.matches(NOTICE_DISMISS) ? at : at.querySelector(NOTICE_DISMISS);
+    if (dismiss instanceof HTMLElement && !dismiss.closest('[data-leaving]')) {
+      dismiss.click();
+      return;
+    }
+  }
+}
+
+/**
+ * Review 15 LOW-B (PR #200 fix round 18): a notice can be replaced rather
+ * than leave (Undo turns "Deleted the node." into "Restored the node." under a
+ * new key), so the button that had focus is simply gone and focus falls to
+ * <body>. With a dialog open, it goes where the last × sends it: the dialog's
+ * field (GM r27 item 3). Watches `region` for the focused notice control
+ * going away; returns a stop function.
+ */
+export function keepNoticeFocus(region: HTMLElement): () => void {
+  let held: Element | null = null;
+  const onFocusIn = (event: globalThis.FocusEvent) => { held = event.target instanceof Element ? event.target : null; };
+  const onFocusOut = (event: globalThis.FocusEvent) => {
+    // Focus moved somewhere real: nothing to keep.
+    if (event.relatedTarget instanceof Element) held = null;
+  };
+  const observer = new MutationObserver(() => {
+    if (!held || held.isConnected) return;
+    held = null;
+    const active = document.activeElement;
+    if (active && active !== document.body) return;
+    dialogStart(openModalDialog())?.focus();
+  });
+  region.addEventListener('focusin', onFocusIn);
+  region.addEventListener('focusout', onFocusOut);
+  observer.observe(region, { childList: true, subtree: true });
+  return () => {
+    region.removeEventListener('focusin', onFocusIn);
+    region.removeEventListener('focusout', onFocusOut);
+    observer.disconnect();
+  };
+}

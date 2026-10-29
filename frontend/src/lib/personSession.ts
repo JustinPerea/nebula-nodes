@@ -285,6 +285,31 @@ export function subscribePersonBanner(listener: () => void): () => void {
   return () => { personBannerListeners.delete(listener); };
 }
 
+/**
+ * GM r27 item 2 (PR #200 fix round 18): the banner's × hides the banner, not
+ * the condition. Whether this tab is known not to be connected as the person:
+ * set by any person-only refusal (PERSON_REQUIRED_EVENT, which also shows the
+ * banner), cleared only when a person link connects the tab. The note dialog
+ * holds Send note on it, so after × Send note stays disabled with its reason
+ * and never brings up the Q116a toast.
+ */
+let personGateHeldNow = false;
+const personGateListeners = new Set<() => void>();
+function setPersonGateHeld(held: boolean): void {
+  if (held === personGateHeldNow) return;
+  personGateHeldNow = held;
+  personGateListeners.forEach((listener) => listener());
+}
+export const personGateHeld = (): boolean => personGateHeldNow;
+export function subscribePersonGate(listener: () => void): () => void {
+  personGateListeners.add(listener);
+  return () => { personGateListeners.delete(listener); };
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener(PERSON_REQUIRED_EVENT, () => setPersonGateHeld(true));
+  window.addEventListener(PERSON_CONNECTED_EVENT, () => setPersonGateHeld(false));
+}
+
 /** Tell the canvas a person-only action was refused here (shows the banner). */
 export function reportPersonRequired(): void {
   if (typeof window === 'undefined') return;
@@ -311,6 +336,7 @@ if (typeof window !== 'undefined') {
 
 export function resetPersonSessionForTests(): void {
   setPersonBannerLine(null);
+  setPersonGateHeld(false);
   memoryCredential = null;
   desktopLookup = null;
   desktopReason = null;

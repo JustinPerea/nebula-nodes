@@ -3,10 +3,11 @@ import { PromptDialog, type PromptRequest } from '../PromptDialog';
 import { KEPT_FEWER, KEPT_SHOWN, keptMoreLabel, keptNoteDisplay, keptNoteLine, MAX_PIN_TEXT, noteLength, NOTE_KEPT_COPY, PIN_REFUSAL_COPY,
   pinDisplayText, pinTextSettled, pinTextSettling, type KeptNote } from '../../lib/canvasPins';
 import { useGraphStore } from '../../store/graphStore';
-import { personBannerShown, subscribePersonBanner } from '../../lib/personSession';
+import { personBannerShown, personGateHeld, subscribePersonBanner, subscribePersonGate } from '../../lib/personSession';
 import { useCurrentProjectId } from '../../lib/currentProject';
 import { getProjectContext } from '../../lib/projectContext';
 import { useCanvasPinsStore } from '../../store/canvasPinsStore';
+import { wsClient } from '../../lib/wsClient';
 import { useProjectStore } from '../../store/projectStore';
 import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 import { InNoticeRegion } from '../InNoticeRegion';
@@ -41,6 +42,9 @@ import '../../styles/canvasPins.css';
 /** The note's cap in the dialog: 280 shown characters, counted as the
  * backend counts them; "N left" from 30 left (GM r20 note 1). */
 const NOTE_CAP = { max: MAX_PIN_TEXT, count: noteLength, showAt: 30 };
+/** GM r27 item 4: how long a pin_node_gone refusal holds Send note while the
+ * canvas still shows the node and no sync has named it. */
+const NODE_GONE_RECHECK_MS = 5000;
 
 export function PinComposer() {
   const composer = useCanvasPinsStore((s) => s.composer);
@@ -60,7 +64,11 @@ export function PinComposer() {
   // opened, or came up while it was open), Send note waits, disabled in the
   // shared style with its reason; a refused send's toast then leaves the fix
   // to the banner.
-  const gateBanner = useSyncExternalStore(subscribePersonBanner, personBannerShown);
+  // GM r27 item 2: and after the banner's ×, while the tab still isn't
+  // connected as the person (× hides the banner, not the condition).
+  const bannerUp = useSyncExternalStore(subscribePersonBanner, personBannerShown);
+  const gateHeld = useSyncExternalStore(subscribePersonGate, personGateHeld);
+  const gateBanner = bannerUp || gateHeld;
   const lock = useCanvasLock();
   // Review 13 L-2: the dialog counts only once the Unicode data is in (its
   // own chunk, fetched as lib/canvasPins loads; a few milliseconds at most).
@@ -94,6 +102,20 @@ export function PinComposer() {
       targetRemoved();
     }
   }, [targetNode, nodeHere, targetGone, targetRemoved, targetReturned]);
+  // GM r27 item 4 (review 15 NIT 3): Nebula refused with pin_node_gone while
+  // the canvas still shows the node (its sync not in yet). Send note comes
+  // back on the next sync that names the node, or after 5 s, whichever is
+  // first; a sync that drops it leaves it disabled under the rule above.
+  useEffect(() => {
+    if (!targetGone || !nodeHere || targetNode === null || lostNode.current === targetNode) return;
+    const timer = window.setTimeout(() => {
+      if (useGraphStore.getState().nodes.some((node) => node.id === targetNode)) targetReturned();
+    }, NODE_GONE_RECHECK_MS);
+    const stop = wsClient.subscribe((event) => {
+      if (event.type === 'graphSync' && event.nodes.some((node) => (node as { id?: unknown })?.id === targetNode)) targetReturned();
+    });
+    return () => { window.clearTimeout(timer); stop(); };
+  }, [targetGone, nodeHere, targetNode, targetReturned]);
   // Re-renders on a project change; the key is the canvas's own (projectKey).
   const openId = useCurrentProjectId();
   const here = getProjectContext()?.id ?? openId ?? '';
@@ -137,7 +159,10 @@ export function PinComposer() {
   // GM r24: a send the person gate refused says only "Your note wasn’t
   // added." while the banner (which says how to fix it) shows; the full
   // Q116a line when it doesn't.
-  const errorLine = errorPersonGate && gateBanner ? PIN_REFUSAL_COPY.notAdded : error;
+  // The toast defers to the banner only while the banner shows (GM r24); once
+  // it's dismissed, a refused send's toast says the full Q116a line (GM r27
+  // item 2: "keep the full Q116a line"), and Send note stays held (gateBanner).
+  const errorLine = errorPersonGate && bannerUp ? PIN_REFUSAL_COPY.notAdded : error;
   const errorLeave = useLeave(errorLine && (errorProject === null || errorProject === here) ? errorLine : null);
 
   // Back to the newest two once no note is hidden (the next one kept starts

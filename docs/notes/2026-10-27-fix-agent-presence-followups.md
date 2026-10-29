@@ -2159,3 +2159,138 @@ GM r26 (head 1d59f730).
   reload. Shot: `fix17-channel-push-england-flag-whole-1440.png`. The md5
   check found one pair, the 5xx and no-answer toasts, which are meant to
   match.
+
+## Fix round 18
+
+Review 15 (of 1d59f730) and GM r27, on 33eb5e1c.
+
+- **GM r27 item 1: Escape on a notice.**
+  - Escape on a focused notice now closes that notice only, as its ×
+    would, and focus follows the × rule (the next notice's ×, or back into
+    the dialog). Escape from inside a dialog still closes the dialog.
+  - It is one shared rule, `lib/modalFocus.noticeEscape`, a window-capture
+    keydown handler that NoticeRegion installs. It runs before any
+    dialog's own handler and presses the notice's own "Dismiss", so the
+    note dialog, palette, mask painter, shortcuts, onboarding and
+    comparison can't drift from one another.
+  - Tests: `agentPresenceFollowups.r27.test.tsx`, in all six modals.
+  - Live (`r27`): the note dialog, shortcuts, palette and onboarding.
+- **Review 15 LOW-A.**
+  - The onboarding (`containUnfocusedKey`) and result comparison
+    (`containKey`) document-level handlers now return early for a key from
+    the notice region. Enter and Space press the notice's button, and
+    Shift+Tab leaves it.
+  - Test: no preventDefault, focus kept, and a real Shift keydown then
+    Tab goes into the dialog.
+  - Live: Enter on the banner's × in the tour presses it, and Shift-then-Tab
+    from the toast's × lands in the tour.
+  - The sweep of the other modal key handlers found the same gap in no
+    other dialog. Lightbox acts only inside its panel, and PresetLibrary,
+    ForgetRecoveryConfirm, WorldPreview and MeshPreview handle only Escape
+    and Tab, which `noticeEscape` and `noticeTab` now take first.
+  - One leftover: `?` pressed on a notice while the shortcuts dialog is
+    open still closes that dialog. Minor; not changed.
+- **Review 15 LOW-B and GM r27 item 3: focus after Undo.**
+  - CanvasUndoNotice remounts under `key={shown.id}`, so the focused Undo
+    button is removed and focus fell to the page.
+  - Fix: `lib/modalFocus.keepNoticeFocus` (installed by NoticeRegion)
+    watches for the focused notice element being disconnected while focus
+    is on the body, and then sends focus to the open dialog's field.
+  - Redo stays a Tab stop through the notice region.
+  - Unit test: starts with focus on Undo, then replaces the notice element.
+  - Live: the note dialog is open when an agent's edit lands. Undo, by
+    Enter and by mouse, undoes it, focus is in the note field, and Tab
+    reaches Redo.
+- **GM r27 item 2: × hides the banner, not the condition.**
+  - `personSession` keeps `personGateHeld`. Any person-only refusal sets
+    it, and it clears only when a person link connects the tab (the same
+    events that show and clear the banner).
+  - The note dialog holds Send note on `bannerUp || gateHeld`. After ×,
+    Send note stays disabled with "You can send notes when this tab is
+    connected as you.", so it never brings up the Q116a toast itself.
+  - A toast already up when × is pressed changes to the full Q116a line,
+    as before, and other refused actions keep that full line.
+  - Test: r24's dismissed case now expects Send note disabled with that
+    title, and a submit to send nothing.
+  - Live: r24 checks the same, and that Enter and a click send nothing.
+- **GM r27 item 4 (review 15 NIT 3).**
+  - After a `pin_node_gone` refusal while the canvas still shows the node,
+    Send note comes back on the next graphSync that names the node, or
+    after 5 s (`NODE_GONE_RECHECK_MS`), whichever is first.
+  - A sync that drops the node keeps it disabled under the removed-node
+    rule.
+  - No new copy.
+  - Tests: `agentPresenceFollowups.r27pin.test.tsx`, with fake timers.
+    They cover 4.9 s still disabled then live at 5 s, a sync for another
+    node changing nothing, a sync naming it reviving at once, and a sync
+    dropping it staying disabled past 10 s and then reviving when the node
+    returns.
+- **Review 15 NIT 2: the narrowLeftEdge ratchet.**
+  - Fixed false positive: rem and em are read as lengths (16 px base), so
+    `width: 0.25rem` passes.
+  - Now also caught:
+    - `zoom`;
+    - any `filter` or `backdrop-filter` other than `none`;
+    - an edge `::before` or `::after` sized past 4 px, or one repainting
+      the fill with `inherit` or `currentColor`;
+    - a side border the fill paints under (`background-clip` is
+      border-box by default), so a 200 px transparent `border-right` is a
+      finding unless the clip is padding-box or content-box.
+  - Corpus: ten new failing cases and five new passing ones. Against the
+    old helper, eight of the failing cases passed and the rem and em
+    widths were flagged.
+- **Review 15 NIT 4.**
+  - Confirmed: round 17's `plain()` runs `agent_line` first, so a stray ZWJ
+    never reaches the raw channel push.
+  - New test `test_review15_nit4_a_stray_zwj_never_reaches_the_raw_channel_push`
+    (a real ChannelState push). It fails when `plain()` skips `agent_line`.
+- **NIT 5:** left as is (GM).
+- **Round 17's fragment retry against a production build** (`vite build`,
+  then `vite preview` on 5795 with the backend on 8795):
+  - The data is its own chunk (`assets/pinTextUnicode-<hash>.js`).
+  - Blocked, the tab answers a 50 ms timer and the pin shows in the
+    fallback form.
+  - Unblocked, after the gap the next pins push fetches the same hashed URL
+    again, and both pins then show the registered 葛 variant. No notice,
+    alert or page error.
+  - Script: `scratchpad/agent-presence/fix18-prod/`. Shots:
+    `fix18-prod-chunk-blocked-fallback-1280.png` and
+    `fix18-prod-chunk-retry-loaded-1280.png`.
+- **LOW-C** was already fixed in round 17.
+- **MCP:** nothing agents see changed (the channel's output is the same;
+  NIT 4 is a test), so MCP-SETUP.md is unchanged.
+
+### Fix round 18 gates
+
+- Backend, the full suite (isolated, no xdist, `lg run --gate`): 11,803
+  passed, 71 skipped, none failed (6 min 36 s).
+- Frontend: `tsc -b` clean; `eslint .` clean.
+- Vitest, the full run with `--maxWorkers=6` (`--gate`): 582 files, 7,435
+  tests, all passed.
+- Mutation checks: with `noticeEscape` and `keepNoticeFocus` uninstalled
+  and the two LOW-A returns removed, all 9 tests in r27.test fail. Without
+  the NIT 3 effect, the two revive tests fail. Without `agent_line` in
+  `plain()`, the NIT 4 test fails.
+- Build into a scratch outDir: the entry is 426,627 bytes raw (130,904
+  gzip), under 512,000, and 96 JS assets are eval-free. Fonts: 53
+  @font-face rules, 13 woff2, 285,052 bytes.
+- Production build (`vite preview` on 5795): 4 of 4.
+- Live (backend 8795, Vite 5795, 8000-8010 and 5173 blocked): 105 of 105
+  on the last full run.
+  - The new r27 section: Escape in four modals, LOW-A in onboarding, and
+    LOW-B by Enter and by mouse. r24 now checks that Send note stays held
+    after ×.
+  - The harness clears the person gate where it only cleared the banner
+    (each section start, r14, and r24/r25/r27's `banner(false)`), since
+    the gate now outlives the banner.
+  - Intermittent: in full runs only, r23 sometimes opened the note dialog
+    on a node other than the one it then removes. The removed-node checks
+    then fail: 2 checks in one run, and an error in another where three
+    tries all missed. Over 4 full runs it failed or errored in 2. It never
+    happened in partial runs, and round 17's one full run passed.
+  - r23 now confirms the dialog's node, retries (Fit view in between) and
+    logs each try, with its target, the hit element and the selection, so
+    the cause shows next time. Not yet known: whether it's the harness's
+    click or the app's Note button acting on a stale selection.
+- md5: one duplicate pair, the 5xx and no-answer toasts, which are meant
+  to match.

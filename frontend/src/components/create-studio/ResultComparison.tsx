@@ -72,6 +72,10 @@ export function ResultComparison({ items, onClose, onReuseSettings }: ResultComp
     const containKey = (event: KeyboardEvent) => {
       // A modal dialog opened over the comparison owns the keys (review 8, L-d).
       if (keyBlockedByModal(panel)) return;
+      // Review 15 LOW-A (fix round 18): a notice's keys are its own (Enter
+      // and Space press its button, Tab and Shift+Tab: lib/modalFocus; Escape:
+      // GM r27, noticeEscape), never the comparison's.
+      if (inNoticeRegion(event.target)) return;
       // Keep global Canvas shortcuts out of the modal, including a body-level
       // event after browser focus loss. Native video/disclosure defaults remain.
       event.stopImmediatePropagation();

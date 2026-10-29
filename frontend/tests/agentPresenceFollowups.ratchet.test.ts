@@ -2355,7 +2355,27 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
       '.canvas-pin__edge { padding-right: 200px; }',
       '.canvas-pin__edge { transform: scaleX(80); }',
       '.canvas-pin__edge { inset-inline: 0; }',
+      // Review 15 NIT 2 (fix round 18): zoom, a blur, a pseudo-element
+      // repainting the fill, a wide border the fill paints under.
+      '.canvas-pin__edge { zoom: 40; }',
+      '.canvas-pin__edge { filter: blur(30px); }',
+      '.canvas-pin__edge { filter: drop-shadow(0 0 20px var(--pin-color)); }',
+      '.canvas-pin__edge::after { content: ""; position: absolute; top: 0; left: 0; width: 200px; height: 100%; background: inherit; }',
+      '.canvas-pin__edge::before { content: ""; position: absolute; inset: 0; background: inherit; }',
+      '.canvas-pin__edge:hover::after { content: ""; width: 12rem; }',
+      '.canvas-pin__edge { border-right: 200px solid transparent; background-clip: border-box; }',
+      '.canvas-pin__edge { border-right: 200px solid transparent; }',
+      '.canvas-pin__edge { border-width: 0 10em 0 0; border-style: solid; border-color: transparent; }',
+      '.canvas-pin__edge { width: 1rem; }',
     ]) expect(frameFindings(pinDelete, vars0, css), css).not.toEqual([]);
+    // The edge in other units, and borders the fill stops short of, stay the edge.
+    for (const css of [
+      '.canvas-pin__edge { width: 0.25rem; }',
+      '.canvas-pin__edge { width: 0.1875em; }',
+      '.canvas-pin__edge { zoom: 1; filter: none; }',
+      '.canvas-pin__edge { border-right: 200px solid transparent; background-clip: padding-box; }',
+      '.canvas-pin__edge { border-left: 1px solid transparent; }',
+    ]) expect(frameFindings(pinDelete, vars0, css), css).toEqual([]);
     // Resolved: the author's colour, with only its blue fallback.
     const resolvedDelete = { ...pinDelete, ancestors: [['div', ['canvas-pin', 'canvas-pin--resolved']], ['div', ['canvas-pin__card']]] as Array<[string, string[]]> };
     expect(frameFindings(resolvedDelete, vars0, '.canvas-pin--resolved .canvas-pin__edge { background: var(--agent-color, #ff5a1f); }')).not.toEqual([]);

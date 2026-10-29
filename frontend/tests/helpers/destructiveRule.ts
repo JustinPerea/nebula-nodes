@@ -925,22 +925,61 @@ export const STATUS_EDGE_MAX_PX = 4;
  * left edge only. In every state the edge is at most 4px wide, anchored by
  * `left`, never stretched by `inset`, `right` or an inline end, and never
  * widened by a min-width, padding, a transform or `scale`. (`inset: 0` with
- * the pin colour turned the whole card amber and still passed.)
+ * the pin colour turned the whole card amber and still passed.) Review 15
+ * NIT 2 (fix round 18): rem/em widths are read as lengths; `zoom`, a
+ * `filter`, a side border the fill paints under (background-clip:
+ * border-box, the default) and its ::before/::after (sized past 4px, or
+ * repainting the fill with `inherit`) widen it too.
  */
 export function narrowLeftEdge(styles: Map<string, { value: string }>): string | null {
+  // Review 15 NIT 2 (fix round 18): rem and em are lengths too (16px base),
+  // so `width: 0.25rem` is the 4px edge it is, not a finding.
   const px = (value: string) => {
-    const match = /^(-?\d*\.?\d+)px$/.exec(value.trim());
-    return match ? Number(match[1]) : value.trim() === '0' ? 0 : null;
+    const v = value.trim().toLowerCase();
+    if (v === '0') return 0;
+    const match = /^(-?\d*\.?\d+)(px|rem|em)$/.exec(v);
+    if (!match) return null;
+    return Number(match[1]) * (match[2] === 'px' ? 1 : 16);
+  };
+  const BORDER_KEYWORD: Record<string, number> = { thin: 1, medium: 3, thick: 5 };
+  const borderWidth = (part: string) => BORDER_KEYWORD[part.toLowerCase()] ?? px(part);
+  /** The width a border declaration paints on the left and right sides together. */
+  const horizontalBorder = (prop: string, value: string): number | null => {
+    const parts = value.trim().split(/\s+/);
+    if (/^border(?:-left|-right|-inline-start|-inline-end)?$/.test(prop) || prop === 'border-inline') {
+      // A shorthand: its one length (or keyword) is the side's width; none means medium's default only with a style.
+      const widths = parts.map(borderWidth).filter((n): n is number => n !== null);
+      if (/^(?:none|0)$/i.test(value.trim())) return 0;
+      const n = widths.length ? widths[0] : (parts.some((part) => /^(?:none|hidden)$/i.test(part)) ? 0 : 3);
+      return prop === 'border' || prop === 'border-inline' ? n * 2 : n;
+    }
+    if (/^border-(?:left|right|inline-start|inline-end)-width$/.test(prop)) return borderWidth(value.trim());
+    if (prop === 'border-inline-width') {
+      const [a, b = a] = parts.map(borderWidth);
+      return a === null || b === null ? null : a + b;
+    }
+    if (prop === 'border-width') {
+      const n = parts.map(borderWidth);
+      if (n.some((x) => x === null)) return null;
+      const right = n[1] ?? n[0]!;
+      const left = n[3] ?? right;
+      return right! + left!;
+    }
+    return 0;
   };
   let width = false;
   let left = false;
+  const borders = new Map<string, number>();
   for (const [key, winner] of styles) {
     const [state, prop] = key.split('|');
-    if (/::?(before|after)\b/.test(state)) continue;
     const value = winner.value.trim();
+    const pseudo = /::?(before|after)\b/.test(state);
+    // A pseudo-element painting the edge's own fill (inherit, currentColor)
+    // is a second edge with no width rule: it can't widen the first.
+    if (pseudo && /^background(?:-color)?$/.test(prop) && /\b(?:inherit|currentcolor)\b/i.test(value)) return `${state} ${prop} ${value}`;
     if (prop === 'width') {
       const n = px(value);
-      if (n === null || n > STATUS_EDGE_MAX_PX) return `width ${value}`;
+      if (n === null || n > STATUS_EDGE_MAX_PX) return `${state ? `${state} ` : ''}width ${value}`;
       if (state === '') width = true;
     } else if (prop === 'left' || prop === 'inset-inline-start') {
       if (state === '') left = true;
@@ -948,10 +987,32 @@ export function narrowLeftEdge(styles: Map<string, { value: string }>): string |
       if (prop === 'min-width' || prop === 'min-inline-size' || prop === 'inline-size') {
         const n = px(value);
         if (n === null || n > STATUS_EDGE_MAX_PX) return `${prop} ${value}`;
-      } else if (value !== 'auto') return `${prop} ${value}`;
+      } else if (value !== 'auto') {
+        // A pseudo-element anchored inside the edge (inset: 0) is only as wide as the edge.
+        if (!(pseudo && /^(?:inset|inset-inline|right|inset-inline-end)$/.test(prop) && px(value) === 0)) return `${prop} ${value}`;
+      }
     } else if (/^padding(?:-left|-right|-inline(?:-start|-end)?)?$/.test(prop)) {
       if (!value.split(/\s+/).every((part) => px(part) === 0)) return `${prop} ${value}`;
-    } else if ((prop === 'transform' || prop === 'scale') && value !== 'none') return `${prop} ${value}`;
+    } else if ((prop === 'transform' || prop === 'scale' || prop === 'zoom') && !/^(?:none|normal|1|100%)$/i.test(value)) {
+      return `${prop} ${value}`;
+    } else if ((prop === 'filter' || prop === 'backdrop-filter') && value !== 'none') {
+      // blur() and drop-shadow() paint the fill past the edge's 4px.
+      return `${prop} ${value}`;
+    } else if (/^border/.test(prop) && !/radius|color|style|image/.test(prop)) {
+      const n = horizontalBorder(prop, value);
+      if (n === null) return `${prop} ${value}`;
+      borders.set(state, Math.max(borders.get(state) ?? 0, n));
+    }
+  }
+  // A border widens the painted fill unless the background stops at the
+  // padding box (background-clip defaults to border-box): a 200px
+  // transparent border-right is a 203px amber bar.
+  for (const [state, n] of borders) {
+    if (n === 0) continue;
+    const clip = (styles.get(`${state}|background-clip`) ?? styles.get('|background-clip'))?.value.trim() ?? 'border-box';
+    if (/^(?:padding-box|content-box)$/.test(clip)) continue;
+    const own = px(styles.get(`${state}|width`)?.value ?? styles.get('|width')?.value ?? '0') ?? 0;
+    if (own + n > STATUS_EDGE_MAX_PX) return `${state ? `${state} ` : ''}border ${n}px with background-clip ${clip}`;
   }
   if (!width) return 'no width';
   if (!left) return 'no left';
