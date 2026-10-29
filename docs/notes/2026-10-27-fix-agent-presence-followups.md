@@ -2531,3 +2531,45 @@ From review 17 and GM r30 (both rounds' rulings applied verbatim).
     run.
 - md5: one duplicate pair, the 5xx and no-answer toasts, which are meant
   to match.
+
+## Fix round 21
+
+From GM r31 (round 20's visuals approved; Enter on an empty field doing
+nothing is OK, since Escape and Cancel still close).
+
+- **The heading cut steps back to a near word start (GM r31 nit).**
+  `wordCut` in lib/noteHeading uses `Intl.Segmenter` with `granularity:
+  'word'`. When the grapheme cut lands inside a word-like segment, it steps
+  back to that word's start if all three hold:
+  - the word is in a script that spaces its words;
+  - a whitespace segment comes before it;
+  - the start is at most `WORD_STEP_BACK` (8) graphemes back.
+
+  The cut then reads "A lighthouse prompt…”", and the trailing space is
+  dropped as before. Otherwise it stays the grapheme cut, which covers a
+  longer word, a one-word name, and a cut inside an emoji.
+  - Han, kana, Thai, Lao, Khmer, Myanmar and Tibetan never step back.
+  - Hangul doesn't either. Korean spaces its words, but GM said to leave
+    CJK as it is.
+  - A mixed name steps back only inside its spaced words. The live emoji
+    name ("… to 🇯🇵 and …") now ends after the flag ("… to 🇯🇵…”"), where
+    it used to end with "a…”".
+- **focus_visible_box.** The ratchet corpus keeps the reviewers' exact
+  form as a passing case, with a note: left open on purpose under GM r17
+  (kept in r31). An ancestor's keyboard ring belongs to the ring rule. No
+  behaviour change.
+- **Harness.** r30's Latin heading check also requires the cut to end at a
+  word's end.
+
+### Fix round 21 gates
+
+- Backend, the full suite (isolated, `lg run --gate`): 11,803 passed, 71
+  skipped, none failed. No backend change.
+- Frontend: `tsc -b` clean, `eslint .` clean.
+- Vitest, the full run (`--gate`): 589 files, 7,476 tests, all passed.
+- Every new test fails on 2eaec2a6: r31 has 4 of 4.
+- Build: the entry is 430,341 bytes raw (132,119 gzip). 96 JS assets are
+  eval-free. Fonts are OK.
+- Live (8795/5795, 8000-8010 and 5173 blocked):
+  - the r30 section passed 12 of 12;
+  - a full run passed 121 of 121.

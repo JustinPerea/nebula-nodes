@@ -2433,6 +2433,11 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
       '.probe-row { border-color: var(--sr-danger-edge); background: var(--sr-danger-tint); }',
       // A focus ring is the keyboard-ring rule's to judge, not a frame.
       '.probe-row:focus-visible { outline: 2px solid var(--sr-accent); }',
+      // focus_visible_box (reviews 13-17): left open on purpose (GM r17,
+      // kept in GM r31). An ancestor's own keyboard ring, even a warm one
+      // round a red control, belongs to the ring rule, so this check passes it.
+      // Closing it would reverse r17; that takes a new GM ruling.
+      'body.app-slava-restraint .probe-box:focus-visible { outline: 2px solid #ff5a1f; }',
     ]) expect(frameFindings(forget, vars0, css), css).toEqual([]);
     // A neutral control may sit in a warning box; only red ones are framed.
     expect(frameFindings({ ...forget, kind: 'neutral' }, vars0, '.probe-box { border: 1px solid #f5c518; }')).toEqual([]);
