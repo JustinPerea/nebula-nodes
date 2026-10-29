@@ -1479,8 +1479,10 @@ Rules:
   `/ws` socket (PR #200 fix round 16, review 14 LOW-1: only a socket whose
   `{type: "hello"}` carried the person's token gets the shown form; every
   other socket gets this form, on connect and on every push). The channel
-  push also drops every tag character from a note, so the England,
-  Scotland and Wales flags read there as a plain black flag. 280 ideographs
+  push applies the same rule to everything it quotes, a note or a one-line
+  field (PR #200 fix round 17, GM r26): the England, Scotland and Wales
+  flags arrive whole, a fake tag flag as a plain 🏴, and every other tag
+  character, a stray joiner or a selector not at all. 280 ideographs
   whose selectors spell an instruction reach you as 280 bare ideographs. Whitespace (and a byte order mark) at
   the ends of a note or reply is trimmed, and the note is stored trimmed;
   the spaces and blank lines inside are kept as typed and count. A note of

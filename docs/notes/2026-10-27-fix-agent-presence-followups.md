@@ -2083,3 +2083,79 @@ Done in the shared code, so every modal behaves the same.
   - and the earlier sections' shots under the fix16 prefix.
   The md5 check found only the two pairs that are meant to match (the 5xx
   and no-answer toasts; the float shot before and after undo).
+
+## Fix round 17
+
+GM r26 (head 1d59f730).
+
+- **The channel's flags (reverts round 16's NIT-1 change).** A bare 🏴 is a
+  different symbol from the England, Scotland or Wales flag, so agents must
+  get the three whole.
+  - `services/canvas_pins.agent_line(line)` is the one shared rule for what
+    draws nothing: `_agent_form(_plain(line))`, the same steps as
+    `agent_text` and the card's count, untrimmed.
+  - Under it, a tag run stays only as one of the three RGI tag sequences
+    with its cancel tag, and any other run goes, leaving a plain 🏴 or
+    nothing. A ZWJ stays only inside an RGI sequence, and no variation
+    selector survives.
+  - `mcp_channel.clean_text` now calls it in both modes rather than doing
+    its own stripping, so the channel, `agent_text` and the count can't
+    drift. Its unused `_variation_selector` is gone.
+  - Private-use and surrogate code points still drop.
+  - One-line fields (a summary, a reason) now keep a flag or a family whole
+    too, instead of losing every format character.
+  - MCP-SETUP.md is updated.
+  - Tests (`test_pin_text_r23.py`): the three flags whole in either mode;
+    a fake flag, or one without its cancel tag, as a plain 🏴; stray and
+    message tag runs dropped; a family whole; the channel equal to
+    `agent_line` on sample lines; and a real push (ChannelState) with all
+    three flags whole, 18 tag characters, theirs only.
+  - Live (`r26`): `mcp_server.py --channel` on 8795 over stdio, the person
+    pins a note, and the `notifications/claude/channel` push carries the
+    three flags whole and the fake one as 🏴. Shot:
+    `fix17-channel-push-england-flag-whole-1440.png`.
+- **GM's check on the failed IVD chunk.**
+  - *Treats E0100–E01EF as hidden, erring toward refusing.* Confirmed. With
+    the data missing, the IVD map is empty, so no ideographic selector
+    fits and each is hidden. A non-basic chain (a family) counts once per
+    emoji, so the dialog refuses sooner, never later. There was no test
+    for this, so `chunkFail.test.tsx` now has one.
+  - *Reloads the chunk the next time it's needed.* This was not true in
+    Chromium (Chrome and the Electron app). It keeps a failed `import()` in
+    its module map and rejects the same URL at once without a fetch, so the
+    round 16 retry could never succeed there. It also ran only once per tab
+    and never on opening the dialog. Now:
+    - every need retries: a pins push, `hydrate`, or `compose` (the dialog
+      opening). Attempts are at least `PIN_TEXT_RETRY_GAP_MS` (10 s) apart,
+      so a burst of pushes asks once.
+    - After a failure, the retry imports the URL the error names
+      (`failedModuleUrl` from lazyWithPreload) under a fresh fragment
+      (`#retry=…`): a new module-map key and the same request.
+    - It is not a fresh query, as lazyWithPreload uses for its JS chunks.
+      Checked live, the Vite dev server makes this JSON a module only for
+      exactly `?import` and serves the raw JSON for any other query
+      (`SyntaxError: Unexpected token ':'`).
+    - Safari names no URL, refetches anyway, and gets the plain import.
+    - Live (`r16chunk`): with the chunk blocked, the tab stays responsive.
+      Unblocked, the next pins push after the gap loads it, and the
+      registered 葛 variant then shows.
+  - *The person sees no error of their own.* Confirmed. The failure is
+    caught silently, nothing is logged, and no notice or alert shows. The
+    test now checks for no `console.error`, no notice or alert, and no store
+    error.
+
+### Fix round 17 gates
+
+- Backend, the full suite (isolated, no xdist, `lg run --gate`): 11,802
+  passed, 71 skipped, none failed (6 min 20 s).
+- Frontend: `tsc -b` clean; `eslint .` clean.
+- Vitest, the full run with `--maxWorkers=6` (`--gate`): 580 files, 7,423
+  tests, all passed.
+- Build into a scratch outDir: the entry is 425,047 bytes raw (130,461
+  gzip), under 512,000. The Unicode chunk is 101,320 B; 96 JS assets are
+  eval-free. Fonts: 53 @font-face rules, 13 woff2, 285,052 bytes.
+- Live (backend 8795, Vite 5795, 8000-8010 and 5173 blocked): 98 of 98, all
+  sections, including the new r26 (a real channel push) and r16chunk's
+  reload. Shot: `fix17-channel-push-england-flag-whole-1440.png`. The md5
+  check found one pair, the 5xx and no-answer toasts, which are meant to
+  match.

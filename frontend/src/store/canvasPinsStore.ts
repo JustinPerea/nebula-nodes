@@ -175,6 +175,8 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
   // switch and while offline, and nothing is sent.
   compose: (target) => {
     if (refuseCanvasEdit()) return;
+    // GM r26: the dialog needs the Unicode data; a failed chunk loads again.
+    retryPinText();
     // GM (2026-10-28 answer 1): the kept note, else the draft × or Esc left,
     // starts the dialog, on the project it was written in only. Elsewhere the
     // dialog starts empty, and the kept note's notice stays.

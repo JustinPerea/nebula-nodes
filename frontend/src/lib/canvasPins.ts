@@ -1,3 +1,4 @@
+import { failedModuleUrl } from './lazyWithPreload';
 import type { InternalNode, Node } from '@xyflow/react';
 import type { NodeData } from '../types';
 import { apiRequest } from './apiRequest';
@@ -150,21 +151,45 @@ let RGI_ZWJ_LONGEST = 1;
 let TAG_FLAGS = new Set<string>();
 // 'pending' until the import settles; 'failed' keeps the strict fallbacks
 // above (review 14 MEDIUM-1: every selector, tag run and chain hidden or
-// counted apart), and nothing waits on it any more.
+// counted apart, so the count errs toward refusing), and nothing waits on it
+// any more. Nothing is shown to the person for it (GM r26).
 let pinTextState: 'pending' | 'loaded' | 'failed' = 'pending';
-let pinTextRetried = false;
-const loadPinText = (): Promise<void> => import('./pinTextUnicode.json').then(({ default: data }) => {
-  const unicode = data as PinTextData;
-  ivd = ivdPairs(unicode.ivd);
-  mongolianLetter = within(unicode.mongolianLetters);
-  variationBases = new Map(Object.entries(unicode.variationBases).map(([selector, spans]) => [parseInt(selector, 16), within(spans)]));
-  RGI_ZWJ = new Set(unicode.rgiZwj);
-  RGI_ZWJ_LONGEST = unicode.rgiZwjLongest;
-  TAG_FLAGS = new Set(unicode.tagFlags);
+let pinTextError: unknown = null;
+let pinTextFailedAt = 0;
+/** The least time between two loads after a failure, so a burst of pin
+ * pushes asks for the chunk once, not once per push. */
+export const PIN_TEXT_RETRY_GAP_MS = 10_000;
+const applyPinText = (data: PinTextData) => {
+  ivd = ivdPairs(data.ivd);
+  mongolianLetter = within(data.mongolianLetters);
+  variationBases = new Map(Object.entries(data.variationBases).map(([selector, spans]) => [parseInt(selector, 16), within(spans)]));
+  RGI_ZWJ = new Set(data.rgiZwj);
+  RGI_ZWJ_LONGEST = data.rgiZwjLongest;
+  TAG_FLAGS = new Set(data.tagFlags);
   pinTextState = 'loaded';
-}, () => { pinTextState = 'failed'; });
+};
+// GM r26 check (fix round 17): after a failure, Chromium (Chrome, the
+// Electron app) keeps the failed import in its module map and rejects a
+// second import() at once, with no fetch. So a retry imports the chunk from
+// the URL the error names (lib/lazyWithPreload's failedModuleUrl) under a
+// fresh fragment: a new module-map key, the same request to the server. Not
+// a fresh query, as lazyWithPreload does for its JS chunks: the Vite dev
+// server turns this JSON into a module only for exactly `?import`, and
+// serves the raw JSON for any other query (checked live). Safari names no
+// URL and does fetch again, so it gets the plain import.
+let pinTextRetries = 0;
+const freshFragment = (url: string) => { pinTextRetries += 1; return `${url.split('#')[0]}#retry=${Date.now().toString(36)}${pinTextRetries}`; };
+const loadPinText = (): Promise<void> => {
+  const url = pinTextError === null ? undefined : failedModuleUrl(pinTextError);
+  const load = url ? (import(/* @vite-ignore */ freshFragment(url)) as Promise<{ default: unknown }>) : import('./pinTextUnicode.json');
+  return load.then(({ default: data }) => applyPinText(data as PinTextData), (error: unknown) => {
+    pinTextError = error;
+    pinTextFailedAt = Date.now();
+    pinTextState = 'failed';
+  });
+};
 let pinTextCurrent: Promise<void> = loadPinText();
-/** Resolves once the generated Unicode data's import settles, loaded or
+/** Resolves once the generated Unicode data's first import settles, loaded or
  * failed (it never rejects: a failed fetch leaves the strict fallbacks). */
 export const pinTextReady: Promise<void> = pinTextCurrent;
 /** The import under way now (a retry's, after a failure). */
@@ -174,11 +199,12 @@ export const pinTextIsLoaded = () => pinTextState === 'loaded';
 /** Whether its import has settled, loaded or failed: only a pending one is
  * waited for (review 14 MEDIUM-1: a settled failure re-queued forever). */
 export const pinTextSettled = () => pinTextState !== 'pending';
-/** After a failed import, try it once more (the next pin event or a
- * reconnect calls this); the strict fallbacks stand meanwhile. */
-export function retryPinText(): void {
-  if (pinTextState !== 'failed' || pinTextRetried) return;
-  pinTextRetried = true;
+/** The data is needed (a pins push, a hydrate, the note dialog opening):
+ * after a failed import, load it again, at most once per PIN_TEXT_RETRY_GAP_MS
+ * (GM r26: "reloads the chunk next time it's needed"). The strict fallbacks
+ * stand meanwhile; nothing waits on a failed one. */
+export function retryPinText(now: number = Date.now()): void {
+  if (pinTextState !== 'failed' || now - pinTextFailedAt < PIN_TEXT_RETRY_GAP_MS) return;
   pinTextState = 'pending';
   pinTextCurrent = loadPinText();
 }

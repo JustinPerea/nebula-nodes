@@ -448,6 +448,17 @@ def _agent_form(shown: str) -> str:
     return "".join(char for char in "".join(out) if not _variation_selector(ord(char)))
 
 
+def agent_line(line: str) -> str:
+    """One line of any text in agents' form, untrimmed: the shared rule for
+    what draws nothing (GM r26, PR #200 fix round 17). Control and format
+    characters go; a tag run stays only as the England, Scotland or Wales
+    flag with its cancel tag (any other goes, leaving a plain 🏴 or nothing);
+    a ZWJ stays only inside an RGI sequence; no variation selector. The
+    channel push (mcp_channel.clean_text) calls it, so it can't drift from
+    agent_text and the card's count."""
+    return _agent_form(_plain(line))
+
+
 def agent_text(raw: Any, *, multiline: bool = True) -> str:
     """Note or reply text as every agent-facing output carries it (GM r23):
     the shown form (shown_text) without variation selectors, and with a ZWJ
