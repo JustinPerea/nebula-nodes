@@ -38,10 +38,13 @@ _COORD_LIMIT = 1e7
 
 
 class PinError(Exception):
-    def __init__(self, status: int, detail: str) -> None:
+    def __init__(self, status: int, detail: str, extra: Mapping[str, Any] | None = None) -> None:
         super().__init__(detail)
         self.status = status
         self.detail = detail
+        # Beside `detail` in the answer, for agents (code, byte counts); the
+        # person reads only `detail` (GM r12 answer 3).
+        self.extra = dict(extra or {})
 
 
 def _iso(timestamp: float) -> str:
@@ -114,10 +117,48 @@ def shown_text(raw: Any, *, multiline: bool = True) -> str:
     return _shown(raw if isinstance(raw, str) else str(raw), multiline)
 
 
-# What the store keeps is the text as typed (GM r15 condition 1), bounded:
-# its shown form is capped at the limit, and the typed form at this many
-# times the limit (escape codes and controls pasted with it).
-RAW_TEXT_FACTOR = 4
+# GM r12 answer 3 (PR #200 fix round 11): only what shows counts against the
+# cap, in characters as a person sees them (grapheme clusters) of the shown
+# text, the same strip every output uses; the composer counts the same way
+# (frontend lib/canvasPins.ts noteLength), so the two never disagree. What the
+# shown form drops (escape codes, control and format characters) is the
+# hidden text: up to HIDDEN_TEXT_BYTES of it (UTF-8) is stored as typed.
+HIDDEN_TEXT_BYTES = 1120
+HIDDEN_TOO_LONG = "This note has too much hidden text to save. Paste it as plain text, then try again."
+HIDDEN_TOO_LONG_CODE = "note_hidden_too_long"
+# A cluster takes at most this many marks; past it each mark counts as a
+# character of its own, so 280 characters bound what is stored too.
+MAX_MARKS_PER_CHARACTER = 32
+
+
+def _extends(char: str) -> bool:
+    """A code point that joins the character before it: a combining mark
+    (Mn, Mc, Me, which covers the variation selectors) or an emoji skin tone."""
+    return unicodedata.category(char) in {"Mn", "Mc", "Me"} or "\U0001F3FB" <= char <= "\U0001F3FF"
+
+
+def _regional(char: str) -> bool:
+    return "\U0001F1E6" <= char <= "\U0001F1FF"
+
+
+def text_length(shown: str) -> int:
+    """Characters as a person sees them in already-shown text: a base and its
+    marks are one, two regional indicators (a flag) are one. The frontend's
+    noteLength is the same rule, code point for code point."""
+    count = 0
+    marks = 0
+    pending_flag = False
+    for char in shown:
+        if _extends(char) and count and marks < MAX_MARKS_PER_CHARACTER:
+            marks += 1
+            continue
+        if _regional(char) and pending_flag:
+            pending_flag = False
+            continue
+        count += 1
+        marks = 0
+        pending_flag = _regional(char)
+    return count
 
 
 def clean_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = False) -> str:
@@ -142,8 +183,13 @@ def clean_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = F
     text = _shown(raw, multiline)
     if not text:
         raise PinError(422, f"{label} can't be empty")
-    if len(text) > limit or len(raw) > limit * RAW_TEXT_FACTOR:
+    if text_length(text) > limit:
         raise PinError(422, f"{label} must be {limit} characters or fewer")
+    raw_bytes = len(raw.encode("utf-8", "surrogatepass"))
+    hidden = raw_bytes - len(text.encode("utf-8", "surrogatepass"))
+    if hidden > HIDDEN_TEXT_BYTES:
+        raise PinError(422, HIDDEN_TOO_LONG, {"code": HIDDEN_TOO_LONG_CODE, "rawBytes": raw_bytes,
+                                              "hiddenBytes": hidden, "limitBytes": HIDDEN_TEXT_BYTES})
     return text
 
 
@@ -440,7 +486,9 @@ class CanvasPins:
             else:
                 for key in _UNDO_KEYS:
                     pin.pop(key, None)
-            changed.append(copy.deepcopy(pin))
+            # Its public form (review 10 MEDIUM-1): the journal's pin.detached
+            # reads it, so its note is the shown text; the store keeps it as typed.
+            changed.append(public_pin(pin))
         return changed
 
     def detach_node(self, node_id: str, position: Any = None, removal: str | None = None,
@@ -502,7 +550,7 @@ class CanvasPins:
                 pin["detached"] = False
                 for key in ("detachedFrom", *_UNDO_KEYS):
                     pin.pop(key, None)
-                back_on.append(copy.deepcopy(pin))
+                back_on.append(public_pin(pin))  # pin.reattached journals it: shown text (review 10 MEDIUM-1)
             left.extend(pin_left(pin_id, DELETED_SINCE) for pin_id in named if pin_id not in seen)
             return {"reattached": back_on, "left": left}
 

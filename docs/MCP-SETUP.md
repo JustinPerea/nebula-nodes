@@ -1211,7 +1211,13 @@ port output) is Nebula's, not part of the scene you write. Since PR #200's
 fix round 9, a write that drops a shot keeps what it had. Since fix round 10,
 a later write gets it back only when the returning shot is the same shot:
 the same id with the same prompt and settings (every field but the run
-media), as the person's Undo of a shot's × sends it. A different shot that
+media), as the person's Undo of a shot's × sends it. Settings are compared
+by value (fix round 11): `1.0` matches `1` exactly (no rounding, and `true`
+is not `1`), key order doesn't count, a `null`, `{}` or `[]` is the same as
+the field missing, and a missing `prompt`, `refImageUrls` or `overrides` is
+its default (`""`, `[]`, `{}`). An override inside `overrides` has no
+default of its own (missing means the scene's), so a set one never matches
+a missing one. A different shot that
 reuses the id (yours, with a new prompt) starts idle, and the kept media is
 let go. Only the link goes: the generated files stay in the outputs folder.
 Nebula keeps the last 128 removed shots in memory only, until the canvas is
@@ -1451,8 +1457,12 @@ Rules:
   #200 fix round 10), and every place that shows one strips it: the API's
   pins, events and their summaries, the CLI, the channel push and the
   canvas. So what you read never carries a control byte (no C0 but `\n`, no
-  C1, no ESC). The 280 counts the text as shown; the text as typed may be up
-  to four times that, for codes pasted with it. A reply is one line (whitespace collapsed). A note keeps
+  C1, no ESC). The 280 counts only what shows: characters as a person sees
+  them (a letter with its accents, a flag) in the stripped text, the same
+  count the note dialog uses. What the strip drops is hidden text; up to
+  1,120 bytes of it (UTF-8) is kept as typed. Past that the note or reply is
+  refused (422) with `"code": "note_hidden_too_long"`, `rawBytes`,
+  `hiddenBytes` and `limitBytes` beside `detail`. A reply is one line (whitespace collapsed). A note keeps
   the lines the person wrote (Shift+Enter in the note dialog): its newlines
   reach agents as `\n` in `pins[].text` (look_at_canvas, start_here, the
   snapshot JSON). `nebula pins`, `nebula look` and `nebula start` print a

@@ -581,3 +581,63 @@ def test_r10_dropping_kept_media_never_deletes_a_file(authoring_client):
     graph.clear()
     assert all(item.read_bytes() == b"\x89PNG fixture" for item in files)
     assert set(before_listing) <= set(main.OUTPUT_ROOT.rglob("*"))
+
+
+# PR #200 fix round 11 (review 10 LOW-2, GM r12 answer 4): "settings match"
+# is value equality. 1.0 is 1 (exact, no epsilon); a missing field is its
+# default (no prompt is "", no refs are [], no overrides are {}), and a null,
+# {} or [] anywhere is the same as missing; key order never counts.
+
+def _remove_then_return(client, graph, stored_b: dict, returning_b: dict) -> dict:
+    graph.nodes["n1"]["params"]["scene"]["shots"][1].update(copy.deepcopy(stored_b))
+    before = copy.deepcopy(graph.nodes["n1"]["params"]["scene"])
+    assert client.put("/api/graph/node/n1", json={"params": {"scene": _authored(before, {"a"})}}).status_code == 200
+    back = _authored(before, {"a"})
+    back["shots"].append(returning_b)
+    assert client.put("/api/graph/node/n1", json={"params": {"scene": back}}).status_code == 200
+    return graph.nodes["n1"]["params"]["scene"]["shots"][1]
+
+
+def test_r11_an_agents_float_setting_matches_the_browsers_int(authoring_client):
+    """The reviewer's live case: an agent wrote contrast 1.0; the browser's
+    JSON round trip sends it back as 1. Same shot, so its media comes back."""
+    client, graph, _, _ = authoring_client
+    _with_media(graph)
+    stored = {"prompt": "Agent shot", "overrides": {"look": {"contrast": 1.0, "grain": 0.25}}}
+    assert isinstance(stored["overrides"]["look"]["contrast"], float)
+    shot_b = _remove_then_return(client, graph, stored,
+                                 {"id": "b", "overrides": {"look": {"grain": 0.25, "contrast": 1}}, "prompt": "Agent shot"})
+    assert {key: shot_b[key] for key in RUN_MEDIA} == RUN_MEDIA
+
+
+def test_r11_a_missing_field_matches_its_default_on_either_side(authoring_client):
+    client, graph, _, _ = authoring_client
+    _with_media(graph)
+    # Stored with the defaults written out; it comes back without them.
+    shot_b = _remove_then_return(client, graph,
+                                 {"prompt": "Keeper", "refImageUrls": [], "overrides": {"look": {}, "palette": None}, "note": None},
+                                 {"id": "b", "prompt": "Keeper"})
+    assert {key: shot_b[key] for key in RUN_MEDIA} == RUN_MEDIA
+    assert main._shot_authoring({"id": "b"}) == main._shot_authoring({"id": "b", "prompt": "", "refImageUrls": [], "overrides": {}})
+    assert main._shot_authoring({"id": "b", "prompt": "x"}) == main._shot_authoring({"prompt": "x", "id": "b", "overrides": {"look": {"contrast": None}}})
+
+
+def test_r11_value_equality_is_exact():
+    """No epsilon, a bool is not a number, and a set override never matches a
+    missing one (missing means "the scene's", not any number)."""
+    fp = main._shot_authoring
+    base = {"id": "b", "prompt": "p", "overrides": {"look": {"contrast": 1.0}}}
+    assert fp(base) == fp({"id": "b", "prompt": "p", "overrides": {"look": {"contrast": 1}}})
+    assert fp(base) != fp({"id": "b", "prompt": "p", "overrides": {"look": {"contrast": 1.0000001}}})
+    assert fp(base) != fp({"id": "b", "prompt": "p", "overrides": {"look": {"contrast": True}}})
+    assert fp(base) != fp({"id": "b", "prompt": "p"})
+    assert fp({"id": "b", "prompt": "p", "overrides": {"look": {"contrast": 0}}}) != fp({"id": "b", "prompt": "p"})
+    assert fp({"id": "b", "prompt": " p"}) != fp({"id": "b", "prompt": "p"})
+
+
+def test_r11_a_changed_float_is_still_a_different_shot(authoring_client):
+    client, graph, _, _ = authoring_client
+    _with_media(graph)
+    shot_b = _remove_then_return(client, graph, {"prompt": "Agent shot", "overrides": {"look": {"contrast": 1.0}}},
+                                 {"id": "b", "prompt": "Agent shot", "overrides": {"look": {"contrast": 1.5}}})
+    assert shot_b["output"] == {"status": "idle"} and "variations" not in shot_b

@@ -1266,3 +1266,116 @@ r16 (built as written).
   confirm, which look the same. The other matches across the whole folder
   are the same unchanged controls in round 8 and 9 crops, plus the shot
   removed state, which is the same as round 9's.
+
+## Fix round 11
+
+From ecb54ad4. Review 10 (1 MEDIUM, 2 LOW, 4 NIT) and GM's answers to its
+questions (gm-r12r10-answers.md items 3 to 5), built as written.
+
+- **MEDIUM-1, the journal's own fields.** `pin.detached` and
+  `pin.reattached` put the stored (raw) note in `data.text`: `_detach` and
+  `reattach` handed back the stored pin. They now hand back `public_pin`
+  (shown text, no undo keys); the store keeps the raw note and its undo
+  keys. The fuzz now covers both through the store (300 cases), and every
+  pin event (added, resolved, detached, reattached, removed) through the
+  routes, the journal and `GET /api/canvas/events` (60 cases each). Live:
+  the events route, `nebula watch --json` and MCP `wait_for_canvas_change`
+  return all four events for a raw note with no control byte, raw or
+  escaped.
+- **NIT-3.** `agent_start.pins_part` strips on its own (`shown_text`); in
+  the fuzz with raw pins.
+- **NIT-2, the cap (GM r12 answer 3).** Only what shows counts: characters
+  as a person sees them (a base and its marks, a flag of two regional
+  indicators, a skin tone) of the stripped text. The backend
+  (`canvas_pins.text_length`) and the dialog (`lib/canvasPins.ts
+  textLength`, `fitNote`) are the same rule, code point for code point,
+  with one shared table of cases. Decision: a character takes at most 32
+  marks, so 280 characters also bound the stored size (a Zalgo note can't
+  hide in one character). Past 1,120 bytes of hidden text (what the strip
+  drops, in UTF-8) the note is refused with GM's line, and the answer
+  carries `code: note_hidden_too_long`, `rawBytes`, `hiddenBytes` and
+  `limitBytes` beside `detail`. Over 280 shown keeps "280 characters or
+  fewer". Surprise: the store cut every note at 280 UTF-16 code units, sent
+  and received (a note of 280 flags arrived as 140, and a note with pasted
+  codes was cut before the backend could refuse it); both now go by what
+  shows. The dialog has no native maxLength now (it counted escape codes);
+  it trims a paste to 280 shown characters, the way maxLength did.
+- **LOW-1 (GM r17 item 1).** The off star hovers in neutral ink
+  (`--sr-ink-bold`, as the other icon buttons do); the on star is the
+  accent at rest and hovered. The ratchet checks a toggle twice: on, the
+  accent may mark its state; off (its state class gone), not in any state.
+  Round 10's shared rule is a corpus case it catches.
+- **LOW-2 (GM r12 answer 4).** The fingerprint compares by value: integral
+  floats are ints (exact, no epsilon; `true` stays `true`), a null, `{}` or
+  `[]` is the field missing, key order never counts, and a missing
+  `prompt`, `refImageUrls` or `overrides` is its default. Decision: an
+  override inside `overrides` has no default of its own (missing means "the
+  scene's"), so a set contrast never matches a missing one; GM's "contrast
+  defaults to 1" example has no shot-level default to apply. Live: the
+  reviewer's agent shot with `contrast: 1.0`, × then Cmd+Z, comes back done
+  with its 2 variations; nothing on disk is deleted.
+- **NIT-1 (GM r12 answer 5).** A hidden tab finishes a leave at once (at
+  its start, or the moment the tab hides). A visible, stalled leave
+  (late, paused, endless) waits out what it has left, up to 2.3 s from its
+  start, then finishes with the reduced-motion fade (140 ms, ease-out) from
+  where it stands, never a hard cut; the item unmounts and the space closes
+  when that fade ends. Decision: focus still moves as the leave starts (GM
+  r16 answer 2, review 8 NIT-2): the leaving item is inert from its first
+  frame, so focus left on it would drop to `<body>`; the layout hand-off
+  (unmount, the stack closing up) is what waits for the exit to finish.
+- **NIT-4, the ratchet's label forms.** It reads an object's property
+  (`L.del`), a function's return (`label()`, the call that is the label
+  itself, not its arguments, and only on a button), an i18n key's words
+  with short forms spelled out (`btn.rm` is "btn remove"), markup in
+  `dangerouslySetInnerHTML`, an icon-only control's icon and handler names
+  (`<Trash2 />`, `deleteProject`), a component imported from a file outside
+  the set (read from disk), and menu item objects with any label form and
+  any handler name. 72 controls on the real tree, no new findings. Not
+  done: a colour that reaches a control only through `inherit` from an
+  accented parent in a static rule; the cascade pass checks the real
+  controls that way.
+- **#198 follow-up (from round 10).** The Projects stack needs GM r16 answer
+  2's focus rule; that is #198's change.
+
+### Fix round 11 gates
+
+- tsc -b: clean. Full lint: clean.
+- Full vitest (`--maxWorkers=6`): 7294 of 7298. All 4 failures were
+  timeouts, in 3 files (commonsEvaluation, modalStyles.round11,
+  PlaceholderRunDialog.round12), none touched here; rerun alone, the 3
+  files pass (14 of 14).
+- Full backend suite (no xdist): 11,746 passed, 71 skipped, 0 failed
+  (26 min).
+- vite build plus check-build-budget and check-built-fonts: 416,723 B raw
+  (+1,234 on ecb54ad4, as review 10 measured it: the note count and the
+  stalled-leave fade) and
+  127,110 B gzip; 13 woff2 files, no font CDN.
+- Live (backend 8795, Vite 5795, nothing paid). r11: 12 of 12 after two
+  fixes to the harness and one to the code. The hidden-tab check timed
+  the timer, not the removal (it now polls frames: gone 17 ms after the
+  tab hid). The refusal toast was missing because the store cut the note
+  at 280 code units before sending it (the store fix above). Then exits,
+  openlist, undo, colours, leave9 and r10: 42 of 42.
+  - Events route, `nebula watch --json` and MCP `wait_for_canvas_change`
+    all return pin.added, resolved, detached and reattached for a raw note
+    with no control byte, raw or escaped. pin.detached `data.text` reads
+    "look red and / c1  end / … / line  two".
+  - Hidden-text refusal: 422 with the code, rawBytes 1,207, hiddenBytes
+    1,205 and limitBytes 1,120 beside the detail. The toast reads
+    "Couldn't save the note. This note has too much hidden text to save.
+    Paste it as plain text, then try again."
+  - The dialog keeps 280 flags (560 code units), keeps 60 escape codes
+    plus 280 letters, and stops plain text at 280. It has no native
+    maxLength.
+  - Star: off is rgba(255,255,255,0.2) at rest and white on hover; on is
+    the accent at rest and on hover.
+  - Paused leave: gone at 2,495 ms, fading from 0.34 to 0 at a held scale
+    over its last frames, not cut. A hidden tab finishes the exit at once.
+  - The reviewer's contrast 1.0 shot, × then Cmd+Z: done, 2 variations,
+    contrast 1. No file on disk is gone.
+- Shots: 66 fix11 shots, each looked at. Byte-identical pairs:
+  - The float shot before and after Undo. The scene is the same state,
+    and the header reads "Saved" in both.
+  - The neutral resets' hover and pressed crops. Nothing changes when
+    pressed.
+  - The key row's Remove and the armed Remove. They look the same.

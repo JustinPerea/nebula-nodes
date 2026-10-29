@@ -2073,8 +2073,15 @@ body.app-slava-restraint .inspector__favorite-button {
   transition: color var(--sr-motion-fast), transform var(--sr-motion-fast);
 }
 
-body.app-slava-restraint .inspector__favorite-button:hover,
-body.app-slava-restraint .inspector__favorite-button--active {
+/* An off star brightens in neutral ink on hover, as the other icon buttons
+   do; only the on state is the accent, hovered or not, so hover never looks
+   like "on" (GM r17 item 1, review 10 LOW-1 of PR #200). */
+body.app-slava-restraint .inspector__favorite-button:hover:not(.inspector__favorite-button--active) {
+  color: var(--sr-ink-bold);
+}
+
+body.app-slava-restraint .inspector__favorite-button--active,
+body.app-slava-restraint .inspector__favorite-button--active:hover {
   color: var(--sr-accent);
 }
 

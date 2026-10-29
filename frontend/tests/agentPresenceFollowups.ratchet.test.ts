@@ -2358,4 +2358,47 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
     // A red class with nothing red behind it.
     expect(notRedFindings({ ...before, classes: ['x__action--delete'] })).not.toEqual([]);
   });
+
+  it('review 10 NIT-4: the label forms it missed are read', () => {
+    const found = (tsx: string, file = 'probe.tsx') => controlsIn(tsx, file).map((c) => c.name);
+    expect(found('const L = { del: "Delete" }; const A = () => <button className="x__go" aria-label={L.del}>x</button>;')).toEqual(['Delete']);
+    expect(found('const label = () => "Delete"; const A = () => <button className="x__go" aria-label={label()}>x</button>;')).toEqual(['Delete']);
+    expect(found('function label() { if (a) return "Deleting…"; return "Delete"; } const A = () => <button className="x__go">{label()}</button>;')).toEqual(['Deleting… Delete']);
+    expect(found('const A = () => <button className="x__go" aria-label={t("btn.rm")}>x</button>;')).toEqual(['btn remove']);
+    expect(found('const A = () => <button className="x__go" aria-label={t("actions.delete_project")}>x</button>;')).toEqual(['actions delete project']);
+    // Icon-only, no words a person reads: its icon or its handler names it.
+    expect(found('const A = () => <button className="x__go" onClick={() => deleteProject(id)}><Trash2 /></button>;')).toEqual(['Trash']);
+    expect(found('const A = () => <button className="x__go" onClick={() => deleteProject(id)}><X /></button>;')).toEqual(['delete Project']);
+    expect(found('const A = ({ name }) => <button className="x__go" title={`${name}`} onClick={wipeIt}><Ban /></button>;')).toEqual(['wipe It']);
+    expect(found('const A = () => <button className="x__go" dangerouslySetInnerHTML={{ __html: "<b>Delete</b>" }} />;')).toEqual(['Delete']);
+    // A component imported from a file outside the set is read from disk (CopyValueButton forwards its label).
+    expect(found('import { CopyValueButton } from "./ExpandableBlock"; const A = () => <CopyValueButton label="Delete it" text={() => ""} />;',
+      'components/nodes/Probe.tsx')).toEqual(['Delete it']);
+    // A menu item object, any label form, any handler name.
+    expect(menuItemFindings('const items = [{ label: "Delete", onSelect: del }];', 'p.tsx')).not.toEqual([]);
+    expect(menuItemFindings('const L = () => "Delete"; const items = [{ label: L(), onClick: del }];', 'p.tsx')).toEqual([]);
+    expect(menuItemFindings('const items = [{ label: "Delete", onSelect: del, danger: true }];', 'p.tsx')).toEqual([]);
+    // Still quiet: a bare ×, a card's content, a call's arguments.
+    expect(found('<button className="chip__remove">×</button>')).toEqual([]);
+    expect(found('const A = () => <button className="x__go" aria-label={nameOf(removedNode())}>x</button>;')).toEqual([]);
+  });
+
+  it('review 10 LOW-1 (GM r17 item 1): a toggle may be the accent only when on; off, hovering it can\'t look on', () => {
+    const vars0 = customProperties(appCss());
+    const star = { file: 'p.tsx', line: 1, name: 'Remove from favorites', kind: 'neutral' as const, toggle: true,
+      classes: ['x__star', 'x__star--active', 'x__favorite-remove'], ancestors: [] };
+    // Round 10's rule: hover and on shared the accent.
+    const shared = 'body.app-slava-restraint .x__star:hover, body.app-slava-restraint .x__star--active { color: var(--sr-accent); }';
+    expect(cascadeFindings(star, vars0, shared).some((f) => / \(off\) :hover color: /.test(f))).toBe(true);
+    expect(cascadeFindings(star, vars0, shared).some((f) => / \(on\) /.test(f))).toBe(false);
+    // Split: off hovers in neutral ink, on is the accent hovered or not.
+    const split = 'body.app-slava-restraint .x__star:hover:not(.x__star--active) { color: var(--sr-ink-bold); }'
+      + ' body.app-slava-restraint .x__star--active, body.app-slava-restraint .x__star--active:hover { color: var(--sr-accent); }';
+    expect(cascadeFindings(star, vars0, split)).toEqual([]);
+    // The real star.
+    const real = appControls().filter((c) => c.file === 'components/panels/Inspector.tsx' && c.toggle);
+    expect(real.length).toBeGreaterThan(0);
+    for (const control of real) expect(cascadeFindings(control, vars0)).toEqual([]);
+    expect(real.every((c) => c.classes.includes('inspector__favorite-button--active'))).toBe(true);
+  });
 });

@@ -12,7 +12,7 @@ const api = vi.hoisted(() => ({
 vi.mock('../src/lib/wsClient', () => ({
   wsClient: { subscribe: (handler: (event: unknown) => void) => { ws.handlers.push(handler); return () => {}; } },
 }));
-vi.mock('../src/lib/canvasPins', () => ({ ...api, MAX_PIN_TEXT: 280 }));
+vi.mock('../src/lib/canvasPins', async (importOriginal) => ({ ...await importOriginal<typeof import('../src/lib/canvasPins')>(), ...api, MAX_PIN_TEXT: 280 }));
 
 const { useCanvasPinsStore } = await import('../src/store/canvasPinsStore');
 

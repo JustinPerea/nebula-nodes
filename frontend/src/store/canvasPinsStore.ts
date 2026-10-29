@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { wsClient, type CanvasPinsEvent, type Pin } from '../lib/wsClient';
-import { createPin, deletePin, fetchPins, MAX_PIN_TEXT, noteKeptLine, type KeptNote } from '../lib/canvasPins';
+import { createPin, deletePin, fetchPins, fitNote, noteKeptLine, type KeptNote } from '../lib/canvasPins';
 import { currentProject } from '../lib/currentProject';
 import { failureMessage, RequestFailedError } from '../lib/errorCopy';
 import { refuseCanvasEdit } from '../lib/canvasLock';
@@ -81,7 +81,8 @@ function sanitize(raw: unknown): Pin | null {
   const agent = reply?.agent as Record<string, unknown> | undefined;
   return {
     id: pin.id,
-    text: pin.text.slice(0, MAX_PIN_TEXT),
+    // Bounded as the backend counts it (fix round 11: what shows, not code units).
+    text: fitNote(pin.text),
     anchor: safeAnchor,
     position: position && finite(position.x) && finite(position.y) ? { x: position.x, y: position.y } : null,
     status: pin.status === 'resolved' ? 'resolved' : 'open',
@@ -167,7 +168,10 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
     if (refuseCanvasEdit()) return false;
     try {
       // For the canvas it was written on (round 23): never the one open now.
-      const pin = sanitize(await createPin(trimmed.slice(0, MAX_PIN_TEXT), target, canvas));
+      // Whole: the dialog already holds it to 280 shown characters, and the
+      // backend refuses past that (fix round 11: a slice by code units cut a
+      // note of flags or pasted codes, and sent the hidden-text refusal nothing).
+      const pin = sanitize(await createPin(trimmed, target, canvas));
       set((state) => ({
         composer: null,
         composerCanvas: null,

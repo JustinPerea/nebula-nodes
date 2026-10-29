@@ -36,7 +36,13 @@ describe('PinComposer', () => {
     api.createPin.mockResolvedValue(pin('warmer'));
     render(<PinComposer />);
     const input = screen.getByRole('textbox', { name: 'Note for agents' }) as HTMLTextAreaElement;
-    expect(input.maxLength).toBe(280);
+    // Fix round 11 (GM r12 answer 3): only what shows counts, so no native
+    // maxLength (it counts escape codes); the dialog trims to 280 shown characters.
+    expect(input.maxLength).toBe(-1);
+    fireEvent.change(input, { target: { value: 'x'.repeat(290) } });
+    expect(input.value).toBe('x'.repeat(280));
+    fireEvent.change(input, { target: { value: `${'\x1b[31m'.repeat(40)}${'y'.repeat(280)}` } });
+    expect(input.value).toBe(`${'\x1b[31m'.repeat(40)}${'y'.repeat(280)}`);
     fireEvent.change(input, { target: { value: '  warmer  ' } });
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Send note' }));

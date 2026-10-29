@@ -115,6 +115,54 @@ export function pinDisplayText(text: string | null | undefined, { multiline = tr
   return fold ? joined.replace(/\n(?:\n)+/g, '\n') : joined;
 }
 
+// GM r12 answer 3 (PR #200 fix round 11): only what shows counts against
+// the 280, in characters as a person sees them, of the shown text. The same
+// rule as the backend's services/canvas_pins.text_length, code point for
+// code point, so the dialog's limit and the backend's refusal never disagree:
+// a base and its marks (\p{M}: Mn, Mc, Me, the variation selectors too) or an
+// emoji skin tone are one character, up to 32 marks; two regional indicators
+// (a flag) are one.
+const MAX_MARKS_PER_CHARACTER = 32;
+const joinsBefore = (char: string) => {
+  const code = char.codePointAt(0) ?? 0;
+  return /\p{M}/u.test(char) || (code >= 0x1f3fb && code <= 0x1f3ff);
+};
+const regional = (char: string) => { const code = char.codePointAt(0) ?? 0; return code >= 0x1f1e6 && code <= 0x1f1ff; };
+
+/** Characters as a person sees them in already-shown text. */
+export function textLength(shown: string): number {
+  let count = 0;
+  let marks = 0;
+  let pendingFlag = false;
+  for (const char of shown) {
+    if (joinsBefore(char) && count && marks < MAX_MARKS_PER_CHARACTER) { marks += 1; continue; }
+    if (regional(char) && pendingFlag) { pendingFlag = false; continue; }
+    count += 1;
+    marks = 0;
+    pendingFlag = regional(char);
+  }
+  return count;
+}
+
+/** What a typed note counts against the cap: its shown form's characters. */
+export function noteLength(text: string): number {
+  return textLength(pinDisplayText(text, { fold: false }));
+}
+
+/** The longest start of `text` (whole code points) that fits the cap: the
+ * note dialog's limit, the way maxLength trims a paste, counted as above. */
+export function fitNote(text: string, limit: number = MAX_PIN_TEXT): string {
+  if (noteLength(text) <= limit) return text;
+  const points = Array.from(text);
+  let low = 0;
+  let high = points.length;
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    if (noteLength(points.slice(0, mid).join('')) <= limit) low = mid; else high = mid - 1;
+  }
+  return points.slice(0, low).join('');
+}
+
 /** A kept note as its notice shows it (GM, PR #200 round 5 answer 5): its
  * own line breaks, clamped to 2 lines by CSS, with each run of blank lines
  * (and a line of only spaces) collapsed to one break, so the two lines show

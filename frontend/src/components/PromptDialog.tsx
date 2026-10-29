@@ -12,11 +12,15 @@ export interface PromptRequest {
 }
 
 /** Shared text-entry dialog for browser and desktop workflows. */
-export function PromptDialog({ request, onDone, maxLength, onChange, confirm, onRefused, multiline = false, confirmLabel = 'OK' }: {
+export function PromptDialog({ request, onDone, maxLength, fit, onChange, confirm, onRefused, multiline = false, confirmLabel = 'OK' }: {
   request: PromptRequest;
   onDone: (value: string | null) => void;
   /** Optional cap passed to the input (e.g. 280 for notes to agents). */
   maxLength?: number;
+  /** A cap the field can't count itself (the note's: only what shows counts,
+   * PR #200 fix round 11): each change goes through it, the way maxLength
+   * trims a paste. */
+  fit?: (value: string) => string;
   /** Each change of the text (the note dialog keeps it: round 23 of PR #195). */
   onChange?: (value: string) => void;
   /** The OK button's state when something else decides it (the canvas lock's
@@ -51,7 +55,8 @@ export function PromptDialog({ request, onDone, maxLength, onChange, confirm, on
     return () => { if (previous instanceof HTMLElement && previous.isConnected) previous.focus(); };
   }, [multiline]);
 
-  const change = (next: string) => {
+  const change = (typed: string) => {
+    const next = fit ? fit(typed) : typed;
     setValue(next);
     onChange?.(next);
   };

@@ -24,10 +24,15 @@ export function runsLeave(element: Element | null): boolean {
   return leaves(element).length > 0;
 }
 
-/** Slack past a leave's own end before the fallback ends it. */
+/** Slack past a leave's own end before the fallback looks again. */
 export const LEAVE_SLACK_MS = 250;
 /** How many times the fallback waits again for a leave still running. */
 export const MAX_REARMS = 8;
+/** How long a visible leave may stall (running late, paused, never ending)
+ * before it finishes with the reduced-motion fade (GM r12 answer 5). */
+export const STALL_LIMIT_MS = 2300;
+/** The reduced-motion fade a stalled leave finishes with (noticeRegion.css notice-fade-out). */
+export const STALL_FADE_MS = 140;
 
 /** The longest time any of `animations` has left, from now. */
 function timeLeft(animations: Animation[]): number {
@@ -42,48 +47,82 @@ function timeLeft(animations: Animation[]): number {
   return Math.max(0, left);
 }
 
+const unfinished = (animation: Animation) => animation.pending || animation.playState === 'running' || animation.playState === 'paused';
+const tabHidden = () => typeof document !== 'undefined' && document.visibilityState === 'hidden';
+
 /**
- * Review 8 NIT-1: a leave also ends when its animation is cancelled (by a
- * style change or by script) or, if no event comes at all, once its time is
- * up plus LEAVE_SLACK_MS, so an item is never left mounted, inert and
- * half-gone. Returns the cleanup.
+ * How a leave ends, whatever happens to its animation (review 8 NIT-1,
+ * review 9 LOW-3, review 10 NIT-1, GM r12 answer 5):
+ * - It ends on its own animationend (the caller's onAnimationEnd), or at
+ *   once when its animation is cancelled (by a style change or by script).
+ * - The tab hidden (now or during the leave): it finishes at once; nobody
+ *   sees it, and a hidden tab's timers and frames are throttled.
+ * - Visible but stalled (a late first frame, a blocked main thread, a paused
+ *   or endless animation): the fallback waits out the time it has left, up
+ *   to STALL_LIMIT_MS from the start, then finishes it with the
+ *   reduced-motion fade from where it stands, never a hard cut.
+ * `end` (the item unmounts, the space closes) runs when the exit finishes.
+ * Returns the cleanup.
  */
 export function watchLeave(element: HTMLElement, end: () => void): () => void {
   const running = leaves(element);
+  const started = Date.now();
   let ended = false;
   let rearms = 0;
   let timer = 0;
-  const finish = () => { if (!ended) { ended = true; end(); } };
-  const arm = () => { timer = window.setTimeout(check, timeLeft(running) + LEAVE_SLACK_MS); };
-  // Review 9 LOW-3: the time left is read as of now. A leave whose first
-  // frame came late (a blocked main thread, slowed animations) is still
-  // running when the timer fires: the timer waits out what it has left
-  // instead of cutting it short. A paused or stuck one ends after
-  // MAX_REARMS waits.
+  let fade: Animation | null = null;
+  const finish = () => { if (!ended) { ended = true; stop(); end(); } };
+  const arm = (delay: number) => { window.clearTimeout(timer); timer = window.setTimeout(check, delay); };
+  const onCancel = (event: Event) => {
+    if (event.target === element && isLeave((event as globalThis.AnimationEvent).animationName)) finish();
+  };
+  const onVisibility = () => { if (tabHidden()) finish(); };
+  const listen = (on: boolean) => {
+    // A style change that drops the animation fires animationcancel on the
+    // element; Animation.cancel() from script fires only the animation's own
+    // cancel event (Chrome, live), so both are heard.
+    const method = on ? 'addEventListener' : 'removeEventListener';
+    element[method]('animationcancel', onCancel);
+    for (const animation of running) animation[method]?.('cancel', finish);
+  };
+  const stop = () => {
+    listen(false);
+    document.removeEventListener('visibilitychange', onVisibility);
+    window.clearTimeout(timer);
+  };
+  const fadeOut = () => {
+    // From where it stands: its look now, held while only the opacity goes.
+    const style = getComputedStyle(element);
+    const from = { opacity: style.opacity, transform: style.transform === 'none' ? 'none' : style.transform };
+    listen(false);
+    for (const animation of running) animation.cancel();
+    if (typeof element.animate !== 'function') { finish(); return; }
+    fade = element.animate([from, { opacity: '0', transform: from.transform }], { duration: STALL_FADE_MS, easing: 'ease-out', fill: 'forwards' });
+    fade.addEventListener('finish', finish);
+    fade.addEventListener('cancel', finish);
+    // Its own fallback: the fade's time plus the slack, then it's done.
+    arm(STALL_FADE_MS + LEAVE_SLACK_MS);
+  };
   const check = () => {
     if (ended) return;
-    if (rearms < MAX_REARMS && running.some((animation) => animation.playState === 'running' || animation.pending)) {
-      rearms += 1;
-      arm();
+    if (fade || tabHidden()) { finish(); return; }
+    const waited = Date.now() - started;
+    if (running.some(unfinished)) {
+      if (waited < STALL_LIMIT_MS && rearms < MAX_REARMS) {
+        rearms += 1;
+        arm(Math.min(timeLeft(running) + LEAVE_SLACK_MS, Math.max(16, STALL_LIMIT_MS - waited)));
+      } else {
+        fadeOut();
+      }
       return;
     }
     finish();
   };
-  const onCancel = (event: Event) => {
-    if (event.target === element && isLeave((event as globalThis.AnimationEvent).animationName)) finish();
-  };
-  // A style change that drops the animation fires animationcancel on the
-  // element; Animation.cancel() from script fires only the animation's own
-  // cancel event (Chrome, live), so both are heard.
-  element.addEventListener('animationcancel', onCancel);
-  for (const animation of running) animation.addEventListener?.('cancel', finish);
-  arm();
-  return () => {
-    ended = true;
-    element.removeEventListener('animationcancel', onCancel);
-    for (const animation of running) animation.removeEventListener?.('cancel', finish);
-    window.clearTimeout(timer);
-  };
+  if (tabHidden()) { queueMicrotask(finish); return () => { ended = true; }; }
+  listen(true);
+  document.addEventListener('visibilitychange', onVisibility);
+  arm(timeLeft(running) + LEAVE_SLACK_MS);
+  return () => { ended = true; stop(); fade?.removeEventListener('finish', finish); };
 }
 
 // A notice's ×: every notice labels it "Dismiss…".

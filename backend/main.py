@@ -6436,8 +6436,24 @@ def _undo_extras_text(result: Mapping[str, Any]) -> str:
     return ("; ".join(parts) + ".") if parts else ""
 
 
+class PinRefusal(HTTPException):
+    """A pin route's refusal: ``detail`` for the person, and the PinError's
+    extra fields (``code``, byte counts) beside it for agents (GM r12 answer
+    3 of PR #200: the hidden-text refusal names note_hidden_too_long, the
+    raw byte count and the limit; the person's line never does)."""
+
+    def __init__(self, exc: PinError) -> None:
+        super().__init__(status_code=exc.status, detail=exc.detail)
+        self.extra = exc.extra
+
+
+@app.exception_handler(PinRefusal)
+async def pin_refusal(request, exc: PinRefusal):
+    return JSONResponse(status_code=exc.status_code, content={**exc.extra, "detail": exc.detail})
+
+
 def _pin_http_error(exc: PinError) -> HTTPException:
-    return HTTPException(status_code=exc.status, detail=exc.detail)
+    return PinRefusal(exc)
 
 
 @app.get("/api/canvas/pins")
@@ -12335,13 +12351,47 @@ _SHOT_MEDIA_FIELDS = ("output", "variations", "selectedVariation")
 _REMOVED_SHOT_MEDIA_CAP = 128
 
 
+# A shot field's value when the shot doesn't carry it (types/index.ts
+# CinemaShot): no prompt is "", no refs are [], no overrides are {}. An
+# override inside `overrides` has no default of its own: missing means "the
+# scene's", so it matches only another missing (or null, or empty) one.
+_SHOT_FIELD_DEFAULTS: dict[str, Any] = {"prompt": "", "refImageUrls": [], "overrides": {}}
+
+
+def _authoring_value(value: Any) -> Any:
+    """A value as the fingerprint compares it (review 10 LOW-2, GM r12 answer
+    4): an integral float is that int, so 1.0 matches 1 exactly (no epsilon,
+    and 1.5 never matches 1); a null, {} or [] inside an object is the same as
+    the key missing; key order never counts. A bool stays a bool (true is not 1)."""
+    if isinstance(value, bool) or value is None:
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, dict):
+        out = {}
+        for key, item in value.items():
+            item = _authoring_value(item)
+            if item is None or item == {} or item == []:
+                continue
+            out[str(key)] = item
+        return out
+    if isinstance(value, (list, tuple)):
+        return [_authoring_value(item) for item in value]
+    return value
+
+
 def _shot_authoring(shot: dict[str, Any]) -> str:
     """A shot's prompt and settings (everything but its run media), as one
     comparable string: a returning shot gets its media back only when this
     matches what was taken out (PR #200 fix round 10, review 9 LOW-1, GM r16
-    answer 4)."""
-    return json.dumps({key: value for key, value in shot.items() if key not in _SHOT_MEDIA_FIELDS},
-                      sort_keys=True, default=str, ensure_ascii=False)
+    answer 4). Compared by value (fix round 11): see _authoring_value, and a
+    top-level field at its default (_SHOT_FIELD_DEFAULTS) is the same as missing."""
+    fields = {key: value for key, value in shot.items() if key not in _SHOT_MEDIA_FIELDS}
+    canon = _authoring_value(fields)
+    for key, default in _SHOT_FIELD_DEFAULTS.items():
+        if key in canon and canon[key] == _authoring_value(default):
+            del canon[key]
+    return json.dumps(canon, sort_keys=True, default=str, ensure_ascii=False)
 
 
 def _keep_removed_shot_media(graph: CLIGraph, node_id: str, shot_id: str, kept: dict[str, Any]) -> None:

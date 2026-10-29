@@ -24,14 +24,14 @@ vi.mock('@xyflow/react', () => ({
 }));
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { subscribe: () => () => {} } }));
 
-const { LEAVE_SLACK_MS, MAX_REARMS, useLeave } = await import('../src/lib/noticeLeave');
+const { LEAVE_SLACK_MS, STALL_FADE_MS, STALL_LIMIT_MS, useLeave } = await import('../src/lib/noticeLeave');
 const { keptNoteDisplay, pinDisplayText } = await import('../src/lib/canvasPins');
 const { PinLayer } = await import('../src/components/canvas/PinLayer');
 const { useCanvasPinsStore } = await import('../src/store/canvasPinsStore');
 
 // jsdom runs no CSS: stand in for noticeRegion.css's leave animation.
 type Stub = EventTarget & { animationName: string; currentTime: number; playState: string; pending: boolean; playbackRate: number;
-  effect: { getComputedTiming: () => { endTime: number } } };
+  effect: { getComputedTiming: () => { endTime: number } }; cancel: () => void };
 const realGetAnimations = Element.prototype.getAnimations;
 let stubs = new WeakMap<Element, Stub>();
 let running = false;
@@ -47,6 +47,7 @@ beforeEach(() => {
         animationName: kind === 'row' ? 'notice-row-out' : 'notice-surface-out', currentTime: 0,
         playState: running ? 'running' : 'finished', pending: false, playbackRate: 1,
         effect: { getComputedTiming: () => ({ endTime: 294 }) },
+        cancel() { this.playState = 'idle'; this.dispatchEvent(new Event('cancel')); },
       });
       stubs.set(this, stub);
     }
@@ -181,13 +182,83 @@ describe('review 9 LOW-3: the fallback waits out a leave that started late', () 
     expect(screen.queryByTestId('item')).toBeNull();
   });
 
-  it('a leave that never ends (paused) still goes after a bounded number of waits', () => {
+  it('GM r12 answer 5: a paused (stalled) leave waits up to the limit, then finishes with the reduced-motion fade from where it stands, never a hard cut', () => {
     vi.useFakeTimers();
     running = true;
-    const { rerender } = render(<Probe value="One" />);
-    rerender(<Probe value={null} />);
-    act(() => { vi.advanceTimersByTime((294 + LEAVE_SLACK_MS) * (MAX_REARMS + 2)); });
-    expect(screen.queryByTestId('item')).toBeNull();
+    const fades: Array<EventTarget & { keyframes: Keyframe[]; options: KeyframeAnimationOptions }> = [];
+    const realAnimate = HTMLElement.prototype.animate;
+    HTMLElement.prototype.animate = function animate(keyframes: Keyframe[], options: KeyframeAnimationOptions) {
+      const fade = Object.assign(new EventTarget(), { keyframes, options });
+      fades.push(fade);
+      return fade as unknown as Animation;
+    } as typeof HTMLElement.prototype.animate;
+    try {
+      const { rerender } = render(<Probe value="One" />);
+      rerender(<Probe value={null} />);
+      const item = screen.getByTestId('item');
+      const animation = item.getAnimations()[0] as unknown as Stub;
+      animation.playState = 'paused';
+      animation.currentTime = 108;
+      // Round 10 cut it at the first timer (review 10 NIT-1: 569 ms at opacity 1).
+      act(() => { vi.advanceTimersByTime(STALL_LIMIT_MS - 50); });
+      expect(screen.getByTestId('item')).toHaveAttribute('data-leaving', 'surface');
+      expect(fades).toHaveLength(0);
+      act(() => { vi.advanceTimersByTime(100); });
+      // The fade, not a cut: still there, fading over the reduced-motion time.
+      expect(screen.getByTestId('item')).toBeInTheDocument();
+      expect(fades).toHaveLength(1);
+      expect(fades[0].options.duration).toBe(STALL_FADE_MS);
+      expect(fades[0].keyframes.map((k) => k.opacity)).toEqual(['1', '0']);
+      expect(animation.playState).toBe('idle');
+      // The exit finishes with the fade: then it goes (the space closes then).
+      act(() => { fades[0].dispatchEvent(new Event('finish')); });
+      expect(screen.queryByTestId('item')).toBeNull();
+    } finally {
+      HTMLElement.prototype.animate = realAnimate;
+    }
+  });
+
+  it('GM r12 answer 5: an endless leave also fades at the limit, and the fade has its own bound', () => {
+    vi.useFakeTimers();
+    running = true;
+    const realAnimate = HTMLElement.prototype.animate;
+    HTMLElement.prototype.animate = function animate() { return new EventTarget() as unknown as Animation; } as typeof HTMLElement.prototype.animate;
+    try {
+      const { rerender } = render(<Probe value="One" />);
+      rerender(<Probe value={null} />);
+      const animation = screen.getByTestId('item').getAnimations()[0] as unknown as Stub;
+      animation.effect = { getComputedTiming: () => ({ endTime: Infinity }) };
+      act(() => { vi.advanceTimersByTime(STALL_LIMIT_MS + 300); });
+      expect(screen.getByTestId('item')).toBeInTheDocument();
+      act(() => { vi.advanceTimersByTime(STALL_FADE_MS + LEAVE_SLACK_MS + 1); });
+      expect(screen.queryByTestId('item')).toBeNull();
+    } finally {
+      HTMLElement.prototype.animate = realAnimate;
+    }
+  });
+
+  it('GM r12 answer 5: with the tab hidden, the exit finishes at once (at the start, or the moment it hides)', async () => {
+    const visibility = Object.getOwnPropertyDescriptor(Document.prototype, 'visibilityState');
+    let state: DocumentVisibilityState = 'hidden';
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state });
+    try {
+      running = true;
+      const first = render(<Probe value="One" />);
+      first.rerender(<Probe value={null} />);
+      await act(async () => { await Promise.resolve(); });
+      expect(screen.queryByTestId('item')).toBeNull();
+      first.unmount();
+      state = 'visible';
+      const second = render(<Probe value="Two" />);
+      second.rerender(<Probe value={null} />);
+      expect(screen.getByTestId('item')).toBeInTheDocument();
+      state = 'hidden';
+      act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+      expect(screen.queryByTestId('item')).toBeNull();
+    } finally {
+      delete (document as unknown as Record<string, unknown>).visibilityState;
+      if (visibility) Object.defineProperty(Document.prototype, 'visibilityState', visibility);
+    }
   });
 
   it('a finished one with no event goes at the first check', () => {

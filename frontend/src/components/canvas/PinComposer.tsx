@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { PromptDialog, type PromptRequest } from '../PromptDialog';
-import { KEPT_FEWER, KEPT_SHOWN, keptMoreLabel, keptNoteDisplay, keptNoteLine, MAX_PIN_TEXT, NOTE_KEPT_COPY, pinDisplayText, type KeptNote } from '../../lib/canvasPins';
+import { KEPT_FEWER, KEPT_SHOWN, keptMoreLabel, keptNoteDisplay, keptNoteLine, fitNote, NOTE_KEPT_COPY, pinDisplayText, type KeptNote } from '../../lib/canvasPins';
 import { useCurrentProjectId } from '../../lib/currentProject';
 import { getProjectContext } from '../../lib/projectContext';
 import { useCanvasPinsStore } from '../../store/canvasPinsStore';
@@ -190,7 +190,8 @@ export function PinComposer() {
       {request && (
         <PromptDialog
           request={request}
-          maxLength={MAX_PIN_TEXT}
+          // Only what shows counts (GM r12 answer 3), as the backend counts it.
+          fit={fitNote}
           // GM bug 2 (fix round 1 of PR #200): a textarea that grows, the
           // caret at the end of a kept note, and "Send note".
           multiline
