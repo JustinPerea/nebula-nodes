@@ -242,6 +242,38 @@ describe('following an agent’s project switch', () => {
     }
   });
 
+  it('PR #198 fix round 14 (GM r22 Q2): once Try again has saved them, a neutral notice with [Open] takes the banner’s place and names the copy', async () => {
+    useGraphStore.setState({ notify: vi.fn(), undoNotice: null, messageNotice: null });
+    setPrompt('typed before a switch elsewhere');
+    socket()({ type: 'graphSync', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION } as never);
+    expect(useProjectStore.getState().error)
+      .toBe('The active project changed in another window. Try again to save your unsaved edits as a recovered project.');
+    const copy = summary('p3', 'Loop (recovered)');
+    vi.mocked(api.recoverProject).mockClear();
+    vi.mocked(api.recoverProject).mockResolvedValueOnce(saved(copy) as never);
+    vi.mocked(api.listProjects).mockResolvedValue({
+      projects: [sketches, loop, copy], trash: [], activeProjectId: 'p2', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION,
+    } as never);
+    await useProjectStore.getState().retry();
+    expect(api.recoverProject).toHaveBeenCalledTimes(1);
+    expect(useProjectStore.getState()).toMatchObject({ error: null, copyNotice: {
+      line: 'Your latest edits were saved as their own project, “Loop (recovered)”.', restore: null, open: { id: 'p3', name: 'Loop (recovered)' } } });
+    // [Open] opens that project, and the notice goes.
+    vi.mocked(api.openProject).mockResolvedValueOnce({ project: saved(copy), workspaceRevision: 'r3', paramsVersion: GRAPH_PARAMS_VERSION } as never);
+    await useProjectStore.getState().openCopyNotice();
+    expect(api.openProject).toHaveBeenLastCalledWith('p3', expect.anything());
+    expect(useProjectStore.getState().copyNotice).toBeNull();
+  });
+
+  it('PR #198 fix round 14 (GM r22 Q2): with nothing unsaved, Try again only reloads: no saved-as notice', async () => {
+    socket()({ type: 'graphSync', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION } as never);
+    expect(useProjectStore.getState().error).toBe('The active project changed in another window. Reload projects to continue.');
+    vi.mocked(api.recoverProject).mockClear();
+    await useProjectStore.getState().retry();
+    expect(api.recoverProject).not.toHaveBeenCalled();
+    expect(useProjectStore.getState().copyNotice).toBeNull();
+  });
+
   it('doesn’t follow a switch away from some other project or revision', () => {
     socket()({ type: 'graphSync', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION,
       projectSwitch: { ...agentSwitch, previousRevision: 'r0' } } as never);

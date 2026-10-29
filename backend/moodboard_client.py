@@ -800,7 +800,7 @@ def _new_avoid(current: list[str], avoid: list[str] | None, add: list[str] | Non
     for item in drop or []:
         keys = [_avoid_key(existing) for existing in items]
         if _avoid_key(item) not in keys:
-            raise MoodboardError(f"'{item}' isn't on the Avoid list ({', '.join(items) or 'it is empty'})")
+            raise MoodboardError(f"“{item}” isn't on the Avoid list ({', '.join(items) or 'it is empty'})")
         items.pop(keys.index(_avoid_key(item)))
     for item in add or []:
         if len(_avoid_key(item)) > rules.AVOID_ITEM_LIMIT:

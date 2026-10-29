@@ -2,7 +2,7 @@
  * edits" plus "Continue without them"."), verbatim, for the held edits'
  * screen (UnsavedEditsNotice.tsx) and Projects home. */
 export const UNSAVED_EDITS_HEADING = "Couldn’t save your edits.";
-export const CONFIRM_LINE = "Continue without your edits? They can't be recovered after this.";
+export const CONFIRM_LINE = "Continue without your edits? They can’t be recovered after this.";
 
 /** The confirm when the held edits are the open project's own canvas (Q118
  * review): the backend's switch keeps its nodes, connections and settings in that
@@ -26,7 +26,7 @@ export function editsSavedLine(filename: string): string {
 /** GM's line 2 (2026-10-23), verbatim: the body of the held edits' screen
  * after a download that couldn't be written at all (not a cancelled save
  * picker). The heading and both choices stay. */
-export const EDITS_NOT_WRITTEN = "The download didn't save, so your edits are still only in this tab. "
+export const EDITS_NOT_WRITTEN = "The download didn’t save, so your edits are still only in this tab. "
   + 'Check that your disk has free space, then download them again, or continue without them.';
 
 /** GM - Design (2026-10-24), verbatim: the line above the held edits' screen
@@ -40,4 +40,4 @@ export function agentOpeningLine(agent: string, projectName: string): string {
  * download past the browser's string cap. The heading is the download's
  * ("Couldn't download your edits.") and the line is graphFileShared's
  * TOO_BIG_TO_DOWNLOAD; both choices stay. */
-export const EDITS_DOWNLOAD_HEADING = "Couldn't download your edits.";
+export const EDITS_DOWNLOAD_HEADING = "Couldn’t download your edits.";

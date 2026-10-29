@@ -135,6 +135,16 @@ interface Failure { seed: number; step: number; what: string; log: string[]; cal
 
 type Variant = 'plain' | 'foreign' | 'refuse' | 'clear';
 
+/** PR #198 fix round 14 (review 13's flake): a block vitest timed out isn't
+ * cancelled; its seed loop went on against the shared fake Nebula and store
+ * while the next block ran, so the next block read the abandoned block's
+ * typing ("pre-clear typing landed on the new canvas", seeds 10 and 24
+ * under load; reproduced by forcing the block before it to time out). Each
+ * block runs under its own generation; an abandoned one stops at its next
+ * step. */
+let generation = 0;
+class Abandoned extends Error {}
+
 async function runSeed(seed: number, variant: Variant = 'plain'): Promise<Failure | null> {
   const refuser = rng(seed + 7_000_000);
   fake.refuseDelete = variant === 'refuse' ? () => refuser() < 0.3 : null;
@@ -246,7 +256,9 @@ async function runSeedInner(seed: number, foreign: boolean, clearing = false): P
       + `\n      redo: ${store().redoStack.map((e) => 'nodes' in e ? `[${(e.nodes as Array<{ id: string }>).map((n) => n.id.length > 4 ? 'L' : n.id).join(' ')}]` : 'agent').join(' ')}` : '');
   const push = log.push.bind(log);
   if (debug) log.push = (...items: string[]) => { const n = push(...items); push(state()); return n; };
+  const mine = generation;
   for (let step = 0; step < OPS; step += 1) {
+    if (generation !== mine) throw new Abandoned();
     const roll = random();
     // A person's action comes after every echo whose answer already landed
     // (Nebula writes the echo first: FakeNebula.catchUp).
@@ -449,8 +461,14 @@ describe('round 17 (review 16, H1): random sequences of edits, undos and echoes'
     ...refuse.map(([range, seeds]) => [`${range}, 30% of deletes refused`, seeds, 'refuse'] as const),
     ...clear.map(([range, seeds]) => [`${range}, an agent clears`, seeds, 'clear'] as const)])('seeds %s', async (_range, seeds, variant) => {
     const failures: Failure[] = [];
+    const mine = ++generation;
     for (const seed of seeds) {
-      const failure = await runSeed(seed, variant);
+      if (generation !== mine) return;
+      const failure = await runSeed(seed, variant).catch((error: unknown) => {
+        if (error instanceof Abandoned) return null;
+        throw error;
+      });
+      if (generation !== mine) return;
       if (failure) failures.push(failure);
       await tick(20_000);
     }

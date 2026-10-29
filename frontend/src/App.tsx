@@ -299,7 +299,7 @@ export default function App() {
       onDownloadEdits={() => void projects.downloadUnsavedEdits()}
       onContinueWithoutEdits={() => void projects.continueWithoutEdits()}
       copyNotice={projects.copyNotice} onRestoreCopy={() => void projects.restoreCopyNotice()}
-      onDismissCopy={projects.dismissCopyNotice} />;
+      onDismissCopy={projects.dismissCopyNotice} onOpenCopy={() => void projects.openCopyNotice()} />;
   } else if (isCanvas) {
     mainView = <Canvas />;
   } else if (isCommons) {

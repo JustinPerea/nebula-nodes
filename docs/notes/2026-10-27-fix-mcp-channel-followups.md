@@ -753,3 +753,61 @@ Four of this round's ring shots are byte-identical to round 10 shots of the same
   - Person switch: 5 of 5.
   - Round 12 regression (m1, unknown, escape, stack): 16 of 16.
   - Shots `fix13-*` at 1280 and 1440, all distinct: m1double-back-to-stopped, toobig-line, toobig-popover, deleted-by-codex-line, deleted-did-more-one-toast, clashback-clash-replaces-deleted-toast, moved-banner-keeps-edits, moved-recovered-listed.
+
+## Fix round 14 (GM's pr198 r22, PR #198 review 13, GM's pr198 r23)
+
+- **GM r22 Q1: the popover takes the toast's place.** `noteScenePopover` (graphStore) runs when the "Unsaved" mark's popover mounts and unmounts. Opening it clears whichever slot holds that scene's line and [Try again] (`retryScene.nodeId`). Agent toasts and other scenes' toasts stay. While it is open, a new line for that scene goes only to the popover (`stopSceneSave` and `stopSceneForGood` skip the toast). Closing it brings nothing back.
+- **GM r22 Q2: the saved-as notice.** In `projectStore.retry`, when Try again finished a pending recovery and a new recovered copy is listed, `copyNotice` becomes "Your latest edits were saved as their own project, “<name>”." with `open: {id, name}`. `ProjectHome`'s `CopyNotice` renders [Open] before ×, in the banner's slot. Focus goes to its × when it was on the body, lost, in the notice stack, or on the Recent heading; otherwise it stays where the person put it. `openCopyNotice` clears the notice and opens the project.
+- **GM r22 Q3: one line per status.** `sceneRefusal` gives 400 "Nebula can’t save your changes to “Opening”." and 413 "“Opening” is too big to save. Remove something from it, then try again." on every save, not only a stopped one. The kept-edits branch of `settleSceneAnswer` stops it for good (`stopSceneForGood`), so nothing goes until the person edits or presses [Try again]. `BAD_SAVE`, `SCENE_TOO_BIG` and `sceneTooBigLine` are gone. The Agent log still has the status and code.
+- **GM r22 notes.**
+  - 1: `editArrivedText` ends with a period ("Codex changed the canvas.", "Codex undid its edit.").
+  - 2: `CONFIRM_LINE`, `EDITS_NOT_WRITTEN` and `EDITS_DOWNLOAD_HEADING` use ’. The stopped popover's "Couldn’t" was already U+2019: the live check reads its code points.
+  - 3: a write that deleted a scene and did more is `sceneChangedAndDeletedLine`, "Codex changed the canvas and deleted “Opening”, so your changes to it can’t be saved." An undo that deleted a scene (`entry.undoes`) keeps "Codex undid its edit. <line>"; flagged.
+  - 4: the banner colour is skipped, as GM said.
+- **Review 13 LOW-1 and GM r23 answer 2: [Undo] asks the clash again.**
+  - `restoreHeldScenes` (called from `sendRestore`) puts back the scene as Nebula had it (`backendScenes`) for a cinema scene that has a same-canvas deleted record, not the person's unsaved text.
+  - Once the restore lands, `restoreDeletedScenes` asks the waiting clash again. It clears the toast showing the delete (its line, or the redo toast for that node) and passes `focus` when that toast had focus or focus was lost.
+  - `SceneClashNotice` gives the prompt `tabIndex={-1}` and focuses the prompt itself, never [Keep mine], unless the person has moved focus elsewhere.
+- **Review 13 LOW-2: refused again stays stopped.** A [Try again] or an edit refused 400/413 goes back to stopped for good with the same line and [Try again] in the toast and the popover, and Codex writes send nothing. `retrySceneSave` clears `refusedLine`, so a refused retry says the line again; an edit keeps it, so a refused edit says nothing new.
+- **NITs and GM r23 answer 3.**
+  - `mcp_server._example` puts the call in backticks.
+  - The Avoid item and "has no model “…”" use curly quotes.
+  - `node_lookup.shown_definition` leaves an id-shaped definition bare and puts anything else in “…”.
+  - No value (missing, null, empty or blank) reads "No node definition was given." for the person (`refusal_copy.refusal`, route canvas). The agent's detail stays `unknown node definition ""`. Both carry `code: "unknown_definition"` and `definitionId` (raw).
+  - `count_agent_turns.py` reads the new forms.
+- **The property-test flake (seeds 10 and 24).** It came from the harness, not a product race. When a block in `heldUndo.property.round17` timed out, its seed loop kept running and typed into the next block's fresh canvas ("pre-clear typing landed on the new canvas"). I reproduced it by forcing the refuse block's timeout to 1000 ms: the clear blocks then failed on seeds 24 and 84. Each block now runs under its own `generation`, and an abandoned loop throws `Abandoned` at its next step. With the same forced timeout, the probe then passed.
+- **Docs.** MCP-SETUP has:
+  - the `unknown_definition` code row;
+  - the saved-as notice;
+  - the 400/413 lines on every save, the popover rule, and that refused again keeps the line;
+  - the did-more sentence;
+  - Undo restoring Nebula's scene and the prompt taking focus;
+  - toast periods.
+
+  SKILL.md has the `unknown_definition` sentence.
+- **Tests.**
+  - New `graphStore.fix14` (16): Q3 400/413, the next change, no retry promise; Q1 (4); notes 1 and 3; LOW-1 (3); LOW-2 (3). The first 10 and the LOW-2 tests fail on beaf935d, and LOW-1 fails without `restoreHeldScenes`.
+  - New `pr198Fix14Ui` (6): the Q2 notice and focus, focus left alone, the update copy notice unchanged, the Q1 popover, and the clash prompt's focus (2).
+  - `projectStore.switch`: 2 Q2 tests.
+  - New `test_pr198_fix14.py`: definitions (bare, quoted, empty in 3 forms), backticks, curly quotes.
+  - Tests changed because GM or the coordinator changed behaviour:
+    - `graphStore.fix3`, `fix4` and `fix5`: the 400/413 lines;
+    - `graphStore.fix13`: did-more is one sentence;
+    - the toast period pins in arrangeUndo, agentUndo, noticeMessageBesideUndo.round8, round23Surfaces, placeholderRuns round8/round9 and CanvasUndoNotice;
+    - `errorCopy.namedLine`: drops the SCENE_TOO_BIG and BAD_SAVE entries;
+    - `ProjectHome.unsavedEdits` and `downloadTooBig`: ’;
+    - `test_first_turn_fixes`: backticks;
+    - `test_node_lookup_by_name`: a shown name.
+- **Gates.**
+  - tsc -b and `npm run lint` are clean.
+  - Full vitest: 593 files, 7,745 tests passed.
+  - Full backend: 12,061 passed, 71 skipped.
+  - vite build plus `check-build-budget.mjs`: 425,658 bytes raw (budget 512,000), 128,722 gzip; `dist` deleted.
+- **Live** (`fix14_live.mjs`: backend 8797 with `fix14_server.py`, which adds a `bad-put-<id>` 400 flag; Vite 5797; 8000–8010 and 5173 blocked, 0 attempts after the canary; no paid runs).
+  - bad400 8/8: the unstopped line with [Try again], and a refused Try again from the popover staying stopped.
+  - toobig: the period, and the popover clearing the toast.
+  - deleted13: one sentence.
+  - clashback (undoclash) 6/6.
+  - moved 6/6: the saved-as notice, × focused, [Open] opens it.
+  - Round 12 regression 16/16.
+  - Shots `fix14-*` at 1280 and 1440, all distinct: popover-open-toast-gone, moved-saved-as-notice, moved-banner-keeps-edits, bad400-unstopped-line, bad400-try-again-refused, deleted-did-more-one-toast, toobig-line, undoclash-asked-again.

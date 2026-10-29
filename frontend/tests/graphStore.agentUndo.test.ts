@@ -84,7 +84,7 @@ describe("an agent's edit is one undo step", () => {
 
     expect(ids()).toEqual(['n1', 'n2', 'n3']);
     expect(useGraphStore.getState().undoStack).toHaveLength(1);
-    expect(useGraphStore.getState().undoNotice).toMatchObject({ text: 'Claude changed the canvas', offer: 'undo' });
+    expect(useGraphStore.getState().undoNotice).toMatchObject({ text: 'Claude changed the canvas.', offer: 'undo' });
 
     useGraphStore.getState().undo();
     expect(ids()).toEqual(['n1', 'n2']);
@@ -153,7 +153,7 @@ describe("an agent's edit is one undo step", () => {
     useGraphStore.setState({ nodes: [named, nodes[1]], edges });
     sync([], [], { edit: CLAUDE });
     expect(ids()).toEqual([]);
-    expect(useGraphStore.getState().undoNotice?.text).toBe('Claude changed the canvas');
+    expect(useGraphStore.getState().undoNotice?.text).toBe('Claude changed the canvas.');
 
     useGraphStore.getState().undo();
     expect(ids()).toEqual(['n1', 'n2']);
@@ -189,7 +189,7 @@ describe("an agent's import (nebula graph load) is one undo step", () => {
     // The import restarts ids at n1: n1 is a Nano Banana now.
     sync([imageNode('n1')], [], { graphReplaced: true, edit: CLAUDE });
     expect(ids()).toEqual(['n1']);
-    expect(useGraphStore.getState().undoNotice?.text).toBe('Claude changed the canvas');
+    expect(useGraphStore.getState().undoNotice?.text).toBe('Claude changed the canvas.');
 
     useGraphStore.getState().undo();
     expect(ids()).toEqual(['b5c0ffee-0000-4000-8000-000000000001', 'n1', 'n2']);
@@ -380,6 +380,6 @@ describe('the canvas names the edit its undo step came from (U1)', () => {
     const { nodes, edges } = start();
     sync([...nodes, textNode('n3', 'fog', {}, 800)], edges,
       { edit: { ...CLAUDE, id: 'ed_00000000000000b2', undoes: 'ed_00000000000000a1' } });
-    expect(useGraphStore.getState().undoNotice).toMatchObject({ text: 'Claude undid its edit', offer: 'undo' });
+    expect(useGraphStore.getState().undoNotice).toMatchObject({ text: 'Claude undid its edit.', offer: 'undo' });
   });
 });

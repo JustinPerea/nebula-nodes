@@ -61,9 +61,12 @@ export interface ProjectHomeProps {
   /** GM r12 item 5: where an update's recovered copy went, when the reload
    * couldn't open it (store/projectStore CopyNotice): neutral, × to close,
    * [Restore] while it is in Recently deleted. */
-  copyNotice?: { line: string; restore: { id: string; name: string } | null } | null;
+  copyNotice?: { line: string; restore: { id: string; name: string } | null; open?: { id: string; name: string } | null } | null;
   onRestoreCopy?: () => void;
   onDismissCopy?: () => void;
+  /** GM #198 r22 Q2: [Open] on the notice saying where a stale tab's edits
+   * were saved (a recovered project); opens it. */
+  onOpenCopy?: () => void;
   trash?: TrashedProject[];
   lastDeleted?: { id: string; name: string } | null;
   onRestore?: (id: string) => void;
@@ -369,15 +372,16 @@ function UndoToast({ project, busy, onUndo, onDismiss }: {
  * inline notice at the top of Projects home, first in the notice stack.
  * Neutral, the line, [Restore] while the copy is in Recently deleted, and ×;
  * it stays until the person closes it or restores. */
-function CopyNotice({ notice, busy, onRestore, onDismiss }: {
-  notice: { line: string; restore: { id: string; name: string } | null };
-  busy: boolean; onRestore: () => void; onDismiss: () => void;
+function CopyNotice({ notice, busy, onRestore, onOpen, onDismiss }: {
+  notice: { line: string; restore: { id: string; name: string } | null; open?: { id: string; name: string } | null };
+  busy: boolean; onRestore: () => void; onOpen: () => void; onDismiss: () => void;
 }) {
   return (
     <div className="project-home__notice project-home__notice--copy" role="status" data-copy-notice="">
       <span className="project-home__notice-text">{notice.line}</span>
       <span className="project-home__notice-actions">
         {notice.restore && <button type="button" className="project-home__notice-restore" disabled={busy} onClick={onRestore}>Restore</button>}
+        {notice.open && <button type="button" className="project-home__notice-restore" disabled={busy} onClick={onOpen}>Open</button>}
         <button type="button" className="project-home__notice-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
       </span>
     </div>
@@ -445,7 +449,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
   trash = [], lastDeleted = null, onRestore = noop, onPurge = noop, onEmptyTrash = noop, onDismissUndo = noop,
   settingsOpen = false, onToggleSettings, loadCoverChoices, onPinCover,
   unsavedEdits = null, editsSavedAs = null, onDownloadEdits = noop, onContinueWithoutEdits = noop,
-  copyNotice = null, onRestoreCopy = noop, onDismissCopy = noop }: ProjectHomeProps) {
+  copyNotice = null, onRestoreCopy = noop, onDismissCopy = noop, onOpenCopy = noop }: ProjectHomeProps) {
   const [query, setQuery] = useState('');
   // Offline is read-only (round 15 of PR #114): create, open, rename,
   // delete, restore and covers are disabled as while busy; search and
@@ -461,6 +465,19 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
     ...(showError ? ['error' as const] : []),
   ];
   const { track } = useNoticeStackFocus(noticeKeys, stack, recentHeading);
+  // GM #198 r22 Q2: the notice saying where Try again saved the edits takes
+  // the banner's place, and focus goes to its × (never [Open]), unless the
+  // person had moved on to something else. While the projects loaded, the
+  // stack rule may have parked focus on "Recent projects": that counts as
+  // still the banner's.
+  const savedAsCopy = copyNotice?.open ? copyNotice : null;
+  useEffect(() => {
+    if (!savedAsCopy) return;
+    const active = document.activeElement;
+    if (active && active !== document.body && active.isConnected && active !== recentHeading.current
+      && !stack.current?.contains(active)) return;
+    stack.current?.querySelector<HTMLElement>(`[data-notice="copy"] ${NOTICE_DISMISS}`)?.focus();
+  }, [savedAsCopy]);
   const visibleProjects = useMemo(() => projects
     .filter((project) => project.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
     .sort((left, right) => recentTimestamp(right) - recentTimestamp(left)), [projects, query]);
@@ -490,7 +507,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
             or can't help, the line stays whole. */}
         {noticeKeys.length > 0 && <div ref={stack} className="project-home__notices">
           {copyNotice && <div {...track('copy')}><CopyNotice notice={copyNotice} busy={locked}
-            onRestore={onRestoreCopy} onDismiss={onDismissCopy} /></div>}
+            onRestore={onRestoreCopy} onOpen={onOpenCopy} onDismiss={onDismissCopy} /></div>}
           {unsavedEdits ? <div {...track('held')}><UnsavedEditsNotice reason={unsavedEdits.reason} downloadFailed={unsavedEdits.downloadFailed}
             downloadTooBig={unsavedEdits.downloadTooBig}
             keptIn={unsavedEdits.keptIn} agentOpening={unsavedEdits.agentOpening} busy={locked}

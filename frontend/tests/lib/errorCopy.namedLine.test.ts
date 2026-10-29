@@ -77,7 +77,6 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
   { file: 'lib/deleteCopy.ts', text: '`Couldn\'t delete ${what}. ${DELETE_NO_ANSWER_REASON}`',
     why: 'GM\'s no-answer delete line (#195): the tail is a fixed sentence' },
   { file: 'lib/canvasFileDrop.ts', text: '`Couldn\'t add ${quoted(failure.name)}. ${DROP_TYPES_LINE}`', why: 'the tail is a fixed sentence' },
-  { file: 'lib/sceneSaveCopy.ts', text: '`Couldn’t save “${scene}”. ${SCENE_TOO_BIG}`', why: 'the tail is a fixed sentence' },
   { file: 'lib/directRoute.ts', text: '`${name} can\'t run on ${providerLabel(spec.provider)}${whyPerson(definition, spec, block, params)}. ${fix}${also}`',
     why: 'GM\'s direct-route line: the tail is its own fixed "fix" sentences' },
   { file: 'store/providerReadinessStore.ts', text: '`${CHECK_HEADING} ${REFUSED_FALLBACK_COPY}`', why: 'the fixed fallback after a heading' },
@@ -95,7 +94,6 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
   // backend's lines go through headedLine in sceneRefusal).
   { file: 'store/graphStore.ts', text: '`${heading} ${KEPT_UNTIL_RUN_ENDS}`', why: "GM's heading over GM's fixed suffix" },
   { file: 'store/graphStore.ts', text: '`${heading} ${KEPT_AND_RETRYING}`', why: "GM's heading over GM's fixed suffix" },
-  { file: 'store/graphStore.ts', text: '`${heading} ${BAD_SAVE}`', why: "GM's heading over GM's fixed suffix" },
   // PR #198 fix round 8 (GM r11 answer 3): the stopped-after-8 line.
   { file: 'lib/sceneSaveCopy.ts', text: '`${sceneSaveHeading(scene)} ${KEPT_UNTIL_NEXT_CHANGE}`', why: "GM's heading over GM's fixed suffix" },
     // The Agent log's raw save line: agents read the backend's own detail,

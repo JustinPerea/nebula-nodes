@@ -10,8 +10,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  *   [Try again] on the mark, and nothing tries again by itself until the
  *   person edits or presses it. The Agent log has the status and code.
  * - GM r21 answer 3: a delete's sync is ONE toast: the deleted line with
- *   Codex's [Undo]; "Codex changed the canvas." first only when the write
- *   did more than delete the scene.
+ *   Codex's [Undo]; when the write did more than delete the scene, one
+ *   sentence (GM r22 note 3): "Codex changed the canvas and deleted …".
  * - GM #198 r12 answer 2 (review 12 L-2): a clash waiting when the scene was
  *   deleted is asked again once it is back, against the restored scene; the
  *   same value is no clash; the clash prompt takes the deleted toast's place.
@@ -391,7 +391,7 @@ describe('GM r21 answer 3: the delete’s sync is ONE toast', () => {
     expect(said).toEqual([]);
   });
 
-  it('Codex’s write did more: "Codex changed the canvas." with its [Undo], the deleted line as its second sentence', async () => {
+  it('Codex’s write did more: one sentence with its [Undo] (GM r22 note 3)', async () => {
     const h = backend(S3);
     store.setSceneRetryDelaysForTests([60]);
     h.failNext(1);
@@ -401,7 +401,7 @@ describe('GM r21 answer 3: the delete’s sync is ONE toast', () => {
     h.state.nodes = [editNode('n2', 'Edit B')];
     h.remove({ kind: 'agent', name: 'Codex' }, AGENT);
     await sleep(100);
-    expect(toast()?.text).toBe(`Codex changed the canvas. ${DELETED}`);
+    expect(toast()?.text).toBe('Codex changed the canvas and deleted “Opening”, so your changes to it can’t be saved.');
     expect(offer()).toBe('undo');
     expect(useGraphStore.getState().messageNotice).toBeNull();
     expect(said).toEqual([]);
@@ -431,7 +431,7 @@ describe('GM r21 answer 3: the delete’s sync is ONE toast', () => {
     await sleep(30);
     h.remove({ kind: 'agent', name: 'Codex' }, AGENT);
     await sleep(40);
-    expect(toast()?.text).toBe('Codex changed the canvas');
+    expect(toast()?.text).toBe('Codex changed the canvas.');
   });
 });
 

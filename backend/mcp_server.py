@@ -106,7 +106,7 @@ def _signature(schema: dict[str, Any], keep: list[str]) -> str:
 
 def _example(name: str, schema: dict[str, Any]) -> str:
     required = [param for param in (schema.get("properties") or {}) if param in set(schema.get("required") or [])]
-    return f" Call {name}({', '.join(f'{param}=...' for param in required)})." if required else ""
+    return f" Call `{name}({', '.join(f'{param}=...' for param in required)})`." if required else ""
 
 
 def argument_problem(tool: Any, arguments: dict[str, Any]) -> str | None:
@@ -1317,7 +1317,10 @@ def edit_canvas(
     `sceneRev`, `changedBy`) and nothing is saved; read it again and redo
     your change (a refusal is not a read). A write to a node someone
     deleted is 404 `node_gone` with `deletedBy` (who, or null); the person's
-    canvas says it in your delete's own toast. Ids and ports in details are
+    canvas says it in your delete's own toast (one sentence when your
+    write did more). The person's own scene save refused 400 or 413 shows one
+    line per status and waits for them; its Agent log line carries the status
+    and code (docs/MCP-SETUP.md). Ids and ports in details are
     bare (`Node n4 not found`); a name that matches nothing is in “…”
     (`no Style “Neon dusk”`); a next call is in backticks.
     Who bills a run is the person's call: Krea billing (`_kreaAuth`: API token
@@ -2577,7 +2580,7 @@ def model_schema(provider: str, model_id: str, ctx: Context | None = None) -> di
     _, node, param = _MODEL_CATALOGS[key]
     found = next((row for row in _catalog_models(key, ctx) if row.get("id") == model), None)
     if found is None:
-        raise ValueError(f"{key} has no model '{model[:120]}': `model_catalog('{key}', query=...)` lists them")
+        raise ValueError(f"{key} has no model “{model[:120]}”: `model_catalog('{key}', query=...)` lists them")
     result: dict[str, Any] = {"provider": key, "node": node, "param": param, "model": found}
     if isinstance(node, str) and _universal_ports.is_universal(node):
         configured = _model_ports(node, model, found)

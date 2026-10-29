@@ -757,10 +757,11 @@ export function foreignSource(origin: EditOrigin): ForeignEdit['source'] {
   return 'outside';
 }
 
-/** "Claude changed the canvas": shown when an agent's edit lands, with Undo. */
+/** "Claude changed the canvas.": shown when an agent's edit lands, with
+ * Undo. A sentence, so it ends with its period (GM #198 r22 note 1). */
 export function editArrivedText(edit: ForeignEdit): string | null {
   if (edit.source !== 'agent' || !edit.agentName) return null;
-  return edit.undoes ? `${edit.agentName} undid its edit` : `${edit.agentName} changed the canvas`;
+  return edit.undoes ? `${edit.agentName} undid its edit.` : `${edit.agentName} changed the canvas.`;
 }
 
 /** "Undid Claude's edit", "Redid an edit from another window". */

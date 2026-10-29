@@ -200,7 +200,9 @@ describe('H1: a scene save the backend refuses keeps the person\'s typing', () =
     await sleep(80);
     // Round 5 (GM r7 item 1): a 400 is Nebula's bug; the typing stays on
     // screen, unsaved, and GM's line says so.
-    expect(said).toEqual(["Couldn’t save your changes to “Opening”. Nebula ran into a problem saving them, so they’re kept on screen but not saved."]);
+    // GM r22 Q3: the one 400 line, with [Try again].
+    expect((() => { const g = useGraphStore.getState(); return g.undoNotice?.retryScene?.nodeId === 'n31' ? g.undoNotice.text : g.messageNotice?.retryScene?.nodeId === 'n31' ? g.messageNotice.text : null; })()).toBe('Nebula can’t save your changes to “Opening”.');
+    expect(said).toEqual([]);
     expect(shotsOf('n31')[0].prompt).toBe('typed by the person');
   });
 

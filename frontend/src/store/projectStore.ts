@@ -80,6 +80,8 @@ export type ProjectRetry =
 export interface CopyNotice {
   line: string;
   restore: { id: string; name: string } | null;
+  /** GM #198 r22 Q2: [Open] for a recovered copy that is in the list. */
+  open?: { id: string; name: string } | null;
 }
 
 /** What the Projects screen offers beside its error: 'redo' (Try again
@@ -175,6 +177,8 @@ interface ProjectState {
   restoreCopyNotice: () => Promise<void>;
   /** Its ×. */
   dismissCopyNotice: () => void;
+  /** Its [Open] (GM #198 r22 Q2): open the recovered copy it names. */
+  openCopyNotice: () => Promise<void>;
   /** "Download your edits": write the held copy as a .nebula file, then load
    * the projects. A cancelled save picker keeps the two choices. */
   downloadUnsavedEdits: () => Promise<void>;
@@ -836,6 +840,12 @@ function takeCopyForUpdate(): { id: string; name: string } | null {
  * edits, so the builder's form drops the scene's name. */
 export function reloadForUpdateLine(project: string): string {
   return `Couldn’t save your changes because Nebula was updated. Reload Nebula and they’ll open in a recovered copy of “${project}”.`;
+}
+/** GM #198 r22 Q2, verbatim but for “X”: Try again saved a stale tab's
+ * unsaved edits as a recovered project (the active project changed in
+ * another window). Shown in the banner's place, with [Open] and ×. */
+export function editsSavedAsProjectLine(copy: string): string {
+  return `Your latest edits were saved as their own project, “${copy}”.`;
 }
 export function openedAfterUpdateLine(copy: string): string {
   return `These are the changes Nebula couldn’t save before it updated. They’re in “${copy}”.`;
@@ -1754,6 +1764,12 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
   emptyTrash: async () => emptyTrashOf(get().trash.map((entry) => entry.id)),
   dismissUndo: () => set({ lastDeleted: null }),
   dismissCopyNotice: () => set({ copyNotice: null }),
+  openCopyNotice: async () => {
+    const target = get().copyNotice?.open;
+    if (!target) return;
+    set({ copyNotice: null });
+    await get().open(target.id);
+  },
   restoreCopyNotice: async () => {
     const copy = get().copyNotice?.restore;
     if (!copy) return;
@@ -1920,12 +1936,21 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
       paramsVersionChange = null;
       paramsHandling += 1;
     }
+    // GM #198 r22 Q2: a Try again that saves the stale tab's edits as a
+    // recovered project says where they went, in the banner's place.
+    const recovering = pendingRecovery;
+    const copyBefore = lastRecoveredCopy;
     if (!get().initialized) await get().initialize();
     else {
       try {
         await get().flush();
         await listNow();
       } catch (error) { showError(error, { action: 'list' }); }
+    }
+    const copy = lastRecoveredCopy;
+    if (recovering && pendingRecovery !== recovering && copy && copy !== copyBefore && !reloadingForParams
+      && !get().error && !get().unsavedEdits && get().projects.some((project) => project.id === copy.id)) {
+      set({ copyNotice: { line: editsSavedAsProjectLine(copy.name), restore: null, open: { id: copy.id, name: copy.name } } });
     }
     // An open whose reply was lost: finish it, unless it already landed.
     const reopen = failed?.action === 'load' ? failed.reopen : undefined;

@@ -919,7 +919,10 @@ class CodedRefusal(HTTPException):
       #198 review 6, M1: a clear is not a switch);
     - ``params_outdated`` (the params-version gate's own answer);
     - ``node_gone`` (404): the node isn't on the canvas; ``deletedBy`` names
-      who deleted it, or null (_scene_write_gone; fix round 12).
+      who deleted it, or null (_scene_write_gone; fix round 12);
+    - ``unknown_definition`` (400): a node write named a definition the
+      registry doesn't have, or none; ``definitionId`` is the raw value sent
+      (``""`` for none) (_refuse_unknown_definition; fix round 14).
 
     Raised where those helpers are used by other routes too: the fields are
     additive."""
@@ -15350,8 +15353,15 @@ def _refuse_unknown_definition(definition_id: Any) -> None:
     can't change when names do; the refusal names the node the text is the
     name of ("did you mean nebula-moodboard (Moodboard)?")."""
     if not isinstance(definition_id, str) or node_registry.get(definition_id) is None:
-        raise HTTPException(status_code=400,
-                            detail=node_lookup.unknown_definition(str(definition_id), node_registry.get_all()))
+        # GM #198 r23 answer 3: no value (missing, null, empty) is GM's own
+        # line for the person ("No node definition was given."); an agent's
+        # detail keeps the raw value (`unknown node definition ""`), and the
+        # answer the code and the raw value.
+        raw = definition_id if isinstance(definition_id, str) else "" if definition_id is None else str(definition_id)
+        specific = node_lookup.unknown_definition(raw, node_registry.get_all())
+        refused = (refusal_copy.refusal(400, specific, node_lookup.NO_DEFINITION, route="canvas") if not raw.strip()
+                   else HTTPException(status_code=400, detail=specific))
+        raise _coded(refused, "unknown_definition", definitionId=raw)
 
 
 def _validated_ingress_node(

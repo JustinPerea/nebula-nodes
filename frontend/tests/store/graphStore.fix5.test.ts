@@ -265,6 +265,10 @@ describe('M1 / GM r6 item 1: the partial revert', () => {
 
 // -- GM r7 item 1: whole-save refusals ------------------------------------------------------
 
+// GM r22 Q3 (2026-10-28): one line per status, a save that wasn't stopped too.
+const TOO_BIG_LINE = '“Opening” is too big to save. Remove something from it, then try again.';
+const CANT_LINE = 'Nebula can’t save your changes to “Opening”.';
+
 describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked unsaved', () => {
   it('413: the edits stay, GM\'s line once, and they save once a later save fits', async () => {
     const h = harness({ first: () => json({ detail: 'graph payload contains too many values' }, 413),
@@ -276,8 +280,10 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     h.release();
     await sleep(150);
     expect(brief()).toEqual([`s1:${'x'.repeat(50)}`, 's2:second field']);
-    expect(said).toEqual(["Couldn’t save “Opening”. The project is too big to save. Remove something and Nebula will save your changes."]);
-    expect(unsaved()).toBe(said[0]);
+    // GM r22 Q3: the one 413 line, with [Try again]; no promise of a retry.
+    expect((() => { const g = useGraphStore.getState(); return g.undoNotice?.retryScene?.nodeId === 'n1' ? g.undoNotice.text : g.messageNotice?.retryScene?.nodeId === 'n1' ? g.messageNotice.text : null; })()).toBe(TOO_BIG_LINE);
+    expect(said).toEqual([]);
+    expect(unsaved()).toBe(TOO_BIG_LINE);
     h.answerLater(() => json({ ok: true }));
     typeIn('s2', 'shorter');
     await sleep(120);
@@ -372,10 +378,12 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     await sleep(20);
     h.release();
     await sleep(120);
-    expect(said).toEqual(["Couldn’t save your changes to “Opening”. Nebula ran into a problem saving them, so they’re kept on screen but not saved."]);
-    expect(logged.some((line) => line.includes('params.scene nested too deeply') && line.includes('n1'))).toBe(true);
+    // GM r22 Q3: the one 400 line, with [Try again]; the status in the Agent log.
+    expect((() => { const g = useGraphStore.getState(); return g.undoNotice?.retryScene?.nodeId === 'n1' ? g.undoNotice.text : g.messageNotice?.retryScene?.nodeId === 'n1' ? g.messageNotice.text : null; })()).toBe(CANT_LINE);
+    expect(said).toEqual([]);
+    expect(logged.some((line) => line.includes('params.scene nested too deeply') && line.includes('n1') && line.includes('HTTP 400'))).toBe(true);
     expect(brief()[0]).toBe('s1:bad');
-    expect(unsaved()).toBe(said[0]);
+    expect(unsaved()).toBe(CANT_LINE);
   });
 
   it('params outdated: the edits stay on screen for the recovered copy, and the scene adds no line', async () => {
@@ -400,7 +408,8 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
   });
 
   it('the copy is in constants for GM', () => {
-    expect(copy.SCENE_TOO_BIG).toBe('The project is too big to save. Remove something and Nebula will save your changes.');
+    expect(copy.sceneTooBigToSaveLine('Opening')).toBe(TOO_BIG_LINE);
+    expect(copy.sceneCantSaveLine('Opening')).toBe(CANT_LINE);
     expect(copy.KEPT_UNTIL_RUN_ENDS).toBe("They’re kept and will save when the run finishes.");
     expect(copy.KEPT_AND_RETRYING).toBe("They’re kept and Nebula will try again.");
   });

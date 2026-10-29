@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { useAnchoredPopover } from '../asset-move/anchoredPopover';
 import { RetrySceneButton } from '../canvas/RetrySceneButton';
 import { UNSAVED_MARK } from '../../lib/sceneSaveCopy';
+import { noteScenePopover } from '../../store/graphStore';
 import '../../styles/canvasProposals.css';
 
 /**
@@ -18,6 +19,9 @@ import '../../styles/canvasProposals.css';
  * off, and the popover, a portal still inside the card in React's tree,
  * stops its presses the same way. A press released off the mark does
  * nothing (review 10, N-1).
+ * GM r22 Q1: while the popover is open, the toast with the same line and
+ * [Try again] leaves (as on ×) and none comes back, even once it closes:
+ * one line and one [Try again] on screen (graphStore noteScenePopover).
  */
 const keepToItself = (event: SyntheticEvent) => event.stopPropagation();
 const OWN_PRESSES = { onPointerDown: keepToItself, onMouseDown: keepToItself, onDoubleClick: keepToItself } as const;
@@ -80,6 +84,11 @@ function SceneUnsavedPopover({ nodeId, line, anchorRef, onClose }: {
   const lineId = useId();
   const dismiss = useCallback(() => onClose(false), [onClose]);
   const position = useAnchoredPopover(anchorRef, panelRef, dismiss, 'start', 320);
+
+  useEffect(() => {
+    noteScenePopover(nodeId, true);
+    return () => noteScenePopover(nodeId, false);
+  }, [nodeId]);
 
   useEffect(() => {
     if (position) panelRef.current?.querySelector<HTMLElement>('button')?.focus();

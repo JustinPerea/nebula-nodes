@@ -260,7 +260,7 @@ const SURFACES: Record<string, Surface> = {
     mount: () => {
       const entry = { id: 'e1', before: { nodes: {}, edges: [] }, after: { nodes: {}, edges: [] } };
       useGraphStore.setState({ undoStack: [entry as never], redoStack: [],
-        undoNotice: { id: 1, text: 'Codex changed the canvas', offer: 'undo', entry: entry as never } as never });
+        undoNotice: { id: 1, text: 'Codex changed the canvas.', offer: 'undo', entry: entry as never } as never });
       return at(<CanvasUndoNotice />);
     },
     looks: [/^Dismiss$/],

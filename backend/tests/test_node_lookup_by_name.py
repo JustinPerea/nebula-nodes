@@ -255,7 +255,9 @@ def test_a_style_model_named_by_display_name_is_refused_naming_the_id(cli, tmp_p
         "refImages": [], "scope": "global"})
     assert refused.status_code == 400
     detail = refused.json()["detail"]
-    assert f"unknown node definition {name}: did you mean {match}?" in detail
+    # GM #198 r23 answer 3: id-shaped stays bare, a name with spaces is in “…”.
+    shown = name if " " not in name else f"“{name}”"
+    assert f"unknown node definition {shown}: did you mean {match}?" in detail
     assert "find_nodes" in detail
     assert cli.http.get("/api/presets").json() == []  # nothing stored
 

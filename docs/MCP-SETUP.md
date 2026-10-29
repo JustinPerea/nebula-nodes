@@ -2073,7 +2073,7 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   Generate again when it finishes."); if a graph import is running,
   "Nothing ran. Nebula is still importing. Click “Run” again when it
   finishes." (from Cinema, "… Generate again when it finishes."). A notice
-  that arrives while "Codex changed the canvas" offers its Undo shows above
+  that arrives while "Codex changed the canvas." offers its Undo shows above
   it and leaves the Undo in place. While the dialog is open, focus stays in
   it (if the rows stop scrolling while they have focus, focus moves to
   Cancel) and no key acts behind it: not Cmd+Enter, Delete or Backspace,
@@ -3233,7 +3233,7 @@ answers.
 How it works: a graphSync caused by an edit request carries `edit` =
 `{actor, tab?, id?, undoes?}`. `id` names an agent's apply or undo (its
 `undo.editId`), and `undoes` says the sync is an agent undoing that edit
-(the notice then reads "Claude undid its edit"). `actor` is the request's journal actor (a named agent, the
+(the notice then reads "Claude undid its edit."). `actor` is the request's journal actor (a named agent, the
 person, or anonymous). `tab` is the canvas tab that sent it (`X-Nebula-Tab`,
 set by the canvas on every write), so that tab skips the echo of its own
 edit. Only the person's canvas (this launch's person token) gets a `tab`:
@@ -3688,6 +3688,7 @@ was):
 | `canvas_replaced` | 409 | the same project is open, but its canvas was cleared or replaced (a graph import) since the caller read it (a tab's `X-Nebula-Canvas-Revision`, or a write that waited), so node ids may name new nodes; nothing changed | the same `project` and `switchedBy` as `workspace_moved` |
 | `scene_changed` | 409 | a scene write built on a scene that changed since (its `ifSceneKey`, or for an agent the scene that session last read); nothing was saved (above) | `scene`, `sceneKey`, `sceneRev`, `changedBy` |
 | `node_gone` | 404 | a node write (`PUT /api/graph/node/{id}`) to a node that isn't on the canvas: someone deleted it (the detail for an agent is `Node n4 not found`, the id bare) | `deletedBy`: `{kind, name}` of who deleted it, as `changedBy` names a writer, or `null` when Nebula didn't see the delete |
+| `unknown_definition` | 400 | a node write named a node definition the registry doesn't have (`unknown node definition moodboard`; a value with spaces or other characters no id has is in “…”: `unknown node definition “GPT Image 2”`), or none at all (`unknown node definition ""`; the person reads "No node definition was given.") | `definitionId`: the raw value sent (`""` for none) |
 | `input_taken` | 409 | a connect with `"onlyIfFree": true` into a single-connection input that holds another connection; nothing changed (above) | |
 | `params_outdated` | 409 | the tab was built for another params version; reload | `paramsVersion` |
 | `run_safeguards` | 507 | the paid-start fence can't be read or written | |
@@ -3700,33 +3701,53 @@ On the person's canvas a deleted scene says so once ("Codex deleted
 window…" for the person's other tab; "“Opening” was deleted, so your changes
 to it can’t be saved." when Nebula didn't see who) and stops saving it. Your
 delete's own toast says it, with your edit's Undo: when your write only
-deleted the scene the toast is that line; when it did more, "Codex changed
-the canvas." comes first and the line after it, in the same toast. If the
+deleted the scene the toast is that line; when it did more, it is one
+sentence: "Codex changed the canvas and deleted “Opening”, so your changes
+to it can’t be saved.". If the
 delete is undone (that Undo, the Agent log's, or yours), the scene comes
-back and the person's edits are merged onto it and saved, with no new line;
+back as Nebula had it (the canvas's own Undo puts back Nebula's scene, not
+the card as it was shown, so it doesn't pick a value) and the person's
+edits are merged onto it and saved, with no new line;
 a field the person was still being asked about (your change clashed with
 theirs when you deleted it) is asked again, against the scene as it came
-back, unless your restored value is the person's. A
+back, unless your restored value is the person's. The prompt takes the
+delete toast's place (and the Undo's own "Undid Codex’s edit"), never
+both; it has no ×, so focus goes to the prompt itself, never Keep mine. A
 `workspace_moved` refusal says nothing on the card: the project switch's
 own handling says it once (an agent's switch hands the edits over; any
 other stops on the outdated-workspace banner with its Reload, whose Try
 again keeps the person's scene edits as a recovered project, even ones the
-autosave had already sent).
+autosave had already sent). Once that copy is saved, a neutral notice takes
+the banner's place on Projects: "Your latest edits were saved as their own
+project, “Recovered canvas (recovered)”.", with [Open] (opens that copy)
+and ×. The copy is an ordinary project in `list_projects`, named after
+the project with "(recovered)" after it.
 
-A scene save stopped because another writer kept changing it tries once by
-itself when that writer goes quiet. If that try (or the save the person's
-clash answer sends) is refused 400 or 413, it can't succeed as it is: the
-card says so once ("Nebula can’t save your changes to “Opening”."; for 413
-"“Opening” is too big to save. Remove something from it, then try again.")
-and nothing more goes until the person edits the scene or presses Try
-again. The Agent log's line for it carries the status and the code
-(`HTTP 400 bad_params`); the person's line never does.
+A scene save refused 400 or 413 can't succeed as it is, whichever save it
+was: an ordinary one, the quiet try a stopped save makes when the writer
+that kept changing it goes quiet, the save the person's clash answer
+sends, a Try again or an edit. There is one line per status: 400 "Nebula
+can’t save your changes to “Opening”.", 413 "“Opening” is too big to
+save. Remove something from it, then try again.". Neither promises a
+retry. The card says it once, with
+Try again (on the toast and in the "Unsaved" mark's popover), and nothing
+more goes until the person edits the scene or presses Try again; one of
+those refused the same way again keeps the same line and Try again, and
+your writes meanwhile never send it. While the
+person has that popover open, the toast with the same line leaves and
+doesn't come back. The Agent log's line for it carries the status and the
+code (`Couldn’t save “Opening”, node n1: HTTP 400 bad_params. <detail>`);
+the person's line never does.
 
 Ids and handles in details, run errors and CLI output take no quotes
 (`run run_ab12 already ran…`, `Node n4 not found`, `Required input port
 prompt is not connected`, `n4 has no output video`), so a copied id never
 carries a quote mark. A name you wrote that matches nothing takes “…”
-(`no Style “Neon dusk”`, `no board “Dusk”`, `2 boards are named “Dusk”`).
+(`no Style “Neon dusk”`, `no board “Dusk”`, `2 boards are named “Dusk”`,
+`“grain” isn't on the Avoid list`, `openai has no model “gpt-9”`). A node
+definition you sent is bare when it looks like an id and in “…” when it
+doesn't (`unknown node definition “GPT Image 2”`); none at all is
+`unknown node definition ""` (code `unknown_definition`).
 A call you can make next is code, in backticks with its own quotes
 (`` `get_run('run_ab12')` ``).
 

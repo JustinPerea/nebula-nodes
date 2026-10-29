@@ -4,7 +4,7 @@
  * - Heading: "Couldn’t save your edits."
  * - Buttons: "Download your edits" (primary) / "Continue without them"
  * - Confirm after "Continue without them": "Continue without your edits?
- *   They can't be recovered after this." Buttons: "Continue without them" /
+ *   They can’t be recovered after this." Buttons: "Continue without them" /
  *   "Cancel", with focus on Cancel.
  * - After a download: "Your edits are saved as {filename}. Open it from
  *   Projects to bring them back." Use whatever the real reopen path is called
@@ -60,7 +60,7 @@ describe("Projects: Couldn’t save your edits.", () => {
     const line = dialog.getAttribute('aria-labelledby') ? document.getElementById(dialog.getAttribute('aria-labelledby')!)?.textContent : '';
     expect(line).toBe("Continue without them? “Glass campaign” keeps its nodes, connections and settings. "
       + 'Run history since the last save, and anything else only this tab has, will be lost.');
-    expect(line).not.toContain("Continue without your edits? They can't be recovered after this.");
+    expect(line).not.toContain("Continue without your edits? They can’t be recovered after this.");
     fireEvent.click(within(dialog).getByRole('button', { name: 'Continue without them' }));
     expect(actions.onContinueWithoutEdits).toHaveBeenCalledTimes(1);
   });
@@ -94,7 +94,7 @@ describe("Projects: Couldn’t save your edits.", () => {
     render(<Home {...actions} />);
     const trigger = screen.getByRole('button', { name: 'Continue without them' });
     fireEvent.click(trigger);
-    const dialog = screen.getByRole('alertdialog', { name: "Continue without your edits? They can't be recovered after this." });
+    const dialog = screen.getByRole('alertdialog', { name: "Continue without your edits? They can’t be recovered after this." });
     expect(within(dialog).getByRole('button', { name: 'Continue without them' })).toBeTruthy();
     const cancel = within(dialog).getByRole('button', { name: 'Cancel' });
     expect(document.activeElement).toBe(cancel);
@@ -204,7 +204,7 @@ describe('review: the line after a download, and where focus goes', () => {
 describe("GM's lines", () => {
   const BILLING = "zz1: Changing how a Krea node is billed (_kreaAuth) is the person's call. Propose the change instead with propose_change (`nebula propose`).";
   const PERSON_LINE = "Couldn't recover the project. This change needs your OK, and this tab isn't connected as you. Open the link Nebula printed when it started, then try again.";
-  const NOT_WRITTEN = "The download didn't save, so your edits are still only in this tab. Check that your disk has free space, then download them again, or continue without them.";
+  const NOT_WRITTEN = "The download didn’t save, so your edits are still only in this tab. Check that your disk has free space, then download them again, or continue without them.";
 
   it("GM's line 1 is gone (Q118): a big file opens with Load graph now", () => {
     render(<Home {...props({ unsavedEdits: null, editsSavedAs: { name: SAVED, reopens: false } })} />);

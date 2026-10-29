@@ -7,28 +7,23 @@ import { nodeNameList, quotedNames } from './errorCopy';
  * generic one, never both.
  */
 
-/** "Couldn't save your changes to “Opening”." The heading of every line below
- * but the 413's, which is GM's own (r6 item 1). */
+/** "Couldn’t save your changes to “Opening”." The heading of the lines
+ * below that keep their edits for a retry (not the 400 and 413 lines, which
+ * are GM's own). */
 export function sceneSaveHeading(scene: string): string {
   return `Couldn’t save your changes to “${scene}”.`;
 }
 
-/** 413, the whole save (GM r6 item 1, verbatim): "Couldn't save “Scene”. The
- * project is too big to save. Remove something and Nebula will save your changes." */
-export const SCENE_TOO_BIG = 'The project is too big to save. Remove something and Nebula will save your changes.';
-export function sceneTooBigLine(scene: string): string {
-  return `Couldn’t save “${scene}”. ${SCENE_TOO_BIG}`;
-}
-
-/** GM (2026-10-28, #198 r12 answer 1): a stopped save's own try (its quiet
- * try, or the save a clash answer sent) refused 400 or 413 can never succeed
- * as it is: said once, nothing retries by itself, and no line promises a
- * retry. [Try again] stays in the "Unsaved" mark's popover. The status and
- * code go to the Agent log only. 400, verbatim: */
+/** GM (2026-10-28, #198 r12 answer 1; r22 Q3: one line per status
+ * everywhere, a save that wasn't stopped too): a save refused 400 or 413 can
+ * never succeed as it is: said once, nothing retries by itself, and no line
+ * promises a retry. [Try again] goes with it, on the toast and in the
+ * "Unsaved" mark's popover. The status and code go to the Agent log only.
+ * 400, verbatim: */
 export function sceneCantSaveLine(scene: string): string {
   return `Nebula can’t save your changes to “${scene}”.`;
 }
-/** 413, in place of the generic stop line, verbatim: */
+/** 413, verbatim: */
 export function sceneTooBigToSaveLine(scene: string): string {
   return `“${scene}” is too big to save. Remove something from it, then try again.`;
 }
@@ -102,6 +97,15 @@ export function sceneDeletedLine(scene: string, by: SceneWriter): string {
   return `“${scene}” was deleted, ${tail}`;
 }
 
+/** GM r22 note 3: an agent's write that deleted the scene and did more
+ * besides is one toast, one sentence: "Codex changed the canvas and deleted
+ * “Opening”, so your changes to it can’t be saved." (several scenes: “A”
+ * and “B”, "to them"). */
+export function sceneChangedAndDeletedLine(agent: string, scenes: readonly string[]): string {
+  const them = scenes.length > 1 ? 'them' : 'it';
+  return `${agent} changed the canvas and deleted ${quotedNames(scenes, 'scenes')}, so your changes to ${them} can’t be saved.`;
+}
+
 /** The workspace moved (GM r7): "Codex switched to “Y” first."; the person
  * in another window (GM r9 answer 4): "You switched to “Y” in another window
  * first."; nobody known: "Nebula switched to “Y” first." */
@@ -112,10 +116,6 @@ export function switchedFirst(project: string, agent: string | null, byPerson = 
 /** The workspace moved and the backend named no project (an unfiled
  * canvas; GM r8, verbatim). */
 export const SWITCHED_UNNAMED = 'The canvas switched to another project first.';
-
-/** 400, a bad save, which is Nebula's bug (GM r7, verbatim). The detail goes
- * in the Agent log. */
-export const BAD_SAVE = "Nebula ran into a problem saving them, so they’re kept on screen but not saved.";
 
 /** The scene card's mark while its edits aren't saved (GM r9: "Unsaved", to
  * match the bar's "Unsaved changes"): a small label under the card's header,

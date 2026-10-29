@@ -86,7 +86,10 @@ USAGE_PATTERNS = [
         # describe_node's and the write paths' words for a node type that isn't one
         # (an unknown id, or a display name two nodes share).
         r"\bNo node type (?:'[^']+'|[^\s'.:]+)[.:]",
-        r"\bunknown node definition (?:'[^']+'|[^\s'.:]+)",
+        # GM #198 r23 answer 3: bare when id-shaped, in “…” otherwise, and
+        # its own line when none was given.
+        r"\bunknown node definition (?:'[^']+'|“[^”]+”|[^\s'.:]+)",
+        r"\bNo node definition was given\.",
         r"`nebula [a-z-]+` doesn't take --",
         r"\bRename existing nodes with edit_canvas\b",
         r"\bvalidation errors? for \w+Arguments\b",

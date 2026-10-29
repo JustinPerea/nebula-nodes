@@ -157,7 +157,9 @@ describe('H1-new: a shot removal another window\'s run refuses (review 4, R3)', 
       shots: current.shots.map((shot) => (shot.id === 's1' ? { ...shot, prompt: 'very long' } : shot)) }));
     await sleep(120);
     expect(shotsOf()[0].prompt).toBe('very long');
-    expect(said).toEqual(["Couldn’t save “Opening”. The project is too big to save. Remove something and Nebula will save your changes."]);
+    // GM r22 Q3: the one 413 line, with [Try again].
+    expect((() => { const g = useGraphStore.getState(); return g.undoNotice?.retryScene?.nodeId === 'n1' ? g.undoNotice.text : g.messageNotice?.retryScene?.nodeId === 'n1' ? g.messageNotice.text : null; })()).toBe('“Opening” is too big to save. Remove something from it, then try again.');
+    expect(said).toEqual([]);
   });
 });
 
