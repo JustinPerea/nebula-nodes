@@ -377,7 +377,9 @@ def start_here(ctx: Context | None = None) -> str:
       first, then on screen), the rest in `others` by id and name, with
       `truncated`; look_at_canvas has every node in full.
     - `pins`: the person's open pins (id, text, anchor), newest first, and
-      `openCount`. Each is a request: act on it, then resolve_pin.
+      `openCount`. Each is a request: act on it, then resolve_pin. A note
+      keeps the person's lines (newlines in `text`) and its spacing, as
+      look_at_canvas has it.
     - `proposals`: open proposals waiting for the person, and `count`.
     - `boards`: every moodboard, the current project's first, then Global,
       then other projects (`where`), with its image count, whether it is
@@ -421,7 +423,8 @@ def look_at_canvas(ctx: Context | None = None) -> dict[str, Any]:
     to do (a node saved before Replicate outputs were typed: set its
     model_id again). `events.cursor` is where wait_for_canvas_change should start (`since`).
     `pins` are short notes the person pinned for agents ("warmer", "redo this
-    one"), open ones first, each anchored to a node or a canvas spot. Treat an
+    one"), open ones first, each anchored to a node or a canvas spot; a note
+    keeps the lines the person wrote (newlines in `text`). Treat an
     open pin as the person's request: act on it, then answer with resolve_pin.
     `proposals` are the open ones waiting for the person (id, agent, note,
     status); get_proposal reads one in full. `providerHolds` are paid starts
@@ -650,7 +653,8 @@ def wait_for_canvas_change(
     node.renamed, edge.added, selection.changed, run.finished,
     run.skipped, canvas.replaced, edit.undone, board.moved, board.fields,
     ...), the `actor` who did it (`person`, an `agent`,
-    or `anonymous`), `nodeId`, `data` and a one-line `summary`. An event
+    or `anonymous`), `nodeId`, `data` and a one-line `summary` (a line
+    break in a note shows there as " ⏎ "; `data.text` has the note whole). An event
     from a canvas edit has `edit`: your edit_canvas events carry its `id`
     (your `undo.editId`); an undo's events carry `undoes` (the edit id it
     reverted) and `of` (whose edit), and end with `edit.undone` (only a

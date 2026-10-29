@@ -65,8 +65,11 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
   const updateClip = useGraphStore((s) => s.updateEditNodeClip);
   // Round 23 (review 22, L-3): Cut, the speed and volume controls and Mute
   // edit the clip on the canvas, so they take the canvas lock. Play, the edit
-  // points, Trim/Speed/Vol (they select and focus), zoom, Render Preview and
-  // Export only look or make a file, and stay enabled.
+  // points, Trim/Speed/Vol (they select and focus) and zoom only look, and
+  // stay enabled. Render Preview and Export… start a render on the backend
+  // (while following, of the canvas that is going away; offline it can't
+  // start), so they lock too (review 3 LOW-4), with the follow or reconnect
+  // tooltip.
   const lock = useCanvasLock();
   const cutAtSource = useGraphStore((s) => s.cutEditNodeAtSource);
   const speedSliderRef = useRef<HTMLInputElement>(null);
@@ -277,7 +280,7 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
         </button>
         <button
           type="button"
-          className="editor-transport__btn"
+          className="editor-transport__btn editor-transport__zoom-reset"
           onClick={() => useUIStore.getState().resetTimelineZoom()}
           title="Reset zoom (⌘0)"
         >
@@ -296,7 +299,7 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
         type="button"
         className="editor-transport__btn editor-transport__btn--render"
         onClick={handleRender}
-        disabled={isRendering || clips.length === 0}
+        {...lock.act({ disabled: isRendering || clips.length === 0, offline: true })}
       >
         <RotateCw className="editor-transport__icon" aria-hidden="true" focusable="false" />
         <span>{isRendering ? 'Rendering...' : hasRendered ? 'Re-render' : 'Render Preview'}</span>
@@ -306,7 +309,7 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
           type="button"
           className="editor-transport__btn editor-transport__btn--export"
           onClick={() => setExportOpen((open) => !open)}
-          disabled={clips.length === 0}
+          {...lock.act({ disabled: clips.length === 0, offline: true })}
         >
           <Download className="editor-transport__icon" aria-hidden="true" focusable="false" />
           <span>Export…</span>
@@ -359,7 +362,7 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
                 <button type="button" onClick={renderJob.reset}>New export</button>
               </div>
             ) : (
-              <button type="button" className="final-export__start" onClick={handleFinalExport}>
+              <button type="button" className="final-export__start" onClick={handleFinalExport} {...lock.act({ offline: true })}>
                 Export {exportFormat.toUpperCase()}
               </button>
             )}

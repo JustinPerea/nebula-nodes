@@ -35,7 +35,7 @@ import '../../styles/mask-painter.css';
 import { failureMessage } from '../../lib/errorCopy';
 import { extractPaletteFromImage, paletteNotice } from '../../lib/paletteExtract';
 import { fileNameParam, inputFileName } from '../../lib/fileName';
-import { useCanvasLock } from '../../lib/canvasLock';
+import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 
 type InspectorParamDefinition = ParamDefinition | DynamicParamDefinition;
 
@@ -68,6 +68,14 @@ export function Inspector({ embedded = false }: InspectorProps) {
   // open." while following.
   const lock = useCanvasLock();
   const readOnly = lock.locked;
+  // A file picker is a <label> around a hidden input: the input is disabled,
+  // and the label carries the lock's look and reason (follow, then offline;
+  // GM r9 answer 3: "You can choose a file when Nebula reconnects.").
+  const lockedPicker = (title: string | undefined, offline: string) => ({
+    ...lock.mark,
+    title: lock.title({ title, offline }),
+    'aria-disabled': readOnly || undefined,
+  });
   const panelVisible = useUIStore((s) => s.panels.inspector.visible);
   const position = useUIStore((s) => s.panels.inspector.position);
   const selectedNodeId = useUIStore((s) => s.selectedNodeId);
@@ -484,8 +492,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
               type="button"
               className={
                 isFavorite
-                  ? 'inspector__favorite-button inspector__favorite-button--active'
-                  : 'inspector__favorite-button'
+                  ? 'inspector__favorite-button inspector__favorite-button--active inspector__favorite-remove'
+                  : 'inspector__favorite-button inspector__favorite-remove'
               }
               title={isFavorite ? 'Remove favorite' : 'Add favorite'}
               aria-label={isFavorite ? 'Remove model from favorites' : 'Add model to favorites'}
@@ -681,9 +689,11 @@ export function Inspector({ embedded = false }: InspectorProps) {
                     <button
                       type="button"
                       className="inspector__palette-remove"
-                      title="Remove swatch"
                       aria-label={`Remove swatch ${idx + 1}`}
-                      disabled={readOnly} {...lock.mark}
+                      // Fix round 5 of PR #200 (review 5 LOW-2, GM r7): the
+                      // lock's own tooltip, the follow reason first, then
+                      // offline's verb; "Remove swatch" when live.
+                      {...lock.act({ title: 'Remove swatch', offline: 'remove swatches' })}
                       onClick={() => writeSwatches(swatches.filter((_, i) => i !== idx))}
                     >
                       <X
@@ -703,8 +713,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
             <button
               type="button"
               className="inspector__action-button"
-              title="Add a swatch"
-              disabled={readOnly} {...lock.mark}
+              // Fix round 6 of PR #200 (review 6 LOW-1, GM r8): the lock's
+              // reason, not "Add a swatch", while it can't add.
+              {...lock.act({ title: 'Add a swatch', offline: 'add swatches' })}
               onClick={() => writeSwatches([...swatches, '#808080'])}
             >
               <Plus
@@ -716,7 +727,10 @@ export function Inspector({ embedded = false }: InspectorProps) {
               />
               <span>Add</span>
             </button>
-            <label className="inspector__file-button" title="Extract a palette from an image">
+            {/* A <label> can't be disabled: locked, it says so itself (the
+                shared grey, the lock's reason, no hover; fix round 6 of PR
+                #200, review 6 LOW-1, GM r9 answer 3). */}
+            <label className="inspector__file-button" {...lockedPicker('Extract a palette from an image', 'extract a palette')}>
               <Upload
                 className="inspector__action-icon"
                 size={14}
@@ -732,6 +746,10 @@ export function Inspector({ embedded = false }: InspectorProps) {
                 disabled={extracting || readOnly}
                 {...lock.mark}
                 onChange={(e) => {
+                  // Fix round 7 of PR #200 (review 7 N-2): refused here too, so
+                  // a file set on the input from outside, or picked just before
+                  // the lock, uploads nothing (no orphan in output/).
+                  if (refuseCanvasEdit()) { e.target.value = ''; return; }
                   const file = e.target.files?.[0];
                   if (!file) return;
                   // Reset the input so the same file can be picked again later.
@@ -780,7 +798,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           : 'image/*,video/*,audio/*';
       return (
         <div className="inspector__control-stack">
-          <label className="inspector__file-button">
+          <label className="inspector__file-button" {...lockedPicker(undefined, 'choose a file')}>
             <Upload
               className="inspector__action-icon"
               size={14}
@@ -795,6 +813,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
               disabled={readOnly} {...lock.mark}
               className="inspector__file-input"
               onChange={(e) => {
+                // Review 7 N-2: refused here too (see Extract's onChange).
+                if (refuseCanvasEdit()) { e.target.value = ''; return; }
                 const file = e.target.files?.[0];
                 if (!file) return;
                 const formData = new FormData();

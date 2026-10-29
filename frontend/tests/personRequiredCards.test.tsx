@@ -1,8 +1,8 @@
 /**
  * GM - Design, 2026-10-23 (Q116 a, round 2): "This change needs your OK, and
- * this tab isn't connected as you. Open the link Nebula printed when it
+ * this tab isn’t connected as you. Open the link Nebula printed when it
  * started, then try again." In the desktop app: "This change needs your OK,
- * and this window isn't connected as you. Quit Nebula and open it again, then
+ * and this window isn’t connected as you. Quit Nebula and open it again, then
  * try again." "Use it for every person-only refusal, not just Krea
  * billing. The agents' text stays behind Details."
  *
@@ -19,8 +19,8 @@ import { ExecutionStartRejectedError } from '../src/lib/api';
 import { NodeRunError } from '../src/components/nodes/NodeError';
 import { RUN_HISTORY_STORAGE_KEY } from '../src/lib/runHistory';
 
-const GM_LINE = "This change needs your OK, and this tab isn't connected as you. Open the link Nebula printed when it started, then try again.";
-const APP_LINE = "This change needs your OK, and this window isn't connected as you. Quit Nebula and open it again, then try again.";
+const GM_LINE = "This change needs your OK, and this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.";
+const APP_LINE = "This change needs your OK, and this window isn’t connected as you. Quit Nebula and open it again, then try again.";
 const BILLING = "n1: Changing how a Krea node is billed (_kreaAuth) is the person's call, so it needs their OK. Leave _kreaAuth as it is, and propose the change instead with propose_change (`nebula propose`); the person accepts it on the canvas.";
 
 const krea = {

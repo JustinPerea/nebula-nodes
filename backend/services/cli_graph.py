@@ -49,6 +49,13 @@ class CLIGraph:
         # tabs loaded before the restart reload).
         self.upgraded_on_load = 0
         self.params_advanced_on_load = False
+        # A Cinema shot's run media (output, variations, its port's output)
+        # kept after a write took the shot out, by (node id, shot id), so an
+        # Undo that brings the shot back brings its images too (fix round 9
+        # of PR #200, GM r13). Server-held only; never sent to clients. It
+        # belongs to this canvas: clone and replace_with carry it, clear and
+        # load drop it.
+        self.removed_shot_media: dict[tuple[str, str], dict[str, Any]] = {}
 
     def _maybe_persist(self) -> None:
         """Best-effort save — swallow errors so a hostile filesystem never
@@ -217,6 +224,7 @@ class CLIGraph:
         self.nodes.clear()
         self.edges.clear()
         self._counter = 0
+        self.removed_shot_media = {}
         self._maybe_persist()
 
     def replace_with(self, candidate: "CLIGraph") -> None:
@@ -240,6 +248,7 @@ class CLIGraph:
         self.nodes = replacement_nodes
         self.edges = replacement_edges
         self._counter = replacement_counter
+        self.removed_shot_media = copy.deepcopy(candidate.removed_shot_media)
 
     def clone(self) -> "CLIGraph":
         """Return a persistence-free deep copy suitable for staged mutation."""
@@ -247,6 +256,7 @@ class CLIGraph:
         candidate.nodes = copy.deepcopy(self.nodes)
         candidate.edges = copy.deepcopy(self.edges)
         candidate._counter = self._counter
+        candidate.removed_shot_media = copy.deepcopy(self.removed_shot_media)
         return candidate
 
     # ------------------------------------------------------------------
@@ -375,6 +385,7 @@ class CLIGraph:
         version = stored_version(data.get("paramsVersion"))
         upgraded = upgrade_flat_nodes(nodes.values(), version)
         self.nodes, self.edges, self._counter = nodes, edges, counter
+        self.removed_shot_media = {}
         self.upgraded_on_load = upgraded
         self.params_advanced_on_load = version < PARAMS_VERSION
 

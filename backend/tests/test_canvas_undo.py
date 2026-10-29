@@ -60,7 +60,7 @@ def api(tmp_path, monkeypatch, person):
     book = CanvasUndoBook(clock=clock)
     sent: list[dict] = []
 
-    async def capture(data):
+    async def capture(data, **kw):
         sent.append(data)
 
     monkeypatch.setattr(main_module, "cli_graph", graph)
@@ -567,8 +567,8 @@ def test_a_change_that_lands_during_the_edits_own_broadcast_is_not_part_of_its_u
     landed = {"done": False}
     original = main_module.manager.broadcast_raw
 
-    async def broadcast_then_the_person_edits(data):
-        await original(data)
+    async def broadcast_then_the_person_edits(data, **kw):
+        await original(data, **kw)
         if data.get("type") == "graphSync" and not landed["done"]:
             landed["done"] = True
             # The person's own edits, landing while apply is still awaiting.
@@ -597,8 +597,8 @@ def test_an_edit_whose_canvas_is_cleared_while_it_finishes_gets_no_token(api, mo
     original = main_module.manager.broadcast_raw
     cleared = {"done": False}
 
-    async def broadcast_then_clear(data):
-        await original(data)
+    async def broadcast_then_clear(data, **kw):
+        await original(data, **kw)
         if data.get("type") == "graphSync" and not cleared["done"]:
             cleared["done"] = True
             api.graph.clear()

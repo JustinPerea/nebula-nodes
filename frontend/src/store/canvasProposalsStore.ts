@@ -18,6 +18,7 @@ import type { Point } from '../lib/agentCursorMotion';
 import { useGraphStore, watchGraphSyncs } from './graphStore';
 import { PERSON_REQUIRED_CODE, failureMessage } from '../lib/errorCopy';
 import { refuseEditWhileOffline } from '../lib/backendConnection';
+import { onPersonPromoted, personGateHeld } from '../lib/personSession';
 import { refuseEditWhileFollowing } from '../lib/canvasFollow';
 
 /** How long a closed proposal's ghosts fade before they go. Matches canvasProposals.css. */
@@ -112,6 +113,14 @@ function cleanValues(values: unknown): ProposalPersonValues | undefined {
   if (!isRecord(values) || !isRecord(values.nodes) || !isRecord(values.params)) return undefined;
   return values as unknown as ProposalPersonValues;
 }
+
+/** Review 17 LOW-1 (fix round 20): proposals whose error is the person gate's
+ * refusal (403 person_required). The server promoting the tab clears them. */
+const personRefused = new Set<string>();
+const notePersonRefusal = (id: string, error: unknown) => {
+  if (error instanceof ProposalRequestError && error.code === PERSON_REQUIRED_CODE) personRefused.add(id);
+  else personRefused.delete(id);
+};
 
 function without<T>(record: Record<string, T>, id: string): Record<string, T> {
   if (!(id in record)) return record;
@@ -278,6 +287,7 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
         : error instanceof ProposalRequestError && error.status === 403 && error.code !== PERSON_REQUIRED_CODE
         ? 'Only the canvas can accept this. Reload the page.'
         : failureMessage(error, "Couldn't accept the proposal.");
+      notePersonRefusal(id, error);
       set((state) => ({ errors: { ...state.errors, [id]: message } }));
     } finally {
       // On every path (ending twice is harmless): an undo pressed meanwhile acts (review 10, L-2).
@@ -301,6 +311,7 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
       const message = error instanceof ProposalRequestError && error.status === 403 && error.code !== PERSON_REQUIRED_CODE
         ? 'Only the canvas can reject this. Reload the page.'
         : failureMessage(error, "Couldn't reject the proposal.");
+      notePersonRefusal(id, error);
       set((state) => ({ errors: { ...state.errors, [id]: message } }));
     } finally {
       set((state) => ({ pending: without(state.pending, id) }));
@@ -323,7 +334,13 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
   dismissDeferred: () => {
     const deferred = get().deferredRun;
     set(nextDeferred);
-    if (deferred?.approvalId) void releaseApproval(deferred.approvalId);
+    if (!deferred?.approvalId) return;
+    // GM r33 item 2 (fix round 22): while this tab isn't connected as the
+    // person, Dismiss hides the notice here only; the release (person-only,
+    // DELETE /api/canvas/approvals/{id}, which only frees the nodes it locked)
+    // goes once the server promotes the tab.
+    if (personGateHeld()) holdRelease(deferred.approvalId);
+    else void releaseApproval(deferred.approvalId);
   },
 }));
 
@@ -341,3 +358,63 @@ wsClient.subscribe((event) => {
     for (const held of [deferredRun, ...deferredQueue]) if (held?.approvalId) void releaseApproval(held.approvalId);
   }
 });
+
+// Review 17 LOW-1 (fix round 20): once the server promotes this tab, an
+// Accept or Reject refused for not being connected as the person no longer
+// says so; Accept and Reject are live again (ProposalBar reads the hold).
+onPersonPromoted(() => {
+  if (!personRefused.size) return;
+  const errors = { ...useCanvasProposalsStore.getState().errors };
+  for (const id of personRefused) delete errors[id];
+  personRefused.clear();
+  useCanvasProposalsStore.setState({ errors });
+});
+
+// GM r33 item 2: the approvals dismissed while the gate held, released once
+// the server promotes the tab, each once. Review 19 LOW-1 (fix round 23): kept
+// in this tab's sessionStorage too, so a reload before the promote still
+// releases them (otherwise the approval keeps its nodes locked against agent
+// edits until its 30-minute TTL, and nothing says so). Only a promote sends:
+// never on load. An id the server no longer has answers not_found, which
+// releaseApproval lets pass, so it is done either way. A tab whose storage
+// throws keeps them in memory only, as before.
+export const HELD_RELEASES_KEY = 'nebula.heldRunReleases';
+
+function readHeldReleases(): string[] {
+  try {
+    const raw = window.sessionStorage.getItem(HELD_RELEASES_KEY);
+    const ids: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string' && id.length > 0).slice(0, 64) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeHeldReleases(ids: ReadonlySet<string>): void {
+  try {
+    if (ids.size) window.sessionStorage.setItem(HELD_RELEASES_KEY, JSON.stringify([...ids]));
+    else window.sessionStorage.removeItem(HELD_RELEASES_KEY);
+  } catch {
+    /* No storage in this tab: memory only. */
+  }
+}
+
+const releasesHeld = new Set<string>(readHeldReleases());
+
+function holdRelease(approvalId: string): void {
+  releasesHeld.add(approvalId);
+  writeHeldReleases(releasesHeld);
+}
+
+onPersonPromoted(() => {
+  if (!releasesHeld.size) return;
+  const ids = [...releasesHeld];
+  releasesHeld.clear();
+  writeHeldReleases(releasesHeld);
+  for (const id of ids) void releaseApproval(id);
+});
+
+/** A reload, for tests: what this tab held in memory goes; its storage stays. */
+export function forgetHeldReleasesForTests(): void {
+  releasesHeld.clear();
+}

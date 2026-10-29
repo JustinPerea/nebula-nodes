@@ -64,7 +64,7 @@ export function isModalDialogOpen(): boolean {
 /** The modal dialog on top, or null: the last one opened (review 9, nit b),
  * by ModalPortal's layers, wherever it sits on the page; a modal outside a
  * layer is above what comes before it on the page, as before. */
-function topModalDialog(): Element | null {
+export function topModalDialog(): Element | null {
   let top: Element | null = null;
   for (const dialog of shownModalDialogs()) {
     const [mine, theirs] = [layerOf(dialog), top ? layerOf(top) : null];

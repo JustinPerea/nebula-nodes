@@ -68,7 +68,7 @@ export function ModelPicker({ value, onSelect, onClose, selectedParams }: ModelP
         {groups.every((group) => group.models.length === 0) && <div className="model-picker__empty">
           <p role="status">No models match this search and provider.</p>
           <p>Try a model name, provider or task such as “animate a logo”.</p>
-          <button type="button" onClick={() => { setQuery(''); setProvider(''); }}>Clear filters</button>
+          <button type="button" className="model-picker__filters-reset" onClick={() => { setQuery(''); setProvider(''); }}>Clear filters</button>
         </div>}
         {groups.filter((group) => group.models.length > 0).map((group) => (
           <div key={group.label} className="model-picker__group">

@@ -717,15 +717,18 @@ async function recoverPendingWork(): Promise<boolean> {
  * idempotent by its id); one over the save limit isn't sent. Null when no
  * project is open; the promise is null when no copy was made.
  */
-function keepReplacedCanvasAsCopy(): Promise<{ id: string; name: string } | null> | null {
+function keepReplacedCanvasAsCopy(): (() => Promise<{ id: string; name: string } | null>) | null {
   const context = getProjectContext();
   if (!context) return null;
+  // The canvas as it is now, before the replacement changes it; the copy is
+  // sent when graphStore calls back (at once, or once a save on its way is
+  // refused: follow-up to PR #195, review 23 L-5).
   const snapshot = captureProjectSnapshot();
   if (projectSizeBytes(snapshot) > PROJECT_SAVE_LIMIT_BYTES) return null;
   const recovery = pendingRecoveryOf(context.id, snapshot);
   // A request that throws before it is sent is a copy not made, never a
   // replacement left half done.
-  return new Promise<Awaited<ReturnType<typeof api.recoverProject>>>((resolve) => {
+  return () => new Promise<Awaited<ReturnType<typeof api.recoverProject>>>((resolve) => {
     resolve(api.recoverProject(recovery.sourceProjectId, recovery.snapshot, recovery.recoveryId, recovery.paramsVersion));
   })
     .then((copy) => (copy && typeof copy.name === 'string' ? { id: copy.id ?? recovery.recoveryId, name: copy.name } : null))

@@ -5,7 +5,7 @@ import { ResultDetails, ResultMetadata } from './ResultDetails';
 import '../../styles/result-comparison.css';
 import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
 import { ModalPortal } from '../ModalPortal';
-import { sitsBehind } from '../../lib/modalFocus';
+import { inNoticeRegion, sitsBehind } from '../../lib/modalFocus';
 
 export interface ComparisonResult {
   key: string;
@@ -66,11 +66,16 @@ export function ResultComparison({ items, onClose, onReuseSettings }: ResultComp
     const containFocus = (event: FocusEvent) => {
       // A modal dialog opened over the comparison keeps its own focus.
       if (keyBlockedByModal(panel)) return;
-      if (event.target instanceof Node && !overlay.contains(event.target)) focusClose();
+      // The app's notices are the trap's second region (GM r25).
+      if (event.target instanceof Node && !overlay.contains(event.target) && !inNoticeRegion(event.target)) focusClose();
     };
     const containKey = (event: KeyboardEvent) => {
       // A modal dialog opened over the comparison owns the keys (review 8, L-d).
       if (keyBlockedByModal(panel)) return;
+      // Review 15 LOW-A (fix round 18): a notice's keys are its own (Enter
+      // and Space press its button, Tab and Shift+Tab: lib/modalFocus; Escape:
+      // GM r27, noticeKeys), never the comparison's.
+      if (inNoticeRegion(event.target)) return;
       // Keep global Canvas shortcuts out of the modal, including a body-level
       // event after browser focus loss. Native video/disclosure defaults remain.
       event.stopImmediatePropagation();

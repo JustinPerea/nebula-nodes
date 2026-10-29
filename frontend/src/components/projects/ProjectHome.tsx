@@ -14,6 +14,7 @@ import { editsSavedLine } from './unsavedEditsCopy';
 import type { SavedEditsFile } from '../../lib/graphFileShared';
 import '../../styles/project-home.css';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { NoticeLeave, type LeaveProps } from '../../lib/noticeLeave';
 
 export interface ProjectSummary {
   id: string;
@@ -276,7 +277,9 @@ function ConfirmInline({ label, confirmLabel, prompt, busy, onConfirm, className
   const trigger = useRef<HTMLButtonElement>(null);
   const disarm = () => { setArmed(false); requestAnimationFrame(() => trigger.current?.focus()); };
   if (!armed) {
-    return <button type="button" ref={trigger} className={className} disabled={busy} onClick={() => setArmed(true)}>{label}</button>;
+    // It arms a Delete forever or an Empty: red on hover (GM r13), neutral at rest.
+    return <button type="button" ref={trigger} className={[className, 'project-home__trigger--danger'].filter(Boolean).join(' ')} disabled={busy}
+      onClick={() => setArmed(true)}>{label}</button>;
   }
   return (
     <span className="project-home__confirm" role="group" aria-label={prompt} onKeyDown={(event) => {
@@ -333,8 +336,8 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash }: {
   );
 }
 
-function UndoToast({ project, busy, onUndo, onDismiss }: {
-  project: { id: string; name: string }; busy: boolean; onUndo: () => void; onDismiss: () => void;
+function UndoToast({ project, busy, onUndo, onDismiss, leave }: {
+  project: { id: string; name: string }; busy: boolean; onUndo: () => void; onDismiss: () => void; leave?: LeaveProps;
 }) {
   const [paused, setPaused] = useState(false);
   useEffect(() => {
@@ -345,7 +348,7 @@ function UndoToast({ project, busy, onUndo, onDismiss }: {
   // In the app's notice region, like every toast (GM - Design, 2026-10-23).
   return (
     <InNoticeRegion slot="project-home">
-      <div className="project-home__toast" role="status" aria-live="polite"
+      <div className="project-home__toast" role="status" aria-live="polite" {...leave}
         onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
         onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
         <span className="project-home__toast-text">Moved “{project.name}” to Recently deleted</span>
@@ -435,13 +438,14 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
           </div>
           {loading ? <div className="project-home__loading" role="status"><span className="project-home__loading-dot" />Loading your projects…</div>
             : visibleProjects.length > 0 ? <div className="project-home__grid">{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} busy={locked} onOpen={onOpen} onRename={onRename} onDelete={onDelete} loadCoverChoices={loadCoverChoices} onPinCover={onPinCover} />)}</div>
-              : projects.length > 0 ? <div className="project-home__empty" role="status"><Search className="project-home__empty-search" aria-hidden="true" /><h3>No projects match “{query.trim()}”</h3><p>Try another name or clear your search.</p><button type="button" className="project-home__secondary" onClick={() => setQuery('')}>Clear search</button></div>
+              : projects.length > 0 ? <div className="project-home__empty" role="status"><Search className="project-home__empty-search" aria-hidden="true" /><h3>No projects match “{query.trim()}”</h3><p>Try another name or clear your search.</p><button type="button" className="project-home__secondary project-home__search-reset" onClick={() => setQuery('')}>Clear search</button></div>
                 : !error && !unsavedEdits && <div className="project-home__empty"><div className="project-home__empty-graph"><NodeGraphPlaceholder /></div><h3>Your first project starts here.</h3><p>Connect ideas, models and media on a canvas of your own.</p><button type="button" className="project-home__secondary" disabled={locked} {...offlineMark(offline)} onClick={() => onCreate()}><Plus aria-hidden="true" />Create your first project</button></div>}
         </section>
         {!loading && trash.length > 0 && <RecentlyDeleted trash={trash} busy={locked} onRestore={onRestore} onPurge={onPurge} onEmptyTrash={onEmptyTrash} />}
       </main>
-      {lastDeleted && <UndoToast key={lastDeleted.id} project={lastDeleted} busy={locked}
-        onUndo={() => onRestore(lastDeleted.id)} onDismiss={onDismissUndo} />}
+      {/* It leaves as it entered (fix round 7 of PR #200, GM r11 answer 2). */}
+      <NoticeLeave value={lastDeleted}>{(last, leave) => <UndoToast key={last.id} project={last} busy={locked}
+        onUndo={() => onRestore(last.id)} onDismiss={onDismissUndo} leave={leave} />}</NoticeLeave>
     </div>
   );
 }

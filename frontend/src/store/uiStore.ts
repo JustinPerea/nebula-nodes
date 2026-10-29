@@ -313,6 +313,11 @@ interface UIState {
   inspectorPinned: boolean;
 
   enterEditor: (sourceNodeId: string) => void;
+  /** Open the trim editor on an edit node that exists (EditNode's Open
+   * Editor): finds nothing, makes nothing, writes nothing, so it works while
+   * following or offline, read-only there (fix round 2 of PR #200, review 2
+   * L-6); the editor's own edits take the canvas lock. */
+  openEditNode: (editNodeId: string) => void;
   setCanvasViewport: (viewport: Viewport, options?: { initial?: boolean; byCanvas?: boolean }) => void;
   clearCanvasViewport: () => void;
   setCinemaSelectedShot: (nodeId: string, shotId: string | null) => void;
@@ -507,6 +512,18 @@ export const useUIStore = create<UIState>(holdCommonsExits(holdCommons, (set, ge
     const editNodeId = useGraphStore.getState().getOrCreateEditNodeDownstream(sourceNodeId);
     // '' when none could be made (offline is read-only, round 15 of PR #114).
     if (!editNodeId) return;
+    set({
+      viewMode: 'editor',
+      editorTargetNodeId: editNodeId,
+      selectedClipId: null,
+      playheadOutputTime: 0,
+      isPlaying: false,
+      renderedPreviewUrl: null,
+    });
+  },
+
+  openEditNode: (editNodeId) => {
+    if (!useGraphStore.getState().nodes.some((node) => node.id === editNodeId && node.data.definitionId === 'video-edit')) return;
     set({
       viewMode: 'editor',
       editorTargetNodeId: editNodeId,

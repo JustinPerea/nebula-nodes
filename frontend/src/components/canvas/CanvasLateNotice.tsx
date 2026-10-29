@@ -1,5 +1,6 @@
 import { useGraphStore } from '../../store/graphStore';
 import { useNoticeHold } from '../../hooks/useNoticeHold';
+import { useLeave } from '../../lib/noticeLeave';
 
 const isShownLate = (id: number) => useGraphStore.getState().lateNotice?.id === id;
 
@@ -24,16 +25,19 @@ export function CanvasLateNotice() {
   const notice = useGraphStore((state) => state.lateNotice);
   const dismiss = useGraphStore((state) => state.dismissLateNotice);
   const holdHandlers = useNoticeHold(notice, isShownLate, dismiss);
-  if (!notice) return null;
+  // It leaves as it entered (fix round 7 of PR #200, GM r11 answer 2).
+  const leave = useLeave(notice);
+  if (!leave.shown) return null;
+  const shown = leave.shown;
   return (
     <div
-      key={notice.id}
+      key={shown.id}
       className="canvas-undo-notice canvas-undo-notice--message canvas-undo-notice--late"
       role="status"
       aria-live="polite"
-      {...holdHandlers}
+      {...holdHandlers} {...leave.props}
     >
-      <span className="canvas-undo-notice__text">{notice.text}</span>
+      <span className="canvas-undo-notice__text">{shown.text}</span>
       <button type="button" className="canvas-undo-notice__close" aria-label="Dismiss" onClick={dismiss}>
         ×
       </button>

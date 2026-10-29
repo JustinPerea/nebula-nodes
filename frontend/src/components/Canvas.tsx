@@ -46,7 +46,7 @@ import type { NodeData } from '../types';
 import { NODE_RENAME_EVENT } from '../lib/keyboardShortcuts';
 import { publishCanvasSelection, selectedNodeIds } from '../lib/canvasSelection';
 import '../styles/canvas.css';
-import { useCanvasLock } from '../lib/canvasLock';
+import { refuseCanvasEdit, useCanvasLock } from '../lib/canvasLock';
 
 const nodeTypes = CANVAS_NODE_TYPES;
 const edgeTypes = CANVAS_EDGE_TYPES;
@@ -526,6 +526,10 @@ export function Canvas() {
   const onDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault();
+      // Nothing lands while following or offline: files, a character, a
+      // moodboard or a library node (fix round 6 of PR #200; the store's edit
+      // gate refused the node drops too, the handler now says so itself).
+      if (refuseCanvasEdit()) return;
       setFitFirstNodes(false);
 
       // Files from the desktop: every one is handled (lib/canvasFileDrop.ts).

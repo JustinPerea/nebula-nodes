@@ -25,11 +25,25 @@
      width rule reads it too, so a narrower rule (a Studio's room) still wins
      and none is wider. */
   --notice-max-w: 560px;
+  /* The neutral notice (GM r24, PR #200 fix round 15): what a notice that is
+     no error of the person's draws, the pin toasts and the person-gate banner
+     alike, in both skins. */
+  --notice-neutral-fill: #1a1a1a;
+  --notice-neutral-edge: #333;
+  --notice-neutral-ink: #d8d8d8;
+  /* The toasts' spring (ProjectSwitchToast.css and the others), for the
+     region's shared motion below. */
+  --notice-spring: linear(0, 0.049, 0.163, 0.305, 0.452, 0.588, 0.705, 0.801, 0.876, 0.931, 0.97, 0.995, 1.011, 1.019, 1.022, 1.022, 1.02, 1.017, 1.014, 1.011, 1.008, 1.005, 1.003, 1.002, 1);
+  /* The leave (fix round 7 of PR #200, GM r11 answer 2): the same spring's
+     motion, faster (70% of the 420 ms entry) and critically damped, so
+     nothing overshoots on the way out: x(t) = 1 - (1 + 7t)e^(-7t). */
+  --notice-exit: linear(0, 0.035, 0.116, 0.218, 0.325, 0.428, 0.522, 0.605, 0.677, 0.737, 0.788, 0.83, 0.864, 0.892, 0.914, 0.932, 0.947, 0.958, 0.967, 0.974, 0.98, 0.984, 0.988, 0.991, 1);
+  --notice-exit-ms: 294ms;
   position: fixed;
   left: var(--page-gutter, 16px);
   right: var(--page-gutter, 16px);
   bottom: calc(var(--bottom-bar-clearance, calc(var(--sr-space-6, 24px) - var(--notice-gap))) + var(--notice-gap));
-  z-index: var(--sr-layer-notice, 58);
+  z-index: var(--sr-layer-notice, 20010);
   display: flex;
   justify-content: center;
   pointer-events: none;
@@ -87,6 +101,95 @@
    BOTTOM_BAR_SWITCH_ATTR; GM - Design, round 7). */
 :root[data-bottom-bar-switch] .notice-region {
   transition: none;
+}
+
+/* Motion by kind (fix round 6 of PR #200, GM r9 answer 2, verbatim:
+   "Anything that appears as its own surface in the notice region scales in
+   with the toasts' spring ... Content that appears inside a surface that's
+   already there (kept-note rows, an inline error line under a field) expands
+   into place: its height springs so the rows around it move smoothly, with
+   opacity. Rows don't scale. Reduced motion: everything uses opacity only.")
+   A surface uses notice-surface-in (the toasts' scale and fade); a row uses
+   notice-row-in, which springs its height, padding, border and the gap
+   above it from nothing, and never its scale. Each surface's own CSS names
+   one of the two (tests/agentPresenceFollowups.r6.test.tsx pins which). */
+@keyframes notice-surface-in {
+  from { opacity: 0; transform: scale(0.96); }
+  30% { opacity: 1; }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes notice-row-in {
+  from {
+    height: 0;
+    min-height: 0;
+    margin-block-start: calc(-1 * var(--notice-row-gap, 0px));
+    padding-block: 0;
+    border-block-width: 0;
+    opacity: 0;
+  }
+  40% { opacity: 1; }
+}
+
+/* Reduced motion: the same entrances as a fade, nothing that moves. */
+@keyframes notice-fade-in {
+  from { opacity: 0; }
+}
+
+/* The leaves (fix round 7 of PR #200, GM r11 answer 2, verbatim: "The leave
+   mirrors the enter for EVERY surface, toasts included ... Surfaces scale
+   out on the same spring but faster (~70% of entry time), critically
+   damped, no overshoot on the way out. Rows collapse in height with
+   opacity; the rows around them close up on the same spring. Reduced
+   motion: fade only. Timed toasts get the same exit as ones closed with
+   ×."). lib/noticeLeave.ts keeps a leaving item mounted and marks it
+   data-leaving="surface" or "row" until its -out animation ends; these
+   rules are the only ones that draw a leave. */
+@keyframes notice-surface-out {
+  70% { opacity: 1; }
+  to { opacity: 0; transform: scale(0.96); }
+}
+
+@keyframes notice-row-out {
+  to {
+    height: 0;
+    min-height: 0;
+    margin-block-start: calc(-1 * var(--notice-row-gap, 0px));
+    padding-block: 0;
+    border-block-width: 0;
+    opacity: 0;
+  }
+}
+
+@keyframes notice-fade-out {
+  to { opacity: 0; }
+}
+
+/* Three classes, so a leave outranks any item's own entrance rule
+   (`body.app-slava-restraint .project-home__toast` is 0,2,1). */
+.notice-region .notice-region__slot [data-leaving='surface'] {
+  pointer-events: none;
+  animation: notice-surface-out var(--notice-exit-ms) var(--notice-exit) both;
+}
+
+.notice-region .notice-region__slot [data-leaving='row'] {
+  pointer-events: none;
+  overflow: clip;
+  interpolate-size: allow-keywords;
+  animation: notice-row-out var(--notice-exit-ms) var(--notice-exit) both;
+}
+
+/* Reduced motion (GM r14, review 8 NIT-4): a row leaving fades out over
+   140 ms on opacity alone, so it keeps its space for the whole fade; only
+   when the fade ends (lib/noticeLeave unmounts it then) do the rows around
+   it take their new place, in one step with no height transition. A row
+   entering takes its space at once and its content fades in (notice-fade-in).
+   tests/agentPresenceFollowups.r9-leave.test.tsx pins this. */
+@media (prefers-reduced-motion: reduce) {
+  .notice-region .notice-region__slot [data-leaving='surface'],
+  .notice-region .notice-region__slot [data-leaving='row'] {
+    animation: notice-fade-out 140ms ease-out both;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

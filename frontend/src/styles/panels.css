@@ -651,7 +651,7 @@ body:not(.app-slava-restraint) .inspector__palette-remove {
 }
 
 body:not(.app-slava-restraint) .inspector__palette-remove:hover {
-  color: #c05a4a;
+  color: #ddd; /* GM r12: removing a swatch is an edit, so neutral */
 }
 
 .inspector__palette-actions {
@@ -808,8 +808,8 @@ body:not(.app-slava-restraint) .context-menu__item:hover:not(:disabled) {
 }
 
 body:not(.app-slava-restraint) .context-menu__item--danger:hover:not(:disabled) {
-  background: rgba(244, 67, 54, 0.15);
-  color: #F44336;
+  background: var(--sr-danger-tint);
+  color: var(--sr-danger-ink, #ff887d);
 }
 
 body:not(.app-slava-restraint) .context-menu__shortcut {
@@ -1049,9 +1049,9 @@ body:not(.app-slava-restraint) .inspector__action-button:hover:not(:disabled) {
 }
 
 body:not(.app-slava-restraint) .inspector__action-button--danger:hover:not(:disabled) {
-  background: #3a1a1a;
-  color: #F44336;
-  border-color: #5a2a2a;
+  background: var(--sr-danger-tint);
+  color: var(--sr-danger-ink, #ff887d);
+  border-color: var(--sr-danger-edge);
 }
 
 /* ---------- Inspector info button & panel ---------- */

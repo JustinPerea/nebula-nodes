@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { followingSwitch, refuseEditWhileFollowing, useFollowingSwitch, waitToOpenTooltip, type FollowingSwitch } from './canvasFollow';
 import { isBackendOffline, refuseEditWhileOffline } from './backendConnection';
 import { OFFLINE_MARK, useBackendOffline } from './useBackendOffline';
+import { offlineDisabledReason } from './errorCopy';
 
 /**
  * Round 22 of PR #195 (GM - Design, blocker A): the one read-only state
@@ -30,8 +31,19 @@ export interface CanvasLock {
    * (following) or the offline banner. Empty when unlocked. */
   mark: Record<string, ''>;
   /** A control that acts: `disabled` (its own reasons too), the marks, and
-   * while following GM's tooltip in place of its own. */
-  act(own?: { disabled?: boolean; title?: string }): ActProps;
+   * while following GM's tooltip in place of its own. `offline` (a verb, or
+   * true for none): offline, GM's "You can <verb> when Nebula reconnects."
+   * in place of its own (fix round 1 of PR #200, answer 1). */
+  act(own?: LockOwn): ActProps;
+  /** The tooltip `act` gives, for a control that isn't disabled by it (a
+   * read-only field). */
+  title(own?: LockOwn): string | undefined;
+}
+
+export interface LockOwn {
+  disabled?: boolean;
+  title?: string;
+  offline?: string | true;
 }
 
 export interface ActProps {
@@ -47,12 +59,14 @@ export function canvasLockOf(following: FollowingSwitch | null, offline: boolean
   if (following) mark[FOLLOWING_MARK] = '';
   if (offline) mark[OFFLINE_MARK] = '';
   const locked = Boolean(following) || offline;
+  const title = (own: LockOwn = {}) => (following ? waitToOpenTooltip(following.projectName)
+    : offline && own.offline ? offlineDisabledReason(own.offline === true ? undefined : own.offline) : own.title);
   return {
-    locked, following, offline, mark,
+    locked, following, offline, mark, title,
     act: (own = {}) => ({
       ...mark,
       disabled: locked || Boolean(own.disabled),
-      title: following ? waitToOpenTooltip(following.projectName) : own.title,
+      title: title(own),
     }),
   };
 }

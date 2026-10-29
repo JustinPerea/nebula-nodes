@@ -1,3 +1,5 @@
+import { nodeNameList } from './errorCopy';
+
 /**
  * GM - Design, round 19 (PR #195, review 18 G-1), verbatim. A project switch
  * or an import waits for the saves on their way (15 s at most); one that
@@ -22,6 +24,9 @@ export interface CutOffSave {
   node: string | null;
   /** The setting's label on the card (never a raw key). */
   setting: string | null;
+  /** The node's place on its canvas when the save was made: GM's lists
+   * read in canvas order (fix round 1 of PR #200). Unknown goes last. */
+  order?: number;
 }
 
 export type CutOffEnding = { kind: 'switch' } | { kind: 'import' }
@@ -141,7 +146,8 @@ export function agentClearedLine(saves: CutOffSave[], agent: string | null): str
  *    "“a”, “b” and “c”"
  *   One node, 4+ settings: "Couldn't save 4 settings for “Hero still”."
  *   Two or three nodes: "Couldn't save your changes to “Hero still” and
- *    “Hero prompt”."
+ *    “Hero prompt”." Same titles grouped with a count (GM 2026-10-27):
+ *    "…to 2 “Text” nodes.", "…to “Brief” and 2 “Text” nodes."
  *   Four+ nodes: "Couldn't save your changes to 4 nodes."
  *   None it can name: "Couldn't save your last change."
  */
@@ -150,9 +156,12 @@ export function changesNotSavedLine(saves: CutOffSave[]): string | null {
   const settings = distinctSaves(saves.filter((save) => save.node && save.setting));
   if (settings.length === 0) return "Couldn't save your last change.";
   const nodes = new Map<string, string>();
-  for (const save of settings) if (!nodes.has(nodeKey(save))) nodes.set(nodeKey(save), save.node!);
-  if (nodes.size > 3) return `Couldn't save your changes to ${nodes.size} nodes.`;
-  if (nodes.size > 1) return `Couldn't save your changes to ${quotedList([...nodes.values()])}.`;
+  const at = (save: CutOffSave) => save.order ?? Number.POSITIVE_INFINITY;
+  // Canvas order (GM, PR #200 answer 3), not the order the saves came in.
+  for (const save of [...settings].sort((a, b) => at(a) - at(b))) if (!nodes.has(nodeKey(save))) nodes.set(nodeKey(save), save.node!);
+  // Several nodes: the shared name list (errorCopy nodeNameList, GM
+  // 2026-10-27): two nodes titled “Text” read "2 “Text” nodes"; 4+, "4 nodes".
+  if (nodes.size > 1) return `Couldn't save your changes to ${nodeNameList([...nodes.values()])}.`;
   return `Couldn't save ${settingsOnOneNode(settings.map((save) => save.setting!))} for “${settings[0].node}”.`;
 }
 

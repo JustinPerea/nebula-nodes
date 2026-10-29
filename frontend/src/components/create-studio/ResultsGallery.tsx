@@ -164,7 +164,7 @@ export function ResultsGallery({
 
       {comparison.length > 0 && <div className="results-gallery__comparison" aria-label="Comparison selection">
         <span>{comparison.length} of 2 selected</span>
-        {comparison.map((item, index) => <button key={item.key} type="button"
+        {comparison.map((item, index) => <button key={item.key} type="button" className="results-gallery__comparison-remove"
           aria-label={`Remove result ${index + 1} from comparison`}
           title={`${item.context.modelName} · ${item.context.prompt || 'Unrecorded prompt'}`}
           onClick={() => setComparison((current) => current.filter((result) => result.key !== item.key))}>
@@ -173,7 +173,7 @@ export function ResultsGallery({
         </button>)}
         <button type="button" disabled={comparison.length !== 2} data-result-comparison-fallback
           onClick={() => setComparisonOpen(true)}>Compare selected</button>
-        <button type="button" onClick={() => setComparison([])}>Clear</button>
+        <button type="button" className="results-gallery__comparison-reset" onClick={() => setComparison([])}>Clear</button>
       </div>}
 
       {items.length === 0 ? (

@@ -55,17 +55,17 @@ export const PERSON_REQUIRED_CODE = 'person_required';
  * `code`, never its words. Round 2 (GM): "line 3 shouldn't depend on the
  * notice being there, since it can be dismissed", so it says the fix itself.
  * A browser tab's line; the desktop app says PERSON_REQUIRED_APP_COPY. */
-export const PERSON_REQUIRED_COPY = "This change needs your OK, and this tab isn't connected as you. "
+export const PERSON_REQUIRED_COPY = "This change needs your OK, and this tab isn’t connected as you. "
   + 'Open the link Nebula printed when it started, then try again.';
 /** GM - Design, 2026-10-23 (round 2), verbatim: line 3 in the desktop app. A
  * quit and reopen gives the app a fresh backend and a fresh person token. */
-export const PERSON_REQUIRED_APP_COPY = "This change needs your OK, and this window isn't connected as you. "
+export const PERSON_REQUIRED_APP_COPY = "This change needs your OK, and this window isn’t connected as you. "
   + 'Quit Nebula and open it again, then try again.';
 
 /** GM - Design, 2026-10-23 (round 3), verbatim: line 3 in the app's two
  * developer setups (a debug port, the dev renderer), where the banner already
  * gives the real fix. */
-export const PERSON_REQUIRED_DEV_COPY = "This change needs your OK, and this window isn't connected as you. "
+export const PERSON_REQUIRED_DEV_COPY = "This change needs your OK, and this window isn’t connected as you. "
   + 'The notice below says why.';
 
 /** Line 3 for where this page runs: `desktop` is personSession's
@@ -496,3 +496,44 @@ export async function requestError(heading: string, response: Response,
     storageFull: body.storageFull, storageLimit: body.storageLimit, code: body.code,
     overSaveLimit: body.overSaveLimit, sizeBytes: body.sizeBytes });
 }
+
+/**
+ * A list of node names in a line (GM - Design, 2026-10-27, the follow-up to
+ * PR #195), shared by every line that names several nodes: the failed-save
+ * lines (lib/savingCutOff) and the multi-delete toasts (lib/deleteCopy).
+ * - Up to 3 nodes by name: "“A”", "“A” and “B”", "“A”, “B” and “C”".
+ * - Nodes with the same title are grouped with a count, never repeated:
+ *   "2 “Text” nodes"; a mix, "“Brief” and 2 “Text” nodes".
+ * - The rule counts nodes, not groups: from 4 nodes in total, "4 nodes".
+ * - No node ids: the Agent log keeps those.
+ * Groups keep the order their first node came in; callers give names in
+ * canvas order (GM, PR #200 answer 3: "2 “Text” nodes and “Brief”" is fine).
+ * Also the placeholder-run dialog's two lines (lib/placeholderRunConfirm).
+ */
+export function nodeNameList(names: string[]): string {
+  if (names.length >= 4) return `${names.length} nodes`;
+  const groups = new Map<string, number>();
+  for (const name of names) groups.set(name, (groups.get(name) ?? 0) + 1);
+  const parts = [...groups].map(([name, count]) => (count === 1 ? `“${name}”` : `${count} “${name}” nodes`));
+  return parts.length <= 1 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+}
+
+/**
+ * GM - Design, PR #200 answer 1 (2026-10-27), verbatim: the tooltip of a
+ * control that is disabled because Nebula is offline. "You can <verb> when
+ * Nebula reconnects." (e.g. "You can generate when Nebula reconnects."); no
+ * verb, "This works again when Nebula reconnects.". PR #198 adds a shared
+ * disabled-reason helper with the same strings; this local one is
+ * reconciled with it when both are merged.
+ */
+export function offlineDisabledReason(verb?: string): string {
+  return verb ? `You can ${verb} when Nebula reconnects.` : 'This works again when Nebula reconnects.';
+}
+
+/** Run history's replay verbs offline (fix round 3 of PR #200, review 3
+ * LOW-1). Rerun is GM's (r4 answer 2: "You can rerun it when Nebula
+ * reconnects."); Retry and Recover follow it ("You can retry it …", "You can
+ * recover it …", approved in GM's round 3 answers). */
+export const OFFLINE_RERUN = 'rerun it';
+export const OFFLINE_RETRY = 'retry it';
+export const OFFLINE_RECOVER = 'recover it';

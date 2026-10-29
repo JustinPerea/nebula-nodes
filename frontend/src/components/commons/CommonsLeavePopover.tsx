@@ -100,7 +100,7 @@ export function CommonsLeavePopover({ asking, unsaved, running, onChoose, onStay
                 aria-busy={saving || undefined} disabled={readOnly} {...offlineMark(readOnly)}
                 onClick={() => choose('save')}>{saving ? 'Saving…' : 'Save and leave'}</button>
             )}
-            <button type="button" className="commons-button" onClick={() => choose('discard')}>Discard and leave</button>
+            <button type="button" className="commons-button commons-button--danger" onClick={() => choose('discard')}>Discard and leave</button>
           </>
         ) : (
           <button type="button" className="commons-button commons-button--primary" data-leave-first="" onClick={() => choose('stop')}>Stop and leave</button>

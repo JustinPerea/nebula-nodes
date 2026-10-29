@@ -384,7 +384,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
                 </button>
               )}
               <button type="button" className="commons-link" onClick={() => void renameRegion(r)}>Rename</button>
-              <button type="button" className="commons-link" onClick={() => run(() => commonsApi.patchRegion(r.id, { status: 'deleted' }))}>
+              <button type="button" className="commons-link commons-region__delete" onClick={() => run(() => commonsApi.patchRegion(r.id, { status: 'deleted' }))}>
                 Delete
               </button>
             </li>
@@ -488,7 +488,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
             {keywords.map((k) => (
               <span key={k} className="commons-chip">
                 {k}
-                <button type="button" aria-label={`Remove ${k}`} onClick={() => void correct('keywords', 'remove', k)}>×</button>
+                <button type="button" className="commons-chip__remove" aria-label={`Remove ${k}`} onClick={() => void correct('keywords', 'remove', k)}>×</button>
               </span>
             ))}
           </div>

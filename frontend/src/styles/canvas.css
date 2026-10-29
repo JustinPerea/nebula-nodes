@@ -192,13 +192,15 @@ body.app-slava-restraint .react-flow__minimap {
   opacity: 0.34;
 }
 
+/* Review 3 LOW-2: a red bright enough that the shared grey reads dimmer
+   (styles/disabled-buttons.css --sr-danger-ink). */
 .selection-toolbar__button--danger {
-  color: rgba(255, 132, 118, 0.88);
+  color: var(--sr-danger-ink, #ff887d);
 }
 
 .selection-toolbar__button--danger:hover:not(:disabled) {
-  background: rgba(255, 70, 60, 0.14);
-  color: #ff8f82;
+  background: var(--sr-danger-tint);
+  color: var(--sr-danger-ink-hover, #ff9a91);
 }
 
 @keyframes selection-toolbar-in {

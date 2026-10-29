@@ -1,6 +1,7 @@
 import { useProjectStore } from '../../store/projectStore';
 import { useNoticeHold } from '../../hooks/useNoticeHold';
 import { SEE_WHATS_LARGE } from '../../lib/savePausedCopy';
+import { useLeave } from '../../lib/noticeLeave';
 
 const isShown = (id: number) => useProjectStore.getState().sizeNotice?.id === id;
 const dismiss = () => useProjectStore.getState().dismissSizeNotice();
@@ -17,12 +18,15 @@ const dismiss = () => useProjectStore.getState().dismissSizeNotice();
 export function SavePausedNotice() {
   const notice = useProjectStore((state) => state.sizeNotice);
   const holdHandlers = useNoticeHold(notice, isShown, dismiss);
-  if (!notice) return null;
+  // It leaves as it entered (fix round 7 of PR #200, GM r11 answer 2).
+  const leave = useLeave(notice);
+  if (!leave.shown) return null;
+  const shown = leave.shown;
   return (
-    <div key={notice.id} className="canvas-undo-notice canvas-undo-notice--message save-paused-notice"
-      role="status" aria-live="polite" {...holdHandlers}>
-      <span className="canvas-undo-notice__text">{notice.text}</span>
-      {notice.action && (
+    <div key={shown.id} className="canvas-undo-notice canvas-undo-notice--message save-paused-notice"
+      role="status" aria-live="polite" {...holdHandlers} {...leave.props}>
+      <span className="canvas-undo-notice__text">{shown.text}</span>
+      {shown.action && (
         <button type="button" className="canvas-undo-notice__action"
           onClick={() => useProjectStore.getState().openSizePanel()}>{SEE_WHATS_LARGE}</button>
       )}

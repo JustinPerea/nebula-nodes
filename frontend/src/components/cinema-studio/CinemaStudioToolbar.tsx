@@ -56,6 +56,7 @@ export function CinemaStudioToolbar({ cinemaNodeId }: CinemaStudioToolbarProps) 
         {...lock.act({
           disabled: isExecuting || runStarting || isImportingGraph || Boolean(referenceIssue),
           title: referenceIssue ?? 'Generate every shot using the current scene settings',
+          offline: 'generate',
         })}
       >
         {sceneRuns.length > 0 ? 'Generating…' : 'Generate all'}

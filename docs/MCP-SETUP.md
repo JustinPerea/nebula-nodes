@@ -857,7 +857,10 @@ appear, only which params changed), the pin's text, a proposal's note and the
 reason you gave, a run's status and how many nodes ran. Nothing else is
 fetched, run outputs and errors stay in `get_run`, and moodboard events never
 carry note text. Canvas text has its angle brackets and hidden characters
-replaced, so it can't close or open a tag.
+replaced, so it can't close or open a tag. A pin's text keeps the person's
+lines as real newlines inside `<pin>…</pin>` (the channel's content is plain
+text that already spans many lines, and with `<` and `>` replaced a line
+can't leave the tag); every other quoted text is one line.
 
 **What a woken turn may do** (plan v2.7 Q42 a and Q51 a). Some pushes are
 gated (`gate="change"`): Claude may look (the read tools), point and say
@@ -1203,6 +1206,25 @@ keeps `error` on the shot's `output` as before and adds `errorCategory`,
 cut) for the Cinema panel. Read `error`; don't parse `person` or the shot's
 error* fields.
 
+A shot's run media (`output`, `variations`, `selectedVariation` and its
+port output) is Nebula's, not part of the scene you write. Since PR #200's
+fix round 9, a write that drops a shot keeps what it had. Since fix round 10,
+a later write gets it back only when the returning shot is the same shot:
+the same id with the same prompt and settings (every field but the run
+media), as the person's Undo of a shot's × sends it. Settings are compared
+by value (fix round 11): `1.0` matches `1` exactly (no rounding, and `true`
+is not `1`), key order doesn't count, a `null`, `{}` or `[]` is the same as
+the field missing, and a missing `prompt`, `refImageUrls` or `overrides` is
+its default (`""`, `[]`, `{}`). An override inside `overrides` has no
+default of its own (missing means the scene's), so a set one never matches
+a missing one. A different shot that
+reuses the id (yours, with a new prompt) starts idle, and the kept media is
+let go. Only the link goes: the generated files stay in the outputs folder.
+Nebula keeps the last 128 removed shots in memory only, until the canvas is
+cleared or another project opens. A restart forgets them: an Undo of a
+shot's × after one brings the shot back idle, with its prompt and settings
+but without its images (they are still in the outputs folder).
+
 Round 3d gives a provider's answer a line too, from one table: a 401 or 403
 reads "{Provider} didn't accept your API key. ...", a 402 or an exhausted
 quota "Your {Provider} account is out of credits. ...", a 429 "{Provider} is
@@ -1316,6 +1338,14 @@ Ask the agent for a new one.", so propose again against the canvas as it is
 now); Stop (`DELETE /api/executions/…`)
 stays open while the canvas follows an agent's switch.
 
+The check runs twice: before the request reaches the route, and again as the
+route starts, in the same step as whatever the route writes before it
+waits on anything (a follow-up to PR #195, review 23 L-1). A project open
+that commits in between, which can happen in the few event-loop turns
+between the two, gets the write refused with the same 409, never applied
+to the project just opened. So a note the person wrote for one project's n1
+is never pinned to the next project's n1.
+
 A write that carries `X-Nebula-Tab` (only the canvas sends it) to one of
 those routes must also carry `X-Nebula-Workspace-Revision`; without it, the
 same 409. A tab that has let go of its project (it is following an agent's
@@ -1422,9 +1452,80 @@ Rules:
   CLI and MCP server never have it.
 - `POST /api/canvas/pins/{id}/resolve` needs a named agent
   (`NEBULA_AGENT_NAME`, `--as`, or an in-app agent token).
-- Text is plain text: whitespace collapsed, control characters dropped, 1–280
-  characters for notes and replies. At most 100 open notes per project and
-  200 in total (the oldest answered ones are dropped first).
+- Text is plain text, control characters dropped, 1–280 characters for
+  notes and replies. Nebula stores a note and a reply as typed but trimmed at both ends (PR
+  #200 fix rounds 10 and 12), and every place that shows one strips it: the API's
+  pins, events and their summaries, the CLI, the channel push and the
+  canvas. So what you read never carries a control byte (no C0 but `\n`, no
+  C1, no ESC, no format character). What draws nothing is dropped too
+  (fix round 13 reads Unicode 18's own lists for this): a variation
+  selector stays only when Unicode lists it for the character before it,
+  and only one: U+E0100–E01EF only for a pair the Ideographic Variation
+  Database registers (葛 has ten; most ideographs have none), U+180B–180F
+  after a Mongolian letter, U+FE00–FE0F after a base StandardizedVariants
+  or emoji-variation-sequences lists (an emoji's U+FE0E/U+FE0F, a keycap's
+  digit); every other selector, the combining grapheme joiner, a
+  zero-width joiner outside an emoji ZWJ sequence, and every tag character
+  except the England, Scotland and Wales flags is dropped. That shown form
+  is what the person's own canvas displays. What agents read goes one step
+  further (PR #200 fix round 14, GM r23): no variation selector at all
+  (U+FE00–FE0F, U+E0100–E01EF, U+180B–180F) and a zero-width joiner only
+  inside an RGI emoji ZWJ sequence, so a registered variant of 葛 reads as
+  葛, `❤️` as `❤`, and a family stays one family. That holds for `pins`
+  (look_at_canvas, start_here, GET /api/canvas/pins without the person's
+  token, the snapshot JSON), `nebula pins` / `nebula look` / `nebula
+  start`, a resolve's answer, the events feed (`text`, `reply`,
+  `summary`), the channel push, and the `canvasPins` message on a raw
+  `/ws` socket (PR #200 fix round 16, review 14 LOW-1: only a socket whose
+  `{type: "hello"}` carried the person's token gets the shown form; every
+  other socket gets this form, on connect and on every push). The channel
+  push applies the same rule to everything it quotes, a note or a one-line
+  field (PR #200 fix round 17, GM r26): the England, Scotland and Wales
+  flags arrive whole, a fake tag flag as a plain 🏴, and every other tag
+  character, a stray joiner or a selector not at all. 280 ideographs
+  whose selectors spell an instruction reach you as 280 bare ideographs. Whitespace (and a byte order mark) at
+  the ends of a note or reply is trimmed, and the note is stored trimmed;
+  the spaces and blank lines inside are kept as typed and count. A note of
+  only whitespace is empty (422, "Note can't be empty"). The 280 counts only
+  what shows: characters as a person sees them (a letter with its accents
+  or its variant selector, a flag, an RGI emoji ZWJ sequence such as a
+  family) in the stripped text, the same count the note dialog uses; emoji
+  joined into a chain that isn't an RGI sequence count one each. What the strip drops is hidden text; up to
+  1,120 hidden characters (code points, never bytes: 280 families of about
+  25 bytes each save) are kept as typed. Past that the note or reply is
+  refused (422) with `"code": "note_hidden_too_long"`, `hiddenCharacters`
+  and `limitCharacters` beside `detail`. No note limit counts bytes. An
+  event's `text` and `reply`, and a pin event's summary, are previews cut on
+  a character's edge (never half a family) to fit the events feed; read the
+  whole note from `pins`. Past 280 characters the
+  422 carries `"code": "note_too_long"` and `"limit": 280` beside `detail`. A reply is one line (a line break reads as a space). A note keeps
+  the lines the person wrote (Shift+Enter in the note dialog): its newlines
+  reach agents as `\n` in `pins[].text` (look_at_canvas, start_here, the
+  snapshot JSON). `nebula pins`, `nebula look` and `nebula start` print a
+  one-line note inline in quotes (`pin_1 on n4: "warmer"`); a note of several
+  lines goes under its pin's line (`pin_1 on n4 (12m ago):`), every line
+  indented the same and a blank line left empty, so a list keeps its shape.
+  An answered note puts the answer after the note, as on one line
+  (`pin_1 on n4: "warmer" — resolved by Codex: "Done"`); with several lines,
+  on its own line under the note at the row's indent
+  (`pin_1 on n4:`, the note's lines, then `— resolved by Codex: "Done"`).
+  A tab reads as a space; each line loses its trailing spaces (the first
+  keeps its leading ones); a terminal colour code pasted in goes whole;
+  blank lines inside the note stay as typed (only the canvas display folds a
+  run of them); spacing inside a line is kept, the same in look_at_canvas and
+  start_here. Every line break Unicode knows (`\r\n`, `\r`, U+2028, U+2029
+  and the rest) reads as `\n`. The Claude Code channel's push prints a note
+  the same way: one line inline in `<pin …>warmer</pin>`; several lines on
+  their own lines after `<pin …>`, each indented two spaces, then `</pin>` on
+  its own line (so a line the person typed never starts where a line of the
+  push itself does). A one-line
+  surface shows a break as ` ⏎ `: an event's `summary` (`pinned "warmer ⏎
+  bluer" on n4`) and each line of `nebula watch`, so one
+  event is always one line. At most 100 open notes per project and
+  200 in total (the oldest answered ones are dropped first). The 101st open
+  note is refused (409) with `"code": "open_notes_full"` and `"limit": 100`;
+  a note for a node that is no longer on the canvas is refused (404) with
+  `"code": "pin_node_gone"` (the canvas then holds Send note and says so).
 - Pins persist with the project (on the project record, beside the canvas
   snapshot, so autosave never touches them) and switch with it. Deleting a
   pinned node leaves its pins where the node stood, marked detached; so does

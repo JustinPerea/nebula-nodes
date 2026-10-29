@@ -241,7 +241,7 @@ export function ConnectedApps({ view, loadError, onChanged }: {
                 onChange={(dailyUsd) => void run(async () => { await setConnectedAppLimit(app.id, dailyUsd); })} />
               {armed === app.id ? (
                 <span className="settings__remove-confirm">
-                  <button type="button" className="settings__button settings__remove-key--armed" disabled={busy}
+                  <button type="button" className="settings__button settings__confirm--danger" disabled={busy}
                     onClick={() => void run(async () => { await revokeConnectedApp(app.id); setArmed(null); })}>
                     Revoke {app.name}
                   </button>
@@ -249,7 +249,7 @@ export function ConnectedApps({ view, loadError, onChanged }: {
                     onClick={() => setArmed(null)}>Keep</button>
                 </span>
               ) : (
-                <button type="button" className="settings__button" disabled={busy}
+                <button type="button" className="settings__button settings__button--danger" disabled={busy}
                   aria-label={`Revoke the token for ${app.name}`} onClick={() => setArmed(app.id)}>Revoke</button>
               )}
             </span>

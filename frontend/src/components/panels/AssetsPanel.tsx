@@ -28,6 +28,7 @@ import { failureMessage } from '../../lib/errorCopy';
 import { useCanvasLock } from '../../lib/canvasLock';
 import '../../styles/character-studio.css';
 import '../../styles/moodboard-studio.css';
+import { NoticeLeave } from '../../lib/noticeLeave';
 
 type Scope = 'global' | 'project';
 type Tab = 'characters' | 'moodboards' | 'styles';
@@ -374,11 +375,11 @@ export function AssetsPanel() {
         </ScrollFade>
       </ScrollFade>
       {/* The toast draws in the app's notice region (UndoDeleteToast), never in the panel. */}
-      {deleting.lastDeleted && (
-        <UndoDeleteToast key={deleting.lastDeleted.id} name={deleting.lastDeleted.name} busy={deleting.busy}
+      <NoticeLeave value={deleting.lastDeleted}>{(last, leave) => (
+        <UndoDeleteToast key={last.id} name={last.name} busy={deleting.busy}
           error={deleting.undoError} onDismiss={deleting.dismiss}
-          onUndo={() => { void deleting.undo().then((asset) => { if (asset) relist(); }); }} />
-      )}
+          onUndo={() => { void deleting.undo().then((asset) => { if (asset) relist(); }); }} leave={leave} />
+      )}</NoticeLeave>
     </div>
   );
 }
@@ -466,7 +467,7 @@ function AssetItem({
           )}
           {move}
           {onDelete && (
-            <button type="button" className="assets-item__action" onClick={onDelete} disabled={deleteBusy}
+            <button type="button" className="assets-item__action assets-item__action--delete" onClick={onDelete} disabled={deleteBusy}
               title="Move to Recently deleted" aria-label={`Delete ${label}`}>
               Delete
             </button>
