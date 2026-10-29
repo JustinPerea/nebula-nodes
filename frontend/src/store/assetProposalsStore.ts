@@ -7,7 +7,7 @@ import {
   type AssetProposalView,
 } from '../lib/assetProposals';
 import { PERSON_REQUIRED_CODE, failureMessage } from '../lib/errorCopy';
-import { onPersonPromoted } from '../lib/personSession';
+import { onPersonPromoted, personGateHeld, subscribePersonGate } from '../lib/personSession';
 
 /** How long a closed proposal's strip fades before it goes. Matches asset-proposals.css. */
 export const ASSET_PROPOSAL_EXIT_MS = 220;
@@ -32,6 +32,12 @@ export interface ReviewRequest {
 interface AssetProposalsState {
   proposals: Record<string, AssetProposalEntry>;
   review: ReviewRequest | null;
+  /** GM r34 (PR #200 fix round 23, review 19 NIT-4): true from the moment the
+   * person gate holds until the person's next assetProposalSync. Meanwhile
+   * a new proposal's Update has no card here (its frame is person-only), so
+   * the strip shows a placeholder for it (store/heldAssetProposals.ts); the
+   * sync that follows the promote puts the real card in its place. */
+  awaitingSync: boolean;
   /** Newer views of open proposals (a relist), keeping keys and person-only `before`. */
   refresh: (views: AssetProposalView[]) => void;
   pending: Record<string, 'accept' | 'reject'>;
@@ -74,6 +80,7 @@ function cancelExit(id: string): void {
 export const useAssetProposalsStore = create<AssetProposalsState>((set, get) => ({
   proposals: {},
   review: null,
+  awaitingSync: personGateHeld(),
 
   refresh: (views) => {
     const current = get().proposals;
@@ -100,7 +107,7 @@ export const useAssetProposalsStore = create<AssetProposalsState>((set, get) => 
       delete (view as Partial<AssetProposalView & { acceptKey: string }>).acceptKey;
       proposals[view.id] = { view, acceptKey };
     }
-    set({ proposals });
+    set({ proposals, awaitingSync: false });
   },
 
   open: (raw, acceptKey) => {
@@ -146,6 +153,15 @@ export const useAssetProposalsStore = create<AssetProposalsState>((set, get) => 
   accept: async (id) => decide(id, 'accept'),
   reject: async (id, reason) => decide(id, 'reject', reason),
 }));
+
+// The gate held (a refused hello, personRequired, or a 403 person_required):
+// from now until the person's next sync, new proposals reach this tab only as
+// Updates.
+subscribePersonGate(() => {
+  if (personGateHeld() && !useAssetProposalsStore.getState().awaitingSync) {
+    useAssetProposalsStore.setState({ awaitingSync: true });
+  }
+});
 
 /** Review 17 LOW-1, as on the canvas bar (fix round 22): proposals whose
  * error is the person gate's refusal; the server promoting the tab clears them. */

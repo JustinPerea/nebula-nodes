@@ -32,6 +32,32 @@
   animation: asset-proposal-out 220ms var(--sr-motion-handle, cubic-bezier(0.32, 0.72, 0, 1)) forwards;
 }
 
+/* GM r34 (PR #200 fix round 23): a proposal known only from its Update while
+ * this tab isn't connected as the person. Neutral: no agent colour, no left
+ * status edge, no buttons. The real card replaces it in place without
+ * springing in (--in-place). */
+.asset-proposal--held {
+  --agent-color: var(--sr-ink-light, rgb(255 255 255 / 0.55));
+  border-left-width: 1px;
+  border-left-color: var(--sr-edge-strong, rgb(255 255 255 / 0.12));
+  padding-left: 10px;
+}
+
+.asset-proposal--held .asset-proposal__agent {
+  color: var(--sr-ink, rgb(255 255 255 / 0.92));
+}
+
+.asset-proposal__held-line {
+  margin: 0;
+  color: var(--sr-ink-light, rgb(255 255 255 / 0.55));
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.asset-proposal--in-place:not(.asset-proposal--closing) {
+  animation: none;
+}
+
 @keyframes asset-proposal-in {
   from { opacity: 0; transform: translateY(6px) scale(0.98); }
 }
@@ -269,6 +295,10 @@
     asset-proposal-review 1600ms var(--agent-log-spring, cubic-bezier(0.2, 0.9, 0.3, 1.2)) both;
 }
 
+.asset-proposals[data-review='true'] .asset-proposal--in-place:not(.asset-proposal--closing) {
+  animation: asset-proposal-review 1600ms var(--agent-log-spring, cubic-bezier(0.2, 0.9, 0.3, 1.2)) both;
+}
+
 @keyframes asset-proposal-review {
   0% { box-shadow: 0 0 0 0 var(--agent-color); }
   25% { box-shadow: 0 0 0 3px var(--agent-color); }
@@ -283,7 +313,8 @@
 @media (prefers-reduced-motion: reduce) {
   .asset-proposal,
   .asset-proposal--closing,
-  .asset-proposals[data-review='true'] .asset-proposal {
+  .asset-proposals[data-review='true'] .asset-proposal,
+  .asset-proposals[data-review='true'] .asset-proposal--in-place:not(.asset-proposal--closing) {
     animation: none;
   }
   .asset-proposals[data-review='true'] .asset-proposal {

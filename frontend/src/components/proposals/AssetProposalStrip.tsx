@@ -7,6 +7,7 @@ import type { AssetProposalKind, AssetProposalView, CommonsEdit } from '../../li
 import { proposalsFor, useAssetProposalsStore, type AssetProposalEntry } from '../../store/assetProposalsStore';
 import { PROPOSAL_GATE_COPY } from '../../lib/canvasProposals';
 import { personGateHeld, subscribePersonGate } from '../../lib/personSession';
+import { HELD_PROPOSAL_LINE, useHeldProposals, type HeldProposal } from '../../store/heldAssetProposals';
 import '../../styles/asset-proposals.css';
 
 /** How often the strip rechecks expiry while one is showing. */
@@ -172,7 +173,8 @@ function CommonsChange({ view, names }: { view: AssetProposalView; names: Propos
 
 const NO_NAMES: ProposalNames = {};
 
-function ProposalCard({ entry, now, names }: { entry: AssetProposalEntry; now: number; names: ProposalNames }) {
+function ProposalCard({ entry, now, names, inPlace }: { entry: AssetProposalEntry; now: number; names: ProposalNames;
+  inPlace: boolean }) {
   const { view, closing } = entry;
   // The strip's clock ticks every 15 s from when it mounted (Moodboard Studio
   // mounts it with the board, long before a proposal may come): count from
@@ -192,7 +194,7 @@ function ProposalCard({ entry, now, names }: { entry: AssetProposalEntry; now: n
   const gateHeld = useSyncExternalStore(subscribePersonGate, personGateHeld);
   return (
     <div role="group" aria-label={`${view.agent.name} ${said}`} tabIndex={-1}
-      className={`asset-proposal${closing ? ' asset-proposal--closing' : ''}`}
+      className={`asset-proposal${closing ? ' asset-proposal--closing' : ''}${inPlace ? ' asset-proposal--in-place' : ''}`}
       style={{ '--agent-color': view.agent.color } as CSSProperties}>
       <div className="asset-proposal__who">
         <span className="asset-proposal__dot" aria-hidden="true" />
@@ -216,6 +218,23 @@ function ProposalCard({ entry, now, names }: { entry: AssetProposalEntry; now: n
   );
 }
 
+/** GM r34 (fix round 23, review 19 NIT-4): a proposal this tab knows only from
+ * its Update while it isn't connected as the person. The real card's header,
+ * one line, no thumbnails and no buttons, in a neutral style. */
+function HeldCard({ held }: { held: HeldProposal }) {
+  return (
+    <div role="group" aria-label={`${held.agentName} ${held.header}`} tabIndex={-1}
+      className="asset-proposal asset-proposal--held" data-held-proposal={held.proposalId}>
+      <div className="asset-proposal__who">
+        <span className="asset-proposal__dot" aria-hidden="true" />
+        <span className="asset-proposal__agent">{held.agentName}</span>
+        <span className="asset-proposal__asks">{held.header}</span>
+      </div>
+      <p className="asset-proposal__held-line">{HELD_PROPOSAL_LINE}</p>
+    </div>
+  );
+}
+
 /**
  * An agent's proposal for this project, board or Commons reference, where the
  * person works on it: on its card on the Projects screen, beside Send notes in
@@ -225,8 +244,14 @@ function ProposalCard({ entry, now, names }: { entry: AssetProposalEntry; now: n
 export function AssetProposalStrip({ kind, targetId, names = NO_NAMES }: { kind: AssetProposalKind; targetId: string;
   names?: ProposalNames }) {
   const entries = useAssetProposalsStore(useShallow((state) => proposalsFor(state, kind, targetId)));
+  const held = useHeldProposals(kind, targetId);
+  // A real card that comes in where its placeholder was takes its place
+  // without springing in (GM r34: "no extra motion").
+  // (Derived state, set during render: the real card's first render already knows.)
+  const [wasHeld, setWasHeld] = useState<ReadonlySet<string>>(() => new Set());
+  if (held.some((item) => !wasHeld.has(item.proposalId))) setWasHeld(new Set([...wasHeld, ...held.map((item) => item.proposalId)]));
   const [now, setNow] = useState(() => Date.now());
-  const showing = entries.length > 0;
+  const showing = entries.length > 0 || held.length > 0;
   const root = useRef<HTMLDivElement>(null);
   const asked = useAssetProposalsStore((state) => state.review?.kind === kind && state.review.targetId === targetId);
   const ringTimer = useRef<number | null>(null);
@@ -259,7 +284,10 @@ export function AssetProposalStrip({ kind, targetId, names = NO_NAMES }: { kind:
   if (!showing) return null;
   return (
     <div className="asset-proposals" ref={root}>
-      {entries.map((entry) => <ProposalCard key={entry.view.id} entry={entry} now={now} names={names} />)}
+      {[...entries.map((entry) => ({ at: entry.view.createdAt, id: entry.view.id, card: (
+        <ProposalCard key={entry.view.id} entry={entry} now={now} names={names} inPlace={wasHeld.has(entry.view.id)} />) })),
+      ...held.map((item) => ({ at: item.at, id: item.proposalId, card: <HeldCard key={item.proposalId} held={item} /> }))]
+        .sort((left, right) => left.at - right.at).map((item) => item.card)}
     </div>
   );
 }

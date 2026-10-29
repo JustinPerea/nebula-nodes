@@ -21,21 +21,36 @@ export const HEADING_START = 'Note for agents on “';
 export const HEADING_END = '”';
 
 // GM r33 (review 18 NIT-R21-1): the spaces and the separating punctuation a
-// cut ends on go before the "…" ("Lighthouse…”", never "Lighthouse,…”").
-// Closing brackets and quotes stay: they close something the name opened.
-const CUT_TRAIL = /[\s,.;:!?·،؛、。，；：\p{Pd}\p{Ps}\p{Pi}"'«‹]+$/u;
-const trimCut = (text: string) => text.replace(CUT_TRAIL, '');
+// cut ends on go before the "…" ("Lighthouse…”", never "Lighthouse,…”"),
+// and so does a "…" the name already had there (review 19 NIT-2: never
+// "……"). Closing brackets and quotes stay: they close something the name
+// opened. A straight " or ' is both (review 19 NIT-1, fix round 23): it goes
+// only when it opens a word at the cut (after a space, a dash or an opening
+// mark), so “A lighthouse "warm"…” and “The keepers'…” keep theirs.
+const CUT_TRAIL = /[\s,.;:!?·،؛、。，；：…\p{Pd}\p{Ps}\p{Pi}«‹]+$/u;
+const OPENING_STRAIGHT = /(^|[\s\p{Pd}\p{Ps}\p{Pi}«‹])["']+$/u;
+function trimCut(text: string): string {
+  let trimmed = text;
+  for (let before = ''; before !== trimmed;) {
+    before = trimmed;
+    trimmed = trimmed.replace(CUT_TRAIL, '').replace(OPENING_STRAIGHT, '$1');
+  }
+  return trimmed;
+}
 
 /** The name as the heading shows it: whole, or its first `keep` graphemes
  * with the trailing spaces and punctuation dropped, then "…". Never a bare
- * "…" (GM r33, NIT-R21-2): a cut that would keep nothing visible keeps the
- * name's first visible grapheme. */
+ * "…" (GM r33, NIT-R21-2; review 19 NIT-3): a cut that would keep nothing
+ * visible keeps up to the name's first visible grapheme, and a name with
+ * nothing but punctuation keeps its first `keep` graphemes (at least one). */
 export function noteHeadingName(title: string, keep?: number, graphemes: string[] = graphemesOf(title)): string {
   if (keep === undefined || keep >= graphemes.length) return title;
   let kept = trimCut(graphemes.slice(0, Math.max(0, keep)).join(''));
   if (!kept) {
     const first = graphemes.findIndex((g) => trimCut(g) !== '');
-    kept = first < 0 ? '' : graphemes.slice(0, first + 1).join('').trimStart();
+    kept = first >= 0 ? graphemes.slice(0, first + 1).join('').trimStart()
+      : graphemes.slice(0, Math.max(1, keep)).join('').trim()
+        || (graphemes.find((g) => g.trim() !== '') ?? '');
   }
   return `${kept}…`;
 }

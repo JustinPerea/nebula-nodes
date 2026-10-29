@@ -2694,3 +2694,88 @@ round and built as GM wrote them.
   - the new r33 section passed 7 of 7: the Hebrew and Arabic `<bdi>`
     checks, and the asset strip held, then promoted, then demoted;
   - a full run passed 126 of 126.
+
+## Fix round 23
+
+Review 19 (of round 22) found 0 HIGH and 0 MEDIUM. This round fixes its LOW
+and the three cut NITs, which GM approved as described, and adds GM r34
+(NIT-4). GM accepted Q1 as is: in an RTL name, the "…" sits at the RTL run's
+visual end, even when the cut lands in a Latin word. NIT-5 and NIT-6 (ratchet
+hardening) go to a follow-up.
+
+- **LOW-1, a held Dismiss survives a reload.**
+  - The approvals dismissed while the gate held are kept in this tab's
+    `sessionStorage` (`nebula.heldRunReleases`) as well as in memory, so a
+    reload before the promote still releases them.
+  - Before this, the approval kept its nodes locked against agent edits
+    until its 30-minute TTL, with nothing shown to the person.
+  - Only a promote sends a release, never a page load. Each id is sent
+    once, then it leaves memory and storage.
+  - An approval the server no longer has answers 200 `not_found`, which is
+    done.
+  - A tab whose storage throws keeps the ids in memory, as before.
+    Malformed storage is ignored.
+  - Live: dismiss while held, reload (still held, still 409), promote: one
+    DELETE, and the agent PUT gets 200. A second promote sends nothing, and
+    nothing executes.
+- **NIT-1, straight quotes.** A straight `"` or `'` now goes before the "…"
+  only when it opens a word at the cut: after a space, a dash or an opening
+  mark. A closing one stays, as in “A lighthouse "warm"…” and
+  “The keepers'…”. Live shot: `fix23-heading-cut-straight-quote-1440.png`.
+- **NIT-2.** A "…" already in the name at the cut is trimmed, so the
+  heading never shows "……".
+- **NIT-3.** A name of nothing but punctuation keeps a grapheme cut with at
+  least one grapheme (`,,,,,…`), so the heading is never a bare “…”.
+- **GM r34 (NIT-4), the held placeholder.**
+  - While the gate holds, a new asset proposal reaches the tab only as its
+    Update, because its frame is person-only. Its strip now shows a
+    placeholder built from that Update alone (`store/heldAssetProposals.ts`).
+  - The placeholder has the agent's name, the real card's header for that
+    kind, and "You can review this when this tab is connected as you." It has
+    no thumbnails, no buttons and no request path. The style is neutral,
+    with no agent colour and no status edge.
+  - It shows from the moment the gate holds until the person's next
+    `assetProposalSync` (`awaitingSync` in the asset store). The canvas's
+    promote frame comes one frame before that sync, so the placeholder holds
+    until the real card arrives. The real card takes the same place and
+    doesn't spring in (`asset-proposal--in-place`).
+  - Live: same top and left, animation `none`.
+  - An Update resolved first (expired or withdrawn) takes the placeholder
+    with it. Review on the Update scrolls to the placeholder and focuses it.
+  - Headers by kind:
+    - a cover: "proposes a new cover" (GM's wording; the Update doesn't say
+      whether the cover is the automatic one);
+    - a board: "asks to send these notes to generators";
+    - a Commons reference: "proposes a change to this reference", or
+      "proposes N changes to this reference", with the count taken from
+      the Update's own text.
+  - **MCP:** this is display-only for the person, so agents need no new
+    tool and nothing in MCP-SETUP.md changes.
+- **Tests.**
+  - New tests: `tests/agentPresenceFollowups.r34.test.ts` (the cut),
+    `tests/agentPresenceFollowups.r34deferred.test.ts` (the reload) and
+    `src/components/proposals/AssetProposalStrip.held.test.tsx` (the
+    placeholder).
+  - On acf1477c, 12 of the 17 cut and reload tests fail. The 5 that pass
+    check behaviour that already worked: the four opening-quote drops, and
+    a name of only "…" (it wasn't trimmed before either). The placeholder
+    file fails because its module doesn't exist there.
+  - Mutations: 16 of 16 killed, including review 19's surviving one
+    ("closing straight quotes trimmed").
+- The placeholder's "replaced in place" flag is state derived during render
+  (`setWasHeld` while rendering), not a ref, which satisfies
+  `react-hooks/refs`. The real card's first render already has it.
+
+### Fix round 23 gates
+
+- Backend, the full suite (isolated, `lg run --gate`): 11,803 passed, 71
+  skipped. There is no backend change.
+- Frontend: `tsc -b` and `eslint .` are clean.
+- Vitest, the full run (`--gate`): 596 files, 7,520 tests, all passed.
+- Build: the entry is 421,000 bytes raw (129,406 gzip). 101 JS assets are
+  eval-free. Fonts are OK.
+- Live (8795/5795, with 8000-8010 and 5173 blocked):
+  - the new r34 section passed 8 of 8: the straight quote, the reload
+    release (agent PUT 200 after the promote), and the placeholder held,
+    then replaced in place;
+  - a full run passed 131 of 131.

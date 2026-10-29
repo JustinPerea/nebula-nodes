@@ -339,7 +339,7 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
     // person, Dismiss hides the notice here only; the release (person-only,
     // DELETE /api/canvas/approvals/{id}, which only frees the nodes it locked)
     // goes once the server promotes the tab.
-    if (personGateHeld()) releasesHeld.add(deferred.approvalId);
+    if (personGateHeld()) holdRelease(deferred.approvalId);
     else void releaseApproval(deferred.approvalId);
   },
 }));
@@ -371,11 +371,50 @@ onPersonPromoted(() => {
 });
 
 // GM r33 item 2: the approvals dismissed while the gate held, released once
-// the server promotes the tab, each once (a gone approval answers not_found,
-// which releaseApproval lets pass).
-const releasesHeld = new Set<string>();
+// the server promotes the tab, each once. Review 19 LOW-1 (fix round 23): kept
+// in this tab's sessionStorage too, so a reload before the promote still
+// releases them (otherwise the approval keeps its nodes locked against agent
+// edits until its 30-minute TTL, and nothing says so). Only a promote sends:
+// never on load. An id the server no longer has answers not_found, which
+// releaseApproval lets pass, so it is done either way. A tab whose storage
+// throws keeps them in memory only, as before.
+export const HELD_RELEASES_KEY = 'nebula.heldRunReleases';
+
+function readHeldReleases(): string[] {
+  try {
+    const raw = window.sessionStorage.getItem(HELD_RELEASES_KEY);
+    const ids: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string' && id.length > 0).slice(0, 64) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeHeldReleases(ids: ReadonlySet<string>): void {
+  try {
+    if (ids.size) window.sessionStorage.setItem(HELD_RELEASES_KEY, JSON.stringify([...ids]));
+    else window.sessionStorage.removeItem(HELD_RELEASES_KEY);
+  } catch {
+    /* No storage in this tab: memory only. */
+  }
+}
+
+const releasesHeld = new Set<string>(readHeldReleases());
+
+function holdRelease(approvalId: string): void {
+  releasesHeld.add(approvalId);
+  writeHeldReleases(releasesHeld);
+}
+
 onPersonPromoted(() => {
+  if (!releasesHeld.size) return;
   const ids = [...releasesHeld];
   releasesHeld.clear();
+  writeHeldReleases(releasesHeld);
   for (const id of ids) void releaseApproval(id);
 });
+
+/** A reload, for tests: what this tab held in memory goes; its storage stays. */
+export function forgetHeldReleasesForTests(): void {
+  releasesHeld.clear();
+}
