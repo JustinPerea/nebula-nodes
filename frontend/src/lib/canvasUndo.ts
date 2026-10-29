@@ -764,12 +764,13 @@ export function editArrivedText(edit: ForeignEdit): string | null {
   return edit.undoes ? `${edit.agentName} undid its edit.` : `${edit.agentName} changed the canvas.`;
 }
 
-/** "Undid Claude's edit", "Redid an edit from another window". */
+/** "Undid Claude’s edit.", "Redid an edit from another window.": a
+ * sentence, so it ends with its period (GM #198 r24 answer 2). */
 export function undoNoticeText(action: 'undo' | 'redo', edit: ForeignEdit): string {
   const verb = action === 'undo' ? 'Undid' : 'Redid';
-  if (edit.source === 'agent' && edit.agentName) return `${verb} ${edit.agentName}’s edit`;
-  if (edit.source === 'window') return `${verb} an edit from another window`;
-  return `${verb} an edit made outside Nebula`;
+  if (edit.source === 'agent' && edit.agentName) return `${verb} ${edit.agentName}’s edit.`;
+  if (edit.source === 'window') return `${verb} an edit from another window.`;
+  return `${verb} an edit made outside Nebula.`;
 }
 
 // -- comparing nodes ----------------------------------------------------------

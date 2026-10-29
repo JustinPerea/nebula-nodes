@@ -121,7 +121,7 @@ function undidAgentEdit() {
   const entry = { agentName: 'Claude Code', agentColor: '#E8825A' } as never;
   useGraphStore.setState({
     redoStack: [entry],
-    undoNotice: { id: 9001, text: 'Undid Claude Code\'s edit', agentColor: '#E8825A', offer: 'redo', entry },
+    undoNotice: { id: 9001, text: 'Undid Claude Code’s edit.', agentColor: '#E8825A', offer: 'redo', entry },
   });
 }
 
@@ -130,7 +130,7 @@ describe('one app-level notice region', () => {
     const { container } = render(<App />);
     await screen.findByTestId('canvas');
     act(undidAgentEdit);
-    const notice = await noticeWith('Undid Claude Code\'s edit');
+    const notice = await noticeWith('Undid Claude Code’s edit.');
     expect(notice).toHaveAttribute('role', 'status');
     expectInRegion(notice, container);
     const redo = screen.getByRole('button', { name: 'Redo' });

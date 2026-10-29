@@ -811,3 +811,27 @@ Four of this round's ring shots are byte-identical to round 10 shots of the same
   - moved 6/6: the saved-as notice, × focused, [Open] opens it.
   - Round 12 regression 16/16.
   - Shots `fix14-*` at 1280 and 1440, all distinct: popover-open-toast-gone, moved-saved-as-notice, moved-banner-keeps-edits, bad400-unstopped-line, bad400-try-again-refused, deleted-did-more-one-toast, toobig-line, undoclash-asked-again.
+
+## Fix round 15 (GM's pr198 r24)
+
+- **Answer 1: an agent's undo that deleted a scene is one sentence.** `sayDeletedSceneLines` gives `sceneUndidAndDeletedLine` ("Codex undid its edit and deleted “Opening”, so your changes to it can’t be saved.") whenever the toast's edit `undoes` one and has an agent's name. That holds whether the undo only deleted the scene or did more. It replaces round 14's two sentences, "Codex undid its edit. <line>". Both lines share `agentDeletedLine` in `lib/sceneSaveCopy.ts`; several scenes read “A” and “B”, "to them".
+- **Answer 2: "Undid Codex’s edit." with its period.** `undoNoticeText` ends all three forms with a period (agent, another window, outside Nebula; Undo and Redo). The count added after it ("1 proposal couldn't be reopened.") now joins with one period: the join strips the line's own period first.
+- **The saved-as notice's ×: the ring follows the input.** Checked live with a real mouse click on Try again, then Enter, then Space (each round makes a new recovered copy). The mouse leaves × focused with no ring (`:focus-visible` false, outline none). Enter and Space ring it (`:focus-visible` true, the solid token ring).
+  - This needed no change: the effect is a plain `focus()` and the CSS rings from `:focus-visible` only, the mechanism GM r17 set for every notice.
+  - Round 14's shot showed a ring because its harness pressed Try again with a scripted `click()` after keyboard actions, which Chrome treats as keyboard input.
+  - `pr198Fix15Ui` pins the mechanism (one plain `focus()` with no options on ×, for mouse, Enter and Space; the CSS rings from `:focus-visible` only), since jsdom has no `:focus-visible` heuristic.
+- GM withdrew r22 note 2 (the popover was already ’).
+- **Docs.** MCP-SETUP (the agent-undo sentence, "Undid Codex’s edit.") and the `mcp_server.py` docstring.
+- **Tests.**
+  - New `graphStore.fix15` (6): the undo that only deleted the scene, and the one that did more, both fail on 0d66cdef; two scenes; nothing unsaved; every Undo/Redo form; Undo pressed on Codex's toast.
+  - New `pr198Fix15Ui` (4).
+  - Tests changed because GM changed behaviour (answer 2's period): CanvasUndoNotice, graphStore.agentUndo, noticeFollowsStacks, noticeRegion.
+- **Gates.**
+  - tsc -b and `npm run lint` are clean.
+  - Full vitest: 595 files, 7,755 tests passed.
+  - Full backend: 12,061 passed, 71 skipped.
+  - vite build plus `check-build-budget.mjs`: 425,658 bytes raw (budget 512,000), 128,731 gzip; `dist` deleted.
+- **Live** (`fix15_live.mjs` on round 14's harness: backend 8797 with `fix15_server.py`, Vite 5797, 8000–8010 and 5173 blocked with 0 attempts after the canary, no paid runs).
+  - moved across mouse, Enter and Space: 15/15.
+  - undodel, ownundo, and the round 14 deleted13 and undoclash regression: 13/13.
+  - Shots `fix15-*` at 1280 and 1440, all distinct: undo-delete-one-sentence, undo-toast-period, saved-as-x-after-mouse, saved-as-x-after-enter.

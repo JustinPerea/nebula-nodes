@@ -48,7 +48,7 @@ describe('CanvasUndoNotice', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
     expect(useGraphStore.getState().nodes.map((n) => n.id)).toEqual(['n1']);
-    expect(screen.getByRole('status')).toHaveTextContent('Undid Claude’s edit');
+    expect(screen.getByRole('status')).toHaveTextContent('Undid Claude’s edit.');
 
     fireEvent.click(screen.getByRole('button', { name: 'Redo' }));
     expect(useGraphStore.getState().nodes.map((n) => n.id)).toEqual(['n1', 'n2']);

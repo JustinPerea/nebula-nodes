@@ -3703,7 +3703,10 @@ to it can’t be saved." when Nebula didn't see who) and stops saving it. Your
 delete's own toast says it, with your edit's Undo: when your write only
 deleted the scene the toast is that line; when it did more, it is one
 sentence: "Codex changed the canvas and deleted “Opening”, so your changes
-to it can’t be saved.". If the
+to it can’t be saved.". When your undo (`undo_canvas_edit`, `nebula undo`)
+deleted the scene, however much else it undid, it is one sentence too:
+"Codex undid its edit and deleted “Opening”, so your changes to it can’t be
+saved.". If the
 delete is undone (that Undo, the Agent log's, or yours), the scene comes
 back as Nebula had it (the canvas's own Undo puts back Nebula's scene, not
 the card as it was shown, so it doesn't pick a value) and the person's
@@ -3711,7 +3714,7 @@ edits are merged onto it and saved, with no new line;
 a field the person was still being asked about (your change clashed with
 theirs when you deleted it) is asked again, against the scene as it came
 back, unless your restored value is the person's. The prompt takes the
-delete toast's place (and the Undo's own "Undid Codex’s edit"), never
+delete toast's place (and the Undo's own "Undid Codex’s edit."), never
 both; it has no ×, so focus goes to the prompt itself, never Keep mine. A
 `workspace_moved` refusal says nothing on the card: the project switch's
 own handling says it once (an agent's switch hands the edits over; any

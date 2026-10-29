@@ -102,8 +102,19 @@ export function sceneDeletedLine(scene: string, by: SceneWriter): string {
  * “Opening”, so your changes to it can’t be saved." (several scenes: “A”
  * and “B”, "to them"). */
 export function sceneChangedAndDeletedLine(agent: string, scenes: readonly string[]): string {
+  return agentDeletedLine(`${agent} changed the canvas`, scenes);
+}
+
+/** GM r24 answer 1: an agent's undo that deleted the scene is one sentence
+ * too: "Codex undid its edit and deleted “Opening”, so your changes to it
+ * can’t be saved." */
+export function sceneUndidAndDeletedLine(agent: string, scenes: readonly string[]): string {
+  return agentDeletedLine(`${agent} undid its edit`, scenes);
+}
+
+function agentDeletedLine(lead: string, scenes: readonly string[]): string {
   const them = scenes.length > 1 ? 'them' : 'it';
-  return `${agent} changed the canvas and deleted ${quotedNames(scenes, 'scenes')}, so your changes to ${them} can’t be saved.`;
+  return `${lead} and deleted ${quotedNames(scenes, 'scenes')}, so your changes to ${them} can’t be saved.`;
 }
 
 /** The workspace moved (GM r7): "Codex switched to “Y” first."; the person

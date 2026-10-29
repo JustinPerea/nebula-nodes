@@ -13,7 +13,7 @@ const isShownNotice = (id: number) => useGraphStore.getState().undoNotice?.id ==
 
 /**
  * A short line when someone else's edit changes this canvas: "Claude changed
- * the canvas" with Undo when an agent's edit lands, "Undid Claude's edit"
+ * the canvas." with Undo when an agent's edit lands, "Undid Claude’s edit."
  * with Redo after Cmd-Z. The person's own delete says "Deleted the node."
  * with Undo, and its undo "Restored the node." with Redo (GM, 2026-10-23). The button acts only while that edit is next in
  * line on the undo (or redo) stack, so it never undoes something else.

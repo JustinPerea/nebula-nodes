@@ -124,7 +124,7 @@ describe('a notice whose button no longer applies', () => {
     expect(notice()).toBeNull();
   });
 
-  it('"Undid Claude Code\'s edit" with Redo, then a new step: it clears', async () => {
+  it('"Undid Claude Code’s edit." with Redo, then a new step: it clears', async () => {
     sync([textNode('n1'), textNode('n2'), textNode('n3')], [], { edit: { actor: CLAUDE, id: 'ed_00000000000000a2' } });
     useGraphStore.getState().undo();
     await settle();
@@ -203,7 +203,7 @@ describe('a notice whose button no longer applies', () => {
     net.restoreAnswers.push({ notReopened: [{ id: 'p_1', reason: 'it expired' }] });
     useGraphStore.getState().undo();
     await settle();
-    expect(notice()?.text).toBe('Undid Claude Code’s edit');
+    expect(notice()?.text).toBe('Undid Claude Code’s edit.');
     ownStep();
     expect(notice()).toBeNull();
     for (const release of net.heldRestores.splice(0)) release();

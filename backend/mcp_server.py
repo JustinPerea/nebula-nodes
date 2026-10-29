@@ -1318,7 +1318,7 @@ def edit_canvas(
     your change (a refusal is not a read). A write to a node someone
     deleted is 404 `node_gone` with `deletedBy` (who, or null); the person's
     canvas says it in your delete's own toast (one sentence when your
-    write did more). The person's own scene save refused 400 or 413 shows one
+    write did more, and when your undo deleted it). The person's own scene save refused 400 or 413 shows one
     line per status and waits for them; its Agent log line carries the status
     and code (docs/MCP-SETUP.md). Ids and ports in details are
     bare (`Node n4 not found`); a name that matches nothing is in “…”

@@ -89,14 +89,14 @@ describe("an agent's edit is one undo step", () => {
     useGraphStore.getState().undo();
     expect(ids()).toEqual(['n1', 'n2']);
     expect(useGraphStore.getState().edges.map((edge) => edge.source)).toEqual(['n1']);
-    expect(useGraphStore.getState().undoNotice).toMatchObject({ text: 'Undid Claude’s edit', offer: 'redo' });
+    expect(useGraphStore.getState().undoNotice).toMatchObject({ text: 'Undid Claude’s edit.', offer: 'redo' });
     await flush();
     expect(restores()).toEqual([{ action: 'undo', nodes: [], remove: ['n3'], wire: [], unwire: [] }]);
 
     useGraphStore.getState().redo();
     expect(ids()).toEqual(['n1', 'n2', 'n3']);
     expect(useGraphStore.getState().edges).toHaveLength(2);
-    expect(useGraphStore.getState().undoNotice?.text).toBe('Redid Claude’s edit');
+    expect(useGraphStore.getState().undoNotice?.text).toBe('Redid Claude’s edit.');
     await flush();
     expect(restores()[1]).toMatchObject({
       action: 'redo', remove: [],
@@ -341,7 +341,7 @@ describe('two open tabs', () => {
     // No notice when it lands: only agents' edits announce themselves.
     expect(useGraphStore.getState().undoNotice).toBeNull();
     useGraphStore.getState().undo();
-    expect(useGraphStore.getState().undoNotice?.text).toBe('Undid an edit from another window');
+    expect(useGraphStore.getState().undoNotice?.text).toBe('Undid an edit from another window.');
   });
 });
 

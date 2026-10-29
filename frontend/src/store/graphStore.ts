@@ -96,7 +96,7 @@ import {
 import { CANVAS_NOTICE_EVENT, showNotice, type CanvasNoticeDetail } from '../lib/canvasNotice';
 import { KEPT_AND_RETRYING, sceneStoppedLine, sceneOutpacedLine, type SceneOutpacedBy, type SceneWriter, sceneWriterOf,
   sameSceneWriter, UNKNOWN_WRITER, sceneDeletedLine, KEPT_UNTIL_RUN_ENDS, sceneClashLine,
-  sceneReorderedLine, sceneSaveHeading, sceneCantSaveLine, sceneTooBigToSaveLine, sceneChangedAndDeletedLine, shotBackWithoutLine, shotsRemovedLine } from '../lib/sceneSaveCopy';
+  sceneReorderedLine, sceneSaveHeading, sceneCantSaveLine, sceneTooBigToSaveLine, sceneChangedAndDeletedLine, sceneUndidAndDeletedLine, shotBackWithoutLine, shotsRemovedLine } from '../lib/sceneSaveCopy';
 import { ORDER, PRESENCE, WHOLE, mergeScenes, stillClashing, unionFields, withFields, type SceneField } from '../lib/cinemaSceneMerge';
 import { cleanPending, pendingSkipLine, type PendingAgent, type PendingSkipSummary } from '../lib/pendingNodes';
 import { MISSING_KEY_FAILURE, MODEL_SETTINGS_FAILURE, MODEL_SETTINGS_FAILURE_HEADER, modelKeyMissingText, modelSettingsFailedText, modelSetupFailedText } from '../lib/failureLines';
@@ -3244,10 +3244,13 @@ function sayDeletedSceneLines(lines: DeletedSceneLine[], before: number | null):
     const generic = notice.text.replace(/[.!?]$/, '');
     // GM r22 note 3: a write that did more is one sentence: "Codex changed
     // the canvas and deleted “Opening”, so your changes to it can’t be saved."
+    // GM r24 answer 1: an agent's undo that deleted it, however much it did,
+    // is one sentence too: "Codex undid its edit and deleted “Opening”, …".
     const scenes = [...new Set(lines.map((line) => line.scene))];
-    const text = nodesOnly && wiresOnly && !entry.undoes ? specific
-      : !entry.undoes && entry.agentName ? sceneChangedAndDeletedLine(entry.agentName, scenes)
-        : `${generic}. ${specific}`;
+    const text = entry.undoes && entry.agentName ? sceneUndidAndDeletedLine(entry.agentName, scenes)
+      : nodesOnly && wiresOnly && !entry.undoes ? specific
+        : !entry.undoes && entry.agentName ? sceneChangedAndDeletedLine(entry.agentName, scenes)
+          : `${generic}. ${specific}`;
     useGraphStore.setState({ undoNotice: { ...notice, text } });
     return;
   }
@@ -3296,7 +3299,7 @@ function restoreDeletedScenes(synced: ReadonlySet<string>, held: ReadonlyMap<str
     entry.clash = { fields: asked, writer: kept.clash!.writer, line: '' };
     entry.clash.line = clashLineFor(entry.clash, node2 ? cardTitle([node2], nodeId) : 'Scene', scene, entry.readded);
     // The deleted toast, if it still shows, gives way: never both. So does
-    // the canvas Undo's own "Undid Codex’s edit" that brought it back (GM
+    // the canvas Undo's own "Undid Codex’s edit." that brought it back (GM
     // r23 answer 2: the prompt replaces the delete toast in the same slot).
     const said = kept.line;
     const toastHadFocus = typeof document !== 'undefined'
@@ -3312,7 +3315,7 @@ function restoreDeletedScenes(synced: ReadonlySet<string>, held: ReadonlyMap<str
   }
 }
 
-/** Whether `notice` is the canvas Undo's own line ("Undid Codex’s edit",
+/** Whether `notice` is the canvas Undo's own line ("Undid Codex’s edit.",
  * with Redo) for the step that put `nodeId` back. */
 function restoredBy(notice: GraphState['undoNotice'], nodeId: string): boolean {
   const entry = notice?.offer === 'redo' ? notice.entry : undefined;
@@ -8463,7 +8466,9 @@ function sendRestore(
       const tail = skippedShown.get(notice.noticeId);
       skippedShown.delete(notice.noticeId);
       const base = tail && shown.text.endsWith(` ${tail}`) ? shown.text.slice(0, -(tail.length + 1)) : shown.text;
-      return { undoNotice: { ...shown, text: `${base}. ${text}${tail ? ` ${tail}` : ''}` } };
+      // The Undo's own line is a sentence now ("Undid Codex’s edit.", GM r24
+      // answer 2): one period between it and the count.
+      return { undoNotice: { ...shown, text: `${base.replace(/\.$/, '')}. ${text}${tail ? ` ${tail}` : ''}` } };
     }
     return lateCount(state, missed);
   });
