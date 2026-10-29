@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { PromptDialog, type PromptRequest } from '../PromptDialog';
-import { KEPT_FEWER, KEPT_SHOWN, keptMoreLabel, keptNoteDisplay, keptNoteLine, fitNote, NOTE_KEPT_COPY, pinDisplayText, type KeptNote } from '../../lib/canvasPins';
+import { KEPT_FEWER, KEPT_SHOWN, keptMoreLabel, keptNoteDisplay, keptNoteLine, MAX_PIN_TEXT, noteLength, NOTE_KEPT_COPY, pinDisplayText, type KeptNote } from '../../lib/canvasPins';
 import { useCurrentProjectId } from '../../lib/currentProject';
 import { getProjectContext } from '../../lib/projectContext';
 import { useCanvasPinsStore } from '../../store/canvasPinsStore';
@@ -34,13 +34,16 @@ import '../../styles/canvasPins.css';
  * or the selection toolbar; each note keeps its line breaks, clamped to 2
  * lines (blank-line runs collapsed), and names its project as it is called
  * now; a failed send's error goes once the person leaves its project. */
+/** The note's cap in the dialog: 280 shown characters, counted as the
+ * backend counts them; "N left" from 30 left (GM r20 note 1). */
+const NOTE_CAP = { max: MAX_PIN_TEXT, count: noteLength, showAt: 30 };
+
 export function PinComposer() {
   const composer = useCanvasPinsStore((s) => s.composer);
   const submit = useCanvasPinsStore((s) => s.submit);
   const cancel = useCanvasPinsStore((s) => s.cancelCompose);
   const setDraft = useCanvasPinsStore((s) => s.setDraft);
   const error = useCanvasPinsStore((s) => s.error);
-  const errorTone = useCanvasPinsStore((s) => s.errorTone);
   const errorProject = useCanvasPinsStore((s) => s.errorProject);
   const clearError = useCanvasPinsStore((s) => s.clearError);
   const kept = useCanvasPinsStore((s) => s.kept);
@@ -84,11 +87,9 @@ export function PinComposer() {
   // row count changes then), never at its start.
   const stackLeave = useLeave(kept.length > 0 ? true : null);
   const { rows, rowProps } = useLeavingRows(shown, (note) => note.project, { hold: stackLeave.leaving });
-  // A red error shows once the dialog has closed; a neutral notice (GM r18
-  // Q1) shows beside the dialog it leaves open. The tone goes with the text,
-  // so a leaving toast keeps its look.
-  const toast = useMemo(() => (error ? { text: error, tone: errorTone } : null), [error, errorTone]);
-  const errorLeave = useLeave(toast && (!composer || toast.tone === 'notice') && (errorProject === null || errorProject === here) ? toast : null);
+  // A refusal is one neutral line (GM r20 Q1), beside the dialog it leaves
+  // open, or alone after a failed delete.
+  const errorLeave = useLeave(error && (errorProject === null || errorProject === here) ? error : null);
 
   // Back to the newest two once no note is hidden (the next one kept starts
   // collapsed again).
@@ -195,8 +196,9 @@ export function PinComposer() {
       {request && (
         <PromptDialog
           request={request}
-          // Only what shows counts (GM r12 answer 3), as the backend counts it.
-          fit={fitNote}
+          // Only what shows counts (GM r12 answer 3), as the backend counts it;
+          // a neutral "N left" from 30 left (GM r20 note 1).
+          cap={NOTE_CAP}
           // GM bug 2 (fix round 1 of PR #200): a textarea that grows, the
           // caret at the end of a kept note, and "Send note".
           multiline
@@ -213,9 +215,8 @@ export function PinComposer() {
       {/* In the app's notice region, like every toast (GM - Design, 2026-10-23). */}
       {errorLeave.shown && (
         <InNoticeRegion slot="pin">
-          <div className={`canvas-pin-toast canvas-pin-toast--${errorLeave.shown.tone === 'notice' ? 'notice' : 'error'}`}
-            role={errorLeave.shown.tone === 'notice' ? 'status' : 'alert'} {...errorLeave.props}>
-            <span>{errorLeave.shown.text}</span>
+          <div className="canvas-pin-toast canvas-pin-toast--notice" role="status" {...errorLeave.props}>
+            <span>{errorLeave.shown}</span>
             <button type="button" onClick={clearError} aria-label="Dismiss">×</button>
           </div>
         </InNoticeRegion>

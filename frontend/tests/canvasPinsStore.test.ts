@@ -76,7 +76,8 @@ describe('canvas pins store', () => {
     useCanvasPinsStore.setState({ pins: [pin('pin_a')] });
     await useCanvasPinsStore.getState().remove('pin_a');
     expect(useCanvasPinsStore.getState().pins.map((p) => p.id)).toEqual(['pin_a']);
-    expect(useCanvasPinsStore.getState().error).toMatch(/Only the person/);
+    // GM r20 Q1: one neutral line, whatever the answer said.
+    expect(useCanvasPinsStore.getState().error).toBe('Nebula couldn’t delete this note. Try again in a moment.');
   });
 
   it('submits the composer target and closes it', async () => {

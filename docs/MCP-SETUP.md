@@ -1457,20 +1457,27 @@ Rules:
   #200 fix rounds 10 and 12), and every place that shows one strips it: the API's
   pins, events and their summaries, the CLI, the channel push and the
   canvas. So what you read never carries a control byte (no C0 but `\n`, no
-  C1, no ESC, no format character). What draws nothing is dropped too:
-  variation selectors and the combining grapheme joiner, except one U+FE0E
-  or U+FE0F right after an emoji (or a keycap's digit); a zero-width joiner,
-  except inside an emoji ZWJ sequence (a family); tag characters, except an
-  emoji tag flag (England, Scotland, Wales). Real emoji reach you whole,
-  extra selectors never. Whitespace at the ends of a note or reply is
-  trimmed, and the note is stored trimmed; the spaces and blank lines inside
-  are kept as typed and count. A note of only whitespace is empty (422,
-  "Note can't be empty"). The 280 counts only what shows: characters as a person sees
-  them (a letter with its accents, a flag) in the stripped text, the same
-  count the note dialog uses. What the strip drops is hidden text; up to
+  C1, no ESC, no format character). What draws nothing is dropped too
+  (fix round 13 reads Unicode 18's own lists for this): a variation
+  selector stays only when Unicode lists it for the character before it,
+  and only one: U+E0100–E01EF after a CJK unified ideograph, U+180B–180F
+  after a Mongolian letter, U+FE00–FE0F after a base StandardizedVariants
+  or emoji-variation-sequences lists (an emoji's U+FE0E/U+FE0F, a keycap's
+  digit); every other selector, the combining grapheme joiner, a
+  zero-width joiner outside an emoji ZWJ sequence, and every tag character
+  except the England, Scotland and Wales flags is dropped. Real emoji reach
+  you whole, extra selectors never. Whitespace (and a byte order mark) at
+  the ends of a note or reply is trimmed, and the note is stored trimmed;
+  the spaces and blank lines inside are kept as typed and count. A note of
+  only whitespace is empty (422, "Note can't be empty"). The 280 counts only
+  what shows: characters as a person sees them (a letter with its accents
+  or its variant selector, a flag, an RGI emoji ZWJ sequence such as a
+  family) in the stripped text, the same count the note dialog uses; emoji
+  joined into a chain that isn't an RGI sequence count one each. What the strip drops is hidden text; up to
   1,120 bytes of it (UTF-8) is kept as typed. Past that the note or reply is
   refused (422) with `"code": "note_hidden_too_long"`, `rawBytes`,
-  `hiddenBytes` and `limitBytes` beside `detail`. A reply is one line (a line break reads as a space). A note keeps
+  `hiddenBytes` and `limitBytes` beside `detail`. Past 280 characters the
+  422 carries `"code": "note_too_long"` and `"limit": 280` beside `detail`. A reply is one line (a line break reads as a space). A note keeps
   the lines the person wrote (Shift+Enter in the note dialog): its newlines
   reach agents as `\n` in `pins[].text` (look_at_canvas, start_here, the
   snapshot JSON). `nebula pins`, `nebula look` and `nebula start` print a

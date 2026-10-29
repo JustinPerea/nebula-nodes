@@ -19,7 +19,6 @@ vi.mock('../src/lib/canvasPins', async (importOriginal) => ({ ...await importOri
 
 const { HIDDEN_TEXT_CODE, HIDDEN_TEXT_COPY, MAX_PIN_TEXT, fitNote, noteLength, pinDisplayText } = await import('../src/lib/canvasPins');
 const { PromptDialog } = await import('../src/components/PromptDialog');
-const { fitEdit } = await import('../src/lib/fitEdit');
 const { PinComposer } = await import('../src/components/canvas/PinComposer');
 const { useCanvasPinsStore } = await import('../src/store/canvasPinsStore');
 
@@ -29,7 +28,7 @@ const hidden = () => new RequestFailedError("Couldn't save the note.", 422, {
 const NOTE = `look here\x1b]0;${'h'.repeat(1200)}\x07`;
 
 beforeEach(() => {
-  useCanvasPinsStore.setState({ pins: [], composer: null, composerCanvas: null, removing: {}, error: null, errorTone: 'error',
+  useCanvasPinsStore.setState({ pins: [], composer: null, composerCanvas: null, removing: {}, error: null,
     errorProject: null, draft: '', drafts: {}, kept: [] });
   for (const fn of Object.values(api)) fn.mockReset();
 });
@@ -48,7 +47,6 @@ describe('GM r18 Q1: too much hidden text', () => {
     expect(state.composer).toEqual({ nodeId: 'n1' });
     expect(state.draft).toBe(NOTE);
     expect(state.error).toBe(HIDDEN_TEXT_COPY);
-    expect(state.errorTone).toBe('notice');
     // The open dialog holds it; no stale draft waits to come back after a send.
     expect(state.drafts).toEqual({});
   });
@@ -60,16 +58,6 @@ describe('GM r18 Q1: too much hidden text', () => {
     await useCanvasPinsStore.getState().submit(NOTE);
     expect(await useCanvasPinsStore.getState().submit('look here')).toBe(true);
     expect(useCanvasPinsStore.getState()).toMatchObject({ composer: null, error: null, drafts: {} });
-  });
-
-  it('every other refusal stays red and keeps its heading (unchanged this round)', async () => {
-    api.createPin.mockRejectedValue(new RequestFailedError("Couldn't save the note.", 422, { detail: 'Notes are 280 characters or fewer.' }));
-    useCanvasPinsStore.getState().compose({ nodeId: 'n1' });
-    await useCanvasPinsStore.getState().submit('x');
-    const state = useCanvasPinsStore.getState();
-    expect(state.errorTone).toBe('error');
-    expect(state.error).toMatch(/^Couldn't save the note\./);
-    expect(state.composer).toBeNull();
   });
 
   it('the composer shows a neutral status toast over the open dialog, with the typed note still in the field', async () => {
@@ -143,30 +131,13 @@ describe('review 11 NIT-1: fitNote never cuts inside an escape code a longer sta
   });
 });
 
-describe('review 11 LOW-1: a full note refuses a keystroke; it never drops its end', () => {
-  const fits = (text: string) => fitNote(text) === text;
+describe('review 11 LOW-1, GM r20 note 1: a full note refuses a keystroke; it never drops its end', () => {
   const full = `${'a'.repeat(279)}Z`;
-
-  it('fitEdit: typing into a full note keeps the note and puts the caret back', () => {
-    expect(fitEdit(full, `X${full}`, 1, fits)).toEqual({ text: full, caret: 0 });
-    const mid = `${full.slice(0, 100)}M${full.slice(100)}`;
-    expect(fitEdit(full, mid, 101, fits)).toEqual({ text: full, caret: 100 });
-  });
-
-  it('fitEdit: a paste is cut where it went in, the rest of the note kept', () => {
-    const before = 'a'.repeat(270);
-    const typed = `${before.slice(0, 10)}${'P'.repeat(20)}${before.slice(10)}`;
-    expect(fitEdit(before, typed, 30, fits)).toEqual({ text: `${before.slice(0, 10)}${'P'.repeat(10)}${before.slice(10)}`, caret: 20 });
-  });
-
-  it('fitEdit: a pasted colour code is kept whole when the letter after it is what fits', () => {
-    const before = 'x'.repeat(279);
-    expect(fitEdit(before, `${before}\x1b[31myz`, 279 + 7, fits)).toEqual({ text: `${before}\x1b[31my`, caret: 279 + 6 });
-  });
+  const NOTE_CAP = { max: MAX_PIN_TEXT, count: noteLength, showAt: 30 };
 
   it('the dialog: typing at the start of a full note leaves it whole, the caret where it was', async () => {
     const request = { label: 'Note for agents', initial: full, resolve: () => {} };
-    render(<PromptDialog request={request} onDone={() => {}} fit={fitNote} multiline confirmLabel="Send note" />);
+    render(<PromptDialog request={request} onDone={() => {}} cap={NOTE_CAP} multiline confirmLabel="Send note" />);
     const field = screen.getByRole('textbox', { name: 'Note for agents' }) as HTMLTextAreaElement;
     const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
     await act(async () => {

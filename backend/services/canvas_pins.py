@@ -17,12 +17,15 @@ are stripped, and length is capped. It is never interpreted.
 """
 from __future__ import annotations
 
+import bisect
 import copy
+import json
 import secrets
 import time
 import re
 import unicodedata
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from services.agent_presence import AgentIdentity
@@ -75,20 +78,41 @@ _ANSI = re.compile(
 
 
 # Review 11 MEDIUM-1 of PR #200 and GM r19 answer 1: what draws nothing is
-# hidden text. Variation selectors, the combining grapheme joiner, Mongolian
-# free variation selectors and Khmer's inherent vowels are category Mn, so
-# they passed the Cc/Cf strip and folded into the character before: 32 per
-# letter carried a payload past the hidden-text cap to every agent. Each is
-# dropped from the shown form, with three guards so real emoji still work:
-# - one text/emoji presentation selector (FE0E, FE0F) stays directly after a
-#   character that takes it (an emoji, or a keycap's digit, # or *);
-# - a zero-width joiner stays inside an emoji ZWJ sequence (an emoji, its
-#   selector or skin tone, ZWJ, an emoji: a family, a profession);
-# - tag characters stay only as an emoji tag sequence after U+1F3F4 (the
-#   England, Scotland and Wales flags), up to TAG_SPEC_MAX of them and the
-#   cancel tag.
-# Every other selector, joiner and tag is hidden. The frontend's
-# pinDisplayText (lib/canvasPins.ts) is the same rule, range for range.
+# hidden text, dropped from the shown form; only real emoji and real
+# variants keep their invisible parts. One rule for the variation selectors
+# (GM r21, PR #200 fix round 13): at most one selector stays, and only when
+# Unicode lists it for the character before it:
+# - E0100-E01EF after a CJK unified ideograph (every extension block);
+# - 180B-180D and 180F after a Mongolian letter;
+# - FE00-FE0F after a base StandardizedVariants.txt or
+#   emoji-variation-sequences.txt lists for that selector (an emoji's
+#   FE0E/FE0F, a keycap's digit, a CJK compatibility variant).
+# Every other selector, and every one past the first, is hidden; so are the
+# combining grapheme joiner and Khmer's inherent vowels. A zero-width joiner
+# stays inside an emoji ZWJ sequence; tag characters stay only as one of the
+# three RGI subdivision flags after U+1F3F4, England, Scotland and Wales
+# (review 12 M-1: any other tag run carried 7 hidden ASCII characters a
+# flag). The data is generated from Unicode's own files
+# (scripts/generate-pin-text-unicode.py), the same bytes the frontend's
+# pinDisplayText (lib/canvasPins.ts) reads, so the two never disagree.
+_UNICODE_DATA = json.loads((Path(__file__).resolve().parent.parent / "data" / "pin_text_unicode.json").read_text(encoding="utf-8"))
+
+
+def _within(spans: list[list[int]]) -> Callable[[int], bool]:
+    lows = [low for low, _high in spans]
+
+    def inside(code: int) -> bool:
+        at = bisect.bisect_right(lows, code) - 1
+        return at >= 0 and code <= spans[at][1]
+    return inside
+
+
+_CJK_UNIFIED = _within(_UNICODE_DATA["cjkUnified"])
+_MONGOLIAN_LETTER = _within(_UNICODE_DATA["mongolianLetters"])
+_VARIATION_BASES = {int(selector, 16): _within(spans) for selector, spans in _UNICODE_DATA["variationBases"].items()}
+_RGI_ZWJ = frozenset(_UNICODE_DATA["rgiZwj"])
+_RGI_ZWJ_LONGEST = int(_UNICODE_DATA["rgiZwjLongest"])
+_TAG_FLAGS = frozenset(_UNICODE_DATA["tagFlags"])
 _PICTOGRAPHIC = (
     (0x00A9, 0x00A9), (0x00AE, 0x00AE), (0x203C, 0x203C), (0x2049, 0x2049), (0x2122, 0x2122),
     (0x2139, 0x2139), (0x2194, 0x21AA), (0x231A, 0x23FF), (0x24C2, 0x24C2), (0x25AA, 0x25FE),
@@ -98,7 +122,7 @@ _PICTOGRAPHIC = (
 )
 ZWJ = "\u200d"
 BLACK_FLAG = "\U0001F3F4"
-TAG_SPEC_MAX = 7
+CANCEL_TAG = "\U000E007F"
 
 
 def _pictographic(char: str | None) -> bool:
@@ -112,13 +136,25 @@ def _skin_tone(char: str) -> bool:
     return "\U0001F3FB" <= char <= "\U0001F3FF"
 
 
-def _invisible_mark(code: int) -> bool:
-    return (0xFE00 <= code <= 0xFE0F or 0xE0100 <= code <= 0xE01EF or code == 0x034F
-            or 0x180B <= code <= 0x180D or code == 0x180F or code in (0x17B4, 0x17B5))
+def _variation_selector(code: int) -> bool:
+    return 0xFE00 <= code <= 0xFE0F or 0xE0100 <= code <= 0xE01EF or 0x180B <= code <= 0x180D or code == 0x180F
 
 
-def _takes_selector(base: str | None) -> bool:
-    return _pictographic(base) or (base is not None and base in "0123456789#*")
+def _selector_fits(base: str | None, code: int) -> bool:
+    """GM r21: this selector is listed for this base."""
+    if base is None:
+        return False
+    if 0xFE00 <= code <= 0xFE0F:
+        listed = _VARIATION_BASES.get(code)
+        return listed is not None and listed(ord(base))
+    if 0xE0100 <= code <= 0xE01EF:
+        return _CJK_UNIFIED(ord(base))
+    return _MONGOLIAN_LETTER(ord(base))
+
+
+def _never_shown_mark(code: int) -> bool:
+    """The combining grapheme joiner and Khmer's inherent vowels draw nothing."""
+    return code == 0x034F or code in (0x17B4, 0x17B5)
 
 
 def _ends_in_emoji(out: list[str]) -> bool:
@@ -147,7 +183,9 @@ def _plain(line: str) -> str:
             end = index + 1
             while end < size and "\U000E0020" <= line[end] <= "\U000E007E":
                 end += 1
-            if 1 <= end - index - 1 <= TAG_SPEC_MAX and end < size and line[end] == "\U000E007F":
+            # Only England, Scotland and Wales (review 12 M-1).
+            spec = "".join(chr(ord(tag) - 0xE0000) for tag in line[index + 1:end])
+            if spec in _TAG_FLAGS and end < size and line[end] == CANCEL_TAG:
                 out.extend(line[index:end + 1])
                 index = end + 1
                 continue
@@ -160,9 +198,13 @@ def _plain(line: str) -> str:
         if unicodedata.category(char) in {"Cc", "Cf"}:
             index += 1
             continue
-        if _invisible_mark(code):
-            if code in (0xFE0E, 0xFE0F) and out and _takes_selector(out[-1]):
+        if _variation_selector(code):
+            # One, valid for its base (GM r21); a second finds a selector before it.
+            if out and _selector_fits(out[-1], code):
                 out.append(char)
+            index += 1
+            continue
+        if _never_shown_mark(code):
             index += 1
             continue
         out.append(char)
@@ -208,6 +250,7 @@ def shown_text(raw: Any, *, multiline: bool = True) -> str:
 HIDDEN_TEXT_BYTES = 1120
 HIDDEN_TOO_LONG = "This note has too much hidden text to save. Paste it as plain text, then try again."
 HIDDEN_TOO_LONG_CODE = "note_hidden_too_long"
+TOO_LONG_CODE = "note_too_long"
 # A cluster takes at most this many marks; past it each mark counts as a
 # character of its own, so 280 characters bound what is stored too.
 MAX_MARKS_PER_CHARACTER = 32
@@ -215,8 +258,10 @@ MAX_MARKS_PER_CHARACTER = 32
 
 def _extends(char: str) -> bool:
     """A code point that joins the character before it: a combining mark
-    (Mn, Mc, Me, which covers the variation selectors) or an emoji skin tone."""
-    return unicodedata.category(char) in {"Mn", "Mc", "Me"} or "\U0001F3FB" <= char <= "\U0001F3FF"
+    (Mn, Mc, Me, which covers the variation selectors), an emoji skin tone,
+    or a tag character (the strip keeps only a real flag's)."""
+    return (unicodedata.category(char) in {"Mn", "Mc", "Me"} or "\U0001F3FB" <= char <= "\U0001F3FF"
+            or "\U000E0020" <= char <= "\U000E007F")
 
 
 def _regional(char: str) -> bool:
@@ -244,41 +289,83 @@ def _hangul(char: str) -> str:
 _HANGUL_JOINS = {"L": {"L", "V", "LV", "LVT"}, "V": {"V", "T"}, "LV": {"V", "T"}, "T": {"T"}, "LVT": {"T"}}
 
 
+def _marks_end(shown: str, end: int) -> int:
+    """Past the marks that join the character before ``end``, up to 32."""
+    marks = 0
+    while end < len(shown) and marks < MAX_MARKS_PER_CHARACTER and _extends(shown[end]):
+        end += 1
+        marks += 1
+    return end
+
+
+def _zwj_key(part: str) -> str:
+    """An emoji in a ZWJ chain as the RGI list keys it: no FE0E/FE0F, no skin tone."""
+    return " ".join("%X" % ord(char) for char in part if char not in "\ufe0e\ufe0f" and not _skin_tone(char))
+
+
+def _zwj_characters(parts: list[str]) -> int:
+    """Characters in a chain of emoji joined by ZWJ (review 12 L-2, GM r21):
+    each RGI ZWJ sequence in it is one, longest first from the left; every
+    other emoji counts on its own, so 11 thumbs joined are 11, not 1."""
+    keys = [_zwj_key(part) for part in parts]
+    characters = 0
+    at = 0
+    while at < len(keys):
+        step = 1
+        for size in range(min(_RGI_ZWJ_LONGEST, len(keys) - at), 1, -1):
+            if "|".join(keys[at:at + size]) in _RGI_ZWJ:
+                step = size
+                break
+        characters += 1
+        at += step
+    return characters
+
+
 def text_length(shown: str) -> int:
     """Characters as a person sees them in already-shown text: a base and its
-    marks are one (a mark after a line break is its own), two regional
-    indicators (a flag) are one, and Hangul jamo that make one syllable are
-    one (review 11 NIT-3: the grapheme rules of UAX #29 the strip leaves to
-    matter, with no segmentation package). The frontend's textLength is the
-    same rule, code point for code point."""
+    marks are one, up to 32 (a mark after a line break is its own), two
+    regional indicators (a flag) are one, Hangul jamo that make one syllable
+    are one (review 11 NIT-3, UAX #29 GB6-GB8), a subdivision flag is one,
+    and a chain of emoji joined by ZWJ counts each RGI ZWJ sequence in it as
+    one and every other emoji on its own (review 12 L-2). No segmentation
+    package. The frontend's textLength is the same rule, code point for code
+    point."""
     count = 0
-    marks = 0
-    pending_flag = False
-    previous = ""
-    joined = False
-    for char in shown:
-        # An emoji ZWJ sequence and an emoji tag sequence are one character
-        # (the strip keeps only valid ones, GM r19 answer 1); their parts count
-        # toward the 32 like marks.
-        joins = (_extends(char) or char == ZWJ or "\U000E0020" <= char <= "\U000E007F"
-                 or (joined and _pictographic(char)))
-        joined = char == ZWJ
-        if joins and count and previous != "\n" and marks < MAX_MARKS_PER_CHARACTER:
-            marks += 1
-            continue
-        part = _hangul(char)
-        if part and marks == 0 and part in _HANGUL_JOINS.get(_hangul(previous) if previous else "", ()):
-            previous = char
-            continue
-        if _regional(char) and pending_flag:
-            pending_flag = False
-            previous = char
-            continue
-        count += 1
-        marks = 0
-        pending_flag = _regional(char)
-        previous = char
+    size = len(shown)
+    at = 0
+    while at < size:
+        char = shown[at]
+        end = at + 1
+        if char != "\n":
+            if _regional(char) and end < size and _regional(shown[end]):
+                end += 1
+            else:
+                part = _hangul(char)
+                while part and end < size and _hangul(shown[end]) in _HANGUL_JOINS.get(part, ()):
+                    part = _hangul(shown[end])
+                    end += 1
+            end = _marks_end(shown, end)
+        if _pictographic(char):
+            parts = [shown[at:end]]
+            while end + 1 < size and shown[end] == ZWJ and _pictographic(shown[end + 1]):
+                start = end + 1
+                end = _marks_end(shown, start + 1)
+                parts.append(shown[start:end])
+            count += _zwj_characters(parts)
+        else:
+            count += 1
+        at = end
     return count
+
+
+def _trimmed(raw: str) -> str:
+    """Whitespace and byte order marks off both ends (GM r19 answer 1; review
+    12 NIT-5: str.strip keeps a leading U+FEFF, the canvas's trim doesn't)."""
+    while True:
+        trimmed = raw.strip().strip("\ufeff")
+        if trimmed == raw:
+            return trimmed
+        raw = trimmed
 
 
 def clean_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = False) -> str:
@@ -301,12 +388,14 @@ def clean_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = F
     # GM r19 answer 1: the note is kept trimmed (typed_text), so what is
     # saved is what was counted; its hidden text is what the trimmed note
     # holds past what shows.
-    raw = raw.strip()
+    raw = _trimmed(raw)
     text = _shown(raw, multiline)
     if not text:
         raise PinError(422, f"{label} can't be empty")
     if text_length(text) > limit:
-        raise PinError(422, f"{label} must be {limit} characters or fewer")
+        # The person's line comes from its code (GM r20 Q1, PR #200 fix round
+        # 13), never from these words.
+        raise PinError(422, f"{label} must be {limit} characters or fewer", {"code": TOO_LONG_CODE, "limit": limit})
     raw_bytes = len(raw.encode("utf-8", "surrogatepass"))
     hidden = raw_bytes - len(text.encode("utf-8", "surrogatepass"))
     if hidden > HIDDEN_TEXT_BYTES:
@@ -321,7 +410,7 @@ def typed_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = F
     at both ends (GM r19 answer 1)."""
     clean_text(raw, limit=limit, label=label, multiline=multiline)
     # Trimmed at both ends (GM r19 answer 1, the one change to "as typed").
-    return raw.strip()
+    return _trimmed(raw)
 
 
 def note_block(text: Any, indent: str) -> str:

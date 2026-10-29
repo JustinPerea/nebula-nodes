@@ -224,10 +224,10 @@ describe('GM r10 and r11: a kept note collapses, the stack scales out, focus mov
     useCanvasPinsStore.setState({ error: 'Couldn’t save the note.', errorProject: null } as never);
     const { container } = render(<PinComposer />);
     act(() => useCanvasPinsStore.setState({ error: null } as never));
-    const error = container.querySelector<HTMLElement>('.canvas-pin-toast--error')!;
+    const error = container.querySelector<HTMLElement>('.canvas-pin-toast--notice')!;
     expect(error).toHaveAttribute('data-leaving', 'surface');
     endLeave(error);
-    expect(container.querySelector('.canvas-pin-toast--error')).toBeNull();
+    expect(container.querySelector('.canvas-pin-toast--notice')).toBeNull();
   });
 
   describe('the open list', () => {

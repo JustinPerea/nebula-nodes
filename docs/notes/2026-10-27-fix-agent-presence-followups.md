@@ -1536,3 +1536,154 @@ GM r18 (head 2c3e95e8).
   - the float shot before and after Undo, the same state as in round 11;
   - in an earlier pass, the r11 and r12 hidden-text toasts, the same
     notice.
+
+## Fix round 13
+
+GM r20, its addendum, review 12 and GM r21 (head 8bb9087d).
+
+- GM r20 Q1: every pin refusal is one neutral line. Each shows in the
+  `canvas-pin-toast--notice` status (role=status), with no "Couldn't …"
+  heading. The red `--error` toast, its class and `errorTone` are gone.
+  `pinRefusalLine` (lib/canvasPins.ts) reads the answer's code, then its
+  status, never its words:
+  - hidden text: `note_hidden_too_long`;
+  - over 280: the new `note_too_long`, with `limit`;
+  - another 4xx: the "can’t add" line;
+  - a 5xx or no answer: the "didn’t answer" line.
+  - A refused add keeps the composer open with the note in the field.
+  - A failed delete keeps the pin, with "Nebula couldn’t delete this note."
+  - Decision: the composer only adds pins, so it uses the "add" lines.
+    The "save" lines are in `PIN_REFUSAL_COPY` and tested, but no person
+    path saves a note's text today.
+  - The person-gate 403 ("only works from the Nebula canvas") now reads the
+    generic "Nebula can’t add this pin. Try again in a moment."
+  - No person-facing reply composer exists, so the reply cases and the
+    reply counter don't apply.
+- GM r20 note 1 and the addendum: the note dialog has a counter.
+  - "N left" (no period, neutral `--sr-ink-light`, never red) sits at the
+    left of the actions row, so showing it moves nothing. It shows from 30
+    left. The field is `aria-describedby` it while it shows.
+  - Once an edit has been refused, the counter shows at once, whatever is
+    left, and stays for the dialog.
+  - An edit that won't fit is refused whole: never cut to fit, the note and
+    caret unchanged. `fitEdit` is gone.
+  - PromptDialog's `fit` prop became `cap: { max, count, showAt }`.
+- GM r20 Q3: the frame ratchet's exemption is now the presence-colour author
+  edge on the pin card. It is keyed to the presence-colour variables, not
+  to amber. Review 12 NIT-3 narrowed it further: only `border-left` or
+  `border-left-color` in `var(--pin-color)` or `var(--agent-color)`, on a
+  `.canvas-pin__card` rule. A whole border, a glow, a literal colour or
+  another element fails.
+  - An open pin's `--pin-color` is a fixed amber, #e8a33d in canvasPins.css,
+    not a per-author colour. A resolved pin's edge is its agent's
+    `--agent-color`.
+- Review 12 M-1: tag runs. A tag run stays only when it spells England,
+  Scotland or Wales (gbeng, gbsct, gbwls) and ends in the cancel tag. Any
+  other run is hidden text. The reviewer's 280 flags of 7 ASCII tags are
+  8,960 hidden bytes, refused (422 note_hidden_too_long); a few of them
+  reach agents as plain black flags.
+- Review 12 L-2: a ZWJ chain is one character only as an RGI ZWJ sequence.
+  - Each RGI sequence in a chain counts one, matched longest first from the
+    left; every other emoji counts on its own. So 11 thumbs joined count 11.
+  - The keys leave out FE0E/FE0F and skin tones, so every tone of a
+    sequence matches.
+- GM r21: one rule for variation selectors. At most one stays, and only
+  when Unicode lists it for the character before it:
+  - E0100-E01EF after a CJK unified ideograph (Unified_Ideograph, every
+    extension block);
+  - 180B-180D/180F after a Mongolian letter (script Mongolian, category L);
+  - FE00-FE0F after a base listed for that selector in
+    StandardizedVariants.txt or emoji-variation-sequences.txt.
+  - The kept pair counts one. Every other selector, and each one past the
+    first, is hidden.
+  - This replaces round 12's "one FE0E/FE0F after an emoji or keycap". An
+    FE0F after an emoji Unicode doesn't list (😀, 👩, 🏴) is now hidden.
+    The corpus changed 29 old cases for that (27 fuzz, 2 named): it now keeps
+    葛+E0100 and ᠠ+FVS1.
+- The data: `scripts/generate-pin-text-unicode.py` reads Unicode 18's own
+  files and writes the same bytes to `backend/data/pin_text_unicode.json`
+  and `frontend/src/lib/pinTextUnicode.json`. It is data, not a package
+  (27 KB: 261 RGI ZWJ keys, the longest 4 emoji; 2,062 variation pairs; the
+  CJK and Mongolian ranges; the three flags). A test on each side checks
+  the two files are byte-identical.
+  - There's no runtime directory both sides read (`contracts/` is
+    test-only), so the data is written twice from one generator.
+- Review 12 L-1: the cut escape.
+  - GM r20 removed the dialog's trim path: a paste that won't fit is now
+    refused whole.
+  - The one cut left is `fitNote` in the store's `sanitize`, which bounds a
+    pin's text as it arrives. When that cut ends inside an escape (a lone
+    ESC, or an unfinished CSI), the partial code is now dropped whole.
+  - Text that fits is never cut, and the backend never cuts: it refuses or
+    trims whitespace at the ends. Typing can't splice an escape either: the
+    person can't type ESC, and an edit is accepted or refused whole.
+- Review 12 NIT-1: zoom reset, camera reset and Erase ease back on release.
+  Their base rules carry the toolbar's 220ms spring on `transform`, along
+  with each control's colour, background, border, shadow and opacity
+  fades. The classes are paired to outrank `.editor-transport__btn`'s
+  later rule. Live, the release is still easing 30ms in (0.97-0.98) and
+  rests at 1.
+- Review 12 NIT-2: the frame ratchet now sees:
+  - every state of an ancestor: `:focus-within`, `:active`, and
+    `[data-*]`/`:not()` states, through the new `loose` match in
+    `cssCascade`, which ignores attribute selectors and `:not()`;
+  - `::before`/`::after`, an ancestor's and the control's own;
+  - `filter: drop-shadow`, border-image and background-image gradients;
+  - amber in `rgb()`/`rgba()`;
+  - a variable aliased in the test's own sheet.
+  - An ancestor's own `:focus`/`:focus-visible` ring stays the
+    keyboard-ring rule's to judge.
+  - The reviewer's nine bypasses are now in the corpus and caught. The real
+    app has no findings.
+- Review 12 NIT-5: a byte order mark at either end is trimmed with the
+  whitespace (`_trimmed`). Inside a note it is a format character, so it is
+  hidden.
+- Review 12 NIT-4 (Thai, Hangul fillers): left as is; both sides agree.
+- Shots:
+  - fix12-full-note-typed-into showed the round 12 partial paste. It is now
+    `paste-refused-room-for-5`.
+  - A real `full-note-typed-into` shot is taken, scrolled to the note's
+    last "Z".
+  - The row cut at the bottom is the textarea's own: it shows four lines,
+    and the fifth shows in its bottom padding while it scrolls. The crop
+    takes the whole card.
+- Wording batch (not this PR): the World Labs line becomes "Keep these
+  unless you’ve checked Marble and want to forget recovery."
+- MCP-SETUP.md: the selector, ZWJ, tag-flag, BOM and counting rules, and
+  `note_too_long`.
+
+### Fix round 13 gates
+
+- Backend, full suite (isolated): 11,786 passed, 71 skipped (14m42s).
+- Frontend, full vitest (6 workers): 573 files, 7,373 tests, all pass.
+- tsc -b clean, eslint clean.
+- The vite build into a scratch outDir passes the budget at 447,554 B raw /
+  137,997 B gzip (limit 512,000) and the font check (53 @font-face, 13
+  woff2).
+  - The entry grew about 28 KB: the Unicode data sits in the entry chunk,
+    because the dialog counts synchronously. It could move to a lazy chunk
+    later if the budget gets tight.
+- The Unicode data generator reproduces both files from the Unicode 18
+  sources. The corpus generator reproduces the 845-case fixture.
+- Live (backend 8795, Vite 5795, nothing paid, 0 requests toward
+  8000-8010 or 5173): exits, openlist, undo, colours, leave9, r10, r11,
+  r12, r13 and r13text, 71 of 71.
+  - r13: each refusal toast (too long, a real 422, 503 and no answer
+    through the page's fetch), the failed delete with the pin kept here and
+    on the server, the counter at 30 and 0 left, the paste refused into a
+    full note, and the addendum's "100 left" paste refusal, which stays.
+  - r13text: the 280×7 tag smuggle refused; fake flags reach agents as
+    black flags; England, 葛+E0100 and ᠠ+FVS1 kept through the API, the
+    list, `nebula pins` and the card; 30 thumbs joined count 30 in the
+    dialog and the backend.
+  - Earlier checks updated for this round's intended changes:
+    - pastes are refused whole (r12 room-for-5, r12 flags/plain);
+    - the 1,200-space refusal carries note_too_long;
+    - the release eases back, so the check samples it 30ms in;
+    - the `--error` selectors became `--notice`.
+  - Harness fix: the u1/u2 fixture PNGs, which an earlier cleanup removed,
+    are regenerated.
+- Shots: 101 fix13 shots, each new one looked at. md5 duplicates, both
+  intended:
+  - the 5xx and no-answer toasts, which have the same line by spec;
+  - the float shot before and after Undo.

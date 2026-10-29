@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { wsClient, type CanvasPinsEvent, type Pin } from '../lib/wsClient';
-import { createPin, deletePin, fetchPins, fitNote, HIDDEN_TEXT_CODE, HIDDEN_TEXT_COPY, noteKeptLine, type KeptNote } from '../lib/canvasPins';
+import { createPin, deletePin, fetchPins, fitNote, noteKeptLine, PIN_REFUSAL_COPY, pinRefusalLine, type KeptNote } from '../lib/canvasPins';
 import { currentProject } from '../lib/currentProject';
-import { failureMessage, RequestFailedError } from '../lib/errorCopy';
+import { RequestFailedError } from '../lib/errorCopy';
 import { refuseCanvasEdit } from '../lib/canvasLock';
 import { subscribeFollowingSwitch, followingSwitch } from '../lib/canvasFollow';
 import { subscribeCanvasReplaced } from '../lib/canvasReplaced';
@@ -47,11 +47,8 @@ interface CanvasPinsState {
   errorProject: string | null;
   /** Deletes sent but not yet confirmed: hidden even if a stale update still lists them. */
   removing: Record<string, true>;
+  /** A refusal's one neutral line (GM r20 Q1): what happened, then what to do. */
   error: string | null;
-  /** How the toast reads: 'error' (red, "Couldn't …" first), or 'notice'
-   * (neutral: the note was refused for something the person can fix in the
-   * dialog that stays open, GM r18 Q1). */
-  errorTone: 'error' | 'notice';
   hydrate: () => Promise<void>;
   apply: (event: Pick<CanvasPinsEvent, 'projectId' | 'pins'>) => void;
   compose: (target: PinComposerTarget) => void;
@@ -124,7 +121,6 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
   errorProject: null,
   removing: {},
   error: null,
-  errorTone: 'error',
   hydrate: async () => {
     try {
       const listing = await fetchPins();
@@ -192,18 +188,11 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
           kept: keepNote(state.kept, trimmed, project, state.composerProjectName, followingSwitch()) }));
         return false;
       }
-      if (error instanceof RequestFailedError && error.code === HIDDEN_TEXT_CODE) {
-        // GM r18 Q1: too much hidden text. The dialog stays open with the
-        // note as typed (to paste it again as plain text), and a neutral
-        // toast says only what to do. (Not a draft yet: the dialog holds it,
-        // and × or Esc keeps it as one.)
-        set({ draft: text, error: HIDDEN_TEXT_COPY, errorTone: 'notice', errorProject: project });
-        return false;
-      }
-      // Not sent: the text stays as its project's draft for the next open
-      // there (GM: only sending drops it), and the toast says why.
-      set((state) => ({ composer: null, composerCanvas: null, draft: '', drafts: keepDraft(state.drafts, project, text),
-        error: failureMessage(error, "Couldn't add the pin."), errorTone: 'error', errorProject: project }));
+      // GM r20 Q1 (PR #200 fix round 13), after GM r18 Q1: any refusal keeps
+      // the dialog open with the note as typed, and one neutral line says
+      // what happened and what to do. (Not a draft yet: the dialog holds it,
+      // and × or Esc keeps it as one.)
+      set({ draft: text, error: pinRefusalLine(error, 'add'), errorProject: project });
       return false;
     }
   },
@@ -216,12 +205,13 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
     }));
     try {
       await deletePin(id);
-    } catch (error) {
+    } catch {
       // Put it back: the backend still has it.
       const restored = previous.find((pin) => pin.id === id);
       set((state) => ({
         pins: restored && !state.pins.some((p) => p.id === id) ? [...state.pins, restored] : state.pins,
-        error: failureMessage(error, "Couldn't remove the pin."), errorTone: 'error',
+        // GM r20 Q1: the pin stays, and the line says so in its own words.
+        error: PIN_REFUSAL_COPY.deleteFailed,
         errorProject: null,
       }));
     } finally {
@@ -280,9 +270,16 @@ function keepDraft(drafts: Record<string, string>, project: string, text: string
  * purpose gets no line; it stays their project's draft. A send that had
  * already failed keeps its own failure line. */
 function closeComposerForGoneCanvas(following: ReturnType<typeof followingSwitch>): void {
-  const { composer, composerCanvas, composerProjectName, draft, kept } = useCanvasPinsStore.getState();
+  const { composer, composerCanvas, composerProjectName, draft, drafts, kept, error, errorProject } = useCanvasPinsStore.getState();
   if (!composer) return;
   const text = draft.trim();
+  // A send already refused (its line showing, GM r20 Q1: the dialog stays
+  // open on any failure) keeps that line: its note goes back to its
+  // project's draft, never "wasn’t sent because the canvas changed".
+  if (error && errorProject === projectKey(composerCanvas)) {
+    useCanvasPinsStore.setState({ composer: null, composerCanvas: null, draft: '', drafts: keepDraft(drafts, errorProject, draft) });
+    return;
+  }
   useCanvasPinsStore.setState({ composer: null, composerCanvas: null, draft: '',
     ...(text ? { kept: keepNote(kept, text, projectKey(composerCanvas), composerProjectName, following) } : {}) });
 }

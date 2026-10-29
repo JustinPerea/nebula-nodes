@@ -20,6 +20,7 @@ from services import agent_start
 from cli import formatter
 from services.agent_presence import AgentIdentity
 from services.canvas_pins import (
+    _selector_fits,
     HIDDEN_TEXT_BYTES,
     HIDDEN_TOO_LONG,
     MAX_PIN_TEXT,
@@ -155,7 +156,8 @@ def test_a_note_too_long_once_shown_or_as_typed_is_refused(tmp_path):
     pins = CanvasPins(store, clock=Clock())
     with pytest.raises(PinError) as over:
         pins.add_in("x" * (MAX_PIN_TEXT + 1), position={"x": 0, "y": 0}, graph_nodes={})
-    assert over.value.detail == "Note must be 280 characters or fewer" and over.value.extra == {}
+    assert over.value.detail == "Note must be 280 characters or fewer"
+    assert over.value.extra == {"code": "note_too_long", "limit": 280}  # GM r20 Q1: the person's line by its code
     with pytest.raises(PinError) as hidden:
         pins.add_in("x" + "\x1b[0m" * 281, position={"x": 0, "y": 0}, graph_nodes={})
     assert hidden.value.detail == HIDDEN_TOO_LONG
@@ -224,7 +226,8 @@ def test_the_shared_corpus_shows_and_counts_as_written():
         assert named[name]["note"] == named[name]["typed"] and named[name]["noteLength"] == 1, name
     assert named["text and emoji hearts"]["note"] == "\u2665\ufe0e\u2665\ufe0f"
     assert named["a selector after a letter"]["note"] == "a"
-    assert named["an ideographic selector"]["note"] == "\u845b"  # GM r19: only FE0E/FE0F stay
+    # GM r21 (fix round 13): one selector, kept when Unicode lists it for its base.
+    assert named["an ideographic selector"]["note"] == "\u845b\U000E0100" and named["an ideographic selector"]["noteLength"] == 1
     assert named["a ZWJ between letters"]["note"] == "ab"
     assert named["tags without the black flag"]["note"] == "a"
     assert named["whitespace at the ends"]["note"] == "hi there"
@@ -240,8 +243,11 @@ def test_a_seeded_fuzz_leaves_no_stray_selector_joiner_or_tag_on_any_output():
         for shown in (shown_text(typed), shown_text(typed, multiline=False), one_line(typed)):
             for index, char in enumerate(shown):
                 code = ord(char)
-                if 0xFE00 <= code <= 0xFE0F or 0xE0100 <= code <= 0xE01EF or code == 0x34F:
-                    assert code in (0xFE0E, 0xFE0F) and index and shown[index - 1] not in "\ufe0e\ufe0f\u200d", repr(typed)
+                if code == 0x34F:
+                    raise AssertionError(repr(typed))
+                if 0xFE00 <= code <= 0xFE0F or 0xE0100 <= code <= 0xE01EF:
+                    # GM r21: one selector, right after a base it is listed for.
+                    assert index and _selector_fits(shown[index - 1], code), repr(typed)
                 if char == "\u200d":
                     assert 0 < index < len(shown) - 1, repr(typed)
                 if 0xE0020 <= code <= 0xE007F:
@@ -303,7 +309,8 @@ def test_a_refused_hidden_text_answers_its_code_and_counts_beside_the_persons_li
                     "hiddenBytes": raw_bytes - 2, "limitBytes": HIDDEN_TEXT_BYTES}
     assert not store.projection().pins
     over = client.post("/api/canvas/pins", headers=PERSON, json={"text": "x" * 281, "nodeId": node})
-    assert over.status_code == 422 and over.json() == {"detail": "Note must be 280 characters or fewer"}
+    assert over.status_code == 422
+    assert over.json() == {"detail": "Note must be 280 characters or fewer", "code": "note_too_long", "limit": 280}
 
 
 def test_routes_store_as_typed_and_every_answer_journal_and_broadcast_is_stripped(api):

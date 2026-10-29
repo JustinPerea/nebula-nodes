@@ -175,13 +175,12 @@
 }
 
 /* Motion by kind (fix round 6 of PR #200, GM r9 answer 2; noticeRegion.css):
-   the pin error is its own box in the region, and so is the kept stack when
+   a pin refusal is its own box in the region (neutral since GM r20 Q1), and so is the kept stack when
    its first note arrives, so both scale in on the toasts' spring. A note
    kept while the stack shows is a row inside it: it expands into place
    (PinComposer marks it data-entering until its expand ends) and never
    scales. While PinComposer measures the open list it holds the expand, so
    the list is sized to whole rows. */
-.canvas-pin-toast--error,
 .canvas-pin-toast--notice,
 .canvas-pin-kept-stack {
   animation: notice-surface-in 420ms var(--notice-spring) both;
@@ -335,7 +334,6 @@
     animation: none;
   }
   /* Opacity only (GM r9 answer 2). */
-  .canvas-pin-toast--error,
   .canvas-pin-toast--notice,
   .canvas-pin-kept-stack,
   .canvas-pin-toast--kept[data-entering] {

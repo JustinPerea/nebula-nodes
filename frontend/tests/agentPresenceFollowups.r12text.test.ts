@@ -43,7 +43,7 @@ describe('the shared pin-text corpus', () => {
     expect(noteLength(typed)).toBe(MAX_PIN_TEXT);
   });
 
-  it('a seeded fuzz: no output keeps a selector that isn\'t right after a character that takes it, a stray joiner, or a stray tag', () => {
+  it('a seeded fuzz: no output keeps a selector that isn\'t right after a base it is listed for, a stray joiner, or a stray tag', () => {
     let seed = 20261028;
     const rand = () => { seed = (seed * 1103515245 + 12345) % 2 ** 31; return seed / 2 ** 31; };
     const pool = ['a', ' ', '\n', '́', '︎', '️', '︀', '͏', '‍', '\u{1F468}', '\u{1F3FD}', '\u{1F3F4}',
@@ -53,11 +53,12 @@ describe('the shared pin-text corpus', () => {
       const points = Array.from(pinDisplayText(typed, { fold: false }));
       points.forEach((char, i) => {
         const code = char.codePointAt(0)!;
-        if ((code >= 0xfe00 && code <= 0xfe0f) || (code >= 0xe0100 && code <= 0xe01ef) || code === 0x34f) {
-          expect([0xfe0e, 0xfe0f], JSON.stringify(typed)).toContain(code);
-          expect(points[i - 1], JSON.stringify(typed)).toBeDefined();
-          expect([0xfe0e, 0xfe0f, 0x200d]).not.toContain(points[i - 1].codePointAt(0));
-        }
+        // GM r21 (fix round 13): one selector, right after a base Unicode
+        // lists it for. In this pool: FE0E/FE0F after ♥ or 1, E0100 after 葛.
+        expect(code, JSON.stringify(typed)).not.toBe(0x34f);
+        if (code === 0xfe0e || code === 0xfe0f) expect(['♥', '1'], JSON.stringify(typed)).toContain(points[i - 1]);
+        else if (code === 0xe0100) expect(points[i - 1], JSON.stringify(typed)).toBe('葛');
+        else if ((code >= 0xfe00 && code <= 0xfe0f) || (code >= 0xe0100 && code <= 0xe01ef)) throw new Error(JSON.stringify(typed));
         if (char === '‍') expect(i > 0 && i < points.length - 1, JSON.stringify(typed)).toBe(true);
         if (code >= 0xe0020 && code <= 0xe007f) expect(points.slice(0, i).reverse().find((p) => (p.codePointAt(0)! < 0xe0020)), JSON.stringify(typed)).toBe('\u{1F3F4}');
       });

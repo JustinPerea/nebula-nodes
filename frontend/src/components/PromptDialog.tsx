@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState, type FormEvent, type RefObject } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type RefObject } from 'react';
 import { AutoGrowTextarea } from './AutoGrowTextarea';
 import '../styles/prompt-dialog.css';
 import { ModalPortal } from './ModalPortal';
 import type { ActProps } from '../lib/canvasLock';
 import { composing } from '../lib/imeComposing';
-import { fitEdit } from '../lib/fitEdit';
 
 export interface PromptRequest {
   label: string;
@@ -13,15 +12,17 @@ export interface PromptRequest {
 }
 
 /** Shared text-entry dialog for browser and desktop workflows. */
-export function PromptDialog({ request, onDone, maxLength, fit, onChange, confirm, onRefused, multiline = false, confirmLabel = 'OK' }: {
+export function PromptDialog({ request, onDone, maxLength, cap, onChange, confirm, onRefused, multiline = false, confirmLabel = 'OK' }: {
   request: PromptRequest;
   onDone: (value: string | null) => void;
   /** Optional cap passed to the input (e.g. 280 for notes to agents). */
   maxLength?: number;
   /** A cap the field can't count itself (the note's: only what shows counts,
-   * PR #200 fix round 11): each change goes through it, the way maxLength
-   * trims a paste. */
-  fit?: (value: string) => string;
+   * PR #200 fix round 11). An edit that would pass it is refused whole, a
+   * paste too (never cut to fit), with the caret kept; a neutral "N left"
+   * shows under the field from `showAt` left, and at once, whatever is
+   * left, from the first refused edit on (GM r20 note 1 and its addendum). */
+  cap?: { max: number; count: (value: string) => number; showAt: number };
   /** Each change of the text (the note dialog keeps it: round 23 of PR #195). */
   onChange?: (value: string) => void;
   /** The OK button's state when something else decides it (the canvas lock's
@@ -56,26 +57,38 @@ export function PromptDialog({ request, onDone, maxLength, fit, onChange, confir
     return () => { if (previous instanceof HTMLElement && previous.isConnected) previous.focus(); };
   }, [multiline]);
 
+  // Once an edit has been refused, the counter stays for this dialog.
+  const [refused, setRefused] = useState(false);
+  // Where the caret goes back to after a refused edit: set after the commit
+  // that puts the value back (a render), and in a microtask for the case
+  // with no render (React puts the controlled value back after the handler).
+  const caret = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    if (caret.current === null) return;
+    input.current?.setSelectionRange(caret.current, caret.current);
+    caret.current = null;
+  });
   const change = (typed: string, field: HTMLInputElement | HTMLTextAreaElement) => {
-    if (!fit || fit(typed) === typed) {
+    caret.current = null;
+    if (!cap || cap.count(typed) <= cap.max || cap.count(typed) <= cap.count(value)) {
       setValue(typed);
       onChange?.(typed);
       return;
     }
-    // Over the cap (review 11 LOW-1 of PR #200): only what was just typed or
-    // pasted is cut, where it went in; the rest of the note and the caret stay.
-    // Nothing of it fits in a full note: the keystroke is refused, as
-    // maxLength refuses it.
-    const fitted = fitEdit(value, typed, end(field), (text) => fit(text) === text);
-    const next = fitted?.text ?? (fit(value) === value ? value : fit(typed));
-    // The caret back where the edit went in. After React has put the
-    // controlled value back (it does so once this handler returns, and that
-    // moves the caret to the end), so in a microtask.
-    const at = fitted?.caret ?? (next === value ? Math.max(0, end(field) - (typed.length - value.length)) : next.length);
-    setValue(next);
-    if (next !== value) onChange?.(next);
+    // Over the cap: refused whole (GM r20 note 1), never cut to fit. React
+    // puts the controlled value back once this handler returns, which moves
+    // the caret to the end, so the caret goes back where the edit began in a
+    // microtask after that.
+    const at = Math.max(0, Math.min(value.length, end(field) - (typed.length - value.length)));
+    caret.current = at;
+    setRefused(true);
+    setValue(value);
     queueMicrotask(() => { if (field.isConnected) field.setSelectionRange(at, at); });
   };
+  const left = cap ? Math.max(0, cap.max - cap.count(value)) : 0;
+  const counter = cap && (refused || left <= cap.showAt) ? `${left} left` : null;
+  const counterId = useId();
+  const described = counter !== null ? counterId : undefined;
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -115,6 +128,7 @@ export function PromptDialog({ request, onDone, maxLength, fit, onChange, confir
           {request.label}
           {multiline
             ? <AutoGrowTextarea textareaRef={input as RefObject<HTMLTextAreaElement | null>} rows={1} value={value} maxLength={maxLength}
+                aria-describedby={described}
                 onChange={(event) => change(event.target.value, event.target)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' && !event.shiftKey && !composing(event)) {
@@ -122,10 +136,14 @@ export function PromptDialog({ request, onDone, maxLength, fit, onChange, confir
                     form.current?.requestSubmit();
                   }
                 }} />
-            : <input ref={input as RefObject<HTMLInputElement | null>} value={value} maxLength={maxLength}
+            : <input ref={input as RefObject<HTMLInputElement | null>} value={value} maxLength={maxLength} aria-describedby={described}
                 onChange={(event) => change(event.target.value, event.target)} />}
         </label>
         <div className="prompt-dialog__actions">
+          {/* Under the field, on the left of the buttons' row, so showing it
+              moves nothing; outside the label, so it never joins the
+              field's name (the field points at it while it shows). */}
+          {counter !== null && <span id={counterId} className="prompt-dialog__counter" aria-live="polite">{counter}</span>}
           <button type="button" onClick={() => onDone(null)}>Cancel</button>
           <button type="submit" className="prompt-dialog__confirm" {...confirm}>{confirmLabel}</button>
         </div>

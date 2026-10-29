@@ -127,12 +127,12 @@ describe('M-2: kept notes stack, one per project, each with its own Copy note an
     publishOpenProject({ id: 'beta', name: 'Second canvas' });
     useCanvasPinsStore.setState({ error: "Couldn't save the note. Nebula didn't respond.", errorProject: 'alpha' } as never);
     render(<PinComposer />);
-    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
     cleanup();
     setProjectContext({ id: 'alpha', revision: 'rev-a' });
     publishOpenProject({ id: 'alpha', name: 'Alpha' });
     render(<PinComposer />);
-    expect(screen.getByRole('alert').textContent).toContain("Couldn't save the note.");
+    expect(screen.getByRole('status').textContent).toContain("Couldn't save the note. Nebula didn't respond.");
   });
 });
 

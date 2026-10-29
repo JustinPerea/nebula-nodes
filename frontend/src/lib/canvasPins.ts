@@ -1,8 +1,10 @@
 import type { InternalNode, Node } from '@xyflow/react';
 import type { NodeData } from '../types';
 import { apiRequest } from './apiRequest';
+import { RequestFailedError } from './errorCopy';
 import type { Pin } from './wsClient';
 import type { ProjectContext } from './projectContext';
+import UNICODE from './pinTextUnicode.json';
 
 export type { Pin } from './wsClient';
 
@@ -93,12 +95,33 @@ const ESCAPES = /\x1b\[[0-?]*[ -/]*[@-~]|\x9b[0-?]*[ -/]*[@-~]|(?:\x1b[\]P_^X]|[
 // eslint-disable-next-line no-control-regex -- line-break controls
 const LINE_BREAKS = /\r\n|[\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029]/;
 // Review 11 MEDIUM-1 and GM r19 answer 1: what draws nothing is hidden
-// text, with three guards so real emoji still work: one FE0E/FE0F directly
-// after a character that takes it (an emoji, a keycap's digit, # or *); a
-// zero-width joiner inside an emoji ZWJ sequence; tag characters only as an
-// emoji tag sequence after U+1F3F4 (up to 7 and the cancel tag). Every other
-// selector, joiner and tag is hidden (backend services/canvas_pins.py _plain,
-// the same rule, range for range).
+// text; only real emoji and real variants keep their invisible parts. GM r21
+// (fix round 13): at most one variation selector stays, and only when Unicode
+// lists it for the character before it (E0100-E01EF after a CJK unified
+// ideograph, 180B-180D/180F after a Mongolian letter, FE00-FE0F after a base
+// StandardizedVariants or emoji-variation-sequences lists for it); a
+// zero-width joiner stays inside an emoji ZWJ sequence; tag characters stay
+// only as the England, Scotland or Wales flag (review 12 M-1). The data is
+// generated from Unicode's files (scripts/generate-pin-text-unicode.py), the
+// same bytes the backend reads (services/canvas_pins.py _plain, the same rule).
+const within = (spans: number[][]) => (code: number) => {
+  let low = 0;
+  let high = spans.length - 1;
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    if (code < spans[mid][0]) high = mid - 1;
+    else if (code > spans[mid][1]) low = mid + 1;
+    else return true;
+  }
+  return false;
+};
+const cjkUnified = within(UNICODE.cjkUnified);
+const mongolianLetter = within(UNICODE.mongolianLetters);
+const variationBases = new Map(Object.entries(UNICODE.variationBases as Record<string, number[][]>)
+  .map(([selector, spans]) => [parseInt(selector, 16), within(spans)]));
+const RGI_ZWJ = new Set<string>(UNICODE.rgiZwj);
+const RGI_ZWJ_LONGEST: number = UNICODE.rgiZwjLongest;
+const TAG_FLAGS = new Set<string>(UNICODE.tagFlags);
 const PICTOGRAPHIC: Array<[number, number]> = [
   [0x00a9, 0x00a9], [0x00ae, 0x00ae], [0x203c, 0x203c], [0x2049, 0x2049], [0x2122, 0x2122],
   [0x2139, 0x2139], [0x2194, 0x21aa], [0x231a, 0x23ff], [0x24c2, 0x24c2], [0x25aa, 0x25fe],
@@ -108,16 +131,25 @@ const PICTOGRAPHIC: Array<[number, number]> = [
 ];
 const ZWJ = '\u200d';
 const BLACK_FLAG = 0x1f3f4;
-const TAG_SPEC_MAX = 7;
+const CANCEL_TAG = 0xe007f;
 const pictographic = (char: string | undefined) => {
   if (!char) return false;
   const code = char.codePointAt(0) ?? 0;
   return PICTOGRAPHIC.some(([low, high]) => code >= low && code <= high);
 };
 const skinTone = (char: string) => { const code = char.codePointAt(0) ?? 0; return code >= 0x1f3fb && code <= 0x1f3ff; };
-const invisibleMark = (code: number) => (code >= 0xfe00 && code <= 0xfe0f) || (code >= 0xe0100 && code <= 0xe01ef)
-  || code === 0x034f || (code >= 0x180b && code <= 0x180d) || code === 0x180f || code === 0x17b4 || code === 0x17b5;
-const takesSelector = (base: string | undefined) => pictographic(base) || (base !== undefined && '0123456789#*'.includes(base));
+const variationSelector = (code: number) => (code >= 0xfe00 && code <= 0xfe0f) || (code >= 0xe0100 && code <= 0xe01ef)
+  || (code >= 0x180b && code <= 0x180d) || code === 0x180f;
+// GM r21: this selector is listed for this base.
+const selectorFits = (base: string | undefined, code: number) => {
+  if (base === undefined) return false;
+  const point = base.codePointAt(0) ?? 0;
+  if (code >= 0xfe00 && code <= 0xfe0f) return variationBases.get(code)?.(point) ?? false;
+  if (code >= 0xe0100 && code <= 0xe01ef) return cjkUnified(point);
+  return mongolianLetter(point);
+};
+// The combining grapheme joiner and Khmer's inherent vowels draw nothing.
+const neverShownMark = (code: number) => code === 0x034f || code === 0x17b4 || code === 0x17b5;
 const endsInEmoji = (out: string[]) => {
   let index = out.length - 1;
   if (index >= 0 && skinTone(out[index])) index -= 1;
@@ -136,8 +168,9 @@ const plain = (line: string) => {
     if (code === BLACK_FLAG) {
       let end = index + 1;
       while (end < chars.length && tagSpec(chars[end].codePointAt(0) ?? 0)) end += 1;
-      const spec = end - index - 1;
-      if (spec >= 1 && spec <= TAG_SPEC_MAX && end < chars.length && chars[end].codePointAt(0) === 0xe007f) {
+      // Only England, Scotland and Wales (review 12 M-1).
+      const spec = chars.slice(index + 1, end).map((tag) => String.fromCodePoint((tag.codePointAt(0) ?? 0) - 0xe0000)).join('');
+      if (TAG_FLAGS.has(spec) && end < chars.length && chars[end].codePointAt(0) === CANCEL_TAG) {
         out.push(...chars.slice(index, end + 1));
         index = end + 1;
         continue;
@@ -149,11 +182,13 @@ const plain = (line: string) => {
       continue;
     }
     if (/[\p{Cc}\p{Cf}]/u.test(char)) { index += 1; continue; }
-    if (invisibleMark(code)) {
-      if ((code === 0xfe0e || code === 0xfe0f) && takesSelector(out[out.length - 1])) out.push(char);
+    if (variationSelector(code)) {
+      // One, valid for its base (GM r21); a second finds a selector before it.
+      if (selectorFits(out[out.length - 1], code)) out.push(char);
       index += 1;
       continue;
     }
+    if (neverShownMark(code)) { index += 1; continue; }
     out.push(char);
     index += 1;
   }
@@ -186,21 +221,49 @@ export function pinDisplayText(text: string | null | undefined, { multiline = tr
 // the 280, in characters as a person sees them, of the shown text. The same
 // rule as the backend's services/canvas_pins.text_length, code point for
 // code point, so the dialog's limit and the backend's refusal never disagree:
-// a base and its marks (\p{M}: Mn, Mc, Me, the variation selectors too) or an
-// emoji skin tone are one character, up to 32 marks; two regional indicators
-// (a flag) are one.
+// a base and its marks (\p{M}: Mn, Mc, Me, the variation selectors too), an
+// emoji skin tone or a flag's tags are one character, up to 32 marks; two
+// regional indicators (a flag) are one.
 const MAX_MARKS_PER_CHARACTER = 32;
 const joinsBefore = (char: string) => {
   const code = char.codePointAt(0) ?? 0;
-  return /\p{M}/u.test(char) || (code >= 0x1f3fb && code <= 0x1f3ff);
+  return /\p{M}/u.test(char) || (code >= 0x1f3fb && code <= 0x1f3ff) || (code >= 0xe0020 && code <= 0xe007f);
 };
-const regional = (char: string) => { const code = char.codePointAt(0) ?? 0; return code >= 0x1f1e6 && code <= 0x1f1ff; };
+const regional = (char: string | undefined) => { const code = char?.codePointAt(0) ?? 0; return code >= 0x1f1e6 && code <= 0x1f1ff; };
 
 /** The backend's code for a note with too much hidden text (GM r12 answer 3). */
 export const HIDDEN_TEXT_CODE = 'note_hidden_too_long';
 /** GM r18 Q1: the whole line, no "Couldn't save the note." before it, in a
  * neutral toast; the note stays in the open dialog to fix. */
 export const HIDDEN_TEXT_COPY = 'This note has too much hidden text to save. Paste it as plain text, then try again.';
+/** The backend's code for a note past 280 shown characters (GM r20 Q1). */
+export const TOO_LONG_CODE = 'note_too_long';
+
+/**
+ * GM r20 Q1 (PR #200 fix round 13): every pin refusal is one neutral line,
+ * what happened, then what to do, with no "Couldn't …" heading; read by the
+ * answer's code and status, never its words. The note stays in the dialog.
+ */
+export const PIN_REFUSAL_COPY = {
+  tooLong: 'Notes can be up to 280 characters. Shorten this one, then try again.',
+  hidden: HIDDEN_TEXT_COPY,
+  addRefused: 'Nebula can’t add this pin. Try again in a moment.',
+  saveRefused: 'Nebula can’t save this note. Try again in a moment.',
+  addNoAnswer: 'Nebula didn’t answer, so the pin wasn’t added. Try again in a moment.',
+  saveNoAnswer: 'Nebula didn’t answer, so the note wasn’t saved. Try again in a moment.',
+  deleteFailed: 'Nebula couldn’t delete this note. Try again in a moment.',
+} as const;
+
+/** The line for a refused add (a new pin and its note) or save (a note's text). */
+export function pinRefusalLine(error: unknown, action: 'add' | 'save'): string {
+  const code = error instanceof RequestFailedError ? error.code : null;
+  const status = error instanceof RequestFailedError ? error.status : 0;
+  if (code === HIDDEN_TEXT_CODE) return PIN_REFUSAL_COPY.hidden;
+  if (code === TOO_LONG_CODE) return PIN_REFUSAL_COPY.tooLong;
+  if (status >= 400 && status < 500) return action === 'add' ? PIN_REFUSAL_COPY.addRefused : PIN_REFUSAL_COPY.saveRefused;
+  // A 5xx, or no answer at all.
+  return action === 'add' ? PIN_REFUSAL_COPY.addNoAnswer : PIN_REFUSAL_COPY.saveNoAnswer;
+}
 
 // A Hangul jamo or syllable's part in a syllable (UAX #29): L, V, T, LV, LVT, or ''.
 const hangul = (char: string | undefined): string => {
@@ -214,29 +277,62 @@ const hangul = (char: string | undefined): string => {
 // Hangul parts that join the one before (UAX #29 GB6-GB8).
 const HANGUL_JOINS: Record<string, string[]> = { L: ['L', 'V', 'LV', 'LVT'], V: ['V', 'T'], LV: ['V', 'T'], T: ['T'], LVT: ['T'] };
 
-/** Characters as a person sees them in already-shown text: a base and its
- * marks are one (a mark after a line break is its own), a flag is one, and
- * Hangul jamo that make one syllable are one (review 11 NIT-3). */
-export function textLength(shown: string): number {
-  let count = 0;
+// Past the marks that join the character before `end`, up to 32.
+const marksEnd = (chars: string[], end: number) => {
   let marks = 0;
-  let pendingFlag = false;
-  let previous: string | undefined;
-  let joined = false;
-  for (const char of shown) {
-    // An emoji ZWJ or tag sequence is one character (GM r19 answer 1); its
-    // parts count toward the 32 like marks.
-    const code = char.codePointAt(0) ?? 0;
-    const joins = joinsBefore(char) || char === ZWJ || (code >= 0xe0020 && code <= 0xe007f) || (joined && pictographic(char));
-    joined = char === ZWJ;
-    if (joins && count && previous !== '\n' && marks < MAX_MARKS_PER_CHARACTER) { marks += 1; continue; }
-    const part = hangul(char);
-    if (part && marks === 0 && (HANGUL_JOINS[hangul(previous)] ?? []).includes(part)) { previous = char; continue; }
-    if (regional(char) && pendingFlag) { pendingFlag = false; previous = char; continue; }
-    count += 1;
-    marks = 0;
-    pendingFlag = regional(char);
-    previous = char;
+  while (end < chars.length && marks < MAX_MARKS_PER_CHARACTER && joinsBefore(chars[end])) { end += 1; marks += 1; }
+  return end;
+};
+// An emoji in a ZWJ chain as the RGI list keys it: no FE0E/FE0F, no skin tone.
+const zwjKey = (part: string[]) => part.filter((char) => char !== '\ufe0e' && char !== '\ufe0f' && !skinTone(char))
+  .map((char) => (char.codePointAt(0) ?? 0).toString(16).toUpperCase()).join(' ');
+// Review 12 L-2, GM r21: each RGI ZWJ sequence in a chain is one character,
+// longest first from the left; every other emoji counts on its own.
+const zwjCharacters = (parts: string[][]) => {
+  const keys = parts.map(zwjKey);
+  let characters = 0;
+  let at = 0;
+  while (at < keys.length) {
+    let step = 1;
+    for (let size = Math.min(RGI_ZWJ_LONGEST, keys.length - at); size > 1; size -= 1) {
+      if (RGI_ZWJ.has(keys.slice(at, at + size).join('|'))) { step = size; break; }
+    }
+    characters += 1;
+    at += step;
+  }
+  return characters;
+};
+
+/** Characters as a person sees them in already-shown text: a base and its
+ * marks are one (a mark after a line break is its own), a flag is one,
+ * Hangul jamo that make one syllable are one (review 11 NIT-3), and a chain
+ * of emoji joined by ZWJ counts each RGI ZWJ sequence in it as one and every
+ * other emoji on its own (review 12 L-2). */
+export function textLength(shown: string): number {
+  const chars = Array.from(shown);
+  let count = 0;
+  let at = 0;
+  while (at < chars.length) {
+    const char = chars[at];
+    let end = at + 1;
+    if (char !== '\n') {
+      if (regional(char) && regional(chars[end])) end += 1;
+      else {
+        let part = hangul(char);
+        while (part && end < chars.length && (HANGUL_JOINS[part] ?? []).includes(hangul(chars[end]))) { part = hangul(chars[end]); end += 1; }
+      }
+      end = marksEnd(chars, end);
+    }
+    if (pictographic(char)) {
+      const parts = [chars.slice(at, end)];
+      while (end + 1 < chars.length && chars[end] === ZWJ && pictographic(chars[end + 1])) {
+        const start = end + 1;
+        end = marksEnd(chars, start + 1);
+        parts.push(chars.slice(start, end));
+      }
+      count += zwjCharacters(parts);
+    } else count += 1;
+    at = end;
   }
   return count;
 }
@@ -263,7 +359,18 @@ export function fitNote(text: string, limit: number = MAX_PIN_TEXT): string {
   for (let k = low + 1; k <= Math.min(points.length, low + 64); k += 1) {
     if (noteLength(points.slice(0, k).join('')) <= limit) low = k;
   }
-  return points.slice(0, low).join('');
+  return points.slice(0, dropCutEscape(points.slice(0, low))).join('');
+}
+
+// Review 12 L-1: a cut that ends inside an escape code ("\x1b[0" of
+// "\x1b[0m") drops that partial code whole, so nothing after it can ever
+// complete it (the dialog no longer cuts a paste, GM r20; this bounds a
+// pin's text as it arrives).
+// eslint-disable-next-line no-control-regex -- the escape bytes it looks for
+const CUT_ESCAPE = /(?:\x1b(?:\[[0-?]*[ -/]*)?|\x9b[0-?]*[ -/]*)$/;
+function dropCutEscape(points: string[]): number {
+  const cut = CUT_ESCAPE.exec(points.join(''));
+  return cut ? Array.from(points.join('').slice(0, cut.index)).length : points.length;
 }
 
 /** A kept note as its notice shows it (GM, PR #200 round 5 answer 5): its

@@ -175,13 +175,13 @@ describe('N-5 and N-6: a kept note\'s project name, a failed send\'s error', () 
     on('alpha', 'Alpha');
     useCanvasPinsStore.setState({ error: "Couldn't save the note. Nebula didn't respond.", errorProject: 'alpha' } as never);
     const view = render(<PinComposer />);
-    expect(screen.getByRole('alert')).toBeTruthy();
+    expect(screen.getByRole('status')).toBeTruthy();
     act(() => on('beta', 'Second canvas'));
     view.rerender(<PinComposer />);
     expect(useCanvasPinsStore.getState().error).toBeNull();
     act(() => on('alpha', 'Alpha'));
     view.rerender(<PinComposer />);
-    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
   });
 
   it('N-6: an error of another project is left alone by a switch that never was on it', () => {

@@ -117,3 +117,14 @@
   cursor: default;
   opacity: 0.5;
 }
+
+/* GM r20 note 1 (PR #200 fix round 13): the note's "N left", under the
+   field at the start of the buttons' row (showing it moves nothing). A label
+   in the dialog's quiet ink, never red, whatever is left. */
+.prompt-dialog__counter {
+  align-self: center;
+  margin-right: auto;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--sr-ink-light, rgba(255, 255, 255, 0.55));
+}

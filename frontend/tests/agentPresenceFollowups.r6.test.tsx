@@ -221,7 +221,7 @@ describe('GM r9 answer 2: motion by kind', () => {
   const surfaces: Array<[string, string, 'surface' | 'row', string]> = [
     ['proposal bar (and the run-later notice)', 'styles/canvasProposals.css', 'surface', '.proposal-bar'],
     ['person-required notice', 'App.css', 'surface', '.person-required'],
-    ['pin error (its own box)', 'styles/canvasPins.css', 'surface', '.canvas-pin-toast--error'],
+    ['pin error (its own box)', 'styles/canvasPins.css', 'surface', '.canvas-pin-toast--notice'],
     ['kept-notes stack (its first note)', 'styles/canvasPins.css', 'surface', '.canvas-pin-kept-stack'],
     ['a note kept into the showing stack', 'styles/canvasPins.css', 'row', '.canvas-pin-toast--kept[data-entering]'],
     ['the proposal bar\'s inline error line', 'styles/canvasProposals.css', 'row', '.proposal-bar__error'],
@@ -299,7 +299,7 @@ describe('GM r9 answer 2: motion by kind', () => {
   it('the pin error is its own box, marked as one', () => {
     useCanvasPinsStore.setState({ error: "Couldn't save the note.", errorProject: null } as never);
     render(<PinComposer />);
-    expect(screen.getByRole('alert')).toHaveClass('canvas-pin-toast', 'canvas-pin-toast--error');
+    expect(screen.getByRole('status')).toHaveClass('canvas-pin-toast', 'canvas-pin-toast--notice');
   });
 });
 

@@ -36,6 +36,10 @@ interface SheetRule {
   base: string;
   /** ":focus-visible", "::placeholder", "" for the element at rest. */
   state: string;
+  /** `base` without attribute selectors or :not(): every state the element
+   * can take ([data-open], [aria-expanded="true"] …), for a check that has
+   * to see them all (review 12 NIT-2, the frame ratchet). */
+  loose: string;
   specificity: [number, number, number];
   order: number;
   decls: Array<{ prop: string; value: string; important: boolean }>;
@@ -117,7 +121,28 @@ function rulesOf(css: string, file: string, order: { next: number }, from?: stri
       } catch {
         continue;
       }
-      rules.push({ file, selector, base, state, specificity, order: order.next, decls });
+      let loose = base;
+      try {
+        selectorParser((root) => {
+          root.walkAttributes((attribute) => { attribute.remove(); });
+          root.walkPseudos((pseudo) => { if (pseudo.value === ':not') pseudo.remove(); });
+          // A compound left empty ("> [data-x]") matches anything: "*".
+          root.each((sel) => {
+            let empty = true;
+            for (const node of [...sel.nodes]) {
+              if (node.type === 'combinator') {
+                if (empty) sel.insertBefore(node, selectorParser.universal());
+                empty = true;
+              } else if (node.type !== 'comment') empty = false;
+            }
+            if (empty) sel.append(selectorParser.universal());
+          });
+          loose = root.toString().trim() || '*';
+        }).processSync(base);
+      } catch {
+        loose = base;
+      }
+      rules.push({ file, selector, base, state, loose, specificity, order: order.next, decls });
     }
   });
   return rules;
@@ -141,13 +166,13 @@ function wins(a: { important: boolean; specificity: [number, number, number]; or
 type Winner = { value: string; important: boolean; specificity: [number, number, number]; order: number; selector: string };
 
 /** The rules that match `element` (any state), with the winning declaration per state|property. */
-export function cascaded(element: Element, extraCss?: string): Map<string, Winner> {
+export function cascaded(element: Element, extraCss?: string, { loose = false }: { loose?: boolean } = {}): Map<string, Winner> {
   const out = new Map<string, Winner>();
   // A test's own stylesheet comes after the app's, as a later sheet would.
   const extra = extraCss ? rulesOf(extraCss, 'extra.css', { next: appRules().length + 1 }) : [];
   for (const rule of [...appRules(), ...extra]) {
     let hit = false;
-    try { hit = element.matches(rule.base); } catch { hit = false; }
+    try { hit = element.matches(loose ? rule.loose : rule.base); } catch { hit = false; }
     if (!hit) continue;
     for (const decl of rule.decls) {
       const key = `${rule.state}|${decl.prop}`;

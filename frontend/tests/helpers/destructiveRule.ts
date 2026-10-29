@@ -844,28 +844,36 @@ function stateFindings(control: Control, classes: readonly string[], vars: Vars,
 /** The warning amber: a frame colour as loud as the accent (GM r18). */
 const WARNING_VAR = /^--sr-warning(?:-[\w-]+)?$/;
 /** Amber and yellow-orange hues the warm check leaves out (#f5c518 is 48 degrees). */
+function amberRgb(red: number, green: number, blue: number): boolean {
+  const [r, g, b] = [red, green, blue].map((n) => n / 255);
+  const max = Math.max(r, g, b); const min = Math.min(r, g, b); const d = max - min;
+  if (!d || [r, g, b].some((n) => Number.isNaN(n))) return false;
+  const l = (max + min) / 2; const sat = d / (1 - Math.abs(2 * l - 1));
+  const hue = ((max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4) * 60 + 360) % 360;
+  return sat > 0.35 && hue > 0 && hue <= 60;
+}
 function amberColours(value: string): string[] {
   const out: string[] = [];
   for (const match of value.matchAll(/#([0-9a-f]{6}|[0-9a-f]{3})\b/gi)) {
     const hex = match[1].length === 3 ? [...match[1]].map((c) => c + c).join('') : match[1];
-    const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
-    const max = Math.max(r, g, b); const min = Math.min(r, g, b); const d = max - min;
-    if (!d) continue;
-    const l = (max + min) / 2; const sat = d / (1 - Math.abs(2 * l - 1));
-    const hue = ((max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4) * 60 + 360) % 360;
-    if (sat > 0.35 && hue > 0 && hue <= 60) out.push(match[0]);
+    if (amberRgb(...([0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number]))) out.push(match[0]);
+  }
+  // Review 12 NIT-2: rgb() and rgba() too (a gradient of rgba(245,197,24,.2)).
+  for (const match of value.matchAll(/rgba?\(([^)]*)\)/gi)) {
+    const [r, g, b] = parts(match[1]).slice(0, 3).map((part) => (part.endsWith('%') ? parseFloat(part) * 2.55 : Number(part)));
+    if (amberRgb(r, g, b)) out.push(match[0]);
   }
   return out;
 }
 
 /**
- * Frames reviewed and waiting on GM: the open pin's card keeps its amber
- * identity edge (the pin's own colour, as its badge) around "Delete note".
- * Asked in PR #200 fix round 12; a new frame is a finding until added here.
+ * The one frame GM allows round a red control (r20 Q3): the presence-colour
+ * author edge on the pin card. It is the author's presence colour, it runs
+ * the whole card, and it doesn't frame Delete, so whatever that colour is
+ * (amber or orange too) it passes. Keyed to the presence-colour variables,
+ * never to a hue: any other warm frame still fails.
  */
-export const FRAME_PENDING_GM: Array<{ file: string; selector: RegExp }> = [
-  { file: 'components/canvas/PinLayer.tsx', selector: /^\.canvas-pin__card$/ },
-];
+export const PRESENCE_COLOUR_EDGE = /^(?:\d+(?:\.\d+)?px\s+solid\s+)?var\(--(?:pin|agent)-color(?:,\s*#[0-9a-f]{3,8})?\)$/i;
 
 /**
  * GM r18 (PR #200 fix round 12): orange never frames a destructive action.
@@ -876,22 +884,38 @@ export const FRAME_PENDING_GM: Array<{ file: string; selector: RegExp }> = [
  */
 export function frameFindings(control: Control, vars: Vars, extraCss?: string): string[] {
   if (control.kind !== 'red' || !control.ancestors.length) return [];
-  const [, ancestors, done] = built(control);
+  const [el, ancestors, done] = built(control);
   const found: string[] = [];
+  // Review 12 NIT-2: a colour the test's own sheet aliases (--box-edge: var(--sr-accent)) resolves too.
+  const allVars: Vars = new Map(vars);
+  if (extraCss) for (const [name, values] of customProperties([{ css: extraCss }])) allVars.set(name, [...(allVars.get(name) ?? []), ...values]);
+  const check = (element: Element, pseudoOnly: boolean) => {
+    // Every state an ancestor can take (focus, pressed, [data-*] …) and
+    // every pseudo-element it draws, not only rest and hover (review 12 NIT-2).
+    for (const [key, winner] of cascaded(element, extraCss, { loose: true })) {
+      const [state, prop] = key.split('|');
+      if (pseudoOnly && !/::?(before|after)\b/.test(state)) continue;
+      if (!/^(border|outline|box-shadow|background|filter)/.test(prop)) continue;
+      // An ancestor's own keyboard ring (:focus, :focus-visible) is the ring
+      // rule's to judge; :focus-within, drawn round the focused control, is a frame.
+      if (/^:focus(?:-visible)?$/.test(state) && FOCUS_RING.test(prop)) continue;
+      // The one exemption (GM r20 Q3, review 12 NIT-3): the pin card's left
+      // edge in a presence colour, nothing else on it (a whole border or a
+      // glow still fails).
+      if (/^border-left(?:-color)?$/.test(prop) && /\.canvas-pin__card\b/.test(winner.selector)
+        && PRESENCE_COLOUR_EDGE.test(winner.value.trim())) continue;
+      const bad = [
+        ...badColours(winner.value, 'red', allVars),
+        ...varsIn(winner.value).filter((v) => WARNING_VAR.test(v.name)).map((v) => v.text),
+        ...amberColours(winner.value),
+      ];
+      if (bad.length) found.push(`${control.file}:${control.line} "${control.name}" is framed by ${winner.selector} ${state || 'rest'} ${prop}: ${[...new Set(bad)].join(' ')}`);
+    }
+  };
   try {
-    ancestors.forEach((ancestor) => {
-      for (const [key, winner] of cascaded(ancestor, extraCss)) {
-        const [state, prop] = key.split('|');
-        if (!['', ':hover'].includes(state) || !/^(border|outline|box-shadow|background)/.test(prop)) continue;
-        if (FRAME_PENDING_GM.some((f) => f.file === control.file && f.selector.test(winner.selector.trim()))) continue;
-        const bad = [
-          ...badColours(winner.value, 'red', vars),
-          ...varsIn(winner.value).filter((v) => WARNING_VAR.test(v.name)).map((v) => v.text),
-          ...amberColours(winner.value),
-        ];
-        if (bad.length) found.push(`${control.file}:${control.line} "${control.name}" is framed by ${winner.selector} ${state || 'rest'} ${prop}: ${[...new Set(bad)].join(' ')}`);
-      }
-    });
+    ancestors.forEach((ancestor) => check(ancestor, false));
+    // The control's own ::before and ::after can draw a frame round it too.
+    check(el, true);
   } finally {
     done();
   }

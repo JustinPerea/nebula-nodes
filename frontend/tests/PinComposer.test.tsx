@@ -37,10 +37,16 @@ describe('PinComposer', () => {
     render(<PinComposer />);
     const input = screen.getByRole('textbox', { name: 'Note for agents' }) as HTMLTextAreaElement;
     // Fix round 11 (GM r12 answer 3): only what shows counts, so no native
-    // maxLength (it counts escape codes); the dialog trims to 280 shown characters.
+    // maxLength (it counts escape codes). GM r20 note 1: a change past 280
+    // shown characters is refused whole, never cut to fit.
     expect(input.maxLength).toBe(-1);
     fireEvent.change(input, { target: { value: 'x'.repeat(290) } });
+    expect(input.value).toBe('');
+    // Refused, the counter shows at once, whatever is left (GM r20 addendum).
+    expect(screen.getByText('280 left')).toBeTruthy();
+    fireEvent.change(input, { target: { value: 'x'.repeat(280) } });
     expect(input.value).toBe('x'.repeat(280));
+    expect(screen.getByText('0 left')).toBeTruthy();
     fireEvent.change(input, { target: { value: `${'\x1b[31m'.repeat(40)}${'y'.repeat(280)}` } });
     expect(input.value).toBe(`${'\x1b[31m'.repeat(40)}${'y'.repeat(280)}`);
     fireEvent.change(input, { target: { value: '  warmer  ' } });
@@ -71,7 +77,7 @@ describe('PinComposer', () => {
     expect(api.createPin).not.toHaveBeenCalled();
   });
 
-  it('shows a dismissable alert when the backend refuses the pin', async () => {
+  it('shows a dismissable neutral line when the backend refuses the pin, and keeps the dialog open with the note (GM r20 Q1)', async () => {
     useCanvasPinsStore.getState().compose({ nodeId: 'n4' });
     // Round 3e: a refusal arrives as the API's typed error (apiRequest), not a plain Error,
     // whose own text no surface shows any more.
@@ -81,8 +87,9 @@ describe('PinComposer', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Send note' }));
     });
-    expect(screen.getByRole('alert').textContent).toContain('only works from the Nebula canvas');
+    expect(screen.getByRole('status').textContent).toBe('Nebula can’t add this pin. Try again in a moment.×');
+    expect((screen.getByRole('textbox', { name: 'Note for agents' }) as HTMLTextAreaElement).value).toBe('redo this one');
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
-    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
   });
 });

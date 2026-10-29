@@ -3,7 +3,7 @@ import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import ts from 'typescript';
 import { gatedGraphActions } from '../src/store/graphStore';
-import { appControls, appCss, appMenuItemFindings, cascadeFindings, controlsIn, controlsInFiles, customProperties, frameFindings, FRAME_PENDING_GM, menuItemFindings, notRedFindings, pressedFindings, ruleFindings, wordFindings, wordKind } from './helpers/destructiveRule';
+import { appControls, appCss, appMenuItemFindings, cascadeFindings, controlsIn, controlsInFiles, customProperties, frameFindings, PRESENCE_COLOUR_EDGE, menuItemFindings, notRedFindings, pressedFindings, ruleFindings, wordFindings, wordKind } from './helpers/destructiveRule';
 
 /**
  * Follow-ups to PR #195, two static ratchets.
@@ -2274,8 +2274,10 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
 
   it('GM r18: no frame around a red control is amber, warning or accent (Forget ID sat in an amber box)', () => {
     expect(controls.flatMap((control) => frameFindings(control, vars))).toEqual([]);
-    // The one frame left for GM (the open pin's amber identity edge) is named, never a pattern.
-    expect(FRAME_PENDING_GM.map((f) => f.file)).toEqual(['components/canvas/PinLayer.tsx']);
+    // GM r20 Q3: the presence-colour author edge on the pin card passes by its variable, whatever the colour.
+    expect(PRESENCE_COLOUR_EDGE.test('3px solid var(--pin-color)')).toBe(true);
+    expect(PRESENCE_COLOUR_EDGE.test('3px solid var(--agent-color, #5b9dff)')).toBe(true);
+    expect(PRESENCE_COLOUR_EDGE.test('3px solid #e8a33d')).toBe(false);
   });
 
   it('GM r18 corpus: an amber, warning, accent or warm frame is caught at rest and on hover; neutral and red frames stay quiet', () => {
@@ -2290,8 +2292,42 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
       '.probe-row:hover { outline: 1px solid #f5c518; }',
       '.probe-row { box-shadow: 0 0 0 1px var(--sr-accent); }',
       '.probe-box { border-left: 3px solid #e8a33d; }',
+      // Amber by hue, not the presence variable: still caught (GM r20 Q3).
+      '.probe-box { border-left: 3px solid var(--sr-warning); }',
+      '.probe-box { border: 3px solid var(--pin-color); }',
       '.probe-box:hover { border-color: #ff5a1f; }',
+      // Review 12 NIT-2: every state, pseudo-element, gradient, shadow and alias.
+      'body.app-slava-restraint .probe-row:focus-within { outline: 1px solid #f5c518; }',
+      'body.app-slava-restraint .probe-row:active { box-shadow: 0 0 0 1px #ff5a1f; }',
+      'body.app-slava-restraint .probe-box::before { content: ""; position: absolute; inset: 0; border: 1px solid #f5c518; }',
+      'body.app-slava-restraint .probe-box { border: 1px solid; border-image: linear-gradient(#f5c518, #f5c518) 1; }',
+      'body.app-slava-restraint .probe-box { background-image: linear-gradient(rgba(245,197,24,.2), rgba(245,197,24,.2)); }',
+      'body.app-slava-restraint .probe-box { filter: drop-shadow(0 0 2px #f5c518); }',
+      'body.app-slava-restraint .probe-box[data-open] { border-color: #f5c518; }',
+      'body.app-slava-restraint .probe-box:not(.closed) { border-color: #f5c518; }',
+      ':root { --box-edge: var(--sr-accent); } body.app-slava-restraint .probe-box { border: 1px solid var(--box-edge); }',
+      'body.app-slava-restraint .probe-box > .probe-row::after { content: ""; border-bottom: 2px solid #ff5a1f; }',
+      'body.app-slava-restraint .probe-row:hover { outline: 2px solid var(--sr-warning); outline-offset: 2px; }',
+      // The control's own pseudo-element drawing a frame round it.
+      '.x__forget::after { content: ""; border: 1px solid #f5c518; }',
     ]) expect(frameFindings(forget, vars0, css), css).not.toEqual([]);
+    // Review 12 NIT-3: on the pin card only its left edge in a presence colour
+    // passes; a whole border, a glow, a literal colour or another element fails.
+    const pinDelete = { file: 'components/canvas/PinLayer.tsx', line: 1, name: 'Delete note', kind: 'red' as const, classes: ['canvas-pin__delete'],
+      ancestors: [['div', ['canvas-pin']], ['div', ['canvas-pin__card']]] as Array<[string, string[]]> };
+    for (const css of [
+      '.canvas-pin__card { border: 2px solid var(--sr-accent); box-shadow: 0 0 0 4px #ff5a1f; }',
+      '.canvas-pin__card { border: 3px solid var(--pin-color); }',
+      '.canvas-pin__card { box-shadow: 0 0 0 2px var(--pin-color); }',
+      '.canvas-pin__card { border-left: 3px solid #f5c518; }',
+      'body.app-slava-restraint .canvas-pin__card { border-color: #ff5a1f; }',
+      '.canvas-pin { outline: 2px solid #ff5a1f; }',
+      '.canvas-pin { border-left: 3px solid var(--pin-color); }',
+    ]) expect(frameFindings(pinDelete, vars0, css), css).not.toEqual([]);
+    for (const css of [
+      '.canvas-pin__card { --pin-color: #ff5a1f; border-left: 3px solid var(--pin-color); }',
+      '.canvas-pin__card { border-left-color: var(--agent-color, #5b9dff); }',
+    ]) expect(frameFindings(pinDelete, vars0, css), css).toEqual([]);
     for (const css of [
       '.probe-box { border: 1px solid var(--sr-edge-strong); background: var(--sr-surface-control); }',
       '.probe-box { border: 1px solid #383838; background: #1e1e1e; }',
