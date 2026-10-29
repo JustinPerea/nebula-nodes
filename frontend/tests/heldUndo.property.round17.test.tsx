@@ -98,14 +98,25 @@ async function freshStore(): Promise<void> {
 }
 const store = () => useGraphStore.getState();
 const tick = (ms: number) => vi.advanceTimersByTimeAsync(ms);
+/** The real setTimeout, taken before any block fakes the clock. */
+const REAL_SET_TIMEOUT = globalThis.setTimeout;
+/** The slice of the shared fake clock a seed is advancing now, if any. */
+let sliceInFlight: Promise<unknown> = Promise.resolve();
 /** Review 14 NIT-2: the shared fake timers advance in slices of at most a
  * second, and an abandoned block's run (`mine` no longer the generation)
  * stops before and after every slice, so it never finishes a step or its
- * final phase against the next block's canvas. */
+ * final phase against the next block's canvas. Review 15 NIT-2: and the
+ * slice in flight when it was abandoned finishes before the next block
+ * starts (afterEach waits for it), so it can't advance that block's clock. */
 function guardedTimers(mine: number) {
   const guard = () => { if (generation !== mine) throw new Abandoned(); };
   const sliced = async (ms: number) => {
-    for (let left = ms; left > 0; left -= 1000) { guard(); await tick(Math.min(1000, left)); }
+    for (let left = ms; left > 0; left -= 1000) {
+      guard();
+      const slice = tick(Math.min(1000, left));
+      sliceInFlight = slice.catch(() => {});
+      await slice;
+    }
     guard();
   };
   return { guard, tick: sliced, settle: async () => { for (let i = 0; i < 12; i += 1) await sliced(5); } };
@@ -447,6 +458,11 @@ describe('round 17 (review 16, H1): random sequences of edits, undos and echoes'
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
   afterEach(async () => {
+    // Review 15 NIT-2: a block vitest timed out is over: its run stops at its
+    // next await, and the slice it has in flight ends here, on this block's
+    // clock, before the next block fakes its own (at most 10 s of real time).
+    generation += 1;
+    await Promise.race([sliceInFlight, new Promise((resolve) => REAL_SET_TIMEOUT(resolve, 10_000))]);
     await tick(20_000);
     vi.useRealTimers();
     vi.restoreAllMocks();

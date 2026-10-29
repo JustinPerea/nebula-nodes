@@ -883,3 +883,60 @@ Four of this round's ring shots are byte-identical to round 10 shots of the same
   - The first run's two failures were my check counting the Undo and Redo toasts as said lines.
   - clash400b: refused 400 with s3 unsaved, the prompt the only line, and Codex's two writes send 0. Keep mine then shows the line once with [Try again] and sends nothing, and [Try again] saves. Run together with toobig (NIT-3): 14/16, the two failures being the redo check above.
   - Shots `fix16-*` at 1280 and 1440, all distinct: redoclash-asked-again-mouse, redoclash-asked-again-keyboard, clash400-only-prompt, clash400-after-keep-mine.
+
+## Fix round 17 (PR #198 review 15, GM's pr198 r26)
+
+- **LOW-1 and GM r26 answer 1: Codex ending a clash counts as the person's answer.** When a sync writes the person's own value into the clashing field, `settleRebasedScene` used to drop the clash. A 400 or 413 waiting behind it (`clashRefusal`) then stayed stopped with nothing said.
+  - The refusal branch of `resolveSceneClash` is now `endClashRefusal(nodeId, entry)`, and both paths call it. `settleRebasedScene` calls it when the clash has gone and `clashRefusal` is still set.
+  - If the card now matches Nebula's scene with nothing in flight, the stop and the mark go and nothing is said. Otherwise the stop line is said once with [Try again] and nothing is sent.
+- **GM r26 answer 2: while a clash is asked again, the prompt is the only line for that scene.**
+  - `restoreDeletedScenes` clears both slots where `aboutScene(notice, nodeId, said)` holds:
+    - a stop line for the scene;
+    - its said line;
+    - an undo entry that touches the node (a ForeignEdit's before or after, an own-add, or an UndoSnapshot whose presence of the node differs from the canvas now).
+  - So "Codex undid its edit." [Undo] and "Restored the node." [Redo] give way. They are not put back after the answer. Lines about other nodes stay.
+  - The undo and redo stacks are untouched, so the keyboard and the Agent log still undo and redo. No stale toast button is left to delete the scene behind the question.
+- **GM r26 answer 3: a stop line keeps its slot.**
+  - In `foreignEditStep`, a Codex edit that touches only stopped scenes and deletes none (its changed edges touch only stopped nodes) goes on the undo stack with no toast. The Agent log has it as before.
+  - A Codex edit about anything else takes the undo slot as usual. A stop line that was there moves to `messageNotice`, keeping its `retryScene`, so [Try again] stays beside the toast.
+  - The two branches where the situation changes:
+    - Codex deletes the scene: the delete line replaces the stop line, as before.
+    - Codex starts a new clash: `setSceneClash` clears that scene's stop line when the clash is first set.
+- **NIT-2: the property test's clock window.** Each slice of `guardedTimers` is recorded in `sliceInFlight`. Before its 20 s settle, `afterEach` bumps the generation and waits, up to 10 s of real time, for the slice in flight. So an abandoned slice can't advance the next block's clock.
+- **The round 16 edge-case test now pins its code.** While the clash waits it checks:
+  - nothing is sent after s3 is typed back;
+  - the scene isn't stopped;
+  - the clash is still there.
+
+  It fails on 0d66cdef's graphStore and when the equality branch is disabled.
+- **Docs.**
+  - MCP-SETUP: asked again, the prompt is the only line; Codex's write ending the clash counts as an answer; the stop line keeps its slot, with its two boundary cases.
+  - The `mcp_server.py` docstring.
+- **Tests.**
+  - New `graphStore.fix17` (11 tests):
+    - LOW-1: 400 and 413 with another edit left (the line once, nothing sent, [Try again] saves); nothing left unsaved (no stop, no mark, nothing said).
+    - Answer 2: the Agent log's undo (no slots; the stack's top still undoes Codex's edit; nothing after the answer); the person's delete and Undo, then Redo by keyboard; a line about another node stays.
+    - Answer 3: Codex's edit about the stopped scene; Codex deletes it alone; deletes it and more; a new clash; an edit about another node.
+
+    On 732ca471, 6 fail. These 5 pass there and are guards:
+    - nothing unsaved (it fails with the equality branch disabled);
+    - the other-node line under the prompt;
+    - the two delete tests;
+    - the new clash.
+  - `graphStore.fix16`: the edge-case test (above). `heldUndo.property.round17` (NIT-2).
+  - Changed because GM r26 changed behaviour: only the live harness's toobig section. A Codex edit about the stopped scene no longer toasts, so the 413 line is in the undo slot, the pointer rests on that toast for NIT-3, and the popover check expects no Codex toast. No vitest or backend test changed for that reason.
+- **Gates.**
+  - tsc -b and `npm run lint` are clean.
+  - Full vitest: 597 files, 7,775 tests passed.
+  - Full backend: 12,061 passed, 71 skipped.
+  - vite build plus `check-build-budget.mjs`: 425,658 bytes raw (budget 512,000), 128,726 gzip; `dist` deleted.
+- **Live** (`fix17_live.mjs`, isolation as before, 0 blocked attempts, no paid runs).
+  - dissolve (LOW-1): Codex ends the clash with the person's value while a 400 waits. The stop line shows once with [Try again] on the toast and the mark, 0 PUTs, and [Try again] saves.
+  - onlyprompt (answer 2), by Codex's apply/undo and by the person's delete then Cmd+Z: the prompt is the only line, with no [Undo] or [Redo] toast. Keep mine saves and nothing comes back.
+  - stopline (answer 3): four branches (the same scene, another node, a new clash, deleted), each as specified.
+  - All three together: 13/13. The first runs failed the new-clash branch because the harness started it from a scene still stopped by the previous branch, so its edit had been saved. Each branch now starts from a saved scene.
+  - Regressions:
+    - m1, unknown, deleted, escape and stack all pass.
+    - m1double, toobig and bad400: 17/17 rerun alone. The first run had them after stack, which leaves the page on Projects, and all 13 of their checks failed there.
+    - deleted13, clashback, undoclash, moved, undodel, ownundo, redoclash and clash400b: 35/35.
+  - Shots `fix17-*` at 1280 and 1440, all distinct: dissolve-stop-line, onlyprompt-agentundo, onlyprompt-ownundo, stopline-codex-same-scene, stopline-codex-other-node, stopline-new-clash, stopline-deleted.

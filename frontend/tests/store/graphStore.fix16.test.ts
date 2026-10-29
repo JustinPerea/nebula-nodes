@@ -447,9 +447,15 @@ describe('review 14 LOW-2 (GM r25 answer 2): refused 400 or 413 while a clash wa
     const h = backend(S3);
     const lines = watchSlots();
     await refusedDuringClash(h, 400);
+    // Review 15: pins round 16's own path, not only the outcome. Behind the
+    // clash the 400 stops the save, so typing s3 back sends nothing (round 14
+    // sent it), and the answer itself ends the stop: no save goes after it.
+    const puts = h.puts.length;
     typeIn('s3', 'c');
     await sleep(40);
-    const puts = h.puts.length;
+    expect(h.puts.length).toBe(puts);
+    expect(stopped()).toEqual({});
+    expect(useGraphStore.getState().sceneClashes).toHaveProperty('n1');
     useGraphStore.getState().resolveSceneClash('n1', 'theirs');
     await vi.waitFor(() => expect(store.hasUnsavedSceneEdits()).toBe(false), { timeout: 3000, interval: 5 });
     await sleep(40);

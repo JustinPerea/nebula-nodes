@@ -3717,9 +3717,14 @@ back, unless your restored value is the person's. That holds for every
 way the scene comes back, each time: your undo, the canvas's Undo, the
 person's Redo and Undo again, their own delete undone, or another window's
 restore. No way back counts as an answer, and the person's own delete or
-Redo says nothing. The prompt takes the
-delete toast's place (and the Undo's own "Undid Codex’s edit."), never
-both; it has no ×, so focus goes to the prompt itself, never Keep mine. A
+Redo says nothing. While it is asked again the prompt is the only line
+for that scene: the delete toast, the Undo's own "Undid Codex’s edit.",
+"Codex undid its edit." with its [Undo], "Restored the node." with its
+[Redo] and any other line about that scene give way, and they don't come
+back once the person answers (lines about other nodes stay). Undo and Redo
+still work from the keyboard and the Agent log, so no stale [Undo] can
+delete the scene behind an open question. The prompt has no ×, so focus
+goes to the prompt itself, never Keep mine. A
 `workspace_moved` refusal says nothing on the card: the project switch's
 own handling says it once (an agent's switch hands the edits over; any
 other stops on the outdated-workspace banner with its Reload, whose Try
@@ -3745,7 +3750,17 @@ person, the clash prompt stays the only line for that scene and nothing for
 it is sent, on your writes or theirs, until they answer; then it is stopped
 the same way, with its line and Try again, unless the answer left nothing
 unsaved (Use Codex’s on the only changed field), when the stop and the
-"Unsaved" mark simply go. Other scenes keep saving. While the
+"Unsaved" mark simply go. Your own write can end that clash too (it writes
+the person's value into the clashing field): that counts as their answer,
+with the same two outcomes. Other scenes keep saving.
+
+While a scene is stopped, its line ("Couldn’t save your changes…", the
+400 or 413 line, or "…kept changing…") keeps its slot with Try again, and
+your edits about that scene alone go only to the Agent log, with no
+"Codex changed the canvas." toast. When your edit changes the situation,
+its own line replaces the stop line: you deleted the scene (the delete
+line above) or started a new clash (the clash prompt). Your edits about
+other nodes show their toast as usual, with the stop line beside it. While the
 person has that popover open, the toast with the same line leaves and
 doesn't come back. The Agent log's line for it carries the status and the
 code (`Couldn’t save “Opening”, node n1: HTTP 400 bad_params. <detail>`);
