@@ -3707,7 +3707,7 @@ to it can’t be saved.". When your undo (`undo_canvas_edit`, `nebula undo`)
 deleted the scene, however much else it undid, it is one sentence too:
 "Codex undid its edit and deleted “Opening”, so your changes to it can’t be
 saved.". If the
-delete is undone (that Undo, the Agent log's, or yours), the scene comes
+delete is undone (that Undo, the person's Cmd+Z, or yours), the scene comes
 back as Nebula had it (the canvas's own Undo puts back Nebula's scene, not
 the card as it was shown, so it doesn't pick a value) and the person's
 edits are merged onto it and saved, with no new line;
@@ -3722,8 +3722,8 @@ for that scene: the delete toast, the Undo's own "Undid Codex’s edit.",
 "Codex undid its edit." with its [Undo], "Restored the node." with its
 [Redo] and any other line about that scene give way, and they don't come
 back once the person answers (lines about other nodes stay). Undo and Redo
-still work from the keyboard and the Agent log, so no stale [Undo] can
-delete the scene behind an open question. The prompt has no ×, so focus
+work from the keyboard, so no stale [Undo] can delete the scene behind an
+open question. The prompt has no ×, so focus
 goes to the prompt itself, never Keep mine. A
 `workspace_moved` refusal says nothing on the card: the project switch's
 own handling says it once (an agent's switch hands the edits over; any
@@ -3754,13 +3754,21 @@ unsaved (Use Codex’s on the only changed field), when the stop and the
 the person's value into the clashing field): that counts as their answer,
 with the same two outcomes. Other scenes keep saving.
 
-While a scene is stopped, its line ("Couldn’t save your changes…", the
-400 or 413 line, or "…kept changing…") keeps its slot with Try again, and
-your edits about that scene alone go only to the Agent log, with no
-"Codex changed the canvas." toast. When your edit changes the situation,
-its own line replaces the stop line: you deleted the scene (the delete
-line above) or started a new clash (the clash prompt). Your edits about
-other nodes show their toast as usual, with the stop line beside it. While the
+While a scene has a line of its own (its stop line: "Couldn’t save your
+changes…", the 400 or 413 line, or "…kept changing…"; or a clash prompt,
+the first time or asked again), that line keeps its slot, and your edits
+about that scene alone go only to the Agent log, with no "Codex changed
+the canvas." toast. Undo and Redo of them work from the keyboard. An edit
+to the clashed field rewrites the prompt to the latest state; one that
+makes it the person's value ends the clash (above). When your edit changes
+the situation, its own line replaces the scene's: you deleted the scene
+(the delete line above) or started a new clash (the clash prompt). Your
+edits about other nodes show their toast as usual, a connection from the scene
+into another node included (it changes that node's input), with the stop
+line beside it and its Try again. The person's own toasts ("Deleted the
+node.", "Restored the node.", "Undid Codex’s edit.") show the same way,
+with the stop line beside them; when their own Undo leaves nothing unsaved
+(the card is Nebula's scene again), the stop and the "Unsaved" mark go. While the
 person has that popover open, the toast with the same line leaves and
 doesn't come back. The Agent log's line for it carries the status and the
 code (`Couldn’t save “Opening”, node n1: HTTP 400 bad_params. <detail>`);

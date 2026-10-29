@@ -1324,9 +1324,10 @@ def edit_canvas(
     person's own scene save refused 400 or 413 shows one line per status and
     waits for them (behind a waiting clash, after their answer, or after your
     write that ends the clash with their value); its Agent log line carries
-    the status and code. While their scene is stopped, your edits about it
-    alone go only to the Agent log; deleting it or a new clash says so
-    instead (docs/MCP-SETUP.md). Ids and ports in details are
+    the status and code. While their scene is stopped or its clash waits,
+    your edits about it alone go only to the Agent log; deleting it or a new
+    clash says so instead, and a connection from it into another node toasts as
+    usual (docs/MCP-SETUP.md). Ids and ports in details are
     bare (`Node n4 not found`); a name that matches nothing is in “…”
     (`no Style “Neon dusk”`); a next call is in backticks.
     Who bills a run is the person's call: Krea billing (`_kreaAuth`: API token

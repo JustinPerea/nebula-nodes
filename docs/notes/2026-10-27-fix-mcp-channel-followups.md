@@ -940,3 +940,64 @@ Four of this round's ring shots are byte-identical to round 10 shots of the same
     - m1double, toobig and bad400: 17/17 rerun alone. The first run had them after stack, which leaves the page on Projects, and all 13 of their checks failed there.
     - deleted13, clashback, undoclash, moved, undodel, ownundo, redoclash and clash400b: 35/35.
   - Shots `fix17-*` at 1280 and 1440, all distinct: dissolve-stop-line, onlyprompt-agentundo, onlyprompt-ownundo, stopline-codex-same-scene, stopline-codex-other-node, stopline-new-clash, stopline-deleted.
+
+## Fix round 18 (PR #198 review 16, GM's pr198 r27)
+
+- **LOW-1 and GM r27 answer 1: one rule for a scene with a line of its own.**
+  - `scenesWithOwnLine()` returns the scenes whose save entry is `stopped` or holds a `clash`, whether a first clash or one asked again. It replaces round 17's `stoppedSceneIds()`.
+  - In `foreignEditStep`, a Codex edit that touches only those scenes, deletes none of them and changes only wires going into them goes on the undo stack with no toast. The Agent log has it as before.
+  - `applyGraphSync` notes the set before its merge rebases any scene (`sceneLinesBeforeSync`), and `foreignEditStep` reads it once.
+    - Without it, an edit that ends a clash (the field now the person's value) while changing another field would still toast, since the clash is gone by the time the toast is decided.
+  - An edit to the clashed field alone doesn't change the card, so it makes no undo step and no toast. The prompt takes the latest state (path 5), and a value that matches the person's ends the clash.
+  - A delete or a new clash still replaces the line, as before.
+- **LOW-2 and GM r27 answer 2: the person's own toasts.**
+  - `stopLineBeside(state, gone)` is the helper Codex's toasts already used, extracted. A stop line in the undo slot moves to `messageNotice` with its `retryScene`, unless the step took that scene off the canvas.
+  - It now runs with every own-step notice:
+    - "Deleted the node." (`deletedNotice`);
+    - the undo/redo notice in `applyHistory` ("Undid Codex’s edit.", kept lines, "Restored the node." / "Deleted the node.");
+    - the late "Restored the node." that waits for the backend's answer.
+  - After an undo or redo, a stopped scene whose node the step changed goes through `settleIfNothingUnsaved`. That is `endClashRefusal`'s equality branch, extracted and shared: if the card is Nebula's scene and nothing is in flight, the stop, its line and the mark go, and nothing is said.
+- **GM r27 answer 3: a wire out.** A wire counts as about the scene only when it goes into it. So a Codex wire from the stopped scene into another node shows its toast, with the stop line beside it.
+- **NIT-1 and GM r27 answer 4.** MCP-SETUP and the code comments say Undo and Redo work from the keyboard. Mentions of an undo "from the Agent log" now name the agent's undo or the person's Cmd+Z. In-app copy is unchanged.
+- **Harness.**
+  - Each round 18 section starts with `fresh18`: it unflags the fake failures, ends any clash or stop, resets the scene and clears the slots.
+  - The older `stack` section still leaves the page on Projects. Getting back to the canvas from it didn't work: neither the card click nor `projectStore.open` after a fresh load left the home screen. So m1double, toobig and bad400, which come after it in file order, run in their own run.
+- **Docs.** MCP-SETUP: a scene with a line of its own, the person's own toasts, the wire out, and keyboard only. The `mcp_server.py` docstring.
+- **Tests.**
+  - New `graphStore.fix18` (8 tests). All 8 fail on befffdca.
+    - LOW-1:
+      - a first clash: no toast for Codex's edit to another field, Cmd+Z can undo it, an edit about another node still toasts;
+      - asked again: no toast;
+      - the clashed field and another field together: the prompt is rewritten with no toast, and Use Codex’s takes the latest;
+      - the clashed field now the person's value, with another field: the clash ends, no toast, nothing unsaved.
+    - LOW-2:
+      - "Deleted the node." then "Restored the node." with the stop line beside both;
+      - "Undid Codex’s edit." with the stop line beside it;
+      - the person's own Undo leaves nothing unsaved: stop and mark clear.
+    - Answer 3: the wire out.
+  - Mutation check: with the before-merge set disabled, the "ends the clash" test fails.
+  - No existing test changed because behaviour changed. The full `tests/store` directory passes unchanged.
+- **Gates.**
+  - tsc -b and `npm run lint` are clean.
+  - Full vitest: 598 files, 7,783 tests passed.
+  - Full backend: 12,061 passed, 71 skipped.
+    - The first run failed 2 tests in `test_connected_copy_sweep.py`: the new MCP-SETUP and docstring prose said "wire". It now says "connection", and that file passes 72/72.
+  - vite build plus `check-build-budget.mjs`: 425,658 bytes raw (budget 512,000), 128,741 gzip; `dist` deleted.
+- **Live** (`fix18_live.mjs`, isolation as before, 0 blocked attempts, no paid runs).
+  - Round 18 sections, 12/12:
+    - clashquiet: a first clash, Codex's edit to s3 quiet, its edit to another node toasting beside the prompt, then an edit that ends the clash quietly;
+    - askedquiet;
+    - owntoasts: Deleted, then Restored, each with the stop line beside it;
+    - undidcodex;
+    - ownundoclear;
+    - wireout.
+  - The first owntoasts run failed its last check. The stop line in the message slot had reached the end of its reading-time hold, which every canvas notice has, before the Cmd+Z. That check is now its own section (`undidcodex`) with a fresh stop line, and it passes.
+  - Regressions:
+    - m1, unknown, deleted, escape and stack: 16/16.
+    - m1double, toobig and bad400 in their own run: 17/17.
+    - deleted13, clashback, undoclash, moved, undodel, ownundo, redoclash and clash400b: 35/35.
+    - Round 17's dissolve, onlyprompt and stopline: 13/13.
+  - Shots `fix18-*` at 1280 and 1440, all distinct:
+    - clash-codex-same-scene, clash-other-node, clash-dissolve, askedagain-codex-same-scene;
+    - stopped-own-delete, stopped-own-restore, stopped-undid-codex;
+    - ownundo-clears-stop, stopped-wire-out.

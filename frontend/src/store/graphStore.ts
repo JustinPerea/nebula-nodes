@@ -3118,7 +3118,7 @@ export function clearCinemaScenePersistence(nodeId?: string): void {
  * GM r20 answer 3: scenes deleted while the person's edits to them weren't
  * saved (a save's 404, or a sync that took the card off). The deleted line
  * is said once per scene; the edits are kept here, with the scene they
- * started from, so a delete undone from the Agent log (the node back with
+ * started from, so a delete undone (the agent's undo_canvas_edit, the node back with
  * its id, on the same canvas) picks the save back up, merged onto the
  * scene as it comes back (restoreDeletedScenes). The line isn't said again.
  */
@@ -3196,7 +3196,7 @@ function keepDeletedScene(node: Node<NodeData>, entry: CinemaScenePersistence, l
  * noteSceneRemovals') while its edits weren't saved or a clash waited. It is
  * their own action, so nothing is said; the edits and the clash are kept so
  * that every way the scene comes back (their Undo or Redo, another window's
- * restore, the Agent log's) restores Nebula's scene and asks again while the
+ * restore, the agent's undo) restores Nebula's scene and asks again while the
  * values still differ. No way back counts as an answer. */
 function keepOwnRemovedScene(node: Node<NodeData>, entry: CinemaScenePersistence): void {
   if (node.data.definitionId !== 'cinema-scene' || !sceneHasUnsavedEdits(entry)) return;
@@ -3337,8 +3337,8 @@ function restoreDeletedScenes(synced: ReadonlySet<string>, held: ReadonlyMap<str
     // for the scene: every other line about it gives way (the person's own
     // "Restored the node." with Redo, Codex's "Codex undid its edit." with
     // Undo, a retry line), and doesn't come back after the answer. Undo and
-    // Redo stay on the keyboard and in the Agent log; no stale [Undo] can
-    // delete the scene behind the open question.
+    // Redo work from the keyboard; no stale [Undo] can delete the scene
+    // behind the open question.
     useGraphStore.setState((state) => ({
       ...(aboutScene(state.undoNotice, nodeId, said) ? { undoNotice: null } : {}),
       ...(aboutScene(state.messageNotice, nodeId, said) ? { messageNotice: null } : {}),
@@ -3474,20 +3474,30 @@ function endClashRefusal(nodeId: string, entry: CinemaScenePersistence): boolean
   if (!refusal) return false;
   entry.clashRefusal = null;
   entry.clashAnswerStop = null;
-  const now = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
-  const nebula = backendScenes.get(nodeId);
-  if (now && nebula && !entry.inFlight && cinemaAuthoringKey(sceneFromNode(now)) === cinemaAuthoringKey(nebula)) {
-    entry.refused = null;
-    entry.refusedLine = null;
-    setSceneStopped(nodeId, entry, false);
-    markSceneUnsaved(nodeId, null);
-    entry.acknowledged = true;
-    entry.pending = false;
-    settleSceneAnswer(nodeId, entry, { kind: 'ok' });
-    return true;
-  }
+  if (settleIfNothingUnsaved(nodeId, entry)) return true;
   entry.refusedLine = null;
   stopSceneForGood(nodeId, entry, refusal);
+  return true;
+}
+
+/** A stopped save with nothing left unsaved: the card is Nebula's scene and
+ * nothing is on its way, so the stop, its line and the "Unsaved" mark go
+ * and nothing is said (GM r25's edge case; r26 answer 1: a clash Codex
+ * ended; r27 answer 2: the person's own Undo took their edits back). */
+function settleIfNothingUnsaved(nodeId: string, entry: CinemaScenePersistence): boolean {
+  const now = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
+  const nebula = backendScenes.get(nodeId);
+  if (!now || !nebula || entry.inFlight || cinemaAuthoringKey(sceneFromNode(now)) !== cinemaAuthoringKey(nebula)) return false;
+  if (entry.retryTimer) clearTimeout(entry.retryTimer);
+  entry.retryTimer = null;
+  clearQuietRetry(entry);
+  entry.refused = null;
+  entry.refusedLine = null;
+  setSceneStopped(nodeId, entry, false);
+  markSceneUnsaved(nodeId, null);
+  entry.acknowledged = true;
+  entry.pending = false;
+  settleSceneAnswer(nodeId, entry, { kind: 'ok' });
   return true;
 }
 
@@ -5670,7 +5680,7 @@ function deletedNotice(count: number, step: UndoEntry, kept: readonly KeptScene[
   // counted from 4); a single delete keeps "Deleted the node." (signed off).
   const deleted = names.length === count && (count > 1 || kept.length > 0) ? `Deleted ${nodeNameList([...names])}.` : deletedNoticeText(count);
   const text = kept.length > 0 ? `${deleted} ${scenesKeptLine(kept)}` : deleted;
-  return { undoNotice: { id: ++undoNoticeSeq, text, offer: 'undo', entry: step } };
+  return { undoNotice: { id: ++undoNoticeSeq, text, offer: 'undo', entry: step }, ...stopLineBeside(useGraphStore.getState()) };
 }
 
 /** The nodes stay on the canvas (their delete wasn't confirmed). GM's
@@ -7205,6 +7215,8 @@ function foreignEditStep(
 ): Partial<GraphState> {
   const landings = landingsForNextStep;
   landingsForNextStep = null;
+  const beforeSync = sceneLinesBeforeSync;
+  sceneLinesBeforeSync = null;
   if (origin && isOwnEcho(origin, TAB_ID)) return {};
   if (!origin) {
     if (graphReplaced) return { undoStack: [], redoStack: [] };
@@ -7244,43 +7256,65 @@ function foreignEditStep(
     holdForLandings(entry, landings.filter((landing) => landing.nodeId in entry.before.nodes));
   }
   const text = editArrivedText(entry);
-  // GM r26 answer 3: while a scene is stopped, its stop line keeps its slot
-  // and an edit about that scene alone goes only to the Agent log (its Undo
-  // stays on the keyboard and in the log). One that deletes it says its own
-  // line (sayDeletedSceneLines), and a new clash its prompt (setSceneClash):
-  // specific replaces generic. An edit about anything else shows as usual,
-  // and a stop line in the toast's slot moves beside it.
-  const stopped = stoppedSceneIds();
-  if (text && stopped.size > 0 && onlyAboutStoppedScenes(entry, stopped)) {
+  // GM r26 answer 3, r27 answer 1: while a scene has a line of its own (a
+  // stop line, or a clash prompt waiting or asked again), that line keeps
+  // its slot and an edit about that scene alone goes only to the Agent log
+  // (its Undo stays on the keyboard). An edit to the clashed field rewrites
+  // the prompt, or ends the clash when it matches the person's value
+  // (settleRebasedScene). One that deletes the scene says its own line
+  // (sayDeletedSceneLines), and a new clash its prompt (setSceneClash):
+  // specific replaces generic. An edit about anything else, a wire from the
+  // scene into another node included (r27 answer 3), shows as usual, and a
+  // stop line in the toast's slot moves beside it (stopLineBeside).
+  const withLine = scenesWithOwnLine(beforeSync);
+  if (text && withLine.size > 0 && onlyAboutScenesWithLine(entry, withLine)) {
     return { undoStack: [...state.undoStack, entry].slice(-UNDO_CAP), redoStack: [] };
   }
-  const current = useGraphStore.getState();
-  const stopLine = current.undoNotice && !current.undoNotice.offer && current.undoNotice.retryScene
-    && stopped.has(current.undoNotice.retryScene.nodeId) && entry.after.nodes[current.undoNotice.retryScene.nodeId] !== null
-    ? current.undoNotice : null;
   return {
     undoStack: [...state.undoStack, entry].slice(-UNDO_CAP),
     redoStack: [],
-    ...(text ? { undoNotice: { id: ++undoNoticeSeq, text, agentColor: entry.agentColor, offer: 'undo' as const, entry } } : {}),
-    ...(text && stopLine ? { messageNotice: { id: stopLine.id, text: stopLine.text, tone: stopLine.tone ?? 'info',
-      retryScene: stopLine.retryScene } } : {}),
+    ...(text ? { undoNotice: { id: ++undoNoticeSeq, text, agentColor: entry.agentColor, offer: 'undo' as const, entry },
+      ...stopLineBeside(useGraphStore.getState(), (nodeId) => entry.after.nodes[nodeId] === null) } : {}),
   };
 }
 
-/** The scenes whose saves are stopped (their stop line is theirs to show). */
-function stoppedSceneIds(): Set<string> {
-  return new Set([...cinemaScenePersistence].filter(([, entry]) => entry.stopped).map(([nodeId]) => nodeId));
+/** The scenes with a line of their own (GM r26 answer 3, r27 answer 1): a
+ * stopped save's stop line, or a clash's prompt. A sync's edit counts the
+ * scenes that had one before it too, so the edit that ends a clash (its
+ * field now the person's value) is still about that scene's prompt. */
+function scenesWithOwnLine(before: ReadonlySet<string> | null = null): Set<string> {
+  const now = [...cinemaScenePersistence].filter(([, entry]) => entry.stopped || entry.clash).map(([nodeId]) => nodeId);
+  return new Set([...now, ...(before ?? [])]);
 }
+/** scenesWithOwnLine() as a graphSync found it, before its merge rebased
+ * any scene; read once, by that sync's foreignEditStep. */
+let sceneLinesBeforeSync: Set<string> | null = null;
 
-/** GM r26 answer 3: an edit that touches only stopped scenes, deleting none
- * of them, and only wires of theirs. */
-function onlyAboutStoppedScenes(entry: ForeignEdit, stopped: ReadonlySet<string>): boolean {
+/** An edit that changes only scenes with a line of their own, deleting none
+ * of them: its nodes are those scenes, and its wires go into them. A wire
+ * from such a scene into another node changes that node's input (GM r27
+ * answer 3). */
+function onlyAboutScenesWithLine(entry: ForeignEdit, withLine: ReadonlySet<string>): boolean {
   const ids = new Set([...Object.keys(entry.before.nodes), ...Object.keys(entry.after.nodes)]);
-  if (![...ids].every((id) => stopped.has(id) && entry.after.nodes[id] !== null)) return false;
+  if (![...ids].every((id) => withLine.has(id) && entry.after.nodes[id] !== null)) return false;
   return Object.keys({ ...entry.before.edges, ...entry.after.edges }).every((key) => {
     const edge = entry.after.edges[key] ?? entry.before.edges[key];
-    return Boolean(edge) && (stopped.has(edge!.source) || stopped.has(edge!.target));
+    return Boolean(edge) && withLine.has(edge!.target);
   });
+}
+
+/** GM r26 answer 3, r27 answers 2 and 3: a new toast (Codex's edit about
+ * another node, or the person's own reply to what they just did) and a stop
+ * line show together: the stop line in the toast's slot moves beside it,
+ * with its [Try again]. Neither replaces the other, unless the new toast's
+ * step took that scene off the canvas (its own line says so). */
+function stopLineBeside(state: Pick<GraphState, 'undoNotice' | 'nodes'>,
+  gone: (nodeId: string) => boolean = (nodeId) => !state.nodes.some((node) => node.id === nodeId)): Partial<GraphState> {
+  const line = state.undoNotice;
+  if (!line || line.offer || !line.retryScene) return {};
+  const { nodeId } = line.retryScene;
+  if (!cinemaScenePersistence.get(nodeId)?.stopped || gone(nodeId)) return {};
+  return { messageNotice: { id: line.id, text: line.text, tone: line.tone ?? 'info', retryScene: line.retryScene } };
 }
 
 /**
@@ -8319,19 +8353,26 @@ function applyHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet, tar
     }
   }
   const rest = [...from.slice(0, at), ...above];
+  const stepNotice: UndoNotice | null = isForeignEdit(entry) ? {
+    id: noticeId, text: undoNoticeText(action, entry), agentColor: entry.agentColor,
+    offer: action === 'undo' ? 'redo' as const : 'undo' as const, entry,
+  } : keptLine ? { id: noticeId, text: keptLine, offer: 'redo' as const, entry: inverse }
+    : ownLine && !(ownLine.kind === 'restored' && waitsForBackend)
+      ? ownStepNotice(noticeId, ownLine, NOTHING_MISSED, action, inverse) : null;
   set({
     nodes: nextNodes,
     edges: next.edges,
     ...(action === 'undo'
       ? { undoStack: rest, redoStack: [...state.redoStack, inverse] }
       : { redoStack: rest, undoStack: [...state.undoStack, inverse] }),
-    ...(isForeignEdit(entry) ? { undoNotice: {
-      id: noticeId, text: undoNoticeText(action, entry), agentColor: entry.agentColor,
-      offer: action === 'undo' ? 'redo' as const : 'undo' as const, entry,
-    } } : keptLine ? { undoNotice: { id: noticeId, text: keptLine, offer: 'redo' as const, entry: inverse } }
-      : ownLine && !(ownLine.kind === 'restored' && waitsForBackend)
-      ? { undoNotice: ownStepNotice(noticeId, ownLine, NOTHING_MISSED, action, inverse) } : {}),
+    ...(stepNotice ? { undoNotice: stepNotice, ...stopLineBeside(state, (nodeId) => !after.has(nodeId)) } : {}),
   });
+  // GM r27 answer 2: an undo or redo that left a stopped scene with nothing
+  // unsaved (the person's own Undo took their edits back) ends its stop.
+  for (const [nodeId, scene] of [...cinemaScenePersistence]) {
+    if (!scene.stopped || scene.clash) continue;
+    if (nodes.find((node) => node.id === nodeId) !== nextNodes.find((node) => node.id === nodeId)) settleIfNothingUnsaved(nodeId, scene);
+  }
   // Someone else's only for the steps taken after the change it undoes (or
   // redoes): those above it, and those its re-pushed delete went above. An
   // older step keeps owning what it added (review 16, H1).
@@ -8599,7 +8640,7 @@ function sendRestore(
     if (notice.ownLine) {
       const shown = ownStepNotice(notice.noticeId, notice.ownLine, missed, action, inverse);
       if (undoNoticeSeq === notice.noticeId && offerApplies(shown, state)) {
-        return { undoNotice: skipped ? { ...shown, text: `${shown.text} ${skipped}` } : shown };
+        return { undoNotice: skipped ? { ...shown, text: `${shown.text} ${skipped}` } : shown, ...stopLineBeside(state) };
       }
       // Its line can't show any more: the count and the skipped sentence still do.
       return { ...lateCount(state, missed), ...(skipped ? noticeLine(state, skipped, 'info') : {}) };
@@ -9255,6 +9296,9 @@ function applyGraphSync(event: ExecutionEvent, options: { fromExport?: boolean }
   sceneSyncOrigin = { own: ownEcho, writer: syncSource === 'agent' ? { kind: 'agent', name: origin?.actor?.name ?? null }
     : syncSource === 'window' ? { kind: 'window' } : UNKNOWN_WRITER };
   sceneSyncRevs = sceneRevs;
+  // The scenes with a line of their own before this merge rebases any
+  // (foreignEditStep: an edit that ends a clash is still about its prompt).
+  sceneLinesBeforeSync = graphReplaced ? null : scenesWithOwnLine();
   // A node this tab's undo or redo took off stays off until that lands.
   const cliMerged = (cliNodes as Node<NodeData>[]).filter((incoming) => heldNodeIds.get(incoming.id) !== false).map((incoming) => {
     const existing = existingById.get(incoming.id);
@@ -9355,7 +9399,7 @@ function applyGraphSync(event: ExecutionEvent, options: { fromExport?: boolean }
   // against what the backend has now (PR #198 review 5, L1).
   sceneSyncOrigin = { own: false, writer: UNKNOWN_WRITER };
   if (!graphReplaced) reconcileSceneEntries();
-  // GM r20 answer 3: a deleted scene back (an undo from the Agent log).
+  // GM r20 answer 3: a deleted scene back (the agent's undo, another window's restore).
   if (!graphReplaced) restoreDeletedScenes(new Set(cliMerged.map((node) => node.id)), heldNodeIds);
   // After the merge, so the nodes an arrange names are already on the canvas.
   useArrangeStore.getState().setPending(arrange);
