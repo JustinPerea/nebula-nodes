@@ -2375,6 +2375,24 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
       '.canvas-pin__edge { font-size: 500%; width: 0.25em; }',
       '.canvas-pin__edge { font-size: larger; width: 0.25em; }',
       '.canvas-pin__edge::after { content: ""; font-size: 400px; width: 0.5em; }',
+      // Review 17 NIT 2 (fix round 20): the font shorthand, at rest and in a
+      // state; pseudo text a width doesn't hold in (no clip, an inline box,
+      // letter-spacing); a font size the edge inherits; a flex basis or grow.
+      '.canvas-pin__edge { font: 1000px/1 serif; width: 0.25em; }',
+      '.canvas-pin:hover .canvas-pin__edge { font: 1000px serif; width: 0.25em; }',
+      '.canvas-pin__edge { font: var(--big); width: 0.25em; }',
+      '.canvas-pin__edge::after { content: "\\2588\\2588\\2588\\2588"; width: 2px; font-size: 40px; color: var(--pin-color); position: absolute; left: 0; }',
+      '.canvas-pin__edge::after { content: "."; width: 2px; letter-spacing: 400px; color: var(--pin-color); position: absolute; left: 0; }',
+      '.canvas-pin__edge::after { content: "x"; width: 2px; }',
+      '.canvas-pin__edge::after { content: "x"; width: 2px; overflow: hidden; }',
+      '.canvas-pin__card { font-size: 1000px; } .canvas-pin__edge { width: 0.25em; }',
+      '.canvas-pin__card:hover { font-size: 1000px; } .canvas-pin__edge { width: 0.25em; }',
+      '.canvas-pin { font-size: 100px; } .canvas-pin__card { font-size: 10em; } .canvas-pin__edge { width: 0.25em; }',
+      '.canvas-pin__card { font: 1000px serif; } .canvas-pin__edge { font-size: 100%; width: 0.25em; }',
+      '.canvas-pin__edge { position: static; flex: 0 0 230px; }',
+      '.canvas-pin__edge { position: static; flex: 1; }',
+      '.canvas-pin__edge { position: static; flex-basis: 230px; }',
+      '.canvas-pin__edge { position: static; flex-grow: 1; }',
     ]) expect(frameFindings(pinDelete, vars0, css), css).not.toEqual([]);
     // The edge in other units, and borders the fill stops short of, stay the edge.
     for (const css of [
@@ -2385,7 +2403,11 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
       '.canvas-pin__edge { border-left: 1px solid transparent; }',
       '.canvas-pin__edge { font-size: 12px; width: 0.25em; }',
       '.canvas-pin__edge::after { content: ""; }',
-      '.canvas-pin__edge::after { content: "x"; width: 2px; }',
+      '.canvas-pin__edge::after { content: "x"; position: absolute; width: 2px; overflow: hidden; }',
+      '.canvas-pin__edge { font: 12px/1 sans-serif; width: 0.25em; }',
+      '.canvas-pin__card { font-size: 12px; } .canvas-pin__edge { width: 0.25em; }',
+      '.canvas-pin__edge { flex: none; }',
+      '.canvas-pin__edge { flex: 0 0 3px; }',
     ]) expect(frameFindings(pinDelete, vars0, css), css).toEqual([]);
     // Resolved: the author's colour, with only its blue fallback.
     const resolvedDelete = { ...pinDelete, ancestors: [['div', ['canvas-pin', 'canvas-pin--resolved']], ['div', ['canvas-pin__card']]] as Array<[string, string[]]> };

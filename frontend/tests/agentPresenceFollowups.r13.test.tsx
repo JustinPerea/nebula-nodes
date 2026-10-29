@@ -45,7 +45,9 @@ describe('GM r20 Q1: every pin refusal is one neutral line', () => {
       openNotesFull: 'This canvas has 100 open notes. Resolve or delete some, then add this one.',
       nodeGone: 'That node was removed, so the note wasn’t added.',
       notAdded: 'Your note wasn’t added.',
+      notDeleted: 'Your note wasn’t deleted.',
       sendWhenConnected: 'You can send notes when this tab is connected as you.',
+      writeFirst: 'You can send this once you write a note.',
     });
     for (const line of Object.values(PIN_REFUSAL_COPY)) {
       expect(line).not.toMatch(/'/);

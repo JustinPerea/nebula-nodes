@@ -5,6 +5,7 @@ import { createPin, deletePin, fetchPins, fitNote, NODE_GONE_CODE, noteKeptLine,
 import { currentProject } from '../lib/currentProject';
 import { PERSON_REQUIRED_CODE, RequestFailedError } from '../lib/errorCopy';
 import { refuseCanvasEdit } from '../lib/canvasLock';
+import { onPersonPromoted } from '../lib/personSession';
 import { subscribeFollowingSwitch, followingSwitch } from '../lib/canvasFollow';
 import { subscribeCanvasReplaced } from '../lib/canvasReplaced';
 import { getProjectContext, STALE_CANVAS_DETAIL, type ProjectContext } from '../lib/projectContext';
@@ -50,10 +51,12 @@ interface CanvasPinsState {
   removing: Record<string, true>;
   /** A refusal's one neutral line (GM r20 Q1): what happened, then what to do. */
   error: string | null;
-  /** GM r24: `error` is the person gate's refusal of a send (person_required).
-   * While the banner shows, the toast says only "Your note wasn’t added."
-   * (PinComposer decides as it draws: the banner can come or go). */
-  errorPersonGate: boolean;
+  /** GM r24: `error` is the person gate's refusal (person_required) of a send
+   * ('add') or, GM r30 item 2, a delete ('delete'). While the banner shows,
+   * the toast says only "Your note wasn’t added." or "Your note wasn’t
+   * deleted." (PinComposer decides as it draws: the banner can come or go).
+   * Review 17 LOW-1: the server promoting the tab clears it. */
+  errorPersonGate: false | 'add' | 'delete';
   /** GM r23 item 2: the open dialog's node was removed (Nebula said so, or
    * the canvas lost it): Send note is disabled with the line as its reason;
    * Cancel and the typed text stay. */
@@ -244,7 +247,7 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
       // and × or Esc keeps it as one.)
       const code = error instanceof RequestFailedError ? error.code : null;
       set((state) => ({ draft: text, error: pinRefusalLine(error, 'add'), errorProject: project,
-        errorPersonGate: code === PERSON_REQUIRED_CODE,
+        errorPersonGate: code === PERSON_REQUIRED_CODE ? 'add' : false,
         targetGone: state.targetGone || code === NODE_GONE_CODE,
         tooLongRefusals: state.tooLongRefusals + (code === TOO_LONG_CODE ? 1 : 0) }));
       return false;
@@ -269,7 +272,8 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
         // isn't connected as the person, it's the Q116a line (how to fix it),
         // never "try again in a moment", which can't work from this tab.
         error: pinDeleteLine(error),
-        errorPersonGate: false,
+        errorPersonGate: error instanceof RequestFailedError && error.code === PERSON_REQUIRED_CODE
+          && error.status >= 400 && error.status < 500 ? 'delete' : false,
         errorProject: null,
       }));
     } finally {
@@ -361,6 +365,15 @@ wsClient.subscribe((event) => {
     // Another project (or an import) arrived: its pins come from the backend.
     void useCanvasPinsStore.getState().hydrate();
   }
+});
+
+// Review 17 LOW-1 (fix round 20): the server promoted this tab (lib/wsClient
+// saw the person-only proposalSync): a refusal for not being connected as the
+// person is no longer true, so its toast goes, never turning into the full
+// "isn’t connected as you" line as the banner leaves. Registered as the module
+// loads, before the banner's own listener, so both change in one render.
+onPersonPromoted(() => {
+  if (useCanvasPinsStore.getState().errorPersonGate) useCanvasPinsStore.getState().clearError();
 });
 
 // Review 16 NIT 2 (fix round 19): the Unicode data loaded (by the dialog

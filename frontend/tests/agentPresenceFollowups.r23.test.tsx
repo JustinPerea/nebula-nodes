@@ -99,6 +99,8 @@ describe('GM r23 item 2: a removed node holds Send note', () => {
   });
 
   it('a node the canvas hasn\'t loaded is not "removed"', () => {
+    // A note in the field (GM r30 item 3: an empty one can't be sent anyway).
+    useCanvasPinsStore.setState({ drafts: { '': 'warmer' } });
     useCanvasPinsStore.getState().compose({ nodeId: 'n7' });
     render(<PinComposer />);
     expect(send().disabled).toBe(false);

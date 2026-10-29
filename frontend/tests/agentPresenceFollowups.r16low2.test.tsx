@@ -106,6 +106,8 @@ describe('review 14 LOW-2: the removed node comes back while the dialog is open'
 
   it('another line is not taken away: only the "removed" line leaves', async () => {
     useGraphStore.setState({ nodes: [NODE] });
+    // A note in the field (GM r30 item 3: an empty one can't be sent anyway).
+    useCanvasPinsStore.setState({ drafts: { '': 'warmer' } });
     useCanvasPinsStore.getState().compose({ nodeId: 'n1' });
     render(<PinComposer />);
     await act(async () => { useGraphStore.setState({ nodes: [] }); });

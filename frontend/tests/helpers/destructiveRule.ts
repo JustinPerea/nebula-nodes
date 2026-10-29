@@ -902,6 +902,57 @@ function amberColours(value: string): string[] {
   return out;
 }
 
+/** The size a `font` shorthand sets ("bold 1000px/1 serif": "1000px"); null
+ * when it can't be read (a system font, a var()), so ems are unknown. */
+export function fontShorthandSize(value: string): string | null {
+  const v = value.trim().toLowerCase();
+  if (/^(?:inherit|initial|unset|revert|revert-layer)$/.test(v)) return v;
+  if (/var\(|^(?:caption|icon|menu|message-box|small-caption|status-bar)$/.test(v)) return null;
+  for (const token of v.split(/\s+/)) {
+    const size = token.split('/')[0];
+    if (/^(-?\d*\.?\d+)(px|rem|em|%)$/.test(size) || size in FONT_KEYWORD_PX || /^(?:larger|smaller)$/.test(size)) return size;
+  }
+  return null;
+}
+const FONT_KEYWORD_PX: Record<string, number> = {
+  'xx-small': 9, 'x-small': 10, small: 13, medium: 16, large: 18, 'x-large': 24, 'xx-large': 32, 'xxx-large': 48,
+};
+/** A font size in px, given the parent's (null: unknown). larger, smaller
+ * and anything else the check can't read are unknown. */
+export function resolveFontPx(value: string | null, parentPx: number | null): number | null {
+  if (value === null) return null;
+  const v = value.trim().toLowerCase();
+  if (/^(?:inherit|unset|revert|revert-layer)$/.test(v)) return parentPx;
+  if (v === 'initial') return 16;
+  if (v in FONT_KEYWORD_PX) return FONT_KEYWORD_PX[v];
+  const match = /^(-?\d*\.?\d+)(px|rem|em|%)$/.exec(v);
+  if (!match) return null;
+  const n = Number(match[1]);
+  if (match[2] === 'px') return n;
+  if (match[2] === 'rem') return n * 16;
+  if (parentPx === null) return null;
+  return match[2] === 'em' ? n * parentPx : (n / 100) * parentPx;
+}
+/** The font size an element inherits (review 17 NIT 2): its ancestors' own
+ * sizes, root first, each in every state they take (the largest counts), from
+ * a 16px base. One the check can't read makes it unknown. */
+function inheritedFontPx(element: Element, extraCss?: string): number | null {
+  const chain: Element[] = [];
+  for (let at = element.parentElement; at; at = at.parentElement) chain.unshift(at);
+  let px: number | null = 16;
+  for (const at of chain) {
+    const sizes: Array<number | null> = [];
+    for (const [key, won] of cascaded(at, extraCss, { loose: true })) {
+      const prop = key.split('|')[1];
+      if (prop === 'font-size') sizes.push(resolveFontPx(won.value, px));
+      else if (prop === 'font') sizes.push(resolveFontPx(fontShorthandSize(won.value), px));
+    }
+    if (!sizes.length) continue;
+    px = sizes.some((n) => n === null) ? null : Math.max(...(sizes as number[]));
+  }
+  return px;
+}
+
 /**
  * The one coloured element GM allows near a red control (r20 Q3, r22 Q2,
  * PR #200 fix round 14): the pin card's left status edge, its own element
@@ -931,7 +982,7 @@ export const STATUS_EDGE_MAX_PX = 4;
  * border-box, the default) and its ::before/::after (sized past 4px, or
  * repainting the fill with `inherit`) widen it too.
  */
-export function narrowLeftEdge(styles: Map<string, { value: string }>): string | null {
+export function narrowLeftEdge(styles: Map<string, { value: string }>, inheritedPx: number | null = 16): string | null {
   // Review 15 NIT 2 (fix round 18): rem and em are lengths too (16px base),
   // so `width: 0.25rem` is the 4px edge it is, not a finding.
   // Review 16 NIT 5 (fix round 19): an em is the element's own font size, so
@@ -949,13 +1000,19 @@ export function narrowLeftEdge(styles: Map<string, { value: string }>): string |
     if (match[2] === 'em') return emPx === null ? null : n * emPx;
     return null;
   };
+  // Review 17 NIT 2 (fix round 20): the `font` shorthand sets the size too,
+  // and a size the edge doesn't set is its parent's (`inheritedPx`, which
+  // frameFindings reads up the edge's ancestors). With both a font-size and
+  // a font, the larger counts: the map keeps no order between them.
   const fontPx = (state: string): number | null => {
-    const own = styles.get(`${state}|font-size`) ?? (state ? styles.get('|font-size') : undefined);
-    if (!own) return 16;
-    const v = own.value.trim().toLowerCase();
-    const pct = /^(\d*\.?\d+)%$/.exec(v);
-    if (pct) return Number(pct[1]) / 100 * 16;
-    return length(v, 16);
+    const values: Array<string | null> = [];
+    for (const prop of ['font-size', 'font'] as const) {
+      const won = styles.get(`${state}|${prop}`) ?? (state ? styles.get(`|${prop}`) : undefined);
+      if (won) values.push(prop === 'font' ? fontShorthandSize(won.value) : won.value);
+    }
+    if (!values.length) return inheritedPx;
+    const sizes = values.map((value) => resolveFontPx(value, inheritedPx));
+    return sizes.some((n) => n === null) ? null : Math.max(...(sizes as number[]));
   };
   let statePx = 16 as number | null;
   const px = (value: string) => length(value, statePx);
@@ -995,7 +1052,17 @@ export function narrowLeftEdge(styles: Map<string, { value: string }>): string |
     statePx = fontPx(state);
     // Review 16 NIT 5: a pseudo-element with text and no width of its own is
     // as wide as its glyphs, painted in the edge's colour.
-    if (pseudo && prop === 'content' && !/^(?:none|normal|""|'')$/.test(value) && !styles.has(`${state}|width`)) return `${state} content ${value} with no width`;
+    if (pseudo && prop === 'content' && !/^(?:none|normal|""|'')$/.test(value)) {
+      if (!styles.has(`${state}|width`)) return `${state} content ${value} with no width`;
+      // Review 17 NIT 2 (fix round 20): a width doesn't hold glyphs in.
+      // Text draws past its box (and letter-spacing past any box) unless the
+      // pseudo-element is a block that clips: an inline one ignores width.
+      const own = (name: string) => (styles.get(`${state}|${name}`)?.value ?? '').trim().toLowerCase();
+      const block = /^(?:absolute|fixed)$/.test(own('position')) || (own('float') !== '' && own('float') !== 'none')
+        || (own('display') !== '' && !/^(?:inline|contents|none)$/.test(own('display')));
+      const clips = /^(?:hidden|clip)$/.test(own('overflow')) || (/^(?:hidden|clip)$/.test(own('overflow-x')));
+      if (!block || !clips) return `${state} content ${value} that draws past its width (${block ? 'no overflow clip' : 'inline'})`;
+    }
     // A pseudo-element painting the edge's own fill (inherit, currentColor)
     // is a second edge with no width rule: it can't widen the first.
     if (pseudo && /^background(?:-color)?$/.test(prop) && /\b(?:inherit|currentcolor)\b/i.test(value)) return `${state} ${prop} ${value}`;
@@ -1003,6 +1070,16 @@ export function narrowLeftEdge(styles: Map<string, { value: string }>): string |
       const n = px(value);
       if (n === null || n > STATUS_EDGE_MAX_PX) return `${state ? `${state} ` : ''}width ${value}`;
       if (state === '') width = true;
+    } else if (prop === 'flex' || prop === 'flex-grow' || prop === 'flex-basis') {
+      // Review 17 NIT 2 (fix round 20): in a flex row (position: static) the
+      // basis or a grow sets the width, not `width`.
+      const v = value.toLowerCase();
+      if (/^(?:none|initial|0)$/.test(v) && prop !== 'flex-basis') continue;
+      const parts = prop === 'flex' ? v.split(/\s+/) : [v];
+      const grow = prop === 'flex-basis' ? 0 : (v === 'auto' ? 1 : Number(/^\d*\.?\d+$/.test(parts[0]) ? parts[0] : 0));
+      const basis = prop === 'flex-grow' ? 'auto' : (prop === 'flex-basis' ? v : parts.find((part, i) => i > 0 && !/^\d*\.?\d+$/.test(part)) ?? (parts.length === 1 && !/^\d*\.?\d+$/.test(parts[0]) ? parts[0] : '0'));
+      const basisPx = /^(?:auto|content)$/.test(basis) ? 0 : px(basis);
+      if (grow > 0 || basisPx === null || basisPx > STATUS_EDGE_MAX_PX) return `${state ? `${state} ` : ''}${prop} ${value}`;
     } else if (prop === 'left' || prop === 'inset-inline-start') {
       if (state === '') left = true;
     } else if (/^(?:inset|inset-inline|inset-inline-end|right|inline-size|min-width|min-inline-size)$/.test(prop)) {
@@ -1080,7 +1157,7 @@ export function frameFindings(control: Control, vars: Vars, extraCss?: string): 
       // The one exemption (GM r22 Q2): the status edge's own fill, at rest,
       // in a presence colour. Its border, shadow or any other state isn't.
       if (edge && state === '' && /^background(?:-color)?$/.test(prop) && PRESENCE_COLOUR.test(winner.value.trim())
-        && winner.selector.split(',').some((part) => EDGE_SUBJECT.test(part.trim())) && narrowLeftEdge(styles) === null) continue;
+        && winner.selector.split(',').some((part) => EDGE_SUBJECT.test(part.trim())) && narrowLeftEdge(styles, inheritedFontPx(element, extraCss)) === null) continue;
       // Review 13 NIT-4: currentColor is the element's own colour in that state.
       const value = /currentcolor/i.test(winner.value) ? `${winner.value} ${colourOf(state)}` : winner.value;
       const bad = [

@@ -2438,3 +2438,96 @@ Review 16 (of 073cdd93), GM r28 and GM r29.
   confirmed-point click and no retry.
 - md5: one duplicate pair, the 5xx and no-answer toasts, which are meant to
   match.
+
+## Fix round 20
+
+From review 17 and GM r30 (both rounds' rulings applied verbatim).
+
+- **The heading's cut (GM r30 item 1).** `lib/noteHeading.ts` cuts the name
+  inside its quotes by grapheme (`Intl.Segmenter`), drops the spaces before
+  the "…", and keeps the closing ” outside the cut: "Note for agents on “A
+  lighthouse prompt with…”". `NoteHeading` (PinComposer) fits it to the
+  heading's width less the id chip's, measuring each candidate in a hidden
+  span in the heading's own font; it fits again on resize and once fonts
+  load. CSS `text-overflow` is gone (the clip stays only for a sub-pixel
+  overrun). The visible line is `aria-hidden`; a visually hidden copy of the
+  whole heading names the field, and the tooltip keeps the whole heading. Not
+  laid out (a box 0 px wide), it shows the whole name.
+- **A refused delete defers to the banner (GM r30 item 2).**
+  `errorPersonGate` is now `false | 'add' | 'delete'`. While the banner
+  shows, a gate-refused delete reads "Your note wasn’t deleted."; once × hides
+  it, the full Q116a line; when it comes back, short again. Send's rule.
+- **Empty Send (GM r30 item 3).** `noteIsEmpty` is `noteLength(text) === 0`,
+  the counter's own rule: spaces and line breaks at the ends, and every
+  character that draws nothing, don't count. Send note is disabled with "You
+  can send this once you write a note." The node-gone and gate reasons win
+  over it. Enter on an empty field no longer closes the dialog (it used to act
+  as Cancel); it does nothing.
+- **Review 17 LOW-1.** `onPersonPromoted` in canvasPinsStore clears a
+  person-gate error (add or delete), registered as the module loads, so the
+  toast leaves in the same render the banner does and never shows the full
+  line. Other errors stay. The proposal store does the same for an Accept or
+  Reject refused `person_required` (a set of those ids), since the bar now
+  holds on the same gate.
+- **Proposal bar (GM r30 item 7).** Accept and Reject read `personGateHeld`
+  and are disabled while it holds, titled "You can accept proposals when this
+  tab is connected as you." and "You can reject proposals when this tab is
+  connected as you." Show stays live. Reject is person-only on the server:
+  `reject_canvas_proposal` (backend/main.py:7783) calls
+  `_decidable_proposal(..., reject=True)` (main.py:7548), whose first check is
+  `require_person(headers)` (main.py:7557), then the proposal's key. The bar
+  has no Dismiss. The held-run Dismiss (`DELETE /api/canvas/approvals/…`,
+  main.py:7803) is also `require_person`, but it lives on DeferredRunNotice,
+  not the bar, and was left as it is. No server change.
+- **The ratchet (review 17 NIT 2).** `narrowLeftEdge` reads the `font`
+  shorthand's size, and the size the edge inherits (`inheritedFontPx`: its
+  ancestors' sizes in every state, root first, the largest counting, unknown
+  if any can't be read). Pseudo text needs a block box (absolute, fixed, a
+  float or a non-inline display) that clips (`overflow: hidden|clip`), so
+  neither a width it overflows nor letter-spacing gets past. A flex grow, or
+  a basis over 4 px, is a finding. `focus_visible_box` is not closed: the
+  corpus keeps "A focus ring is the keyboard-ring rule's to judge, not a
+  frame" (`.probe-row:focus-visible { outline: 2px solid var(--sr-accent) }`
+  passes, from GM r17). Closing it means judging an ancestor's own focus ring
+  as a frame, which reverses that ruling; it needs GM.
+- **Harness (review 17 NIT 3).** The dev chunk "loads again" check waits for
+  the condition (the retry settles, then the pin is in the store, up to 20 s),
+  not a fixed 2.5 s.
+- **Tests changed for the rulings.** r13's copy list adds the two lines.
+  r16low2, r23 and r24 seed a draft before expecting Send note live (an empty
+  field holds it now). r29pin reads the visible heading span (the hidden whole
+  copy sits beside it) and checks for no `text-overflow`. PinComposer.test's
+  "cancels on empty text" now expects the dialog to stay with Send note held.
+
+### Fix round 20 gates
+
+- Main: nothing new since bbdd55d8 (origin/main is already in the branch).
+  #198 is still open, so the "Codex changed the canvas" period can't be
+  checked yet.
+- Backend, the full suite (isolated, `lg run --gate`): 11,803 passed, 71
+  skipped, none failed (7 min 49 s). No backend change.
+- Frontend: `tsc -b` clean, `eslint .` clean.
+- Vitest, the full run (`--maxWorkers=6`, `--gate`): 588 files, 7,472
+  tests, all passed.
+- Every new test fails on bbdd55d8:
+  - r30proposal: 4 of 4;
+  - r30: 16 of 16 (its module, lib/noteHeading, doesn't exist there).
+    With the module copied in, 12 of 16 still fail. The other 4 are the
+    module's own unit tests.
+  - The ratchet's 15 new failing cases all pass the old helper.
+- Build into a scratch outDir: the entry is 429,709 bytes raw (131,912
+  gzip). 96 JS assets are eval-free. Fonts: 53 @font-face rules, 13 woff2,
+  285,052 bytes.
+- Production build (`vite preview` on 5795): 5 of 5.
+- Live (backend 8795, Vite 5795, 8000-8010 and 5173 blocked):
+  - The first full run passed 118 of 121. All 3 misses were the harness's:
+    - two r29 checks still expected r29's rulings (the CSS ellipsis, and
+      the full line with the banner up);
+    - r30's own fetch wrapper didn't install after r29's, so the POST
+      wasn't stripped.
+  - Fixed. r29 plus r30 then passed 18 of 18, and the second full run 121
+    of 121.
+  - The dev chunk check now waits for the condition, and passed in every
+    run.
+- md5: one duplicate pair, the 5xx and no-answer toasts, which are meant
+  to match.

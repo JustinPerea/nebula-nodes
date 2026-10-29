@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { PromptDialog, type PromptRequest } from '../PromptDialog';
-import { KEPT_FEWER, KEPT_SHOWN, keptMoreLabel, keptNoteDisplay, keptNoteLine, MAX_PIN_TEXT, noteLength, NOTE_KEPT_COPY, PIN_REFUSAL_COPY,
+import { KEPT_FEWER, KEPT_SHOWN, keptMoreLabel, keptNoteDisplay, keptNoteLine, MAX_PIN_TEXT, noteIsEmpty, noteLength, NOTE_KEPT_COPY, PIN_REFUSAL_COPY,
   pinDisplayText, pinTextSettled, pinTextSettling, type KeptNote } from '../../lib/canvasPins';
 import { nodeCardTitle, useGraphStore } from '../../store/graphStore';
 import { personBannerShown, personGateHeld, subscribePersonBanner, subscribePersonGate } from '../../lib/personSession';
@@ -13,6 +13,7 @@ import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 import { InNoticeRegion } from '../InNoticeRegion';
 import { dialogStart, openModalDialog } from '../../lib/modalFocus';
 import { useLeave, useLeavingRows } from '../../lib/noticeLeave';
+import { fitNoteHeading, noteHeading } from '../../lib/noteHeading';
 import '../../styles/canvasPins.css';
 
 /** The "Note for agents" dialog, opened from the context menu or the selection toolbar.
@@ -60,6 +61,10 @@ export function PinComposer() {
   const targetRemoved = useCanvasPinsStore((s) => s.targetRemoved);
   const tooLongRefusals = useCanvasPinsStore((s) => s.tooLongRefusals);
   const errorPersonGate = useCanvasPinsStore((s) => s.errorPersonGate);
+  // GM r30 item 3 (fix round 20): Send note waits for a note. A field that is
+  // empty, or holds only what the counter doesn't count (spaces, line breaks,
+  // characters that draw nothing), can't be sent.
+  const noteEmpty = useCanvasPinsStore((s) => noteIsEmpty(s.draft));
   // GM r24: while the person-gate banner shows (it was up as the dialog
   // opened, or came up while it was open), Send note waits, disabled in the
   // shared style with its reason; a refused send's toast then leaves the fix
@@ -162,7 +167,13 @@ export function PinComposer() {
   // The toast defers to the banner only while the banner shows (GM r24); once
   // it's dismissed, a refused send's toast says the full Q116a line (GM r27
   // item 2: "keep the full Q116a line"), and Send note stays held (gateBanner).
-  const errorLine = errorPersonGate && bannerUp ? PIN_REFUSAL_COPY.notAdded : error;
+  // GM r30 item 2 (fix round 20): a refused delete, the same rule: "Your note
+  // wasn’t deleted." while the banner shows, the full line once it's gone,
+  // short again if it comes back. Review 17 LOW-1: the server promoting the
+  // tab clears either (canvasPinsStore), so neither turns into the full line
+  // as the banner leaves.
+  const errorLine = errorPersonGate && bannerUp
+    ? (errorPersonGate === 'delete' ? PIN_REFUSAL_COPY.notDeleted : PIN_REFUSAL_COPY.notAdded) : error;
   const errorLeave = useLeave(errorLine && (errorProject === null || errorProject === here) ? errorLine : null);
 
   // Back to the newest two once no note is hidden (the next one kept starts
@@ -272,13 +283,10 @@ export function PinComposer() {
   });
   const titleShared = useGraphStore((s) => targetTitle !== ''
     && s.nodes.some((node) => node.id !== targetNode && nodeCardTitle(node) === targetTitle));
-  const headingText = targetTitle ? `Note for agents on “${targetTitle}”` : 'Note for agents';
-  const heading = targetTitle ? (
-    <span className="prompt-dialog__heading">
-      <span className="prompt-dialog__heading-text" title={headingText}>{headingText}</span>
-      {titleShared && <span className="prompt-dialog__node-id">{targetNode}</span>}
-    </span>
-  ) : undefined;
+  // GM r30 item 1 (fix round 20): a name too long for the line is cut inside
+  // its quotes by grapheme, in JS (NoteHeading), the closing quote kept.
+  const headingText = targetTitle ? noteHeading(targetTitle) : 'Note for agents';
+  const heading = targetTitle ? <NoteHeading title={targetTitle} nodeId={titleShared ? targetNode : null} /> : undefined;
 
   const request = useMemo<PromptRequest | null>(
     () => (composer ? { label: 'Note for agents', initial: useCanvasPinsStore.getState().draft, resolve: () => {} } : null),
@@ -307,8 +315,9 @@ export function PinComposer() {
           confirmLabel="Send note"
           onChange={setDraft}
           confirm={lock.act({ offline: 'send notes', ...(targetGone ? { disabled: true, title: PIN_REFUSAL_COPY.nodeGone }
-            : gateBanner ? { disabled: true, title: PIN_REFUSAL_COPY.sendWhenConnected } : {}) })}
-          onRefused={() => { if (!targetGone && !gateBanner) refuseCanvasEdit(); }}
+            : gateBanner ? { disabled: true, title: PIN_REFUSAL_COPY.sendWhenConnected }
+            : noteEmpty ? { disabled: true, title: PIN_REFUSAL_COPY.writeFirst } : {}) })}
+          onRefused={() => { if (!targetGone && !gateBanner && !noteEmpty) refuseCanvasEdit(); }}
           onDone={(value) => {
             if (value === null || !value.trim()) cancel();
             else void submit(value);
@@ -368,5 +377,48 @@ export function PinComposer() {
         </InNoticeRegion>
       )}
     </>
+  );
+}
+
+/** The dialog's heading for a node (GM r29 item 1, GM r30 item 1): the name
+ * in quotes, cut by grapheme to the line's width with the closing quote kept,
+ * the full heading in the tooltip and in the field's name; the node's bare id
+ * after it when another node has the same title. */
+function NoteHeading({ title, nodeId }: { title: string; nodeId: string | null }) {
+  const whole = noteHeading(title);
+  const [shown, setShown] = useState(whole);
+  const boxRef = useRef<HTMLSpanElement | null>(null);
+  const measureRef = useRef<HTMLSpanElement | null>(null);
+  const chipRef = useRef<HTMLSpanElement | null>(null);
+  useLayoutEffect(() => {
+    const box = boxRef.current;
+    const measure = measureRef.current;
+    if (!box || !measure) return;
+    const fit = () => {
+      const boxWidth = box.getBoundingClientRect().width;
+      // Not laid out (a hidden dialog): the whole name until it is.
+      if (boxWidth <= 0) { setShown(whole); return; }
+      const gap = parseFloat(getComputedStyle(box).columnGap) || 0;
+      const chip = chipRef.current ? chipRef.current.getBoundingClientRect().width + gap : 0;
+      setShown(fitNoteHeading(title, boxWidth - chip, (text) => {
+        measure.textContent = text;
+        return measure.getBoundingClientRect().width;
+      }));
+    };
+    fit();
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(fit) : null;
+    observer?.observe(box);
+    // The heading's font may land after the dialog opens: fit again then.
+    let live = true;
+    void document.fonts?.ready.then(() => { if (live) fit(); });
+    return () => { live = false; observer?.disconnect(); };
+  }, [title, whole, nodeId]);
+  return (
+    <span ref={boxRef} className="prompt-dialog__heading">
+      <span className="prompt-dialog__heading-text" title={whole} aria-hidden="true">{shown}</span>
+      <span className="prompt-dialog__sr-only">{whole}</span>
+      {nodeId !== null && <span ref={chipRef} className="prompt-dialog__node-id">{nodeId}</span>}
+      <span className="prompt-dialog__heading-measure" aria-hidden="true"><span ref={measureRef} /></span>
+    </span>
   );
 }

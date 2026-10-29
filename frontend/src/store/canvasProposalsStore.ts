@@ -18,6 +18,7 @@ import type { Point } from '../lib/agentCursorMotion';
 import { useGraphStore, watchGraphSyncs } from './graphStore';
 import { PERSON_REQUIRED_CODE, failureMessage } from '../lib/errorCopy';
 import { refuseEditWhileOffline } from '../lib/backendConnection';
+import { onPersonPromoted } from '../lib/personSession';
 import { refuseEditWhileFollowing } from '../lib/canvasFollow';
 
 /** How long a closed proposal's ghosts fade before they go. Matches canvasProposals.css. */
@@ -112,6 +113,14 @@ function cleanValues(values: unknown): ProposalPersonValues | undefined {
   if (!isRecord(values) || !isRecord(values.nodes) || !isRecord(values.params)) return undefined;
   return values as unknown as ProposalPersonValues;
 }
+
+/** Review 17 LOW-1 (fix round 20): proposals whose error is the person gate's
+ * refusal (403 person_required). The server promoting the tab clears them. */
+const personRefused = new Set<string>();
+const notePersonRefusal = (id: string, error: unknown) => {
+  if (error instanceof ProposalRequestError && error.code === PERSON_REQUIRED_CODE) personRefused.add(id);
+  else personRefused.delete(id);
+};
 
 function without<T>(record: Record<string, T>, id: string): Record<string, T> {
   if (!(id in record)) return record;
@@ -278,6 +287,7 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
         : error instanceof ProposalRequestError && error.status === 403 && error.code !== PERSON_REQUIRED_CODE
         ? 'Only the canvas can accept this. Reload the page.'
         : failureMessage(error, "Couldn't accept the proposal.");
+      notePersonRefusal(id, error);
       set((state) => ({ errors: { ...state.errors, [id]: message } }));
     } finally {
       // On every path (ending twice is harmless): an undo pressed meanwhile acts (review 10, L-2).
@@ -301,6 +311,7 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
       const message = error instanceof ProposalRequestError && error.status === 403 && error.code !== PERSON_REQUIRED_CODE
         ? 'Only the canvas can reject this. Reload the page.'
         : failureMessage(error, "Couldn't reject the proposal.");
+      notePersonRefusal(id, error);
       set((state) => ({ errors: { ...state.errors, [id]: message } }));
     } finally {
       set((state) => ({ pending: without(state.pending, id) }));
@@ -340,4 +351,15 @@ wsClient.subscribe((event) => {
     useCanvasProposalsStore.setState({ deferredRun: null, deferredQueue: [] });
     for (const held of [deferredRun, ...deferredQueue]) if (held?.approvalId) void releaseApproval(held.approvalId);
   }
+});
+
+// Review 17 LOW-1 (fix round 20): once the server promotes this tab, an
+// Accept or Reject refused for not being connected as the person no longer
+// says so; Accept and Reject are live again (ProposalBar reads the hold).
+onPersonPromoted(() => {
+  if (!personRefused.size) return;
+  const errors = { ...useCanvasProposalsStore.getState().errors };
+  for (const id of personRefused) delete errors[id];
+  personRefused.clear();
+  useCanvasProposalsStore.setState({ errors });
 });

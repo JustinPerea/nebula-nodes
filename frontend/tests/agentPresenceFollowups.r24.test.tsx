@@ -104,6 +104,8 @@ describe('GM r24: Send note waits while the banner shows', () => {
   });
 
   it('banner arriving while the dialog is open disables it then', () => {
+    // A note in the field (GM r30 item 3: an empty one can't be sent anyway).
+    useCanvasPinsStore.setState({ drafts: { '': 'make it warmer' } });
     useCanvasPinsStore.getState().compose({ nodeId: 'n1' });
     render(<><PersonRequiredBanner /><PinComposer /></>);
     expect(send().disabled).toBe(false);

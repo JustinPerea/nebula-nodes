@@ -60,14 +60,15 @@ describe('PinComposer', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('cancels on empty text or Cancel without calling the backend', async () => {
+  it('sends nothing on empty text (GM r30 item 3: Send note is held, the dialog stays), and Cancel closes it', async () => {
     useCanvasPinsStore.getState().compose({ nodeId: 'n4' });
     const { unmount } = render(<PinComposer />);
     fireEvent.change(screen.getByRole('textbox', { name: 'Note for agents' }), { target: { value: '   ' } });
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Send note' }));
     });
-    expect(useCanvasPinsStore.getState().composer).toBeNull();
+    expect((screen.getByRole('button', { name: 'Send note' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(useCanvasPinsStore.getState().composer).not.toBeNull();
     unmount();
 
     useCanvasPinsStore.getState().compose({ nodeId: 'n4' });

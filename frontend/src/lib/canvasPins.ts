@@ -355,8 +355,13 @@ export const PIN_REFUSAL_COPY = {
   nodeGone: 'That node was removed, so the note wasn’t added.',
   // GM r24: a person-gate refusal while the banner shows: the banner carries the fix.
   notAdded: 'Your note wasn’t added.',
+  // GM r30 item 2 (fix round 20): a person-gate refused delete while the
+  // banner shows, the same rule as Send's.
+  notDeleted: 'Your note wasn’t deleted.',
   // GM r24: Send note's lock reason while the banner shows.
   sendWhenConnected: 'You can send notes when this tab is connected as you.',
+  // GM r30 item 3: Send note's reason while the field has no note in it.
+  writeFirst: 'You can send this once you write a note.',
 } as const;
 /** The backend's codes for the 100-open-notes 409 and the removed-node 404 (GM r23). */
 export const OPEN_NOTES_FULL_CODE = 'open_notes_full';
@@ -384,7 +389,9 @@ export function pinRefusalLine(error: unknown, action: 'add' | 'save'): string {
 
 /** A refused pin delete's line (review 16 LOW-1, GM r29): the person-only
  * line when this tab isn't connected as the person (403 person_required), as
- * every person-gate refusal reads; otherwise the pin stays and Nebula says so. */
+ * every person-gate refusal reads; otherwise the pin stays and Nebula says so.
+ * GM r30 item 2: while the banner shows, the toast says only "Your note
+ * wasn’t deleted." (PinComposer decides as it draws). */
 export function pinDeleteLine(error: unknown): string {
   const code = error instanceof RequestFailedError ? error.code : null;
   const status = error instanceof RequestFailedError ? error.status : 0;
@@ -467,6 +474,13 @@ export function textLength(shown: string): number {
 /** What a typed note counts against the cap: its shown form's characters. */
 export function noteLength(text: string): number {
   return textLength(pinDisplayText(text, { fold: false }));
+}
+
+/** GM r30 item 3 (fix round 20): the field holds no note: nothing would show
+ * once the counter's rule strips it (spaces and line breaks at the ends, and
+ * every character that draws nothing, as the backend strips them). */
+export function noteIsEmpty(text: string): boolean {
+  return noteLength(text) === 0;
 }
 
 /** The longest start of `text` (whole code points) that fits the cap: the

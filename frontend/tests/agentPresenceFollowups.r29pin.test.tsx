@@ -40,7 +40,7 @@ describe('GM r29 item 1: the note dialog names its node', () => {
     useGraphStore.setState({ nodes: [node('n1'), node('n2', 'Sky prompt')] } as never);
     act(() => useCanvasPinsStore.getState().compose({ nodeId: 'n1' }));
     render(<PinComposer />);
-    expect(heading()?.textContent).toBe('Note for agents on “Text Input”');
+    expect(document.querySelector('.prompt-dialog__heading-text')?.textContent).toBe('Note for agents on “Text Input”');
     expect(document.querySelector('.prompt-dialog__node-id')).toBeNull();
     expect(screen.getByRole('dialog', { name: 'Note for agents on “Text Input”' })).toBeTruthy();
     expect(screen.getByRole('textbox', { name: 'Note for agents on “Text Input”' })).toBeTruthy();
@@ -52,7 +52,10 @@ describe('GM r29 item 1: the note dialog names its node', () => {
     render(<PinComposer />);
     const id = document.querySelector('.prompt-dialog__node-id');
     expect(id?.textContent).toBe('n4');
-    expect(heading()?.textContent).toBe('Note for agents on “Text Input”n4');
+    // What shows: the heading, then the chip (GM r30 item 1 keeps a hidden
+    // whole copy for the field's name beside a cut one).
+    expect(document.querySelector('.prompt-dialog__heading-text')?.textContent).toBe('Note for agents on “Text Input”');
+    expect(heading()?.lastElementChild?.previousElementSibling?.textContent).toBe('n4');
     expect(screen.getByRole('dialog', { name: 'Note for agents on “Text Input” n4' })).toBeTruthy();
     // Styled like the card's id chip: its font, size, colour and edge.
     const css = readFileSync('src/styles/prompt-dialog.css', 'utf8');
@@ -61,7 +64,7 @@ describe('GM r29 item 1: the note dialog names its node', () => {
       expect(rule, decl).toContain(decl);
   });
 
-  it('a long title: one line, truncated, the full name in the tooltip', () => {
+  it('a long title: one line, the full name in the tooltip (not laid out here, so whole)', () => {
     const long = 'A very long title for this text node that goes on well past the width of the dialog';
     useGraphStore.setState({ nodes: [node('n1', long)] } as never);
     act(() => useCanvasPinsStore.getState().compose({ nodeId: 'n1' }));
@@ -71,7 +74,10 @@ describe('GM r29 item 1: the note dialog names its node', () => {
     expect(text?.getAttribute('title')).toBe(`Note for agents on “${long}”`);
     const css = readFileSync('src/styles/prompt-dialog.css', 'utf8');
     const rule = /\.prompt-dialog__heading-text \{([^}]*)\}/.exec(css)?.[1] ?? '';
-    for (const decl of ['white-space: nowrap', 'text-overflow: ellipsis', 'overflow: hidden']) expect(rule, decl).toContain(decl);
+    // GM r30 item 1 (fix round 20): cut in JS by grapheme, never by CSS
+    // text-overflow (r30heading tests the cut).
+    for (const decl of ['white-space: nowrap', 'overflow: hidden']) expect(rule, decl).toContain(decl);
+    expect(rule).not.toContain('text-overflow');
   });
 });
 
