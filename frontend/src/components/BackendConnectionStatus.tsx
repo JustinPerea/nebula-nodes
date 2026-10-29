@@ -47,10 +47,12 @@ export function BackendConnectionStatus({ placement = 'workspace' }: {
         // Which backend process answered (round 16, M4): a new one restarted.
         // The answer alone means online; a body that can't be read only
         // leaves the boot id unknown.
-        let body: { bootId?: unknown } | null = null;
-        try { body = await response.json() as { bootId?: unknown } | null; } catch { body = null; }
+        let body: { bootId?: unknown; bootStartedAt?: unknown } | null = null;
+        try { body = await response.json() as { bootId?: unknown; bootStartedAt?: unknown } | null; } catch { body = null; }
         if (!cancelled) {
-          noteBackendBootId(body?.bootId);
+          // Review 11, L-4: with when it started, so a late answer from an
+          // older process never takes the newer one's place.
+          noteBackendBootId(body?.bootId, body?.bootStartedAt);
           noteProbeAnswer(seq, 'online');
         }
       } catch {

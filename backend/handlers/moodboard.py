@@ -45,10 +45,10 @@ async def handle_moodboard_node(
         moodboard = None
     if moodboard is None:
         if _in_trash(moodboard_id):
-            raise with_person_line(ValueError(f"Moodboard {moodboard_id!r} is in Recently deleted. Restore it (Moodboard Studio, "
+            raise with_person_line(ValueError(f"Moodboard {moodboard_id} is in Recently deleted. Restore it (Moodboard Studio, "
                              f"or nebula trash restore moodboard {moodboard_id}) and run again."),
                 "This node's board is in Recently deleted. Restore it in Moodboard Studio, then run the node again.")
-        raise with_person_line(ValueError(f"Moodboard {moodboard_id!r} not found; it may have been deleted for good. "
+        raise with_person_line(ValueError(f"Moodboard {moodboard_id} not found; it may have been deleted for good. "
                          "Pick another board for this node."),
             "This node's board can't be found. It may have been deleted for good. Pick another board for this node.")
 

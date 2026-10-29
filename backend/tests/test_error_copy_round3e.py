@@ -253,7 +253,7 @@ def _contracts(nodes: list[tuple[str, str]], edges: list[tuple[str, str, str, st
 
 def test_a_wire_of_the_wrong_kind_names_the_input_by_its_label():
     [issue] = _contracts([("a", "image-input"), ("b", "gpt-image-1-generate")], [("a", "image", "b", "prompt")])
-    assert issue.message.startswith("Incompatible port types: source 'image' on node 'a'")
+    assert issue.message.startswith("Incompatible port types: source 'image' on node a")
     # Round 3g (GM): the port's label in quotes.
     assert _clean(issue.person) == ("The connection into “Prompt” brings something it can't take. "
                                     "Remove that connection, then connect a matching output.")
@@ -263,14 +263,14 @@ def test_too_many_wires_into_one_input_has_a_line():
     issues = _contracts([("a", "text-input"), ("c", "text-input"), ("b", "gpt-image-1-generate")],
                         [("a", "text", "b", "prompt"), ("c", "text", "b", "prompt")])
     [issue] = [i for i in issues if "multiple connections" in i.message]
-    assert issue.message == "Input port 'prompt' on node 'b' does not allow multiple connections"
+    assert issue.message == "Input port 'prompt' on node b does not allow multiple connections"
     # Round 3g (GM): the port's label in quotes.
     assert _clean(issue.person) == "“Prompt” takes one connection. Remove the extra one, then run the node again."
 
 
 def test_a_wire_into_an_input_the_node_no_longer_has_has_a_line():
     [issue] = _contracts([("a", "text-input"), ("b", "gpt-image-1-generate")], [("a", "text", "b", "gone")])
-    assert issue.message.startswith("Invalid target handle 'gone' on node 'b'")
+    assert issue.message.startswith("Invalid target handle 'gone' on node b")
     assert _clean(issue.person) == ("A connection into this node no longer matches its inputs. Remove it, then "
                                     "connect it again.")
 
@@ -360,7 +360,7 @@ def test_a_validation_event_serializes_its_person_line():
 
     event = ValidationErrorEvent(run_id="r1", errors=[
         ValidationErrorDetail(node_id="n1", port_id="", message="Missing API key: OPENAI_API_KEY", person=KEY_LINE),
-        ValidationErrorDetail(node_id="n2", port_id="", message="Edge 'e1' references missing ..."),
+        ValidationErrorDetail(node_id="n2", port_id="", message="Edge e1 references missing ..."),
     ])
     camel = main._event_to_camel(event)
     assert camel["errors"][0]["person"] == KEY_LINE

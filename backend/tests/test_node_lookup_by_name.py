@@ -122,7 +122,7 @@ def test_nebula_info_by_id_is_not_shadowed(cli, shadow):
 def test_nebula_info_refuses_a_shared_name_listing_both_first(cli, shared_name):
     code, out, err = _run(["info", "moodboard"])
     assert code == 1
-    assert "Node 'moodboard' not found" in err
+    assert "Node moodboard not found" in err
     listed = [line.split()[1] for line in err.splitlines() if line.strip().startswith("- ")]
     assert listed[:2] == ["nebula-moodboard", "zz-moodboard-twin"], err
     assert "2 node types are named Moodboard" in err
@@ -131,7 +131,7 @@ def test_nebula_info_refuses_a_shared_name_listing_both_first(cli, shared_name):
 def test_unknown_text_keeps_todays_error(cli):
     code, _, err = _run(["info", "moodbord"])
     assert code == 1
-    assert "Node 'moodbord' not found. Did you mean:" in err
+    assert "Node moodbord not found. Did you mean:" in err
     code, _, err = _run(["info", "xyzzy-quux-nothing"])
     assert code == 1 and "Did you mean" not in err
 
@@ -170,7 +170,7 @@ def test_describe_node_refuses_a_shared_name(nebula, shared_name):
     with pytest.raises(Exception) as caught:
         mcp_server.describe_node("Moodboard")
     message = str(caught.value)
-    assert "No node type 'Moodboard': 2 node types are named Moodboard: nebula-moodboard, zz-moodboard-twin." in message
+    assert "No node type Moodboard: 2 node types are named Moodboard: nebula-moodboard, zz-moodboard-twin." in message
 
 
 def test_describe_node_through_the_mcp_handler(nebula):
@@ -305,14 +305,14 @@ def counter():
 
 @pytest.mark.parametrize("tool,command,text", [
     ("Bash", "nebula info moodboard",
-     "Exit code 1\nerror: Node 'moodboard' not found: 2 node types are named Moodboard. Did you mean:"),
+     "Exit code 1\nerror: Node moodboard not found: 2 node types are named Moodboard. Did you mean:"),
     ("Bash", "nebula apply --note x --add +mb=moodboard",
      "Exit code 1\nerror: unknown node definition 'moodboard': did you mean nebula-moodboard (Moodboard)?"),
     ("mcp__nebula__describe_node", None,
-     "Error executing tool describe_node: No node type 'Moodboard': 2 node types are named Moodboard: "
+     "Error executing tool describe_node: No node type Moodboard: 2 node types are named Moodboard: "
      "nebula-moodboard, zz-moodboard-twin."),
     ("mcp__nebula__describe_node", None,
-     "Error executing tool describe_node: No node type 'moodbord'. Close matches: nebula-moodboard."),
+     "Error executing tool describe_node: No node type moodbord. Close matches: nebula-moodboard."),
     ("mcp__nebula__edit_canvas", None,
      "Error executing tool edit_canvas: unknown node definition 'moodboard': did you mean nebula-moodboard (Moodboard)?"),
     ("mcp__nebula__style_create", None,

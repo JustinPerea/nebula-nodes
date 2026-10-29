@@ -6,10 +6,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * - GM r14 item 1: the recovered copy's notice is not a toast. It is the
  *   inline notice at the top of Projects home, first in a real stack of
  *   notices (then the held edits or where they went, then the error).
- * - GM r15 answer 2: closing a notice moves focus to the next notice in the
- *   stack, onto its first control; if it was the last, to the one before;
- *   with the stack empty, to the "Recent projects" heading (tabindex -1).
- *   Never to the body. GM r17: it rings from :focus-visible like any target.
+ * - GM r15 answer 2, as GM pr200 r16 #2 changed it: closing a notice moves
+ *   focus to the next notice in the stack, onto its × (never one of its
+ *   actions; a notice with no × takes focus itself); if it was the last, to
+ *   the one before; with the stack empty, to the "Recent projects" heading
+ *   (tabindex -1). Never to the body. GM r17: it rings from :focus-visible
+ *   like any target.
  * - GM r15 answer 3: a click on the "Unsaved" mark opens the popover and does
  *   nothing else: no selection, no drag start.
  * - Review 9 M-3 (GM r14: the bar follows the card): the project bar says
@@ -86,13 +88,25 @@ describe('GM r14 item 1: the recovered copy’s notice, inline and first in the 
   });
 });
 
-describe('GM r15 answer 2: where focus goes when a notice closes', () => {
-  it('the next notice: closing the copy’s notice moves focus to the error’s first control', async () => {
+describe('GM r15 answer 2 (GM pr200 r16 #2): where focus goes when a notice closes', () => {
+  // GM pr200 r16 #2 replaced "its first control" (which was [Try again]
+  // here): the error has no ×, so the error box itself, never its action.
+  it('the next notice: closing the copy’s notice moves focus to the error box, never its [Try again]', async () => {
     const view = render(<Home {...props({ copyNotice: copyNotice(), error: 'Couldn’t load your projects.' })} />);
     const dismiss = screen.getByRole('button', { name: 'Dismiss' });
     dismiss.focus();
     view.rerender(<Home {...props({ copyNotice: null, error: 'Couldn’t load your projects.' })} />);
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Try again' })));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('alert')));
+    expect(document.activeElement).not.toBe(screen.getByRole('button', { name: 'Try again' }));
+  });
+
+  it('the next notice is the held edits (no ×): the notice itself, never [Download your edits]', async () => {
+    const view = render(<Home {...props({ copyNotice: copyNotice(), unsavedEdits: { reason: TOO_LARGE } })} />);
+    screen.getByRole('button', { name: 'Dismiss' }).focus();
+    view.rerender(<Home {...props({ copyNotice: null, unsavedEdits: { reason: TOO_LARGE } })} />);
+    await waitFor(() => expect(document.activeElement?.classList.contains('project-home__edits')).toBe(true));
+    expect(document.activeElement?.getAttribute('tabindex')).toBe('-1');
+    expect(document.activeElement?.tagName).not.toBe('BUTTON');
   });
 
   it('the next notice with no control of its own: the line that says where the edits went', async () => {
@@ -111,12 +125,13 @@ describe('GM r15 answer 2: where focus goes when a notice closes', () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('alert')));
   });
 
-  it('the last one: focus goes to the one before, onto [Restore]', async () => {
+  // GM pr200 r16 #2 replaced "first control: [Restore]": onto its ×.
+  it('the last one: focus goes to the one before, onto its ×, never [Restore]', async () => {
     const view = render(<Home {...props({ copyNotice: copyNotice(), unsavedEdits: { reason: TOO_LARGE } })} />);
     fireEvent.click(screen.getByRole('button', { name: 'Continue without them' }));
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Continue without them' }));
     view.rerender(<Home {...props({ copyNotice: copyNotice() })} />);
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Restore' })));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Dismiss' })));
   });
 
   it('the last one, before it a notice with no [Restore]: onto its ×', async () => {

@@ -330,18 +330,20 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     expect(unsaved()).toBeNull();
   });
 
-  it('404: deleted in another window, no promise, nothing sent again', async () => {
+  it('404: deleted, no promise, nothing sent again', async () => {
     const h = harness({ first: () => json({ detail: "That node isn't on the canvas anymore." }, 404) });
     typeIn('s1', 'gone');
     await sleep(20);
     h.release();
     await sleep(150);
-    expect(said).toEqual(["Couldn’t save your changes to “Opening”. It was deleted in another window."]);
+    // PR #198 fix round 12 (GM r20 answer 3): who deleted it isn't known
+    // here (no deletedBy), so the line says nothing of who.
+    expect(said).toEqual(["“Opening” was deleted, so your changes to it can’t be saved."]);
     expect(brief()[0]).toBe('s1:gone');
     expect(h.puts).toHaveLength(1);
   });
 
-  it('the workspace moved: who switched, and to what', async () => {
+  it('the workspace moved: no line of the scene’s own, the edits held for the switch (GM r20 answer 3)', async () => {
     const moved = (switchedBy: unknown) => () => json({ detail: 'This canvas is out of date. Open the current project before editing or running it.',
       code: 'workspace_moved', project: { id: 'B', name: 'Moodboards' }, switchedBy }, 409);
     let h = harness({ first: moved({ kind: 'agent', name: 'Codex' }) });
@@ -349,8 +351,11 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     await sleep(20);
     h.release();
     await sleep(120);
-    expect(said).toEqual(["Couldn’t save your changes to “Opening”. Codex switched to “Moodboards” first."]);
+    // PR #198 fix round 12 (GM r20 answer 3): the switch's own handling
+    // says it once (projectStore); the scene says nothing and sends nothing more.
+    expect(said).toEqual([]);
     expect(h.puts).toHaveLength(1);
+    expect(store.hasUnsavedSceneEdits()).toBe(true);
     said = [];
     useGraphStore.setState({ notify: (text: string) => { said.push(text); } } as never);
     h = harness({ first: moved(null) });
@@ -358,7 +363,7 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     await sleep(20);
     h.release();
     await sleep(120);
-    expect(said).toEqual(["Couldn’t save your changes to “Opening”. Nebula switched to “Moodboards” first."]);
+    expect(said).toEqual([]);
   });
 
   it('400: our bug; kept on screen, the detail goes to the Agent log', async () => {

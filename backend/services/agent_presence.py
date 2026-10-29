@@ -212,7 +212,7 @@ def parse_target(raw: Any, graph_nodes: Mapping[str, Any], label: str = "target"
         if not isinstance(node_id, str) or not _NODE_ID_RE.fullmatch(node_id):
             raise PresenceError(f"{label}.nodeId is invalid")
         if node_id not in graph_nodes:
-            raise PresenceError(f"{label}.nodeId '{node_id}' is not on the canvas")
+            raise PresenceError(f"{label}.nodeId {node_id} is not on the canvas")
         target: dict[str, Any] = {"nodeId": node_id}
         handle = raw.get("handle")
         if handle is not None:

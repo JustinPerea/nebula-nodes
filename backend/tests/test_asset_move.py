@@ -183,7 +183,7 @@ def test_refusals(env, kind):
 
     unknown_target = _move(env, kind, asset["id"], "nebula_nodes")
     assert unknown_target.status_code == 422
-    assert unknown_target.json()["detail"].startswith("No project has the id 'nebula_nodes'. Use the id of a project")
+    assert unknown_target.json()["detail"].startswith("No project has the id nebula_nodes. Use the id of a project")
     trashed_target = _move(env, kind, asset["id"], gone)
     assert trashed_target.status_code == 422
     assert trashed_target.json()["detail"].startswith("The project “Gone” is in Recently deleted. Restore it first")

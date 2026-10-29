@@ -64,14 +64,15 @@ describe('GM r12 item 1: the stopped save\'s popover on the "Unsaved" mark', () 
   });
 });
 
+const CODEX = { kind: 'agent', name: 'Codex' } as const;
 describe('GM r12 items 2 and 3: the button and the plurals', () => {
   it('"Use Codex’s" with a curly apostrophe; every clash line one sentence', () => {
     expect(theirsLabel('Codex')).toBe('Use Codex’s');
-    expect(sceneClashLine('Shot 2', 'Codex')).toBe('Codex changed “Shot 2” while you were editing it.');
+    expect(sceneClashLine('Shot 2', CODEX)).toBe('Codex changed “Shot 2” while you were editing it.');
   });
 
   it('GM\'s three lines, verbatim', () => {
-    expect(shotsRemovedLine(['Shot 2', 'Shot 3'], 'Codex')).toBe('Codex removed “Shot 2” and “Shot 3” while you were editing them.');
+    expect(shotsRemovedLine(['Shot 2', 'Shot 3'], CODEX)).toBe('Codex removed “Shot 2” and “Shot 3” while you were editing them.');
     expect(shotBackWithoutLine(['Shot 2'], ['Edit A', 'Edit B'])).toBe('“Shot 2” is back without its connections to “Edit A” and “Edit B”.');
     expect(shotBackWithoutLine(['Shot 2', 'Shot 3'], ['Edit A'])).toBe('“Shot 2” and “Shot 3” are back without their connections to “Edit A”.');
     expect(shotBackWithoutLine(['Shot 2'], ['Edit A'])).toBe('“Shot 2” is back without its connection to “Edit A”.');
@@ -81,7 +82,7 @@ describe('GM r12 items 2 and 3: the button and the plurals', () => {
     expect(quotedNames(['A'], 'shots')).toBe('“A”');
     expect(quotedNames(['A', 'B', 'C'], 'shots')).toBe('“A”, “B” and “C”');
     expect(quotedNames(['A', 'B', 'C', 'D'], 'shots')).toBe('4 shots');
-    expect(shotsRemovedLine(['Shot 1', 'Shot 2', 'Shot 3', 'Shot 4'], 'Codex')).toBe('Codex removed 4 shots while you were editing them.');
+    expect(shotsRemovedLine(['Shot 1', 'Shot 2', 'Shot 3', 'Shot 4'], CODEX)).toBe('Codex removed 4 shots while you were editing them.');
   });
 });
 

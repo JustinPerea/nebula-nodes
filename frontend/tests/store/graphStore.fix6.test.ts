@@ -190,7 +190,9 @@ describe('GM r9 decision 2: a clash with another window waits for the person', (
     await sleep(60);
     expect(unsaved()).toBe("Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again.");
     h.answerLater(() => json({ ok: true }));
-    syncs(backendGraph({ id: 's1', prompt: 'from another window' }));
+    // The person's other tab (review 11, L-1: "another window" only then).
+    syncs({ ...backendGraph({ id: 's1', prompt: 'from another window' }),
+      edit: { id: 'ed_window', actor: { kind: 'person', name: 'You' }, tab: 'tab-other' } });
     await sleep(60);
     expect(brief()).toEqual(['s1:mine', 's2:b']);
     expect(useGraphStore.getState().sceneClashes.n1?.line).toBe(LINE);
@@ -214,6 +216,8 @@ describe('GM r9 decision 2: a clash with another window waits for the person', (
     await sleep(20);
     h.release();
     await sleep(120);
-    expect(said).toEqual(["Couldn’t save your changes to “Opening”. The canvas switched to another project first."]);
+    // PR #198 fix round 12 (GM r20 answer 3): no line of the scene's own;
+    // the switch's handling says it.
+    expect(said).toEqual([]);
   });
 });

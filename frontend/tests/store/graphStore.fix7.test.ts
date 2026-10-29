@@ -362,6 +362,8 @@ describe('L2-L5', () => {
       switchedBy: { kind: 'person', name: 'You' } }, 409)]);
     typeIn('s1', 'typed');
     await sleep(80);
-    expect(said).toEqual(["Couldn’t save your changes to “Opening”. You switched to “B” in another window first."]);
+    // PR #198 fix round 12 (GM r20 answer 3): the switch's own handling says
+    // it (projectStore's outdated-workspace banner); the scene says nothing.
+    expect(said).toEqual([]);
   });
 });

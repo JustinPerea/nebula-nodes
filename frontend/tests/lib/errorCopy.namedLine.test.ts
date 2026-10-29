@@ -93,8 +93,6 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
   // Round 5's whole-save refusals (GM r7 item 1, lib/sceneSaveCopy.ts): GM's
   // heading over one of GM's own fixed suffixes, never a backend line (the
   // backend's lines go through headedLine in sceneRefusal).
-  { file: 'store/graphStore.ts', text: '`${heading} ${DELETED_ELSEWHERE}`', why: "GM's heading over GM's fixed suffix" },
-  { file: 'store/graphStore.ts', text: '`${heading} ${project ? switchedFirst(project, agent, byPerson) : SWITCHED_UNNAMED}`', why: "GM's heading over GM's fixed suffix" },
   { file: 'store/graphStore.ts', text: '`${heading} ${KEPT_UNTIL_RUN_ENDS}`', why: "GM's heading over GM's fixed suffix" },
   { file: 'store/graphStore.ts', text: '`${heading} ${KEPT_AND_RETRYING}`', why: "GM's heading over GM's fixed suffix" },
   { file: 'store/graphStore.ts', text: '`${heading} ${BAD_SAVE}`', why: "GM's heading over GM's fixed suffix" },

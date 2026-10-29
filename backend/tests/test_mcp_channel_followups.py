@@ -148,9 +148,9 @@ async def test_the_cinema_shot_merge_sync_carries_the_run_id(monkeypatch) -> Non
 # -- L4: a stopped run's id, reused ----------------------------------------------
 
 
-STOPPED = "run '{id}' was already stopped, so this id can’t start again. Start a new run with a new id."
-RAN = "run '{id}' already ran, so this id can’t start again. Start a new run with a new id."
-STOP_RECORDED = "run '{id}' was stopped, so this id can’t start again. Start a new run with a new id."
+STOPPED = "run {id} was already stopped, so this id can’t start again. Start a new run with a new id."
+RAN = "run {id} already ran, so this id can’t start again. Start a new run with a new id."
+STOP_RECORDED = "run {id} was stopped, so this id can’t start again. Start a new run with a new id."
 
 
 def _text() -> GraphNode:
@@ -224,4 +224,4 @@ async def test_a_stop_that_beat_its_start_still_says_cancelled_before_it_started
     await main_module.cancel_execution("early-run")
     refused = await _start_again("early-run")
     assert refused.status_code == 409
-    assert refused.detail == "run 'early-run' was cancelled before it started"
+    assert refused.detail == "run early-run was cancelled before it started"

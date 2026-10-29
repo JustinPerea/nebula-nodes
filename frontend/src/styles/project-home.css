@@ -185,9 +185,9 @@ body.app-slava-restraint .project-home__notice-close svg { width: 14px; height: 
 body.app-slava-restraint .project-home__notice-restore:focus-visible,
 body.app-slava-restraint .project-home__notice-close:focus-visible { outline: var(--sr-focus-outline); outline-offset: 2px; }
 /* Focus lands in the stack, or on "Recent projects" once it is empty
-   (ProjectHome useNoticeStackFocus). A target with no control of its own
-   (the saved line, an error with no Try again, the heading) takes focus
-   itself (tabindex -1). Like every target it rings from :focus-visible only,
+   (ProjectHome useNoticeStackFocus): the next notice's ×, never one of its
+   actions (GM pr200 r16 #2). A notice with no × (the held edits, the saved
+   line, the error, then the heading) takes focus itself (tabindex -1). Like every target it rings from :focus-visible only,
    so a notice closed from the keyboard rings what takes focus next and one
    closed with a click rings nothing (GM r17). */
 body.app-slava-restraint .project-home__notice:focus-visible,

@@ -614,3 +614,82 @@ Live, GM r17 rings: 12 of 12 checks, same isolation. For each target that takes 
 - a real mouse click on ×: focus moved to it with no ring.
 
 Four of this round's ring shots are byte-identical to round 10 shots of the same states (keyboard close onto the error box, ringed both rounds; the heading with no ring, from the keyboard in round 10 and from a click now). They come from separate runs on different code, with the state checked each time, so they are identical renders, not reused frames.
+
+## Fix round 12 (PR #198 review 11, GM's pr198 r19 and r20)
+
+- **M-1 (GM r19 answer 2, r20 answer 1): a clash answered while the save was stopped.** `resolveSceneClash` now notes whether the save was stopped, and who stopped it (`clashAnswerStop`), before it clears the stop. The answer sends the save once.
+  - It lands: the stopped state is gone for good, and a later failure says its own line and retries as any save does.
+  - It fails, whatever refused it (a server error, a run lock, 400, 413): `backToStopped` puts the card back as it was. Same line (the named writer kept), the mark's popover with [Try again], no toast and no timed retries. Its comment says GM r19 overrides GM r10 for a stopped save.
+  - Refused as changed: merged as usual. If the 20-in-a-row guard stops it again, it stops quietly too (`stopSceneSave` reads the flag).
+  - The quiet try comes back: the next change another writer brings starts a quiet stretch, as in any stopped state (GM r20 answer 1).
+  - [Use Codex’s] that leaves the card as Nebula has it sends nothing and settles as saved, so it never goes back to stopped.
+  - The flag clears on a save that lands, on the person's next change and on [Try again].
+- **L-1 (GM r19 answer 3, r20 answer 2): "another window" only for the person's own tab.**
+  - `lib/sceneSaveCopy.ts` has one writer type for every line: `SceneWriter` is agent (a name or none), window or unknown. `sceneWriterOf` maps a backend `changedBy` or `deletedBy`: `person` is window, `agent` is agent, and anything else (anonymous, system, null) is unknown.
+  - The clash, reorder, removed and stop lines each have GM's neutral form for unknown. The 404 line is new (below), and `DELETED_ELSEWHERE` is gone.
+  - The refusal's `by` is the only writer the 409 carries (the separate `agent` field is gone). Item 7: the clash's author comes from it.
+  - `sceneSyncOrigin` carries the writer from `foreignSource`: agent, window (`origin.tab`, sent only with this launch's person token) or unknown.
+  - A clash with two different authors is unknown, unless both are the same writer.
+  - `rebaseAfterEchoWait` merges as unknown, since nobody named that change.
+  - The clash prompt's button reads from the writer: [Use Codex’s] for a named agent, [Use theirs] for anyone else.
+  - Backend: `_restore_graph` calls `note_write` with the restoring actor for each scene whose authoring it changed (`_note_restored_scenes`), so a refusal after an undo names the restorer.
+  - `switchedFirst` and the canvas undo copy are left as they were (items 9 and 10).
+- **L-2 (GM r16, r20 answer 3): what the quiet try says when it is refused.**
+  - 400 and 413 now follow GM r16, like a server error: back to stopped, same line, no toast. Before, only `server` and `run-lock` did.
+  - 404: the save can never land, so it speaks once and stops for good.
+    - The backend answers a node write to a missing node with `code: "node_gone"` and `deletedBy`. `scene_keys.note_delete` records who deleted a scene (the delete endpoint, an agent's `edit_canvas`, a restore that removes it) under the same scope as reads and writers.
+    - The line is "Codex deleted “Opening”, so your changes to it can’t be saved.", "“Opening” was deleted in another window, …" or "“Opening” was deleted, …".
+    - A delete's sync usually lands first and takes the card off, aborting any PUT in flight. So `noteSceneRemovals` says the same line from the sync's writer when a scene card with unsaved edits leaves by another writer's sync. It is said once per scene per canvas, whichever comes first. It is said after the sync's own update, in the plain line beside the sync's toast ("Codex changed the canvas" with [Undo]). Said before it, the toast took the slot and the line was lost; the first live run caught that.
+    - The edits are kept aside (`deletedSceneEdits`, with the base they started from). When a sync shows the node back on the same canvas, with no undo of this tab still holding it, they are merged onto the restored scene (`mergeScenes`, the person's value kept where both changed) and saved, with no new line. Tested for an agent's undo (the Agent log's path, a sync that brings the node back). The canvas's own Undo of a foreign delete was not checked this round: its restore is held until it lands, and only a sync after that would merge the edits.
+  - Workspace moved: a new refusal kind, `moved`, that says nothing, sends nothing more (flush skips it, as it skips `replaced`), and still counts as unsaved. The switch's own handling says it once: an agent's switch hands the edits over, and anything else stops on the outdated-workspace banner. It does not read the graph again (unlike `replaced`), since that would read another project's canvas.
+  - A server failure stays quiet, as before.
+- **L-3: Escape on the "Unsaved" mark.** `keepActivationKeys` keeps Escape too, so React Flow's node never sees it. With the popover open, Escape on the mark closes it and focus stays on the mark. Escape inside the popover already closed it and gave focus back to the mark.
+- **L-4: two quick restarts.** The backend sends `bootStartedAt` (`BACKEND_BOOT_STARTED_AT`, microseconds since the epoch) with the health answer and the socket's hello. `noteBackendBootId(id, startedAt)` orders processes by it.
+  - An id that started before the current one is retired on arrival and never becomes current. That covers the late health answer from the middle process (probe B1).
+  - An id with no start, from a backend before this round, counts as older than one that has a start.
+  - With no start known for the current process at all, the newest id wins, as before.
+  - A hello from a retired process is dropped before `socketBoot` takes it.
+  - H-1/P1 holds: its test is unchanged and passes.
+- **GM r19 answer 1: ids take no quotes.** Every backend refusal detail, store error and CLI line that put an id in straight quotes now prints it bare: `run run_ab12 already ran…`, `Node n4 not found`, `Moodboard mb_x not found`, `Edge e1 references missing … node n3`, `sora-2 was retired … Use veo-3 instead (or grok-imagine-video or runway-video)`, and the provider-start holds.
+  - `scripts/count_agent_turns.py` reads both forms, since old transcripts quote them.
+  - Left alone:
+    - repr of a bad value (`invalid id: 'x y'`), which shows what was sent;
+    - the engine's two run-error lines (`Required input port 'prompt' is not connected`, `No handler registered for 'x'`; in the scan test's allow list);
+    - call syntax shown as code (`get_run('run_x')`);
+    - refs that may be names (`no Style 'X'`, `no board 'X'`, `unknown node definition 'moodboard'`).
+
+    The last group is GM's call on names (“…”): see the questions in the report.
+- **GM pr200 r16 #2 (from the coordinator, added to this round): where focus goes after ×.** GM reversed the r15 rule for safety: in #200, × moved focus onto the next notice's Run and a second Enter ran it. `useNoticeStackFocus` now moves focus to the next notice's × (`button.project-home__notice-close`), else the one before's. It never lands on a primary or destructive action (Restore, Download your edits, Continue without them, Try again).
+  - A notice with no × takes focus itself, by its `tabindex -1`. The held edits' notice (`UnsavedEditsNotice`) gets `tabIndex={-1}`, since it had none and would otherwise have fallen through to the heading. The saved line and the error box had one already.
+  - An empty stack still goes to the "Recent projects" heading. The r17 ring rule is unchanged: a plain `focus()`, ringed from `:focus-visible` only. The held notice rings from `.project-home__error:focus-visible`, the rule it already shared.
+  - The doc comment and the project-home.css comment now cite GM pr200 r16 #2.
+- **Docs.** MCP-SETUP (the `changedBy` kinds, a restore counts as a write, the neutral person lines, `node_gone` and `deletedBy` in the codes table, the deleted line and its resume, the workspace hand-off, `bootStartedAt`, bare ids), SKILL.md and `mcp_server.py`'s docstring (`node_gone`, bare ids), and `CodedRefusal`'s list of codes.
+- **Tests.**
+  - `graphStore.fix12` (24): M-1 (Keep mine fails, back to stopped; the quiet try comes back; a named stop keeps its line; Keep mine lands; Use Codex’s with nothing to send), L-1 (an unknown sync's clash and removed lines, the other tab, two authors, the neutral stop for anonymous, system and null), L-2 (400 and 413 quiet; a server failure quiet; 404 said once by name, then the restore resumes the save; the delete's sync first for Codex, the other tab and an unknown writer, each resuming after the restore; nothing unsaved says nothing; workspace moved says nothing) and L-4 (probe B1 with start times, a start-less middle answer, a real restart still taking over). On dee9cd75, 19 fail. The 5 that pass are guards: Keep mine lands, the other tab's line, a quiet server failure, a delete with nothing unsaved, a real restart.
+  - `pr198Fix12Ui` (6): L-3's three Escape cases (all fail on dee9cd75), and review 11 N-5: the keyboard-versus-click ring, pinned with a simulated input-modality heuristic (a key press makes the next focus keyboard focus, a pointer press makes it not) over project-home.css with `:focus-visible` read as that attribute. That covers the heading and the error box. They pass on dee9cd75 too: they pin round 11's behaviour, which N-5 asked for.
+  - `pr198Fix12Ui`, GM pr200 r16 #2 (5): two Enters on × never act. Enter is modelled as the browser activates a button (keydown, then a click unless it was prevented), against a real stack whose × closes the copy's notice. With the error next, the held edits next, the saved line next and an empty stack, the first Enter closes it and the second does nothing. Every handler (Restore, Try again, Download, Continue, create, open, rename, delete) stays uncalled. After the held edits go by their confirm, focus lands on the copy's ×, never [Restore]; Enter there closes it, and the next Enter does nothing. Against the old rule, 3 of the 5 fail; the saved line and the empty stack are guards.
+  - `projectStore.switch`: a scene save refused as another window switched project shows only the banner (no toast, no line, no mark). It fails on dee9cd75.
+  - `test_pr198_fix12.py` (9): `node_gone` with `deletedBy` for Codex's delete, the person's other window, an agent's `edit_canvas` removal, and a delete never seen (null, bare id); a restore names the restorer; a restore that leaves the scene as it was records no writer; health's `bootStartedAt`; bare ids; a scan of backend f-strings for a quoted id. On dee9cd75, 8 fail; the no-writer restore is a guard. The hello's `bootStartedAt` is checked in `test_graph_recovery_bootstrap_retry`.
+  - Tests changed because they pinned behaviour GM or the coordinator changed:
+    - the scene copy tests (`pr198Fix6Copy`, `pr198Fix9Ui`; the copy functions take a writer now);
+    - `errorCopy.namedLine`'s two allow-list entries for the 404 and moved lines, which no longer exist;
+    - `graphStore.fix5`'s 404 line and its workspace-moved test, and `graphStore.fix6`'s and `graphStore.fix7`'s moved lines (GM r20 answer 3: no line of the scene's own);
+    - `graphStore.fix6`'s other-window clash, whose sync now carries the other tab's origin (L-1);
+    - `graphStore.cinemaPersistence`'s external update, whose sync names no writer and now gets the neutral line (L-1);
+    - `pr198Fix10Ui`'s focus tests (GM pr200 r16 #2 replaced "first control"): closing the copy's notice with the error next now lands on the error box, not [Try again]; the last notice closing lands on the copy's ×, not [Restore]. A new case: the held edits next land on the notice itself, not [Download your edits]. All three fail against the old rule;
+    - the health pin in `test_params_version_gate` (`bootStartedAt`);
+    - the backend tests that pinned quoted ids (GM r19 answer 1): error_copy_round3, 3b and 3e, node_delete_person_copy, character_node, asset_move, node_lookup_by_name, cli_apply, moodboard_adapters, moodboard_reader_routes, retired_nodes, provider_start_admission, project_context, moodboard_cli, pr198_fix1 and mcp_channel_followups.
+- **Gates.**
+  - tsc -b and `npm run lint` are clean.
+  - Full vitest: 590 files, 7,710 tests passed.
+  - Full backend: 12,046 passed and 71 skipped, with 1 failure. `test_journal_write_project::test_a_reopened_proposals_expiry_never_carries_the_undos_edit_link` is a timing test (0.4 s expiries against a 1.5 s slow write), and it ran while vitest, a build and a live run shared the machine. It passes alone (5 of 5) and with its file (35 passed).
+  - vite build plus `check-build-budget.mjs`: 424,760 bytes raw (budget 512,000), 128,465 gzip; `dist` deleted.
+- **Live** (isolated backend 8797 and Vite 5797; 8000–8010 and 5173 blocked, 0 attempts after the canary; the cinema handler a free fake).
+  - M-1, 5 of 5: stopped, then Codex changes the same shot and the clash asks. Keep mine with saves still failing sends once and goes back to stopped with the same line and no toast, and the popover has [Try again]. Codex's next change brings one quiet try about 2 s later. Once saving works, the quiet try saves both.
+  - Unknown writer, 3 of 3: a script's change clashes with the neutral line and [Use theirs]. A script that keeps writing stops the save with the neutral stop line (mark, toast and popover).
+  - Deleted, 3 of 3: Codex deletes the scene with an edit unsaved, and the line is said once, by name, beside Codex's [Undo] toast. Nothing more is sent. Codex's undo brings it back, and the edit is saved onto it with no new line.
+  - Escape, 2 of 2.
+  - Stack, 3 of 3. With the error next, the held edits next and an empty stack, × then a second Enter leaves focus on the error box, the held notice and the heading, and nothing acts (Restore, Try again, Download, Continue, create, open and delete were counted, not run). Keyboard focus rings each time.
+  - The combined run of all five sections reached the stack section and then lost its page to a reload behind a `beforeunload` dialog (unsaved state left by the earlier sections), a harness fault. The stack ran alone, 6 of 6 with the canary and page-error checks. The unknown section was rerun so that its stop shot shows the stopped state while the script still writes (6 of 6).
+  - Shots: `fix12-*` at 1280 and 1440. The stack's error-box and heading shots match round 10 and 11's pixel for pixel; they are fresh files of the same state. `deleted-by-codex-line-1440` was taken after the toasts timed out, so the 1280 one shows the line beside the toast. The bar says "Unsaved changes" in the canvas shots because of the harness's project save, as in round 11.
+

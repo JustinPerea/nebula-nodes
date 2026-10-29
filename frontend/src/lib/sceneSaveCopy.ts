@@ -39,10 +39,28 @@ export function sceneStoppedLine(scene: string): string {
   return `${sceneSaveHeading(scene)} ${KEPT_UNTIL_NEXT_CHANGE}`;
 }
 
-/** Who kept changing a scene while its save was refused (review 9, M-2): an
- * agent by name, an agent with none, or another window (the person's own
- * other tab; also a change with no named writer, as the clash lines say). */
-export type SceneOutpacedBy = { kind: 'agent'; name: string | null } | { kind: 'window' };
+/** Who changed a scene the person was editing (review 11, L-1; GM r19 answer
+ * 3): an agent by name or with none; another window, only when Nebula knows
+ * the writer was one of the person's own tabs (this launch's person token);
+ * else unknown (a script with no marker, Nebula itself, no writer recorded),
+ * and the line says nothing about who. */
+export type SceneWriter = { kind: 'agent'; name: string | null } | { kind: 'window' } | { kind: 'unknown' };
+/** The same, for the stop line (GM r18 answer 2). */
+export type SceneOutpacedBy = SceneWriter;
+export const UNKNOWN_WRITER: SceneWriter = { kind: 'unknown' };
+
+/** The writer a backend `changedBy` (or `deletedBy`) names: "person" is the
+ * person's own tab (another window), an agent by its name; anything else,
+ * or none, is unknown (GM r19 answer 3). */
+export function sceneWriterOf(by: { kind?: unknown; name?: unknown } | null | undefined): SceneWriter {
+  if (by?.kind === 'agent') return { kind: 'agent', name: typeof by.name === 'string' && by.name.trim() ? by.name : null };
+  if (by?.kind === 'person') return { kind: 'window' };
+  return UNKNOWN_WRITER;
+}
+/** Whether two changes have the same writer (a clash keeps one author). */
+export function sameSceneWriter(a: SceneWriter, b: SceneWriter): boolean {
+  return a.kind === b.kind && (a.kind !== 'agent' || a.name === (b as { name: string | null }).name);
+}
 
 /** GM r18 answer 2: the save stopped because another writer kept changing
  * the scene, not because saving failed. The line names the writer and says
@@ -52,13 +70,24 @@ export type SceneOutpacedBy = { kind: 'agent'; name: string | null } | { kind: '
 export function sceneOutpacedLine(scene: string, by: SceneOutpacedBy): string {
   const notYet = 'so your changes aren’t saved yet.';
   if (by.kind === 'window') return `“${scene}” kept changing in another window, ${notYet} Nebula will try again when it stops.`;
+  // GM r19 answer 3: an unknown writer, and nothing said about who.
+  if (by.kind === 'unknown') return `“${scene}” kept changing, ${notYet} Nebula will try again when it stops.`;
   if (by.name) return `${by.name} kept changing “${scene}”, ${notYet} Nebula will try again when ${by.name} stops.`;
   return `An agent kept changing “${scene}”, ${notYet} Nebula will try again when it stops.`;
 }
 export const TRY_AGAIN = 'Try again';
 
-/** 404, the node was deleted elsewhere (GM r7, verbatim): no promise. */
-export const DELETED_ELSEWHERE = 'It was deleted in another window.';
+/** GM r20 answer 3: the scene was deleted, so the save can never succeed:
+ * said once, and nothing retries. The writer is named when known, "another
+ * window" only for the person's own tab, else nothing about who: "“Opening”
+ * was deleted, so your changes to it can’t be saved." If the delete is
+ * undone (the Agent log), the line stays and the save picks back up. */
+export function sceneDeletedLine(scene: string, by: SceneWriter): string {
+  const tail = 'so your changes to it can’t be saved.';
+  if (by.kind === 'agent') return `${by.name ?? 'An agent'} deleted “${scene}”, ${tail}`;
+  if (by.kind === 'window') return `“${scene}” was deleted in another window, ${tail}`;
+  return `“${scene}” was deleted, ${tail}`;
+}
 
 /** The workspace moved (GM r7): "Codex switched to “Y” first."; the person
  * in another window (GM r9 answer 4): "You switched to “Y” in another window
@@ -88,10 +117,11 @@ export const UNSAVED_MARK = 'Unsaved';
  * (graphStore rebaseScene). `scene` is what changed: the scene, or (GM r13
  * answer 1) a shot the other side put back with other text, by its current
  * name ("Codex changed “Shot 2” while you were editing it."). */
-export function sceneClashLine(scene: string, agent: string | null): string {
-  return agent
-    ? `${agent} changed “${scene}” while you were editing it.`
-    : `“${scene}” was changed in another window while you were editing it.`;
+export function sceneClashLine(scene: string, by: SceneWriter): string {
+  if (by.kind === 'agent') return `${by.name ?? 'An agent'} changed “${scene}” while you were editing it.`;
+  if (by.kind === 'window') return `“${scene}” was changed in another window while you were editing it.`;
+  // GM r19 answer 3, r20 answer 2: an unknown writer, passive, no actor.
+  return `“${scene}” changed while you were editing it.`;
 }
 
 /** GM r10 answer 3: each kind of clash its own line, verbatim. Both sides
@@ -99,19 +129,21 @@ export function sceneClashLine(scene: string, agent: string | null): string {
  * were editing them." The other side removed a shot the person changed:
  * "Codex removed “Shot 2” while you were editing it."; several (GM r12 answer
  * 3, active voice, the shared name list): "Codex removed “Shot 2” and “Shot
- * 3” while you were editing them." With no agent, "…in another window…" in
- * the same shapes. */
-export function sceneReorderedLine(scene: string, agent: string | null): string {
-  return agent
-    ? `${agent} reordered the shots in “${scene}” while you were editing them.`
-    : `The shots in “${scene}” were reordered in another window while you were editing them.`;
+ * 3” while you were editing them." The person's other window: "…in another
+ * window…" in the same shapes. An unknown writer (GM r20 answer 2): passive,
+ * no actor: "The shots in “Opening” were reordered while you were editing
+ * them.", "“Shot 2” was removed while you were editing it." */
+export function sceneReorderedLine(scene: string, by: SceneWriter): string {
+  if (by.kind === 'agent') return `${by.name ?? 'An agent'} reordered the shots in “${scene}” while you were editing them.`;
+  const where = by.kind === 'window' ? ' in another window' : '';
+  return `The shots in “${scene}” were reordered${where} while you were editing them.`;
 }
-export function shotsRemovedLine(shots: readonly string[], agent: string | null): string {
+export function shotsRemovedLine(shots: readonly string[], by: SceneWriter): string {
   const names = quotedNames(shots, 'shots');
   const them = shots.length === 1 ? 'it' : 'them';
-  return agent
-    ? `${agent} removed ${names} while you were editing ${them}.`
-    : `${names} ${shots.length === 1 ? 'was' : 'were'} removed in another window while you were editing ${them}.`;
+  if (by.kind === 'agent') return `${by.name ?? 'An agent'} removed ${names} while you were editing ${them}.`;
+  const where = by.kind === 'window' ? ' in another window' : '';
+  return `${names} ${shots.length === 1 ? 'was' : 'were'} removed${where} while you were editing ${them}.`;
 }
 
 /** GM r11 answer 4 and r12 answer 3: Keep mine brought removed shots back,

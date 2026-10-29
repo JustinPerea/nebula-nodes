@@ -125,7 +125,7 @@ async def test_stop_arriving_before_execute_admission_blocks_paid_start() -> Non
     # the refusal says only what is known (it may be a run from before a
     # restart), not "cancelled before it started".
     assert exc_info.value.detail == (
-        f"run '{run_id}' was stopped, so this id can’t start again. Start a new run with a new id.")
+        f"run {run_id} was stopped, so this id can’t start again. Start a new run with a new id.")
     assert main_module.provider_start_guard.has_active() is False
     # The exact tombstone is compacted immediately, but the durable Bloom
     # filter permanently denies the delayed run ID.

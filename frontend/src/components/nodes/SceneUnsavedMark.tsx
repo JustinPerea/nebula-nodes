@@ -40,9 +40,9 @@ function cancelReleaseOffMark(mark: HTMLElement) {
   window.addEventListener('pointercancel', onCancel, { capture: true, once: true });
 }
 /** Enter and Space press the mark's buttons; React Flow's node selects on
- * them too, so they stay here as well. */
+ * them too, and on Escape (review 11, L-3), so they stay here as well. */
 const keepActivationKeys = (event: ReactKeyboardEvent) => {
-  if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
+  if (event.key === 'Enter' || event.key === ' ' || event.key === 'Escape') event.stopPropagation();
 };
 export function SceneUnsavedMark({ nodeId, line, stopped }: { nodeId: string; line: string; stopped: boolean }) {
   const [open, setOpen] = useState(false);
@@ -54,7 +54,13 @@ export function SceneUnsavedMark({ nodeId, line, stopped }: { nodeId: string; li
     <>
       <button ref={markRef} type="button" title={line} aria-haspopup="dialog" aria-expanded={open}
         className="cinema-scene-node__unsaved cinema-scene-node__unsaved--button nodrag nopan"
-        {...OWN_PRESSES} onKeyDown={keepActivationKeys}
+        {...OWN_PRESSES}
+        onKeyDown={(event) => {
+          keepActivationKeys(event);
+          // Review 11, L-3: Escape on the mark closes its popover, focus
+          // staying on the mark, and never selects the card.
+          if (event.key === 'Escape' && open) { event.preventDefault(); setOpen(false); }
+        }}
         onPointerDown={(event) => { event.stopPropagation(); cancelReleaseOffMark(event.currentTarget); }}
         onClick={(event) => { event.stopPropagation(); setOpen((was) => !was); }}>
         {UNSAVED_MARK}

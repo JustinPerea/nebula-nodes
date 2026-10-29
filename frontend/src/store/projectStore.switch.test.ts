@@ -165,6 +165,42 @@ describe('following an agent’s project switch', () => {
     expect(useProjectStore.getState().error).toContain('another window');
   });
 
+  it('PR #198 fix round 12 (GM r20 answer 3): a scene save refused because another window switched project: only the outdated-workspace banner says it', async () => {
+    const notify = vi.fn();
+    useGraphStore.setState({ notify, undoNotice: null, messageNotice: null, unsavedScenes: {}, nodes: [{
+      id: 'n1', type: 'cinemaSceneNode', position: { x: 0, y: 0 },
+      data: { definitionId: 'cinema-scene', label: 'Opening', outputs: {},
+        params: { scene: { version: 1, base: { model: 'seedream-4-5' }, aspectRatio: '16:9', shots: [{ id: 's1', prompt: 'a' }] } } },
+    }] as never });
+    const realFetch = globalThis.fetch;
+    const puts: string[] = [];
+    globalThis.fetch = vi.fn(async (url: unknown, init?: RequestInit) => {
+      if (init?.method === 'PUT' && String(url).includes('/api/graph/node/n1')) {
+        puts.push(String(url));
+        return new Response(JSON.stringify({ detail: 'This canvas is out of date. Open the current project before editing or running it.',
+          code: 'workspace_moved', project: { id: 'p2', name: 'Agent sketches' }, switchedBy: { kind: 'person', name: 'You' } }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }) as never;
+    try {
+      useGraphStore.getState().updateScene('n1', (scene: { shots: { id: string; prompt: string }[] }) => ({ ...scene,
+        shots: scene.shots.map((shot) => ({ ...shot, prompt: 'typed' })) }) as never);
+      await vi.waitFor(() => expect(puts).toHaveLength(1));
+      await new Promise((done) => setTimeout(done, 50));
+      socket()({ type: 'graphSync', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION } as never);
+      expect(useProjectStore.getState().error).toContain('another window');
+      // The scene adds nothing of its own: no toast, no line beside one, no mark.
+      expect(notify).not.toHaveBeenCalled();
+      expect(useGraphStore.getState().undoNotice).toBeNull();
+      expect(useGraphStore.getState().messageNotice).toBeNull();
+      expect(useGraphStore.getState().unsavedScenes).toEqual({});
+      expect(puts).toHaveLength(1);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
   it('doesn’t follow a switch away from some other project or revision', () => {
     socket()({ type: 'graphSync', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION,
       projectSwitch: { ...agentSwitch, previousRevision: 'r0' } } as never);

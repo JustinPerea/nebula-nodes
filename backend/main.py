@@ -812,6 +812,10 @@ if _bootstrap_checkpoints:
 app = FastAPI(title="Nebula Node Backend", version="0.1.0")
 # This backend process's id, new on every start (the socket's first graphSync).
 BACKEND_BOOT_ID = uuid4().hex
+# When it started, in microseconds since the epoch (PR #198 review 11, L-4):
+# a tab orders processes by it, so a late answer from a process that two
+# quick restarts replaced never takes the newer one's place.
+BACKEND_BOOT_STARTED_AT = _time_module.time_ns() // 1000
 
 
 _DISK_FULL_ERRNOS = {errno.ENOSPC, getattr(errno, "EDQUOT", errno.ENOSPC)}
@@ -913,7 +917,9 @@ class CodedRefusal(HTTPException):
       cleared or replaced (an import) since, so node ids may name new nodes;
       the same ``project`` and ``switchedBy`` (_canvas_replaced_refusal; PR
       #198 review 6, M1: a clear is not a switch);
-    - ``params_outdated`` (the params-version gate's own answer).
+    - ``params_outdated`` (the params-version gate's own answer);
+    - ``node_gone`` (404): the node isn't on the canvas; ``deletedBy`` names
+      who deleted it, or null (_scene_write_gone; fix round 12).
 
     Raised where those helpers are used by other routes too: the fields are
     additive."""
@@ -1815,7 +1821,7 @@ def _validate_restore_graph(graph: Any) -> dict[str, Any]:
                 status_code=400, detail=f"nodes[{index}].id must be a bounded non-empty string"
             )
         if node_id in seen_node_ids:
-            raise HTTPException(status_code=400, detail=f"duplicate node id '{node_id}'")
+            raise HTTPException(status_code=400, detail=f"duplicate node id {node_id}")
         seen_node_ids.add(node_id)
         if not isinstance(node.get("type"), str) or not node["type"]:
             raise HTTPException(status_code=400, detail=f"nodes[{index}].type must be a string")
@@ -1901,7 +1907,7 @@ def _validate_restore_graph(graph: Any) -> dict[str, Any]:
                 status_code=400, detail=f"edges[{index}].id must be a bounded non-empty string"
             )
         if edge_id in seen_edge_ids:
-            raise HTTPException(status_code=400, detail=f"duplicate edge id '{edge_id}'")
+            raise HTTPException(status_code=400, detail=f"duplicate edge id {edge_id}")
         seen_edge_ids.add(edge_id)
         if not isinstance(edge.get("type"), str) or not edge["type"]:
             raise HTTPException(status_code=400, detail=f"edges[{index}].type must be a string")
@@ -2377,7 +2383,7 @@ def _validate_imported_outputs(
         if not handles_are_dynamic and handle not in declared_ports:
             raise ValueError(
                 f"nodes[{node_index}] output handle '{handle}' is not declared by "
-                f"definition '{definition_id}'"
+                f"definition {definition_id}"
             )
         if not isinstance(port, dict):
             raise ValueError(f"nodes[{node_index}].outputs.{handle} must be an object")
@@ -2390,7 +2396,7 @@ def _validate_imported_outputs(
         if not _imported_output_type_is_valid(actual_type, declared_type):
             raise ValueError(
                 f"nodes[{node_index}] output '{handle}' declares type {actual_type}, "
-                f"but definition '{definition_id}' outputs {declared_type or 'a known dynamic type'}"
+                f"but definition {definition_id} outputs {declared_type or 'a known dynamic type'}"
             )
 
 
@@ -3989,7 +3995,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         # holding a create whose answer was lost releases it only when the
         # backend restarted (a new bootId); after a mere reconnect the create
         # may still land, and a later sync shows it.
-        await websocket.send_text(json.dumps({"type": "graphSync", **export, "bootId": BACKEND_BOOT_ID}))
+        await websocket.send_text(json.dumps({"type": "graphSync", **export, "bootId": BACKEND_BOOT_ID,
+                                              "bootStartedAt": BACKEND_BOOT_STARTED_AT}))
         await websocket.send_text(json.dumps(_pins_message()))
         await _settle_proposal_updates()
         await websocket.send_text(json.dumps(_canvas_notes_message()))
@@ -5102,10 +5109,10 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
     if found.definition_id is None:
         if len(found.named) > 1:
             line = node_lookup.shared_name_line(definition_id, found.named, node_registry.get_all())
-            raise HTTPException(status_code=404, detail=f"No node type '{definition_id}': {line}: "
+            raise HTTPException(status_code=404, detail=f"No node type {definition_id}: {line}: "
                                 f"{', '.join(found.named)}. Use one of those ids.")
         hint = ", ".join(_suggest_node_ids(definition_id, node_registry.get_all()))
-        raise HTTPException(status_code=404, detail=f"No node type '{definition_id}'." + (
+        raise HTTPException(status_code=404, detail=f"No node type {definition_id}." + (
             f" Close matches: {hint}." if hint else " find_nodes lists them."))
     definition_id = found.definition_id
     definition = node_registry.get(definition_id)
@@ -5260,9 +5267,10 @@ async def health() -> dict:
     # for another version (desktop/frontend-build.mjs). Not a secret.
     # bootId: which backend process answers (round 16 of PR #114, M4). A tab
     # notes it from every health probe and socket hello, with or without a
-    # project open, and a new one means the backend restarted. Not a secret.
+    # project open, and a new one means the backend restarted. bootStartedAt
+    # orders processes (PR #198 review 11, L-4). Not secrets.
     return {"status": "ok", "app": "nebula", "version": "0.1.0", "paramsVersion": PARAMS_VERSION,
-            "bootId": BACKEND_BOOT_ID}
+            "bootId": BACKEND_BOOT_ID, "bootStartedAt": BACKEND_BOOT_STARTED_AT}
 
 
 @app.get("/api/capabilities/worldlabs")
@@ -7203,7 +7211,7 @@ def _live_board_for_notes(moodboard_id: str) -> dict[str, Any] | JSONResponse:
     try:
         board = store.get(moodboard_id, laid_out=False)
     except ValueError:
-        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
+        raise refusal_copy.not_found(f"Moodboard {moodboard_id} not found", "board", "boards")
     if board is None:
         return _asset_not_found("moodboard", moodboard_id)
     return board
@@ -9078,7 +9086,7 @@ async def _asset_proposal_target(kind: str, target_id: str, change: dict[str, An
     except ValueError:
         board = None
     if board is None:
-        raise HTTPException(status_code=404, detail=f"No moodboard '{target_id[:40]}' (moodboard_list lists them)")
+        raise HTTPException(status_code=404, detail=f"No moodboard {target_id[:40]} (moodboard_list lists them)")
     if board.get("sendNotes") is True:
         raise HTTPException(status_code=409, detail=(
             f'Send notes to generators is already on for board "{board.get("name")}"; nothing to propose.'))
@@ -9760,10 +9768,10 @@ def _validate_cinema_base_models(nodes: list[GraphNode]) -> None:
 # A start refused because a Stop was recorded for its run id (review 17 L4):
 # worded by what this process knows about the id, never more. The registry
 # and the durable guard know only that a Stop was recorded.
-RUN_ID_STOPPED = "run '{id}' was already stopped, so this id can’t start again. Start a new run with a new id."
-RUN_ID_RAN = "run '{id}' already ran, so this id can’t start again. Start a new run with a new id."
-RUN_ID_STOP_RECORDED = "run '{id}' was stopped, so this id can’t start again. Start a new run with a new id."
-RUN_ID_STOPPED_BEFORE_START = "run '{id}' was cancelled before it started"
+RUN_ID_STOPPED = "run {id} was already stopped, so this id can’t start again. Start a new run with a new id."
+RUN_ID_RAN = "run {id} already ran, so this id can’t start again. Start a new run with a new id."
+RUN_ID_STOP_RECORDED = "run {id} was stopped, so this id can’t start again. Start a new run with a new id."
+RUN_ID_STOPPED_BEFORE_START = "run {id} was cancelled before it started"
 
 
 def _stopped_id_refusal(run_id: str) -> str:
@@ -10352,7 +10360,7 @@ async def execute(request: ExecuteRequest) -> dict:
     run_id = request.run_id or str(uuid4())
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
-        raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
+        raise HTTPException(status_code=409, detail=f"run {run_id} already exists")
     # This process saw the start begin (round 17, review 16 L1): a Stop that
     # finds no record of it may say it never started.
     execution_runs.note_start_begun(run_id)
@@ -10528,7 +10536,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     run_id = request.run_id or str(uuid4())
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
-        raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
+        raise HTTPException(status_code=409, detail=f"run {run_id} already exists")
     # This process saw the start begin (round 17, review 16 L1): a Stop that
     # finds no record of it may say it never started.
     execution_runs.note_start_begun(run_id)
@@ -10544,7 +10552,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     )
 
     if not sub_nodes:
-        raise _node_gone(request.target_node_id, f"Node '{request.target_node_id}' not found in graph")
+        raise _node_gone(request.target_node_id, f"Node {request.target_node_id} not found in graph")
     _note_run_nodes(run_id, sub_nodes)
     requested_nodes, requested_edges = sub_nodes, sub_edges
     # The person running a placeholder directly makes it theirs; an accepted
@@ -10742,7 +10750,7 @@ async def get_execution_status(run_id: str) -> dict:
         # is tombstoned and can't start here, so it reads as cancelled.
         if execution_runs.tombstoned(run_id):
             return _tombstoned_answer(run_id)
-        raise refusal_copy.not_found(f"run '{run_id}' not found", "run", "runs")
+        raise refusal_copy.not_found(f"run {run_id} not found", "run", "runs")
     return {"runId": run_id, "status": record.status}
 
 
@@ -11087,7 +11095,7 @@ async def _promote_shot_variation(
         if node is None:
             raise _node_gone(node_id)
         if node.get("definitionId") != "cinema-scene":
-            raise HTTPException(status_code=400, detail=f"Node '{node_id}' is not a cinema-scene node")
+            raise HTTPException(status_code=400, detail=f"Node {node_id} is not a cinema-scene node")
 
         params = dict(node.get("params") or {})
         scene = params.get("scene")
@@ -11103,20 +11111,20 @@ async def _promote_shot_variation(
             None,
         )
         if target_shot is None:
-            raise refusal_copy.not_found(f"Shot '{shot_id}' not found in scene", "shot", "shots")
+            raise refusal_copy.not_found(f"Shot {shot_id} not found in scene", "shot", "shots")
 
         variations = target_shot.get("variations")
         if not isinstance(variations, list) or index >= len(variations):
             raise HTTPException(
                 status_code=400,
-                detail=f"Variation index {index} is not available for shot '{shot_id}'",
+                detail=f"Variation index {index} is not available for shot {shot_id}",
             )
         variation = variations[index]
         image_url = str(variation.get("url") or "") if isinstance(variation, dict) else ""
         if not image_url:
             raise HTTPException(
                 status_code=400,
-                detail=f"Variation index {index} for shot '{shot_id}' has no image URL",
+                detail=f"Variation index {index} for shot {shot_id} has no image URL",
             )
 
         # Replace the canonical output instead of retaining a hash or error from
@@ -11173,7 +11181,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     run_id = request.run_id or f"cinema-shot-{uuid4().hex}"
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
-        raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
+        raise HTTPException(status_code=409, detail=f"run {run_id} already exists")
     # This process saw the start begin (round 17, review 16 L1): a Stop that
     # finds no record of it may say it never started.
     execution_runs.note_start_begun(run_id)
@@ -11184,9 +11192,9 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
 
     target = next((n for n in nodes if n.id == request.node_id), None)
     if target is None:
-        raise _node_gone(request.node_id, f"Node '{request.node_id}' not found in graph")
+        raise _node_gone(request.node_id, f"Node {request.node_id} not found in graph")
     if target.definition_id != "cinema-scene":
-        raise HTTPException(status_code=400, detail=f"Node '{request.node_id}' is not a cinema-scene node")
+        raise HTTPException(status_code=400, detail=f"Node {request.node_id} is not a cinema-scene node")
 
     scene = (target.params or {}).get("scene")
     if not isinstance(scene, dict):
@@ -11198,7 +11206,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
         None,
     )
     if shot is None:
-        raise refusal_copy.not_found(f"Shot '{request.shot_id}' not found in scene", "shot", "shots")
+        raise refusal_copy.not_found(f"Shot {request.shot_id} not found in scene", "shot", "shots")
 
     # Build a single-shot copy of the scene so the handler regenerates ONLY this
     # shot. The seed is applied per-pass via the shot's `_seedOverride` (which the
@@ -11210,7 +11218,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
 
     sub_nodes, sub_edges = get_subgraph(patched_nodes, request.edges, request.node_id)
     if not sub_nodes:
-        raise _node_gone(request.node_id, f"Node '{request.node_id}' not found in graph")
+        raise _node_gone(request.node_id, f"Node {request.node_id} not found in graph")
     _note_run_nodes(run_id, sub_nodes)
     # A shot is the person's direct run of the scene (Q133, as /api/execute-node):
     # the placeholders feeding it run and turn normal, a paid one only with the
@@ -11518,7 +11526,7 @@ async def get_node(node_id: str) -> dict:
     found = node_lookup.resolve(node_id, all_nodes)
     if found.definition_id is None:
         suggestions = _suggest_node_ids(node_id, all_nodes)
-        head = f"Node '{node_id}' not found"
+        head = f"Node {node_id} not found"
         if len(found.named) > 1:
             head += f": {node_lookup.shared_name_line(node_id, found.named, all_nodes)}"
         if suggestions:
@@ -13073,7 +13081,7 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
     with _paid_graph_mutation("update graph node parameters"):
         node = cli_graph.nodes.get(node_id)
         if not node:
-            raise _node_gone(node_id)
+            raise _scene_write_gone(node_id)
         params_before = copy.deepcopy(node.get("params") or {})
 
         raw_params = body.get("params", {})
@@ -13126,7 +13134,7 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
                 try:
                     candidate.update_params(node_id, params)
                 except ValueError:
-                    raise _node_gone(node_id)
+                    raise _scene_write_gone(node_id)
                 _commit_graph_candidate_with_recoveries(
                     candidate,
                     [candidate.nodes[node_id]],
@@ -13136,7 +13144,7 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
                 try:
                     cli_graph.update_params(node_id, params)
                 except ValueError:
-                    raise _node_gone(node_id)
+                    raise _scene_write_gone(node_id)
     # Journaled before any await, so it names the project the change was made
     # in (round 8 of PR #114); the reply is the node as the change left it.
     changes = param_changes(params_before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
@@ -13452,19 +13460,19 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
         if node_id not in cli_graph.nodes:
             raise _node_gone(node_id)
         if not isinstance(raw_position, dict):
-            raise HTTPException(status_code=400, detail=f"Position for '{node_id}' must be an object")
+            raise HTTPException(status_code=400, detail=f"Position for {node_id} must be an object")
         try:
             x = float(raw_position["x"])
             y = float(raw_position["y"])
         except (KeyError, TypeError, ValueError):
             raise HTTPException(
                 status_code=400,
-                detail=f"Position for '{node_id}' requires numeric x and y",
+                detail=f"Position for {node_id} requires numeric x and y",
             )
         if not math.isfinite(x) or not math.isfinite(y):
             raise HTTPException(
                 status_code=400,
-                detail=f"Position for '{node_id}' requires finite x and y",
+                detail=f"Position for {node_id} requires finite x and y",
             )
         normalized[node_id] = {"x": x, "y": y}
 
@@ -13733,7 +13741,51 @@ def _node_refusal(status: int, specific: str, person: str) -> HTTPException:
 def _node_gone(node_id: str, specific: str | None = None) -> HTTPException:
     """404 for a node that isn't on the canvas: GM's line for the person
     (approved round 3), the id for agents."""
-    return _node_refusal(404, specific or f"Node '{node_id}' not found", NODE_GONE_PERSON)
+    return _node_refusal(404, specific or f"Node {node_id} not found", NODE_GONE_PERSON)
+
+
+def _scene_write_gone(node_id: str) -> CodedRefusal:
+    """PR #198 fix round 12 (GM r20 answer 3): a node write to a node that
+    isn't on the canvas, coded ``node_gone`` with ``deletedBy``: who deleted
+    it when Nebula saw the delete (``{kind, name}``, as ``changedBy``), else
+    null. The person's canvas names them once and stops saving it."""
+    try:
+        deleted_by = scene_keys.deleted_by(_scene_scope(), node_id)
+    except Exception:  # noqa: BLE001 - the refusal itself never fails over its extras
+        deleted_by = None
+    return _coded(_node_gone(node_id), "node_gone", deletedBy=deleted_by)
+
+
+def _note_restored_scenes(node_ids: Iterable[str], keys_before: Mapping[str, str | None]) -> None:
+    """``_restore_graph``'s scenes whose authoring it changed: who wrote
+    them (``scene_keys.note_write``), and that the restoring agent knows
+    them now. Call right after the commit. Never fails."""
+    try:
+        scope = _scene_scope()
+        actor = _canvas_change_actor()
+        reader = _reader_agent()
+        for node_id in node_ids:
+            key = scene_keys.node_scene_key(cli_graph.nodes.get(node_id))
+            if key is not None and key != keys_before.get(node_id):
+                scene_keys.note_write(scope, node_id, actor, key, reader)
+    except Exception:  # noqa: BLE001 - changedBy then names the writer before
+        return
+
+
+def _note_scene_deletes(removed: Sequence[Mapping[str, Any]]) -> None:
+    """Who deleted each Cinema scene in ``removed`` (dicts with ``id`` and
+    ``definitionId``), for a save of it that comes after (_scene_write_gone).
+    Call right after the commit, before any await. Never fails."""
+    try:
+        scenes = [str(gone["id"]) for gone in removed if gone.get("definitionId") == "cinema-scene"]
+        if not scenes:
+            return
+        scope = _scene_scope()
+        actor = _canvas_change_actor()
+        for node_id in scenes:
+            scene_keys.note_delete(scope, node_id, actor)
+    except Exception:  # noqa: BLE001 - a later 404 then says deletedBy null
+        return
 
 
 def _ensure_node_deletable(node_id: str, node: dict[str, Any], *, action: str | None = None) -> None:
@@ -13791,6 +13843,7 @@ async def delete_graph_node(node_id: str) -> dict:
             cli_graph.remove_node(node_id)
         except ValueError:
             raise _node_gone(node_id)
+        _note_scene_deletes([{"id": node_id, "definitionId": removed_definition}])
     entries = _remove_side_effects(
         [{"id": node_id, "name": label, "definitionId": removed_definition, "position": removed_position}],
         lambda gone: f"{gone['name']} ({gone['id']}) was deleted")
@@ -14129,6 +14182,7 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
             [candidate.nodes[node_id] for node_id in touched],
             source="agent-edit",
         )
+        _note_scene_deletes(removed)
 
     edit_link = _canvas_edit_link.set({"id": canvas_undo_book.new_id()})
     # Before any await: a request that lands while this one broadcasts is not part of this edit.
@@ -14555,11 +14609,17 @@ async def _restore_graph(
         # person's Cmd+Z never is refused (the check skips the person).
         _refuse_agent_growth_past_save_limit(candidate)
         touched = sorted(set(added) | set(changed))
+        scene_keys_before = {node_id: scene_keys.node_scene_key(cli_graph.nodes.get(node_id)) for node_id in touched}
         _commit_graph_candidate_with_recoveries(
             candidate,
             [candidate.nodes[node_id] for node_id in touched],
             source="restore",
         )
+        _note_scene_deletes(removed)
+        # Review 11, L-1: a restore authors the scenes it puts back or sets
+        # like any write: a refusal after it names the restoring actor
+        # (changedBy), never the writer from before it.
+        _note_restored_scenes(touched, scene_keys_before)
     # A swapped id now holds another node, which never failed here. A node
     # put back under its own id keeps its error, as the canvas's undo does.
     for node_id in {gone["id"] for gone in removed} & set(added):
@@ -14974,21 +15034,21 @@ async def get_node_image_path(node_id: str) -> dict:
     """
     node = cli_graph.nodes.get(node_id)
     if not node:
-        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+        raise HTTPException(status_code=404, detail=f"Node {node_id} not found")
 
     url = _resolve_primary_image_url(node)
     if url is None:
         _raise_last_run_failed(node_id)
         raise HTTPException(
             status_code=400,
-            detail=f"No image file for node '{node_id}'",
+            detail=f"No image file for node {node_id}",
         )
 
     local_path = _url_to_output_path(url)
     if local_path is None:
         raise HTTPException(
             status_code=400,
-            detail=f"Image for node '{node_id}' is not local (external URL)",
+            detail=f"Image for node {node_id} is not local (external URL)",
         )
     return {"path": str(local_path.resolve())}
 
@@ -15043,7 +15103,7 @@ async def preview_node_output(node_id: str, port: str | None = None, size: str =
     Only files in Nebula's outputs are read; external URLs are never fetched."""
     node = cli_graph.nodes.get(node_id)
     if node is None:
-        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+        raise HTTPException(status_code=404, detail=f"Node {node_id} not found")
     if size not in output_preview.SIZES:
         raise HTTPException(status_code=400, detail=f"size must be one of {', '.join(output_preview.SIZES)}")
     name, entry = _preview_port(node_id, node.get("outputs") or {}, port)
@@ -16196,7 +16256,7 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
             if isinstance(data.get("label"), str) and data["label"].strip():
                 staged_node["label"] = " ".join(data["label"].split())[:MAX_NODE_LABEL_LENGTH]
         else:
-            raise HTTPException(status_code=400, detail=retired_message(definition_id) or f"Unknown node definition '{definition_id}'")
+            raise HTTPException(status_code=400, detail=retired_message(definition_id) or f"Unknown node definition {definition_id}")
         staged_node["id"] = node_id
         # An agent's placeholder (Q125 item 3) stays one across a save and a
         # reopen; a malformed flag loads as a normal node. Saves of the live
@@ -17730,7 +17790,7 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
             target,
         )
         if not sub_nodes:
-            raise HTTPException(status_code=404, detail=f"Node '{target}' not found in graph")
+            raise HTTPException(status_code=404, detail=f"Node {target} not found in graph")
     else:
         sub_nodes = [GraphNode.model_validate(n) for n in nodes_list]
         sub_edges = [GraphEdge.model_validate(e) for e in edges_list]
@@ -18003,7 +18063,7 @@ _cli_runs = _CliRuns()
 async def _cli_run_response(run_id: str, wait: float | None, *, report_failure: bool = False) -> dict[str, Any]:
     entry = _cli_runs.get(run_id)
     if entry is None:
-        raise HTTPException(status_code=404, detail=f"No run '{run_id}' (finished runs are kept for a while, then forgotten)")
+        raise HTTPException(status_code=404, detail=f"No run {run_id} (finished runs are kept for a while, then forgotten)")
     if "refused" in entry:
         return entry["refused"]
     task: asyncio.Task = entry["task"]
@@ -18166,7 +18226,7 @@ def _validated_quick_image_refs(port_id: str, value: list[Any]) -> list[str]:
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Input '{port_id}' got an empty array — provide at least one "
+                f"Input {port_id} got an empty array — provide at least one "
                 "image reference (URL, data: URI, or local image path)."
             ),
         )
@@ -18175,7 +18235,7 @@ def _validated_quick_image_refs(port_id: str, value: list[Any]) -> list[str]:
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Input '{port_id}' has {len(invalid)} invalid image reference(s): "
+                f"Input {port_id} has {len(invalid)} invalid image reference(s): "
                 f"{invalid!r}. Each item must be an http(s) URL, a data: URI, or a "
                 f"local image path ({'/'.join(_QUICK_IMAGE_SUFFIXES)})."
             ),
@@ -18196,7 +18256,7 @@ def _validated_quick_image_refs(port_id: str, value: list[Any]) -> list[str]:
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Input '{port_id}' references {len(missing)} local image file(s) "
+                f"Input {port_id} references {len(missing)} local image file(s) "
                 f"that do not exist: {missing!r}. Check the paths — downstream "
                 "nodes would otherwise receive a reference no model can load."
             ),
@@ -18860,7 +18920,7 @@ def _require_canvas_project(project_id: str | None) -> None:
             f"The project “{trashed.get('name') or project_id}” is in Recently deleted. Restore it first, "
             "or leave projectId out to save this as Global."))
     raise HTTPException(status_code=422, detail=(
-        f"No project has the id '{project_id}'. Use the id of a project from GET /api/projects "
+        f"No project has the id {project_id}. Use the id of a project from GET /api/projects "
         "(activeProjectId is the one open on the canvas), or leave projectId out to save this as Global."))
 
 
@@ -18946,7 +19006,7 @@ async def get_character(char_id: str) -> dict:
     try:
         char = store.get(char_id)
     except ValueError:
-        raise refusal_copy.not_found(f"Character '{char_id}' not found", "character", "characters")
+        raise refusal_copy.not_found(f"Character {char_id} not found", "character", "characters")
     if char is None:
         return _asset_not_found("character", char_id)
     return char
@@ -18969,7 +19029,7 @@ async def update_character(char_id: str, body: CharacterUpdate) -> dict:
         try:
             stored = store.get(char_id)
         except ValueError:
-            raise refusal_copy.not_found(f"Character '{char_id}' not found", "character", "characters")
+            raise refusal_copy.not_found(f"Character {char_id} not found", "character", "characters")
         # Not live: the in_trash 404 the Studio offers Restore from, before
         # any check (a Studio sends the views it read, held links too).
         if stored is None:
@@ -18996,7 +19056,7 @@ async def update_character(char_id: str, body: CharacterUpdate) -> dict:
             "character": exc.character,
         })
     except ValueError:
-        raise refusal_copy.not_found(f"Character '{char_id}' not found", "character", "characters")
+        raise refusal_copy.not_found(f"Character {char_id} not found", "character", "characters")
     await _broadcast_stored_asset("character", character, edit={})
     return character
 
@@ -19009,7 +19069,7 @@ async def delete_character(char_id: str) -> dict:
     try:
         record = store.delete(char_id, deleted_by=actor_record(actor_for_headers(current_request_headers())))
     except (KeyError, ValueError):
-        raise refusal_copy.not_found(f"Character '{char_id}' not found", "character", "characters")
+        raise refusal_copy.not_found(f"Character {char_id} not found", "character", "characters")
     await _broadcast_stored_asset("character", None, char_id, deleted=True)
     return {"status": "trashed", "id": char_id, "trashed": record}
 
@@ -19071,7 +19131,7 @@ async def get_moodboard(moodboard_id: str) -> dict:
         # image (services/moodboard_layout.file_aspect). Reading writes nothing.
         moodboard = await asyncio.to_thread(store.get, moodboard_id)
     except ValueError:
-        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
+        raise refusal_copy.not_found(f"Moodboard {moodboard_id} not found", "board", "boards")
     if moodboard is None:
         return _asset_not_found("moodboard", moodboard_id)
     return _moodboard_out(moodboard)
@@ -19265,7 +19325,7 @@ async def analyze_moodboard_route(moodboard_id: str) -> dict:
         # saves an old board's layout) finds its image headers already read.
         moodboard = await asyncio.to_thread(store.get, moodboard_id)
     except ValueError:
-        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
+        raise refusal_copy.not_found(f"Moodboard {moodboard_id} not found", "board", "boards")
     if moodboard is None:
         # In Recently deleted: say so (and how to restore it), as GET does.
         return _asset_not_found("moodboard", moodboard_id)
@@ -19290,7 +19350,7 @@ async def analyze_moodboard_route(moodboard_id: str) -> dict:
             if not analysis_is_current(moodboard, analysis):
                 analysis = await asyncio.to_thread(analyze_moodboard, moodboard)
         except (KeyError, ValueError):
-            raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
+            raise refusal_copy.not_found(f"Moodboard {moodboard_id} not found", "board", "boards")
     await _broadcast_stored_asset("moodboard", moodboard, edit=_UNTOUCHED_LAYOUT)
     await _say_agent_action(moodboard_actions.describe_write("analyzed", moodboard))
     return _moodboard_out(moodboard)
@@ -19318,9 +19378,9 @@ async def dry_run_moodboard_analysis(moodboard_id: str, body: MoodboardDryRunReq
     try:
         moodboard = _moodboard_store().get(moodboard_id, laid_out=False)  # nor does the dry run
     except ValueError:
-        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
+        raise refusal_copy.not_found(f"Moodboard {moodboard_id} not found", "board", "boards")
     if moodboard is None:
-        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
+        raise refusal_copy.not_found(f"Moodboard {moodboard_id} not found", "board", "boards")
     # It reads every image file, so it runs off the event loop.
     return await asyncio.to_thread(dry_run, moodboard, thresholds)
 
@@ -19337,9 +19397,9 @@ def _reader_board(moodboard_id: str) -> dict:
     try:
         board = _moodboard_store().get(moodboard_id, laid_out=False)  # a read never writes the board
     except ValueError:
-        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
+        raise refusal_copy.not_found(f"Moodboard {moodboard_id} not found", "board", "boards")
     if board is None:
-        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
+        raise refusal_copy.not_found(f"Moodboard {moodboard_id} not found", "board", "boards")
     return board
 
 
@@ -19514,7 +19574,7 @@ async def delete_moodboard(moodboard_id: str) -> dict:
     try:
         record = store.delete(moodboard_id, deleted_by=actor_record(actor_for_headers(current_request_headers())))
     except (KeyError, ValueError):
-        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
+        raise refusal_copy.not_found(f"Moodboard {moodboard_id} not found", "board", "boards")
     await _broadcast_stored_asset("moodboard", None, moodboard_id, deleted=True)
     await _say_agent_action(moodboard_actions.describe_write("deleted", record))
     return {"status": "trashed", "id": moodboard_id, "trashed": record}
@@ -19559,14 +19619,14 @@ async def _move_stored_asset(kind: str, asset_id: str, body: AssetMoveBody) -> d
     try:
         live = store.get(asset_id)
     except ValueError:
-        raise _stored_asset_gone(kind, f"{noun} '{asset_id}' not found")
+        raise _stored_asset_gone(kind, f"{noun} {asset_id} not found")
     if live is None:
         record = _trashed_asset(kind, asset_id)
         if record is None:
-            raise _stored_asset_gone(kind, f"{noun} '{asset_id}' not found")
+            raise _stored_asset_gone(kind, f"{noun} {asset_id} not found")
         return JSONResponse(status_code=409, content={
             "detail": refusal_copy.refusal_detail(
-                f"{noun} '{asset_id}' is in Recently deleted. Restore it first "
+                f"{noun} {asset_id} is in Recently deleted. Restore it first "
                 f"(nebula trash restore {kind} {asset_id}, or POST /api/trash/{kind}/{asset_id}/restore), "
                 "then move it.",
                 f"That {_person_noun(kind)} is in Recently deleted. Restore it first, then move it."),
@@ -19577,10 +19637,10 @@ async def _move_stored_asset(kind: str, asset_id: str, body: AssetMoveBody) -> d
     try:
         before, after, moved = store.move(asset_id, target)
     except KeyError:  # deleted between the read and the move
-        raise _stored_asset_gone(kind, f"{noun} '{asset_id}' not found")
+        raise _stored_asset_gone(kind, f"{noun} {asset_id} not found")
     except FileExistsError as exc:
         raise HTTPException(status_code=409, detail=(
-            f"{noun} '{asset_id}' can't move: {exc}. Nothing was changed.")) from exc
+            f"{noun} {asset_id} can't move: {exc}. Nothing was changed.")) from exc
     catalog = project_store.read()
     source = before.get("projectId") or None
     names = {"from": _scope_name(catalog, source), "to": _scope_name(catalog, target)}
@@ -19669,10 +19729,10 @@ def _asset_not_found(kind: str, asset_id: str) -> JSONResponse:
     noun = _person_noun(kind)
     if record is None:
         return JSONResponse(status_code=404, content={"detail": refusal_copy.refusal_detail(
-            f"{_asset_noun(kind)} '{asset_id}' not found", refusal_copy.gone(noun, f"{noun}s"))})
+            f"{_asset_noun(kind)} {asset_id} not found", refusal_copy.gone(noun, f"{noun}s"))})
     return JSONResponse(status_code=404, content={
         "detail": refusal_copy.refusal_detail(
-            f"{_asset_noun(kind)} '{asset_id}' is in Recently deleted. Restore it with "
+            f"{_asset_noun(kind)} {asset_id} is in Recently deleted. Restore it with "
             f"nebula trash restore {kind} {asset_id} (POST /api/trash/{kind}/{asset_id}/restore).",
             f"That {noun} is in Recently deleted. Restore it, then try again."),
         "code": "in_trash",
@@ -19737,14 +19797,14 @@ async def restore_trashed(kind: str, item_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except asset_trash.AlreadyLive:
         raise HTTPException(status_code=409, detail=(
-            f"{_asset_noun(kind)} '{item_id}' is already back; nothing to restore"))
+            f"{_asset_noun(kind)} {item_id} is already back; nothing to restore"))
     except KeyError:
         # Already restored (another tab, an agent, or a retry): nothing to do,
         # and the caller gets what it asked for.
         live = _stored_asset(kind, item_id)
         if live is not None:
             return {"restored": kind, "id": item_id, "asset": _asset_out(kind, live), "alreadyRestored": True}
-        raise refusal_copy.refusal(404, f"{_asset_noun(kind)} '{item_id}' isn't in Recently deleted", refusal_copy.gone_from_trash(_person_noun(kind)))
+        raise refusal_copy.refusal(404, f"{_asset_noun(kind)} {item_id} isn't in Recently deleted", refusal_copy.gone_from_trash(_person_noun(kind)))
     await _broadcast_stored_asset(kind, asset)
     if kind == "moodboard":
         await _say_agent_action(moodboard_actions.describe_write("restored", asset))
@@ -19768,7 +19828,7 @@ async def purge_trashed(kind: str, item_id: str) -> dict[str, Any]:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except KeyError:
-        raise refusal_copy.refusal(404, f"{_asset_noun(kind)} '{item_id}' isn't in Recently deleted", refusal_copy.gone_from_trash(_person_noun(kind)))
+        raise refusal_copy.refusal(404, f"{_asset_noun(kind)} {item_id} isn't in Recently deleted", refusal_copy.gone_from_trash(_person_noun(kind)))
     # A card that showed it "in Recently deleted" now says it's gone.
     if kind == "style":
         _journal_style("purged", record, style_id=item_id)  # before any await (round 8 of PR #114)
@@ -19965,7 +20025,7 @@ async def delete_preset(preset_id: str) -> dict:
     try:
         record = preset_store.delete(preset_id, deleted_by=actor_record(actor_for_headers(current_request_headers())))
     except (KeyError, ValueError):
-        raise refusal_copy.not_found(f"Style '{preset_id}' not found", "style", "styles")
+        raise refusal_copy.not_found(f"Style {preset_id} not found", "style", "styles")
     await _style_written("deleted", record, deleted=True)
     return {"status": "trashed", "id": preset_id, "trashed": record}
 

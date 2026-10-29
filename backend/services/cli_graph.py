@@ -96,11 +96,11 @@ class CLIGraph:
         else:
             match = SHORT_ID_RE.fullmatch(node_id)
             if match is None:
-                raise ValueError(f"'{node_id}' is not a short node id like n3")
+                raise ValueError(f"{node_id} is not a short node id like n3")
             if node_id in self.nodes:
-                raise ValueError(f"Node '{node_id}' already exists")
+                raise ValueError(f"Node {node_id} already exists")
             if int(match.group(1)) > max(self._counter, MAX_ID_JUMP):
-                raise ValueError(f"'{node_id}' is higher than any id this graph has handed out")
+                raise ValueError(f"{node_id} is higher than any id this graph has handed out")
             short_id = node_id
             self._counter = max(self._counter, int(match.group(1)))
         node: dict[str, Any] = {
@@ -131,9 +131,9 @@ class CLIGraph:
     ) -> dict[str, str]:
         """Connect two nodes by port. Returns the created edge dict."""
         if src_id not in self.nodes:
-            raise ValueError(f"Source node '{src_id}' not found")
+            raise ValueError(f"Source node {src_id} not found")
         if dst_id not in self.nodes:
-            raise ValueError(f"Target node '{dst_id}' not found")
+            raise ValueError(f"Target node {dst_id} not found")
 
         # len+1 alone can land on a live edge's id after a removal.
         taken = {str(e.get("id")) for e in self.edges}
@@ -154,21 +154,21 @@ class CLIGraph:
     def update_params(self, node_id: str, params: dict[str, Any]) -> None:
         """Merge *params* into the node's existing params dict."""
         if node_id not in self.nodes:
-            raise ValueError(f"Node '{node_id}' not found")
+            raise ValueError(f"Node {node_id} not found")
         self.nodes[node_id]["params"].update(params)
         self._maybe_persist()
 
     def set_params(self, node_id: str, params: dict[str, Any]) -> None:
         """Replace the node's params (``update_params`` merges)."""
         if node_id not in self.nodes:
-            raise ValueError(f"Node '{node_id}' not found")
+            raise ValueError(f"Node {node_id} not found")
         self.nodes[node_id]["params"] = dict(params)
         self._maybe_persist()
 
     def set_label(self, node_id: str, label: str | None) -> None:
         """Give a node a custom name, or clear it (None) to show the model's name."""
         if node_id not in self.nodes:
-            raise ValueError(f"Node '{node_id}' not found")
+            raise ValueError(f"Node {node_id} not found")
         if label is None:
             self.nodes[node_id].pop("label", None)
         else:
@@ -184,7 +184,7 @@ class CLIGraph:
         """
         unknown = [node_id for node_id in positions if node_id not in self.nodes]
         if unknown:
-            raise ValueError(f"Node '{unknown[0]}' not found")
+            raise ValueError(f"Node {unknown[0]} not found")
         for node_id, position in positions.items():
             x = float(position["x"])
             y = float(position["y"])
@@ -199,7 +199,7 @@ class CLIGraph:
     def remove_node(self, node_id: str) -> None:
         """Remove a node and any edges touching it. Raises if node_id is unknown."""
         if node_id not in self.nodes:
-            raise ValueError(f"Node '{node_id}' not found")
+            raise ValueError(f"Node {node_id} not found")
         del self.nodes[node_id]
         self.edges = [
             e for e in self.edges if e["source"] != node_id and e["target"] != node_id

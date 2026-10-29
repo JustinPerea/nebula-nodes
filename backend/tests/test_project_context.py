@@ -78,7 +78,7 @@ def test_a_new_project_asset_must_name_a_canvas_project(catalog, path, body):
 
     unknown = catalog.client.post(path, json={**body, "projectId": "nebula_nodes"})
     assert unknown.status_code == 422
-    assert unknown.json()["detail"].startswith("No project has the id 'nebula_nodes'. Use the id of a project from GET /api/projects")
+    assert unknown.json()["detail"].startswith("No project has the id nebula_nodes. Use the id of a project from GET /api/projects")
 
     trashed = catalog.client.post(path, json={**body, "projectId": gone_id})
     assert trashed.status_code == 422

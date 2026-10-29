@@ -3623,7 +3623,10 @@ nothing in it was saved:
 
 `scene` is the scene Nebula has now, `sceneKey` and `sceneRev` its key and
 revision, and `changedBy` who last changed it (`agent` with its name,
-`person` as "You"; `null` when Nebula doesn't know, after a restart). Read
+`person` as "You", `anonymous` for a request with neither an agent marker
+nor the person's token, `system` for Nebula itself; `null` when Nebula
+doesn't know, after a restart). A restore (the canvas's undo or redo, your
+undo) counts as a write by whoever restored. Read
 the scene again (`nebula look`), put your change on top and send it; over
 HTTP you can instead take `scene` from this answer and send your change on
 it with `ifSceneKey` set to this answer's `sceneKey`. A change to a shot's
@@ -3640,18 +3643,27 @@ changed the same thing does the card ask, with one line for the clash
 were editing them."; for shots you removed that they were editing "Codex
 removed “Shot 2” and “Shot 3” while you were editing them."; when a removed
 shot comes back with other text, "Codex changed “Shot 2” while you were
-editing it."). It is never a "Couldn't save" line and never counts toward
+editing it."). "In another window" is said only for the person's own other
+tab; for any writer Nebula can't name (`anonymous`, `system`, none) the
+line says nothing of who: "“Opening” changed while you were editing it.",
+"The shots in “Opening” were reordered while you were editing them.",
+"“Shot 2” was removed while you were editing it." It is never a "Couldn't save" line and never counts toward
 the canvas's retries. When a writer refuses it 20 times in a row the save
 stops, "Unsaved" with [Try again], and the line names you: "Codex kept
 changing “Opening”, so your changes aren’t saved yet. Nebula will try
 again when Codex stops." ("An agent kept changing…" with no name; "…kept
-changing in another window…" for the person's other window). It goes
+changing in another window…" for the person's other window; "“Opening”
+kept changing, so your changes aren’t saved yet. Nebula will try again when
+it stops." for a writer Nebula can't name). It goes
 again with the person's next change, [Try again] or a reconnect, and once
 by itself about 2 s after the last change another writer brings, so stop
 writing that scene for a moment and their edits land. The canvas ignores
 any scene below a revision it has already seen from the same backend
 process (a sync that arrives late), and any sync from a process it has
-seen replaced; a restarted Nebula starts the count again. So when you change a scene the
+seen replaced (the health answer and the socket's first `graphSync` carry
+`bootId` and `bootStartedAt`, when that process started, in microseconds,
+so the newer of two processes wins whatever order their messages arrive
+in); a restarted Nebula starts the count again. So when you change a scene the
 person is editing, your change stays unless they changed the same field and
 choose Keep mine; read the scene again before a second write.
 
@@ -3675,12 +3687,27 @@ was):
 | `workspace_moved` | 409 | another project was opened, made or deleted since the caller read it (a tab's `X-Nebula-Workspace-Revision`, or a write that waited); nothing changed | `project`: `{id, name}` of the project open now (`null` for the unfiled canvas); `switchedBy`: `{kind, name}` of who did it (`agent` with its name, `person` as "You"), or `null` when Nebula doesn't know (it restarted since) |
 | `canvas_replaced` | 409 | the same project is open, but its canvas was cleared or replaced (a graph import) since the caller read it (a tab's `X-Nebula-Canvas-Revision`, or a write that waited), so node ids may name new nodes; nothing changed | the same `project` and `switchedBy` as `workspace_moved` |
 | `scene_changed` | 409 | a scene write built on a scene that changed since (its `ifSceneKey`, or for an agent the scene that session last read); nothing was saved (above) | `scene`, `sceneKey`, `sceneRev`, `changedBy` |
+| `node_gone` | 404 | a node write (`PUT /api/graph/node/{id}`) to a node that isn't on the canvas: someone deleted it (the detail for an agent is `Node n4 not found`, the id bare) | `deletedBy`: `{kind, name}` of who deleted it, as `changedBy` names a writer, or `null` when Nebula didn't see the delete |
 | `input_taken` | 409 | a connect with `"onlyIfFree": true` into a single-connection input that holds another connection; nothing changed (above) | |
 | `params_outdated` | 409 | the tab was built for another params version; reload | `paramsVersion` |
 | `run_safeguards` | 507 | the paid-start fence can't be read or written | |
 
 The same codes come from every route that refuses for those causes (a
 project switch, an import, a clear, a restore), always beside `detail`.
+
+On the person's canvas a deleted scene says so once ("Codex deleted
+“Opening”, so your changes to it can’t be saved."; "…was deleted in another
+window…" for the person's other tab; "“Opening” was deleted, so your changes
+to it can’t be saved." when Nebula didn't see who) and stops saving it; if
+the delete is undone (the Agent log's Undo, or yours), the scene comes back
+and the person's edits are merged onto it and saved, with no new line. A
+`workspace_moved` refusal says nothing on the card: the project switch's
+own handling says it once (an agent's switch hands the edits over; any
+other stops on the outdated-workspace banner with its Reload).
+
+Ids in details and CLI output take no quotes (`run run_ab12 already ran…`,
+`Node n4 not found`), so a copied id never carries a quote mark; names
+take “…”.
 
 The canvas blocks the same things: the shot's × is disabled, titled "Stop
 the run first." or "Wait for “Shot 2” to finish."; the scene's Delete (the

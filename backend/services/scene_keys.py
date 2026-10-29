@@ -35,6 +35,10 @@ another's unasked:
   ``main._agent_readers`` gives the keys a read is kept under and the keys
   a write is checked against, in order.
 
+Who deleted a scene node is kept too (``note_delete``, fix round 12): a
+save of it that comes after is answered 404 ``node_gone`` with
+``deletedBy``, so the person's line names who deleted it (GM r20 answer 3).
+
 Reads and writers are kept per canvas (``scope``: the live graph, its
 project and canvas epoch), so a node id another canvas uses never matches;
 nothing is forgotten on a project switch (fix round 9, M-1: reopening a
@@ -62,11 +66,15 @@ from typing import Any, Mapping, Sequence
 RUNTIME_KEYS = ("output", "variations", "selectedVariation")
 MAX_READS = 4096
 MAX_WRITERS = 1024
+MAX_DELETERS = 1024
 
 # (scope, reader, node id) -> the sceneKey that reader last read there.
 _reads: "OrderedDict[tuple[str, str, str], str]" = OrderedDict()
 # (scope, node id) -> who last changed its scene's authoring ({"kind", "name"}).
 _writers: "OrderedDict[tuple[str, str], dict[str, Any]]" = OrderedDict()
+# (scope, node id) -> who last deleted that Cinema scene node (PR #198 fix
+# round 12, GM r20 answer 3): a save that comes after says who.
+_deleters: "OrderedDict[tuple[str, str], dict[str, Any]]" = OrderedDict()
 # node id -> (scope, key, revision) Nebula last showed for it.
 _revisions: dict[str, tuple[str, str, int]] = {}
 # Microseconds since the epoch at start, then +1 a change: above any
@@ -179,6 +187,19 @@ def writer(scope: str, node_id: str) -> dict[str, Any] | None:
     return dict(found) if found else None
 
 
+def note_delete(scope: str, node_id: str, actor: Mapping[str, Any] | None) -> None:
+    """A scene node was deleted (a person's delete, an agent's edit, an
+    undo or redo): who did it, for a save of it that arrives after
+    (``deletedBy`` on that 404)."""
+    if actor:
+        _keep(_deleters, (scope, node_id), dict(actor), MAX_DELETERS)
+
+
+def deleted_by(scope: str, node_id: str) -> dict[str, Any] | None:
+    found = _deleters.get((scope, node_id))
+    return dict(found) if found else None
+
+
 def _keep(book: "OrderedDict[Any, Any]", key: Any, value: Any, limit: int) -> None:
     book.pop(key, None)
     book[key] = value
@@ -190,4 +211,5 @@ def forget() -> None:
     """Tests: start with no reads, writers or revisions."""
     _reads.clear()
     _writers.clear()
+    _deleters.clear()
     _revisions.clear()

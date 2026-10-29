@@ -210,12 +210,35 @@ const restartListeners = new Set<() => void>();
  * has its own id and never comes back, so a late message from one is not a
  * restart, and its syncs are dropped (isRetiredBackendBoot). */
 const retiredBootIds = new Set<string>();
+/** Review 11, L-4: when each process started (main.py BACKEND_BOOT_STARTED_AT,
+ * microseconds), as its hello or health answer said. */
+const bootStarts = new Map<string, number>();
 
-export function noteBackendBootId(bootId: unknown): void {
-  if (typeof bootId !== 'string' || !bootId || retiredBootIds.has(bootId)) return;
+/** `startedAt`: when that process started, if it said. Review 11, L-4: of
+ * two processes the later start is the newer, whatever order their messages
+ * arrive in, so a late health answer from a short-lived middle process (two
+ * quick restarts) is retired on arrival and never retires the live one. With
+ * no start known for the current process (a backend before round 12), the
+ * newest id seen wins, as before. */
+export function noteBackendBootId(bootId: unknown, startedAt?: unknown): void {
+  if (typeof bootId !== 'string' || !bootId) return;
+  if (typeof startedAt === 'number' && Number.isFinite(startedAt) && !bootStarts.has(bootId)) {
+    bootStarts.set(bootId, startedAt);
+    if (bootStarts.size > 64) bootStarts.delete(bootStarts.keys().next().value!);
+  }
+  if (retiredBootIds.has(bootId)) return;
   const previous = knownBootId;
+  if (previous === bootId) return;
+  const start = bootStarts.get(bootId);
+  const previousStart = previous !== null ? bootStarts.get(previous) : undefined;
+  // One that doesn't say when it started is a backend from before the start
+  // was sent: older than one that says.
+  if (previousStart !== undefined && (start === undefined || start < previousStart)) {
+    retiredBootIds.add(bootId);
+    return;
+  }
   knownBootId = bootId;
-  if (previous !== null && previous !== bootId) {
+  if (previous !== null) {
     retiredBootIds.add(previous);
     for (const listener of [...restartListeners]) listener();
   }
@@ -260,5 +283,6 @@ export function resetBackendConnectionForTests(): void {
   lastPulseAt = Number.NEGATIVE_INFINITY;
   knownBootId = null;
   retiredBootIds.clear();
+  bootStarts.clear();
   for (const listener of [...listeners]) listener();
 }

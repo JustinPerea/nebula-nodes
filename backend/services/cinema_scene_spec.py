@@ -310,7 +310,7 @@ def normalize_scene(scene: Any, *, strict: bool = True, reserved: Iterable[str] 
         if not isinstance(shot_id, str) or not shot_id:
             raise _refuse(f"scene.shots[{index}].id", "must be non-empty text")
         if shot_id in seen:
-            raise _refuse(f"scene.shots[{index}].id", f"'{shot_id}' is used twice; shot ids must be unique")
+            raise _refuse(f"scene.shots[{index}].id", f"{shot_id} is used twice; shot ids must be unique")
         seen.add(shot_id)
         prompt = shot.get("prompt")
         if prompt is None:

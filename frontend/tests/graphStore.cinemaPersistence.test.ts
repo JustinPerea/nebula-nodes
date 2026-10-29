@@ -194,7 +194,9 @@ describe('Cinema scene persistence ordering', () => {
     // is asked; until then, saves send the other side's value for it.
     receive(spec('External recovery'));
     expect(current().shots[0].prompt).toBe('Rejected');
-    expect(useGraphStore.getState().sceneClashes.n1?.line).toBe('“Scene” was changed in another window while you were editing it.');
+    // Review 11, L-1 (GM r19 answer 3): a sync that names no writer is
+    // unknown, and the line says nothing of who.
+    expect(useGraphStore.getState().sceneClashes.n1?.line).toBe('“Scene” changed while you were editing it.');
     edit(spec('Retry edit'));
     await settle();
     // Fix round 4 (review 4, HIGH): a refused write also reads the backend's

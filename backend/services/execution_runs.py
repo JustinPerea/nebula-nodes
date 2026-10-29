@@ -92,7 +92,7 @@ class ExecutionRunRegistry:
         if not run_id or len(run_id) > 128:
             raise ValueError("runId must be between 1 and 128 characters")
         if run_id in self._records:
-            raise ValueError(f"run '{run_id}' already exists")
+            raise ValueError(f"run {run_id} already exists")
         try:
             self.assert_admissible(run_id)
         except (ExecutionCancelledBeforeStartError, ExecutionCancellationCapacityError):
@@ -244,7 +244,7 @@ class ExecutionRunRegistry:
     def assert_admissible(self, run_id: str) -> None:
         if run_id in self._cancel_before_start or self.tombstoned(run_id):
             raise ExecutionCancelledBeforeStartError(
-                f"run '{run_id}' was cancelled before it started"
+                f"run {run_id} was cancelled before it started"
             )
         if len(self._cancel_before_start) >= self._max_records:
             raise ExecutionCancellationCapacityError(

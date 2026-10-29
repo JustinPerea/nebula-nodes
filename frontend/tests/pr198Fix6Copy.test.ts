@@ -19,8 +19,10 @@ import type { NodeData } from '../src/types';
 describe('GM r8: the scene save lines', () => {
   it('UNSAVED_MARK, the clash lines (GM r9) and SWITCHED_UNNAMED', () => {
     expect(scene.UNSAVED_MARK).toBe('Unsaved');
-    expect(scene.sceneClashLine('Opening', 'Codex')).toBe('Codex changed “Opening” while you were editing it.');
-    expect(scene.sceneClashLine('Opening', null)).toBe('“Opening” was changed in another window while you were editing it.');
+    expect(scene.sceneClashLine('Opening', { kind: 'agent', name: 'Codex' } as const)).toBe('Codex changed “Opening” while you were editing it.');
+    // Review 11, L-1: "another window" only for the person's own tab.
+    expect(scene.sceneClashLine('Opening', { kind: 'window' })).toBe('“Opening” was changed in another window while you were editing it.');
+    expect(scene.sceneClashLine('Opening', scene.UNKNOWN_WRITER)).toBe('“Opening” changed while you were editing it.');
     expect([scene.KEEP_MINE, scene.theirsLabel('Codex'), scene.theirsLabel(null)]).toEqual(['Keep mine', 'Use Codex’s', 'Use theirs']);
     expect(`${scene.sceneSaveHeading('X')} ${scene.SWITCHED_UNNAMED}`)
       .toBe("Couldn’t save your changes to “X”. The canvas switched to another project first.");

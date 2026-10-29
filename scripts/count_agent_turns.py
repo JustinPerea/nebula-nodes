@@ -80,10 +80,12 @@ USAGE_PATTERNS = [
         r"\berror: the following arguments are required\b",
         r"\berror: argument [^:\n]+: expected\b",
         r"\berror: unknown [a-z ]+ (command|action)\b",
-        r"\bNode '[^']+' not found\b",
+        # Ids are bare since PR #198 fix round 12 (GM r19 answer 1); older
+        # transcripts quote them.
+        r"\bNode (?:'[^']+'|[^\s'.:]+) not found\b",
         # describe_node's and the write paths' words for a node type that isn't one
         # (an unknown id, or a display name two nodes share).
-        r"\bNo node type '[^']+'",
+        r"\bNo node type (?:'[^']+'|[^\s'.:]+)[.:]",
         r"\bunknown node definition '[^']+'",
         r"`nebula [a-z-]+` doesn't take --",
         r"\bRename existing nodes with edit_canvas\b",

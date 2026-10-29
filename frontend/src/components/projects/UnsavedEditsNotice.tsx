@@ -44,7 +44,7 @@ export function UnsavedEditsNotice({ reason, downloadFailed = false, downloadToo
     if (!active || active === document.body || !active.isConnected) downloadButton.current?.focus();
   }, [busy]);
   return (
-    <div className="project-home__error project-home__edits" role="alert">
+    <div className="project-home__error project-home__edits" role="alert" tabIndex={-1}>
       <span className="project-home__edits-text">
         {agentOpening && <span>{agentOpeningLine(agentOpening.agent, agentOpening.projectName)}</span>}
         <strong className="project-home__edits-heading">{downloadTooBig ? EDITS_DOWNLOAD_HEADING : UNSAVED_EDITS_HEADING}</strong>

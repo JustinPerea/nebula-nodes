@@ -391,14 +391,19 @@ const noop = () => {};
  * a notice's own dialog (the held edits' confirm) counts as in the notice. */
 type NoticeKey = 'copy' | 'held' | 'saved' | 'error';
 
-/** The notice stack's focus rule (GM r15, as the kept notes do it): when a
- * notice goes and takes focus with it, focus moves to the notice now in its
- * place (the next one), else the one before, onto its first control (a
- * notice with none, the saved line, takes focus itself); with the stack
- * empty, to the "Recent projects" heading. Never the body. Only when focus
- * was lost: never from something the person moved to meanwhile (Q116 a
- * review). After the commit that removed the notice: no frame to wait for
- * (a frame never comes in a background tab). */
+/** The notice stack's focus rule (GM pr200 r16 #2, which replaced GM r15's
+ * "first control"): when a notice goes and takes focus with it, focus moves
+ * to the notice now in its place (the next one), else the one before, onto
+ * its × (Dismiss). Never onto a primary or destructive action (Restore,
+ * Download, Try again, Run, Undo, Delete): a second Enter must not act. A
+ * notice with no × (the held edits, the saved line, the error) takes focus
+ * itself; with the stack empty, the "Recent projects" heading. Never the
+ * body. Only when focus was lost: never from something the person moved to
+ * meanwhile (Q116 a review). After the commit that removed the notice: no
+ * frame to wait for (a frame never comes in a background tab). */
+/** The × every dismissable notice carries (CopyNotice). */
+const NOTICE_DISMISS = 'button.project-home__notice-close';
+
 function useNoticeStackFocus(keys: NoticeKey[], stack: RefObject<HTMLElement | null>,
   fallback: RefObject<HTMLElement | null>) {
   const focused = useRef<NoticeKey | null>(null);
@@ -416,9 +421,8 @@ function useNoticeStackFocus(keys: NoticeKey[], stack: RefObject<HTMLElement | n
     const notices = Array.from(stack.current?.querySelectorAll<HTMLElement>(':scope > [data-notice]') ?? []);
     const target = notices[Math.min(index, notices.length - 1)];
     if (!target) { fallback.current?.focus(); return; }
-    // Its first control; a notice with none (the saved line, an error with
-    // no Try again) is itself the focus target, by its tabindex.
-    const control = target.querySelector<HTMLElement>('button:not(:disabled), summary, [href]')
+    // Its ×, else the notice itself by its tabindex: never one of its actions.
+    const control = target.querySelector<HTMLElement>(`${NOTICE_DISMISS}:not(:disabled)`)
       ?? target.querySelector<HTMLElement>('[tabindex="-1"]');
     (control ?? fallback.current)?.focus();
     // keys is read through `joined`: a new array each render, the same stack.

@@ -1315,7 +1315,9 @@ def edit_canvas(
     refreshes a `nebula look`): changed
     since, it is refused with 409 `scene_changed` (`scene`, `sceneKey`,
     `sceneRev`, `changedBy`) and nothing is saved; read it again and redo
-    your change (a refusal is not a read).
+    your change (a refusal is not a read). A write to a node someone
+    deleted is 404 `node_gone` with `deletedBy` (who, or null). Ids in
+    details are bare (`Node n4 not found`).
     Who bills a run is the person's call: Krea billing (`_kreaAuth`: API token
     or the Krea plan) and a multi-provider node's route (`_provider`: a route id
     or auto; describe_node lists them and the values each takes). Send a change

@@ -172,7 +172,7 @@ async def test_missing_id_raises(monkeypatch, tmp_path) -> None:
 @pytest.mark.asyncio
 async def test_unknown_id_raises(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("NEBULA_CHARACTER_ROOT", str(tmp_path))
-    with pytest.raises(ValueError, match="Character 'doesnotexist' not found"):
+    with pytest.raises(ValueError, match="Character doesnotexist not found"):
         await handle_character_node(
             _character_node("doesnotexist"), inputs={}, api_keys={}, emit=None
         )
