@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { ArrowRight } from 'lucide-react';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { takeReview } from '../../store/assetProposalReviewRequest';
 import type { AssetProposalKind, AssetProposalView, CommonsEdit } from '../../lib/assetProposals';
 import { proposalsFor, useAssetProposalsStore, type AssetProposalEntry } from '../../store/assetProposalsStore';
+import { PROPOSAL_GATE_COPY } from '../../lib/canvasProposals';
+import { personGateHeld, subscribePersonGate } from '../../lib/personSession';
 import '../../styles/asset-proposals.css';
 
 /** How often the strip rechecks expiry while one is showing. */
@@ -183,6 +185,11 @@ function ProposalCard({ entry, now, names }: { entry: AssetProposalEntry; now: n
   const said = headline(view);
   const words = labels(view);
   const busy = Boolean(pending || closing);
+  // GM r33 item 1 (review 18 LOW-2): held like the canvas's proposal bar while
+  // this tab isn't connected as the person (both routes are person-only:
+  // main._decidable_asset_proposal, require_person), with the same titles;
+  // the server's promote clears it and its demote brings it back.
+  const gateHeld = useSyncExternalStore(subscribePersonGate, personGateHeld);
   return (
     <div role="group" aria-label={`${view.agent.name} ${said}`} tabIndex={-1}
       className={`asset-proposal${closing ? ' asset-proposal--closing' : ''}`}
@@ -198,9 +205,11 @@ function ProposalCard({ entry, now, names }: { entry: AssetProposalEntry; now: n
       {error && <p className="asset-proposal__error" role="alert">{error}</p>}
       <div className="asset-proposal__foot">
         <span className="asset-proposal__expires">{closing ? '' : minutesLeft(view, Math.max(now, shownAt))}</span>
-        <button type="button" className="asset-proposal__button" disabled={busy}
+        <button type="button" className="asset-proposal__button" disabled={busy || gateHeld}
+          title={gateHeld ? PROPOSAL_GATE_COPY.reject : undefined}
           onClick={() => void reject(view.id)}>{pending === 'reject' ? 'Saying no…' : words.reject}</button>
-        <button type="button" className="asset-proposal__button asset-proposal__button--accept" disabled={busy}
+        <button type="button" className="asset-proposal__button asset-proposal__button--accept" disabled={busy || gateHeld}
+          title={gateHeld ? PROPOSAL_GATE_COPY.accept : undefined}
           onClick={() => void accept(view.id)}>{pending === 'accept' ? 'Accepting…' : words.accept}</button>
       </div>
     </div>

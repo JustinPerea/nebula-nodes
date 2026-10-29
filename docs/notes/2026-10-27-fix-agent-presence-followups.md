@@ -2573,3 +2573,124 @@ nothing is OK, since Escape and Cancel still close).
 - Live (8795/5795, 8000-8010 and 5173 blocked):
   - the r30 section passed 12 of 12;
   - a full run passed 121 of 121.
+
+## Fix round 22
+
+GM r32, applied as written: "any name with spaces between words steps back to
+the last space within 8 graphemes; scripts without spaces (Chinese,
+Japanese, Thai) cut by grapheme. Key it on whether there's a space before the
+cut (within 8 graphemes), NOT on the script, so mixed names work."
+
+- `wordCut(keep, graphemes)` no longer looks at the script and no longer
+  uses the word segmenter. The grapheme segmenter stays.
+- How it decides:
+  - a cut that already ends a word (the next grapheme is a space) stays;
+  - otherwise it steps back to the last space before it, if that drops at
+    most 8 graphemes of the word;
+  - otherwise it is a grapheme cut.
+- "Within 8" counts the graphemes of the word that are dropped: 8 steps
+  back, 9 doesn't. This matches round 21.
+- A space is any whitespace grapheme, so a full-width U+3000 counts too.
+- What that means for each kind of name:
+  - Korean steps back like Latin. Live: "등대 프롬프트 저녁 바위 위의…”".
+  - Chinese, Japanese and Thai with no spaces keep the grapheme cut.
+  - Thai phrases separated by a space, and CJK after a space in a mixed
+    name, step back.
+  - The emoji name still ends "… to 🇯🇵…”", which GM said is fine.
+- r31's grapheme-only list drops its Korean name; r32 covers Korean now.
+
+### Fix round 22 gates
+
+- Backend, the full suite (isolated, `lg run --gate`): 11,803 passed, 71
+  skipped. No backend change.
+- Frontend: `tsc -b` clean, `eslint .` clean.
+- Vitest, the full run (`--gate`): 590 files, 7,481 tests, all passed.
+- r32: 5 of 5 fail on f3f335af.
+- Build: the entry is 429,862 bytes raw (131,965 gzip). Fonts are OK.
+- Live: the r30 section passed 13 of 13, with the new Korean case.
+
+### Fix round 22, part two: review 18 and GM r33
+
+Review 18 (of rounds 20 and 21) and GM's r33 answers, added to the same
+round and built as GM wrote them.
+
+- **LOW-1, the name in `<bdi>` (GM r33 item 1).** The heading is
+  `Note for agents on “<bdi>name…</bdi>”`: the cut name and its "…" are
+  isolated, and the curly quotes stay outside. The hidden measure copy uses
+  the same structure, so the fit is measured on what shows. Live, the
+  Hebrew and Arabic names read right to left, with the "…" at the name's
+  left (its visual end) and inside the quotes.
+- **LOW-2, the asset strip (GM r33 item 2).** `AssetProposalStrip`'s Accept
+  and Reject are held exactly like the canvas's proposal bar while the
+  tab isn't connected as the person. Both routes are person-only
+  (`_decidable_asset_proposal` calls `require_person`). They use the same
+  titles (`PROPOSAL_GATE_COPY`) and the same `useSyncExternalStore` on
+  the person gate. They clear on promote and come back on demote. A
+  `person_required` error on an asset proposal is cleared on promote, as
+  on the canvas; other errors stay.
+- **Held-run Dismiss (GM r33 item 3).** While the gate holds,
+  `DeferredRunNotice`'s Dismiss hides the notice in this tab only and
+  doesn't call the server. The release route (`DELETE
+  /api/canvas/approvals/{id}`) is person-only, so the call would only be
+  refused. The approval id is kept. On promote, each held id is sent once
+  and then forgotten, so a second promote sends nothing. A not_found reply
+  (the approval already expired) is fine: `releaseApproval` ignores any
+  failure, and the approval expires on its own. A connected tab still
+  releases at once.
+- **CJK after a space (GM r33 item 4).** This was already true from part
+  one, because the rule looks only for a space within 8 graphemes, so a cut
+  inside a CJK run after a space steps back. r32 covers it.
+- **Copy (GM r33 item 5).**
+  - A cut that lands right after punctuation drops the punctuation before
+    "…": "Lighthouse…”", not "Lighthouse,…”". The punctuation trimmed
+    includes commas, full stops, colons, semicolons, dashes, opening
+    brackets and quotes, and their CJK and Arabic forms.
+  - A cut after a leading space never shows a bare "…": the first
+    visible grapheme is kept.
+- **NITs.**
+  - The emoji, CJK and Japanese cut tests now use literal expected
+    strings, not ones the test computes with the code it checks.
+  - Unit tests now cover the refit on resize (a ResizeObserver stub that
+    fires only for the observed heading), the refit on font load
+    (`document.fonts.ready`), and the Send title priority (node gone, then
+    the gate, then empty).
+  - There are tests for the space-before and word-end checks, and a
+    literal grapheme test.
+- **Mutations.** Ten mutations, and every one fails a test:
+  - no resize refit;
+  - no font refit;
+  - the empty title first;
+  - no word-end check;
+  - punctuation counted as a space;
+  - the first space, not the last;
+  - code points, not graphemes;
+  - no `<bdi>`;
+  - no punctuation trim;
+  - no guard against a bare "…".
+- **Ratchet.**
+  - The ancestor `font` shorthand from the review (`.canvas-pin { font: … }`)
+    can't reach the edge, because `.canvas-pin__card` sets its own
+    `font-size: 12px`. It is now a passing case.
+  - The forms that do reach the edge fail and are tested: the card's own
+    shorthand, and `font-size: inherit` under an ancestor shorthand.
+  - Pseudo-element text no longer needs a clipping box when it is one
+    narrow glyph: a single non-emoji grapheme at 4 px or less, with no
+    letter-spacing or text-indent. Two glyphs, 5 px, an emoji or
+    letter-spacing still fail.
+
+### Fix round 22 gates, after part two
+
+- Backend, the full suite (isolated, `lg run --gate`): 11,803 passed, 71
+  skipped. There is no backend change.
+- Frontend: `tsc -b` and `eslint .` are clean.
+- Vitest, the full run (`--gate`): 593 files, 7,496 tests, all passed.
+- On f3f335af, 15 of the 19 new tests fail. The 4 that pass cover
+  behaviour that was already there and didn't change: the refit on
+  resize, the refit on font load, Send's title order, and a connected tab
+  releasing at once.
+- Build: the entry is 430,532 bytes raw (132,277 gzip). 98 JS assets are
+  eval-free. Fonts are OK.
+- Live (8795/5795, with 8000-8010 and 5173 blocked):
+  - the new r33 section passed 7 of 7: the Hebrew and Arabic `<bdi>`
+    checks, and the asset strip held, then promoted, then demoted;
+  - a full run passed 126 of 126.

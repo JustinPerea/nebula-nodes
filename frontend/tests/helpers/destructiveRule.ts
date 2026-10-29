@@ -1061,7 +1061,16 @@ export function narrowLeftEdge(styles: Map<string, { value: string }>, inherited
       const block = /^(?:absolute|fixed)$/.test(own('position')) || (own('float') !== '' && own('float') !== 'none')
         || (own('display') !== '' && !/^(?:inline|contents|none)$/.test(own('display')));
       const clips = /^(?:hidden|clip)$/.test(own('overflow')) || (/^(?:hidden|clip)$/.test(own('overflow-x')));
-      if (!block || !clips) return `${state} content ${value} that draws past its width (${block ? 'no overflow clip' : 'inline'})`;
+      // Review 18 NIT-5 (fix round 22): one glyph no wider than the edge may
+      // stand unclipped, as a 4 px box may: a single grapheme, not an emoji, at
+      // a font size of at most 4 px, with no letter-spacing or indent to push it.
+      const text = /^(["'])(.*)\1$/s.exec(value)?.[2]?.replace(/\\([0-9a-f]{1,6})\s?/gi, (_m, hex: string) => String.fromCodePoint(parseInt(hex, 16))) ?? null;
+      const one = text !== null && [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)].length === 1
+        && !/\p{Extended_Pictographic}|\p{Regional_Indicator}/u.test(text);
+      const glyphPx = fontPx(state);
+      const pushed = !/^(?:|normal|0|0px)$/.test(own('letter-spacing')) || !/^(?:|0|0px)$/.test(own('text-indent'));
+      const narrowGlyph = one && glyphPx !== null && glyphPx <= STATUS_EDGE_MAX_PX && !pushed;
+      if ((!block || !clips) && !narrowGlyph) return `${state} content ${value} that draws past its width (${block ? 'no overflow clip' : 'inline'})`;
     }
     // A pseudo-element painting the edge's own fill (inherit, currentColor)
     // is a second edge with no width rule: it can't widen the first.

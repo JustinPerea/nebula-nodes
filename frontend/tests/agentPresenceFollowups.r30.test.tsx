@@ -20,7 +20,7 @@ vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: () => {}, subscribe
 vi.mock('../src/lib/canvasPins', async (importOriginal) => ({ ...await importOriginal<typeof import('../src/lib/canvasPins')>(), ...api }));
 
 const { PIN_REFUSAL_COPY, pinTextReady } = await import('../src/lib/canvasPins');
-const { fitNoteHeading, graphemesOf, noteHeading } = await import('../src/lib/noteHeading');
+const { fitNoteHeading } = await import('../src/lib/noteHeading');
 const { PinComposer } = await import('../src/components/canvas/PinComposer');
 const { PersonRequiredBanner } = await import('../src/components/PersonRequiredBanner');
 const { useCanvasPinsStore } = await import('../src/store/canvasPinsStore');
@@ -40,7 +40,10 @@ const dismissBanner = () => fireEvent.click(document.querySelector('.person-requ
 const WIDE = /\p{Script=Han}|\p{Script=Hiragana}|\p{Script=Katakana}|\p{Script=Hangul}/u;
 const EMOJI = /\p{Extended_Pictographic}|\p{Regional_Indicator}/u;
 const graphemeWidth = (g: string) => (EMOJI.test(g) ? 20 : WIDE.test(g) ? 16 : 8);
-const textWidth = (text: string) => graphemesOf(text).reduce((sum, g) => sum + graphemeWidth(g), 0);
+// The test's own segmenter: widths never depend on the module's graphemesOf.
+const TEST_SEG = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+const testGraphemes = (text: string) => Array.from(TEST_SEG.segment(text), (part) => part.segment);
+const textWidth = (text: string) => testGraphemes(text).reduce((sum, g) => sum + graphemeWidth(g), 0);
 
 beforeAll(() => pinTextReady);
 beforeEach(() => {
@@ -53,7 +56,6 @@ afterEach(() => { cleanup(); session.resetPersonSessionForTests(); vi.restoreAll
 
 describe('GM r30 item 1: the heading is cut by grapheme, its closing quote kept', () => {
   const fits = (title: string, available: number) => fitNoteHeading(title, available, textWidth);
-  const cutOf = (heading: string) => /^Note for agents on “(.*)…”$/u.exec(heading)?.[1] ?? null;
 
   it('GM\'s example: "Note for agents on “A lighthouse prompt with…”", no space before "…"', () => {
     const title = 'A lighthouse prompt with warm light on the rocks at dusk';
@@ -64,25 +66,17 @@ describe('GM r30 item 1: the heading is cut by grapheme, its closing quote kept'
     expect(fits(title, 10_000)).toBe(`Note for agents on “${title}”`);
   });
 
+  // Review 18 NIT-2 (fix round 22): literal expectations, measured with the
+  // test's own segmenter (TEST_SEG), never the module's graphemesOf, so a cut
+  // that split a ZWJ family, a flag, a skin tone or a mark would fail.
   it.each([
-    ['emoji with ZWJ, skin tones and flags', '👨‍👩‍👧‍👦 family trip 👍🏽 to 🇯🇵 and 🏴󠁧󠁢󠁳󠁣󠁴󠁿 with 🧑🏾‍🚀 friends and more'],
-    ['CJK', '灯台のプロンプト、夕暮れの岩に暖かい光が差し込む長い説明文です'],
-    ['Hangul and a combining mark', '등대 프롬프트 저녁 바위 위의 따뜻한 빛 é̂ 그리고 더 긴 설명'],
-  ])('%s: whole graphemes only, the longest that fits, the quote outside the cut', (_label, title) => {
-    const graphemes = graphemesOf(title);
-    for (const available of [200, 260, 330, 420]) {
-      const heading = fits(title, available);
-      const cut = cutOf(heading);
-      expect(cut, heading).not.toBeNull();
-      expect(heading.endsWith('…”')).toBe(true);
-      expect(heading).not.toMatch(/\s…/u);
-      // A start of the title by whole graphemes (trailing spaces dropped).
-      const kept = graphemesOf(cut!);
-      expect(kept, heading).toEqual(graphemes.slice(0, kept.length));
-      expect(textWidth(heading), heading).toBeLessThanOrEqual(available);
-      // The next grapheme would not fit.
-      const longer = noteHeading(title, kept.length + 1, graphemes);
-      if (graphemes.slice(kept.length, kept.length + 1).join('').trim()) expect(textWidth(longer), longer).toBeGreaterThan(available);
+    ['emoji with ZWJ, skin tones and flags', "👨‍👩‍👧‍👦 family trip 👍🏽 to 🇯🇵 and 🏴󠁧󠁢󠁳󠁣󠁴󠁿 with 🧑🏾‍🚀 friends and more", { 200: 'Note for agents on “👨‍👩‍👧‍👦…”', 260: 'Note for agents on “👨‍👩‍👧‍👦 family…”', 330: 'Note for agents on “👨‍👩‍👧‍👦 family trip 👍🏽…”', 420: 'Note for agents on “👨‍👩‍👧‍👦 family trip 👍🏽 to 🇯🇵 and…”' }],
+    ['CJK', "灯台のプロンプト、夕暮れの岩に暖かい光が差し込む長い説明文です", { 200: 'Note for agents on “灯…”', 260: 'Note for agents on “灯台のプロ…”', 330: 'Note for agents on “灯台のプロンプト、夕…”', 420: 'Note for agents on “灯台のプロンプト、夕暮れの岩に…”' }],
+    ['Hangul and a combining mark (Korean steps back to a space, GM r32)', "등대 프롬프트 저녁 바위 위의 따뜻한 빛 é̂ 그리고 더 긴 설명", { 200: 'Note for agents on “등…”', 260: 'Note for agents on “등대…”', 330: 'Note for agents on “등대 프롬프트 저녁…”', 420: 'Note for agents on “등대 프롬프트 저녁 바위 위의…”' }],
+  ] as Array<[string, string, Record<number, string>]>)('%s: whole graphemes only, the longest that fits, the quote outside the cut', (_label, title, expected) => {
+    for (const [available, heading] of Object.entries(expected)) {
+      expect(fits(title, Number(available)), `${available}px`).toBe(heading);
+      expect(textWidth(heading)).toBeLessThanOrEqual(Number(available));
     }
   });
 

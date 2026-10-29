@@ -18,7 +18,7 @@ import type { Point } from '../lib/agentCursorMotion';
 import { useGraphStore, watchGraphSyncs } from './graphStore';
 import { PERSON_REQUIRED_CODE, failureMessage } from '../lib/errorCopy';
 import { refuseEditWhileOffline } from '../lib/backendConnection';
-import { onPersonPromoted } from '../lib/personSession';
+import { onPersonPromoted, personGateHeld } from '../lib/personSession';
 import { refuseEditWhileFollowing } from '../lib/canvasFollow';
 
 /** How long a closed proposal's ghosts fade before they go. Matches canvasProposals.css. */
@@ -334,7 +334,13 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
   dismissDeferred: () => {
     const deferred = get().deferredRun;
     set(nextDeferred);
-    if (deferred?.approvalId) void releaseApproval(deferred.approvalId);
+    if (!deferred?.approvalId) return;
+    // GM r33 item 2 (fix round 22): while this tab isn't connected as the
+    // person, Dismiss hides the notice here only; the release (person-only,
+    // DELETE /api/canvas/approvals/{id}, which only frees the nodes it locked)
+    // goes once the server promotes the tab.
+    if (personGateHeld()) releasesHeld.add(deferred.approvalId);
+    else void releaseApproval(deferred.approvalId);
   },
 }));
 
@@ -362,4 +368,14 @@ onPersonPromoted(() => {
   for (const id of personRefused) delete errors[id];
   personRefused.clear();
   useCanvasProposalsStore.setState({ errors });
+});
+
+// GM r33 item 2: the approvals dismissed while the gate held, released once
+// the server promotes the tab, each once (a gone approval answers not_found,
+// which releaseApproval lets pass).
+const releasesHeld = new Set<string>();
+onPersonPromoted(() => {
+  const ids = [...releasesHeld];
+  releasesHeld.clear();
+  for (const id of ids) void releaseApproval(id);
 });

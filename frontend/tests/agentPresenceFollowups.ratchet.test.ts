@@ -2393,6 +2393,16 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
       '.canvas-pin__edge { position: static; flex: 1; }',
       '.canvas-pin__edge { position: static; flex-basis: 230px; }',
       '.canvas-pin__edge { position: static; flex-grow: 1; }',
+      // Review 18 NIT-4/5 (fix round 22): a font shorthand an ancestor sets
+      // that reaches the edge (the card's own 12px stops one on .canvas-pin;
+      // inherit lets it through); a glyph too big, too many, an emoji or pushed.
+      '.canvas-pin__card { font: 1000px/1 serif; } .canvas-pin__edge { width: .25em; }',
+      '.canvas-pin { font: 1000px/1 serif; } .canvas-pin__card { font-size: inherit; } .canvas-pin__edge { width: .25em; }',
+      '.canvas-pin__edge::before { content: "|"; width: 3px; font-size: 5px; }',
+      '.canvas-pin__edge::before { content: "||"; width: 3px; font-size: 4px; }',
+      '.canvas-pin__edge::before { content: "\\1F525"; width: 3px; font-size: 4px; }',
+      '.canvas-pin__edge::before { content: "|"; width: 3px; font-size: 4px; letter-spacing: 300px; }',
+      '.canvas-pin__card { font-size: 1000px; } .canvas-pin__edge::before { content: "|"; width: 3px; }',
     ]) expect(frameFindings(pinDelete, vars0, css), css).not.toEqual([]);
     // The edge in other units, and borders the fill stops short of, stay the edge.
     for (const css of [
@@ -2408,6 +2418,10 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
       '.canvas-pin__card { font-size: 12px; } .canvas-pin__edge { width: 0.25em; }',
       '.canvas-pin__edge { flex: none; }',
       '.canvas-pin__edge { flex: 0 0 3px; }',
+      // Review 18 NIT-5: one 4 px glyph, unclipped, is no wider than the edge.
+      '.canvas-pin__edge::before { content: "|"; width: 3px; font-size: 4px; }',
+      // An ancestor's font that the card's own 12px stops.
+      '.canvas-pin { font: 1000px/1 serif; } .canvas-pin__edge { width: .25em; }',
     ]) expect(frameFindings(pinDelete, vars0, css), css).toEqual([]);
     // Resolved: the author's colour, with only its blue fallback.
     const resolvedDelete = { ...pinDelete, ancestors: [['div', ['canvas-pin', 'canvas-pin--resolved']], ['div', ['canvas-pin__card']]] as Array<[string, string[]]> };

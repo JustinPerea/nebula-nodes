@@ -13,7 +13,7 @@ import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 import { InNoticeRegion } from '../InNoticeRegion';
 import { dialogStart, openModalDialog } from '../../lib/modalFocus';
 import { useLeave, useLeavingRows } from '../../lib/noticeLeave';
-import { fitNoteHeading, noteHeading } from '../../lib/noteHeading';
+import { fitNoteHeading, HEADING_END, HEADING_START, noteHeading } from '../../lib/noteHeading';
 import '../../styles/canvasPins.css';
 
 /** The "Note for agents" dialog, opened from the context menu or the selection toolbar.
@@ -401,7 +401,10 @@ function NoteHeading({ title, nodeId }: { title: string; nodeId: string | null }
       const gap = parseFloat(getComputedStyle(box).columnGap) || 0;
       const chip = chipRef.current ? chipRef.current.getBoundingClientRect().width + gap : 0;
       setShown(fitNoteHeading(title, boxWidth - chip, (text) => {
-        measure.textContent = text;
+        // Measured as it's drawn: the name in its own <bdi>.
+        const name = document.createElement('bdi');
+        name.textContent = text.slice(HEADING_START.length, text.length - HEADING_END.length);
+        measure.replaceChildren(HEADING_START, name, HEADING_END);
         return measure.getBoundingClientRect().width;
       }));
     };
@@ -415,7 +418,11 @@ function NoteHeading({ title, nodeId }: { title: string; nodeId: string | null }
   }, [title, whole, nodeId]);
   return (
     <span ref={boxRef} className="prompt-dialog__heading">
-      <span className="prompt-dialog__heading-text" title={whole} aria-hidden="true">{shown}</span>
+      {/* GM r33 (review 18 LOW-1): the name and its "…" in a <bdi>, the curly
+          quotes outside it, so a Hebrew or Arabic name ends in its "…". */}
+      <span className="prompt-dialog__heading-text" title={whole} aria-hidden="true">
+        {HEADING_START}<bdi>{shown.slice(HEADING_START.length, shown.length - HEADING_END.length)}</bdi>{HEADING_END}
+      </span>
       <span className="prompt-dialog__sr-only">{whole}</span>
       {nodeId !== null && <span ref={chipRef} className="prompt-dialog__node-id">{nodeId}</span>}
       <span className="prompt-dialog__heading-measure" aria-hidden="true"><span ref={measureRef} /></span>
