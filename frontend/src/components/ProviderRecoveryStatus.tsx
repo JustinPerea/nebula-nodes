@@ -73,7 +73,7 @@ export function ProviderRecoveryStatus() {
           type="button"
           className="provider-recovery-status__ack"
           onClick={() => void unlock()}
-          {...lock.act({ disabled: unlocking === ambiguityKey, title: UNLOCK_TITLE })}
+          {...lock.act({ disabled: unlocking === ambiguityKey, title: UNLOCK_TITLE, kept: 'unlock' })}
           // GM, round 13 of PR #114: the node by its card title. No confirm.
           aria-label={unlockAriaLabel(heldTitle ?? recordNodeName([], ambiguity.nodeId, true))}
         >
@@ -85,7 +85,7 @@ export function ProviderRecoveryStatus() {
           type="button"
           className="provider-recovery-status__ack"
           onClick={acknowledgeUncertainRun}
-          {...lock.act({ title: UNLOCK_TITLE })}
+          {...lock.act({ title: UNLOCK_TITLE, kept: 'unlock' })}
           // No node to name: GM's line (round 14 of PR #114).
           aria-label={UNLOCK_RUN_ARIA}
         >

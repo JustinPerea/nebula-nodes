@@ -11287,6 +11287,12 @@ const EDIT_GATES: Partial<Record<keyof GraphState, EditGate>> = {
       blocks: ((_nodeId: string, data: Partial<NodeData>) => 'params' in data || 'label' in data) as FollowGate['blocks'] } },
 };
 
+/** The edits that only change this tab's canvas, which the kept state
+ * (GM r15 on PR #199, Q11) lets through: typing (a param edit; the push
+ * waits) and a duplicate (GM r17: frontend-only copies, no graph request;
+ * the project snapshot [Save as a project] files carries them). */
+const KEPT_TAB_ONLY: ReadonlySet<keyof GraphState> = new Set<keyof GraphState>(['updateNodeData', 'duplicateSelected', 'duplicateNode']);
+
 /** The actions the gates wrap (round 21, review 20 L-1: a store test walks
  * every action and checks each is here or in NOT_GRAPH_EDITS). */
 export function gatedGraphActions(): string[] {
@@ -11462,10 +11468,12 @@ subscribeBackendConnection(() => {
       }
       const blocks = !gate.blocks || (gate.blocks as (...a: unknown[]) => boolean)(...args);
       // Kept in this tab after a restore (GM r15, Q11): typing joins the kept
-      // edits; any other edit or run is refused, and the kept line pulses.
+      // edits, and so does a duplicate (GM r17: its copies are this tab's
+      // own nodes, sent nowhere until [Save as a project] files the canvas);
+      // any other edit or run is refused, and the kept line pulses.
       if (blocks && isCanvasKept()) {
-        const typing = name === 'updateNodeData' && keptCanvasTakesTyping();
-        if (!typing) {
+        const tabOnly = KEPT_TAB_ONLY.has(name) && keptCanvasTakesTyping();
+        if (!tabOnly) {
           pulseKeptCanvas();
           return gate.refused();
         }

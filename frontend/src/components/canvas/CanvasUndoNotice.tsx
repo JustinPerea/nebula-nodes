@@ -67,7 +67,7 @@ export function CanvasUndoNotice({ messagesOnly = false }: { messagesOnly?: bool
       {notice.agentColor && <span className="canvas-undo-notice__dot" aria-hidden="true" />}
       <span className="canvas-undo-notice__text">{noticeText(notice.text, notice.mono)}</span>
       {actionable && (
-        <button type="button" className="canvas-undo-notice__action" onClick={act} {...lock.act()}
+        <button type="button" className="canvas-undo-notice__action" onClick={act} {...lock.act({ kept: 'undo' })}
           aria-keyshortcuts={notice.offer === 'undo' ? 'Meta+Z Control+Z' : 'Meta+Shift+Z Control+Shift+Z'}>
           {notice.offer === 'undo' ? 'Undo' : 'Redo'}
         </button>

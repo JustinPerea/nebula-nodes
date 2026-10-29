@@ -85,7 +85,7 @@ export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarP
           type="button"
           className="remotion-editor-toolbar__add"
           onClick={() => handleAdd(btn.componentType)}
-          {...lock.act()}
+          {...lock.act({ kept: 'edit-video' })}
         >
           {btn.label}
         </button>
@@ -102,6 +102,7 @@ export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarP
                 ? !canMoveBackward
                 : !canMoveForward,
               title: btn.title,
+              kept: 'edit-video',
             })}
           >
             {btn.label}
@@ -112,7 +113,7 @@ export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarP
         type="button"
         className="remotion-editor-toolbar__delete"
         onClick={handleDelete}
-        {...lock.act({ disabled: !selectedTrackItemId })}
+        {...lock.act({ disabled: !selectedTrackItemId, kept: 'edit-video' })}
       >
         Delete
       </button>

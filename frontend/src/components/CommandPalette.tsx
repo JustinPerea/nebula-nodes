@@ -18,7 +18,17 @@ import { claimIntent } from '../lib/heldIntents';
 import { returnFocusOnSlip } from '../lib/modalFocus';
 import { ModalPortal } from './ModalPortal';
 import { refuseCanvasEdit, useCanvasLock } from '../lib/canvasLock';
+import type { KeptAction } from '../lib/keptCanvas';
 import '../styles/command-palette.css';
+
+/** A palette command's line while the canvas is kept (GM r17 on PR #199). */
+function paletteKeptAction(id: string): KeptAction {
+  if (id === 'action:run') return 'run';
+  if (id === 'action:load') return 'load';
+  if (id === 'agent:ask') return 'ask';
+  if (id.startsWith('node:')) return 'add-node';
+  return 'other';
+}
 
 const NO_NODE_FIELDS: readonly string[] = Object.freeze([]);
 const NO_COMMANDS: PaletteCommand[] = [];
@@ -349,7 +359,7 @@ export function CommandPalette() {
                 {g.items.map((cmd) => {
                   const index = indexById.get(cmd.id) ?? 0;
                   const isSel = index === safeSelected;
-                  const act = cmd.acts ? lock.act({ disabled: cmd.enabled === false }) : null;
+                  const act = cmd.acts ? lock.act({ disabled: cmd.enabled === false, kept: paletteKeptAction(cmd.id) }) : null;
                   const disabled = act ? act.disabled : cmd.enabled === false;
                   return (
                     <button

@@ -1192,7 +1192,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button"
-            {...lock.act({ title: 'Duplicate this node', kept: 'duplicate' })}
+            {...lock.act({ title: 'Duplicate this node', kept: 'live' })}
             onClick={() => duplicateNode(renderNode.id)}
           >
             <Copy

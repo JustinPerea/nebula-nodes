@@ -49,19 +49,55 @@ export function useKeptCanvas(): boolean {
   return useSyncExternalStore(subscribeKeptCanvas, isCanvasKept, isCanvasKept);
 }
 
-/** GM r16 on PR #199, 4: what a control disabled while the canvas is kept
- * says unlocks it. `other`: a control GM's list doesn't name (builder's). */
-export type KeptAction = 'run' | 'duplicate' | 'delete' | 'note' | 'ask' | 'settings' | 'arrange' | 'other';
-export const KEPT_LOCK_TITLES: Record<KeptAction, string> = {
+/** GM r16 and r17 on PR #199: what a control disabled while the canvas is
+ * kept says unlocks it, one line per control. `other` is only a safety net
+ * nobody should see: every control names its own (canvasLock's `act` takes
+ * a `kept` for each, and a test walks the sources). */
+export type KeptAction = 'run' | 'delete' | 'note' | 'ask' | 'duplicate' | 'settings' | 'arrange'
+  | 'add-node' | 'next-step' | 'rewrite' | 'load' | 'clear' | 'undo' | 'proposal' | 'unlock'
+  | 'edit-video' | 'generate' | 'scene' | 'other';
+const KEPT_LINES: Record<Exclude<KeptAction, 'ask'>, string> = {
   run: 'You can run this after you save it as a project.',
-  duplicate: 'You can duplicate this after you save it as a project.',
   delete: 'You can delete this after you save it as a project.',
-  note: 'You can add a note after you save it as a project.',
-  ask: 'You can ask an agent about this after you save it as a project.',
-  settings: 'You can change its settings after you save it as a project.',
-  arrange: 'You can arrange this after you save it as a project.',
+  // GM r17, Q2, verbatim.
+  note: 'You can add notes after you save it as a project.',
+  duplicate: 'You can duplicate nodes after you save it as a project.',
+  arrange: 'You can arrange nodes after you save it as a project.',
+  settings: 'You can change settings after you save it as a project.',
+  // The builder's, in GM's form (for GM to confirm).
+  'add-node': 'You can add nodes after you save it as a project.',
+  'next-step': 'You can add a next step after you save it as a project.',
+  rewrite: 'You can rewrite the prompt after you save it as a project.',
+  load: 'You can load a graph after you save it as a project.',
+  clear: 'You can clear the canvas after you save it as a project.',
+  undo: 'You can undo after you save it as a project.',
+  proposal: 'You can answer proposals after you save it as a project.',
+  unlock: 'You can unlock it after you save it as a project.',
+  'edit-video': 'You can edit the video after you save it as a project.',
+  generate: 'You can generate after you save it as a project.',
+  scene: 'You can change the scene after you save it as a project.',
   other: 'You can do this after you save it as a project.',
 };
+
+/** The agent the chat talks to (ChatPanel's saved choice): Ask's line names
+ * it, as GM r17 wrote it for Codex. A personal agent is "your agent". */
+export function keptAskAgentName(): string {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem('nebula:chat-selection') || 'null') as { agent?: unknown } | null;
+    if (saved?.agent === 'codex') return 'Codex';
+    if (typeof saved?.agent === 'string' && saved.agent.startsWith('personal:')) return 'your agent';
+  } catch { /* the default agent */ }
+  return 'Claude';
+}
+
+/** A kept control's tooltip (GM r17, Q2). */
+export function keptLockTitle(action: KeptAction): string {
+  if (action === 'ask') return `You can ask ${keptAskAgentName()} after you save it as a project.`;
+  return KEPT_LINES[action];
+}
+
+/** The generic line, for the test that no visible control shows it. */
+export const KEPT_GENERIC_LINE = KEPT_LINES.other;
 
 export function setKeptCanvasSaving(value: boolean): void {
   saving = kept && value;

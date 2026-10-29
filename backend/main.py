@@ -16423,9 +16423,10 @@ async def canvas_waiting_refusal(request, exc: CanvasWaitingRefusal):
 # person's [Save as a project] then opens their edits over it, so both are
 # refused with this code until the person saves them (or closes the tab).
 CANVAS_KEPT_CODE = "canvas_kept_in_tab"
+# Curly ’ (GM r17 on PR #199, Q4): agents relay it to the person.
 CANVAS_KEPT_IN_TAB_DETAIL = (
-    "The person's tab is keeping edits Nebula couldn't save before it restored its project list, so the canvas "
-    "can't be changed and projects can't be switched until they save those edits as a project. Tell the person; "
+    "The person’s tab is keeping edits Nebula couldn’t save before it restored its project list, so the canvas "
+    "can’t be changed and projects can’t be switched until they save those edits as a project. Tell the person; "
     "try again after they click Save as a project.")
 
 
@@ -17374,13 +17375,18 @@ def _canvas_saved_now() -> dict[str, Any] | None:
     return saved if 0 <= age <= CANVAS_SAVED_SECONDS else None
 
 
-def _canvas_not_filed_note(reason: str, *, room_now: bool = False, live: bool = True, held: int = 0) -> str:
+def _canvas_not_filed_note(reason: str, *, room_now: bool = False, live: bool = True, held: int = 0,
+                           deletes: int | None = None, projects: int | None = None) -> str:
     """The agents' line for a canvas waiting to be saved as a project (the
     person's is GM's waiting line, frontend catalogRestoreCopy.ts): the live
     one (``live``), and ``held`` more held aside (GM's held model). Never
     says the person can reach it: the Projects home can't show a canvas that
     isn't a project (GM r6; review 4, M-1). ``room_now``: the list has room
-    again (an agent's delete, and no listing since: review 4, N-2)."""
+    again (an agent's delete, and no listing since: review 4, N-2).
+    ``deletes``: how many projects must go before every waiting canvas is
+    saved; more than one (the list past its limit, as after an Undo that
+    passed it, or several canvases waiting) is said with the number and
+    ``projects``, the list's count (GM r17 on PR #199)."""
     if live and held:
         which = (f"The canvas the person had open isn't a saved project, and {held} earlier "
                  f"{'canvas is' if held == 1 else 'canvases are'} held aside the same way")
@@ -17395,7 +17401,11 @@ def _canvas_not_filed_note(reason: str, *, room_now: bool = False, live: bool = 
         return (f"{which}, but the project list has room now: the next listing (the person's Projects home, "
                 "`nebula projects`, list_projects) saves each as its own project. Nothing in them is lost. The "
                 "person can't see or open them until then.")
-    if reason == "projects":
+    if reason == "projects" and deletes is not None and deletes > 1:
+        held_count = f"{projects} projects" if projects is not None else "its projects"
+        room = (f"the project list holds {held_count} and its limit is {project_store_module.MAX_PROJECTS}. "
+                f"Moving {deletes} projects to Recently deleted makes room")
+    elif reason == "projects":
         room = (f"the project list is at its limit of {project_store_module.MAX_PROJECTS} projects. Moving a project "
                 "to Recently deleted frees a slot")
     else:
@@ -17441,6 +17451,9 @@ def _canvas_not_filed_view(room_now: bool = False, catalog: dict[str, Any] | Non
     if catalog is not None and first["reason"] == "projects":
         for place, row in enumerate(rows, start=1):
             row["deletes"] = max(1, len(catalog["projects"]) + place - project_store_module.MAX_PROJECTS)
+    total_deletes = (max(1, len(catalog["projects"]) + len(held) + (1 if waiting is not None else 0)
+                         - project_store_module.MAX_PROJECTS)
+                     if catalog is not None and first["reason"] == "projects" else None)
     return {"reason": first["reason"], "from": first.get("from"), "since": first.get("since"),
             "projectLimit": project_store_module.MAX_PROJECTS, "live": waiting is not None, "held": len(held),
             "canvases": rows,
@@ -17448,11 +17461,10 @@ def _canvas_not_filed_view(room_now: bool = False, catalog: dict[str, Any] | Non
             **({"roomNow": True} if room_now else {}),
             # How many projects the person deletes before every canvas that
             # waits is saved (GM's answer 3: the plural line's real number).
-            **({"deletes": max(1, len(catalog["projects"]) + len(held) + (1 if waiting is not None else 0)
-                               - project_store_module.MAX_PROJECTS)}
-               if catalog is not None and first["reason"] == "projects" else {}),
+            **({"deletes": total_deletes} if total_deletes is not None else {}),
             "note": _canvas_not_filed_note(first["reason"], room_now=room_now, live=waiting is not None,
-                                           held=len(held))}
+                                           held=len(held), deletes=total_deletes,
+                                           projects=len(catalog["projects"]) if catalog is not None else None)}
 
 
 def _waiting_canvas_row(owner: Any, catalog: dict[str, Any] | None, copies: Mapping[str, Any]) -> dict[str, Any]:

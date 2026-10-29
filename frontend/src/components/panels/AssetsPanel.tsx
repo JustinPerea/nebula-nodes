@@ -460,7 +460,7 @@ function AssetItem({
             {openLabel}
           </button>
           {onAdd && (
-            <button type="button" className="assets-item__action" onClick={onAdd} {...lock.act()} aria-label={`Add ${label} to canvas`}>
+            <button type="button" className="assets-item__action" onClick={onAdd} {...lock.act({ kept: 'add-node' })} aria-label={`Add ${label} to canvas`}>
               Add to canvas
             </button>
           )}

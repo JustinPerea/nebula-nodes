@@ -27,7 +27,6 @@ import { NodeRunStatus } from './NodeRunStatus';
 import { OverviewImage, OverviewVideoStill } from './OverviewImage';
 import { StructuredOutputs } from './StructuredValuePreview';
 import { canvasTitle } from '../../lib/directRoute';
-import { useCanvasLock } from '../../lib/canvasLock';
 
 function isDynamicData(data: NodeData): data is DynamicNodeData {
   return 'isDynamic' in data && (data as DynamicNodeData).isDynamic === true;
@@ -43,7 +42,6 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
   const setInspectorVisible = useUIStore((s) => s.setInspectorVisible);
   const isSlavaSkin = useUIStore((s) => s.skin === 'slava-restraint');
   const actionSlot = useSelectionActionSlot(id);
-  const lock = useCanvasLock();
   const entranceClass = useSlavaNodeEntranceClass();
   const [videoLoop, setVideoLoop] = useState<boolean>(true);
 
@@ -126,8 +124,9 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
           aria-label="Show node settings"
           onClick={handleInspectorButtonClick}
           onMouseDown={(e) => e.stopPropagation()}
-          // GM r16 on PR #199, 4: disabled while the canvas is kept.
-          {...lock.keptOnly('settings', 'Show node settings')}
+          // Live while kept (GM r17 on PR #199): it opens the Inspector, where a
+          // param edit stays on this tab as typing does; its writes are gated.
+          title="Show node settings"
         >
           {inToolbar
             ? <><SlidersHorizontal size={17} aria-hidden="true" /><span className="selection-toolbar__label--compact">Settings</span></>

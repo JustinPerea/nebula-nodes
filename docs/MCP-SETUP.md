@@ -3017,9 +3017,18 @@ Nebula process restores the same folder. The restore:
    for example an Undo after the waiting canvas took the slot the delete
    freed. A restore with a canvas still waiting saves that canvas into any
    freed place first, as a listing would, so it never takes the place a
-   waiting canvas waits on. A list past the limit that way is like any other: making a
-   project is still refused (413, `limit: "projects"`, `projectLimit`) until
-   enough are deleted. Every agent write to the live canvas while it waits goes through
+   waiting canvas waits on. A list past the limit that way is like any other (a
+   damaged project list restored from a copy of it comes back whole too:
+   a restore adds no new project): making a
+   project is still refused (413, `limit: "projects"`, `projectLimit`; MCP's
+   `new_project` and `open_project` say it whole: "Project limit reached
+   (413, {"limit": "projects", "projectLimit": 500})") until enough are
+   deleted. A canvas waiting on a list past the limit needs more than one
+   delete: `canvasNotFiled.deletes` (and each row's own) counts them, and the
+   `note` names the number ("the project list holds 502 projects and its
+   limit is 500. Moving 3 projects to Recently deleted makes room"); the
+   person reads "Delete 3 projects and Nebula will save it." (at the limit
+   itself, "Delete a project and Nebula will save it."). Every agent write to the live canvas while it waits goes through
    one guard at the graph-write fence (every route marked as a graph write:
    adding, removing or changing nodes and connections, `apply`, `restore`, runs,
    uploads that add a node, a clear, a graph load), and again in the write
@@ -3123,9 +3132,9 @@ Nebula process restores the same folder. The restore:
    changes. Every canvas write, run and project switch of yours (add, set,
    connect, delete, clear, load, apply, run, `open_project`,
    `create_project`, deleting the open project) is refused (409, `code:
-   "canvas_kept_in_tab"`) with "The person's tab is keeping edits Nebula
-   couldn't save before it restored its project list, so the canvas can't
-   be changed and projects can't be switched until they save those edits
+   "canvas_kept_in_tab"`) with "The person’s tab is keeping edits Nebula
+   couldn’t save before it restored its project list, so the canvas can’t
+   be changed and projects can’t be switched until they save those edits
    as a project. Tell the person; try again after they click Save as a
    project." Reads still answer. MCP tools add "(409,
    canvas_kept_in_tab)" and the CLI "(canvas_kept_in_tab)". It ends when

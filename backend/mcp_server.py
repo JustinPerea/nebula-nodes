@@ -1421,12 +1421,29 @@ def list_projects(ctx: Context | None = None) -> dict[str, Any]:
     return project_client.list_projects(_api(), headers=_agent_headers(ctx))
 
 
+@contextlib.contextmanager
+def _limit_said_whole() -> Iterator[None]:
+    """A store limit's refusal (413) reaches the agent whole, as HTTP gives
+    it (review 5 of PR #199, L-2; GM r17, Q4: new_project too): the bare
+    detail left out which limit and how many projects it holds."""
+    try:
+        yield
+    except NebulaAPIError as exc:
+        payload = exc.payload if isinstance(exc.payload, dict) else {}
+        if exc.status != 413:
+            raise
+        fields = {key: payload[key] for key in ("limit", "projectLimit", "scope", "code") if key in payload}
+        raise NebulaAPIError(f"{exc.detail} (413, {_json.dumps(fields)})", status=413, kind=exc.kind,
+                             headers=exc.headers, payload=exc.payload) from exc
+
+
 def _switch(path: str, body: dict[str, Any], ctx: Context | None) -> dict[str, Any]:
     listing = _canvas_call("GET", "/api/projects", ctx)
     previous_id = listing.get("activeProjectId")
     previous = next((p for p in listing.get("projects") or [] if p.get("id") == previous_id), None)
-    result = _canvas_call("POST", path, ctx, timeout=30.0,
-                          json={**body, "workspaceRevision": listing.get("workspaceRevision", "")})
+    with _limit_said_whole():
+        result = _canvas_call("POST", path, ctx, timeout=30.0,
+                              json={**body, "workspaceRevision": listing.get("workspaceRevision", "")})
     project = result.get("project") or {}
     reply: dict[str, Any] = {"project": {"id": project.get("id"), "name": project.get("name"),
                                          "nodes": len((project.get("snapshot") or {}).get("nodes") or [])}}
@@ -1449,6 +1466,8 @@ def new_project(name: str, ctx: Context | None = None) -> dict[str, Any]:
     new one loads; what they had typed is saved into the project left (or, if
     that fails, as a new project named after the project left, "<project
     left> (recovered)", then "(recovered 2)" and so on). Refused while a run is going.
+    Refused at the project limit with the whole refusal, as HTTP answers it:
+    "Project limit reached (413, {"limit": "projects", "projectLimit": N})".
     """
     return _switch("/api/projects", {"name": name}, ctx)
 
@@ -1816,17 +1835,8 @@ def restore_from_trash(kind: str, id: str, ctx: Context | None = None) -> dict[s
     "projects", projectLimit), as HTTP answers it."""
     from urllib.parse import quote
 
-    try:
+    with _limit_said_whole():
         return _canvas_call("POST", f"/api/trash/{quote(kind, safe='')}/{quote(id, safe='')}/restore", ctx)
-    except NebulaAPIError as exc:
-        payload = exc.payload if isinstance(exc.payload, dict) else {}
-        if exc.status != 413:
-            raise
-        # The whole refusal, as HTTP gives it (review 5 of PR #199, L-2):
-        # the bare detail left out which limit and how many projects.
-        fields = {key: payload[key] for key in ("limit", "projectLimit", "scope", "code") if key in payload}
-        raise NebulaAPIError(f"{exc.detail} (413, {_json.dumps(fields)})", status=413, kind=exc.kind,
-                             headers=exc.headers, payload=exc.payload) from exc
 
 
 # -- commons (smart moodboard) ------------------------------------------------

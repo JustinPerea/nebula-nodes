@@ -83,3 +83,17 @@ describe("the listing's round 6 fields reach the store", () => {
     expect(state.canvasSaved?.filed?.map((row) => row.name)).toEqual(['Recovered canvas', 'Recovered canvas 2']);
   });
 });
+
+describe('GM r17 (fix round 13): each waiting canvas keeps its own count', () => {
+  it("the listing's per-canvas `deletes` reach the store, so each line counts its own", async () => {
+    listProjects.mockResolvedValueOnce({ projects: [], trash: [], activeProjectId: null, workspaceRevision: 'r3',
+      paramsVersion: GRAPH_PARAMS_VERSION, projectLimit: 3,
+      canvasNotFiled: { reason: 'projects', projectLimit: 3, live: true, held: 0, deletes: 3,
+        canvases: [{ name: null, deletes: 2 }, { name: null, agentCopy: { agent: 'Codex' }, deletes: 3 }] },
+    } as never);
+    send({ type: 'projectsChanged', change: 'deleted', projectId: 'y' });
+    await vi.waitFor(() => expect(useProjectStore.getState().canvasNotFiled?.deletes).toBe(3));
+    expect(useProjectStore.getState().canvasNotFiled?.canvases).toEqual([
+      { name: null, deletes: 2 }, { name: null, agentCopy: { agent: 'Codex' }, deletes: 3 }]);
+  });
+});

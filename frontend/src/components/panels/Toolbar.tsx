@@ -40,7 +40,7 @@ import '../../styles/panels.css';
 import '../../styles/canvas-toolbar.css';
 import { refuseEditWhileOffline } from '../../lib/backendConnection';
 import { KEPT_MARK, useCanvasLock } from '../../lib/canvasLock';
-import { KEPT_LOCK_TITLES } from '../../lib/keptCanvas';
+import { keptLockTitle } from '../../lib/keptCanvas';
 
 const CLEAR_CANVAS = "Couldn't clear the canvas.";
 
@@ -302,7 +302,7 @@ export function Toolbar() {
           // Kept first (GM r16 on PR #199, 4): its mark and its tooltip.
           {...(lock.kept ? { [KEPT_MARK]: '' } : lock.mark)}
           aria-describedby={nodeCount > 0 ? runScopeId : undefined}
-          title={lock.kept ? KEPT_LOCK_TITLES.run : following ? waitToOpenTooltip(following.projectName)
+          title={lock.kept ? keptLockTitle('run') : following ? waitToOpenTooltip(following.projectName)
             : isImportingGraph ? 'Wait for the graph import to finish' : `Run graph. ${describeRunScope(runScope)} (${displayKey('Mod')}${displayKey('Enter')})`}
         >
           <ToolbarIcon name="run" />
@@ -338,19 +338,19 @@ export function Toolbar() {
                 <ToolbarIcon name="save" /><span>Save graph</span><kbd aria-hidden="true">Ctrl / ⌘ S</kbd>
               </button>
               <button type="button" className="toolbar__action"
-                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Load graph (Ctrl+O or ⌘O)' })}
+                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Load graph (Ctrl+O or ⌘O)', kept: 'load' })}
                 aria-describedby={!canLoad ? blockedId : undefined}
                 aria-keyshortcuts="Control+o Meta+o" onClick={() => runSecondaryAction(requestGraphLoad)}>
                 <ToolbarIcon name="load" /><span>Load graph</span><kbd aria-hidden="true">Ctrl / ⌘ O</kbd>
               </button>
               <button type="button" className="toolbar__action"
-                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Import graph built by Nebula CLI' })}
+                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Import graph built by Nebula CLI', kept: 'load' })}
                 aria-describedby={!canLoad ? blockedId : undefined}
                 onClick={() => runSecondaryAction(() => void handleImportCLI())}>
                 <ToolbarIcon name="cli" /><span>Import CLI graph</span>
               </button>
               <button type="button" className="toolbar__action toolbar__action--danger"
-                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Clear canvas — asks for confirmation' })}
+                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Clear canvas — asks for confirmation', kept: 'clear' })}
                 aria-describedby={!canLoad ? blockedId : undefined}
                 onClick={() => runSecondaryAction(() => void handleClear())}>
                 <ToolbarIcon name="clear" /><span>Clear canvas…</span>

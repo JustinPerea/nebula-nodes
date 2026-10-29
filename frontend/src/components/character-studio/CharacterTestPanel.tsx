@@ -104,6 +104,7 @@ export function CharacterTestPanel({
           title: canTest
             ? 'Drop this Character on the canvas to test on a base-edit node'
             : 'Save the Character first (needs a name + ≥3 reference views)',
+          kept: 'add-node',
         })}
       >
         {pending ? 'Adding to canvas…' : 'Test on canvas →'}

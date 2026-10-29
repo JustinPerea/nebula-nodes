@@ -37,7 +37,7 @@ import { WORLD_LABS_NEEDS_CHECK } from '../lib/worldLabsWaiting';
 import type { CatalogRestore, ProjectList, ProjectSnapshot, ProjectSummary, SavedProject, TrashedProject } from '../lib/projects';
 import {
   agentClosedLine, canvasHeldLogLine, canvasHoldRefusedLogLine, catalogRestoreLogLine, DEFAULT_PROJECT_LIMIT, editsRecoveredToast,
-  LATEST_EDITS_KEPT, RELOAD_TO_CONTINUE,
+  LATEST_EDITS_KEPT, RELOAD_TO_CONTINUE, type CanvasLimitContext,
 } from '../components/projects/catalogRestoreCopy';
 
 /** The canvas kept in this tab (GM r15 on PR #199, Q11; review 11, HIGH-1):
@@ -145,7 +145,7 @@ interface ProjectState {
   dismissCatalogRestore: () => void;
   /** The live canvas isn't a project and the list had no room to save it
    * (the listing's `canvasNotFiled`): the Projects home's waiting line. */
-  canvasNotFiled: { reason: 'projects' | 'storage'; projectLimit?: number; canvases?: { name?: string | null }[]; deletes?: number | null } | null;
+  canvasNotFiled: { reason: 'projects' | 'storage'; projectLimit?: number; canvases?: CanvasLimitContext['canvases']; deletes?: number | null } | null;
   /** Held canvases that couldn't be read (the listing's
    * `canvasHeldUnreadable`, review 6, L-1): the person's line. */
   canvasHeldUnreadable: { count: number | null; at?: string } | null;
@@ -1311,7 +1311,9 @@ function listingNotices(list: ProjectList): ListingNotices {
         ...(Array.isArray(waiting.canvases) ? { canvases: waiting.canvases.map((canvas) => ({
           name: typeof canvas?.name === 'string' ? canvas.name : null,
           ...(canvas?.agentCopy && typeof canvas.agentCopy === 'object'
-            ? { agentCopy: { agent: typeof canvas.agentCopy.agent === 'string' ? canvas.agentCopy.agent : null } } : {}) })) } : {}),
+            ? { agentCopy: { agent: typeof canvas.agentCopy.agent === 'string' ? canvas.agentCopy.agent : null } } : {}),
+          // Each line's own count (GM r12, 2; r17: past the limit too).
+          ...(typeof canvas?.deletes === 'number' && canvas.deletes > 0 ? { deletes: canvas.deletes } : {}) })) } : {}),
         ...(typeof waiting.deletes === 'number' && waiting.deletes > 0 ? { deletes: waiting.deletes } : {}) }
       : null,
     canvasHeldUnreadable: unreadable && typeof unreadable === 'object'

@@ -40,8 +40,10 @@ export function SelectionToolbar() {
   // Note, Duplicate, Arrange and Delete are disabled and look it, with "Wait
   // for “<project>” to open." while following; Copy, Download and the
   // node's Settings stay. While the canvas is kept after a restore (GM r16
-  // on PR #199, 4) the node's Settings is disabled too, each with its own
-  // "You can … after you save it as a project."; Copy and Download stay.
+  // and r17 on PR #199) what writes to Nebula or spends is disabled, each
+  // with its own "You can … after you save it as a project."; Copy,
+  // Download, Settings and Duplicate (its copies stay on this tab, as
+  // typing does) stay.
   const lock = useCanvasLock();
   const executeNode = useGraphStore((state) => state.executeNode);
   const executeCluster = useGraphStore((state) => state.executeCluster);
@@ -179,7 +181,7 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button"
         onClick={duplicateSelected}
-        {...lock.act({ busy: isExecuting ? RUN_GOING : null, title: 'Duplicate selected nodes', kept: 'duplicate' })}
+        {...lock.act({ busy: isExecuting ? RUN_GOING : null, title: 'Duplicate selected nodes', kept: 'live' })}
       >
         <Files size={17} aria-hidden="true" />
         <span className="selection-toolbar__label--compact">Duplicate</span>

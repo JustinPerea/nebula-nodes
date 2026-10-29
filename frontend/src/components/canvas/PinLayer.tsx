@@ -155,7 +155,7 @@ function PinBadge({ pin, slot, zoom }: { pin: Pin; slot: number; zoom: number })
             type="button"
             className="canvas-pin__delete"
             aria-label="Delete note"
-            {...lock.act()}
+            {...lock.act({ kept: 'note' })}
             onClick={() => void remove(pin.id)}
           >
             <Trash2 size={12} aria-hidden="true" />

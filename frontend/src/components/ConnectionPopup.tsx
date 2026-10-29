@@ -340,7 +340,7 @@ export function ConnectionPopup() {
               </button>
               {isOpen && nodes.map((node) => (
                 <div key={node.definition.id} className="next-step-choice">
-                <button type="button" {...lock.act({ disabled: pending })}
+                <button type="button" {...lock.act({ disabled: pending, kept: 'add-node' })}
                   className="connection-popup__item"
                   onClick={() => handleSelect(node)}
                 >

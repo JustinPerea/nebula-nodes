@@ -5,6 +5,7 @@ import { useCanvasPinsStore } from '../store/canvasPinsStore';
 import { isBackendNodeId } from '../lib/canvasPins';
 import { floatingBottomLimit } from '../lib/bottomBar';
 import { useCanvasLock } from '../lib/canvasLock';
+import type { KeptAction } from '../lib/keptCanvas';
 import '../styles/panels.css';
 import { keyBlockedByModal } from '../lib/canvasShortcutScope';
 
@@ -13,6 +14,8 @@ const MENU_EDGE = 8;
 
 interface MenuItem {
   label: string;
+  /** Its line while the canvas is kept, or 'live' (GM r17 on PR #199). */
+  kept: KeptAction | 'live';
   shortcut?: string;
   danger?: boolean;
   disabled?: boolean;
@@ -94,7 +97,7 @@ export function ContextMenu() {
       <div ref={menuRef} className="context-menu" style={style}>
         <button
           className="context-menu__item"
-          {...lock.act()}
+          {...lock.act({ kept: 'note' })}
           onClick={() => {
             composeNote({ position: flowPosition });
             hideContextMenu();
@@ -109,6 +112,7 @@ export function ContextMenu() {
   const items: MenuItem[] = [
     {
       label: 'Run This Node',
+      kept: 'run',
       disabled: isExecuting || runStarting,
       action: () => {
         executeNode(nodeId);
@@ -117,6 +121,7 @@ export function ContextMenu() {
     },
     {
       label: 'Leave a note for agents…',
+      kept: 'note',
       // Agents only see nodes the backend knows (ids like n4).
       disabled: !isBackendNodeId(nodeId),
       action: () => {
@@ -126,6 +131,8 @@ export function ContextMenu() {
     },
     {
       label: 'Duplicate',
+      // Its copy stays on this tab while the canvas is kept (GM r17).
+      kept: 'live',
       shortcut: 'Ctrl+D',
       action: () => {
         duplicateNode(nodeId);
@@ -134,6 +141,7 @@ export function ContextMenu() {
     },
     {
       label: 'Delete',
+      kept: 'delete',
       shortcut: 'Del',
       danger: true,
       action: () => {
@@ -156,7 +164,7 @@ export function ContextMenu() {
           key={item.label}
           className={`context-menu__item ${item.danger ? 'context-menu__item--danger' : ''}`}
           onClick={item.action}
-          {...lock.act({ disabled: item.disabled })}
+          {...lock.act({ disabled: item.disabled, kept: item.kept })}
         >
           <span>{item.label}</span>
           {item.shortcut && <span className="context-menu__shortcut">{item.shortcut}</span>}

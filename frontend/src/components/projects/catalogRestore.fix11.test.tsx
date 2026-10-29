@@ -42,11 +42,14 @@ afterEach(() => {
 });
 
 describe("GM r14, 2: the person's line counts only when several of theirs wait", () => {
-  it('one canvas of theirs: "Delete a project", whatever the listing counts', () => {
+  // GM r17 (fix round 13) superseded "whatever the listing counts": past the
+  // limit one canvas of theirs names the number too (catalogRestore.fix13).
+  it('one canvas of theirs: "Delete a project" at the limit, the number past it', () => {
     for (const line of [canvasWaitingLine, canvasLimitLine]) {
-      expect(line('projects', { ...LIMIT, deletes: 3, canvases: [{ name: 'Alpha', deletes: 3 }] }))
+      expect(line('projects', { ...LIMIT, deletes: 1, canvases: [{ name: 'Alpha', deletes: 1 }] }))
         .toMatch(/Nothing in it is lost\. Delete a project and Nebula will save it\.$/);
-      expect(line('projects', { ...LIMIT, deletes: 2 })).toMatch(/Delete a project and Nebula will save it\.$/);
+      expect(line('projects', { ...LIMIT, deletes: 3, canvases: [{ name: 'Alpha', deletes: 3 }] }))
+        .toMatch(/Nothing in it is lost\. Delete 3 projects and Nebula will save it\.$/);
     }
   });
 

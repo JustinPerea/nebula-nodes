@@ -1356,7 +1356,7 @@ class ProjectStore:
             raise ProjectStoreError(UNREADABLE) from exc
         # Written to a temporary file first: past a limit, nothing has changed.
         try:
-            temporary = self.prepare(catalog)
+            temporary = self.prepare(catalog, restoring=True)
         except ProjectLimitError as exc:
             if fallback is None or not (merged.added or merged.updated):
                 # A rebuild has no copy to fall back on (review 1, L1): the
@@ -1387,7 +1387,7 @@ class ProjectStore:
             if catalog.get("migratedProjectId") not in catalog["projects"]:
                 catalog.pop("migratedProjectId", None)
             self._carry_protection(catalog, salvages, read_whole)
-            temporary = self.prepare(catalog)
+            temporary = self.prepare(catalog, restoring=True)
         # Every damaged file is kept before anything replaces it.
         set_aside: list[str] = []
         damaged_file: str | None = None
@@ -2434,15 +2434,23 @@ class ProjectStore:
         known = getattr(self._local, "ids", None)
         return bool(known) and set(catalog["projects"]) <= known
 
-    def prepare(self, catalog: dict[str, Any]) -> Path:
+    def prepare(self, catalog: dict[str, Any], *, restoring: bool = False) -> Path:
         """Write/fsync a private temporary catalog before any live graph edit.
 
         Refuses (ProjectStoreError, nothing written) a catalog _read would
         refuse: it would read back as damage and be "restored", hiding the
         bug behind the person's restore notice (review 1, L7), or one that
-        can't be encoded."""
+        can't be encoded.
+
+        ``restoring`` (the catalog restore, fix round 13 of PR #199): a list
+        restored from Nebula's own files adds no new project, so with
+        RESTORE_MAY_PASS_THE_PROJECT_LIMIT on it may pass the project limit
+        (a copy of a list an Undo took past it). reconcile adds a record past
+        the limit back only when the copy is below it, so the restored list
+        is past it only by what the copy holds. The size cap still holds."""
         self._ensure_root()
-        if len(catalog["projects"]) > MAX_PROJECTS and not self._past_the_limit_by_restores_only(catalog):
+        if (len(catalog["projects"]) > MAX_PROJECTS and not (restoring and RESTORE_MAY_PASS_THE_PROJECT_LIMIT)
+                and not self._past_the_limit_by_restores_only(catalog)):
             raise ProjectLimitError("Project limit reached", "projects")
         try:
             self._check(catalog, fill=False)

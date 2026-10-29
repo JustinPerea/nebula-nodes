@@ -111,11 +111,13 @@ they click Save as a project.
 Nothing in the canvas is lost, also across restarts, but the person can't
 see or open it until it is saved: never tell them it is open. Its
 note says what frees room: for the project limit, moving a project to
-Recently deleted; for the size limit, only deleting one for good. Once room
+Recently deleted (or, on a list past the limit, how many: "Moving 2
+projects …", `deletes`); for the size limit, only deleting one for good. Once room
 is free (`roomNow`) the next listing saves it. Tell them, and don't delete
 anything to make room yourself. Restoring a project from Recently deleted
 is never refused by the limit (it may pass it); making a new one past the
-limit still is (413 with `limit` and `projectLimit`).
+limit still is (413 with `limit` and `projectLimit`, which MCP's
+`new_project` prints too).
 Start new work in a new project (`nebula project new "<name>"`) or open the
 right one (`nebula project open <id>`). The person's canvas follows (from
 their Projects screen too), names you, and offers them a button back.

@@ -562,11 +562,11 @@ def test_l1_a_rebuild_past_the_size_limit_refuses_and_changes_nothing(tmp_path, 
     real = store.prepare
     calls = {"n": 0}
 
-    def limited(catalog):
+    def limited(catalog, **kwargs):  # the restore passes restoring=True (fix round 13)
         calls["n"] += 1
         if catalog["projects"]:
             raise store_module.ProjectLimitError("Project storage limit reached", "storage")
-        return real(catalog)
+        return real(catalog, **kwargs)
 
     monkeypatch.setattr(store, "prepare", limited)
     with pytest.raises(ProjectStoreError):

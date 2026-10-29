@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { followingSwitch, refuseEditWhileFollowing, useFollowingSwitch, waitToOpenTooltip, type FollowingSwitch } from './canvasFollow';
 import { isBackendOffline, refuseEditWhileOffline } from './backendConnection';
 import { OFFLINE_MARK, useBackendOffline } from './useBackendOffline';
-import { isCanvasKept, KEPT_LOCK_TITLES, refuseEditWhileKept, useKeptCanvas, type KeptAction } from './keptCanvas';
+import { isCanvasKept, keptLockTitle, refuseEditWhileKept, useKeptCanvas, type KeptAction } from './keptCanvas';
 
 /**
  * Round 22 of PR #195 (GM - Design, blocker A): the one read-only state
@@ -27,12 +27,14 @@ export const KEPT_MARK = 'data-kept-disabled';
 
 /** A control's own state for `act`: `busy` is the run's reason when one is
  * going ("Wait for the active run to finish"), `kept` which of GM's kept
- * tooltips it shows (r16, 4). */
+ * lines it shows (r16, 4; r17, Q2: every control names its own, so the
+ * field is required), or 'live' for a control that only changes this tab's
+ * canvas, as typing does (r17: Duplicate), which the kept state leaves on. */
 export interface ActOwn {
   disabled?: boolean;
   title?: string;
   busy?: string | null;
-  kept?: KeptAction;
+  kept: KeptAction | 'live';
 }
 
 export interface CanvasLock {
@@ -51,10 +53,7 @@ export interface CanvasLock {
   /** A control that acts: `disabled` (its own reasons too), the marks, and
    * the first lock reason's tooltip in GM's order (r16, 4): kept, a run
    * going (`busy`), following, offline (offline has no tooltip of its own). */
-  act(own?: ActOwn): ActProps;
-  /** A control that stays live while following or offline (it changes
-   * nothing there) but not while kept: GM r16, 4 lists Settings. */
-  keptOnly(action: KeptAction, title?: string): ActProps;
+  act(own: ActOwn): ActProps;
 }
 
 export interface ActProps {
@@ -71,18 +70,15 @@ export function canvasLockOf(following: FollowingSwitch | null, offline: boolean
   if (following) mark[FOLLOWING_MARK] = '';
   if (offline) mark[OFFLINE_MARK] = '';
   const locked = Boolean(following) || offline;
-  const keptProps = (action: KeptAction = 'other'): ActProps => ({
-    [KEPT_MARK]: '', disabled: true, title: KEPT_LOCK_TITLES[action],
-  });
   return {
     locked, following, offline, kept, mark,
-    // Kept first: its tooltip and its mark only (a press pulses the kept line).
-    act: (own = {}) => (kept ? keptProps(own.kept) : {
+    // Kept first: its own line and its mark only (a press pulses the kept
+    // line). A control that only changes this tab's canvas stays on.
+    act: (own) => (kept && own.kept !== 'live' ? { [KEPT_MARK]: '', disabled: true, title: keptLockTitle(own.kept) } : {
       ...mark,
       disabled: locked || Boolean(own.disabled) || Boolean(own.busy),
       title: own.busy || (following ? waitToOpenTooltip(following.projectName) : own.title),
     }),
-    keptOnly: (action, title) => (kept ? keptProps(action) : { disabled: false, title }),
   };
 }
 

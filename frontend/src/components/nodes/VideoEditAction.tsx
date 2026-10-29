@@ -39,7 +39,7 @@ export function VideoEditAction({ id, data, displayedOutputs, className = 'model
     <button type="button"
       className={`${className} model-node__video-edit nodrag nopan`}
       {...lock.act({ disabled: isImportingGraph || !canvasActive,
-        title: isImportingGraph ? 'Wait for the graph import to finish' : 'Edit this video result' })}
+        title: isImportingGraph ? 'Wait for the graph import to finish' : 'Edit this video result', kept: 'edit-video' })}
       onPointerDown={(event) => event.stopPropagation()}
       onMouseDown={(event) => event.stopPropagation()}
       onKeyDown={(event) => event.stopPropagation()}

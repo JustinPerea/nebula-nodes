@@ -172,7 +172,7 @@ export function CreateComposer({
         <button
           type="button"
           className="create-composer__generate"
-          {...lock.act({ disabled: !canGenerate })}
+          {...lock.act({ disabled: !canGenerate, kept: 'generate' })}
           onClick={(e) => { if (e.detail <= 1 && canGenerate && !refuseCanvasEdit()) onGenerate(); }}
         >
           <Sparkles size={16} strokeWidth={1.9} aria-hidden="true" />

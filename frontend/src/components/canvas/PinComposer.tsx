@@ -42,7 +42,7 @@ export function PinComposer() {
           request={request}
           maxLength={MAX_PIN_TEXT}
           onChange={setDraft}
-          confirm={lock.act()}
+          confirm={lock.act({ kept: 'note' })}
           onRefused={() => { refuseCanvasEdit(); }}
           onDone={(value) => {
             if (value === null || !value.trim()) cancel();

@@ -141,7 +141,9 @@ export function agentCopyWaitingLine(agent: string | null | undefined, reason: C
 }
 
 /** "Delete a project and Nebula will save it.", or with the real number
- * when more than one has to go (GM r12, 2). */
+ * when more than one has to go (GM r12, 2; GM r17: the person's own canvas
+ * too, once the list is past the limit, as after an Undo that passed it:
+ * "Delete 2 projects and Nebula will save it."). */
 function deleteToSaveIt(deletes?: number | null): string {
   return typeof deletes === 'number' && deletes > 1
     ? `Delete ${deletes} projects and Nebula will save it.` : 'Delete a project and Nebula will save it.';
@@ -299,14 +301,11 @@ function personsLimitLine(reason: CanvasLimit, context: CanvasLimitContext): str
   }
   const opening = "The canvas you had open couldn’t be saved as its own project because";
   if (reason === 'projects') {
-    return `${opening} you’ve reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST} ${DELETE_A_PROJECT}`;
+    return `${opening} you’ve reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST} ${deleteToSaveIt(ownCount(context))}`;
   }
   return `${opening} Nebula’s project list is full. ${NOTHING_LOST} ${sizeCapAdvice(context.trashHasItems)}`;
 }
 
-/** GM r14 on PR #199, 2: one canvas of the person's always gets "Delete a
- * project"; "Delete N projects" is only for several of theirs waiting. */
-const DELETE_A_PROJECT = 'Delete a project and Nebula will save it.';
 
 /** GM r5 (1)/r6, the waiting line: the Projects home's slim notice while
  * the canvas waits, whether or not a restore notice is open; it can't be
@@ -328,7 +327,7 @@ function personsWaitingLine(reason: CanvasLimit, context: CanvasLimitContext): s
   }
   const opening = "The canvas you had open isn’t saved as a project yet because";
   if (reason === 'projects') {
-    return `${opening} you’ve reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST} ${DELETE_A_PROJECT}`;
+    return `${opening} you’ve reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST} ${deleteToSaveIt(ownCount(context))}`;
   }
   return `${opening} Nebula’s project list is full. ${NOTHING_LOST} ${sizeCapAdvice(context.trashHasItems)}`;
 }

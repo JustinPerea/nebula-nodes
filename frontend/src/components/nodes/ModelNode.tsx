@@ -391,7 +391,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         {hasMediaPreview && <button type="button"
           className={inToolbar ? 'selection-toolbar__button nodrag' : 'model-node__next-step nodrag'}
           data-next-step-anchor={id}
-          {...lock.act({ disabled: !nextStepSource || isExecuting || !/^n\d+$/.test(id), title: nextStepTitle })}
+          {...lock.act({ disabled: !nextStepSource || isExecuting || !/^n\d+$/.test(id), title: nextStepTitle, kept: 'next-step' })}
           onMouseDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
@@ -411,8 +411,9 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
           aria-label="Show node settings"
           onClick={handleInspectorButtonClick}
           onMouseDown={(e) => e.stopPropagation()}
-          // GM r16 on PR #199, 4: disabled while the canvas is kept.
-          {...lock.keptOnly('settings', 'Show node settings')}
+          // Live while kept (GM r17 on PR #199): it opens the Inspector, where a
+          // param edit stays on this tab as typing does; its writes are gated.
+          title="Show node settings"
         >
           {inToolbar
             ? <><SlidersHorizontal size={17} aria-hidden="true" /><span className="selection-toolbar__label--compact">Settings</span></>
@@ -594,7 +595,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
             <button
               type="button"
               className="model-node__enhance nodrag"
-              {...lock.act({ title: "Ask Claude to rewrite this prompt for the node it's connected to" })}
+              {...lock.act({ title: "Ask Claude to rewrite this prompt for the node it's connected to", kept: 'rewrite' })}
               onClick={(e) => {
                 e.stopPropagation();
                 handleEnhance();

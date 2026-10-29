@@ -164,22 +164,22 @@ export function CinemaShotsRail({
               {selected && <>
                 <button type="button" className="cinema-shots-rail__move"
                   aria-label={`Move Shot ${idx + 1} earlier`}
-                  {...lock.act({ disabled: idx === 0, title: 'Move shot earlier' })}
+                  {...lock.act({ disabled: idx === 0, title: 'Move shot earlier', kept: 'scene' })}
                   onClick={() => reorder(shot.id, idx - 1, true)}>←</button>
                 <button type="button" className="cinema-shots-rail__move"
                   aria-label={`Move Shot ${idx + 1} later`}
-                  {...lock.act({ disabled: idx === scene.shots.length - 1, title: 'Move shot later' })}
+                  {...lock.act({ disabled: idx === scene.shots.length - 1, title: 'Move shot later', kept: 'scene' })}
                   onClick={() => reorder(shot.id, idx + 1, true)}>→</button>
               </>}
               <button type="button" className="cinema-shots-rail__remove"
-                aria-label={`Remove Shot ${idx + 1}`} {...lock.act({ title: 'Remove shot' })}
+                aria-label={`Remove Shot ${idx + 1}`} {...lock.act({ title: 'Remove shot', kept: 'scene' })}
                 onClick={() => handleRemove(shot.id, idx)}>×</button>
             </div>
           </div>
         );
       })}
       <button ref={addRef} type="button" className="cinema-shots-rail__add"
-        {...lock.act()} onClick={() => { if (!refuseCanvasEdit()) onAddShot(); }}>
+        {...lock.act({ kept: 'scene' })} onClick={() => { if (!refuseCanvasEdit()) onAddShot(); }}>
         + Add shot
       </button>
     </div>
