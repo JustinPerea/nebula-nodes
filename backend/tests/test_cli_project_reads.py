@@ -165,7 +165,7 @@ def test_project_rename_json_is_rename_projects_result(cli):
     by_mcp = mcp_server.rename_project(project["id"], "After")
     # Each surface words its undo hint as its own call.
     assert by_cli.pop("note") == f"`nebula project rename {project['id']} Before` puts the old name back."
-    assert by_mcp.pop("note") == f"rename_project('{project['id']}', 'Before') puts the old name back."
+    assert by_mcp.pop("note") == f"`rename_project('{project['id']}', 'Before')` puts the old name back."
     assert by_cli == by_mcp == {"project": {"id": project["id"], "name": "After"}, "previousName": "Before"}
 
 

@@ -96,7 +96,7 @@ import {
 import { CANVAS_NOTICE_EVENT, showNotice, type CanvasNoticeDetail } from '../lib/canvasNotice';
 import { BAD_SAVE, KEPT_AND_RETRYING, sceneStoppedLine, sceneOutpacedLine, type SceneOutpacedBy, type SceneWriter, sceneWriterOf,
   sameSceneWriter, UNKNOWN_WRITER, sceneDeletedLine, KEPT_UNTIL_RUN_ENDS, sceneClashLine,
-  sceneReorderedLine, sceneSaveHeading, sceneTooBigLine, shotBackWithoutLine, shotsRemovedLine } from '../lib/sceneSaveCopy';
+  sceneReorderedLine, sceneSaveHeading, sceneTooBigLine, sceneCantSaveLine, sceneTooBigToSaveLine, shotBackWithoutLine, shotsRemovedLine } from '../lib/sceneSaveCopy';
 import { ORDER, PRESENCE, WHOLE, mergeScenes, stillClashing, unionFields, withFields, type SceneField } from '../lib/cinemaSceneMerge';
 import { cleanPending, pendingSkipLine, type PendingAgent, type PendingSkipSummary } from '../lib/pendingNodes';
 import { MISSING_KEY_FAILURE, MODEL_SETTINGS_FAILURE, MODEL_SETTINGS_FAILURE_HEADER, modelKeyMissingText, modelSettingsFailedText, modelSetupFailedText } from '../lib/failureLines';
@@ -3114,7 +3114,17 @@ export function clearCinemaScenePersistence(nodeId?: string): void {
  * its id, on the same canvas) picks the save back up, merged onto the
  * scene as it comes back (restoreDeletedScenes). The line isn't said again.
  */
-const deletedSceneEdits = new Map<string, { mine: CinemaSceneSpec; base: CinemaSceneSpec | null; graph: number }>();
+const deletedSceneEdits = new Map<string, { mine: CinemaSceneSpec; base: CinemaSceneSpec | null; graph: number;
+  /** The deleted line said for it, so the delete's own toast can carry it
+   * (GM r21 answer 3) and a clash asked again replaces it (GM #198 r12
+   * answer 2). */
+  line: string;
+  /** A clash that was waiting for the person when the scene went: asked
+   * again once the scene is back, if it still differs (GM #198 r12 answer 2). */
+  clash: { fields: SceneField[]; writer: SceneWriter } | null }>();
+/** A deleted scene's line, said or to say, for the sync that took the card
+ * off (`said`: the save's 404 said it first). */
+interface DeletedSceneLine { nodeId: string; line: string; said: boolean }
 const DELETED_SCENES_KEPT = 32;
 
 /** Whether the entry holds edits Nebula doesn't have (sceneSavesNow). */
@@ -3123,23 +3133,33 @@ function sceneHasUnsavedEdits(entry: CinemaScenePersistence): boolean {
 }
 
 /** `later`: the line is said by the caller once its sync has landed. */
-function noteSceneDeleted(nodeId: string, entry: CinemaScenePersistence, line: string, later?: string[]): void {
+function noteSceneDeleted(nodeId: string, entry: CinemaScenePersistence, line: string, later?: DeletedSceneLine[]): void {
   const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
   if (!node || node.data.definitionId !== 'cinema-scene') return;
   const said = deletedSceneEdits.get(nodeId);
   const sameCanvas = said?.graph === canvasReplacementRevision;
   deletedSceneEdits.delete(nodeId);
+  const clash = entry.clash ? { fields: [...entry.clash.fields], writer: entry.clash.writer }
+    : sameCanvas && said ? said.clash : null;
   deletedSceneEdits.set(nodeId, { mine: cloneScene(sceneFromNode(node)),
-    base: sameCanvas && said ? said.base : entry.base ? cloneScene(entry.base) : null, graph: canvasReplacementRevision });
+    base: sameCanvas && said ? said.base : entry.base ? cloneScene(entry.base) : null, graph: canvasReplacementRevision,
+    line: sameCanvas && said ? said.line : line, clash });
   while (deletedSceneEdits.size > DELETED_SCENES_KEPT) deletedSceneEdits.delete(deletedSceneEdits.keys().next().value!);
-  if (sameCanvas) return; // said once (the sync's removal, then the save's 404, or an edit after it)
+  // The clash waits for the scene to come back (asked again then).
+  if (entry.clash) setSceneClash(nodeId, null);
+  if (sameCanvas) {
+    // Said once (the sync's removal, then the save's 404, or an edit after
+    // it); the delete's toast may still carry it.
+    if (later) later.push({ nodeId, line: said!.line, said: true });
+    return;
+  }
   // Its [Try again] or retry line no longer applies.
   useGraphStore.setState((state) => ({
     ...(state.undoNotice?.retryScene?.nodeId === nodeId ? { undoNotice: null } : {}),
     ...(state.messageNotice?.retryScene?.nodeId === nodeId ? { messageNotice: null } : {}),
     ...(state.undoNotice?.text === entry.refusedLine && !state.undoNotice?.offer ? { undoNotice: null } : {}),
   }));
-  if (later) later.push(line);
+  if (later) later.push({ nodeId, line, said: false });
   else useGraphStore.getState().notify(line);
 }
 
@@ -3148,16 +3168,51 @@ function noteSceneDeleted(nodeId: string, entry: CinemaScenePersistence, line: s
  * by who deleted it. Read before the sync's nodes replace the canvas's; the
  * lines it returns are said after them, so the delete's own toast (its
  * [Undo]) doesn't take their place: they go beside it (noticeLine). */
-function noteSceneRemovals(state: GraphState, kept: ReadonlySet<string>): string[] {
-  const lines: string[] = [];
+function noteSceneRemovals(state: GraphState, kept: ReadonlySet<string>): DeletedSceneLine[] {
+  const lines: DeletedSceneLine[] = [];
   if (sceneSyncOrigin.own) return lines;
   for (const node of state.nodes) {
     if (kept.has(node.id) || node.data.definitionId !== 'cinema-scene') continue;
     const entry = cinemaScenePersistence.get(node.id);
-    if (!entry || !sceneHasUnsavedEdits(entry)) continue;
-    noteSceneDeleted(node.id, entry, sceneDeletedLine(cardTitle([node], node.id), sceneSyncOrigin.writer), lines);
+    if (entry && sceneHasUnsavedEdits(entry)) {
+      noteSceneDeleted(node.id, entry, sceneDeletedLine(cardTitle([node], node.id), sceneSyncOrigin.writer), lines);
+      continue;
+    }
+    // The save's 404 came first and said it: the delete's toast carries it.
+    const said = deletedSceneEdits.get(node.id);
+    if (said && said.graph === canvasReplacementRevision) lines.push({ nodeId: node.id, line: said.line, said: true });
   }
   return lines;
+}
+
+/** GM r21 answer 3: a delete's sync and its deleted lines are ONE toast
+ * ("specific replaces generic"). When the sync brought the deleter's toast
+ * with its [Undo] (`before`: the toast's id before the sync): if the write
+ * only deleted those scenes (and their wires), the toast says the line
+ * instead of "Codex changed the canvas" and keeps its [Undo] (which puts the
+ * scene back, and the save resumes); if it did more, "Codex changed the
+ * canvas." stays, the line after it as a second sentence. Never a second
+ * toast. With no such toast (another window, a script), the line shows on
+ * its own, once. */
+function sayDeletedSceneLines(lines: DeletedSceneLine[], before: number | null): void {
+  if (lines.length === 0) return;
+  const state = useGraphStore.getState();
+  const notice = state.undoNotice;
+  const entry = notice?.offer === 'undo' && notice.id !== before ? notice.entry : undefined;
+  if (notice && entry && isForeignEdit(entry)) {
+    const ids = new Set(lines.map((line) => line.nodeId));
+    const nodesOnly = Object.entries(entry.after.nodes).every(([id, now]) => now === null && ids.has(id));
+    const wiresOnly = Object.entries(entry.after.edges).every(([key, now]) => {
+      const was = entry.before.edges[key];
+      return now === null && Boolean(was) && (ids.has(was!.source) || ids.has(was!.target));
+    });
+    const specific = [...new Set(lines.map((line) => line.line))].join(' ');
+    const generic = notice.text.replace(/[.!?]$/, '');
+    const text = nodesOnly && wiresOnly && !entry.undoes ? specific : `${generic}. ${specific}`;
+    useGraphStore.setState({ undoNotice: { ...notice, text } });
+    return;
+  }
+  for (const line of lines) if (!line.said) useGraphStore.getState().notify(line.line);
 }
 
 /** GM r20 answer 3: a deleted scene that came back (an undo from the Agent
@@ -3182,9 +3237,33 @@ function restoreDeletedScenes(synced: ReadonlySet<string>, held: ReadonlyMap<str
     } catch {
       scene = kept.mine;
     }
+    // GM #198 r12 answer 2: a clash that was waiting when the scene went is
+    // asked again, against the scene as it came back: only where the
+    // restored value still differs from the person's (the same value is no
+    // clash). The existing clash line and buttons; no line of its own.
+    const asked = kept.clash ? stillClashing(kept.clash.fields, scene, back, sameCinemaValue) : [];
     if (cinemaAuthoringKey(scene) === cinemaAuthoringKey(back)) continue;
     applySceneToNode(useGraphStore.setState, nodeId, scene);
-    persistSceneParam(nodeId, scene, 0, back);
+    if (asked.length === 0) {
+      persistSceneParam(nodeId, scene, 0, back);
+      continue;
+    }
+    // Set up before the save goes (it sends the restored value for the
+    // fields that clash, as every save does while a clash waits).
+    persistSceneParam(nodeId, scene, 1, back);
+    const entry = cinemaScenePersistence.get(nodeId);
+    if (!entry) continue;
+    const node2 = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
+    entry.clash = { fields: asked, writer: kept.clash!.writer, line: '' };
+    entry.clash.line = clashLineFor(entry.clash, node2 ? cardTitle([node2], nodeId) : 'Scene', scene, entry.readded);
+    // The deleted toast, if it still shows, gives way: never both.
+    const said = kept.line;
+    useGraphStore.setState((state) => ({
+      ...(state.undoNotice?.text.includes(said) ? { undoNotice: null } : {}),
+      ...(state.messageNotice?.text.includes(said) ? { messageNotice: null } : {}),
+    }));
+    setSceneClash(nodeId, entry.clash);
+    markSceneUnsaved(nodeId, entry.clash.line);
   }
 }
 
@@ -3245,7 +3324,11 @@ function resolveSceneClash(nodeId: string, keep: 'mine' | 'theirs'): void {
   entry.refusedLine = null;
   entry.retries = 0;
   setSceneStopped(nodeId, entry, false);
-  entry.clashAnswerStop = stopped;
+  // Review 12, L-1: a second clash during the answer's save finds the stop
+  // already cleared by the first answer; nothing has landed since, so the
+  // flag it set still holds (cleared only by a landed save, the person's
+  // own change or [Try again]).
+  entry.clashAnswerStop = stopped ?? entry.clashAnswerStop;
   markSceneUnsaved(nodeId, entry.refused !== null && entry.refused !== 'replaced' ? sceneKeptLine(nodeId, entry) : null);
   // Use theirs (Use Codex’s) that leaves the card as Nebula has it: nothing
   // to send, so it is saved, and never back to stopped.
@@ -3424,6 +3507,9 @@ function clearQuietRetry(entry: CinemaScenePersistence): void {
  * does, and a failure goes back to the stopped state with no new toast. */
 function scheduleQuietRetry(nodeId: string, entry: CinemaScenePersistence): void {
   clearQuietRetry(entry);
+  // GM #198 r12 answer 1: a save stopped for good (400, 413) waits for the
+  // person: their next change or [Try again].
+  if (stoppedForGood(entry)) return;
   entry.quietTimer = setTimeout(() => {
     entry.quietTimer = null;
     if (cinemaScenePersistence.get(nodeId) !== entry || !entry.stopped || entry.clash || entry.inFlight) return;
@@ -3459,6 +3545,53 @@ function stopSceneSave(nodeId: string, entry: CinemaScenePersistence): void {
     const notice = said.undoNotice ? { undoNotice: { ...said.undoNotice, retryScene: { nodeId } } } : {};
     const message = said.messageNotice ? { messageNotice: { ...said.messageNotice, retryScene: { nodeId } } } : {};
     return { ...said, ...notice, ...message };
+  });
+}
+
+/** A stopped save that waits for the person (GM #198 r12 answer 1). */
+function stoppedForGood(entry: CinemaScenePersistence): boolean {
+  return entry.stopped && (entry.refused === 'bad-save' || entry.refused === 'too-big');
+}
+
+/** GM #198 r12 answer 1: a stopped save's own try (the quiet try, or the
+ * save a clash answer sent) refused 400 or 413. It can't succeed as it is,
+ * so it is said once, in its own line, which promises no retry: 400 "Nebula
+ * can’t save your changes to “Opening”.", 413 "“Opening” is too big to save.
+ * Remove something from it, then try again.". The mark keeps it with
+ * [Try again] in its popover; nothing more goes until the person edits or
+ * presses it. The status and code go to the Agent log. */
+function stopSceneForGood(nodeId: string, entry: CinemaScenePersistence, refused: 'bad-save' | 'too-big', log?: string): void {
+  entry.clashAnswerStop = null;
+  if (entry.retryTimer) clearTimeout(entry.retryTimer);
+  entry.retryTimer = null;
+  clearQuietRetry(entry);
+  entry.refused = refused;
+  entry.pending = false;
+  setSceneStopped(nodeId, entry, true);
+  const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
+  const scene = node ? cardTitle([node], nodeId) : 'Scene';
+  const line = refused === 'too-big' ? sceneTooBigToSaveLine(scene) : sceneCantSaveLine(scene);
+  const said = entry.refusedLine === line;
+  entry.refusedLine = line;
+  if (log && typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', { detail: { source: 'system', message: log } }));
+  }
+  // A clash that came meanwhile asks first; its line stays the mark's.
+  if (entry.clash) return;
+  markSceneUnsaved(nodeId, line);
+  if (said) return;
+  useGraphStore.setState((state) => {
+    // The stop's own toast (its line, with [Try again]) gives way to this one.
+    const old = (notice: { text: string; retryScene?: { nodeId: string } } | null | undefined) => notice?.retryScene?.nodeId === nodeId;
+    const cleared = {
+      ...(old(state.undoNotice) && !state.undoNotice?.offer ? { undoNotice: null } : {}),
+      ...(old(state.messageNotice) ? { messageNotice: null } : {}),
+    };
+    const base = { ...state, ...cleared };
+    const shown = noticeLine(base, line);
+    const notice = shown.undoNotice ? { undoNotice: { ...shown.undoNotice, retryScene: { nodeId } } } : {};
+    const message = shown.messageNotice ? { messageNotice: { ...shown.messageNotice, retryScene: { nodeId } } } : {};
+    return { ...cleared, ...shown, ...notice, ...message };
   });
 }
 
@@ -3716,7 +3849,10 @@ async function sceneRefusal(nodeId: string, response: Response): Promise<SceneAn
         : [];
     if (named.length > 0) return { kind: 'rendering', shotIds: named, line: isNamedLine(detail) ? detail : headedLine(heading, detail) };
   }
-  if (status === 413) return { kind: 'kept', refused: 'too-big', line: sceneTooBigLine(label) };
+  // The Agent log's line for a refusal the person can't read the cause of:
+  // the status and the code (GM #198 r12 answer 1), never in the person's text.
+  const log = `Couldn’t save “${label}”, node ${nodeId}: HTTP ${status}${code ? ` ${code}` : ''}. ${detail || 'No detail.'}`;
+  if (status === 413) return { kind: 'kept', refused: 'too-big', line: sceneTooBigLine(label), log };
   if (code === 'params_outdated') return { kind: 'kept', refused: 'params-outdated', line: null };
   // GM r20 answer 3: the scene was deleted, so this save can never land:
   // said once, by who deleted it when Nebula knows (deletedBy; "another
@@ -3737,8 +3873,7 @@ async function sceneRefusal(nodeId: string, response: Response): Promise<SceneAn
   }
   if (failureKind(status) === 'no-response') return { kind: 'kept', refused: 'server', line: `${heading} ${KEPT_AND_RETRYING}` };
   if (status === 400) {
-    return { kind: 'kept', refused: 'bad-save', line: `${heading} ${BAD_SAVE}`,
-      log: `Couldn’t save “${label}”, node ${nodeId}. ${detail || `HTTP ${status}`}` };
+    return { kind: 'kept', refused: 'bad-save', line: `${heading} ${BAD_SAVE}`, log };
   }
   return { kind: 'kept', refused: 'other', line: isNamedLine(detail) ? detail : headedLine(heading, copyForAnswer(status, body.detail, code)) };
 }
@@ -3999,6 +4134,13 @@ function settleSceneAnswer(nodeId: string, entry: CinemaScenePersistence, answer
         if (entry.retryTimer) clearTimeout(entry.retryTimer);
         entry.retryTimer = null;
         clearQuietRetry(entry);
+        return;
+      }
+      if (((quiet && entry.stopped) || answeredStop) && (answer.refused === 'bad-save' || answer.refused === 'too-big')) {
+        // GM #198 r12 answer 1: a stopped save's own try refused 400 or 413
+        // can never succeed as it is: said once, and nothing tries again by
+        // itself until the person edits or presses [Try again].
+        stopSceneForGood(nodeId, entry, answer.refused, answer.log);
         return;
       }
       if (((quiet && entry.stopped) || answeredStop) && answer.refused !== 'replaced' && answer.refused !== 'params-outdated') {
@@ -8945,6 +9087,7 @@ function applyGraphSync(event: ExecutionEvent, options: { fromExport?: boolean }
   if (!graphReplaced) noteSyncRemovals(state, mergedIds);
   // GM r20 answer 3: a scene card another writer deleted with edits unsaved.
   const deletedLines = graphReplaced ? [] : noteSceneRemovals(state, mergedIds);
+  const toastBefore = useGraphStore.getState().undoNotice?.id ?? null;
   // This tab's own echo can take a delete's nodes off before its answer.
   if (!graphReplaced && (!origin || isOwnEcho(origin, TAB_ID))) {
     placeEchoedDeletes(state, mergedIds, useGraphStore.setState as GraphSet, useGraphStore.getState);
@@ -8959,7 +9102,7 @@ function applyGraphSync(event: ExecutionEvent, options: { fromExport?: boolean }
   noteSyncArrivals(graphReplaced ? [] : state.nodes, merged, useGraphStore.setState as GraphSet, useGraphStore.getState);
   if (replacedPresses) announceDrop(useGraphStore.setState as GraphSet, replacedPresses);
   showClearReport();
-  for (const line of deletedLines) useGraphStore.getState().notify(line);
+  sayDeletedSceneLines(deletedLines, toastBefore);
   useCinemaUploadStore.getState().reconcileTargets(merged);
   // Scenes whose last write got no answer, or whose edits are kept unsaved,
   // against what the backend has now (PR #198 review 5, L1).

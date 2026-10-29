@@ -244,7 +244,7 @@ def test_an_agent_builds_a_vision_node_and_an_image_node_wired_onward(api):
     errors = validate_graph([GraphNode.model_validate(n) for n in graph_nodes],
                             [GraphEdge.model_validate(e) for e in graph_edges], {"OPENROUTER_API_KEY": "or-test"})
     # (image-compare's second image is unwired; that's all the check finds.)
-    assert [e.message for e in errors] == ["Required input port 'imageB' is not connected"]
+    assert [e.message for e in errors] == ["Required input port imageB is not connected"]
 
 
 def test_an_agent_wires_a_replicate_file_input(api):

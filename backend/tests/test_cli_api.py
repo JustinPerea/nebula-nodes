@@ -398,7 +398,7 @@ class TestGraphEndpoints:
         """`nebula create` used to store a node of any type it was given."""
         resp = client.post("/api/graph/node", json={"definitionId": "node-a", "params": {}})
         assert resp.status_code == 400
-        assert resp.json()["detail"].startswith("unknown node definition 'node-a'")
+        assert resp.json()["detail"].startswith("unknown node definition node-a")
         assert client.get("/api/graph").json()["nodes"] == []
 
     def test_update_unknown_node_404(self, client):

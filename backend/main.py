@@ -2382,7 +2382,7 @@ def _validate_imported_outputs(
             raise ValueError(f"nodes[{node_index}] has an invalid output handle")
         if not handles_are_dynamic and handle not in declared_ports:
             raise ValueError(
-                f"nodes[{node_index}] output handle '{handle}' is not declared by "
+                f"nodes[{node_index}] output handle {handle} is not declared by "
                 f"definition {definition_id}"
             )
         if not isinstance(port, dict):
@@ -2395,7 +2395,7 @@ def _validate_imported_outputs(
         declared_type = declared_ports.get(handle)
         if not _imported_output_type_is_valid(actual_type, declared_type):
             raise ValueError(
-                f"nodes[{node_index}] output '{handle}' declares type {actual_type}, "
+                f"nodes[{node_index}] output {handle} declares type {actual_type}, "
                 f"but definition {definition_id} outputs {declared_type or 'a known dynamic type'}"
             )
 
@@ -15062,7 +15062,7 @@ def _preview_port(node_id: str, outputs: dict[str, Any], port: str | None) -> tu
         entry = outputs.get(port)
         if not isinstance(entry, dict):
             have = ", ".join(sorted(outputs)) or "none yet"
-            raise HTTPException(status_code=404, detail=f"{node_id} has no output '{port}' (outputs: {have}).")
+            raise HTTPException(status_code=404, detail=f"{node_id} has no output {port} (outputs: {have}).")
         return port, entry
     candidates = [(name, entry) for name, entry in outputs.items()
                   if isinstance(entry, dict) and entry.get("value") not in (None, "", [])]

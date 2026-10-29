@@ -423,11 +423,11 @@ def resolve_move_target(api: NebulaAPI, to: str | None,
         return matches[0]["id"], named(matches[0])
     if len(matches) > 1:
         ids = ", ".join(p["id"] for p in matches)
-        raise MoodboardError(f"{len(matches)} projects are named '{named(matches[0])}' ({ids}); use the id")
+        raise MoodboardError(f"{len(matches)} projects are named “{named(matches[0])}” ({ids}); use the id")
     if gone:
-        raise MoodboardError(f"the project '{named(gone[0])}' is in Recently deleted. Restore it first "
+        raise MoodboardError(f"the project “{named(gone[0])}” is in Recently deleted. Restore it first "
                              f"(`nebula trash restore project {gone[0]['id']}`), or move it to global")
-    raise MoodboardError(f"no project '{ref}' (`nebula projects` lists them; or use global or current)")
+    raise MoodboardError(f"no project “{ref}” (`nebula projects` lists them; or use global or current)")
 
 
 def move_asset(api: NebulaAPI, kind: str, asset: dict[str, Any], to: str | None,
@@ -493,10 +493,10 @@ def get_board(api: NebulaAPI, ref: str, headers: dict[str, str] | None = None) -
         candidates.extend(list_boards(api, project=project_id, include_global=False, headers=headers))
     matches = [board for board in candidates if str(board.get("name", "")).casefold() == ref.casefold()]
     if not matches:
-        raise MoodboardError(f"no board '{ref}' (`nebula moodboard list` shows them)")
+        raise MoodboardError(f"no board “{ref}” (`nebula moodboard list` shows them)")
     if len(matches) > 1:
         ids = ", ".join(str(board.get("id")) for board in matches)
-        raise MoodboardError(f"{len(matches)} boards are named '{ref}' ({ids}); use the id")
+        raise MoodboardError(f"{len(matches)} boards are named “{ref}” ({ids}); use the id")
     # A list leaves out what only a board read gives (an old board's layout),
     # so read the one that matched.
     return api.request("GET", f"/api/moodboards/{matches[0]['id']}", headers=headers)
@@ -640,7 +640,7 @@ def _card_of(board: dict[str, Any], ref: str) -> tuple[dict[str, Any], dict[str,
         frame = next((f for f in frames if f.get("id") == frame_ref), None) or next(
             (f for f in frames if str(f.get("name", "")).casefold() == frame_ref.casefold()), None)
         if frame is None:
-            raise MoodboardError(f"no look '{frame_ref}' on this board")
+            raise MoodboardError(f"no look “{frame_ref}” on this board")
         card = next((c for c in cards if c.get("frameId") == frame.get("id")), None)
         if card is None:
             raise MoodboardError(f"#{number} has no card in {frame.get('name')}")

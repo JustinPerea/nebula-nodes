@@ -1316,8 +1316,10 @@ def edit_canvas(
     since, it is refused with 409 `scene_changed` (`scene`, `sceneKey`,
     `sceneRev`, `changedBy`) and nothing is saved; read it again and redo
     your change (a refusal is not a read). A write to a node someone
-    deleted is 404 `node_gone` with `deletedBy` (who, or null). Ids in
-    details are bare (`Node n4 not found`).
+    deleted is 404 `node_gone` with `deletedBy` (who, or null); the person's
+    canvas says it in your delete's own toast. Ids and ports in details are
+    bare (`Node n4 not found`); a name that matches nothing is in “…”
+    (`no Style “Neon dusk”`); a next call is in backticks.
     Who bills a run is the person's call: Krea billing (`_kreaAuth`: API token
     or the Krea plan) and a multi-provider node's route (`_provider`: a route id
     or auto; describe_node lists them and the values each takes). Send a change
@@ -1387,7 +1389,7 @@ def _switch(path: str, body: dict[str, Any], ctx: Context | None) -> dict[str, A
     if previous and previous_id != project.get("id"):
         reply["previousProject"] = {"id": previous_id, "name": previous.get("name")}
         reply["note"] = (f"The canvas now shows {project.get('name')}. {previous.get('name')} is saved as it was; "
-                         f"open_project('{previous_id}') goes back.")
+                         f"`open_project('{previous_id}')` goes back.")
     if result.get("warnings"):
         reply["warnings"] = result["warnings"]
     return reply
@@ -1579,7 +1581,7 @@ def _run_result(payload: dict[str, Any], ctx: Context | None) -> list:
         # closest it could get to your 1000x560."
         shown["notes"] = payload["notes"]
     if status == "running":
-        shown["next"] = (f"Still running. get_run('{payload.get('runId')}', wait_seconds=...) collects it; "
+        shown["next"] = (f"Still running. `get_run('{payload.get('runId')}', wait_seconds=...)` collects it; "
                          "cancel_run stops it.")
     elif payload.get("noRecord"):
         shown["next"] = run_no_record_next(payload.get("runId"))
@@ -2575,7 +2577,7 @@ def model_schema(provider: str, model_id: str, ctx: Context | None = None) -> di
     _, node, param = _MODEL_CATALOGS[key]
     found = next((row for row in _catalog_models(key, ctx) if row.get("id") == model), None)
     if found is None:
-        raise ValueError(f"{key} has no model '{model[:120]}': model_catalog('{key}', query=...) lists them")
+        raise ValueError(f"{key} has no model '{model[:120]}': `model_catalog('{key}', query=...)` lists them")
     result: dict[str, Any] = {"provider": key, "node": node, "param": param, "model": found}
     if isinstance(node, str) and _universal_ports.is_universal(node):
         configured = _model_ports(node, model, found)

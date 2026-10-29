@@ -1,7 +1,7 @@
 /**
  * Q116 a) (Justin, 2026-10-23): "a): "Download your edits" plus "Continue
  * without them"." GM - Design's copy, verbatim:
- * - Heading: "Couldn't save your edits."
+ * - Heading: "Couldn’t save your edits."
  * - Buttons: "Download your edits" (primary) / "Continue without them"
  * - Confirm after "Continue without them": "Continue without your edits?
  *   They can't be recovered after this." Buttons: "Continue without them" /
@@ -32,7 +32,7 @@ const Home = ProjectHome as unknown as (props: Props) => ReturnType<typeof Proje
 
 afterEach(() => vi.restoreAllMocks());
 
-describe("Projects: Couldn't save your edits.", () => {
+describe("Projects: Couldn’t save your edits.", () => {
   // GM - Design, 2026-10-24: when an agent's switch is what left the project,
   // "{agent} is opening “{name}”." goes above the screen's lines.
   it("an agent's switch: the agent and the project it opens, above the heading; the rest unchanged", () => {
@@ -40,7 +40,7 @@ describe("Projects: Couldn't save your edits.", () => {
       agentOpening: { agent: 'Claude Code', projectName: 'Moodboard v2' } } })} />);
     const alert = screen.getByRole('alert');
     const opening = within(alert).getByText('Claude Code is opening “Moodboard v2”.');
-    const heading = within(alert).getByText("Couldn't save your edits.");
+    const heading = within(alert).getByText("Couldn’t save your edits.");
     expect(opening.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(alert).getByText(TOO_LARGE)).toBeTruthy();
     expect(within(alert).getAllByRole('button').map((button) => button.textContent))
@@ -68,7 +68,7 @@ describe("Projects: Couldn't save your edits.", () => {
   it("shows GM's heading, the reason and the two choices, announced as an alert, with no Try again", () => {
     render(<Home {...props()} />);
     const alert = screen.getByRole('alert');
-    expect(within(alert).getByText("Couldn't save your edits.")).toBeTruthy();
+    expect(within(alert).getByText("Couldn’t save your edits.")).toBeTruthy();
     expect(within(alert).getByText(TOO_LARGE)).toBeTruthy();
     expect(within(alert).getByRole('button', { name: 'Download your edits' })).toBeTruthy();
     expect(within(alert).getByRole('button', { name: 'Continue without them' })).toBeTruthy();
@@ -141,7 +141,7 @@ describe("Projects: Couldn't save your edits.", () => {
     render(<Home {...props({ unsavedEdits: null, editsSavedAs: { name: 'Glass campaign - unsaved edits.nebula', reopens: true } })} />);
     const line = screen.getByText('Your edits are saved as Glass campaign - unsaved edits.nebula. Open it with “Load graph” under “Canvas actions” in a new project to bring them back.');
     expect(line.closest('[role="status"]')).toBeTruthy();
-    expect(screen.queryByText("Couldn't save your edits.")).toBeNull();
+    expect(screen.queryByText("Couldn’t save your edits.")).toBeNull();
   });
 });
 
@@ -214,7 +214,7 @@ describe("GM's lines", () => {
   it("a download that couldn't be written: the heading and both buttons stay, GM's line 2 is the body", () => {
     render(<Home {...props({ unsavedEdits: { reason: TOO_LARGE, downloadFailed: true } as never })} />);
     const alert = screen.getByRole('alert');
-    expect(within(alert).getByText("Couldn't save your edits.")).toBeTruthy();
+    expect(within(alert).getByText("Couldn’t save your edits.")).toBeTruthy();
     expect(within(alert).getByText(NOT_WRITTEN)).toBeTruthy();
     expect(within(alert).queryByText(TOO_LARGE)).toBeNull();
     expect(within(alert).getByRole('button', { name: 'Download your edits' })).toBeTruthy();

@@ -11,8 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  *   the quiet try comes back.
  * - L-1 (GM r19 answer 3, r20 answer 2): "another window" only for the
  *   person's own tab; anyone else unknown, and the line says nothing of who.
- * - L-2 (GM r16, r20 answer 3): a quiet try refused 400 or 413 stays quiet;
- *   a deleted scene says so once and stops for good, and picks the save back
+ * - L-2 (GM r16, r20 answer 3): a deleted scene says so once and stops for good, and picks the save back
  *   up when the delete is undone; a workspace move says nothing of its own.
  */
 
@@ -437,27 +436,8 @@ describe('L-1 (GM r19 answer 3, r20 answer 2): "another window" only for the per
 });
 
 describe('L-2 (GM r16, r20 answer 3): what the quiet try says when it is refused', () => {
-  it.each([
-    ['400 (a bad save)', 400, { detail: 'params.scene nested too deeply' }],
-    ['413 (too big)', 413, { detail: 'too big' }],
-  ])('%s: back to stopped, the same line, no new toast', async (_what, status, body) => {
-    const h = backend(S3);
-    const before = await stoppedByServer(h);
-    const saidBefore = [...said];
-    const toasts = watchToasts();
-    h.refuseNext(status, body);
-    h.other((shots) => setPrompt(shots, 's2', 'codex'), 'agent');
-    await sleep(QUIET + 80);
-    toasts.off();
-    expect(h.puts.length).toBe(before + 1);
-    expect(h.puts.at(-1)!.status).toBe(status);
-    expect(stopped()).toEqual({ n1: true });
-    expect(unsaved()).toBe(STOPPED);
-    expect(said).toEqual(saidBefore);
-    expect(saveLines(toasts.lines)).toEqual([]);
-    await sleep(QUIET * 2);
-    expect(h.puts.length).toBe(before + 1);
-  });
+  // GM #198 r12 answer 1 (round 13) changed this: a stopped save's quiet try
+  // refused 400 or 413 speaks once and stops; graphStore.fix13 pins it.
 
   it('a server failure stays quiet (unchanged)', async () => {
     const h = backend(S3);
@@ -516,13 +496,20 @@ describe('L-2 (GM r16, r20 answer 3): what the quiet try says when it is refused
     h.remove(by, origin);
     await sleep(150);
     expect(nodeOf('n1')).toBeUndefined();
-    expect(said).toEqual([line]);
+    // GM r21 answer 3 (round 13): Codex's delete is one toast, its line with
+    // Codex's [Undo]; another window or a script brings no toast, so the
+    // line shows on its own.
+    if (by.kind === 'agent') {
+      expect(said).toEqual([]);
+      expect(toast()?.text).toBe(line);
+      expect((toast() as unknown as { offer: string }).offer).toBe('undo');
+    } else expect(said).toEqual([line]);
     const puts = h.puts.length;
     await sleep(150);
     expect(h.puts.length).toBe(puts);
     h.restore(origin);
     await vi.waitFor(() => expect(h.backendBrief()[0]).toBe('s1:mine'), { timeout: 3000, interval: 5 });
-    expect(said).toEqual([line]);
+    expect(said).toEqual(by.kind === 'agent' ? [] : [line]);
   });
 
   it('a scene deleted with nothing unsaved: no line (the delete’s own toast is the canvas’s)', async () => {

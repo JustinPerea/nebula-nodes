@@ -595,6 +595,11 @@ function preserveWorkspaceConflict(message: string, neverRan?: Set<string>, capt
     try { saved = lastSaved ? JSON.parse(lastSaved) as ProjectSnapshot : null; } catch { saved = null; }
     dirty = Boolean(context) && (!saved || paramsStopWork(snapshot, neverRan) !== paramsStopWork(saved, new Set()));
   } else dirty = Boolean(context) && JSON.stringify(snapshot) !== lastSaved;
+  // Review 12, M-1: a scene card's edits Nebula doesn't have count too, even
+  // when the autosave already sent a snapshot with them (the switch then
+  // saved Nebula's own canvas, without them). They are in the snapshot: the
+  // card shows them.
+  if (!dirty && context && hasUnsavedSceneEdits()) dirty = true;
   if (dirty && context) pendingRecovery = pendingRecoveryOf(context.id, snapshot);
   // Try again reloads the saved projects (initialize), as these lines say.
   useProjectStore.setState({ screen: 'home', initialized: false, loading: false, dirty, error: message, errorRetry: retry });
@@ -2077,7 +2082,10 @@ export function subscribeProjectAutosave(): () => void {
       return;
     }
     const snapshot = captureProjectSnapshot();
-    const unsaved = JSON.stringify(snapshot) !== lastSaved;
+    // Review 12, M-1: as on the agent-switch path (beginAgentSwitch), a scene
+    // edit Nebula doesn't have is unsaved though the snapshot matches what the
+    // autosave sent; the recovered copy keeps it (GM r20 answer 3's hand-off).
+    const unsaved = JSON.stringify(snapshot) !== lastSaved || hasUnsavedSceneEdits();
     // On Projects with everything saved there is nothing to protect: let go
     // of the project still loaded from before (another window opened another
     // one, or it was deleted) instead of stopping the screen with a conflict.

@@ -69,7 +69,7 @@ describe('L4: headedLine decides by the heading\'s role', () => {
   it('the generic headings are the ones that name nothing', () => {
     for (const heading of ["Couldn't delete the node.", "Couldn't delete 4 nodes.", "Couldn't save the scene.",
       "Couldn't undo.", "Couldn't redo.", "Couldn't save “Scene” for “Opening”.", "Couldn't save “A” and “B” for “N”.",
-      "Couldn't save a setting on “N”.", "Couldn't save your edits.", "Couldn't undo the change."]) {
+      "Couldn't save a setting on “N”.", "Couldn’t save your edits.", "Couldn't undo the change."]) {
       expect(isGenericHeading(heading), heading).toBe(true);
     }
     for (const heading of ["Couldn't run the graph.", "Couldn't save the project.", "Couldn't delete “Brief”.",

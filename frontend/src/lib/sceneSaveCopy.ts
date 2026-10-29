@@ -20,6 +20,19 @@ export function sceneTooBigLine(scene: string): string {
   return `Couldn’t save “${scene}”. ${SCENE_TOO_BIG}`;
 }
 
+/** GM (2026-10-28, #198 r12 answer 1): a stopped save's own try (its quiet
+ * try, or the save a clash answer sent) refused 400 or 413 can never succeed
+ * as it is: said once, nothing retries by itself, and no line promises a
+ * retry. [Try again] stays in the "Unsaved" mark's popover. The status and
+ * code go to the Agent log only. 400, verbatim: */
+export function sceneCantSaveLine(scene: string): string {
+  return `Nebula can’t save your changes to “${scene}”.`;
+}
+/** 413, in place of the generic stop line, verbatim: */
+export function sceneTooBigToSaveLine(scene: string): string {
+  return `“${scene}” is too big to save. Remove something from it, then try again.`;
+}
+
 /** Clears by itself (a paid start, an approved run's inputs, any run lock;
  * GM r7, reworded r9): "…They're kept and will save when the run finishes." */
 export const KEPT_UNTIL_RUN_ENDS = "They’re kept and will save when the run finishes.";

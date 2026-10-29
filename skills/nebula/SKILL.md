@@ -426,8 +426,10 @@ refused ("“Opening” changed since you last read it, so nothing was changed.
 Read it again and redo your change."; over HTTP 409 `scene_changed`, with
 `scene`, `sceneKey`, `sceneRev` and `changedBy`) and nothing is saved; a
 write to a scene node someone deleted is 404 `node_gone` with `deletedBy`
-(who deleted it, or null). Ids in details take no quotes (`Node n4 not
-found`): copy them as they are. A
+(who deleted it, or null). Ids and ports in details take no quotes (`Node n4 not
+found`): copy them as they are. A name that matches nothing comes back in
+“…” (`no Style “Neon dusk”`); a next call comes in backticks
+(`` `get_run('run_x')` ``). A
 refusal is not a read: run `nebula look`, then redo your change on what it
 shows; sending the same copy again is refused again. A scene you never read
 is written as you send it, and a write whose scene is already Nebula's is

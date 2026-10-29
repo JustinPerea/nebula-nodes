@@ -110,9 +110,9 @@ def test_ids_take_no_quotes(api):  # noqa: F811
 
 def test_no_quoted_id_in_the_backends_details():
     """A scan of the backend's f-strings: an id interpolated in straight
-    quotes (``'{node_id}'``) is gone from refusal details and CLI output. A
-    call shown as code (``get_run('{rid}')``) keeps its quotes: they are the
-    call's syntax."""
+    quotes (``'{node_id}'``) is gone from refusal details, run errors and CLI
+    output. A call shown as code (``get_run('{rid}')``) keeps its quotes:
+    they are the call's syntax (in backticks since round 13)."""
     import re
     from pathlib import Path
 
@@ -121,12 +121,10 @@ def test_no_quoted_id_in_the_backends_details():
     found = []
     for path in sorted(root.rglob("*.py")):
         rel = path.relative_to(root).as_posix()
-        if rel.startswith(("tests/", ".venv/")) or "/site-packages/" in rel or rel in {"cinema/look.py"}:
+        if rel.startswith(("tests/", ".venv/")) or "/site-packages/" in rel:
             continue
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             if quoted.search(line):
                 found.append(f"{rel}:{number}: {line.strip()}")
-    # Two run-error lines inside the engine stay as they are (internal
-    # wiring errors, not refusals or CLI output; listed for GM).
-    allowed = {"execution/engine.py", "execution/gating.py"}
-    assert [entry for entry in found if entry.split(":", 1)[0] not in allowed] == []
+    # Review 12 N-5 (round 13): the engine's run errors too; nothing allowed.
+    assert found == []

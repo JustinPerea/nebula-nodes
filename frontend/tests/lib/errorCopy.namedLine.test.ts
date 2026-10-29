@@ -98,9 +98,10 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
   { file: 'store/graphStore.ts', text: '`${heading} ${BAD_SAVE}`', why: "GM's heading over GM's fixed suffix" },
   // PR #198 fix round 8 (GM r11 answer 3): the stopped-after-8 line.
   { file: 'lib/sceneSaveCopy.ts', text: '`${sceneSaveHeading(scene)} ${KEPT_UNTIL_NEXT_CHANGE}`', why: "GM's heading over GM's fixed suffix" },
-    // The Agent log's raw save line: agents read the backend's own detail.
-  { file: 'store/graphStore.ts', text: '`Couldn’t save “${label}”, node ${nodeId}. ${detail || `HTTP ${status}`}`',
-    why: "the Agent log's raw form (agents read the raw text)" },
+    // The Agent log's raw save line: agents read the backend's own detail,
+    // with the status and code (GM #198 r12 answer 1, round 13).
+  { file: 'store/graphStore.ts', text: "`Couldn’t save “${label}”, node ${nodeId}: HTTP ${status}${code ? ` ${code}` : ''}. ${detail || 'No detail.'}`",
+    why: "the Agent log's raw form (agents read the raw text, the status and the code)" },
 ];
 
 function sources(dir: string): string[] {

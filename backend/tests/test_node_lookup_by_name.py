@@ -192,7 +192,7 @@ def test_edit_canvas_refuses_a_display_name_and_names_the_id(nebula):
     http, _ = nebula
     with pytest.raises(Exception) as caught:
         mcp_server.edit_canvas(note="board", nodes=[{"ref": "+mb", "definitionId": "moodboard"}])
-    assert "unknown node definition 'moodboard'" in str(caught.value)
+    assert "unknown node definition moodboard" in str(caught.value)
     assert HINT in str(caught.value)
     assert http.get("/api/graph").json()["nodes"] == []
 
@@ -200,14 +200,14 @@ def test_edit_canvas_refuses_a_display_name_and_names_the_id(nebula):
 def test_propose_change_refuses_a_display_name_and_names_the_id(nebula):
     with pytest.raises(Exception) as caught:
         mcp_server.propose_change(note="board", nodes=[{"ref": "+mb", "definitionId": "Moodboard"}])
-    assert "unknown node definition 'Moodboard'" in str(caught.value)
+    assert "unknown node definition Moodboard" in str(caught.value)
     assert HINT in str(caught.value)
 
 
 def test_nebula_apply_refuses_a_display_name_and_names_the_id(cli):
     code, _, err = _run(["apply", "--note", "board", "--add", "+mb=moodboard"])
     assert code == 1
-    assert "unknown node definition 'moodboard'" in err and HINT in err
+    assert "unknown node definition moodboard" in err and HINT in err
     assert cli.graph.nodes == {}
 
 
@@ -227,9 +227,9 @@ def test_nebula_quick_refuses_a_display_name(cli):
 
 def test_a_write_refusal_with_no_name_match_gives_close_ids_or_nothing(cli):
     _, _, err = _run(["apply", "--note", "x", "--add", "+mb=nebula-moodbord"])
-    assert "unknown node definition 'nebula-moodbord'" in err and "nebula-moodboard" in err.split("'nebula-moodbord'", 1)[1]
+    assert "unknown node definition nebula-moodbord" in err and "nebula-moodboard" in err.split("nebula-moodbord", 1)[1]
     _, _, err = _run(["apply", "--note", "x", "--add", "+mb=xyzzy-quux-nothing"])
-    assert "unknown node definition 'xyzzy-quux-nothing'" in err and "did you mean" not in err
+    assert "unknown node definition xyzzy-quux-nothing" in err and "did you mean" not in err
 
 
 def test_a_write_refusal_lists_a_shared_name_first(cli, shared_name):
@@ -255,7 +255,7 @@ def test_a_style_model_named_by_display_name_is_refused_naming_the_id(cli, tmp_p
         "refImages": [], "scope": "global"})
     assert refused.status_code == 400
     detail = refused.json()["detail"]
-    assert f"unknown node definition '{name}': did you mean {match}?" in detail
+    assert f"unknown node definition {name}: did you mean {match}?" in detail
     assert "find_nodes" in detail
     assert cli.http.get("/api/presets").json() == []  # nothing stored
 
@@ -286,7 +286,7 @@ def test_a_style_model_near_miss_gets_close_ids(cli, tmp_path, monkeypatch):
         "name": "s", "category": "My Styles", "prompt": "", "params": {}, "modelId": "gpt-image-2-generat",
         "refImages": [], "scope": "global"})
     assert refused.status_code == 400
-    assert "gpt-image-2-generate" in refused.json()["detail"].split("'gpt-image-2-generat'", 1)[1]
+    assert "gpt-image-2-generate" in refused.json()["detail"].split("definition gpt-image-2-generat", 1)[1]
 
 
 # -- the turn counter still counts what's left -----------------------------------

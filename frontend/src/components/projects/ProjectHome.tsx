@@ -71,7 +71,7 @@ export interface ProjectHomeProps {
   onEmptyTrash?: () => void;
   onDismissUndo?: () => void;
   /** A stale tab's unsaved edits Nebula refused for good (Q116 a): GM's
-   * "Couldn't save your edits." with this reason, in place of the error line
+   * "Couldn’t save your edits." with this reason, in place of the error line
    * and its Try again, until the person downloads them or continues without. */
   unsavedEdits?: { reason: string; downloadFailed?: boolean; downloadTooBig?: boolean; keptIn?: string; agentOpening?: { agent: string; projectName: string } } | null;
   /** The file the held edits were downloaded as, for GM's line after it, and

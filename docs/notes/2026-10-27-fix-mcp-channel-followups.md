@@ -681,7 +681,7 @@ Four of this round's ring shots are byte-identical to round 10 shots of the same
     - the backend tests that pinned quoted ids (GM r19 answer 1): error_copy_round3, 3b and 3e, node_delete_person_copy, character_node, asset_move, node_lookup_by_name, cli_apply, moodboard_adapters, moodboard_reader_routes, retired_nodes, provider_start_admission, project_context, moodboard_cli, pr198_fix1 and mcp_channel_followups.
 - **Gates.**
   - tsc -b and `npm run lint` are clean.
-  - Full vitest: 590 files, 7,710 tests passed.
+  - Full vitest: 590 files, 7,710 tests passed. A second full run that overlapped the backend suite by mistake had 68 failures in 23 files, 50 of them 5 s timeouts. Rerun on an idle machine, those 23 files pass (418 tests).
   - Full backend: 12,046 passed and 71 skipped, with 1 failure. `test_journal_write_project::test_a_reopened_proposals_expiry_never_carries_the_undos_edit_link` is a timing test (0.4 s expiries against a 1.5 s slow write), and it ran while vitest, a build and a live run shared the machine. It passes alone (5 of 5) and with its file (35 passed).
   - vite build plus `check-build-budget.mjs`: 424,760 bytes raw (budget 512,000), 128,465 gzip; `dist` deleted.
 - **Live** (isolated backend 8797 and Vite 5797; 8000–8010 and 5173 blocked, 0 attempts after the canary; the cinema handler a free fake).
@@ -693,3 +693,63 @@ Four of this round's ring shots are byte-identical to round 10 shots of the same
   - The combined run of all five sections reached the stack section and then lost its page to a reload behind a `beforeunload` dialog (unsaved state left by the earlier sections), a harness fault. The stack ran alone, 6 of 6 with the canary and page-error checks. The unknown section was rerun so that its stop shot shows the stopped state while the script still writes (6 of 6).
   - Shots: `fix12-*` at 1280 and 1440. The stack's error-box and heading shots match round 10 and 11's pixel for pixel; they are fresh files of the same state. `deleted-by-codex-line-1440` was taken after the toasts timed out, so the 1280 one shows the line beside the toast. The bar says "Unsaved changes" in the canvas shots because of the harness's project save, as in round 11.
 
+
+## Fix round 13 (PR #198 review 12, GM's pr198 r21 and r12/r10 answers)
+
+- **M-1: the person's other window switches project while a scene edit is unsaved.** The handler's `unsaved` now also counts `hasUnsavedSceneEdits()`, as the agent-switch path does through `beginAgentSwitch`. So the banner offers "Try again to save your unsaved edits as a recovered project." even when the autosave already sent the typed text with the project (the snapshot matched `lastSaved`). `preserveWorkspaceConflict` also sets `dirty` from it, so Try again sends the recovered copy.
+  - Live: Street's edit stopped, the other window opens "Second canvas", the banner offers to keep the edits, and Try again makes "Recovered canvas (recovered)" holding the typed text.
+  - After Try again, Projects lists the copy, but no notice says where the edits went. That is the existing `retry` load path, unchanged here; a question for GM.
+- **L-1: a second clash during the answer's save.** `resolveSceneClash` keeps the earlier stop (`entry.clashAnswerStop = stopped ?? entry.clashAnswerStop`), so the second answer, failing, goes back to stopped with no timed retries and no new line.
+- **GM r12 answer 1 (review 12 N-1): a stopped save's own try refused 400 or 413.** `stopSceneForGood` says it once and stops: "Nebula can’t save your changes to “Opening”." for 400, and "“Opening” is too big to save. Remove something from it, then try again." for 413 (`sceneCantSaveLine` and `sceneTooBigToSaveLine` in `lib/sceneSaveCopy.ts`). Each line has [Try again], in the toast and in the "Unsaved" mark's popover.
+  - The Agent log gets the status and code: `Couldn’t save “Opening”, node n1: HTTP 413. <detail>`. The person-facing text never does.
+  - `scheduleQuietRetry` skips a save stopped for good (`stoppedForGood`), and `resendKeptScenes` already skipped 400 and 413. Nothing goes until the person edits or presses Try again.
+  - This also covers a clash answer sent while stopped that is refused 400 or 413. It replaces round 12's "back to stopped, same line" for those two codes.
+  - The ordinary 400 and 413 lines, where the save was not stopped, are unchanged. A question for GM.
+- **GM r21 answer 3: a delete's sync is ONE toast.** `noteSceneRemovals` returns the deleted lines, and `sayDeletedSceneLines` puts them into the sync's own toast:
+  - If Codex's write only deleted the scene (every node it removed has a line, and every wire it removed touches one), the toast is the deleted line with Codex's [Undo].
+  - If it did more, the toast is "Codex changed the canvas. Codex deleted “Opening”, …", still with its [Undo].
+  - A 404 that said the line first: the sync's toast carries it, and no second toast appears.
+  - When no agent toast appears (a window or an unknown writer), the line goes out as before.
+- **GM r12 answer 2 (review 12 L-2): a clash waiting when the scene was deleted.** `deletedSceneEdits` keeps the clash's fields and writer, and the clash prompt goes away with the card.
+  - When the scene comes back, `restoreDeletedScenes` compares against the restored scene (`stillClashing`). If Codex's restored value is the person's, there is no clash and the save goes.
+  - Otherwise the existing clash line asks again, with Keep mine and Use Codex’s. It clears the deleted line from whichever slot shows it, so the two are never shown together, and there is no "came back" sentence.
+- **N-5: ids and handles are bare, through `!r` too.** Changed:
+  - `moodboard_layout.py` (card ids);
+  - `main.py`: `_preview_port`, the imported handle check, and the port line at 15065;
+  - `node_lookup.py`: unknown node definition;
+  - `engine.py`: Required input port and No handler registered;
+  - `cinema_scene.py`, `gating.py`, `cinema/look.py` and `typesafe_client.py`.
+
+  A value that was refused (invalid, received, unexpected) keeps its repr, as sent. `count_agent_turns.py` reads both forms.
+- **GM r21 answers 1 and 2.** Names an agent wrote are in “…”: no Style, no Character, no board, no project, no look, frame, Board and Moodboard, and "N Styles are named …". Calls an agent can make next are code in backticks with straight quotes (`get_run('run_x')`, `open_project('…')`).
+- **N-6.** "Couldn’t save your edits." `CONFIRM_LINE` ("can't") and `EDITS_NOT_WRITTEN` ("didn't") in the same file still use straight apostrophes. They are out of N-6's scope; flagged.
+- **Docs.** MCP-SETUP (the bare examples, the one toast, asked again, the hand-off keeping scene edits, 400 and 413, and ids, names and calls), SKILL.md, and `mcp_server.py`'s docstring.
+- **Tests.**
+  - `graphStore.fix13` (12):
+    - L-1's double clash;
+    - N-1: 400 and 413 said once with [Try again] and nothing more until the person acts; the person's next change; a clash answer refused 400;
+    - r21-3: only a delete, did more, the 404 first, nothing unsaved;
+    - L-2: asked again with the deleted toast cleared, the same value meaning no clash, Use Codex’s after the restore.
+
+    On 4acdfe27, 11 fail; "nothing unsaved" is the guard.
+  - `projectStore.switch`: M-1, failing on 4acdfe27.
+  - `test_pr198_fix13.py` (7): bare card id, port and handle; a `!r` scan; a names scan; a style by name nothing has or two share; a backticked-calls scan; the engine's bare run errors. `test_pr198_fix12`'s id scan no longer has exclusions.
+  - Tests changed because GM or the coordinator changed behaviour:
+    - `graphStore.fix12`: the 400/413 back-to-stopped test is removed (GM r12 answer 1), and the delete-sync test now expects the one toast (GM r21 answer 3);
+    - `errorCopy.namedLine`: the log line's reviewed template;
+    - `ProjectHome.unsavedEdits` and `pr198Fix5CopyHeadedLine` (N-6);
+    - the backend copy pins (N-5, r21 answers 1 and 2): asset_move, cli_api, cli_project_reads, error_copy_round3e, graph_cluster, krea_board_strengths, universal_ports, node_lookup_by_name, pending_nodes, and the fixtures `moodboard_golden/expected.json` (`test_moodboard_golden` maps “…” back before hashing) and `universal_ports_saved_before.json`.
+- **Gates.**
+  - tsc -b and `npm run lint` are clean.
+  - Full vitest: 591 files, 7,721 tests passed.
+  - Full backend: 12,053 passed and 71 skipped, with 1 failure. It was `universal_ports_saved_before.json` pinning the old quoted run error; that fixture is now fixed, and the file passes with `test_pending_nodes` (62 passed).
+  - vite build plus `check-build-budget.mjs`: 424,788 bytes raw (budget 512,000), 128,492 gzip; `dist` deleted.
+- **Live** (`fix13_live.mjs`: backend 8797 with `fix13_server.py`, which adds a `big-put-<id>` 413 flag, and Vite 5797; 8000–8010 and 5173 blocked, 0 attempts after the canary; no paid runs).
+  - Canvas run, 18 of 18:
+    - m1double: two clashes, the second answer failing, sends once, then stopped, with no new lines and [Try again] in the popover;
+    - toobig: the line is said once with [Try again] in the toast and the popover, the Agent log has HTTP 413, Codex writing again sends nothing, and Try again saves;
+    - deleted13: one toast in both cases, still showing in both shots, and its [Undo] resumes the save;
+    - clashback: asked again with the deleted toast gone, Keep mine saves, and the same value means no clash.
+  - Person switch: 5 of 5.
+  - Round 12 regression (m1, unknown, escape, stack): 16 of 16.
+  - Shots `fix13-*` at 1280 and 1440, all distinct: m1double-back-to-stopped, toobig-line, toobig-popover, deleted-by-codex-line, deleted-did-more-one-toast, clashback-clash-replaces-deleted-toast, moved-banner-keeps-edits, moved-recovered-listed.

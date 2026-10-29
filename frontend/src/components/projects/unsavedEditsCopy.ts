@@ -1,7 +1,7 @@
 /** GM - Design's copy for Q116 a) (Justin, 2026-10-23: "a): "Download your
  * edits" plus "Continue without them"."), verbatim, for the held edits'
  * screen (UnsavedEditsNotice.tsx) and Projects home. */
-export const UNSAVED_EDITS_HEADING = "Couldn't save your edits.";
+export const UNSAVED_EDITS_HEADING = "Couldn’t save your edits.";
 export const CONFIRM_LINE = "Continue without your edits? They can't be recovered after this.";
 
 /** The confirm when the held edits are the open project's own canvas (Q118

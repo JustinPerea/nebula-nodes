@@ -109,7 +109,7 @@ The server exposes these tools for building and running (see
   `create`/`quick` and a Style's `model_id` (`style_create`/`style_update`,
   `nebula style new/set --model`) take ids only, because they store and bill by id and a
   display name can be renamed or come to be shared; given a name they refuse
-  with "unknown node definition 'moodboard': did you mean nebula-moodboard
+  with "unknown node definition moodboard: did you mean nebula-moodboard
   (Moodboard)?". (Before, `nebula create` stored a node of any type it was
   given and `nebula quick` tried to run it.) A local node that still calls
   a provider also has `runsWithOptions`: readiness per value of the param that
@@ -1273,7 +1273,7 @@ Round 3e gave the pre-run check the same split. A run the check refuses
 that no longer fits) still answers agents exactly as before: `run_nodes`,
 `/api/graph/run` and `nebula run` list each node's `message` in `errors`,
 word for word ("Missing API key: OPENAI_API_KEY", "Required input port
-'prompt' is not connected", "Batch has 3 items, exceeding its
+prompt is not connected", "Batch has 3 items, exceeding its
 batch_size_cap of 2. ..."), and `look_at_canvas` / `nebula look` show it
 as the node's `error`. Only the canvas's own answer (`/api/execute`,
 `/api/execute-node`, a shot run) and the `validationError` socket event
@@ -3698,16 +3698,37 @@ project switch, an import, a clear, a restore), always beside `detail`.
 On the person's canvas a deleted scene says so once ("Codex deleted
 “Opening”, so your changes to it can’t be saved."; "…was deleted in another
 window…" for the person's other tab; "“Opening” was deleted, so your changes
-to it can’t be saved." when Nebula didn't see who) and stops saving it; if
-the delete is undone (the Agent log's Undo, or yours), the scene comes back
-and the person's edits are merged onto it and saved, with no new line. A
+to it can’t be saved." when Nebula didn't see who) and stops saving it. Your
+delete's own toast says it, with your edit's Undo: when your write only
+deleted the scene the toast is that line; when it did more, "Codex changed
+the canvas." comes first and the line after it, in the same toast. If the
+delete is undone (that Undo, the Agent log's, or yours), the scene comes
+back and the person's edits are merged onto it and saved, with no new line;
+a field the person was still being asked about (your change clashed with
+theirs when you deleted it) is asked again, against the scene as it came
+back, unless your restored value is the person's. A
 `workspace_moved` refusal says nothing on the card: the project switch's
 own handling says it once (an agent's switch hands the edits over; any
-other stops on the outdated-workspace banner with its Reload).
+other stops on the outdated-workspace banner with its Reload, whose Try
+again keeps the person's scene edits as a recovered project, even ones the
+autosave had already sent).
 
-Ids in details and CLI output take no quotes (`run run_ab12 already ran…`,
-`Node n4 not found`), so a copied id never carries a quote mark; names
-take “…”.
+A scene save stopped because another writer kept changing it tries once by
+itself when that writer goes quiet. If that try (or the save the person's
+clash answer sends) is refused 400 or 413, it can't succeed as it is: the
+card says so once ("Nebula can’t save your changes to “Opening”."; for 413
+"“Opening” is too big to save. Remove something from it, then try again.")
+and nothing more goes until the person edits the scene or presses Try
+again. The Agent log's line for it carries the status and the code
+(`HTTP 400 bad_params`); the person's line never does.
+
+Ids and handles in details, run errors and CLI output take no quotes
+(`run run_ab12 already ran…`, `Node n4 not found`, `Required input port
+prompt is not connected`, `n4 has no output video`), so a copied id never
+carries a quote mark. A name you wrote that matches nothing takes “…”
+(`no Style “Neon dusk”`, `no board “Dusk”`, `2 boards are named “Dusk”`).
+A call you can make next is code, in backticks with its own quotes
+(`` `get_run('run_ab12')` ``).
 
 The canvas blocks the same things: the shot's × is disabled, titled "Stop
 the run first." or "Wait for “Shot 2” to finish."; the scene's Delete (the

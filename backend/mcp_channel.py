@@ -746,7 +746,7 @@ class ChannelState:
         self.tracked_runs.discard(run_id)
         rid = _ident(run_id)
         self._notes.append(f"Nebula couldn't follow your run {rid} to its end, so no push will say it ended: "
-                           f"get_run('{rid}') reads it.")
+                           f"`get_run('{rid}')` reads it.")
 
     def stop(self, why: str) -> None:
         """Listening is over (idle, or the listener failed); the next dict result says so once."""
@@ -939,7 +939,7 @@ class ChannelState:
         rid = _ident(run["runId"])
         if run["status"] == "running":
             return (f"{lead} {rid} is still running after {_duration(self.limits.person_run_max)}; "
-                    f"get_run('{rid}') follows it.")
+                    f"`get_run('{rid}')` follows it.")
         status = {"finished": "finished", "failed": "failed", "cancelled": "was stopped"}.get(run["status"],
                                                                                              run["status"])
         ran = run.get("nodesExecuted")
@@ -947,7 +947,7 @@ class ChannelState:
         if run.get("errorCount"):
             parts.append(f"{run['errorCount']} with errors")
         detail = f" ({', '.join(parts)})" if parts else ""
-        return (f"{lead} {rid} {status}{detail}. get_run('{rid}') has its outputs"
+        return (f"{lead} {rid} {status}{detail}. `get_run('{rid}')` has its outputs"
                 + (" and errors." if run["status"] == "failed" else "."))
 
     def _render(self, wake: str, pins: list[dict], pin_overflow: int, proposals: list[dict], runs: list[dict],

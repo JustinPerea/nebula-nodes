@@ -86,7 +86,7 @@ def _either(items: list[str]) -> str:
 
 
 def write_hint(text: str, definitions: Definitions) -> str:
-    """What follows "unknown node definition 'x'" on a write: the node types
+    """What follows "unknown node definition x" on a write: the node types
     the text is the name of, with their names ("did you mean nebula-moodboard
     (Moodboard)?"), else close ids, else nothing."""
     matches = list(named(text, definitions))
@@ -98,4 +98,4 @@ def write_hint(text: str, definitions: Definitions) -> str:
 
 def unknown_definition(text: str, definitions: Definitions) -> str:
     """The write paths' refusal for a definition id that isn't one."""
-    return f"unknown node definition '{text}'{write_hint(text, definitions)}"
+    return f"unknown node definition {text}{write_hint(text, definitions)}"
