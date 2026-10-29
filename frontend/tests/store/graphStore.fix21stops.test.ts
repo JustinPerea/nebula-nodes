@@ -229,7 +229,8 @@ function watchStopLines() {
 
 const tries = () => useGraphStore.getState().sceneTries;
 const clashOf = (id: string) => (useGraphStore.getState().sceneClashes as Record<string, { sending?: string }>)[id] ?? null;
-const RUN_LINE = 'Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula will save them when the run finishes.';
+// GM r32 answer 1: the run's line is not a failure.
+const RUN_LINE = 'Your changes to “Opening” are kept. Nebula will save them when the run finishes.';
 const CAUSES: Cause[] = ['server', 400, 413];
 /** Queue the refusal `cause` keeps giving (a server error keeps failing by itself). */
 const stillFailing = (h: ReturnType<typeof backend>, id: string, cause: Cause) => { if (cause !== 'server') h.refuse(id, cause); };
@@ -452,16 +453,18 @@ describe('GM r31 answer 2: a run lock refusing the one try', () => {
       // The run goes on: the next sends are refused the same way.
       for (let i = 0; i < 3; i += 1) h.scenes.get('n1')!.refuse.push({ status: 409, body: { detail: 'A paid run is starting.', code: 'paid_start' } });
       release();
-      await vi.waitFor(() => expect(said.slice(before)).toContain(RUN_LINE), { timeout: 3000, interval: 5 });
+      // GM r32 answer 3: the run's line is a state line now (no ×, no [Try again]), not a toast; still no stop.
+      await vi.waitFor(() => expect(stopLines()).toEqual([RUN_LINE]), { timeout: 3000, interval: 5 });
       expect(stopped().n1).toBeUndefined();
-      expect(useGraphStore.getState().sceneStops.n1).toBeUndefined();
-      expect(stopLines()).toEqual([]);
+      expect(useGraphStore.getState().sceneStops.n1).toEqual({ cause: 'run-lock' });
+      expect(stopLineOf('n1')?.retry).toBe(false);
       expect(unsaved('n1')).toBe(RUN_LINE);
-      expect(said.slice(before).filter((line) => line !== RUN_LINE)).toEqual([]);
+      expect(said.slice(before)).toEqual([]);
       // The run ends: the save goes and lands.
       await vi.waitFor(() => expect(unsaved('n1')).toBeNull(), { timeout: 3000, interval: 5 });
       expect(h.brief('n1')).toEqual(['s1:mine n1', 's2:b']);
       expect(stopped().n1).toBeUndefined();
+      expect(stopLines()).toEqual([]);
     });
 });
 

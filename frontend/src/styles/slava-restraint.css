@@ -91,6 +91,21 @@ body.app-slava-restraint {
   --sr-disabled-opacity: 0.48;
   --sr-disabled-opacity-strong: 0.36;
   --sr-disabled-opacity-muted: 0.50;
+  /* GM r33 (PR #198): the one disabled look, by kind of control, never a
+     whole-control opacity on a text button. Always: no hover change, no
+     pointer cursor.
+     - Text buttons: the label goes neutral grey at 0.55; the outline is
+       never brighter than the enabled edge; a ghost button gets no fill.
+     - Filled buttons: the grey fill (the held [Try again] of round 21),
+       its edge the fill itself, a dark label on it.
+     - Image-only buttons: 0.45 and greyscale.
+     The notice buttons read these now (canvasProposals.css); the rest of
+     the app moves over in the pressed-state sweep. */
+  --disabled-label: var(--sr-ink-light);
+  --disabled-fill: rgb(255 255 255 / 0.42);
+  --disabled-fill-label: rgb(17 17 17 / 0.62);
+  --disabled-opacity: 0.45;
+  --disabled-filter: grayscale(1);
 
   /* Brand-surface palette — Crab (M1, NN-45) gradient, radial.
    * BRAND SURFACES ONLY — README hero, OG card, swag, in-app splash.

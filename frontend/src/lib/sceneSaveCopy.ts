@@ -29,11 +29,24 @@ export function sceneTooBigToSaveLine(scene: string): string {
   return `“${scene}” is too big to save. Remove something from it, then try again.`;
 }
 
-/** Clears by itself (a paid start, an approved run's inputs, any run lock;
- * GM r7, reworded r9; GM r31 answer 5: "Nebula" as the subject, and a comma
- * between the two full clauses): "…They’re kept, and Nebula will save them
- * when the run finishes." */
-export const KEPT_UNTIL_RUN_ENDS = 'They’re kept, and Nebula will save them when the run finishes.';
+/** A run locks the scene's inputs (a paid start, an approved run's inputs;
+ * GM r7, r9, r31; GM r32 answer 1: not a failure). It clears by itself: the
+ * save goes again when the run ends. A state line, merged with the shared
+ * name list (up to 3 by name, from 4 a count), verbatim:
+ * "Your changes to “Opening” are kept. Nebula will save them when the run
+ * finishes."; "Your changes to “Opening” and “Ref scene” are kept. …" */
+export const SAVES_WHEN_RUN_ENDS = 'Nebula will save them when the run finishes.';
+export function sceneRunLockLine(scenes: readonly string[]): string {
+  return `Your changes to ${quotedNames(scenes, 'scenes')} are kept. ${SAVES_WHEN_RUN_ENDS}`;
+}
+
+/** GM r32 answer 2: a refusal Nebula has no line of its own for ("other"),
+ * a stop line with [Try again], its wording as it stood (GM r31): "Nebula
+ * couldn’t save your changes to “Opening”. Try again, or reload if it keeps
+ * happening." Scenes refused for the same reason share one line. */
+export function sceneOtherStopLine(scenes: readonly string[], reason: string): string {
+  return `Nebula couldn’t save your changes to ${quotedNames(scenes, 'scenes')}. ${reason}`;
+}
 
 /** A server error, with the automatic retry the canvas makes (GM r9; GM r29
  * Q1: the subject and the comma, and the present tense, since Nebula is

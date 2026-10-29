@@ -594,27 +594,55 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   background: rgb(255 255 255 / 0.08);
 }
 
-/* GM r30: every notice button shares the app's disabled style
-   (--sr-disabled-opacity), the label unchanged. A button held while its
-   action is on its way (a [Try again], a clash answer being sent) is
-   aria-disabled at once and greys only once useHeldLook adds
+/* GM r33: every notice button that is held or locked reads the one
+   disabled token set (slava-restraint.css), never a whole-control opacity:
+   a filled button takes the grey fill, a ghost or text button greys its
+   label and gets no fill, and hover changes nothing. A button held while
+   its action is on its way (a [Try again], a clash answer being sent) is
+   aria-disabled at once and takes the look only once useHeldLook adds
    data-held-look (~150 ms), so a fast try never flickers; a button the
-   canvas lock disables (following, offline) is :disabled. Hover leaves it
-   as it is. */
+   canvas lock disables (following, offline) is :disabled, and the lock's
+   own whole-control dim (App.css) gives way here. */
 body.app-slava-restraint .canvas-undo-notice button[aria-disabled='true'][data-held-look],
 body.app-slava-restraint .canvas-undo-notice button:disabled {
-  opacity: var(--sr-disabled-opacity);
+  opacity: 1;
   cursor: default;
 }
 
-body.app-slava-restraint .canvas-undo-notice__action[aria-disabled='true']:hover,
-body.app-slava-restraint .canvas-undo-notice__action:disabled:hover {
+/* Held, not yet greyed (the first ~150 ms): hover leaves it as it is.
+   Before the disabled look, so a button both held and locked takes it. */
+body.app-slava-restraint .canvas-undo-notice__action[aria-disabled='true']:hover {
   background: rgb(255 255 255 / 0.9);
 }
 
-body.app-slava-restraint .canvas-undo-notice__action--quiet[aria-disabled='true']:hover,
-body.app-slava-restraint .canvas-undo-notice__action--quiet:disabled:hover {
+body.app-slava-restraint .canvas-undo-notice__action--quiet[aria-disabled='true']:hover {
   background: transparent;
+}
+
+body.app-slava-restraint .canvas-undo-notice__action[aria-disabled='true'][data-held-look],
+body.app-slava-restraint .canvas-undo-notice__action[aria-disabled='true'][data-held-look]:hover,
+body.app-slava-restraint .canvas-undo-notice__action:disabled,
+body.app-slava-restraint .canvas-undo-notice__action:disabled:hover {
+  border-color: var(--disabled-fill);
+  background: var(--disabled-fill);
+  color: var(--disabled-fill-label);
+}
+
+body.app-slava-restraint .canvas-undo-notice__action--quiet[aria-disabled='true'][data-held-look],
+body.app-slava-restraint .canvas-undo-notice__action--quiet[aria-disabled='true'][data-held-look]:hover,
+body.app-slava-restraint .canvas-undo-notice__action--quiet:disabled,
+body.app-slava-restraint .canvas-undo-notice__action--quiet:disabled:hover {
+  border-color: rgb(255 255 255 / 0.28); /* its enabled edge, never brighter */
+  background: transparent;
+  color: var(--disabled-label);
+}
+
+body.app-slava-restraint .canvas-undo-notice__close[aria-disabled='true'][data-held-look],
+body.app-slava-restraint .canvas-undo-notice__close[aria-disabled='true'][data-held-look]:hover,
+body.app-slava-restraint .canvas-undo-notice__close:disabled,
+body.app-slava-restraint .canvas-undo-notice__close:disabled:hover {
+  background: transparent;
+  color: var(--disabled-label);
 }
 
 .canvas-undo-notice__close {

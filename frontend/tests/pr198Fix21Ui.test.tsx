@@ -161,10 +161,13 @@ describe('GM r30: the shared disabled style, keyed on aria-disabled', () => {
     return '';
   };
 
-  it('a held notice button greys with the app’s disabled token once data-held-look comes; no new grey', () => {
+  it('a held notice button takes the disabled look once data-held-look comes (GM r33: the token set, no whole-control opacity)', () => {
     const held = rule("body.app-slava-restraint .canvas-undo-notice button[aria-disabled='true'][data-held-look]");
-    expect(held).toMatch(/opacity:\s*var\(--sr-disabled-opacity\)/);
-    expect(held).not.toMatch(/#[0-9a-f]{3,6}|rgb|color:/i);
+    expect(held).toMatch(/opacity:\s*1\s*;/);
+    expect(held).not.toMatch(/--sr-disabled-opacity/);
+    const filled = rule("body.app-slava-restraint .canvas-undo-notice__action[aria-disabled='true'][data-held-look]");
+    expect(filled).toMatch(/background:\s*var\(--disabled-fill\)/);
+    expect(filled).toMatch(/color:\s*var\(--disabled-fill-label\)/);
     // aria-disabled alone (the first ~150 ms) has no look of its own.
     expect(rule("body.app-slava-restraint .canvas-undo-notice button[aria-disabled='true']")).toBe('');
   });

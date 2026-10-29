@@ -3667,10 +3667,14 @@ in); a restarted Nebula starts the count again. So when you change a scene the
 person is editing, your change stays unless they changed the same field and
 choose Keep mine; read the scene again before a second write. Once the
 person answers, the prompt stays while the answer's save is on its way,
-its buttons held (they grey after a moment), and goes when that save is
-answered: saved, nothing more shows; failed, the line for that failure
-takes its place (a stopped scene's stop line in the same moment); a write
-of yours that clashes again asks again with a new prompt.
+its buttons held (they take the disabled look after a moment), and goes
+when that save is answered: saved, nothing more shows; failed, the line for
+that failure takes its place (a stopped scene's stop line in the same
+moment); a write of yours that clashes again asks again with a new prompt.
+The prompt waits 15 seconds at most: past that it goes, the person's answer
+stands, and the save carries on as an ordinary save (saved later, nothing
+shows; failed, its own stop line). On a stopped scene the answer is the one
+try, and past 15 seconds the scene is stopped again in the same moment.
 
 When Keep mine brings back a shot you removed, its connections go back
 with `POST /api/graph/connect` and `"onlyIfFree": true`: if that input
@@ -3775,22 +3779,35 @@ counted: "Nebula can’t save your changes to “Opening” and
 “Ref scene”. They’re kept, and Nebula will try again with your next
 change." (a server error that went on past the retries); "“Opening” and
 “Ref scene” are too big to save. Remove something from them, then try
-again." (413; from four, "4 scenes are too big to save. …"). One scene
-keeps its own line, and "…kept changing…" stays one line per scene. The
+again." (413; from four, "4 scenes are too big to save. …"); "Nebula
+couldn’t save your changes to “Opening” and “Ref scene”. Try again, or
+reload if it keeps happening." (a refusal Nebula has no line of its own
+for, merged when the reason is the same; a line the backend wrote itself
+stays one per scene). One scene keeps its own line, and "…kept changing…"
+stays one line per scene. None of these lines has a ×. The
 line's Try again tries every scene it names once: those that save leave
 the line, those that fail stay in it, and no new round of retries starts.
 While those tries run, the line stays (marked busy) and Try again (there
 and in the "Unsaved" mark's popover) is disabled, its label unchanged, so a
-second press sends nothing; it greys only after about 150 ms, so a try that
-answers at once doesn't flicker. A try with no answer within 15 seconds
-counts as failed: the scene is stopped again with the same line and a live
-Try again. If that try's save lands late while the card still holds what it
-sent, the stop and the "Unsaved" mark go at once; after the person changed
-the scene the stop stays (their next change sends it), and a late failure
-changes nothing. A try refused because a run's inputs are locked (a paid
-start or an approved run) isn't a stop: the scene says the run's own line,
-"Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula
-will save them when the run finishes.", and saves when the run ends.
+second press sends nothing; it takes the disabled look only after about
+150 ms, so a try that answers at once doesn't flicker. A try with no answer
+within 15 seconds counts as failed: the scene is stopped again with the
+same line and a live Try again. Every such try is tracked, so pressing Try
+again twice, each past 15 seconds, gives each its own late answer. If a
+try's save lands late while the card still holds what it sent, the stop
+and the "Unsaved" mark go at once; after the person changed the scene the
+stop stays (their next change sends it), and a late failure changes
+nothing (no retries start, nothing is said). A try refused because a run's inputs are locked (a paid
+start or an approved run) isn't a stop, and neither is any save a run's
+lock refuses: it isn't a failure. The scene's line waits in the same place
+as a state, with no Try again and no ×: "Your changes to “Opening” are
+kept. Nebula will save them when the run finishes." (merged the same way:
+"Your changes to “Opening” and “Ref scene” are kept. …", from four "Your
+changes to 4 scenes are kept. …"). It clears when the save goes after the
+run ends. If the save that a run held was a stopped scene's one try (Try
+again, the person's clash answer, Undo bringing a stopped scene back) and
+it still fails after the run, that is still the one try: the scene goes
+back to stopped with its line and Try again, with no new round of retries.
 A scene leaves its line whenever its stop clears: it saved, or your write
 made it match the person's values (then the stop, the line and the
 "Unsaved" mark go together, and nothing is said or sent).

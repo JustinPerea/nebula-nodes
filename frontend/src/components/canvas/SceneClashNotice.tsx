@@ -107,7 +107,7 @@ function useAnsweredFocus(entries: [string, SceneClashNotice][]): (answer: Answe
     const again = entries.find(([nodeId]) => nodeId === was.nodeId);
     const stopped = Array.from(document.querySelectorAll<HTMLElement>('[data-scene-stop]'))
       .find((line) => (line.getAttribute('data-scene-ids') ?? '').split(' ').includes(was.nodeId));
-    const target = stopped?.querySelector<HTMLElement>('button')
+    const target = (stopped ? stopped.querySelector<HTMLElement>('button') ?? stopped : null)
       ?? (again ? document.querySelector<HTMLElement>(`[data-scene-clash="${again[0]}"]`) : null)
       ?? nextNoticeTarget('scene-clash') ?? canvasFocusTarget();
     target?.focus({ focusVisible: was.keyboard });

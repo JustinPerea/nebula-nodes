@@ -828,6 +828,6 @@ body.app-slava-restraint .settings-notice__undo:focus-visible { outline: var(--s
   opacity: 1;
 }
 .settings__fieldset:disabled :disabled {
-  opacity: var(--sr-disabled-opacity, 0.48);
+  opacity: var(--sr-disabled-opacity);
   cursor: not-allowed;
 }

@@ -92,7 +92,10 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
   // Round 5's whole-save refusals (GM r7 item 1, lib/sceneSaveCopy.ts): GM's
   // heading over one of GM's own fixed suffixes, never a backend line (the
   // backend's lines go through headedLine in sceneRefusal).
-  { file: 'store/graphStore.ts', text: '`${heading} ${KEPT_UNTIL_RUN_ENDS}`', why: "GM's heading over GM's fixed suffix" },
+  // GM r32 answer 2: the "other" stop line, GM's heading over the reason the
+  // single line already had (copyForAnswer's), merged for several scenes.
+  { file: 'lib/sceneSaveCopy.ts', text: "`Nebula couldn’t save your changes to ${quotedNames(scenes, 'scenes')}. ${reason}`",
+    why: "GM's heading over the line's own reason (GM r32 answer 2)" },
   // PR #198 fix round 8 (GM r11 answer 3): the stopped-after-8 line. Round 19
   // (GM r28 item 2): the state slot's merged line, with GM's subject-and-comma fix.
   { file: 'lib/sceneSaveCopy.ts', text: '`Nebula couldn’t save your changes to ${names}. ${KEPT_UNTIL_NEXT_CHANGE}`', why: "GM's own line over GM's fixed suffix (GM r28 item 2)" },

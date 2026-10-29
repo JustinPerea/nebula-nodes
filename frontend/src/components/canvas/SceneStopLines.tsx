@@ -16,7 +16,11 @@ import { useHeldLook } from '../../hooks/useHeldLook';
  * r29 call 2: aria-disabled, so focus stays on it), so a second press can't
  * queue another; GM r30: the line is aria-busy, the button greys after a
  * moment (useHeldLook) and has no reason tooltip.
- * No hold and no ×: the line goes when the stop does. A scene whose clash
+ * No hold and no × on any of them (GM r29 #5, r32 answer 3): the line goes
+ * when the stop does. GM r32: the run-lock line ("Your changes to “Opening”
+ * are kept. Nebula will save them when the run finishes.") is one too, with
+ * no [Try again] (it clears when the run ends), and so is the "other" line,
+ * with [Try again]. A scene whose clash
  * waits is asked by its prompt instead, and the scene whose "Unsaved"
  * popover is open is left out while it is (its line is there).
  *
@@ -30,11 +34,12 @@ export function SceneStopLines() {
   const sceneStops = useGraphStore((state) => state.sceneStops);
   const sceneTries = useGraphStore((state) => state.sceneTries);
   const scenePopover = useGraphStore((state) => state.scenePopover);
+  const sceneClashes = useGraphStore((state) => state.sceneClashes);
   const retry = useGraphStore((state) => state.retrySceneSave);
   // A try saves: read-only while following or offline, as every edit is.
   const lock = useCanvasLock();
-  const lines = useMemo(() => sceneStopLines({ nodes, stoppedScenes, sceneStops, sceneTries, scenePopover }),
-    [nodes, stoppedScenes, sceneStops, sceneTries, scenePopover]);
+  const lines = useMemo(() => sceneStopLines({ nodes, stoppedScenes, sceneStops, sceneTries, scenePopover, sceneClashes }),
+    [nodes, stoppedScenes, sceneStops, sceneTries, scenePopover, sceneClashes]);
   const { track, buttonRef } = useStopLineFocus(lines);
   if (lines.length === 0) return null;
   return (
@@ -60,10 +65,12 @@ function StopLine({ line, track, buttonRef, act, onRetry }: { line: Line; track:
       data-scene-ids={line.nodeIds.join(' ')}
       aria-busy={line.trying || undefined} tabIndex={-1} {...track}>
       <span className="canvas-undo-notice__text">{line.text}</span>
-      <button type="button" className="canvas-undo-notice__action" {...act} {...held} ref={buttonRef}
-        onClick={() => { if (!line.trying) onRetry(); }}>
-        {TRY_AGAIN}
-      </button>
+      {line.retry && (
+        <button type="button" className="canvas-undo-notice__action" {...act} {...held} ref={buttonRef}
+          onClick={() => { if (!line.trying) onRetry(); }}>
+          {TRY_AGAIN}
+        </button>
+      )}
     </div>
   );
 }
@@ -100,7 +107,8 @@ function useStopLineFocus(lines: Line[]) {
     if (active && active !== document.body && active.isConnected) return;
     const back = lines.find((line) => line.nodeIds.some((id) => was.nodeIds.includes(id)));
     if (back) {
-      buttons.current.get(back.key)?.focus();
+      // A line with no [Try again] (the run-lock line): the line itself.
+      (buttons.current.get(back.key) ?? lineEls.current.get(back.key))?.focus();
       return;
     }
     const index = before.indexOf(was.key);

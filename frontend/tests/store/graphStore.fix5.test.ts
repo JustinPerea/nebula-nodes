@@ -301,7 +301,10 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     h.release();
     await sleep(60);
     expect(brief()).toEqual(['s1:during the run', 's2:b']);
-    expect(said).toEqual(["Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula will save them when the run finishes."]);
+    // GM r32 answers 1 and 3: not a failure, and a state line (no toast).
+    expect(said).toEqual([]);
+    expect(stopLineOf('n1')).toBe("Your changes to “Opening” are kept. Nebula will save them when the run finishes.");
+    expect(unsaved()).toBe("Your changes to “Opening” are kept. Nebula will save them when the run finishes.");
     h.answerLater(() => json({ ok: true }));
     socketSends({ type: 'executionComplete', runId: 'other-run' });
     socketSends({ type: 'graphSync', ...base, empty: false, ...backendGraph(), runParams: 'other-run' });
@@ -309,18 +312,25 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     expect(h.puts.at(-1)).toEqual(['s1:during the run', 's2:b']);
     expect(brief()).toEqual(['s1:during the run', 's2:b']);
     expect(unsaved()).toBeNull();
-    expect(said).toHaveLength(1);
+    expect(stopLineOf('n1')).toBeNull();
+    expect(said).toHaveLength(0);
   });
 
   it('an approved run\'s inputs: the same line', async () => {
     const h = harness({ first: () => json({ detail: 'An approved run uses this.', code: 'approved_run' }, 409),
       later: () => json({ ok: true }) });
+    const seen: (string | null)[] = [];
+    const off = useGraphStore.subscribe(() => { const now = stopLineOf('n1'); if (seen[seen.length - 1] !== now) seen.push(now); });
     typeIn('s1', 'held');
     await sleep(20);
     h.release();
     await sleep(60);
-    expect(said[0]).toBe("Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula will save them when the run finishes.");
+    expect(said).toEqual([]);
     await sleep(200);
+    off();
+    // The run's state line while the run held it, gone once it saved.
+    expect(seen.filter(Boolean)).toEqual(["Your changes to “Opening” are kept. Nebula will save them when the run finishes."]);
+    expect(seen[seen.length - 1]).toBeNull();
     expect(h.puts.at(-1)).toEqual(['s1:held', 's2:b']);
     expect(unsaved()).toBeNull();
   });
@@ -398,21 +408,22 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     expect(said).toEqual([]);
   });
 
-  it('any other refusal: kept, marked unsaved, the backend\'s line', async () => {
+  it('any other refusal: kept, marked unsaved, the backend\'s line (GM r32: its stop line, with [Try again])', async () => {
     const h = harness({ first: () => json({ detail: "Couldn’t save “Opening”. It's locked." }, 409) });
     typeIn('s1', 'locked');
     await sleep(20);
     h.release();
     await sleep(120);
-    expect(said).toEqual(["Couldn’t save “Opening”. It's locked."]);
+    expect(said).toEqual([]);
+    expect(stopLineOf('n1')).toBe("Couldn’t save “Opening”. It's locked.");
     expect(brief()[0]).toBe('s1:locked');
-    expect(unsaved()).toBe(said[0]);
+    expect(unsaved()).toBe("Couldn’t save “Opening”. It's locked.");
   });
 
   it('the copy is in constants for GM', () => {
     expect(copy.sceneTooBigToSaveLine('Opening')).toBe(TOO_BIG_LINE);
     expect(copy.sceneCantSaveLine('Opening')).toBe(CANT_LINE);
-    expect(copy.KEPT_UNTIL_RUN_ENDS).toBe("They’re kept, and Nebula will save them when the run finishes.");
+    expect(copy.sceneRunLockLine(['Opening'])).toBe("Your changes to “Opening” are kept. Nebula will save them when the run finishes.");
     expect(copy.KEPT_AND_TRYING).toBe('They’re kept, and Nebula is trying again.');
     expect(copy.sceneRetryingLine(['Opening'])).toBe('Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula is trying again.');
   });
