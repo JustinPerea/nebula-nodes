@@ -32,19 +32,16 @@
   animation: asset-proposal-out 220ms var(--sr-motion-handle, cubic-bezier(0.32, 0.72, 0, 1)) forwards;
 }
 
-/* GM r34 (PR #200 fix round 23): a proposal known only from its Update while
- * this tab isn't connected as the person. Neutral: no agent colour, no left
- * status edge, no buttons. The real card replaces it in place without
- * springing in (--in-place). */
+/* GM r34-r35 (PR #200 fix rounds 23-24): a proposal known only from its
+ * Update while this tab isn't connected as the person. The dot and the name
+ * keep the agent's identity colour (--agent-color, set from the Update, as on
+ * the real card); the card is neutral: no left status edge, no accent fill,
+ * no buttons. The real card replaces it in place without springing in
+ * (--in-place). */
 .asset-proposal--held {
-  --agent-color: var(--sr-ink-light, rgb(255 255 255 / 0.55));
   border-left-width: 1px;
   border-left-color: var(--sr-edge-strong, rgb(255 255 255 / 0.12));
   padding-left: 10px;
-}
-
-.asset-proposal--held .asset-proposal__agent {
-  color: var(--sr-ink, rgb(255 255 255 / 0.92));
 }
 
 .asset-proposal__held-line {

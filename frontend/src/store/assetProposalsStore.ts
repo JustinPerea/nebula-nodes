@@ -57,10 +57,17 @@ const SAFE_COLOR = /^#[0-9a-fA-F]{6}$/;
 const KINDS: ReadonlySet<string> = new Set<AssetProposalKind>(['project', 'moodboard', 'commons']);
 const exitTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-/** Drop malformed views; the agent colour goes into CSS, so only plain hex passes. */
+/** The agent's identity colour as a proposal card draws it (its dot and
+ * name): it goes into CSS, so only plain hex passes. The held placeholder
+ * uses it too (GM r35), with the same agent's colour from its Update. */
+export function proposalAgentColor(color: unknown): string {
+  return typeof color === 'string' && SAFE_COLOR.test(color) ? color : '#5B9DFF';
+}
+
+/** Drop malformed views. */
 function clean(view: AssetProposalView): AssetProposalView | null {
   if (!view || typeof view.id !== 'string' || !KINDS.has(view.kind) || typeof view.target?.id !== 'string') return null;
-  const color = SAFE_COLOR.test(view.agent?.color ?? '') ? view.agent.color : '#5B9DFF';
+  const color = proposalAgentColor(view.agent?.color);
   return { ...view, agent: { ...view.agent, name: String(view.agent?.name ?? 'Agent'), color }, change: view.change ?? {} };
 }
 

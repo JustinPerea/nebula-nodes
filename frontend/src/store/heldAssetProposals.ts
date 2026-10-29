@@ -2,21 +2,24 @@ import { useMemo } from 'react';
 import type { AgentNote } from '../lib/agentNotes';
 import type { AssetProposalKind } from '../lib/assetProposals';
 import { selectCanvasList, useAgentNotesStore } from './agentNotesStore';
-import { useAssetProposalsStore, type AssetProposalEntry } from './assetProposalsStore';
+import { proposalAgentColor, useAssetProposalsStore, type AssetProposalEntry } from './assetProposalsStore';
 
 /**
  * GM r34 (PR #200 fix round 23, review 19 NIT-4): while this tab isn't
  * connected as the person, a new asset proposal reaches it only as its
  * Update (the proposal and its accept key go to the person's sockets only,
  * main.py `broadcast_browser`). Its strip shows a placeholder card for it,
- * built from the Update alone: who asks, the real card's header, and one
- * line. No thumbnails, no buttons, no request path. The person's sync after
+ * built from the Update alone: who asks (in the agent's own colour, GM r35),
+ * the real card's header, and one line. No thumbnails, no buttons, no
+ * request path. The person's sync after
  * the promote brings the real card into the same place; an Update resolved
  * first (expired, withdrawn) takes the placeholder with it.
  */
 export interface HeldProposal {
   proposalId: string;
   agentName: string;
+  /** GM r35: the asking agent's identity colour, as on the real card (who asks, not a status). */
+  agentColor: string;
   header: string;
   at: number;
 }
@@ -48,7 +51,9 @@ export function heldProposalsFor(notes: readonly AgentNote[], proposals: Readonl
     const proposalId = typeof op?.proposalId === 'string' ? op.proposalId : '';
     if (!proposalId || op?.target !== kind || op.targetId !== targetId || proposals[proposalId]) continue;
     const at = Date.parse(note.at);
-    held.push({ proposalId, agentName: note.author.name, header: headerFor(kind, note.text), at: Number.isFinite(at) ? at : 0 });
+    // The Update's author is the proposal's agent (main._post_asset_update: proposal.agent), the
+    // same identity, colour included, that the real card's view carries.
+    held.push({ proposalId, agentName: note.author.name, agentColor: proposalAgentColor(note.author.color), header: headerFor(kind, note.text), at: Number.isFinite(at) ? at : 0 });
   }
   return held.sort((left, right) => left.at - right.at);
 }

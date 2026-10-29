@@ -19,7 +19,7 @@ const { ProposalsFor } = await import('./ProposalsFor');
 const { useAssetProposalsStore } = await import('../../store/assetProposalsStore');
 const { useAgentNotesStore } = await import('../../store/agentNotesStore');
 const { heldProposalsFor, HELD_PROPOSAL_LINE } = await import('../../store/heldAssetProposals');
-const { coverProposal } = await import('../../test/assetProposalFixtures');
+const { coverProposal, commonsProposal } = await import('../../test/assetProposalFixtures');
 const { surfaceKey } = await import('../../lib/agentNotes');
 const session = await import('../../lib/personSession');
 
@@ -115,7 +115,7 @@ describe('GM r34: a placeholder for a proposal this held tab knows only from its
     expect(heldProposalsFor(notes, proposals, false, 'project', 'dusk')).toEqual([]);
     expect(heldProposalsFor(notes, proposals, true, 'project', 'dusk').map((item) => item.proposalId)).toEqual(['pa_1']);
     expect(heldProposalsFor(notes, proposals, true, 'moodboard', 'dusk')).toEqual([
-      { proposalId: 'pa_6', agentName: 'Claude Code', header: 'asks to send these notes to generators', at: T0 }]);
+      { proposalId: 'pa_6', agentName: 'Claude Code', agentColor: '#5B9DFF', header: 'asks to send these notes to generators', at: T0 }]);
   });
 
   it('a Commons ask uses the real card\'s header, counted from the Update', () => {
@@ -145,5 +145,51 @@ describe('GM r34: a placeholder for a proposal this held tab knows only from its
     const { container } = render(<AssetProposalStrip kind="project" targetId="dusk" />);
     expect(scroll).toHaveBeenCalled();
     expect(document.activeElement).toBe(container.querySelector('[data-held-proposal="pa_new"]'));
+  });
+
+  // GM r35 (fix round 24): the dot and the name keep the asking agent's identity colour, from the same
+  // identity the real card's view carries (the Update's author is the proposal's agent).
+  it.each([['Codex', '#4F8CFF'], ['Claude Code', '#E8825A'], ['Argon', '#7C5CFF']])(
+    'the placeholder\'s dot and name get the same colour as the real card\'s for %s', (name, color) => {
+      act(() => session.reportPersonRequired());
+      const agent = { id: name.toLowerCase().replace(/ /g, '-'), name, color };
+      setUpdates([update('pa_held', { author: { kind: 'agent', ...agent } })]);
+      useAssetProposalsStore.getState().open(coverProposal({ id: 'pa_real', agent, createdAt: T0 - 1 }), 'k');
+      const { container } = render(<AssetProposalStrip kind="project" targetId="dusk" />);
+      const placeholder = container.querySelector<HTMLElement>('[data-held-proposal="pa_held"]')!;
+      const real = container.querySelector<HTMLElement>('.asset-proposal:not(.asset-proposal--held)')!;
+      expect(placeholder.style.getPropertyValue('--agent-color')).toBe(color);
+      expect(real.style.getPropertyValue('--agent-color')).toBe(color);
+      expect(placeholder.querySelector('.asset-proposal__agent')?.textContent).toBe(name);
+      expect(placeholder.querySelector('.asset-proposal__dot')).not.toBeNull();
+    });
+
+  it('the stylesheet draws the placeholder\'s dot and name from --agent-color, and only its edge neutral', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const css = readFileSync(resolve(process.cwd(), 'src/styles/asset-proposals.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const held = [...css.matchAll(/([^{}]*asset-proposal--held[^{}]*)\{([^}]*)\}/g)];
+    expect(held.map((rule) => rule[1].trim())).toEqual(['.asset-proposal--held']);
+    expect(held[0][2]).not.toMatch(/--agent-color|background/);
+    expect(held[0][2]).toMatch(/border-left-color:\s*var\(--sr-edge-strong/);
+    expect(css).toMatch(/\.asset-proposal__dot \{[^}]*background: var\(--agent-color\)/);
+    expect(css).toMatch(/\.asset-proposal__agent \{[^}]*color: var\(--agent-color\)/);
+  });
+
+  // GM r35: the placeholder's Commons header matches the real card's for every N.
+  it.each([
+    [1, 'Claude Code asks to change a reference in the Commons', 'proposes a change to this reference'],
+    [2, 'Claude Code asks to make 2 changes to a reference in the Commons', 'proposes 2 changes to this reference'],
+  ])('a Commons ask with %i change(s): the placeholder\'s header is the real card\'s', (count, text, header) => {
+    const edits = [
+      { correction: { field_path: 'summary.value', op: 'set', value: 'A quiet grid poster', reason: null } },
+      { correction: { field_path: 'keywords', op: 'add', value: 'brutalist', reason: null } },
+    ].slice(0, count);
+    useAssetProposalsStore.getState().open(commonsProposal({ id: 'pa_c', change: { edits }, before: edits.map(() => ({ value: 'x' })) } as never), 'k');
+    const { container } = render(<AssetProposalStrip kind="commons" targetId="ast_1" />);
+    const realHeader = container.querySelector('.asset-proposal__asks')?.textContent;
+    expect(realHeader).toBe(header);
+    const [held] = heldProposalsFor([update('pa_h', { text }, 'commons', 'ast_1')], {}, true, 'commons', 'ast_1');
+    expect(held.header).toBe(realHeader);
   });
 });

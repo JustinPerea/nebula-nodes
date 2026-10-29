@@ -2779,3 +2779,51 @@ hardening) go to a follow-up.
     release (agent PUT 200 after the promote), and the placeholder held,
     then replaced in place;
   - a full run passed 131 of 131.
+
+## Fix round 24
+
+GM r35 signed off on round 23 with one change.
+
+- **The placeholder's dot and name keep the agent's identity colour**, as
+  on the real card: colour says who is asking, not a status.
+  - Both cards draw it from the same identity.
+    - The Update's author is the proposal's agent
+      (`_post_asset_update` → `proposal.agent.as_dict()`), and so is the
+      real card's view (`asset_proposals.view` → `proposal.agent.as_dict()`).
+    - The server refuses an Update author without a `#rrggbb` colour.
+  - On the frontend, both pass the same rule: a new exported
+    `proposalAgentColor` in `assetProposalsStore`, which the real card's
+    `clean()` now uses too. The placeholder sets `--agent-color` from it.
+  - The placeholder's CSS no longer overrides the dot or the name. Only the
+    left edge is neutral, with no accent fill and no buttons.
+  - Live, the placeholder's dot and name are `rgb(122, 211, 255)`, the same
+    as the real card after the promote, and its left edge stays neutral.
+- **Commons header.** The real card at N = 1 says "proposes a change to this
+  reference", so per the coordinator neither wording changed and GM is
+  being asked.
+  - Real card: "proposes a change to this reference" (N = 1),
+    "proposes N changes to this reference" (N ≥ 2).
+  - Placeholder: the same strings.
+  - GM's example, "proposes 1 change", doesn't match either.
+  - A test pins N = 1 and N = 2 against the rendered real card.
+- **Tests** (in `AssetProposalStrip.held.test.tsx`):
+  - the dot and name colour are the same as the real card's for three
+    agents;
+  - the stylesheet draws the placeholder's dot and name from
+    `--agent-color`, and only its edge is neutral;
+  - the Commons header matches the real card at N = 1 and N = 2.
+- **Against 68119d5c:** the colour and stylesheet tests fail, along with the
+  existing shape test, which now includes `agentColor`. The Commons header
+  tests pass there, because they pin wording that already matched.
+
+### Fix round 24 gates
+
+- Backend, the full suite (isolated, `lg run --gate`): 11,803 passed, 71
+  skipped. There is no backend change.
+- Frontend: `tsc -b` and `eslint .` are clean.
+- Vitest, the full run (`--gate`): 596 files, 7,526 tests, all passed.
+- Build: the entry is 421,038 bytes raw (129,437 gzip). 101 JS assets are
+  eval-free. Fonts are OK.
+- Live (8795/5795, with 8000-8010 and 5173 blocked):
+  - the r34 section passed 9 of 9, including the new colour check;
+  - a full run passed 132 of 132.

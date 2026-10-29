@@ -220,11 +220,14 @@ function ProposalCard({ entry, now, names, inPlace }: { entry: AssetProposalEntr
 
 /** GM r34 (fix round 23, review 19 NIT-4): a proposal this tab knows only from
  * its Update while it isn't connected as the person. The real card's header,
- * one line, no thumbnails and no buttons, in a neutral style. */
+ * one line, no thumbnails and no buttons. The dot and the name keep the
+ * agent's identity colour (GM r35: who asks, not a status); the card itself
+ * is neutral: no status edge, no accent fill. */
 function HeldCard({ held }: { held: HeldProposal }) {
   return (
     <div role="group" aria-label={`${held.agentName} ${held.header}`} tabIndex={-1}
-      className="asset-proposal asset-proposal--held" data-held-proposal={held.proposalId}>
+      className="asset-proposal asset-proposal--held" data-held-proposal={held.proposalId}
+      style={{ '--agent-color': held.agentColor } as CSSProperties}>
       <div className="asset-proposal__who">
         <span className="asset-proposal__dot" aria-hidden="true" />
         <span className="asset-proposal__agent">{held.agentName}</span>
