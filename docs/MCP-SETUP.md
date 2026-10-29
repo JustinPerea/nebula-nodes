@@ -3713,7 +3713,11 @@ the card as it was shown, so it doesn't pick a value) and the person's
 edits are merged onto it and saved, with no new line;
 a field the person was still being asked about (your change clashed with
 theirs when you deleted it) is asked again, against the scene as it came
-back, unless your restored value is the person's. The prompt takes the
+back, unless your restored value is the person's. That holds for every
+way the scene comes back, each time: your undo, the canvas's Undo, the
+person's Redo and Undo again, their own delete undone, or another window's
+restore. No way back counts as an answer, and the person's own delete or
+Redo says nothing. The prompt takes the
 delete toast's place (and the Undo's own "Undid Codex’s edit."), never
 both; it has no ×, so focus goes to the prompt itself, never Keep mine. A
 `workspace_moved` refusal says nothing on the card: the project switch's
@@ -3736,7 +3740,12 @@ retry. The card says it once, with
 Try again (on the toast and in the "Unsaved" mark's popover), and nothing
 more goes until the person edits the scene or presses Try again; one of
 those refused the same way again keeps the same line and Try again, and
-your writes meanwhile never send it. While the
+your writes meanwhile never send it. Refused while a clash waits for the
+person, the clash prompt stays the only line for that scene and nothing for
+it is sent, on your writes or theirs, until they answer; then it is stopped
+the same way, with its line and Try again, unless the answer left nothing
+unsaved (Use Codex’s on the only changed field), when the stop and the
+"Unsaved" mark simply go. Other scenes keep saving. While the
 person has that popover open, the toast with the same line leaves and
 doesn't come back. The Agent log's line for it carries the status and the
 code (`Couldn’t save “Opening”, node n1: HTTP 400 bad_params. <detail>`);

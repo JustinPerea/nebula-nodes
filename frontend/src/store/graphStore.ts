@@ -2992,6 +2992,12 @@ interface CinemaScenePersistence {
    * toast and no timed retries. Cleared by a save that lands, the person's
    * next change and [Try again]. */
   clashAnswerStop: { by: SceneOutpacedBy | null } | null;
+  /** Review 14 LOW-2 (GM r25 answer 2): a save refused 400 or 413 while a
+   * clash waited. The clash prompt stays the only line for the scene and
+   * nothing for it is sent until the person answers; then it is stopped for
+   * good with its line and [Try again], unless the answer left nothing
+   * unsaved (resolveSceneClash). */
+  clashRefusal?: 'bad-save' | 'too-big' | null;
   /** Review 7, M2: the wires the other side's removal took off a shot the
    * person kept (a PRESENCE clash), held on the card while the choice waits
    * and sent again after Keep mine's save (GM r11 answer 4). */
@@ -3164,10 +3170,12 @@ function sceneHasUnsavedEdits(entry: CinemaScenePersistence): boolean {
   return entry.refused !== null || entry.unanswered || entry.pending || entry.inFlight !== null || entry.clash !== null;
 }
 
-/** `later`: the line is said by the caller once its sync has landed. */
-function noteSceneDeleted(nodeId: string, entry: CinemaScenePersistence, line: string, later?: DeletedSceneLine[]): void {
-  const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
-  if (!node || node.data.definitionId !== 'cinema-scene') return;
+/** Keeps a scene's unsaved edits, the scene Nebula had and a waiting clash
+ * as its card leaves the canvas, for when it comes back (`line`: the
+ * deleted line said for it, '' when nothing is said). Returns what was kept
+ * for it before on this canvas, if anything. */
+function keepDeletedScene(node: Node<NodeData>, entry: CinemaScenePersistence, line: string) {
+  const nodeId = node.id;
   const said = deletedSceneEdits.get(nodeId);
   const sameCanvas = said?.graph === canvasReplacementRevision;
   deletedSceneEdits.delete(nodeId);
@@ -3175,15 +3183,36 @@ function noteSceneDeleted(nodeId: string, entry: CinemaScenePersistence, line: s
     : sameCanvas && said ? said.clash : null;
   deletedSceneEdits.set(nodeId, { mine: cloneScene(sceneFromNode(node)),
     base: sameCanvas && said ? said.base : entry.base ? cloneScene(entry.base) : null, graph: canvasReplacementRevision,
-    line: sameCanvas && said ? said.line : line, scene: sameCanvas && said ? said.scene : cardTitle([node], nodeId),
-    held: sameCanvas && said ? said.held : heldSceneOf(nodeId), clash });
+    line: sameCanvas && said?.line ? said.line : line, scene: sameCanvas && said ? said.scene : cardTitle([node], nodeId),
+    held: sameCanvas && said?.held ? said.held : heldSceneOf(nodeId), clash });
   while (deletedSceneEdits.size > DELETED_SCENES_KEPT) deletedSceneEdits.delete(deletedSceneEdits.keys().next().value!);
   // The clash waits for the scene to come back (asked again then).
   if (entry.clash) setSceneClash(nodeId, null);
-  if (sameCanvas) {
+  return { said: sameCanvas ? said : undefined };
+}
+
+/** Review 14 LOW-1 (GM r25 answer 1): the person's own step took a scene
+ * card off (their delete, an undo or a redo; a sync from elsewhere is
+ * noteSceneRemovals') while its edits weren't saved or a clash waited. It is
+ * their own action, so nothing is said; the edits and the clash are kept so
+ * that every way the scene comes back (their Undo or Redo, another window's
+ * restore, the Agent log's) restores Nebula's scene and asks again while the
+ * values still differ. No way back counts as an answer. */
+function keepOwnRemovedScene(node: Node<NodeData>, entry: CinemaScenePersistence): void {
+  if (node.data.definitionId !== 'cinema-scene' || !sceneHasUnsavedEdits(entry)) return;
+  keepDeletedScene(node, entry, '');
+}
+
+/** `later`: the line is said by the caller once its sync has landed. */
+function noteSceneDeleted(nodeId: string, entry: CinemaScenePersistence, line: string, later?: DeletedSceneLine[]): void {
+  const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
+  if (!node || node.data.definitionId !== 'cinema-scene') return;
+  const { said: before } = keepDeletedScene(node, entry, line);
+  const said = before?.line ? before : undefined;
+  if (said) {
     // Said once (the sync's removal, then the save's 404, or an edit after
     // it); the delete's toast may still carry it.
-    if (later) later.push({ nodeId, line: said!.line, scene: said!.scene, said: true });
+    if (later) later.push({ nodeId, line: said.line, scene: said.scene, said: true });
     return;
   }
   // Its [Try again] or retry line no longer applies.
@@ -3213,7 +3242,7 @@ function noteSceneRemovals(state: GraphState, kept: ReadonlySet<string>): Delete
     }
     // The save's 404 came first and said it: the delete's toast carries it.
     const said = deletedSceneEdits.get(node.id);
-    if (said && said.graph === canvasReplacementRevision) lines.push({ nodeId: node.id, line: said.line, scene: said.scene, said: true });
+    if (said?.line && said.graph === canvasReplacementRevision) lines.push({ nodeId: node.id, line: said.line, scene: said.scene, said: true });
   }
   return lines;
 }
@@ -3305,8 +3334,8 @@ function restoreDeletedScenes(synced: ReadonlySet<string>, held: ReadonlyMap<str
     const toastHadFocus = typeof document !== 'undefined'
       && Boolean(document.activeElement?.closest?.('.canvas-undo-notice:not(.scene-clash-notice)'));
     useGraphStore.setState((state) => ({
-      ...(state.undoNotice?.text.includes(said) || restoredBy(state.undoNotice, nodeId) ? { undoNotice: null } : {}),
-      ...(state.messageNotice?.text.includes(said) ? { messageNotice: null } : {}),
+      ...((said && state.undoNotice?.text.includes(said)) || restoredBy(state.undoNotice, nodeId) ? { undoNotice: null } : {}),
+      ...(said && state.messageNotice?.text.includes(said) ? { messageNotice: null } : {}),
     }));
     // The prompt has no ×: focus goes to the prompt itself, never Keep mine.
     setSceneClash(nodeId, entry.clash, { focus: toastHadFocus || typeof document === 'undefined'
@@ -3372,6 +3401,32 @@ function resolveSceneClash(nodeId: string, keep: 'mine' | 'theirs'): void {
     // M2 (GM r11 answer 4): the shot comes back with its wires, sent once
     // the scene's save lands (the port exists then). Held on the card till then.
     entry.restoreWires = [...(entry.restoreWires ?? []), ...wires];
+  }
+  // Review 14 LOW-2 (GM r25 answer 2 and its edge case): a save refused 400
+  // or 413 while the clash waited. If the answer left nothing unsaved (Use
+  // Codex’s on the only changed field), the stop and the "Unsaved" mark go,
+  // with no refusal for edits that no longer exist. Otherwise it stays
+  // stopped for good: its line, said now (the prompt was the only line till
+  // then), with [Try again]; nothing is sent.
+  const refusal = entry.clashRefusal;
+  if (refusal) {
+    entry.clashRefusal = null;
+    entry.clashAnswerStop = null;
+    const now = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
+    const nebula = backendScenes.get(nodeId);
+    if (now && nebula && !entry.inFlight && cinemaAuthoringKey(sceneFromNode(now)) === cinemaAuthoringKey(nebula)) {
+      entry.refused = null;
+      entry.refusedLine = null;
+      setSceneStopped(nodeId, entry, false);
+      markSceneUnsaved(nodeId, null);
+      entry.acknowledged = true;
+      entry.pending = false;
+      settleSceneAnswer(nodeId, entry, { kind: 'ok' });
+      return;
+    }
+    entry.refusedLine = null;
+    stopSceneForGood(nodeId, entry, refusal);
+    return;
   }
   // GM r10: the clash was the line; a failure of this save says its own
   // (the normal retry line), and the retries start again. GM r19 answer 2
@@ -3655,8 +3710,13 @@ function stopSceneForGood(nodeId: string, entry: CinemaScenePersistence, refused
   if (log && typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', { detail: { source: 'system', message: log } }));
   }
-  // A clash that came meanwhile asks first; its line stays the mark's.
-  if (entry.clash) return;
+  // A clash that came meanwhile asks first; its line stays the mark's, and
+  // nothing goes until it is answered (review 14 LOW-2, GM r25 answer 2).
+  if (entry.clash) {
+    entry.clashRefusal = refused;
+    return;
+  }
+  entry.clashRefusal = null;
   markSceneUnsaved(nodeId, line);
   if (said) return;
   useGraphStore.setState((state) => {
@@ -3970,6 +4030,12 @@ async function flushCinemaScenePersistence(nodeId: string, entry: CinemaScenePer
   // A write with no answer waits for a sync to show what the backend has
   // (L1); an outdated tab sends nothing more (projectStore reloads it).
   if (entry.unanswered || entry.refused === 'params-outdated' || entry.refused === 'replaced' || entry.refused === 'moved') return;
+  // Review 14 LOW-2 (GM r25 answer 2): refused 400 or 413 while a clash
+  // waits, nothing for the scene goes until the person answers it.
+  if (entry.clash && entry.clashRefusal) {
+    entry.pending = false;
+    return;
+  }
   const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
   const scene = node?.data.params.scene as CinemaSceneSpec | undefined;
   if (node?.data.definitionId !== 'cinema-scene' || !scene?.shots) {
@@ -4079,6 +4145,7 @@ function settleSceneAnswer(nodeId: string, entry: CinemaScenePersistence, answer
     case 'ok': {
       entry.refused = null;
       entry.refusedLine = null;
+      entry.clashRefusal = null;
       entry.retries = 0;
       setSceneStopped(nodeId, entry, false);
       entry.changedInRow = 0;
@@ -4243,6 +4310,13 @@ function settleSceneAnswer(nodeId: string, entry: CinemaScenePersistence, answer
       }
       entry.refused = answer.refused;
       // GM r10: while a clash waits, its prompt is the line; nothing retries.
+      // Review 14 LOW-2 (GM r25 answer 2): refused 400 or 413 then, it is
+      // stopped for good behind the prompt (no line yet, nothing resent on
+      // another writer's change); the answer says the line (resolveSceneClash).
+      if (entry.clash && (answer.refused === 'bad-save' || answer.refused === 'too-big')) {
+        stopSceneForGood(nodeId, entry, answer.refused, answer.log);
+        return;
+      }
       if (entry.clash) {
         entry.refusedLine = answer.line;
         return;
@@ -4612,8 +4686,9 @@ function persistSceneParam(nodeId: string, scene: CinemaSceneSpec, debounceMs = 
   // GM r19 answer 2: the person's own change is a new save, not the clash
   // answer's: its failure says its own line again.
   entry.clashAnswerStop = null;
-  // GM r11 answer 3: the next change sends a stopped save again.
-  if (entry.stopped) {
+  // GM r11 answer 3: the next change sends a stopped save again; not while
+  // a clash waits after a 400 or 413 (review 14 LOW-2): the answer decides.
+  if (entry.stopped && !(entry.clash && entry.clashRefusal)) {
     setSceneStopped(nodeId, entry, false);
     entry.retries = 0;
     entry.changedInRow = 0;
@@ -13696,6 +13771,9 @@ useGraphStore.subscribe((state, previous) => {
   for (const node of previous.nodes) {
     if (node.data.definitionId === 'cinema-scene'
       && !state.nodes.some((next) => next.id === node.id && next.data.definitionId === 'cinema-scene')) {
+      // Review 14 LOW-1: edits or a clash the card held are kept for its return.
+      const entry = cinemaScenePersistence.get(node.id);
+      if (entry) keepOwnRemovedScene(node, entry);
       clearCinemaScenePersistence(node.id);
     }
   }

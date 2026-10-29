@@ -98,7 +98,18 @@ async function freshStore(): Promise<void> {
 }
 const store = () => useGraphStore.getState();
 const tick = (ms: number) => vi.advanceTimersByTimeAsync(ms);
-const settle = async () => { for (let i = 0; i < 12; i += 1) await tick(5); };
+/** Review 14 NIT-2: the shared fake timers advance in slices of at most a
+ * second, and an abandoned block's run (`mine` no longer the generation)
+ * stops before and after every slice, so it never finishes a step or its
+ * final phase against the next block's canvas. */
+function guardedTimers(mine: number) {
+  const guard = () => { if (generation !== mine) throw new Abandoned(); };
+  const sliced = async (ms: number) => {
+    for (let left = ms; left > 0; left -= 1000) { guard(); await tick(Math.min(1000, left)); }
+    guard();
+  };
+  return { guard, tick: sliced, settle: async () => { for (let i = 0; i < 12; i += 1) await sliced(5); } };
+}
 
 const SEEDS = Number(process.env.UNDO_PROPERTY_SEEDS ?? 120);
 const FIRST = Number(process.env.UNDO_PROPERTY_FIRST ?? 1);
@@ -141,7 +152,8 @@ type Variant = 'plain' | 'foreign' | 'refuse' | 'clear';
  * typing ("pre-clear typing landed on the new canvas", seeds 10 and 24
  * under load; reproduced by forcing the block before it to time out). Each
  * block runs under its own generation; an abandoned one stops at its next
- * step. */
+ * step; review 14 NIT-2: and at every await within a step and in the final
+ * phase (guardedTimers). */
 let generation = 0;
 class Abandoned extends Error {}
 
@@ -155,7 +167,12 @@ async function runSeed(seed: number, variant: Variant = 'plain'): Promise<Failur
 }
 
 async function runSeedInner(seed: number, foreign: boolean, clearing = false): Promise<Failure | null> {
+  const mine = generation;
+  // Shadow the shared timers for everything this seed does (its steps, its
+  // presses and its final delivery): an abandoned run stops at its next await.
+  const { guard, tick, settle } = guardedTimers(mine);
   await freshStore();
+  guard();
   const random = rng(seed);
   const pick = <T,>(items: T[]): T | undefined => items[Math.floor(random() * items.length)];
   const log: string[] = [];
@@ -245,6 +262,7 @@ async function runSeedInner(seed: number, foreign: boolean, clearing = false): P
       }
     }
     await Promise.allSettled(pending);
+    guard();
     await settle();
   };
 
@@ -256,9 +274,8 @@ async function runSeedInner(seed: number, foreign: boolean, clearing = false): P
       + `\n      redo: ${store().redoStack.map((e) => 'nodes' in e ? `[${(e.nodes as Array<{ id: string }>).map((n) => n.id.length > 4 ? 'L' : n.id).join(' ')}]` : 'agent').join(' ')}` : '');
   const push = log.push.bind(log);
   if (debug) log.push = (...items: string[]) => { const n = push(...items); push(state()); return n; };
-  const mine = generation;
   for (let step = 0; step < OPS; step += 1) {
-    if (generation !== mine) throw new Abandoned();
+    guard();
     const roll = random();
     // A person's action comes after every echo whose answer already landed
     // (Nebula writes the echo first: FakeNebula.catchUp).
@@ -465,12 +482,13 @@ describe('round 17 (review 16, H1): random sequences of edits, undos and echoes'
     for (const seed of seeds) {
       if (generation !== mine) return;
       const failure = await runSeed(seed, variant).catch((error: unknown) => {
-        if (error instanceof Abandoned) return null;
+        // Only a run a newer block took over stops this way; a live one rethrows.
+        if (error instanceof Abandoned && generation !== mine) return null;
         throw error;
       });
       if (generation !== mine) return;
       if (failure) failures.push(failure);
-      await tick(20_000);
+      for (let left = 20_000; left > 0 && generation === mine; left -= 1000) await tick(1000);
     }
     if (failures.length > 0) {
       const first = failures[0];

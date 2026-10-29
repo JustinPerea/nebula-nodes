@@ -835,3 +835,51 @@ Four of this round's ring shots are byte-identical to round 10 shots of the same
   - moved across mouse, Enter and Space: 15/15.
   - undodel, ownundo, and the round 14 deleted13 and undoclash regression: 13/13.
   - Shots `fix15-*` at 1280 and 1440, all distinct: undo-delete-one-sentence, undo-toast-period, saved-as-x-after-mouse, saved-as-x-after-enter.
+
+## Fix round 16 (PR #198 review 14, GM's pr198 r25)
+
+- **LOW-1 and GM r25 answer 1: every way back asks again.** The person's own Redo took the scene off as this tab's own echo, so `noteSceneRemovals` kept nothing, and the next Undo restored the card as shown, which settled the clash as theirs.
+  - Now the node-removal subscriber (the one that clears a scene's save entry) first calls `keepOwnRemovedScene`. When the card held unsaved edits or a waiting clash, it keeps them aside with the scene Nebula had, silently, through the same `keepDeletedScene` record a deleting sync uses. That covers the person's delete, an undo and a redo.
+  - Every way back then goes through the same path: `restoreHeldScenes` for the canvas's own Undo or Redo, and `restoreDeletedScenes` on the sync for any return (another window's restore, the Agent log's undo). The clash is asked again while the values still differ. No way back counts as an answer.
+  - A silent record has an empty line, so it never clears a slot (`said &&`) and never counts as said in `noteSceneRemovals`.
+  - Canvas replacements clear every save entry before they swap nodes, so nothing is kept across canvases.
+- **LOW-2 and GM r25 answer 2: a 400 or 413 behind a clash.**
+  - In `settleSceneAnswer`, a `bad-save`/`too-big` answer while a clash waits goes to `stopSceneForGood`. With a clash waiting, that sets `entry.clashRefusal` and says nothing.
+  - `flushCinemaScenePersistence` sends nothing for the scene while `clash && clashRefusal` hold, whether triggered by another writer's sync, the person's edit (which no longer unstops it) or a reconnect. Other scenes are untouched.
+  - `resolveSceneClash` then decides:
+    - if the answer left the card as Nebula has it (GM's edge case), the stop and the mark go and nothing is said;
+    - otherwise `stopSceneForGood` says the line once with [Try again], and nothing is sent.
+  - A landed save clears `clashRefusal`.
+- **NIT-2: the property test's window.**
+  - `runSeedInner` shadows `tick` and `settle` with `guardedTimers(mine)`. The shared fake timers advance in slices of at most a second, with the generation checked before and after each slice.
+  - The seed's steps, presses, `Promise.allSettled` and its final delivery all stop at their next await once a newer block took over.
+  - The block's own 20 s wait is sliced too.
+  - `Abandoned` counts as a stop only when the generation moved; otherwise it rethrows, so a misfire can't hide a failure.
+  - Probe: a copy where the refuse block gives up after 1 s of real time and leaves its run going, as vitest's timeout does. The clear 1–30 block and seeds 84 and 1123 pass after it.
+  - Seed timings match round 15's file (plain 1–30: 2.1 s both; clear 1–30: 0.26 s both), so the slicing changes nothing for a live run.
+- **NIT-3 (harness).** The pointer rests on Codex's toast during the toobig-line shots (its hold waits while the pointer is on it). The click on the mark that follows starts its full hold again before the check. Live, it passes.
+- **Docs.** MCP-SETUP (every way back, each time; a refusal behind a clash, with the edge case) and the `mcp_server.py` docstring.
+- **Tests.**
+  - New `graphStore.fix16` (9):
+    - Undo, Redo, Undo again;
+    - the person's own delete, then Undo;
+    - another window's restore;
+    - the same value meaning no question;
+    - nothing unsaved;
+    - 400 and 413 behind a clash: nothing sent on Codex's writes, the person's edits or a reconnect; Keep mine leaves it stopped for good; [Try again] saves;
+    - Use Codex’s with another edit left: stopped for good;
+    - the edge case: nothing unsaved, so no stop, no mark, nothing said.
+
+    On 172f5673, 6 fail; the same-value, nothing-unsaved and edge-case tests are guards.
+  - `heldUndo.property.round17` (NIT-2).
+  - No test changed because behaviour changed.
+- **Gates.**
+  - tsc -b and `npm run lint` are clean.
+  - Full vitest: 596 files, 7,764 tests passed.
+  - Full backend: 12,061 passed, 71 skipped.
+  - vite build plus `check-build-budget.mjs`: 425,658 bytes raw (budget 512,000), 128,730 gzip; `dist` deleted.
+- **Live** (`fix16_live.mjs`, isolation as before, 0 blocked attempts, no paid runs).
+  - redoclash, mouse and keyboard (Undo by the toast's [Undo] or Cmd+Z; Redo by Cmd+Shift+Z, since no toast offers it then; Undo again by the "Redid Codex’s edit." toast's [Undo] or Cmd+Z): asked again each time, Codex's value on Nebula, no deleted line for the Redo, and Keep mine saves. 7/7.
+  - The first run's two failures were my check counting the Undo and Redo toasts as said lines.
+  - clash400b: refused 400 with s3 unsaved, the prompt the only line, and Codex's two writes send 0. Keep mine then shows the line once with [Try again] and sends nothing, and [Try again] saves. Run together with toobig (NIT-3): 14/16, the two failures being the redo check above.
+  - Shots `fix16-*` at 1280 and 1440, all distinct: redoclash-asked-again-mouse, redoclash-asked-again-keyboard, clash400-only-prompt, clash400-after-keep-mine.
