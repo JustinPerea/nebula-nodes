@@ -1,25 +1,24 @@
 /**
  * Fix round 5 of PR #199 (GM r7 and round 5's answers, review 5's nits,
- * 2026-10-28): Restore in Recently deleted is disabled at the project limit
- * with its tooltip; the restore notice is one outcome per line from the
- * first render; the refused toast leaves on its own time after a mouse
- * Undo, even under the pointer, as the app's other toasts do (a hold is
- * per notice: a new notice starts its own).
+ * 2026-10-28): the restore notice is one outcome per line from the first
+ * render; the Undo toast leaves on its own time as the app's other toasts
+ * do. (Restore disabled at the project limit is gone: a restore may pass
+ * it, Justin 2026-10-29, fix round 12.)
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { ProjectHome, type ProjectHomeProps, type ProjectSummary, type TrashedProject } from './ProjectHome';
 import {
-  canvasHeldLogLine, canvasHoldRefusedLogLine, catalogRestoreNotice, restoreAtLimitTooltip, restoreRefusedLine,
+  canvasHeldLogLine, canvasHoldRefusedLogLine, catalogRestoreNotice,
 } from './catalogRestoreCopy';
 import type { CatalogRestore } from '../../lib/projects';
 
 vi.mock('../../lib/backend', () => ({ backendAssetUrlSync: (url: string) => `http://127.0.0.1:8060${url}` }));
 
 const NOW = Date.parse('2026-10-28T12:00:00Z');
-const OPEN = "Nebula's project list was damaged, so it restored the last good copy";
+const OPEN = "Nebula’s project list was damaged, so it restored the last good copy";
 const KEPT = 'The damaged file was kept.';
-const NOT_WHOLE = "Nebula couldn't read the whole damaged file, so changes made after that copy may be missing.";
+const NOT_WHOLE = "Nebula couldn’t read the whole damaged file, so changes made after that copy may be missing.";
 const ALPHA = 'a'.repeat(32);
 const LOGO = 'l'.repeat(32);
 const DUNES = 'd'.repeat(32);
@@ -42,32 +41,16 @@ const props = (overrides: Partial<ProjectHomeProps> = {}): ProjectHomeProps => (
 });
 const openTrash = () => fireEvent.click(screen.getByRole('button', { name: /Recently deleted/ }));
 
-describe('GM r7: Restore at the project limit', () => {
-  it('words the tooltip with the real limit', () => {
-    expect(restoreAtLimitTooltip(500)).toBe("You can restore it after you delete a project. You've reached the limit of 500 projects.");
-    expect(restoreAtLimitTooltip(3)).toBe("You can restore it after you delete a project. You've reached the limit of 3 projects.");
-  });
-
-  it('is disabled in the shared grey with the tooltip while the list is at its limit, and does nothing', () => {
+describe('Restore is never greyed by the project limit (Justin, 2026-10-29)', () => {
+  it('stays enabled with the list full and restores, with no limit tooltip', () => {
     const onRestore = vi.fn();
-    render(<ProjectHome {...props({ projects: [project(LOGO, 'Logo'), project(DUNES, 'Dunes')], projectLimit: 2,
+    render(<ProjectHome {...props({ projects: [project(LOGO, 'Logo'), project(DUNES, 'Dunes')],
       trash: [trashed(ALPHA, 'Alpha')], onRestore })} />);
-    openTrash();
-    const button = screen.getByRole('button', { name: 'Restore Alpha' });
-    expect(button.getAttribute('aria-disabled')).toBe('true');
-    expect(button.getAttribute('title')).toBe(restoreAtLimitTooltip(2));
-    expect(button.className).toContain('project-home__restore--at-limit');
-    fireEvent.click(button);
-    expect(onRestore).not.toHaveBeenCalled();
-  });
-
-  it('restores as before below the limit', () => {
-    const onRestore = vi.fn();
-    render(<ProjectHome {...props({ projectLimit: 2, trash: [trashed(ALPHA, 'Alpha')], onRestore })} />);
     openTrash();
     const button = screen.getByRole('button', { name: 'Restore Alpha' });
     expect(button.getAttribute('aria-disabled')).toBeNull();
     expect(button.getAttribute('title')).toBeNull();
+    expect(button.className).not.toContain('at-limit');
     fireEvent.click(button);
     expect(onRestore).toHaveBeenCalledWith(ALPHA);
   });
@@ -93,31 +76,14 @@ describe('GM round 5, 3: the restore notice is stacked from the first render', (
   });
 });
 
-describe('review 5, N-2: the refused toast times out like the app\'s other toasts', () => {
+describe('review 5, N-2: the Undo toast times out like the app\'s other toasts', () => {
   beforeEach(() => { vi.useFakeTimers(); });
   afterEach(() => { vi.useRealTimers(); });
 
-  it('leaves after its time when the refusal arrives under the pointer after a mouse Undo', () => {
+  it('leaves after its time, and holds while the person points at it', () => {
     const onDismiss = vi.fn();
-    const line = restoreRefusedLine('Alpha', 3);
-    const { rerender } = render(<ProjectHome {...props({ lastDeleted: { id: ALPHA, name: 'Alpha' }, onDismissUndo: onDismiss })} />);
-    const undo = screen.getByRole('button', { name: 'Undo' });
-    const toast = undo.closest('.project-home__toast') as HTMLElement;
-    fireEvent.mouseEnter(toast);
-    fireEvent.focus(undo);
-    fireEvent.click(undo);
-    rerender(<ProjectHome {...props({ lastDeleted: { id: ALPHA, name: 'Alpha', refused: line }, onDismissUndo: onDismiss })} />);
-    expect(screen.getByText(line)).toBeTruthy();
-    act(() => { vi.advanceTimersByTime(8000); });
-    expect(onDismiss).toHaveBeenCalled();
-  });
-
-  it('still holds the refusal while the person points at it again', () => {
-    const onDismiss = vi.fn();
-    const line = restoreRefusedLine('Alpha', 3);
-    render(<ProjectHome {...props({ lastDeleted: { id: ALPHA, name: 'Alpha', refused: line }, onDismissUndo: onDismiss })} />);
-    const toast = screen.getByText(line).closest('.project-home__toast') as HTMLElement;
-    fireEvent.mouseLeave(toast);
+    render(<ProjectHome {...props({ lastDeleted: { id: ALPHA, name: 'Alpha' }, onDismissUndo: onDismiss })} />);
+    const toast = screen.getByRole('button', { name: 'Undo' }).closest('.project-home__toast') as HTMLElement;
     fireEvent.mouseEnter(toast);
     act(() => { vi.advanceTimersByTime(20000); });
     expect(onDismiss).not.toHaveBeenCalled();
@@ -137,8 +103,8 @@ describe('GM held model: the Agent log lines', () => {
 
   it('words a refused clear or replace at the limit', () => {
     expect(canvasHoldRefusedLogLine('Codex', 'clear'))
-      .toBe("Codex tried to clear the canvas you had open. Nebula stopped it because that canvas isn't saved as a project yet.");
+      .toBe("Codex tried to clear the canvas you had open. Nebula stopped it because that canvas isn’t saved as a project yet.");
     expect(canvasHoldRefusedLogLine(null, 'replace'))
-      .toBe("An agent tried to replace the canvas you had open. Nebula stopped it because that canvas isn't saved as a project yet.");
+      .toBe("An agent tried to replace the canvas you had open. Nebula stopped it because that canvas isn’t saved as a project yet.");
   });
 });

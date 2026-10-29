@@ -121,7 +121,6 @@ body.app-slava-restraint .project-home__confirm button { display: inline-flex; a
 body.app-slava-restraint .project-home__trash-actions button svg { width: 13px; height: 13px; }
 /* GM r7: Restore at the project limit, in the shared disabled grey but still
    focusable, so its tooltip says why (aria-disabled, as the toolbar's). */
-body.app-slava-restraint .project-home__trash-actions .project-home__restore--at-limit { opacity: var(--sr-disabled-opacity); cursor: default; }
 /* Every hover rule here skips [aria-disabled="true"] (review 6 of PR #199,
    L-4): the at-limit Restore keeps its resting look under the pointer. */
 body.app-slava-restraint .project-home__trash-actions button:hover:not(:disabled):not([aria-disabled="true"]),

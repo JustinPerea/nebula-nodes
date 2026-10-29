@@ -88,8 +88,8 @@ any other change works on a copy of it ("…and made your change on a copy of
 it."; for a project the person already had, which a restore protected
 again: "Nebula kept “My film” as it was and …"), saved as "X copy" ("X copy 2" when that name is taken) on the next
 listing or your next change, which then lands on it. When only the person's
-canvas fits, the reply adds "The copy isn't saved as a project yet because the
-project limit is reached." (or "…because Nebula's project list is full."):
+canvas fits, the reply adds "The copy isn’t saved as a project yet because the
+project limit is reached." (or "…because Nebula’s project list is full."):
 the copy waits, and the person sees it as your copy, not theirs. The CLI
 prints this reply under its own line (`nebula clear` prints it in place of
 the Undo sentence: the person's canvas wasn't cleared). The same holds right
@@ -103,14 +103,19 @@ than a project can be saved is never held for you: that change is refused
 nothing was changed. Work in an existing project, or make the canvas smaller
 first."). Right after a restore of the project list, your first change finds
 the same: Nebula reads whether the canvas waits from the canvas itself.
+While the person's tab keeps edits Nebula couldn't save after a restore of
+the project list (their tab shows "They’re kept in this tab." with Save as a
+project), every change, run or project switch of yours is refused (409
+`canvas_kept_in_tab`); reads still work. Tell the person, and try again after
+they click Save as a project.
 Nothing in the canvas is lost, also across restarts, but the person can't
 see or open it until it is saved: never tell them it is open. Its
 note says what frees room: for the project limit, moving a project to
 Recently deleted; for the size limit, only deleting one for good. Once room
 is free (`roomNow`) the next listing saves it. Tell them, and don't delete
-anything to make room yourself. Restoring a project into a full list is
-refused too ("You've reached the limit of 500 projects.", 413 with `limit`
-and `projectLimit`); it stays in Recently deleted.
+anything to make room yourself. Restoring a project from Recently deleted
+is never refused by the limit (it may pass it); making a new one past the
+limit still is (413 with `limit` and `projectLimit`).
 Start new work in a new project (`nebula project new "<name>"`) or open the
 right one (`nebula project open <id>`). The person's canvas follows (from
 their Projects screen too), names you, and offers them a button back.

@@ -17,7 +17,7 @@ vi.mock('../../lib/backend', () => ({ backendAssetUrlSync: (url: string) => `htt
 const DAMAGED = '/Users/someone/.nebula/projects/catalog.json.damaged-20261027T101500Z-1a2b3c4d';
 const NOW = Date.parse('2026-10-27T12:00:00Z');
 const TWO_DAYS_AGO = '2026-10-25T11:00:00+00:00';
-const OPEN = "Nebula's project list was damaged, so it restored the last good copy";
+const OPEN = "Nebula’s project list was damaged, so it restored the last good copy";
 const KEPT = 'The damaged file was kept.';
 
 const restore = (overrides: Partial<CatalogRestore> = {}): CatalogRestore => ({
@@ -60,12 +60,12 @@ describe('GM r3: the open project that couldn\'t be added back, saved from its c
   it('still names the other projects that couldn\'t be added back', () => {
     const other = { id: 'h'.repeat(32), name: 'Hero', reason: 'incomplete' };
     expect(line({ ...canvas, notAddedBack: [scratch, other], notAddedBackCount: 2 }))
-      .toBe(`${OPEN}. “Hero”, a newer project, couldn't be added back. The canvas you had open was saved as its own project, “Scratch (recovered)”, so nothing in it is lost. ${KEPT}`);
+      .toBe(`${OPEN}. “Hero”, a newer project, couldn’t be added back. The canvas you had open was saved as its own project, “Scratch (recovered)”, so nothing in it is lost. ${KEPT}`);
   });
 
   it('keeps the failed line when the canvas wasn\'t saved', () => {
     expect(line({ openProjectMissing: 's'.repeat(32), notAddedBack: [scratch], notAddedBackCount: 1 }))
-      .toContain('“Scratch”, a newer project, couldn\'t be added back.');
+      .toContain('“Scratch”, a newer project, couldn’t be added back.');
   });
 });
 
@@ -104,9 +104,9 @@ describe('GM r3 strings 2 and 3: the age, with no comma before it', () => {
 describe('GM r3 string 4: a damaged file that was not read whole', () => {
   it('says so in place of "No projects were missing."', () => {
     expect(line({ damagedReadWhole: false }))
-      .toBe(`${OPEN}. Nebula couldn't read the whole damaged file, so changes made after that copy may be missing. ${KEPT}`);
+      .toBe(`${OPEN}. Nebula couldn’t read the whole damaged file, so changes made after that copy may be missing. ${KEPT}`);
     expect(line({ damagedReadWhole: false, addedBack: rows('Dunes'), addedBackCount: 1 }))
-      .toBe(`${OPEN} and added back “Dunes”, a newer project it found. Nebula couldn't read the whole damaged file, so changes made after that copy may be missing. ${KEPT}`);
+      .toBe(`${OPEN} and added back “Dunes”, a newer project it found. Nebula couldn’t read the whole damaged file, so changes made after that copy may be missing. ${KEPT}`);
   });
 });
 
@@ -120,8 +120,8 @@ describe('GM r3: the B layout', () => {
     expect(notice.lines).toEqual([
       `${OPEN} from 2 days ago.`,
       '“Newer”, a newer project it found, is in Recently deleted. Restore it from there to keep it.',
-      "“Logo” went back to its version in that copy, so its latest edits aren't there.",
-      "“Draft” was deleted, but the copy still had it, so it's back. Delete it again if you don't need it.",
+      "“Logo” went back to its version in that copy, so its latest edits aren’t there.",
+      "“Draft” was deleted, but the copy still had it, so it’s back. Delete it again if you don’t need it.",
       '“Revived” is in Recently deleted again because the copy had it there. Restore it again if you need it.',
       'The canvas you had open was saved as its own project, “Scratch (recovered)”, so nothing in it is lost.',
       KEPT,
@@ -133,8 +133,8 @@ describe('GM r3: the B layout', () => {
   // line from the first render; GM r3's inline single outcome is retired.
   it('stacks a single outcome too (GM round 5; was inline, as in A)', () => {
     const notice = catalogRestoreNotice(restore({ ...older, reverted: rows('Logo'), revertedCount: 1 }), NOW);
-    expect(notice.lines).toEqual([`${OPEN} from 2 days ago.`, "“Logo” went back to its version in that copy, so its latest edits aren't there.", KEPT]);
-    expect(notice.text).toBe(`${OPEN} from 2 days ago. “Logo” went back to its version in that copy, so its latest edits aren't there. ${KEPT}`);
+    expect(notice.lines).toEqual([`${OPEN} from 2 days ago.`, "“Logo” went back to its version in that copy, so its latest edits aren’t there.", KEPT]);
+    expect(notice.text).toBe(`${OPEN} from 2 days ago. “Logo” went back to its version in that copy, so its latest edits aren’t there. ${KEPT}`);
   });
 
   it('renders the lines stacked, without bullets, with the button beside them', () => {
@@ -158,7 +158,7 @@ describe('GM r3: the B layout', () => {
     expect(Array.from(lines?.children ?? []).map((child) => child.textContent)).toEqual([
       `${OPEN} from 2 days ago.`,
       '“Newer”, a newer project it found, is in Recently deleted. Restore it from there to keep it.',
-      "“Logo” went back to its version in that copy, so its latest edits aren't there.",
+      "“Logo” went back to its version in that copy, so its latest edits aren’t there.",
       KEPT,
     ]);
     expect(screen.getByRole('button', { name: OPEN_RECENTLY_DELETED })).toBeTruthy();
@@ -173,7 +173,7 @@ describe('GM r3 string 5: the rebuild\'s Agent log line', () => {
     expect(catalogRestoreLogLine(restore({
       ...rebuilt, damagedReadWhole: false, addedBack: rows('A', 'B', 'C', 'D'), addedBackCount: 4,
       notAddedBack: [{ id: 'x'.repeat(32), reason: 'incomplete', name: 'Logo' }], notAddedBackCount: 1,
-    }))).toBe(`Rebuilt the project list from the damaged file. Recovered 4 projects. Couldn't recover “Logo”. Couldn't read the whole file. The damaged file was kept at ${DAMAGED}.`);
+    }))).toBe(`Rebuilt the project list from the damaged file. Recovered 4 projects. Couldn’t recover “Logo”. Couldn’t read the whole file. The damaged file was kept at ${DAMAGED}.`);
   });
 });
 

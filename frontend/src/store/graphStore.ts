@@ -2646,6 +2646,9 @@ function forgetParkedParamSaves(): void {
 export function keepCanvasLocally(): void {
   setCanvasKept(true);
   forgetParkedParamSaves();
+  // The backend refuses agents' writes and switches meanwhile (GM r16 on
+  // PR #199: 409 canvas_kept_in_tab). Optional: tests mock the socket.
+  wsClient.setKeptEdits?.(true);
 }
 
 /** The kept canvas was saved as its own project (or let go): what this
@@ -2654,6 +2657,7 @@ export function keepCanvasLocally(): void {
 export function releaseKeptCanvas(): void {
   if (!isCanvasKept()) return;
   setCanvasKept(false);
+  wsClient.setKeptEdits?.(false);
   forgetParkedParamSaves();
   clearAllParamPushTimers();
 }

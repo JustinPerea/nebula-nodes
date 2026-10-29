@@ -1187,7 +1187,7 @@ def _storage_error_body(exc: ProjectStoreError) -> dict[str, Any]:
     (Q116 a)."""
     return {"detail": str(exc), **({"storage": "full"} if _storage_full(exc) else {}),
             **({"limit": exc.limit} if isinstance(exc, ProjectLimitError) else {}),
-            # The limit's number, beside the project limit (GM r6's refused restore names it).
+            # The limit's number, beside the project limit (the create refusal's line names it).
             **({"projectLimit": project_store_module.MAX_PROJECTS}
                if isinstance(exc, ProjectLimitError) and exc.limit == "projects" else {})}
 
@@ -1695,8 +1695,8 @@ def _saved_canvas_reply(note: Mapping[str, Any] | None) -> dict[str, Any]:
 # was made on can't be saved as a project now. (A clear's or a load's new
 # canvas has no project and is never saved as the person's, so it never waits.)
 CANVAS_COPY_WAITS = {
-    "projects": "The copy isn't saved as a project yet because the project limit is reached.",
-    "storage": "The copy isn't saved as a project yet because Nebula's project list is full.",
+    "projects": "The copy isn’t saved as a project yet because the project limit is reached.",
+    "storage": "The copy isn’t saved as a project yet because Nebula’s project list is full.",
 }
 
 
@@ -1786,6 +1786,8 @@ async def project_workspace_fence(request: Request, call_next):
             except CanvasWaitingRefusal as exc:
                 await _tell_canvas_guarded(guard_note)
                 return JSONResponse(status_code=409, content=_canvas_waiting_body(exc))
+            except CanvasKeptRefusal:
+                return JSONResponse(status_code=409, content=_canvas_kept_body())
             except CanvasHeldFull as exc:
                 return await canvas_held_full(request, exc)
             except HTTPException as exc:
@@ -4117,6 +4119,9 @@ class ConnectionManager:
     def __init__(self) -> None:
         self.active_connections: list[WebSocket] = []
         self.browser_connections: set[WebSocket] = set()
+        # The person's tabs that keep edits Nebula couldn't save after a
+        # restore (GM r15 on PR #199, Q11): agents' writes wait for them.
+        self.kept_tabs: set[WebSocket] = set()
 
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
@@ -4136,6 +4141,18 @@ class ConnectionManager:
     def is_browser(self, websocket: WebSocket) -> bool:
         return websocket in self.browser_connections
 
+    def set_kept(self, websocket: WebSocket, kept: object) -> None:
+        """The person's tab says it keeps edits Nebula couldn't save (or no
+        longer does): only a promoted socket (is_browser) gets here."""
+        if kept is True and websocket in self.browser_connections:
+            self.kept_tabs.add(websocket)
+        else:
+            self.kept_tabs.discard(websocket)
+
+    def kept_in_tab(self) -> bool:
+        """Whether a connected person's tab keeps unsaved edits now."""
+        return any(websocket in self.browser_connections for websocket in self.kept_tabs)
+
     def canvas_open(self) -> bool:
         """Whether a canvas is connected: any socket without an agent marker.
 
@@ -4148,6 +4165,7 @@ class ConnectionManager:
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
         self.browser_connections.discard(websocket)
+        self.kept_tabs.discard(websocket)
 
     async def broadcast(self, event: ExecutionEvent) -> None:
         data = _event_to_camel(event)
@@ -4392,6 +4410,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     await _person_tab_input(frame.get("projectId"))
                 elif isinstance(frame, dict) and frame.get("type") == "personOpen":
                     await _person_tab_open(frame.get("projectId"))
+                elif isinstance(frame, dict) and frame.get("type") == "keptEdits":
+                    manager.set_kept(websocket, frame.get("kept"))
                 continue
             try:
                 # ValueError, not only JSONDecodeError: an int past 4,300
@@ -16396,6 +16416,45 @@ async def canvas_waiting_refusal(request, exc: CanvasWaitingRefusal):
     return JSONResponse(status_code=409, content=_canvas_waiting_body(exc))
 
 
+# GM r16 on PR #199 (MCP): while the person's tab keeps edits Nebula
+# couldn't save after it restored its project list (kept mode, GM r15 Q11),
+# the tab neither sends nor shows any canvas change. An agent's write or
+# project switch would land on a canvas the person can't see, and the
+# person's [Save as a project] then opens their edits over it, so both are
+# refused with this code until the person saves them (or closes the tab).
+CANVAS_KEPT_CODE = "canvas_kept_in_tab"
+CANVAS_KEPT_IN_TAB_DETAIL = (
+    "The person's tab is keeping edits Nebula couldn't save before it restored its project list, so the canvas "
+    "can't be changed and projects can't be switched until they save those edits as a project. Tell the person; "
+    "try again after they click Save as a project.")
+
+
+class CanvasKeptRefusal(HTTPException):
+    """409 canvas_kept_in_tab: an agent's canvas write or project switch
+    while a person's tab keeps unsaved edits (ConnectionManager.kept_in_tab)."""
+
+    def __init__(self) -> None:
+        super().__init__(status_code=409, detail=CANVAS_KEPT_IN_TAB_DETAIL)
+
+
+def _canvas_kept_body() -> dict[str, Any]:
+    return {"detail": CANVAS_KEPT_IN_TAB_DETAIL, "code": CANVAS_KEPT_CODE}
+
+
+@app.exception_handler(CanvasKeptRefusal)
+async def canvas_kept_refusal(request, exc: CanvasKeptRefusal):
+    return JSONResponse(status_code=409, content=_canvas_kept_body())
+
+
+def _refuse_agent_while_kept(action: str) -> None:
+    """The kept tab's guard: agents only (the person's own requests pass,
+    their [Save as a project] among them)."""
+    if not manager.kept_in_tab() or is_person(current_request_headers()):
+        return
+    print(f"[projects] refused an agent's {action}: the person's tab keeps unsaved edits", flush=True)
+    raise CanvasKeptRefusal()
+
+
 def _held_canvases() -> list[dict[str, Any]]:
     global _canvas_held_cache
     cached = _canvas_held_cache
@@ -16980,6 +17039,7 @@ def _fence_waiting_canvas(action: str) -> None:
         return
     if is_person(current_request_headers()):
         return
+    _refuse_agent_while_kept(action)
     try:
         hold = _guard_waiting_canvas(action)
     except CanvasWaitingRefusal as exc:
@@ -17757,6 +17817,7 @@ def _project_replacement_guard(action: str = "switch projects", *, person: str |
     person's own line for the run refusal (refusal_copy), where GM wrote one
     (Clear, round 11); agents keep the specific text either way."""
     _reject_graph_replacement_during_paid_start(action)
+    _refuse_agent_while_kept(action)
     if execution_runs.has_active():
         specific = f"Cannot {action} while a run is active. Wait for the run to finish or stop it first."
         if person is None:
@@ -17888,15 +17949,8 @@ async def list_projects() -> dict[str, Any]:
             # from its own (frontend/src/store/projectStore.ts).
             "paramsVersion": PARAMS_VERSION,
             # How many projects the list may hold, for the person's lines
-            # that name it (a refused restore: GM r6).
+            # that name it (the waiting lines).
             "projectLimit": project_store_module.MAX_PROJECTS,
-            # The switch that lets a restore pass the limit (GM r6): then
-            # Restore in Recently deleted stays enabled at the limit (GM r7).
-            **({"restoreMayPassTheProjectLimit": True}
-               if project_store_module.RESTORE_MAY_PASS_THE_PROJECT_LIMIT else {}),
-            # The backend's own verdict on a restore now, held canvases
-            # counted (review 6 of PR #199, L-3): Restore greys on it.
-            **({"restoreRoom": room} if (room := _restore_room(catalog)) else {}),
             **({"migratedProjectId": catalog["migratedProjectId"]} if catalog.get("migratedProjectId") else {}),
         }
         if waiting := _canvas_not_filed_view(catalog=catalog):
@@ -18888,92 +18942,19 @@ def _trashed_or_404(project_id: str, catalog: dict[str, Any]) -> dict[str, Any]:
 
 # Trash routes never touch the live canvas, so unlike delete they don't
 # need the workspace revision: a gone entry is a plain 404.
-def _refuse_a_restore_past_the_limit(catalog: dict[str, Any]) -> None:
-    """A restore from Recently deleted (the person's Undo, Restore in the
-    list, an agent's restore_project) into a list at its project limit:
-    refused with the limit's 413 and its number (`projectLimit`) before
-    anything changes, unless RESTORE_MAY_PASS_THE_PROJECT_LIMIT, the one
-    switch for letting it through (GM r6 prefers that; Justin hasn't
-    decided). Before, prepare refused it at the commit with the same 413,
-    and the person's Undo stayed up to fail again (review 4, L-1). A canvas
-    held aside to be saved as a project counts: it takes the next slot
-    (review 5 of PR #199, M-3)."""
-    if project_store_module.RESTORE_MAY_PASS_THE_PROJECT_LIMIT:
-        return
-    if len(catalog["projects"]) + _canvases_waiting_count() >= project_store_module.MAX_PROJECTS:
-        raise ProjectLimitError("Project limit reached", "projects")
-
-
-def _canvases_waiting_count() -> int:
-    """How many canvases wait for a place in the list: the held ones (each
-    once) and the live one while it waits (review 8 of PR #199, L-2: a
-    restore counted only the held, and took the place the live one waited
-    on). restoreRoom counts the same."""
-    live = _canvas_not_filed_now() is not None and bool(cli_graph.nodes or cli_graph.edges)
-    return len(_held_distinct()) + (1 if live else 0)
-
-
-def _restore_room(catalog: dict[str, Any]) -> dict[str, Any] | None:
-    """The listing's `restoreRoom` (review 6 of PR #199, L-3): None when a
-    restore from Recently deleted passes now; else {refused: "projects",
-    deletes: how many projects the person must delete first (None: deleting
-    can't make room, the canvases waiting don't fit by size), heldTakesPlace:
-    the canvases waiting to be saved hold the places the list has left,
-    waiting: how many wait}. From the same count as
-    _refuse_a_restore_past_the_limit, and what deletes then really do (GM's
-    answer 3 to review 6): each delete is followed by a listing, which saves
-    the waiting canvases into the freed places (the live one, then the held
-    ones, while they fit by size), and those are projects the person can
-    delete too (review 7, N-2: counted along the way). Each canvas's size is
-    measured once (N-5)."""
-    if project_store_module.RESTORE_MAY_PASS_THE_PROJECT_LIMIT:
-        return None
-    limit = project_store_module.MAX_PROJECTS
-    projects = len(catalog["projects"])
-    if projects + _canvases_waiting_count() < limit:
-        return None
-    held = _held_distinct()
-    waiting = _canvas_not_filed_now()
-    live = waiting is not None and bool(cli_graph.nodes or cli_graph.edges)
-    try:
-        signature = project_store.signature()
-    except ProjectStoreError:
-        signature = None
-    room = project_store_module.MAX_CATALOG_BYTES - (signature[2] if signature else 0) - 64 * 1024
-    # (bytes, the limit it waits on) per waiting canvas, in filing order.
-    queue: list[int] = []
-    if live:
-        try:
-            exported = _graph_canvas_export(cli_graph)
-            queue.append(len(json.dumps({"nodes": exported["nodes"], "edges": exported["edges"]}, ensure_ascii=False,
-                                        separators=(",", ":"), default=str).encode("utf-8")))
-        except Exception:  # noqa: BLE001 - unknown: counted as fitting
-            queue.append(0)
-    for entry in held:
-        queue.append(len(json.dumps({"nodes": entry["nodes"], "edges": entry["edges"]}, ensure_ascii=False,
-                                    separators=(",", ":"), default=str).encode("utf-8")))
-    waiting_count = len(queue)
-    listed, used, deletes = projects, 0, None
-    for k in range(1, projects + waiting_count + 1):
-        listed -= 1  # one delete (to Recently deleted: it frees a place, not bytes)
-        while queue and listed < limit and used + queue[0] + 1024 <= room:
-            used += queue.pop(0) + 1024
-            listed += 1
-        if listed + len(queue) < limit:
-            deletes = k
-            break
-        if listed <= 0 and queue:
-            break  # what waits doesn't fit by size: deletes can't make room
-    return {"refused": "projects", "deletes": deletes, "heldTakesPlace": projects < limit,
-            "waiting": waiting_count}
-
-
 @app.post("/api/projects/{project_id}/restore")
 async def restore_saved_project(project_id: str) -> dict[str, Any]:
+    if _canvas_not_filed_now() is not None or _held_distinct():
+        # A canvas waits to be saved: it takes any place a delete freed
+        # first, as the listing the person's tab makes after a delete does
+        # (review 8 of PR #199, L-2: a restore never takes the place a
+        # waiting canvas waits on). The restore then may pass the limit.
+        await list_projects()
     with project_store.transaction() as catalog:
         expired = purge_expired_trash(catalog)
         _trashed_or_404(project_id, catalog)
-        _refuse_a_restore_past_the_limit(catalog)
+        # Past the project limit too (RESTORE_MAY_PASS_THE_PROJECT_LIMIT;
+        # Justin, 2026-10-29): prepare counts only projects new to the list.
         project = restore_from_trash(catalog, project_id)
         project_store.commit(catalog)
         result = {"project": project_metadata(project), "workspaceRevision": catalog["workspaceRevision"]}

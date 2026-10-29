@@ -392,54 +392,46 @@ def test_l2_no_hold_is_ever_released_by_name():
     assert "_release_hold" not in source
 
 
-# -- L-3: the restore verdict ------------------------------------------------------
+# -- L-3: the restore verdict, gone (fix round 12) ---------------------------------
+# Justin, 2026-10-29: a restore from Recently deleted may pass the project
+# limit, so the listing carries no `restoreRoom` verdict and a held canvas
+# holding the last place never refuses a restore.
 
 
-def test_l3_a_held_canvas_in_the_last_place_greys_restore_and_one_delete_frees_it(app, monkeypatch):
-    """Review 6's H8: the size cap keeps the held canvas held, so the list
-    shows 2 of 3 and a restore is refused. The listing says so, and one
-    delete really frees a place for the restore (the held canvas can't take
-    it: the size cap holds it)."""
+def test_l3_a_held_canvas_in_the_last_place_no_longer_refuses_a_restore(app, monkeypatch):
+    """Review 6's H8 case: the size cap keeps the held canvas held, so the
+    list shows 2 of 3. The restore lands (3 of 3), and the held canvas still
+    waits, nothing in it lost."""
     client, store, graph, state = app
     ids = _held_one(client, store, graph, state, monkeypatch)
     monkeypatch.setattr(main_module, "_held_room", lambda *args, **kwargs: "storage")
     listing = _free_a_slot(client, ids[2])
     assert len(listing["projects"]) == 2 and listing["canvasNotFiled"]["held"] == 1
-    assert listing["restoreRoom"] == {"refused": "projects", "deletes": 1, "heldTakesPlace": True, "waiting": 1}
-    assert client.post(f"/api/projects/{ids[2]}/restore", headers=PERSON).status_code == 413
-    _free_a_slot(client, ids[0])
+    assert "restoreRoom" not in listing
     assert client.post(f"/api/projects/{ids[2]}/restore", headers=PERSON).status_code == 200
+    after = client.get("/api/projects", headers=PERSON).json()
+    assert len(after["projects"]) == 3 and after["canvasNotFiled"]["held"] == 1
 
 
-def test_l3_when_the_held_canvas_takes_the_freed_place_two_deletes_are_needed(app, monkeypatch):
-    """GM's answer 3: at 3 of 3 with a canvas held, the first delete's place
-    goes to the held canvas (the next listing saves it there), so the verdict
-    says 2, and that is what really happens."""
+def test_l3_at_the_limit_with_a_canvas_held_a_restore_passes_and_a_create_is_refused(app, monkeypatch):
+    """At 3 of 3 with a canvas held: a restore passes the limit (4), and a
+    new project is still refused at the limit."""
     client, store, graph, state = app
     ids = _held_one(client, store, graph, state, monkeypatch)
     _make_room_without_listing(client, store, ids[0])
-    trashed = ids[0]
-    # Fill the place again without a listing: the person makes nothing, an agent can't, so put a project back.
     with store.transaction() as catalog:
         extra = store_module.make_project("D")
         catalog["projects"][extra["id"]] = extra
         store.commit(catalog)
     listing = client.get("/api/projects", headers=PERSON).json()
     assert len(listing["projects"]) == 3 and listing["canvasNotFiled"]["held"] == 1
-    assert listing["restoreRoom"]["deletes"] == 2 and listing["restoreRoom"]["heldTakesPlace"] is False
-    after = _free_a_slot(client, ids[2])
-    assert after["canvasSaved"]["name"] == "Recovered canvas"
-    assert len(after["projects"]) == 3
-    assert after["restoreRoom"]["deletes"] == 1
-    assert client.post(f"/api/projects/{trashed}/restore", headers=PERSON).status_code == 413
-    _free_a_slot(client, extra["id"])
-    assert client.post(f"/api/projects/{trashed}/restore", headers=PERSON).status_code == 200
-
-
-def test_l3_no_verdict_below_the_limit(app, monkeypatch):
-    client, store, graph, state = app
-    monkeypatch.setattr(store_module, "MAX_PROJECTS", 3)
-    assert "restoreRoom" not in client.get("/api/projects", headers=PERSON).json()
+    assert "restoreRoom" not in listing
+    assert client.post(f"/api/projects/{ids[0]}/restore", headers=PERSON).status_code == 200
+    after = client.get("/api/projects", headers=PERSON).json()
+    assert len(after["projects"]) == 4
+    created = client.post("/api/projects", json={"name": "New", "workspaceRevision": after["workspaceRevision"]},
+                          headers=PERSON)
+    assert created.status_code == 413 and created.json()["limit"] == "projects"
 
 
 # -- L-5: a flipped commit digit -----------------------------------------------------

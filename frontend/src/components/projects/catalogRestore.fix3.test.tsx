@@ -16,9 +16,9 @@ import type { CatalogRestore } from '../../lib/projects';
 vi.mock('../../lib/backend', () => ({ backendAssetUrlSync: (url: string) => `http://127.0.0.1:8060${url}` }));
 
 const NOW = Date.parse('2026-10-27T12:00:00Z');
-const OPEN = "Nebula's project list was damaged, so it restored the last good copy";
+const OPEN = "Nebula’s project list was damaged, so it restored the last good copy";
 const KEPT = 'The damaged file was kept.';
-const NOT_WHOLE = "Nebula couldn't read the whole damaged file, so changes made after that copy may be missing.";
+const NOT_WHOLE = "Nebula couldn’t read the whole damaged file, so changes made after that copy may be missing.";
 const HERO = 'h'.repeat(32);
 const DUNES = 'd'.repeat(32);
 const LOGO = 'l'.repeat(32);
@@ -45,7 +45,7 @@ const s1 = restore({
   reverted: [{ id: LOGO, name: 'Logo' }], revertedCount: 1, damagedReadWhole: false,
 });
 const heroLine = '“Hero”, a newer project it found, is in Recently deleted. Restore it from there to keep it.';
-const logoLine = '“Logo” went back to its version in that copy, so its latest edits aren\'t there.';
+const logoLine = '“Logo” went back to its version in that copy, so its latest edits aren’t there.';
 
 describe('GM r4: the notice only shows lines that are still true', () => {
   it('says Hero is in Recently deleted only while it is there', () => {
@@ -74,8 +74,8 @@ describe('GM r4: the notice only shows lines that are still true', () => {
     const all = catalogRestoreNotice(record, NOW, now([project(DUNES, 'Dunes')], [trashed(HERO, 'Hero')]));
     expect(all.lines).toEqual([
       `${OPEN} from 2 days ago.`,
-      '“Scratch”, a newer project, couldn\'t be added back.',
-      '“Dunes” was deleted, but the copy still had it, so it\'s back. Delete it again if you don\'t need it.',
+      '“Scratch”, a newer project, couldn’t be added back.',
+      '“Dunes” was deleted, but the copy still had it, so it’s back. Delete it again if you don’t need it.',
       '“Hero” is in Recently deleted again because the copy had it there. Restore it again if you need it.',
       KEPT,
     ]);
@@ -112,14 +112,14 @@ describe('GM r4: the notice only shows lines that are still true', () => {
 describe('GM r5: the limit lines, in the canvas line\'s place', () => {
   it('words the project limit with the number', () => {
     expect(canvasLimitLine('projects', { projectLimit: 500, trashHasItems: false }))
-      .toBe("The canvas you had open couldn't be saved as its own project because you've reached the limit of 500 projects. Nothing in it is lost. Delete a project and Nebula will save it.");
+      .toBe("The canvas you had open couldn’t be saved as its own project because you’ve reached the limit of 500 projects. Nothing in it is lost. Delete a project and Nebula will save it.");
   });
 
   it('words the size cap by whether Recently deleted has items', () => {
     expect(canvasLimitLine('storage', { projectLimit: 500, trashHasItems: true }))
-      .toBe("The canvas you had open couldn't be saved as its own project because Nebula's project list is full. Nothing in it is lost. Permanently delete a project in Recently deleted and Nebula will save it.");
+      .toBe("The canvas you had open couldn’t be saved as its own project because Nebula’s project list is full. Nothing in it is lost. Permanently delete a project in Recently deleted and Nebula will save it.");
     expect(canvasLimitLine('storage', { projectLimit: 500, trashHasItems: false }))
-      .toBe("The canvas you had open couldn't be saved as its own project because Nebula's project list is full. Nothing in it is lost. Delete a project, then remove it from Recently deleted too, and Nebula will save it.");
+      .toBe("The canvas you had open couldn’t be saved as its own project because Nebula’s project list is full. Nothing in it is lost. Delete a project, then remove it from Recently deleted too, and Nebula will save it.");
   });
 
   it('sits after the reverted line and before the not-read-whole line, and only while the canvas waits', () => {
@@ -128,7 +128,7 @@ describe('GM r5: the limit lines, in the canvas line\'s place', () => {
     expect(waiting.lines).toEqual([`${OPEN}.`, logoLine, canvasLimitLine('storage', { projectLimit: 500, trashHasItems: true }), NOT_WHOLE, KEPT]);
     expect(waiting.openRecentlyDeleted).toBe(true);
     const filed = catalogRestoreNotice(record, NOW, now([project(LOGO, 'Logo')], [trashed(DUNES, 'Dunes')]));
-    expect(filed.text).not.toContain('couldn\'t be saved');
+    expect(filed.text).not.toContain('couldn’t be saved');
   });
 
   it('never says "128 MB" or "storage"', () => {
@@ -142,11 +142,11 @@ describe('GM r5: the limit lines, in the canvas line\'s place', () => {
 describe('GM r5: the waiting line and the saved toast', () => {
   it('words the waiting line for each limit', () => {
     expect(canvasWaitingLine('projects', { projectLimit: 500, trashHasItems: true }))
-      .toBe("The canvas you had open isn't saved as a project yet because you've reached the limit of 500 projects. Nothing in it is lost. Delete a project and Nebula will save it.");
+      .toBe("The canvas you had open isn’t saved as a project yet because you’ve reached the limit of 500 projects. Nothing in it is lost. Delete a project and Nebula will save it.");
     expect(canvasWaitingLine('storage', { projectLimit: 500, trashHasItems: true }))
-      .toBe("The canvas you had open isn't saved as a project yet because Nebula's project list is full. Nothing in it is lost. Permanently delete a project in Recently deleted and Nebula will save it.");
+      .toBe("The canvas you had open isn’t saved as a project yet because Nebula’s project list is full. Nothing in it is lost. Permanently delete a project in Recently deleted and Nebula will save it.");
     expect(canvasWaitingLine('storage', { projectLimit: 500, trashHasItems: false }))
-      .toBe("The canvas you had open isn't saved as a project yet because Nebula's project list is full. Nothing in it is lost. Delete a project, then remove it from Recently deleted too, and Nebula will save it.");
+      .toBe("The canvas you had open isn’t saved as a project yet because Nebula’s project list is full. Nothing in it is lost. Delete a project, then remove it from Recently deleted too, and Nebula will save it.");
   });
 
   it('says the saved project by its real name, without "nothing in it is lost"', () => {
@@ -199,7 +199,7 @@ describe('the Projects home', () => {
   it('says the limit in the restore notice, not twice', () => {
     const record = restore({ canvasNotFiled: { reason: 'projects' } });
     render(<ProjectHome {...props({ catalogRestore: record, canvasNotFiled: { reason: 'projects', projectLimit: 500 } })} />);
-    expect(screen.getAllByText(/you've reached the limit of 500 projects/)).toHaveLength(1);
+    expect(screen.getAllByText(/you’ve reached the limit of 500 projects/)).toHaveLength(1);
   });
 });
 

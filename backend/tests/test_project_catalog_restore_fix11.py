@@ -399,7 +399,8 @@ def test_r14_4_recovered_canvas_takes_the_next_free_number_and_counts_the_trash(
     ("Alpha", (), "Alpha"),
     ("Alpha", ("Alpha",), "Alpha (recovered)"),
     ("Alpha (recovered)", ("Alpha (recovered)",), "Alpha (recovered 2)"),
-    ("Alpha copy", ("Alpha copy",), "Alpha copy 2"),
+    # GM r16, 1: a recovered copy of a copy names its source.
+    ("Alpha copy", ("Alpha copy",), "Alpha copy (recovered)"),
 ])
 def test_r14_4_a_lost_rows_own_name_is_reused_when_free(lost, names, want):
     assert store_module.lost_row_name(lost, _named(*names)) == want

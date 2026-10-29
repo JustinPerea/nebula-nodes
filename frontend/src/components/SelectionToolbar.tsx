@@ -26,6 +26,9 @@ import { failureMessage } from '../lib/errorCopy';
 import { useCanvasLock } from '../lib/canvasLock';
 
 
+/** A run going: the lock reason after kept, before following (GM r16, 4). */
+const RUN_GOING = 'Wait for the active run to finish';
+
 export function SelectionToolbar() {
   const nodes = useGraphStore((state) => state.nodes);
   const edges = useGraphStore((state) => state.edges);
@@ -36,7 +39,9 @@ export function SelectionToolbar() {
   // agent's switch (GM round 22, A: one state, lib/canvasLock): Run, Ask,
   // Note, Duplicate, Arrange and Delete are disabled and look it, with "Wait
   // for “<project>” to open." while following; Copy, Download and the
-  // node's Settings stay.
+  // node's Settings stay. While the canvas is kept after a restore (GM r16
+  // on PR #199, 4) the node's Settings is disabled too, each with its own
+  // "You can … after you save it as a project."; Copy and Download stay.
   const lock = useCanvasLock();
   const executeNode = useGraphStore((state) => state.executeNode);
   const executeCluster = useGraphStore((state) => state.executeCluster);
@@ -130,7 +135,7 @@ export function SelectionToolbar() {
       </span>
       <span className="selection-toolbar__divider" aria-hidden="true" />
       <button type="button" className="selection-toolbar__button" onClick={openAgent}
-        {...lock.act({ title: 'Ask agent about selection' })}>
+        {...lock.act({ title: 'Ask agent about selection', kept: 'ask' })}>
         <MessageCircle size={17} aria-hidden="true" />
         <span>Ask</span>
       </button>
@@ -139,7 +144,7 @@ export function SelectionToolbar() {
           type="button"
           className="selection-toolbar__button"
           onClick={() => composeNote({ nodeId: ids[0] })}
-          {...lock.act({ title: 'Note for agents' })}
+          {...lock.act({ title: 'Note for agents', kept: 'note' })}
           aria-label="Note for agents"
         >
           <StickyNote size={17} aria-hidden="true" />
@@ -150,7 +155,7 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button selection-toolbar__button--primary"
         onClick={runSelection}
-        {...lock.act({ disabled: isExecuting || runStarting, title: `Run selected nodes. ${describeRunScope(runScope)}` })}
+        {...lock.act({ disabled: isExecuting || runStarting, title: `Run selected nodes. ${describeRunScope(runScope)}`, kept: 'run' })}
         aria-label="Run selected nodes"
         aria-describedby={runScopeId}
       >
@@ -174,7 +179,7 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button"
         onClick={duplicateSelected}
-        {...lock.act({ disabled: isExecuting, title: isExecuting ? 'Wait for the active run to finish' : 'Duplicate selected nodes' })}
+        {...lock.act({ busy: isExecuting ? RUN_GOING : null, title: 'Duplicate selected nodes', kept: 'duplicate' })}
       >
         <Files size={17} aria-hidden="true" />
         <span className="selection-toolbar__label--compact">Duplicate</span>
@@ -183,7 +188,7 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button"
         onClick={autoLayoutSelected}
-        {...lock.act({ disabled: ids.length < 2 || isExecuting, title: 'Arrange selected nodes' })}
+        {...lock.act({ disabled: ids.length < 2, busy: isExecuting ? RUN_GOING : null, title: 'Arrange selected nodes', kept: 'arrange' })}
       >
         <LayoutGrid size={17} aria-hidden="true" />
         <span className="selection-toolbar__label--compact">Arrange</span>
@@ -210,7 +215,7 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button selection-toolbar__button--danger"
         onClick={removeSelection}
-        {...lock.act({ disabled: isExecuting, title: isExecuting ? 'Wait for the active run to finish' : 'Delete selected nodes' })}
+        {...lock.act({ busy: isExecuting ? RUN_GOING : null, title: 'Delete selected nodes', kept: 'delete' })}
         aria-label="Delete selected nodes"
       >
         <Trash2 size={17} aria-hidden="true" />

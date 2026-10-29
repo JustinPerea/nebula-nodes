@@ -653,14 +653,19 @@ def test_trash_expires_after_thirty_days(workspace):
     assert set(store.read()["trash"]) == {recent["project"]["id"]}
 
 
-def test_restore_respects_the_project_limit(workspace, monkeypatch):
+def test_restore_may_pass_the_project_limit_and_a_create_still_may_not(workspace, monkeypatch):
+    """Justin, 2026-10-29 (PR #199 fix round 12): a restore from Recently
+    deleted may pass the project limit; the limit applies to new projects."""
     client, graph, store, _ = workspace
     a = create(client, "A")
     b = create(client, "B", a["workspaceRevision"])
     _trash(client, a["project"]["id"], b["workspaceRevision"])
     monkeypatch.setattr("services.project_store.MAX_PROJECTS", 1)
-    assert client.post(f"/api/projects/{a['project']['id']}/restore").status_code == 413
-    assert a["project"]["id"] in store.read()["trash"]
+    assert client.post(f"/api/projects/{a['project']['id']}/restore").status_code == 200
+    assert a["project"]["id"] in store.read()["projects"]
+    revision = client.get("/api/projects").json()["workspaceRevision"]
+    created = client.post("/api/projects", json={"name": "C", "workspaceRevision": revision})
+    assert created.status_code == 413 and created.json()["limit"] == "projects"
 
 
 def test_a_corrupt_trash_entry_is_reported_not_silently_dropped(workspace):

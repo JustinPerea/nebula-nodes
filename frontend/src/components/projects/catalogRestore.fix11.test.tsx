@@ -52,13 +52,13 @@ describe("GM r14, 2: the person's line counts only when several of theirs wait",
 
   it('several of theirs: the real number, "…and Nebula will save them."', () => {
     expect(canvasWaitingLine('projects', { ...LIMIT, deletes: 2, canvases: [{ name: 'A', deletes: 1 }, { name: 'B', deletes: 2 }] }))
-      .toBe("The canvases you had open, “A” and “B”, aren't saved as projects yet because you've reached the limit of 4 projects. "
+      .toBe("The canvases you had open, “A” and “B”, aren’t saved as projects yet because you’ve reached the limit of 4 projects. "
         + 'Nothing in them is lost. Delete 2 projects and Nebula will save them.');
   });
 
   it('the size cap never gives a number', () => {
     const line = canvasWaitingLine('storage', { ...LIMIT, deletes: 3, canvases: [{ name: 'A', deletes: 3 }] });
-    expect(line).toBe("The canvas you had open isn't saved as a project yet because Nebula's project list is full. "
+    expect(line).toBe("The canvas you had open isn’t saved as a project yet because Nebula’s project list is full. "
       + 'Nothing in it is lost. Delete a project, then remove it from Recently deleted too, and Nebula will save it.');
     expect(line).not.toMatch(/\d/);
   });
@@ -110,9 +110,9 @@ describe('GM r15, Q11: the kept line in the canvas notice region', () => {
     useProjectStore.setState({ screen: 'workspace', keptEdits: { ...kept, saving: true } });
     const { container, rerender } = render(<KeptEditsNotice />);
     expect((screen.getByRole('button', { name: SAVE_AS_A_PROJECT }) as HTMLButtonElement).disabled).toBe(true);
-    act(() => { useProjectStore.setState({ keptEdits: { ...kept, error: "Couldn't save your edits." } }); });
+    act(() => { useProjectStore.setState({ keptEdits: { ...kept, error: "Couldn’t save your edits." } }); });
     rerender(<KeptEditsNotice />);
-    expect(screen.getByRole('alert').textContent).toBe("Couldn't save your edits.");
+    expect(screen.getByRole('alert').textContent).toBe("Couldn’t save your edits.");
     act(() => { pulseKeptCanvas(Date.now() + 10_000); });
     expect(container.querySelector('.kept-edits-notice--pulse')).not.toBeNull();
   });

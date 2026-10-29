@@ -3,20 +3,20 @@
  * saved over the save limit has GM's own line, in the toast and the restore
  * notice alike, never beside the plain one; several named mark only those
  * over it (plural form for GM). The plural waiting line says the real number
- * of deletes (GM's answer 3). A Restore that deletes can't free says so
- * without a false count (review 7, N-2). The saved toast wraps (GM r8).
+ * of deletes (GM's answer 3). The saved toast wraps (GM r8). (Review 7
+ * N-2's Restore tooltip is gone: a restore may pass the project limit,
+ * Justin 2026-10-29, fix round 12.)
  */
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { ProjectHome, type ProjectHomeProps, type ProjectSummary } from './ProjectHome';
 import {
   canvasLimitLine, canvasSavedToast, canvasWaitingLine, catalogRestoreNotice, recoveredCanvasSentence,
-  restoreAtLimitTooltip,
 } from './catalogRestoreCopy';
 
 vi.mock('../../lib/backend', () => ({ backendAssetUrlSync: (url: string) => `http://127.0.0.1:8060${url}` }));
 
-const OVER = "The canvas you had open was saved as its own project, “Delta (recovered)”. It's over the save limit, so new changes won't save until it's smaller.";
+const OVER = "The canvas you had open was saved as its own project, “Delta (recovered)”. It’s over the save limit, so new changes won’t save until it’s smaller.";
 
 describe("GM: the saved line for a canvas over the save limit", () => {
   it('the toast, verbatim, in place of the plain line', () => {
@@ -36,11 +36,11 @@ describe("GM: the saved line for a canvas over the save limit", () => {
 
   it('several named: only those over the limit are marked', () => {
     expect(canvasSavedToast('B', [{ name: 'A' }, { name: 'B', overSaveLimit: true }]))
-      .toBe("The canvases you had open were saved as their own projects, “A” and “B”. “B” is over the save limit, so new changes to it won't save until it's smaller.");
+      .toBe("The canvases you had open were saved as their own projects, “A” and “B”. “B” is over the save limit, so new changes to it won’t save until it’s smaller.");
     expect(canvasSavedToast('C', [{ name: 'A', overSaveLimit: true }, { name: 'B' }, { name: 'C', overSaveLimit: true }]))
-      .toBe("The canvases you had open were saved as their own projects, “A”, “B” and “C”. “A” and “C” are over the save limit, so new changes to them won't save until they're smaller.");
+      .toBe("The canvases you had open were saved as their own projects, “A”, “B” and “C”. “A” and “C” are over the save limit, so new changes to them won’t save until they’re smaller.");
     expect(canvasSavedToast('D', [{ name: 'A' }, { name: 'B' }, { name: 'C', overSaveLimit: true }, { name: 'D' }]))
-      .toBe("4 canvases you had open were saved as their own projects. One of them is over the save limit, so new changes to it won't save until it's smaller.");
+      .toBe("4 canvases you had open were saved as their own projects. One of them is over the save limit, so new changes to it won’t save until it’s smaller.");
     expect(canvasSavedToast('B', [{ name: 'A' }, { name: 'B' }]))
       .toBe('The canvases you had open were saved as their own projects, “A” and “B”.');
   });
@@ -50,26 +50,13 @@ describe("GM's answer 3: the plural line's real number", () => {
   const two = { projectLimit: 3, trashHasItems: false, canvases: [{ name: 'A' }, { name: 'B' }] };
   it('"Delete 2 projects and Nebula will save them." from the listing', () => {
     expect(canvasWaitingLine('projects', { ...two, deletes: 2 })).toBe(
-      "The canvases you had open, “A” and “B”, aren't saved as projects yet because you've reached the limit of 3 projects. Nothing in them is lost. Delete 2 projects and Nebula will save them.");
+      "The canvases you had open, “A” and “B”, aren’t saved as projects yet because you’ve reached the limit of 3 projects. Nothing in them is lost. Delete 2 projects and Nebula will save them.");
     expect(canvasLimitLine('projects', { ...two, deletes: 3 })).toContain('Delete 3 projects and Nebula will save them.');
     expect(canvasWaitingLine('projects', two)).toContain('Delete 2 projects and Nebula will save them.');
   });
   it('the size-cap plurals stay as written', () => {
     expect(canvasWaitingLine('storage', { ...two, trashHasItems: true })).toContain(
       'Permanently delete projects in Recently deleted and Nebula will save them.');
-  });
-});
-
-describe('Review 7, N-2: a Restore no count of deletes frees', () => {
-  it('says no false "after you delete a project"', () => {
-    const line = restoreAtLimitTooltip(3, { refused: 'projects', deletes: null, heldTakesPlace: true, waiting: 3 });
-    expect(line).not.toContain('after you delete');
-    // GM r9 (2), verbatim (fix round 8).
-    expect(line).toBe("You can restore it once the canvases you had open are saved as projects. They're holding the last places.");
-  });
-  it('GM answer 6: the real count, plural', () => {
-    expect(restoreAtLimitTooltip(3, { refused: 'projects', deletes: 4, heldTakesPlace: true, waiting: 3 })).toBe(
-      'You can restore it after you delete 4 projects. The canvases you had open are holding the last places.');
   });
 });
 

@@ -354,7 +354,7 @@ describe("GM r14, 3: an agent's write closed the project this tab showed", () =>
     const kept = useProjectStore.getState().keptEdits!;
     expect(useProjectStore.getState().screen).toBe('workspace');
     expect(keptEditsLine(kept)).toBe("Codex made its changes on a copy of “Glass campaign”. “Glass campaign” is kept as it was. "
-      + "Your latest edits weren't saved yet. They're kept in this tab.");
+      + "Your latest edits weren’t saved yet. They’re kept in this tab.");
   });
 });
 

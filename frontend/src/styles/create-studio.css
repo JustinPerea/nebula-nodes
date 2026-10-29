@@ -188,6 +188,7 @@ body.app-slava-restraint .create-composer__generate:disabled { opacity: 0.45; cu
 /* Round 23 (GM blocker A): locked while following or offline, the neutral
    disabled look, never orange. */
 body.app-slava-restraint .create-composer__generate[data-following-disabled],
+body.app-slava-restraint .create-composer__generate[data-kept-disabled],
 body.app-slava-restraint .create-composer__generate[data-offline-disabled] {
   background: rgba(255, 255, 255, 0.06);
   color: inherit;

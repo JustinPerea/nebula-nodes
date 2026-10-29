@@ -353,13 +353,17 @@ def test_l1_a_held_canvas_whose_content_changed_is_kept_aside_at_filing_and_said
 # -- L-2: a restore from Recently deleted counts the live waiting canvas --
 
 def test_l2_a_restore_never_takes_the_place_the_live_canvas_waits_on(app, monkeypatch):
+    """Fix round 12 (Justin, 2026-10-29: a restore may pass the limit): the
+    waiting canvas takes the freed place first, as the listing after a
+    delete does, and the restore then passes the limit (4 of 3)."""
     client, store, graph, state = app
     ids = _waiting(client, store, graph, state, monkeypatch)
     _make_room_without_listing(client, store, ids[0])
     restored = client.post(f"/api/projects/{ids[0]}/restore", headers=CODEX, json={})
-    assert restored.status_code == 413, restored.text
+    assert restored.status_code == 200, restored.text
     listing = client.get("/api/projects", headers=PERSON).json()
     assert listing.get("canvasNotFiled") is None
+    assert len(listing["projects"]) == 4 and ids[0] in [p["id"] for p in listing["projects"]]
     assert [p["name"] for p in _catalog(store)["projects"].values() if ONLY_W in _values(p)] == ["Recovered canvas"]
 
 

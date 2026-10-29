@@ -13,7 +13,7 @@
 - L-3. One file per held canvas, no shared cap: the person's open always
   holds it; only an agent's write is refused past a project's size. The old
   canvas-held.json moves in once, a crash midway included.
-- N-1 / N-2 / N-5: no false "may be lost", restoreRoom's deletes counted
+- N-1 / N-2 / N-5: no false "may be lost" (restoreRoom's deletes: gone in fix round 12)
   along the way, sizes measured once.
 - GM: the person's own clear and load lines, the over-the-save-limit saved
   line's marker, the Agent log line after a restore.
@@ -208,6 +208,8 @@ _UNMARKED_ALLOWED = {
     "save_project": "a tab's save of the open project, fenced by its revision (404/409 while one waits)",
     "pin_project_cover": "a project's cover only",
     "delete_saved_project": "settles the canvas itself before it deletes",
+    "restore_saved_project": "files a waiting canvas as the listing does (list_projects) before it restores (fix round 12)",
+    "restore_trashed": "a project's restore is restore_saved_project's (fix round 12)",
 }
 
 
@@ -411,7 +413,7 @@ def test_l1_failed_opens_hold_the_canvas_once_and_it_is_filed_once(app, monkeypa
     other = next(pid for pid in catalog["projects"] if pid != catalog["activeProjectId"])
     _free_a_slot(client, other)
     assert _projects_holding(client, store, ONLY_W) == ["Recovered canvas"]  # one project, never two
-    assert after.get("restoreRoom") is None or after["restoreRoom"]["waiting"] == 0
+    assert "restoreRoom" not in after  # no restore verdict since fix round 12
 
 
 # -- L-3: one file per canvas, no shared cap, agents capped like a project --------------
@@ -624,60 +626,31 @@ def test_l2_a_damaged_note_still_says_a_canvas_may_be_lost(app, monkeypatch):
     assert client.get("/api/projects", headers=PERSON).json()["canvasHeldUnreadable"]["count"] is None
 
 
-# -- N-2 / N-5: restoreRoom ---------------------------------------------------------------
+# -- N-2 / N-5: restoreRoom, gone (fix round 12) -------------------------------------
+# Justin, 2026-10-29: a restore may pass the project limit, so no count of
+# deletes is ever said for it, and canvases waiting never refuse it.
 
 
-def test_n2_restore_room_counts_the_canvases_filed_along_the_way(app, monkeypatch):
-    """Review 7's case: the live canvas and two held at a limit of 3. The
-    deletes the listing says, done for real, let a restore through, and one
-    fewer doesn't."""
+def test_n2_a_restore_lands_however_many_canvases_wait(app, monkeypatch):
+    """Review 7's case: the live canvas and two held at a limit of 3. One
+    delete and its Undo: the restore lands at once, no deletes asked for."""
     client, store, graph, state = app
-    ids = _held_one(client, store, graph, state, monkeypatch)
+    _held_one(client, store, graph, state, monkeypatch)
     good = _held(store)[0]
     main_module._add_held({**good, "projectId": "f" * 32, "digest": "other"})
     catalog = json.loads(store.path.read_text())
     assert len(catalog["projects"]) == 3
-    # The live canvas waits again (a canvas from a project the list lacks).
     _add_text(client, "b-node")
     graph.owner = "d" * 32
     graph.save(state)
     listing = client.get("/api/projects", headers=PERSON).json()
-    room = listing["restoreRoom"]
-    assert room["waiting"] == 3 and isinstance(room["deletes"], int)
-    deletes = room["deletes"]
-    trashed = []
-    for _ in range(deletes):
-        catalog = json.loads(store.path.read_text())
-        victim = next(pid for pid in catalog["projects"] if pid != catalog["activeProjectId"]) \
-            if len(catalog["projects"]) > 1 else next(iter(catalog["projects"]))
-        trashed.append(victim)
-        _free_a_slot(client, victim)
-        if len(trashed) == deletes - 1:
-            refused = client.post(f"/api/projects/{trashed[0]}/restore", headers=PERSON)
-            assert refused.status_code == 413, refused.text
-    restored = client.post(f"/api/projects/{trashed[0]}/restore", headers=PERSON)
+    assert "restoreRoom" not in listing
+    catalog = json.loads(store.path.read_text())
+    victim = next(pid for pid in catalog["projects"] if pid != catalog["activeProjectId"])
+    _free_a_slot(client, victim)
+    restored = client.post(f"/api/projects/{victim}/restore", headers=PERSON)
     assert restored.status_code == 200, restored.text
-    assert ids
-
-
-def test_n5_restore_room_measures_each_canvas_once(app, monkeypatch):
-    client, store, graph, state = app
-    _held_one(client, store, graph, state, monkeypatch)
-    good = _held(store)[0]
-    for n in range(4):
-        main_module._add_held({**good, "projectId": f"{n:x}" * 32, "digest": f"other{n}"})
-    catalog = store.read()
-    calls = {"n": 0}
-    real = main_module.json.dumps
-
-    def counted(*args, **kwargs):
-        calls["n"] += 1
-        return real(*args, **kwargs)
-    monkeypatch.setattr(main_module.json, "dumps", counted)
-    room = main_module._restore_room(catalog)
-    monkeypatch.setattr(main_module.json, "dumps", real)
-    assert room is not None
-    assert calls["n"] <= 5 + 2  # one per held canvas (and the digest), not one per canvas per delete
+    assert hasattr(main_module, "_restore_room") is False
 
 
 # -- GM answer 7: the person's own clear and load ----------------------------------------

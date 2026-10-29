@@ -29,7 +29,7 @@ export function editsRecoveredToast(name: string): string {
 
 /** GM r14, 3 (and r12, 1): the second half of a kept-in-this-tab line, for
  * edits a closed project never got. */
-export const LATEST_EDITS_KEPT = "Your latest edits weren't saved yet. They're kept in this tab.";
+export const LATEST_EDITS_KEPT = "Your latest edits weren’t saved yet. They’re kept in this tab.";
 /** GM r14, 3: added where the tab can't go home by itself. */
 export const RELOAD_TO_CONTINUE = 'Reload projects to continue.';
 
@@ -48,8 +48,8 @@ export function agentClosedLine(agent: string | null | undefined, action: 'clear
 /** The button the notice shows when something is in Recently deleted. */
 export const OPEN_RECENTLY_DELETED = 'Open Recently deleted';
 
-const OPENING = "Nebula's project list was damaged, so it restored the last good copy";
-const REBUILT = "Nebula's project list was damaged and there was no good copy, so it recovered every project it could still read.";
+const OPENING = "Nebula’s project list was damaged, so it restored the last good copy";
+const REBUILT = "Nebula’s project list was damaged and there was no good copy, so it recovered every project it could still read.";
 const KEPT = 'The damaged file was kept.';
 
 const quoted = (name: string) => `“${name}”`;
@@ -59,7 +59,7 @@ const quoted = (name: string) => `“${name}”`;
 const RECOVERED_CANVAS = 'Recovered canvas';
 /** GM r3: "When the damaged file wasn't read whole" (it replaces "No
  * projects were missing."; "The damaged file was kept." follows it). */
-const NOT_READ_WHOLE = "Nebula couldn't read the whole damaged file, so changes made after that copy may be missing.";
+const NOT_READ_WHOLE = "Nebula couldn’t read the whole damaged file, so changes made after that copy may be missing.";
 
 /** GM r3 (follow-up), one sentence for every case: the open project
  * couldn't be restored, it was restored but older (upgrade day), or which
@@ -77,7 +77,7 @@ export function recoveredCanvasSentence(name: string | null | undefined, overSav
 export function canvasSavedOverLimitLine(name: string): string {
   return `The canvas you had open was saved as its own project, ${quoted(name)}. ${ONE_OVER}`;
 }
-const ONE_OVER = "It's over the save limit, so new changes won't save until it's smaller.";
+const ONE_OVER = "It’s over the save limit, so new changes won’t save until it’s smaller.";
 
 /** A canvas saved as its own project, as the listing gives it: `filedAt`
  * when it was saved, `agentCopy` when it is an agent's copy of the person's
@@ -124,7 +124,7 @@ export function agentCopySavedLine(agent: string | null | undefined, name: strin
 }
 
 /** GM r12 on PR #199, 3, verbatim: the copy's over-limit tail. */
-const COPY_OVER = "It's over the save limit, so new changes to it won't save until it's smaller.";
+const COPY_OVER = "It’s over the save limit, so new changes to it won’t save until it’s smaller.";
 
 /** GM r11, 4, verbatim: an agent's copy that waits to be saved. At the
  * project limit its own count (GM r12, 2: the person's canvases are saved
@@ -133,11 +133,11 @@ const COPY_OVER = "It's over the save limit, so new changes to it won't save unt
  * the singular size advice. */
 export function agentCopyWaitingLine(agent: string | null | undefined, reason: CanvasLimit,
   context: Pick<CanvasLimitContext, 'projectLimit' | 'trashHasItems'>, deletes?: number | null): string {
-  const opening = `${agentPossessive(agent)} copy of your canvas isn't saved as a project yet because`;
+  const opening = `${agentPossessive(agent)} copy of your canvas isn’t saved as a project yet because`;
   if (reason === 'projects') {
-    return `${opening} you've reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST} ${deleteToSaveIt(deletes)}`;
+    return `${opening} you’ve reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST} ${deleteToSaveIt(deletes)}`;
   }
-  return `${opening} Nebula's project list is full. ${NOTHING_LOST} ${sizeCapAdvice(context.trashHasItems)}`;
+  return `${opening} Nebula’s project list is full. ${NOTHING_LOST} ${sizeCapAdvice(context.trashHasItems)}`;
 }
 
 /** "Delete a project and Nebula will save it.", or with the real number
@@ -148,7 +148,7 @@ function deleteToSaveIt(deletes?: number | null): string {
 }
 
 /** GM r9 (1): every canvas saved is over the save limit. */
-const EVERY_ONE_OVER = "They're over the save limit, so new changes to them won't save until they're smaller.";
+const EVERY_ONE_OVER = "They’re over the save limit, so new changes to them won’t save until they’re smaller.";
 
 /** Several canvases saved as their own projects, named up to 3, a count
  * from 4 (GM's answer 1 to review 8: the restore notice names every canvas
@@ -176,12 +176,12 @@ function overLimitTail(rows: { name: string; overSaveLimit?: boolean }[], counte
   if (over.length === rows.length && rows.length > 1) return ` ${EVERY_ONE_OVER}`;
   if (counted) {
     return over.length === 1
-      ? ' One of them is over the save limit, so new changes to it won\'t save until it\'s smaller.'
-      : ` ${over.length} of them are over the save limit, so new changes to them won't save until they're smaller.`;
+      ? ' One of them is over the save limit, so new changes to it won’t save until it’s smaller.'
+      : ` ${over.length} of them are over the save limit, so new changes to them won’t save until they’re smaller.`;
   }
   return over.length === 1
-    ? ` ${quoted(over[0].name)} is over the save limit, so new changes to it won't save until it's smaller.`
-    : ` ${namedList(over.map((row) => row.name))} are over the save limit, so new changes to them won't save until they're smaller.`;
+    ? ` ${quoted(over[0].name)} is over the save limit, so new changes to it won’t save until it’s smaller.`
+    : ` ${namedList(over.map((row) => row.name))} are over the save limit, so new changes to them won’t save until they’re smaller.`;
 }
 
 /** The limit the live canvas waits on (backend `canvasNotFiled.reason`):
@@ -291,17 +291,17 @@ function countOf(rows: { deletes?: number | null }[]): number | null {
 function personsLimitLine(reason: CanvasLimit, context: CanvasLimitContext): string {
   const many = manyCanvases(context);
   if (many) {
-    const opening = `${many} couldn't be saved as their own projects because`;
+    const opening = `${many} couldn’t be saved as their own projects because`;
     if (reason === 'projects') {
-      return `${opening} you've reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST_MANY} ${deleteToSaveMany(context)}`;
+      return `${opening} you’ve reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST_MANY} ${deleteToSaveMany(context)}`;
     }
-    return `${opening} Nebula's project list is full. ${NOTHING_LOST_MANY} ${sizeCapAdviceMany(context.trashHasItems)}`;
+    return `${opening} Nebula’s project list is full. ${NOTHING_LOST_MANY} ${sizeCapAdviceMany(context.trashHasItems)}`;
   }
-  const opening = "The canvas you had open couldn't be saved as its own project because";
+  const opening = "The canvas you had open couldn’t be saved as its own project because";
   if (reason === 'projects') {
-    return `${opening} you've reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST} ${DELETE_A_PROJECT}`;
+    return `${opening} you’ve reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST} ${DELETE_A_PROJECT}`;
   }
-  return `${opening} Nebula's project list is full. ${NOTHING_LOST} ${sizeCapAdvice(context.trashHasItems)}`;
+  return `${opening} Nebula’s project list is full. ${NOTHING_LOST} ${sizeCapAdvice(context.trashHasItems)}`;
 }
 
 /** GM r14 on PR #199, 2: one canvas of the person's always gets "Delete a
@@ -320,17 +320,17 @@ export function canvasWaitingLine(reason: CanvasLimit, context: CanvasLimitConte
 function personsWaitingLine(reason: CanvasLimit, context: CanvasLimitContext): string {
   const many = manyCanvases(context);
   if (many) {
-    const opening = `${many} aren't saved as projects yet because`;
+    const opening = `${many} aren’t saved as projects yet because`;
     if (reason === 'projects') {
-      return `${opening} you've reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST_MANY} ${deleteToSaveMany(context)}`;
+      return `${opening} you’ve reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST_MANY} ${deleteToSaveMany(context)}`;
     }
-    return `${opening} Nebula's project list is full. ${NOTHING_LOST_MANY} ${sizeCapAdviceMany(context.trashHasItems)}`;
+    return `${opening} Nebula’s project list is full. ${NOTHING_LOST_MANY} ${sizeCapAdviceMany(context.trashHasItems)}`;
   }
-  const opening = "The canvas you had open isn't saved as a project yet because";
+  const opening = "The canvas you had open isn’t saved as a project yet because";
   if (reason === 'projects') {
-    return `${opening} you've reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST} ${DELETE_A_PROJECT}`;
+    return `${opening} you’ve reached the limit of ${context.projectLimit} projects. ${NOTHING_LOST} ${DELETE_A_PROJECT}`;
   }
-  return `${opening} Nebula's project list is full. ${NOTHING_LOST} ${sizeCapAdvice(context.trashHasItems)}`;
+  return `${opening} Nebula’s project list is full. ${NOTHING_LOST} ${sizeCapAdvice(context.trashHasItems)}`;
 }
 
 /** The person's line when canvas-held.json couldn't be read and a canvas
@@ -339,56 +339,17 @@ function personsWaitingLine(reason: CanvasLimit, context: CanvasLimitContext): s
 export function canvasHeldUnreadableLine(count: number | null | undefined, kept = true): string {
   const end = kept ? ` ${KEPT}` : '';
   if (count === 1) {
-    return `Nebula couldn't read a canvas you had open that was waiting to be saved, so it may be lost.${end}`;
+    return `Nebula couldn’t read a canvas you had open that was waiting to be saved, so it may be lost.${end}`;
   }
   if (typeof count === 'number' && count > 1) {
-    return `Nebula couldn't read ${count} canvases you had open that were waiting to be saved, so they may be lost.${end}`;
+    return `Nebula couldn’t read ${count} canvases you had open that were waiting to be saved, so they may be lost.${end}`;
   }
-  return `Nebula couldn't read the file that kept the canvases you had open, so some may be lost.${end}`;
+  return `Nebula couldn’t read the file that kept the canvases you had open, so some may be lost.${end}`;
 }
 
 /** GM r9: the closing line when the restore notice also says the held
  * canvases that couldn't be read (two damaged files kept). */
 const KEPT_BOTH = 'The damaged files were kept.';
-
-/** GM r6 (bug 3 and its addition): a restore from Recently deleted refused
- * by the project limit, from the Undo toast (in its place) or the list,
- * with the project's real name and the limit. */
-export function restoreRefusedLine(name: string, projectLimit: number): string {
-  return `Couldn't restore ${quoted(name)}. You've reached the limit of ${projectLimit} projects.`;
-}
-
-/** The backend's own verdict on a restore now (the listing's
- * `restoreRoom`, review 6 of PR #199, L-3): how many projects must be
- * deleted first (null: deleting can't make room), and whether the canvases
- * waiting to be saved hold the places the list has left. */
-export interface RestoreRoom { refused: 'projects'; deletes: number | null; heldTakesPlace: boolean; waiting?: number }
-
-/** GM r7: Restore in Recently deleted, disabled while the list is at its
- * project limit, says why in its tooltip, with the real limit. GM's answer
- * 3 to review 6: when a canvas waiting to be saved holds the last place,
- * "The canvas you had open is holding the last place.", and the number of
- * deletes is the real one (the next listing saves a waiting canvas into a
- * freed place first, so it can take 2). */
-export function restoreAtLimitTooltip(projectLimit: number, room?: RestoreRoom | null): string {
-  const holding = (room?.waiting ?? 1) > 1
-    ? 'The canvases you had open are holding the last places.' : 'The canvas you had open is holding the last place.';
-  if (room && room.deletes === null) {
-    // Review 7 of PR #199, N-2: deleting can't make room (what waits doesn't
-    // fit by size), so no count of deletes is true. GM r9 (2), verbatim: the
-    // canvas isn't named twice.
-    const many = (room.waiting ?? 1) > 1;
-    const saved = many ? 'the canvases you had open are saved as projects' : 'the canvas you had open is saved as a project';
-    const why = !room.heldTakesPlace ? `You've reached the limit of ${projectLimit} projects.`
-      : many ? "They're holding the last places." : "It's holding the last place.";
-    return `You can restore it once ${saved}. ${why}`;
-  }
-  const deletes = room?.deletes ?? 1;
-  const first = deletes === 1 ? 'You can restore it after you delete a project.'
-    : `You can restore it after you delete ${deletes} projects.`;
-  if (room?.heldTakesPlace) return `${first} ${holding}`;
-  return `${first} You've reached the limit of ${projectLimit} projects.`;
-}
 
 /** GM's held model (2026-10-28), the person's Agent log line when an
  * agent's write made Nebula hold the waiting canvas aside (``action``
@@ -420,7 +381,7 @@ function canvasSavedFirstLogLine(who: string, action: 'cleared' | 'replaced' | '
  * refused an agent's write at the limit while the canvas waited (``action``
  * "clear", "replace", or "change" for any other write). */
 export function canvasHoldRefusedLogLine(agent: string | null | undefined, action: 'clear' | 'replace' | 'change'): string {
-  return `${agent || 'An agent'} tried to ${action} the canvas you had open. Nebula stopped it because that canvas isn't saved as a project yet.`;
+  return `${agent || 'An agent'} tried to ${action} the canvas you had open. Nebula stopped it because that canvas isn’t saved as a project yet.`;
 }
 
 /** GM r4/r5, the toast once a waiting canvas is saved: the project's real
@@ -617,11 +578,11 @@ function rebuiltNotice(restore: NoticeInput, current?: NoticeNow, extras?: Notic
   const lost = Math.max(0, recorded - dropped);
   const outcomes: string[] = [];
   if (recorded === 0) {
-    outcomes.push("If a project you expect isn't here, it couldn't be recovered.");
+    outcomes.push("If a project you expect isn’t here, it couldn’t be recovered.");
   } else if (lost > 0) {
     const names = namesFor(rows, lost);
     const who = names ? namedList(names) : `${lost} ${lost === 1 ? 'project' : 'projects'}`;
-    outcomes.push(`${who} couldn't be recovered, and others may be missing too.`);
+    outcomes.push(`${who} couldn’t be recovered, and others may be missing too.`);
   }
   const canvas = canvasOutcome(restore, current);
   if (canvas) outcomes.push(...canvas.lines);
@@ -712,26 +673,26 @@ export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.no
   if (failed > 0) {
     const names = namesFor(failedRows, failed);
     const partial = liveAdded > 0 || trashedAdded.length > 0;
-    if (names && partial) outcomes.push(`${namedList(names)} couldn't be added back.`);
-    else if (names?.length === 1) outcomes.push(`${quoted(names[0])}, a newer project, couldn't be added back.`);
-    else if (names) outcomes.push(`${namedList(names)}, newer projects, couldn't be added back.`);
-    else outcomes.push(`${failed} newer ${failed === 1 ? 'project' : 'projects'} couldn't be added back.`);
+    if (names && partial) outcomes.push(`${namedList(names)} couldn’t be added back.`);
+    else if (names?.length === 1) outcomes.push(`${quoted(names[0])}, a newer project, couldn’t be added back.`);
+    else if (names) outcomes.push(`${namedList(names)}, newer projects, couldn’t be added back.`);
+    else outcomes.push(`${failed} newer ${failed === 1 ? 'project' : 'projects'} couldn’t be added back.`);
   }
 
   // (a) Reverted to the copy's version.
   if (reverted > 0) {
     const names = namesFor(revertedRows, reverted);
-    if (names?.length === 1) outcomes.push(`${quoted(names[0])} went back to its version in that copy, so its latest edits aren't there.`);
-    else if (names) outcomes.push(`${namedList(names)} went back to their versions in that copy, so their latest edits aren't there.`);
-    else outcomes.push(`${reverted} projects went back to their versions in that copy, so their latest edits aren't there.`);
+    if (names?.length === 1) outcomes.push(`${quoted(names[0])} went back to its version in that copy, so its latest edits aren’t there.`);
+    else if (names) outcomes.push(`${namedList(names)} went back to their versions in that copy, so their latest edits aren’t there.`);
+    else outcomes.push(`${reverted} projects went back to their versions in that copy, so their latest edits aren’t there.`);
   }
 
   // (b) Back after it was deleted (who deleted it isn't named).
   if (cameBack > 0) {
     const names = namesFor(cameBackRows, cameBack);
-    if (names?.length === 1) outcomes.push(`${quoted(names[0])} was deleted, but the copy still had it, so it's back. Delete it again if you don't need it.`);
-    else if (names) outcomes.push(`${namedList(names)} were deleted, but the copy still had them, so they're back. Delete them again if you don't need them.`);
-    else outcomes.push(`${cameBack} deleted projects are back because the copy still had them. Delete them again if you don't need them.`);
+    if (names?.length === 1) outcomes.push(`${quoted(names[0])} was deleted, but the copy still had it, so it’s back. Delete it again if you don’t need it.`);
+    else if (names) outcomes.push(`${namedList(names)} were deleted, but the copy still had them, so they’re back. Delete them again if you don’t need them.`);
+    else outcomes.push(`${cameBack} deleted projects are back because the copy still had them. Delete them again if you don’t need them.`);
   }
 
   // (c) Back in Recently deleted.
@@ -805,7 +766,7 @@ export function catalogRestoreLogLine(restore: Pick<CatalogRestore, 'kind' | 'so
   if (trashed.length > 0) sentences.push(`Put ${logList(trashed, trashed.length)} in Recently deleted.`);
   const failedRows = restore.notAddedBack ?? [];
   const failed = total(restore.notAddedBackCount, failedRows);
-  if (failed > 0) sentences.push(`Couldn't add back ${logList(failedRows, failed)}.`);
+  if (failed > 0) sentences.push(`Couldn’t add back ${logList(failedRows, failed)}.`);
   return sentences.join(' ');
 }
 
@@ -820,8 +781,8 @@ function rebuiltLogLine(restore: Parameters<typeof catalogRestoreLogLine>[0], pa
   if (recovered > 0) sentences.push(`Recovered ${logList(rows, recovered)}.`);
   const failedRows = restore.notAddedBack ?? [];
   const failed = total(restore.notAddedBackCount, failedRows);
-  if (failed > 0) sentences.push(`Couldn't recover ${logList(failedRows, failed)}.`);
-  if (restore.damagedReadWhole === false) sentences.push("Couldn't read the whole file.");
+  if (failed > 0) sentences.push(`Couldn’t recover ${logList(failedRows, failed)}.`);
+  if (restore.damagedReadWhole === false) sentences.push("Couldn’t read the whole file.");
   if (path) sentences.push(`The damaged file was kept at ${path}.`);
   return sentences.join(' ');
 }

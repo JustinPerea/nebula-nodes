@@ -424,6 +424,21 @@ class WebSocketClient {
     if (this.ws) this.sendViewing(this.ws);
   }
 
+  /** Whether this tab keeps edits Nebula couldn't save after a restore
+   * (GM r15 on PR #199, Q11): the backend refuses agents' canvas writes and
+   * project switches meanwhile (409 canvas_kept_in_tab, GM r16). Said on
+   * the promoted socket after every hello, and on change. */
+  private keptEdits = false;
+
+  setKeptEdits(kept: boolean): void {
+    if (this.keptEdits === kept) return;
+    this.keptEdits = kept;
+    const socket = this.ws;
+    if (socket && this.greeted === socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: 'keptEdits', kept }));
+    }
+  }
+
   /** One of the person's own acts in `projectId`, said on the person's
    * promoted socket (now, or after its next hello). */
   notePersonAct(type: 'personOpen' | 'personInput', projectId: string): void {
@@ -433,6 +448,7 @@ class WebSocketClient {
 
   private sendViewing(socket: WebSocket): void {
     if (this.greeted !== socket || this.ws !== socket || socket.readyState !== WebSocket.OPEN) return;
+    if (this.keptEdits) socket.send(JSON.stringify({ type: 'keptEdits', kept: true }));
     if (this.viewing !== undefined) {
       socket.send(JSON.stringify(this.viewing === null ? { type: 'viewing', projectId: null }
         : { type: 'viewing', projectId: this.viewing, openedBy: 'person' }));

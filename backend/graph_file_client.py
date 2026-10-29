@@ -45,7 +45,7 @@ from pathlib import Path
 from typing import Any, BinaryIO, Callable, Iterator
 from urllib.parse import quote
 
-from nebula_api import NebulaAPI, NebulaAPIError
+from nebula_api import AGENT_REFUSAL_CODES, NebulaAPI, NebulaAPIError
 
 MIB = 1024 * 1024
 # Load graph's ceiling for a file it opens (the frontend's
@@ -298,7 +298,7 @@ def _refused(exc: NebulaAPIError) -> str:
     review 5 of PR #199, M-3), so an agent tells it from a stale revision."""
     payload = exc.payload if isinstance(exc.payload, dict) else {}
     code = payload.get("code")
-    return f"{exc.detail} ({exc.status}, {code})" if code in ("canvas_waiting", "canvas_held_full") else exc.detail
+    return f"{exc.detail} ({exc.status}, {code})" if code in AGENT_REFUSAL_CODES else exc.detail
 
 
 def load(api: NebulaAPI, source: str, *, headers: dict[str, str] | None = None, via: str = "mcp") -> dict[str, Any]:

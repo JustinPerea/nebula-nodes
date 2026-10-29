@@ -1177,7 +1177,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button"
-            {...lock.act({ title: 'Run this node and its dependencies' })}
+            {...lock.act({ title: 'Run this node and its dependencies', kept: 'run' })}
             onClick={() => executeNode(renderNode.id)}
           >
             <Play
@@ -1192,7 +1192,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button"
-            {...lock.act({ title: 'Duplicate this node' })}
+            {...lock.act({ title: 'Duplicate this node', kept: 'duplicate' })}
             onClick={() => duplicateNode(renderNode.id)}
           >
             <Copy
@@ -1207,7 +1207,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button inspector__action-button--danger"
-            {...lock.act({ title: 'Delete this node' })}
+            {...lock.act({ title: 'Delete this node', kept: 'delete' })}
             onClick={() => {
               // A World Labs hold refuses, with its notice; otherwise it deletes at
               // once and says "Deleted the node." with Undo (GM, 2026-10-23).

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { keptEditsLine, useProjectStore } from '../../store/projectStore';
-import { subscribeKeptPulse } from '../../lib/keptCanvas';
+import { pulseKeptCanvas, subscribeKeptPulse, useKeptCanvas } from '../../lib/keptCanvas';
+import { KEPT_MARK } from '../../lib/canvasLock';
 import { SAVE_AS_A_PROJECT } from './catalogRestoreCopy';
 import './KeptEditsNotice.css';
 
@@ -18,6 +19,17 @@ export function KeptEditsNotice() {
   const onWorkspace = useProjectStore((state) => state.screen === 'workspace');
   const [pulses, setPulses] = useState(0);
   useEffect(() => subscribeKeptPulse(() => setPulses((count) => count + 1)), []);
+  // GM r16, 4: a press on a control the kept canvas disabled (lib/canvasLock's
+  // kept mark) pulses this line, as following pulses the project bar.
+  const canvasKept = useKeptCanvas();
+  useEffect(() => {
+    if (!canvasKept) return undefined;
+    const pressed = (event: PointerEvent) => {
+      if (event.target instanceof Element && event.target.closest(`[${KEPT_MARK}]`)) pulseKeptCanvas();
+    };
+    document.addEventListener('pointerdown', pressed, true);
+    return () => document.removeEventListener('pointerdown', pressed, true);
+  }, [canvasKept]);
   if (!kept || !onWorkspace) return null;
   return (
     <div className={`canvas-undo-notice canvas-undo-notice--message kept-edits-notice${pulses > 0 ? ' kept-edits-notice--pulse' : ''}`}

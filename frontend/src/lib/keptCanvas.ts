@@ -13,9 +13,12 @@
  * when the saved project opens.
  */
 
+import { useSyncExternalStore } from 'react';
+
 let kept = false;
 let saving = false;
 const pulseListeners = new Set<() => void>();
+const keptListeners = new Set<() => void>();
 let lastPulseAt = 0;
 const KEPT_PULSE_MS = 1000;
 
@@ -29,9 +32,36 @@ export function keptCanvasTakesTyping(): boolean {
 }
 
 export function setCanvasKept(value: boolean): void {
+  const changed = kept !== value;
   kept = value;
   if (!value) saving = false;
+  if (changed) for (const listener of [...keptListeners]) listener();
 }
+
+export function subscribeKeptCanvas(listener: () => void): () => void {
+  keptListeners.add(listener);
+  return () => { keptListeners.delete(listener); };
+}
+
+/** Whether the canvas is kept, for a component (GM r16 on PR #199, 4: the
+ * controls that write or spend show disabled while it is). */
+export function useKeptCanvas(): boolean {
+  return useSyncExternalStore(subscribeKeptCanvas, isCanvasKept, isCanvasKept);
+}
+
+/** GM r16 on PR #199, 4: what a control disabled while the canvas is kept
+ * says unlocks it. `other`: a control GM's list doesn't name (builder's). */
+export type KeptAction = 'run' | 'duplicate' | 'delete' | 'note' | 'ask' | 'settings' | 'arrange' | 'other';
+export const KEPT_LOCK_TITLES: Record<KeptAction, string> = {
+  run: 'You can run this after you save it as a project.',
+  duplicate: 'You can duplicate this after you save it as a project.',
+  delete: 'You can delete this after you save it as a project.',
+  note: 'You can add a note after you save it as a project.',
+  ask: 'You can ask an agent about this after you save it as a project.',
+  settings: 'You can change its settings after you save it as a project.',
+  arrange: 'You can arrange this after you save it as a project.',
+  other: 'You can do this after you save it as a project.',
+};
 
 export function setKeptCanvasSaving(value: boolean): void {
   saving = kept && value;
@@ -59,6 +89,7 @@ export function refuseEditWhileKept(): boolean {
 }
 
 export function resetKeptCanvasForTests(): void {
+  if (kept) setCanvasKept(false);
   kept = false;
   saving = false;
   lastPulseAt = 0;

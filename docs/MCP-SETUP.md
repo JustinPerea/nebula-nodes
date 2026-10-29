@@ -2984,7 +2984,13 @@ Nebula process restores the same folder. The restore:
    "Recovered canvas" ("Recovered canvas 2" and on) (`recoveredCanvas`).
    Names never stack: a name already in one of these families ("X
    (recovered)", "Recovered canvas", "X copy") takes the next free number
-   in it ("X (recovered 2)", "Recovered canvas 2", "X copy 2").
+   in it ("X (recovered 2)", "Recovered canvas 2", "X copy 2"). A name
+   made from one in another family names its source, so families sit
+   together: a copy of "X (recovered)" is "X (recovered) copy", then "X
+   (recovered) copy 2"; a recovered "X copy" is "X copy (recovered)". A
+   project's own name counts as free only when no project in the list or
+   in Recently deleted has it: a "Beta" still in Recently deleted makes the
+   canvas "Beta (recovered)".
    When the list is at its project limit (500) or its size limit (the
    whole list is capped at 128 MiB; only a delete for good frees that) it
    can't. Nothing in the canvas is lost (Nebula keeps it, across restarts
@@ -3006,13 +3012,14 @@ Nebula process restores the same folder. The restore:
    whether the live canvas waits too). A crash between the hold and the
    open leaves one canvas, saved once, and a canvas already held (an open
    tried again after a failure) is never held or saved twice. Making a project is refused (413,
-   `limit`) while it can't be saved too, and so is a restore from Recently
-   deleted that would take the slot (held canvases count; the listing's
-   `restoreRoom`, `{refused, deletes, heldTakesPlace, waiting}`, says so
-   and how many projects must be deleted first, since the next listing
-   saves a waiting canvas into a freed place before a restore can take
-   it; `deletes` counts the waiting canvases those deletes save on the way,
-   and is null only when deleting can't make room). Every agent write to the live canvas while it waits goes through
+   `limit`) while it can't be saved too. A restore from Recently deleted is
+   never refused by the project limit: it may pass it (Justin, 2026-10-29),
+   for example an Undo after the waiting canvas took the slot the delete
+   freed. A restore with a canvas still waiting saves that canvas into any
+   freed place first, as a listing would, so it never takes the place a
+   waiting canvas waits on. A list past the limit that way is like any other: making a
+   project is still refused (413, `limit: "projects"`, `projectLimit`) until
+   enough are deleted. Every agent write to the live canvas while it waits goes through
    one guard at the graph-write fence (every route marked as a graph write:
    adding, removing or changing nodes and connections, `apply`, `restore`, runs,
    uploads that add a node, a clear, a graph load), and again in the write
@@ -3064,12 +3071,12 @@ Nebula process restores the same folder. The restore:
    `load_graph_file` reply with the same line and `project: null`; every CLI
    printer prints `message` under its own line, and `nebula clear` prints it
    in place of its Undo sentence). If only the person's canvas fits, the
-   copy waits like any canvas, the reply adds "The copy isn't saved as a
+   copy waits like any canvas, the reply adds "The copy isn’t saved as a
    project yet because the project limit is reached." (or "…because
-   Nebula's project list is full."), and your next write is refused at the
+   Nebula’s project list is full."), and your next write is refused at the
    limit. The person sees the copy as yours: `canvasNotFiled.canvases` marks
    it `agentCopy: {agent}`, and their line is "Codex’s copy of your canvas
-   isn't saved as a project yet…". The person's canvases are saved before
+   isn’t saved as a project yet…". The person's canvases are saved before
    an agent's copy, and `canvasNotFiled.canvases` lists them in that order;
    at the project limit each row's `deletes` says how many projects must go
    before it is saved (`canvasNotFiled.deletes` is the last row's). A write sent while the project list is
@@ -3108,7 +3115,24 @@ Nebula process restores the same folder. The restore:
    "This canvas is too big for Nebula to keep aside, so nothing was changed.
    Work in an existing project, or make the canvas smaller first.", changing
    nothing; MCP tools add "(409, canvas_held_full)" and the CLI
-   "(canvas_held_full)". The person's own open, create, clear and load always
+   "(canvas_held_full)".
+   While the person's tab keeps edits Nebula couldn't save before it
+   restored its project list (the tab shows "Nebula restored its project
+   list before your latest edits were saved. They’re kept in this tab."
+   with Save as a project), the tab neither sends nor shows canvas
+   changes. Every canvas write, run and project switch of yours (add, set,
+   connect, delete, clear, load, apply, run, `open_project`,
+   `create_project`, deleting the open project) is refused (409, `code:
+   "canvas_kept_in_tab"`) with "The person's tab is keeping edits Nebula
+   couldn't save before it restored its project list, so the canvas can't
+   be changed and projects can't be switched until they save those edits
+   as a project. Tell the person; try again after they click Save as a
+   project." Reads still answer. MCP tools add "(409,
+   canvas_kept_in_tab)" and the CLI "(canvas_kept_in_tab)". It ends when
+   the person saves those edits (the tab then opens the saved project) or
+   closes the tab. Only the person's own tab can start it (its socket says
+   so after its hello with the person token); an agent's socket can't.
+   The person's own open, create, clear and load always
    hold it, whatever its size: such a canvas is saved over the save limit and
    opens with saving paused. A person request that reaches the refusal gets
    the same lines (the person's tab never does: a waiting canvas has no
@@ -3259,11 +3283,10 @@ unnamed client) and when. Agents may delete boards, characters and Styles
 - `POST /api/trash/{kind}/{id}/restore` brings one back with the same id and
   contents, so a Moodboard or Character node that points at it runs again. A
   project comes back closed. Agents may restore. Restoring one that is already
-  back is a no-op (200, `alreadyRestored: true`). A project restore into a
-  list at its project limit is refused before anything changes (413,
-  `limit: "projects"`, `projectLimit`); it stays in Recently deleted, and the
-  person sees "Couldn't restore “<name>”. You've reached the limit of 500
-  projects." (in the Undo toast's place when it came from Undo). MCP: `list_trash` (with
+  back is a no-op (200, `alreadyRestored: true`). A project restore may pass
+  the project limit (the limit applies to new projects: Justin, 2026-10-29);
+  after one, making a project is still refused (413, `limit: "projects"`,
+  `projectLimit`) until the list is back under it. MCP: `list_trash` (with
   `kind`, `scope` and `project_id`), `restore_from_trash`. CLI: `nebula trash list`
   (`--kind`, `--scope`, `--project`: list_trash's three; `--json` prints its
   result), `nebula trash restore [kind] <id>`.

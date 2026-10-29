@@ -950,6 +950,38 @@ describe('browser person link', () => {
     wsClient.disconnect();
   });
 
+  it('the kept canvas is said on the promoted socket, after every hello and on change (GM r16 on PR #199)', async () => {
+    sessionStorage.setItem('nebula.person', JSON.stringify({ token: TOKEN, backend: 'http://127.0.0.1:8131' }));
+    const sockets: Array<{ sent: string[]; onopen: (() => void) | null }> = [];
+    class MockWS {
+      static OPEN = 1;
+      readyState = 1;
+      sent: string[] = [];
+      onopen: (() => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onclose: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      constructor(public url: string) { sockets.push(this); }
+      send(data: string) { this.sent.push(data); }
+      close() { this.readyState = 3; }
+    }
+    vi.stubGlobal('WebSocket', MockWS);
+    await importFresh();
+    const { wsClient } = await import('../../src/lib/wsClient');
+    wsClient.setKeptEdits(true); // before the socket: sent after the hello
+    wsClient.connect();
+    await vi.waitFor(() => expect(sockets).toHaveLength(1));
+    expect(sockets[0].sent).toEqual([]);
+    sockets[0].onopen?.();
+    await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
+    expect(sockets[0].sent.map((frame) => JSON.parse(frame))).toEqual([
+      { type: 'hello', personToken: TOKEN }, { type: 'keptEdits', kept: true }]);
+    wsClient.setKeptEdits(true);
+    wsClient.setKeptEdits(false);
+    expect(sockets[0].sent.slice(2).map((frame) => JSON.parse(frame))).toEqual([{ type: 'keptEdits', kept: false }]);
+    wsClient.disconnect();
+  });
+
   it('a link pasted into the open tab makes the canvas socket say hello without a reload', async () => {
     const sockets: Array<{ url: string; sent: string[]; onopen: (() => void) | null }> = [];
     class MockWS {

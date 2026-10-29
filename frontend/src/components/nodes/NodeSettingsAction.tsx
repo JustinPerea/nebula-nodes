@@ -3,6 +3,7 @@ import { SlidersHorizontal } from 'lucide-react';
 import { useSelectionActionSlot } from '../../lib/selectionActionSlot';
 import { useUIStore } from '../../store/uiStore';
 import { useCardSelection } from '../../hooks/useCardSelection';
+import { useCanvasLock } from '../../lib/canvasLock';
 
 /**
  * "Settings" in the selection toolbar for a card node that has no pill of its
@@ -14,6 +15,7 @@ export function NodeSettingsAction({ id }: { id: string }) {
   const { inspectorOpen: open } = useCardSelection(id);
   const selectNode = useUIStore((s) => s.selectNode);
   const setInspectorVisible = useUIStore((s) => s.setInspectorVisible);
+  const lock = useCanvasLock();
   if (!slot) return null;
   return createPortal(
     <button
@@ -22,7 +24,8 @@ export function NodeSettingsAction({ id }: { id: string }) {
       aria-haspopup="dialog"
       aria-expanded={open}
       aria-label="Show node settings"
-      title="Show node settings"
+      // GM r16 on PR #199, 4: disabled while the canvas is kept.
+      {...lock.keptOnly('settings', 'Show node settings')}
       onMouseDown={(event) => event.stopPropagation()}
       onClick={(event) => {
         event.stopPropagation();

@@ -129,14 +129,15 @@ CANVAS_HELD_READ_MAX_BYTES = 128 * 1024 * 1024 + 1024 * 1024
 # How long the person is told a held canvas couldn't be read (review 6, L-1).
 HELD_UNREADABLE_SECONDS = 7 * 24 * 3600
 PURGED_FILE_MAX_BYTES = 1024 * 1024
-# Whether a restore from Recently deleted (the person's Undo, or Restore in
-# the list) may take the list past MAX_PROJECTS. GM (r6) prefers yes, since
-# the limit is for new projects; Justin hasn't decided, so it is refused
-# with the limit's 413 (main._refuse_a_restore_past_the_limit). This is the
-# one switch: with it on, that refusal goes, and prepare's cap counts only
-# projects new to the list, so later saves of the list past the limit still
-# land and a new project is still refused.
-RESTORE_MAY_PASS_THE_PROJECT_LIMIT = False
+# Whether a restore from Recently deleted (the person's Undo, Restore in the
+# list, an agent's restore) may take the list past MAX_PROJECTS: yes (GM r6;
+# Justin, 2026-10-29: the limit is for new projects, so an Undo of a delete
+# may go over it when a recovered canvas took the freed place). prepare's
+# cap then counts only projects new to the list: later saves of a list past
+# the limit still land, and a new project is still refused at the limit.
+# The refusal and the Restore-greying it needed (main's restore guard and
+# `restoreRoom`, the frontend's "Couldn't restore …" line) are gone.
+RESTORE_MAY_PASS_THE_PROJECT_LIMIT = True
 RECORD_ROWS = 100  # names listed per restore; the counts are whole
 # The fields prepare writes first, so a cut file still says which project was
 # open. ``canvasPending`` (what protects the person's canvas) comes right
@@ -372,6 +373,9 @@ RECOVERED_CANVAS_NAME = "Recovered canvas"
 # duplicate ("Alpha copy", "Alpha copy 2"). One rule for all three: a name
 # already in the family gets the next free number in it (never "Recovered
 # canvas (recovered)" or "Alpha copy copy"), and a number freed is used again.
+# A name made from one in another family names its source, so families sit
+# together: a copy of "Alpha (recovered)" is "Alpha (recovered) copy", then
+# "Alpha (recovered) copy 2" (GM r16 on PR #199, 1).
 _NAME_FAMILIES: dict[str, tuple[re.Pattern[str], Callable[[str, int], str]]] = {
     "canvas": (re.compile(rf"(?P<stem>{re.escape(RECOVERED_CANVAS_NAME)})(?: (?P<n>[2-9]|[1-9]\d+))?"),
                lambda stem, n: stem if n == 1 else f"{stem} {n}"),
@@ -436,17 +440,16 @@ def recovered_name(source_name: str, catalog: Mapping[str, Any]) -> str:
 
 def lost_row_name(name: str, catalog: Mapping[str, Any]) -> str:
     """The name a canvas whose project row is gone is filed under (GM r14,
-    4): that row's own name when it is free again (the row is gone and
-    nothing else has it); else the next free number in the family the name
-    is already in ("Recovered canvas" gives "Recovered canvas 2"); else
-    "<name> (recovered)" and on."""
-    names = _names_in_use(catalog)
-    if name not in names:
+    4; GM r16, 3): that row's own name when it is free, and free means no
+    project in the list or in Recently deleted has it ("Beta" still in
+    Recently deleted gives "Beta (recovered)"). Else it is a recovered copy
+    of that name (recovered_name): "Recovered canvas" gives "Recovered
+    canvas 2", "Alpha (recovered)" gives "Alpha (recovered 2)", and a name
+    in another family keeps it and names its source ("Alpha copy" gives
+    "Alpha copy (recovered)", GM r16, 1)."""
+    if name not in _names_in_use(catalog):
         return name
-    member = name_family(name)
-    if member is not None:
-        return _next_free(member[0], member[1], names)
-    return _next_free("recovered", name[:100], names)
+    return recovered_name(name, catalog)
 
 
 def duplicate_name(source_name: str, catalog: Mapping[str, Any], taken: Iterable[str] = ()) -> str:
@@ -2422,10 +2425,10 @@ class ProjectStore:
             self._local.pending_ids = holds
 
     def _past_the_limit_by_restores_only(self, catalog: dict[str, Any]) -> bool:
-        """With RESTORE_MAY_PASS_THE_PROJECT_LIMIT on: whether every project
-        in ``catalog`` is one this hold read (in the list or in Recently
-        deleted), so a list past the limit got there by restores, and the
-        commit adds no new project. Off (today): never."""
+        """With RESTORE_MAY_PASS_THE_PROJECT_LIMIT on (it is): whether every
+        project in ``catalog`` is one this hold read (in the list or in
+        Recently deleted), so a list past the limit got there by restores,
+        and the commit adds no new project."""
         if not RESTORE_MAY_PASS_THE_PROJECT_LIMIT:
             return False
         known = getattr(self._local, "ids", None)

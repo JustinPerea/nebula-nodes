@@ -45,7 +45,7 @@ describe("N-3: the Agent log row is the agent's", () => {
     const codex = useAgentLogStore.getState().entries.filter((entry) => entry.agent?.id === 'ext:codex');
     expect(codex).toHaveLength(1);
     expect(codex[0]).toMatchObject({ source: 'agent', agent: { id: 'ext:codex', name: 'Codex', color: '#5B9DFF' },
-      message: "Codex tried to change the canvas you had open. Nebula stopped it because that canvas isn't saved as a project yet." });
+      message: "Codex tried to change the canvas you had open. Nebula stopped it because that canvas isn’t saved as a project yet." });
   });
 
   it("files Codex's held change under Codex too", () => {
@@ -66,18 +66,17 @@ describe("N-3: the Agent log row is the agent's", () => {
 });
 
 describe("the listing's round 6 fields reach the store", () => {
-  it('keeps the restore verdict, the waiting canvases, the unreadable note and every filed name', async () => {
+  it('keeps the waiting canvases, the unreadable note and every filed name', async () => {
     listProjects.mockResolvedValueOnce({ projects: [], trash: [], activeProjectId: null, workspaceRevision: 'r2',
       paramsVersion: GRAPH_PARAMS_VERSION, projectLimit: 3,
-      restoreRoom: { refused: 'projects', deletes: 2, heldTakesPlace: false, waiting: 1 },
       canvasNotFiled: { reason: 'projects', projectLimit: 3, live: true, held: 1, canvases: [{ name: 'Delta' }, { name: null }] },
       canvasHeldUnreadable: { count: null, kept: ['canvas-held.json.damaged-x'], at: '2026-10-28T10:00:00Z' },
       canvasSaved: { id: 'b', name: 'Recovered canvas 2', filed: [{ id: 'a', name: 'Recovered canvas' }, { id: 'b', name: 'Recovered canvas 2' }] },
     } as never);
     send({ type: 'projectsChanged', change: 'deleted', projectId: 'x' });
-    await vi.waitFor(() => expect(useProjectStore.getState().restoreRoom).not.toBeNull());
+    await vi.waitFor(() => expect(useProjectStore.getState().canvasNotFiled).not.toBeNull());
     const state = useProjectStore.getState();
-    expect(state.restoreRoom).toEqual({ refused: 'projects', deletes: 2, heldTakesPlace: false, waiting: 1 });
+    expect('restoreRoom' in state).toBe(false);
     expect(state.canvasNotFiled?.canvases).toEqual([{ name: 'Delta' }, { name: null }]);
     // `at` keys the person's × (GM r9, fix round 8).
     expect(state.canvasHeldUnreadable).toEqual({ count: null, at: '2026-10-28T10:00:00Z' });

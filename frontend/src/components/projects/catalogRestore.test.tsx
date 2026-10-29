@@ -29,7 +29,7 @@ const failedRows = (...names: (string | null)[]) => names.map((name, index) => (
   id: String(index).repeat(32), reason: 'incomplete', ...(name ? { name } : {}),
 }));
 const line = (overrides: Partial<CatalogRestore>) => catalogRestoreLine(restore(overrides), NOW);
-const OPEN = "Nebula's project list was damaged, so it restored the last good copy";
+const OPEN = "Nebula’s project list was damaged, so it restored the last good copy";
 
 describe('form 1: restored, with what was added back', () => {
   it('names one, two or three projects added back, and counts from four', () => {
@@ -50,7 +50,7 @@ describe('form 1: restored, with what was added back', () => {
   it('never says no projects were missing when the damaged file could not be read to its end', () => {
     // A cut or zeroed file (live check of fix round 1): what it held past the
     // damage is unknown, so something may be lost (GM r3 string 4).
-    const notWhole = "Nebula couldn't read the whole damaged file, so changes made after that copy may be missing.";
+    const notWhole = "Nebula couldn’t read the whole damaged file, so changes made after that copy may be missing.";
     expect(line({ damagedReadWhole: false })).toBe(`${OPEN}. ${notWhole} The damaged file was kept.`);
     expect(line({ damagedReadWhole: undefined })).toBe(`${OPEN}. ${notWhole} The damaged file was kept.`);
     expect(line({ damagedReadWhole: false, source: 'catalog.json.bak.1', copyAt: TWO_DAYS_AGO }))
@@ -65,28 +65,28 @@ describe('form 1: restored, with what was added back', () => {
 describe('form 2 (round 1): add-backs that failed', () => {
   it('names what failed when all failed', () => {
     expect(line({ notAddedBack: failedRows('Hero study'), notAddedBackCount: 1 }))
-      .toBe(`${OPEN}. “Hero study”, a newer project, couldn't be added back. The damaged file was kept.`);
+      .toBe(`${OPEN}. “Hero study”, a newer project, couldn’t be added back. The damaged file was kept.`);
     expect(line({ notAddedBack: failedRows('A', 'B'), notAddedBackCount: 2 }))
-      .toBe(`${OPEN}. “A” and “B”, newer projects, couldn't be added back. The damaged file was kept.`);
+      .toBe(`${OPEN}. “A” and “B”, newer projects, couldn’t be added back. The damaged file was kept.`);
     expect(line({ notAddedBack: failedRows('A', 'B', 'C', 'D'), notAddedBackCount: 4 }))
-      .toBe(`${OPEN}. 4 newer projects couldn't be added back. The damaged file was kept.`);
+      .toBe(`${OPEN}. 4 newer projects couldn’t be added back. The damaged file was kept.`);
   });
 
   it('counts even one to three when a name could not be read', () => {
     expect(line({ notAddedBack: failedRows(null, null), notAddedBackCount: 2 }))
-      .toBe(`${OPEN}. 2 newer projects couldn't be added back. The damaged file was kept.`);
+      .toBe(`${OPEN}. 2 newer projects couldn’t be added back. The damaged file was kept.`);
     expect(line({ notAddedBack: failedRows(null), notAddedBackCount: 1 }))
-      .toBe(`${OPEN}. 1 newer project couldn't be added back. The damaged file was kept.`);
+      .toBe(`${OPEN}. 1 newer project couldn’t be added back. The damaged file was kept.`);
   });
 
   it('gives form 1, then what failed, when some were added back', () => {
     expect(line({ addedBack: rows('Logo'), addedBackCount: 1, notAddedBack: failedRows('Dunes'), notAddedBackCount: 1 }))
-      .toBe(`${OPEN} and added back “Logo”, a newer project it found. “Dunes” couldn't be added back. The damaged file was kept.`);
+      .toBe(`${OPEN} and added back “Logo”, a newer project it found. “Dunes” couldn’t be added back. The damaged file was kept.`);
   });
 
   it('only says the damaged file was kept when it was', () => {
     expect(line({ damagedFile: null, notAddedBack: failedRows('Dunes'), notAddedBackCount: 1 }))
-      .toBe(`${OPEN}. “Dunes”, a newer project, couldn't be added back.`);
+      .toBe(`${OPEN}. “Dunes”, a newer project, couldn’t be added back.`);
   });
 });
 
@@ -112,17 +112,17 @@ describe('form 3: what an older copy decided', () => {
 
   it('says the copy is older up front when its age is known', () => {
     expect(line({ ...older, reverted: rows('Logo'), revertedCount: 1 }))
-      .toBe(`${OPEN} from 2 days ago. “Logo” went back to its version in that copy, so its latest edits aren't there. The damaged file was kept.`);
+      .toBe(`${OPEN} from 2 days ago. “Logo” went back to its version in that copy, so its latest edits aren’t there. The damaged file was kept.`);
     expect(line({ ...older })).toBe(`${OPEN} from 2 days ago. No projects were missing.`);
     expect(line({ source: 'catalog.json.bak.1', copyAt: null, reverted: rows('Logo'), revertedCount: 1 }))
-      .toBe(`${OPEN}. “Logo” went back to its version in that copy, so its latest edits aren't there. The damaged file was kept.`);
+      .toBe(`${OPEN}. “Logo” went back to its version in that copy, so its latest edits aren’t there. The damaged file was kept.`);
   });
 
   it('(a) reverted', () => {
     expect(line({ ...older, reverted: rows('Logo', 'Hero'), revertedCount: 2 }))
-      .toBe(`${OPEN} from 2 days ago. “Logo” and “Hero” went back to their versions in that copy, so their latest edits aren't there. The damaged file was kept.`);
+      .toBe(`${OPEN} from 2 days ago. “Logo” and “Hero” went back to their versions in that copy, so their latest edits aren’t there. The damaged file was kept.`);
     expect(line({ ...older, reverted: rows('A', 'B', 'C', 'D'), revertedCount: 4 }))
-      .toBe(`${OPEN} from 2 days ago. 4 projects went back to their versions in that copy, so their latest edits aren't there. The damaged file was kept.`);
+      .toBe(`${OPEN} from 2 days ago. 4 projects went back to their versions in that copy, so their latest edits aren’t there. The damaged file was kept.`);
   });
 
   it('(a) leaves out the open project whose graph came from the live canvas', () => {
@@ -132,11 +132,11 @@ describe('form 3: what an older copy decided', () => {
 
   it('(b) back after it was deleted', () => {
     expect(line({ ...older, cameBack: rows('Draft'), cameBackCount: 1 }))
-      .toBe(`${OPEN} from 2 days ago. “Draft” was deleted, but the copy still had it, so it's back. Delete it again if you don't need it.`);
+      .toBe(`${OPEN} from 2 days ago. “Draft” was deleted, but the copy still had it, so it’s back. Delete it again if you don’t need it.`);
     expect(line({ ...older, cameBack: rows('Draft', 'Old hero'), cameBackCount: 2 }))
-      .toBe(`${OPEN} from 2 days ago. “Draft” and “Old hero” were deleted, but the copy still had them, so they're back. Delete them again if you don't need them.`);
+      .toBe(`${OPEN} from 2 days ago. “Draft” and “Old hero” were deleted, but the copy still had them, so they’re back. Delete them again if you don’t need them.`);
     expect(line({ ...older, cameBack: rows('A', 'B', 'C', 'D'), cameBackCount: 4 }))
-      .toBe(`${OPEN} from 2 days ago. 4 deleted projects are back because the copy still had them. Delete them again if you don't need them.`);
+      .toBe(`${OPEN} from 2 days ago. 4 deleted projects are back because the copy still had them. Delete them again if you don’t need them.`);
   });
 
   it('(c) back in Recently deleted, with the button', () => {
@@ -152,8 +152,8 @@ describe('form 3: what an older copy decided', () => {
   it('gives one sentence per outcome, (a) then (b) then (c)', () => {
     expect(line({ ...older, reverted: rows('Logo'), revertedCount: 1, cameBack: rows('Draft'), cameBackCount: 1,
       backInTrash: rows('Hero'), backInTrashCount: 1 }))
-      .toBe(`${OPEN} from 2 days ago. “Logo” went back to its version in that copy, so its latest edits aren't there. `
-        + '“Draft” was deleted, but the copy still had it, so it\'s back. Delete it again if you don\'t need it. '
+      .toBe(`${OPEN} from 2 days ago. “Logo” went back to its version in that copy, so its latest edits aren’t there. `
+        + '“Draft” was deleted, but the copy still had it, so it’s back. Delete it again if you don’t need it. '
         + '“Hero” is in Recently deleted again because the copy had it there. Restore it again if you need it. The damaged file was kept.');
   });
 
@@ -178,18 +178,18 @@ describe('form 4 (round 1): rebuilt, no good copy', () => {
 
   it('says when nothing was spotted missing', () => {
     expect(line({ ...rebuilt, addedBack: rows('Dunes'), addedBackCount: 1 }))
-      .toBe("Nebula's project list was damaged and there was no good copy, so it recovered every project it could still read. "
-        + "If a project you expect isn't here, it couldn't be recovered. The damaged file was kept.");
+      .toBe("Nebula’s project list was damaged and there was no good copy, so it recovered every project it could still read. "
+        + "If a project you expect isn’t here, it couldn’t be recovered. The damaged file was kept.");
   });
 
   it('names up to three spotted missing, counts from four, and leaves Recently deleted out', () => {
-    const start = "Nebula's project list was damaged and there was no good copy, so it recovered every project it could still read.";
+    const start = "Nebula’s project list was damaged and there was no good copy, so it recovered every project it could still read.";
     expect(line({ ...rebuilt, notAddedBack: failedRows('Hero study'), notAddedBackCount: 1 }))
-      .toBe(`${start} “Hero study” couldn't be recovered, and others may be missing too. The damaged file was kept.`);
+      .toBe(`${start} “Hero study” couldn’t be recovered, and others may be missing too. The damaged file was kept.`);
     expect(line({ ...rebuilt, notAddedBack: failedRows('A', 'B', 'C', 'D'), notAddedBackCount: 4 }))
-      .toBe(`${start} 4 projects couldn't be recovered, and others may be missing too. The damaged file was kept.`);
+      .toBe(`${start} 4 projects couldn’t be recovered, and others may be missing too. The damaged file was kept.`);
     expect(line({ ...rebuilt, notAddedBack: [{ ...failedRows('Old')[0], trashed: true }], notAddedBackCount: 1 }))
-      .toBe(`${start} If a project you expect isn't here, it couldn't be recovered. The damaged file was kept.`);
+      .toBe(`${start} If a project you expect isn’t here, it couldn’t be recovered. The damaged file was kept.`);
   });
 });
 
@@ -200,11 +200,11 @@ describe('the Agent log line (round 2)', () => {
     expect(catalogRestoreLogLine(restore({ addedBack: rows('A', 'B', 'C', 'D'), addedBackCount: 4 })))
       .toBe(`Restored the project list from catalog.json.bak. The damaged file was kept at ${DAMAGED}. Added back 4 projects.`);
     expect(catalogRestoreLogLine(restore({ notAddedBack: failedRows('Hero study'), notAddedBackCount: 1 })))
-      .toBe(`Restored the project list from catalog.json.bak. The damaged file was kept at ${DAMAGED}. Couldn't add back “Hero study”.`);
+      .toBe(`Restored the project list from catalog.json.bak. The damaged file was kept at ${DAMAGED}. Couldn’t add back “Hero study”.`);
     expect(catalogRestoreLogLine(restore({ addedBack: trashedRows('Logo'), addedBackCount: 1 })))
       .toBe(`Restored the project list from catalog.json.bak. The damaged file was kept at ${DAMAGED}. Put “Logo” in Recently deleted.`);
     expect(catalogRestoreLogLine(restore({ notAddedBack: failedRows(null, null), notAddedBackCount: 2 })))
-      .toBe(`Restored the project list from catalog.json.bak. The damaged file was kept at ${DAMAGED}. Couldn't add back 2 projects.`);
+      .toBe(`Restored the project list from catalog.json.bak. The damaged file was kept at ${DAMAGED}. Couldn’t add back 2 projects.`);
   });
 });
 

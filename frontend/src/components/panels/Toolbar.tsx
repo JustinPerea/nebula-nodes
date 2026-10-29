@@ -39,7 +39,8 @@ import type { Edge, Node } from '@xyflow/react';
 import '../../styles/panels.css';
 import '../../styles/canvas-toolbar.css';
 import { refuseEditWhileOffline } from '../../lib/backendConnection';
-import { useCanvasLock } from '../../lib/canvasLock';
+import { KEPT_MARK, useCanvasLock } from '../../lib/canvasLock';
+import { KEPT_LOCK_TITLES } from '../../lib/keptCanvas';
 
 const CLEAR_CANVAS = "Couldn't clear the canvas.";
 
@@ -296,11 +297,12 @@ export function Toolbar() {
           // and the focus; a click only pulses the project bar). Offline it
           // is disabled outright (round 15 of PR #114).
           onClick={() => { if (refuseEditWhileFollowing()) return; void executeGraph(); }}
-          disabled={nodeCount === 0 || isImportingGraph || runStarting || offline}
-          aria-disabled={following ? true : undefined}
-          {...lock.mark}
+          disabled={nodeCount === 0 || isImportingGraph || runStarting || offline || lock.kept}
+          aria-disabled={following && !lock.kept ? true : undefined}
+          // Kept first (GM r16 on PR #199, 4): its mark and its tooltip.
+          {...(lock.kept ? { [KEPT_MARK]: '' } : lock.mark)}
           aria-describedby={nodeCount > 0 ? runScopeId : undefined}
-          title={following ? waitToOpenTooltip(following.projectName)
+          title={lock.kept ? KEPT_LOCK_TITLES.run : following ? waitToOpenTooltip(following.projectName)
             : isImportingGraph ? 'Wait for the graph import to finish' : `Run graph. ${describeRunScope(runScope)} (${displayKey('Mod')}${displayKey('Enter')})`}
         >
           <ToolbarIcon name="run" />
@@ -357,7 +359,7 @@ export function Toolbar() {
             <div className="toolbar__action-group" role="group" aria-label="Canvas layout">
               <h2 className="toolbar__action-heading">Layout</h2>
               <button type="button" className="toolbar__action"
-                {...lock.act({ disabled: nodeCount === 0, title: 'Arrange nodes by dependency' })} onClick={() => runSecondaryAction(autoLayout)}>
+                {...lock.act({ disabled: nodeCount === 0, title: 'Arrange nodes by dependency', kept: 'arrange' })} onClick={() => runSecondaryAction(autoLayout)}>
                 <ToolbarIcon name="layout" /><span>Arrange nodes</span>
               </button>
               <button type="button" className="toolbar__action" title="Reset panel positions and sizes"

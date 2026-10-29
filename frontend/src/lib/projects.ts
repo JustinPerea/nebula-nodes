@@ -127,17 +127,11 @@ export interface ProjectList {
     another?: boolean;
     filedAt?: string; agentCopy?: { agent?: string | null };
     filed?: SavedCanvas[] };
-  /** The backend's verdict on a restore from Recently deleted now, held
-   * canvases counted (review 6 of PR #199, L-3): absent when it passes. */
-  restoreRoom?: { refused: 'projects'; deletes: number | null; heldTakesPlace: boolean; waiting?: number };
   /** canvas-held.json didn't read whole and a held canvas may be lost, for a
    * week (review 6, L-1): the person's line. `count` null: unknown. */
   canvasHeldUnreadable?: { count: number | null; kept?: string[]; at?: string };
   /** How many projects the list may hold (the backend's MAX_PROJECTS). */
   projectLimit?: number;
-  /** The switch that lets a restore pass the limit is on (GM r6): Restore in
-   * Recently deleted stays enabled at the limit. */
-  restoreMayPassTheProjectLimit?: boolean;
 }
 export interface ProjectActivation {
   project: SavedProject; workspaceRevision: string;

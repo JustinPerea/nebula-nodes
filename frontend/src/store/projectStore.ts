@@ -37,7 +37,7 @@ import { WORLD_LABS_NEEDS_CHECK } from '../lib/worldLabsWaiting';
 import type { CatalogRestore, ProjectList, ProjectSnapshot, ProjectSummary, SavedProject, TrashedProject } from '../lib/projects';
 import {
   agentClosedLine, canvasHeldLogLine, canvasHoldRefusedLogLine, catalogRestoreLogLine, DEFAULT_PROJECT_LIMIT, editsRecoveredToast,
-  LATEST_EDITS_KEPT, RELOAD_TO_CONTINUE, restoreRefusedLine, type RestoreRoom,
+  LATEST_EDITS_KEPT, RELOAD_TO_CONTINUE,
 } from '../components/projects/catalogRestoreCopy';
 
 /** The canvas kept in this tab (GM r15 on PR #199, Q11; review 11, HIGH-1):
@@ -132,16 +132,12 @@ interface ProjectState {
   projects: ProjectSummary[]; activeProject: ProjectSummary | null;
   /** Recently deleted, newest first. Restorable until each entry's purgeAt. */
   trash: TrashedProject[];
-  /** The project the Undo toast offers to bring back; ``refused`` is the
-   * line that takes the toast's place when its Undo was refused by the
-   * project limit (GM r6), with no Undo button. */
-  lastDeleted: { id: string; name: string; refused?: string } | null;
+  /** The project the Undo toast offers to bring back (its Undo may pass the
+   * project limit: Justin, 2026-10-29). */
+  lastDeleted: { id: string; name: string } | null;
   /** How many projects the list may hold (the listing's `projectLimit`), for
    * the lines that name it. */
   projectLimit: number;
-  /** A restore may pass the limit (the listing's
-   * `restoreMayPassTheProjectLimit`): Restore stays enabled at it (GM r7). */
-  restorePassesLimit: boolean;
   /** Nebula restored a damaged project list (backend catalog restore): the
    * Projects home notice, until the person closes it with ×. */
   catalogRestore: CatalogRestore | null;
@@ -150,9 +146,6 @@ interface ProjectState {
   /** The live canvas isn't a project and the list had no room to save it
    * (the listing's `canvasNotFiled`): the Projects home's waiting line. */
   canvasNotFiled: { reason: 'projects' | 'storage'; projectLimit?: number; canvases?: { name?: string | null }[]; deletes?: number | null } | null;
-  /** The backend's verdict on a restore now (the listing's `restoreRoom`,
-   * review 6 of PR #199, L-3): Restore greys on it, held canvases counted. */
-  restoreRoom: RestoreRoom | null;
   /** Held canvases that couldn't be read (the listing's
    * `canvasHeldUnreadable`, review 6, L-1): the person's line. */
   canvasHeldUnreadable: { count: number | null; at?: string } | null;
@@ -616,15 +609,6 @@ function showError(error: unknown, retry: ProjectRetry | null = null): void {
   const line = failureMessage(error, RETRY_HEADINGS[retry?.action ?? 'save']);
   useProjectStore.setState({ error: line, errorDetails: detailsFor(line, error),
     errorRetry: refusedForGood(error) ? null : retry });
-}
-/** GM r6's line for a restore the project limit refused, or null for any
- * other failure. The name is the project's own (Recently deleted's entry,
- * or the Undo toast's), the limit the listing's. */
-function restoreRefusal(error: unknown, id: string): string | null {
-  if (!(error instanceof RequestFailedError) || error.status !== 413 || error.storageLimit !== 'projects') return null;
-  const state = useProjectStore.getState();
-  const name = state.trash.find((entry) => entry.id === id)?.name ?? (state.lastDeleted?.id === id ? state.lastDeleted.name : null);
-  return name ? restoreRefusedLine(name, state.projectLimit) : null;
 }
 /** What counts as unsaved work when the tab stops for a params version: run
  * records that never ran are left out, and so is node run state (queued,
@@ -1312,17 +1296,14 @@ const toastedCanvases = new Set<string>();
  * canvas waiting to be saved, and a waiting canvas just saved (its toast
  * once per tab; a later listing that still carries it keeps it showing
  * until it is dismissed or times out). */
-type ListingNotices = Pick<ProjectState, 'catalogRestore' | 'canvasNotFiled' | 'restorePassesLimit' | 'restoreRoom'
-  | 'canvasHeldUnreadable'> & { canvasSaved?: ProjectState['canvasSaved'] } & { projectLimit?: number };
+type ListingNotices = Pick<ProjectState, 'catalogRestore' | 'canvasNotFiled' | 'canvasHeldUnreadable'> & { canvasSaved?: ProjectState['canvasSaved'] } & { projectLimit?: number };
 
 function listingNotices(list: ProjectList): ListingNotices {
   const waiting = list.canvasNotFiled;
   const saved = list.canvasSaved;
-  const room = list.restoreRoom;
   const unreadable = list.canvasHeldUnreadable;
   const notices: ListingNotices = {
     catalogRestore: restoreFrom(list),
-    restorePassesLimit: list.restoreMayPassTheProjectLimit === true,
     ...(typeof list.projectLimit === 'number' && Number.isFinite(list.projectLimit) && list.projectLimit > 0
       ? { projectLimit: list.projectLimit } : {}),
     canvasNotFiled: waiting && (waiting.reason === 'projects' || waiting.reason === 'storage')
@@ -1332,10 +1313,6 @@ function listingNotices(list: ProjectList): ListingNotices {
           ...(canvas?.agentCopy && typeof canvas.agentCopy === 'object'
             ? { agentCopy: { agent: typeof canvas.agentCopy.agent === 'string' ? canvas.agentCopy.agent : null } } : {}) })) } : {}),
         ...(typeof waiting.deletes === 'number' && waiting.deletes > 0 ? { deletes: waiting.deletes } : {}) }
-      : null,
-    restoreRoom: room && room.refused === 'projects'
-      ? { refused: 'projects', deletes: typeof room.deletes === 'number' && room.deletes > 0 ? room.deletes : null,
-        heldTakesPlace: room.heldTakesPlace === true, ...(typeof room.waiting === 'number' ? { waiting: room.waiting } : {}) }
       : null,
     canvasHeldUnreadable: unreadable && typeof unreadable === 'object'
       && !(typeof unreadable.at === 'string' && dismissedHeldNotes.has(unreadable.at))
@@ -1753,7 +1730,7 @@ async function emptyTrashOf(ids: string[]): Promise<void> {
 // Projects waits while the Commons holds unsaved labels (lib/commonsUnsaved).
 export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectState>(holdProjects, (set, get) => ({
   screen: 'home', initialized: false, loading: true, busy: false,
-  projects: [], activeProject: null, trash: [], lastDeleted: null, projectLimit: DEFAULT_PROJECT_LIMIT, restorePassesLimit: false, catalogRestore: null, canvasNotFiled: null, canvasSaved: null, editsRecoveredAs: null, agentClosedNote: null, keptEdits: null, restoreRoom: null, canvasHeldUnreadable: null, workspaceRevision: '', error: null, errorDetails: null,
+  projects: [], activeProject: null, trash: [], lastDeleted: null, projectLimit: DEFAULT_PROJECT_LIMIT, catalogRestore: null, canvasNotFiled: null, canvasSaved: null, editsRecoveredAs: null, agentClosedNote: null, keptEdits: null, canvasHeldUnreadable: null, workspaceRevision: '', error: null, errorDetails: null,
   errorRetry: null, saveError: null, saveStatus: 'saved', dirty: false, switchNotice: null,
   unsavedEdits: null, editsSavedAs: null, savePaused: null, sizeNotice: null, sizePanelOpen: false,
   openSizePanel: () => { if (get().savePaused) set({ sizePanelOpen: true }); },
@@ -1931,25 +1908,10 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
         set((current) => ({ trash: current.trash.filter((entry) => entry.id !== id),
           lastDeleted: current.lastDeleted?.id === id ? null : current.lastDeleted }));
       }
-      // The list is at its project limit (the waiting canvas took the slot
-      // the delete freed, or it filled between the render and the click):
-      // GM r6's line, with the real name and limit, as the neutral toast,
-      // from Undo (in its place: no Undo left up to fail again) and from
-      // Recently deleted alike (GM r7: never the banner), taking the place
-      // of any toast up, so the line is never said twice and a press never
-      // goes unanswered. Nothing is lost: it stays in Recently deleted.
+      // A restore may pass the project limit (Justin, 2026-10-29: the
+      // waiting canvas may have taken the slot the delete freed), so the
+      // limit never refuses it; any other failure says so in the banner.
       void from;
-      const refused = restoreRefusal(error, id);
-      if (refused) {
-        const current = get();
-        const name = current.trash.find((entry) => entry.id === id)?.name
-          ?? (current.lastDeleted?.id === id ? current.lastDeleted.name : '');
-        set({ lastDeleted: { id, name, refused } });
-        // The list filled since it was shown (the race): list again, so
-        // Restore shows the limit (GM r7's disabled Restore) from now on.
-        void relistProjects();
-        return;
-      }
       showError(error, { action: 'restore', id });
     } finally { set({ busy: false }); }
   },
@@ -2245,7 +2207,7 @@ export const RESTORED_LIST_RELOAD = 'Nebula restored its project list. Reload pr
  * saved, beside [Save as a project] (it saves them under the "(recovered)"
  * name; its toast names the project). Closing the tab meanwhile gets the
  * unload warning (the edits are only here). */
-export const RESTORED_LIST_UNSAVED = "Nebula restored its project list before your latest edits were saved. They're kept in this tab.";
+export const RESTORED_LIST_UNSAVED = "Nebula restored its project list before your latest edits were saved. They’re kept in this tab.";
 /** The id of the last project an agent's write closed to keep the person's
  * canvas in it, as the last graphSync carried it (undefined: no sync yet),
  * and that project when a new one came since this tab last matched its

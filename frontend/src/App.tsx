@@ -276,8 +276,7 @@ export default function App() {
       canvasNotFiled={projects.canvasNotFiled} canvasSaved={projects.canvasSaved} onDismissCanvasSaved={projects.dismissCanvasSaved}
       editsRecoveredAs={projects.editsRecoveredAs} onDismissEditsRecovered={projects.dismissEditsRecovered}
       agentClosedNote={projects.agentClosedNote} onDismissAgentClosedNote={projects.dismissAgentClosedNote}
-      projectLimit={projects.projectLimit} restorePassesLimit={projects.restorePassesLimit}
-      restoreRoom={projects.restoreRoom} canvasHeldUnreadable={projects.canvasHeldUnreadable}
+      canvasHeldUnreadable={projects.canvasHeldUnreadable}
       onDismissCanvasHeldUnreadable={projects.dismissCanvasHeldUnreadable} />;
   } else if (isCanvas) {
     mainView = <Canvas />;

@@ -411,7 +411,8 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
           aria-label="Show node settings"
           onClick={handleInspectorButtonClick}
           onMouseDown={(e) => e.stopPropagation()}
-          title="Show node settings"
+          // GM r16 on PR #199, 4: disabled while the canvas is kept.
+          {...lock.keptOnly('settings', 'Show node settings')}
         >
           {inToolbar
             ? <><SlidersHorizontal size={17} aria-hidden="true" /><span className="selection-toolbar__label--compact">Settings</span></>

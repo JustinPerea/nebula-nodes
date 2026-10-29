@@ -303,10 +303,10 @@ def test_gm10_3_the_edit_reply_says_the_copy_waits(app, monkeypatch):
     saved = response.json()["savedCanvas"]
     assert saved["copyWaits"] == "projects"
     assert saved["message"] == ("Nebula saved the open canvas as its own project, “Recovered canvas”, and made your "
-                                "change on a copy of it. The copy isn't saved as a project yet because the project "
+                                "change on a copy of it. The copy isn’t saved as a project yet because the project "
                                 "limit is reached.")
     assert main_module.CANVAS_COPY_WAITS["storage"] == (
-        "The copy isn't saved as a project yet because Nebula's project list is full.")
+        "The copy isn’t saved as a project yet because Nebula’s project list is full.")
     # GM r11, 4: the waiting copy is the agent's in the listing, never the person's.
     listing = client.get("/api/projects", headers=PERSON).json()
     assert listing["canvasNotFiled"]["canvases"] == [{"name": None, "agentCopy": {"agent": "Codex"}, "deletes": 1}]

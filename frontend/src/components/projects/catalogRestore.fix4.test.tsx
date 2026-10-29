@@ -3,8 +3,8 @@
  * L-1): "Nothing in it is lost." in every limit and waiting form, never
  * "It stays open"; one outcome per line however many remain; 6px between
  * the lines; no ring on a focus target the page moves focus to (tabindex
- * -1), never focus moved on load; Undo refused past the limit says so in
- * the Undo toast's place.
+ * -1), never focus moved on load. (Undo refused past the limit is gone:
+ * a restore may pass the project limit, Justin 2026-10-29, fix round 12.)
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -12,16 +12,16 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { ProjectHome, type ProjectHomeProps, type ProjectSummary, type TrashedProject } from './ProjectHome';
 import {
-  canvasLimitLine, canvasWaitingLine, catalogRestoreNotice, restoreRefusedLine,
+  canvasLimitLine, canvasWaitingLine, catalogRestoreNotice,
 } from './catalogRestoreCopy';
 import type { CatalogRestore } from '../../lib/projects';
 
 vi.mock('../../lib/backend', () => ({ backendAssetUrlSync: (url: string) => `http://127.0.0.1:8060${url}` }));
 
 const NOW = Date.parse('2026-10-27T12:00:00Z');
-const OPEN = "Nebula's project list was damaged, so it restored the last good copy";
+const OPEN = "Nebula’s project list was damaged, so it restored the last good copy";
 const KEPT = 'The damaged file was kept.';
-const NOT_WHOLE = "Nebula couldn't read the whole damaged file, so changes made after that copy may be missing.";
+const NOT_WHOLE = "Nebula couldn’t read the whole damaged file, so changes made after that copy may be missing.";
 const HERO = 'h'.repeat(32);
 const DUNES = 'd'.repeat(32);
 const LOGO = 'l'.repeat(32);
@@ -49,20 +49,20 @@ const props = (overrides: Partial<ProjectHomeProps> = {}): ProjectHomeProps => (
 describe('GM r6: "Nothing in it is lost." in every limit and waiting form', () => {
   it('words the three restore limit forms', () => {
     expect(canvasLimitLine('projects', { projectLimit: 500, trashHasItems: false }))
-      .toBe("The canvas you had open couldn't be saved as its own project because you've reached the limit of 500 projects. Nothing in it is lost. Delete a project and Nebula will save it.");
+      .toBe("The canvas you had open couldn’t be saved as its own project because you’ve reached the limit of 500 projects. Nothing in it is lost. Delete a project and Nebula will save it.");
     expect(canvasLimitLine('storage', { projectLimit: 500, trashHasItems: true }))
-      .toBe("The canvas you had open couldn't be saved as its own project because Nebula's project list is full. Nothing in it is lost. Permanently delete a project in Recently deleted and Nebula will save it.");
+      .toBe("The canvas you had open couldn’t be saved as its own project because Nebula’s project list is full. Nothing in it is lost. Permanently delete a project in Recently deleted and Nebula will save it.");
     expect(canvasLimitLine('storage', { projectLimit: 500, trashHasItems: false }))
-      .toBe("The canvas you had open couldn't be saved as its own project because Nebula's project list is full. Nothing in it is lost. Delete a project, then remove it from Recently deleted too, and Nebula will save it.");
+      .toBe("The canvas you had open couldn’t be saved as its own project because Nebula’s project list is full. Nothing in it is lost. Delete a project, then remove it from Recently deleted too, and Nebula will save it.");
   });
 
   it('words the three waiting forms', () => {
     expect(canvasWaitingLine('projects', { projectLimit: 500, trashHasItems: true }))
-      .toBe("The canvas you had open isn't saved as a project yet because you've reached the limit of 500 projects. Nothing in it is lost. Delete a project and Nebula will save it.");
+      .toBe("The canvas you had open isn’t saved as a project yet because you’ve reached the limit of 500 projects. Nothing in it is lost. Delete a project and Nebula will save it.");
     expect(canvasWaitingLine('storage', { projectLimit: 500, trashHasItems: true }))
-      .toBe("The canvas you had open isn't saved as a project yet because Nebula's project list is full. Nothing in it is lost. Permanently delete a project in Recently deleted and Nebula will save it.");
+      .toBe("The canvas you had open isn’t saved as a project yet because Nebula’s project list is full. Nothing in it is lost. Permanently delete a project in Recently deleted and Nebula will save it.");
     expect(canvasWaitingLine('storage', { projectLimit: 500, trashHasItems: false }))
-      .toBe("The canvas you had open isn't saved as a project yet because Nebula's project list is full. Nothing in it is lost. Delete a project, then remove it from Recently deleted too, and Nebula will save it.");
+      .toBe("The canvas you had open isn’t saved as a project yet because Nebula’s project list is full. Nothing in it is lost. Delete a project, then remove it from Recently deleted too, and Nebula will save it.");
   });
 
   it('never says the canvas stays open, and has no Open canvas button', () => {
@@ -161,12 +161,7 @@ describe('GM r6 bug 4: a focus target the page moves focus to never shows a ring
   });
 });
 
-describe('GM r6 bug 3: Undo refused past the limit', () => {
-  it('words the refusal with the real name and limit', () => {
-    expect(restoreRefusedLine('Alpha', 500)).toBe("Couldn't restore “Alpha”. You've reached the limit of 500 projects.");
-    expect(restoreRefusedLine('Alpha', 3)).toBe("Couldn't restore “Alpha”. You've reached the limit of 3 projects.");
-  });
-
+describe('Undo of a delete may pass the project limit (Justin, 2026-10-29)', () => {
   it('says Undo asked when the toast\'s button restores', () => {
     const onRestore = vi.fn();
     render(<ProjectHome {...props({ lastDeleted: { id: ALPHA, name: 'Alpha' }, onRestore })} />);
@@ -174,12 +169,10 @@ describe('GM r6 bug 3: Undo refused past the limit', () => {
     expect(onRestore).toHaveBeenCalledWith(ALPHA, 'undo');
   });
 
-  it('replaces the Undo toast in its spot, with no Undo button', () => {
-    const line = restoreRefusedLine('Alpha', 3);
-    render(<ProjectHome {...props({ lastDeleted: { id: ALPHA, name: 'Alpha', refused: line } })} />);
-    expect(screen.getByText(line)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull();
-    expect(screen.queryByText(/Moved “Alpha” to Recently deleted/)).toBeNull();
-    expect(screen.getByText(line).closest('.project-home__toast')).toBeTruthy();
+  it('keeps the Undo toast whole: no refusal line takes its place', () => {
+    render(<ProjectHome {...props({ lastDeleted: { id: ALPHA, name: 'Alpha' } })} />);
+    expect(screen.getByText(/Moved “Alpha” to Recently deleted/).closest('.project-home__toast')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy();
+    expect(screen.queryByText(/Couldn’t restore/)).toBeNull();
   });
 });

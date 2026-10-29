@@ -493,20 +493,25 @@ def test_l3_a_crash_before_a_remake_lands_keeps_the_delete_that_did_land(tmp_pat
 # -- L-2: MCP gets the whole refusal ---------------------------------------------------
 
 
-def test_l2_mcp_restore_from_trash_says_the_413_the_limit_and_its_number(app, monkeypatch):
+def test_l2_mcp_restore_passes_the_limit_and_new_project_says_the_413_and_its_number(app, monkeypatch):
+    """Fix round 12 (Justin, 2026-10-29): an agent's restore_from_trash may
+    pass the limit; its new_project past it is still refused with the
+    existing line (and HTTP's 413 body names the limit)."""
     client, store, graph, state = app
     ids = _unfiled_at_the_limit(client, store, graph, state, monkeypatch, "e" * 32)
     client.get("/api/projects", headers=PERSON)
     client.request("DELETE", f"/api/projects/{ids[0]}", headers=PERSON, json={"workspaceRevision": _rev(client)})
     client.get("/api/projects", headers=PERSON)  # the waiting canvas takes the slot
-    http = client.post(f"/api/trash/project/{ids[0]}/restore", headers=AGENT)
-    assert http.status_code == 413
     monkeypatch.setattr(mcp_server, "_api", lambda: NebulaAPI("http://testserver", client=client))
+    asyncio.run(mcp_server.mcp.call_tool("restore_from_trash", {"kind": "project", "id": ids[0]}))
+    listing = client.get("/api/projects", headers=PERSON).json()
+    assert len(listing["projects"]) == 4 and ids[0] in [p["id"] for p in listing["projects"]]
     with pytest.raises(Exception) as raised:
-        asyncio.run(mcp_server.mcp.call_tool("restore_from_trash", {"kind": "project", "id": ids[0]}))
-    text = str(raised.value)
-    assert "413" in text and http.json()["detail"] in text
-    assert '"limit": "projects"' in text and '"projectLimit": 3' in text
+        asyncio.run(mcp_server.mcp.call_tool("new_project", {"name": "Fifth"}))
+    assert "Project limit reached" in str(raised.value)
+    assert len(client.get("/api/projects", headers=PERSON).json()["projects"]) == 4
+    http = client.post("/api/projects", headers=AGENT, json={"name": "Fifth", "workspaceRevision": _rev(client)})
+    assert http.status_code == 413 and http.json() == {"detail": "Project limit reached", "limit": "projects", "projectLimit": 3}
 
 
 # -- M-3: the waiting canvas is held aside --------------------------------------------

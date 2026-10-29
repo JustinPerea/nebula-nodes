@@ -524,40 +524,54 @@ def test_l3_a_damaged_side_file_is_ignored(tmp_path):
 
 
 # -- L-1 / GM bug 3: restoring past the project limit ----------------------------------
+# Justin, 2026-10-29 (fix round 12): Undo of a delete may go over the limit
+# when the recovered canvas took the freed slot. RESTORE_MAY_PASS_THE_PROJECT_LIMIT
+# is on, so this is the default path; no switch is flipped here.
 
 
-def test_l1_undo_after_the_canvas_took_the_slot_is_refused_with_the_limit_and_its_number(app, monkeypatch):
-    client, store, graph, state = app
+def _undo_past_the_limit(client, store, graph, state, monkeypatch) -> list[str]:
+    """At the limit (3) with the live canvas waiting: delete a project, the
+    canvas takes the freed slot, then Undo it. Returns the ids."""
     ids = _unfiled_at_the_limit(client, store, graph, state, monkeypatch, "e" * 32)
     listing = client.get("/api/projects", headers=PERSON).json()
     assert listing["projectLimit"] == 3
     client.request("DELETE", f"/api/projects/{ids[0]}", headers=PERSON, json={"workspaceRevision": _rev(client)})
     after = client.get("/api/projects", headers=PERSON).json()
     assert after["canvasSaved"]["name"] == "Recovered canvas"
-    undo = client.post(f"/api/projects/{ids[0]}/restore", headers=PERSON)
-    assert undo.status_code == 413
-    assert undo.json()["limit"] == "projects" and undo.json()["projectLimit"] == 3
-    again = client.get("/api/projects", headers=PERSON).json()
-    assert ids[0] in [entry["id"] for entry in again["trash"]]
-
-
-def test_l1_letting_a_restore_pass_the_limit_is_one_switch(app, monkeypatch):
-    """GM prefers that a restore may go over the limit (it applies to new
-    projects); Justin hasn't decided. Flipping the one switch lets it land,
-    later commits still work, and a new project is still refused."""
-    client, store, graph, state = app
-    ids = _unfiled_at_the_limit(client, store, graph, state, monkeypatch, "e" * 32)
-    client.get("/api/projects", headers=PERSON)
-    client.request("DELETE", f"/api/projects/{ids[0]}", headers=PERSON, json={"workspaceRevision": _rev(client)})
-    client.get("/api/projects", headers=PERSON)
-    monkeypatch.setattr(store_module, "RESTORE_MAY_PASS_THE_PROJECT_LIMIT", True)
+    assert len(after["projects"]) == 3
     undo = client.post(f"/api/projects/{ids[0]}/restore", headers=PERSON)
     assert undo.status_code == 200, undo.text
+    return ids
+
+
+def test_l1_undo_after_the_canvas_took_the_slot_passes_the_limit(app, monkeypatch):
+    assert store_module.RESTORE_MAY_PASS_THE_PROJECT_LIMIT is True
+    client, store, graph, state = app
+    ids = _undo_past_the_limit(client, store, graph, state, monkeypatch)
     listing = client.get("/api/projects", headers=PERSON).json()
     assert len(listing["projects"]) == 4
+    assert ids[0] in [project["id"] for project in listing["projects"]]
+    assert ids[0] not in [entry["id"] for entry in listing["trash"]]
+    # The listing no longer carries a restore verdict.
+    assert "restoreRoom" not in listing and "restoreMayPassTheProjectLimit" not in listing
     _add_text(client, "after the restore")  # the open project still saves
+    # It survives a restart: the list past the limit reads back.
+    _restart(monkeypatch, state, store)
+    assert len(client.get("/api/projects", headers=PERSON).json()["projects"]) == 4
+
+
+def test_l1_over_the_limit_after_undo_the_next_create_is_refused_with_the_limit_line(app, monkeypatch):
+    """Over the limit after such an Undo is like any other list over it: a
+    new project is still refused (413, the existing limit body), nothing
+    changes."""
+    client, store, graph, state = app
+    _undo_past_the_limit(client, store, graph, state, monkeypatch)
+    before = client.get("/api/projects", headers=PERSON).json()
     created = client.post("/api/projects", json={"name": "New", "workspaceRevision": _rev(client)}, headers=PERSON)
     assert created.status_code == 413
+    assert created.json() == {"detail": "Project limit reached", "limit": "projects", "projectLimit": 3}
+    after = client.get("/api/projects", headers=PERSON).json()
+    assert [project["id"] for project in after["projects"]] == [project["id"] for project in before["projects"]]
 
 
 # -- nits: the waiting record, start_here, in-place rewrites ---------------------------

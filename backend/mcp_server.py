@@ -18,7 +18,7 @@ import anyio.lowlevel
 import anyio.to_thread
 import httpx  # noqa: F401 - tests patch httpx.request through this module
 from commons.client_paths import asset_path
-from nebula_api import (NebulaAPI, NebulaAPIError, dropped_mid_request, error_detail, never_reached, next_backoff,
+from nebula_api import (AGENT_REFUSAL_CODES, NebulaAPI, NebulaAPIError, dropped_mid_request, error_detail, never_reached, next_backoff,
                         offline_read_only, unanswered, with_identity)
 from services.file_access import require_allowed_path
 from services.canvas_proposals import READY_NODES_MCP, WITHDRAW_MCP, agent_wording
@@ -300,8 +300,9 @@ def _canvas_waiting_said() -> Iterator[None]:
     except NebulaAPIError as exc:
         payload = exc.payload if isinstance(exc.payload, dict) else {}
         code = payload.get("code")
-        # canvas_held_full: the canvas is too big to keep aside (review 7, L-3).
-        if code not in ("canvas_waiting", "canvas_held_full") or code in exc.detail:
+        # canvas_held_full: the canvas is too big to keep aside (review 7, L-3);
+        # canvas_kept_in_tab: the person's tab keeps unsaved edits (GM r16).
+        if code not in AGENT_REFUSAL_CODES or code in exc.detail:
             raise
         raise NebulaAPIError(f"{exc.detail} ({exc.status}, {code})", status=exc.status, kind=exc.kind,
                              headers=exc.headers, payload=exc.payload) from exc
@@ -405,7 +406,10 @@ def start_here(ctx: Context | None = None) -> str:
     canvas (an edit, a removal, a run, a clear, load_graph_file) is refused
     with "(409, canvas_waiting)", so open a project to work in; tell them what
     `note` says frees room, or, with `roomNow`, that the next listing saves
-    it; don't free it yourself):
+    it; don't free it yourself; and while the person's tab keeps edits
+    Nebula couldn't save after a restore, every change, run and project
+    switch is refused with "(409, canvas_kept_in_tab)": tell them, and try
+    again after they click Save as a project):
     - `canvas`: the project, `view.stale` (no browser watching), the
       selection, other agents' cursors, and the nodes (id, name,
       definitionId, state, onScreen, inputsFrom, up to 8 params cut to 60
@@ -1405,9 +1409,9 @@ def list_projects(ctx: Context | None = None) -> dict[str, Any]:
     yet because the project limit is reached, so it can't be changed. …").
     Below the limit a change holds it aside first and works, on a canvas
     with no project that is never saved (open or make a project to keep
-    your work). `restoreRoom` ({refused, deletes, heldTakesPlace}) says a
-    restore from Recently deleted is refused now and how many deletes free
-    a place for it; `canvasHeldUnreadable` that a held canvas couldn't be read. `roomNow`
+    your work). A restore from Recently deleted is never refused by the
+    project limit (it may pass it); `canvasHeldUnreadable` says a held
+    canvas couldn't be read. `roomNow`
     true means room is free and the next listing saves them; `projectLimit` (top level) is the list's limit; `note` says what frees it
     for that limit (the project limit: a move to Recently deleted; the size
     limit: only a delete for good). Don't free it for them. `canvasSaved`
@@ -1807,11 +1811,9 @@ def restore_from_trash(kind: str, id: str, ctx: Context | None = None) -> dict[s
     It comes back with the same id and contents, so a Moodboard or Character
     node that points at it runs again. A project comes back closed. Any
     agent may restore; only the person can delete for good. A project
-    restore into a list at its project limit is refused (413, limit
-    "projects", projectLimit) and changes nothing: it stays in Recently
-    deleted until the person frees room. That refusal reaches you whole:
-    "<detail> (413, {"limit": "projects", "projectLimit": N})", as HTTP
-    answers it."""
+    restore may pass the project limit (the limit applies to new projects);
+    after one, new_project is still refused at the limit (413, limit
+    "projects", projectLimit), as HTTP answers it."""
     from urllib.parse import quote
 
     try:

@@ -7,7 +7,7 @@ from urllib.parse import quote
 
 import httpx
 
-from nebula_api import NebulaAPI, NebulaAPIError, never_reached, offline_read_only
+from nebula_api import AGENT_REFUSAL_CODES, NebulaAPI, NebulaAPIError, never_reached, offline_read_only
 from services.agent_params import internal_keys, internal_refusal
 
 
@@ -55,10 +55,11 @@ class NebulaClient:
         else:
             message = exc.detail
             payload = exc.payload if isinstance(exc.payload, dict) else {}
-            if payload.get("code") in ("canvas_waiting", "canvas_held_full"):
+            if payload.get("code") in AGENT_REFUSAL_CODES:
                 # The canvas waits to be saved as a project and the list is at
-                # its limit (review 5 of PR #199, M-3), or it is too big to
-                # keep aside (review 7, L-3): the code, for scripts.
+                # its limit (review 5 of PR #199, M-3), it is too big to keep
+                # aside (review 7, L-3), or the person's tab keeps edits after
+                # a restore (GM r16): the code, for scripts.
                 message = f"{message} ({payload['code']})"
         print(f"error: {message}", file=sys.stderr)
         sys.exit(1)

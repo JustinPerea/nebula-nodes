@@ -26,16 +26,16 @@ describe('GM r12, 2: each waiting line its own count, the person first', () => {
   it("the person's line counts what it needs, the copy's line the total", () => {
     expect(canvasWaitingLine('projects', { ...LIMIT, deletes: 2,
       canvases: [{ name: null, deletes: 1 }, { name: null, agentCopy: { agent: 'Codex' }, deletes: 2 }] }))
-      .toBe("The canvas you had open isn't saved as a project yet because you've reached the limit of 4 projects. "
+      .toBe("The canvas you had open isn’t saved as a project yet because you’ve reached the limit of 4 projects. "
         + 'Nothing in it is lost. Delete a project and Nebula will save it. '
-        + "Codex’s copy of your canvas isn't saved as a project yet because you've reached the limit of 4 projects. "
+        + "Codex’s copy of your canvas isn’t saved as a project yet because you’ve reached the limit of 4 projects. "
         + 'Nothing in it is lost. Delete 2 projects and Nebula will save it.');
   });
 
   it('a copy alone waiting counts what it needs', () => {
     expect(canvasWaitingLine('projects', { ...LIMIT, deletes: 1,
       canvases: [{ name: null, agentCopy: { agent: null }, deletes: 1 }] }))
-      .toBe("An agent’s copy of your canvas isn't saved as a project yet because you've reached the limit of 4 projects. "
+      .toBe("An agent’s copy of your canvas isn’t saved as a project yet because you’ve reached the limit of 4 projects. "
         + 'Nothing in it is lost. Delete a project and Nebula will save it.');
   });
 
@@ -43,17 +43,17 @@ describe('GM r12, 2: each waiting line its own count, the person first', () => {
     render(<ProjectHome {...base} canvasNotFiled={{ reason: 'projects', projectLimit: 4, deletes: 2,
       canvases: [{ name: null, deletes: 1 }, { name: null, agentCopy: { agent: 'Codex' }, deletes: 2 }] }} />);
     expect(screen.getByText(/Codex’s copy of your canvas .* Delete 2 projects and Nebula will save it\.$/)).toBeTruthy();
-    expect(screen.getByText(/^The canvas you had open isn't saved .* Delete a project and Nebula will save it\. Codex’s/)).toBeTruthy();
+    expect(screen.getByText(/^The canvas you had open isn’t saved .* Delete a project and Nebula will save it\. Codex’s/)).toBeTruthy();
   });
 });
 
 describe('GM r13, 2: the copy at the size cap', () => {
   it('"Nothing in it is lost." then the singular size advice, by whether Recently deleted has items', () => {
     expect(agentCopyWaitingLine('Codex', 'storage', { projectLimit: 500, trashHasItems: true }))
-      .toBe("Codex’s copy of your canvas isn't saved as a project yet because Nebula's project list is full. "
+      .toBe("Codex’s copy of your canvas isn’t saved as a project yet because Nebula’s project list is full. "
         + 'Nothing in it is lost. Permanently delete a project in Recently deleted and Nebula will save it.');
     expect(agentCopyWaitingLine('Codex', 'storage', { projectLimit: 500, trashHasItems: false }))
-      .toBe("Codex’s copy of your canvas isn't saved as a project yet because Nebula's project list is full. "
+      .toBe("Codex’s copy of your canvas isn’t saved as a project yet because Nebula’s project list is full. "
         + 'Nothing in it is lost. Delete a project, then remove it from Recently deleted too, and Nebula will save it.');
   });
 });
@@ -61,9 +61,9 @@ describe('GM r13, 2: the copy at the size cap', () => {
 describe('GM r12, 3: the saved copy over the save limit', () => {
   it('verbatim, named or not', () => {
     expect(agentCopySavedLine('Codex', 'X copy', true))
-      .toBe("Codex’s changes were saved as their own project, “X copy”. It's over the save limit, so new changes to it won't save until it's smaller.");
+      .toBe("Codex’s changes were saved as their own project, “X copy”. It’s over the save limit, so new changes to it won’t save until it’s smaller.");
     expect(agentCopySavedLine(null, 'X copy', true))
-      .toBe("An agent’s changes were saved as their own project, “X copy”. It's over the save limit, so new changes to it won't save until it's smaller.");
+      .toBe("An agent’s changes were saved as their own project, “X copy”. It’s over the save limit, so new changes to it won’t save until it’s smaller.");
   });
 });
 
@@ -71,7 +71,7 @@ describe('GM r12, 1: [Save as a project] after a restore stopped this tab’s ed
   it('the whole line, and the button runs the save', () => {
     const onRetry = vi.fn();
     render(<ProjectHome {...base} error={RESTORED_LIST_UNSAVED} retry="save" onRetry={onRetry} />);
-    expect(screen.getByText("Nebula restored its project list before your latest edits were saved. They're kept in this tab.")).toBeTruthy();
+    expect(screen.getByText("Nebula restored its project list before your latest edits were saved. They’re kept in this tab.")).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: SAVE_AS_A_PROJECT }));
     expect(onRetry).toHaveBeenCalledTimes(1);

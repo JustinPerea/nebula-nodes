@@ -174,7 +174,7 @@ describe("a followed tab when the agent's next write closes the person's project
     const state = useProjectStore.getState();
     expect(state).toMatchObject({ screen: 'workspace', error: null, keptEdits: { sourceId: 'po' } });
     expect(keptEditsLine(state.keptEdits!)).toBe("An agent made its changes on a copy of “Recovered canvas”. "
-      + "“Recovered canvas” is kept as it was. Your latest edits weren't saved yet. They're kept in this tab.");
+      + "“Recovered canvas” is kept as it was. Your latest edits weren’t saved yet. They’re kept in this tab.");
   });
 
   it('a sync that carries the same closed project again changes nothing', async () => {
@@ -199,7 +199,7 @@ describe('GM r12, 1: the edits a restore stopped, kept in the tab, with [Save as
   it("GM's line, verbatim, kept where the person is (GM r15, Q11); closing the tab gets the unload warning", async () => {
     await stoppedByARestore();
     const state = useProjectStore.getState();
-    expect(RESTORED_LIST_UNSAVED).toBe("Nebula restored its project list before your latest edits were saved. They're kept in this tab.");
+    expect(RESTORED_LIST_UNSAVED).toBe("Nebula restored its project list before your latest edits were saved. They’re kept in this tab.");
     expect(state).toMatchObject({ screen: 'workspace', dirty: true, error: null });
     expect(keptEditsLine(state.keptEdits!)).toBe(RESTORED_LIST_UNSAVED);
     const unload = new Event('beforeunload', { cancelable: true });

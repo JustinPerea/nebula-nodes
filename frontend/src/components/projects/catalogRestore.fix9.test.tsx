@@ -51,7 +51,7 @@ describe('GM r10: in the order they were saved', () => {
       .toBe('Other canvases you had open were saved as their own projects, “A” and “B”.');
     const four = [{ name: 'R' }, { name: 'R 2' }, { name: 'R 3', overSaveLimit: true }, { name: 'R 4' }];
     expect(canvasSavedToast('R 4', four, false, true)).toBe('4 other canvases you had open were saved as their own projects. '
-      + "One of them is over the save limit, so new changes to it won't save until it's smaller.");
+      + "One of them is over the save limit, so new changes to it won’t save until it’s smaller.");
   });
 });
 
@@ -72,14 +72,14 @@ describe("GM r11, 4: the agent's copy is the agent's", () => {
 
   it('waiting at the project limit, verbatim', () => {
     expect(agentCopyWaitingLine('Codex', 'projects', { projectLimit: 500, trashHasItems: false })).toBe(
-      "Codex’s copy of your canvas isn't saved as a project yet because you've reached the limit of 500 projects. Nothing in it is lost. Delete a project and Nebula will save it.");
+      "Codex’s copy of your canvas isn’t saved as a project yet because you’ve reached the limit of 500 projects. Nothing in it is lost. Delete a project and Nebula will save it.");
   });
 
   it('waiting at the size cap, with the size advice by Recently deleted', () => {
     expect(agentCopyWaitingLine('Codex', 'storage', { projectLimit: 500, trashHasItems: true })).toBe(
-      "Codex’s copy of your canvas isn't saved as a project yet because Nebula's project list is full. Nothing in it is lost. Permanently delete a project in Recently deleted and Nebula will save it.");
+      "Codex’s copy of your canvas isn’t saved as a project yet because Nebula’s project list is full. Nothing in it is lost. Permanently delete a project in Recently deleted and Nebula will save it.");
     expect(agentCopyWaitingLine(null, 'storage', { projectLimit: 500, trashHasItems: false })).toBe(
-      "An agent’s copy of your canvas isn't saved as a project yet because Nebula's project list is full. Nothing in it is lost. Delete a project, then remove it from Recently deleted too, and Nebula will save it.");
+      "An agent’s copy of your canvas isn’t saved as a project yet because Nebula’s project list is full. Nothing in it is lost. Delete a project, then remove it from Recently deleted too, and Nebula will save it.");
   });
 
   it("the waiting line never calls the copy the person's", () => {
@@ -89,8 +89,8 @@ describe("GM r11, 4: the agent's copy is the agent's", () => {
     expect(line).toMatch(/^Codex’s copy of your canvas/);
     const both = canvasWaitingLine('projects', { projectLimit: 500, trashHasItems: false,
       canvases: [{ name: 'Delta' }, { name: null, agentCopy: { agent: 'Codex' } }] });
-    expect(both).toBe("The canvas you had open isn't saved as a project yet because you've reached the limit of 500 projects. Nothing in it is lost. Delete a project and Nebula will save it. "
-      + "Codex’s copy of your canvas isn't saved as a project yet because you've reached the limit of 500 projects. Nothing in it is lost. Delete a project and Nebula will save it.");
+    expect(both).toBe("The canvas you had open isn’t saved as a project yet because you’ve reached the limit of 500 projects. Nothing in it is lost. Delete a project and Nebula will save it. "
+      + "Codex’s copy of your canvas isn’t saved as a project yet because you’ve reached the limit of 500 projects. Nothing in it is lost. Delete a project and Nebula will save it.");
   });
 
   it('the toast follows the same split', () => {
@@ -111,6 +111,6 @@ describe("GM r11, 4: the agent's copy is the agent's", () => {
   it('rendered: the copy waiting on home', () => {
     render(<ProjectHome {...base} canvasNotFiled={{ reason: 'projects', projectLimit: 500,
       canvases: [{ name: null, agentCopy: { agent: 'Codex' } }] }} />);
-    expect(screen.getByText(/^Codex’s copy of your canvas isn't saved as a project yet/)).toBeTruthy();
+    expect(screen.getByText(/^Codex’s copy of your canvas isn’t saved as a project yet/)).toBeTruthy();
   });
 });
