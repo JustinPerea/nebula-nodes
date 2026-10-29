@@ -218,7 +218,7 @@ describe('H2 (GM r9 decision 2): another change is merged in, never overwritten'
     typeIn('s2', 'person edits s2');
     await sleep(80);
     expect(h.puts.at(-1)).toEqual(['s1:mine', 's2:person edits s2', 's3:agent shot']);
-    expect(said).toEqual(["Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again."]);
+    expect(said).toEqual(["Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula is trying again."]);
   });
 
   it('5c (control): with nothing kept, the same agent edit is simply shown', async () => {

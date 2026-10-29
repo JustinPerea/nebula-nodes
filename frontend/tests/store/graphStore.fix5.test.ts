@@ -325,13 +325,13 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     expect(unsaved()).toBeNull();
   });
 
-  it('a server error: kept, "Nebula will try again.", and it does', async () => {
+  it('a server error: kept, "Nebula is trying again." (GM r29 Q1), and it does', async () => {
     const h = harness({ first: () => json({ detail: 'boom' }, 500), later: () => json({ ok: true }) });
     typeIn('s1', 'retry me');
     await sleep(20);
     h.release();
     await sleep(40);
-    expect(said).toEqual(["Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again."]);
+    expect(said).toEqual(["Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula is trying again."]);
     expect(brief()[0]).toBe('s1:retry me');
     await sleep(200);
     expect(h.puts).toEqual([['s1:retry me', 's2:b'], ['s1:retry me', 's2:b']]);
@@ -413,7 +413,8 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     expect(copy.sceneTooBigToSaveLine('Opening')).toBe(TOO_BIG_LINE);
     expect(copy.sceneCantSaveLine('Opening')).toBe(CANT_LINE);
     expect(copy.KEPT_UNTIL_RUN_ENDS).toBe("They’re kept and will save when the run finishes.");
-    expect(copy.KEPT_AND_RETRYING).toBe("They’re kept and Nebula will try again.");
+    expect(copy.KEPT_AND_TRYING).toBe('They’re kept, and Nebula is trying again.');
+    expect(copy.sceneRetryingLine(['Opening'])).toBe('Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula is trying again.');
   });
 
   it('a kept removal never goes out after a run paid for that shot\'s image', async () => {

@@ -372,7 +372,7 @@ describe('review 17 LOW-1: the person’s own delete of a stopped scene', () => 
     h.codexElsewhere();
     await vi.waitFor(() => expect(toast()?.text).toBe('Codex changed the canvas.'), { timeout: 3000, interval: 5 });
     release();
-    const RETRYING = 'Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again.';
+    const RETRYING = 'Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula is trying again.';
     await vi.waitFor(() => expect(messageSlot()?.text).toBe(RETRYING), { timeout: 3000, interval: 5 });
     useGraphStore.getState().deleteNode('n1');
     await vi.waitFor(() => expect(toast()?.text).toBe('Deleted the node.'), { timeout: 3000, interval: 5 });
@@ -391,24 +391,27 @@ describe('review 17 LOW-1: the person’s own delete of a stopped scene', () => 
   });
 });
 
-describe('review 17 LOW-3 (GM r28 answer 1, c): Undo brings a stopped scene back stopped', () => {
-  it.each<Cause>([400, 413])('%s: back stopped, with its line and [Try again]; nothing is sent until the person acts', async (cause) => {
+// GM r29 call 3 (round 20) changed this describe: Undo saves first; only a
+// save that still fails comes back stopped (graphStore.fix20 pins it closely).
+describe('review 17 LOW-3 (GM r28 answer 1, r29 call 3): Undo saves first; still failing, the scene comes back stopped', () => {
+  it.each<Cause>([400, 413])('%s again: one save at once, refused; back stopped with its line and [Try again]; nothing more until the person acts', async (cause) => {
     const h = backend({ n1: 'Opening' });
     await stopBy(h, 'n1', cause);
     useGraphStore.getState().deleteNode('n1');
     await vi.waitFor(() => expect(toast()?.text).toBe('Deleted the node.'), { timeout: 3000, interval: 5 });
     const puts = h.putsOf('n1').length;
+    h.refuse('n1', cause);
     useGraphStore.getState().undo();
     await vi.waitFor(() => expect(sceneBrief('n1')[0]).toBe('s1:mine n1'), { timeout: 3000, interval: 5 });
-    await vi.waitFor(() => expect(toast()?.text).toBe('Restored the node.'), { timeout: 3000, interval: 5 });
-    expect(stopped()).toEqual({ n1: true });
+    await vi.waitFor(() => expect(stopped()).toEqual({ n1: true }), { timeout: 3000, interval: 5 });
+    expect(h.putsOf('n1').length).toBe(puts + 1);
     expect(stopLines()).toEqual([lineFor(cause, 'Opening')]);
     expect(unsaved('n1')).toBe(lineFor(cause, 'Opening'));
     expect(store.hasUnsavedSceneEdits()).toBe(true);
-    // Codex writing elsewhere, a reconnect, time: nothing goes by itself.
+    // Codex writing elsewhere, time: nothing goes by itself.
     h.codexElsewhere();
     await sleep(QUIET * 4);
-    expect(h.putsOf('n1').length).toBe(puts);
+    expect(h.putsOf('n1').length).toBe(puts + 1);
     expect(stopLines()).toEqual([lineFor(cause, 'Opening')]);
     expect(h.brief('n1')[0]).toBe('s1:a');
     // [Try again] sends it.
@@ -418,7 +421,7 @@ describe('review 17 LOW-3 (GM r28 answer 1, c): Undo brings a stopped scene back
     expect(stopLines()).toEqual([]);
   });
 
-  it('a server failure that goes on: back stopped, and the cycle isn’t restarted (one quiet try at most)', async () => {
+  it('a server failure that goes on: one save at once, failed; back stopped; the cycle isn’t restarted', async () => {
     const h = backend({ n1: 'Opening' });
     await stopBy(h, 'n1', 'server');
     useGraphStore.getState().deleteNode('n1');
@@ -426,16 +429,16 @@ describe('review 17 LOW-3 (GM r28 answer 1, c): Undo brings a stopped scene back
     const puts = h.putsOf('n1').length;
     useGraphStore.getState().undo();
     await vi.waitFor(() => expect(sceneBrief('n1')[0]).toBe('s1:mine n1'), { timeout: 3000, interval: 5 });
-    expect(stopped()).toEqual({ n1: true });
+    await vi.waitFor(() => expect(stopped()).toEqual({ n1: true }), { timeout: 3000, interval: 5 });
     expect(stopLines()).toEqual([SERVER('“Opening”')]);
     expect(unsaved('n1')).toBe(SERVER('“Opening”'));
     await sleep(QUIET * 5);
-    expect(h.putsOf('n1').length).toBeLessThanOrEqual(puts + 1);
+    expect(h.putsOf('n1').length).toBe(puts + 1);
     expect(stopped()).toEqual({ n1: true });
     expect(stopLines()).toEqual([SERVER('“Opening”')]);
   });
 
-  it('the server is back by then: back stopped with its line; the quiet try then saves, and the line goes', async () => {
+  it('the server is back by then: the save goes at once and lands; no line', async () => {
     const h = backend({ n1: 'Opening' });
     await stopBy(h, 'n1', 'server');
     useGraphStore.getState().deleteNode('n1');
@@ -443,12 +446,10 @@ describe('review 17 LOW-3 (GM r28 answer 1, c): Undo brings a stopped scene back
     h.fail('n1', 0);
     const saidBefore = [...said];
     useGraphStore.getState().undo();
-    await vi.waitFor(() => expect(sceneBrief('n1')[0]).toBe('s1:mine n1'), { timeout: 3000, interval: 5 });
-    expect(stopped()).toEqual({ n1: true });
-    expect(stopLines()).toEqual([SERVER('“Opening”')]);
+    await vi.waitFor(() => expect(h.brief('n1')[0]).toBe('s1:mine n1'), { timeout: 3000, interval: 5 });
     await vi.waitFor(() => expect(unsaved('n1')).toBeNull(), { timeout: 3000, interval: 5 });
+    expect(stopped()).toEqual({});
     expect(stopLines()).toEqual([]);
-    expect(h.brief('n1')[0]).toBe('s1:mine n1');
     expect(said.slice(saidBefore.length).filter((line) => /save/i.test(line))).toEqual([]);
   });
 

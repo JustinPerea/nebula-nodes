@@ -29,7 +29,8 @@ export function CinemaSceneNode({ id, data, selected }: NodeProps) {
   // Edits on screen that the backend didn't take (GM, PR #198 r6 item 1):
   // the line that said why, kept as the mark's title.
   const unsaved = useGraphStore((s) => s.unsavedScenes[id] ?? null);
-  const stopped = useGraphStore((s) => s.stoppedScenes[id] === true);
+  // A [Try again] on its way keeps the mark's popover and its button (GM r29 call 2).
+  const stopped = useGraphStore((s) => s.stoppedScenes[id] === true || id in s.sceneTries);
   const { params, keyStatus } = data as CinemaSceneNodeData;
   // Read through a guard (PR #198 review 3, L4): a scene whose data is
   // damaged still draws its card.

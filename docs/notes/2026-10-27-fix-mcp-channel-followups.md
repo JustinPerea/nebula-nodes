@@ -1041,3 +1041,62 @@ Four of this round's ring shots are byte-identical to round 10 shots of the same
   - deleted13, clashback, undoclash, moved, undodel, ownundo, redoclash and clash400b: 35/35.
   - dissolve, onlyprompt, stopline, clashquiet, askedquiet, owntoasts, undidcodex, ownundoclear and wireout: 22/22.
   - Shots `fix19-*` at 1280 and 1440, 24 files, all distinct: merged-line, merged-partial, two-causes, event-under-state-slot, own-delete-stopped-{server,400,413}, undo-back-stopped-{server,400,413}, codex-match-shrinks, owndel-nothing-left.
+
+## Fix round 20 (GM's pr198 r29, PR #198 review 18)
+
+- **GM r29 call 3: Undo saves first.** `restoreSceneStopped` is gone. `restoreDeletedScenes` calls `restoreSceneSavingFirst` for a scene deleted while stopped that comes back still different from Nebula's. It puts the scene back with its "Unsaved" mark (the line it had, from `DeletedSceneStop.line`) and sends one save at once through the one-try path (`clashAnswerStop`).
+  - If it saves, the mark goes and no stop line shows at any store update.
+  - If it fails (a server error, 400 or 413), `settleSceneAnswer` puts it straight back to stopped, with its line and [Try again]. Nothing more goes by itself: no timed retries and no quiet try.
+  - This replaces round 19's "back stopped, then a quiet try saves it", which showed the stop line for about 2.2 s before clearing it (review 18's GM note 2).
+- **GM r29 call 2: [Try again] while its try runs.** `retrySceneSave` puts the scene in a new store map, `sceneTries` (scene → the stop it is trying out of), before it un-stops it, so no store update lacks the line. `noteSceneTry` takes it out when the try ends: it saved, it stopped again, a clash came, the scene was edited (`persistSceneParam`), or the scene left.
+  - `sceneStopLines` keeps a trying scene in its line (`trying: true`), and the mark stays a button with its popover.
+  - Both [Try again] buttons, in the state slot and in the popover, are `aria-disabled` while the try runs, with the label unchanged. A press does nothing, and `retrySceneSave` also returns early for a scene in `sceneTries`.
+  - Why `aria-disabled` and not `disabled`: a focused button that turns disabled drops focus to the page, which is review 18 LOW-1 (a). The canvas toolbar uses `aria-disabled` for the same reason.
+  - It also ends round 19's flicker, where the line left and came back during a try.
+- **GM r29 call 7: reading order with a row tolerance.** `readingOrder` sorts by top, then x. A node joins the current row when its top is within `READING_ROW_SHARE` (0.25) of the row's first node's height below that node's top; each row then reads left to right.
+  - For an unmeasured card that is 55 px (`UNMEASURED_NODE_SIZE.height` 220). Live, the scene cards measure 278 and 314 px, so about 70 to 79 px.
+  - Why a quarter: two cards a few pixels apart read as one row, while a card a third of its height lower already reads as the next row. Review 18 suggested half, which would merge cards that look stacked.
+- **Review 18 LOW-1: focus on a stop line never drops to the page** (`useStopLineFocus` in `SceneStopLines.tsx`). It acts only when focus went with the line (on the body, or gone), never when the person moved elsewhere.
+  - (a) A try that fails the same way keeps the same element, so focus never moves (the line stays mounted, and the button is `aria-disabled`). A try that comes back under another cause (400 then 413) lands in a new line, and focus goes to that line's [Try again].
+  - (b) A focused line that goes for good (the stop cleared by itself, or every scene saved) follows the notice stack's × rule (ProjectHome `useNoticeStackFocus`, GM pr200 r16 #2):
+    - first, the stop line now in its place, else the one before, as the notice itself (stop lines now have `tabindex -1`), never its [Try again], so a second Enter can't act;
+    - with no stop line left, the next notice below in the region, else the one above, onto its ×, or onto the notice itself when it takes focus (the clash prompt);
+    - otherwise the canvas (`.canvas-wrapper`).
+    - Focus moves by a plain `focus()`, so the ring follows the input (GM r17).
+- **Review 18 NIT-1.** Two fix20 tests pin `dropRetryingLine` in `stopSceneSave` (the timed retries run out) and in `stopSceneForGood` (a retry refused 400). Removing either call fails its test.
+- **Review 18 NIT-2 / GM r29 Q1.** The retrying event line is now "Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula is trying again." It is in the present tense because Nebula is retrying now, while the stopped line keeps "…will try again with your next change."
+  - It is built in one place, `sceneRetryingLine(scenes)`, with the shared `quotedNames`, and is used by the refusal, `dropSceneLines` and `dropRetryingLine`.
+  - `KEPT_AND_RETRYING` became `KEPT_AND_TRYING`. The named-line ratchet lists the new template in place of `${heading} ${KEPT_AND_RETRYING}`.
+- **Review 18 NIT-3.** The harness `owndel` seed now includes `sceneStopLines`.
+- **Docs.** MCP-SETUP covers save-first Undo, the disabled [Try again] while it runs, the reading order with its row tolerance, and the retrying line.
+- **Tests.**
+  - New: `graphStore.fix20` (13) and `pr198Fix20Ui` (9).
+  - 21 of the 22 fail on 8c970400. The one that passes is the guard "focus the person moved elsewhere stays there".
+  - The NIT-1 pair fails there only because the wording changed; the two mutations above pin them.
+  - Tests changed because behaviour changed:
+    - fix19's LOW-3 describe now expects save first: one save at once, and back stopped only while saving still fails.
+    - The retrying line's new wording is in fix5 (and its constant check), fix6, fix7, fix8, fix12, fix19 and pr198Fix6Ui.
+    - The named-line ratchet has the new template.
+- **Gates.**
+  - tsc -b and `npm run lint` are clean.
+  - Full vitest: 602 files, 7,830 tests passed.
+  - Full backend: 12,061 passed, 71 skipped.
+  - vite build plus `check-build-budget.mjs`: 425,736 bytes raw (budget 512,000), 128,774 gzip; `dist` deleted.
+- **Live** (`fix20_live.mjs`, from fix19's).
+  - Setup: ports 8797/5797, 0 blocked attempts after the canary in every run, no paid runs. `fix20_server.py` adds `hold-put-X`, which holds the tab's save to X until the flag goes.
+  - Round 20 sections, 28/28:
+    - `undoback` for server, 400 and 413 (one save at once; no stop line at any store update or in the page);
+    - `owndelstop` for each cause (still failing: one save, back stopped, the line never leaves);
+    - `trydisabled` (the state slot and the popover, a held try, two more presses send nothing). Its line check reads the lines with the open popover set aside; the popover's own opens and closes are logged apart (GM r28 leaves its scene out of the line while it is open);
+    - `focus20` (LOW-1 a and b, rings by keyboard and none by mouse);
+    - `nearlevel`.
+  - Regressions:
+    - merged, twocauses, codexmatch and owndel: 11/11;
+    - m1, unknown, deleted, escape and stack: 20/20;
+    - m1double, toobig and bad400: 17/17;
+    - deleted13 through clash400b: 35/35;
+    - dissolve through wireout: 22/22.
+  - Two runs before the split broke in `stack` with the known "Promise was collected" harness flake. That is why m1double, toobig and bad400 now run as a batch of their own.
+  - Shots: 128 `fix20-*`/`fix20r-*` files.
+    - One md5 pair matches: `focus-try-again-held-keyboard` and `-back-keyboard` at 1280. That is expected, since nothing visible changes between the held try and its return (same line, same focused button). Their 1440 versions differ.
+- **For GM.** The notice actions have no disabled look, so [Try again] while its try runs looks like a live button. The clash prompt's buttons share this. The label stays as GM asked; whether it should dim is GM's call.

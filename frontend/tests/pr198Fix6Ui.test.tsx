@@ -71,7 +71,7 @@ describe('GM r8: the follow lock and the run lock in one toolbar', () => {
 
 describe('GM r9: "Unsaved" under the scene card\'s header', () => {
   it('a small label under the header, its tooltip the toast\'s sentence', () => {
-    const line = "Couldn't save your changes to “Opening”. They're kept and Nebula will try again.";
+    const line = 'Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula is trying again.';
     useGraphStore.setState({ unsavedScenes: { n4: line } } as never);
     const props = { id: 'n4', selected: false, type: 'cinemaSceneNode', dragging: false, zIndex: 0, isConnectable: true,
       positionAbsoluteX: 0, positionAbsoluteY: 0, selectable: true, deletable: true, draggable: true,

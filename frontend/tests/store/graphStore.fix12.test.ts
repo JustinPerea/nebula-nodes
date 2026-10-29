@@ -194,7 +194,7 @@ const setPrompt = (shots: Shot[], id: string, prompt: string) => shots.map((s) =
 const S3 = [{ id: 's1', prompt: 'a' }, { id: 's2', prompt: 'b' }, { id: 's3', prompt: 'c' }];
 
 const STOPPED = 'Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula will try again with your next change.';
-const RETRYING = 'Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again.';
+const RETRYING = 'Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula is trying again.';
 const QUIET = 80;
 const stopped = () => useGraphStore.getState().stoppedScenes;
 const clashes = () => useGraphStore.getState().sceneClashes;

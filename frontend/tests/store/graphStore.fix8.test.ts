@@ -294,7 +294,7 @@ describe('M1 (GM r10): while a clash waits, nothing retries and no retry line sh
     h.failNext(100);
     typeIn('s1', 'mine');
     await sleep(20);
-    expect(said).toEqual(["Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again."]);
+    expect(said).toEqual(["Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula is trying again."]);
     useGraphStore.setState({ undoNotice: { id: 99, text: said[0], offer: null } } as never);
     h.other((shots) => setPrompt(shots, 's1', "codex's s1"));
     await sleep(10);
@@ -318,7 +318,7 @@ describe('M1 (GM r10): while a clash waits, nothing retries and no retry line sh
     h.failNext(1);
     useGraphStore.getState().resolveSceneClash('n1', 'mine');
     await sleep(15);
-    expect(said).toEqual(["Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again."]);
+    expect(said).toEqual(["Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula is trying again."]);
     await sleep(80);
     expect(h.backendBrief()).toEqual(['s1:mine', 's2:b']);
     expect(unsaved()).toBeNull();

@@ -3754,10 +3754,17 @@ unsaved (Use Codex’s on the only changed field), when the stop and the
 the person's value into the clashing field): that counts as their answer,
 with the same two outcomes. Other scenes keep saving.
 
+While a server error's timed retries run, the scene says an event line,
+"Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula
+is trying again."; it goes when the save lands, stops or the scene leaves
+the canvas, so it never sits under the stop line below.
+
 A stopped save's line is a state, not an event: the canvas shows the stop
 lines in their own place above its toasts, one line per cause, and no toast
 pushes one out. Scenes stopped for the same cause share one line, named up
-to three, then counted: "Nebula can’t save your changes to “Opening” and
+to three in reading order on the canvas (top to bottom, then left to right;
+cards whose tops are within a quarter of the row's first card height read
+as one row), then counted: "Nebula can’t save your changes to “Opening” and
 “Ref scene”." (400); "Nebula couldn’t save your changes to “Opening” and
 “Ref scene”. They’re kept, and Nebula will try again with your next
 change." (a server error that went on past the retries); "“Opening” and
@@ -3766,6 +3773,9 @@ again." (413; from four, "4 scenes are too big to save. …"). One scene
 keeps its own line, and "…kept changing…" stays one line per scene. The
 line's Try again tries every scene it names once: those that save leave
 the line, those that fail stay in it, and no new round of retries starts.
+While those tries run, the line stays and Try again (there and in the
+"Unsaved" mark's popover) is disabled, its label unchanged, so a second
+press sends nothing.
 A scene leaves its line whenever its stop clears: it saved, or your write
 made it match the person's values (then the stop, the line and the
 "Unsaved" mark go together, and nothing is said or sent).
@@ -3785,11 +3795,11 @@ lines. The person's own toasts ("Deleted the node.", "Restored the node.",
 nothing unsaved (the card is Nebula's scene again), the stop and the
 "Unsaved" mark go. When the person deletes a stopped scene, "Deleted the
 node." with Undo is the only line. Undo (theirs, or any that puts the scene
-back) brings it back as it was: stopped, with its line and Try again,
-whatever the cause. Nothing is sent then and the retries don't start
-again; after a server error the one quiet try still goes on the next sign
-that saving works (the restore landing is one), and after a 400 or 413
-nothing goes until the person acts. A scene that comes back matching the
+back) brings it back with its "Unsaved" mark and sends one save at once.
+If it saves, the mark goes and no stop line ever shows. If it fails,
+whatever the cause, the scene is stopped again, with its line and Try
+again, and nothing more goes until the person acts (no new round of
+retries). A scene that comes back matching the
 person's values has no stop at all. While the person has a scene's
 "Unsaved" popover open, that scene leaves the stop line (its line is in
 the popover) and is back in it when the popover closes. The Agent log's

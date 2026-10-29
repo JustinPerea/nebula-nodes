@@ -32,11 +32,17 @@ export function sceneTooBigToSaveLine(scene: string): string {
  * GM r7, reworded r9): "…They're kept and will save when the run finishes." */
 export const KEPT_UNTIL_RUN_ENDS = "They’re kept and will save when the run finishes.";
 
-/** A server error, with the automatic retry the canvas makes (GM r9,
- * verbatim): "Couldn't save your changes to “Opening”. They're kept and
- * Nebula will try again."
+/** A server error, with the automatic retry the canvas makes (GM r9; GM r29
+ * Q1: the subject and the comma, and the present tense, since Nebula is
+ * doing it now): "Nebula couldn’t save your changes to “Opening”. They’re
+ * kept, and Nebula is trying again." Several scenes take the shared name
+ * list (up to 3 by name, from 4 a count).
  * After SCENE_SERVER_RETRIES timed tries the timer stops: KEPT_UNTIL_NEXT_CHANGE. */
-export const KEPT_AND_RETRYING = "They’re kept and Nebula will try again.";
+export const KEPT_AND_TRYING = 'They’re kept, and Nebula is trying again.';
+export function sceneRetryingLine(scenes: readonly string[]): string {
+  const names = quotedNames(scenes, 'scenes');
+  return `Nebula couldn’t save your changes to ${names}. ${KEPT_AND_TRYING}`;
+}
 
 /** The timed retries stopped (GM r11 answer 3; r28: the subject and the
  * comma): "Nebula couldn’t save your changes to “Opening”. They’re kept, and

@@ -188,7 +188,7 @@ describe('GM r9 decision 2: a clash with another window waits for the person', (
     await sleep(20);
     h.release();
     await sleep(60);
-    expect(unsaved()).toBe("Couldn’t save your changes to “Opening”. They’re kept and Nebula will try again.");
+    expect(unsaved()).toBe("Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula is trying again.");
     h.answerLater(() => json({ ok: true }));
     // The person's other tab (review 11, L-1: "another window" only then).
     syncs({ ...backendGraph({ id: 's1', prompt: 'from another window' }),
