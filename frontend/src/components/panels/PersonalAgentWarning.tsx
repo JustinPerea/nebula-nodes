@@ -30,7 +30,7 @@ export function PersonalAgentWarning({ agentName, onAccept, onCancel }: {
     } catch (exc) {
       const line = failureMessage(exc, "Couldn't save your answer.");
       setError(line);
-      clearSetterOnPromote(exc, setError, line, null); // GM, #204 r3
+      clearSetterOnPromote(exc, setError, line, null); // clears-on-promote: settings.agent-warning (GM, #204 r3)
       setBusy(false);
     }
   };

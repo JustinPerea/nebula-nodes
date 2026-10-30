@@ -138,7 +138,7 @@ export function PersonalAgentsSection() {
         setError(line);
         // GM, #204 r3: refused only because this tab isn't connected as you:
         // on the promote the line goes and the list loads.
-        if (isPersonRefusal(exc)) clearsOnPromote(() => { setError((now) => (now === line ? null : now)); setAttempt((n) => n + 1); });
+        if (isPersonRefusal(exc)) clearsOnPromote(() => { setError((now) => (now === line ? null : now)); setAttempt((n) => n + 1); }); // clears-on-promote: settings.agents-load
       });
   }, []);
 
@@ -162,7 +162,7 @@ export function PersonalAgentsSection() {
     } catch (exc) {
       const line = failureMessage(exc, "Couldn't update your agents.");
       setError(line);
-      clearSetterOnPromote(exc, setError, line, null); // GM, #204 r3
+      clearSetterOnPromote(exc, setError, line, null); // clears-on-promote: settings.agents (GM, #204 r3)
     } finally {
       setBusy(false);
     }

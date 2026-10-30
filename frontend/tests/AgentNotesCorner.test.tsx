@@ -138,7 +138,8 @@ describe('the list (GM\'s still)', () => {
     fireEvent.click(chip());
     const list = screen.getByRole('dialog', { name: 'Updates' });
     expect(api.markAgentNotesRead).toHaveBeenCalledWith({ kind: 'canvas' }, 'an_3');
-    expect(within(list).getByText('3 · all read')).toBeTruthy();
+    // GM, #204 r3 item 1: "all read" once the server has read them, not before.
+    expect(await within(list).findByText('3 · all read')).toBeTruthy();
     expect(within(list).getByText('kept with this project')).toBeTruthy();
     // The chip's count is a muted 0 while the list is open.
     expect(chip().querySelector('.agent-notes-chip__count')!.textContent).toBe('0');
@@ -216,7 +217,7 @@ describe('the list (GM\'s still)', () => {
     expect(screen.queryByRole('dialog', { name: 'Updates' })).toBeNull();
   });
 
-  it('takes a new update on top while open, marks it read and drops no card', () => {
+  it('takes a new update on top while open, marks it read and drops no card', async () => {
     render(<AppAgentNotes />);
     sync([note('an_1')]);
     fireEvent.click(chip());
@@ -224,7 +225,7 @@ describe('the list (GM\'s still)', () => {
     added(note('an_2'), 1);
     const list = screen.getByRole('dialog', { name: 'Updates' });
     expect(within(list).getAllByRole('listitem')[0].querySelector('.agent-notes-entry__text')!.textContent).toBe('update an_2');
-    expect(within(list).getByText('2 · 1 new')).toBeTruthy();
+    expect(await within(list).findByText('2 · 1 new')).toBeTruthy();
     expect(api.markAgentNotesRead).toHaveBeenCalledWith({ kind: 'canvas' }, 'an_2');
     expect(document.querySelector('.agent-note-card')).toBeNull();
     // "1 new" is this list's own state: it clears when the list closes.

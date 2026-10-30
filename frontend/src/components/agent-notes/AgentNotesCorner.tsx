@@ -33,6 +33,7 @@ import { AuthorDot, type AgentNotesAdapter } from './AgentNoteParts';
 import { UPDATES_SLOT_EVENT } from './UpdatesSlot';
 import type { RosterNext } from './agentRosterModel';
 import { answerableQuestions, heldAsks, needsYouCount, openViews } from './agentNeedsYou';
+import { holdsAskIn } from './heldLock';
 import { LeaveBusyContext } from './leaveBusy';
 import { askBeforeLeavingCommons } from '../../lib/commonsUnsaved';
 import { unreadRingColor } from '../../lib/unreadRing';
@@ -65,7 +66,7 @@ function useNeedsYouCount(projectId: string | null, enabled: boolean): number {
     canvasProposals: openViews(canvasProposals),
     assetProposals: openViews(assetProposals),
     // GM, 2026-10-29: what this tab knows only from Updates counts too, so a promote changes nothing here.
-    held: heldAsks(notes ?? [], (id) => Boolean(sets[id]?.answerKey) || id in canvasProposals || id in assetProposals),
+    held: heldAsks(notes ?? [], holdsAskIn(sets, canvasProposals, assetProposals)),
   }) : 0), [enabled, projectId, sets, canvasProposals, assetProposals, notes]);
 }
 
@@ -667,7 +668,7 @@ export function AgentNotesCorner({ sections, agents = null }: {
     const line = failureMessage(failure, "Couldn't update the note.");
     useAgentNotesStore.setState({ error: line });
     // GM, #204 r3: refused only because this tab isn't connected as you: gone on the promote.
-    clearLineOnPromote(failure, () => useAgentNotesStore.getState().error, line,
+    clearLineOnPromote(failure, () => useAgentNotesStore.getState().error, line, // clears-on-promote: notes.corner
       () => useAgentNotesStore.setState({ error: null }));
     if (!openRef.current) openListRef.current();
   }
@@ -923,6 +924,7 @@ export function AgentNotesCorner({ sections, agents = null }: {
           listRef={listRef}
           sections={sections}
           newCount={newCount}
+          unread={unread}
           now={now}
           error={error}
           onClose={closeList}

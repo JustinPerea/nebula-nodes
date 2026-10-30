@@ -78,6 +78,24 @@ export function personRequiredCopy(desktop: boolean = inDesktopShell(),
   return reason === 'debug-port' || reason === 'dev-renderer' ? PERSON_REQUIRED_DEV_COPY : PERSON_REQUIRED_APP_COPY;
 }
 
+/** GM, PR #204 round 3 ruling item 3 (2026-10-30), verbatim for a tab: the line when
+ * opening the Updates couldn't mark them read because this tab isn't the person's. No
+ * "then try again": the promote retries it (lib/clearsOnPromote retryOnPromote). The
+ * desktop app's two forms follow personSession's banners for a window. */
+// One sentence pair each, written whole (a reason, not a heading joined to one).
+export const MARK_READ_REFUSED_COPY =
+  'Nebula couldn’t mark the updates as read because this tab isn’t connected as you. Open the link Nebula printed when it started.';
+export const MARK_READ_REFUSED_APP_COPY =
+  'Nebula couldn’t mark the updates as read because this window isn’t connected as you. Quit Nebula and open it again.';
+export const MARK_READ_REFUSED_DEV_COPY =
+  'Nebula couldn’t mark the updates as read because this window isn’t connected as you. The notice below says why.';
+
+export function markReadRefusedCopy(desktop: boolean = inDesktopShell(),
+  reason: string = personUnavailableReason()): string {
+  if (!desktop) return MARK_READ_REFUSED_COPY;
+  return reason === 'debug-port' || reason === 'dev-renderer' ? MARK_READ_REFUSED_DEV_COPY : MARK_READ_REFUSED_APP_COPY;
+}
+
 const isPersonRequiredCopy = (line: string) =>
   line === PERSON_REQUIRED_COPY || line === PERSON_REQUIRED_APP_COPY || line === PERSON_REQUIRED_DEV_COPY;
 
@@ -335,13 +353,17 @@ export class FailureNotice extends Error {
   /** A whole written line that reads on its own (writtenLine): failureCopy
    * puts no heading over it, whatever heading the catch passes. */
   readonly standalone: boolean;
+  /** The refusal's `code` when the line came from one (`person_required`: clearsOnPromote
+   * reads it, so a line refused only for this tab goes on the promote; PR #204 round 4). */
+  readonly code: string | null;
 
-  constructor(heading: string, reason: string, options: { standalone?: boolean } = {}) {
+  constructor(heading: string, reason: string, options: { standalone?: boolean; code?: string | null } = {}) {
     super(oneLine({ heading, reason }));
     this.name = 'FailureNotice';
     this.heading = heading;
     this.reason = reason;
     this.standalone = options.standalone === true;
+    this.code = options.code ?? null;
   }
 }
 

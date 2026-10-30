@@ -27,7 +27,7 @@ vi.mock('../src/lib/projects', async (importOriginal) => ({
 
 const { clearLineOnPromote, clearsOnPromote, pendingPromoteClears } = await import('../src/lib/clearsOnPromote');
 const { notePersonPromoted } = await import('../src/lib/personSession');
-const { PERSON_REQUIRED_CODE, PERSON_REQUIRED_COPY, RequestFailedError } = await import('../src/lib/errorCopy');
+const { PERSON_REQUIRED_CODE, PERSON_REQUIRED_COPY, MARK_READ_REFUSED_COPY, RequestFailedError } = await import('../src/lib/errorCopy');
 const { useAgentNotesStore } = await import('../src/store/agentNotesStore');
 const { useGraphStore } = await import('../src/store/graphStore');
 const { useSettingsDraftStore } = await import('../src/store/settingsDraftStore');
@@ -83,7 +83,8 @@ describe('the surfaces', () => {
   it('the Updates list: "Couldn\'t mark the updates as read…" (refused, not connected) goes on the promote', async () => {
     notesApi.markAgentNotesRead.mockRejectedValue(refused("Couldn't mark the updates as read."));
     await useAgentNotesStore.getState().markRead(surface);
-    expect(useAgentNotesStore.getState().error).toContain(PERSON_REQUIRED_COPY);
+    // GM, #204 r3 item 3: its own line, no "then try again" (the promote retries it).
+    expect(useAgentNotesStore.getState().error).toBe(MARK_READ_REFUSED_COPY);
     notePersonPromoted();
     expect(useAgentNotesStore.getState().error).toBeNull();
   });

@@ -570,7 +570,7 @@ function showError(error: unknown, retry: ProjectRetry | null = null): void {
     errorRetry: refusedForGood(error) ? null : retry });
   // GM, #204 r3: refused only because this tab isn't connected as the person
   // (a cover pin, Delete for good): the line and its Try again go on the promote.
-  clearLineOnPromote(error, () => useProjectStore.getState().error, line,
+  clearLineOnPromote(error, () => useProjectStore.getState().error, line, // clears-on-promote: project.error
     () => useProjectStore.setState({ error: null, errorDetails: null, errorRetry: null }));
 }
 /** What counts as unsaved work when the tab stops for a params version: run
@@ -1889,8 +1889,13 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
         // notice's "See what's large" goes with the panel (review).
         if (wasPaused) resumePending = true;
         const notice = get().sizeNotice;
-        set({ dirty: true, saveStatus: 'error', saveError: failureMessage(error, "Couldn't save the project."),
+        const saveLine = failureMessage(error, "Couldn't save the project.");
+        set({ dirty: true, saveStatus: 'error', saveError: saveLine,
           ...(state.savePaused ? { savePaused: null, sizePanelOpen: false, ...(notice?.action ? { sizeNotice: null } : {}) } : {}) });
+        // PR #204 round 4 (review 2 MEDIUM): a save the gate refused for this tab only (a held tab
+        // switching a provider or Krea billing, main._refuse_agent_billing_change): its reason goes
+        // on the promote; "Save failed · Retry" stays, and its Retry works then.
+        clearLineOnPromote(error, () => get().saveError, saveLine, () => set({ saveError: null })); // clears-on-promote: project.save
         showError(error, { action: 'save' });
         throw error;
       } finally { inFlight = null; }

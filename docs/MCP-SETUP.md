@@ -2434,9 +2434,20 @@ same target, that ask's). Plus, for a cover, `cover`: `"automatic"` or
 reference out of the inbox. Because one Update stands for all your open asks
 on that target, it also carries `asks` (how many of your proposals on that
 target are open and share it, 1 to 3: your open-proposal cap) and
-`firstSince` (when the oldest of them was made, ms). Both change in place
-(op `changed`) as your asks there open and close: a new ask, one of them
-closing, an undo reopening one.
+`firstSince` (when the oldest of them was made, ms). A new ask posts a new
+Update with them (op `added`, and the one it replaces `removed`); one of them
+closing or an undo reopening one changes them in place (op `changed`).
+You see `asks` and `firstSince` only on your own Updates: another agent's
+`list_notes`, `nebula notes`, `GET /api/canvas/agent-notes` and a board's
+`GET /api/moodboards/{id}/agent-notes` (and the socket's Updates messages) get its Updates without them, as before they existed, and
+so does a caller that names no agent. The person's tabs see them: a tab
+connected as the person, and a held tab, which says it is a tab with the
+`X-Nebula-Tab` header (`?tab=1` on its socket) and carries no agent marker.
+A tab claim never beats a marker: a request with both is read as that
+agent. The claim proves nothing, so a program on this machine that sends it
+without a marker sees those two counts; that is the same local, unsandboxed
+case `person_gate.py` describes, and it reaches nothing else (it is not the
+person and passes no gate).
 A tab that isn't connected as the person sees only the Update, and its
 placeholder card and the Commons proposals line read these, never the text;
 its Agents panel counts `asks` proposals from `firstSince`, as the connected

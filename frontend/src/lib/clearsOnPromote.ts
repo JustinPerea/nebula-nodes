@@ -61,6 +61,25 @@ export function pendingPromoteClears(): number {
   return sweeps.size;
 }
 
+const retries = new Map<string, Clear>();
+
+/**
+ * GM, PR #204 round 4 (item 1): a write the gate refused only because of this tab, done
+ * again once on the promote, silently (its line has cleared; a retry that fails again
+ * says nothing new). `key` keeps one retry per thing: a later refusal of the same write
+ * replaces the earlier one. Only for a person refusal; returns whether it registered.
+ */
+export function retryOnPromote(error: unknown, key: string, run: Clear): boolean {
+  if (!isPersonRefusal(error)) return false;
+  retries.set(key, run);
+  return true;
+}
+
+/** How many writes wait for the promote to retry (tests). */
+export function pendingPromoteRetries(): number {
+  return retries.size;
+}
+
 function sweep(): void {
   const all = [...sweeps];
   sweeps.clear();
@@ -69,6 +88,16 @@ function sweep(): void {
       clear();
     } catch (error) {
       console.error('[person] a line that clears on promote failed to clear:', error);
+    }
+  }
+  // After the lines: a retry that fails again must not find its old line still there.
+  const again = [...retries.values()];
+  retries.clear();
+  for (const run of again) {
+    try {
+      run();
+    } catch (error) {
+      console.error('[person] a write retried on promote failed to start:', error);
     }
   }
 }

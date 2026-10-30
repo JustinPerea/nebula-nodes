@@ -138,7 +138,7 @@ export const useAssetStudioDraftStore = create<AssetStudioDraftState>((set, get)
       saveError: message, retry, retryStep: retry === 'save' ? null : options.step ?? null });
   },
   clearOnPromote: (key, error, failure) => {
-    clearLineOnPromote(error, () => get().entries[resolveAssetStudioDraftKey(get(), key)]?.saveError, failure, () => {
+    clearLineOnPromote(error, () => get().entries[resolveAssetStudioDraftKey(get(), key)]?.saveError, failure, () => { // clears-on-promote: studio.draft
       const entry = get().entries[resolveAssetStudioDraftKey(get(), key)];
       if (!entry) return;
       get().patch(key, { saveError: null, retryStep: null,

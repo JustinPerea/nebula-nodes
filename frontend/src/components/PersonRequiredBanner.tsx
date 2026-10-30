@@ -30,7 +30,7 @@ export function PersonRequiredBanner() {
       const line = personRequiredMessage();
       setPersonBannerLine(line);
       stopSweep();
-      stopSweep = clearsOnPromote(() => { if (currentPersonBannerLine() === line) setPersonBannerLine(null); });
+      stopSweep = clearsOnPromote(() => { if (currentPersonBannerLine() === line) setPersonBannerLine(null); }); // clears-on-promote: banner
     });
     // No banner on screen, nothing for the dialog to defer to.
     return () => { stopRequired(); stopSweep(); setPersonBannerLine(null); };

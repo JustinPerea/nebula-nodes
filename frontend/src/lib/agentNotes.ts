@@ -1,4 +1,5 @@
 import { apiRequest } from './apiRequest';
+import { TAB_HEADER, TAB_ID } from './tabId';
 
 /**
  * Updates: what an agent or the board reader noticed, saved with the project
@@ -281,7 +282,9 @@ function base(surface: AgentNotesSurface): string {
 }
 
 export async function fetchAgentNotes(surface: AgentNotesSurface): Promise<AgentNotesListing> {
-  const response = await apiRequest("Couldn't load the updates.", base(surface));
+  // This tab says it is a tab (X-Nebula-Tab, which agents never send), so a shared Update keeps
+  // what it stands for here even before the tab is connected as the person (PR #204 round 4).
+  const response = await apiRequest("Couldn't load the updates.", base(surface), { headers: { [TAB_HEADER]: TAB_ID } });
   return (await response.json()) as AgentNotesListing;
 }
 

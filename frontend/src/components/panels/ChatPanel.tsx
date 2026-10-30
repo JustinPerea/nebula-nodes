@@ -689,7 +689,7 @@ export function ChatPanel() {
     } catch (err) {
       const line = failureMessage(err, "Couldn't start the ChatGPT sign-in.");
       setCodexLoginError(line);
-      clearSetterOnPromote(err, setCodexLoginError, line, null); // GM, #204 r3
+      clearSetterOnPromote(err, setCodexLoginError, line, null); // clears-on-promote: chat.codex-login (GM, #204 r3)
     } finally {
       setCodexLoginBusy(false);
     }
@@ -720,7 +720,7 @@ export function ChatPanel() {
         if (cancelled) return;
         const line = failureMessage(err, "Couldn't check the ChatGPT sign-in.");
         setCodexLoginError(line);
-        clearSetterOnPromote(err, setCodexLoginError, line, null); // GM, #204 r3
+        clearSetterOnPromote(err, setCodexLoginError, line, null); // clears-on-promote: chat.codex-login-check (GM, #204 r3)
         retryTimer = window.setTimeout(poll, 2500);
       }
     };
@@ -1231,7 +1231,7 @@ export function ChatPanel() {
             const personRequired = event.code === PERSON_REQUIRED_CODE;
             if (personRequired) {
               reportPersonRequired();
-              clearsOnPromote(() => setMessages((prev) => withoutPersonGateLines(prev)));
+              clearsOnPromote(() => setMessages((prev) => withoutPersonGateLines(prev))); // clears-on-promote: chat.transcript
             }
             // The personal agent stopped (crash, idle timeout, closed): the next send starts a new one.
             if (event.code === 'personal_session_ended') setSessionId(null);
@@ -1558,7 +1558,7 @@ export function ChatPanel() {
           const refused = await requestError(CLEAR_CANVAS, response);
           const line = failureMessage(refused, CLEAR_CANVAS);
           setNotice(line);
-          clearSetterOnPromote(refused, setNotice, line, null); // GM, #204 r3
+          clearSetterOnPromote(refused, setNotice, line, null); // clears-on-promote: chat.clear-canvas (GM, #204 r3)
         },
       });
       said(outcome === 'cleared' ? CHAT_CLEARED_CANVAS
@@ -1585,7 +1585,7 @@ export function ChatPanel() {
       const line = oneLine(failureCopy(error));
       setNotice(line);
       reportPersonRequired();
-      clearsOnPromote(() => setNotice((now) => (now === line ? null : now)));
+      clearsOnPromote(() => setNotice((now) => (now === line ? null : now))); // clears-on-promote: chat.session
       return;
     }
     finally { authorityPendingRef.current = false; if (commonsEnabled) setAuthorizing(false); }

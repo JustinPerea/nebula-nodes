@@ -130,3 +130,20 @@ describe('Krea connection contract', () => {
     }
   });
 });
+
+describe('PR #204 round 4: a person-only refusal keeps its code', () => {
+  beforeEach(() => apiFetchMock.mockReset());
+
+  it('a Krea connect, check or disconnect the gate refused carries person_required, so its line clears on the promote', async () => {
+    const { isPersonRefusal } = await import('../../src/lib/clearsOnPromote');
+    for (const call of [connectKrea, checkKreaConnection, disconnectKrea]) {
+      apiFetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Only the person can do this.', code: 'person_required' }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } }));
+      const error = await call().catch((value: unknown) => value);
+      expect(error).toBeInstanceOf(FailureNotice);
+      expect(isPersonRefusal(error)).toBe(true);
+    }
+    apiFetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'nope' }), { status: 500 }));
+    expect(isPersonRefusal(await connectKrea().catch((value: unknown) => value))).toBe(false);
+  });
+});

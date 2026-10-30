@@ -101,7 +101,8 @@
   .cinema-shot-panel__reset,
   .cinema-reference-upload__retry,
   .cinema-upload__remove,
-  .agent-roster__row
+  .agent-roster__row,
+  .agent-notes-btn--held
 ):is(:disabled, [aria-disabled='true']:not([data-held-pending])),
 :is(
   .selection-toolbar__button,
@@ -129,7 +130,8 @@
   .cinema-shot-panel__reset,
   .cinema-reference-upload__retry,
   .cinema-upload__remove,
-  .agent-roster__row
+  .agent-roster__row,
+  .agent-notes-btn--held
 ):is(:disabled, [aria-disabled='true']:not([data-held-pending])):hover {
   background: transparent !important;
   border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.12)) !important;

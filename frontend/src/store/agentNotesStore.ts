@@ -12,8 +12,8 @@ import {
   type AgentNotesEvent,
   type AgentNotesSurface,
 } from '../lib/agentNotes';
-import { failureMessage } from '../lib/errorCopy';
-import { clearLineOnPromote } from '../lib/clearsOnPromote';
+import { failureMessage, markReadRefusedCopy } from '../lib/errorCopy';
+import { clearLineOnPromote, isPersonRefusal, retryOnPromote } from '../lib/clearsOnPromote';
 
 /**
  * Updates for every surface, keyed `canvas:<projectId>` and `board:<boardId>`.
@@ -112,22 +112,42 @@ function initialState() {
   };
 }
 
-/** Send a read and take the server's count back; on failure, reload the list. */
+/**
+ * Send a read; the Updates read only when the server says so (GM, #204 r3 item 1: the
+ * header says "all read" for real or not at all), from its `ids` and count. On failure
+ * nothing was read, so nothing changes but the line. A refusal only because this tab
+ * isn't the person's: GM's line, gone on the promote, which retries the read once,
+ * silently (`retry` false then: a second refusal adds no line).
+ */
 async function sendRead(
   surface: AgentNotesSurface,
   key: string,
-  send: () => Promise<{ unread: number }>,
+  send: () => Promise<{ ids?: string[]; unread: number }>,
+  /** What it reads (`upTo:<id>`, `ids:<id,…>`): one retry per read on the promote. */
+  what: string,
+  retry = true,
 ): Promise<void> {
   const { getState, setState } = useAgentNotesStore;
   try {
     const result = await send();
-    if (keyFor(getState(), surface) !== key || typeof result.unread !== 'number') return;
-    setState((state) => ({ lists: withList(state.lists, key, (list) => ({ ...list, unread: result.unread })) }));
+    if (keyFor(getState(), surface) !== key) return;
+    const read = new Set(Array.isArray(result.ids) ? result.ids : []);
+    const at = new Date().toISOString();
+    setState((state) => ({
+      lists: withList(state.lists, key, (list) => {
+        const notes = list.notes.map((n) => (read.has(n.id) && !n.readAt ? { ...n, readAt: at } : n));
+        return { ...list, notes, unread: typeof result.unread === 'number' ? result.unread : countUnread(notes) };
+      }),
+    }));
   } catch (error) {
-    const line = failureMessage(error, "Couldn't mark the notes read.");
+    if (!retry) return;
+    const line = isPersonRefusal(error) ? markReadRefusedCopy() : failureMessage(error, "Couldn't mark the notes read.");
     setState({ error: line });
     // Refused only because this tab isn't connected as the person: gone on the promote (GM, #204 r3).
-    clearLineOnPromote(error, () => getState().error, line, () => setState({ error: null }));
+    clearLineOnPromote(error, () => getState().error, line, () => setState({ error: null })); // clears-on-promote: notes.read
+    retryOnPromote(error, `agentNotes.read:${key}:${what}`, () => { // clears-on-promote: notes.read-retry
+      if (keyFor(getState(), surface) === key) void sendRead(surface, key, send, what, false);
+    });
     // (A board's list is read again by the corner when this error shows.)
     if (surface.kind === 'canvas') void getState().hydrateCanvas();
   }
@@ -228,33 +248,17 @@ export const useAgentNotesStore = create<AgentNotesState>((set, get) => ({
 
   markRead: async (surface, upTo) => {
     const key = keyFor(get(), surface);
-    const now = new Date().toISOString();
-    set((state) => ({
-      arrivals: state.arrivals.filter((a) => a.key !== key),
-      lists: withList(state.lists, key, (list) => {
-        // Newest first: everything from `upTo` down is read.
-        const start = upTo ? list.notes.findIndex((n) => n.id === upTo) : 0;
-        if (start < 0) return list;
-        const notes = list.notes.map((n, index) => (index >= start && !n.readAt ? { ...n, readAt: now } : n));
-        return { ...list, notes, unread: countUnread(notes) };
-      }),
-    }));
-    await sendRead(surface, key, () => markAgentNotesRead(surface, upTo));
+    // The cards go (the list is open); the Updates read when the server says (sendRead).
+    set((state) => ({ arrivals: state.arrivals.filter((a) => a.key !== key) }));
+    await sendRead(surface, key, () => markAgentNotesRead(surface, upTo), `upTo:${upTo ?? ''}`);
   },
 
   markReadIds: async (surface, ids) => {
     if (ids.length === 0) return;
     const key = keyFor(get(), surface);
     const wanted = new Set(ids);
-    const now = new Date().toISOString();
-    set((state) => ({
-      arrivals: state.arrivals.filter((a) => !wanted.has(a.id)),
-      lists: withList(state.lists, key, (list) => {
-        const notes = list.notes.map((n) => (wanted.has(n.id) && !n.readAt ? { ...n, readAt: now } : n));
-        return { ...list, notes, unread: countUnread(notes) };
-      }),
-    }));
-    await sendRead(surface, key, () => markAgentNotesRead(surface, undefined, ids));
+    set((state) => ({ arrivals: state.arrivals.filter((a) => !wanted.has(a.id)) }));
+    await sendRead(surface, key, () => markAgentNotesRead(surface, undefined, ids), `ids:${ids.join(',')}`);
   },
 
   dismiss: async (surface, id) => {
@@ -273,7 +277,7 @@ export const useAgentNotesStore = create<AgentNotesState>((set, get) => ({
       await dismissAgentNote(surface, id);
     } catch (error) {
       const line = failureMessage(error, "Couldn't dismiss the note.");
-      clearLineOnPromote(error, () => get().error, line, () => set({ error: null }));
+      clearLineOnPromote(error, () => get().error, line, () => set({ error: null })); // clears-on-promote: notes.dismiss
       set((state) => ({
         error: line,
         lists: withList(state.lists, key, (list) => {

@@ -811,7 +811,8 @@ class AgentNotes:
 
     # -- a proposal's Update (Justin's Q92 a, Q112 a) -----------------------------
     def post_proposal(self, *, author: Mapping[str, Any], text: str,
-                      proposal: Mapping[str, Any], project_id: str | None = None) -> dict[str, Any]:
+                      proposal: Mapping[str, Any], project_id: str | None = None,
+                      share: Callable[[], Mapping[str, Any]] | None = None) -> dict[str, Any]:
         """The Update a proposal posts on the open project's list (or
         ``project_id``'s, the project a canvas proposal was made in): written
         by Nebula from names only (``source: "nebula"``), attributed to the
@@ -823,7 +824,11 @@ class AgentNotes:
         ``removed``), so a re-proposal replaces it instead of stacking. A
         canvas proposal's replaces only the same agent's canvas Updates it
         withdrew itself (``_same_ask``); every other one stays (Q112 a:
-        "every one")."""
+        "every one").
+
+        ``share`` (PR #204 round 4): what a shared asset Update stands for,
+        read inside the write as ``retarget_proposal`` does, so an ask closed
+        while this one posts isn't counted."""
         clean_author = _clean_author(author)
         ref = {"id": str(proposal["id"])[:64], "kind": str(proposal["kind"])[:16],
                "targetId": str(proposal["targetId"])[:128], **proposal_detail(proposal)}
@@ -834,6 +839,9 @@ class AgentNotes:
         note["proposal"] = ref
 
         def mutate(notes: list[dict[str, Any]], keep: frozenset[str]) -> tuple[int, list[str]]:
+            if share is not None:
+                note["proposal"] = {"id": ref["id"], "kind": ref["kind"], "targetId": ref["targetId"],
+                                    **proposal_detail(_with_share(proposal, share))}
             removed = []
             for old in [n for n in notes if _same_ask(n, note)]:
                 notes.remove(old)
@@ -1121,6 +1129,39 @@ def proposal_detail(raw: Mapping[str, Any] | None) -> dict[str, Any]:
 
 
 _DETAIL_KEYS = ("cover", "changes", "inbox", "since", "asks", "firstSince")
+
+
+SHARE_KEYS = ("asks", "firstSince")
+
+
+def for_reader(payload: Any, *, sees_share: bool, agent_id: str | None) -> Any:
+    """``payload`` (a note, a listing ``{notes}``, or a socket message with ``note``/``notes``) as
+    this reader may see it (PR #204 round 4, a product decision): a shared asset
+    Update's ``asks`` and ``firstSince`` go to the person's tabs (``sees_share``) and to the agent
+    that made the asks (``agent_id`` is the note's author id); every other reader gets the Update
+    as before they existed. Copies only what it changes; the stored note is never touched."""
+    if sees_share or not isinstance(payload, Mapping):
+        return payload
+
+    def one(note: Any) -> Any:
+        if not isinstance(note, Mapping):
+            return note
+        ref = note.get("proposal")
+        if not isinstance(ref, Mapping) or not any(key in ref for key in SHARE_KEYS):
+            return note
+        author = note.get("author") if isinstance(note.get("author"), Mapping) else {}
+        if agent_id is not None and author.get("kind") == "agent" and author.get("id") == agent_id:
+            return note
+        return {**note, "proposal": {key: value for key, value in ref.items() if key not in SHARE_KEYS}}
+
+    out = dict(payload)
+    if "proposal" in out and "author" in out:
+        return one(out)
+    if isinstance(out.get("note"), Mapping):
+        out["note"] = one(out["note"])
+    if isinstance(out.get("notes"), list):
+        out["notes"] = [one(note) for note in out["notes"]]
+    return out
 
 
 def _with_share(detail: Mapping[str, Any] | None,

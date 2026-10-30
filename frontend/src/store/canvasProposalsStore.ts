@@ -120,7 +120,7 @@ function cleanValues(values: unknown): ProposalPersonValues | undefined {
  * (403 person_required) clears when the server promotes the tab, while it is
  * still that proposal's error. */
 const clearRefusalOnPromote = (id: string, error: unknown, message: string) => {
-  clearLineOnPromote(error, () => useCanvasProposalsStore.getState().errors[id], message,
+  clearLineOnPromote(error, () => useCanvasProposalsStore.getState().errors[id], message, // clears-on-promote: canvas-proposals.refusal
     () => useCanvasProposalsStore.setState((state) => ({ errors: without(state.errors, id) })));
 };
 
@@ -290,7 +290,7 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
         ? 'Only the canvas can accept this. Reload the page.'
         : failureMessage(error, "Couldn't accept the proposal.");
       set((state) => ({ errors: { ...state.errors, [id]: message } }));
-      clearRefusalOnPromote(id, error, message);
+      clearRefusalOnPromote(id, error, message); // clears-on-promote: canvas-proposals.accept
     } finally {
       // On every path (ending twice is harmless): an undo pressed meanwhile acts (review 10, L-2).
       useGraphStore.getState().endUndoStep(undoStep);
@@ -314,7 +314,7 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
         ? 'Only the canvas can reject this. Reload the page.'
         : failureMessage(error, "Couldn't reject the proposal.");
       set((state) => ({ errors: { ...state.errors, [id]: message } }));
-      clearRefusalOnPromote(id, error, message);
+      clearRefusalOnPromote(id, error, message); // clears-on-promote: canvas-proposals.reject
     } finally {
       set((state) => ({ pending: without(state.pending, id) }));
     }

@@ -558,7 +558,7 @@ export function MoodboardStudioView() {
     } catch (err) {
       const failure = failureCopy(err, { heading: SAVE_BOARD });
       store.failSave(key, attempt.id, failure);
-      store.clearOnPromote(key, err, failure); // GM, #204 r3
+      store.clearOnPromote(key, err, failure); // clears-on-promote: studio.save-board (GM, #204 r3)
       return null;
     }
   }, [key, epoch, isCurrent, verifyProject, enterMoodboardEditor, moveDraft, draftNow, follow, forgetUnsentSteps, fieldSteps]);
@@ -831,7 +831,7 @@ export function MoodboardStudioView() {
         heading: direction === 'undo' ? "Couldn't undo the change." : "Couldn't redo the change.",
       };
       store.failSave(key, attempt.id, failure, { retry: direction, step: step.id });
-      store.clearOnPromote(key, err, failure); // GM, #204 r3
+      store.clearOnPromote(key, err, failure); // clears-on-promote: studio.undo-redo (GM, #204 r3)
     }
   };
 
@@ -953,7 +953,7 @@ export function MoodboardStudioView() {
       if (isCurrent()) {
         const failure = failureCopy(err, { heading: "Couldn't save your brief." });
         patch({ saveError: failure });
-        useAssetStudioDraftStore.getState().clearOnPromote(key, err, failure); // GM, #204 r3
+        useAssetStudioDraftStore.getState().clearOnPromote(key, err, failure); // clears-on-promote: studio.brief (GM, #204 r3)
       }
     }
   };

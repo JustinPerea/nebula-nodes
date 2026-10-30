@@ -46,7 +46,7 @@ function fail(id: string, message: string, error?: unknown) {
   useSettingsDraftStore.setState((state) => ({ errors: { ...state.errors, [id]: message } }));
   // GM, #204 r3: refused only because this tab isn't connected as the person
   // (the banner says so): the row's line goes on the promote.
-  clearLineOnPromote(error, () => useSettingsDraftStore.getState().errors[id], message, () => {
+  clearLineOnPromote(error, () => useSettingsDraftStore.getState().errors[id], message, () => { // clears-on-promote: settings.write
     useSettingsDraftStore.setState((state) => {
       const errors = { ...state.errors };
       delete errors[id];

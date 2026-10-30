@@ -175,7 +175,7 @@ export function ConnectedApps({ view, loadError, onChanged }: {
     } catch (exc) {
       const line = failureMessage(exc, "Couldn't update the connected apps.");
       setError(line);
-      clearSetterOnPromote(exc, setError, line, null); // GM, #204 r3
+      clearSetterOnPromote(exc, setError, line, null); // clears-on-promote: settings.apps (GM, #204 r3)
     } finally {
       setBusy(false);
     }

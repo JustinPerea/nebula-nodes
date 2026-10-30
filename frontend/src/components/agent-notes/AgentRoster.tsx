@@ -8,6 +8,7 @@ import { useGraphStore } from '../../store/graphStore';
 import { AuthorDot } from './AgentNoteParts';
 import { selectCanvasList, useAgentNotesStore } from '../../store/agentNotesStore';
 import { answerableQuestions, heldAsks, openViews } from './agentNeedsYou';
+import { holdsAskIn, useTabHeld } from './heldLock';
 import {
   AGENTS_HEADING,
   buildRosterRows,
@@ -54,6 +55,7 @@ export function AgentRoster({
   const canvasProposals = useCanvasProposalsStore((s) => s.proposals);
   const assetProposals = useAssetProposalsStore((s) => s.proposals);
   const notes = useAgentNotesStore((s) => selectCanvasList(s).notes);
+  const tabHeld = useTabHeld();
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -112,10 +114,11 @@ export function AgentRoster({
       questions: answerableQuestions(sets),
       canvasProposals: openViews(canvasProposals),
       assetProposals: openViews(assetProposals),
-      held: heldAsks(notes ?? [], (id) => Boolean(sets[id]?.answerKey) || id in canvasProposals || id in assetProposals),
+      held: heldAsks(notes ?? [], holdsAskIn(sets, canvasProposals, assetProposals)),
+      tabHeld,
       nodeLabel: (id) => byId.get(id) || null,
     });
-  }, [projectId, now, statuses, cursors, sets, canvasProposals, assetProposals, notes, named, labels]);
+  }, [projectId, now, statuses, cursors, sets, canvasProposals, assetProposals, notes, named, labels, tabHeld]);
 
   // Opened with no agents around: the panel isn't there, so it isn't open.
   useLayoutEffect(() => {

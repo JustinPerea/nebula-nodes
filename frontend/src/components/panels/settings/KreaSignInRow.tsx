@@ -8,6 +8,7 @@ import { KREA_ROW, type RowTone } from './rowHelpers';
 import type { KreaController } from './useKreaConnection';
 import '../../../styles/krea-connection.css';
 import { failureMessage } from '../../../lib/errorCopy';
+import { clearSetterOnPromote } from '../../../lib/clearsOnPromote';
 
 const STATUS: Record<KreaConnectionState['status'], { label: string; tone: RowTone }> = {
   disconnected: { label: 'Not signed in', tone: 'idle' },
@@ -32,7 +33,12 @@ function KreaPlans() {
     setBusy(true);
     setError(null);
     try { await action(); }
-    catch (value) { setError(failureMessage(value, "Couldn't load the Krea plans.")); }
+    catch (value) {
+      const line = failureMessage(value, "Couldn't load the Krea plans.");
+      setError(line);
+      // The trial and the plans are person-only (krea_connector person_only): gone on the promote (#204 r4).
+      clearSetterOnPromote(value, setError, line, null); // clears-on-promote: krea.plans
+    }
     finally { setBusy(false); }
   }
 

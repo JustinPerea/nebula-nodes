@@ -187,7 +187,7 @@ async function decide(id: string, verb: 'accept' | 'reject', reason?: string): P
     store.setState((state) => ({ pending: without(state.pending, id), errors: { ...state.errors, [id]: message } }));
     // Review 17 LOW-1, through GM's #204 round 3 mechanism: the person gate's
     // refusal goes when the server promotes the tab, while it is still this error.
-    clearLineOnPromote(error, () => store.getState().errors[id], message,
+    clearLineOnPromote(error, () => store.getState().errors[id], message, // clears-on-promote: asset-proposals.decide
       () => store.setState((state) => ({ errors: without(state.errors, id) })));
   }
 }

@@ -634,7 +634,7 @@ describe('WS reconnect with injected endpoint (VAL-TRANSPORT-008)', () => {
     await vi.advanceTimersByTimeAsync(0);
 
     expect(constructedUrls).toHaveLength(1);
-    expect(constructedUrls[0]).toBe(`${INJECTED_WS}/ws`);
+    expect(constructedUrls[0]).toBe(`${INJECTED_WS}/ws?tab=1`);
 
     // Simulate open then close — triggers reconnect timer (3 s).
     const firstWs = MockWebSocket as unknown as { prototype: MockWebSocket };
@@ -707,7 +707,7 @@ describe('WS reconnect with injected endpoint (VAL-TRANSPORT-008)', () => {
     await vi.advanceTimersByTimeAsync(0);
 
     expect(instances).toHaveLength(1);
-    expect(instances[0].url).toBe(`${INJECTED_WS}/ws`);
+    expect(instances[0].url).toBe(`${INJECTED_WS}/ws?tab=1`);
 
     // Simulate open
     instances[0].onopen?.(new Event('open'));
@@ -722,7 +722,7 @@ describe('WS reconnect with injected endpoint (VAL-TRANSPORT-008)', () => {
     await vi.advanceTimersByTimeAsync(0);
 
     expect(instances).toHaveLength(2);
-    expect(instances[1].url).toBe(`${INJECTED_WS}/ws`);
+    expect(instances[1].url).toBe(`${INJECTED_WS}/ws?tab=1`);
     expect(instances[0].url).toBe(instances[1].url);
 
     // No fetch probes during resolution or reconnect
@@ -873,7 +873,7 @@ describe('browser person link', () => {
     window.addEventListener('nebula:person-required', seen);
     wsClient.connect();
     await vi.waitFor(() => expect(sockets).toHaveLength(1));
-    expect(sockets[0].url).toBe('ws://127.0.0.1:8131/ws');
+    expect(sockets[0].url).toBe('ws://127.0.0.1:8131/ws?tab=1');
     sockets[0].onopen?.();
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(1));
     expect(JSON.parse(sockets[0].sent[0])).toEqual({ type: 'hello', personToken: TOKEN });

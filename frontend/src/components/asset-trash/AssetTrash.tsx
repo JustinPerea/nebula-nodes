@@ -144,7 +144,7 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
       // A request's own line; never another error's message (round 3b).
       const line = failureMessage(err, '');
       setError(line);
-      clearSetterOnPromote(err, setError, line, null); // GM, #204 r3
+      clearSetterOnPromote(err, setError, line, null); // clears-on-promote: trash (GM, #204 r3)
     } finally {
       setBusy(false);
       setReload((value) => value + 1);

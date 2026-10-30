@@ -33,6 +33,7 @@ export function AgentNotesList({
   listRef,
   sections,
   newCount,
+  unread = 0,
   now,
   onClose,
   onSeeAll,
@@ -46,6 +47,9 @@ export function AgentNotesList({
   sections: AgentNotesListSection[];
   /** Updates that arrived while this list was open ("· 1 new"). */
   newCount: number;
+  /** The server's count of unread Updates in these lists: "all read" only once it is 0
+   * (GM, #204 r3 item 1), so a read the server refused never shows as done. */
+  unread?: number;
   now: number;
   onClose: (returnFocus: boolean) => void;
   /** "See all actions →": null while the Agent log is switched off. */
@@ -60,7 +64,7 @@ export function AgentNotesList({
   top?: ReactNode;
 }) {
   const today = new Date(now);
-  const state = newCount > 0 ? `${newCount} new` : 'all read';
+  const state = unread > 0 ? `${unread} unread` : newCount > 0 ? `${newCount} new` : 'all read';
   const total = sections.reduce((sum, section) => sum + section.notes.length, 0);
   const notNow = sections.some((section) => section.notes.some(offersNotNow));
   const single = sections.length === 1 ? sections[0] : null;

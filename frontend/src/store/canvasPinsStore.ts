@@ -251,7 +251,7 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
         errorPersonGate: code === PERSON_REQUIRED_CODE ? 'add' : false,
         targetGone: state.targetGone || code === NODE_GONE_CODE,
         tooLongRefusals: state.tooLongRefusals + (code === TOO_LONG_CODE ? 1 : 0) }));
-      clearPinRefusalOnPromote(error, line);
+      clearPinRefusalOnPromote(error, line); // clears-on-promote: pins.add
       return false;
     }
   },
@@ -279,7 +279,7 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
           && error.status >= 400 && error.status < 500 ? 'delete' : false,
         errorProject: null,
       }));
-      clearPinRefusalOnPromote(error, line);
+      clearPinRefusalOnPromote(error, line); // clears-on-promote: pins.remove
     } finally {
       set((state) => {
         const removing = { ...state.removing };
@@ -377,7 +377,7 @@ wsClient.subscribe((event) => {
 // toast goes, never turning into the full "isn’t connected as you" line as
 // the banner leaves. Swept in the same tick as the banner.
 function clearPinRefusalOnPromote(error: unknown, line: string | null): void {
-  clearLineOnPromote(error, () => useCanvasPinsStore.getState().error, line,
+  clearLineOnPromote(error, () => useCanvasPinsStore.getState().error, line, // clears-on-promote: pins.refusal
     () => useCanvasPinsStore.getState().clearError());
 }
 

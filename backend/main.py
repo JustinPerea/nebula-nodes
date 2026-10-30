@@ -164,6 +164,7 @@ from services.canvas_events import (
 from services.canvas_pins import ANOTHER_PROJECT, CanvasPins, PinError, event_text, pin_left, pin_resolved_summary, pin_summary
 from services.node_removals import RemovalLedger
 from services.agent_notes import AgentNotes, NoteError, note_summary
+from services.agent_notes import for_reader as notes_for_reader
 from services import person_session
 from services import asset_trash
 from services.child_env import scrubbed_env
@@ -3770,14 +3771,59 @@ def _websocket_has_agent_marker(websocket: WebSocket) -> bool:
         return True
 
 
+# PR #204 round 4: a tab says it is one: ``X-Nebula-Tab`` (its tab id, which the canvas already
+# sends on writes and agents, the CLI and MCP never send) on its Updates reads, and ``?tab=1`` on
+# its socket, where a browser can't set headers. It is a claim, not an agent marker: it never
+# makes a request the person (person_gate is untouched) and only decides who sees a shared asset
+# Update's ``asks`` and ``firstSince`` (agent_notes.for_reader). A local program that claims to be
+# a tab sees those two numbers: the same unsandboxed case person_gate.py documents.
+TAB_CLAIM_HEADER = "x-nebula-tab"
+TAB_CLAIM_PARAM = "tab"
+
+
+def _share_view(headers: Mapping[str, str] | None, *, tab_claim: bool | None = None) -> dict[str, Any]:
+    """Who this reader is for a shared Update's share fields: the person, a tab not connected as
+    the person (claims to be a tab, carries no agent marker), or the agent it names (only a marked
+    reader is one). ``tab_claim``: a socket's, from its URL."""
+    lower = {str(k).lower(): v for k, v in (headers or {}).items()}
+    marked = has_agent_marker(lower)
+    claim = bool(str(lower.get(TAB_CLAIM_HEADER) or "").strip()) if tab_claim is None else tab_claim
+    if is_person(lower) or (claim and not marked):
+        return {"sees_share": True, "agent_id": None}
+    identity = identify_agent(lower) if marked else None
+    return {"sees_share": False, "agent_id": identity.id if identity is not None else None}
+
+
+def _socket_share_view(websocket: WebSocket) -> dict[str, Any]:
+    try:
+        claim = websocket.query_params.get(TAB_CLAIM_PARAM) == "1"
+        return _share_view(websocket.headers, tab_claim=claim)
+    except Exception:  # noqa: BLE001 - a malformed handshake is another reader
+        return {"sees_share": False, "agent_id": None}
+
+
 class ConnectionManager:
     def __init__(self) -> None:
         self.active_connections: list[WebSocket] = []
         self.browser_connections: set[WebSocket] = set()
+        self.share_views: dict[WebSocket, dict[str, Any]] = {}
 
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
         self.active_connections.append(websocket)
+        self.share_views[websocket] = _socket_share_view(websocket)
+
+    def share_view(self, websocket: WebSocket) -> dict[str, Any]:
+        """The person's verified canvas sees everything; any other socket as it connected."""
+        if websocket in self.browser_connections:
+            return {"sees_share": True, "agent_id": None}
+        return self.share_views.get(websocket) or {"sees_share": False, "agent_id": None}
+
+    def for_socket(self, websocket: WebSocket, data: dict[str, Any]) -> dict[str, Any]:
+        """An Updates message as this socket may see it (agent_notes.for_reader)."""
+        if data.get("type") != "agentNotes":
+            return data
+        return notes_for_reader(data, **self.share_view(websocket))
 
     def promote(self, websocket: WebSocket, person_token: object) -> bool:
         """Mark a socket as the person's canvas after a valid hello frame.
@@ -3805,6 +3851,7 @@ class ConnectionManager:
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
         self.browser_connections.discard(websocket)
+        self.share_views.pop(websocket, None)
 
     async def broadcast(self, event: ExecutionEvent) -> None:
         data = _event_to_camel(event)
@@ -3817,9 +3864,19 @@ class ConnectionManager:
         `others` (review 14 LOW-1 of PR #200: the pins' person form)."""
         message = json.dumps(data)
         other_message = message if others is None else json.dumps(others)
+        # Updates: each socket gets the form its reader may see (a shared Update's share fields).
+        per_reader = others is None and data.get("type") == "agentNotes"
+        forms: dict[tuple[bool, str | None], str] = {}
         disconnected: list[WebSocket] = []
         for connection in self.active_connections:
             try:
+                if per_reader:
+                    view = self.share_view(connection)
+                    key = (view["sees_share"], view["agent_id"])
+                    if key not in forms:
+                        forms[key] = json.dumps(notes_for_reader(data, **view))
+                    await connection.send_text(forms[key])
+                    continue
                 await connection.send_text(message if connection in self.browser_connections else other_message)
             except Exception:
                 disconnected.append(connection)
@@ -4038,7 +4095,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         # The agents' form until a verified hello promotes this socket (review 14 LOW-1).
         await websocket.send_text(json.dumps(_pins_message()))
         await _settle_proposal_updates()
-        await websocket.send_text(json.dumps(_canvas_notes_message()))
+        await websocket.send_text(json.dumps(manager.for_socket(websocket, _canvas_notes_message())))
         while True:
             raw = await websocket.receive_text()
             if manager.is_browser(websocket):
@@ -6970,6 +7027,15 @@ async def _reopen_removed_proposals(plan: dict[str, Any], project_id: str | None
         else:
             out["notReopened"].append({"id": proposal.id, "reason": reason})
     for proposal in reopened_assets:
+        # PR #204 round 4: a newer ask from the same agent on the same target posted while this
+        # one was closed, and its Update replaced this one's (_same_ask). This ask joins that live
+        # Update, as if it had been open then; the refresh below counts it there. Without this it
+        # pointed at an Update that's gone: no Update of its own, and one too few on the live one.
+        live = next((other.update for other in _open_sharers(proposal)
+                     if other is not proposal and other.update and other.update != proposal.update), None)
+        if live is not None:
+            proposal.update = dict(live)
+            continue
         await _reopen_update(proposal.update, proposal.id, asset_update_detail(proposal), asset_update_text(proposal),
                              _share_reader(proposal, proposal.update))
         _schedule_asset_expiry(proposal)
@@ -7243,7 +7309,8 @@ async def list_canvas_agent_notes(unread: int = 0) -> Any:
     """The open project's Updates, newest first (``?unread=1`` for unread only)."""
     try:
         await _settle_proposal_updates()  # never list an expired proposal as waiting
-        return agent_notes.canvas_list(unread_only=bool(unread))
+        return notes_for_reader(agent_notes.canvas_list(unread_only=bool(unread)),
+                                             **_share_view(current_request_headers()))
     except NoteError as exc:
         return _raise_note_error(exc)
 
@@ -7311,7 +7378,8 @@ async def list_board_agent_notes(moodboard_id: str, unread: int = 0) -> Any:
     board = await asyncio.to_thread(_live_board_for_notes, moodboard_id)
     if isinstance(board, JSONResponse):
         return board
-    return agent_notes.board_list(board, unread_only=bool(unread))
+    return notes_for_reader(agent_notes.board_list(board, unread_only=bool(unread)),
+                                         **_share_view(current_request_headers()))
 
 
 @app.post("/api/moodboards/{moodboard_id}/agent-notes", status_code=201)
@@ -8727,7 +8795,8 @@ async def _post_asset_update(proposal: AssetProposal) -> None:
             agent_notes.post_proposal, author={"kind": "agent", **proposal.agent.as_dict()},
             text=asset_update_text(proposal),
             proposal={"id": proposal.id, "kind": proposal.kind, "targetId": proposal.target_id,
-                      **asset_update_detail(proposal), **_asset_share_detail(_open_sharers(proposal))})
+                      **asset_update_detail(proposal)},
+            share=_share_reader(proposal, None))
     except (NoteError, ProjectStoreError):
         return  # no project open: the Agent log line is the only notice, as before
     note = result["note"]
@@ -8742,6 +8811,19 @@ async def _post_asset_update(proposal: AssetProposal) -> None:
     _journal_note(note, "canvas", project_id=result["projectId"])
     await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"], note=note,
                                                 unread=result["unread"], removed=result["removed"]))
+    # PR #204 round 4 (review 2 LOW-1): an ask that closed after the write counted it, but before
+    # it joined this Update, had its follow land on the Update this one replaced. Count again now
+    # that every sharer points here; the Update stays on this ask (no write when the count holds).
+    if proposal.is_open:
+        try:
+            recount = await asyncio.to_thread(agent_notes.retarget_proposal, ref["projectId"], ref["id"], proposal.id,
+                                              asset_update_detail(proposal), asset_update_text(proposal),
+                                              _share_reader(proposal, ref))
+        except (NoteError, ProjectStoreError):
+            recount = None
+        if recount is not None and recount["projectId"] == _open_project_id():
+            await _broadcast_raw_quietly(_notes_message("canvas", "changed", project_id=recount["projectId"],
+                                                        ids=[ref["id"]], note=recount["note"]))
 
 
 def _same_asker(one: AssetProposal, other: AssetProposal) -> bool:

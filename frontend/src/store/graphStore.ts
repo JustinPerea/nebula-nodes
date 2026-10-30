@@ -375,6 +375,11 @@ function markNodesErrored(
   failure?: unknown,
 ): Node<NodeData>[] {
   const hidden = failure === undefined ? null : failureDetails(failure);
+  // PR #204 round 4: a start the gate refused only for this tab (a spend approval, a billing
+  // switch: main._person_only_refusal) leaves these nodes' line until the promote, while it is
+  // still theirs. Every refused start comes through here with its failure.
+  const line = hidden ?? message;
+  clearsOnPromoteIf(failure, () => useGraphStore.setState((state) => ({ nodes: withoutRefusedStart(state.nodes, nodeIds, line) }))); // clears-on-promote: graph.run-start
   return nodes.map((node) => {
     if (!nodeIds.has(node.id)) return node;
     return {
@@ -1596,6 +1601,16 @@ function shotOutputPorts(scene: CinemaSceneSpec): DynamicPortDefinition[] {
 /** A shot's output without its status or the last failure's fields (error
  *  copy round 3c-2): a new run, or a failure Nebula wrote itself, must not
  *  show an earlier failure's person line or Details. */
+/** A shot a refused start marked, back to how it was (its image, or idle), if it still says that line. */
+function clearShotRefusal(nodeId: string, shotId: string, line: string, set: GraphSet, get: GraphGet): void {
+  const scene = (get().nodes.find((n) => n.id === nodeId)?.data.params as { scene?: CinemaSceneSpec } | undefined)?.scene;
+  const shot = scene?.shots.find((s) => s.id === shotId);
+  if (!scene || shot?.output?.status !== 'error' || shot.output.error !== line) return;
+  const rest = withoutShotError(shot.output);
+  const output: NonNullable<CinemaShot['output']> = rest.imageUrl ? { ...rest, status: 'done' } : { ...rest, status: 'idle' };
+  applySceneToNode(set, nodeId, { ...scene, shots: scene.shots.map((s) => (s.id === shotId ? { ...s, output } : s)) });
+}
+
 function withoutShotError(output: CinemaShot['output']): Omit<NonNullable<CinemaShot['output']>, 'status'> {
   const rest: Partial<NonNullable<CinemaShot['output']>> = { ...(output ?? {}) };
   for (const key of ['status', 'error', 'errorCategory', 'errorFriendly', 'errorPerson', 'errorProviderText', 'errorProvider', 'errorRaw'] as const) delete rest[key];
@@ -5784,8 +5799,16 @@ const nodeWrites = new Map<string, WireWrite>();
  * (review 8, L-d). `tone` as notify gives it; none keeps the notice's default.
  */
 /** GM, #204 r3: a toast for a person-gate refusal goes on the promote (lib/clearsOnPromote). */
+/** The nodes a refused start marked, back to idle: only those still showing its line. */
+function withoutRefusedStart(nodes: Node<NodeData>[], ids: Set<string>, line: string): Node<NodeData>[] {
+  return nodes.map((node) => (ids.has(node.id) && node.data.state === 'error' && node.data.error === line
+    ? { ...node, data: { ...node.data, state: 'idle' as const, error: undefined, errorPerson: undefined,
+      errorProviderText: undefined } }
+    : node));
+}
+
 function clearsOnPromoteIf(error: unknown, clear: () => void): void {
-  if (isPersonRefusal(error)) clearsOnPromote(clear);
+  if (isPersonRefusal(error)) clearsOnPromote(clear); // clears-on-promote: graph.refusal
 }
 
 function noticeLine(state: Pick<GraphState, 'undoNotice'>, text: string, tone?: 'error' | 'info',
@@ -11037,7 +11060,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     });
     if (shownId === null) return;
     const id = shownId;
-    clearsOnPromoteIf(saysPersonRequired(text) ? { code: PERSON_REQUIRED_CODE } : options?.error, () => useGraphStore.setState((state) => (state.undoNotice?.id === id
+    clearsOnPromoteIf(saysPersonRequired(text) ? { code: PERSON_REQUIRED_CODE } : options?.error, () => useGraphStore.setState((state) => (state.undoNotice?.id === id // clears-on-promote: graph.notify
       ? { undoNotice: null } : state.messageNotice?.id === id ? { messageNotice: null } : {})));
   },
 
@@ -12735,7 +12758,10 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       if (!ownsRun(runId)) return;
       console.error('Failed to generate shot:', err);
       if (err instanceof ExecutionStartRejectedError) {
-        failShot(failureMessage(err, "Couldn't start the shot."));
+        const line = failureMessage(err, "Couldn't start the shot.");
+        failShot(line);
+        // PR #204 round 4: refused only for this tab, the shot's line goes on the promote while it is still there.
+        clearsOnPromoteIf(err, () => clearShotRefusal(nodeId, shotId, line, set, get)); // clears-on-promote: graph.shot-start
         settleTrackedExecutionStatus('failed', runId, set, get);
       } else await reconcileWorldLabsExecutionStatus(runId, set, get, err);
     }

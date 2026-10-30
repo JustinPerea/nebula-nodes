@@ -47,7 +47,7 @@ function useOutsideSpend() {
         setError(line);
         // GM, #204 r3: refused only because this tab isn't connected as you:
         // on the promote the line goes and the read runs again.
-        if (isPersonRefusal(exc)) clearsOnPromote(() => { setError((now) => (now === line ? null : now)); setAttempt((n) => n + 1); });
+        if (isPersonRefusal(exc)) clearsOnPromote(() => { setError((now) => (now === line ? null : now)); setAttempt((n) => n + 1); }); // clears-on-promote: settings.spend-load
       });
   }, []);
   useEffect(() => { reload(); }, [reload, attempt]);

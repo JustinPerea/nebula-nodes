@@ -279,3 +279,191 @@ The first full backend run on the merged tree failed 9 tests.
 - Live: 15 of 15 on 8795/5795.
   - An earlier live run, made while pytest was running, lost a puppeteer evaluate ("Promise was collected") at the start of part B.
   - The idle re-run passed every check.
+
+## Round 4 (review 2 on 24e7ebc7; GM 2026-10-30, `gm-pr204-r3`)
+
+### GM item 1: a truthful header
+
+- Marking read is no longer optimistic. `sendRead` sets `readAt` only on the
+  ids the server's answer lists, and takes `unread` from it. A refused read
+  leaves every Update unread.
+- The header leads with the server's count: "N unread" while any is unread,
+  then "N new" for arrivals, then "all read". "all read" now means the server
+  has them read. GM didn't word it, so I chose "N unread"; it matches the
+  chip's count.
+- On a person refusal the write registers `retryOnPromote` (in
+  `lib/clearsOnPromote.ts`, keyed per list and per read, so a later refusal
+  of the same read replaces the earlier one). The promote's sweep clears the
+  lines first and then runs the retries, once each. A retry that fails again
+  says nothing new (`retry = false`).
+- Another reason (a 500, offline) keeps its line and isn't retried.
+
+### GM item 2: Review and Answer locked in a held tab, on every surface
+
+- `components/agent-notes/heldLock.ts` is the one rule:
+  - `holdsAskIn` (shared with the Agents panel rows and the badge's count);
+  - `heldLockFor(note, holds, tabHeld)` built on `heldAsks`;
+  - `HELD_OPS` (`proposal.review`, `question.answer`);
+  - `useHeldLock`.
+- `NoteButtons` (used by the opened list and the arrival card) greys those
+  two buttons through `BusyButton`'s `locked`. They stay in place with the
+  same words and are still focusable. They carry `aria-disabled` and their
+  lock reason as the tooltip, and a click does nothing. Show on canvas and
+  Not now stay live.
+- Every Review and Answer goes through `NoteButtons`, so that is the one
+  place the lock is checked. A second check I'd put in the corner's
+  `runAction` survived mutation (nothing reaches it except through
+  `NoteButtons`), so I took it out.
+- The grey is the shared ghost rule: `.agent-notes-btn--held` joins both
+  lists in `disabled-buttons.css`, which use `--disabled-label`.
+- The lock asks whether the tab is held, using assetProposalsStore
+  `awaitingSync`, the flag the held placeholders read. Without that check, a
+  connected tab locked Review on an Update whose ask it had no proposal for
+  (an orphan), which broke `AgentNotesEveryScreen`. The roster's `locked`
+  got the same check (`RosterInput.tabHeld`, default true). Counting is
+  unchanged.
+- The arrival card line (`AgentNoteCard.tsx:79` in the brief) goes through
+  `NoteButtons`, so it is covered by the same change.
+
+### GM item 3: the stale line's words
+
+- `MARK_READ_REFUSED_COPY`: "Nebula couldn’t mark the updates as read because
+  this tab isn’t connected as you. Open the link Nebula printed when it
+  started." It has no "try again", because the promote retries.
+- `markReadRefusedCopy(desktop, reason)` also has a desktop variant and a dev
+  variant, following `PERSON_REQUIRED_COPY`'s. GM worded only the browser
+  line, so the other two are my extrapolation; flagged for GM.
+- Each is a single literal, so the named-line ratchet reads it.
+
+### Review 2 MEDIUM: every line registered; the ratchet sees every gate
+
+- Registered: the Krea row (`useKreaConnection`, `KreaSignInRow`) and the
+  project save line (`projectStore`).
+- The live run found the Krea registration didn't work. `kreaJson` throws a
+  `FailureNotice`, which carried no `code`, so `isPersonRefusal` never
+  matched a real refusal. The unit test had mocked a `RequestFailedError`.
+  `FailureNotice` now takes an optional `code`, and `kreaJson` passes the
+  refusal's. A test runs connect, check and disconnect through the real
+  request path. No other `FailureNotice` is built from a server refusal; the
+  run and shot starts throw `ExecutionStartRejectedError`, which keeps its
+  code.
+- The widened ratchet found two more surfaces:
+  - a run start refused for the person (`markNodesErrored`, which now puts
+    the nodes back as they were at the refusal: `withoutRefusedStart`);
+  - a shot start (`clearShotRefusal`: the shot goes back to `done` if it has
+    an image, else `idle`).
+- `gatedFunctions()` now finds all four gate forms:
+  - `require_person(`;
+  - Krea's `person_only` routes (`krea_connector.*`);
+  - `_person_only_refusal(` callers;
+  - `stop_refusal`.
+- Every registration line carries `// clears-on-promote: <site>`.
+  - SITES lists each site with its file.
+  - GATED maps each gated function to its sites, or to NO_LINE.
+  - OTHER_SITES lists the registrations not tied to one gate.
+  - The test checks each site once, in its file, on a real call into the
+    mechanism, and checks that no call into the mechanism goes unmarked.
+- No line to clear:
+  - `krea_connector.person_only`: the dependency itself; its four routes are
+    listed by name;
+  - `_reader_spend_hold`: `POST /api/moodboards/{id}/read`, which no tab
+    calls (agents and the CLI only);
+  - `_refuse_stopping_the_persons_run`: a refused Stop shows no line, since
+    `requestTrackedCancellation` keeps the intent and asks again.
+- Mutation sweep of the registrations: 39 of 39 caught (each marker line
+  removed in turn). Changing any gate form's source in the test is caught
+  too.
+
+### Review 2 LOW: `_post_asset_update` reads the share inside the write
+
+- `post_proposal(..., share=)` calls the reader inside the notes write, so a
+  close that lands before the write is never counted.
+- A close after the write but before the new ask joins the Update lands on
+  the old Update. So after the "added" broadcast, the post counts again with
+  a targeted `retarget_proposal` onto the posted ask, and broadcasts
+  "changed" only if that wrote something.
+- Tests use a fixed interleave: the close and its follow run inside the
+  patched notes call, on the loop, with no sleeps. One test closes before
+  the write (one "added" with 1), one after (a "changed" with 1), and one
+  checks that nothing closing writes once.
+- A probe found an orphan. p1 closes, the same agent's p2 replaces its
+  Update, and an undo reopens p1. p1 reopened its old, resolved Update next
+  to p2's live one. Now a reopened ask whose agent already has a live Update
+  on that target joins it, so the Update counts both, and p2 closing falls
+  back to p1.
+
+### Cross-agent visibility of `asks` and `firstSince` (Justin's decision)
+
+- Showing these counts across agents changes what agents can see of each
+  other, so the coordinator took it to Justin. He chose this option on
+  2026-10-30: only the agent that made the asks, and the person's tabs, see
+  the count and time; other agents see the Update as before.
+- Who sees them:
+  - `is_person`;
+  - a request that has the tab claim and no agent marker (a held tab);
+  - a marked reader whose `identify_agent(...).id` is the Update's author.
+- Every other reader gets the Update without the two keys, as on main.
+  That includes another agent, an unnamed unmarked CLI, and a request with
+  both a tab claim and a marker.
+- The tab claim reuses #195's existing `X-Nebula-Tab` header (present and
+  non-empty), so the tab sends nothing new over HTTP. The socket carries
+  `?tab=1` (`withTabClaim`), because a browser can't set a socket's headers.
+  The claim is not in `AGENT_MARKER_HEADERS`, and `is_person` and the gate
+  are untouched. `canvas_open()`'s socket classification is unchanged.
+- `agent_notes.for_reader` strips the keys from a note, a `notes` list, or a
+  message's `note`. It is applied on:
+  - the canvas and board list endpoints (MCP `list_notes` and `nebula notes`
+    read these);
+  - the socket's first sync;
+  - `broadcast_raw` for `agentNotes` messages, per socket (each socket's
+    view is set at connect).
+- Residual risk, in the code comment and in MCP-SETUP: a local program that
+  claims to be a tab sees the two counts. That's the same unsandboxed case
+  `person_gate.py` describes, and it reaches nothing else.
+
+### NITs
+
+- MCP-SETUP's op wording now says a new ask posts a new Update (`added`,
+  with the replaced one `removed`). A close or an undo reopen changes it in
+  place (`changed`).
+- `refresh_oldest` (the refresh retargeting the oldest open ask instead of
+  the newest) is killed by a test that reopens the newer of two.
+- The frontend `firstSince >= 0` bound has its own test.
+- One equivalent survivor: `sharers_any_update` (dropping the
+  `p.update == ref` filter in `_open_sharers`). Every open ask of one agent
+  on one target now shares that agent's one live Update, and the reopen joins
+  it. So "open, same agent, same target" already implies the same Update,
+  and no reachable state tells the two apart. I kept the filter as a guard
+  in case that invariant ever breaks.
+
+### Round 4 verification
+
+- On 24e7ebc7:
+  - Backend: 8 of 12 new tests fail. The other 4 are guards: two catch
+    mutants (`refresh_oldest`, `reopen_no_share`), one checks that the
+    recount writes once, and one checks that the claim is not a marker.
+  - Frontend (`presenceRound4`, with the base given `heldLock.ts`, since the
+    test imports it): 10 of 14 fail. The other 4 are the post-promote
+    companion, the helper's unit test, the "another reason stays" guard, and
+    the `firstSince` bound (coverage of existing behaviour, as review 2
+    asked).
+  - The ratchet: 2 of 6 fail.
+  - The new Krea `code` test and the roster `tabHeld` test fail too.
+- Mutations:
+  - backend: 18 of 19 caught; `sharers_any_update` is equivalent (above);
+  - frontend: 25 of 25 caught, plus the Krea `code` mutant;
+  - registration markers: 39 of 39 caught.
+- Live on 8795/5795: 11 of 11.
+  - In a held tab, the arrival card's Answer is locked. In the list, Review
+    and Answer are locked, the header reads "2 · 2 unread", and GM's line
+    shows.
+  - On the promote: one retried read, "2 · all read" from the server, the
+    line gone, and the buttons live in the same boxes.
+  - The Krea row's line is gone after the promote.
+  - Nothing reached 8000-8010 or 5173; nothing was accepted, rejected,
+    answered or executed.
+- Gates:
+  - tsc and lint are clean.
+  - vitest: 8,594 passed in 674 files.
+  - build: 449,127 B raw (limit 512,000).
+  - backend: 12,338 passed in a full isolated run.
