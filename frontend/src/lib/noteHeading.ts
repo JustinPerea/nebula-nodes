@@ -45,14 +45,26 @@ function trimCut(text: string): string {
  * nothing but punctuation keeps its first `keep` graphemes (at least one). */
 export function noteHeadingName(title: string, keep?: number, graphemes: string[] = graphemesOf(title)): string {
   if (keep === undefined || keep >= graphemes.length) return title;
-  let kept = trimCut(graphemes.slice(0, Math.max(0, keep)).join(''));
+  // Review 20 NIT-5, PR #202 review 1 NIT-5: a cut never shows a run of "…".
+  // In every branch the kept part's own "…" runs fold into one (the tooltip
+  // has the name whole), and a kept part that already ends on "…" takes no
+  // second: a name of nothing but "…" shows one, its own (GM, PR #202 r1).
+  let kept = foldEllipses(trimCut(graphemes.slice(0, Math.max(0, keep)).join('')));
   if (!kept) {
     const first = graphemes.findIndex((g) => trimCut(g) !== '');
-    kept = first >= 0 ? graphemes.slice(0, first + 1).join('').trimStart()
+    // Up to the first visible grapheme: when that is the name's last, the
+    // whole name shows and nothing was cut, so no "…" follows (“……” → “…”).
+    if (first === graphemes.length - 1) return foldEllipses(title.trimStart());
+    kept = foldEllipses(first >= 0 ? graphemes.slice(0, first + 1).join('').trimStart()
       : graphemes.slice(0, Math.max(1, keep)).join('').trim()
-        || (graphemes.find((g) => g.trim() !== '') ?? '');
+        || (graphemes.find((g) => g.trim() !== '') ?? ''));
+    if (kept.endsWith('…')) return kept;
   }
   return `${kept}…`;
+}
+
+function foldEllipses(text: string): string {
+  return text.replace(/…+/gu, '…');
 }
 
 /** The heading for a node's title, whole, or cut to its first `keep` graphemes. */

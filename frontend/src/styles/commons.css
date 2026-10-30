@@ -403,6 +403,21 @@ body.app-slava-restraint .commons-notice--proposal {
   color: var(--sr-ink);
 }
 
+/* GM, PR #202 r1: each asking agent's dot, in its colour, before its name. */
+body.app-slava-restraint .commons-notice__dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--agent-color, #5b9dff);
+  vertical-align: 0.05em;
+}
+
+body.app-slava-restraint .commons-notice__dot + .commons-notice__dot {
+  margin-left: -2px;
+}
+
 body.app-slava-restraint .commons-notice + .commons-notice {
   margin-top: 6px;
 }

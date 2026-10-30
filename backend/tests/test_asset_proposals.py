@@ -530,7 +530,7 @@ def test_the_cli_prints_an_asset_proposal_as_what_it_changes(api):
     _pin(api, A, api.person)
     view = _propose(api, {"cover": C}).json()["proposal"]
     printed = format_proposal(view)
-    assert 'make another image the cover of project "Dusk"' in printed
+    assert 'make another image the cover of “Dusk”' in printed
     assert f"{A} → {C}" in printed
     assert "decide on the Projects screen" in printed
     assert "runs" not in printed

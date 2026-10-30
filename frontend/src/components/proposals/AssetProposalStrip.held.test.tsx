@@ -118,9 +118,9 @@ describe('GM r34: a placeholder for a proposal this held tab knows only from its
       { proposalId: 'pa_6', agentName: 'Claude Code', agentColor: '#5B9DFF', header: 'asks to send these notes to generators', at: T0 }]);
   });
 
-  it('a Commons ask uses the real card\'s header, counted from the Update', () => {
-    const one = update('pa_c1', { text: 'Claude Code asks to change a reference in the Commons' }, 'commons', 'ast_1');
-    const four = update('pa_c4', { text: 'Claude Code asks to make 4 changes to a reference in the Commons' }, 'commons', 'ast_1');
+  it('a Commons ask uses the real card\'s header, counted from the Update\'s ref', () => {
+    const one = update('pa_c1', { text: 'Claude Code asks to change a reference in the Commons', proposal: { changes: 1 } }, 'commons', 'ast_1');
+    const four = update('pa_c4', { text: 'Claude Code asks to make 4 changes to a reference in the Commons', proposal: { changes: 4 } }, 'commons', 'ast_1');
     expect(heldProposalsFor([one, four], {}, true, 'commons', 'ast_1').map((item) => item.header))
       .toEqual(['proposes a change to this reference', 'proposes 4 changes to this reference']);
     expect(HELD_PROPOSAL_LINE).toBe('You can review this when this tab is connected as you.');
@@ -189,7 +189,7 @@ describe('GM r34: a placeholder for a proposal this held tab knows only from its
     const { container } = render(<AssetProposalStrip kind="commons" targetId="ast_1" />);
     const realHeader = container.querySelector('.asset-proposal__asks')?.textContent;
     expect(realHeader).toBe(header);
-    const [held] = heldProposalsFor([update('pa_h', { text }, 'commons', 'ast_1')], {}, true, 'commons', 'ast_1');
+    const [held] = heldProposalsFor([update('pa_h', { text, proposal: { changes: count } }, 'commons', 'ast_1')], {}, true, 'commons', 'ast_1');
     expect(held.header).toBe(realHeader);
   });
 });

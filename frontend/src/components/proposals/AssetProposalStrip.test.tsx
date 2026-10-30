@@ -38,7 +38,7 @@ describe('AssetProposalStrip', () => {
   it('asks about a board in its own words', () => {
     useAssetProposalsStore.getState().open(coverProposal({
       kind: 'moodboard', target: { kind: 'moodboard', id: 'mb1', name: 'Dusk board' },
-      change: { sendNotes: { from: false, to: true } }, summary: 'send the notes of board "Dusk board" to generators',
+      change: { sendNotes: { from: false, to: true } }, summary: 'send the notes of “Dusk board” to generators',
       decideIn: 'moodboard-studio',
     }), 'k1');
     render(<AssetProposalStrip kind="moodboard" targetId="mb1" />);
