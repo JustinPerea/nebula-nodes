@@ -8,7 +8,7 @@ import { useGraphStore } from '../../store/graphStore';
 import { AuthorDot } from './AgentNoteParts';
 import { selectCanvasList, useAgentNotesStore } from '../../store/agentNotesStore';
 import { answerableQuestions, heldAsks, openViews } from './agentNeedsYou';
-import { holdsAskIn, useTabHeld } from './heldLock';
+import { holdsAskIn, useLockPending, useTabHeld } from './heldLock';
 import {
   AGENTS_HEADING,
   buildRosterRows,
@@ -197,6 +197,8 @@ function RosterRowView({ row, onFlyTo, onOpen }: {
 }) {
   const lineId = useId();
   const needsYou = row.group === 'needsYou';
+  // GM r5 2a: before the socket's first answer, the lock's first moment keeps the row's look.
+  const pending = useLockPending(Boolean(row.locked));
   const content = (
     <>
       <AuthorDot author={{ kind: 'agent', name: row.agent.name, color: row.agent.color }} verified={row.agent.verified} />
@@ -217,8 +219,8 @@ function RosterRowView({ row, onFlyTo, onOpen }: {
   };
   return (
     // aria-disabled, not disabled: it keeps its focus and its tooltip (the shared disabled look, disabled-buttons.css).
-    <button type="button" className="agent-roster__row" data-group={row.group} title={row.tooltip}
-      aria-disabled={row.locked ? true : undefined}
+    <button type="button" className="agent-roster__row" data-group={row.group} title={pending ? undefined : row.tooltip}
+      aria-disabled={row.locked ? true : undefined} data-held-pending={pending ? '' : undefined}
       aria-label={row.ariaLabel} aria-describedby={needsYou && row.line ? lineId : undefined} onClick={click}>
       {content}
     </button>

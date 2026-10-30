@@ -31,7 +31,7 @@ import {
   FailureNotice, PERSON_REQUIRED_CODE, REFUSED_FALLBACK_COPY, RequestFailedError, canTryAgain, failureCopy, failureDetails,
   failureMessage, isNoAnswer, oneLine, shortReason,
 } from '../lib/errorCopy';
-import { clearLineOnPromote } from '../lib/clearsOnPromote';
+import { clearLineOnPromote, retryOnPromote } from '../lib/clearsOnPromote';
 import { WORLD_LABS_NEEDS_CHECK } from '../lib/worldLabsWaiting';
 import type { ProjectSnapshot, ProjectSummary, SavedProject, TrashedProject } from '../lib/projects';
 
@@ -1896,6 +1896,13 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
         // switching a provider or Krea billing, main._refuse_agent_billing_change): its reason goes
         // on the promote; "Save failed · Retry" stays, and its Retry works then.
         clearLineOnPromote(error, () => get().saveError, saveLine, () => set({ saveError: null })); // clears-on-promote: project.save
+        // GM, #204 r5 item 1: and the save itself goes again on the promote, silently, through
+        // the one retry mechanism: the header reads its normal "Saving…" while it does, and a
+        // retry that fails keeps "Save failed · Retry" with its new reason.
+        retryOnPromote(error, `project.save:${context.id}`, () => { // clears-on-promote: project.save-retry
+          const now = get();
+          if (now.activeProject?.id === context.id && now.saveStatus === 'error') void now.retrySave();
+        });
         showError(error, { action: 'save' });
         throw error;
       } finally { inFlight = null; }

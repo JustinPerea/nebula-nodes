@@ -86,9 +86,10 @@ export interface RosterInput {
   assetProposals: AssetProposalView[];
   /** The asks this tab knows only from their Updates (agentNeedsYou heldAsks). */
   held?: HeldAsk[];
-  /** Whether this tab is held (not connected as the person: heldLock useTabHeld). Only then is
-   * a held ask's row locked; in the person's tab an Update its ask hasn't reached opens and
-   * says what became of it. Default true (the rows as the held ones read). */
+  /** Whether this tab isn't confirmed as the person (heldLock useTabHeld). Only then is a
+   * Needs-you row locked, whatever it would open (GM r5 2b: a demoted tab's synced asks lock
+   * too); in the person's tab an Update its ask hasn't reached opens and says what became of
+   * it. Default false (the connected tab). */
   tabHeld?: boolean;
   /** A node's name on the canvas now (its label, else its type's name), or null when it isn't there. */
   nodeLabel: (nodeId: string) => string | null;
@@ -186,7 +187,7 @@ export function buildRosterRows(input: RosterInput): RosterRow[] {
   }
 
   const rows: RosterRow[] = [];
-  for (const entry of byAgent.values()) rows.push(rowFor(entry, now, nodeLabel, input.tabHeld ?? true));
+  for (const entry of byAgent.values()) rows.push(rowFor(entry, now, nodeLabel, input.tabHeld ?? false));
   rows.sort((a, b) => {
     if (a.group !== b.group) return a.group === 'needsYou' ? -1 : 1;
     if (a.group === 'needsYou') return a.sortAt - b.sortAt || a.agent.name.localeCompare(b.agent.name);
@@ -214,8 +215,9 @@ function rowFor(entry: Gathered, now: number, nodeLabel: (id: string) => string 
         targetId: p.targetId, createdAt: p.createdAt, ...(p.held ? { held: true } : {}) })),
     ].sort((a, b) => a.createdAt - b.createdAt);
     const next = items[0];
-    // The same rule as an Update's own Review and Answer (heldLock heldLockFor).
-    const locked = next.held && tabHeld ? (next.kind === 'questions' ? HELD_QUESTIONS_LINE : HELD_PROPOSAL_LINE) : null;
+    // The same rule as an Update's own Review and Answer (heldLock heldLockFor): every row
+    // locks while the tab isn't confirmed, held asks and synced ones alike.
+    const locked = tabHeld ? (next.kind === 'questions' ? HELD_QUESTIONS_LINE : HELD_PROPOSAL_LINE) : null;
     const tooltip = locked ?? (counts.questions > 0 && counts.proposals > 0
       ? OPEN_NEXT : counts.questions > 0 ? OPEN_QUESTIONS : OPEN_PROPOSAL);
     const counted = countLine(counts);

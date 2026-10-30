@@ -467,3 +467,76 @@ The first full backend run on the merged tree failed 9 tests.
   - vitest: 8,594 passed in 674 files.
   - build: 449,127 B raw (limit 512,000).
   - backend: 12,338 passed in a full isolated run.
+
+## Round 5 (review 3 and its security review on 5916653e; GM `gm-pr204-r4`, `gm-pr204-r5`)
+
+- **Header (GM r4).** "N · all unread" when every Update is unread, "N · M unread"
+  when some are. Both numbers are the server's.
+- **Create's two lines (review 3 MEDIUM-1).**
+  - Generate's cluster FailureNotice now carries the refusal's code, and when the
+    request was sent.
+  - CreateView registers Save style (`create.style`) and Generate
+    (`create.generate`).
+  - The structural fix is `tests/personGatedCallers.ts`. It finds every backend
+    route behind a gate form (directly, or through same-file helpers) and every
+    frontend function that sends one. It traces by path literal and method, through
+    lib/ helpers and their imports, to the first store action or component.
+  - Each caller keeps its line with the mechanism (a marked call in its body, or a
+    call to a same-file function that has one) or is declared in CALLERS: sites,
+    NO_LINE, or KEEPS, each with a reason. Routes it can't find by path are in
+    COMPOSED (agent notes' `base(surface)`) or NO_FRONTEND.
+  - Heuristic limits: references are by name plus import; a call whose method it
+    can't read counts as any method; "calls a keeper" doesn't know which branch.
+- **Late refusal (review 3 LOW-1).**
+  - apiFetch stamps an answer whose request went out before the latest promote
+    (`personPromotions`, a WeakSet of responses). `requestError` and `readRefusal`
+    carry the stamp as `sentBeforePromote`.
+  - The mechanism runs the clear or retry for such a refusal on the next microtask.
+  - Such an answer no longer re-holds the tab (`notePersonRequired`). This touches
+    #200's demote path: only a refusal of a request sent under the current promote
+    demotes.
+  - The project, canvas-proposal and asset-proposal error wrappers now keep the
+    stamp.
+- **Reopen-join expiry (review 3 LOW-2).** `_schedule_asset_expiry` runs on both
+  reopen branches.
+- **NITs.**
+  - A refused run puts each node back to how it was before the start queued it
+    (`beforeQueued`), not `idle`. Before, the snapshot was taken after queueing, so
+    it restored `queued`; the new test caught that. Only nodes still showing that
+    line are restored.
+  - Tests for the tab-claim edges, the board list, `for_reader` leaving its input
+    unchanged, and keyFor.
+- **Security review.**
+  - Every Updates broadcast goes through the per-socket `for_reader`
+    (`ConnectionManager._form`), including `others=` forms and `broadcast_others`.
+  - MCP-SETUP and the main.py comment now say the claim needs no secret: a
+    localhost page or a sandboxed agent with localhost access can send it, but an
+    MCP/CLI-only agent can't.
+  - "Your own" means by name for an unverified agent.
+- **GM r5 item 1.** A project save refused as not connected is retried on the
+  promote through `retryOnPromote` (the same mechanism mark-read uses).
+  - During the retry the header shows its normal "Saving…".
+  - A retry that fails keeps "Save failed · Retry" with the new reason.
+  - The ratchet's RETRIES test allows exactly these two retries.
+- **GM r5 item 2.** Held is a state: `personUnconfirmed = held || !answered`.
+  - "Answered" turns true on the socket's first promote or refusal. In test mode it
+    defaults to true.
+  - Every lock reads it: Updates buttons, roster rows (all asks lock while
+    unconfirmed; `heldLockFor` no longer looks at what the tab holds; the roster's
+    `tabHeld` defaults to false), the arrival card, and ProposalBar and
+    AssetProposalStrip Accept/Reject.
+  - Before the first answer a lock keeps its own look for 150 ms
+    (`data-held-pending`: aria-disabled, no grey, no reason, clicks do nothing).
+    The grey comes after that. A refusal greys at once.
+- **Server side of 2a: reported, not changed.** See the PR body.
+- **Verification.**
+  - On 5916653e, 17 of 29 frontend and 2 of 7 backend new tests fail. The tests
+    that pass there cover existing behaviour, as the NITs asked.
+  - Mutations: 17 of 17 frontend, 3 of 3 backend, and 4 of 4 for the ratchet.
+  - Gates: tsc and lint clean; vitest 8,617 in 677 files; build 449,567 B raw;
+    backend 12,345 passed.
+  - Live on 8795/5795: 12 of 12.
+  - The first live attempts failed for harness reasons: the backend and the browser
+    timed out starting while the full pytest ran, the canvas once didn't open on the
+    first try, and the prompt input selector was wrong. None of these was a product
+    failure.

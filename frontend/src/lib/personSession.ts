@@ -307,13 +307,29 @@ export function subscribePersonBanner(listener: () => void): () => void {
  * and never brings up the Q116a toast.
  */
 let personGateHeldNow = false;
+/**
+ * GM, PR #204 r5 item 2 ("held is a state, not a path"): whether this page's
+ * canvas socket has answered who it is since the page loaded, either way: the
+ * person-only `proposalSync` (promoted) or a refusal (`personRequired`, no
+ * token, a 403 person_required). Until then the tab isn't confirmed as the
+ * person, so what only the person may open stays locked (heldLock). Tests
+ * start answered, as the connected tab they render; a test of the load
+ * window resets to unanswered (resetPersonSessionForTests).
+ */
+let personGateAnsweredNow = import.meta.env.MODE === 'test';
 const personGateListeners = new Set<() => void>();
 function setPersonGateHeld(held: boolean): void {
-  if (held === personGateHeldNow) return;
+  if (held === personGateHeldNow && personGateAnsweredNow) return;
   personGateHeldNow = held;
+  personGateAnsweredNow = true;
   personGateListeners.forEach((listener) => listener());
 }
 export const personGateHeld = (): boolean => personGateHeldNow;
+/** The socket has answered since load (promoted or refused). */
+export const personGateAnswered = (): boolean => personGateAnsweredNow;
+/** Not confirmed as the person: held, or no answer yet since load. One state
+ * for every lock on what only the person may open (GM r5 item 2). */
+export const personUnconfirmed = (): boolean => personGateHeldNow || !personGateAnsweredNow;
 export function subscribePersonGate(listener: () => void): () => void {
   personGateListeners.add(listener);
   return () => { personGateListeners.delete(listener); };
@@ -327,10 +343,29 @@ if (typeof window !== 'undefined') {
   window.addEventListener(PERSON_REQUIRED_EVENT, () => setPersonGateHeld(true));
 }
 
+/**
+ * Review 3 LOW-1 (#204 r5): how many times the server has promoted this tab,
+ * and which answers came to requests sent before the latest promote. A
+ * refusal of such a request is the old state's answer, not the tab's now:
+ * it holds nothing (lib/backend notePersonRequired), and a line it puts up
+ * clears at once (lib/clearsOnPromote), since the sweep it waited for has run.
+ */
+let personPromotionsNow = 0;
+export const personPromotions = (): number => personPromotionsNow;
+const answeredAfterPromote = new WeakSet<object>();
+/** Mark an answer whose request was sent before the latest promote. */
+export function noteSentBeforePromote(response: object): void {
+  answeredAfterPromote.add(response);
+}
+export function sentBeforePromote(response: object): boolean {
+  return answeredAfterPromote.has(response);
+}
+
 /** The server promoted this tab's canvas socket as the person: its hello was
  * verified (lib/wsClient sees the person-only `proposalSync` the backend sends
  * on promote, and only then). Clears the hold and the banner. */
 export function notePersonPromoted(): void {
+  personPromotionsNow += 1;
   setPersonGateHeld(false);
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(PERSON_PROMOTED_EVENT));
 }
@@ -364,9 +399,13 @@ if (typeof window !== 'undefined') {
   });
 }
 
-export function resetPersonSessionForTests(): void {
+export function resetPersonSessionForTests({ unanswered = false }: { unanswered?: boolean } = {}): void {
   setPersonBannerLine(null);
   setPersonGateHeld(false);
+  if (unanswered) {
+    personGateAnsweredNow = false;
+    personGateListeners.forEach((listener) => listener());
+  }
   memoryCredential = null;
   desktopLookup = null;
   desktopReason = null;

@@ -4,7 +4,9 @@ import { BACKEND_NOT_RUNNING_COPY, ConnectionLostError, isConnectionFailure } fr
 import { TAB_HEADER, TAB_ID } from './tabId';
 import { noteParamsOutdated, PARAMS_VERSION_HEADER } from './paramsOutdated';
 import { GRAPH_PARAMS_VERSION } from './savedParamsUpgrades';
-import { browserPersonCredential, personCredential, reportPersonRequired } from './personSession';
+import {
+  browserPersonCredential, noteSentBeforePromote, personCredential, personPromotions, reportPersonRequired, sentBeforePromote,
+} from './personSession';
 import {
   DEFAULT_BACKEND_PORT,
   assertBackendEnvConsistent,
@@ -315,6 +317,9 @@ function wantsPersonHeader(path: string, method: string): boolean {
 
 function notePersonRequired(response: Response): void {
   if (response.status !== 403 || typeof response.clone !== 'function') return;
+  // An answer to a request sent before the latest promote is the old state's (review 3
+  // LOW-1): the server has since promoted this tab, so it holds nothing.
+  if (sentBeforePromote(response)) return;
   void response.clone().json()
     .then((body: { code?: unknown } | null) => { if (body?.code === 'person_required') reportPersonRequired(); })
     .catch(() => { /* not JSON: not a person-gate refusal */ });
@@ -442,14 +447,20 @@ export async function apiFetch(path: string, init?: RequestInit,
   // key. Only read-only requests may transparently rediscover and replay.
   const mayReplayAfterDiscovery = method === 'GET' || method === 'HEAD';
 
+  // Which promote this request was sent under (review 3 LOW-1, PR #204 r5).
+  const promotions = personPromotions();
+  const stamp = (response: Response): Response => {
+    if (personPromotions() !== promotions) noteSentBeforePromote(response);
+    return response;
+  };
   try {
-    const response = await send(requestUrl);
+    const response = stamp(await send(requestUrl));
     notePersonRequired(response);
     noteParamsOutdated(response);
     if (mayReplayAfterDiscovery && shouldRetryWithDiscovery(baseUrl, response)) {
       const retryBaseUrl = await getBackendBaseUrl({ force: true });
       if (retryBaseUrl !== baseUrl) {
-        return send(joinBackendPath(retryBaseUrl, path));
+        return stamp(await send(joinBackendPath(retryBaseUrl, path)));
       }
     }
     return response;
@@ -457,7 +468,7 @@ export async function apiFetch(path: string, init?: RequestInit,
     if (!mayReplayAfterDiscovery || !shouldRetryWithDiscovery(baseUrl)) throw err;
     const retryBaseUrl = await getBackendBaseUrl({ force: true });
     if (retryBaseUrl === baseUrl) throw err;
-    return send(joinBackendPath(retryBaseUrl, path));
+    return stamp(await send(joinBackendPath(retryBaseUrl, path)));
   }
 }
 

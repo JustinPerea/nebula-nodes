@@ -11,7 +11,7 @@ import {
 import { PERSONAL_AGENTS_CHANGED_EVENT } from '../../../lib/personalAgentsEvents';
 import '../../../styles/personal-agents.css';
 import { failureMessage } from '../../../lib/errorCopy';
-import { clearSetterOnPromote, clearsOnPromote, isPersonRefusal } from '../../../lib/clearsOnPromote';
+import { clearRefusedOnPromote, clearSetterOnPromote } from '../../../lib/clearsOnPromote';
 
 const STATUS_TEXT: Record<PersonalAgent['status'], string> = {
   ready: 'Ready',
@@ -138,7 +138,7 @@ export function PersonalAgentsSection() {
         setError(line);
         // GM, #204 r3: refused only because this tab isn't connected as you:
         // on the promote the line goes and the list loads.
-        if (isPersonRefusal(exc)) clearsOnPromote(() => { setError((now) => (now === line ? null : now)); setAttempt((n) => n + 1); }); // clears-on-promote: settings.agents-load
+        clearRefusedOnPromote(exc, () => { setError((now) => (now === line ? null : now)); setAttempt((n) => n + 1); }); // clears-on-promote: settings.agents-load
       });
   }, []);
 

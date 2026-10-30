@@ -57,7 +57,7 @@ const { useProjectStore } = await import('../src/store/projectStore');
 const { useAgentRosterStore } = await import('../src/components/agent-notes/agentRosterStore');
 const { useAssetProposalsStore } = await import('../src/store/assetProposalsStore');
 const { coverProposal } = await import('../src/test/assetProposalFixtures');
-const { notePersonPromoted } = await import('../src/lib/personSession');
+const { notePersonPromoted, reportPersonRequired } = await import('../src/lib/personSession');
 const { PERSON_REQUIRED_CODE, RequestFailedError, MARK_READ_REFUSED_COPY } = await import('../src/lib/errorCopy');
 const { pendingPromoteRetries } = await import('../src/lib/clearsOnPromote');
 const { sanitizeNotes } = await import('../src/lib/agentNotes');
@@ -98,10 +98,11 @@ function sync(notes: unknown[] = UPDATES, unread = notes.length) {
   emit({ type: 'agentNotes', surface: 'canvas', op: 'sync', projectId: 'p1', notes, unread, at: 1 });
 }
 function held() {
-  act(() => { useAssetProposalsStore.setState({ awaitingSync: true }); });
+  act(() => { reportPersonRequired(); useAssetProposalsStore.setState({ awaitingSync: true }); });
 }
 /** The person's sync after the promote: the asks themselves. */
 function promoteAsks() {
+  act(() => { notePersonPromoted(); });
   emit({ type: 'questionsOpened', answerKey: 'k_q', set: { id: 'qs_2', status: 'open', agent: CLAUDE, note: null,
     projectId: 'p1', nodeIds: [], createdAt: T + 1_000, closedAt: null, answers: null, update: { id: 'u_q', projectId: 'p1' },
     questions: [{ id: 'q1', text: 'Which crop?', options: ['Square', 'Wide'], multiple: false, allowText: true }] } });
@@ -208,12 +209,12 @@ describe('GM r3 item 2: Review and Answer locked in a held tab, wherever they ar
     expect(notesApi.markAgentNotesRead).not.toHaveBeenCalled();
   });
 
-  it('one rule with the Agents panel rows: heldLockFor is heldAsks', () => {
+  it('one rule with the Agents panel rows: every open ask locks while the tab is held', () => {
     const [cover, question] = sanitizeNotes(UPDATES);
-    expect(heldLockFor(cover, () => false)).toBe(REVIEW_LOCK);
-    expect(heldLockFor(question, () => false)).toBe(ANSWER_LOCK);
-    expect(heldLockFor(cover, (id) => id === 'pa_cover')).toBeNull();
-    expect(heldLockFor({ ...question, resolvedAt: new Date().toISOString() }, () => false)).toBeNull();
+    expect(heldLockFor(cover)).toBe(REVIEW_LOCK);
+    expect(heldLockFor(question)).toBe(ANSWER_LOCK);
+    expect(heldLockFor(cover, false)).toBeNull();
+    expect(heldLockFor({ ...question, resolvedAt: new Date().toISOString() })).toBeNull();
   });
 
   it('the locked look is the shared ghost rule: --disabled-label', async () => {
@@ -247,7 +248,7 @@ describe('GM r3 items 1 and 3: a truthful header, a silent retry on the promote,
     await waitFor(() => expect(list.textContent).toContain(MARK_READ_REFUSED_COPY));
     expect(MARK_READ_REFUSED_COPY).toBe('Nebula couldn’t mark the updates as read because this tab isn’t connected as you. '
       + 'Open the link Nebula printed when it started.');
-    expect(header(list)).toBe('2 · 2 unread');
+    expect(header(list)).toBe('2 · all unread');
     expect(list.textContent).not.toContain('all read');
     expect(list.textContent).not.toContain('try again');
   });
@@ -278,7 +279,7 @@ describe('GM r3 items 1 and 3: a truthful header, a silent retry on the promote,
     act(() => { notePersonPromoted(); });
     await waitFor(() => expect(notesApi.markAgentNotesRead).toHaveBeenCalledTimes(2));
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
-    expect(header(list)).toBe('2 · 2 unread');
+    expect(header(list)).toBe('2 · all unread');
     expect(useAgentNotesStore.getState().error).toBeNull();
     expect(list.textContent).not.toContain('couldn’t mark');
     expect(pendingPromoteRetries()).toBe(0);
@@ -296,7 +297,7 @@ describe('GM r3 items 1 and 3: a truthful header, a silent retry on the promote,
     act(() => { notePersonPromoted(); });
     expect(useAgentNotesStore.getState().error).toBe(line);
     expect(notesApi.markAgentNotesRead).toHaveBeenCalledTimes(1);
-    expect(header(list)).toBe('2 · 2 unread');
+    expect(header(list)).toBe('2 · all unread');
   });
 });
 

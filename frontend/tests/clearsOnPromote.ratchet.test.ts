@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { callersOf, gatedRoutes, keepsLine } from './personGatedCallers';
 
 /**
  * GM, PR #204 round 3 (2026-10-30): "on promote, every line whose only reason
@@ -22,6 +23,17 @@ import { describe, expect, it } from 'vitest';
  * 3. Any frontend file that recognises the person gate's refusal goes
  *    through the mechanism too, or is a classifier listed in CLASSIFIERS.
  * 4. Nothing clears on the promote by its own listener.
+ *
+ * Round 5 (review 3 MEDIUM-1: Create's two lines had slipped through every list) adds the half
+ * that needs no hand-kept map to start from (tests/personGatedCallers.ts):
+ *
+ * 5. Every backend route behind the gate is found, and every frontend function that sends one
+ *    (by its path, through lib/ helpers, to the first store action or component) either keeps
+ *    its line with the mechanism (a marked call in its body, or a call to a same-file function
+ *    that has one) or is in CALLERS: the registrations that clear its line, or why it shows
+ *    none. A new gated call that shows a line fails here until it registers or is declared.
+ * 6. Exactly one retry on the promote per kind of request (RETRIES): Save and mark-read share
+ *    `retryOnPromote`, and nothing else retries on its own.
  */
 
 const ROOT = join(__dirname, '..');
@@ -117,6 +129,9 @@ const SITES: Record<string, string> = {
   'canvas-proposals.reject': 'store/canvasProposalsStore.ts',
   'project.error': 'store/projectStore.ts',
   'project.save': 'store/projectStore.ts',
+  'project.save-retry': 'store/projectStore.ts',
+  'create.style': 'components/create-studio/CreateView.tsx',
+  'create.generate': 'components/create-studio/CreateView.tsx',
   'graph.refusal': 'store/graphStore.ts',
   'graph.notify': 'store/graphStore.ts',
   'graph.run-start': 'store/graphStore.ts',
@@ -173,7 +188,10 @@ const GATED: Record<string, Surface> = {
   // _person_only_refusal: person_required for a tab that isn't the person.
   _check_run_approval: ['graph.run-start', 'graph.refusal'],
   _require_spend_approval: ['graph.run-start', 'graph.shot-start', 'graph.refusal'],
-  _refuse_agent_billing_change: ['project.save', 'project.error', 'graph.notify', 'graph.run-start', 'graph.refusal'],
+  // Create's Save style (POST /api/presets, _check_style_write) and Generate (POST
+  // /api/graph/cluster) answer with it too (review 3 MEDIUM-1, round 5).
+  _refuse_agent_billing_change: ['project.save', 'project.save-retry', 'project.error', 'graph.notify', 'graph.run-start',
+    'graph.refusal', 'create.style', 'create.generate'],
   _refuse_graph_over_save_limit_on_its_own: ['graph.notify', 'graph.refusal'],
   _refuse_agent_growth_past_save_limit: ['graph.notify', 'graph.refusal'],
   _reader_spend_hold: NO_LINE('POST /api/moodboards/{id}/read: no tab calls it (agents and the CLI only)'),
@@ -189,7 +207,7 @@ const OTHER_SITES: Record<string, string> = {
   'chat.clear-canvas': 'Clear canvas from the chat: DELETE /api/graph has no gate form today; a person_required answer still clears',
 };
 
-const REGISTRATION = /\b(?:clearLineOnPromote|clearSetterOnPromote|clearsOnPromote|retryOnPromote|clearsOnPromoteIf|clearRefusalOnPromote|clearPinRefusalOnPromote)\(|\.clearOnPromote\(/;
+const REGISTRATION = /\b(?:clearLineOnPromote|clearSetterOnPromote|clearsOnPromote|retryOnPromote|clearsOnPromoteIf|clearRefusalOnPromote|clearRefusedOnPromote|clearPinRefusalOnPromote)\(|\.clearOnPromote\(/;
 const DEFINITION = /^\s*(?:export\s+)?(?:async\s+)?function\s|^\s*const\s+\w+\s*=\s*\(|^\s*\w+\s*:\s*\(|^\s*clearOnPromote:\s/;
 const MARKER = /\/\/ clears-on-promote: ([\w.-]+)/;
 
@@ -221,6 +239,53 @@ const PROMOTE_LISTENERS: Record<string, string> = {
   'lib/clearsOnPromote.ts': 'the sweep',
   'lib/personSession.ts': 'defines it',
   'store/canvasProposalsStore.ts': 'releases approvals dismissed while the gate held (a request, not a line)',
+};
+
+/** Round 5: what a route the trace can't find by its path is (none may be left unexplained). */
+const COMPOSED: Record<string, string[]> = {
+  // lib/agentNotes builds the path from base(surface): both surfaces go through these two.
+  'POST /api/canvas/agent-notes/read': ['lib/agentNotes.ts#markAgentNotesRead'],
+  'POST /api/moodboards/{moodboard_id}/agent-notes/read': ['lib/agentNotes.ts#markAgentNotesRead'],
+  'POST /api/canvas/agent-notes/{note_id}/dismiss': ['lib/agentNotes.ts#dismissAgentNote'],
+  'POST /api/moodboards/{moodboard_id}/agent-notes/{note_id}/dismiss': ['lib/agentNotes.ts#dismissAgentNote'],
+};
+const NO_FRONTEND: Record<string, string> = {
+  'POST /api/graph/apply': 'an agent\'s edit (edit_canvas, `nebula apply`); no tab sends it',
+  'POST /api/graph/apply/undo': 'an agent\'s undo of its own apply; no tab sends it',
+  'POST /api/graph/run': 'the CLI\'s and MCP\'s run; a tab runs through /api/execute',
+  'POST /api/quick': 'the CLI\'s one-shot generate; no tab sends it',
+  'POST /api/moodboards/{moodboard_id}/read': 'an agent reading a board (spend hold); no tab sends it',
+  'PUT /api/presets/{preset_id}': 'no tab edits a style in place: Create saves a new one (POST) or deletes it',
+};
+
+const KEEPS = (why: string) => ({ keeps: why });
+type Caller = string[] | { none: string } | { keeps: string };
+
+/** Round 5: each function that sends a gated route but doesn't keep its line with the mechanism
+ * in its own file. Keys are `file#function`; a lib/ key also stops the trace there. */
+const CALLERS: Record<string, Caller> = {
+  // Its line is kept by what it hands the failure to.
+  'components/GraphFileActions.tsx#importGraph': ['graph.notify'], // showNotice → graphStore notify, which reads GM's line
+  'components/panels/ChatPanel.tsx#acceptWarning': ['settings.agent-warning'], // throws to PersonalAgentWarning
+  // No line.
+  'lib/runCostConfirm.ts#applySavedRunCostConfirm': NO_LINE('a quiet migration of the run cost threshold: a failure logs and tries again on the next read of settings'),
+  'lib/canvasProposals.ts#releaseApproval': NO_LINE('releaseApproval swallows every failure: the approval expires on its own'),
+  'components/panels/ChatPanel.tsx#load': NO_LINE('a failed read of the agents falls back to an empty list; the Settings tab shows the refusal'),
+  'components/panels/Inspector.tsx#renderUniversalModelControl': NO_LINE('a favourite\'s star: a failed save is ignored (.catch(() => undefined))'),
+  'store/graphStore.ts#cancelWithinTimeLimit': NO_LINE('throws to requestTrackedCancellation, which keeps the Stop and asks again (see _refuse_stopping_the_persons_run)'),
+  'store/graphStore.ts#refused': NO_LINE('an offline refusal built locally: nothing is sent'),
+  'store/graphStore.ts#saves': NO_LINE('describes a cut-off save from its path; sends nothing'),
+  'store/graphStore.ts#typingSaves': NO_LINE('describes typing a cut-off save held; sends nothing'),
+  'store/projectStore.ts#keepReplacedCanvasAsCopy': NO_LINE('.catch(() => null): a copy not made; the held edits\' screen offers it again'),
+  // A line that stays through the promote on purpose: the screen's own Try again is the way on.
+  'store/projectStore.ts#recoverPendingWork': KEEPS('throws to initialize and the params reload, whose load screen keeps its Try again: clearing it would strand a tab that hasn\'t loaded'),
+  'store/projectStore.ts#followProjectSwitch': KEEPS('the handoff after an agent\'s switch: its failure becomes a recovered copy, and the line says where it went'),
+};
+
+/** Round 5, GM r5 (1): the requests that retry on the promote, through `retryOnPromote` only. */
+const RETRIES: Record<string, string> = {
+  'notes.read-retry': 'store/agentNotesStore.ts',
+  'project.save-retry': 'store/projectStore.ts',
 };
 
 const usesMechanism = (source: string) => /from '[./]*(?:lib\/)?clearsOnPromote'/.test(source)
@@ -286,6 +351,58 @@ describe('GM, PR #204: a line whose only reason was this tab clears on the promo
   it('nothing clears on the promote by its own listener', () => {
     const own = sourceFiles().filter((path) => /\bonPersonPromoted\(/.test(readFileSync(path, 'utf8')))
       .map(rel).filter((file) => !(file in PROMOTE_LISTENERS));
+    expect(own).toEqual([]);
+  });
+
+  it('round 5: every gated route is found from the frontend, or listed as composed or agent-only', { timeout: 30_000 }, () => {
+    const routes = gatedRoutes();
+    expect(routes.length).toBeGreaterThan(50);
+    const keys = routes.map((route) => `${route.method} ${route.path}`);
+    const wrong: string[] = [];
+    for (const route of routes) {
+      const key = `${route.method} ${route.path}`;
+      const byPath = callersOf(route).size;
+      if (key in NO_FRONTEND) { if (byPath > 0 || key in COMPOSED) wrong.push(`${key}: listed as agent-only, but sent from the frontend`); }
+      else if (key in COMPOSED) { if (byPath > 0) wrong.push(`${key}: composed, but found by its path`); }
+      else if (byPath === 0) wrong.push(`${key}: no frontend caller found, and not listed`);
+    }
+    for (const key of [...Object.keys(COMPOSED), ...Object.keys(NO_FRONTEND)]) if (!keys.includes(key)) wrong.push(`${key}: listed, but not gated`);
+    expect(wrong).toEqual([]);
+  });
+
+  it('round 5: every frontend caller of a gated route keeps its line with the mechanism, or is in CALLERS', { timeout: 30_000 }, () => {
+    const stops = new Set(Object.keys(CALLERS).filter((key) => key.startsWith('lib/')));
+    const undeclared = new Map<string, string[]>();
+    const seen = new Set<string>();
+    for (const route of gatedRoutes()) {
+      const starts = COMPOSED[`${route.method} ${route.path}`] ?? [];
+      for (const [id, unit] of callersOf(route, starts, stops)) {
+        seen.add(id);
+        if (keepsLine(unit) && !(id in CALLERS)) continue;
+        if (!(id in CALLERS)) undeclared.set(id, [...(undeclared.get(id) ?? []), `${route.method} ${route.path}`]);
+      }
+    }
+    expect(Object.fromEntries(undeclared)).toEqual({});
+    // Every declaration is a caller the trace finds (a stale one fails), and says something.
+    expect(Object.keys(CALLERS).filter((id) => !seen.has(id))).toEqual([]);
+    for (const [id, caller] of Object.entries(CALLERS)) {
+      if (Array.isArray(caller)) {
+        expect(caller.length, id).toBeGreaterThan(0);
+        for (const site of caller) expect(site in SITES, `${id}: ${site}`).toBe(true);
+      } else {
+        expect(('none' in caller ? caller.none : caller.keeps).length, id).toBeGreaterThan(20);
+      }
+    }
+  });
+
+  it('round 5: the requests that retry on the promote go through retryOnPromote, and are listed', () => {
+    const found = markers();
+    const retries = [...found].filter(([, at]) => at.some((where) => /\bretryOnPromote\(/.test(where.line))).map(([site]) => site).sort();
+    expect(retries).toEqual(Object.keys(RETRIES).sort());
+    for (const [site, file] of Object.entries(RETRIES)) expect(found.get(site)?.[0]?.file, site).toBe(file);
+    // Nothing else retries a refused request on the promote by its own means.
+    const own = sourceFiles().filter((path) => rel(path) !== 'lib/clearsOnPromote.ts'
+      && /onPersonPromoted\([^)]*\)[\s\S]{0,400}\b(?:retry|retrySave|save)\(/.test(readFileSync(path, 'utf8'))).map(rel);
     expect(own).toEqual([]);
   });
 });

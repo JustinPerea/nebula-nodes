@@ -25,7 +25,7 @@
 
 import { isOfflineRefusal } from './backendConnection';
 import { OFFLINE_VERBS, reconnectsLine } from './useBackendOffline';
-import { inDesktopShell, personUnavailableReason } from './personSession';
+import { inDesktopShell, personUnavailableReason, sentBeforePromote } from './personSession';
 
 /** No answer at all: the connection dropped, or the backend isn't there.
  * Round 3f (GM): ""Check your connection" sends people to their Wi-Fi, but
@@ -318,10 +318,14 @@ export class RequestFailedError extends Error {
    * failing. storageLimit stays null for it, as for any too-large request. */
   readonly overSaveLimit: boolean;
   readonly sizeBytes: number | null;
+  /** The request was sent before the server's latest promote of this tab (review 3 LOW-1):
+   * its refusal is the old state's, so its line clears at once (lib/clearsOnPromote). */
+  readonly sentBeforePromote: boolean;
 
   constructor(heading: string, status: number,
     options: { detail?: unknown; reason?: string; cause?: unknown; storageFull?: boolean;
-      storageLimit?: StorageLimit | null; code?: string | null; overSaveLimit?: boolean; sizeBytes?: number | null } = {}) {
+      storageLimit?: StorageLimit | null; code?: string | null; overSaveLimit?: boolean; sizeBytes?: number | null;
+      sentBeforePromote?: boolean } = {}) {
     const reason = copyForAnswer(status, options.detail, options.code ?? null, options.reason);
     super(oneLine({ heading, reason }), 'cause' in options ? { cause: options.cause } : undefined);
     this.name = 'RequestFailedError';
@@ -334,6 +338,7 @@ export class RequestFailedError extends Error {
     this.code = options.code ?? null;
     this.overSaveLimit = options.overSaveLimit === true;
     this.sizeBytes = options.sizeBytes ?? null;
+    this.sentBeforePromote = options.sentBeforePromote === true;
   }
 
   get kind(): FailureKind {
@@ -356,14 +361,18 @@ export class FailureNotice extends Error {
   /** The refusal's `code` when the line came from one (`person_required`: clearsOnPromote
    * reads it, so a line refused only for this tab goes on the promote; PR #204 round 4). */
   readonly code: string | null;
+  /** As RequestFailedError's: refused for a request sent before the latest promote. */
+  readonly sentBeforePromote: boolean;
 
-  constructor(heading: string, reason: string, options: { standalone?: boolean; code?: string | null } = {}) {
+  constructor(heading: string, reason: string,
+    options: { standalone?: boolean; code?: string | null; sentBeforePromote?: boolean } = {}) {
     super(oneLine({ heading, reason }));
     this.name = 'FailureNotice';
     this.heading = heading;
     this.reason = reason;
     this.standalone = options.standalone === true;
     this.code = options.code ?? null;
+    this.sentBeforePromote = options.sentBeforePromote === true;
   }
 }
 
@@ -490,9 +499,9 @@ export async function readDetail(response: Response): Promise<unknown> {
 /** An answer's `detail` and `code` (the person gate's, when it has one), from
  * one read of its body, for a caller that words the failure itself
  * (copyForAnswer). */
-export async function readRefusal(response: Response): Promise<{ detail: unknown; code: string | null }> {
+export async function readRefusal(response: Response): Promise<{ detail: unknown; code: string | null; sentBeforePromote: boolean }> {
   const { detail, code } = await readFailureBody(response);
-  return { detail, code };
+  return { detail, code, sentBeforePromote: sentBeforePromote(response) };
 }
 
 /** An answer's `detail`, and whether it says the disk is full (the backend's
@@ -618,7 +627,7 @@ export async function requestError(heading: string, response: Response,
   warnFailure(heading, response.status, body.detail);
   return new RequestFailedError(heading, response.status, { detail: body.detail, reason: options.reason,
     storageFull: body.storageFull, storageLimit: body.storageLimit, code: body.code,
-    overSaveLimit: body.overSaveLimit, sizeBytes: body.sizeBytes });
+    overSaveLimit: body.overSaveLimit, sizeBytes: body.sizeBytes, sentBeforePromote: sentBeforePromote(response) });
 }
 
 /**

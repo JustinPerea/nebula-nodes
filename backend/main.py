@@ -3772,11 +3772,15 @@ def _websocket_has_agent_marker(websocket: WebSocket) -> bool:
 
 
 # PR #204 round 4: a tab says it is one: ``X-Nebula-Tab`` (its tab id, which the canvas already
-# sends on writes and agents, the CLI and MCP never send) on its Updates reads, and ``?tab=1`` on
-# its socket, where a browser can't set headers. It is a claim, not an agent marker: it never
-# makes a request the person (person_gate is untouched) and only decides who sees a shared asset
-# Update's ``asks`` and ``firstSince`` (agent_notes.for_reader). A local program that claims to be
-# a tab sees those two numbers: the same unsandboxed case person_gate.py documents.
+# sends on writes; the CLI and MCP never send it) on its Updates reads, and ``?tab=1`` on its
+# socket, where a browser can't set headers. It is a claim, not an agent marker: it never makes a
+# request the person (person_gate is untouched) and only decides who sees a shared asset Update's
+# ``asks`` and ``firstSince`` (agent_notes.for_reader). The claim needs no secret (security
+# review LOW-2, r5): any local program, a page on any localhost origin, or an agent sandboxed
+# with localhost network access can send it without a marker and read those two counts. Agents
+# that reach Nebula only through MCP or the CLI can't: neither ever sends the claim.
+# The counts are payload shape, not a secret: GET /api/asset-proposals and the journal let any
+# agent work them out (security review LOW-1).
 TAB_CLAIM_HEADER = "x-nebula-tab"
 TAB_CLAIM_PARAM = "tab"
 
@@ -3862,34 +3866,40 @@ class ConnectionManager:
         """Send `data` to every socket; with `others`, only the person's canvas
         sockets (a verified hello) get `data` and every other socket gets
         `others` (review 14 LOW-1 of PR #200: the pins' person form)."""
-        message = json.dumps(data)
-        other_message = message if others is None else json.dumps(others)
-        # Updates: each socket gets the form its reader may see (a shared Update's share fields).
-        per_reader = others is None and data.get("type") == "agentNotes"
-        forms: dict[tuple[bool, str | None], str] = {}
+        forms: dict[tuple[Any, ...], str] = {}
         disconnected: list[WebSocket] = []
         for connection in self.active_connections:
             try:
-                if per_reader:
-                    view = self.share_view(connection)
-                    key = (view["sees_share"], view["agent_id"])
-                    if key not in forms:
-                        forms[key] = json.dumps(notes_for_reader(data, **view))
-                    await connection.send_text(forms[key])
-                    continue
-                await connection.send_text(message if connection in self.browser_connections else other_message)
+                base = data if others is None or connection in self.browser_connections else others
+                await connection.send_text(self._form(connection, base, forms))
             except Exception:
                 disconnected.append(connection)
         for conn in disconnected:
             self.disconnect(conn)
 
+    def _form(self, connection: WebSocket, base: dict[str, Any], forms: dict[tuple[Any, ...], str]) -> str:
+        """`base` as this socket gets it, serialised once per form. An Updates message always
+        goes through its reader's form (agent_notes.for_reader), whichever form a broadcast
+        hands this socket (PR #204 r5, security review NIT-1: an `others=` form or a
+        broadcast_others of Updates never skips the filter)."""
+        if base.get("type") == "agentNotes":
+            view = self.share_view(connection)
+            key: tuple[Any, ...] = (id(base), view["sees_share"], view["agent_id"])
+            if key not in forms:
+                forms[key] = json.dumps(notes_for_reader(base, **view))
+            return forms[key]
+        key = (id(base),)
+        if key not in forms:
+            forms[key] = json.dumps(base)
+        return forms[key]
+
     async def broadcast_others(self, data: dict[str, Any]) -> None:
         """Send to every socket that isn't the person's canvas (CLI/MCP listeners)."""
-        message = json.dumps(data)
+        forms: dict[tuple[Any, ...], str] = {}
         disconnected: list[WebSocket] = []
         for connection in [c for c in self.active_connections if c not in self.browser_connections]:
             try:
-                await connection.send_text(message)
+                await connection.send_text(self._form(connection, data, forms))
             except Exception:
                 disconnected.append(connection)
         for conn in disconnected:
@@ -7035,9 +7045,11 @@ async def _reopen_removed_proposals(plan: dict[str, Any], project_id: str | None
                      if other is not proposal and other.update and other.update != proposal.update), None)
         if live is not None:
             proposal.update = dict(live)
-            continue
-        await _reopen_update(proposal.update, proposal.id, asset_update_detail(proposal), asset_update_text(proposal),
-                             _share_reader(proposal, proposal.update))
+        else:
+            await _reopen_update(proposal.update, proposal.id, asset_update_detail(proposal), asset_update_text(proposal),
+                                 _share_reader(proposal, proposal.update))
+        # Review 3 LOW-2 (#204 r5): either way it is open again with a new expiry, and its old
+        # timer may have fired while it was closed: check it when it is due.
         _schedule_asset_expiry(proposal)
     # MEDIUM-1: an ask reopened under an Update another open ask still holds
     # leaves that Update on the other ask (reopen_proposal); it now stands for

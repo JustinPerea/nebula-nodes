@@ -93,7 +93,7 @@ import {
   PERSON_REQUIRED_CODE, failureMessage, headedLine, isNamedLine, readRefusal, requestError,
   saysPersonRequired, warnFailure, nodeNameList,
 } from '../lib/errorCopy';
-import { clearsOnPromote, isPersonRefusal } from '../lib/clearsOnPromote';
+import { clearRefusedOnPromote } from '../lib/clearsOnPromote';
 import { CANVAS_NOTICE_EVENT, showNotice, type CanvasNoticeDetail } from '../lib/canvasNotice';
 import { sceneRetryingLine, sceneStoppedLine, sceneStopStateLine, type SceneStopCause, sceneOutpacedLine, type SceneOutpacedBy, type SceneWriter, sceneWriterOf,
   sameSceneWriter, UNKNOWN_WRITER, sceneDeletedLine, sceneRunLockLine, sceneOtherStopLine, sceneClashLine,
@@ -349,6 +349,7 @@ function markExecutionScopeQueued(
   const scopeIds = new Set(nodesInExecutionScope(nodes, edges, targetNodeId).map((node) => node.id));
   return nodes.map((node) => {
     if (!scopeIds.has(node.id)) return node;
+    queuedFrom(node);
     return {
       ...node,
       data: {
@@ -379,7 +380,11 @@ function markNodesErrored(
   // switch: main._person_only_refusal) leaves these nodes' line until the promote, while it is
   // still theirs. Every refused start comes through here with its failure.
   const line = hidden ?? message;
-  clearsOnPromoteIf(failure, () => useGraphStore.setState((state) => ({ nodes: withoutRefusedStart(state.nodes, nodeIds, line) }))); // clears-on-promote: graph.run-start
+  // Review 3 NIT-2 (#204 r5): what the refusal covered, so the promote puts each node back as
+  // it was (a complete node shows its image again), not idle.
+  const before = new Map(nodes.filter((node) => nodeIds.has(node.id)).map((node) => [node.id,
+    beforeQueued.get(node.id) ?? Object.fromEntries(REFUSED_START_FIELDS.map((key) => [key, node.data[key]]))]));
+  clearsOnPromoteIf(failure, () => useGraphStore.setState((state) => ({ nodes: withoutRefusedStart(state.nodes, before, line) }))); // clears-on-promote: graph.run-start
   return nodes.map((node) => {
     if (!nodeIds.has(node.id)) return node;
     return {
@@ -5799,16 +5804,30 @@ const nodeWrites = new Map<string, WireWrite>();
  * (review 8, L-d). `tone` as notify gives it; none keeps the notice's default.
  */
 /** GM, #204 r3: a toast for a person-gate refusal goes on the promote (lib/clearsOnPromote). */
-/** The nodes a refused start marked, back to idle: only those still showing its line. */
-function withoutRefusedStart(nodes: Node<NodeData>[], ids: Set<string>, line: string): Node<NodeData>[] {
-  return nodes.map((node) => (ids.has(node.id) && node.data.state === 'error' && node.data.error === line
-    ? { ...node, data: { ...node.data, state: 'idle' as const, error: undefined, errorPerson: undefined,
-      errorProviderText: undefined } }
-    : node));
+/** What markNodesErrored writes over: a refused start's clear puts these back. */
+const REFUSED_START_FIELDS = ['state', 'error', 'errorCategory', 'errorFriendly', 'errorPerson', 'errorProviderText',
+  'errorProvider', 'progress', 'streamingText', 'streamingPartials', 'streamingSvg'] as const;
+
+/** Each node as it was before the latest start queued it (review 3 NIT-2): what a refused start
+ * puts back, since by the refusal the node reads 'queued'. Every start queues first, so the
+ * entry is always the latest start's. */
+const beforeQueued = new Map<string, Partial<NodeData>>();
+function queuedFrom(node: Node<NodeData>): Node<NodeData> {
+  beforeQueued.set(node.id, Object.fromEntries(REFUSED_START_FIELDS.map((key) => [key, node.data[key]])) as Partial<NodeData>);
+  return node;
+}
+
+/** The nodes a refused start marked, back as they were before it (review 3 NIT-2): only those
+ * still showing its line, so a node that ran again and failed otherwise keeps its new line. */
+function withoutRefusedStart(nodes: Node<NodeData>[], before: Map<string, Partial<NodeData>>, line: string): Node<NodeData>[] {
+  return nodes.map((node) => {
+    const was = before.get(node.id);
+    return was && node.data.state === 'error' && node.data.error === line ? { ...node, data: { ...node.data, ...was } } : node;
+  });
 }
 
 function clearsOnPromoteIf(error: unknown, clear: () => void): void {
-  if (isPersonRefusal(error)) clearsOnPromote(clear); // clears-on-promote: graph.refusal
+  clearRefusedOnPromote(error, clear); // clears-on-promote: graph.refusal
 }
 
 function noticeLine(state: Pick<GraphState, 'undoNotice'>, text: string, tone?: 'error' | 'info',
@@ -7296,6 +7315,7 @@ function markSnapshotScopeQueued(
 ): Node<NodeData>[] {
   return nodes.map((node) => {
     if (!scopeIds.has(node.id)) return node;
+    queuedFrom(node);
     return {
       ...node,
       data: {
@@ -12838,7 +12858,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       nodes: state.nodes.map((n) =>
         idSet.has(n.id)
           ? {
-              ...n,
+              ...queuedFrom(n),
               data: {
                 ...n.data,
                 state: 'queued' as const,
@@ -13057,7 +13077,11 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
         console.error('[nebula] authorGenerationCluster persist failed:', err);
         // Refused while offline: nothing was sent, and Create says nothing.
         if (isOfflineRefusal(err)) throw err;
-        throw new FailureNotice(GENERATE_HEADING, `${CLUSTER_NOT_ADDED} ${clusterFailureReason(err)}`);
+        // Review 3 MEDIUM-1 (#204 r5): the refusal's code (and when it was sent) go with it, so
+        // Create's line clears on the promote when its only reason was this tab.
+        const refused = err instanceof RequestFailedError ? err : null;
+        throw new FailureNotice(GENERATE_HEADING, `${CLUSTER_NOT_ADDED} ${clusterFailureReason(err)}`,
+          { code: refused?.code ?? null, sentBeforePromote: refused?.sentBeforePromote });
       } finally {
         synced.stop();
       }

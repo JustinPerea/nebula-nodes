@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { ChevronDown, ChevronLeft, ChevronRight, Eye, X } from 'lucide-react';
 import {
@@ -16,7 +16,7 @@ import { InNoticeRegion } from '../InNoticeRegion';
 import '../../styles/canvasProposals.css';
 import { useCanvasLock } from '../../lib/canvasLock';
 import { useLeave } from '../../lib/noticeLeave';
-import { personGateHeld, subscribePersonGate } from '../../lib/personSession';
+import { useLockPending, useTabHeld } from '../agent-notes/heldLock';
 
 /** How long Accept/Reject ignore clicks after the shown proposal changes on its own. */
 const SWITCH_GUARD_MS = 600;
@@ -81,7 +81,13 @@ export function ProposalBar() {
   // GM r30 item 7: while this tab isn't connected as the person (the hold the
   // server's demote sets and its promote clears, lib/personSession), Accept
   // and Reject wait, disabled with their reasons; Show still works.
-  const gateHeld = useSyncExternalStore(subscribePersonGate, personGateHeld);
+  // GM, #204 r5 item 2: one state, held or not answered yet since load (useTabHeld). Before
+  // the socket's first answer the lock keeps its own look for 150 ms (gatePending), so a
+  // normal load never greys: aria-disabled, no reason, a click does nothing.
+  const gateHeld = useTabHeld();
+  const gatePending = useLockPending(gateHeld);
+  const gateGrey = gateHeld && !gatePending;
+  const pendingLook = gatePending ? { 'aria-disabled': true as const, 'data-held-pending': '' } : {};
   const pruneExpired = useCanvasProposalsStore((s) => s.pruneExpired);
   const { fitBounds, getInternalNode } = useReactFlow();
   // Track the shown proposal by id, never by position: a proposal that
@@ -308,9 +314,11 @@ export function ProposalBar() {
           <button
             type="button"
             className="proposal-bar__button"
-            {...lock.act({ disabled: Boolean(pending[current.view.id]) || gateHeld,
-              title: gateHeld ? PROPOSAL_GATE_COPY.reject : undefined })}
+            {...lock.act({ disabled: Boolean(pending[current.view.id]) || gateGrey,
+              title: gateGrey ? PROPOSAL_GATE_COPY.reject : undefined })}
+            {...pendingLook}
             onClick={() => {
+              if (gateHeld) return;
               if (settled()) void reject(current.view.id);
             }}
           >
@@ -320,9 +328,11 @@ export function ProposalBar() {
           <button
             type="button"
             className="proposal-bar__button proposal-bar__button--primary"
-            {...lock.act({ disabled: Boolean(pending[current.view.id]) || gateHeld,
-              title: gateHeld ? PROPOSAL_GATE_COPY.accept : undefined })}
+            {...lock.act({ disabled: Boolean(pending[current.view.id]) || gateGrey,
+              title: gateGrey ? PROPOSAL_GATE_COPY.accept : undefined })}
+            {...pendingLook}
             onClick={() => {
+              if (gateHeld) return;
               if (settled()) void accept(current.view.id);
             }}
           >

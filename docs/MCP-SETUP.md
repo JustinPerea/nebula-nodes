@@ -2444,10 +2444,17 @@ so does a caller that names no agent. The person's tabs see them: a tab
 connected as the person, and a held tab, which says it is a tab with the
 `X-Nebula-Tab` header (`?tab=1` on its socket) and carries no agent marker.
 A tab claim never beats a marker: a request with both is read as that
-agent. The claim proves nothing, so a program on this machine that sends it
-without a marker sees those two counts; that is the same local, unsandboxed
-case `person_gate.py` describes, and it reaches nothing else (it is not the
-person and passes no gate).
+agent. "Your own" means the same agent: for an unverified agent that is its
+name, so a caller naming itself after you reads your two counts, as it can
+already withdraw your unverified proposals. The claim needs no secret: any
+local program, a page on any localhost origin, or an agent sandboxed with
+localhost network access can send it without a marker and see the two
+counts. An agent that reaches Nebula only through MCP or the CLI can't send
+it: neither ever does, and MCP always names itself. The claim reaches nothing else (it is not
+the person and passes no gate). The counts are not a secret either:
+`GET /api/asset-proposals` and the journal list every open ask with its
+agent, target and time, so this keeps other agents' Updates as they were
+before the fields existed rather than hiding anything.
 A tab that isn't connected as the person sees only the Update, and its
 placeholder card and the Commons proposals line read these, never the text;
 its Agents panel counts `asks` proposals from `firstSince`, as the connected

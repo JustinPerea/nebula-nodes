@@ -1,5 +1,5 @@
 import { PERSON_REQUIRED_CODE } from './errorCopy';
-import { onPersonPromoted } from './personSession';
+import { onPersonPromoted, personGateHeld } from './personSession';
 
 /**
  * GM, PR #204 round 3 (2026-10-30): "on promote, every line whose only
@@ -29,9 +29,40 @@ export function clearsOnPromote(clear: Clear): () => void {
   return () => { sweeps.delete(clear); };
 }
 
+/**
+ * Review 3 LOW-1 (#204 r5): a refusal of a request sent before the latest promote, that
+ * lands once the tab is connected. The sweep it would wait for has already run, so it
+ * clears (and retries) now: on the next microtask, after its caller has shown the line.
+ */
+function refusedBeforeThisPromote(error: unknown): boolean {
+  return (error as { sentBeforePromote?: unknown } | null)?.sentBeforePromote === true && !personGateHeld();
+}
+
+function now(error: unknown, run: Clear): boolean {
+  if (!refusedBeforeThisPromote(error)) return false;
+  queueMicrotask(() => {
+    try {
+      run();
+    } catch (failure) {
+      console.error('[person] a line refused before the promote failed to clear:', failure);
+    }
+  });
+  return true;
+}
+
 /** Whether a failure is the person gate's refusal (403 `person_required`): its only reason was this tab. */
 export function isPersonRefusal(error: unknown): boolean {
   return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === PERSON_REQUIRED_CODE;
+}
+
+/**
+ * Any clear for a failure the person gate refused: on the promote, or at once when the
+ * refusal came for a request sent before it (review 3 LOW-1). Returns whether it registered.
+ */
+export function clearRefusedOnPromote(error: unknown, clear: Clear): boolean {
+  if (!isPersonRefusal(error)) return false;
+  if (!now(error, clear)) clearsOnPromote(clear);
+  return true;
 }
 
 /**
@@ -42,7 +73,8 @@ export function isPersonRefusal(error: unknown): boolean {
  */
 export function clearLineOnPromote<T>(error: unknown, current: () => T, line: T, clear: Clear): boolean {
   if (!isPersonRefusal(error)) return false;
-  clearsOnPromote(() => { if (current() === line) clear(); });
+  const run = () => { if (current() === line) clear(); };
+  if (!now(error, run)) clearsOnPromote(run);
   return true;
 }
 
@@ -52,7 +84,8 @@ export function clearLineOnPromote<T>(error: unknown, current: () => T, line: T,
  */
 export function clearSetterOnPromote<T>(error: unknown, setLine: (update: (current: T) => T) => void, line: T, empty: T): boolean {
   if (!isPersonRefusal(error)) return false;
-  clearsOnPromote(() => setLine((current) => (current === line ? empty : current)));
+  const run = () => setLine((current) => (current === line ? empty : current));
+  if (!now(error, run)) clearsOnPromote(run);
   return true;
 }
 
@@ -71,7 +104,7 @@ const retries = new Map<string, Clear>();
  */
 export function retryOnPromote(error: unknown, key: string, run: Clear): boolean {
   if (!isPersonRefusal(error)) return false;
-  retries.set(key, run);
+  if (!now(error, run)) retries.set(key, run);
   return true;
 }
 

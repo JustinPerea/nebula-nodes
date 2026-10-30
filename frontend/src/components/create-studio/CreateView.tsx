@@ -30,6 +30,7 @@ import '../../styles/create-studio.css';
 import '../../styles/create-gallery.css';
 import { FailureNotice, failureMessage } from '../../lib/errorCopy';
 import { isOfflineRefusal } from '../../lib/backendConnection';
+import { clearSetterOnPromote } from '../../lib/clearsOnPromote';
 
 const MAX_CONCURRENT = 2;
 /** A Generate that didn't start, named by its button (error copy round 3e). */
@@ -203,7 +204,11 @@ export function CreateView() {
       styleName.current = null;
       if (mounted.current) setPresetReloadKey((k) => k + 1);
     } catch (err) {
-      if (mounted.current) setStyleSaveError(failureMessage(err, "Couldn't save the style."));
+      const line = failureMessage(err, "Couldn't save the style.");
+      if (mounted.current) setStyleSaveError(line);
+      // Review 3 MEDIUM-1 (#204 r5): refused only for this tab (a style that bills the plan,
+      // main._check_style_write): the line goes on the promote.
+      if (mounted.current) clearSetterOnPromote(err, setStyleSaveError, line, null); // clears-on-promote: create.style
     } finally {
       styleSavePending.current = false;
       if (mounted.current) setSavingStyle(false);
@@ -298,7 +303,10 @@ export function CreateView() {
       // Offline is read-only (round 15 of PR #114): a refused Generate says nothing.
       if (isOfflineRefusal(error)) return;
       if (mounted.current && !useGraphStore.getState().createCancelledLaunchIds.includes(genId)) {
-        setGenerationError(failureMessage(error, GENERATE_HEADING));
+        const line = failureMessage(error, GENERATE_HEADING);
+        setGenerationError(line);
+        // Review 3 MEDIUM-1 (#204 r5): a cluster or start refused only for this tab goes on the promote.
+        clearSetterOnPromote(error, setGenerationError, line, null); // clears-on-promote: create.generate
       }
     } finally {
       store.releaseCreateGeneration(genId);

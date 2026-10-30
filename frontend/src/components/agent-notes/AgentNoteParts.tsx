@@ -1,6 +1,6 @@
 import { useContext, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import { LeaveBusyContext } from './leaveBusy';
-import { HELD_OPS, useHeldLock } from './heldLock';
+import { HELD_OPS, useHeldLock, useLockPending } from './heldLock';
 import { backendAssetUrlSync } from '../../lib/backend';
 import type { AgentNote, AgentNoteAction, AgentNoteAuthor, AgentNoteRun } from '../../lib/agentNotes';
 import { authorInitials, clipDuration, noteControls, type NoteButton } from '../../lib/agentNotesView';
@@ -123,10 +123,13 @@ export function BusyButton({ className, onClick, children, op, locked }: {
 }) {
   const [element, setElement] = useState<HTMLButtonElement | null>(null);
   const busy = useContext(LeaveBusyContext) === element && element !== null;
+  // GM r5 2a: before the socket's first answer, the lock's first moment keeps the button's look.
+  const pending = useLockPending(Boolean(locked));
   return (
     <button ref={setElement} type="button" className={locked ? `${className} agent-notes-btn--held` : className}
       aria-busy={busy || undefined} data-op={op} aria-disabled={locked ? true : undefined}
-      title={locked ?? undefined} onClick={onClick}>
+      data-held-pending={pending ? '' : undefined}
+      title={(!pending && locked) || undefined} onClick={onClick}>
       {busy ? 'Saving…' : children}
     </button>
   );

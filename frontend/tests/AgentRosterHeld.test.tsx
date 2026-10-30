@@ -55,6 +55,7 @@ const { useAgentRosterStore } = await import('../src/components/agent-notes/agen
 const { useAssetProposalsStore } = await import('../src/store/assetProposalsStore');
 const { coverProposal } = await import('../src/test/assetProposalFixtures');
 const { buildRosterRows } = await import('../src/components/agent-notes/agentRosterModel');
+const { notePersonPromoted, reportPersonRequired, resetPersonSessionForTests } = await import('../src/lib/personSession');
 const { heldAsks, needsYouCount } = await import('../src/components/agent-notes/agentNeedsYou');
 const { sanitizeNotes, MAX_REF_QUESTIONS, MAX_SHARED_ASKS } = await import('../src/lib/agentNotes');
 
@@ -84,6 +85,7 @@ async function rosterToggle(list: HTMLElement) {
 }
 
 beforeEach(() => {
+  resetPersonSessionForTests();
   useAgentNotesStore.getState().reset();
   useAgentQuestionsStore.getState().reset();
   useAgentPresenceStore.getState().clear();
@@ -133,6 +135,7 @@ function syncUpdates() {
 
 /** The person's sync after the promote: the asks themselves, made when their Updates' refs say. */
 function promote() {
+  act(() => { notePersonPromoted(); });
   emit({ type: 'questionsOpened', answerKey: 'k_q', set: { ...SET, id: 'qs_2', createdAt: T + 1_000,
     update: { id: 'u_q', projectId: 'p1' },
     questions: [SET.questions[0], { ...SET.questions[0], id: 'q2', text: 'Which light?' }] } });
@@ -158,7 +161,7 @@ const looks = (list: HTMLElement) => rows(list).map((row) => ({
 describe('GM 2026-10-29: the held needs-you count', () => {
   it('held: the badge and the Needs-you rows count the asks the Updates name; each row is locked, not hidden', async () => {
     render(<AppAgentNotes />);
-    act(() => { useAssetProposalsStore.setState({ awaitingSync: true }); });
+    act(() => { reportPersonRequired(); useAssetProposalsStore.setState({ awaitingSync: true }); });
     syncUpdates();
     expect(chip().querySelector('.agent-notes-needs-badge')?.textContent).toBe('3');
     expect(chip().getAttribute('aria-label')).toBe('Updates, 3 unread, 3 agents need you');
@@ -195,7 +198,7 @@ describe('GM 2026-10-29: the held needs-you count', () => {
 
   it('promote: the same badge, the same rows in the same order with the same words; only the action turns on', async () => {
     render(<AppAgentNotes />);
-    act(() => { useAssetProposalsStore.setState({ awaitingSync: true }); });
+    act(() => { reportPersonRequired(); useAssetProposalsStore.setState({ awaitingSync: true }); });
     syncUpdates();
     const list = await openList();
     fireEvent.click(await rosterToggle(list));
@@ -225,9 +228,12 @@ describe('GM 2026-10-29: the held needs-you count', () => {
     const view = { ...coverProposal({ id: 'pa_cover', agent: CODEX, createdAt: T }), update: { id: 'u_cover', projectId: 'p1' } };
     const input = { projectId: 'p1', questions: [], canvasProposals: [], assetProposals: [view as never], held: asks };
     expect(needsYouCount(input)).toBe(3);
-    const built = buildRosterRows({ ...input, now: Date.now(), statuses: [], cursors: [], nodeLabel: () => null });
+    // GM, #204 r5 item 2: while the tab isn't confirmed every row locks, the synced view's too.
+    const built = buildRosterRows({ ...input, now: Date.now(), statuses: [], cursors: [], nodeLabel: () => null, tabHeld: true });
     expect(built.filter((row) => row.group === 'needsYou').map((row) => [row.agent.name, row.countLine, row.locked]))
-      .toEqual([['Codex', '1 proposal', null], ['Claude Code', '2 questions', ANSWER_LOCK], ['Cursor', '1 proposal', REVIEW_LOCK]]);
+      .toEqual([['Codex', '1 proposal', REVIEW_LOCK], ['Claude Code', '2 questions', ANSWER_LOCK], ['Cursor', '1 proposal', REVIEW_LOCK]]);
+    const live = buildRosterRows({ ...input, now: Date.now(), statuses: [], cursors: [], nodeLabel: () => null });
+    expect(live.filter((row) => row.group === 'needsYou').map((row) => row.locked)).toEqual([null, null, null]);
   });
 });
 
@@ -252,7 +258,7 @@ describe('GM, PR #204 round 1: a held row reads disabled', () => {
 
   it('every line of a held row, the name included, takes the shared grey; the dot keeps its colour; promoted, its own inks come back', async () => {
     render(<AppAgentNotes />);
-    act(() => { useAssetProposalsStore.setState({ awaitingSync: true }); });
+    act(() => { reportPersonRequired(); useAssetProposalsStore.setState({ awaitingSync: true }); });
     syncUpdates();
     const list = await openList();
     fireEvent.click(await rosterToggle(list));
@@ -284,6 +290,7 @@ describe('PR #204 review 1 MEDIUM-1: two asks that share one Update', () => {
   const cover = (id: string, createdAt: number) => ({ ...coverProposal({ id, agent: CODEX, createdAt,
     target: { kind: 'project', id: 'p1', name: 'Followups' }, update: { id: 'u_cover', projectId: 'p1' } } as never), acceptKey: `k_${id}` });
   const promoteBoth = () => {
+    act(() => { notePersonPromoted(); });
     emit({ type: 'questionsOpened', answerKey: 'k_q1', set: { ...SET, id: 'qs_1', createdAt: Q, update: { id: 'u_q1', projectId: 'p1' } } });
     act(() => { useAssetProposalsStore.getState().sync([cover('pa_a', A), cover('pa_b', B)]); });
   };
@@ -291,7 +298,7 @@ describe('PR #204 review 1 MEDIUM-1: two asks that share one Update', () => {
 
   it('held and promoted read the same: the full count, in the order of the oldest ask, with the same badge', async () => {
     render(<AppAgentNotes />);
-    act(() => { useAssetProposalsStore.setState({ awaitingSync: true }); });
+    act(() => { reportPersonRequired(); useAssetProposalsStore.setState({ awaitingSync: true }); });
     sync([shared(2, A), question]);
     const list = await openList();
     fireEvent.click(await rosterToggle(list));
@@ -307,7 +314,7 @@ describe('PR #204 review 1 MEDIUM-1: two asks that share one Update', () => {
 
   it('one of the two closing while the tab is held: the Update says one, and so does the row', async () => {
     render(<AppAgentNotes />);
-    act(() => { useAssetProposalsStore.setState({ awaitingSync: true }); });
+    act(() => { reportPersonRequired(); useAssetProposalsStore.setState({ awaitingSync: true }); });
     sync([shared(2, A), question]);
     const list = await openList();
     fireEvent.click(await rosterToggle(list));
@@ -321,7 +328,7 @@ describe('PR #204 review 1 MEDIUM-1: two asks that share one Update', () => {
 
   it('an undo reopening the closed one: the Update counts it again, held as promoted', async () => {
     render(<AppAgentNotes />);
-    act(() => { useAssetProposalsStore.setState({ awaitingSync: true }); });
+    act(() => { reportPersonRequired(); useAssetProposalsStore.setState({ awaitingSync: true }); });
     sync([shared(1, B), question]);
     const list = await openList();
     fireEvent.click(await rosterToggle(list));

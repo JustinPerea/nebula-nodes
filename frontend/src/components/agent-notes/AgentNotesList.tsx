@@ -64,8 +64,11 @@ export function AgentNotesList({
   top?: ReactNode;
 }) {
   const today = new Date(now);
-  const state = unread > 0 ? `${unread} unread` : newCount > 0 ? `${newCount} new` : 'all read';
   const total = sections.reduce((sum, section) => sum + section.notes.length, 0);
+  // GM, #204 r4 item 1: "2 · all unread" mirrors "2 · all read"; "5 · 2 unread" when some
+  // are. The count is always the server's, never what the tab hopes.
+  const state = unread > 0 ? (unread >= total ? 'all unread' : `${unread} unread`)
+    : newCount > 0 ? `${newCount} new` : 'all read';
   const notNow = sections.some((section) => section.notes.some(offersNotNow));
   const single = sections.length === 1 ? sections[0] : null;
 

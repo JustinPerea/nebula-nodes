@@ -10,7 +10,7 @@ import { useUIStore } from '../../../store/uiStore';
 import { ConnectedApps } from './ConnectedApps';
 import { failureMessage } from '../../../lib/errorCopy';
 import { formatSpentUsd } from '../../../lib/pricing';
-import { clearsOnPromote, isPersonRefusal } from '../../../lib/clearsOnPromote';
+import { clearRefusedOnPromote } from '../../../lib/clearsOnPromote';
 
 const SESSION_CHOICES = [2, 5, 10, 25, 50, 100] as const;
 const PLAN_RUN_CHOICES = [5, 10, 25, 50, 100, 250] as const;
@@ -47,7 +47,7 @@ function useOutsideSpend() {
         setError(line);
         // GM, #204 r3: refused only because this tab isn't connected as you:
         // on the promote the line goes and the read runs again.
-        if (isPersonRefusal(exc)) clearsOnPromote(() => { setError((now) => (now === line ? null : now)); setAttempt((n) => n + 1); }); // clears-on-promote: settings.spend-load
+        clearRefusedOnPromote(exc, () => { setError((now) => (now === line ? null : now)); setAttempt((n) => n + 1); }); // clears-on-promote: settings.spend-load
       });
   }, []);
   useEffect(() => { reload(); }, [reload, attempt]);
