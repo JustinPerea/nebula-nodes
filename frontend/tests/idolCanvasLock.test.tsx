@@ -99,7 +99,7 @@ describe('the canvas with a keyed Space node (Idol\'s keyed shape) and its key m
       const run = screen.getByRole('button', { name: /^Run/ });
       expect(run).not.toHaveAttribute('aria-disabled');
       expect(run).not.toHaveAttribute('data-key-locked');
-      expect(run.getAttribute('title')).toMatch(/^Run graph\./);
+      expect(run.getAttribute('title')).toMatch(/^Run graph \(/);
     }
   });
 

@@ -37,11 +37,6 @@ export function keyStatus(key: string, health: ProviderHealthState): { tone: Row
   }
 }
 
-/** Where a provider hands out keys, shortened for a link label. */
-export function hostOf(url: string): string {
-  try { return new URL(url).host.replace(/^www\./, ''); } catch { return url; }
-}
-
 export type ServiceAccountCheck =
   | { ok: true; email: string; project: string }
   | { ok: false; error: string };

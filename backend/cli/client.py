@@ -49,6 +49,10 @@ class NebulaClient:
         session = os.environ.get("NEBULA_AGENT_SESSION")
         if session:
             headers.setdefault("X-Nebula-Agent-Session", session)
+        # Which words a refusal or a hint uses for the next call: `nebula`
+        # commands (services/agent_words). Not an agent marker: who the
+        # caller is stays the person gate's to decide (services/person_gate).
+        headers.setdefault("X-Nebula-Surface", "cli")
         return headers
 
     def _fail(self, exc: NebulaAPIError, what: str) -> None:
@@ -58,11 +62,11 @@ class NebulaClient:
             message = (f"Nebula didn't answer {what} in time. A run keeps going on the "
                        "backend; `nebula graph` shows what finished.")
         else:
-            # A refusal names the MCP tool to use instead; the CLI names its
-            # own command (cli/formatter._cli_words; review 8 of PR #203, NIT-4).
-            from .formatter import _cli_words
-
-            message = _cli_words(exc.detail) if isinstance(exc.detail, str) else exc.detail
+            # Printed as the backend wrote it: every request says it comes
+            # from the CLI (X-Nebula-Surface), so a refusal names `nebula`
+            # commands where it is written (services/agent_words; review 9 of
+            # PR #203, keys MEDIUM-1), never rewritten here.
+            message = exc.detail
         print(f"error: {message}", file=sys.stderr)
         sys.exit(1)
 

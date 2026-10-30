@@ -97,11 +97,18 @@ everywhere (GM r17 item 1; review 8, LOW-1): `services.settings.load_settings`
 returns every key as `key_text` gives it and drops one that's empty, so a
 value already stored that way reads as unset to every backend reader, the
 masked GET /api/settings included, and the canvas's cache with it.
-PUT /api/settings and the desktop credential bridge
-(`/api/credentials/update`) refuse such a key, as the Settings field does
-("This key is only spaces or invisible characters once trimmed. Copy it
-again, then paste it here."), and store every other key trimmed. The
-switcher's "key is set" is `directRoute.isKeySet` too.
+PUT /api/settings refuses such a key with a 400 (GM r18 item 3): "Nothing
+was saved because the key is empty once spaces and invisible characters are
+removed." The desktop credential bridge (`/api/credentials/update`) refuses
+it the same way (a 422 with the same words), but Settings never sends one:
+its Save button stays off for such a key, and `settingsWrites.storableKey`
+checks the backend's rule before anything is written, the Keychain
+included (review 9, keys NIT-2; `key_text_cases.json` `storeCases` pins
+both sides). Every other key is stored trimmed. A save starts from the
+settings file as saved (`settings.load_saved_settings`), so every entry it
+wasn't asked to change, an unknown or a non-string one included, is
+written back exactly as it was (review 9, keys NIT-1). The switcher's "key
+is set" is `directRoute.isKeySet` too.
 
 ### The token can bill: agents ask first
 
@@ -125,13 +132,19 @@ $0 and spend tracking never counts it as paid.
   Face token is set, so it can bill their Hugging Face account: … An agent
   can't start a run that includes it, at any spending limit, even for a node
   after it: propose the run, or run only nodes that don't need it." (review
-  7, NIT-3), then how to propose in the surface's own words, from one
-  source (`agent_spend.propose_hint`; review 8, NIT-4): MCP reads "Propose
+  7, NIT-3), then how to propose in the reader's own words. Each refusal is
+  worded where it is written (review 9, keys MEDIUM-1): the CLI sends
+  `X-Nebula-Surface: cli` on every request, and `services/agent_words`
+  (one table of each surface's calls) fills the refusal's `{propose}` and
+  the hint (`agent_spend.propose_hint`) for that reader. MCP reads "Propose
   it instead: propose_change (run: n1). The person accepts on the canvas,
-  and the canvas runs it.", and the CLI prints the same refusal with its
-  command, `` `nebula propose --note "<why>" --run n1` `` (`cli/client._fail`
-  through `cli/formatter._cli_words`). The person's own Run needs no
-  proposal. Without a token nothing can bill, so an agent runs Idol as
+  and the canvas runs it."; the CLI gets
+  `` `nebula propose --note "<why>" --run n1` `` and prints the refusal as it
+  came (`cli/client._fail` rewrites nothing). The header names the surface
+  only: it is no agent marker, so it doesn't change who a request counts
+  as. The same goes for the billing-setting refusals and `nebula quick`'s
+  hint (`` `nebula create <id>` `` in the CLI). The person's own Run needs
+  no proposal. Without a token nothing can bill, so an agent runs Idol as
   before.
 - **Every agent surface says it, as the token is set now** (review 7,
   LOW-1). `describe_node`'s route `billing`, the `find_nodes` row's
@@ -141,12 +154,19 @@ $0 and spend tracking never counts it as paid.
   an agent can't run it, "or any run that includes it, even for a node
   after it" (review 8, NIT-2). Each surface names its own way to propose:
   MCP `propose_change`, the CLI `` `nebula propose` ``
-  (`nebula info`'s and `nebula nodes`' `BILLING:` lines,
-  `cli/formatter._cli_words`; `nebula context`, `main._cli_words`).
+  (`nebula info`'s and `nebula nodes`' `BILLING:` lines and
+  `nebula context`, all through `agent_words.cli_words`, one table with
+  word boundaries that leaves a name already beside its command alone).
 - **The canvas counts it as "may cost", never "paid"** (GM r11 item 2).
   `node_route.key_billing` (frontend `directRoute.keyBilling`) is "mayCost"
-  with the token and "free" without, and it is the one function every cost
-  surface reads (GM r15 item 2; review 8, LOW-3): the agent gate
+  with the token and "free" without. It is the first step of the one cost
+  class every cost surface reads, `model_pricing.cost_class` (frontend
+  `lib/costClass.ts`; GM r18 item 1, r19 item 1): a key-billing route's
+  own class, else "plan" for a run on the Krea plan, else "free" for a
+  sourced $0, else "paid". `pricing_cases.json` `classCases` pins both
+  sides, and a second reader of `key_billing` or `uses_krea_account` that
+  counts a node fails `test_idol_round10.py` (`CLASS_PARTS`) and
+  `tests/idolRound10.test.ts`. The surfaces (GM r15 item 2; review 8, LOW-3): the agent gate
   (`may_bill` is `key_billing == MAY_COST`), the billing note
   (`main._space_billing`, per route in `describe_node`), the chips, the
   bar's cost line, the ghost card, the confirm before a run over an agent's
@@ -160,8 +180,16 @@ $0 and spend tracking never counts it as paid.
   and `mayCost` (names and the account) beside `paidRuns`.
   - Toolbar Run chip (GM r14 item 4): "1 may cost" alone, "2 paid · 1 may
     cost" beside paid nodes with no list price, "~$0.13 + 1 may cost" beside
-    a priced part. The Run button's description puts Idol's sentence after
-    the estimate too.
+    a priced part. A run on the Krea plan is counted the same way, apart
+    from paid (GM r19 item 1): "2 paid · 1 on Krea plan", "1 on Krea plan"
+    alone, "~$0.13 + 1 on Krea plan · 1 may cost". A sourced $0 is free,
+    never in "N paid" (GM r18 item 1); a run of only those reads "$0" with
+    the tooltip "This costs nothing to run." alone.
+  - The Run buttons' title and screen-reader text (Toolbar, the selection
+    toolbar) are "Runs 3 nodes." and then the Run chip's own tooltip,
+    from the same formatter, with no per-node breakdown (GM r19 item 2;
+    review 9, cost LOW-1). Only the costly-run confirm keeps each node's
+    figure.
   - Every cost tooltip, the Run chip's and the Accept chip's, comes from
     one formatter, `runScope.costTitle` (GM r16 item 3, r17 items 3 and 4).
     Line 1 names the paid nodes, priced or not, then the priced part as a
@@ -171,12 +199,22 @@ $0 and spend tracking never counts it as paid.
     part goes on its own line under line 1 ("“B” has no listed price."),
     and Idol's sentence comes last: "“A” and “B” call paid providers.
     Estimated cost $0.13. Idol can use your Hugging Face credits." The
+    order is the paid lead, the figure (paid nodes only), the reason lines
+    (a plan run's "“Krea 2” runs on your Krea plan." among them), then
+    Idol's sentence. A reason kind the canvas doesn't know reads as "has
+    no listed price" (review 9, cost NIT-2). The
     Accept chip gets its reasons from the backend
     (`model_pricing.estimate_run` `reasons`, on each paid cost entry as
     `reason`), in the Run chip's kinds; `pricing_cases.json`'s run cases
     pin the two sides to the same reason.
-  - Accept chip: counts ("2 paid · 1 may cost"), with that tooltip whenever
-    the chip shows (`canvasProposals.acceptChipTitle`).
+  - Accept chip: counts ("2 paid · 1 on Krea plan · 1 may cost"), with that
+    tooltip whenever the chip shows (`canvasProposals.acceptChipTitle`).
+    The tooltip is the Accept button's screen-reader description too
+    (`aria-describedby`, after a key lock's line); its name stays the
+    visible text (GM r19 item 3). At a narrow window (760 px) the button
+    wraps and the chip goes onto its own line under "Accept and run",
+    never clipped (GM r19 item 8). The bar's line 1 counts plan runs
+    outside paid: "runs 2 paid models · 1 on Krea plan".
   - The bar (GM r14 item 2): "Runs Idol · may use your Hugging Face credits",
     or with paid models "Runs 2 paid models and Idol · Idol may use your
     Hugging Face credits", no provider tag, and the amount leads the line
@@ -208,11 +246,21 @@ $0 and spend tracking never counts it as paid.
   no chip, like any free node.
   - A token added or removed anywhere reaches every open tab (review 8,
     NIT-3): PUT /api/settings, a key's DELETE and the desktop credential
-    bridge broadcast `{"type": "settingsChanged"}`, with no values, and
-    each tab reads GET /api/settings again
+    bridge send `{"type": "settingsChanged", "keys": [...]}` to the
+    person's tabs only (`broadcast_browser`; an agent's socket never hears
+    it: review 9, keys LOW-1), with the names of the keys whose value
+    changed and never a value. Each tab reads GET /api/settings again
     (`store/settingsChangedSocket.ts`), so a token set from a second
     window, a script calling the API, or the desktop app flips an open bar
-    without a reload. A reconnected socket reads them again too.
+    without a reload. A reconnected socket reads them again too. Connection
+    checks are kept; only the changed keys' results clear (GM r19 item 7):
+    from the signal's `keys`, and from any read that finds a key's value
+    changed (`uiStore.setSettingsCache`). A check still running when a key
+    changes drops that provider's result. An open Settings panel updates
+    in place (GM r19 item 6): other rows move with the spring, a row the
+    person is in (focus in it, or its edit view open) changes its status
+    where it stands and moves when they leave it, and a typed draft is
+    never touched.
 
 ## Request contract
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 from typing import Any
 
 # The readiness rule lives with the backend so the CLI and MCP server agree.
@@ -83,19 +82,14 @@ def format_agent_nodes(rows: list[dict[str, Any]], *, ranked: bool,
     return "\n".join(lines).rstrip("\n")
 
 
-# "propose_change (run: n2, n3)": a refusal's way to propose these nodes
-# (services/agent_spend.propose_hint), which the CLI words as its command.
-_PROPOSE_RUN = re.compile(r"propose_change \(run: ([^)]*)\)")
-
-
 def _cli_words(text: str) -> str:
-    """An agent route's MCP words in `nebula` words (main._cli_words): the
+    """describe_node's and find_nodes' MCP-worded data in `nebula` words: the
     CLI names its own command, never the MCP tool (review 7 of PR #203,
-    LOW-1), in the billing text and in a refusal alike (review 8, NIT-4)."""
-    text = _PROPOSE_RUN.sub(lambda match: "`nebula propose --note \"<why>\" " + " ".join(
-        f"--run {node}" for node in match.group(1).split(", ")) + "`", text)
-    return (text.replace("describe_node", "`nebula info <id>`").replace("propose_change", "`nebula propose`")
-            .replace("edit_canvas", "`nebula apply`"))
+    LOW-1), from the one table (services/agent_words.cli_words; review 9,
+    keys MEDIUM-1). Refusals arrive already worded for the CLI."""
+    from services.agent_words import cli_words
+
+    return cli_words(text)
 
 
 def _route_takes(node: dict[str, Any], route: dict[str, Any]) -> str:

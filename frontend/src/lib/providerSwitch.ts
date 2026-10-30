@@ -194,16 +194,17 @@ function autoLabel(definition: ModelNodeDefinition, unavailable: NonNullable<Ret
 function price(definition: ModelNodeDefinition, route: RouteSpec, estimates: ReturnType<typeof estimateRoutes>,
   pricing: PricingTable | null | undefined, plan: boolean, params: Params,
   wired: Iterable<string>): { price: string; priceTitle?: string } {
-  if (plan) return { price: '-', priceTitle: 'Billed to your Krea plan' };
+  if (plan) return { price: '-', priceTitle: 'Runs on your Krea plan.' };
   const estimate = estimates[route.id];
   if (!estimate && awaitsInput(entryForRoute(pricing?.nodes[definition.id], route.pricing ?? route.id))) {
-    return { price: 'by size', priceTitle: "Priced from the input's size when it runs" };
+    return { price: 'by size', priceTitle: 'Priced from the input’s size when it runs.' };
   }
-  if (!estimate || estimate.currency !== 'usd') return { price: '-', priceTitle: 'No list price for these settings' };
+  if (!estimate || estimate.currency !== 'usd') return { price: '-', priceTitle: 'No list price for these settings.' };
   const unconfirmed = routePriceUnconfirmed(definition, route.id, pricing, params, wired);
   return {
     price: `${formatUsdRange(estimate.low, estimate.high)}${unconfirmed ? '*' : ''}`,
-    priceTitle: unconfirmed ? "Estimate: the provider's page doesn't state this price exactly" : 'List price per run at these settings',
+    // Sentences (GM, PR #203 r19 item 4).
+    priceTitle: unconfirmed ? 'An estimate, because the provider’s page doesn’t state this price exactly.' : 'List price per run at these settings.',
   };
 }
 

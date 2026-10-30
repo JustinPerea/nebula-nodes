@@ -150,12 +150,14 @@ export interface ProjectsChangedEvent {
   projectId: string | null;
 }
 
-/** A key was set, replaced or removed (PUT /api/settings, a key's DELETE, the
- *  desktop credential bridge: backend main.py _broadcast_settings_changed).
- *  No values travel; the tab reads GET /api/settings again
+/** The settings changed (PUT /api/settings, a key's DELETE, the desktop
+ *  credential bridge: backend main.py _broadcast_settings_changed), sent to
+ *  the person's tabs only. No values travel: `keys` names the keys whose
+ *  value changed, if any; the tab reads GET /api/settings again
  *  (store/settingsChangedSocket.ts). */
 export interface SettingsChangedEvent {
   type: 'settingsChanged';
+  keys?: string[];
 }
 
 /** The active project's pins, sent after graphSync and on every pin change. */
@@ -169,9 +171,12 @@ export type ProposalStatus = 'open' | 'accepted' | 'rejected' | 'withdrawn' | 'e
 
 /** One node's run cost: free or paid, with its list price when Nebula has one. */
 export interface ProposalCost {
-  /** `mayCost`: a key-billing route with the person's key set (Idol with a
-   * Hugging Face token; backend canvas_proposals.cost_for), never paid. */
-  kind: 'free' | 'paid' | 'mayCost';
+  /** The node's cost class (backend model_pricing.cost_class through
+   * canvas_proposals.cost_for): `mayCost`, a key-billing route with the
+   * person's key set (Idol with a Hugging Face token), and `plan`, a run on
+   * the person's Krea plan, are never paid; `free` is a local node, a
+   * key-billing route with no key or a sourced $0. */
+  kind: 'free' | 'paid' | 'mayCost' | 'plan';
   provider: string | null;
   label: string;
   price?: { low: number; high: number } | null;
@@ -184,7 +189,7 @@ export interface ProposalCost {
  * reasons), in the Run chip's kinds (runScope UnpricedReason): the Accept
  * chip writes the same reason lines (GM, PR #203 r17 item 4). */
 export type ProposalCostReason =
-  | { kind: 'noPrice' | 'cantRun' | 'awaitingInput' | 'sizeUnreadable' }
+  | { kind: 'noPrice' | 'cantRun' | 'awaitingInput' | 'sizeUnreadable' | 'plan' }
   | { kind: 'missingKey'; keys?: string[] }
   | { kind: 'leftOut'; plus?: string };
 
@@ -258,6 +263,9 @@ export interface ProposalView {
      * before round 7 of PR #203. */
     mayCostRuns?: number;
     mayCost?: Array<{ name: string; account: string }>;
+    /** Runs on the person's Krea plan, never counted as paid (GM, PR #203
+     * r19 item 1: "2 paid · 1 on Krea plan"). Absent from an older backend. */
+    planRuns?: number;
     freeRuns: number;
     estimate: ProposalEstimate | null;
     upTo: boolean;

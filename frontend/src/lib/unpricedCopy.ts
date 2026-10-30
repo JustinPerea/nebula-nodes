@@ -40,6 +40,11 @@ type Line = (names: string, several: boolean) => string;
 /** No list price for these settings (GM r7). */
 export const NO_LISTED_PRICE: Line = (names, several) => `${names} ${several ? 'have' : 'has'} no listed price.`;
 
+/** A run on the person's Krea plan, never "billed" (GM, PR #203 r19 item 1,
+ * verbatim: "“Krea 2” runs on your Krea plan."; the plural is the
+ * builder's). */
+export const ON_KREA_PLAN: Line = (names, several) => `${names} ${several ? 'run' : 'runs'} on your Krea plan.`;
+
 /** The chosen route's key isn't set. `key` is the key as the node's own
  * route line names it ("fal.ai API key", "Black Forest Labs or fal.ai API
  * key"; directRoute.keyPhrase), so the two agree (GM r7; the plural, GM r8). */

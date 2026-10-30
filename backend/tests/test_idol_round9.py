@@ -113,6 +113,8 @@ def stored(tmp_path, monkeypatch, person):
     monkeypatch.setattr(main, "is_injected_mode", settings.is_injected_mode)
     broadcast = AsyncMock()
     monkeypatch.setattr(main.manager, "broadcast_raw", broadcast)
+    # Round 10 (review 9, keys LOW-1): the signal goes to the person's tabs only.
+    monkeypatch.setattr(main.manager, "broadcast_browser", broadcast)
 
     def write(keys):
         path.write_text(json.dumps({"apiKeys": keys}), encoding="utf-8")
@@ -182,13 +184,15 @@ def _signals(broadcast):
 def test_each_key_change_tells_every_socket_with_no_values(stored, monkeypatch):
     client, _path, write, broadcast = stored
     write({"OPENAI_API_KEY": "sk-kept-2222"})
+    # Round 10 (GM, PR #203 r19 item 7): the names of the keys that changed, never a value.
+    signal = {"type": "settingsChanged", "keys": ["HF_TOKEN"]}
     assert client.put("/api/settings", json={"apiKeys": {"HF_TOKEN": "hf_signal_token_5555"}}).status_code == 200
-    assert _signals(broadcast) == [{"type": "settingsChanged"}]
+    assert _signals(broadcast) == [signal]
     assert client.delete("/api/settings/api-keys/HF_TOKEN").status_code == 200
-    assert _signals(broadcast) == [{"type": "settingsChanged"}] * 2
+    assert _signals(broadcast) == [signal] * 2
     monkeypatch.setattr(settings, "_INJECTED_KEYS", {"OPENAI_API_KEY": "sk-desktop"})
     assert client.post("/api/credentials/update", json={"provider": "HF_TOKEN", "key": "hf_desktop_6666"}).status_code == 200
-    assert _signals(broadcast) == [{"type": "settingsChanged"}] * 3
+    assert _signals(broadcast) == [signal] * 3
     # No value travels: not a key, not a mask.
     assert "6666" not in json.dumps(broadcast.call_args_list[-1].args[0])
 
@@ -205,6 +209,8 @@ def test_a_token_set_from_a_second_client_reaches_an_open_socket(tmp_path, monke
     tab = TestClient(main.app)
     other = TestClient(main.app, headers=PERSON)
     with tab.websocket_connect("/ws", headers=PERSON) as socket:
+        # The person's tab (round 10: the signal goes to their tabs only).
+        socket.send_json({"type": "hello", "personToken": PERSON["X-Nebula-Person"]})
         assert other.put("/api/settings", json={"apiKeys": {"HF_TOKEN": "hf_second_client_7777"}}).status_code == 200
         # A marker sent after the PUT answered, so a backend that sends
         # nothing fails here instead of waiting for ever.
@@ -216,7 +222,7 @@ def test_a_token_set_from_a_second_client_reaches_an_open_socket(tmp_path, monke
                 break
             if message.get("type") == "settingsChanged":
                 heard.append(message)
-        assert heard == [{"type": "settingsChanged"}]
+        assert heard == [{"type": "settingsChanged", "keys": ["HF_TOKEN"]}]
 
 
 # -- the placeholder re-ask (GM r17 item 2; review 8, LOW-2) ---------------------------------
@@ -246,17 +252,21 @@ def test_the_409_counts_paid_and_may_cost_apart():
 
 
 def test_the_refusal_names_mcps_tool_and_the_cli_prints_its_command(capsys):
+    """Round 10 (review 9, keys MEDIUM-1): each surface's words are written
+    where the refusal is, and the CLI prints it as it came."""
     from cli.client import NebulaClient
     from nebula_api import NebulaAPIError
 
     hint = main.agent_spend.propose_hint(["n2", "n5"])
     assert "propose_change (run: n2, n5)" in hint and "nebula propose" not in hint
+    cli = main.agent_spend.propose_hint(["n2", "n5"], "cli")
+    assert '`nebula propose --note "<why>" --run n2 --run n5`' in cli and "propose_change" not in cli
     client = NebulaClient.__new__(NebulaClient)
     client.base_url = "http://127.0.0.1:1"
     with pytest.raises(SystemExit):
-        client._fail(NebulaAPIError(f"Needs the person's approval: x. {hint}", status=403), "POST /api/execute")
+        client._fail(NebulaAPIError(f"Needs the person's approval: x. {cli}", status=403), "POST /api/execute")
     printed = capsys.readouterr().err
-    assert '`nebula propose --note "<why>" --run n2 --run n5`' in printed and "propose_change" not in printed
+    assert printed == f"error: Needs the person's approval: x. {cli}\n"
 
 
 # -- the Accept chip's reasons (GM r17 item 4) -----------------------------------------------

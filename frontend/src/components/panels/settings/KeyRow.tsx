@@ -9,7 +9,7 @@ import { unlockSummary, type ProviderKeySpec } from '../../../lib/providerCatalo
 import { removeKey, saveKey } from '../../../lib/settingsWrites';
 import { ProviderRow } from './ProviderRow';
 import { ServiceAccountInput } from './ServiceAccountInput';
-import { cancelRowFocus, focusRowAfterMove, hostOf, keyStatus, readServiceAccount, takeRowFocus } from './rowHelpers';
+import { cancelRowFocus, focusRowAfterMove, keyStatus, readServiceAccount, takeRowFocus } from './rowHelpers';
 
 
 
@@ -38,7 +38,9 @@ function RemoveKeyButton({ label, removing, onConfirm }: { label: string; removi
   );
 }
 
-export function KeyRow({ spec, configured }: { spec: ProviderKeySpec; configured: boolean }) {
+/** `moved`: it changed section since the panel last drew (a key set or
+ * removed elsewhere): it springs in where it lands (GM, PR #203 r19 item 6). */
+export function KeyRow({ spec, configured, moved = false }: { spec: ProviderKeySpec; configured: boolean; moved?: boolean }) {
   const open = useSettingsDraftStore((s) => (s.openRow?.id === spec.key ? s.openRow.mode : null));
   const draft = useSettingsDraftStore((s) => s.keyDrafts[spec.key] ?? '');
   const pending = useSettingsDraftStore((s) => !!s.pending[spec.key]);
@@ -122,7 +124,7 @@ export function KeyRow({ spec, configured }: { spec: ProviderKeySpec; configured
 
   return (
     <div onKeyDownCapture={onKeyDownCapture}>
-      <ProviderRow id={spec.key} tone={state.tone} name={spec.label} status={state.status} statusTone={state.statusTone}
+      <ProviderRow id={spec.key} moved={moved} tone={state.tone} name={spec.label} status={state.status} statusTone={state.statusTone}
         summary={summary} wrapSummary={summary === spec.note} title={configured ? readiness.detail : undefined}
         action={action}>
         {open === 'manage' && (
@@ -141,12 +143,11 @@ export function KeyRow({ spec, configured }: { spec: ProviderKeySpec; configured
               {/* "Saved" needs no more words; a check result explains itself. */}
               {state.status !== 'Saved' && <> {readiness.detail}</>}
             </p>
-            {/* Under "Saved key ending in …" (GM, PR #203 r16 item 5), as the
-                edit view shows it; a key with its own link words ("Open
-                Hugging Face tokens", r14 item 5) uses them here too. */}
+            {/* Under "Saved key ending in …" (GM, PR #203 r16 item 5), with
+                the edit view's name for it (r19 item 5). */}
             <p className="settings-hint settings-row__key-link">
               <a href={spec.url} target="_blank" rel="noopener noreferrer">
-                {spec.keyLink ?? 'Key page'}<span aria-hidden="true"> ↗</span>
+                {spec.keyLink}<span aria-hidden="true"> ↗</span>
               </a>
             </p>
             {spec.caveat && <p className="settings-hint">{spec.caveat}</p>}
@@ -178,22 +179,17 @@ export function KeyRow({ spec, configured }: { spec: ProviderKeySpec; configured
             )}
             {/* GM, PR #203 r11 item 1: how to make the key, its page, then the caveat. */}
             {spec.instruction && <p className="settings-hint">{spec.instruction}</p>}
-            {spec.keyLink && (
-              <p className="settings-hint">
-                <a href={spec.url} target="_blank" rel="noopener noreferrer">
-                  {spec.keyLink}<span aria-hidden="true"> ↗</span>
-                </a>
-              </p>
-            )}
+            {/* One name for the key's page in both views, shaped like Idol's
+                (GM, PR #203 r19 item 5): "Open OpenAI keys ↗". */}
+            <p className="settings-hint settings-row__key-link">
+              <a href={spec.url} target="_blank" rel="noopener noreferrer">
+                {spec.keyLink}<span aria-hidden="true"> ↗</span>
+              </a>
+            </p>
             {spec.caveat && <p className="settings-hint">{spec.caveat}</p>}
             {error && <p className="settings-row__error" role="alert">{error}</p>}
             <div className="settings-row__foot">
-              {spec.keyLink ? <span /> : (
-                <span className="settings-hint">
-                  {configured ? 'Key page: ' : 'No key yet? '}
-                  <a href={spec.url} target="_blank" rel="noopener noreferrer">{hostOf(spec.url)} ↗</a>
-                </span>
-              )}
+              <span />
               <button type="submit" className="settings__button settings__button--primary" disabled={!canSave}>
                 {pending ? 'Saving…' : 'Save key'}
               </button>

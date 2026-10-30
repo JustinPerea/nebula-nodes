@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Search } from 'lucide-react';
 import { NODE_DEFINITIONS } from '../../../constants/nodeDefinitions';
 import { isKeySet } from '../../../lib/directRoute';
@@ -10,6 +10,7 @@ import { useSettingsDraftStore, type SettingsDraft } from '../../../store/settin
 import { useUIStore } from '../../../store/uiStore';
 import { useProviderReadinessStore } from '../../../store/providerReadinessStore';
 import { offlineMark, useBackendOffline } from '../../../lib/useBackendOffline';
+import { SETTINGS_SAVED_EVENT, settingsSavedDetail } from '../../../lib/settingsSignal';
 import { KeyRow } from './KeyRow';
 import { KreaSignInRow } from './KreaSignInRow';
 import { NousRow } from './NousRow';
@@ -27,7 +28,7 @@ interface Entry {
   reach: number;
   order: number;
   matches: (query: string) => boolean;
-  render: () => ReactNode;
+  render: (moved: boolean) => ReactNode;
 }
 
 function plural(count: number, word: string) {
@@ -62,7 +63,7 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
       const connected = isKeySet(saved.apiKeys, spec.key);
       return { id: spec.key, connected, reach: unlockCount(spec), order,
         matches: (q: string) => providerMatches(spec, q),
-        render: () => <KeyRow key={spec.key} spec={spec} configured={connected} /> };
+        render: (moved: boolean) => <KeyRow key={spec.key} spec={spec} configured={connected} moved={moved} /> };
     }),
     { id: KREA_ROW, connected: !!kreaStatus && kreaStatus !== 'disconnected', reach: KREA_ACCOUNT_NODES.length, order: PROVIDER_KEYS.length,
       matches: (q: string) => 'krea sign-in workspace'.includes(q.trim().toLowerCase())
@@ -74,12 +75,76 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
       render: () => <NousRow key={NOUS_ROW} summary={NOUS_NODES.map((node) => node.displayName).join(', ')} /> },
   ];
 
+  // GM, PR #203 r19 item 6: a change made elsewhere updates the panel in
+  // place, but never moves a row the person is in (focus inside it, or its
+  // edit view open): that row's status changes where it stands, and it moves
+  // once they leave it. `held` is the section each such row stays in.
+  const [held, setHeld] = useState<Record<string, boolean>>({});
+  const openRow = useSettingsDraftStore((s) => s.openRow);
+  const placedRef = useRef<Record<string, boolean>>({});
+  const activeRows = useCallback((): Set<string> => {
+    const active = new Set<string>();
+    const open = useSettingsDraftStore.getState().openRow;
+    if (open?.mode === 'edit') active.add(open.id);
+    const focused = typeof document !== 'undefined' ? document.activeElement : null;
+    const row = focused && root.current?.contains(focused) ? focused.closest<HTMLElement>('[data-row]') : null;
+    if (row?.dataset.row) active.add(row.dataset.row);
+    return active;
+  }, []);
+  useEffect(() => {
+    const heard = (event: Event) => {
+      const detail = settingsSavedDetail(event);
+      if (detail?.source === 'local') {
+        // The person's own save or removal moves its row at once.
+        const own = new Set(detail.keys ?? []);
+        if (own.size) {
+          setHeld((current) => (Object.keys(current).some((id) => own.has(id))
+            ? Object.fromEntries(Object.entries(current).filter(([id]) => !own.has(id))) : current));
+        }
+        return;
+      }
+      if (detail?.source !== 'remote' && detail?.source !== 'reconnect') return;
+      // Before the read lands: hold each row the person is in where it is shown now.
+      const hold: Record<string, boolean> = {};
+      for (const id of activeRows()) if (id in placedRef.current) hold[id] = placedRef.current[id];
+      if (Object.keys(hold).length) setHeld((current) => ({ ...hold, ...current }));
+    };
+    window.addEventListener(SETTINGS_SAVED_EVENT, heard);
+    return () => window.removeEventListener(SETTINGS_SAVED_EVENT, heard);
+  }, [activeRows]);
+  // Leaving a held row (focus out of it, its edit view closed) lets it move.
+  const release = useCallback(() => {
+    requestAnimationFrame(() => setHeld((current) => {
+      if (Object.keys(current).length === 0) return current;
+      const active = activeRows();
+      const kept = Object.fromEntries(Object.entries(current).filter(([id]) => active.has(id)));
+      return Object.keys(kept).length === Object.keys(current).length ? current : kept;
+    }));
+  }, [activeRows]);
+  useEffect(() => { release(); }, [openRow, release]);
+
   const q = query.trim();
   const visible = entries.filter((entry) => !q || entry.matches(q))
     .sort((a, b) => b.reach - a.reach || a.order - b.order);
-  const connected = visible.filter((entry) => entry.connected);
-  const toAdd = visible.filter((entry) => !entry.connected);
+  const shownConnected = (entry: Entry) => (Object.hasOwn(held, entry.id) ? held[entry.id] : entry.connected);
+  const connected = visible.filter((entry) => shownConnected(entry));
+  const toAdd = visible.filter((entry) => !shownConnected(entry));
   const anyConnected = entries.some((entry) => entry.connected);
+  // A row that changed section since the last placement springs in where
+  // it lands (--settings-spring, as a row's body opens): the placement is
+  // compared during render (React's "state from the previous render").
+  const placement = JSON.stringify(entries.map((entry) => [entry.id, shownConnected(entry)]));
+  const [placed, setPlaced] = useState({ placement, moved: new Set<string>() });
+  if (placed.placement !== placement) {
+    const before = new Map(JSON.parse(placed.placement) as Array<[string, boolean]>);
+    setPlaced({ placement, moved: new Set(entries.filter((entry) => before.has(entry.id)
+      && before.get(entry.id) !== shownConnected(entry)).map((entry) => entry.id)) });
+  }
+  const moved = (entry: Entry) => placed.moved.has(entry.id);
+  // Where each row is shown now, for the signal handler above to hold.
+  useLayoutEffect(() => {
+    placedRef.current = Object.fromEntries(JSON.parse(placement) as Array<[string, boolean]>);
+  }, [placement]);
 
   // Read through a ref: Krea's status arriving mid-handoff must not cancel the focus below.
   const kreaStatusRef = useRef(kreaStatus);
@@ -109,7 +174,7 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
   }, [setupTarget]);
 
   return (
-    <div ref={root} className="settings-providers">
+    <div ref={root} className="settings-providers" onBlur={release} onFocus={release}>
       {plaintextWarning.length > 0 && (
         <p className="settings-alert" role="alert">
           Keys for {plaintextWarning.join(', ')} are stored as plain text in the settings file.
@@ -139,7 +204,7 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
             <button type="button" className="settings-label__action" disabled={health.loading}
               onClick={() => void health.checkConnections()}>{health.loading ? 'Checking…' : 'Check connections'}</button>
           </div>
-          <div className="settings-list">{connected.map((entry) => entry.render())}</div>
+          <div className="settings-list">{connected.map((entry) => entry.render(moved(entry)))}</div>
           {health.error && <p className="settings-row__error" role="alert">{health.error}</p>}
           {desktop?.credentials && <p className="settings-hint settings-list__note">Keys are stored in the macOS Keychain.</p>}
         </section>
@@ -150,7 +215,7 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
           <div className="settings-label">
             <h3 id="settings-add-heading">{anyConnected || q ? 'Add a provider' : 'Connect a provider'} · {toAdd.length}</h3>
           </div>
-          <div className="settings-list">{toAdd.map((entry) => entry.render())}</div>
+          <div className="settings-list">{toAdd.map((entry) => entry.render(moved(entry)))}</div>
           {!anyConnected && !q && (
             <p className="settings-hint settings-list__note">Sorted by how many nodes each one runs. Keys stay on this computer.</p>
           )}

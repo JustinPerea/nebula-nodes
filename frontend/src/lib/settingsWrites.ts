@@ -1,6 +1,7 @@
 import { isOfflineRefusal, refuseEditWhileOffline } from './backendConnection';
 import { deleteSettingsApiKey, updateCredential, updateSettings } from './api';
 import { keyText } from './directRoute';
+import { changedKeys, SETTINGS_SAVED_EVENT, type SettingsSavedDetail } from './settingsSignal';
 import { PROVIDER_KEY_SPECS } from './providerCatalog';
 import { RUN_COST_CONFIRM_SETTING } from './runCostConfirm';
 import { useSettingsDraftStore, type SettingsDraft, type SettingsField } from '../store/settingsDraftStore';
@@ -61,8 +62,10 @@ function confirm(update: Partial<SettingsDraft>) {
   const next = { ...saved, ...update };
   useSettingsDraftStore.setState({ saved: next });
   useUIStore.getState().setSettingsCache(next.apiKeys, next.kreaConnectionMode);
-  // Readiness invalidates on this; App and the zoom recorder re-read settings.
-  window.dispatchEvent(new CustomEvent('nebula:settings-saved'));
+  // App and the zoom recorder re-read settings; readiness clears only the
+  // checks of the keys this changed (GM, PR #203 r19 item 7).
+  const detail: SettingsSavedDetail = { source: 'local', keys: changedKeys(saved.apiKeys, next.apiKeys) };
+  window.dispatchEvent(new CustomEvent(SETTINGS_SAVED_EVENT, { detail }));
 }
 
 function notify(message: string, undoKey?: string) {
@@ -96,14 +99,24 @@ export function keyCharacterLine(key: string, value: string): string | null {
   return /^[\x21-\x7e]+$/.test(value) ? null : HF_TOKEN_CHARACTER_LINE;
 }
 
+/** The text Settings stores for a typed key, or null when the backend would
+ * refuse it (main._key_refusal is the twin; key_text_cases.json storeCases
+ * pins both): trimmed as every surface reads a key (directRoute keyText),
+ * never empty, and for a Hugging Face token, printable ASCII. Checked before
+ * anything is written, the macOS Keychain included, so a key the backend
+ * would refuse never reaches it (review 9 of PR #203, keys NIT-2). */
+export function storableKey(key: string, raw: string): string | null {
+  const value = keyText(raw);
+  return value && !keyCharacterLine(key, value) ? value : null;
+}
+
 /** Save one provider key, then check it (read-only; nothing is generated). */
 export function saveKey(key: string, raw: string): Promise<boolean> {
   // Trimmed as every surface reads a key (directRoute keyText; review 7 of PR #203, NIT-4).
-  const value = keyText(raw);
-  if (!value) return Promise.resolve(false);
-  const refused = keyCharacterLine(key, value);
-  if (refused) {
-    fail(key, refused);
+  const value = storableKey(key, raw);
+  if (!value) {
+    const refused = keyCharacterLine(key, keyText(raw));
+    if (keyText(raw) && refused) fail(key, refused);
     return Promise.resolve(false);
   }
   setPending(key, true);

@@ -284,7 +284,9 @@ describe('detail lines in the Run button title and the confirm', () => {
   it('write both ends in full', () => {
     const graph = [priced('e', 'gpt-image-2-edit', {}, 'Edit')];
     const summary = summarizeRunScope(graph, [], { kind: 'graph' }, context);
-    expect(describeRunScope(summary)).toContain('Estimated $0.01–$0.20 at list prices (Edit $0.01–$0.20)');
+    // The Run button's text is the chip's (GM, PR #203 r19 item 2); the confirm keeps each node's figure.
+    expect(describeRunScope(summary)).toBe(`Runs 1 node.\n${runChipTitle(summary)}`);
+    expect(runChipTitle(summary)).toContain('costs between $0.01 and $0.20.');
     expect(runCostConfirmMessage(summary)).toContain('• Edit: $0.01–$0.20');
   });
 });

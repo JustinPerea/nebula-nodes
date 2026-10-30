@@ -84,12 +84,15 @@ describe('the chips and their tooltips (GM asks 1 and 2)', () => {
   });
 
   it('a sourced $0 reads "$0", titled "This costs nothing to run.", on the chip and the card; open, the reasons still say what is unpriced', () => {
-    const sourced = { paid: ['Veo'], cost: { low: 0, high: 0, lines: [{}], unpriced: [], plus: [], sourcedZero: true } } as unknown as RunScopeSummary;
+    // A sourced $0 is free, never paid (GM, PR #203 r18 item 1): only "This costs nothing to run."
+    const sourced = { paid: [], free: ['Veo'], cost: { low: 0, high: 0, lines: [], unpriced: [], plus: [], sourcedZero: true } } as unknown as RunScopeSummary;
     expect(runChipLabel(sourced)).toBe('$0');
-    expect(runChipTitle(sourced)).toBe('“Veo” calls a paid provider. This costs nothing to run.');
+    expect(runChipTitle(sourced)).toBe('This costs nothing to run.');
     expect(proposalEstimateLabel({ run: ['n1'], cost: { estimate: { low: 0, high: 0, open: false, sourcedZero: true } } } as never)).toBe('$0');
-    const open = { ...sourced, cost: { ...sourced.cost, unpriced: ['Kling'] } } as unknown as RunScopeSummary;
-    expect(runChipLabel(open)).toBe('$0 + unpriced');
+    // An unpriced node beside it is paid, so the run is no sourced $0: the chip counts it.
+    const open = { paid: ['Kling'], free: ['Veo'], cost: { ...sourced.cost, unpriced: ['Kling'], sourcedZero: undefined } } as unknown as RunScopeSummary;
+    expect(runChipLabel(open)).toBe('1 paid');
+    expect(runChipTitle(open)).toBe('“Kling” calls a paid provider.\n“Kling” has no listed price.');
     expect(proposalEstimateLabel({ run: ['n1'], cost: { estimate: { low: 0, high: 0, open: true, sourcedZero: true } } } as never)).toBe('$0 + unpriced');
   });
 

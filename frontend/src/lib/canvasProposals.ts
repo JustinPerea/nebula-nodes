@@ -8,7 +8,8 @@ import { costTitle, mayCostSentence, type UnpricedReason } from './runScope';
 import { resolveAnchor, type Point } from './agentCursorMotion';
 import type { ProposalCost, ProposalCostReason, ProposalNotReady, ProposalPersonValues, ProposalView } from './wsClient';
 import { BILLING_PARAM_LABELS, providerChoiceLabel } from './billingParams';
-import { keyBilling, keyBillingAccount, keyBillingLabel, keyPhrase, PROVIDER_PARAM } from './directRoute';
+import { costClass } from './costClass';
+import { keyBillingAccount, keyBillingLabel, keyPhrase, PROVIDER_PARAM } from './directRoute';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { nodeKeyStatus, usesKreaAccount, type CredentialReadiness } from './kreaConnection';
 import { missingKeyTitle } from './nodeKeys';
@@ -262,7 +263,7 @@ export function notReadyWarning(row: ProposalNotReady | undefined): string | nul
 
 /**
  * The view with every key-billing node's class read from the keys set now
- * (directRoute keyBilling, the class every cost surface reads): a token
+ * (costClass, the class every cost surface reads): a token
  * added after the agent proposed makes Idol "may cost", one removed makes
  * it "free", on the ghost card, in the run's counts and so on the bar and
  * the Accept chip (GM, PR #203 r15 items 1 and 2; review 7, NIT-5). The
@@ -279,9 +280,9 @@ export function liveKeyBilling(
   const relabel = <T extends ProposalCost>(cost: T, definition: ModelNodeDefinition | undefined,
     params: Record<string, unknown> | null | undefined): T => {
     if (!definition || !params || (cost.kind !== 'free' && cost.kind !== 'mayCost')) return cost;
-    const billing = keyBilling(definition, params, apiKeys);
-    if (!billing) return cost;
-    // The one cost class and its label (directRoute keyBilling,
+    const billing = costClass(definition, params, apiKeys);
+    if (billing !== 'free' && billing !== 'mayCost') return cost;
+    // The one cost class and its label (costClass,
     // keyBillingAccount, keyBillingLabel; review 8 of PR #203, LOW-3).
     const account = keyBillingAccount(definition, params, apiKeys) ?? '';
     const label = keyBillingLabel(billing, account);
@@ -313,8 +314,9 @@ export function liveKeyBilling(
     return [row];
   });
   const paid = entries.filter((entry) => entry.kind === 'paid').length;
+  const plan = entries.filter((entry) => entry.kind === 'plan').length;
   return { ...view, nodes, cost: { ...view.cost, nodes: entries, mayCostRuns: may.length, mayCost,
-    freeRuns: entries.length - paid - may.length } };
+    freeRuns: entries.length - paid - plan - may.length } };
 }
 
 /** "Adds 1 node · 1 connection · changes n4 · runs up to 1 paid model (fal)". */
@@ -332,20 +334,28 @@ export function proposalSummary(view: ProposalView): string {
     // and Idol · Idol may use your Hugging Face credits".
     const mayCost = mayCostRows(view);
     const mayNames = joinNames(mayCost.map((row) => row.name));
+    // GM, PR #203 r19 item 1: a run on the Krea plan is counted outside
+    // "paid", as the count chip counts it ("2 paid · 1 on Krea plan").
+    const planRuns = view.cost.planRuns ?? 0;
+    const plan = planRuns > 0 ? [`${planRuns} on Krea plan`] : [];
     if (paidRuns > 0 && mayNames) {
       // GM, PR #203 r14 item 2, verbatim: "Runs 2 paid models and Idol ·
       // Idol may use your Hugging Face credits", no provider tag; the amount
       // leads the line under it (proposalMetaLine).
-      parts.push(`runs ${upTo ? 'up to ' : ''}${plural(paidRuns, 'paid model')} and ${mayNames}`,
+      parts.push(`runs ${upTo ? 'up to ' : ''}${plural(paidRuns, 'paid model')} and ${mayNames}`, ...plan,
         mayCostClauses(mayCost, true));
     } else if (paidRuns > 0) {
       const who = providers.length ? ` (${providers.join(', ')})` : '';
       parts.push(`runs ${upTo ? 'up to ' : ''}${plural(paidRuns, 'paid model')}${who}`);
+      // The amount covers the paid models only, so it sits beside them.
       const amount = proposalEstimateLabel(view);
       if (amount) parts.push(amount);
+      parts.push(...plan);
     } else if (mayNames) {
       // A named node takes no "up to" (GM: "Runs Idol").
-      parts.push(`runs ${mayNames}`, mayCostClauses(mayCost, false));
+      parts.push(`runs ${mayNames}`, ...plan, mayCostClauses(mayCost, plan.length > 0));
+    } else if (planRuns > 0) {
+      parts.push(`runs ${upTo ? 'up to ' : ''}${plural(planRuns, 'node')} on your Krea plan`);
     } else if (runsNothing(view)) {
       // Its whole run waits on agents' placeholders, which it skips (GM - Design,
       // round 4, verbatim), counting the placeholders themselves (review 4, M2).
@@ -396,8 +406,8 @@ export function proposalEstimateLabel(view: ProposalView): string | null {
  * no run for it (canvasProposalsStore.accept; review 5, L1). */
 export function runsNothing(view: ProposalView): boolean {
   const { paidRuns, freeRuns, pendingSkipped } = view.cost;
-  return view.run.length > 0 && paidRuns === 0 && (view.cost.mayCostRuns ?? 0) === 0 && freeRuns === 0
-    && Boolean(pendingSkipped && pendingSkipped.count > 0);
+  return view.run.length > 0 && paidRuns === 0 && (view.cost.mayCostRuns ?? 0) === 0 && (view.cost.planRuns ?? 0) === 0
+    && freeRuns === 0 && Boolean(pendingSkipped && pendingSkipped.count > 0);
 }
 
 /** The run's may-cost nodes, each with the account it may bill (backend
@@ -436,13 +446,17 @@ export function proposalMayCostSentence(view: ProposalView): string | null {
   return mayCostSentence(mayCostRows(view));
 }
 
-/** A paid node's reason from the backend (model_pricing.estimate_run
- * reasons) as the Run chip records it (runScope UnpricedReason). */
-function entryReason(why: ProposalCostReason): UnpricedReason {
+const REASON_KINDS = new Set<string>(['noPrice', 'cantRun', 'awaitingInput', 'sizeUnreadable', 'plan']);
+
+/** A node's reason from the backend (model_pricing.estimate_run reasons) as
+ * the Run chip records it (runScope UnpricedReason). A kind this build
+ * doesn't know (a newer backend's) reads as no listed price, never a crash
+ * in the bar's render (review 9 of PR #203, NIT-2). */
+export function entryReason(why: ProposalCostReason): UnpricedReason {
   switch (why.kind) {
-    case 'missingKey': return { kind: 'missingKey', key: keyPhrase(why.keys ?? []) };
-    case 'leftOut': return { kind: 'leftOut', plus: why.plus ?? '' };
-    default: return { kind: why.kind };
+    case 'missingKey': return { kind: 'missingKey', key: keyPhrase(Array.isArray(why.keys) ? why.keys : []) };
+    case 'leftOut': return { kind: 'leftOut', plus: typeof why.plus === 'string' ? why.plus : '' };
+    default: return REASON_KINDS.has(why.kind) ? { kind: why.kind } : { kind: 'noPrice' };
   }
 }
 
@@ -467,20 +481,21 @@ export function acceptChipTitle(
     ?? entry.nodeId ?? entry.ref;
   const atOf = (entry: Entry) => (entry.nodeId === null ? ghosts.get(entry.ref)?.position : canvasAt?.(entry.nodeId));
   const paid = view.cost.paidRuns > 0 ? view.cost.nodes.filter((entry) => entry.kind === 'paid') : [];
+  // Runs on the Krea plan: never paid, a reason line of their own (GM, PR #203 r19 item 1).
+  const plan = view.cost.nodes.filter((entry) => entry.kind === 'plan');
   const estimate = view.cost.estimate;
   // A proposal made before reasons were sent: its unpriced nodes have no listed price.
   const unpriced = new Set(estimate?.unpriced ?? []);
-  const reasons = paid.flatMap((entry) => {
+  const reasons = [...paid, ...plan].flatMap((entry) => {
     const reason: UnpricedReason | null = entry.reason ? entryReason(entry.reason)
-      : unpriced.has(entry.ref) ? { kind: 'noPrice' } : null;
+      : entry.kind === 'plan' ? { kind: 'plan' } : unpriced.has(entry.ref) ? { kind: 'noPrice' } : null;
     if (!reason) return [];
     const at = atOf(entry);
     return [{ name: nameOf(entry), reason, ...(at && Number.isFinite(at.x) && Number.isFinite(at.y) ? { at } : {}) }];
   });
   return costTitle({
     paid: paid.map(nameOf),
-    estimate: estimate ? { low: estimate.low, high: estimate.high, open: Boolean(estimate.open),
-      sourcedZero: estimate.sourcedZero === true } : null,
+    estimate: estimate ? { low: estimate.low, high: estimate.high, open: Boolean(estimate.open) } : null,
     reasons,
     mayCost: mayCostRows(view),
   }) ?? null;
@@ -493,8 +508,10 @@ export function acceptChipTitle(
 export function acceptCountChip(view: ProposalView): string | null {
   if (view.run.length === 0 || runsNothing(view)) return null;
   const paid = view.cost.paidRuns;
+  const plan = view.cost.planRuns ?? 0;
   const may = view.cost.mayCostRuns ?? 0;
-  return [paid > 0 ? `${paid} paid` : '', may > 0 ? `${may} may cost` : ''].filter(Boolean).join(' · ') || null;
+  return [paid > 0 ? `${paid} paid` : '', plan > 0 ? `${plan} on Krea plan` : '', may > 0 ? `${may} may cost` : '']
+    .filter(Boolean).join(' · ') || null;
 }
 
 /** "3:05" until the proposal expires. */

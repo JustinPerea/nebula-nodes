@@ -69,6 +69,8 @@ import { useProviderReadinessStore } from '../src/store/providerReadinessStore';
 import { resetSettingsWrites } from '../src/lib/settingsWrites';
 import { resetRunCostConfirmMigration } from '../src/lib/runCostConfirm';
 import { readServiceAccount } from '../src/components/panels/settings/rowHelpers';
+import { PROVIDER_KEYS } from '../src/lib/providerCatalog';
+import { SETTINGS_SAVED_EVENT } from '../src/lib/settingsSignal';
 import { ConnectionLostError, RequestFailedError } from '../src/lib/errorCopy';
 
 // ---------------------------------------------------------------------------
@@ -433,7 +435,7 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
     fireEvent.click(screen.getByRole('button', { name: 'Manage OpenAI' }));
     expect(screen.getByRole('button', { name: 'Replace key' })).toHaveFocus();
-    expect(screen.getByRole('link', { name: 'Key page' })).toHaveAttribute('href', 'https://platform.openai.com/api-keys');
+    expect(screen.getByRole('link', { name: 'Open OpenAI keys' })).toHaveAttribute('href', 'https://platform.openai.com/api-keys');
     fireEvent.click(screen.getByRole('button', { name: 'Replace key' }));
     const input = await screen.findByLabelText('OpenAI API key');
     fireEvent.change(input, { target: { value: 'fixture-new' } });
@@ -466,8 +468,9 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
     ].map((line) => text.indexOf(line));
     expect(order.every((at) => at >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
-    // One link to the token page, not a second "Key page" beside it.
-    expect(within(row('Hugging Face')).queryByRole('link', { name: 'Key page ↗' })).toBeNull();
+    // One link to the token page, not a second one beside it.
+    expect(within(row('Hugging Face')).getAllByRole('link').map((each) => each.getAttribute('href')))
+      .toEqual(['https://huggingface.co/settings/tokens']);
   });
 
   it('trims a pasted Hugging Face token\'s spaces and line breaks without a word (GM, PR #203 r2)', async () => {
@@ -531,15 +534,15 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
     const link = within(row('Hugging Face')).getByRole('link', { name: 'Open Hugging Face tokens' });
     expect(link).toHaveAttribute('href', 'https://huggingface.co/settings/tokens');
     expect(link).toHaveTextContent('Open Hugging Face tokens ↗');
-    expect(within(row('Hugging Face')).queryByRole('link', { name: /Key page/ })).toBeNull();
-    // Every other key keeps the shared words.
+    expect(within(row('Hugging Face')).getAllByRole('link')).toHaveLength(1);
+    // Every other key is named the same way, by its provider (GM, PR #203 r19 item 5).
     fireEvent.click(screen.getByRole('button', { name: 'Manage OpenAI' }));
-    expect(within(row('OpenAI')).getByRole('link', { name: 'Key page' })).toHaveTextContent('Key page ↗');
+    expect(within(row('OpenAI')).getByRole('link', { name: 'Open OpenAI keys' })).toHaveTextContent('Open OpenAI keys ↗');
   });
 
   it('keeps the actions on the key together and puts its page on its own line, every provider (GM, PR #203 r16 item 5)', async () => {
     await renderSettings({ apiKeys: { HF_TOKEN: '***aaaa', OPENAI_API_KEY: '***bbbb' } });
-    for (const [name, words] of [['Hugging Face', 'Open Hugging Face tokens'], ['OpenAI', 'Key page']] as const) {
+    for (const [name, words] of [['Hugging Face', 'Open Hugging Face tokens'], ['OpenAI', 'Open OpenAI keys']] as const) {
       fireEvent.click(screen.getByRole('button', { name: `Manage ${name}` }));
       const manage = row(name).querySelector('.settings-row__manage')!;
       // [Replace key] and [Remove] on one row, and nothing else on it.
@@ -609,6 +612,91 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
     providerApiFetchMock.mockReturnValue(new Promise(() => {}));
     await act(async () => finishCheck(healthResponse({ OpenAI: 'valid' })));
     expect(within(row('OpenAI')).queryByText('Connected')).not.toBeInTheDocument();
+  });
+});
+
+describe('Settings — a key changed elsewhere while the panel is open (GM, PR #203 r19 items 5 to 7)', () => {
+  const remote = (keys: string[]) => window.dispatchEvent(new CustomEvent(SETTINGS_SAVED_EVENT, { detail: { source: 'remote', keys } }));
+
+  it('updates in place: other rows move with the spring, the row the person is in stays, and the draft is kept', async () => {
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    // The person is typing an Anthropic key.
+    fireEvent.click(screen.getByRole('button', { name: 'Add Anthropic key' }));
+    const input = await screen.findByLabelText('Anthropic API key');
+    fireEvent.change(input, { target: { value: 'sk-ant-draft' } });
+    expect(input).toHaveFocus();
+    // A second window sets Anthropic's and fal.ai's keys.
+    getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1,
+      apiKeys: { OPENAI_API_KEY: '***aaaa', ANTHROPIC_API_KEY: '***bbbb', FAL_KEY: '***cccc' } });
+    await act(async () => { remote(['ANTHROPIC_API_KEY', 'FAL_KEY']); });
+    await waitFor(() => expect(rowNames(list(/^Connected/))).toContain('fal.ai'));
+    expect(row('fal.ai')).toHaveClass('settings-row--moved');
+    // Anthropic stays where the person is, with their text and their focus.
+    expect(rowNames(list(/^Add a provider/))).toContain('Anthropic');
+    expect(screen.getByLabelText('Anthropic API key')).toHaveValue('sk-ant-draft');
+    expect(screen.getByLabelText('Anthropic API key')).toHaveFocus();
+    expect(useSettingsDraftStore.getState().keyDrafts.ANTHROPIC_API_KEY).toBe('sk-ant-draft');
+    // Leaving it lets it move.
+    fireEvent.click(within(row('Anthropic')).getByRole('button', { name: 'Cancel' }));
+    act(() => { (document.activeElement as HTMLElement | null)?.blur(); });
+    await waitFor(() => expect(rowNames(list(/^Connected/))).toContain('Anthropic'));
+  });
+
+  it('a row with focus in it stays put until focus leaves it', async () => {
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    const add = screen.getByRole('button', { name: 'Add Replicate key' });
+    add.focus();
+    getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***aaaa', REPLICATE_API_TOKEN: '***dddd' } });
+    await act(async () => { remote(['REPLICATE_API_TOKEN']); });
+    await waitFor(() => expect(within(row('Replicate')).getByRole('button', { name: 'Manage Replicate' })).toBeInTheDocument());
+    // Its status changed where it stands; it is still under "Add a provider".
+    expect(rowNames(list(/^Add a provider/))).toContain('Replicate');
+    act(() => { screen.getByRole('searchbox', { name: 'Search providers and models' }).focus(); });
+    await waitFor(() => expect(rowNames(list(/^Connected/))).toContain('Replicate'));
+  });
+
+  it('keeps every connection check but the changed provider\'s', async () => {
+    providerApiFetchMock.mockResolvedValue(healthResponse({ OpenAI: 'valid', FAL: 'valid' }));
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa', FAL_KEY: '***ffff' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Check connections' }));
+    await waitFor(() => expect(within(row('OpenAI')).getByText('Connected')).toBeInTheDocument());
+    expect(within(row('fal.ai')).getByText('Connected')).toBeInTheDocument();
+    getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***zzzz', FAL_KEY: '***ffff' } });
+    await act(async () => { remote(['OPENAI_API_KEY']); });
+    await waitFor(() => expect(within(row('OpenAI')).queryByText('Connected')).not.toBeInTheDocument());
+    console.log('FALROW', row('fal.ai').textContent, JSON.stringify(useProviderReadinessStore.getState().providers));
+    expect(within(row('fal.ai')).getByText('Connected')).toBeInTheDocument();
+  });
+
+  it('a check still running when a key changes drops that provider\'s result alone', async () => {
+    let finish!: (value: Response) => void;
+    providerApiFetchMock.mockReturnValueOnce(new Promise<Response>((resolve) => { finish = resolve; }));
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa', FAL_KEY: '***ffff' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Check connections' }));
+    getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***zzzz', FAL_KEY: '***ffff' } });
+    await act(async () => { remote(['OPENAI_API_KEY']); });
+    await act(async () => finish(healthResponse({ OpenAI: 'valid', FAL: 'valid' })));
+    await waitFor(() => expect(within(row('fal.ai')).getByText('Connected')).toBeInTheDocument());
+    expect(within(row('OpenAI')).queryByText('Connected')).not.toBeInTheDocument();
+  });
+
+  it('names every provider\'s page the same way in the edit and the manage view (GM, PR #203 r19 item 5)', async () => {
+    const specs = PROVIDER_KEYS.filter((spec) => spec.input !== 'service-account');
+    await renderSettings({ apiKeys: {} });
+    for (const spec of specs) {
+      fireEvent.click(screen.getByRole('button', { name: `Add ${spec.label} key` }));
+      const link = within(row(spec.label)).getByRole('link', { name: spec.keyLink });
+      expect(link).toHaveAttribute('href', spec.url);
+      expect(link).toHaveTextContent(`${spec.keyLink} ↗`);
+      fireEvent.click(within(row(spec.label)).getByRole('button', { name: 'Cancel' }));
+    }
+    cleanup();
+    await renderSettings({ apiKeys: Object.fromEntries(PROVIDER_KEYS.map((spec) => [spec.key, '***abcd'])) });
+    for (const spec of PROVIDER_KEYS) {
+      fireEvent.click(screen.getByRole('button', { name: `Manage ${spec.label}` }));
+      expect(within(row(spec.label)).getByRole('link', { name: spec.keyLink })).toHaveAttribute('href', spec.url);
+      fireEvent.click(screen.getByRole('button', { name: `Manage ${spec.label}` }));
+    }
   });
 });
 

@@ -1,5 +1,5 @@
 {
-  "about": "Shared by backend/tests/test_model_pricing.py and frontend/tests/lib/pricing.test.ts so the two estimators agree. A case's optional `wired` lists input ports with an edge into them. The `table` node is a five-route table (services/node_route.py routes): its price entry keys each route by its `pricing` or id, `runCases` price a whole run (estimate_run / summarizeRunScope) with the keys in `apiKeys`, and `routeEstimateCases` give each route's price (estimate_routes / estimateRoutes). A route entry with `unconfirmed: true` is a price the provider's page doesn't state exactly (the switcher marks it with *; route_price_unconfirmed / routePriceUnconfirmed). The `moded` node prices by `(mode)`, a price variable read from the wired ports (v2v with start_video, i2v with start_image, keyframes or end_image, else t2v; model_pricing.VIDEO_MODE / pricing.ts VIDEO_MODE), and `tooled` by run-time quantities of its source clip ((source seconds), (output megapixels): RUN_TIME_VARIABLES), so it is unpriced before the run. `shippedRouteCases` price the registry's route-table nodes with the shipped table (backend/data/model_pricing.json): each route's price as a number, a [low, high] range, or null, and optionally `unconfirmed`: whether each route's price is marked at those params (route_price_unconfirmed / routePriceUnconfirmed; a row may carry its own `unconfirmed`, as FLUX.2's Flash and Klein rows on fal do). `shippedRunCases` price a whole run of a registry node on the shipped table (estimate_run / summarizeRunScope) with the keys in `apiKeys` and the ports in `wired` (one edge each). Krea 3 also prices by `(references)`, read from the wired ports: `some` with an edge into `images`, else `none` (model_pricing.REFERENCES / pricing.ts REFERENCES). The `tiered` node prices by `(wired refs)`, read from the wired ports: `yes` with an edge into `refs`, else `no` (model_pricing.WIRED_PREFIX / pricing.ts WIRED_PREFIX); every row that reads the `refs` param also reads `(wired refs)`, so a wire into `refs` is priced, not unknown, while the `loose` node's row reads `refs` alone and stays unpriced with it wired. Krea 2 prices by k2BillingTier this way (shippedRunCases), and its entries list the params the handler strips in `whitespaceUnset`, so a whitespace-only value there prices as unset (only those params: `tiered` counts a whitespace `refs` as set). A case's optional `size` is the measured input of the port its entry's `sizing` names ({width, height, seconds, frames}: model_pricing.estimate_node size / pricing.ts estimateNode size): the `sized` node prices per megapixel of the larger of input and output, rounded up, and `tooled` per megapixel-second of output; without a size both are unpriced. `sizedRunCases` price a whole run of a registry node on the shipped table with its sizing port wired from an Image Input or Video Input whose file measured `size` (estimate_run sizes / summarizeRunScope sizes); `awaitingInput` is whether the node is unpriced only because its input's size isn't known. Every run case's `expected.reason` is why the node leaves the total open, or null (estimate_run `reasons` / summarizeRunScope `reasons`): {kind: noPrice | cantRun | awaitingInput | missingKey with the `keys` it needs | leftOut with its `plus`}; the proposal bar's Accept chip writes its reason lines from it.",
+  "about": "Shared by backend/tests/test_model_pricing.py and frontend/tests/lib/pricing.test.ts so the two estimators agree. A case's optional `wired` lists input ports with an edge into them. The `table` node is a five-route table (services/node_route.py routes): its price entry keys each route by its `pricing` or id, `runCases` price a whole run (estimate_run / summarizeRunScope) with the keys in `apiKeys`, and `routeEstimateCases` give each route's price (estimate_routes / estimateRoutes). A route entry with `unconfirmed: true` is a price the provider's page doesn't state exactly (the switcher marks it with *; route_price_unconfirmed / routePriceUnconfirmed). The `moded` node prices by `(mode)`, a price variable read from the wired ports (v2v with start_video, i2v with start_image, keyframes or end_image, else t2v; model_pricing.VIDEO_MODE / pricing.ts VIDEO_MODE), and `tooled` by run-time quantities of its source clip ((source seconds), (output megapixels): RUN_TIME_VARIABLES), so it is unpriced before the run. `shippedRouteCases` price the registry's route-table nodes with the shipped table (backend/data/model_pricing.json): each route's price as a number, a [low, high] range, or null, and optionally `unconfirmed`: whether each route's price is marked at those params (route_price_unconfirmed / routePriceUnconfirmed; a row may carry its own `unconfirmed`, as FLUX.2's Flash and Klein rows on fal do). `shippedRunCases` price a whole run of a registry node on the shipped table (estimate_run / summarizeRunScope) with the keys in `apiKeys` and the ports in `wired` (one edge each). Krea 3 also prices by `(references)`, read from the wired ports: `some` with an edge into `images`, else `none` (model_pricing.REFERENCES / pricing.ts REFERENCES). The `tiered` node prices by `(wired refs)`, read from the wired ports: `yes` with an edge into `refs`, else `no` (model_pricing.WIRED_PREFIX / pricing.ts WIRED_PREFIX); every row that reads the `refs` param also reads `(wired refs)`, so a wire into `refs` is priced, not unknown, while the `loose` node's row reads `refs` alone and stays unpriced with it wired. Krea 2 prices by k2BillingTier this way (shippedRunCases), and its entries list the params the handler strips in `whitespaceUnset`, so a whitespace-only value there prices as unset (only those params: `tiered` counts a whitespace `refs` as set). A case's optional `size` is the measured input of the port its entry's `sizing` names ({width, height, seconds, frames}: model_pricing.estimate_node size / pricing.ts estimateNode size): the `sized` node prices per megapixel of the larger of input and output, rounded up, and `tooled` per megapixel-second of output; without a size both are unpriced. `sizedRunCases` price a whole run of a registry node on the shipped table with its sizing port wired from an Image Input or Video Input whose file measured `size` (estimate_run sizes / summarizeRunScope sizes); `awaitingInput` is whether the node is unpriced only because its input's size isn't known. Every run case's `expected.reason` is why the node leaves the total open, or null (estimate_run `reasons` / summarizeRunScope `reasons`): {kind: noPrice | cantRun | awaitingInput | missingKey with the `keys` it needs | leftOut with its `plus` | plan for a run on the Krea plan}; the proposal bar's Accept chip writes its reason lines from it. `classCases` run several nodes together (the fixture's definitions over the registry's, the fixture's prices over the shipped table's) and give each node's cost class (model_pricing.cost_class / costClass): `paid`, `plan` (the Krea plan), `free` (a key-billing route with no key, or a sourced $0 such as the `zeroed` node's) and `mayCost`, with the paid figure (`low`/`high`, null when no paid node is priced) and whether the run is a sourced $0 (`sourcedZero`): estimate_run `classes` / summarizeRunScope `paid`, `plan`, `free`, `mayCost`.",
   "definitions": {
     "img": {
       "id": "img",
@@ -704,6 +704,32 @@
           ]
         }
       ]
+    },
+    "zeroed": {
+      "id": "zeroed",
+      "displayName": "Fixture Sourced Zero",
+      "category": "image-gen",
+      "apiProvider": "fal",
+      "apiEndpoint": "/fixture/zeroed",
+      "executionPattern": "sync",
+      "envKeyName": "FAL_KEY",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "id": "image",
+          "label": "Image",
+          "dataType": "Image",
+          "required": false
+        }
+      ],
+      "params": []
     }
   },
   "pricing": {
@@ -1314,6 +1340,23 @@
           }
         ],
         "checked": "2026-10-21"
+      },
+      "zeroed": {
+        "currency": "usd",
+        "per": "image",
+        "rows": [
+          {
+            "match": {},
+            "price": 0
+          }
+        ],
+        "sources": [
+          {
+            "url": "https://example.com/pricing",
+            "quote": "fixture"
+          }
+        ],
+        "checked": "2026-10-30"
       }
     }
   },
@@ -2343,7 +2386,9 @@
         "high": null,
         "unavailable": false,
         "plan": true,
-        "reason": null
+        "reason": {
+          "kind": "plan"
+        }
       }
     },
     {
@@ -2388,7 +2433,9 @@
         "high": null,
         "unavailable": false,
         "plan": true,
-        "reason": null
+        "reason": {
+          "kind": "plan"
+        }
       }
     }
   ],
@@ -2857,7 +2904,9 @@
         "high": null,
         "unavailable": false,
         "plan": true,
-        "reason": null
+        "reason": {
+          "kind": "plan"
+        }
       }
     },
     {
@@ -3075,7 +3124,9 @@
         "high": null,
         "unavailable": false,
         "plan": true,
-        "reason": null
+        "reason": {
+          "kind": "plan"
+        }
       }
     },
     {
@@ -3330,6 +3381,26 @@
         "plan": false,
         "reason": null
       }
+    },
+    {
+      "name": "GPT Image 1.5 with no key for either provider can't be priced until a key is added",
+      "nodeId": "gpt-image-1-5",
+      "params": {},
+      "apiKeys": {},
+      "wired": [],
+      "expected": {
+        "low": null,
+        "high": null,
+        "unavailable": false,
+        "plan": false,
+        "reason": {
+          "kind": "missingKey",
+          "keys": [
+            "OPENAI_API_KEY",
+            "FAL_KEY"
+          ]
+        }
+      }
     }
   ],
   "sizedRunCases": [
@@ -3575,6 +3646,204 @@
         "reason": {
           "kind": "awaitingInput"
         }
+      }
+    }
+  ],
+  "classCases": [
+    {
+      "name": "a sourced $0 alone is free, never paid, and exact",
+      "nodes": [
+        {
+          "id": "z",
+          "nodeId": "zeroed",
+          "params": {}
+        }
+      ],
+      "apiKeys": {
+        "FAL_KEY": "set"
+      },
+      "expected": {
+        "paid": [],
+        "plan": [],
+        "free": [
+          "z"
+        ],
+        "mayCost": [],
+        "low": null,
+        "high": null,
+        "sourcedZero": true
+      }
+    },
+    {
+      "name": "a sourced $0 beside a paid node is out of paid and the figure",
+      "nodes": [
+        {
+          "id": "z",
+          "nodeId": "zeroed",
+          "params": {}
+        },
+        {
+          "id": "i",
+          "nodeId": "img",
+          "params": {
+            "quality": "low",
+            "size": "1024x1024"
+          }
+        }
+      ],
+      "apiKeys": {
+        "FAL_KEY": "set",
+        "OPENAI_API_KEY": "set"
+      },
+      "expected": {
+        "paid": [
+          "i"
+        ],
+        "plan": [],
+        "free": [
+          "z"
+        ],
+        "mayCost": [],
+        "low": 0.011,
+        "high": 0.011,
+        "sourcedZero": false
+      }
+    },
+    {
+      "name": "a run on the Krea plan is its own class, out of paid and the figure",
+      "nodes": [
+        {
+          "id": "k",
+          "nodeId": "table",
+          "params": {
+            "_provider": "krea",
+            "_kreaAuth": "mcp"
+          }
+        },
+        {
+          "id": "i",
+          "nodeId": "img",
+          "params": {
+            "quality": "low",
+            "size": "1024x1024"
+          }
+        }
+      ],
+      "apiKeys": {
+        "OPENAI_API_KEY": "set"
+      },
+      "expected": {
+        "paid": [
+          "i"
+        ],
+        "plan": [
+          "k"
+        ],
+        "free": [],
+        "mayCost": [],
+        "low": 0.011,
+        "high": 0.011,
+        "sourcedZero": false
+      }
+    },
+    {
+      "name": "only the Krea plan runs",
+      "nodes": [
+        {
+          "id": "k",
+          "nodeId": "table",
+          "params": {
+            "_provider": "krea",
+            "_kreaAuth": "mcp"
+          }
+        }
+      ],
+      "apiKeys": {},
+      "expected": {
+        "paid": [],
+        "plan": [
+          "k"
+        ],
+        "free": [],
+        "mayCost": [],
+        "low": null,
+        "high": null,
+        "sourcedZero": false
+      }
+    },
+    {
+      "name": "Idol with a token may cost, apart from a plan run and a paid one",
+      "nodes": [
+        {
+          "id": "d",
+          "nodeId": "speridlabs-idol",
+          "params": {}
+        },
+        {
+          "id": "k",
+          "nodeId": "table",
+          "params": {
+            "_provider": "krea",
+            "_kreaAuth": "mcp"
+          }
+        },
+        {
+          "id": "i",
+          "nodeId": "img",
+          "params": {
+            "quality": "low",
+            "size": "1024x1024"
+          }
+        }
+      ],
+      "apiKeys": {
+        "HF_TOKEN": "hf_fixture",
+        "OPENAI_API_KEY": "set"
+      },
+      "expected": {
+        "paid": [
+          "i"
+        ],
+        "plan": [
+          "k"
+        ],
+        "free": [],
+        "mayCost": [
+          "d"
+        ],
+        "low": 0.011,
+        "high": 0.011,
+        "sourcedZero": false
+      }
+    },
+    {
+      "name": "Idol without a token is free beside a sourced $0, which then says nothing of its own",
+      "nodes": [
+        {
+          "id": "d",
+          "nodeId": "speridlabs-idol",
+          "params": {}
+        },
+        {
+          "id": "z",
+          "nodeId": "zeroed",
+          "params": {}
+        }
+      ],
+      "apiKeys": {
+        "FAL_KEY": "set"
+      },
+      "expected": {
+        "paid": [],
+        "plan": [],
+        "free": [
+          "d",
+          "z"
+        ],
+        "mayCost": [],
+        "low": null,
+        "high": null,
+        "sourcedZero": true
       }
     }
   ]

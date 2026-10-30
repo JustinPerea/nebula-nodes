@@ -826,6 +826,16 @@ body.app-slava-restraint .settings-notice__undo:focus-visible { outline: var(--s
   from { opacity: 0; }
 }
 
+/* A row that changed section (its key set or removed elsewhere while the
+   panel is open) springs in where it lands (GM, PR #203 r19 item 6). */
+body.app-slava-restraint .settings-row--moved {
+  animation: settings-row-moved var(--settings-spring) backwards;
+}
+
+@keyframes settings-row-moved {
+  from { opacity: 0; transform: translateY(6px); }
+}
+
 @keyframes settings-row-open {
   from { opacity: 0; transform: translateY(-4px) scaleY(0.98); }
 }
@@ -842,6 +852,7 @@ body.app-slava-restraint .settings-notice__undo:focus-visible { outline: var(--s
   body.app-slava-restraint .settings__tabpanel,
   body.app-slava-restraint .settings-row__body,
   body.app-slava-restraint .settings-notice { animation: none; }
+  body.app-slava-restraint .settings-row--moved { animation: none; }
   body.app-slava-restraint .settings-tabs__pill,
   body.app-slava-restraint .settings-switch::before,
   body.app-slava-restraint .settings-pref--link svg { transition: none; }

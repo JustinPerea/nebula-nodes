@@ -114,25 +114,43 @@ The server exposes these tools for building and running (see
   `nebula quick`, the HTTP run routes, a Cinema shot) refuses a run that
   includes Idol, at any spending limit, even when the node asked for comes
   after Idol, and says why and what to do: propose the run, or run only
-  nodes that don't need Idol. The refusal names the surface's own way to
-  propose, from one source: over MCP "Propose it instead: propose_change
-  (run: n2). The person accepts on the canvas, and the canvas runs it.",
-  from the CLI `` `nebula propose --note "<why>" --run n2` ``. The person's
+  nodes that don't need Idol. The refusal names the reader's own way to
+  propose, worded where it is written: over MCP "Propose it instead:
+  propose_change (run: n2). The person accepts on the canvas, and the
+  canvas runs it.", from the CLI `` `nebula propose --note "<why>" --run n2` ``.
+  The CLI sends `X-Nebula-Surface: cli` on every request and prints a
+  refusal exactly as it came; any other caller reads MCP words. The header
+  says which surface is asking and nothing else: it is no agent marker and
+  changes no gate. The billing-setting refusals (a Krea billing mode, a
+  provider choice, a person's run) and `nebula quick`'s hint ("Add it to
+  the canvas instead (`nebula create <id>`), then propose the run: …") are
+  worded the same way. The person's
   own Run, and an accepted proposal, run it as usual. The `billing` note
   says which state holds now ("Free here" or "May cost here"), and both
   state the downstream rule (no agent run that includes it, "even for a
   node after it"); `nebula info` prints it as its `BILLING:` line in the
   CLI's words. Whether the token is set is read one way everywhere: a key
   that is only spaces or invisible characters once trimmed is unset, even
-  one already saved that way, and PUT /api/settings refuses one (400). When
-  a key is set, replaced or removed, every browser tab gets
-  `{"type": "settingsChanged"}` (no values) and reads its settings again,
-  so an open proposal's "may cost" follows a token added from anywhere;
+  one already saved that way, and PUT /api/settings refuses one (400:
+  "Nothing was saved because the key is empty once spaces and invisible
+  characters are removed."). A save writes back every entry it wasn't
+  asked to change as it was. When a key is set, replaced or removed, the
+  person's browser tabs get `{"type": "settingsChanged", "keys": [...]}`
+  (the names of the keys whose value changed, never a value) and read
+  their settings again; it goes to the canvas's sockets only, so an MCP or
+  CLI listener never receives it. An open proposal's "may cost" follows a
+  token added from anywhere;
   `get_proposal`, `list_proposals` and `nebula proposals` already read the
   keys set at each call. A proposal's cost entries carry `reason` for a
   paid node that leaves the total open (`noPrice`, `cantRun`,
   `awaitingInput`, `missingKey` with its `keys`, `leftOut` with its
-  `plus`), the reason the canvas's Accept chip prints.
+  `plus`), the reason the canvas's Accept chip prints. Every node that
+  calls a provider has one cost class (`model_pricing.cost_class`): `paid`,
+  `plan` (a run on the person's Krea plan: entry `kind: "plan"`, label "on
+  Krea plan", `reason: {"kind": "plan"}`, counted in the cost's `planRuns`,
+  never in `paidRuns` or the estimate), `mayCost`, or `free` (a key-billing
+  route with no key, or a sourced $0: "free · fal.ai" with `price` {0, 0},
+  in `freeRuns`). Treat a reason kind you don't know as `noPrice`.
   `definition_id` is the id, or
   the node type's exact display name (any case, outer spaces ignored) when
   one node type has it: `describe_node(definition_id="Moodboard")` answers

@@ -307,7 +307,7 @@ describe('a route priced from the input file', () => {
       apiKeys: { BFL_API_KEY: KEY }, kreaSignedIn: false, pricing: shipped, wired: new Map([['video', 1]]),
     });
     const prices = Object.fromEntries(state.rows.map((row) => [row.id, [row.price, row.priceTitle]]));
-    expect(prices.bfl).toEqual(['by size', "Priced from the input's size when it runs"]);
+    expect(prices.bfl).toEqual(['by size', 'Priced from the input’s size when it runs.']);
     expect(prices.replicate[0]).toBe('by size');
     expect(prices.fal[0]).toBe('-');
     expect(prices.auto[0]).toBe('by size');

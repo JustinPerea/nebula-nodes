@@ -5,8 +5,10 @@ import type { RowTone } from './rowHelpers';
  * One provider line: status dot, name, a one-line summary, a trailing action,
  * and an optional body that opens in place underneath.
  */
-export function ProviderRow({ id, tone, name, status, statusTone, summary, wrapSummary, title, action, children, setup, rowRef }: {
+export function ProviderRow({ id, tone, name, status, statusTone, summary, wrapSummary, title, action, children, setup, rowRef, moved }: {
   id: string;
+  /** It changed section since the panel last drew: it springs in (settings.css). */
+  moved?: boolean;
   tone: RowTone;
   name: string;
   /** A short state word ("Connected", "Key rejected") shown before the summary. */
@@ -27,7 +29,7 @@ export function ProviderRow({ id, tone, name, status, statusTone, summary, wrapS
   // Rows pass conditional bodies (`open && …`), so count what actually renders.
   const hasBody = Children.toArray(children).length > 0;
   return (
-    <div ref={rowRef} className={`settings-row${hasBody ? ' settings-row--open' : ''}`} data-row={id}
+    <div ref={rowRef} className={`settings-row${hasBody ? ' settings-row--open' : ''}${moved ? ' settings-row--moved' : ''}`} data-row={id}
       {...(setup ? { 'data-provider-setup': setup, tabIndex: -1 } : {})}>
       <span className={`settings-row__dot settings-row__dot--${tone}`} aria-hidden="true" />
       <div className="settings-row__text" title={title}>

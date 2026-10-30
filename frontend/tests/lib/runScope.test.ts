@@ -58,9 +58,10 @@ describe('run scope', () => {
   });
 
   it('describes free and paid scopes in plain language', () => {
-    expect(describeRunScope({ total: 1, paid: [] })).toBe('Runs 1 node · no paid providers');
-    expect(describeRunScope({ total: 2, paid: ['Hero shot'] })).toBe('Runs 2 nodes · 1 calls a paid provider: Hero shot');
-    expect(describeRunScope({ total: 5, paid: ['a', 'b', 'c', 'd'] })).toBe('Runs 5 nodes · 4 call paid providers: a, b, c and 1 more');
+    // GM, PR #203 r19 item 2: the Run chip's own tooltip under the count, no per-node breakdown.
+    expect(describeRunScope({ total: 1, paid: [] })).toBe('Runs 1 node. No paid providers.');
+    expect(describeRunScope({ total: 2, paid: ['Hero shot'] })).toBe('Runs 2 nodes.\n“Hero shot” calls a paid provider.');
+    expect(describeRunScope({ total: 5, paid: ['a', 'b', 'c', 'd'] })).toBe('Runs 5 nodes.\n4 nodes call paid providers.');
   });
 });
 
@@ -100,14 +101,15 @@ describe('run cost', () => {
     expect(summary.cost?.low).toBeCloseTo(0.15);
     expect(summary.cost?.high).toBeCloseTo(0.15);
     expect(runChipLabel(summary)).toBe('~$0.15');
-    expect(describeRunScope(summary)).toContain('Estimated $0.15 at list prices');
+    expect(runChipTitle(summary)).toContain('Estimated cost $0.15.');
+    expect(describeRunScope(summary)).toBe(`Runs 3 nodes.\n${runChipTitle(summary)}`);
   });
 
   it('shows a range when a setting only resolves at run time, and marks costs left out', () => {
     const summary = summarizeRunScope([priced('e', 'gpt-image-2-edit')], [], { kind: 'graph' }, context);
     expect(summary.cost?.plus).toEqual(['input images']);
     expect(runChipLabel(summary)).toBe('$0.01–0.20 + unpriced');
-    expect(describeRunScope(summary)).toContain('Not included: input images');
+    expect(describeRunScope(summary)).toContain('may cost more for its input images, which the estimate leaves out.');
   });
 
   it('marks the total open-ended when a paid node has no list price', () => {
@@ -116,24 +118,25 @@ describe('run cost', () => {
     );
     expect(summary.cost?.unpriced).toEqual(['Writer']);
     expect(runChipLabel(summary)).toBe('$0.05 + unpriced');
-    expect(describeRunScope(summary)).toContain('No list price for Writer');
+    expect(describeRunScope(summary)).toContain('“Writer” has no listed price.');
   });
 
-  it('decides "$0" by source: a run whose every priced row is 0 reads "$0", titled "This costs nothing to run."; one that only rounds to zero keeps "~" (GM, PR #203 r11 item 4)', () => {
+  it('decides "$0" by source: a run whose every provider call is a sourced $0 reads "$0", titled "This costs nothing to run.", and is never paid (GM, PR #203 r11 item 4, r18 item 1)', () => {
     const free: PricingTable = { ...pricing, nodes: { ...pricing.nodes, 'nano-banana': { currency: 'usd', per: 'image', rows: [{ match: {}, price: 0 }] } } };
     const summary = summarizeRunScope([priced('a', 'nano-banana')], [], { kind: 'graph' }, { pricing: free, apiKeys: {} });
     expect(summary.cost?.sourcedZero).toBe(true);
+    expect(summary.paid).toEqual([]);
+    expect(summary.free).toEqual(['Nano Banana']);
+    expect(summary.cost?.lines).toEqual([]);
     expect(runChipLabel(summary)).toBe('$0');
-    // The paid lead first, as every cost tooltip (GM, PR #203 r17 item 3).
-    expect(runChipTitle(summary)).toBe('“Nano Banana” calls a paid provider. This costs nothing to run.');
-    // A closed 0 with no sourced zero (a figure that only rounds to it) is an estimate.
-    const rounded = { ...summary, cost: { ...summary.cost!, sourcedZero: undefined } };
-    expect(runChipLabel(rounded)).toBe('~$0');
-    expect(runChipTitle(rounded)).toBe('“Nano Banana” calls a paid provider. Estimated cost $0.');
-    // A paid priced line beside it: not a sourced zero.
+    // GM, PR #203 r18 item 1: only "This costs nothing to run.", no paid lead.
+    expect(runChipTitle(summary)).toBe('This costs nothing to run.');
+    // A paid priced line beside it: not a sourced zero, and the free node isn't named.
     const mixed = summarizeRunScope([priced('a', 'nano-banana'), priced('b', 'veo-3')], [], { kind: 'graph' },
       { pricing: free, apiKeys: { GOOGLE_API_KEY: 'set' } });
     expect(mixed.cost?.sourcedZero).toBeUndefined();
+    expect(mixed.paid).toEqual(['Veo 3.1']);
+    expect(runChipTitle(mixed)).not.toContain('Nano Banana');
   });
 
   it('never counts Idol as paid: free without a token, "1 may cost" with one (GM, PR #203 r11 item 2, r12)', () => {
@@ -151,7 +154,7 @@ describe('run cost', () => {
     expect(signed.mayCost).toEqual([{ name: 'Idol', account: 'Hugging Face' }]);
     expect(runChipLabel(signed)).toBe('1 may cost');
     expect(runChipTitle(signed)).toBe('Idol can use your Hugging Face credits.');
-    expect(describeRunScope(signed)).toBe('Runs 1 node · no paid providers. Idol can use your Hugging Face credits');
+    expect(describeRunScope(signed)).toBe('Runs 1 node.\nIdol can use your Hugging Face credits.');
   });
 
   it('counts Idol apart beside paid models: "2 paid · 1 may cost", and a priced chip keeps its amount with Idol\'s sentence last', () => {
@@ -207,13 +210,17 @@ describe('run cost', () => {
     expect(wired.cost?.high).toBe(1);
   });
 
-  it('lists Krea account runs as billed to the plan, not as unpriced', () => {
+  it('lists Krea account runs on the plan, never paid and never unpriced (GM, PR #203 r19 item 1)', () => {
     const summary = summarizeRunScope(
       [priced('k', 'krea-2-generate', { _kreaAuth: 'mcp' }, 'Krea shot')], [], { kind: 'graph' }, context,
     );
     expect(summary.cost?.plan).toEqual(['Krea shot']);
+    expect(summary.plan).toEqual(['Krea shot']);
+    expect(summary.paid).toEqual([]);
     expect(summary.cost?.unpriced).toEqual([]);
-    expect(describeRunScope(summary)).toContain('Billed to your Krea plan: Krea shot');
+    expect(runChipLabel(summary)).toBe('1 on Krea plan');
+    expect(runChipTitle(summary)).toBe('“Krea shot” runs on your Krea plan.');
+    expect(describeRunScope(summary)).toBe('Runs 1 node.\n“Krea shot” runs on your Krea plan.');
     const api = summarizeRunScope([priced('k', 'krea-2-generate', { _kreaAuth: 'api-token' })], [], { kind: 'graph' }, context);
     expect(runChipLabel(api)).toBe('~$0.03');
   });
@@ -233,8 +240,10 @@ describe('run cost', () => {
     const summary = summarizeRunScope(graph, fanEdges, { kind: 'graph' }, context);
     expect(summary.cost?.low).toBeCloseTo(0.15 + 0.05);
     expect(summary.cost?.high).toBeCloseTo(0.15 + 0.2);
-    expect(describeRunScope(summary)).toContain('× 3 runs');
-    expect(describeRunScope(summary)).toContain('× up to 4 runs');
+    // The costly-run confirm keeps each node's runs; the Run button's text is the chip's (GM r19 item 2).
+    expect(runCostConfirmMessage(summary)).toContain('× 3 runs');
+    expect(runCostConfirmMessage(summary)).toContain('× up to 4 runs');
+    expect(describeRunScope(summary)).toBe(`Runs 4 nodes.\n${runChipTitle(summary)}`);
     // A cluster run sends only its own nodes, so a Batch outside it doesn't repeat them.
     const cluster = summarizeRunScope(graph, fanEdges, { kind: 'cluster', nodeIds: ['img'] }, context);
     expect(cluster.cost?.high).toBeCloseTo(0.05);
@@ -294,7 +303,7 @@ describe('local nodes that call a provider, and wired price settings', () => {
     expect(vision.paid).toEqual(['QC']);
     expect(vision.cost?.unpriced).toEqual(['QC']);
     expect(runChipLabel(vision)).toBe('1 paid');
-    expect(describeRunScope(vision)).toContain('No list price for QC');
+    expect(describeRunScope(vision)).toContain('“QC” has no listed price.');
     for (const mode of ['heuristic', 'opencv']) {
       const local = summarizeRunScope([qc(mode)], [], { kind: 'graph' }, context);
       expect(local.paid).toEqual([]);
@@ -383,8 +392,8 @@ describe('run estimate for a route-table node (cases shared with the backend)', 
         const routed = withWiredBlockers(definition, testCase.params, new Map(Object.entries(testCase.wiredCounts ?? {})));
         expect(cost!.unavailable!.Node).toBe(routeUnavailable(definition, routed, testCase.apiKeys)!.message);
         expect(cost!.unpriced).toContain('Node');
-        expect(describeRunScope({ total: 1, paid: ['Node'], cost })).toContain("Can't run on the chosen provider: Node");
-        expect(describeRunScope({ total: 1, paid: ['Node'], cost })).not.toContain('No list price');
+        expect(describeRunScope({ total: 1, paid: ['Node'], cost })).toContain(runChipTitle({ total: 1, paid: ['Node'], cost })!);
+        expect(describeRunScope({ total: 1, paid: ['Node'], cost })).not.toContain('no listed price');
       }
     });
   }
@@ -471,8 +480,8 @@ describe('a run priced from its input file (cases shared with the backend)', () 
     expect(summary.cost!.awaitingInput).toEqual(['Upscale']);
     expect(runChipLabel(summary)).toBe('1 paid');
     const text = describeRunScope(summary);
-    expect(text).toContain('Priced when its input is known: Upscale');
-    expect(text).not.toContain('No list price');
+    expect(text).toContain('“Upscale” is priced from its input, which isn’t ready yet.');
+    expect(text).not.toContain('no listed price');
     expect(runCostConfirmMessage(summary)).toContain('Priced when its input is known: Upscale');
   });
 
@@ -506,9 +515,8 @@ describe('a run priced from its input file (cases shared with the backend)', () 
     expect(summary.cost!.awaitingInput).toEqual(['Upscale']);
     expect(summary.cost!.sizeUnreadable).toEqual(['Upscale']);
     const text = describeRunScope(summary);
-    expect(text).not.toContain('Priced when its input is known');
-    expect(text).toContain("Nebula can't read the size of its input");
-    expect(text).toContain('Upscale');
+    expect(text).not.toContain('which isn’t ready yet');
+    expect(text).toContain('“Upscale” is priced by its input size, which Nebula couldn’t read.');
     expect(runCostConfirmMessage(summary)).toContain("Nebula can't read the size of its input");
     expect(runCostConfirmMessage(summary)).not.toContain('Priced when its input is known');
   });
@@ -522,8 +530,8 @@ describe('a run priced from its input file (cases shared with the backend)', () 
     const summary = summarizeRunScope([upload({ filePath: 'https://images.example.com/x.png' }), seedvr, generator, second], edges,
       { kind: 'graph' }, { ...context, sizes: { 'https://images.example.com/x.png': null } });
     const text = describeRunScope(summary);
-    expect(text).toContain('Priced when its input is known: Upscale');
-    expect(text).toContain("Nebula can't read the size of its input (a file on another host is never downloaded to price it): Upscale");
+    expect(text).toContain('“Upscale” is priced from its input, which isn’t ready yet.');
+    expect(text).toContain('“Upscale” is priced by its input size, which Nebula couldn’t read.');
   });
 
   it('never measures an upload with no file yet', () => {

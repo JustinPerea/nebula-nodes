@@ -49,7 +49,9 @@ proposal says "may use your Hugging Face credits", its card reads "may cost ·
 Hugging Face", and the Run chip counts Idol as "may cost" ("~$0.13 + 1 may
 cost" beside priced models), never as paid. Hover the Run chip or the Accept chip for the
 whole picture: the paid nodes first, then the estimate, a line for each node
-with no listed price, and Idol's sentence last. Neither adds anything for
+with no listed price or on your Krea plan, and Idol's sentence last. The Run
+button's own tooltip, and what a screen reader hears for Run and Accept, is
+the same text. Neither adds anything for
 Idol to the estimate. Running an agent's unfinished
 Idol node yourself asks first, as a paid one does. Without a token nothing
 can bill: the card reads "free · Hugging Face", agents run it as they run

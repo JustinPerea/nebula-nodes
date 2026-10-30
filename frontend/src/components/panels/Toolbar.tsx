@@ -315,7 +315,9 @@ export function Toolbar() {
             'aria-disabled': following ? true : undefined,
             title: following ? waitToOpenTooltip(following.projectName)
               : isImportingGraph ? 'Wait for the graph import to finish'
-                : `Run graph. ${describeRunScope(runScope)} (${displayKey('Mod')}${displayKey('Enter')})`,
+                // The Run chip's own tooltip text (describeRunScope reads
+                // runChipTitle; GM, PR #203 r19 item 2).
+                : `Run graph (${displayKey('Mod')}${displayKey('Enter')}). ${describeRunScope(runScope)}`,
           }, keyLock, runScopeId)}
         >
           <ToolbarIcon name="run" />

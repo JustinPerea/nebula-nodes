@@ -478,8 +478,14 @@ def cost_for(
     api_keys: Mapping[str, Any],
     *,
     wired: Any = (),
+    cost_class: str | None = None,
 ) -> dict[str, Any]:
-    """`free` for local utility nodes, else `paid` with the provider. No prices exist.
+    """`free` for local utility nodes, else the node's cost class
+    (model_pricing.cost_class) with the provider: `paid`, `plan` for a run
+    on the person's Krea plan (GM, PR #203 r19 item 1), `mayCost` or `free`
+    for a key-billing route. ``cost_class`` is the class the run's estimate
+    gave this node (model_pricing.estimate_run ``classes``), which also
+    knows its price: a sourced $0 is `free` (r18 item 1).
 
     A cinema scene is a utility node that calls its base image model once per
     shot, so it is paid, by that model's provider. A utility node whose
@@ -519,24 +525,27 @@ def cost_for(
         # A route that is free unless the person's own key is set, and
         # then may bill their account (RouteSpec mayBillWithKey: Idol on
         # its Space): never "paid" (GM, PR #203 r11 item 2, r12).
-        billing = node_route.key_billing(definition, params, api_keys)
-        if billing:
+        billing = model_pricing.cost_class(definition, params, api_keys)
+        if billing in (model_pricing.MAY_COST, model_pricing.FREE):
             # Named by who it runs on and may bill: a Space's host (the one
             # cost class and its account, node_route; review 8, LOW-3).
             host = node_route.key_billing_account(definition, params, api_keys) or "provider"
             return {"kind": billing, "provider": routed, "label": node_route.key_billing_label(billing, host),
                     "name": str(definition.get("displayName") or definition.get("id") or ""), "account": host}
-        return {"kind": "paid", "provider": routed, "label": _paid_label(definition, routed)}
+        return _class_entry(cost_class or billing, definition, routed)
 
     if (definition or {}).get("id") == model_pricing.CINEMA_SCENE:
         nested = model_pricing.cinema_scene_base(params or {})
         base = (definitions or {}).get(nested[0]) if nested else None
         provider = str((base or {}).get("apiProvider") or "") or None
+        if cost_class in (model_pricing.PLAN, model_pricing.FREE):
+            return _class_entry(cost_class, base, provider)
         return {"kind": "paid", "provider": provider, "label": f"paid · {provider or 'provider'}, per shot"}
     provider = str((definition or {}).get("apiProvider") or "") or None
     if definition and provider not in (None, "utility"):
         routed = node_route.with_wired_blockers(definition, params or {}, wired or ())
         provider = str(node_route.select_route(definition, routed, api_keys).provider or "") or provider
+        return _class_entry(cost_class or model_pricing.cost_class(definition, routed, api_keys), definition, provider)
     if provider == "utility" and not model_pricing.is_local(definition or {}, params or {}):
         via = node_readiness.provider_via(definition or {}) or {}
         _keys, what = node_readiness.param_route(via, node_readiness.param_value(definition or {}, params or {}))
@@ -545,10 +554,30 @@ def cost_for(
         except (OSError, ValueError):
             entry = None
         priced = model_pricing.estimate_node(entry, definition or {}, params or {}) is not None
+        if cost_class == model_pricing.FREE:
+            return _class_entry(cost_class, definition, what)
         return {"kind": "paid", "provider": what,
                 "label": f"paid · {what} model{'' if priced else ', no list price'}"}
     if provider == "utility":
         return {"kind": "free", "provider": None, "label": "free · runs locally"}
+    return {"kind": "paid", "provider": provider, "label": _paid_label(definition, provider)}
+
+
+# The ghost card's tag for a run on the Krea plan, by the chip's words ("1 on
+# Krea plan"; GM, PR #203 r19 item 1): never "paid", never "billed".
+PLAN_LABEL = "on Krea plan"
+
+
+def _class_entry(cls: str, definition: Mapping[str, Any] | None, provider: str | None) -> dict[str, Any]:
+    """A provider call's cost entry by its cost class (model_pricing.cost_class):
+    "on Krea plan", "free · <provider>" for a sourced $0, else paid."""
+    from services import model_pricing, node_route
+
+    if cls == model_pricing.PLAN:
+        return {"kind": "plan", "provider": provider, "label": PLAN_LABEL}
+    if cls == model_pricing.FREE:
+        return {"kind": "free", "provider": provider,
+                "label": f"free · {node_route.provider_label(provider) if provider else 'provider'}"}
     return {"kind": "paid", "provider": provider, "label": _paid_label(definition, provider)}
 
 
@@ -593,17 +622,21 @@ def live_cost(proposal: "Proposal", definitions: Mapping[str, Mapping[str, Any]]
     if changed:
         may_cost = [entry for entry in entries if entry.get("kind") == "mayCost"]
         paid = sum(1 for entry in entries if entry.get("kind") == "paid")
+        plan = sum(1 for entry in entries if entry.get("kind") == "plan")
         cost["mayCostRuns"] = len(may_cost)
         cost["mayCost"] = [{"name": name, "account": account} for name, account in dict.fromkeys(
             (str(entry.get("name") or ""), str(entry.get("account") or "")) for entry in may_cost)]
-        cost["freeRuns"] = len(entries) - paid - len(may_cost)
+        cost["freeRuns"] = len(entries) - paid - plan - len(may_cost)
     return cost
 
 
 def _key_billing(definition: Mapping[str, Any], params: Mapping[str, Any], api_keys: Mapping[str, Any]) -> str | None:
-    from services import node_route
+    """The key-billing class ("mayCost" or "free") of the one cost class
+    (model_pricing.cost_class), else None."""
+    from services import model_pricing
 
-    return node_route.key_billing(definition, params, api_keys)
+    cls = model_pricing.cost_class(definition, params, api_keys)
+    return cls if cls in (model_pricing.MAY_COST, model_pricing.FREE) else None
 
 
 def summarize_cost(
@@ -612,7 +645,9 @@ def summarize_cost(
 ) -> dict[str, Any]:
     """The proposal's run set: each entry is {ref, nodeId, kind, provider, label, price},
     plus `missing` when that node can't run here as set up, and `reason` when
-    a paid node leaves the total open (model_pricing.estimate_run reasons).
+    a paid node leaves the total open or a node runs on the Krea plan
+    (model_pricing.estimate_run reasons). ``kind`` is the node's cost class:
+    paid, plan (counted in ``planRuns``), mayCost or free.
 
     ``estimate`` is ``model_pricing.estimate_run`` output keyed by the same
     refs; it becomes {currency, low, high, open, unpriced, plan, plus}, or
@@ -626,6 +661,9 @@ def summarize_cost(
     # (GM, PR #203 r11 item 2: "2 paid · 1 may cost"), with their names for
     # the bar's own clause ("Runs 2 paid models and Idol").
     may_cost = [entry for entry in entries if entry.get("kind") == "mayCost"]
+    # Runs on the person's Krea plan, counted apart from paid too (GM, PR
+    # #203 r19 item 1: "2 paid · 1 on Krea plan").
+    plan = sum(1 for entry in entries if entry.get("kind") == "plan")
     providers = sorted({str(entry["provider"]) for entry in entries if entry.get("kind") == "paid" and entry.get("provider")})
     summary_estimate = None
     if estimate and estimate.get("high") is not None:
@@ -647,10 +685,11 @@ def summarize_cost(
             summary_estimate["awaitingInput"] = list(estimate["awaitingInput"])
     return {
         "paidRuns": paid,
+        "planRuns": plan,
         "mayCostRuns": len(may_cost),
         "mayCost": [{"name": name, "account": account} for name, account in dict.fromkeys(
             (str(entry.get("name") or ""), str(entry.get("account") or "")) for entry in may_cost)],
-        "freeRuns": len(entries) - paid - len(may_cost),
+        "freeRuns": len(entries) - paid - plan - len(may_cost),
         "estimate": summary_estimate,
         "upTo": up_to,
         "providers": providers,

@@ -12,7 +12,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Node } from '@xyflow/react';
 import { NODE_DEFINITIONS } from '../src/constants/nodeDefinitions';
-import { proposalEstimateLabel } from '../src/lib/canvasProposals';
+import { liveKeyBilling, proposalEstimateLabel } from '../src/lib/canvasProposals';
 import type { PricingTable } from '../src/lib/pricing';
 import { historyRunKeyLock } from '../src/lib/historyRunKeyLock';
 import { proposalAcceptLock } from '../src/lib/proposalAcceptLock';
@@ -51,12 +51,14 @@ afterEach(() => {
 });
 
 describe('the sourced $0 lives in the shared formatter', () => {
-  it('a keyed route priced at a sourced $0 reads "$0" with its tooltip', () => {
+  it('a keyed route priced at a sourced $0 is free and reads "$0", its tooltip only that (GM, PR #203 r18 item 1)', () => {
     const summary = summarizeRunScope([node()], [], { kind: 'graph' }, { pricing, apiKeys: { [KEY]: 'set' } });
-    expect(summary.paid).toEqual(['Synthetic']);
+    expect(summary.paid).toEqual([]);
+    expect(summary.free).toEqual(['Synthetic']);
     expect(summary.cost?.sourcedZero).toBe(true);
     expect(runChipLabel(summary)).toBe('$0');
-    expect(runChipTitle(summary)).toBe(`“Synthetic” calls a paid provider. ${SOURCED_ZERO_TITLE}`);
+    expect(runChipTitle(summary)).toBe(SOURCED_ZERO_TITLE);
+    expect(SOURCED_ZERO_TITLE).toBe('This costs nothing to run.');
   });
 
   it('a proposal whose estimate is a sourced $0 reads "$0", one that rounds to it "~$0"', () => {
@@ -64,6 +66,44 @@ describe('the sourced $0 lives in the shared formatter', () => {
     const view = (sourced: boolean) => ({ run: ['+s'], cost: { estimate: sourced ? { ...estimate, sourcedZero: true as const } : estimate } }) as unknown as ProposalView;
     expect(proposalEstimateLabel(view(true))).toBe('$0');
     expect(proposalEstimateLabel(view(false))).toBe('~$0');
+  });
+});
+
+/** A key-billing route on Replicate (not a Space, not Hugging Face): the
+ * class, its account and its label come from directRoute, never from a
+ * hard-coded name (review 9 of PR #203, cost LOW-3: mutants C11 and C12). */
+function billing(): ModelNodeDefinition {
+  const base = synthetic();
+  return { ...base, routes: [{ id: 'syn', provider: 'replicate', handler: 'replicate-model', maker: true, keys: [],
+    optionalKeys: [KEY], mayBillWithKey: true } as never] };
+}
+
+describe('a key-billing route on another account is named by that account', () => {
+  beforeEach(() => { (NODE_DEFINITIONS as Record<string, unknown>)[ID] = billing(); });
+
+  it('the Run chip counts it apart and names Replicate, not Hugging Face', () => {
+    const summary = summarizeRunScope([node()], [], { kind: 'graph' }, { pricing, apiKeys: { [KEY]: 'set' } });
+    expect(summary.paid).toEqual([]);
+    expect(summary.mayCost).toEqual([{ name: 'Synthetic', account: 'Replicate' }]);
+    expect(runChipLabel(summary)).toBe('1 may cost');
+    expect(runChipTitle(summary)).toBe('Synthetic can use your Replicate credits.');
+    // Without the key it is free and the chip says nothing.
+    const free = summarizeRunScope([node()], [], { kind: 'graph' }, { pricing, apiKeys: {} });
+    expect([free.paid, free.mayCost, runChipLabel(free)]).toEqual([[], undefined, null]);
+  });
+
+  it('a proposal\'s card reads its label with the keys set now', () => {
+    const view = {
+      id: 'p', run: ['+s'], params: [], edges: [],
+      nodes: [{ ref: '+s', definitionId: ID, name: 'Synthetic', params: {}, position: { x: 0, y: 0 },
+        cost: { kind: 'free', provider: 'replicate', label: 'free · Replicate' } }],
+      cost: { paidRuns: 0, freeRuns: 1, mayCostRuns: 0, mayCost: [], estimate: null, upTo: false, providers: [], note: '',
+        nodes: [{ ref: '+s', nodeId: null, definitionId: ID, kind: 'free', provider: 'replicate', label: 'free · Replicate', price: null }] },
+    } as unknown as ProposalView;
+    const live = liveKeyBilling(view, { [KEY]: 'set' }, () => ({}));
+    expect(live.nodes[0].cost).toMatchObject({ kind: 'mayCost', label: 'may cost · Replicate', account: 'Replicate' });
+    expect(live.cost.mayCost).toEqual([{ name: 'Synthetic', account: 'Replicate' }]);
+    expect(live.cost.mayCostRuns).toBe(1);
   });
 });
 

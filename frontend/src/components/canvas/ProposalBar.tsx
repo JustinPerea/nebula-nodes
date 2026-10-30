@@ -81,6 +81,15 @@ function useCanvasRunName(): (nodeId: string) => string | null {
   };
 }
 
+/** The Accept button's props with the count chip's tooltip added to its
+ * description (`costId`, the hidden span that holds it), after any key lock's
+ * line: one description, never the name (GM, PR #203 r19 item 3). */
+function withAcceptCost<T extends { 'aria-describedby'?: string }>(props: T, costId: string | null): T {
+  if (!costId) return props;
+  const ids = [props['aria-describedby'], costId].filter(Boolean).join(' ');
+  return { ...props, 'aria-describedby': ids };
+}
+
 /** Where a canvas node sits, so the Accept chip's reasons read left to
  * right as the Run chip's do (runScope reasonSentences). */
 function canvasAt(nodeId: string): { x: number; y: number } | null {
@@ -139,6 +148,10 @@ export function ProposalBar() {
   const countChip = current ? acceptCountChip(current.view) : null;
   const canvasName = useCanvasRunName();
   const acceptTitle = current ? acceptChipTitle(current.view, canvasName, canvasAt) : null;
+  // The count chip's tooltip, for screen readers too: the Accept button's
+  // description, beside the key lock's line when it has one (GM, PR #203 r19
+  // item 3; review 9, LOW-2). Its name stays the visible text.
+  const acceptCostId = useId();
   const [noteRef, noteClamped] = useClamped(current?.view.note);
 
   useEffect(() => {
@@ -349,8 +362,9 @@ export function ProposalBar() {
             className="proposal-bar__button proposal-bar__button--primary"
             // The missing key first, then the canvas lock, then the gate
             // (withKeyLock, GM PR #203 r11 item 3), as on every Run surface.
-            {...withKeyLock(lock.act({ disabled: Boolean(pending[current.view.id]) || gateHeld,
-              title: gateHeld ? PROPOSAL_GATE_COPY.accept : undefined }), acceptLock, acceptLockId)}
+            {...withAcceptCost(withKeyLock(lock.act({ disabled: Boolean(pending[current.view.id]) || gateHeld,
+              title: gateHeld ? PROPOSAL_GATE_COPY.accept : undefined }), acceptLock, acceptLockId),
+            pending[current.view.id] !== 'accept' && countChip && acceptTitle ? acceptCostId : null)}
             onClick={() => {
               if (acceptLock) return;
               if (settled()) void accept(current.view.id);
@@ -366,6 +380,9 @@ export function ProposalBar() {
             )}
           </button>
           {acceptLock && <span id={acceptLockId} className="toolbar__sr-only">{acceptLock}</span>}
+          {pending[current.view.id] !== 'accept' && countChip && acceptTitle && (
+            <span id={acceptCostId} className="toolbar__sr-only">{acceptTitle}</span>
+          )}
         </div>
       </div>
     </InNoticeRegion>

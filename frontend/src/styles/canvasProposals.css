@@ -491,9 +491,13 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   animation: notice-row-in 420ms var(--notice-spring) both;
 }
 
+/* The actions shrink to the bar on a narrow window (760 px; GM, PR #203 r19
+   item 8): never past its edge, never clipped. */
 .proposal-bar__actions {
   display: flex;
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 100%;
   margin-left: auto;
   align-items: center;
   gap: 6px;
@@ -533,6 +537,19 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   background: var(--agent-color);
   color: #fff;
   font-weight: 600;
+}
+
+/* "Accept and run" and its count chip: below the width where the two fit,
+   the chip moves onto its own line under the words, never clipped or cut
+   with "…" (GM, PR #203 r19 item 8). The words never break inside. */
+.proposal-bar__button--primary {
+  flex-wrap: wrap;
+  justify-content: center;
+  row-gap: 3px;
+  height: auto;
+  min-height: 30px;
+  padding-block: 4px;
+  white-space: nowrap;
 }
 
 .proposal-bar__button--primary:hover:not(:disabled) {

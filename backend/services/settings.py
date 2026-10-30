@@ -124,6 +124,25 @@ def load_settings() -> dict[str, Any]:
     return settings
 
 
+def load_saved_settings() -> dict[str, Any]:
+    """The settings file as saved, with a default for every key it leaves
+    out, and nothing else: no injected keys and no key read through
+    node_route.key_text. What a write starts from (PUT /api/settings, a
+    key's DELETE), so a save changes only what it was asked to: an entry the
+    person didn't change, a padded key, an empty one or one that isn't text,
+    is written back as it was (review 9 of PR #203, keys NIT-1). Readers use
+    load_settings."""
+    settings = copy.deepcopy(DEFAULT_SETTINGS)
+    if SETTINGS_PATH.exists():
+        with open(SETTINGS_PATH, "r") as f:
+            saved = json.load(f)
+        if isinstance(saved, dict):
+            settings.update(saved)
+        else:
+            settings = saved
+    return settings
+
+
 def read_keys(api_keys: dict[str, Any]) -> dict[str, str]:
     """``api_keys`` as Nebula reads them (load_settings): each key_text,
     without those that are empty once trimmed."""

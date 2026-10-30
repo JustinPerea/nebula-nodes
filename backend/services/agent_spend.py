@@ -908,14 +908,15 @@ def may_bill_reason(ids: list[str], labels: Mapping[str, str], definitions: Mapp
             f"{them}: propose the run, or run only nodes that don't need {them}.")
 
 
-def propose_hint(run_ids: list[str]) -> str:
+def propose_hint(run_ids: list[str], where: str = "mcp") -> str:
     """The sentence pointing an agent at a proposal for these canvas nodes, in
-    MCP words: each surface names its own way to propose, from this one
-    source (review 8 of PR #203, NIT-4). The CLI prints it with its command
-    and the same nodes (cli/formatter._cli_words: `nebula propose --note
-    "<why>" --run n2`)."""
-    targets = ", ".join(run_ids[:6]) or "<node id>"
+    its reader's words (services/agent_words: "propose_change (run: n2)" for
+    MCP, `nebula propose --note "<why>" --run n2` for the CLI), worded here,
+    never rewritten on the way out (review 8 of PR #203, NIT-4; review 9,
+    keys MEDIUM-1)."""
+    from services import agent_words
+
     return (
-        f"Propose it instead: propose_change (run: {targets}). "
+        f"Propose it instead: {agent_words.propose_run(run_ids[:6], where)}. "
         "The person accepts on the canvas, and the canvas runs it."
     )

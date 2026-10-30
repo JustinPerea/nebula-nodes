@@ -1,8 +1,9 @@
 import type { Edge, Node } from '@xyflow/react';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { NodeData } from '../types';
-import { allParamDefinitions, canvasTitle, hasRoutes, isDefaultTitle, keyBilling, nameOnRoute, nodeTitle, providerLabel, routeById, routeDependsOnKeys,
+import { allParamDefinitions, canvasTitle, hasRoutes, isDefaultTitle, nameOnRoute, nodeTitle, providerLabel, routeById, routeDependsOnKeys,
   selectRoute, withWiredBlockers } from './directRoute';
+import { costClass } from './costClass';
 import { isLocalRun, modelChoice } from './nodeKeys';
 import { cleanPending, type PendingAgent } from './pendingNodes';
 import { formatUsdRange } from './pricing';
@@ -537,12 +538,14 @@ export function rowSegments(row: PlaceholderRunRow): string[] {
 }
 
 /** Calls a provider (backend model_pricing.is_local): an unknown type counts
- * as paid. With `apiKeys`, a key-billing node that is "free" with them is
- * not (backend main._paid_placeholders reads the same). */
+ * as paid. With `apiKeys`, a node whose cost class (costClass) is "free"
+ * with them is not: a key-billing route with no key. The dialog reads no
+ * prices, so a sourced $0 and a run on the Krea plan still ask (backend
+ * main._paid_placeholders reads the same). */
 function isPaid(node: Node<NodeData>, apiKeys?: Readonly<Record<string, string>>): boolean {
   const definition = NODE_DEFINITIONS[node.data?.definitionId];
   const params = (node.data?.params ?? {}) as Record<string, unknown>;
-  if (definition && apiKeys && keyBilling(definition, params, apiKeys) === 'free') return false;
+  if (definition && apiKeys && costClass(definition, params, apiKeys) === 'free') return false;
   return !definition || !isLocalRun(definition, params);
 }
 
@@ -550,7 +553,7 @@ function isPaid(node: Node<NodeData>, apiKeys?: Readonly<Record<string, string>>
 function mayCost(node: Node<NodeData>, apiKeys?: Readonly<Record<string, string>>): boolean {
   const definition = NODE_DEFINITIONS[node.data?.definitionId];
   return Boolean(definition && apiKeys
-    && keyBilling(definition, (node.data?.params ?? {}) as Record<string, unknown>, apiKeys) === 'mayCost');
+    && costClass(definition, (node.data?.params ?? {}) as Record<string, unknown>, apiKeys) === 'mayCost');
 }
 
 /** The node and every node feeding it: the person's direct run (summarizeRunScope's node scope). */

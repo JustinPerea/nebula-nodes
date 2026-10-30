@@ -726,6 +726,49 @@ def uses_krea_account(definition: Mapping[str, Any], params: Mapping[str, Any]) 
     return node_route.uses_krea_plan(definition, params)
 
 
+# The cost classes of a node that calls a provider: what every cost surface
+# counts it as. "paid" is the only one in "N paid", the paid lead and the
+# figure; "plan" runs on the person's Krea plan ("1 on Krea plan"; GM, PR
+# #203 r19 item 1); "mayCost" may bill the person's own account with their
+# key (Idol with a Hugging Face token); "free" is a key-billing route with no
+# key, or a sourced $0 (GM, PR #203 r18 item 1).
+PAID = "paid"
+PLAN = "plan"
+MAY_COST = "mayCost"
+FREE = "free"
+
+
+def sourced_zero(estimate: Mapping[str, Any] | None) -> bool:
+    """A node's own estimate (estimate_node) that is a sourced $0: priced in
+    USD at exactly 0, with nothing its price leaves out."""
+    return bool(estimate) and estimate.get("currency") == "usd" and estimate.get("high") == 0 \
+        and estimate.get("low") == 0 and not estimate.get("plus")
+
+
+def cost_class(definition: Mapping[str, Any], params: Mapping[str, Any] | None, api_keys: Mapping[str, Any],
+               estimate: Mapping[str, Any] | None = None) -> str:
+    """The one cost class of a node that calls a provider (callers leave out
+    local nodes first: is_local), with ``params`` routed
+    (node_route.with_wired_blockers) and the person's keys: a key-billing
+    route's own class (node_route.key_billing), else "plan" for a run on the
+    Krea plan, else "free" when ``estimate``, the node's own price, is a
+    sourced $0, else "paid". frontend lib/costClass.ts costClass is the twin
+    (pricing_cases.json classCases pins both); estimate_run, cost_for, the
+    billing note and the placeholder gate read it, and nothing else reads
+    key_billing or uses_krea_account to count a node (tests/test_idol_round10.py
+    CLASS_PARTS)."""
+    from services import node_route
+
+    billing = node_route.key_billing(definition, params, api_keys)
+    if billing is not None:
+        return billing
+    if uses_krea_account(definition, params or {}):
+        return PLAN
+    if sourced_zero(estimate):
+        return FREE
+    return PAID
+
+
 def _batch_item_count(params: Mapping[str, Any]) -> int:
     text = params.get("items_text") if isinstance(params.get("items_text"), str) else ""
     if params.get("split_mode") == "none":
@@ -891,8 +934,14 @@ def estimate_run(
     ``reasons`` maps each node that leaves the total open to why, in the
     kinds the Run chip's tooltip uses (runScope UnpricedReason): noPrice,
     cantRun, awaitingInput, missingKey with the ``keys`` it needs, and
-    leftOut with the ``plus`` its price leaves out, so the proposal bar's
-    Accept chip writes the same reason lines (GM, PR #203 r17 item 4)."""
+    leftOut with the ``plus`` its price leaves out, and plan for a run on
+    the Krea plan, so the proposal bar's Accept chip writes the same reason
+    lines (GM, PR #203 r17 item 4, r19 item 1).
+
+    ``classes`` maps every node that calls a provider to its cost class
+    (cost_class: paid, plan, mayCost or free); ``free`` lists the sourced $0
+    nodes, which are neither priced nor paid (GM, PR #203 r18 item 1), and
+    ``sourcedZero`` is whether they are the run's only provider calls."""
     from services import node_route
 
     nodes_pricing = pricing.get("nodes") or {}
@@ -905,10 +954,8 @@ def estimate_run(
     unavailable: dict[str, str] = {}
     awaiting: list[str] = []
     reasons: dict[str, dict[str, Any]] = {}
-    # Every priced node's own row is a sourced $0, so the total is exact, not
-    # an estimate that rounds to zero (zero runs of a paid node): GM, PR #203
-    # r11 item 4, "$0" against "~$0".
-    sourced_zero = True
+    classes: dict[str, str] = {}
+    free: list[str] = []
     for item in items:
         node_id = str(item["id"])
         definition = definitions.get(str(item.get("definitionId") or "")) or {}
@@ -919,6 +966,7 @@ def estimate_run(
             if nested is None or not definitions.get(nested[0]):
                 unpriced.append(node_id)
                 reasons[node_id] = {"kind": "noPrice"}
+                classes[node_id] = PAID
                 continue
             billed, params, calls = nested
             definition = definitions[billed]
@@ -931,6 +979,7 @@ def estimate_run(
             if not nodes_pricing.get(str(definition.get("id") or "")):
                 unpriced.append(node_id)
                 reasons[node_id] = {"kind": "noPrice"}
+                classes[node_id] = PAID
                 continue
         elif not definition or definition.get("apiProvider") == "utility":
             continue
@@ -938,19 +987,27 @@ def estimate_run(
         # (node_route.with_wired_blockers), as the router does, and a wired
         # input can block or unblock a route-table node's plan route.
         routed = node_route.with_wired_blockers(definition, params, ports)
-        # A route that is free unless the person's key is set, and then may
-        # bill their own account (mayBillWithKey: Idol), adds nothing to any
-        # estimate: not "$0", since past the allowance the cost is real, and
-        # not unpriced (GM, PR #203 r11 item 2: "Estimate line: show nothing
-        # for Idol"). One place for every caller: a proposal's estimate, the
-        # run's, and the placeholder confirm's (review 8, LOW-2).
-        if node_route.key_billing(definition, routed, api_keys) is not None:
+        # The one cost class (cost_class). A route that is free unless the
+        # person's key is set, and then may bill their own account
+        # (mayBillWithKey: Idol), adds nothing to any estimate: not "$0",
+        # since past the allowance the cost is real, and not unpriced (GM, PR
+        # #203 r11 item 2: "Estimate line: show nothing for Idol"). One place
+        # for every caller: a proposal's estimate, the run's, and the
+        # placeholder confirm's (review 8, LOW-2).
+        cls = cost_class(definition, routed, api_keys)
+        if cls in (MAY_COST, FREE):
+            classes[node_id] = cls
             continue
-        if uses_krea_account(definition, routed):
+        if cls == PLAN:
+            # On the person's Krea plan: never paid, never in the figure, and
+            # its own reason line (GM, PR #203 r19 item 1; review 9, MEDIUM-1).
+            classes[node_id] = PLAN
             plan.append(node_id)
             plan_runs[node_id] = {"model": str(definition.get("id") or item.get("definitionId") or ""),
                                   "runs": (multipliers or {}).get(node_id, (1, 1))[1] * calls}
+            reasons[node_id] = {"kind": "plan"}
             continue
+        classes[node_id] = PAID
         # No key for any of the node's providers: a missing key, never "no
         # listed price" (runScope keyUnset).
         key_unset = False
@@ -980,12 +1037,16 @@ def estimate_run(
             else:
                 reasons[node_id] = {"kind": "noPrice"}
             continue
+        if cost_class(definition, routed, api_keys, estimate) == FREE:
+            # A sourced $0 is free (GM, PR #203 r18 item 1): never paid, never
+            # in the figure; a run of only these is a sourced "$0".
+            classes[node_id] = FREE
+            free.append(node_id)
+            continue
         run_low, run_high = (multipliers or {}).get(node_id, (1, 1))
         line = {"low": estimate["low"] * run_low * calls, "high": estimate["high"] * run_high * calls,
                 "model": str(definition.get("id") or item.get("definitionId") or "")}
         priced[node_id] = line
-        if estimate["high"] != 0:
-            sourced_zero = False
         low += line["low"]
         high += line["high"]
         if estimate.get("plus") and estimate["plus"] not in plus:
@@ -1004,7 +1065,13 @@ def estimate_run(
         "unavailable": unavailable,
         "awaitingInput": awaiting,
         "reasons": reasons,
-        "sourcedZero": bool(priced) and sourced_zero,
+        "classes": classes,
+        "free": free,
+        # Every provider call in the run is a sourced $0, so it is exact, not
+        # an estimate that rounds to zero: GM, PR #203 r11 item 4, "$0"
+        # against "~$0" (r18 item 1: such a node is free, never paid).
+        "sourcedZero": bool(free) and not priced and not unpriced and not plan and not any(
+            cls == MAY_COST for cls in classes.values()),
     }
 
 

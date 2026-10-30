@@ -79,6 +79,7 @@ from execution.sync_runner import get_handler_registry
 from execution import provider_calls
 from services.settings import (
     load_settings,
+    load_saved_settings,
     save_settings,
     get_api_key,
     validate_provider_keys,
@@ -93,6 +94,7 @@ from services.input_file_name import PARAM as INPUT_FILE_NAME_PARAM, file_name_p
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
 from services import agent_start, input_sizes, node_categories, node_lookup, node_names
 from services import scene_keys
+from services import agent_words
 from services import output_thumbnail
 from services import refusal_copy
 from services import cinema_scene_spec
@@ -2995,7 +2997,7 @@ def _require_spend_approval(
     if _is_person_request():
         return
     _refuse_agent_billing_in_run(nodes, on_canvas=on_canvas)
-    ask = how_to_ask or agent_spend.propose_hint(run_ids or [])
+    ask = how_to_ask or agent_spend.propose_hint(run_ids or [], _surface())
     try:
         pricing = model_pricing.load_pricing()
     except (OSError, ValueError) as exc:
@@ -5067,12 +5069,12 @@ def _space_billing(definition: Mapping[str, Any], api_keys: Mapping[str, Any],
                    params: Mapping[str, Any] | None = None) -> str | None:
     """The billing note for a node whose run may bill the person's own
     account with their key (a Hugging Face Space: Idol), from its cost class
-    (node_route.key_billing, the one function every surface reads; review 8
+    (model_pricing.cost_class, the one function every surface reads; review 8
     of PR #203, LOW-3), else None. ``params`` picks the route ({} is Auto's)."""
-    cost_class = node_route.key_billing(definition, params or {}, api_keys)
-    if cost_class is None:
+    cost_class = model_pricing.cost_class(definition, params or {}, api_keys)
+    if cost_class not in (model_pricing.MAY_COST, model_pricing.FREE):
         return None
-    return hf_space_billing_note(cost_class == node_route.MAY_COST)
+    return hf_space_billing_note(cost_class == model_pricing.MAY_COST)
 
 
 def _describe_routes(
@@ -6410,12 +6412,21 @@ def _group_by_note(rows: Iterable[Mapping[str, Any]]) -> dict[str, list[str]]:
     return grouped
 
 
-_CLI_WORDS = {"describe_node": "`nebula info <id>`", "propose_change": "`nebula propose`",
-              "find_nodes": "`nebula nodes`", "edit_canvas": "`nebula apply`"}
-
-
 def _cli_words(text: str) -> str:
-    return re.sub(r"\b(" + "|".join(_CLI_WORDS) + r")\b", lambda match: _CLI_WORDS[match.group(1)], text)
+    """MCP-worded notes in CLI words (agent_words.cli_words, the one table)."""
+    return agent_words.cli_words(text)
+
+
+def _quick_propose_hint(definition_id: str, where: str) -> str:
+    """What a quick run an agent can't start points at instead, in its
+    reader's words: a node on the canvas, then a proposal to run it (the CLI
+    names `nebula create <id>`; review 9 of PR #203, keys NIT-3)."""
+    if where == agent_words.CLI:
+        add = f"`nebula create {definition_id}`"
+    else:
+        add = f"edit_canvas, a {definition_id} node"
+    return (f"Add it to the canvas instead ({add}), then propose the run: "
+            f"{agent_words.propose_run([], where)}. The person accepts on the canvas, and the canvas runs it.")
 
 
 @app.get("/api/agent/start")
@@ -7868,18 +7879,23 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
                 # Which node type, so a listing re-reads a key-billing node's
                 # class with the keys set then (canvas_proposals.live_cost).
                 "definitionId": str(candidate.nodes[node_id].get("definitionId") or ""),
+                # The class the run's estimate gave it (model_pricing.cost_class,
+                # which knows its price: a sourced $0 is free; GM, PR #203 r18).
                 **cost_for(definition, candidate.nodes[node_id].get("params") or {}, definitions, api_keys,
-                           wired=wired),
-                "price": {"low": line["low"], "high": line["high"]} if line else None,
+                           wired=wired, cost_class=(estimate or {}).get("classes", {}).get(node_id)),
+                "price": ({"low": line["low"], "high": line["high"]} if line
+                          else {"low": 0.0, "high": 0.0} if node_id in (estimate or {}).get("free", []) else None),
             })
-            # Why this node leaves the total open, in the Run chip's kinds
-            # (model_pricing.estimate_run reasons), so the Accept chip writes
-            # the same reason lines (GM, PR #203 r17 item 4).
+            # Why this node leaves the total open, or that it runs on the
+            # Krea plan, in the Run chip's kinds (model_pricing.estimate_run
+            # reasons), so the Accept chip writes the same reason lines (GM,
+            # PR #203 r17 item 4, r19 item 1).
             reason = (estimate or {}).get("reasons", {}).get(node_id)
-            if reason and entries[-1].get("kind") == "paid":
+            if reason and entries[-1].get("kind") in ("paid", "plan"):
                 entries[-1]["reason"] = reason
-            if entries[-1].get("kind") in ("free", "mayCost") and node_route.key_billing(
-                    definition, candidate.nodes[node_id].get("params") or {}, api_keys):
+            if entries[-1].get("kind") in ("free", "mayCost") and model_pricing.cost_class(
+                    definition, candidate.nodes[node_id].get("params") or {}, api_keys) in (
+                    model_pricing.MAY_COST, model_pricing.FREE):
                 key_params[entries[-1]["ref"]] = copy.deepcopy(candidate.nodes[node_id].get("params") or {})
         if estimate:
             estimate = {
@@ -9813,9 +9829,12 @@ async def update_settings(body: dict[str, Any]) -> dict:
             if refusal is not None:
                 raise HTTPException(400, refusal)
     # Do not mutate a loaded/shared object until the complete request is valid.
-    current = copy.deepcopy(load_settings())
+    # The file as saved, not as read: a save writes back every entry it wasn't
+    # asked to change exactly as it was (review 9 of PR #203, keys NIT-1).
+    before = dict(load_settings().get("apiKeys") or {})
+    current = copy.deepcopy(load_saved_settings())
     if "apiKeys" in body and accepts_keys:
-        current_keys = current.get("apiKeys", {})
+        current_keys = current.get("apiKeys") if isinstance(current.get("apiKeys"), dict) else {}
         for k, v in body["apiKeys"].items():
             # A pasted key's spaces, line breaks and invisible marks at its
             # ends go (GM, PR #203 r2; node_route.key_text, as Settings trims).
@@ -9842,17 +9861,29 @@ async def update_settings(body: dict[str, Any]) -> dict:
     # GET /api/health/providers re-checks providers instead of serving stale
     # status for up to PROVIDER_CHECK_TTL_SECONDS.
     clear_provider_validation_cache()
-    await _broadcast_settings_changed()
+    await _broadcast_settings_changed(_changed_keys(before))
     return {"status": "saved"}
 
 
-async def _broadcast_settings_changed() -> None:
-    """Every socket hears that the settings changed, with no values in it:
-    each open tab reads them again (GET /api/settings, masked as ever), so a
-    key added or removed in another window, another tab, the desktop app or
-    a script calling the API reaches every cost class, chip, ghost card and lock on the canvas
-    without a reload (review 8 of PR #203, NIT-3 and copy LOW-2)."""
-    await manager.broadcast_raw({"type": "settingsChanged"})
+def _changed_keys(before: Mapping[str, Any]) -> list[str]:
+    """The names of the keys whose value, as Nebula reads it (load_settings),
+    differs from ``before``: set, replaced or removed."""
+    after = load_settings().get("apiKeys") or {}
+    return sorted(name for name in {*before, *after} if before.get(name) != after.get(name))
+
+
+async def _broadcast_settings_changed(keys: Iterable[str] = ()) -> None:
+    """The person's tabs hear that the settings changed: each reads them
+    again (GET /api/settings, masked as ever), so a key added or removed in
+    another window, another tab, the desktop app or a script calling the API
+    reaches every cost class, chip, ghost card and lock on the canvas, and an
+    open Settings panel, without a reload (review 8 of PR #203, NIT-3 and
+    copy LOW-2). ``keys`` names the keys that changed (their names, never a
+    value or an ending), so a tab clears only those connection checks (GM,
+    PR #203 r19 item 7). Only the person's tabs (broadcast_browser): agents
+    re-read keys on every call, and the signal would tell them a key was
+    replaced (review 9, keys LOW-1)."""
+    await manager.broadcast_browser({"type": "settingsChanged", "keys": sorted(set(keys))})
 
 
 # The credential-update allowlist (services/credential_catalog.py; the
@@ -9872,13 +9903,15 @@ async def remove_settings_api_key(provider: str) -> dict:
         raise HTTPException(400, "Unknown credential provider")
     if is_injected_mode():
         raise HTTPException(409, "Injected credentials must be removed through the credential bridge")
-    current = copy.deepcopy(load_settings())
-    current_keys = current.get("apiKeys", {})
+    # The file as saved: only this key goes (review 9 of PR #203, keys NIT-1).
+    before = dict(load_settings().get("apiKeys") or {})
+    current = copy.deepcopy(load_saved_settings())
+    current_keys = current.get("apiKeys") if isinstance(current.get("apiKeys"), dict) else {}
     current_keys.pop(provider, None)
     current["apiKeys"] = current_keys
     save_settings(current)
     clear_provider_validation_cache()
-    await _broadcast_settings_changed()
+    await _broadcast_settings_changed(_changed_keys(before))
     return {"status": "removed"}
 
 
@@ -9913,16 +9946,18 @@ async def credentials_update(body: dict[str, Any]) -> dict:
     refusal = _key_refusal(provider, key)
     if refusal is not None:
         raise HTTPException(status_code=422, detail=refusal)
+    before = dict(load_settings().get("apiKeys") or {})
     update_injected_keys(provider, node_route.key_text(key))
-    await _broadcast_settings_changed()
+    await _broadcast_settings_changed(_changed_keys(before))
     return {"status": "updated"}
 
 
 # A key with something in it that is empty once trimmed: no key at all, so
 # it is refused rather than stored (GM, PR #203 r17 item 1), as the Settings
 # field refuses it (frontend settingsWrites: Save stays off).
-KEY_ONLY_INVISIBLE = ("This key is only spaces or invisible characters once trimmed. Copy it again, then "
-                      "paste it here.")
+# The reader of PUT /api/settings and /api/credentials/update is a request,
+# so "paste it here" doesn't apply (GM, PR #203 r18 item 3, verbatim).
+KEY_ONLY_INVISIBLE = "Nothing was saved because the key is empty once spaces and invisible characters are removed."
 
 
 def _key_refusal(name: str, value: str) -> str | None:
@@ -10303,9 +10338,12 @@ async def _skip_placeholders(
 def _paid_placeholders(nodes: list[GraphNode], ready: Iterable[str], api_keys: Mapping[str, Any]) -> list[str]:
     """The placeholders among ``ready`` that call a paid model with the params
     this run sends (model_pricing.is_local; an unknown type counts as paid).
-    A key-billing node is read with the keys set (node_route.key_billing, the
-    class every cost surface reads; GM, PR #203 r15 item 2): "free" (Idol
-    with no token) is not paid, and "may cost" (with one) still asks."""
+    A key-billing node is read with the keys set (model_pricing.cost_class,
+    the class every cost surface reads; GM, PR #203 r15 item 2): "free" (Idol
+    with no token) is not paid, and "may cost" (with one) still asks. A run on
+    the Krea plan still asks (it spends the plan's credits), and so does any
+    other provider call: the gate reads no prices, so a sourced $0 asks too
+    (lib/placeholderRunConfirm.ts isPaid is the twin)."""
     by_id = {node.id: node for node in nodes}
     paid = []
     for node_id in ready:
@@ -10313,7 +10351,7 @@ def _paid_placeholders(nodes: list[GraphNode], ready: Iterable[str], api_keys: M
         if node is None:
             continue
         definition = node_registry.get(node.definition_id) or {}
-        if node_route.key_billing(definition, node.params or {}, api_keys) == node_route.FREE_WITHOUT_KEY:
+        if model_pricing.cost_class(definition, node.params or {}, api_keys) == model_pricing.FREE:
             continue
         if not model_pricing.is_local(definition, node.params or {}):
             paid.append(node_id)
@@ -10470,9 +10508,9 @@ async def _require_placeholder_confirmation(
     if not paid and confirmed_cost is None:
         return
     by_id = {node.id: node for node in nodes}
-    may_cost = [node_id for node_id in paid if node_route.key_billing(
+    may_cost = [node_id for node_id in paid if model_pricing.cost_class(
         node_registry.get(by_id[node_id].definition_id) or {}, by_id[node_id].params or {}, api_keys)
-        == node_route.MAY_COST]
+        == model_pricing.MAY_COST]
     sizes = await _measure_confirmed_run(nodes, edges)
     estimate = _run_estimate(nodes, edges, passes=passes, api_keys=api_keys, sizes=sizes)
     if paid and sorted(set(confirmed or [])) != sorted(paid):
@@ -14261,16 +14299,18 @@ def _billing_choice(definition_id: str, params: Mapping[str, Any]) -> tuple[str,
     return (provider, mode) if provider or mode else None
 
 
+# The billing refusals, each worded for its reader where it is raised
+# (agent_words.worded: {propose} is propose_change for MCP, `nebula propose`
+# for the CLI; review 9 of PR #203, keys MEDIUM-1).
 KREA_BILLING_REFUSAL = (
     "Changing how a Krea node is billed (_kreaAuth: the API token's balance or the signed-in Krea "
     "plan) is the person's call, so it needs their OK. Leave _kreaAuth as it is, and propose the "
-    "change instead with propose_change (`nebula propose`); the person accepts it on the canvas."
+    "change instead with {propose}; the person accepts it on the canvas."
 )
 PROVIDER_CHOICE_REFUSAL = (
     "Changing which provider a node runs on (_provider: a route id, or auto) decides whose key "
     "pays for it, so it's the person's call and needs their OK. Leave _provider as it is, and "
-    "propose the change instead with propose_change (`nebula propose`); the person accepts it "
-    "on the canvas."
+    "propose the change instead with {propose}; the person accepts it on the canvas."
 )
 
 
@@ -14278,9 +14318,16 @@ NOTES_TO_GENERATORS_REFUSAL = (
     "Sending a board's notes to generators (send_notes on a Moodboard node) is the person's call: "
     "notes are their words about the board, for them, their team and agents. Leave send_notes as it "
     "is (an agent may set it to no), don't point a node that sends notes at another board (set "
-    "send_notes to board or no in the same edit), and propose the change instead with propose_change "
-    "(`nebula propose`); the person accepts it on the canvas."
+    "send_notes to board or no in the same edit), and propose the change instead with {propose}; "
+    "the person accepts it on the canvas."
 )
+
+
+def _surface() -> str:
+    """The surface the current request comes from (agent_words.surface)."""
+    return agent_words.surface(current_request_headers())
+
+
 # How far each send_notes value opens the notes: "board" follows the board's
 # own switch, so it may send them; "yes" always does.
 _SEND_NOTES_RANK = {"no": 0, "board": 1, "yes": 2}
@@ -14332,12 +14379,15 @@ def _refuse_agent_billing_change(changes: Iterable[tuple[str, str, Mapping[str, 
             provider_switched.append(label)
         elif choice[1] != was[1]:
             mode_switched.append(label)
+    where = _surface()
     if provider_switched:
-        raise _person_only_refusal(f"{_listed(provider_switched, 4)}: {PROVIDER_CHOICE_REFUSAL}")
+        raise _person_only_refusal(
+            f"{_listed(provider_switched, 4)}: {agent_words.worded(PROVIDER_CHOICE_REFUSAL, where)}")
     if mode_switched:
-        raise _person_only_refusal(f"{_listed(mode_switched, 4)}: {KREA_BILLING_REFUSAL}")
+        raise _person_only_refusal(f"{_listed(mode_switched, 4)}: {agent_words.worded(KREA_BILLING_REFUSAL, where)}")
     if notes_opened:
-        raise _person_only_refusal(f"{_listed(notes_opened, 4)}: {NOTES_TO_GENERATORS_REFUSAL}")
+        raise _person_only_refusal(
+            f"{_listed(notes_opened, 4)}: {agent_words.worded(NOTES_TO_GENERATORS_REFUSAL, where)}")
 
 
 def _check_krea_auth(definition_id: str, params: dict[str, Any], label: str) -> None:
@@ -18896,10 +18946,7 @@ async def quick_execute(body: dict[str, Any]) -> dict:
     quick_run = f"quick-{uuid4().hex}"
     measured = await _measure_run_inputs(temp_nodes, temp_edges)
     _require_spend_approval(temp_nodes, temp_edges, run_id=quick_run, on_canvas=False, settings=settings,
-                            measured=measured, how_to_ask=(
-        f"Add it to the canvas instead (edit_canvas, a {definition_id} node), then propose the run: "
-        "propose_change (run: <node id>). The person accepts on the canvas, and the canvas runs it."
-    ))
+                            measured=measured, how_to_ask=_quick_propose_hint(definition_id, _surface()))
 
     results: dict[str, Any] = {}
     errors: dict[str, str] = {}
@@ -20543,7 +20590,7 @@ def _check_style_write(name: Any, model_id: str | None, params: Mapping[str, Any
 
 
 _STYLE_PROPOSE_RE = re.compile(
-    r",? and propose the change instead with propose_change \(`nebula propose`\); "
+    r",? and propose the change instead with (?:propose_change|`nebula propose`); "
     r"the person accepts it on the canvas\.")
 _STYLE_BILLING_INSTEAD = (
     " (or leave it out: the model's default). A Style change can't be proposed: ask the person to "

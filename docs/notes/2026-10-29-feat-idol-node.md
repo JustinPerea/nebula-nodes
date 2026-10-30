@@ -1223,3 +1223,123 @@ blocked), every Hugging Face host blocked; nothing was run or accepted.
   reasons.
 - The invisible-only refusal line ("This key is only spaces or invisible
   characters once trimmed. Copy it again, then paste it here.") is mine.
+
+## Round 10 (2026-10-30): one cost class with the plan and the sourced $0, refusals per surface, key changes in place (GM r18, r19, review 9)
+
+No live call to the Space. The live check ran on an isolated backend (8793)
+and Vite (5793) with fake keys, ports 8000-8010 and 5173 blocked (canaries
+blocked), every Hugging Face host blocked; nothing was run or accepted.
+
+### One cost class (GM r18 item 1, r19 item 1; review 9, cost MEDIUM-1)
+
+- `model_pricing.cost_class` (frontend `lib/costClass.ts`) gives every node
+  that calls a provider one class: a key-billing route's own (`mayCost` or
+  `free`), else `plan` for a run on the Krea plan, else `free` for a sourced
+  $0 (USD, exactly 0, nothing left out), else `paid`. `estimate_run`,
+  `cost_for`, the billing note, the placeholder gate's lists, `live_cost`,
+  `summarizeRunScope`, `liveKeyBilling` and the placeholder dialog read it.
+  `pricing_cases.json` `classCases` pins both sides; `CLASS_PARTS` in
+  `test_idol_round10.py` and `ALLOWED` in `tests/idolRound10.test.ts` fail on
+  a second reader of `key_billing`/`uses_krea_account` that counts a node.
+- A plan run is never paid: its own reason kind `plan` on both sides
+  (`expected.reason` on the plan cases), the line "“Krea 2” runs on your
+  Krea plan.", proposal entry `kind: "plan"` ("on Krea plan"), `planRuns`
+  beside `paidRuns`. Chips: "2 paid · 1 on Krea plan", "1 on Krea plan",
+  and beside a priced part "amount + N on Krea plan · N may cost".
+- A sourced $0 is free: never in "N paid", the paid lead or the figure. Its
+  proposal entry is "free · <provider>" with price {0, 0}. A run of only
+  those reads "$0", tooltip "This costs nothing to run." alone.
+- The placeholder dialog's gate reads no prices, so a run over an agent's
+  placeholder on the Krea plan still asks, as before; a sourced $0
+  placeholder (none ships today) would ask too. Left as is.
+- Every tooltip keeps GM's order: paid lead, figure, reason lines, Idol's
+  sentence. An unknown reason kind reads as "has no listed price" in both
+  `entryReason` and `reasonSentences` (review 9, NIT-2).
+
+### One formatter for the Run buttons (GM r19 items 2 and 3)
+
+- `describeRunScope` is "Runs N nodes." and then `runChipTitle`: no
+  per-node breakdown. Toolbar and selection toolbar titles and
+  screen-reader text use it; only the costly-run confirm keeps per-node
+  figures. The ratchet (`ALLOWED`) fails on a new caller of the sentence
+  builders or of `formatUsdRange` outside the confirm and the two price
+  rows.
+- Accept: the chip's tooltip sits in a hidden span the button's
+  `aria-describedby` names (after the key lock's line); the name stays the
+  visible text.
+- 760 px: `.proposal-bar__actions` shrinks to the bar and the primary
+  button wraps; the chip moves under "Accept and run" (measured: 1440 and
+  1024 one line, 760 own line, inside the bar, nothing clipped).
+
+### Refusals worded where they are written (review 9, keys MEDIUM-1)
+
+- `services/agent_words`: one table of each surface's calls, `surface()`
+  from `X-Nebula-Surface` (the CLI sets `cli` on every request; anything
+  else is MCP), `worded()`, `propose_run()`, and `cli_words()` for MCP-worded
+  data the CLI prints (word boundaries; a name already beside its `nebula`
+  command is kept). The two `_cli_words` tables are gone. `_fail` prints the
+  detail as it came. The header is no agent marker; `person_gate` is
+  untouched. Every `*_REFUSAL` is tested for both surfaces, and `nebula
+  quick` now says `` `nebula create <id>` ``.
+
+### Settings and the signal (review 9, keys LOW-1 to LOW-4, NITs; GM r19 items 5 to 7)
+
+- `settingsChanged` goes through `broadcast_browser` (an agent socket never
+  hears it) with `keys`: the names whose value changed (`_changed_keys`),
+  never a value.
+- Checks are kept; only a changed key's result clears: from the signal's
+  keys, from a save here, and from any read that finds a key changed
+  (`uiStore.setSettingsCache`, which used to clear them all). A check still
+  running drops the result of a key changed meanwhile.
+- An open panel re-reads on `remote`/`reconnect` and updates in place. A
+  row with focus in it or its edit view open keeps its section (its status
+  changes where it stands) until left; other rows move with the spring
+  (`settings-row--moved`, off under reduced motion). Drafts are untouched.
+  The tab badge counts keys as saved, so it can read one more than
+  "Connected · N" while a row is held.
+- Link names: `keyLink` on every provider, the provider's own word, shown
+  in both views: "Open OpenAI keys ↗", "Open Replicate tokens ↗", "Open
+  Google Cloud service accounts ↗", "Open fal.ai keys ↗" (fal.ai is the
+  name, not a domain). "tokens" where the provider calls its credential a
+  token (Replicate's API tokens, Hugging Face), else "keys"; Vertex takes a
+  service-account file, so its page is "service accounts".
+  The switcher's price rows are sentences (r19 item 4); "Priced from the
+  input’s size when it runs." and "No list price for these settings." got
+  periods to match.
+- PUT and DELETE start from `load_saved_settings` (the file plus defaults),
+  so untouched, unknown and non-string entries are written back as they
+  were; keys are trimmed on read and on write.
+- GM r18 item 3: PUT's 400 is "Nothing was saved because the key is empty
+  once spaces and invisible characters are removed." The desktop bridge's
+  422 uses the same constant but can't reach a person: Settings disables
+  Save for such a key, and `settingsWrites.storableKey` (the backend's rule,
+  `storeCases`) is checked before `bridge.set`. If it ever got through, the
+  row would show "The key couldn't be saved. Your text is still here; try
+  again."
+- `describe_node`'s per-route billing row follows the class (review B12).
+
+### Base check and mutants
+
+- On 2bc98de3: 24 of 38 backend tests fail (the 14 that pass are coverage
+  pins: storeCases, the ratchets' planted files, B12, MCP-worded quick);
+  `idolRound10.test.ts` and the Settings file fail to import
+  (`costClass`, `settingsSignal` don't exist), and 6 more frontend tests
+  fail. The render pins for C8, N1, N4 and N8 pass there, as they should.
+- 51 mutants (32 frontend, 19 backend), including review 9's C8, C11, C12,
+  N1, N4, N8, B2 and B12. First pass: F3 (a $0 with a left-out cost), F28
+  and F29 (switcher titles), B13 (`_fail` rewriting MCP words) survived; B6
+  needed a unique anchor. Tests added; second pass: all killed, plus B6b
+  (`live_cost`'s plan count).
+- The full backend run caught two things the file-level runs didn't.
+  `keyLink` sits after `label` in each catalog entry, because
+  `test_error_copy_round3d` reads the label straight after the key. The
+  signal test now waits for the hello's `proposalSync` before it starts
+  listening: the hello goes through the socket's receive loop, the marker
+  through the portal, so on a busy run the marker came back first and the
+  tab wasn't the person's yet.
+
+### Questions for GM
+
+- The toolbar chip beside an unpriced part reads "$0.07 + unpriced + 1 on
+  Krea plan" (the r14 "amount + N may cost" shape with the open suffix).
+  Say if it should drop a "+".
