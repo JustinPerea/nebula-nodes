@@ -420,7 +420,8 @@ def test_the_cli_prints_a_commons_proposal_as_its_edits(cx):
         {"membership": {"id": cx.poster_membership, "role": "avoid"}},
     ]}).json()["proposal"]
     printed = format_proposal(view)
-    assert f"make 4 changes to Commons reference {cx.poster}" in printed
+    assert "make 4 changes to an image in the Commons" in printed
+    assert f"on     Commons reference {cx.poster}" in printed
     assert 'summary → "A quiet grid"' in printed
     assert 'keywords − "grid"' in printed
     assert f"region {cx.region}: status confirmed" in printed

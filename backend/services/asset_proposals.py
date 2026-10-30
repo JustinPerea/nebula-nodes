@@ -209,7 +209,8 @@ class AssetProposal:
 
 
 def summary(proposal: AssetProposal) -> str:
-    """The change in one line, for the journal, the Agent log and the CLI."""
+    """The change in one line, for the journal, the Agent log and the CLI: X in
+    "Asks to X" and "Withdrew its request to X" (GM, PR #202 r4)."""
     name = proposal.target_name or proposal.target_id
     if proposal.kind == "commons":
         from services import commons_proposals
@@ -217,9 +218,9 @@ def summary(proposal: AssetProposal) -> str:
         return commons_proposals.summary(proposal.target_id, proposal.change)
     if proposal.kind == "project":
         to = proposal.change.get("cover")
-        return (f'set the cover of project "{name}" back to automatic' if to is None
-                else f'make another image the cover of project "{name}"')
-    return f'send the notes of board "{name}" to generators'
+        return (f"set the cover of “{name}” back to automatic" if to is None
+                else f"make another image the cover of “{name}”")
+    return f"send the notes of “{name}” to generators"
 
 
 def update_text(proposal: AssetProposal) -> str:
@@ -240,6 +241,37 @@ def update_text(proposal: AssetProposal) -> str:
     if isinstance(membership, dict) and membership.get("accept") and set(membership) == {"id", "accept"}:
         return f"{agent} asks to take a reference out of the inbox"
     return f"{agent} asks to change a reference in the Commons"
+
+
+def update_detail(proposal: AssetProposal) -> dict[str, Any]:
+    """What the Update's ``proposal`` ref says about the change beyond its
+    target (GM, PR #200 follow-up 2): for a cover, which kind (``cover``:
+    "automatic" or "image", never which image); for a Commons ask, how many
+    edits (``changes``). A tab that isn't connected as the person sees only
+    the Update, so its placeholder reads these, never the Update's text
+    (review 20 NIT-3: an agent's name could spoof a count parsed from text).
+    Never the image, the asset or any field value.
+
+    Every kind also says when the ask was made (``since``: the view's
+    createdAt, a timestamp only), so a held tab orders its placeholders and
+    lines as the promoted cards and line do, even after the Update fell back
+    to an older ask (PR #202 review 2 LOW-A for Commons; review 3 LOW-1 for
+    covers and moodboards)."""
+    since = int(proposal.created_at * 1000)
+    if proposal.kind == "project":
+        return {"cover": "automatic" if proposal.change.get("cover") is None else "image", "since": since}
+    if proposal.kind == "commons":
+        edits = proposal.change.get("edits") or []
+        detail: dict[str, Any] = {"changes": len(edits)}
+        # GM, PR #202 r1: the held Commons line says what the promoted one says.
+        # An ask only to take a reference out of the inbox is worded so there
+        # (update_text's own rule), so the ref says so too (``inbox``).
+        membership = edits[0].get("membership") if len(edits) == 1 and isinstance(edits[0], dict) else None
+        if isinstance(membership, dict) and membership.get("accept") and set(membership) == {"id", "accept"}:
+            detail["inbox"] = True
+        detail["since"] = since
+        return detail
+    return {"since": since}
 
 
 # An Update whose proposal was open when Nebula restarted (Justin's Q108 a,

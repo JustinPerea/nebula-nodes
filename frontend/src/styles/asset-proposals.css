@@ -37,11 +37,16 @@
  * keep the agent's identity colour (--agent-color, set from the Update, as on
  * the real card); the card is neutral: no left status edge, no accent fill,
  * no buttons. The real card replaces it in place without springing in
- * (--in-place). */
+ * (--in-place).
+ * GM, PR #200 follow-up 2 (review 20 NIT-6): the swap moves nothing inside
+ * the box either. The real card's content starts 3px edge + 12px padding =
+ * 15px in; the placeholder's 1px edge + 14px padding = 15px too. The top
+ * (1px edge + 10px padding) and the right side are already the same, so the
+ * dot, the name and the header sit in the same place on both cards. */
 .asset-proposal--held {
   border-left-width: 1px;
   border-left-color: var(--sr-edge-strong, rgb(255 255 255 / 0.12));
-  padding-left: 10px;
+  padding-left: 14px;
 }
 
 .asset-proposal__held-line {

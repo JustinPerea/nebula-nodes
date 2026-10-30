@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { ArrowRight } from 'lucide-react';
 import { backendAssetUrlSync } from '../../lib/backend';
@@ -7,7 +7,7 @@ import type { AssetProposalKind, AssetProposalView, CommonsEdit } from '../../li
 import { proposalsFor, useAssetProposalsStore, type AssetProposalEntry } from '../../store/assetProposalsStore';
 import { PROPOSAL_GATE_COPY } from '../../lib/canvasProposals';
 import { personGateHeld, subscribePersonGate } from '../../lib/personSession';
-import { HELD_PROPOSAL_LINE, useHeldProposals, type HeldProposal } from '../../store/heldAssetProposals';
+import { askedOrder, HELD_PROPOSAL_LINE, useHeldProposals, type HeldProposal } from '../../store/heldAssetProposals';
 import '../../styles/asset-proposals.css';
 
 /** How often the strip rechecks expiry while one is showing. */
@@ -193,7 +193,7 @@ function ProposalCard({ entry, now, names, inPlace }: { entry: AssetProposalEntr
   // the server's promote clears it and its demote brings it back.
   const gateHeld = useSyncExternalStore(subscribePersonGate, personGateHeld);
   return (
-    <div role="group" aria-label={`${view.agent.name} ${said}`} tabIndex={-1}
+    <div role="group" aria-label={`${view.agent.name} ${said}`} tabIndex={-1} data-proposal-id={view.id}
       className={`asset-proposal${closing ? ' asset-proposal--closing' : ''}${inPlace ? ' asset-proposal--in-place' : ''}`}
       style={{ '--agent-color': view.agent.color } as CSSProperties}>
       <div className="asset-proposal__who">
@@ -223,9 +223,21 @@ function ProposalCard({ entry, now, names, inPlace }: { entry: AssetProposalEntr
  * one line, no thumbnails and no buttons. The dot and the name keep the
  * agent's identity colour (GM r35: who asks, not a status); the card itself
  * is neutral: no status edge, no accent fill. */
-function HeldCard({ held }: { held: HeldProposal }) {
+function HeldCard({ held, onLeaveFocused }: { held: HeldProposal; onLeaveFocused: (proposalId: string) => void }) {
+  const card = useRef<HTMLDivElement>(null);
+  const { proposalId } = held;
+  // Review 20 NIT-4: Review focuses the placeholder, and the promote swaps it
+  // for the real card, another element. Say so while this one still holds
+  // focus (a layout cleanup runs before React removes the node), so the strip
+  // can hand focus to the real card instead of letting it drop to the page.
+  useLayoutEffect(() => {
+    const element = card.current;
+    return () => {
+      if (element && element.contains(document.activeElement)) onLeaveFocused(proposalId);
+    };
+  }, [proposalId, onLeaveFocused]);
   return (
-    <div role="group" aria-label={`${held.agentName} ${held.header}`} tabIndex={-1}
+    <div role="group" aria-label={`${held.agentName} ${held.header}`} tabIndex={-1} ref={card}
       className="asset-proposal asset-proposal--held" data-held-proposal={held.proposalId}
       style={{ '--agent-color': held.agentColor } as CSSProperties}>
       <div className="asset-proposal__who">
@@ -256,6 +268,20 @@ export function AssetProposalStrip({ kind, targetId, names = NO_NAMES }: { kind:
   const [now, setNow] = useState(() => Date.now());
   const showing = entries.length > 0 || held.length > 0;
   const root = useRef<HTMLDivElement>(null);
+  // Review 20 NIT-4: the placeholder that had focus when it left; its real
+  // card takes focus in the same commit, unless focus has gone elsewhere.
+  const focusLeft = useRef<string | null>(null);
+  const [onLeaveFocused] = useState(() => (proposalId: string) => { focusLeft.current = proposalId; });
+  useLayoutEffect(() => {
+    const proposalId = focusLeft.current;
+    if (proposalId === null) return;
+    focusLeft.current = null;
+    const active = document.activeElement;
+    if (active && active !== document.body) return;
+    const real = Array.from(root.current?.querySelectorAll<HTMLElement>('[data-proposal-id]') ?? [])
+      .find((element) => element.dataset.proposalId === proposalId);
+    real?.focus({ preventScroll: true });
+  });
   const asked = useAssetProposalsStore((state) => state.review?.kind === kind && state.review.targetId === targetId);
   const ringTimer = useRef<number | null>(null);
   // Review on this proposal's Update (Q92 a): come into view and take focus,
@@ -289,8 +315,8 @@ export function AssetProposalStrip({ kind, targetId, names = NO_NAMES }: { kind:
     <div className="asset-proposals" ref={root}>
       {[...entries.map((entry) => ({ at: entry.view.createdAt, id: entry.view.id, card: (
         <ProposalCard key={entry.view.id} entry={entry} now={now} names={names} inPlace={wasHeld.has(entry.view.id)} />) })),
-      ...held.map((item) => ({ at: item.at, id: item.proposalId, card: <HeldCard key={item.proposalId} held={item} /> }))]
-        .sort((left, right) => left.at - right.at).map((item) => item.card)}
+      ...held.map((item) => ({ at: item.at, id: item.proposalId, card: <HeldCard key={item.proposalId} held={item} onLeaveFocused={onLeaveFocused} /> }))]
+        .sort(askedOrder).map((item) => item.card)}
     </div>
   );
 }

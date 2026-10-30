@@ -614,7 +614,24 @@ export function nodeNameList(names: string[]): string {
   if (names.length >= 4) return `${names.length} nodes`;
   const groups = new Map<string, number>();
   for (const name of names) groups.set(name, (groups.get(name) ?? 0) + 1);
-  const parts = [...groups].map(([name, count]) => (count === 1 ? `“${name}”` : `${count} “${name}” nodes`));
+  return joinedList([...groups].map(([name, count]) => (count === 1 ? `“${name}”` : `${count} “${name}” nodes`)));
+}
+
+/**
+ * Agents by name in a line, by nodeNameList's rule (GM, PR #202 r2: "names
+ * via the shared name-list helper, 4+ agents → a count"): up to 3 by name,
+ * "Codex", "Codex and Claude Code", "Codex, Claude Code and Cursor"; from 4,
+ * "4 agents". Each agent once. Unquoted: an agent's name is never quoted
+ * where Nebula names who did something (the Agent log, the Updates corner).
+ */
+export function agentNameList(names: string[]): string {
+  const agents = [...new Set(names)];
+  if (agents.length >= 4) return `${agents.length} agents`;
+  return joinedList(agents);
+}
+
+/** "A", "A and B", "A, B and C": the lists' shared join. */
+function joinedList(parts: string[]): string {
   return parts.length <= 1 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 }
 

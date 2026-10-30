@@ -244,35 +244,44 @@ def parse_change(raw: dict[str, Any]) -> dict[str, Any]:
 
 # -- one line for the journal, the Agent log and the CLI -------------------------
 
+# GM, PR #202 r4: how a Commons ask reads in the Agent log ("Asks to X") and
+# its withdrawal ("Withdrew its request to X"), and in the journal. Agents read
+# the log, so X names no reference by its id, filename, page title or
+# collection, and carries no Commons text (a label, value, why or keyword):
+# only the kind of change, a field's name and a role, which the log had.
+COMMONS_REFERENCE = "an image in the Commons"
+
+
 def _edit_words(edit: dict[str, Any]) -> str:
+    ref = COMMONS_REFERENCE
     what, body = next(iter(edit.items()))
     if what == "correction":
+        if body["field_path"] == "keywords":
+            return f"add a keyword to {ref}" if body.get("op") == "add" else f"remove a keyword from {ref}"
         leaf = body["field_path"].removesuffix(".value").replace("axes.", "").replace("_", " ")
-        return f"correct the {leaf}"
+        return f"correct the {leaf} of {ref}"
     if what == "region":
         if "id" not in body:
-            return "add a region"
+            return f"add a region to {ref}"
         if body.get("status") == "confirmed" and len(body) == 2:
-            return "confirm a region"
+            return f"confirm a region of {ref}"
         if body.get("status") == "deleted":
-            return "delete a region"
-        return "change a region"
+            return f"delete a region of {ref}"
+        return f"change a region of {ref}"
     if body.get("accept") and len(body) == 2:
-        return "take it out of the inbox"
+        return f"take {ref} out of the inbox"
     if "role" in body:
-        return f"make its role {body['role']}"
-    return "change why it is in a collection"
+        return f"set {ref} to {body['role']}"
+    return f"change why {ref} is in a collection"
 
 
 def summary(asset_id: str, change: dict[str, Any]) -> str:
+    """X in "Asks to X" and "Withdrew its request to X" (GM, PR #202 r4).
+    ``asset_id`` is never part of it."""
     edits = change.get("edits") or []
     if len(edits) == 1:
-        body = edits[0].get("correction") or {}
-        if body.get("field_path") == "keywords":
-            way = "add a keyword to" if body.get("op") == "add" else "remove a keyword from"
-            return f"{way} Commons reference {asset_id}"
-        return f"{_edit_words(edits[0])} of Commons reference {asset_id}"
-    return f"make {len(edits)} changes to Commons reference {asset_id}"
+        return _edit_words(edits[0])
+    return f"make {len(edits)} changes to {COMMONS_REFERENCE}"
 
 
 # -- the reference as it is now --------------------------------------------------

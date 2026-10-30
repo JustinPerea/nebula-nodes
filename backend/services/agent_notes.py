@@ -825,7 +825,7 @@ class AgentNotes:
         "every one")."""
         clean_author = _clean_author(author)
         ref = {"id": str(proposal["id"])[:64], "kind": str(proposal["kind"])[:16],
-               "targetId": str(proposal["targetId"])[:128]}
+               "targetId": str(proposal["targetId"])[:128], **proposal_detail(proposal)}
         actions = _clean_actions([{"label": "Review", "op": {
             "kind": "proposal.review", "proposalId": ref["id"], "target": ref["kind"], "targetId": ref["targetId"]}}])
         note = self._new_note(author=clean_author, source="nebula", about="proposal", text=clean_note_text(text),
@@ -938,14 +938,20 @@ class AgentNotes:
         project_id, (unread, removed) = self._write_project(mutate, project_id=project_id, keep_open=True)
         return {"note": note_view(note), "unread": unread, "projectId": project_id, "removed": removed}
 
-    def retarget_proposal(self, project_id: str, note_id: str, proposal_id: str) -> dict[str, Any] | None:
+    def retarget_proposal(self, project_id: str, note_id: str, proposal_id: str,
+                          detail: Mapping[str, Any] | None = None, text: str | None = None) -> dict[str, Any] | None:
         """The agent's other proposal on the same target is still open: the
-        Update now reviews that one. None when the update has left the list."""
+        Update now reviews that one, and its ref says that one's ``detail``
+        (``proposal_detail``) and, given ``text``, its words say that one's
+        too (PR #202 review 1 LOW-1: the count and the words come from the
+        same proposal). None when the update has left the list."""
         def mutate(notes: list[dict[str, Any]]) -> dict[str, Any] | None:
             note = next((n for n in notes if n.get("id") == note_id), None)
             if note is None or note.get("resolvedAt"):
                 return None
-            note["proposal"] = {**(note.get("proposal") or {}), "id": proposal_id[:64]}
+            note["proposal"] = _retargeted_ref(note.get("proposal"), proposal_id, detail)
+            if text is not None:
+                note["text"] = clean_note_text(text)
             for action in note.get("actions") or []:
                 if (action.get("op") or {}).get("kind") == "proposal.review":
                     action["op"]["proposalId"] = proposal_id[:64]
@@ -954,20 +960,33 @@ class AgentNotes:
         _, note = self._write_project(mutate, project_id=project_id)
         return None if note is None else {"projectId": project_id, "note": note_view(note)}
 
-    def reopen_proposal(self, project_id: str, note_id: str, proposal_id: str) -> dict[str, Any] | None:
+    def reopen_proposal(self, project_id: str, note_id: str, proposal_id: str,
+                        detail: Mapping[str, Any] | None = None, text: str | None = None,
+                        closed: Callable[[str], bool] | None = None) -> dict[str, Any] | None:
         """The undo of a node delete reopened the proposal (GM, 2026-10-23):
         its Update reviews it again. The outcome line goes and Review is back;
         it stays read (the person's own undo brought it back). None when the
-        update has left the list or still reviews another open proposal."""
+        update has left the list or still reviews another open proposal.
+        Given ``text``, its words are the reopened proposal's (LOW-1).
+
+        PR #202 review 2 LOW-C: the undo can land while the closed proposal's
+        own resolve is still being written. An Update not resolved yet whose
+        ref points at a proposal that has closed (``closed(id)``) is taken
+        over too, and that resolve then finds the ref moved and leaves it
+        (``resolve_proposal``'s ``proposal_id``)."""
         def mutate(notes: list[dict[str, Any]]) -> tuple[dict[str, Any], int] | None:
             note = next((n for n in notes if n.get("id") == note_id), None)
             if note is None:
                 return None
             if not note.get("resolvedAt"):
-                return None
+                current = str((note.get("proposal") or {}).get("id") or "")
+                if closed is None or current == proposal_id[:64] or not current or not closed(current):
+                    return None
             for key in ("resolvedAt", "resolvedBy", "outcome"):
                 note.pop(key, None)
-            note["proposal"] = {**(note.get("proposal") or {}), "id": proposal_id[:64]}
+            note["proposal"] = _retargeted_ref(note.get("proposal"), proposal_id, detail)
+            if text is not None:
+                note["text"] = clean_note_text(text)
             for action in note.get("actions") or []:
                 if (action.get("op") or {}).get("kind") == "proposal.review":
                     action["op"]["proposalId"] = proposal_id[:64]
@@ -980,17 +999,21 @@ class AgentNotes:
         return {"projectId": project_id, "note": note_view(note), "unread": unread}
 
     def resolve_proposal(self, project_id: str, note_id: str, *, outcome: str,
-                         by: Mapping[str, Any]) -> dict[str, Any] | None:
+                         by: Mapping[str, Any], proposal_id: str | None = None) -> dict[str, Any] | None:
         """The proposal closed (accepted, rejected, withdrawn, expired or no
         longer fits): the Update says how in one short line (``outcome``) and
-        is read, so no stale Review stays. None when it has left the list."""
-        return self._resolve(project_id, note_id, outcome=outcome, by=by)
+        is read, so no stale Review stays. None when it has left the list,
+        or (given ``proposal_id``) when it no longer reviews that proposal:
+        an undo reopened another in the meantime (PR #202 review 2 LOW-C)."""
+        return self._resolve(project_id, note_id, outcome=outcome, by=by, proposal_id=proposal_id)
 
     def _resolve(self, project_id: str, note_id: str, *, outcome: str, by: Mapping[str, Any],
-                 retext: Callable[[str], str] | None = None) -> dict[str, Any] | None:
+                 retext: Callable[[str], str] | None = None, proposal_id: str | None = None) -> dict[str, Any] | None:
         def mutate(notes: list[dict[str, Any]]) -> tuple[dict[str, Any], int] | None:
             note = next((n for n in notes if n.get("id") == note_id), None)
             if note is None or note.get("resolvedAt"):
+                return None
+            if proposal_id is not None and (note.get("proposal") or {}).get("id") != proposal_id[:64]:
                 return None
             now = _iso(self._clock())
             note["resolvedAt"] = now
@@ -1008,6 +1031,42 @@ class AgentNotes:
             return None
         note, unread = result
         return {"projectId": project_id, "note": note_view(note), "unread": unread}
+
+
+# What an asset proposal's Update says of its change beyond the target (GM,
+# PR #200 follow-up 2; services/asset_proposals.update_detail): a cover's kind,
+# a Commons ask's edit count. One exact word for a tab that sees only the
+# Update; never an image, an asset or a value.
+PROPOSAL_COVER_KINDS = ("automatic", "image")
+MAX_PROPOSAL_CHANGES = 999
+# A ref's ``since``: the ask's createdAt in ms, a whole number a browser holds exactly.
+MAX_PROPOSAL_SINCE = 2**53 - 1
+
+
+def proposal_detail(raw: Mapping[str, Any] | None) -> dict[str, Any]:
+    """The checked ``cover``, ``changes``, ``inbox`` and ``since`` of a proposal ref; anything else is dropped."""
+    detail: dict[str, Any] = {}
+    if not isinstance(raw, Mapping):
+        return detail
+    if raw.get("cover") in PROPOSAL_COVER_KINDS:
+        detail["cover"] = raw["cover"]
+    changes = raw.get("changes")
+    if isinstance(changes, int) and not isinstance(changes, bool) and 1 <= changes <= MAX_PROPOSAL_CHANGES:
+        detail["changes"] = changes
+    if raw.get("inbox") is True:
+        detail["inbox"] = True
+    since = raw.get("since")
+    if isinstance(since, int) and not isinstance(since, bool) and 0 <= since <= MAX_PROPOSAL_SINCE:
+        detail["since"] = since
+    return detail
+
+
+def _retargeted_ref(old: Any, proposal_id: str, detail: Mapping[str, Any] | None) -> dict[str, Any]:
+    """The ref now about ``proposal_id``: the kind and target stay; the detail is the new proposal's
+    (an older caller that passes none keeps none, rather than the closed one's)."""
+    base = {key: value for key, value in (old if isinstance(old, Mapping) else {}).items()
+            if key not in ("cover", "changes", "inbox", "since")}
+    return {**base, "id": proposal_id[:64], **proposal_detail(detail)}
 
 
 def _same_ask(note: Mapping[str, Any], new: Mapping[str, Any]) -> bool:

@@ -46,7 +46,8 @@ def test_a_cover_proposal_posts_one_update_with_review(api):
     assert note["text"] == "Claude Code asks to change the cover of Dusk"
     assert note["author"]["kind"] == "agent" and note["author"]["name"] == "Claude Code"
     assert note["source"] == "nebula"
-    assert note["proposal"] == {"id": view["id"], "kind": "project", "targetId": api.dusk}
+    assert note["proposal"] == {"id": view["id"], "kind": "project", "targetId": api.dusk, "cover": "image",
+                               "since": view["createdAt"]}
     assert _review(note) == {"kind": "proposal.review", "proposalId": view["id"], "target": "project",
                              "targetId": api.dusk}
     # The agent's own note is the strip's, not the Update's.
