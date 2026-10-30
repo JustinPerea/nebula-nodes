@@ -2371,11 +2371,16 @@ key goes only to `/ws` sockets that said hello with the person token
 screen), never to REST, the journal or MCP results. `assetProposalClosed`
 `{proposalId, status, reason, kind, targetId}` goes to every socket. The
 Agent log names the proposal ("Asks to make another image the cover of
-project "Dusk" (decide on the Projects screen)"), since no cursor can go
-there, and a withdrawal the same way under the agent's name, by any route
+“Dusk” (decide on the Projects screen)"), since no cursor can go there, and
+a withdrawal the same way under the agent's name, by any route
 (`withdraw_proposal`, `nebula proposal withdraw`, `DELETE
 /api/canvas/proposals/{id}`): "Withdrew its request to make another image
-the cover of project "Dusk"". Memory only: lost on restart.
+the cover of “Dusk”". A Commons ask names its reference only as "an image in
+the Commons", never by its id, filename, page title or collection, and
+carries no Commons text (no labels, values, whys or keywords): "Asks to set
+an image in the Commons to avoid", "Asks to add a region to an image in the
+Commons", "Asks to make 3 changes to an image in the Commons". The proposal's
+`summary` is the same words; its `target.id` says which reference. Memory only: lost on restart.
 
 **The Update.** Each asset proposal also posts an Update in the Updates
 corner (Justin's Q92 a, 2026-10-21), on the open project's list, written by

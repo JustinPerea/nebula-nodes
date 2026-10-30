@@ -209,7 +209,8 @@ class AssetProposal:
 
 
 def summary(proposal: AssetProposal) -> str:
-    """The change in one line, for the journal, the Agent log and the CLI."""
+    """The change in one line, for the journal, the Agent log and the CLI: X in
+    "Asks to X" and "Withdrew its request to X" (GM, PR #202 r4)."""
     name = proposal.target_name or proposal.target_id
     if proposal.kind == "commons":
         from services import commons_proposals
@@ -217,9 +218,9 @@ def summary(proposal: AssetProposal) -> str:
         return commons_proposals.summary(proposal.target_id, proposal.change)
     if proposal.kind == "project":
         to = proposal.change.get("cover")
-        return (f'set the cover of project "{name}" back to automatic' if to is None
-                else f'make another image the cover of project "{name}"')
-    return f'send the notes of board "{name}" to generators'
+        return (f"set the cover of “{name}” back to automatic" if to is None
+                else f"make another image the cover of “{name}”")
+    return f"send the notes of “{name}” to generators"
 
 
 def update_text(proposal: AssetProposal) -> str:

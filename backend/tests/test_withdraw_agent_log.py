@@ -54,7 +54,7 @@ def test_http_a_withdrawal_mirrors_the_ask_line(api):
     assert api.client.delete(f"/api/canvas/proposals/{view['id']}", headers=CLAUDE).status_code == 200
     ask, withdrew = _ask_and_withdrawal(api.sent)
     _mirrors(ask, withdrew)
-    assert withdrew[1] == 'Withdrew its request to make another image the cover of project "Dusk"'
+    assert withdrew[1] == 'Withdrew its request to make another image the cover of “Dusk”'
 
 
 def test_mcp_a_withdrawal_mirrors_the_ask_line(tools):
@@ -63,7 +63,7 @@ def test_mcp_a_withdrawal_mirrors_the_ask_line(tools):
     assert mcp_server.withdraw_proposal(view["id"])["proposal"]["status"] == "withdrawn"
     ask, withdrew = _ask_and_withdrawal(tools.sent)
     _mirrors(ask, withdrew)
-    assert withdrew[1] == 'Withdrew its request to set the cover of project "Dusk" back to automatic'
+    assert withdrew[1] == 'Withdrew its request to set the cover of “Dusk” back to automatic'
 
 
 def test_cli_a_withdrawal_mirrors_the_ask_line(api, monkeypatch):
@@ -91,7 +91,7 @@ def test_a_commons_withdrawal_mirrors_its_ask_line(cx, canvas_project):
     assert cx.client.delete(f"/api/canvas/proposals/{made['id']}", headers=COMMONS_CLAUDE).status_code == 200
     ask, withdrew = _ask_and_withdrawal(cx.sent)
     _mirrors(ask, withdrew)
-    assert withdrew[1] == f"Withdrew its request to make 3 changes to Commons reference {cx.poster}"
+    assert withdrew[1] == "Withdrew its request to make 3 changes to an image in the Commons"
 
 
 def test_a_refused_withdrawal_logs_nothing(api):

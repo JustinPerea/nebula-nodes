@@ -623,3 +623,86 @@ Live (1440): 9 of 9, adding the two LOW-A repros to the round-3 checks.
 - Build budget: 422,171 bytes raw (129,713 gzip); 101 JS assets eval-free;
   fonts OK.
 - `dist` removed.
+
+# PR #202 round 4 (GM r4, on d6938ec0): the asset ask/withdraw log wording
+
+Built from `gm-pr202-r4.md` as written. X is built once in the shared helper
+(`asset_proposals.summary` → `commons_proposals.summary`/`_edit_words`) and
+used for "Asks to X (decide …)", "Withdrew its request to X", the journal
+summaries and the proposal view's `summary`. The "(decide …)" parens are
+unchanged (wording batch).
+
+| Kind | Old X | New X |
+|---|---|---|
+| Role | make its role avoid of Commons reference ast_… | set an image in the Commons to avoid |
+| New region | add a region of Commons reference ast_… | add a region to an image in the Commons |
+| Several | make 3 changes to Commons reference ast_… | make 3 changes to an image in the Commons |
+| Keyword add | add a keyword to Commons reference ast_… | add a keyword to an image in the Commons |
+| Keyword remove | remove a keyword from Commons reference ast_… | remove a keyword from an image in the Commons |
+| Field | correct the type style of Commons reference ast_… | correct the type style of an image in the Commons |
+| Region confirm | confirm a region of Commons reference ast_… | confirm a region of an image in the Commons |
+| Region delete | delete a region of Commons reference ast_… | delete a region of an image in the Commons |
+| Region change | change a region of Commons reference ast_… | change a region of an image in the Commons |
+| Inbox | take it out of the inbox of Commons reference ast_… | take an image in the Commons out of the inbox |
+| Why | change why it is in a collection of Commons reference ast_… | change why an image in the Commons is in a collection |
+| Cover, automatic | set the cover of project "Dusk" back to automatic | set the cover of “Dusk” back to automatic |
+| Cover, image | make another image the cover of project "Dusk" | make another image the cover of “Dusk” |
+| Moodboard | send the notes of board "Dusk board" to generators | send the notes of “Dusk board” to generators |
+
+- **Data safety:**
+  - A Commons X names nothing but "an image in the Commons". It never
+    names the id, the filename, the page title or the collection.
+  - It carries no Commons text: no label, value, why or keyword.
+  - What it keeps (the kind of change, a correctable field's name, a role)
+    was already in the log. Both are checked against fixed lists when an ask
+    is parsed (`field_path` against the schema's correctable fields, the role
+    against `MEMBERSHIP_ROLES`), so neither can carry an agent's free text.
+  - Cover and moodboard names were already in the log; only the quotes and
+    the words "project"/"board" changed.
+- **CLI:** the CLI's `asks` line uses the same summary, so the proposing
+  agent's own view would have lost which reference it is. A Commons
+  proposal now prints `on     Commons reference <id>` in that agent's own
+  CLI output. That output isn't the log, and its `sets` lines already show
+  edit ids. MCP views keep `target.id`.
+- **Not built:** the canvas-proposal log lines are a follow-up (GM r3).
+  The collection name as the reference's name stays a "consider" for the
+  LOW-B follow-up, only if a fence check is clean and Justin wants it.
+
+Tests (`tests/test_commons_log_wording.py`):
+- every Commons kind, each asked and withdrawn over HTTP, in GM's words;
+- inbox, both cover kinds and the moodboard, asked and withdrawn;
+- the helper's words directly;
+- **the ratchet:** a reference whose filename, page title, page URL,
+  collection, why, label, value, keyword and note are all distinctive
+  secrets, plus the fixture's own ids, region label, analysis text and
+  inbox why. Every kind is asked and withdrawn against them, and no log
+  line may contain an `ast_`/`mem_`/`reg_`/`col_` id or any of those
+  strings.
+
+All 20 new or changed tests fail on d6938ec0.
+
+Mutations: 13 of 13 killed.
+- Leaks the ratchet catches:
+  - the label;
+  - the keyword value;
+  - the field value;
+  - the why;
+  - the id after one edit;
+  - the id in several.
+- Wording:
+  - the role line repeating "in the Commons";
+  - the old inbox words;
+  - straight quotes on a cover;
+  - "project" back;
+  - "board" back.
+- The withdrawal from another helper.
+- The CLI losing the reference.
+
+Live (8795/5795, 8000-8010 and 5173 blocked, 1440): 4 of 4.
+- The upload is named `secret-file-name.png`, in "Open refs", with private
+  whys and a private note.
+- The Agent log shows "Codex: Asks to set an image in the Commons to avoid
+  (decide in the Commons)" and "Codex: Withdrew its request to set an image
+  in the Commons to avoid", in the panel.
+- No id, filename, collection or Commons text appears in any line.
+- Shot: `fu2d-agent-log-commons-ask-withdrawal-1440.png`.
