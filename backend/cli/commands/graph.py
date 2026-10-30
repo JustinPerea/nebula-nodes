@@ -95,7 +95,7 @@ def run_save(client: NebulaClient, filepath: str) -> None:
 
 
 def run_load(client: NebulaClient, filepath: str) -> None:
-    """Open a .nebula, .json or .nebula.zip as the canvas's Load graph does
+    """Open a .nebula, .json or .nebula.zip as the canvas's Load canvas does
     (MCP load_graph_file; graph_file_client.py): a bundle's files are
     restored, and a file over the save limit opens as a new project named
     after it (Q123 a). Under the limit it replaces the open project's canvas."""

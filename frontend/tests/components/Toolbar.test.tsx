@@ -21,6 +21,7 @@ interface ToolbarGraph {
   beginUndoStep: () => object;
   cancelUndoStep: (step: object) => void;
   endUndoStep: (step: object) => void;
+  sayRunLocked: (line: string) => void;
 }
 
 interface ToolbarUI {
@@ -38,7 +39,7 @@ const mocks = vi.hoisted(() => ({
   ui: null as UseBoundStore<StoreApi<ToolbarUI>> | null,
   execute: vi.fn(), cancel: vi.fn(), layout: vi.fn(), clear: vi.fn(), load: vi.fn(),
   undoStep: { step: 'before clear' }, beginStep: vi.fn(), cancelStep: vi.fn(), endStep: vi.fn(),
-  reset: vi.fn(), fit: vi.fn(), fetch: vi.fn(), cli: vi.fn(),
+  reset: vi.fn(), fit: vi.fn(), fetch: vi.fn(), cli: vi.fn(), say: vi.fn(),
   zoomIn: vi.fn(), zoomOut: vi.fn(), zoomTo: vi.fn(),
   flow: { transform: [0, 0, 1] as [number, number, number], minZoom: 0.1, maxZoom: 4 },
 }));
@@ -58,7 +59,7 @@ vi.mock('../../src/store/graphStore', async () => {
     executeGraph: mocks.execute, cancelExecution: mocks.cancel, autoLayout: mocks.layout,
     clearGraph: mocks.clear, loadGraph: mocks.load,
     beginUndoStep: () => { mocks.beginStep(); return mocks.undoStep; }, cancelUndoStep: mocks.cancelStep,
-    endUndoStep: mocks.endStep,
+    endUndoStep: mocks.endStep, sayRunLocked: mocks.say,
   }));
   return { useGraphStore: mocks.graph };
 });
@@ -162,14 +163,14 @@ describe('Canvas toolbar hierarchy', () => {
     render(<Toolbar />);
     expect(screen.getByRole('button', { name: 'Run' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Canvas actions' })).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByRole('button', { name: 'Save graph' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save canvas' })).not.toBeInTheDocument();
     expect(within(screen.getByRole('group', { name: 'Zoom' })).getByRole('button', { name: 'Fit view' })).toBeInTheDocument();
     const { trigger, panel } = openActions();
     expect(trigger).toHaveAttribute('aria-controls', panel.id);
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
     expect(trigger).toHaveFocus();
     expect(within(panel).getAllByRole('button').map((button) => button.textContent)).toEqual([
-      'Save graphCtrl / ⌘ S', 'Load graphCtrl / ⌘ O', 'Import CLI graph', 'Clear canvas…', 'Arrange nodes', 'Reset panels',
+      'Save canvasCtrl / ⌘ S', 'Load canvasCtrl / ⌘ O', 'Import CLI canvas', 'Clear canvas…', 'Arrange nodes', 'Reset panels',
     ]);
     expect(mocks.execute).not.toHaveBeenCalled();
     expect(mocks.fetch).not.toHaveBeenCalled();
@@ -182,7 +183,7 @@ describe('Canvas toolbar hierarchy', () => {
     const canvasKey = vi.fn();
     render(<div onKeyDown={canvasKey}><Toolbar /></div>);
     const { trigger, panel } = openActions();
-    const save = within(panel).getByRole('button', { name: 'Save graph' });
+    const save = within(panel).getByRole('button', { name: 'Save canvas' });
     save.focus();
     fireEvent.keyDown(save, { key: 'Enter', ctrlKey: true });
     fireEvent.keyDown(save, { key: 'Delete' });
@@ -226,7 +227,7 @@ describe('Canvas toolbar hierarchy', () => {
     try {
       render(<Toolbar />);
       const { trigger, panel } = openActions();
-      fireEvent.keyDown(within(panel).getByRole('button', { name: 'Save graph' }), { key: 's', metaKey: true });
+      fireEvent.keyDown(within(panel).getByRole('button', { name: 'Save canvas' }), { key: 's', metaKey: true });
       expect(onSave).toHaveBeenCalledTimes(1);
       expect(trigger).toHaveFocus();
       expect(screen.queryByRole('region', { name: 'Canvas actions' })).not.toBeInTheDocument();
@@ -254,7 +255,7 @@ describe('Canvas toolbar hierarchy', () => {
     try {
       render(<Toolbar />);
       const { panel, trigger } = openActions();
-      for (const name of ['Save graph', 'Load graph', 'Import CLI graph', 'Clear canvas…']) {
+      for (const name of ['Save canvas', 'Load canvas', 'Import CLI canvas', 'Clear canvas…']) {
         const button = within(panel).getByRole('button', { name });
         expect(button).toBeDisabled();
         expect(button).toHaveAccessibleDescription(reason);
@@ -262,6 +263,9 @@ describe('Canvas toolbar hierarchy', () => {
       }
       fireEvent.keyDown(trigger, { key: 's', ctrlKey: true });
       fireEvent.keyDown(trigger, { key: 'o', metaKey: true });
+      // GM PR #205 r4 item 4: each key says the palette's line for its wait.
+      const until = reason.replace('You can save, load, import or clear the canvas ', '');
+      expect(mocks.say.mock.calls).toEqual([[`You can save the canvas ${until}`], [`You can load a canvas ${until}`]]);
       expect(onSave).not.toHaveBeenCalled();
       expect(onLoad).not.toHaveBeenCalled();
       expect(window.confirm).not.toHaveBeenCalled();
@@ -277,9 +281,9 @@ describe('Canvas toolbar hierarchy', () => {
     mocks.graph!.setState({ providerStartAmbiguities: [{ id: 'review' }] });
     render(<Toolbar />);
     const { panel } = openActions();
-    expect(within(panel).getByRole('button', { name: 'Save graph' })).toBeDisabled();
-    expect(within(panel).getByRole('button', { name: 'Save graph' })).toHaveAccessibleDescription('Check the waiting World Labs run before you save.');
-    expect(within(panel).getByRole('button', { name: 'Load graph' })).toBeEnabled();
+    expect(within(panel).getByRole('button', { name: 'Save canvas' })).toBeDisabled();
+    expect(within(panel).getByRole('button', { name: 'Save canvas' })).toHaveAccessibleDescription('Check the waiting World Labs run before you save.');
+    expect(within(panel).getByRole('button', { name: 'Load canvas' })).toBeEnabled();
   });
 
   it('keeps Stop explicit during a run and prevents repeat cancellation while stopping', () => {
@@ -369,7 +373,7 @@ describe('Canvas toolbar hierarchy', () => {
     let finishCLI: (value: { nodes: unknown[]; edges: unknown[] }) => void;
     mocks.cli.mockReturnValue(new Promise((resolve) => { finishCLI = resolve; }));
     render(<Toolbar />);
-    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI graph' }));
+    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI canvas' }));
     act(() => mocks.graph!.setState({ isExecuting: true }));
     await act(async () => finishCLI!({ nodes: [], edges: [] }));
     expect(mocks.load).not.toHaveBeenCalled();
@@ -380,7 +384,7 @@ describe('Canvas toolbar hierarchy', () => {
     vi.useFakeTimers();
     mocks.cli.mockResolvedValue({ nodes: [{ id: 'imported' }], edges: [] });
     render(<Toolbar />);
-    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI graph' }));
+    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI canvas' }));
     await act(async () => undefined);
     expect(mocks.load).toHaveBeenCalledTimes(1);
     expect(mocks.fit).not.toHaveBeenCalled();
@@ -397,7 +401,7 @@ describe('Canvas toolbar hierarchy', () => {
     vi.useFakeTimers();
     mocks.cli.mockResolvedValue({ nodes: [{ id: 'imported' }], edges: [] });
     render(<Toolbar />);
-    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI graph' }));
+    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI canvas' }));
     await act(async () => undefined);
     act(() => mocks.ui!.setState(state));
     await act(async () => vi.advanceTimersByTime(50));
@@ -408,12 +412,12 @@ describe('Canvas toolbar hierarchy', () => {
     vi.useFakeTimers();
     mocks.cli.mockResolvedValue({ nodes: [{ id: 'imported' }], edges: [] });
     const view = render(<Toolbar />);
-    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI graph' }));
+    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI canvas' }));
     await act(async () => undefined);
     act(() => { mocks.ui!.setState({ viewMode: 'create' }); mocks.ui!.setState({ viewMode: 'canvas' }); });
     await act(async () => vi.advanceTimersByTime(50));
     expect(mocks.fit).not.toHaveBeenCalled();
-    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI graph' }));
+    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI canvas' }));
     await act(async () => undefined);
     view.unmount();
     await act(async () => vi.advanceTimersByTime(50));
@@ -424,7 +428,7 @@ describe('Canvas toolbar hierarchy', () => {
     let finishCLI: (value: { nodes: unknown[]; edges: unknown[] }) => void;
     mocks.cli.mockReturnValue(new Promise((resolve) => { finishCLI = resolve; }));
     const view = render(<Toolbar />);
-    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI graph' }));
+    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI canvas' }));
     view.unmount();
     await act(async () => finishCLI!({ nodes: [{ id: 'imported' }], edges: [] }));
     expect(mocks.load).not.toHaveBeenCalled();
@@ -440,7 +444,7 @@ describe('Canvas toolbar hierarchy', () => {
   ])('a failed CLI import names the action over the reason (%#)', async (error, reason) => {
     mocks.cli.mockRejectedValue(error);
     render(<Toolbar />);
-    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI graph' }));
+    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI canvas' }));
     await waitFor(() => expect(notices).toHaveBeenCalledWith(`Couldn't import the CLI graph. ${reason}`));
   });
 
@@ -478,11 +482,11 @@ describe('Canvas toolbar hierarchy', () => {
     expect(mocks.execute).not.toHaveBeenCalled();
     const { panel } = openActions();
     const named = (label: RegExp) => within(panel).getByRole('button', { name: label });
-    expect(named(/^Load graph/)).toBeDisabled();
-    expect(named(/^Import CLI graph/)).toBeDisabled();
+    expect(named(/^Load canvas/)).toBeDisabled();
+    expect(named(/^Import CLI canvas/)).toBeDisabled();
     expect(named(/^Clear canvas/)).toBeDisabled();
     expect(named(/^Arrange nodes/)).toBeDisabled();
-    expect(named(/^Save graph/)).toBeEnabled();
+    expect(named(/^Save canvas/)).toBeEnabled();
     expect(named(/^Reset panels/)).toBeEnabled();
     act(() => noteBackendConnection('online'));
     expect(screen.getByRole('button', { name: 'Run' })).toBeEnabled();

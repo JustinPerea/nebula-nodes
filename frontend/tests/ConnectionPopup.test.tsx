@@ -439,3 +439,22 @@ describe('ConnectionPopup while offline (round 16)', () => {
     resetBackendConnectionForTests();
   });
 });
+
+// GM PR #205 r4 item 3 (review 2 lines NIT-1): the connected add works during
+// a run, as its add and its connect each do; an import still holds it.
+describe('ConnectionPopup during a run (PR #205 round 3)', () => {
+  it('a press while this tab runs adds the connected node, with no lock line', async () => {
+    useGraphStore.setState({ isExecuting: true, undoNotice: null });
+    openPopup();
+    await act(async () => { fireEvent.click(searchFor('veo-3')); });
+    expect(addConnected).toHaveBeenCalledTimes(1);
+    expect(useGraphStore.getState().undoNotice).toBeNull();
+  });
+
+  it('a press during an import adds nothing', async () => {
+    useGraphStore.setState({ isImportingGraph: true });
+    openPopup();
+    await act(async () => { fireEvent.click(searchFor('veo-3')); });
+    expect(addConnected).not.toHaveBeenCalled();
+  });
+});

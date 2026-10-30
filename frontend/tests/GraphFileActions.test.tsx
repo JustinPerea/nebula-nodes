@@ -77,8 +77,8 @@ afterEach(() => {
 
 function paletteCommand(name: string) {
   fireEvent.keyDown(document, { key: 'k', metaKey: true });
-  fireEvent.change(screen.getByRole('textbox', { name: '' }), { target: { value: name } });
-  fireEvent.click(screen.getByRole('button', { name }));
+  fireEvent.change(screen.getByRole('combobox', { name: 'Search commands and nodes' }), { target: { value: name } });
+  fireEvent.click(screen.getByRole('option', { name }));
 }
 
 describe('workspace-independent graph file actions', () => {
@@ -409,9 +409,15 @@ describe('workspace-independent graph file actions', () => {
     expect(mocks.loadFromFile).not.toHaveBeenCalled();
     expect(mocks.apiFetch).not.toHaveBeenCalled();
     fireEvent.keyDown(document, { key: 'k', metaKey: true });
-    // GM PR #205 r2 item 3: the palette's items say "canvas".
-    expect(screen.getByRole('button', { name: /^Save canvas/ })).toBeDisabled();
-    expect(screen.getByRole('button', { name: /^Load canvas/ })).toBeDisabled();
+    // GM PR #205 r2 item 3: the palette's items say "canvas". Review 2
+    // (lines LOW-1): locked options are aria-disabled, so the arrows reach
+    // them; GM r3 item 2: each says its wait's line (an import's, the
+    // preparation's, as the run's).
+    const wait = owner === 'execution' ? 'when the run finishes' : owner === 'import' ? 'when the import finishes'
+      : 'when Nebula finishes preparing the run';
+    expect(screen.getByRole('option', { name: 'Save canvas' })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('option', { name: 'Save canvas' })).toHaveAccessibleDescription(`You can save the canvas ${wait}.`);
+    expect(screen.getByRole('option', { name: 'Load canvas' })).toHaveAccessibleDescription(`You can load a canvas ${wait}.`);
   });
 
   it.each(['execution', 'preparation'] as const)('rechecks %s ownership acquired while the picker was open', async (owner) => {

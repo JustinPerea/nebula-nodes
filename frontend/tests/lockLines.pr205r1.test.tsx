@@ -81,14 +81,12 @@ describe('answer 2: a refusal after a key press is the lock line alone', () => {
       .toBe('You can delete “Brief” when the run finishes.');
   });
 
-  it('adding a connected node: "You can add “X” when the run finishes." (the import\'s: "… when the import finishes.")', async () => {
+  it('adding a connected node during an import: "You can add “X” when the import finishes." (GM PR #205 r4 item 3: a run no longer locks it)', async () => {
     const said: string[] = [];
     const connect = { source: 'n1', sourceHandle: 'text', target: 'new', targetHandle: 'text', newNodeIs: 'target' as const };
-    useGraphStore.setState({ nodes: [textNode('n1', 'Brief')], edges: [], isExecuting: true, notify: (text: string) => { said.push(text); } } as never);
+    useGraphStore.setState({ nodes: [textNode('n1', 'Brief')], edges: [], isImportingGraph: true, notify: (text: string) => { said.push(text); } } as never);
     await useGraphStore.getState().addNodeAndConnect('text-input', { x: 0, y: 0 }, connect);
-    useGraphStore.setState({ isExecuting: false, isImportingGraph: true });
-    await useGraphStore.getState().addNodeAndConnect('text-input', { x: 0, y: 0 }, connect);
-    expect(said).toEqual(['You can add “Text Input” when the run finishes.', 'You can add “Text Input” when the import finishes.']);
+    expect(said).toEqual(['You can add “Text Input” when the import finishes.']);
   });
 });
 
@@ -136,16 +134,16 @@ describe('the lines left alone, on the pattern', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Canvas actions' }));
     const panel = screen.getByRole('region', { name: 'Canvas actions' });
     expect(within(panel).getByRole('status')).toHaveTextContent(`You can save, load, import or clear the canvas ${when}.`);
-    for (const [name, verb] of [['Save graph', 'save the canvas'], ['Load graph', 'load a canvas'],
-      ['Import CLI graph', 'import a canvas'], ['Clear canvas…', 'clear the canvas']]) {
+    for (const [name, verb] of [['Save canvas', 'save the canvas'], ['Load canvas', 'load a canvas'],
+      ['Import CLI canvas', 'import a canvas'], ['Clear canvas…', 'clear the canvas']]) {
       expect(within(panel).getByRole('button', { name })).toHaveAttribute('title', `You can ${verb} ${when}.`);
     }
   });
 
-  it('the canvas Run during an import: "You can run the graph when the import finishes."', () => {
+  it('the canvas Run during an import: "You can run the canvas when the import finishes."', () => {
     useGraphStore.setState({ nodes: [textNode('n1', 'Brief')], isImportingGraph: true } as never);
     render(<Toolbar />);
-    expect(screen.getByRole('button', { name: /^Run\b/ })).toHaveAttribute('title', 'You can run the graph when the import finishes.');
+    expect(screen.getByRole('button', { name: /^Run\b/ })).toHaveAttribute('title', 'You can run the canvas when the import finishes.');
   });
 
   it('a thrown refusal with no single control says the refused action, standing alone', async () => {

@@ -118,8 +118,11 @@ body.app-slava-restraint .command-palette__item {
   color: var(--sr-ink, #1a1a1a);
   font-family: var(--sr-mono, monospace);
 }
+/* The keyboard highlight (GM PR #205 r3 item 3): the selected-row surface,
+   the token the toolbar's active controls use, never a disabled token. A
+   locked row keeps it: the disabled rule greys its text, not its surface. */
 body.app-slava-restraint .command-palette__item--selected {
-  background: rgba(0, 0, 0, 0.06);
+  background: var(--sr-surface-control-active, rgba(255, 255, 255, 0.10));
 }
 body.app-slava-restraint .command-palette__group-label,
 body.app-slava-restraint .command-palette__item-sub {

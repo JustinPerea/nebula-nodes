@@ -19,7 +19,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
-import { canLoadGraph, canSaveGraph, requestGraphLoad, requestGraphSave } from '../../lib/graphFileActions';
+import { canLoadGraph, canSaveGraph, fileKeyLockLine, requestGraphLoad, requestGraphSave } from '../../lib/graphFileActions';
 import { fetchCLIGraph } from '../../lib/api';
 import { apiRequest } from '../../lib/apiRequest';
 import { failureMessage, failureUnder } from '../../lib/errorCopy';
@@ -163,7 +163,11 @@ export function Toolbar() {
       const key = event.key.toLowerCase();
       if (key === 's' || key === 'o') {
         event.preventDefault();
-        const permitted = key === 's' ? canSaveGraph(useGraphStore.getState()) : canLoadGraph(useGraphStore.getState());
+        const graph = useGraphStore.getState();
+        const permitted = key === 's' ? canSaveGraph(graph) : canLoadGraph(graph);
+        // GM PR #205 r4 item 4: a wait's line, as the same keys say it on the canvas.
+        const line = permitted ? null : fileKeyLockLine(key, graph);
+        if (line) graph.sayRunLocked(line);
         if (permitted) {
           closeActions(true);
           if (key === 's') requestGraphSave();
@@ -306,7 +310,8 @@ export function Toolbar() {
           {...lock.mark}
           aria-describedby={nodeCount > 0 ? runScopeId : undefined}
           title={following ? waitToOpenTooltip(following.projectName)
-            : isImportingGraph ? lockLine(RUN_LOCK_VERBS.runGraph, 'import') : `Run graph. ${describeRunScope(runScope)} (${displayKey('Mod')}${displayKey('Enter')})`}
+            : runStarting ? runFinishesLine(RUN_LOCK_VERBS.runCanvas)
+            : isImportingGraph ? lockLine(RUN_LOCK_VERBS.runCanvas, 'import') : `Run canvas. ${describeRunScope(runScope)} (${displayKey('Mod')}${displayKey('Enter')})`}
         >
           <ToolbarIcon name="run" />
           <span className="toolbar__label">Run</span>
@@ -335,25 +340,25 @@ export function Toolbar() {
             {/* PR #198 review 6, M2: this tab's run locks Load, Import, Clear and
                 Arrange too, and its line wins over following's and offline's
                 (lib/canvasLock), as Save graph and the line above say. */}
-            <div className="toolbar__action-group" role="group" aria-label="Graph files">
-              <h2 className="toolbar__action-heading">Graph</h2>
+            <div className="toolbar__action-group" role="group" aria-label="Canvas files">
+              <h2 className="toolbar__action-heading">Canvas</h2>
               <button type="button" className="toolbar__action" disabled={!canSave}
                 aria-describedby={!canSave ? blockedId : undefined}
-                title={!canSave ? saveBlockedReason : 'Save graph (Ctrl+S or ⌘S)'}
+                title={!canSave ? saveBlockedReason : 'Save canvas (Ctrl+S or ⌘S)'}
                 aria-keyshortcuts="Control+s Meta+s" onClick={() => runSecondaryAction(requestGraphSave)}>
-                <ToolbarIcon name="save" /><span>Save graph</span><kbd aria-hidden="true">Ctrl / ⌘ S</kbd>
+                <ToolbarIcon name="save" /><span>Save canvas</span><kbd aria-hidden="true">Ctrl / ⌘ S</kbd>
               </button>
               <button type="button" className="toolbar__action"
-                {...lock.act({ disabled: !canLoad, title: !canLoad ? filesLine(RUN_LOCK_VERBS.loadCanvas) : 'Load graph (Ctrl+O or ⌘O)' }, { run: isExecuting, runTitle: runFinishesLine(RUN_LOCK_VERBS.loadCanvas) })}
+                {...lock.act({ disabled: !canLoad, title: !canLoad ? filesLine(RUN_LOCK_VERBS.loadCanvas) : 'Load canvas (Ctrl+O or ⌘O)' }, { run: isExecuting, runTitle: runFinishesLine(RUN_LOCK_VERBS.loadCanvas) })}
                 aria-describedby={!canLoad ? blockedId : undefined}
                 aria-keyshortcuts="Control+o Meta+o" onClick={() => runSecondaryAction(requestGraphLoad)}>
-                <ToolbarIcon name="load" /><span>Load graph</span><kbd aria-hidden="true">Ctrl / ⌘ O</kbd>
+                <ToolbarIcon name="load" /><span>Load canvas</span><kbd aria-hidden="true">Ctrl / ⌘ O</kbd>
               </button>
               <button type="button" className="toolbar__action"
-                {...lock.act({ disabled: !canLoad, title: !canLoad ? filesLine(RUN_LOCK_VERBS.importCanvas) : 'Import graph built by Nebula CLI' }, { run: isExecuting, runTitle: runFinishesLine(RUN_LOCK_VERBS.importCanvas) })}
+                {...lock.act({ disabled: !canLoad, title: !canLoad ? filesLine(RUN_LOCK_VERBS.importCanvas) : 'Import a canvas built by the Nebula CLI' }, { run: isExecuting, runTitle: runFinishesLine(RUN_LOCK_VERBS.importCanvas) })}
                 aria-describedby={!canLoad ? blockedId : undefined}
                 onClick={() => runSecondaryAction(() => void handleImportCLI())}>
-                <ToolbarIcon name="cli" /><span>Import CLI graph</span>
+                <ToolbarIcon name="cli" /><span>Import CLI canvas</span>
               </button>
               <button type="button" className="toolbar__action toolbar__action--danger"
                 {...lock.act({ disabled: !canLoad, title: !canLoad ? filesLine(RUN_LOCK_VERBS.clearCanvas) : 'Clear canvas — asks for confirmation' }, { run: isExecuting, runTitle: runFinishesLine(RUN_LOCK_VERBS.clearCanvas) })}

@@ -6,7 +6,7 @@ import { useUIStore } from '../store/uiStore';
 import { useProjectStore } from '../store/projectStore';
 // Save and open load lib/graphFile.ts at the moment of use (preloaded on idle).
 import { graphFileModule } from '../lib/deferredChunks';
-import { canLoadGraph, canSaveGraph, GRAPH_LOAD_EVENT, GRAPH_SAVE_EVENT } from '../lib/graphFileActions';
+import { canLoadGraph, canSaveGraph, fileKeyLockLine, GRAPH_LOAD_EVENT, GRAPH_SAVE_EVENT } from '../lib/graphFileActions';
 import { apiRequest } from '../lib/apiRequest';
 import { rewriteBackendAssetUrls } from '../lib/backend';
 import { adoptCanvasRevision } from '../lib/projectContext';
@@ -230,6 +230,9 @@ export function GraphFileActions() {
       event.preventDefault();
       // Never behind an open dialog: opening a file swaps the canvas under it (review 7, M-1).
       if (isModalDialogOpen()) return;
+      const graph = useGraphStore.getState();
+      const line = fileKeyLockLine(key, graph);
+      if (line) { graph.sayRunLocked(line); return; }
       if (key === 's') void save();
       else void load();
     };

@@ -26,9 +26,9 @@ describe('CommandPalette node insertion', () => {
 
     const insert = (query: string) => {
       fireEvent.keyDown(document, { key: 'k', metaKey: true });
-      const search = screen.getByRole('textbox', { name: '' });
+      const search = screen.getByRole('combobox', { name: 'Search commands and nodes' });
       fireEvent.change(search, { target: { value: query } });
-      fireEvent.click(screen.getByRole('button', { name: new RegExp(query) }));
+      fireEvent.click(screen.getByRole('option', { name: new RegExp(query) }));
     };
 
     insert('Cinema Scene');
@@ -54,8 +54,8 @@ describe('CommandPalette node insertion', () => {
       window.dispatchEvent(new CustomEvent('nebula:command-palette-open'));
     });
 
-    expect(screen.getByRole('textbox', { name: '' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Toggle Run History' })).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Search commands and nodes' })).toBeTruthy();
+    expect(screen.getByRole('option', { name: 'Toggle run history' })).toBeTruthy();
   });
 
   it('recovers an empty search without adding or executing nodes', () => {
@@ -64,12 +64,12 @@ describe('CommandPalette node insertion', () => {
     useGraphStore.setState({ addNode, executeGraph });
     render(<ReactFlowProvider><CommandPalette /></ReactFlowProvider>);
     fireEvent.keyDown(document, { key: 'k', metaKey: true });
-    const search = screen.getByRole('textbox');
+    const search = screen.getByRole('combobox');
     fireEvent.change(search, { target: { value: 'unmatched-task-938475' } });
     expect(screen.getByRole('status')).toHaveTextContent('No commands or nodes match');
     fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
     expect(search).toHaveValue(''); expect(search).toHaveFocus();
-    expect(screen.getByRole('button', { name: 'Toggle Run History' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Toggle run history' })).toBeInTheDocument();
     expect(addNode).not.toHaveBeenCalled(); expect(executeGraph).not.toHaveBeenCalled();
   });
 });

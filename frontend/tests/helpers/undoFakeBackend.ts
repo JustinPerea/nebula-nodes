@@ -170,6 +170,14 @@ export class FakeNebula {
       return this.answer(`cluster ${made.map((node) => node.id).join(',')}`, 200, { idMap,
         nodes: FakeNebula.syncNodes({ nodes: made, edges: [] }), edges: wires });
     }
+    const named = /^\/api\/graph\/node\/(n\d+)\/label$/.exec(path);
+    if (named && method === 'PUT') {
+      const node = this.nodes.get(named[1]);
+      if (!node) return this.answer(`label ${named[1]}`, 404, { detail: 'No such node.' });
+      node.label = String(body.label);
+      this.broadcast();
+      return this.answer(`label ${named[1]}`, 200, { status: 'updated' });
+    }
     const one = /^\/api\/graph\/node\/(n\d+)$/.exec(path);
     if (one && method === 'DELETE') {
       if (!this.nodes.has(one[1])) return this.answer(`delete ${one[1]}`, 404, { detail: 'No such node.' });

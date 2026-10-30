@@ -77,7 +77,7 @@ describe('Toolbar execution lifecycle', () => {
     render(<><GraphFileActions /><Toolbar /></>);
 
     fireEvent.click(screen.getByRole('button', { name: 'Canvas actions' }));
-    const save = screen.getByRole('button', { name: 'Save graph' });
+    const save = screen.getByRole('button', { name: 'Save canvas' });
     expect(save).toBeDisabled();
     expect(save).toHaveAttribute('title', 'You can save the canvas when the run finishes.');
     fireEvent.click(save);
@@ -101,7 +101,7 @@ describe('Toolbar execution lifecycle', () => {
 
     render(<><GraphFileActions /><Toolbar /></>);
     fireEvent.click(screen.getByRole('button', { name: 'Canvas actions' }));
-    const save = screen.getByRole('button', { name: 'Save graph' });
+    const save = screen.getByRole('button', { name: 'Save canvas' });
     expect(save).toBeDisabled();
     expect(save).toHaveAttribute(
       'title',
@@ -140,7 +140,7 @@ describe('Toolbar execution lifecycle', () => {
 
     render(<><GraphFileActions /><Toolbar /></>);
     fireEvent.click(screen.getByRole('button', { name: 'Canvas actions' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Save graph' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save canvas' }));
 
     await waitFor(() => expect(graphFileMocks.saveToFile).toHaveBeenCalledWith(
       [expect.objectContaining({

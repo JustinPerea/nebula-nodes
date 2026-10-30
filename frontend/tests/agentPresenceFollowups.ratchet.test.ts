@@ -1131,8 +1131,10 @@ const CONTROL_ALLOWLIST: Record<string, string> = {
 const CONTROL_AT: Array<{ file: string; tag: string; at: string; reason: string }> = [
   { file: 'components/CommandPalette.tsx', tag: 'input', at: 'className="command-palette__input"',
     reason: "the palette's search field: Enter runs the chosen command through run(), which refuses an acting command with refuseCanvasEdit (round23Surfaces' CommandPalette)" },
-  { file: 'components/CommandPalette.tsx', tag: 'button', at: 'onClick={() => run(cmd)} {...(act ?? {})} disabled={disabled}',
-    reason: "a palette row: a command that edits (`cmd.acts`) spreads lock.act() and takes its `disabled` (`act ? act.disabled : …`, which G can't follow), and run() refuses it with refuseCanvasEdit; round23Surfaces' CommandPalette renders them locked" },
+  { file: 'components/CommandPalette.tsx', tag: 'button', at: 'onClick={() => run(cmd)} {...act} aria-disabled={disabled || undefined}',
+    reason: "a palette row (an option of the listbox, PR #205 review 2 lines LOW-1): a command that edits (`cmd.acts`) spreads lock.act() and takes its `disabled` as aria-disabled (`actDisabled`, which G can't follow), and run() refuses it with refuseCanvasEdit; round23Surfaces' CommandPalette renders them locked" },
+  { file: 'components/CommandPalette.tsx', tag: 'div', at: 'className="command-palette__list" id={listId}',
+    reason: "the palette's listbox (PR #205 review 2 lines LOW-1): a role and a name only, no handler; its rows are the options above, each run through run()" },
 ];
 
 /** Components that take the lock themselves for the gated handler they are

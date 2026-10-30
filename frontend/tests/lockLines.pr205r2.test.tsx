@@ -122,11 +122,13 @@ describe('GM r2 item 3: the command palette', () => {
       'Save canvas': 'You can save the canvas when the run finishes.',
       'Load canvas': 'You can load a canvas when the run finishes.',
     };
-    const rows = screen.getAllByRole('button').filter((button) => button.className.includes('command-palette__item'));
+    const rows = screen.getAllByRole('option');
     expect(rows.slice(0, 3).map((row) => row.querySelector('.command-palette__item-title')?.textContent)).toEqual(Object.keys(lines));
     for (const [name, line] of Object.entries(lines)) {
       const row = rows.find((button) => button.querySelector('.command-palette__item-title')?.textContent === name)!;
-      expect(row).toBeDisabled();
+      // Review 2 (lines LOW-1): locked, not native disabled, so the arrows reach it.
+      expect(row).toHaveAttribute('aria-disabled', 'true');
+      expect(row).not.toBeDisabled();
       expect(row).not.toHaveAttribute('title');
       expect(row).toHaveAccessibleName(name);
       expect(row).toHaveAccessibleDescription(line);
@@ -226,8 +228,8 @@ describe('review 1 NIT-4: Canvas actions gives each control its true reason', ()
     fireEvent.click(screen.getByRole('button', { name: 'Canvas actions' }));
     const panel = screen.getByRole('region', { name: 'Canvas actions' });
     expect(within(panel).getByRole('status')).toHaveTextContent(`You can save, load, import or clear the canvas ${when}.`);
-    for (const [name, verb] of [['Save graph', 'save the canvas'], ['Load graph', 'load a canvas'],
-      ['Import CLI graph', 'import a canvas'], ['Clear canvas…', 'clear the canvas']]) {
+    for (const [name, verb] of [['Save canvas', 'save the canvas'], ['Load canvas', 'load a canvas'],
+      ['Import CLI canvas', 'import a canvas'], ['Clear canvas…', 'clear the canvas']]) {
       expect(within(panel).getByRole('button', { name })).toHaveAttribute('title', `You can ${verb} ${when}.`);
     }
   });

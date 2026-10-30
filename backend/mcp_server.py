@@ -1210,7 +1210,7 @@ def upload_file(path: str, position: dict[str, float] | None = None,
 
 @_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=False), waits=True)
 def load_graph_file(path: str, ctx: Context | None = None) -> dict[str, Any]:
-    """Open a graph file (`nebula load <file>`) as the person's Load graph
+    """Open a graph file (`nebula load <file>`) as the person's Load canvas
     does: a .nebula or .json, or a .nebula.zip bundle, whose files Nebula
     restores into its output folder, with the graph's links pointing at them.
 

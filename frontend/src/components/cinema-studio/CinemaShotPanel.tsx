@@ -268,7 +268,10 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
               || (motionHandoff?.status !== 'ready' && (shotRunning || status !== 'done' || !previewUrl || readOnly))}
             {...(readOnly && motionHandoff?.status !== 'ready' ? lock.mark : {})}
             title={readOnly && motionHandoff?.status !== 'ready'
-              ? lockedAction(lock, {}, { verb: OFFLINE_VERBS.sendToMotion }).title : undefined}
+              ? lockedAction(lock, {}, { verb: OFFLINE_VERBS.sendToMotion }).title
+              // GM PR #205 r4 item 5: an import holds it with its line.
+              : isImportingGraph && motionHandoff?.status !== 'ready' && motionHandoff?.status !== 'pending'
+                ? lockLine(RUN_LOCK_VERBS.sendToMotion, 'import') : undefined}
             aria-busy={motionHandoff?.status === 'pending' || undefined}>
             {motionHandoff?.status === 'ready' ? 'View video node'
               : motionHandoff?.status === 'pending' ? 'Connecting video node…'

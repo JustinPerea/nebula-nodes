@@ -693,3 +693,152 @@ is no picker, the line shows, and no wire is drawn (shot).
     restorefail, refused (answered in 830 ms), giveuprefused, agentedit,
     agenteditafter, palette, wiredrop, duplicate (Cmd+D, Cmd+V) and giveup.
   - 17 shots in scratchpad/lock-lines/shots2/; md5 `uniq -d` is empty.
+
+# Round 3 (GM r3 and r4, review 2)
+
+## 16. CI: the MCP-SETUP run-lock paragraph
+
+CI failed on c85a6ae8 in the backend doc sweep: the "A run this window
+started" bullet said "wire" and called the connected add locked. It's
+rewritten with neither word, wrapped at 76, and covers what changed below
+(the key presses' lines, the palette rows, the import and Create waits, and
+that adding a node or connecting isn't locked by a run).
+
+## 17. GM r3: names and the palette
+
+- "Canvas" everywhere the person reads "Graph" for this canvas: the Canvas
+  actions heading and group, "Save canvas", "Load canvas", "Import CLI
+  canvas" (and its title), the shortcuts sheet's "Run canvas", "Fit view"
+  and its "Canvas" group, the unsaved-edits dialog's “Load canvas”. The
+  agent-visible "Load graph" in mcp_server.py, the CLI help, skills/nebula
+  and MCP-SETUP now say "Load canvas".
+- The palette's panel rows are in sentence case ("Toggle node library").
+- `RUN_LOCK_VERBS.runCanvas` is "run the canvas"; `runGraph` and `addNode`
+  are gone. `sendToMotion` is new.
+- `canvasWait(state)` in lib/runLock picks the wait that locks a canvas
+  command: this tab's run or its start, then Create's launch
+  ("preparing"), then an import. `canvasWaitLine` says its line. The
+  palette's rows, the Cmd keys and the toolbar all read it, so a row locked
+  by an import says "You can run the canvas when the import finishes."
+- The keyboard highlight is the selected-row surface
+  (`--sr-surface-control-active`), and a locked row keeps it: the disabled
+  rule greys its text only.
+- Review 2 lines LOW-1: the input is a combobox (`aria-controls`,
+  `aria-activedescendant`, `aria-autocomplete="list"`), the list a listbox
+  with groups, each row an option with `aria-selected`. A locked row is
+  `aria-disabled`, never native disabled, so ArrowUp/Down reach it and its
+  line is read; Enter on it does nothing (`run` refuses `enabled === false`).
+
+## 18. GM r4 item 1: an agent's edit during a Delete is its own step
+
+`carrySyncedCopy` still writes the agent's synced copy into the Delete's
+step, so the restore brings back what Nebula had. It also records the
+delete-time copy and the synced one, and `placeForeignUnder` makes that
+change a step of its own (with `foreignEditStep`, as `applyHeldCopies`
+does) directly under the Delete's step once the Delete answers. The first
+Undo restores the node with the agent's edit; the next says "Undid Codex’s
+edit." and puts back what the person had; the person's older steps never
+revert the agent's edit without saying so. A sync of this tab's own (an
+echo) makes no agent step. Live: `agentstep`.
+
+## 19. GM r4 item 2: a restored node is selected
+
+The person's own Undo that brings nodes back selects them and only them, as
+a paste does, whatever the step's copy held.
+
+## 20. GM r3 item 4: the agent's connections
+
+The carried copy brings its connections as Nebula synced them, when the
+copy is someone else's (an agent's). A connection stays as the step had it
+when it isn't CLI-backed, when this tab is still writing it, or when either
+end wasn't in that sync. `snapshotNext` drops a connection whose other end
+is gone by the Undo. This replaces section 11's "Not carried".
+
+## 21. GM r4 item 3: the connected add during a run
+
+Adding a node and connecting two are each allowed during a run, so the
+wire drop's picker opens and its add works (section 14's refusal and its
+line are gone, in Canvas, ConnectionPopup and `addNodeAndConnect`). An
+import still refuses it. For agents nothing changes: the backend's
+`/api/graph/node-and-connect` never had a run lock. Live: `wiredrop3`.
+
+## 22. GM r4 items 4–5
+
+- Cmd+Enter, Cmd+S and Cmd+O during a wait say the palette's lines ("You
+  can save the canvas when the run finishes."), on the canvas and from the
+  Canvas actions panel. Cmd+Enter now always prevents the browser default.
+- The toolbar Run's title while a run is starting is "You can run the
+  canvas when the run finishes." (review 2 NIT-2).
+- Send to motion during an import: "You can send it to motion when the
+  import finishes."
+
+## 23. Review 2, held Undo
+
+- **MEDIUM-1:** the confirm loop carries the synced copy before it drops the
+  typing never sent, and the copy keeps a rename still on its way
+  (`labelsInFlight` at the copy's time and at the carry). Tested on both
+  paths (held Undo, Undo after the answer) in both sync orders.
+- **LOW-1 (P11):** "Try Undo again" stays only while its Delete's step is
+  next in line. `giveUpStaysTrue` (store middleware) takes it off when a
+  newer step lands above, outside a Delete's own answer, so a late ok never
+  finds it there. A replaced canvas takes it off through the same rule, so
+  `forgetStepsInFlight` no longer resets it.
+- **NIT-2:** tests for M4 (P7, the agent's move), M7, M9, M10, M12 and M14.
+  M7 isn't reachable since round 18 (a Delete's nodes leave the canvas when
+  it's pressed), so its test sets that state by hand; the walk stays as the
+  guard. M12 is reached through the stale-canvas refusal while a cut-off
+  write answers. M14 is now the code itself: no reset, the middleware does
+  it. M18 is equivalent (section 9).
+
+## 24. Left for the wording batch
+
+Not changed here; listed for GM's batch with file:line: the Delete failure
+line ("Couldn't delete the node." then the reason: main's #198 path,
+graphStore.ts `deletionHeading`), round 2's questions 1–4, the waits
+outside the "You can … when …" shape (cinema uploads, "Wait for this result
+to sync with the backend", the project-open wait), the "graph" error
+headings of Save/Load/Import canvas, "View video node" during an import,
+and the picker's silent press during an import.
+
+## Round 3 proof
+
+- **tsc -b and lint:** clean. vite build plus the budget: passed (445,066
+  bytes raw, 136,710 gzip).
+- **Full vitest (4 workers, final code):** 8,678 of 8,679 passed, Errors 0.
+  The one failure, modalStyles.round11, timed out under load and passes
+  alone (4/4).
+  - The first full run had 6 unhandled errors: Toolbar.test's store mock
+    lacked `sayRunLocked`, which the Canvas actions keys now call. The mock
+    has it, and the test asserts both lines for each wait.
+- **Full isolated backend:** 12,237 passed, 71 skipped, 0 failed (45 min).
+- **New tests on c85a6ae8** fail where they test new behaviour:
+  canvasKeys 4/5, heldUndo.pr205r3 16/25, heldUndoGiveUp 2/7, lockLines
+  14/15, Toolbar's three key cases, connectedStep's "during a run". The
+  ones that pass on the base are the controls, MEDIUM-1's "gone sync first"
+  order (the bug was the other order), and guards over code the base
+  already had or that only a mutant breaks (M7, M9, M10, M12, P7, the
+  other-end and both-ends connection cases, the stack rewrite).
+- **Mutation:** 46 mutants on each guard's own files (--retry=2, clean
+  baseline). The first pass killed 38. The 8 survivors:
+  - `!isOwnEcho` in the agent-step check was redundant (`copy.foreign` is
+    only ever someone else's) and is gone. Its replacement mutant (no
+    `copy.foreign` check) is equivalent: `foreignEditStep` makes no step
+    without an origin.
+  - The own-copy edge mutant was equivalent as written; the carry is now
+    an `if (copy.foreign)` block, and that mutant is killed.
+  - The `there` rule and the snapshot's dangling-connection filter: new
+    tests (both ends deleted together; the other end checked on the canvas
+    at the Undo, before any sync). Both killed.
+  - The carried copy's `selected` was dead (the restore selects) and is
+    gone.
+  - "Keep the line while the step is on top": new test, killed.
+  - The late-ok-not-on-top takeover was redundant with `giveUpStaysTrue`
+    (the line goes when the newer step lands) and is gone.
+  - The store's run refusal returning: new connectedStep test, killed.
+  - Rerun of the changed guards: 10 of 11 killed, 1 equivalent (above).
+- **Live** (8797/5797, isolated, canary to 8001 refused, 0 requests reached
+  8000–8010/5173): 11/11 on the final code. palette3, paletteimport, cmds,
+  wiredrop3 (picked "GPT Image 1": added and connected during the run),
+  deletefail, agentstep ("Restored the node.", selected alone, then
+  "Undid Codex’s edit." with the typed value back here and in Nebula).
+  - 6 shots in scratchpad/lock-lines/shots3/; md5 `uniq -d` is empty.

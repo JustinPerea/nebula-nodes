@@ -14,8 +14,8 @@ describe('KeyboardShortcuts', () => {
     render(<KeyboardShortcuts />);
     fireEvent.keyDown(document.body, { key: '?', shiftKey: true });
     const dialog = screen.getByRole('dialog', { name: 'Keyboard shortcuts' });
-    expect(dialog).toHaveTextContent('Fit the graph');
-    expect(dialog).toHaveTextContent('Run graph');
+    expect(dialog).toHaveTextContent('Fit view');
+    expect(dialog).toHaveTextContent('Run canvas');
     expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
     fireEvent.keyDown(dialog, { key: 'Escape' });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();

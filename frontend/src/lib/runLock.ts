@@ -28,7 +28,6 @@ export const RUN_LOCK_VERBS = {
   generateShot: 'generate this shot',
   /** Cinema's toolbar "Generate all" (GM PR #205 r1 answer 3). */
   generateShots: 'generate the shots',
-  runGraph: 'run the graph',
   forgetRun: 'forget this run',
   arrangeCanvas: 'arrange the canvas',
   loadCanvas: 'load a canvas',
@@ -40,10 +39,11 @@ export const RUN_LOCK_VERBS = {
   redo: 'redo',
   /** Cmd+V during a run (GM PR #205 r2 item 4). */
   paste: 'paste',
-  /** A wire dropped on empty canvas during a run (GM PR #205 r2 item 5). */
-  addNode: 'add a node',
-  /** The command palette's rows (GM PR #205 r2 item 3). */
+  /** The command palette's rows and the toolbar's Run (GM PR #205 r2 item 3,
+   * r3 item 1: one name everywhere). */
   runCanvas: 'run the canvas',
+  /** Cinema's "Send to motion" during an import (GM PR #205 r4 item 5). */
+  sendToMotion: 'send it to motion',
 } as const;
 export type RunLockVerb = typeof RUN_LOCK_VERBS[keyof typeof RUN_LOCK_VERBS];
 
@@ -105,4 +105,28 @@ export function deferredRunLine(names: readonly string[], running: boolean): str
   const named = names.filter((name) => name.trim().length > 0);
   const what = named.length > 0 ? nodeNameList([...named]) : 'it';
   return running ? `You can run ${what} when the current run finishes.` : `You can run ${what} now.`;
+}
+
+/** What the canvas waits for now, as the toolbar's files group reads it:
+ * this tab's run (or its start), then Create's launch, then an import. */
+export interface CanvasWaitState {
+  isExecuting: boolean;
+  runStarting?: boolean;
+  isImportingGraph: boolean;
+  createLaunchingIds: readonly string[];
+}
+export function canvasWait(state: CanvasWaitState): LockWait | null {
+  if (state.isExecuting || state.runStarting) return 'run';
+  if (state.createLaunchingIds.length > 0) return 'preparing';
+  if (state.isImportingGraph) return 'import';
+  return null;
+}
+
+/** GM PR #205 r3 item 2, r4 item 4: the line a canvas command locked by a
+ * wait says, from the same table wherever it shows (a palette row's own
+ * text, or the key press's place): "You can save the canvas when the
+ * import finishes." Null when nothing waits. */
+export function canvasWaitLine(verb: string, state: CanvasWaitState): string | null {
+  const wait = canvasWait(state);
+  return wait ? lockLine(verb, wait) : null;
 }

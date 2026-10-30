@@ -237,8 +237,11 @@ describe('Cinema motion handoff', () => {
       { id: 'a', prompt: 'Waiting', output: { status: 'idle' } }] } } } }] });
     const view = render(panel()); expect(screen.getByRole('button', { name: 'Send to motion' })).toBeDisabled();
     await sendCinemaShotToMotion('n1', 'a'); expect(mocks.fetch).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Send to motion' })).not.toHaveAttribute('title');
     act(() => useGraphStore.setState({ nodes: [source()], isImportingGraph: true })); view.rerender(panel());
     expect(screen.getByRole('button', { name: 'Send to motion' })).toBeDisabled();
+    // GM PR #205 r4 item 5: the import's line.
+    expect(screen.getByRole('button', { name: 'Send to motion' })).toHaveAttribute('title', 'You can send it to motion when the import finishes.');
     await sendCinemaShotToMotion('n1', 'a'); expect(mocks.fetch).not.toHaveBeenCalled();
   });
 

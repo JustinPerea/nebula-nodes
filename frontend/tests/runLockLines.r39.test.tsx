@@ -108,10 +108,10 @@ describe('GM r39 item 2: each run-locked control says its own verb', () => {
     const panel = screen.getByRole('region', { name: 'Canvas actions' });
     const by = (name: string) => within(panel).getByRole('button', { name });
     expect(by('Arrange nodes')).toHaveAttribute('title', 'You can arrange the canvas when the run finishes.');
-    expect(by('Load graph')).toHaveAttribute('title', 'You can load a canvas when the run finishes.');
-    expect(by('Import CLI graph')).toHaveAttribute('title', 'You can import a canvas when the run finishes.');
+    expect(by('Load canvas')).toHaveAttribute('title', 'You can load a canvas when the run finishes.');
+    expect(by('Import CLI canvas')).toHaveAttribute('title', 'You can import a canvas when the run finishes.');
     expect(by('Clear canvas…')).toHaveAttribute('title', 'You can clear the canvas when the run finishes.');
-    expect(by('Save graph')).toHaveAttribute('title', 'You can save the canvas when the run finishes.');
+    expect(by('Save canvas')).toHaveAttribute('title', 'You can save the canvas when the run finishes.');
     expect(within(panel).getByRole('status').textContent).toBe('You can save, load, import or clear the canvas when the run finishes.');
     expect(document.body.innerHTML).not.toMatch(/Wait for the active run/);
   });
@@ -158,14 +158,8 @@ describe('GM r39 item 2: each run-locked control says its own verb', () => {
     expect(runLockedWiresLine(2)).toBe('You can delete the 2 connections when the run finishes.');
   });
 
-  it('adding a connected node while this tab runs: "You can add “Text Input” when the run finishes."', async () => {
-    const said: string[] = [];
-    useGraphStore.setState({ nodes: [textNode('n1', 'Brief', false)], edges: [], isExecuting: true, notify: (text: string) => { said.push(text); } } as never);
-    await useGraphStore.getState().addNodeAndConnect('text-input', { x: 0, y: 0 },
-      { source: 'n1', sourceHandle: 'text', target: 'new', targetHandle: 'text', newNodeIs: 'target' });
-    // GM PR #205 r1 answer 2: the lock line alone, no add heading before it.
-    expect(said).toEqual(['You can add “Text Input” when the run finishes.']);
-  });
+  // GM PR #205 r4 item 3: adding a connected node is no longer run-locked
+  // (lockLines.pr205r3 sends it during a run).
 
   it('no person UI says the old line, and every run lock names its own line', () => {
     const root = resolve(__dirname, '../src');

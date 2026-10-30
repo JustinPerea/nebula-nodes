@@ -17,8 +17,9 @@ import { COMMAND_PALETTE_OPEN_EVENT, isPaletteHotkey, paletteOpenRequestApplies 
 import { claimIntent } from '../lib/heldIntents';
 import { returnFocusOnSlip } from '../lib/modalFocus';
 import { ModalPortal } from './ModalPortal';
-import { refuseCanvasEdit, useCanvasLock } from '../lib/canvasLock';
+import { refuseCanvasEdit, useCanvasLock, type ActProps } from '../lib/canvasLock';
 import { composing } from '../lib/imeComposing';
+import { canvasWait } from '../lib/runLock';
 import '../styles/command-palette.css';
 
 const NO_NODE_FIELDS: readonly string[] = Object.freeze([]);
@@ -45,6 +46,8 @@ export function CommandPalette() {
   // take the canvas lock, as every other surface does.
   const lock = useCanvasLock();
   const paletteId = useId();
+  const listId = `${paletteId}-list`;
+  const rowId = (index: number) => `${paletteId}-row-${index}`;
   // Fit view includes an open proposal's ghosts.
   const fitCanvasView = useFitCanvasView();
   const addNode = useGraphStore((s) => s.addNode);
@@ -53,6 +56,7 @@ export function CommandPalette() {
   // A run waiting for its inputs counts as starting (review 15, M-B).
   const runStarting = useGraphStore((s) => s.runStarting);
   const isImportingGraph = useGraphStore((s) => s.isImportingGraph);
+  const launching = useGraphStore((s) => s.createLaunchingIds);
   const canSave = useGraphStore(canSaveGraph);
   const canLoad = useGraphStore(canLoadGraph);
   const nodeCount = useGraphStore((s) => s.nodes.length);
@@ -140,11 +144,11 @@ export function CommandPalette() {
         canRun: nodeCount > 0 && !isExecuting && !runStarting && !isImportingGraph,
         canSave,
         canLoad,
-        running: isExecuting || runStarting,
+        wait: canvasWait({ isExecuting, runStarting, isImportingGraph, createLaunchingIds: launching }),
         canvasNodes,
         focusNode,
       }),
-    [open, addNodeAtCenter, executeGraph, fitCanvasView, enterCreateView, togglePanel, nodeCount, isExecuting, runStarting, isImportingGraph, canSave, canLoad, canvasNodes, focusNode]
+    [open, addNodeAtCenter, executeGraph, fitCanvasView, enterCreateView, togglePanel, nodeCount, isExecuting, runStarting, isImportingGraph, launching, canSave, canLoad, canvasNodes, focusNode]
   );
 
   // And kept in step with `open` after every render.
@@ -294,8 +298,9 @@ export function CommandPalette() {
       if (at < 0) return;
       e.preventDefault();
       const step = e.key === 'ArrowDown' ? 1 : -1;
-      let next = at + step;
-      while (next >= 0 && next < items.length && items[next].disabled) next += step;
+      const next = at + step;
+      // Review 2 of PR #205 (lines LOW-1): a locked row is reached too
+      // (aria-disabled, never native disabled), so its line is read.
       if (next < 0 || next >= items.length) return;
       items[next].focus();
       return;
@@ -322,6 +327,18 @@ export function CommandPalette() {
         <input
           ref={inputRef}
           className="command-palette__input"
+          // Review 2 of PR #205 (lines LOW-1): the combobox pattern. Focus stays
+          // in the field and the active row is its active descendant, so a
+          // screen reader reads the row reached by the arrows, a locked one's
+          // line too (its aria-describedby).
+          {...(mode === 'agent' ? {} : {
+            role: 'combobox',
+            'aria-label': 'Search commands and nodes',
+            'aria-expanded': flat.length > 0,
+            'aria-controls': listId,
+            'aria-autocomplete': 'list' as const,
+            'aria-activedescendant': flat.length > 0 ? rowId(safeSelected) : undefined,
+          })}
           value={query}
           placeholder={mode === 'agent' ? 'Describe what to build, then Enter…' : 'Search commands and nodes…'}
           onChange={(e) => {
@@ -335,28 +352,31 @@ export function CommandPalette() {
             Enter sends to the agent · Esc to go back
           </div>
         ) : (
-          <div className="command-palette__list">
+          <div className="command-palette__list" id={listId} {...(flat.length > 0 ? { role: 'listbox', 'aria-label': 'Commands and nodes' } : {})}>
             {flat.length === 0 && <div className="command-palette__empty">
               <p role="status">No commands or nodes match “{query}”.</p>
               <p>Try a provider, model name or task such as “animate a logo”.</p>
               <button type="button" className="command-palette__search-reset" onClick={() => { setQuery(''); setSelected(0); inputRef.current?.focus(); }}>Clear search</button>
             </div>}
             {groups.map((g) => (
-              <div key={g.group} className="command-palette__group">
-                <div className="command-palette__group-label">{g.group}</div>
+              <div key={g.group} className="command-palette__group" role="group" aria-labelledby={`${paletteId}-group-${g.group}`}>
+                <div className="command-palette__group-label" id={`${paletteId}-group-${g.group}`}>{g.group}</div>
                 {g.items.map((cmd) => {
                   const index = indexById.get(cmd.id) ?? 0;
                   const isSel = index === safeSelected;
-                  const act = cmd.acts ? lock.act({ disabled: cmd.enabled === false }) : null;
-                  const disabled = act ? act.disabled : cmd.enabled === false;
+                  const { disabled: actDisabled, ...act }: ActProps = cmd.acts ? lock.act({ disabled: cmd.enabled === false }) : { disabled: false, title: undefined };
+                  const disabled = cmd.acts ? Boolean(actDisabled) : cmd.enabled === false;
                   // GM PR #205 r2 item 3: the run's lock line is the row's own
                   // text (a canvas lock's title, when there is one, wins).
-                  const lockLine = disabled && !act?.title ? cmd.lockLine : undefined;
+                  const lockLine = disabled && !act.title ? cmd.lockLine : undefined;
                   const lockId = lockLine ? `${paletteId}-lock-${index}` : undefined;
                   return (
                     <button
                       key={cmd.id}
+                      id={rowId(index)}
                       type="button"
+                      role="option"
+                      aria-selected={isSel}
                       className={`command-palette__item${isSel ? ' command-palette__item--selected' : ''}${disabled ? ' command-palette__item--disabled' : ''}`}
                       // The lock line below (GM PR #205 r2 item 3) describes the row, so
                       // its name is the title alone (not read twice); act's spread has none.
@@ -364,9 +384,7 @@ export function CommandPalette() {
                       aria-describedby={lockId}
                       onMouseEnter={() => setSelected(index)}
                       onFocus={() => setSelected(index)}
-                      onClick={() => run(cmd)}
-                      {...(act ?? {})}
-                      disabled={disabled}
+                      onClick={() => run(cmd)} {...act} aria-disabled={disabled || undefined}
                     >
                       <span className="command-palette__item-title">{cmd.title}</span>
                       {lockLine ? (

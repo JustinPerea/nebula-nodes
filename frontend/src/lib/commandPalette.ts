@@ -1,7 +1,7 @@
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { CATEGORY_LABELS, matchesSearch, modelSearchText, providerLabel } from './modelDiscovery';
 import { SHORTCUTS_OPEN_EVENT } from './keyboardShortcuts';
-import { RUN_LOCK_VERBS, runFinishesLine } from './runLock';
+import { RUN_LOCK_VERBS, lockLine, type LockWait } from './runLock';
 
 export type PaletteGroup = 'Actions' | 'View' | 'Agent' | 'Canvas' | 'Nodes';
 
@@ -49,6 +49,10 @@ export interface PaletteContext {
   canLoad: boolean;
   /** This tab's run is going or starting: Run, Save and Load say so. */
   running?: boolean;
+  /** What the canvas waits for (lib/runLock's canvasWait): a locked Run,
+   * Save or Load says that wait's line, an import's or Create's preparation
+   * as well as a run's (GM PR #205 r3 item 2). `running` means 'run'. */
+  wait?: LockWait | null;
   /** Existing nodes on the canvas, for search-and-focus. */
   canvasNodes: Array<{ id: string; label: string }>;
   focusNode: (id: string) => void;
@@ -57,17 +61,18 @@ export interface PaletteContext {
 type PanelKey = 'library' | 'inspector' | 'settings' | 'chat' | 'assets' | 'history';
 
 const PANELS: Array<[PanelKey, string]> = [
-  ['library', 'Node Library'],
-  ['inspector', 'Inspector'],
-  ['settings', 'Settings'],
-  ['chat', 'Chat'],
-  ['assets', 'Assets'],
-  ['history', 'Run History'],
+  ['library', 'node library'],
+  ['inspector', 'inspector'],
+  ['settings', 'settings'],
+  ['chat', 'chat'],
+  ['assets', 'assets'],
+  ['history', 'run history'],
 ];
 
-/** A row the run locks says its lock line (GM PR #205 r2 item 3). */
+/** A row a wait locks says its lock line (GM PR #205 r2 item 3, r3 item 2). */
 function runLocked(ctx: PaletteContext, enabled: boolean, verb: string): Pick<PaletteCommand, 'lockLine'> {
-  return ctx.running && !enabled ? { lockLine: runFinishesLine(verb) } : {};
+  const wait = ctx.wait ?? (ctx.running ? 'run' : null);
+  return wait && !enabled ? { lockLine: lockLine(verb, wait) } : {};
 }
 
 export function buildCommands(ctx: PaletteContext): PaletteCommand[] {

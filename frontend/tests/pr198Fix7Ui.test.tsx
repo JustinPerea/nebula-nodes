@@ -89,8 +89,8 @@ describe('M2: the run lock comes first, and carries no following mark', () => {
     render(<Toolbar />);
     fireEvent.click(screen.getByRole('button', { name: 'Canvas actions' }));
     // GM r39 item 2: Load, Import, Clear and Auto-layout, each in GM's words.
-    for (const [name, line] of [['Load graph', 'You can load a canvas when the run finishes.'],
-      ['Import CLI graph', 'You can import a canvas when the run finishes.'],
+    for (const [name, line] of [['Load canvas', 'You can load a canvas when the run finishes.'],
+      ['Import CLI canvas', 'You can import a canvas when the run finishes.'],
       ['Clear canvas', 'You can clear the canvas when the run finishes.'],
       ['Arrange', 'You can arrange the canvas when the run finishes.']] as const) {
       const b = screen.getAllByRole('button').find((candidate) => candidate.textContent?.startsWith(name));

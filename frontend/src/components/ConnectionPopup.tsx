@@ -3,7 +3,6 @@ import { useReactFlow } from '@xyflow/react';
 import { ChevronDown, ChevronRight, X } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
 import { useGraphStore } from '../store/graphStore';
-import { RUN_LOCK_VERBS, runFinishesLine } from '../lib/runLock';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { PORT_COLORS } from '../lib/portCompatibility';
 import { CATEGORY_COLORS } from '../constants/ports';
@@ -194,14 +193,9 @@ export function ConnectionPopup() {
     // Round 16 (L3): adding a step is an edit, so offline the items are
     // disabled and a press only pulses the banner, never an error line.
     if (refuseEditWhileOffline()) return;
-    // A run that started while it was open (GM PR #205 r2 item 5): the picker
-    // closes and the lock line shows where the key presses' lines do.
-    if (!busy.current && useGraphStore.getState().isExecuting) {
-      hideConnectionPopup();
-      useGraphStore.getState().sayRunLocked(runFinishesLine(RUN_LOCK_VERBS.addNode));
-      return;
-    }
-    if (busy.current || useGraphStore.getState().isExecuting || useGraphStore.getState().isImportingGraph) return;
+    // GM PR #205 r4 item 3: a run going doesn't lock the connected add (its
+    // add and its connect are each allowed during a run); an import does.
+    if (busy.current || useGraphStore.getState().isImportingGraph) return;
     const graph = useGraphStore.getState();
     const source = graph.nodes.find((item) => item.id === nodeId);
     if (!source || (nextStep && ((nextStep.sourceDefinitionId && source.data.definitionId !== nextStep.sourceDefinitionId)

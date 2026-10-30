@@ -19,7 +19,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useGraphStore, wiresDeletedWith } from '../store/graphStore';
-import { RUN_LOCK_VERBS, runFinishesLine } from '../lib/runLock';
+import { RUN_LOCK_VERBS, canvasWaitLine } from '../lib/runLock';
 import { useUIStore } from '../store/uiStore';
 import { useIsValidConnection } from '../hooks/useIsValidConnection';
 import { CANVAS_EDGE_TYPES, CANVAS_NODE_TYPES } from './canvasTypes';
@@ -523,14 +523,9 @@ export function Canvas() {
     if (target.closest('.react-flow__handle') || target.closest('.react-flow__node')) return;
     const elementsAtDrop = document.elementsFromPoint(point.x, point.y);
     if (elementsAtDrop.some((el) => el.closest('.react-flow__handle') || el.closest('.react-flow__node'))) return;
-    // GM PR #205 r2 item 5: during this tab's run the picker doesn't open (a
-    // list of locked items is a dead end); the drop says the lock line where
-    // the key presses' lines show. Drawing a wire between two nodes isn't
-    // run-locked (onConnect), so the drag itself goes on.
-    if (useGraphStore.getState().isExecuting) {
-      useGraphStore.getState().sayRunLocked(runFinishesLine(RUN_LOCK_VERBS.addNode));
-      return;
-    }
+    // GM PR #205 r4 item 3: the picker opens during a run too. Adding a node
+    // and connecting two are each allowed while a run goes, so the connected
+    // add is as well (no lock, no line).
 
     showConnectionPopup({
       position: point,
@@ -678,10 +673,15 @@ export function Canvas() {
         return;
       }
 
-      // Ctrl+Enter — Run graph
-      if (isCtrlOrCmd && event.key === 'Enter' && !isExecuting) {
+      // Ctrl+Enter: Run canvas. GM PR #205 r4 item 4: while a wait holds
+      // it (this tab's run or its start, Create's launch, an import), the
+      // press says the palette's line in the key presses' place.
+      if (isCtrlOrCmd && event.key === 'Enter') {
         event.preventDefault();
-        executeGraph();
+        const graph = useGraphStore.getState();
+        const line = canvasWaitLine(RUN_LOCK_VERBS.runCanvas, { ...graph, createLaunchingIds: [] });
+        if (line) graph.sayRunLocked(line);
+        else executeGraph();
         return;
       }
 

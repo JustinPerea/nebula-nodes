@@ -179,7 +179,7 @@ The server exposes these tools for building and running (see
   before running a node priced from its input's size on a file of yours
   (see [Spending limits](#spending-limits)). An in-app chat's turn reads
   only its own workspace, and the read follows no links.
-- `load_graph_file`: opens a graph file (`path`) as the person's Load graph
+- `load_graph_file`: opens a graph file (`path`) as the person's Load canvas
   does (`nebula load <file>`, Q123 a): a plain `.nebula` or `.json`, or a
   `.nebula.zip` bundle (a graph plus its files). A bundle streams to `POST
   /api/outputs/restore?rewriteLinks=true` with your own headers: its files
@@ -189,7 +189,7 @@ The server exposes these tools for building and running (see
   empty, with a warning). Under the 16 MB save limit the file replaces the
   open project's canvas (make a new project first, `new_project`, unless the
   person asked for that). A file over the limit opens as a new project named
-  after the file, as the person's Load graph does (Q120): the import is
+  after the file, as the person's Load canvas does (Q120): the import is
   first asked to refuse it (`refuseOverSaveLimit`), the project is made as
   `new_project` makes one, and the file loads there (`newProjectForFile`,
   which loads only into an empty project); the project that was open is left
@@ -218,13 +218,26 @@ The server exposes these tools for building and running (see
   delete's answer, saying nothing meanwhile, then brings the nodes back
   with their connections, on the canvas and in Nebula's graph, with the
   usual "Restored the node." (Redo deletes them again), as a Cmd+Z after
-  the delete has landed does. If Nebula refuses the delete, the nodes come
-  back with the delete's own line and the waiting Cmd+Z says nothing more.
-  If the restore is refused or fails, or the delete gets no answer within
-  15 s, the canvas says "Nebula couldn’t bring back “X”. Try Undo again."
-  (the names as the cards read then; several nodes by the usual list, four
-  or more counted); after the 15 s give-up, a late answer to the delete
-  never brings the nodes back by itself: the next Cmd+Z does. A Cmd+Z the person presses before another step has reached Nebula
+  the delete has landed does. Nodes an Undo brings back come back
+  selected, replacing the selection, as a paste does. Either way it brings
+  them back as Nebula last had them: your edit to a node (or a connection
+  you made or took off) that Nebula took while the person's delete was on
+  its way comes back with it, a connection only while the node at its
+  other end is there; the person's own typing and rename not yet sent stay
+  theirs. Your edit is its own undo step under the delete, as Nebula had
+  them (your edit, then the delete): the person's next Cmd+Z after the
+  restore undoes only your edit, with the usual "Undid <agent>’s edit.",
+  and none of their older steps reverts it. If Nebula refuses the delete,
+  the nodes come back with the delete's own line and the waiting Cmd+Z
+  says nothing more. If the restore is refused or fails, or the delete
+  gets no answer within 15 s, the canvas says "Nebula couldn’t bring back
+  “X”. Try Undo again." (the names as the cards read then; several nodes
+  by the usual list, four or more counted). After the 15 s give-up, a late
+  answer to the delete never brings the nodes back by itself: the next
+  Cmd+Z does. The line goes as soon as it stops being true: a newer step
+  above the delete (Cmd+Z would undo that step), a late answer with the
+  delete no longer on top, or another canvas. A Cmd+Z the person presses
+  before another step has reached Nebula
   waits for Nebula's answer, then undoes it (a clear, an upload once its
   node is on the canvas, an accepted proposal, a model picked on an
   OpenRouter or Replicate node; a step Nebula refused undoes nothing, and
@@ -408,7 +421,7 @@ The server exposes these tools for building and running (see
   The one exception is `load_graph_file`'s import into the empty project it
   made for a file over the limit (`newProjectForFile`). An
   edit that makes it smaller goes through, and the person's own edits and
-  Load graph are never refused for size. A tab's save over the limit gets
+  Load canvas are never refused for size. A tab's save over the limit gets
   the same 413 fields with its `detail` unchanged ("Project snapshot exceeds
   the 16 MiB limit"). CLI: `nebula project size [<id>|current]` (`--json`
   prints this result).
@@ -4008,32 +4021,38 @@ A call you can make next is code, in backticks with its own quotes
 (`` `get_run('run_ab12')` ``).
 
 The canvas blocks the same things: the shot's × is disabled, titled "Stop
-the run first." or "You can remove “Shot 2” when it finishes."; the scene's Delete (the
-context menu, the Inspector, and the selection toolbar when only rendering
-scenes are selected) is disabled, titled "Stop the run first." or "You can delete
-“Scene” when it finishes." ("Stop the runs first." / "You can delete them
-when the running shots finish." for several scenes).
+the run first." or "You can remove “Shot 2” when it finishes."; the scene's
+Delete (the context menu, the Inspector, and the selection toolbar when only
+rendering scenes are selected) is disabled, titled "Stop the run first." or
+"You can delete “Scene” when it finishes." ("Stop the runs first." / "You
+can delete them when the running shots finish." for several scenes).
 
 How a delete or an undo reads depends on whose run it is:
 
 - **A run this window started** locks every delete, undo and redo on the
-  canvas until it ends (the toolbar's are disabled, each titled by its
-  own verb: "You can delete it when the run finishes."). The Delete key, the menu's Delete and Undo/Redo
-  are never silent: a selection of only rendering scenes reads GM's scene
-  line ("Couldn’t delete “Scene”. “Shot 2” is still running. Stop the run
-  first."), an undo that would remove a rendering shot reads "Couldn’t undo.
-  It would remove “Shot 2”, which is still running. Stop the run first.",
-  and anything else reads the lock's own line alone: "You can delete
-  “Brief” when the run finishes.", "You can delete “A”, “B” and “C” when the
-  run finishes.", "You can delete the connection when the run finishes.",
-  "You can undo when the run finishes." ("You can redo …"). Cmd+D and
-  Cmd+V say theirs in the same place: "You can duplicate “Brief” when the
-  run finishes.", "You can paste when the run finishes." A wire dropped on
-  empty canvas opens no node picker; the drop reads "You can add a node
-  when the run finishes." (drawing a wire between two nodes isn't locked).
-  The command palette's Run canvas, Save canvas and Load canvas stay listed,
-  greyed, each with its line as its own text ("You can run the canvas when
-  the run finishes."). Nothing is sent.
+  canvas until it ends (the toolbar's are disabled, each titled by its own
+  verb: "You can delete it when the run finishes."). The Delete key, the
+  menu's Delete and Undo/Redo are never silent: a selection of only
+  rendering scenes reads GM's scene line ("Couldn’t delete “Scene”. “Shot 2”
+  is still running. Stop the run first."), an undo that would remove a
+  rendering shot reads "Couldn’t undo. It would remove “Shot 2”, which is
+  still running. Stop the run first.", and anything else reads the lock's
+  own line alone: "You can delete “Brief” when the run finishes.", "You can
+  delete “A”, “B” and “C” when the run finishes.", "You can delete the
+  connection when the run finishes.", "You can undo when the run finishes."
+  ("You can redo …"). Nothing is sent for any of these. The other keys say
+  theirs in the same place: Cmd+D "You can duplicate “Brief” when the run
+  finishes.", Cmd+V "You can paste when the run finishes.", and, as the
+  command palette's rows say them, Cmd+Enter "You can run the canvas when
+  the run finishes.", Cmd+S "You can save the canvas when the run finishes."
+  and Cmd+O "You can load a canvas when the run finishes." (an import or
+  Create's launch says its own wait the same way: "… when the import
+  finishes."). The palette's Run canvas, Save canvas and Load canvas stay
+  listed, greyed, each with its line as its own text. Adding a node is not
+  locked by a run: from the library, the palette, or a connection dropped on
+  empty canvas (its node picker opens as with no run, and the node comes
+  connected), and connecting two nodes isn't either; your own adds and
+  connections aren't refused during a run.
 - **A run another window (or an agent) started** doesn't lock the canvas.
   The Delete key over a selection deletes the rest and keeps the scene and
   its connections: "Deleted 3 nodes. “Scene” wasn't deleted because “Shot 2” is
@@ -4209,7 +4228,7 @@ nebula project new "Logo ideas"     # start a new, empty project and open it
 nebula project rename current "Logo ideas, round 2"   # prints the command that renames it back
 nebula project show <id>            # a saved project unopened: nodes, connections, cover, runs (get_project)
 nebula project size                 # its size against the 16 MB save limit, largest parts first (project_size)
-nebula load "Big campaign.nebula.zip"  # a .nebula, .json or bundle, as Load graph opens it (load_graph_file)
+nebula load "Big campaign.nebula.zip"  # a .nebula, .json or bundle, as Load canvas opens it (load_graph_file)
 nebula clear                        # refused when the canvas has nodes
 nebula clear --force                # clears it anyway; the person can undo it
 nebula trash list                   # Recently deleted boards, characters, Styles, projects

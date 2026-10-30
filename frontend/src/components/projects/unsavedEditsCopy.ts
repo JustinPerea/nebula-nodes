@@ -20,7 +20,7 @@ export function keptConfirmLine(projectName: string): string {
  * trimmed), and GM's line 1 for a file too large to reopen is gone (GM: "The
  * Load graph line covers every case now"). */
 export function editsSavedLine(filename: string): string {
-  return `Your edits are saved as ${filename}. Open it with “Load graph” under “Canvas actions” in a new project to bring them back.`;
+  return `Your edits are saved as ${filename}. Open it with “Load canvas” under “Canvas actions” in a new project to bring them back.`;
 }
 
 /** GM's line 2 (2026-10-23), verbatim: the body of the held edits' screen
