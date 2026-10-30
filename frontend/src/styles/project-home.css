@@ -104,7 +104,9 @@ body.app-slava-restraint .project-home__rename-form button { display: grid; plac
 body.app-slava-restraint .project-home__rename-form button svg { width: 15px; height: 15px; }
 body.app-slava-restraint .project-home__rename-form button:hover:not(:disabled) { background: var(--sr-surface-control-hover); color: var(--sr-ink); }
 body.app-slava-restraint .project-home__card-actions { display: flex; flex-shrink: 0; gap: 2px; }
-body.app-slava-restraint .project-home__delete:hover:not(:disabled) { border-color: var(--sr-danger-border); background: var(--sr-danger-soft); color: var(--sr-danger); }
+/* Fix round 5 of PR #200 (GM r7 answer 2): Delete hovers to the danger red, never orange. */
+body.app-slava-restraint .project-home__delete:hover:not(:disabled) { border-color: var(--sr-danger-edge); background: var(--sr-danger-tint); color: var(--sr-danger-ink, #ff887d); }
+body.app-slava-restraint .project-home__delete:active:not(:disabled) { color: var(--sr-danger-ink-hover, #ff9a91); }
 body.app-slava-restraint .project-home__trash { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--sr-edge); }
 body.app-slava-restraint .project-home__trash-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 body.app-slava-restraint .project-home__trash-toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 8px 0 4px; border: 0; border-radius: var(--sr-radius-control); background: transparent; color: var(--sr-ink); font: inherit; }
@@ -126,8 +128,12 @@ body.app-slava-restraint .project-home__trash-empty:hover:not(:disabled),
 body.app-slava-restraint .project-home__confirm button:hover:not(:disabled) { background: var(--sr-surface-control-hover); }
 body.app-slava-restraint .project-home__confirm { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
 body.app-slava-restraint .project-home__confirm-prompt { color: var(--sr-ink-light); font-size: 12px; }
-body.app-slava-restraint .project-home__confirm .project-home__danger { border-color: var(--sr-danger); background: var(--sr-danger); color: #fff; font-weight: 600; }
-body.app-slava-restraint .project-home__confirm .project-home__danger:hover:not(:disabled) { border-color: var(--sr-danger); background: var(--sr-danger); filter: brightness(1.08); }
+/* GM r13: the trigger that arms a Delete forever or an Empty turns red on hover. */
+body.app-slava-restraint .project-home__trash button.project-home__trigger--danger:hover:not(:disabled) { border-color: var(--sr-danger-edge); background: var(--sr-danger-tint); color: var(--sr-danger-ink, #ff887d); }
+body.app-slava-restraint .project-home__trash button.project-home__trigger--danger:active:not(:disabled) { color: var(--sr-danger-ink-hover, #ff9a91); }
+/* GM r8 (fix round 6 of PR #200): the red fill with near-black ink, never the orange. */
+body.app-slava-restraint .project-home__confirm .project-home__danger { border-color: var(--sr-danger-fill, #ff887d); background: var(--sr-danger-fill, #ff887d); color: var(--sr-on-danger, #1f1f1f); font-weight: 600; }
+body.app-slava-restraint .project-home__confirm .project-home__danger:hover:not(:disabled) { border-color: var(--sr-danger-fill-hover, #ff9a91); background: var(--sr-danger-fill-hover, #ff9a91); }
 /* Critically damped-ish spring (k 380, c 30, m 1): ~2% overshoot, settles in 420ms. */
 body.app-slava-restraint .project-home__toast { --project-home-spring: linear(0, 0.049, 0.163, 0.305, 0.452, 0.588, 0.705, 0.801, 0.876, 0.931, 0.97, 0.995, 1.011, 1.019, 1.022, 1.022, 1.02, 1.017, 1.014, 1.011, 1.008, 1.005, 1.003, 1.002, 1); display: flex; align-items: center; gap: 4px; max-width: min(var(--notice-max-w, 560px), calc(100vw - 32px)); padding: 6px 6px 6px 16px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-node-media-radius); background: var(--sr-canvas-elevated); color: var(--sr-ink); font-size: 13px; box-shadow: 0 12px 32px rgb(0 0 0 / 0.35); animation: project-home-toast-in 420ms var(--project-home-spring) both; }
 /* GM, #198 r8: a toast wraps (up to 3 lines) and never cuts a sentence. */
@@ -136,8 +142,11 @@ body.app-slava-restraint .project-home__toast-undo { flex-shrink: 0; min-height:
 body.app-slava-restraint .project-home__toast-close { display: grid; place-items: center; flex-shrink: 0; width: 32px; height: 32px; border: 0; border-radius: var(--sr-radius-control); background: transparent; color: var(--sr-ink-meta); }
 body.app-slava-restraint .project-home__toast-close:hover { background: var(--sr-surface-control-hover); color: var(--sr-ink); }
 body.app-slava-restraint .project-home__toast-close svg { width: 14px; height: 14px; }
+/* Fix round 5 of PR #200 (GM r7): every toast in the notice region springs
+   in within its own slot, a scale and a fade, never sliding across a
+   neighbour (the open kept-notes list sits right below some). */
 @keyframes project-home-toast-in {
-  from { opacity: 0; transform: translateY(16px) scale(0.96); }
+  from { opacity: 0; transform: scale(0.96); }
   30% { opacity: 1; }
   to { opacity: 1; transform: none; }
 }
@@ -227,7 +236,7 @@ body.app-slava-restraint .project-home__sr-only { position: absolute; width: 1px
   body.app-slava-restraint .project-home__preview-open,
   body.app-slava-restraint .project-home__trash-toggle svg,
   body.app-slava-restraint .project-home__trash-actions button { transition: none; }
-  body.app-slava-restraint .project-home__toast { animation: none; }
+  body.app-slava-restraint .project-home__toast { animation: notice-fade-in 180ms ease-out both; /* opacity only (GM r9 answer 2) */ }
   body.app-slava-restraint .workspace-overlays--home .workspace-dock-panel.panel { animation: none; }
   body.app-slava-restraint .workspace-overlays--home .workspace-dock-panel.panel.panel--exiting { animation: workspace-dock-fade-out 120ms ease forwards; }
 }

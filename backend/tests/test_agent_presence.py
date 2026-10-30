@@ -225,7 +225,7 @@ def api(monkeypatch):
     presence = AgentPresence()
     sent: list[dict] = []
 
-    async def capture(data):
+    async def capture(data, **kw):
         sent.append(data)
 
     monkeypatch.setattr(main_module, "cli_graph", graph)

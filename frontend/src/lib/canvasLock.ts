@@ -3,6 +3,7 @@ import { followingSwitch, refuseEditWhileFollowing, useFollowingSwitch, waitToOp
 import { isBackendOffline, refuseEditWhileOffline } from './backendConnection';
 import { OFFLINE_MARK, OFFLINE_NEUTRAL, offlineReason, useBackendOffline, type OfflineVerb } from './useBackendOffline';
 import { RUN_LOCK_REASON } from './cinemaScene';
+import { offlineDisabledReason } from './errorCopy';
 
 /**
  * Round 22 of PR #195 (GM - Design, blocker A): the one read-only state
@@ -38,11 +39,22 @@ export interface CanvasLock {
    * (following) or the offline banner. Empty when unlocked. */
   mark: Record<string, ''>;
   /** A control that acts: `disabled` (its own reasons too), the marks, and
-   * while following GM's tooltip in place of its own. `run`: the run lock
-   * holds it now (the caller reads isExecuting, or a wider condition such as
-   * a run that is starting, so a card that draws no run lock never
-   * re-renders when a run starts); its line then wins. */
-  act(own?: { disabled?: boolean; title?: string }, options?: RunLock): ActProps;
+   * while following GM's tooltip in place of its own. `offline` (a verb, or
+   * true for none): offline, GM's "You can <verb> when Nebula reconnects."
+   * in place of its own (fix round 1 of PR #200, answer 1). `run` (PR #198):
+   * the run lock holds it now (the caller reads isExecuting, or a wider
+   * condition such as a run that is starting, so a card that draws no run
+   * lock never re-renders when a run starts); its line then wins. */
+  act(own?: LockOwn, options?: RunLock): ActProps;
+  /** The tooltip `act` gives, for a control that isn't disabled by it (a
+   * read-only field). */
+  title(own?: LockOwn): string | undefined;
+}
+
+export interface LockOwn {
+  disabled?: boolean;
+  title?: string;
+  offline?: string | true;
 }
 
 /** The run lock's hold on one control (M2): `runTitle` when a run holds it
@@ -66,14 +78,16 @@ export interface ActProps {
  * (OFFLINE_NEUTRAL: an orange Generate, an Export), as offlineAction does.
  * Following plus offline keeps the following tooltip (GM round 22, A).
  */
-export function lockedAction(lock: CanvasLock, own: { disabled?: boolean; title?: string } = {},
+export function lockedAction(lock: CanvasLock, own: LockOwn = {},
   options: { verb?: OfflineVerb; neutral?: boolean; offlineTooltip?: boolean } & RunLock = {}): ActProps & { 'data-offline-neutral'?: '' } {
   const props: ActProps & { 'data-offline-neutral'?: '' } = lock.act(own, options);
   if (!lock.offline || options.run) return props;
   if (options.neutral) props[OFFLINE_NEUTRAL] = '';
   // Create's and Remotion's actions keep their own title offline for now
-  // (GM deferred their offline tooltips: `offlineTooltip: false`).
-  if (!lock.following && options.offlineTooltip !== false) props.title = offlineReason(options.verb);
+  // (GM deferred their offline tooltips: `offlineTooltip: false`). A
+  // control that names its own offline verb (PR #200's `own.offline`)
+  // keeps the line act gave it.
+  if (!lock.following && options.offlineTooltip !== false && !(own.offline && !options.verb)) props.title = offlineReason(options.verb);
   return props;
 }
 
@@ -83,15 +97,17 @@ export function canvasLockOf(following: FollowingSwitch | null, offline: boolean
   if (following) mark[FOLLOWING_MARK] = '';
   if (offline) mark[OFFLINE_MARK] = '';
   const locked = Boolean(following) || offline;
+  const title = (own: LockOwn = {}) => (following ? waitToOpenTooltip(following.projectName)
+    : offline && own.offline ? offlineDisabledReason(own.offline === true ? undefined : own.offline) : own.title);
   return {
-    locked, following, offline, mark,
+    locked, following, offline, mark, title,
     act: (own = {}, options = {}) => (options.run
-      // The run's line first, alone (M2, N1).
+      // The run's line first, alone (PR #198 M2, N1).
       ? { disabled: true, title: options.runTitle ?? RUN_LOCK_REASON }
       : {
         ...mark,
         disabled: locked || Boolean(own.disabled),
-        title: following ? waitToOpenTooltip(following.projectName) : own.title,
+        title: title(own),
       }),
   };
 }

@@ -516,7 +516,7 @@ def api(tmp_path, monkeypatch, person):
     journal = CanvasEventJournal()
     sent: list[dict] = []
 
-    async def capture(data):
+    async def capture(data, **kw):
         sent.append(data)
 
     monkeypatch.setattr(main_module, "cli_graph", graph)

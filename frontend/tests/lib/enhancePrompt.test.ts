@@ -23,6 +23,6 @@ describe('enhancePrompt errors', () => {
 
   it("shows the person gate refusal as GM's line (Q116 a: every person-only refusal)", async () => {
     apiFetch.mockResolvedValue(json({ detail: 'Only the person can do this', code: 'person_required' }, 403));
-    await expect(enhancePrompt('x')).rejects.toThrow("This change needs your OK, and this tab isn't connected as you. Open the link Nebula printed when it started, then try again.");
+    await expect(enhancePrompt('x')).rejects.toThrow("This change needs your OK, and this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.");
   });
 });

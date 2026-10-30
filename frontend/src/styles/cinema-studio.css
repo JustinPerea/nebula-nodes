@@ -284,6 +284,8 @@ body.app-slava-restraint .cinema-shared-controls__ref-link {
   pointer-events: none;
 }
 
+/* Review 2 M-1 (GM 2026-10-28 answer 2): the dashed outline stays faint;
+   the label is the normal ink, so the disabled grey reads dimmer. */
 body.app-slava-restraint .cinema-shared-controls__ref-add,
 body.app-slava-restraint .cinema-shot-panel__ref-add {
   width: 44px;
@@ -291,7 +293,7 @@ body.app-slava-restraint .cinema-shot-panel__ref-add {
   border: 1px dashed var(--sr-edge-strong);
   border-radius: 3px;
   background: none;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink);
   cursor: pointer;
   font-size: 18px;
 }
@@ -347,7 +349,7 @@ body.app-slava-restraint .cinema-shared-controls__swatch-add {
   border: 1px dashed var(--sr-edge-strong);
   border-radius: 3px;
   background: none;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink);
   cursor: pointer;
   font-size: 14px;
 }
@@ -370,9 +372,13 @@ body.app-slava-restraint .cinema-shared-controls__chip {
   font-size: 11px;
 }
 
+/* The selected film look: the shared selected style, the Cinema node's
+   category colour (the view sets --node-category-color), never the accent
+   (review 2 L-4, GM 2026-10-28 answer 6). */
 body.app-slava-restraint .cinema-shared-controls__chip--active {
-  border-color: var(--sr-accent);
-  color: var(--sr-accent);
+  border-color: var(--node-category-color, var(--sr-ink));
+  box-shadow: inset 0 0 0 1px var(--node-category-color, var(--sr-ink));
+  color: var(--sr-ink-bold, #fff);
 }
 
 body.app-slava-restraint .cinema-shared-controls__sliders {
@@ -448,7 +454,14 @@ body.app-slava-restraint .cinema-shots-rail__move {
 
 body.app-slava-restraint .cinema-shots-rail__move:disabled { opacity: var(--sr-disabled-opacity, 0.5); cursor: default; }
 
-body.app-slava-restraint .cinema-shots-rail__shot--selected { border-color: var(--sr-accent); }
+/* The selected shot (fix round 1 of PR #200, GM's note): the shared
+   selected style, the node's category colour as a selected node card has it
+   (slava-restraint .model-node--selected), never the accent. The rail sets
+   --node-category-color from the Cinema node's category. */
+body.app-slava-restraint .cinema-shots-rail__shot--selected {
+  border-color: var(--node-category-color, var(--sr-ink));
+  box-shadow: 0 0 0 1px var(--node-category-color, var(--sr-ink));
+}
 body.app-slava-restraint .cinema-shots-rail__shot--dragging { opacity: 0.5; }
 
 body.app-slava-restraint .cinema-shots-rail__thumb {
@@ -502,7 +515,7 @@ body.app-slava-restraint .cinema-shots-rail__caption {
 body.app-slava-restraint .cinema-shots-rail__remove {
   background: none;
   border: none;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink);
   cursor: pointer;
   font-size: 14px;
   padding: 0 4px;
@@ -510,9 +523,10 @@ body.app-slava-restraint .cinema-shots-rail__remove {
   min-height: 24px;
 }
 
-body.app-slava-restraint .cinema-shots-rail__remove:hover:not(:disabled) { color: var(--sr-danger, #c0392b); }
-/* A shot that is rendering keeps its × (disabled, its title says why). */
-body.app-slava-restraint .cinema-shots-rail__remove:disabled { opacity: var(--sr-disabled-opacity-strong, 0.45); cursor: not-allowed; }
+/* A destructive hover is the Delete red, never the accent orange (fix round 5
+   of PR #200, review 5 N-4, GM r7 answer 2). */
+/* GM r12: taking a shot out is an edit the canvas Undo puts back, so neutral. */
+body.app-slava-restraint .cinema-shots-rail__remove:hover:not(:disabled) { color: var(--sr-ink-bold); }
 
 body.app-slava-restraint .cinema-shots-rail__add {
   flex: 0 0 auto;
@@ -520,7 +534,7 @@ body.app-slava-restraint .cinema-shots-rail__add {
   border: 1px dashed var(--sr-edge-strong);
   border-radius: 4px;
   background: none;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink);
   cursor: pointer;
   font: inherit;
   font-size: 12px;
@@ -627,7 +641,11 @@ body.app-slava-restraint .cinema-shot-panel__variation {
 body.app-slava-restraint button.cinema-shot-panel__variation { cursor: pointer; }
 body.app-slava-restraint button.cinema-shot-panel__variation:hover { border-color: var(--sr-ink-meta); }
 
-body.app-slava-restraint .cinema-shot-panel__variation--active { border-color: var(--sr-accent); }
+/* The selected variation: the shared selected style, as the shot card (review 2 L-4). */
+body.app-slava-restraint .cinema-shot-panel__variation--active {
+  border-color: var(--node-category-color, var(--sr-ink));
+  box-shadow: 0 0 0 1px var(--node-category-color, var(--sr-ink));
+}
 
 body.app-slava-restraint .cinema-shot-panel__variations-control {
   display: flex;
@@ -841,15 +859,9 @@ body.app-slava-restraint .cinema-shot-panel__action:disabled {
   cursor: default;
 }
 
-/* Round 23 (GM blocker A): locked while following or offline, Generate shot
-   takes the neutral disabled look, never orange (as the selection toolbar's
-   Run). */
-body.app-slava-restraint .cinema-shot-panel__action--primary[data-following-disabled],
-body.app-slava-restraint .cinema-shot-panel__action--primary[data-offline-disabled] {
-  background: var(--sr-surface-control, rgba(255, 255, 255, 0.04));
-  border-color: var(--sr-edge);
-  color: var(--sr-ink);
-}
+/* Disabled for any reason (following, offline, a run limit, a missing
+   reference), Generate shot takes the one neutral disabled look
+   (styles/disabled-buttons.css, GM r24 item 2), never orange. */
 
 body.app-slava-restraint .cinema-shot-panel__motion {
   display: flex;
@@ -935,6 +947,13 @@ body.app-slava-restraint .cinema-reference-upload__actions button:hover {
   border-color: var(--sr-accent);
 }
 
+/* GM r13: taking an upload out of the scene is an edit, so neutral, never
+   the accent Retry hovers. */
+body.app-slava-restraint .cinema-reference-upload__actions .cinema-upload__remove:hover {
+  border-color: var(--sr-edge-strong);
+  color: var(--sr-ink-bold);
+}
+
 body.app-slava-restraint .cinema-reference-upload__actions button:focus-visible {
   outline: var(--sr-focus-outline);
   outline-offset: var(--sr-focus-offset);
@@ -965,14 +984,18 @@ body.app-slava-restraint .cinema-reference-upload__actions button:focus-visible 
    label at 55% of the ink, the outline fainter at 12%, no fill or accent.
    It replaces the dimming and the neutral look (one level, never both), so
    the orange Generate, the bright arrows and the prompt can't read as live.
-   Checkboxes, swatches and sliders keep the fieldset's dimming above. */
+   Checkboxes, swatches and sliders keep the fieldset's dimming above.
+   Since the merge with PR #200 it reads #200's shared tokens
+   (styles/disabled-buttons.css): the one grey label, and the disabled edge
+   that is never brighter than an enabled one (GM 2026-10-28 answer 3, which
+   replaced the 12% outline). */
 body.app-slava-restraint .cinema-studio-view :is(button, textarea)[data-offline-disabled],
 body.app-slava-restraint .cinema-studio-view :is(button, textarea)[data-offline-disabled]:hover,
 body.app-slava-restraint .cinema-studio-view .cinema-offline-lock:disabled :is(button, select, textarea, input[type="text"], input[type="number"]),
 body.app-slava-restraint .cinema-studio-view .cinema-offline-lock:disabled :is(button, select, textarea, input[type="text"], input[type="number"]):hover {
   opacity: 1 !important;
-  color: color-mix(in srgb, var(--sr-ink) 55%, transparent) !important;
-  border-color: color-mix(in srgb, var(--sr-ink) 12%, transparent) !important;
+  color: var(--sr-disabled-ink, rgba(255, 255, 255, 0.55)) !important;
+  border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important;
   background: transparent !important;
   box-shadow: none !important;
   cursor: not-allowed !important;

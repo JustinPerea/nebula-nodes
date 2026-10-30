@@ -14,8 +14,9 @@ import { nodeNameList } from './errorCopy';
 export const DELETE_NO_ANSWER_REASON = "Nebula isn't answering. Make sure it's running, then try again.";
 
 export function deleteNoAnswerLine(names: string[]): string {
-  const what = nodeNameList(names);
-  return `Couldn't delete ${what}. ${DELETE_NO_ANSWER_REASON}`;
+  // The shared name list (errorCopy nodeNameList, GM 2026-10-27): same
+  // titles grouped with a count, "4 nodes" from 4.
+  return `Couldn't delete ${nodeNameList(names)}. ${DELETE_NO_ANSWER_REASON}`;
 }
 
 /**

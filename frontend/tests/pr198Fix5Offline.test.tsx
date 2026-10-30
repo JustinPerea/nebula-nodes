@@ -76,6 +76,10 @@ describe('GM: the offline reason for a disabled action', () => {
       'You can see run history when Nebula reconnects.',
       // GM, PR #200 r4 item 2 (PR #198 round 6).
       'You can rerun it when Nebula reconnects.',
+      // Run history's Retry and Recover (PR #200 fix round 3, GM's round 3
+      // answers), one list since the merge with #200.
+      'You can retry it when Nebula reconnects.',
+      'You can recover it when Nebula reconnects.',
     ]);
   });
 });
@@ -196,11 +200,14 @@ describe('GM: the Cinema studio is locked offline, and each control says why', (
 });
 
 describe('GM\'s merge check: each locked Cinema control looks locked', () => {
-  it('one rule: the label at 55% of the ink, the outline at 12%, no fill, no dimming on top', () => {
+  // Since the merge with PR #200: the label and outline are #200's shared
+  // tokens (the one grey, white at 0.55; the disabled edge, never brighter
+  // than an enabled one: GM 2026-10-28 answer 3 replaced the 12% outline).
+  it('one rule: the shared grey label, the disabled edge, no fill, no dimming on top', () => {
     const css = readFileSync(join(__dirname, '../src/styles/cinema-studio.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const rule = css.match(/\.cinema-studio-view :is\(button, textarea\)\[data-offline-disabled\][^{]*\{([^}]*)\}/)?.[1] ?? '';
-    expect(rule).toMatch(/color:\s*color-mix\(in srgb, var\(--sr-ink\) 55%, transparent\) !important/);
-    expect(rule).toMatch(/border-color:\s*color-mix\(in srgb, var\(--sr-ink\) 12%, transparent\) !important/);
+    expect(rule).toMatch(/color:\s*var\(--sr-disabled-ink, rgba\(255, 255, 255, 0\.55\)\) !important/);
+    expect(rule).toMatch(/border-color:\s*var\(--sr-disabled-edge, rgba\(255, 255, 255, 0\.06\)\) !important/);
     expect(rule).toMatch(/background:\s*transparent !important/);
     expect(rule).toMatch(/opacity:\s*1 !important/);
   });

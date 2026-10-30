@@ -82,9 +82,20 @@ export const OFFLINE_VERBS = {
   seeRunHistory: 'see run history',
   /** Run history's Rerun (GM, PR #200 r4 item 2). */
   rerun: 'rerun it',
+  /** Run history's Retry and Recover (PR #200 fix round 3, GM's round 3
+   * answers). */
+  retry: 'retry it',
+  recover: 'recover it',
 } as const;
 export type OfflineVerb = typeof OFFLINE_VERBS[keyof typeof OFFLINE_VERBS];
 export function offlineReason(verb?: OfflineVerb): string {
+  return reconnectsLine(verb);
+}
+
+/** The one place the line is built: offlineReason takes GM's listed verbs;
+ * errorCopy's offlineDisabledReason (PR #200) also takes the per-surface
+ * verbs #200 shipped ("add swatches", "send notes"). */
+export function reconnectsLine(verb?: string): string {
   return verb ? `You can ${verb} when Nebula reconnects.` : OFFLINE_RECONNECT_FALLBACK;
 }
 

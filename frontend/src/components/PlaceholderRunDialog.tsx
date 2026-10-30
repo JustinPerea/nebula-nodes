@@ -135,14 +135,14 @@ export function PlaceholderRunDialog({ model, changed = false, moved, onDone }: 
     const all = [...new Set([...track.moved, ...movedNow])];
     // Review 17: every line the update brings, in the body's order: the
     // nodes that moved, then a node joining or leaving (the left line); else the total.
-    const lines = [movedNow.length > 0 ? movedNodesLine(model.rows, all) : null,
+    const lines = [movedNow.length > 0 ? movedNodesLine(model.rows, all, model.canvasOrder) : null,
       model.leftLine !== track.model.leftLine ? model.leftLine : null].filter((line): line is string => Boolean(line));
     const says = lines.length > 0 ? lines.join(' ') : model.totalLine ?? '';
     seen = { last: current, model, changes: track.changes + 1, moved: all, says };
     setTrack(seen);
   }
   const { changes } = seen;
-  const movedLine = movedNodesLine(model.rows, [...(moved ?? []), ...seen.moved]);
+  const movedLine = movedNodesLine(model.rows, [...(moved ?? []), ...seen.moved], model.canvasOrder);
   // Before any click can land: a layout effect runs in the same task as the commit.
   // GM - Design, round 19 (verbatim): "focus moves to Cancel ONLY when the run
   // button's price changes in place": the button's own words, never the

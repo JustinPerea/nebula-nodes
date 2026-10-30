@@ -9,7 +9,7 @@ import { ScrollFade } from '../ScrollFade';
 import { ForgetRecoveryConfirm } from './ForgetRecoveryConfirm';
 import { FORGET_LABEL, FORGET_TITLE, forgetAriaLabel, recordNodeName, recoveryIdLabel } from '../../lib/worldLabsWaiting';
 import { FORGET_RECOVERY_HEADING } from '../../lib/api';
-import { failureMessage } from '../../lib/errorCopy';
+import { failureMessage, OFFLINE_RECOVER, OFFLINE_RERUN, OFFLINE_RETRY } from '../../lib/errorCopy';
 import { showNotice } from '../../lib/canvasNotice';
 import type { PaperSourceRecord } from '../../lib/paperSource';
 import {
@@ -23,7 +23,6 @@ import {
 import '../../styles/panels.css';
 import '../../styles/run-history.css';
 import { lockedAction, useCanvasLock } from '../../lib/canvasLock';
-import { OFFLINE_VERBS } from '../../lib/useBackendOffline';
 
 const STATUS_LABEL: Record<RunRecord['status'], string> = {
   running: 'Running',
@@ -119,7 +118,7 @@ export function RunHistoryPanel() {
           </button>
           <button
             type="button"
-            className="panel__header-action run-history__action"
+            className="panel__header-action run-history__action run-history__action--clear"
             onClick={clearRunHistory}
             disabled={runHistory.length === 0
               || isExecuting
@@ -172,6 +171,7 @@ export function RunHistoryPanel() {
                     {checkpoint.durable !== false && (
                       <button
                         type="button"
+                        className="run-history__forget"
                         onClick={() => setConfirmingForget({ runId: checkpoint.runId, nodeId: checkpoint.nodeId })}
                         // Review 7, L5: canvasLock's order (run, then
                         // following, then offline); GM, round 15 of PR #114's title.
@@ -262,11 +262,13 @@ export function RunHistoryPanel() {
                         }}
                         // L6 (GM r9 answer 3): one order, as the toolbar's:
                         // the run, then following, then offline (lib/canvasLock).
+                        // Offline, its own verb (PR #200 review 3 LOW-1; GM
+                        // #200 r4 item 2: "You can rerun it when Nebula reconnects.").
                         {...lockedAction(lock, { title: recoveryReplayReady
                           ? 'Resume this run from its saved checkpoint'
-                          : 'Run this again with the same nodes and settings' },
-                        // GM (#200 r4 item 2): "You can rerun it when Nebula reconnects."
-                        { verb: recoveryReplayReady || r.status === 'failed' ? undefined : OFFLINE_VERBS.rerun, run: isExecuting })}
+                          : 'Run this again with the same nodes and settings',
+                        offline: recoveryReplayReady ? OFFLINE_RECOVER : r.status === 'failed' ? OFFLINE_RETRY : OFFLINE_RERUN },
+                        { run: isExecuting })}
                         aria-label={recoveryReplayReady
                           ? `Recover ${runTriggerLabel(r.trigger)} run`
                           : r.status === 'failed'
@@ -280,9 +282,9 @@ export function RunHistoryPanel() {
                         <button
                           type="button"
                           className="run-history__replay"
-                          {...lockedAction(lock, { disabled: !latestSourceReady, title: latestSourceReady
+                          {...lockedAction(lock, { disabled: !latestSourceReady, offline: OFFLINE_RERUN, title: latestSourceReady
                             ? 'Run again with the same settings and the latest artwork from Paper'
-                            : 'Refresh or reconnect the Paper source first.' }, { verb: OFFLINE_VERBS.rerun, run: isExecuting })}
+                            : 'Refresh or reconnect the Paper source first.' }, { run: isExecuting })}
                           onClick={() => void rerunHistoryWithLatestPaperSource(r.id)}
                           aria-label={`Rerun ${runTriggerLabel(r.trigger)} with latest source`}
                         >Rerun with latest source</button>

@@ -221,10 +221,14 @@ body.app-slava-restraint .run-history__status--cancelled { color: var(--sr-ink-m
 body.app-slava-restraint .run-history__empty {
   color: var(--sr-ink-meta, rgba(0, 0, 0, 0.5));
 }
+/* GM r18 (PR #200 fix round 12): orange never frames a destructive action.
+   This box holds Forget ID (red), so it is neutral: the edge and surface of
+   the panel's other boxes, not the warning amber it had. Its title says
+   what it is. */
 body.app-slava-restraint .run-history__safeguards {
-  border: 1px solid color-mix(in srgb, var(--sr-warning, #f5c518) 40%, transparent);
-  background: color-mix(in srgb, var(--sr-warning, #f5c518) 10%, transparent);
-  color: var(--sr-ink, #1a1a1a);
+  border: 1px solid var(--sr-edge-strong, rgba(255, 255, 255, 0.12));
+  background: var(--sr-surface-control, rgba(0, 0, 0, 0.3));
+  color: var(--sr-ink, rgba(255, 255, 255, 0.92));
 }
 /* Review 14, L6: --sr-paper is defined nowhere, so its fallback put white
    text on a 72% white pill and Forget ID looked disabled online. It takes the
@@ -277,14 +281,14 @@ body:not(.app-slava-restraint) .run-history__empty {
   color: #777;
 }
 body:not(.app-slava-restraint) .run-history__safeguards {
-  border: 1px solid #66471f;
-  background: #2a2116;
-  color: #e8c99e;
+  border: 1px solid #383838;
+  background: #1e1e1e;
+  color: #d6d6d6;
 }
 body:not(.app-slava-restraint) .run-history__safeguards button {
-  border: 1px solid #765a35;
-  background: #342819;
-  color: #ffe1b8;
+  border: 1px solid #383838;
+  background: #242424;
+  color: #d6d6d6;
 }
 body:not(.app-slava-restraint) .run-history__replay {
   border: 1px solid #383838;
@@ -322,4 +326,27 @@ body:not(.app-slava-restraint) .run-history__action:disabled {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   margin: 0;
+}
+
+/* GM r13: Clear run history wipes the whole list, so red on hover. */
+body.app-slava-restraint .run-history__action--clear:hover:not(:disabled) {
+  background: var(--sr-danger-tint);
+  color: var(--sr-danger-ink, #ff887d);
+}
+
+body.app-slava-restraint .run-history__action--clear:active:not(:disabled) {
+  color: var(--sr-danger-ink-hover, #ff9a91);
+}
+
+/* Forget ID forgets a recovery ID Nebula can't get back: red on hover, as
+   the Settings key's Remove trigger (fix round 10 of PR #200, review 9
+   LOW-4; its confirm, ForgetRecoveryConfirm, is red too). */
+body.app-slava-restraint .run-history__safeguards button.run-history__forget:not(:disabled):hover {
+  border-color: var(--sr-danger-edge);
+  background: var(--sr-danger-tint);
+  color: var(--sr-danger-ink, #ff887d);
+}
+
+body.app-slava-restraint .run-history__safeguards button.run-history__forget:active:not(:disabled) {
+  color: var(--sr-danger-ink-hover, #ff9a91);
 }

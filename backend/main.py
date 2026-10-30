@@ -13,6 +13,7 @@ import copy
 import errno
 import functools
 import hashlib
+import inspect
 import json
 import logging
 import math
@@ -160,7 +161,7 @@ from services.canvas_events import (
     param_changes,
     parse_kinds,
 )
-from services.canvas_pins import ANOTHER_PROJECT, CanvasPins, PinError, pin_left, pin_summary
+from services.canvas_pins import ANOTHER_PROJECT, CanvasPins, PinError, event_text, pin_left, pin_resolved_summary, pin_summary
 from services.node_removals import RemovalLedger
 from services.agent_notes import AgentNotes, NoteError, note_summary
 from services import person_session
@@ -1361,13 +1362,42 @@ FENCE_BEFORE_ROUTE = "before-route"
 FENCE_IN_ROUTE = "in-route"
 
 
+# Set on a FENCE_BEFORE_ROUTE route by graph_write: its body starts with the
+# check (tests/test_agent_presence_followups.py walks every route for it).
+GRAPH_FENCE_RECHECK_ATTR = "__nebula_graph_fence_recheck__"
+
+
 def graph_write(endpoint: Any = None, *, checks_in_route: bool = False) -> Any:
     """Mark a route that changes the graph or starts work on the canvas. Put
-    it right under ``@app.post(...)`` (or put, delete): it sets an attribute
-    and returns the same function, so FastAPI reads the signature as before."""
+    it right under ``@app.post(...)`` (or put, delete).
+
+    A FENCE_IN_ROUTE route is returned as it is (it checks in the step that
+    writes). A FENCE_BEFORE_ROUTE route is wrapped so its body starts with
+    the check again (follow-up to PR #195, review 23 L-1): between the
+    middleware's check and the route body the event loop turns a few times,
+    and an agent's open waiting at its last await can commit a switch there.
+    The wrapper runs the check and then the body in the same synchronous step
+    (awaiting a coroutine runs it up to its first await), so a route that
+    writes before its first await, as the pin routes do, writes only to the
+    canvas its request was made for; a route that awaits first still checks
+    again in the step that writes. ``functools.wraps`` keeps the signature,
+    so FastAPI reads the route's parameters as before. Only async routes can
+    be marked: a sync one runs on a worker thread after an unknown wait."""
     def mark(function: Any) -> Any:
-        setattr(function, GRAPH_FENCE_ATTR, FENCE_IN_ROUTE if checks_in_route else FENCE_BEFORE_ROUTE)
-        return function
+        if checks_in_route:
+            setattr(function, GRAPH_FENCE_ATTR, FENCE_IN_ROUTE)
+            return function
+        if not inspect.iscoroutinefunction(function):
+            raise TypeError(f"graph_write needs an async route: {getattr(function, '__name__', function)!r}")
+
+        @functools.wraps(function)
+        async def fenced(*args: Any, **kwargs: Any) -> Any:
+            _check_workspace_revision()
+            return await function(*args, **kwargs)
+
+        setattr(fenced, GRAPH_FENCE_ATTR, FENCE_BEFORE_ROUTE)
+        setattr(fenced, GRAPH_FENCE_RECHECK_ATTR, True)
+        return fenced
     return mark(endpoint) if endpoint is not None else mark
 
 
@@ -3780,12 +3810,16 @@ class ConnectionManager:
         data.update(_filed_context(_execution_workspace_context.get()) or _workspace_context())
         await self.broadcast_raw(data)
 
-    async def broadcast_raw(self, data: dict[str, Any]) -> None:
+    async def broadcast_raw(self, data: dict[str, Any], *, others: dict[str, Any] | None = None) -> None:
+        """Send `data` to every socket; with `others`, only the person's canvas
+        sockets (a verified hello) get `data` and every other socket gets
+        `others` (review 14 LOW-1 of PR #200: the pins' person form)."""
         message = json.dumps(data)
+        other_message = message if others is None else json.dumps(others)
         disconnected: list[WebSocket] = []
         for connection in self.active_connections:
             try:
-                await connection.send_text(message)
+                await connection.send_text(message if connection in self.browser_connections else other_message)
             except Exception:
                 disconnected.append(connection)
         for conn in disconnected:
@@ -4000,6 +4034,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         # may still land, and a later sync shows it.
         await websocket.send_text(json.dumps({"type": "graphSync", **export, "bootId": BACKEND_BOOT_ID,
                                               "bootStartedAt": BACKEND_BOOT_STARTED_AT}))
+        # The agents' form until a verified hello promotes this socket (review 14 LOW-1).
         await websocket.send_text(json.dumps(_pins_message()))
         await _settle_proposal_updates()
         await websocket.send_text(json.dumps(_canvas_notes_message()))
@@ -4017,14 +4052,21 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 continue
             if manager.promote(websocket, frame.get("personToken")):
                 # Accept keys travel only to the person's canvas sockets.
+                # The tab also reads this proposalSync as "promoted": it is
+                # sent here, on a verified hello, and nowhere else, and it
+                # clears the tab's person hold and banner (GM r29 item 3 of
+                # PR #200; frontend lib/wsClient). personRequired below is the
+                # demote. Keep the two in step if this changes.
                 await websocket.send_text(json.dumps(_proposal_sync_message()))
                 await websocket.send_text(json.dumps(await _asset_proposal_sync_message()))
                 # Open question sets with their answer keys (Q125 item 1), same rule.
                 await _send_questions_sync(websocket)
+                # Now the person's canvas: their pins with registered variants kept.
+                await websocket.send_text(json.dumps(_pins_message(person=True)))
             else:
                 await websocket.send_text(json.dumps({
                     "type": "personRequired",
-                    "message": "This tab isn't connected as you, so it can't accept or reject proposals.",
+                    "message": "This tab isn’t connected as you, so it can’t accept or reject proposals.",
                 }))
     except WebSocketDisconnect:
         manager.disconnect(websocket)
@@ -6460,10 +6502,14 @@ async def get_canvas_events(request: Request) -> dict[str, Any]:
 
 # ---------- Pins: the person's notes for agents ----------
 
-def _pins_message() -> dict[str, Any]:
-    """The `canvasPins` WebSocket message for the active project (empty when unreadable)."""
+def _pins_message(*, person: bool = False) -> dict[str, Any]:
+    """The `canvasPins` WebSocket message for the active project (empty when unreadable).
+
+    `person=True` is the form for the person's canvas sockets only (a verified
+    hello): registered IVD variants kept (GM r23). Every other socket, an agent's
+    or a tab without the person token, gets the agents' form (review 14 LOW-1)."""
     try:
-        listing = canvas_pins.list()
+        listing = canvas_pins.list(person=person)
     except (PinError, ProjectStoreError):
         listing = {"projectId": None, "pins": []}
     return {"type": "canvasPins", **listing}
@@ -6471,7 +6517,7 @@ def _pins_message() -> dict[str, Any]:
 
 async def _broadcast_pins() -> None:
     try:
-        await manager.broadcast_raw(_pins_message())
+        await manager.broadcast_raw(_pins_message(person=True), others=_pins_message())
     except Exception:  # noqa: BLE001 - pins are already saved; a failed push heals on reconnect
         pass
 
@@ -6487,7 +6533,7 @@ def _journal_detached(pins: list[dict[str, Any]], reason: str) -> None:
         _journal(
             "pin.detached",
             node_id=node_id if isinstance(node_id, str) else None,
-            data={"pinId": pin.get("id"), "text": pin.get("text"), "anchor": pin.get("anchor"), "reason": reason},
+            data={"pinId": pin.get("id"), "text": event_text(pin.get("text")), "anchor": pin.get("anchor"), "reason": reason},
             summary=f"note {pin.get('id')} lost its node {node_id} ({reason}); it stays where the node was",
         )
 
@@ -6779,7 +6825,7 @@ def _reattach_removed_pins(records: list[dict[str, Any]], back: Mapping[str, str
         _journal(
             "pin.reattached",
             node_id=node_id if isinstance(node_id, str) else None,
-            data={"pinId": pin.get("id"), "text": pin.get("text"), "anchor": pin.get("anchor")},
+            data={"pinId": pin.get("id"), "text": event_text(pin.get("text")), "anchor": pin.get("anchor")},
             summary=f"note {pin.get('id')} is back on {node_id}: the undo put its node back",
             project_id=project_id,
         )
@@ -6944,15 +6990,35 @@ def _undo_extras_text(result: Mapping[str, Any]) -> str:
     return ("; ".join(parts) + ".") if parts else ""
 
 
+class PinRefusal(HTTPException):
+    """A pin route's refusal: ``detail`` for the person, and the PinError's
+    extra fields (``code``, byte counts) beside it for agents (GM r12 answer
+    3 of PR #200: the hidden-text refusal names note_hidden_too_long, the
+    raw byte count and the limit; the person's line never does)."""
+
+    def __init__(self, exc: PinError) -> None:
+        super().__init__(status_code=exc.status, detail=exc.detail)
+        self.extra = exc.extra
+
+
+@app.exception_handler(PinRefusal)
+async def pin_refusal(request, exc: PinRefusal):
+    return JSONResponse(status_code=exc.status_code, content={**exc.extra, "detail": exc.detail})
+
+
 def _pin_http_error(exc: PinError) -> HTTPException:
-    return HTTPException(status_code=exc.status, detail=exc.detail)
+    return PinRefusal(exc)
 
 
 @app.get("/api/canvas/pins")
 async def list_canvas_pins() -> dict[str, Any]:
-    """Notes the person pinned for agents in the open project (open first, newest first)."""
+    """Notes the person pinned for agents in the open project (open first, newest first).
+
+    GM r23: the person's canvas reads the shown form (a registered
+    ideographic variant kept); anyone else, agents, `nebula pins`, MCP and
+    the channel, reads agents' form, without any variation selector."""
     try:
-        return canvas_pins.list()
+        return canvas_pins.list(person=_is_person_request())
     except PinError as exc:
         raise _pin_http_error(exc) from exc
 
@@ -6993,7 +7059,7 @@ async def create_canvas_pin(body: dict[str, Any]) -> dict[str, Any]:
     _journal(
         "pin.added",
         node_id=anchor.get("nodeId"),
-        data={"pinId": pin["id"], "text": pin["text"], "anchor": anchor},
+        data={"pinId": pin["id"], "text": event_text(pin["text"]), "anchor": anchor},
         summary=pin_summary(pin),
         project_id=project_id,
     )
@@ -7015,7 +7081,7 @@ async def delete_canvas_pin(pin_id: str) -> dict[str, Any]:
     _journal(  # before any await, tagged with the write's project (see create_canvas_pin)
         "pin.removed",
         node_id=(pin.get("anchor") or {}).get("nodeId"),
-        data={"pinId": pin_id, "text": pin.get("text")},
+        data={"pinId": pin_id, "text": event_text(pin.get("text"))},
         summary=f"deleted the note {pin_id}",
         project_id=project_id,
     )
@@ -7043,8 +7109,8 @@ async def resolve_canvas_pin(pin_id: str, body: dict[str, Any]) -> dict[str, Any
     _journal(  # before any await, tagged with the write's project (see create_canvas_pin)
         "pin.resolved",
         node_id=anchor.get("nodeId"),
-        data={"pinId": pin_id, "text": pin.get("text"), "reply": reply},
-        summary=f'answered the note {pin_id} ("{str(pin.get("text"))[:40]}"): {reply}',
+        data={"pinId": pin_id, "text": event_text(pin.get("text")), "reply": event_text(reply, multiline=False)},
+        summary=pin_resolved_summary(pin_id, pin, reply),
         project_id=project_id,
     )
     await _broadcast_pins()
@@ -12937,6 +13003,62 @@ async def get_graph() -> dict:
     return {**state, "sceneKeys": keys, "sceneRevs": scene_keys.revisions_of(scope, keys)} if keys else state
 
 
+_SHOT_MEDIA_FIELDS = ("output", "variations", "selectedVariation")
+# How many taken-out shots one canvas keeps media for; the oldest goes first.
+_REMOVED_SHOT_MEDIA_CAP = 128
+
+
+# A shot field's value when the shot doesn't carry it (types/index.ts
+# CinemaShot): no prompt is "", no refs are [], no overrides are {}. An
+# override inside `overrides` has no default of its own: missing means "the
+# scene's", so it matches only another missing (or null, or empty) one.
+_SHOT_FIELD_DEFAULTS: dict[str, Any] = {"prompt": "", "refImageUrls": [], "overrides": {}}
+
+
+def _authoring_value(value: Any) -> Any:
+    """A value as the fingerprint compares it (review 10 LOW-2, GM r12 answer
+    4): an integral float is that int, so 1.0 matches 1 exactly (no epsilon,
+    and 1.5 never matches 1); a null, {} or [] inside an object is the same as
+    the key missing; key order never counts. A bool stays a bool (true is not 1)."""
+    if isinstance(value, bool) or value is None:
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, dict):
+        out = {}
+        for key, item in value.items():
+            item = _authoring_value(item)
+            if item is None or item == {} or item == []:
+                continue
+            out[str(key)] = item
+        return out
+    if isinstance(value, (list, tuple)):
+        return [_authoring_value(item) for item in value]
+    return value
+
+
+def _shot_authoring(shot: dict[str, Any]) -> str:
+    """A shot's prompt and settings (everything but its run media), as one
+    comparable string: a returning shot gets its media back only when this
+    matches what was taken out (PR #200 fix round 10, review 9 LOW-1, GM r16
+    answer 4). Compared by value (fix round 11): see _authoring_value, and a
+    top-level field at its default (_SHOT_FIELD_DEFAULTS) is the same as missing."""
+    fields = {key: value for key, value in shot.items() if key not in _SHOT_MEDIA_FIELDS}
+    canon = _authoring_value(fields)
+    for key, default in _SHOT_FIELD_DEFAULTS.items():
+        if key in canon and canon[key] == _authoring_value(default):
+            del canon[key]
+    return json.dumps(canon, sort_keys=True, default=str, ensure_ascii=False)
+
+
+def _keep_removed_shot_media(graph: CLIGraph, node_id: str, shot_id: str, kept: dict[str, Any]) -> None:
+    store = graph.removed_shot_media
+    store.pop((node_id, shot_id), None)
+    store[(node_id, shot_id)] = kept
+    while len(store) > _REMOVED_SHOT_MEDIA_CAP:
+        store.pop(next(iter(store)))
+
+
 def _author_cinema_scene(graph: CLIGraph, node_id: str, node: dict[str, Any], params: dict[str, Any], *,
                          returning_media: bool = False, action: str | None = None) -> None:
     """Keep a Cinema scene's runtime media when a write sets its authoring.
@@ -12981,14 +13103,38 @@ def _author_cinema_scene(graph: CLIGraph, node_id: str, node: dict[str, Any], pa
     }
     _refuse_removing_rendering_shots(node_id, node, current_shots, {shot["id"] for shot in shots}, action=action)
     authored_scene = copy.deepcopy(incoming_scene)
+    incoming_ids = {shot["id"] for shot in authored_scene["shots"]}
+    outputs_before = node.get("outputs") or {}
+    # A shot this write takes out keeps its run media on the server, so the
+    # Undo that brings it back brings its images too (fix round 9 of PR #200:
+    # a shot's × is neutral because Undo puts the shot back whole, GM r13).
+    for shot_id, canonical in current_shots.items():
+        if shot_id in incoming_ids:
+            continue
+        kept = {field: copy.deepcopy(canonical[field])
+                for field in _SHOT_MEDIA_FIELDS if field in canonical}
+        port = outputs_before.get(f"shot_{shot_id}")
+        if port is not None:
+            kept["port"] = copy.deepcopy(port)
+        if kept:
+            kept["authoring"] = _shot_authoring(canonical)
+            _keep_removed_shot_media(graph, node_id, shot_id, kept)
+    # Merge of PR #198 into #200: a returning shot gets its media back two
+    # ways. A write the server can trust with media (``returning_media``,
+    # PR #198) brings back what it carries; any other write gets what the
+    # server kept when the shot was taken out (PR #200), when its prompt and
+    # settings match. Either way a newer image a run landed after the shot
+    # left (its live ``shot_<id>`` port) wins.
     returned_ports: dict[str, Any] = {}
-    live_ports = node.get("outputs") or {}
+    restored_ports: dict[str, Any] = {}
     for shot in authored_scene["shots"]:
         canonical = current_shots.get(shot["id"])
+        kept = graph.removed_shot_media.pop((node_id, shot["id"]), None) if canonical is None else None
+        port = outputs_before.get(f"shot_{shot['id']}") if canonical is None else None
+        newer = port.get("value") if isinstance(port, dict) else None
+        newer = newer if isinstance(newer, str) and newer else None
         if canonical is None and returning_media and isinstance(shot.get("output"), dict):
-            port = live_ports.get(f"shot_{shot['id']}")
-            newer = port.get("value") if isinstance(port, dict) else None
-            if isinstance(newer, str) and newer:
+            if newer:
                 # A run landed after the shot left: its image is the newest
                 # result, the port stays, and the shot shows that image.
                 _adopt_late_image(node_id, shot, newer)
@@ -13004,22 +13150,38 @@ def _author_cinema_scene(graph: CLIGraph, node_id: str, node: dict[str, Any], pa
                     returned_ports[f"shot_{shot['id']}"] = {"type": "Image", "value": image}
                 continue
             # Caught mid-render (the canvas's optimistic mark): idle, as any
-            # returning shot that carries nothing finished.
-        for field in ("output", "variations", "selectedVariation"):
+            # returning shot that carries nothing finished, unless the
+            # server kept its media (below).
+        for field in _SHOT_MEDIA_FIELDS:
             shot.pop(field, None)
             if canonical is not None and field in canonical:
                 shot[field] = copy.deepcopy(canonical[field])
         if canonical is None:
-            shot["output"] = {"status": "idle"}
+            # Only the same shot comes back with its media: one whose prompt
+            # and settings match what was taken out (an Undo). A different
+            # shot that reuses the id starts idle, and the kept link goes;
+            # the generated files stay in the outputs folder either way.
+            if kept and kept.get("authoring") == _shot_authoring(shot):
+                for field in _SHOT_MEDIA_FIELDS:
+                    if field in kept:
+                        shot[field] = kept[field]
+                if newer:
+                    # A run landed after the shot left (PR #198): the newer
+                    # image, and the live port stays.
+                    _adopt_late_image(node_id, shot, newer)
+                elif "port" in kept:
+                    restored_ports[f"shot_{shot['id']}"] = kept["port"]
+            shot.setdefault("output", {"status": "idle"})
     params["scene"] = authored_scene
     # Deleted shots no longer own live ports/connections. Import and
     # generation/promotion routes retain their separate media contract.
     valid_ports = {f"shot_{shot['id']}" for shot in authored_scene["shots"]}
     node["outputs"] = {
-        **{port: output for port, output in (node.get("outputs") or {}).items()
+        **{port: output for port, output in outputs_before.items()
            if not port.startswith("shot_") or port in valid_ports},
         **_normalize_outputs_for_storage(returned_ports),
     }
+    node["outputs"].update(restored_ports)
     graph.edges = [edge for edge in graph.edges
                    if edge.get("source") != node_id
                    or not str(edge.get("sourceHandle", "")).startswith("shot_")

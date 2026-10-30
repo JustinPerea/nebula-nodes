@@ -49,6 +49,19 @@ body.app-slava-restraint .moodboard-analysis button:hover {
   color: #f59e0b;
 }
 
+/* GM r13: deleting a board deletes a standalone thing, so red, never the
+   amber every other toolbar button hovers. */
+body.app-slava-restraint .moodboard-studio-toolbar__button--delete:hover:not(:disabled) {
+  border-color: var(--sr-danger-ink, #ff887d);
+  background: var(--sr-danger-tint);
+  color: var(--sr-danger-ink, #ff887d);
+}
+
+body.app-slava-restraint .moodboard-studio-toolbar__button--delete:active:not(:disabled) {
+  border-color: var(--sr-danger-ink-hover, #ff9a91);
+  color: var(--sr-danger-ink-hover, #ff9a91);
+}
+
 body.app-slava-restraint .moodboard-dropzone__file-wrap--disabled,
 body.app-slava-restraint .moodboard-analysis button:disabled {
   opacity: 0.45;
@@ -535,6 +548,13 @@ body.app-slava-restraint .moodboard-analysis .moodboard-chip button {
   color: var(--sr-ink-meta);
   font-size: 13px;
   line-height: 1;
+}
+
+/* GM r12: a chip's × is an edit, so neutral, the same as a Commons
+   keyword chip's (commons.css). */
+body.app-slava-restraint .moodboard-chip .moodboard-chip__remove:hover {
+  border-color: transparent;
+  color: var(--sr-ink-bold);
 }
 
 body.app-slava-restraint .moodboard-inline {

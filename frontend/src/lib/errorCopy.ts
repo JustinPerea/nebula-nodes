@@ -24,6 +24,7 @@
  */
 
 import { isOfflineRefusal } from './backendConnection';
+import { OFFLINE_VERBS, reconnectsLine } from './useBackendOffline';
 import { inDesktopShell, personUnavailableReason } from './personSession';
 
 /** No answer at all: the connection dropped, or the backend isn't there.
@@ -55,17 +56,17 @@ export const PERSON_REQUIRED_CODE = 'person_required';
  * `code`, never its words. Round 2 (GM): "line 3 shouldn't depend on the
  * notice being there, since it can be dismissed", so it says the fix itself.
  * A browser tab's line; the desktop app says PERSON_REQUIRED_APP_COPY. */
-export const PERSON_REQUIRED_COPY = "This change needs your OK, and this tab isn't connected as you. "
+export const PERSON_REQUIRED_COPY = "This change needs your OK, and this tab isn’t connected as you. "
   + 'Open the link Nebula printed when it started, then try again.';
 /** GM - Design, 2026-10-23 (round 2), verbatim: line 3 in the desktop app. A
  * quit and reopen gives the app a fresh backend and a fresh person token. */
-export const PERSON_REQUIRED_APP_COPY = "This change needs your OK, and this window isn't connected as you. "
+export const PERSON_REQUIRED_APP_COPY = "This change needs your OK, and this window isn’t connected as you. "
   + 'Quit Nebula and open it again, then try again.';
 
 /** GM - Design, 2026-10-23 (round 3), verbatim: line 3 in the app's two
  * developer setups (a debug port, the dev renderer), where the banner already
  * gives the real fix. */
-export const PERSON_REQUIRED_DEV_COPY = "This change needs your OK, and this window isn't connected as you. "
+export const PERSON_REQUIRED_DEV_COPY = "This change needs your OK, and this window isn’t connected as you. "
   + 'The notice below says why.';
 
 /** Line 3 for where this page runs: `desktop` is personSession's
@@ -593,19 +594,21 @@ export async function requestError(heading: string, response: Response,
 
 /**
  * A list of node names in a line (GM - Design, 2026-10-27, r6 of PR #198 and
- * the follow-up to PR #195), for every line that names several nodes: the
- * multi-delete toasts and the "+ unpriced" tooltip.
+ * the follow-up to PR #195), shared by every line that names several nodes:
+ * the failed-save lines (lib/savingCutOff), the multi-delete toasts
+ * (lib/deleteCopy) and the "+ unpriced" tooltip.
  * - Up to 3 nodes by name: "“A”", "“A” and “B”", "“A”, “B” and “C”".
  * - Nodes with the same title are grouped with a count, never repeated:
  *   "2 “Text” nodes"; a mix, "“Brief” and 2 “Text” nodes".
  * - The rule counts nodes, not groups: from 4 nodes in total, "4 nodes".
  * - No node ids: the Agent log keeps those.
- * Groups keep the order their first node came in. The one helper for this
- * rule (PR #198 merged with #195): the run-lock and multi-delete lines
- * (lib/cinemaScene), the deleted notice, the "+ unpriced" tooltip
- * (lib/runScope), the no-answer and server-error delete lines
- * (lib/deleteCopy), and the placeholder dialog's moved-rows and replay lines
- * (lib/placeholderRunConfirm).
+ * Groups keep the order their first node came in; callers give names in
+ * canvas order (GM, PR #200 answer 3: "2 “Text” nodes and “Brief”" is fine).
+ * The one helper for this rule (PR #198 merged with #195 and #200): the
+ * run-lock and multi-delete lines (lib/cinemaScene), the deleted notice, the
+ * "+ unpriced" tooltip (lib/runScope), the no-answer and server-error delete
+ * lines (lib/deleteCopy), and the placeholder dialog's moved-rows and replay
+ * lines (lib/placeholderRunConfirm).
  */
 export function nodeNameList(names: string[]): string {
   if (names.length >= 4) return `${names.length} nodes`;
@@ -627,3 +630,24 @@ export function quotedNames(names: readonly string[], counted: string): string {
 export function namesSeveral(names: string[]): boolean {
   return names.length > 1;
 }
+
+/**
+ * GM - Design, PR #200 answer 1 (2026-10-27), verbatim: the tooltip of a
+ * control that is disabled because Nebula is offline. "You can <verb> when
+ * Nebula reconnects." (e.g. "You can generate when Nebula reconnects."); no
+ * verb, "This works again when Nebula reconnects.". The same line as PR
+ * #198's offlineReason (lib/useBackendOffline): both now build it in one
+ * place (reconnectsLine), so the two can't drift.
+ */
+export function offlineDisabledReason(verb?: string): string {
+  return reconnectsLine(verb);
+}
+
+/** Run history's replay verbs offline (fix round 3 of PR #200, review 3
+ * LOW-1). Rerun is GM's (r4 answer 2: "You can rerun it when Nebula
+ * reconnects."); Retry and Recover follow it ("You can retry it …", "You can
+ * recover it …", approved in GM's round 3 answers). The same strings as
+ * OFFLINE_VERBS (lib/useBackendOffline). */
+export const OFFLINE_RERUN = OFFLINE_VERBS.rerun;
+export const OFFLINE_RETRY = OFFLINE_VERBS.retry;
+export const OFFLINE_RECOVER = OFFLINE_VERBS.recover;

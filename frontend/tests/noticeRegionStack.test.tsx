@@ -136,7 +136,7 @@ describe('every toast joins the region (GM 3)', () => {
   it('the canvas pin error toast', async () => {
     useCanvasPinsStore.setState({ error: "Couldn't save the note.", composer: null });
     withRegion('canvas', <PinComposer />);
-    const toast = screen.getByRole('alert');
+    const toast = screen.getByRole('status');
     expect(toast).toHaveClass('canvas-pin-toast');
     inRegion(toast);
     expect(slotOf(toast)).toBe('pin');
@@ -252,7 +252,7 @@ describe('focus in the region leaves the screen its keys', () => {
     expect(bar.closest('.canvas-wrapper')).toBeNull();
     expect(isCanvasShortcutTarget(bar)).toBe(true);
     for (const button of bar.querySelectorAll('button')) expect(isCanvasShortcutTarget(button)).toBe(true);
-    const pin = screen.getByRole('alert');
+    const pin = screen.getByRole('status');
     expect(isCanvasShortcutTarget(within(pin).getByRole('button', { name: 'Dismiss' }))).toBe(true);
   }, SLOW);
 

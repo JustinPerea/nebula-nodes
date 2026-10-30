@@ -169,7 +169,7 @@ describe('GM r30: the shared disabled style, keyed on aria-disabled', () => {
 
   it('a held notice button takes the disabled look once data-held-look comes (GM r33: the token set, no whole-control opacity)', () => {
     const held = rule("body.app-slava-restraint .canvas-undo-notice button[aria-disabled='true'][data-held-look]");
-    expect(held).toMatch(/opacity:\s*1\s*;/);
+    expect(held).toMatch(/opacity:\s*1\s*(!important\s*)?;/);
     expect(held).not.toMatch(/--sr-disabled-opacity/);
     const filled = rule("body.app-slava-restraint .canvas-undo-notice__action[aria-disabled='true'][data-held-look]");
     expect(filled).toMatch(/background:\s*var\(--disabled-fill\)/);

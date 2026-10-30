@@ -2,7 +2,7 @@ import { useEffect, useId, useRef } from 'react';
 import { ModalPortal } from '../ModalPortal';
 import { FORGET_BODY, FORGET_LABEL, forgetHeading } from '../../lib/worldLabsWaiting';
 import '../../styles/prompt-dialog.css';
-import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { useCanvasLock } from '../../lib/canvasLock';
 
 /** Run History's "Forget ID" confirm (GM - Design, round 13 of PR #114), in
  * the app's own dialog on the page body, never window.confirm. The same
@@ -27,7 +27,7 @@ export function ForgetRecoveryConfirm({ name, onCancel, onConfirm }: {
   onCancel: () => void;
   onConfirm: () => void;
 }) {
-  const offline = useBackendOffline();
+  const lock = useCanvasLock();
   const headingId = useId();
   const bodyId = useId();
   const card = useRef<HTMLDivElement>(null);
@@ -83,7 +83,10 @@ export function ForgetRecoveryConfirm({ name, onCancel, onConfirm }: {
         <p id={bodyId} className="prompt-dialog__line">{FORGET_BODY}</p>
         <div className="prompt-dialog__actions">
           <button type="button" ref={cancel} onClick={onCancel}>Cancel</button>
-          <button type="button" className="prompt-dialog__destructive" disabled={offline} {...offlineMark(offline)}
+          {/* Forgetting writes the node's recovery (deleteProviderRecovery):
+              the canvas lock, following as well as offline (fix round 2 of
+              PR #200, review 2 L-5). */}
+          <button type="button" className="prompt-dialog__destructive" {...lock.act({ offline: true })}
             onClick={onConfirm}>{FORGET_LABEL}</button>
         </div>
       </div>

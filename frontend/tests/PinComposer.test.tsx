@@ -4,8 +4,10 @@ import { RequestFailedError } from '../src/lib/errorCopy';
 
 const api = vi.hoisted(() => ({ createPin: vi.fn(), fetchPins: vi.fn(), deletePin: vi.fn() }));
 
-vi.mock('../src/lib/wsClient', () => ({ wsClient: { subscribe: () => () => {} } }));
-vi.mock('../src/lib/canvasPins', () => ({ ...api, MAX_PIN_TEXT: 280 }));
+// Fix round 4 of PR #200: PinComposer reads project names (projectStore, which
+// loads graphStore and connects), and the kept notices' own helpers.
+vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: () => {}, subscribe: () => () => {}, send: () => {}, disconnect: () => {} } }));
+vi.mock('../src/lib/canvasPins', async (importOriginal) => ({ ...await importOriginal<typeof import('../src/lib/canvasPins')>(), ...api, MAX_PIN_TEXT: 280 }));
 
 const { PinComposer } = await import('../src/components/canvas/PinComposer');
 const { useCanvasPinsStore } = await import('../src/store/canvasPinsStore');
@@ -33,11 +35,23 @@ describe('PinComposer', () => {
     useCanvasPinsStore.getState().compose({ nodeId: 'n4' });
     api.createPin.mockResolvedValue(pin('warmer'));
     render(<PinComposer />);
-    const input = screen.getByRole('textbox', { name: 'Note for agents' }) as HTMLInputElement;
-    expect(input.maxLength).toBe(280);
+    const input = screen.getByRole('textbox', { name: 'Note for agents' }) as HTMLTextAreaElement;
+    // Fix round 11 (GM r12 answer 3): only what shows counts, so no native
+    // maxLength (it counts escape codes). GM r20 note 1: a change past 280
+    // shown characters is refused whole, never cut to fit.
+    expect(input.maxLength).toBe(-1);
+    fireEvent.change(input, { target: { value: 'x'.repeat(290) } });
+    expect(input.value).toBe('');
+    // Refused, the counter shows at once, whatever is left (GM r20 addendum).
+    expect(screen.getByText('280 left')).toBeTruthy();
+    fireEvent.change(input, { target: { value: 'x'.repeat(280) } });
+    expect(input.value).toBe('x'.repeat(280));
+    expect(screen.getByText('0 left')).toBeTruthy();
+    fireEvent.change(input, { target: { value: `${'\x1b[31m'.repeat(40)}${'y'.repeat(280)}` } });
+    expect(input.value).toBe(`${'\x1b[31m'.repeat(40)}${'y'.repeat(280)}`);
     fireEvent.change(input, { target: { value: '  warmer  ' } });
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Send note' }));
     });
     // Round 23 (M-1): and the project it was composed on (none open here).
     expect(api.createPin).toHaveBeenCalledWith('warmer', { nodeId: 'n4' }, null);
@@ -46,14 +60,15 @@ describe('PinComposer', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('cancels on empty text or Cancel without calling the backend', async () => {
+  it('sends nothing on empty text (GM r30 item 3: Send note is held, the dialog stays), and Cancel closes it', async () => {
     useCanvasPinsStore.getState().compose({ nodeId: 'n4' });
     const { unmount } = render(<PinComposer />);
     fireEvent.change(screen.getByRole('textbox', { name: 'Note for agents' }), { target: { value: '   ' } });
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Send note' }));
     });
-    expect(useCanvasPinsStore.getState().composer).toBeNull();
+    expect((screen.getByRole('button', { name: 'Send note' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(useCanvasPinsStore.getState().composer).not.toBeNull();
     unmount();
 
     useCanvasPinsStore.getState().compose({ nodeId: 'n4' });
@@ -63,7 +78,7 @@ describe('PinComposer', () => {
     expect(api.createPin).not.toHaveBeenCalled();
   });
 
-  it('shows a dismissable alert when the backend refuses the pin', async () => {
+  it('shows a dismissable neutral line when the backend refuses the pin, and keeps the dialog open with the note (GM r20 Q1)', async () => {
     useCanvasPinsStore.getState().compose({ nodeId: 'n4' });
     // Round 3e: a refusal arrives as the API's typed error (apiRequest), not a plain Error,
     // whose own text no surface shows any more.
@@ -71,10 +86,12 @@ describe('PinComposer', () => {
     render(<PinComposer />);
     fireEvent.change(screen.getByRole('textbox', { name: 'Note for agents' }), { target: { value: 'redo this one' } });
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Send note' }));
     });
-    expect(screen.getByRole('alert').textContent).toContain('only works from the Nebula canvas');
+    // A person-gate 403: GM r22 Q1's line, no "try again".
+    expect(screen.getByRole('status').textContent).toBe('Notes can only be added from the Nebula canvas.×');
+    expect((screen.getByRole('textbox', { name: 'Note for agents' }) as HTMLTextAreaElement).value).toBe('redo this one');
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
-    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
   });
 });

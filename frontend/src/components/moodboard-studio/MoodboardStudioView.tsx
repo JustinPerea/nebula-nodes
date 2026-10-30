@@ -57,6 +57,7 @@ import { boardCover } from '../../lib/moodboardCover';
 import { FieldStepTracker, fieldGroups, fieldStepKeys, type FieldStep } from './fieldSteps';
 import '../../styles/moodboard-studio.css';
 import '../../styles/moodboard-board.css';
+import { NoticeLeave } from '../../lib/noticeLeave';
 
 interface MoodboardDraft {
   name: string;
@@ -1049,7 +1050,7 @@ export function MoodboardStudioView() {
           disabled={deleting.busy || Boolean(pendingSaveId) || analyzing} />
       )}
       {savedId && !isDraftId && (
-        <button type="button" className="moodboard-studio-toolbar__button" title="Move to Recently deleted"
+        <button type="button" className="moodboard-studio-toolbar__button moodboard-studio-toolbar__button--delete" title="Move to Recently deleted"
           disabled={deleting.busy || Boolean(pendingSaveId) || analyzing} onClick={() => void deleteBoard()}>
           Delete
         </button>
@@ -1249,10 +1250,13 @@ export function MoodboardStudioView() {
   );
 
   const shownToast = toast && toast.key === key ? toast : null;
-  const trashToast = deleting.lastDeleted && (
-    <UndoDeleteToast key={deleting.lastDeleted.id} name={deleting.lastDeleted.name} busy={deleting.busy}
-      error={deleting.undoError} onDismiss={deleting.dismiss}
-      onUndo={() => { void deleting.undo().then((asset) => { if (asset) openRestored(asset.id, asset.scope); }); }} />
+  // Both toasts leave as they entered (fix round 7 of PR #200, GM r11 answer 2).
+  const trashToast = (
+    <NoticeLeave value={deleting.lastDeleted}>{(last, leave) => (
+      <UndoDeleteToast key={last.id} name={last.name} busy={deleting.busy}
+        error={deleting.undoError} onDismiss={deleting.dismiss}
+        onUndo={() => { void deleting.undo().then((asset) => { if (asset) openRestored(asset.id, asset.scope); }); }} leave={leave} />
+    )}</NoticeLeave>
   );
 
   if (view === 'board') {
@@ -1266,7 +1270,7 @@ export function MoodboardStudioView() {
               <div className="moodboard-studio-view__board-notices">{notices}</div>
               <BoardCanvas key={key} boardKey={key} images={draft.images} onMove={moveCards} onDropFiles={dropFiles}
                 uploading={uploading} />
-              {shownToast && <BoardUndoToast key={shownToast.id} toast={shownToast} onDismiss={dismissToast} />}
+              <NoticeLeave value={shownToast}>{(last, leave) => <BoardUndoToast key={last.id} toast={last} onDismiss={dismissToast} leave={leave} />}</NoticeLeave>
             </>
           )}
         </main>
@@ -1319,7 +1323,7 @@ export function MoodboardStudioView() {
           </>
         )}
       </main>
-      {shownToast && <BoardUndoToast key={shownToast.id} toast={shownToast} onDismiss={dismissToast} />}
+      <NoticeLeave value={shownToast}>{(last, leave) => <BoardUndoToast key={last.id} toast={last} onDismiss={dismissToast} leave={leave} />}</NoticeLeave>
       {trashToast}
     </div>
   );

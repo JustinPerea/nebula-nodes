@@ -182,7 +182,7 @@ const land = () => new Promise<Response>((resolve) => {
 const pinAnswer = () => answer(201, { pin: { id: 'pin_new', text: 'Make the sky warmer', anchor: { nodeId: 'n1' },
   position: null, status: 'open', createdAt: '', detached: false, reply: null } });
 const resetPins = () => useCanvasPinsStore.setState({ projectId: null, pins: [], composer: null, removing: {}, error: null,
-  composerCanvas: null, draft: '', kept: null } as never);
+  composerCanvas: null, draft: '', kept: [] } as never);
 
 describe('M-1: the note dialog and the pins while following', () => {
   beforeEach(() => resetPins());
@@ -210,7 +210,7 @@ describe('M-1: the note dialog and the pins while following', () => {
     expect(await useCanvasPinsStore.getState().submit('Make the sky warmer')).toBe(false);
     expect(pinWrites()).toEqual([]);
     // Nothing was typed: nothing to keep.
-    expect(useCanvasPinsStore.getState().kept).toBeNull();
+    expect(useCanvasPinsStore.getState().kept).toEqual([]);
   });
 
   it('what the person typed is kept, not anchored anywhere', async () => {
@@ -218,7 +218,7 @@ describe('M-1: the note dialog and the pins while following', () => {
     useCanvasPinsStore.getState().setDraft('Make the sky warmer');
     agentOpens();
     expect(useCanvasPinsStore.getState().composer).toBeNull();
-    expect(useCanvasPinsStore.getState().kept).toEqual({ text: 'Make the sky warmer' });
+    expect(useCanvasPinsStore.getState().kept.at(-1)).toMatchObject({ text: 'Make the sky warmer' });
     await vi.waitFor(() => expect(useProjectStore.getState().activeProject?.id).toBe('beta'));
     expect(pinWrites()).toEqual([]);
   });
@@ -228,7 +228,7 @@ describe('M-1: the note dialog and the pins while following', () => {
     useCanvasPinsStore.getState().setDraft('warmer');
     agentClear();
     expect(useCanvasPinsStore.getState().composer).toBeNull();
-    expect(useCanvasPinsStore.getState().kept).toEqual({ text: 'warmer' });
+    expect(useCanvasPinsStore.getState().kept.at(-1)).toMatchObject({ text: 'warmer' });
   });
 
   it('loadProjectGraph closes it (a project loaded over the canvas)', () => {
@@ -236,7 +236,7 @@ describe('M-1: the note dialog and the pins while following', () => {
     useCanvasPinsStore.getState().setDraft('here');
     expect(useGraphStore.getState().loadProjectGraph([], [], [])).toBe(true);
     expect(useCanvasPinsStore.getState().composer).toBeNull();
-    expect(useCanvasPinsStore.getState().kept).toEqual({ text: 'here' });
+    expect(useCanvasPinsStore.getState().kept.at(-1)).toMatchObject({ text: 'here' });
   });
 
   it('PIN-D: deleting a note while following sends nothing and keeps it', async () => {
@@ -279,7 +279,7 @@ describe('M-1: the note dialog and the pins while following', () => {
     useCanvasPinsStore.getState().compose({ nodeId: 'n1' });
     expect(await useCanvasPinsStore.getState().submit('Make the sky warmer')).toBe(false);
     expect(useCanvasPinsStore.getState().composer).toBeNull();
-    expect(useCanvasPinsStore.getState().kept).toEqual({ text: 'Make the sky warmer' });
+    expect(useCanvasPinsStore.getState().kept.at(-1)).toMatchObject({ text: 'Make the sky warmer' });
     expect(useCanvasPinsStore.getState().error).toBeNull();
   });
 });

@@ -1292,3 +1292,69 @@ Four of this round's ring shots are byte-identical to round 10 shots of the same
   - Regression batch: c, e, e3, f and g all pass. a2 was 37/41 and h 13/14. `clashsend21` (prompt never asked in a2) passed alone.
   - `held21`'s fast-try check (no grey look if the save answers within 150 ms) failed alone too, so I compared frontends on the same backend. The try took 127–348 ms on both, and 1077150e failed it 2 of 4 times. The backend round trip on this machine is right at the 150 ms threshold, so this is not round 24.
 - **Open:** the retry toast ("…Nebula is trying again.") is an event (GM r28) and keeps the name it was said with after a rename, while the mark now follows the rename. Should it follow too?
+
+## Merge of origin/main (#200, a8798dc4)
+
+Both PRs' behaviour kept: a union in every hunk. Read #200's side first (its notes: `docs/notes/2026-10-27-fix-agent-presence-followups.md`).
+
+- **Canvas lock.**
+  - `LockOwn` (#200: `offline` verbs and `lock.title(own)`) and `act(own, { run, runTitle })` (#198's run lock) are both on `CanvasLock`.
+  - `lockedAction` keeps #200's per-control verb when it names no verb of its own.
+  - Cinema follows GM's later ruling (PR #200 r2 item 4), so three of #200's own verbs give way there:
+    - "send it to motion", not "send to motion";
+    - no tooltip on the prompt (a text field goes read-only), not "edit the prompt";
+    - the generic line on a reference's ×, not "remove references".
+  - #200's other verbs ("add swatches", "send notes", "rerun") stay as #200 shipped them.
+- **One offline line.** `useBackendOffline.reconnectsLine` builds it. `offlineReason` (#198, typed verbs) and `errorCopy.offlineDisabledReason` (#200, any verb) both call it. `OFFLINE_RERUN`, `OFFLINE_RETRY` and `OFFLINE_RECOVER` are now `OFFLINE_VERBS` entries.
+- **Run history's Rerun, Retry and Recover.** They use `lockedAction(…, { run: isExecuting })` with #200's offline verbs.
+  - **Conflict:** while a run goes, the tooltip reads #198's one run line, "Wait for the active run to finish." (GM r9 answer 3). #200 kept "Wait for the run to finish first." here, the base's text. Both can't stand; this follows GM r9's one line everywhere.
+- **Name lists.**
+  - Canvas order (#200, GM answer 3) with #198's curly apostrophe ("Couldn’t save …") and nodeNameList grouping.
+  - This covers `savingCutOff`, `placeholderRunConfirm` (whose canvas order replaces #198's row order, per GM r2 item 3) and the no-answer delete line.
+  - Duplicate `inCanvasOrder`: #198's stays.
+- **Cinema shots, backend (`_author_cinema_scene`).** A returning shot gets its media back two ways:
+  - from the trusted undo's own copy (#198 `returning_media`);
+  - or, for any other write, from what the server kept when the shot was taken out (#200), when its prompt and settings match.
+  - Either way, a newer image a run landed after the shot left (its live `shot_<id>` port) wins. Before, #200's kept port overwrote that newer image.
+  - The kept entry is consumed in both cases.
+  - New tests: `test_merge_*` in `test_cinema_scene_authoring_persistence.py`. The late-image one fails with the late-port branch taken out (origin/main's code).
+- **Disabled look.**
+  - #198's Cinema offline rule (cinema-studio.css) now reads #200's tokens, `--sr-disabled-ink` and `--sr-disabled-edge`. The 12% outline it had is the one GM 2026-10-28 answer 3 replaced.
+  - The shot ×'s hover is #200's neutral ink (GM r12). Its disabled opacity (#198) went, since #200's shared rule covers it, and the ratchet's KNOWN list dropped that entry.
+  - #198's App.css `[data-offline-neutral]` rule is now `button[data-offline-neutral]` (only buttons carry it). A bare attribute rule reads as `*` to #200's loose cascade, which hid every ancestor's background from the frame check, so GM r18's corpus probe stopped being caught.
+  - **Open (a GM call):** #198's notice buttons (canvasProposals.css, GM r33 tokens), the Cinema fieldset's dimming and the clip presets keep their own disabled look. They're listed in #200's `SWEEP_LATER`.
+    - The ghost grey is the same in both (white at 0.55: `--disabled-label` = `--sr-ink-light`, and `--sr-disabled-ink`).
+    - The filled look differs: #198's is a 0.42 fill with a dark label, #200's a 0.1 fill with a grey label.
+    - #200's held proposal-bar buttons are already in #200's shared rule. The asset strip's held card has no buttons. Moving #198's notice onto #200's filled look, or the reverse, changes a GM-approved look, so it's not done here.
+- **The canvas notice's buttons (found live).**
+  - #200's shared filled rule lists `.canvas-undo-notice__action` and greys it, with `!important`, the moment it is `aria-disabled`. That broke #198's GM r30/r33 notice look on the merged tree:
+    - a held [Try again] or Keep mine greyed at once, not after the 150 ms hold;
+    - the quiet choice (Use Codex’s) was filled;
+    - the filled grey was #200's 0.1 fill instead of the r33 0.42 fill with a dark label.
+  - Live `held21`, `clashsend21` and `following22` failed on it.
+  - The notice's own rules in canvasProposals.css now carry `!important` at a higher specificity. A button that is held but not yet greyed keeps its enabled look.
+  - Live and pr198Fix21/22 pass again. Those two tests now compare values without the `!important`, and check that it's there.
+  - **Open, the same GM call as above:** which filled disabled look is the app's.
+- **#200's ratchet G and #198's lock forms.**
+  - G now reads #198's forms: `lockedAction(lock, …)`, a local helper that returns `lock.act(…)` (`runLocked`), and an `act` prop handed down (the clash prompt, the stop line).
+  - Two `CONTROL_AT` entries have reasons: the stop line's focus tracking, and Home's copy notice (locked by `busy || offline`).
+  - `reachOf` follows a file's own definitions from a worklist. The recursion overflowed the stack on the first, cold-cache file (App.tsx), even with origin/main's own App.tsx.
+- **Tests changed because behaviour changed (#200's, to the merged copy):**
+  - r1: Send to motion's verb, and the prompt's lack of a tooltip;
+  - r1, store, r2store, nodeNameList: the curly "Couldn’t". r2store's `/Couldn't save/` filter would otherwise have passed vacuously;
+  - ProjectHome.unsavedEdits: both curly apostrophes;
+  - round23Lines: "2 “Text” nodes".
+- **#198's tests changed:**
+  - pr198Fix5Offline: the verb list gained retry and recover, and the merge-check rule reads the tokens;
+  - pr198Fix22Ui: KNOWN dropped the shot ×'s opacity.
+- **Other ratchet updates:**
+  - errorCopy.namedLine: deleteCopy's entry takes #200's form, and #200's note composer's accessible name (`${headingText} ${targetNode}`) is reviewed, since it's no failure line.
+  - G's describe timeout is now 300 s. G alone took 110 s, and it timed out at 120 s in the full suite at a load average of 68.
+- **Live harness:** `held21`'s fast try is deterministic now. It checks the order of events: the grey shows only once 150 ms pass with no answer (the PUT's `responseEnd` from resource timing, on the observer's clock). It doesn't time the backend.
+- **Gates (merge).**
+  - `tsc -b` and lint are clean.
+  - Full vitest: 657 files, 8,405 tests. 3 failed and were fixed (G's timeout, two namedLine entries); those files and every test that reads the changed CSS pass on rerun.
+  - Full backend: 12,185 passed, 71 skipped.
+  - Build: 442,969 bytes raw (136,030 gzip).
+  - Live on 8797/5797, #198's batches: a3 41/41, c 11/11, e 20/20, e3 17/17, f 35/35, g 22/22, h 14/14, r1 25/25. #200's `r34` and `r30` sections: 19/19 (held tab, promote, placeholder and real card in place, note heading on a node, held run release over a reload).
+- **Checked:** "Undid Codex’s edit." and "Codex changed the canvas." keep their periods, both in canvasUndo and through `agent_line`, `agent_text` and the channel's `clean_text`.

@@ -98,10 +98,22 @@ const SKIN = readFileSync(join(__dirname, '../src/styles/slava-restraint.css'), 
 const P = 'body.app-slava-restraint .canvas-undo-notice';
 const FILLED = { 'border-color': 'var(--disabled-fill)', background: 'var(--disabled-fill)', color: 'var(--disabled-fill-label)' };
 const GHOST = { background: 'transparent', color: 'var(--disabled-label)' };
+/** Since the merge with PR #200 the notice's own look wins over #200's
+ * shared rule with !important (canvasProposals.css): every declaration a
+ * notice rule writes carries it; the values compared are without it. */
+const bare = (decls: Record<string, string>) => {
+  const out: Record<string, string> = {};
+  for (const [name, value] of Object.entries(decls)) {
+    expect(value, `${name}: ${value}`).toMatch(/!important$/);
+    out[name] = value.replace(/\s*!important$/, '');
+  }
+  return out;
+};
+const noticeDecls = (selector: string) => bare(declsFor(PROPOSALS, selector));
 /** The disabled look a notice button of this kind takes, for `state` (`:disabled` or the held look). */
 const lookFor = (kind: '__action' | '__action--quiet' | '__close', state: ':disabled' | "[aria-disabled='true'][data-held-look]") => ({
-  ...declsFor(PROPOSALS, `${P}${kind === '__action--quiet' ? '__action' : kind}${state}`),
-  ...(kind === '__action--quiet' ? declsFor(PROPOSALS, `${P}__action--quiet${state}`) : {}),
+  ...noticeDecls(`${P}${kind === '__action--quiet' ? '__action' : kind}${state}`),
+  ...(kind === '__action--quiet' ? noticeDecls(`${P}__action--quiet${state}`) : {}),
 });
 
 describe('GM r33: notice buttons read the one disabled token set', () => {
@@ -117,19 +129,25 @@ describe('GM r33: notice buttons read the one disabled token set', () => {
 
   it('filled, ghost and × buttons, held or locked: their own look, no whole-control opacity, hover the same, no pointer', () => {
     for (const state of [':disabled', "[aria-disabled='true'][data-held-look]"] as const) {
-      expect(declsFor(PROPOSALS, `${P} button${state}`), state).toEqual({ opacity: '1', cursor: 'default' });
+      expect(declsFor(PROPOSALS, `${P} button${state}`), state).toEqual({ opacity: '1 !important', cursor: 'default' });
       expect(lookFor('__action', state), state).toEqual(FILLED);
       // A ghost button: no fill, its enabled edge (never brighter), the label grey.
       expect(lookFor('__action--quiet', state), state).toEqual({ ...FILLED, 'border-color': 'rgb(255 255 255 / 0.28)', ...GHOST });
       expect(declsFor(PROPOSALS, '.canvas-undo-notice__action--quiet')['border-color']).toBe('rgb(255 255 255 / 0.28)');
       expect(lookFor('__close', state), state).toEqual(GHOST);
       for (const kind of ['__action', '__action--quiet', '__close']) {
-        expect(declsFor(PROPOSALS, `${P}${kind}${state}:hover`), `${kind}${state}:hover`).toEqual(declsFor(PROPOSALS, `${P}${kind}${state}`));
+        expect(noticeDecls(`${P}${kind}${state}:hover`), `${kind}${state}:hover`).toEqual(noticeDecls(`${P}${kind}${state}`));
       }
     }
     // aria-disabled alone (the first ~150 ms) has no look of its own; hover leaves it as it is.
     expect(declsFor(PROPOSALS, `${P} button[aria-disabled='true']`)).toEqual({});
-    expect(declsFor(PROPOSALS, `${P}__action[aria-disabled='true']:hover`)).toEqual({ background: 'rgb(255 255 255 / 0.9)' });
+    // Since the merge with #200 (whose shared rule greys it at once): it
+    // keeps its enabled look, hover the same, until data-held-look comes.
+    const notYet = `${P}__action[aria-disabled='true']:not([data-held-look]):not(:disabled)`;
+    expect(noticeDecls(notYet)).toEqual({ 'border-color': 'rgb(255 255 255 / 0.85)', background: 'rgb(255 255 255 / 0.9)', color: '#111' });
+    expect(noticeDecls(`${notYet}:hover`)).toEqual(noticeDecls(notYet));
+    const quietNotYet = `${P}__action--quiet[aria-disabled='true']:not([data-held-look]):not(:disabled)`;
+    expect(noticeDecls(quietNotYet)).toEqual({ 'border-color': 'rgb(255 255 255 / 0.28)', background: 'transparent', color: 'rgb(255 255 255 / 0.9)' });
   });
 
   it.each<'following' | 'offline'>(['following', 'offline'])('%s: every lock-state notice button is truly disabled and takes its kind’s look', async (lock) => {
@@ -178,7 +196,6 @@ const KNOWN = [
   'styles/canvasProposals.css | .proposal-bar__button:disabled | 0.5',
   'styles/cinema-studio.css | body.app-slava-restraint .cinema-studio-toolbar__action:disabled | var(--sr-disabled-opacity, 0.5)',
   'styles/cinema-studio.css | body.app-slava-restraint .cinema-shots-rail__move:disabled | var(--sr-disabled-opacity, 0.5)',
-  'styles/cinema-studio.css | body.app-slava-restraint .cinema-shots-rail__remove:disabled | var(--sr-disabled-opacity-strong, 0.45)',
   'styles/cinema-studio.css | body.app-slava-restraint .cinema-shot-panel__stepper-btn:disabled | var(--sr-disabled-opacity, 0.5)',
   'styles/cinema-studio.css | body.app-slava-restraint .cinema-shot-panel__action:disabled | var(--sr-disabled-opacity, 0.5)',
   'styles/project-home.css | body.app-slava-restraint .project-home__error button:disabled | 0.55',

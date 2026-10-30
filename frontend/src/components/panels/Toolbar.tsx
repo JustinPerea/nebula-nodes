@@ -363,7 +363,7 @@ export function Toolbar() {
                 {...lock.act({ disabled: nodeCount === 0, title: 'Arrange nodes by dependency' }, { run: isExecuting })} onClick={() => runSecondaryAction(autoLayout)}>
                 <ToolbarIcon name="layout" /><span>Arrange nodes</span>
               </button>
-              <button type="button" className="toolbar__action" title="Reset panel positions and sizes"
+              <button type="button" className="toolbar__action toolbar__layout-reset" title="Reset panel positions and sizes"
                 onClick={() => runSecondaryAction(handleResetLayout)}>
                 <ToolbarIcon name="reset" /><span>Reset panels</span>
               </button>
@@ -378,7 +378,7 @@ export function Toolbar() {
           onClick={() => void zoomOut({ duration: CANVAS_ZOOM_DURATION })}>
           <Minus className="toolbar__icon" size={14} strokeWidth={1.6} aria-hidden="true" />
         </button>
-        <button type="button" className="toolbar__button toolbar__zoom-level"
+        <button type="button" className="toolbar__button toolbar__zoom-level toolbar__zoom-reset"
           aria-label={`Zoom ${zoomPercent}%, reset to 100%`} title={`Reset zoom to 100% (${displayKey('Shift')}0)`}
           aria-keyshortcuts="Shift+0"
           onClick={() => void zoomTo(1, { duration: CANVAS_ZOOM_DURATION })}>

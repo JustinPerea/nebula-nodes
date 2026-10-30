@@ -1,6 +1,7 @@
-import { useLayoutEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { WorkspaceHeader } from '../WorkspaceHeader';
 import { useUIStore } from '../../store/uiStore';
+import { CINEMA_CATEGORY_COLOR } from '../../lib/cinemaCategoryColor';
 import { useGraphStore } from '../../store/graphStore';
 import { CinemaStudioToolbar } from './CinemaStudioToolbar';
 import { CinemaSharedControls } from './CinemaSharedControls';
@@ -8,6 +9,7 @@ import { CinemaShotsRail } from './CinemaShotsRail';
 import { CinemaShotPanel } from './CinemaShotPanel';
 import { cinemaConnectedInputs, type CinemaConnectedInput } from '../../lib/cinemaInputs';
 import { normalizeCinemaScene } from '../../lib/cinemaScene';
+import { isModalDialogOpen } from '../../lib/canvasShortcutScope';
 import type { CinemaSceneSpec, CinemaShot } from '../../types';
 import '../../styles/cinema-studio.css';
 
@@ -28,6 +30,25 @@ export function CinemaStudioView() {
   const edges = useGraphStore((s) => s.edges);
   const nodes = useGraphStore((s) => s.nodes);
   const panelRef = useRef<HTMLDivElement>(null);
+
+  // Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z step the canvas history here too (fix
+  // round 9 of PR #200, GM r13): a shot's × is neutral because Undo puts the
+  // shot back, and this view replaces the canvas, whose keys aren't mounted.
+  // Text fields keep their own undo; a dialog keeps its keys.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || isModalDialogOpen()) return;
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== 'z') return;
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.isContentEditable
+        || target.closest('input, textarea, select, [role="dialog"], [aria-modal="true"]'))) return;
+      event.preventDefault();
+      if (event.shiftKey) useGraphStore.getState().redo();
+      else useGraphStore.getState().undo();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   const selectedShotId = useUIStore((s) => cinemaNodeId ? s.cinemaSelectedShotIds[cinemaNodeId] : null);
   const setSelectedShotId = (shotId: string | null) => {
@@ -118,7 +139,8 @@ export function CinemaStudioView() {
   };
 
   return (
-    <div className="cinema-studio-view">
+    // The shared selected style for the film look and the variation too (review 2 L-4).
+    <div className="cinema-studio-view" style={{ ['--node-category-color' as string]: CINEMA_CATEGORY_COLOR }}>
       <CinemaStudioToolbar cinemaNodeId={cinemaNodeId} />
 
       <div className="cinema-studio-view__body">

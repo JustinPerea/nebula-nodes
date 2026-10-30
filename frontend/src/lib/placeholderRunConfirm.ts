@@ -76,6 +76,9 @@ export interface PlaceholderRunConfirm {
    * was setting up is no longer in this run."; else null. */
   leftLine: string | null;
   rows: PlaceholderRunRow[];
+  /** The run's node ids in canvas order: GM's moved line names them so
+   * (fix round 1 of PR #200). Absent on a model built before it. */
+  canvasOrder?: string[];
   /** "Plus 1 free node." / "Plus 2 free nodes.", or null. */
   freeLine: string | null;
   /** The costly-run confirm's own line; "The listed prices total $0.43." when
@@ -484,7 +487,7 @@ export function modelNotChosenText(nodes: Node<NodeData>[], names?: Readonly<Rec
  * the same line when it updates in place (movedNodesLine).
  */
 export function changedNodesLine(shown: PlaceholderRunConfirm, now: PlaceholderRunConfirm): string | null {
-  return movedNodesLine(now.rows, movedRowIds(shown, now));
+  return movedNodesLine(now.rows, movedRowIds(shown, now), now.canvasOrder);
 }
 
 /** The rows of `now` whose route or price moved since `shown`, in row order:
@@ -499,20 +502,24 @@ export function movedRowIds(shown: PlaceholderRunConfirm, now: PlaceholderRunCon
   }).map((row) => row.nodeId);
 }
 
-/** Rows' names (already quoted, “Hero still”) as one errorCopy nodeNameList:
- * up to 3 named, same titles grouped, a count from 4 (the PR #198 merge). */
-function quotedNodeNameList(quoted: string[]): string {
-  return nodeNameList(quoted.map((name) => name.replace(/^“([\s\S]*)”$/u, '$1')));
-}
+/** A row's name without its quotes (rows carry it quoted). */
+const unquoted = (name: string) => /^“(.*)”$/s.exec(name)?.[1] ?? name;
 
-/** GM's line for the nodes `ids` names, by `rows`' names and in their order;
- * null when none of them is a row (any more). */
-export function movedNodesLine(rows: PlaceholderRunRow[], ids: Iterable<string>): string | null {
+/** GM's line for the nodes `ids` names, by `rows`' names; null when none of
+ * them is a row (any more). Fix round 1 of PR #200 (GM answer 3, review
+ * L-6): same titles grouped with a count (errorCopy nodeNameList), in canvas
+ * order (`canvasOrder`, the run's node ids as the canvas holds them; rows'
+ * order without it). */
+export function movedNodesLine(rows: PlaceholderRunRow[], ids: Iterable<string>, canvasOrder?: string[]): string | null {
   const wanted = new Set(ids);
-  const moved = rows.filter((row) => wanted.has(row.nodeId)).map((row) => row.name);
+  const at = (row: PlaceholderRunRow) => {
+    const index = canvasOrder?.indexOf(row.nodeId) ?? -1;
+    return index < 0 ? Number.POSITIVE_INFINITY : index;
+  };
+  const moved = rows.filter((row) => wanted.has(row.nodeId));
   if (moved.length === 0) return null;
-  const who = quotedNodeNameList(moved);
-  return `${who} changed while this was open.`;
+  const ordered = canvasOrder ? [...moved].sort((a, b) => at(a) - at(b)) : moved;
+  return `${nodeNameList(ordered.map((row) => unquoted(row.name)))} changed while this was open.`;
 }
 
 /** A row's segments, in order: the name, the model, each setting, the price
@@ -655,6 +662,7 @@ export function placeholderRunConfirm(
   options: PlaceholderRunOptions = {},
 ): PlaceholderRunConfirm | null {
   const scope = nodeScope(nodes, edges, nodeId);
+  const scopeIds = new Set(scope.map((node) => node.id));
   const placeholders = scope.flatMap((node) => {
     const flag = cleanPending(node.data?.pending);
     return flag ? [{ node, agent: flag.agent }] : [];
@@ -749,9 +757,10 @@ export function placeholderRunConfirm(
   let savedSentence: string | null = null;
   if (changedByAgent.length > 0) {
     const agents = agentNames(changedByAgent.map(({ agent }) => agent));
-    const rowAt = (id: string) => { const at = rows.findIndex((candidate) => candidate.nodeId === id); return at < 0 ? rows.length : at; };
-    const names = [...changedByAgent].sort((a, b) => rowAt(a.node.id) - rowAt(b.node.id)).map(({ node }) => labelOf(node));
-    const which = nodeNameList(names);
+    // Fix round 1 of PR #200 (GM answer 3, review L-6): canvas order, and
+    // same titles grouped with a count (errorCopy nodeNameList).
+    const canvasAt = (id: string) => { const at = nodes.findIndex((candidate) => candidate.id === id); return at < 0 ? nodes.length : at; };
+    const which = nodeNameList([...changedByAgent].sort((a, b) => canvasAt(a.node.id) - canvasAt(b.node.id)).map(({ node }) => labelOf(node)));
     savedSentence = `${agents.length === 1 ? agents[0] : 'The agents'} changed ${which} after the run was saved. The replay uses the saved settings.`;
   }
   if (count > 0) {
@@ -797,6 +806,7 @@ export function placeholderRunConfirm(
     // The heading already says they left: no second line under it.
     leftLine: count === 0 && finished.length === 0 ? null : leftLine,
     rows,
+    canvasOrder: nodes.filter((node) => scopeIds.has(node.id)).map((node) => node.id),
     freeLine: free > 0 ? `Plus ${free} free ${free === 1 ? 'node' : 'nodes'}.` : null,
     totalLine,
     notes: [...costNotes, ...(footnote ? [footnote] : [])],

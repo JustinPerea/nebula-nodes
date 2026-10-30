@@ -30,8 +30,13 @@ const TOKEN_SHAPE = /^[A-Za-z0-9_-]{16,128}$/;
 const DEFAULT_DEV_BACKEND = 'http://127.0.0.1:8000';
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 export const PERSON_REQUIRED_EVENT = 'nebula:person-required';
-/** A fresh person link was taken in by this tab (the canvas may re-say hello). */
+/** A person link was taken in by this tab (the canvas says hello again, or
+ * reconnects to). Not proof: only the server's promote clears the hold. */
 export const PERSON_CONNECTED_EVENT = 'nebula:person-connected';
+/** The server promoted this tab's canvas socket as the person (a verified
+ * hello, by any path: a new link, the same link reopened, a reconnect, the
+ * desktop app's token). See notePersonPromoted. */
+export const PERSON_PROMOTED_EVENT = 'nebula:person-promoted';
 
 export interface PersonCredential {
   token: string;
@@ -161,10 +166,11 @@ export function browserPersonCredential(): PersonCredential | null {
   const fromLink = consumeLink();
   if (fromLink) {
     // A fresh link supersedes whatever this tab held before.
-    const changed = memoryCredential?.token !== fromLink.token || memoryCredential?.backend !== fromLink.backend;
     memoryCredential = fromLink;
     writeStored(fromLink);
-    if (changed) window.dispatchEvent(new CustomEvent(PERSON_CONNECTED_EVENT));
+    // GM r29 item 3 (fix round 19): the same link reopened (the banner's own
+    // fix) is said hello with too, so the server can promote this tab again.
+    window.dispatchEvent(new CustomEvent(PERSON_CONNECTED_EVENT));
     return fromLink;
   }
   if (memoryCredential) return memoryCredential;
@@ -247,12 +253,12 @@ export function personRequiredMessage(reason: PersonUnavailableReason = personUn
     case 'debug-port':
       return 'Debug mode: a debugging port is open, so Settings, proposals and chats are off.';
     case 'dev-renderer':
-      return "Dev mode: the Vite renderer can't use your token. Set NEBULA_DESKTOP_DEV_PERSON=1 to allow it.";
+      return "Dev mode: the Vite renderer can’t use your token. Set NEBULA_DESKTOP_DEV_PERSON=1 to allow it.";
     case 'untrusted-sender':
     case 'desktop-unavailable':
       // GM, round 4 (2026-10-23), verbatim: one line, ending like the app
       // banner, since the window can close while Nebula keeps running in the Dock.
-      return "Nebula couldn't confirm this window is yours. Quit Nebula and open it again.";
+      return "Nebula couldn’t confirm this window is yours. Quit Nebula and open it again.";
     default:
       // The desktop app gets here when its backend refuses the token the
       // shell handed over (desktopReason stays null then): GM's app banner
@@ -260,11 +266,71 @@ export function personRequiredMessage(reason: PersonUnavailableReason = personUn
       // backend with a fresh token; a reload asks the same shell for the same
       // token, which the same backend refuses again.
       if (hasDesktopBridge()) {
-        return "This window isn't connected as you. Quit Nebula and open it again.";
+        return "This window isn’t connected as you. Quit Nebula and open it again.";
       }
       // GM - Design, round 4 (2026-10-23), verbatim.
-      return "This tab isn't connected as you. Open the link Nebula printed when it started.";
+      return "This tab isn’t connected as you. Open the link Nebula printed when it started.";
   }
+}
+
+// GM r24 (PR #200 fix round 15): whether the person-gate banner is showing
+// now, its line or null. PersonRequiredBanner keeps it; the note dialog
+// reads it (Send note waits for the tab to be connected, and a refused
+// send's toast leaves the fix to the banner).
+let personBannerLine: string | null = null;
+const personBannerListeners = new Set<() => void>();
+export function setPersonBannerLine(line: string | null): void {
+  if (line === personBannerLine) return;
+  personBannerLine = line;
+  personBannerListeners.forEach((listener) => listener());
+}
+export const personBannerShown = (): boolean => personBannerLine !== null;
+export const currentPersonBannerLine = (): string | null => personBannerLine;
+export function subscribePersonBanner(listener: () => void): () => void {
+  personBannerListeners.add(listener);
+  return () => { personBannerListeners.delete(listener); };
+}
+
+/**
+ * GM r27 item 2 (PR #200 fix round 18): the banner's × hides the banner, not
+ * the condition. Whether this tab is known not to be connected as the person:
+ * set by any person-only refusal (PERSON_REQUIRED_EVENT, which also shows the
+ * banner), cleared only when a person link connects the tab. The note dialog
+ * holds Send note on it, so after × Send note stays disabled with its reason
+ * and never brings up the Q116a toast.
+ */
+let personGateHeldNow = false;
+const personGateListeners = new Set<() => void>();
+function setPersonGateHeld(held: boolean): void {
+  if (held === personGateHeldNow) return;
+  personGateHeldNow = held;
+  personGateListeners.forEach((listener) => listener());
+}
+export const personGateHeld = (): boolean => personGateHeldNow;
+export function subscribePersonGate(listener: () => void): () => void {
+  personGateListeners.add(listener);
+  return () => { personGateListeners.delete(listener); };
+}
+// GM r29 item 3 (fix round 19): the hold follows the server's state both
+// ways. Demoted (a hello the server refuses, its `personRequired` frame, or a
+// person-only request refused 403 person_required, all PERSON_REQUIRED_EVENT):
+// the hold and the banner come back. Promoted (notePersonPromoted, from the
+// socket): both clear. A link the tab takes in isn't proof by itself.
+if (typeof window !== 'undefined') {
+  window.addEventListener(PERSON_REQUIRED_EVENT, () => setPersonGateHeld(true));
+}
+
+/** The server promoted this tab's canvas socket as the person: its hello was
+ * verified (lib/wsClient sees the person-only `proposalSync` the backend sends
+ * on promote, and only then). Clears the hold and the banner. */
+export function notePersonPromoted(): void {
+  setPersonGateHeld(false);
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(PERSON_PROMOTED_EVENT));
+}
+
+export function onPersonPromoted(listener: () => void): () => void {
+  window.addEventListener(PERSON_PROMOTED_EVENT, listener);
+  return () => window.removeEventListener(PERSON_PROMOTED_EVENT, listener);
 }
 
 /** Tell the canvas a person-only action was refused here (shows the banner). */
@@ -292,6 +358,8 @@ if (typeof window !== 'undefined') {
 }
 
 export function resetPersonSessionForTests(): void {
+  setPersonBannerLine(null);
+  setPersonGateHeld(false);
   memoryCredential = null;
   desktopLookup = null;
   desktopReason = null;

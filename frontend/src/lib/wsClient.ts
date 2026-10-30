@@ -1,5 +1,5 @@
 import { backendWebSocketUrl, personTokenForSocket } from './backend';
-import { onPersonConnected, reportPersonRequired } from './personSession';
+import { notePersonPromoted, onPersonConnected, reportPersonRequired } from './personSession';
 import type { PortValue, VariantScope } from '../types';
 import type { ExecutionStatusResult } from './api';
 import type { AgentNotesEvent } from './agentNotes';
@@ -371,6 +371,9 @@ class WebSocketClient {
   private forceDiscoveryOnReconnect = false;
   /** A socket has opened before, so the next open is a reconnect. */
   private everOpened = false;
+  /** The socket the server promoted as the person (its person-only
+   * `proposalSync` came, which the backend sends on a verified hello only). */
+  private promoted: WebSocket | null = null;
 
   constructor(path: string) {
     this.path = path;
@@ -396,7 +399,11 @@ class WebSocketClient {
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
     void personTokenForSocket(socket.url).then((personToken) => {
       if (this.ws !== socket) return;
-      if (personToken) this.sayHello(socket, socket.url);
+      // GM r29 item 3 (fix round 19): the backend ignores a second hello on a
+      // socket it already promoted, so a link taken in then (the same link
+      // reopened) reconnects, and the new socket's hello is what the server
+      // promotes, or refuses.
+      if (personToken && this.promoted !== socket) this.sayHello(socket, socket.url);
       else socket.close(); // onclose reconnects, now to the pinned backend
     });
   }
@@ -436,8 +443,18 @@ class WebSocketClient {
           try {
             const parsed = JSON.parse(event.data) as ExecutionEvent | { type: 'personRequired' };
             if (parsed.type === 'personRequired') {
+              // The server refused this socket's hello: demoted (GM r29 item 3).
+              if (this.promoted === socket) this.promoted = null;
               reportPersonRequired();
               return;
+            }
+            // GM r29 item 3: the person-only proposalSync comes on promote
+            // only (backend websocket_endpoint), by whatever path the hello
+            // came: a new link, the same link again, a reconnect, the desktop
+            // app's token. The hold and the banner follow it.
+            if (parsed.type === 'proposalSync' && this.ws === socket) {
+              this.promoted = socket;
+              notePersonPromoted();
             }
             this.dispatch(parsed);
           } catch (err) {
@@ -446,6 +463,7 @@ class WebSocketClient {
         };
 
         socket.onclose = () => {
+          if (this.promoted === socket) this.promoted = null;
           this.forceDiscoveryOnReconnect = true;
           console.log('[ws] disconnected, reconnecting in 3s...');
           this.scheduleReconnect();

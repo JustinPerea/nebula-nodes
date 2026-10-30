@@ -833,6 +833,13 @@ nebula note "n4 and n7 use different seeds; I'll match them" --node n4 --node n7
 nebula notes --unread          # your updates the person hasn't opened
 ```
 
+A note keeps the lines the person wrote: `nebula pins` prints a note of
+several lines under its pin's line, every line indented the same, so a list
+keeps its shape, and an answer to it (`— resolved by …`) on its own line
+after the note (over MCP, `pins[].text` holds `\n`; a channel push prints it
+the same way inside `<pin>…</pin>`). `nebula watch`
+keeps each event on one line, so a break in a note shows there as ` ⏎ `. Read all of it before you act.
+
 A pin you read before a project switch may be gone from the open project:
 `nebula pin resolve` then says that note isn't in the open project. Run
 `nebula pins` again and answer one listed there. The person's notes are tied

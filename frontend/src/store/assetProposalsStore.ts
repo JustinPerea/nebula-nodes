@@ -6,7 +6,8 @@ import {
   type AssetProposalStatus,
   type AssetProposalView,
 } from '../lib/assetProposals';
-import { failureMessage } from '../lib/errorCopy';
+import { PERSON_REQUIRED_CODE, failureMessage } from '../lib/errorCopy';
+import { onPersonPromoted, personGateHeld, subscribePersonGate } from '../lib/personSession';
 
 /** How long a closed proposal's strip fades before it goes. Matches asset-proposals.css. */
 export const ASSET_PROPOSAL_EXIT_MS = 220;
@@ -31,6 +32,12 @@ export interface ReviewRequest {
 interface AssetProposalsState {
   proposals: Record<string, AssetProposalEntry>;
   review: ReviewRequest | null;
+  /** GM r34 (PR #200 fix round 23, review 19 NIT-4): true from the moment the
+   * person gate holds until the person's next assetProposalSync. Meanwhile
+   * a new proposal's Update has no card here (its frame is person-only), so
+   * the strip shows a placeholder for it (store/heldAssetProposals.ts); the
+   * sync that follows the promote puts the real card in its place. */
+  awaitingSync: boolean;
   /** Newer views of open proposals (a relist), keeping keys and person-only `before`. */
   refresh: (views: AssetProposalView[]) => void;
   pending: Record<string, 'accept' | 'reject'>;
@@ -50,10 +57,17 @@ const SAFE_COLOR = /^#[0-9a-fA-F]{6}$/;
 const KINDS: ReadonlySet<string> = new Set<AssetProposalKind>(['project', 'moodboard', 'commons']);
 const exitTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-/** Drop malformed views; the agent colour goes into CSS, so only plain hex passes. */
+/** The agent's identity colour as a proposal card draws it (its dot and
+ * name): it goes into CSS, so only plain hex passes. The held placeholder
+ * uses it too (GM r35), with the same agent's colour from its Update. */
+export function proposalAgentColor(color: unknown): string {
+  return typeof color === 'string' && SAFE_COLOR.test(color) ? color : '#5B9DFF';
+}
+
+/** Drop malformed views. */
 function clean(view: AssetProposalView): AssetProposalView | null {
   if (!view || typeof view.id !== 'string' || !KINDS.has(view.kind) || typeof view.target?.id !== 'string') return null;
-  const color = SAFE_COLOR.test(view.agent?.color ?? '') ? view.agent.color : '#5B9DFF';
+  const color = proposalAgentColor(view.agent?.color);
   return { ...view, agent: { ...view.agent, name: String(view.agent?.name ?? 'Agent'), color }, change: view.change ?? {} };
 }
 
@@ -73,6 +87,7 @@ function cancelExit(id: string): void {
 export const useAssetProposalsStore = create<AssetProposalsState>((set, get) => ({
   proposals: {},
   review: null,
+  awaitingSync: personGateHeld(),
 
   refresh: (views) => {
     const current = get().proposals;
@@ -99,7 +114,7 @@ export const useAssetProposalsStore = create<AssetProposalsState>((set, get) => 
       delete (view as Partial<AssetProposalView & { acceptKey: string }>).acceptKey;
       proposals[view.id] = { view, acceptKey };
     }
-    set({ proposals });
+    set({ proposals, awaitingSync: false });
   },
 
   open: (raw, acceptKey) => {
@@ -146,6 +161,26 @@ export const useAssetProposalsStore = create<AssetProposalsState>((set, get) => 
   reject: async (id, reason) => decide(id, 'reject', reason),
 }));
 
+// The gate held (a refused hello, personRequired, or a 403 person_required):
+// from now until the person's next sync, new proposals reach this tab only as
+// Updates.
+subscribePersonGate(() => {
+  if (personGateHeld() && !useAssetProposalsStore.getState().awaitingSync) {
+    useAssetProposalsStore.setState({ awaitingSync: true });
+  }
+});
+
+/** Review 17 LOW-1, as on the canvas bar (fix round 22): proposals whose
+ * error is the person gate's refusal; the server promoting the tab clears them. */
+const personRefused = new Set<string>();
+onPersonPromoted(() => {
+  if (!personRefused.size) return;
+  const errors = { ...useAssetProposalsStore.getState().errors };
+  for (const id of personRefused) delete errors[id];
+  personRefused.clear();
+  useAssetProposalsStore.setState({ errors });
+});
+
 async function decide(id: string, verb: 'accept' | 'reject', reason?: string): Promise<void> {
   const store = useAssetProposalsStore;
   const entry = store.getState().proposals[id];
@@ -159,6 +194,7 @@ async function decide(id: string, verb: 'accept' | 'reject', reason?: string): P
   } catch (error) {
     // A 409 means it no longer fits; the backend closes it and says so over the socket.
     const message = failureMessage(error, `Couldn't ${verb} the proposal.`);
+    if ((error as { code?: unknown } | null)?.code === PERSON_REQUIRED_CODE) personRefused.add(id); else personRefused.delete(id);
     store.setState((state) => ({ pending: without(state.pending, id), errors: { ...state.errors, [id]: message } }));
   }
 }

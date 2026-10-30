@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { canvasLockNow, refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 import { Brush, Eraser, Trash2, X } from 'lucide-react';
 import '../../styles/mask-painter.css';
 import { useMaskPainterDialog } from './maskPainterDialog';
@@ -33,6 +34,7 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
   const [hasStrokes, setHasStrokes] = useState(false);
   const drawingRef = useRef(false);
   const dialog = useMaskPainterDialog(onClose);
+  const lock = useCanvasLock();
   const lastPointRef = useRef<{ x: number; y: number } | null>(null);
 
   // Load the image to learn its natural size (the canvas paints at full res).
@@ -106,6 +108,8 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
   );
 
   const onPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    // Read-only while following or offline (review 3 LOW-3): no stroke.
+    if (refuseCanvasEdit()) return;
     const pt = canvasPoint(e);
     if (!pt) return;
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -115,18 +119,33 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
     setHasStrokes(true);
   }, [canvasPoint, drawSegment]);
 
+  // A stroke under way ends the moment the lock starts (fix round 4 of PR
+  // #200, review 4 LOW-2): the next move paints nothing, before React has
+  // re-rendered with the lock, and the effect below ends it once it has.
+  const endStroke = useCallback((e?: React.PointerEvent<HTMLCanvasElement>) => {
+    drawingRef.current = false;
+    lastPointRef.current = null;
+    if (e && e.currentTarget.hasPointerCapture?.(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+  }, []);
+
+  useEffect(() => {
+    if (lock.locked) endStroke();
+  }, [lock.locked, endStroke]);
+
   const onPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!drawingRef.current) return;
+    if (canvasLockNow().locked) {
+      endStroke(e);
+      return;
+    }
     const pt = canvasPoint(e);
     if (!pt || !lastPointRef.current) return;
     drawSegment(lastPointRef.current, pt);
     lastPointRef.current = pt;
-  }, [canvasPoint, drawSegment]);
+  }, [canvasPoint, drawSegment, endStroke]);
 
-  const onPointerUp = useCallback(() => {
-    drawingRef.current = false;
-    lastPointRef.current = null;
-  }, []);
+  // Up or leave: the stroke ends, painting nothing more (locked or not).
+  const onPointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => endStroke(e), [endStroke]);
 
   const clearStrokes = useCallback(() => {
     const canvas = strokesRef.current;
@@ -203,17 +222,24 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
         )}
 
         <div className="mask-painter__toolbar">
+          {/* Review 3 LOW-3: while following or offline the painter is
+              read-only, as the other editors: its tools and strokes lock (the
+              project bar or the offline row above the scrim says why). */}
           <button
             type="button"
             className={`mask-painter__tool ${tool === 'brush' ? 'mask-painter__tool--active' : ''}`}
+            aria-pressed={tool === 'brush'}
             onClick={() => setTool('brush')}
+            {...lock.act({ offline: true })}
           >
             <Brush size={14} /> Brush
           </button>
           <button
             type="button"
-            className={`mask-painter__tool ${tool === 'erase' ? 'mask-painter__tool--active' : ''}`}
+            className={`mask-painter__tool mask-painter__tool--erase ${tool === 'erase' ? 'mask-painter__tool--active' : ''}`}
+            aria-pressed={tool === 'erase'}
             onClick={() => setTool('erase')}
+            {...lock.act({ offline: true })}
           >
             <Eraser size={14} /> Erase
           </button>
@@ -225,9 +251,10 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
               max={160}
               value={brushSize}
               onChange={(e) => setBrushSize(Number(e.target.value))}
+              {...lock.act({ offline: true })}
             />
           </label>
-          <button type="button" className="mask-painter__tool" onClick={clearStrokes}>
+          <button type="button" className="mask-painter__tool mask-painter__tool--clear" onClick={clearStrokes} {...lock.act({ offline: true })}>
             <Trash2 size={14} /> Clear
           </button>
           <div className="mask-painter__spacer" />
@@ -238,7 +265,9 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
             type="button"
             className="mask-painter__save"
             onClick={saveMask}
-            disabled={!natural || !hasStrokes}
+            // Saving writes the node's mask (updateNodeData): the canvas lock
+            // (fix round 2 of PR #200, review 2 L-5; GM's sweep list).
+            {...lock.act({ disabled: !natural || !hasStrokes, offline: true })}
           >
             Save Mask
           </button>

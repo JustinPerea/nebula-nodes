@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { InNoticeRegion } from '../InNoticeRegion';
+import type { LeaveProps } from '../../lib/noticeLeave';
 
 /** How long the toast stays up while the pointer and focus are elsewhere. */
 export const BOARD_TOAST_MS = 6000;
@@ -21,9 +22,11 @@ export interface BoardToast {
  * notice region, on the Board and in the List view alike (GM - Design,
  * 2026-10-23: "One region, one stack, and nothing else draws toasts.").
  */
-export function BoardUndoToast({ toast, onDismiss }: {
+export function BoardUndoToast({ toast, onDismiss, leave }: {
   toast: BoardToast;
   onDismiss: () => void;
+  /** Its leave (lib/noticeLeave NoticeLeave), when its parent draws one. */
+  leave?: LeaveProps;
 }) {
   const [held, setHeld] = useState(false);
   const dismissRef = useRef(onDismiss);
@@ -42,6 +45,7 @@ export function BoardUndoToast({ toast, onDismiss }: {
         role="status"
         aria-live="polite"
         aria-label="Board undo"
+        {...leave}
         onPointerEnter={() => setHeld(true)}
         onPointerLeave={() => setHeld(false)}
         onFocus={() => setHeld(true)}

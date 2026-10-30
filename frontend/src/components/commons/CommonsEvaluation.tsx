@@ -300,7 +300,7 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef }: {
       {!item.accent_locked ? <>
         <small>C2 · ACCENT OBSERVATIONS</small><h3 className="evaluation-step">What catches your eye?</h3><p>Choose the colors that stand out, even when they occupy very little space.</p>
         {points.map((point, n) => <div className="evaluation-point" key={n}>Accent {n + 1} · {Math.round(point.x * 100)}%, {Math.round(point.y * 100)}%
-          <button className="commons-button" disabled={readonly} onClick={() => { setPoints(points.filter((_, i) => i !== n)); onDirty(true); }}>Remove accent {n + 1}</button></div>)}
+          <button className="commons-button commons-button--remove" disabled={readonly} onClick={() => { setPoints(points.filter((_, i) => i !== n)); onDirty(true); }}>Remove accent {n + 1}</button></div>)}
         <label><input type="checkbox" checked={noAccents} disabled={readonly || !url} onChange={(e) => { setNoAccents(e.target.checked); setPoints([]); onDirty(true); }} /> I don’t see any accent colors</label>
         <div className="evaluation-save"><button className="commons-button commons-button--primary" disabled={readonly || !url || (!points.length && !noAccents) || offline} {...offlineMark(offline)}
           onClick={() => void saveAccents()}>Save accents & reveal labels</button>{unsavedMark}</div>
@@ -322,7 +322,7 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef }: {
             const roles = { ...labels.palette_roles }; if (e.target.value) roles[p.index] = e.target.value; else delete roles[p.index]; change({ palette_roles: roles });
           }}><option value="">Choose a role…</option>{batch.roles.map((role) => <option key={role}>{role}</option>)}</select></label>)}
         <h4 className="evaluation-subhead">Keywords · {labels.keywords.length} / 12</h4>
-        <div className="evaluation-keywords">{labels.keywords.map((word) => <button className="commons-button" key={word} onClick={() => change({ keywords: labels.keywords.filter((w) => w !== word) })}>{pretty(word)} ×</button>)}</div>
+        <div className="evaluation-keywords">{labels.keywords.map((word) => <button className="commons-button commons-button--remove" key={word} aria-label={`Remove ${pretty(word)}`} onClick={() => change({ keywords: labels.keywords.filter((w) => w !== word) })}>{pretty(word)} ×</button>)}</div>
         <input aria-label="Search keywords" placeholder="Search the shared vocabulary…" value={query} onChange={(e) => setQuery(e.target.value)} />
         <div className="evaluation-keywords">{query.trim() && batch.keywords.filter((word) => word.includes(query.trim().toLowerCase().replaceAll(' ', '_')) && !labels.keywords.includes(word)).slice(0, 20).map((word) =>
           <button className="commons-button" key={word} disabled={labels.keywords.length >= 12} onClick={() => { change({ keywords: [...labels.keywords, word], no_keywords: false }); setQuery(''); }}>{pretty(word)}</button>)}</div>
@@ -330,7 +330,7 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef }: {
         <label><input type="checkbox" checked={labels.flagged} onChange={(e) => change({ flagged: e.target.checked })} /> I need to revisit this reference</label>
         <div className="evaluation-save"><button className="commons-button commons-button--primary" disabled={!dirty || offline} {...offlineMark(offline)} onClick={() => void saveLabels()}>Save labels</button>{unsavedMark}</div>
       </fieldset>}
-      {dirty && !busy && <button className="commons-button" onClick={discard}>Discard unsaved changes</button>}
+      {dirty && !busy && <button className="commons-button commons-button--danger" onClick={discard}>Discard unsaved changes</button>}
       <p role="status">{batch.sealed ? 'Sealed · read only' : batch.state === 'closed' ? 'Closed · read only' : busy ? 'Saving…' : dirty ? 'Save before changing reference' : 'Saved on this computer'}</p>
     </div>
   </>;

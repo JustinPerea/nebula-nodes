@@ -156,54 +156,63 @@ export function RemotionPropertiesPanel({ remotionNodeId }: RemotionPropertiesPa
       <section className="remotion-properties-panel__section">
         <h4>Transform</h4>
         <SpatialAxisInput
+          disabled={lock.locked}
           axis="x"
           label="Position X"
           value={item.spatial.x}
           onValueChange={(value) => onSpatialPatch({ x: value })}
         />
         <SpatialAxisInput
+          disabled={lock.locked}
           axis="y"
           label="Position Y"
           value={item.spatial.y}
           onValueChange={(value) => onSpatialPatch({ y: value })}
         />
         <SpatialAxisInput
+          disabled={lock.locked}
           axis="z"
           label="Position Z"
           value={item.spatial.z}
           onValueChange={(value) => onSpatialPatch({ z: value })}
         />
         <SpatialAxisInput
+          disabled={lock.locked}
           axis="x"
           label="Scale X"
           value={item.spatial.scale[0]}
           onValueChange={(value) => onScaleValue(0, value)}
         />
         <SpatialAxisInput
+          disabled={lock.locked}
           axis="y"
           label="Scale Y"
           value={item.spatial.scale[1]}
           onValueChange={(value) => onScaleValue(1, value)}
         />
         <SpatialAxisInput
+          disabled={lock.locked}
           axis="z"
           label="Scale Z"
           value={item.spatial.scale[2]}
           onValueChange={(value) => onScaleValue(2, value)}
         />
         <SpatialAxisInput
+          disabled={lock.locked}
           axis="x"
           label="Rotation X"
           value={item.spatial.rotation[0]}
           onValueChange={(value) => onRotationValue(0, value)}
         />
         <SpatialAxisInput
+          disabled={lock.locked}
           axis="y"
           label="Rotation Y"
           value={item.spatial.rotation[1]}
           onValueChange={(value) => onRotationValue(1, value)}
         />
         <SpatialAxisInput
+          disabled={lock.locked}
           axis="z"
           label="Rotation Z"
           value={item.spatial.rotation[2]}

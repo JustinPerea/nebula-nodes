@@ -64,19 +64,21 @@ describe('the project bar while it follows', () => {
     expect(screen.getByText('Glass campaign')).toBeInTheDocument();
   });
 
-  it('the CSS cuts inside the name and never the quote or the ellipsis', () => {
+  it('the quote and the ellipsis never shrink (a long name is cut in script, PR #200 fix round 1)', () => {
     const css = readFileSync(resolve(__dirname, '../src/components/projects/ProjectWorkspaceControls.css'), 'utf8');
     expect(css).toMatch(/\.project-workspace-controls__opening-fixed \{ flex: 0 0 auto; \}/);
-    expect(css).toMatch(/\.project-workspace-controls__opening-name \{[^}]*text-overflow: ellipsis;[^}]*\}/);
   });
 
-  it('keeps the width it had', () => {
+  // PR #200 fix round 1 (GM bug 1, r21 blocker B): the bar grows to fit the
+  // name; it never gets narrower than it was as the follow starts.
+  it('never narrower than it was; it grows to fit (no width or max-width held)', () => {
     const { container } = render(<ProjectWorkspaceControls />);
     const bar = container.querySelector('.project-workspace-controls') as HTMLElement;
     bar.getBoundingClientRect = () => ({ width: 214, height: 30, x: 0, y: 0, top: 0, left: 0, right: 214, bottom: 30, toJSON: () => ({}) });
     act(() => setFollowingSwitch({ projectName: 'a much longer project name than the bar holds', agent: 'Claude Code' }));
-    expect(bar.style.width).toBe('214px');
-    expect(bar.style.maxWidth).toBe('214px');
+    expect(bar.style.minWidth).toBe('214px');
+    expect(bar.style.width).toBe('');
+    expect(bar.style.maxWidth).toBe('');
   });
 });
 

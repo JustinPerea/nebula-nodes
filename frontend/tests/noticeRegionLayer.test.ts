@@ -28,7 +28,7 @@ function rule(css: string, selector: string): string {
 }
 
 describe('the notice layer', () => {
-  it('sits above every panel, the Agent log, popovers and the Studios, below a blocking modal', () => {
+  it('sits above every panel, the Agent log, popovers, the Studios and (GM r25) every dialog\'s backdrop', () => {
     const notice = layer('notice');
     expect(notice).toBeGreaterThan(layer('panel'));
     expect(notice).toBeGreaterThan(layer('panel') + 2); // the floating Inspector
@@ -38,7 +38,13 @@ describe('the notice layer', () => {
     expect(notice).toBeGreaterThan(layer('workspace'));
     // Settings over a Studio sits one above the workspace overlay (the chat panel's layer there).
     expect(notice).toBeGreaterThan(layer('workspace-overlay') + 1);
-    expect(notice).toBeLessThan(layer('modal'));
+    // GM r25 (PR #200 fix round 16): notices stay above any dialog's backdrop,
+    // the token modals and every raw z-index in the app's sheets alike (the
+    // World viewer's backdrop is 20000).
+    expect(notice).toBeGreaterThan(layer('modal-control'));
+    const sheets = import.meta.glob('../src/**/*.css', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+    const raw = Object.values(sheets).flatMap((css) => [...css.matchAll(/z-index:\s*(\d+)/g)].map((m) => Number(m[1])));
+    expect(Math.max(...raw)).toBeLessThan(notice);
   });
 
   it('the region is fixed on that layer and takes no pointer events itself', () => {
