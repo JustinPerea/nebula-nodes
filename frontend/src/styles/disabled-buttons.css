@@ -284,6 +284,16 @@
   opacity: 1 !important;
 }
 
+/* A ghost control whose label is several lines of its own text (the Agents
+   panel's row: name, count, ask line). Disabled, every line takes the
+   shared grey, whatever colour each line has enabled; an author's dot keeps
+   its colour, since it says who is asking (GM, PR #204 round 1). List a new
+   multi-line ghost control here, next to its entry in the ghost list above. */
+:is(.agent-roster__row):is(:disabled, [aria-disabled='true'])
+  :not(.agent-notes-dot, .agent-notes-dot *) {
+  color: var(--sr-disabled-ink, rgba(255, 255, 255, 0.55)) !important;
+}
+
 /* A text field the canvas lock makes read-only (Cinema's shot prompt): its
    text and edge in the same grey, no extra dimming (GM answer 1's offline
    shot read it as live). */

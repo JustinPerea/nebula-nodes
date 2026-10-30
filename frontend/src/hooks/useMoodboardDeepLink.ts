@@ -3,7 +3,6 @@ import { useUIStore } from '../store/uiStore';
 import { useProjectStore } from '../store/projectStore';
 import { NEW_MOODBOARD_SENTINEL } from '../lib/studioSentinels';
 import { isPersonLinkHash } from '../lib/personSession';
-import { fetchMoodboard } from '../lib/api';
 
 // A board id, as the backend allows it (services/moodboard_store.py).
 const MOODBOARD_HASH = /^#moodboard\/([A-Za-z0-9_-]{1,64})$/;
@@ -73,36 +72,15 @@ export function useMoodboardDeepLink(): void {
   useEffect(() => {
     let pending = moodboardIdFromHash(window.location.hash);
     // No board in the address: the tab's own record of the Studio it showed
-    // (a reload after the person link took the hash). Only a board that still
-    // exists reopens; one deleted meanwhile leaves the person on the canvas.
-    let restoring = false;
-    let checking = false;
-    let disposed = false;
-    if (!pending && neutralHash(window.location.hash)) {
-      pending = keptStudioBoard();
-      restoring = pending !== null;
-    }
+    // (a reload after the person link took the hash). It opens the way the
+    // hash would: a board deleted meanwhile gets the Studio's own "Moodboard
+    // not found", the same as a #moodboard/<id> link to it (GM, PR #204
+    // round 1: one behaviour for a missing board however reached).
+    if (!pending && neutralHash(window.location.hash)) pending = keptStudioBoard();
 
     const openPending = () => {
       const project = useProjectStore.getState();
       if (!pending || !project.initialized || project.busy) return;
-      if (restoring) {
-        if (checking) return;
-        checking = true;
-        const id = pending;
-        void fetchMoodboard(id).catch(() => null).then((found) => {
-          if (disposed || pending !== id) return;
-          checking = false;
-          restoring = false;
-          if (!found) {
-            pending = null;
-            keepStudioBoard(null);
-            return;
-          }
-          openPending();
-        });
-        return;
-      }
       if (project.screen !== 'workspace') {
         // The app starts on Projects with the open project already loaded:
         // the link goes into it, as clicking its card would (open() only
@@ -136,7 +114,6 @@ export function useMoodboardDeepLink(): void {
       const id = moodboardIdFromHash(window.location.hash);
       if (id) {
         pending = id;
-        restoring = false;
         openPending();
         return;
       }
@@ -166,7 +143,6 @@ export function useMoodboardDeepLink(): void {
     openPending();
     followStudio();
     return () => {
-      disposed = true;
       stopUI();
       stopProject();
       window.removeEventListener('hashchange', onHashChange);

@@ -230,3 +230,37 @@ describe('GM 2026-10-29: the held needs-you count', () => {
       .toEqual([['Codex', '1 proposal', null], ['Claude Code', '2 questions', ANSWER_LOCK], ['Cursor', '1 proposal', REVIEW_LOCK]]);
   });
 });
+
+describe('GM, PR #204 round 1: a held row reads disabled', () => {
+  const sheets = ['src/components/agent-notes/agentNotes.css', 'src/components/agent-notes/agentRoster.css',
+    'src/styles/disabled-buttons.css'];
+  let style: HTMLStyleElement;
+  beforeEach(async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    style = document.createElement('style');
+    // The shared helper's own selectors, applied by the real sheets (jsdom resolves no var(), so the declared value is read).
+    style.textContent = sheets.map((file) => readFileSync(resolve(__dirname, '..', file), 'utf8')).join('\n');
+    document.head.append(style);
+  });
+  afterEach(() => style.remove());
+
+  const ink = (row: HTMLElement) => ['.agent-roster__name', '.agent-roster__count', '.agent-roster__line']
+    .map((selector) => getComputedStyle(row.querySelector(selector)!).color);
+  const dotInk = (row: HTMLElement) => getComputedStyle(row.querySelector('.agent-notes-dot')!).color;
+  const GREY = 'var(--sr-disabled-ink, rgba(255, 255, 255, 0.55))';
+
+  it('every line of a held row, the name included, takes the shared grey; the dot keeps its colour; promoted, its own inks come back', async () => {
+    render(<AppAgentNotes />);
+    act(() => { useAssetProposalsStore.setState({ awaitingSync: true }); });
+    syncUpdates();
+    const list = await openList();
+    fireEvent.click(await rosterToggle(list));
+    const dotsHeld = rows(list).map(dotInk);
+    for (const row of rows(list)) expect(ink(row)).toEqual([GREY, GREY, GREY]);
+    expect(dotsHeld.every((value) => value !== GREY)).toBe(true);
+    promote();
+    for (const row of rows(list)) expect(ink(row).some((value) => value === GREY)).toBe(false);
+    expect(rows(list).map(dotInk)).toEqual(dotsHeld);
+  });
+});
