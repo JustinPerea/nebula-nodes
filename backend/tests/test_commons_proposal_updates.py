@@ -87,13 +87,16 @@ def test_a_fallback_to_the_older_ask_rewrites_the_words_with_the_count(cx, canva
     newer = _propose(cx, {"correction": {"field_path": "summary", "op": "set", "value": "A loud grid poster"}}).json()["proposal"]
     (note,) = _proposal_notes(canvas_project)
     assert note["text"] == "Claude Code asks to change a reference in the Commons"
-    assert note["proposal"] == {"id": newer["id"], "kind": "commons", "targetId": cx.poster, "changes": 1}
+    assert note["proposal"] == {"id": newer["id"], "kind": "commons", "targetId": cx.poster, "changes": 1,
+                                "since": newer["createdAt"]}
 
     assert cx.client.delete(f"/api/canvas/proposals/{newer['id']}", headers=CLAUDE).status_code == 200
     (after,) = _proposal_notes(canvas_project)
     assert after["id"] == note["id"] and not after.get("resolvedAt")
     assert after["text"] == "Claude Code asks to make 3 changes to a reference in the Commons"
-    assert after["proposal"] == {"id": older["id"], "kind": "commons", "targetId": cx.poster, "changes": 3}
+    # PR #202 review 2 LOW-A: ``since`` is the older ask's createdAt now, so a held tab orders by it.
+    assert after["proposal"] == {"id": older["id"], "kind": "commons", "targetId": cx.poster, "changes": 3,
+                                 "since": older["createdAt"]}
     assert after["actions"][0]["op"]["proposalId"] == older["id"]
     # In place: still read as it was, no new Update.
     assert after.get("readAt") == note.get("readAt")
@@ -109,4 +112,22 @@ def test_a_fallback_to_an_inbox_ask_says_so_in_words_and_ref(cx, canvas_project)
     assert cx.client.delete(f"/api/canvas/proposals/{newer['id']}", headers=CLAUDE).status_code == 200
     (after,) = _proposal_notes(canvas_project)
     assert after["text"] == "Claude Code asks to take a reference out of the inbox"
-    assert after["proposal"] == {"id": older["id"], "kind": "commons", "targetId": cx.inbox, "changes": 1, "inbox": True}
+    assert after["proposal"] == {"id": older["id"], "kind": "commons", "targetId": cx.inbox, "changes": 1, "inbox": True,
+                                 "since": older["createdAt"]}
+
+
+def test_a_fallback_keeps_a_read_update_read(cx, canvas_project):
+    """PR #202 review 2 NIT-B: the in-place change keeps the read state the
+    person left (read here), so the corner's count doesn't move."""
+    older = _propose(cx, {"edits": [
+        {"correction": {"field_path": "type_style.value", "value": "serif"}},
+        {"correction": {"field_path": "axes.quiet_loud", "value": -0.4}},
+    ]}).json()["proposal"]
+    newer = _propose(cx, {"correction": {"field_path": "summary", "op": "set", "value": "A loud grid poster"}}).json()["proposal"]
+    assert cx.client.post("/api/canvas/agent-notes/read", json={}, headers=cx.person).status_code == 200
+    (read,) = _proposal_notes(canvas_project)
+    assert read["readAt"]
+    assert cx.client.delete(f"/api/canvas/proposals/{newer['id']}", headers=CLAUDE).status_code == 200
+    (after,) = _proposal_notes(canvas_project)
+    assert after["proposal"]["id"] == older["id"] and not after.get("resolvedAt")
+    assert after["readAt"] == read["readAt"]

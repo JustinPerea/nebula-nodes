@@ -340,9 +340,13 @@ export function CommonsView() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [ask, promptElement] = useCommonsPrompt();
   const proposedIds = useAssetProposalsStore(useShallow((state) => targetsOf(state, 'commons')));
-  const proposed = useMemo(() => new Set(proposedIds), [proposedIds]);
-  // GM, PR #202 r1: a held tab shows the proposals line from the Updates it has.
-  const heldLines = useHeldCommonsLines().length;
+  // GM, PR #202 r1: a held tab shows the proposals line from the Updates it has;
+  // r2: and the tiles' PROPOSAL pill, from those Updates' targets only (never
+  // the person-only list), so the promote changes nothing on a tile.
+  const heldCommons = useHeldCommonsLines();
+  const heldLines = heldCommons.length;
+  const proposed = useMemo(() => new Set([...proposedIds, ...heldCommons.map((line) => line.assetId)]),
+    [proposedIds, heldCommons]);
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 

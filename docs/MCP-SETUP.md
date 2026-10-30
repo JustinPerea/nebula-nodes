@@ -2372,7 +2372,10 @@ screen), never to REST, the journal or MCP results. `assetProposalClosed`
 `{proposalId, status, reason, kind, targetId}` goes to every socket. The
 Agent log names the proposal ("Asks to make another image the cover of
 project "Dusk" (decide on the Projects screen)"), since no cursor can go
-there. Memory only: lost on restart.
+there, and a withdrawal the same way under the agent's name, by any route
+(`withdraw_proposal`, `nebula proposal withdraw`, `DELETE
+/api/canvas/proposals/{id}`): "Withdrew its request to make another image
+the cover of project "Dusk"". Memory only: lost on restart.
 
 **The Update.** Each asset proposal also posts an Update in the Updates
 corner (Justin's Q92 a, 2026-10-21), on the open project's list, written by
@@ -2385,8 +2388,9 @@ reference out of the inbox"). Names only: never the agent's note, a board's
 notes, a private note or Commons text. It carries `proposal: {id, kind,
 targetId}`, plus, for a cover, `cover`: `"automatic"` or `"image"` (which
 kind, never which image), and for a Commons ask `changes` (how many edits)
-(1 to 999) and `inbox: true` when it only asks to take a reference out of
-the inbox.
+(1 to 999), `inbox: true` when it only asks to take a reference out of
+the inbox, and `since` (when that ask was made, ms, as the proposal's
+`createdAt`).
 A tab that isn't connected as the person sees only the Update, and its
 placeholder card and the Commons proposals line read these, never the text. It has one **Review** action (`proposal.review`), which takes the
 person to the Projects screen with that card's strip in view, to Moodboard

@@ -174,7 +174,8 @@ review 20 (`held_color_unvalidated`, `fallback_differs`) are now killed.
 - `tsc -b`: clean. `npm run lint`: clean.
 - Vitest, the full run: 598 files, 7,553 tests, all passed.
 - Backend, the full suite (isolated: temp HOME, NEBULA_SETTINGS_PATH,
-  NEBULA_STATE_DIR, NEBULA_OUTPUT_ROOT): 11,882 passed.
+  NEBULA_STATE_DIR, NEBULA_OUTPUT_ROOT): 11,882 passed (as that run printed it;
+  review 1's isolated run of the same commit got 11,811 passed, 71 skipped).
 - Build budget: 421,139 bytes raw (129,418 gzip); 101 JS assets eval-free;
   fonts OK. dist removed after.
 - Live (8795/5795, 8000-8010 and 5173 blocked, nothing run): 14 of 14.
@@ -406,7 +407,219 @@ Same round. Review 1 found 0 HIGH, 0 MEDIUM, 1 LOW and 7 NITs.
   - An earlier full run, before the review-1 changes, had one failure under
     load: `noticeRegionScreenSwitch`, a frame-timing test that this work
     doesn't touch. It passed 3 of 3 times alone, and in this run.
-- Backend, the full suite, isolated: 11,889 passed.
+- Backend, the full suite, isolated: 11,889 passed and 0 skipped in this
+  builder's runs. Review 2's isolated run of d6817e0a got 11,818 passed and
+  71 skipped: its environment skips 71 tests that run here (NIT-A).
 - Build budget: 422,073 bytes raw (129,674 gzip); 101 JS assets eval-free;
+  fonts OK.
+- `dist` removed.
+
+# PR #202 round 3 (GM r2, on d6817e0a)
+
+GM signed off round 2 (`gm-pr202-r2.md`) with four items.
+
+1. **The same agent asking twice while held:** GM accepts that the count
+   rises in place on promote. Nothing changed. Live, the held line
+   "Codex asks to change a reference" became "Codex has 2 requests to
+   change a reference" in place on promote.
+
+2. **A withdrawal goes in the Agent log.**
+   - `_withdraw_asset_proposal` now sends "Withdrew its request to X"
+     through `_say_agent_action`, the call the ask line ("Asks to X
+     (decide …)") uses. X comes from the same helper,
+     `asset_proposal_summary`, so it is the ask's X exactly. The row's author
+     is the calling agent, and there is no trailing period, like the
+     sibling lines.
+   - One code path covers every route: HTTP `DELETE
+     /api/canvas/proposals/{id}`, MCP `withdraw_proposal` and CLI `nebula
+     proposal withdraw` all reach it.
+   - Tests: one per route, plus a Commons case and a refused withdrawal
+     (another agent's, 403) that logs nothing.
+   - **Canvas proposals: not built (reported).** A canvas proposal's ask has
+     no "Asks to X" line. Its Agent log line is the agent's own note (the
+     cursor bubble, `say=spec.note`), and only when the proposal has a
+     target. There is no X to mirror.
+   - The Commons X names the reference by its asset id ("make its role avoid
+     of Commons reference ast_…"), because the ask line already does. GM's
+     example ("make 3 changes to “Open refs”") names it differently, which
+     would be a change to the shared helper, for the wording batch.
+
+3. **No parentheses on the Commons line,** held or promoted:
+   - "Codex and Claude Code have 2 requests to change a reference";
+   - "Codex has 2 requests to change a reference";
+   - "Codex asks to change a reference" (unchanged).
+
+   Names come from the shared name-list helper. `nodeNameList`
+   (lib/errorCopy.ts) is node-specific (quoted names, "N nodes"), so its
+   join moved into a shared `joinedList`, and `agentNameList` sits beside
+   it with the same rule: each agent once, unquoted, up to 3 by name, from 4
+   "4 agents". Pinned for 1, 2, 3 and 4 agents and duplicates; the line
+   shows "Codex, Claude Code and Cursor have 3 requests …" and "4 agents
+   have 4 requests …". The "Asks to … (decide …)" log line is untouched,
+   for the wording batch.
+
+4. **The PROPOSAL pill while held.**
+   - CommonsView's `proposed` set is now the person's list plus the target
+     ids of the held Updates (`useHeldCommonsLines`). It never reads the
+     person-only list while held.
+   - On promote the same ids come from the person's list, so nothing on
+     the tile changes. Live, the pill's markup and box, the badges and the
+     tile box were identical.
+   - A withdrawn or expired Update resolves and takes the pill (unit test;
+     live for a withdraw).
+
+## Tests on d6817e0a
+
+- **Fail there (new behaviour):**
+  - backend: 4 of 5 (HTTP, MCP, CLI, Commons);
+  - frontend: 13, namely `agentNameList` ×5, the no-parentheses and 3/4
+    agent lines, the four reworded held/promoted line tests, and two pill
+    tests.
+- **Pass there by design (pins):**
+  - the refused withdrawal;
+  - the node list's shared rule;
+  - "no pill without a held Update".
+
+## Mutations: 13 of 13 killed
+
+- The withdrawal:
+  - no log line;
+  - a different X (the Update's text);
+  - a trailing period;
+  - logged before the agent check.
+- The name list: 4+ by name, no dedupe, a count from 3.
+- The line:
+  - parentheses back;
+  - "has" for several agents;
+  - "have" for one;
+  - the old join (no count).
+- The pill:
+  - ignoring held Updates;
+  - taken from every Update, held or not.
+
+## Live (8795/5795, 8000-8010 and 5173 blocked, nothing run, 1440): 7 of 7
+
+- **Held:**
+  - "Codex and Claude Code have 2 requests to change a reference" and
+    "Codex asks to change a reference";
+  - dots in each agent's colour, no Review;
+  - pills on both tiles.
+- **Promoted:**
+  - the second line rises in place to "Codex has 2 requests to change a
+    reference";
+  - Review is added;
+  - no parentheses;
+  - every tile is identical.
+- **The Agent log, on the canvas:**
+  - "Codex: Withdrew its request to make its role avoid of Commons
+    reference ast_…", the same X as its ask line;
+  - shown in the panel under Codex.
+- **Held:** withdrawing the last ask on a reference took its line and its
+  pill.
+- **Shots** (`agent-presence/fu2c/`): `fu2c-held-1440.png` and
+  `fu2c-promoted-1440.png` at the same crop, and
+  `fu2c-agent-log-withdrawal-1440.png`.
+
+## Review 2 (of d6817e0a), added to round 3
+
+Review 2 found 0 HIGH and 0 MEDIUM. LOW-B (the held line follows the open
+project, but the Commons isn't per project) waits for GM; nothing was built
+for it.
+
+- **LOW-A: the held order is now the promoted order.**
+  - The cause: a held entry sorted by its Update's `at`, a promoted one by
+    the proposal's `createdAt`. A fallback to an older ask leaves the
+    Update's `at` on the newer ask.
+  - The fix: the Commons ref carries `since`, the ask's `createdAt` in ms
+    (a timestamp only). It is set by `update_detail` and refreshed by a
+    retarget or reopen with the new ask's detail (`_retargeted_ref` drops
+    the old one).
+  - It is checked everywhere it is read: `proposal_detail` keeps a whole
+    number from 0 to 2^53-1; `sanitizeProposal` keeps a safe non-negative
+    integer.
+  - `heldCommonsLines` and `heldProposalsFor` order by it (`askedAt`, with
+    the Update's time for an older ref without it), the same rule the
+    promoted line and the real cards use (createdAt ascending). Line order
+    and agent order both follow it.
+  - Live, the review's repros keep their order on promote:
+    - (b) lines [A, B];
+    - (c) names "Codex and Claude Code".
+  - The same agent asking twice still goes from "asks to …" to "has 2
+    requests to …" on promote (accepted by GM).
+- **LOW-C: a reopen racing a close.** This predates the PR.
+  - `resolve_proposal` takes the proposal id it closes, and resolves only
+    while the Update still reviews that proposal. Asset and canvas follows
+    pass it; the restart settle reads the current ref.
+  - `reopen_proposal` takes a `closed(id)` check (`main._proposal_closed`).
+    It also takes over an Update that isn't resolved yet when that Update
+    reviews a closed proposal.
+  - Both orders are tested end to end (the review's probe, adapted): the
+    close first, then the reopen; and the reopen landing inside the
+    close's write. Either way the reopened proposal is open under an
+    Update that reviews it, with its words.
+  - There is also a store test: another proposal's resolve leaves the
+    Update, and a reopen leaves an Update whose proposal is still open.
+- **NIT-A:** the backend counts above now give both runs (this builder's
+  0 skipped, the reviews' 71 skipped).
+- **NIT-B:** tests added for the six survivors:
+  - a membership accept with extra keys (no inbox words or flag);
+  - read state kept on a retarget (backend, read first);
+  - "changed" keeps `readAt` (frontend store);
+  - a bad colour on the promoted dot, put straight into the store, since
+    the store's own clean() already fixes it on the way in;
+  - line order with the list arriving out of order;
+  - agent order.
+
+Tests on d6817e0a:
+
+- **Fail there:**
+  - the race with the reopen landing inside the close;
+  - the store's resolve-only-its-own;
+  - `since` (backend and frontend);
+  - the extra-keys inbox case (its expected ref now has `since`);
+  - the (b) and (c) order tests;
+  - the fallback tests (the ref now has `since`).
+- **Pass there (pins):**
+  - close-first;
+  - read kept;
+  - the promoted dot colour;
+  - "changed" keeping `readAt`.
+
+Mutations: 16 of 16 killed.
+
+- LOW-A (6):
+  - held order by the Update's time;
+  - no `since`;
+  - negatives allowed;
+  - any number allowed;
+  - a retarget keeping the old `since`;
+  - frontend any number.
+- LOW-C (5):
+  - resolve ignoring the id;
+  - reopen never taking over an unresolved Update;
+  - reopen taking over an open one;
+  - main's asset resolve without the id;
+  - main's reopen without the closed check.
+- NIT-B (5):
+  - any membership with accept;
+  - a retarget marking the Update unread;
+  - the store resetting `readAt`;
+  - the promoted dot unchecked;
+  - lines unsorted.
+
+Two of these survived the first pass. The promoted dot was guarded
+upstream; the test now bypasses the store's clean(). The unsorted lines
+needed a test where the list arrives out of order.
+
+Live (1440): 9 of 9, adding the two LOW-A repros to the round-3 checks.
+
+## Gates for round 3 (`lg run --gate`, on the final tree)
+
+- `tsc -b`: clean.
+- `npm run lint`: clean.
+- Vitest, the full run: 604 files, 7,611 passed.
+- Backend, the full suite, isolated: 11,900 passed, 0 skipped in this
+  environment.
+- Build budget: 422,171 bytes raw (129,713 gzip); 101 JS assets eval-free;
   fonts OK.
 - `dist` removed.

@@ -100,7 +100,7 @@ describe('GM PR #202 r1: the Commons proposals line while the tab is held', () =
     ]);
     const { container } = render(<CommonsProposalsLine onOpen={() => {}} />);
     expect(lines(container).map(words)).toEqual([
-      'Codex and Claude Code ask to change a reference (2 proposals)',
+      'Codex and Claude Code have 2 requests to change a reference',
       'Codex asks to take a reference out of the inbox',
     ]);
     expect(lines(container).map((line) => [...line.querySelectorAll<HTMLElement>('.commons-notice__dot')].map((dot) => dot.style.getPropertyValue('--agent-color'))))
@@ -125,7 +125,7 @@ describe('GM PR #202 r1: the Commons proposals line while the tab is held', () =
     act(() => session.reportPersonRequired());
     setUpdates([update('pa_a', 'ast_1', { proposal: { changes: 1 } }), update('pa_b', 'ast_1', { at: new Date(T0 + 1).toISOString(), proposal: { changes: 1 } })]);
     const { container } = render(<CommonsProposalsLine onOpen={() => {}} />);
-    expect(lines(container).map(words)).toEqual(['Codex asks to change a reference (2 proposals)']);
+    expect(lines(container).map(words)).toEqual(['Codex has 2 requests to change a reference']);
     expect(lines(container)[0].querySelectorAll('.commons-notice__dot')).toHaveLength(1);
   });
 
@@ -144,7 +144,7 @@ describe('GM PR #202 r1: the Commons proposals line while the tab is held', () =
     act(() => session.reportPersonRequired());
     setUpdates([update('pa_h', 'ast_1', { proposal: { changes: 1 } })]);
     const { container } = render(<CommonsProposalsLine onOpen={() => {}} />);
-    expect(lines(container).map(words)).toEqual(['Claude Code and Codex ask to change a reference (2 proposals)']);
+    expect(lines(container).map(words)).toEqual(['Claude Code and Codex have 2 requests to change a reference']);
     expect(container.querySelectorAll('button')).toHaveLength(1);
   });
 

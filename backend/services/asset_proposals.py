@@ -261,6 +261,10 @@ def update_detail(proposal: AssetProposal) -> dict[str, Any]:
         membership = edits[0].get("membership") if len(edits) == 1 and isinstance(edits[0], dict) else None
         if isinstance(membership, dict) and membership.get("accept") and set(membership) == {"id", "accept"}:
             detail["inbox"] = True
+        # PR #202 review 2 LOW-A: when the ask was made (the view's createdAt,
+        # a timestamp only), so a held tab orders its line and names as the
+        # promoted line does, even after the Update fell back to an older ask.
+        detail["since"] = int(proposal.created_at * 1000)
         return detail
     return {}
 

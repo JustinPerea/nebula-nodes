@@ -110,3 +110,32 @@ def test_a_count_is_one_to_999_and_a_float_is_no_count():
     assert clean({"changes": 0}) == {}
     assert clean({"changes": 1}) == {"changes": 1} and clean({"changes": 999}) == {"changes": 999}
     assert clean({"changes": 2.5}) == {} and clean({"changes": 2.0}) == {}
+
+
+def test_since_is_a_whole_timestamp_and_a_retarget_replaces_it():
+    """PR #202 review 2 LOW-A: ``since`` (the ask's createdAt, ms) orders a
+    held tab's line; only a whole, non-negative number is kept, and a retarget
+    carries the new ask's, never the closed one's."""
+    clean = agent_notes_module.proposal_detail
+    assert clean({"since": 0}) == {"since": 0} and clean({"since": 1761739200000}) == {"since": 1761739200000}
+    for junk in (-1, 1.5, "1761739200000", True, None, 2**53):
+        assert clean({"since": junk}) == {}
+    ref = agent_notes_module._retargeted_ref({"id": "a", "kind": "commons", "targetId": "x", "changes": 1, "since": 5},
+                                             "b", {"changes": 3, "since": 2})
+    assert ref == {"id": "b", "kind": "commons", "targetId": "x", "changes": 3, "since": 2}
+    assert "since" not in agent_notes_module._retargeted_ref({"id": "a", "since": 5}, "b", None)
+
+
+def test_an_inbox_ask_with_more_than_its_id_and_accept_is_no_inbox_ask():
+    """PR #202 review 2 NIT-B: the inbox words (and flag) are for a membership
+    of exactly {id, accept}; one that also sets a role is a change."""
+    from services import asset_proposals as module
+
+    def ask(membership):
+        return module.AssetProposal(id="pa_x", agent=module.AgentIdentity(id="c", name="Codex", color="#7AD3FF", verified=True),
+                                    kind="commons", target_id="ast_1", target_name="", change={"edits": [{"membership": membership}]},
+                                    before={}, note="", created_at=1.0, expires_at=2.0)
+
+    assert module.update_detail(ask({"id": "m", "accept": True})) == {"changes": 1, "inbox": True, "since": 1000}
+    assert module.update_detail(ask({"id": "m", "accept": True, "role": "avoid"})) == {"changes": 1, "since": 1000}
+    assert module.update_text(ask({"id": "m", "accept": True, "role": "avoid"})) == "Codex asks to change a reference in the Commons"

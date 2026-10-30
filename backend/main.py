@@ -6204,6 +6204,13 @@ async def _asset_reopen_misfit(proposal: AssetProposal, exported: dict[str, Any]
         return "its target can't be read"
 
 
+def _proposal_closed(proposal_id: str) -> bool:
+    """Whether a canvas or asset proposal has closed (or is gone): an Update
+    pointing at it may be taken over by a reopen (PR #202 review 2 LOW-C)."""
+    proposal = asset_proposals.get(proposal_id) or canvas_proposals.get(proposal_id)
+    return proposal is None or not proposal.is_open
+
+
 async def _reopen_update(ref: Mapping[str, Any] | None, proposal_id: str,
                          detail: Mapping[str, Any] | None = None, text: str | None = None) -> None:
     """Its Update reviews the proposal again (op "changed", the note as it is now); an asset
@@ -6213,7 +6220,7 @@ async def _reopen_update(ref: Mapping[str, Any] | None, proposal_id: str,
         return
     try:
         result = await asyncio.to_thread(agent_notes.reopen_proposal, ref["projectId"], ref["id"], proposal_id,
-                                         detail, text)
+                                         detail, text, _proposal_closed)
     except (NoteError, ProjectStoreError):
         return
     if result is not None and result["projectId"] == _open_project_id():
@@ -8214,7 +8221,7 @@ async def _follow_asset_updates(proposals: list[AssetProposal]) -> None:
                 by = _RESOLVED_BY.get(proposal.status) or (
                     {"kind": "agent", "name": proposal.agent.name} if proposal.status == "withdrawn" else {"kind": "system"})
                 result = await asyncio.to_thread(agent_notes.resolve_proposal, ref["projectId"], ref["id"],
-                                                 outcome=asset_outcome_line(proposal), by=by)
+                                                 outcome=asset_outcome_line(proposal), by=by, proposal_id=proposal.id)
                 op, extra = "resolved", ({"unread": result["unread"]} if result else {})
         except (NoteError, ProjectStoreError):
             continue
@@ -8477,7 +8484,7 @@ async def _follow_canvas_updates(proposals: list[Proposal], *, actor: Mapping[st
         try:
             result = await asyncio.to_thread(agent_notes.resolve_proposal, ref["projectId"], ref["id"],
                                              outcome=canvas_outcome_line(proposal),
-                                             by=_canvas_resolved_by(proposal, actor))
+                                             by=_canvas_resolved_by(proposal, actor), proposal_id=proposal.id)
         except (NoteError, ProjectStoreError):
             continue
         if result is None:
@@ -8732,6 +8739,9 @@ async def _withdraw_asset_proposal(proposal_id: str, identity: Any) -> dict[str,
     except ProposalError as exc:
         raise _proposal_http_error(exc) from exc
     await _announce_closed_asset_proposals([proposal])
+    # GM, PR #202 r2: the Agent log mirrors the ask's own line ("Asks to X"),
+    # with the same X from the same helper, under the agent's name.
+    await _say_agent_action(f"Withdrew its request to {asset_proposal_summary(proposal)}")
     return {"proposal": _asset_proposal_view(proposal)}
 
 

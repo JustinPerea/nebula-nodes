@@ -63,6 +63,8 @@ export interface AgentNoteProposal {
   changes?: number;
   /** A Commons ask only to take a reference out of the inbox (GM, PR #202 r1). */
   inbox?: true;
+  /** PR #202 review 2 LOW-A: when the ask was made (its createdAt, ms), so a held tab orders as the promoted line does. */
+  since?: number;
 }
 
 /** A done card's run (backend agent_notes.post_run_done). */
@@ -144,6 +146,7 @@ function sanitizeProposal(raw: unknown): AgentNoteProposal | null {
     out.changes = ref.changes;
   }
   if (ref.inbox === true) out.inbox = true;
+  if (typeof ref.since === 'number' && Number.isSafeInteger(ref.since) && ref.since >= 0) out.since = ref.since;
   return out;
 }
 

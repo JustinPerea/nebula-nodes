@@ -35,6 +35,16 @@ function changesOf(ref: AgentNoteProposal | null | undefined): number {
   return typeof count === 'number' && Number.isInteger(count) && count >= 1 && count <= 999 ? count : 1;
 }
 
+/** When the ask was made, for ordering as the real cards and the promoted
+ * line order (by the proposal's createdAt): the ref's `since`, which a
+ * fallback to an older ask refreshes (PR #202 review 2 LOW-A); an older ref
+ * without it, the Update's time. */
+function askedAt(note: AgentNote): number {
+  if (typeof note.proposal?.since === 'number') return note.proposal.since;
+  const at = Date.parse(note.at);
+  return Number.isFinite(at) ? at : 0;
+}
+
 /** The real card's header for each kind, from the Update's structured ref
  * (agent_notes.proposal_detail), never its text: review 20 NIT-3, an agent's
  * name in the text could spoof a count. A cover says which kind (GM, PR #200
@@ -58,10 +68,10 @@ export function heldProposalsFor(notes: readonly AgentNote[], proposals: Readonl
     const op = note.actions.find((action) => action.op.kind === 'proposal.review')?.op;
     const proposalId = typeof op?.proposalId === 'string' ? op.proposalId : '';
     if (!proposalId || op?.target !== kind || op.targetId !== targetId || proposals[proposalId]) continue;
-    const at = Date.parse(note.at);
+    const at = askedAt(note);
     // The Update's author is the proposal's agent (main._post_asset_update: proposal.agent), the
     // same identity, colour included, that the real card's view carries.
-    held.push({ proposalId, agentName: note.author.name, agentColor: proposalAgentColor(note.author.color), header: headerFor(kind, note.proposal), at: Number.isFinite(at) ? at : 0 });
+    held.push({ proposalId, agentName: note.author.name, agentColor: proposalAgentColor(note.author.color), header: headerFor(kind, note.proposal), at });
   }
   return held.sort((left, right) => left.at - right.at);
 }
@@ -108,9 +118,9 @@ export function heldCommonsLines(notes: readonly AgentNote[], proposals: Readonl
     const proposalId = typeof op?.proposalId === 'string' ? op.proposalId : '';
     const assetId = typeof op?.targetId === 'string' ? op.targetId : '';
     if (!proposalId || !assetId || op?.target !== 'commons' || proposals[proposalId]) continue;
-    const at = Date.parse(note.at);
+    const at = askedAt(note);
     lines.push({ proposalId, assetId, agentName: note.author.name, agentColor: proposalAgentColor(note.author.color),
-      asks: commonsAsks(note.proposal), at: Number.isFinite(at) ? at : 0 });
+      asks: commonsAsks(note.proposal), at });
   }
   return lines.sort((left, right) => left.at - right.at);
 }

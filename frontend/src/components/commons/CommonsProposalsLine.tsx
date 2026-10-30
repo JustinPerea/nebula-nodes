@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 import type { AssetProposalView } from '../../lib/assetProposals';
 import { proposalAgentColor, useAssetProposalsStore } from '../../store/assetProposalsStore';
 import { useHeldCommonsLines } from '../../store/heldAssetProposals';
+import { agentNameList } from '../../lib/errorCopy';
 
 interface Agent {
   name: string;
@@ -28,11 +29,6 @@ function asks(view: AssetProposalView): string {
   return 'change a reference';
 }
 
-function joinNames(names: string[]): string {
-  if (names.length <= 1) return names[0] ?? 'An agent';
-  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
-}
-
 /** Who asks: a dot in each agent's colour (GM, PR #202 r1), then the names. */
 function Who({ agents }: { agents: Agent[] }) {
   return (
@@ -41,7 +37,7 @@ function Who({ agents }: { agents: Agent[] }) {
         <span key={agent.name} className="commons-notice__dot" aria-hidden="true"
           style={{ '--agent-color': agent.color } as CSSProperties} />
       ))}
-      {joinNames(agents.map((agent) => agent.name))}
+      {agentNameList(agents.map((agent) => agent.name)) || 'An agent'}
     </>
   );
 }
@@ -83,14 +79,18 @@ export function CommonsProposalsLine({ onOpen }: { onOpen: (assetId: string) => 
   return (
     <>
       {[...byAsset.values()].map((line) => {
-        const verb = line.agents.length > 1 ? 'ask' : 'asks';
         const heldOnly = line.known === 0;
+        // GM, PR #202 r2: no parentheses. One ask: "Codex asks to change a
+        // reference"; several: "Codex has 2 requests to change a reference",
+        // "Codex and Claude Code have 2 requests to change a reference".
+        const words = line.count > 1
+          ? ` ${line.agents.length > 1 ? 'have' : 'has'} ${line.count} requests to change a reference`
+          : ` asks to ${line.asks}`;
         return (
           <p key={line.assetId} className="commons-notice commons-notice--proposal" role="status" data-commons-asset={line.assetId}
             data-held-commons={heldOnly ? line.held.join(' ') : undefined}>
             <span className="commons-notice__text">
-              <Who agents={line.agents} /> {verb} to {line.count > 1 ? 'change a reference' : line.asks}
-              {line.count > 1 ? ` (${line.count} proposals)` : ''}
+              <Who agents={line.agents} />{words}
             </span>
             {!heldOnly && <button type="button" className="commons-link" onClick={() => onOpen(line.assetId)}>Review</button>}
           </p>
