@@ -73,7 +73,9 @@ The first provider node that emits World v2 is Idol (`speridlabs-idol`,
 2026-10-29, [model-providers/speridlabs/idol.md](model-providers/speridlabs/idol.md)):
 one image to a 3DGS PLY splat, as `assets.splats = [{format: "ply", ...}]`
 with session `{source: "generated", provider: "speridlabs", model: "idol"}`
-and a right-handed, -Y-up, +Z-forward coordinate system in `custom` units.
+and a right-handed, -Y-up, +X-forward coordinate system in `custom` units
+(the backpack example's front is at +X). The viewer opens an object on a
+three-quarter view of its front, orbit only.
 World Labs Export refuses it before any request, as it does every v2 value.
 
 ## Strict spatial contracts

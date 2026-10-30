@@ -23,7 +23,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 // ---------------------------------------------------------------------------
 
 /**
- * The 21 provider keys that may be stored in the credential service.
+ * The 22 provider keys that may be stored in the credential service.
  * Mirrors backend/services/credential_catalog.py CREDENTIAL_PROVIDERS
  * (desktop/tests/sidecar.test.mjs checks they match). sidecar.mjs also strips
  * these names from the sidecar's environment.

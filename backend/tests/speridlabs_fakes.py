@@ -8,6 +8,8 @@ of GET https://speridlabs-idol.hf.space/gradio_api/info read 2026-10-29
 """
 from __future__ import annotations
 
+import base64
+import ipaddress
 import json
 import re
 from pathlib import Path
@@ -25,6 +27,12 @@ API = SPACE + "/gradio_api"
 HUB = "https://huggingface.co/api/spaces/speridlabs/idol"
 RESULT_PATH = "/tmp/gradio/abc123/idol-seed42-262144-deadbeef.ply"
 RESULT_URL = f"{API}/file={RESULT_PATH}"
+# The wired image: a public https URL Nebula fetches itself (load_media) and
+# uploads to the Space under a neutral name.
+IMAGE = "https://example.com/chair.png"
+PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==")
+UPLOADED = "/tmp/gradio/up/input.png"
 
 PROPERTIES = ["x", "y", "z", "nx", "ny", "nz", "f_dc_0", "f_dc_1", "f_dc_2", "opacity",
               "scale_0", "scale_1", "scale_2", "rot_0", "rot_1", "rot_2", "rot_3"]
@@ -66,15 +74,44 @@ def complete(seed: int = 42, url: str | None = RESULT_URL) -> tuple[str, Any]:
     return ("complete", [file_data, seed, "<div class=\"sl-meta\"></div>"])
 
 
+def public_dns(monkeypatch) -> None:
+    """example.com resolves to a public address (services/public_url), with no DNS lookup."""
+    from services import public_url
+
+    async def resolve(_host, _port):
+        return {ipaddress.ip_address("93.184.216.34")}
+
+    monkeypatch.setattr(public_url, "resolve_host", resolve)
+
+
+def image_route(content: bytes = PNG, url: str = IMAGE) -> tuple[str, str, Any]:
+    """The wired image's own host. `url` is a pattern: idol_hosts serves any
+    example.com image (the shared route tests wire https://example.com/ref.png)."""
+    pattern = url if url != IMAGE else re.escape(IMAGE)
+    return ("GET", pattern, httpx.Response(200, content=content, headers={"content-type": "image/png"}))
+
+
+def space_routes(*, info: Any = None, upload: Any = None) -> list[tuple[str, str, Any]]:
+    """The wired image, a running Space, its pinned /info and its upload."""
+    return [
+        image_route(),
+        ("GET", re.escape(HUB), httpx.Response(200, json={"runtime": {"stage": "RUNNING"}})),
+        ("GET", re.escape(f"{API}/info"), httpx.Response(200, json=INFO if info is None else info)),
+        ("POST", re.escape(f"{API}/upload"), upload or httpx.Response(200, json=[UPLOADED])),
+    ]
+
+
 def idol_hosts(monkeypatch, *, stage: Any = "RUNNING", info: Any = None, stream: bytes | None = None,
                ply: bytes | None = None, upload: Any = None, call: Any = None) -> FakeHosts:
-    """The Hub's Space API, the Space's Gradio API and its file route."""
+    """The wired image's host, the Hub's Space API, the Space's Gradio API and its file route."""
+    public_dns(monkeypatch)
     stage_answer = stage if isinstance(stage, (httpx.Response, list)) or callable(stage) else httpx.Response(
         200, json={"id": "speridlabs/idol", "runtime": {"stage": stage}})
     return FakeHosts(monkeypatch, [
+        image_route(url=r"https://example\.com/[^?#]+\.(?:png|jpe?g|webp)(?:\?.*)?"),
         ("GET", re.escape(HUB), stage_answer),
         ("GET", re.escape(f"{API}/info"), httpx.Response(200, json=INFO if info is None else info)),
-        ("POST", re.escape(f"{API}/upload"), upload or httpx.Response(200, json=["/tmp/gradio/up/input.png"])),
+        ("POST", re.escape(f"{API}/upload"), upload or httpx.Response(200, json=[UPLOADED])),
         ("POST", re.escape(f"{API}/call/run"), call or httpx.Response(200, json={"event_id": "ev1"})),
         ("GET", re.escape(f"{API}/call/run/ev1"), httpx.Response(
             200, content=stream if stream is not None else sse(("heartbeat", "null"), complete()),

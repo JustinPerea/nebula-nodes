@@ -1,9 +1,16 @@
 import { utils as sparkUtils } from '@sparkjsdev/spark';
 import { backendAssetUrlSync, fetchUrl } from './backend';
-import { AssetByteLimitError, readBoundedAssetResponse } from './boundedAsset';
+import { AssetByteLimitError, readBoundedAssetResponse, type AssetPrefixCheck } from './boundedAsset';
 import { isSafeWorldUrl } from './worldValue';
 import { requestError, requestSucceeded } from './errorCopy';
-import { preflightSplatPly, SplatPlyFormatError, SplatPlyTooLargeError } from './splatPly';
+import {
+  parseSplatPlyHeader,
+  preflightSplatPly,
+  SPLAT_PLY_MAX_BYTES,
+  SPLAT_PLY_MAX_HEADER_BYTES,
+  SplatPlyFormatError,
+  SplatPlyTooLargeError,
+} from './splatPly';
 
 /** GM's heading for the world preview (error-copy round 2). */
 const LOAD_WORLD = "Couldn't load the world.";
@@ -165,6 +172,36 @@ async function validateWorldSpzInflation(
   }
 }
 
+/** The PLY header check, run on the first 64 KiB as they arrive: a file whose
+ * header is wrong, declares too many Gaussians or bytes, or whose
+ * Content-Length disagrees with its header stops there instead of downloading
+ * up to 128 MiB first (PR #203 review). The whole-file preflight still runs on
+ * the finished body. */
+function plyPrefixCheck(maxBytes: number): AssetPrefixCheck {
+  return {
+    bytes: SPLAT_PLY_MAX_HEADER_BYTES,
+    check: (prefix, { declaredLength }) => {
+      const header = parseSplatPlyHeader(prefix);
+      if (header.expectedBytes > Math.min(maxBytes, SPLAT_PLY_MAX_BYTES)) {
+        throw new SplatPlyTooLargeError(
+          'This splat is too large to open safely in the browser. Download it for a desktop 3D viewer instead.',
+        );
+      }
+      if (declaredLength != null && declaredLength !== header.expectedBytes) {
+        throw new SplatPlyFormatError(
+          'The splat preview is not a supported 3DGS PLY file (file length does not match its header).',
+        );
+      }
+    },
+  };
+}
+
+function worldPlyError(error: unknown): unknown {
+  if (error instanceof SplatPlyTooLargeError) return new WorldSplatTooLargeError(error.message);
+  if (error instanceof SplatPlyFormatError) return new WorldSplatFormatError(error.message);
+  return error;
+}
+
 /** Fetch one SPZ source with both declared-size and streamed-size bounds.
  * This applies to every resolution, including explicitly selected full or
  * future variants whose labels cannot be trusted as a size declaration. */
@@ -187,21 +224,20 @@ export async function fetchWorldSplatBytes(
   requestSucceeded(LOAD_WORLD);
 
   try {
-    const bytes = await readBoundedAssetResponse(
-      response,
-      options.maxBytes ?? WORLD_SPLAT_MAX_SOURCE_BYTES,
-      { heading: LOAD_WORLD },
-    );
+    const maxBytes = options.maxBytes ?? WORLD_SPLAT_MAX_SOURCE_BYTES;
     if (options.format === 'ply') {
       try {
+        const bytes = await readBoundedAssetResponse(response, maxBytes, {
+          heading: LOAD_WORLD,
+          prefixCheck: plyPrefixCheck(maxBytes),
+        });
         preflightSplatPly(bytes);
+        return bytes;
       } catch (error) {
-        if (error instanceof SplatPlyTooLargeError) throw new WorldSplatTooLargeError(error.message);
-        if (error instanceof SplatPlyFormatError) throw new WorldSplatFormatError(error.message);
-        throw error;
+        throw worldPlyError(error);
       }
-      return bytes;
     }
+    const bytes = await readBoundedAssetResponse(response, maxBytes, { heading: LOAD_WORLD });
     const header = preflightWorldSpz(bytes, options.variant);
     await validateWorldSpzInflation(bytes, header.expectedUncompressedBytes, options.signal);
     return bytes;

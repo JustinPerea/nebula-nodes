@@ -66,14 +66,21 @@ A run is:
 2. `GET /gradio_api/info`: the signature. Inputs, outputs and the two enums
    must match the pinned fixture exactly, or the run stops with "The Idol Space
    changed how it's called".
-3. The image: a public `http(s)` URL goes as itself; a data URI or a local
-   file is uploaded with `POST /gradio_api/upload` (multipart `files`).
+3. The image: Nebula reads it itself (`load_media`, which fetches a public
+   HTTPS URL through `fetch_public_media` and refuses loopback and private
+   hosts), then uploads the bytes with `POST /gradio_api/upload` (multipart
+   `files`) under a neutral name such as `input.png`, so neither the source
+   URL nor its query string nor a local file name reaches the Space.
+   Settings are range-checked against the pinned bounds first.
 4. `POST /gradio_api/call/run` with `{"data": [...]}`, then the event stream
    `GET /gradio_api/call/run/{event_id}` until `complete` or `error`.
    Heartbeats (every 15 s) move the progress bar slowly; it never claims done.
-5. The `.ply` from `/gradio_api/file=...` on the Space's own host, streamed
-   into the run folder with a 128 MiB cap, checked by
-   `services/splat_ply.validate_splat_ply`, then renamed into place.
+5. The `.ply` from `/gradio_api/file=...` on the Space's own host (the path
+   URL-quoted; an `http://` result URL falls back to HTTPS), streamed into
+   the run folder as a `.part` with a 128 MiB cap, checked by
+   `services/splat_ply.validate_splat_ply`, then renamed into place as
+   `idol-seed{seed}-{gaussians}-{8 hex}.ply`, so two nodes with the same
+   settings never share a file.
 
 The node's values are its own (`synthetic`, `real`, `262144`), mapped to the
 Space's labels by the route's `valueMap`. `randomize` is always sent false and
@@ -85,10 +92,10 @@ replay one result. A new seed gives a new object.
 ```json
 {
   "schemaVersion": 2, "kind": "world", "id": "idol-<12 hex>", "displayName": "Idol object",
-  "coordinateSystem": {"id": "idol-object", "handedness": "right", "upAxis": "-y", "forwardAxis": "z",
+  "coordinateSystem": {"id": "idol-object", "handedness": "right", "upAxis": "-y", "forwardAxis": "x",
                        "unit": "custom", "metersPerUnit": 1, "originMeters": [0, 0, 0]},
   "session": {"source": "generated", "provider": "speridlabs", "model": "idol", "label": "Idol object",
-              "tags": ["seed:42", "gaussians:262144", "mode:Synthetic", "steps:50"]},
+              "tags": ["seed:42", "gaussians:262144", "mode:synthetic", "steps:50"]},
   "assets": {"splats": [{"id": "splat", "format": "ply", "pointCount": 262144,
                          "asset": {"id": "splat-ply", "uri": "/api/outputs/...", "mediaType": "application/octet-stream",
                                    "byteLength": 17826208}}]}
@@ -98,9 +105,15 @@ replay one result. A new seed gives a new object.
 Axes: Idol's model works z-up, and `save_ply` writes (x, -z, y). Its comment
 says "y-up", but up in the file is **-Y**: the example
 `default-obj-backpack.ply` projected on to the XY plane is upright with +Y
-pointing down. The side the input camera saw faces +Z. That is the same
-right-handed, -Y-up, +Z-forward frame as World Labs' OpenCV splats. The object
-fits in [-0.5, 0.5] on each axis in model units, so the unit is `custom`.
+pointing down. The front faces **+X**: renders of the backpack from each axis
+show its front at +X, its back at -X and its sides at ±Z (PR #203 review). The
+input camera's yaw is predicted per image, so this is the usual front, not a
+promise. The value says right-handed, `upAxis` `-y`, `forwardAxis` `x`; the
+viewer turns it upright and opens on a three-quarter view of that side
+(about 30° off the front and 15° above, the object's bounding sphere filling
+about 60% of the view). The object fits in [-0.5, 0.5] on each axis in model
+units, so the unit is `custom`. `pointCount` is the count in the file's own
+validated header, not the requested setting.
 
 The file is the plain 3DGS layout with degree-0 spherical harmonics: 17
 float32 properties (x y z, nx ny nz, f_dc_0..2, opacity, scale_0..2,
@@ -111,37 +124,70 @@ rot_0..3), 68 bytes a Gaussian. 262,144 Gaussians is 17.8 MB; 1,048,576 is
 
 `model_pricing.json` prices the route at $0 a run, sourced from the ZeroGPU
 docs: ZeroGPU Spaces are free to all users. Each run uses the caller's daily
-ZeroGPU time: 2 minutes a day without an account, 5 on a free account, 40 on
-PRO and Team, 60 on Enterprise. **PRO, Team and Enterprise accounts can go past
+ZeroGPU time: without a token, Hugging Face's small anonymous allowance; with
+one, the account's own (5 minutes on a free account, 40 on PRO and Team, 60 on
+Enterprise). Each Idol call reserves 120 s of GPU (`spaces.GPU(duration=120)`
+in `app.py`), and ZeroGPU checks the reserved duration against the quota, so
+the anonymous allowance may fit about one run a day. The first live run
+should confirm it; if anonymous runs can never fit 120 s, readiness must say a
+token is needed (GM, waiting on Justin's live test). **PRO, Team and Enterprise accounts can go past
 the daily quota on prepaid Hugging Face credits, at $1 per 10 GPU-minutes.**
 That charge is on the person's own Hugging Face account; Nebula can't see it
-and doesn't count it. The Space asks for up to 120 s of GPU per call
-(`spaces.GPU(duration=120)`); the real time per run isn't published or
-measured. Agents' spend gate admits the run at $0, like other free nodes.
+and doesn't count it. The real GPU time per run isn't published or measured.
+Agents' spend gate admits the run at $0, like other free nodes; whether an
+agent may run it on a PRO token that can bill past the quota is open
+(TODO(Justin)).
 
 ## Errors
+
+The card's lines are GM's (PR #203 r1), with curly apostrophes.
 
 | Situation | The card's line |
 |---|---|
 | No image | "Idol needs an image. Connect one, then run it again." |
-| Anonymous quota used up | "The free GPU time Idol shares without an account is used up for now. Add a Hugging Face token in Settings to use your own daily time, or try again later." |
-| The person's quota used up | "Your Hugging Face GPU time for today is used up. Run Idol again once it resets, or add time to your Hugging Face account." |
-| Space sleeping or building past 180 s | "The Idol Space is still starting up on Hugging Face. Try again in a few minutes." |
-| Space paused, stopped or failed | "The Idol Space on Hugging Face isn't running right now. Try again later." |
-| Space deleted | "The Idol Space is gone from Hugging Face, so Idol can't run." |
-| Signature changed | "The Idol Space changed how it's called, so this version of Nebula can't run it. Update Nebula, or check the Space." |
-| Token refused | "Hugging Face didn't accept your access token. Check it in Settings." |
-| No answer in time | "The Idol Space took too long to answer. Try again in a few minutes." |
-| Not a readable splat | "Idol sent back a file that isn't a splat Nebula can read. Try again." |
-| Splat over 128 MiB | "Idol made a splat too large for Nebula to keep. Pick fewer Gaussians." |
+| Anonymous quota used up | "Idol’s free allowance is used up for now. Try again later, or add your Hugging Face token in Settings to use your own." |
+| The person's quota used up | "Your Hugging Face GPU allowance is used up for now. Try again later, or raise it on your Hugging Face account." |
+| No GPU free in the queue | "Hugging Face had no free GPU for Idol. Try again in a few minutes." |
+| The Space's own GPU limit | "Idol has reached its own limit on Hugging Face for now. Try again later." |
+| A token was sent but didn't reach the Space | "Idol ran without your Hugging Face token and hit the free allowance. Check your token in Settings, then try again." |
+| 120 s is more than the allowance per run, no token | "Idol needs more GPU time per run than the free allowance gives. Add your Hugging Face token in Settings, then try again." |
+| The same with a token | "Idol needs more GPU time per run than your Hugging Face account allows. Raise your allowance on Hugging Face, then try again." |
+| Space sleeping or building past 180 s | "Idol is still starting on Hugging Face. Try again in a few minutes." |
+| Space paused, stopped or failed | "Idol isn’t running on Hugging Face right now. Try again later." |
+| Space deleted | "Idol is no longer on Hugging Face, so it can’t run. Use another 3D node instead." |
+| Signature changed | "Idol changed on Hugging Face, and this version of Nebula can’t run it. Update Nebula, then try again." |
+| Token refused (401 or 403 from the Hub or the Space) | "Hugging Face didn’t accept your token. Check it in Settings." |
+| Token with a character a header can't carry | "Your Hugging Face token has a character a token can’t have. Paste it again in Settings." |
+| No answer in time | "Idol took too long to answer. Try again in a few minutes." |
+| Not a readable splat | "Idol sent back a file Nebula can’t read as a splat. Try again." |
+| Splat over 128 MiB | "This splat is too large for Nebula to keep. Lower Gaussians in the node’s settings, then run it again." |
+| A setting out of range | "Steps must be between 10 and 100. Change it in the node’s settings, then run it again." (each field with its own label and limits) |
 
-Quota errors are matched on the `spaces` package's own texts ("exceeded your
-... quota", "reached its GPU limit", "runs limit", "No GPU was available").
+How the ZeroGPU texts are told apart (`zerogpu_kind`, from `spaces` 0.51.3
+`zero/client.py`):
+
+- **Duration**: "The requested GPU duration (Ns) is larger than the maximum
+  allowed". The text is the same with and without a token, so which line
+  shows depends on whether Nebula sent `HF_TOKEN`. This is built against the
+  mock; the first live run should confirm the texts.
+- **The person's own quota**: "exceeded your … quota", "runs limit" or "too
+  many ZeroGPU credits". Without a token this is the free allowance line.
+- **No IP token reached the Space**: `spaces` adds "Try re-running outside of
+  examples" only on the branch where no `X-IP-Token` arrived. With that
+  marker, "reached its GPU limit" or "No GPU was available" is the token-not-
+  applied line when Nebula sent a token, and the Space's own limit when it
+  didn't.
+- **Busy**: "No GPU was available" without that marker: the queue timed out.
+- **The Space's own limit**: "reached its GPU limit" without the marker.
 
 ## Token handling
 
-The token goes only to `huggingface.co` and `*.hf.space` over HTTPS
-(`token_allowed`), as a Bearer header, never in a URL. Provider text is
+The token goes only to `huggingface.co` and `speridlabs-idol.hf.space` over
+HTTPS (`token_allowed`, `TOKEN_HOSTS`), as a Bearer header, never in a URL.
+Not any `*.hf.space`: anyone can make a Space, so a result URL on another
+Space never gets it. A token with a character outside printable ASCII is
+refused before any request. Which token scope Settings asks for, and whether
+it says the token goes to Speridlabs' Space, are open (TODO(Justin)). Provider text is
 scrubbed of it before it reaches an error, connection errors keep only their
 type name, and the log line says `signed_in=True/False`, nothing more. Agents
 see it masked like every key; only a person can set it.

@@ -27,7 +27,8 @@ describe('createModels', () => {
     expect(getCreateModels().some((model) => model.id === 'worldlabs-environment')).toBe(false);
     expect(getFeaturedModels().some((model) => model.id === 'worldlabs-environment')).toBe(false);
     // Idol (speridlabs) matches "world" (its World output) and "labs"; it is free and may run from Create.
-    expect(searchModels('world labs').filter((model) => model.apiProvider === 'worldlabs')).toEqual([]);
+    // Exactly Idol: any other match, World Labs' paid nodes included, fails here (PR #203 review NIT).
+    expect(searchModels('world labs').map((model) => model.id)).toEqual(['speridlabs-idol']);
   });
 
   it('search matches display name, provider, and category (case-insensitive)', () => {

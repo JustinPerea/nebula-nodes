@@ -166,8 +166,8 @@ function createNoSenderEvent() {
 // ---------------------------------------------------------------------------
 
 describe('Published constants', () => {
-  test('ALLOWED_PROVIDERS has exactly 21 entries', () => {
-    assert.equal(ALLOWED_PROVIDERS.length, 21);
+  test('ALLOWED_PROVIDERS has exactly 22 entries', () => {
+    assert.equal(ALLOWED_PROVIDERS.length, 22);
   });
 
   test('ALLOWED_PROVIDERS is frozen', () => {
@@ -197,6 +197,7 @@ describe('Published constants', () => {
       'WORLDLABS_API_KEY',
       'KREA_USAGE_KEY',
       'GOOGLE_VERTEX_CREDENTIALS',
+      'HF_TOKEN',
     ];
     assert.deepEqual([...ALLOWED_PROVIDERS].sort(), expected.sort());
   });

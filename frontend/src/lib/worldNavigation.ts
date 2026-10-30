@@ -26,6 +26,9 @@ export interface WorldSceneBounds {
    * v2 object splat). Without it the camera looks along -Z from its position,
    * as for an environment. */
   resetTarget?: [number, number, number];
+  /** Orbit's farthest zoom-out, for an object framed from outside; without
+   * it worldOrbitMaxDistance(radius) holds (an environment's scale). */
+  orbitMaxDistance?: number;
 }
 
 export interface WorldCameraPose {
@@ -196,4 +199,100 @@ export function syncWorldFlyAngles(
 ): void {
   euler.setFromQuaternion(camera.quaternion, 'YXZ');
   yawPitch.set(euler.y, euler.x);
+}
+
+/** How an object (a World v2 object splat: Idol) opens: a 3/4 view from its
+ * front, YAW_DEGREES off-axis and PITCH_DEGREES above (GM, PR #203 r1), at
+ * the distance where its bounding sphere fits the narrower half of the view
+ * with MARGIN to spare. No auto-rotate. */
+export const OBJECT_VIEW_YAW_DEGREES = 30;
+export const OBJECT_VIEW_PITCH_DEGREES = 15;
+/** Measured live on the Space's backpack example (PR #203 round 2): 1.15
+ * filled 69% of the stage's height, 1.3 brings a typical object to about
+ * 60% (GM). A shape that fills its bounding sphere (a ball) comes out
+ * larger, about 75%. */
+export const OBJECT_VIEW_MARGIN = 1.3;
+/** Orbit may zoom out to this many framing distances. */
+export const OBJECT_ORBIT_MAX_DISTANCE_FACTOR = 4;
+/** The share of sampled centers the object's radius must hold: floaters
+ * past the 98th percentile don't push the camera back. */
+const OBJECT_RADIUS_QUANTILE = 0.98;
+
+export interface ObjectFraming {
+  center: [number, number, number];
+  /** The object's robust 3D radius, Y included (the environment bounds'
+   * `radius` is horizontal only and never under 0.25). */
+  radius: number;
+  distance: number;
+  resetPosition: [number, number, number];
+  resetTarget: [number, number, number];
+  orbitMaxDistance: number;
+}
+
+/** The object's robust bounding sphere from the sampled centers: the trimmed
+ * box's center (as robustWorldSceneBounds takes it, Y included) and the
+ * 98th-percentile distance from it. */
+export function objectBoundingSphere(
+  sampledCenters: readonly WorldPoint[],
+  fallbackCenter: WorldPoint = { x: 0, y: 0, z: 0 },
+): { center: [number, number, number]; radius: number } {
+  const valid = sampledCenters.filter(finitePoint);
+  const center = robustWorldSceneBounds(valid, fallbackCenter).center;
+  if (valid.length === 0) return { center, radius: 0.5 };
+  const distances = valid
+    .map((point) => Math.hypot(point.x - center[0], point.y - center[1], point.z - center[2]))
+    .sort((a, b) => a - b);
+  return { center, radius: Math.max(quantile(distances, OBJECT_RADIUS_QUANTILE), 0.01) };
+}
+
+/** Where the reset camera stands for an object: `front` (a unit vector in
+ * Three's +Y-up frame, the object's forward axis) turned `yawDegrees` about
+ * +Y and raised `pitchDegrees`, at r / sin(half the narrower field of view)
+ * x `margin` from the center. `fovDegrees` is the camera's vertical field
+ * of view and `aspect` the stage's width over height. */
+export function objectFraming(
+  sampledCenters: readonly WorldPoint[],
+  front: readonly [number, number, number],
+  {
+    fovDegrees,
+    aspect,
+    yawDegrees = OBJECT_VIEW_YAW_DEGREES,
+    pitchDegrees = OBJECT_VIEW_PITCH_DEGREES,
+    margin = OBJECT_VIEW_MARGIN,
+    fallbackCenter,
+  }: {
+    fovDegrees: number;
+    aspect: number;
+    yawDegrees?: number;
+    pitchDegrees?: number;
+    margin?: number;
+    fallbackCenter?: WorldPoint;
+  },
+): ObjectFraming {
+  const { center, radius } = objectBoundingSphere(sampledCenters, fallbackCenter);
+  const halfVertical = MathUtils.degToRad(Number.isFinite(fovDegrees) && fovDegrees > 0 ? fovDegrees : 58) / 2;
+  const safeAspect = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
+  const halfHorizontal = Math.atan(Math.tan(halfVertical) * safeAspect);
+  const halfFov = Math.min(halfVertical, halfHorizontal);
+  const distance = (radius / Math.sin(halfFov)) * margin;
+
+  const forward = new Vector3(front[0], 0, front[2]);
+  if (forward.lengthSq() < 1e-9) forward.set(0, 0, 1);
+  forward.normalize();
+  forward.applyAxisAngle(new Vector3(0, 1, 0), MathUtils.degToRad(yawDegrees));
+  const pitch = MathUtils.degToRad(pitchDegrees);
+  const direction = forward.multiplyScalar(Math.cos(pitch)).add(new Vector3(0, Math.sin(pitch), 0));
+  const resetPosition: [number, number, number] = [
+    center[0] + direction.x * distance,
+    center[1] + direction.y * distance,
+    center[2] + direction.z * distance,
+  ];
+  return {
+    center,
+    radius,
+    distance,
+    resetPosition,
+    resetTarget: [...center],
+    orbitMaxDistance: distance * OBJECT_ORBIT_MAX_DISTANCE_FACTOR,
+  };
 }

@@ -32,9 +32,11 @@ export interface SwitchContext {
   wired?: ReadonlyMap<string, number>;
 }
 
-/** 'optional': a keyless route (RouteSpec.optionalKeys, e.g. Idol on a
- * Hugging Face Space) runs without its key; the cell offers to add one. */
-export type KeyState = 'set' | 'missing' | 'optional' | 'signed-in' | 'sign-in';
+/** A keyless route (RouteSpec.optionalKeys, e.g. Idol on a Hugging Face
+ * Space) has no third state (GM, PR #203 r1): its cell is empty ('none')
+ * without its optional key, and reads "Connected" ('connected') with it. The
+ * row's note says how to add one. */
+export type KeyState = 'set' | 'missing' | 'signed-in' | 'sign-in' | 'connected' | 'none';
 
 export interface ProviderRow {
   /** 'auto', a route id, or `${route id}:plan` for a Krea route's plan row. */
@@ -218,7 +220,7 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
       rows.push({
         id: spec.id, routeId: spec.id, plan: false,
         label: both ? `${label} · API balance` : label,
-        keyState: keyed ? 'set' : keyless ? 'optional' : 'missing',
+        keyState: keyless ? (keyed ? 'connected' : 'none') : keyed ? 'set' : 'missing',
         setup: setupKey ? { kind: 'api-key', key: setupKey } : undefined,
         ...(block ? { price: '-', priceTitle: note ?? undefined } : price(definition, spec, estimates, context.pricing, false, saved, wiredPorts)),
         block: note,

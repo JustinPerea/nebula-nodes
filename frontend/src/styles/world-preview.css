@@ -785,3 +785,15 @@ body.app-slava-restraint :is(
     animation-duration: 1600ms;
   }
 }
+
+/* A World v2 splat the viewer can't show says why in the status line
+   (WorldSplatPreview, GM PR #203 r1): a sentence, so not the status's
+   uppercase mono micro type. */
+.world-modal__status[data-splat-failure],
+body.app-slava-restraint .world-modal__status[data-splat-failure] {
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+  text-align: right;
+}

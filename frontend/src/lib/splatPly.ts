@@ -91,9 +91,16 @@ export function parseSplatPlyHeader(
   if (vertexCount === null || vertexCount <= 0) invalid('no Gaussians');
   const missing = SPLAT_PLY_REQUIRED_PROPERTIES.filter((name) => !properties.includes(name));
   if (missing.length) invalid(`missing ${missing.join(', ')}`);
-  const rest = properties.filter((name) => name.startsWith('f_rest_')).length;
+  const restNames = properties.filter((name) => name.startsWith('f_rest_'));
+  const rest = restNames.length;
   const degree = SH_REST_BY_DEGREE.find(([, count]) => count === rest)?.[0];
   if (degree === undefined) invalid(`${rest} f_rest properties match no spherical-harmonics degree`);
+  // Spark reads f_rest_0 .. f_rest_{n-1} by name: the right count with a gap
+  // or a stray index (f_rest_0..7 and f_rest_20) passes the count and then
+  // throws in Spark (backend/services/splat_ply.py has the same rule).
+  for (let index = 0; index < rest; index += 1) {
+    if (!restNames.includes(`f_rest_${index}`)) invalid(`the f_rest properties aren't f_rest_0 to f_rest_${rest - 1}`);
+  }
 
   const maxPoints = Math.min(options.maxPoints ?? SPLAT_PLY_MAX_POINTS, SPLAT_PLY_MAX_POINTS);
   if (vertexCount > maxPoints) {

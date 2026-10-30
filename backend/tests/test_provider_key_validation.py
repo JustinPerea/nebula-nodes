@@ -604,6 +604,10 @@ async def test_each_provider_uses_its_own_endpoint_and_auth(monkeypatch):
     world_labs = by_url["https://api.worldlabs.ai/marble/v1/credits"]
     assert world_labs["WLT-Api-Key"] == "key-for-WORLDLABS_API_KEY"
 
+    # Hugging Face: the free, read-only whoami (never a Space, never quota).
+    hugging_face = by_url["https://huggingface.co/api/whoami-v2"]
+    assert hugging_face == {"Authorization": "Bearer key-for-HF_TOKEN"}
+
     nous = by_url["https://inference-api.nousresearch.com/v1/models"]
     assert nous["Authorization"] == "Bearer nous-test-token"
 

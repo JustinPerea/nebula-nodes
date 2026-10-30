@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { proposalChanges } from '../../src/lib/canvasProposals';
+import { proposalChanges, proposalEstimateLabel } from '../../src/lib/canvasProposals';
 import type { ProposalView } from '../../src/lib/wsClient';
 
 function view(): ProposalView {
@@ -46,5 +46,17 @@ describe('proposalChanges', () => {
     expect(proposalChanges(named)[0].title).toBe('New Lake hero (+k, Krea 2)');
     // An unnamed node's name is already the model's.
     expect(proposalChanges(view())[0].title).toBe('New Krea 2 (+k)');
+  });
+});
+
+describe('proposalEstimateLabel', () => {
+  const priced = (low: number, high: number, open = false) => ({
+    ...view(), run: ['+k'], cost: { ...view().cost, estimate: { low, high, open } },
+  }) as unknown as ProposalView;
+
+  it('shows a sourced $0 as "$0", not "~$0" (GM, PR #203 r1)', () => {
+    expect(proposalEstimateLabel(priced(0, 0))).toBe('$0');
+    expect(proposalEstimateLabel(priced(0.07, 0.07))).toBe('~$0.07');
+    expect(proposalEstimateLabel(priced(0, 0, true))).toBe('$0+');
   });
 });

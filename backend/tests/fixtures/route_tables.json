@@ -82,7 +82,7 @@
   ],
   "HF_TOKEN": [
    "Hugging Face",
-   "access token"
+   "token"
   ],
   "HIGGSFIELD_API_KEY": [
    "Higgsfield",

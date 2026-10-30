@@ -118,3 +118,24 @@ def test_the_summary_skips_non_finite_positions_and_refuses_none(tmp_path):
 def test_the_header_byte_count_is_exact():
     data = header(1) + struct.pack("<17f", *range(17))
     assert parse_splat_ply_header(data).header_bytes == len(header(1))
+
+
+@pytest.mark.parametrize("rest_names", [
+    # The right count for SH degree 1 (9), with a gap and a stray index.
+    [*(f"f_rest_{i}" for i in range(8)), "f_rest_20"],
+    [*(f"f_rest_{i}" for i in range(1, 10))],
+    # Leading zeros name no coefficient Spark reads.
+    [*(f"f_rest_{i}" for i in range(8)), "f_rest_08"],
+    # 24 for degree 2, with f_rest_23 missing.
+    [*(f"f_rest_{i}" for i in range(23)), "f_rest_99"],
+])
+def test_f_rest_must_be_exactly_zero_to_n_minus_one(rest_names):
+    """PR #203 review LOW 5: a set Spark rejects passed on its count alone."""
+    names = [*PROPERTIES[:9], *rest_names, *PROPERTIES[9:]]
+    with pytest.raises(SplatPlyError, match="f_rest properties aren't f_rest_0 to"):
+        parse_splat_ply_header(header(4, names))
+
+
+def test_f_rest_in_any_order_is_fine():
+    names = [*PROPERTIES[:9], *(f"f_rest_{i}" for i in reversed(range(9))), *PROPERTIES[9:]]
+    assert parse_splat_ply_header(header(4, names)).sh_degree == 1

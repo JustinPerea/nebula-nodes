@@ -35,10 +35,12 @@ Idol needs no key. It runs on Hugging Face ZeroGPU, which
 [Hugging Face offers free](https://huggingface.co/docs/hub/spaces-zerogpu),
 so Nebula shows $0 a run.
 
-Without a key, runs share Hugging Face's small allowance for people without an
-account (2 GPU-minutes a day). Add a Hugging Face **read** token in
-**Settings → Providers → Hugging Face** to use your own daily time instead: 5
-minutes on a free account, 40 on PRO or Team, 60 on Enterprise. Create one at
+Without a key, runs share Hugging Face's small free allowance for people
+without an account. Each Idol run reserves 120 seconds of GPU time, so that
+allowance may fit only about one run a day; the first live run will confirm
+it. Add your Hugging Face token in **Settings → Providers → Hugging Face** to
+use your own daily time instead: 5 minutes on a free account, 40 on PRO or
+Team, 60 on Enterprise. Create one at
 [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens).
 
 **On a PRO, Team or Enterprise account, Hugging Face can bill you** for GPU
@@ -48,13 +50,15 @@ That bill is between you and Hugging Face; Nebula can't see it.
 ## The result
 
 The `world` output is a World v2 value with one PLY splat. On the card,
-**Explore in 3D** opens it in the World viewer (Orbit or Fly), turned upright
-and framed as an object, with a download of the `.ply`. The file opens in any
+**Explore in 3D** opens it in the World viewer, turned upright and seen from a
+three-quarter view in front of the object, to orbit, pan and zoom, with a
+download of the `.ply`. The file opens in any
 3DGS viewer (SuperSplat, Spark, Blender add-ons). 262,144 Gaussians is about
 18 MB; 1,048,576 is about 71 MB.
 
-Agents can't look at 3D, so `view_output` gives them the splat as numbers:
-Gaussian count, bounding box, file size, seed and axes.
+Agents can't look at 3D, so `view_output` (or `nebula splat <node>` from the
+CLI) gives them the splat as numbers: Gaussian count, bounding box, file size,
+seed and axes.
 
 World Labs Export only exports worlds made by World Labs Environment, so it
 doesn't take an Idol splat.
@@ -63,7 +67,7 @@ doesn't take an Idol splat.
 
 The Space is Speridlabs' demo on Hugging Face. It may be asleep (Nebula wakes
 it and waits up to 3 minutes), paused, or busy. If the shared allowance is
-used up, add your token or try later. If Speridlabs change the Space's API,
+used up, add your token or try later. The card says which of these it is. If Speridlabs change the Space's API,
 the node stops with a line saying so until Nebula is updated.
 
 Details: [model-providers/speridlabs/idol.md](../model-providers/speridlabs/idol.md).

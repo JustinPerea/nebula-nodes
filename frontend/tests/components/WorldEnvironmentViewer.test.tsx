@@ -16,6 +16,7 @@ const viewerHarness = vi.hoisted(() => ({
   fetchWorldSplatBytes: vi.fn(),
   getSplat: vi.fn(),
   splatCount: 16,
+  controls: [] as unknown[],
 }));
 
 vi.mock('@react-three/fiber', async () => {
@@ -60,7 +61,14 @@ vi.mock('@react-three/fiber', async () => {
     useFrame: (callback: (state: unknown, delta: number) => void) => {
       viewerHarness.frameCallbacks.push(callback);
     },
-    useThree: () => getThreeState(),
+    // The viewer reads `useThree((state) => state.get)` for the object framing's
+    // camera and stage size; without a selector, the state itself.
+    useThree: (selector?: (state: unknown) => unknown) => {
+      const state = getThreeState();
+      return selector
+        ? selector({ ...state, get: () => ({ ...state, size: { width: 800, height: 600 } }) })
+        : state;
+    },
   };
 });
 
@@ -98,6 +106,9 @@ vi.mock('three/addons/controls/OrbitControls.js', async () => {
   const three = await vi.importActual<typeof import('three')>('three');
   return {
     OrbitControls: class MockOrbitControls {
+      constructor() {
+        viewerHarness.controls.push(this);
+      }
       target = new three.Vector3();
       maxDistance = 1_000;
       enableDamping = false;
@@ -117,6 +128,8 @@ vi.mock('../../src/lib/worldSplat', () => ({
 }));
 
 import { WorldEnvironmentViewer } from '../../src/components/nodes/WorldEnvironmentViewer';
+import { RequestFailedError } from '../../src/lib/errorCopy';
+import { OBJECT_ORBIT_MAX_DISTANCE_FACTOR, OBJECT_VIEW_MARGIN } from '../../src/lib/worldNavigation';
 
 describe('WorldEnvironmentViewer', () => {
   beforeEach(() => {
@@ -126,6 +139,7 @@ describe('WorldEnvironmentViewer', () => {
     viewerHarness.meshes.length = 0;
     viewerHarness.frameCallbacks.length = 0;
     viewerHarness.splatCount = 16;
+    viewerHarness.controls.length = 0;
     viewerHarness.fetchWorldSplatBytes.mockReset();
     viewerHarness.fetchWorldSplatBytes.mockResolvedValue(new Uint8Array([1, 2, 3]));
     viewerHarness.getSplat.mockReset();
@@ -283,5 +297,81 @@ describe('WorldEnvironmentViewer', () => {
 
     await waitFor(() => expect(mesh.dispose).toHaveBeenCalledTimes(2));
     expect(onStatusChange).not.toHaveBeenCalledWith('ready');
+  });
+
+  it('frames an object from a 3/4 view on its forward side, at the distance its sphere fits', async () => {
+    viewerHarness.renderScene = true;
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      getExtension: vi.fn().mockReturnValue(null),
+    } as unknown as WebGL2RenderingContext);
+    // 64 centers on a sphere of radius 0.4 around the origin.
+    viewerHarness.splatCount = 64;
+    viewerHarness.getSplat.mockImplementation((index: number) => {
+      const theta = (index / 64) * Math.PI * 2 * 7;
+      const z = (index / 63) * 2 - 1;
+      const ring = Math.sqrt(1 - z * z);
+      return { center: new Vector3(Math.cos(theta) * ring * 0.4, Math.sin(theta) * ring * 0.4, z * 0.4), opacity: 1 };
+    });
+    const onStatusChange = vi.fn();
+    render(
+      <WorldEnvironmentViewer
+        src="/api/outputs/run/idol.ply"
+        format="ply"
+        label="Idol object"
+        navigationMode="orbit"
+        resetToken={0}
+        upAxis="-y"
+        forwardAxis="x"
+        framing="object"
+        onStatusChange={onStatusChange}
+      />,
+    );
+    expect(screen.getByRole('application', { name: 'Idol object, interactive 3D object' })).toBeInTheDocument();
+    await waitFor(() => expect(onStatusChange).toHaveBeenCalledWith('ready'));
+    const camera = viewerHarness.threeState?.camera as PerspectiveCamera;
+    await waitFor(() => expect(camera.position.length()).toBeGreaterThan(0.5));
+
+    const offset = camera.position.clone();
+    const distance = offset.length();
+    // Sphere radius 0.4 (98th percentile), fov 58 at 800x600: the vertical half
+    // is the narrower, so r / sin(29 deg) x margin.
+    expect(distance).toBeCloseTo((0.4 / Math.sin((29 * Math.PI) / 180)) * OBJECT_VIEW_MARGIN, 1);
+    const direction = offset.normalize();
+    // Idol's +X front, 30 degrees off it about +Y and 15 degrees above.
+    const pitch = (15 * Math.PI) / 180;
+    const yaw = (30 * Math.PI) / 180;
+    expect(direction.y).toBeCloseTo(Math.sin(pitch), 2);
+    expect(direction.x).toBeCloseTo(Math.cos(pitch) * Math.cos(yaw), 2);
+    expect(direction.z).toBeCloseTo(-Math.cos(pitch) * Math.sin(yaw), 2);
+    // It looks at the object, and orbit zooms out to 4 framing distances, not
+    // an environment's scale.
+    const look = camera.getWorldDirection(new Vector3());
+    expect(look.dot(direction)).toBeCloseTo(-1, 2);
+    const controls = viewerHarness.controls.at(-1) as { maxDistance: number };
+    expect(controls.maxDistance).toBeCloseTo(distance * OBJECT_ORBIT_MAX_DISTANCE_FACTOR, 1);
+  });
+
+  it('reports a splat whose file is gone (404) as missing, another failed request as other', async () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      getExtension: vi.fn().mockReturnValue(null),
+    } as unknown as WebGL2RenderingContext);
+    viewerHarness.renderScene = true;
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    viewerHarness.fetchWorldSplatBytes.mockRejectedValueOnce(new RequestFailedError("Couldn't load the world.", 404));
+    const onFailure = vi.fn();
+    const { unmount } = render(
+      <WorldEnvironmentViewer src="/api/outputs/run/gone.ply" format="ply" label="Idol object"
+        navigationMode="orbit" resetToken={0} framing="object" onFailure={onFailure} quietFallback />,
+    );
+    await waitFor(() => expect(onFailure).toHaveBeenCalledWith('missing'));
+    unmount();
+
+    viewerHarness.fetchWorldSplatBytes.mockRejectedValueOnce(new RequestFailedError("Couldn't load the world.", 500));
+    const onOther = vi.fn();
+    render(
+      <WorldEnvironmentViewer src="/api/outputs/run/broken.ply" format="ply" label="Idol object"
+        navigationMode="orbit" resetToken={0} framing="object" onFailure={onOther} quietFallback />,
+    );
+    await waitFor(() => expect(onOther).toHaveBeenCalledWith('other'));
   });
 });

@@ -5657,7 +5657,7 @@ No settings.
 
 | Route | Provider | Keys | Endpoint | Notes |
 |---|---|---|---|---|
-| `hf-space` | Speridlabs | none (optional HF_TOKEN) | `speridlabs/idol` | maker; Free on Hugging Face GPU time. Add a Hugging Face token for your own daily allowance. |
+| `hf-space` | Speridlabs | none (optional HF_TOKEN) | `speridlabs/idol` | maker; Free. Runs on Hugging Face with a small daily allowance. Add your Hugging Face token to use your own. |
 
 **Speridlabs (`hf-space`) settings**
 

@@ -443,6 +443,24 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
     expect(updateSettingsMock.mock.calls).toEqual([[{ apiKeys: { OPENAI_API_KEY: 'fixture-new' } }]]);
   });
 
+  it('names the Hugging Face credential a token, with GM\'s optional note (PR #203 r1)', async () => {
+    await renderSettings({ apiKeys: {} });
+    const hf = row('Hugging Face');
+    expect(hf).toHaveTextContent('Optional. Gives Idol your own daily GPU time.');
+    fireEvent.click(within(hf).getByRole('button', { name: 'Add Hugging Face key' }));
+    expect(await screen.findByLabelText('Hugging Face token')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Hugging Face API key')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show Hugging Face token' })).toBeInTheDocument();
+  });
+
+  it('removes a Hugging Face token by its name', async () => {
+    await renderSettings({ apiKeys: { HF_TOKEN: '***aaaa' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Manage Hugging Face' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Hugging Face token' }));
+    expect(screen.getByRole('group', { name: 'Remove the Hugging Face token?' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirm removing the Hugging Face token' })).toBeInTheDocument();
+  });
+
   it('asks before removing: Keep and Escape back out without deleting or closing', async () => {
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
     fireEvent.click(screen.getByRole('button', { name: 'Manage OpenAI' }));

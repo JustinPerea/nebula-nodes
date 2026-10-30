@@ -31,6 +31,8 @@ export interface ModelReadiness {
   tone: 'neutral' | 'success' | 'warning';
   setupTarget?: ProviderSetupTarget;
   connectionLabel?: string;
+  /** Muted words after the connection label ("Optional", GM PR #203 r1). */
+  connectionNote?: string;
 }
 
 export const PROVIDER_HEALTH_TTL_MS = 5 * 60 * 1000;
@@ -187,11 +189,13 @@ function keylessReadiness(
     return { ...ready, connectionLabel: `${PROVIDER_KEY_LABELS[route.key] ?? route.key} token`,
       detail: `Runs on your own ${PROVIDER_KEY_LABELS[route.key] ?? route.key} allowance. ${ready.detail}` };
   }
+  // GM (PR #203 r1): "shared" dropped until a live run confirms the numbers.
   return {
     label: 'No key needed', tone: 'neutral',
-    ...(optional ? { setupTarget: { kind: 'api-key', key: optional } as const, connectionLabel: `${name} token (optional)` } : {}),
+    ...(optional ? { setupTarget: { kind: 'api-key', key: optional } as const, connectionLabel: `${name} token`,
+      connectionNote: 'Optional' } : {}),
     detail: name
-      ? `Runs without a key on a small shared daily allowance. Add a ${name} token in Settings to use your own.`
+      ? `Runs without a key on a small free daily allowance. Add your ${name} token in Settings to use your own.`
       : 'Runs without a key.',
   };
 }

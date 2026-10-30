@@ -2,6 +2,10 @@
 import { Euler, Matrix4, PerspectiveCamera, Vector2, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import {
+  OBJECT_ORBIT_MAX_DISTANCE_FACTOR,
+  OBJECT_VIEW_MARGIN,
+  objectBoundingSphere,
+  objectFraming,
   WORLD_EYE_HEIGHT_METERS,
   WORLD_NAVIGATION_SAMPLE_LIMIT,
   placeWorldCamera,
@@ -112,5 +116,61 @@ describe('World environment navigation geometry', () => {
     expect(worldFlySpeedMetersPerSecond(1_000_000)).toBe(6);
     expect(worldFlyGestureScale(0.01)).toBe(0.08);
     expect(worldFlyGestureScale(1_000_000)).toBe(0.75);
+  });
+});
+
+describe('object framing (a World v2 object splat: Idol)', () => {
+  // 200 points on the unit-ish shell of radius 0.5 around (1, 2, 3).
+  const shell = Array.from({ length: 200 }, (_, index) => {
+    const z = (index / 199) * 2 - 1;
+    const ring = Math.sqrt(1 - z * z);
+    const theta = index * 2.399963;
+    return { x: 1 + Math.cos(theta) * ring * 0.5, y: 2 + Math.sin(theta) * ring * 0.5, z: 3 + z * 0.5 };
+  });
+  const rad = (degrees: number) => (degrees * Math.PI) / 180;
+
+  it('stands at r / sin(half the narrower field of view) x margin', () => {
+    const wide = objectFraming(shell, [1, 0, 0], { fovDegrees: 60, aspect: 16 / 9 });
+    expect(wide.radius).toBeCloseTo(0.5, 1);
+    // Landscape: the vertical half (30 degrees) is the narrower.
+    expect(wide.distance).toBeCloseTo((wide.radius / Math.sin(rad(30))) * OBJECT_VIEW_MARGIN, 6);
+    // Portrait: the horizontal half is the narrower, so it stands farther back.
+    const tall = objectFraming(shell, [1, 0, 0], { fovDegrees: 60, aspect: 0.5 });
+    const halfHorizontal = Math.atan(Math.tan(rad(30)) * 0.5);
+    expect(tall.distance).toBeCloseTo((tall.radius / Math.sin(halfHorizontal)) * OBJECT_VIEW_MARGIN, 6);
+    expect(tall.distance).toBeGreaterThan(wide.distance);
+    expect(wide.orbitMaxDistance).toBeCloseTo(wide.distance * OBJECT_ORBIT_MAX_DISTANCE_FACTOR, 6);
+  });
+
+  it('views from 30 degrees off the front and 15 above, at the center', () => {
+    const framed = objectFraming(shell, [1, 0, 0], { fovDegrees: 58, aspect: 1 });
+    expect(framed.resetTarget).toEqual(framed.center);
+    const offset = new Vector3(...framed.resetPosition).sub(new Vector3(...framed.center));
+    expect(offset.length()).toBeCloseTo(framed.distance, 6);
+    const direction = offset.normalize();
+    expect(direction.y).toBeCloseTo(Math.sin(rad(15)), 6);
+    expect(direction.x).toBeCloseTo(Math.cos(rad(15)) * Math.cos(rad(30)), 6);
+    expect(direction.z).toBeCloseTo(-Math.cos(rad(15)) * Math.sin(rad(30)), 6);
+    // Zero yaw and pitch: straight on from the front.
+    const straight = objectFraming(shell, [0, 0, -1], { fovDegrees: 58, aspect: 1, yawDegrees: 0, pitchDegrees: 0 });
+    const ahead = new Vector3(...straight.resetPosition).sub(new Vector3(...straight.center)).normalize();
+    expect(ahead.toArray().map((value) => Number(value.toFixed(6)))).toEqual([0, 0, -1]);
+  });
+
+  it('flattens a tilted front and falls back to +Z for a vertical one', () => {
+    const tilted = objectFraming(shell, [0, 0.9, 0.1], { fovDegrees: 58, aspect: 1, yawDegrees: 0, pitchDegrees: 0 });
+    const tiltedDirection = new Vector3(...tilted.resetPosition).sub(new Vector3(...tilted.center)).normalize();
+    expect(tiltedDirection.z).toBeCloseTo(1, 6);
+    const vertical = objectFraming(shell, [0, 1, 0], { fovDegrees: 58, aspect: 1, yawDegrees: 0, pitchDegrees: 0 });
+    const verticalDirection = new Vector3(...vertical.resetPosition).sub(new Vector3(...vertical.center)).normalize();
+    expect(verticalDirection.z).toBeCloseTo(1, 6);
+  });
+
+  it('keeps a few far floaters from pushing the camera back', () => {
+    const floaters = [...shell, { x: 40, y: 2, z: 3 }, { x: 1, y: -50, z: 3 }];
+    expect(objectBoundingSphere(floaters).radius).toBeLessThan(0.6);
+    expect(objectBoundingSphere([]).radius).toBe(0.5);
+    // A degenerate fov or aspect still gives a finite distance.
+    expect(Number.isFinite(objectFraming(shell, [1, 0, 0], { fovDegrees: Number.NaN, aspect: 0 }).distance)).toBe(true);
   });
 });

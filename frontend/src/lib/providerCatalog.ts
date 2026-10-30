@@ -10,6 +10,10 @@ export interface ProviderKeySpec {
   placeholder: string;
   /** A Google service-account key arrives as a JSON file, not a pasted token. */
   input?: 'secret' | 'service-account';
+  /** What the provider calls the credential in screen-reader labels ("token"
+   *  for Hugging Face); "API key" when unset. The visible "Add key" buttons
+   *  stay as they are (GM, PR #203 r1). */
+  credential?: string;
   /** Words dropped from node names in this row ("ElevenLabs TTS" reads as "TTS"). */
   brand?: string[];
   /** Nodes to name first in the row's summary. A test keeps these real. */
@@ -59,18 +63,22 @@ export const PROVIDER_KEYS: readonly ProviderKeySpec[] = [
   // shared by the organization. docs/api-guides/bfl.md.
   { key: 'BFL_API_KEY', label: 'Black Forest Labs', placeholder: 'bfl_...', url: 'https://dashboard.bfl.ai',
     brand: ['FLUX'], note: 'FLUX on Black Forest Labs\' own API' },
+  // Optional. The Idol node runs on Speridlabs' Hugging Face Space without a
+  // token, on a small free ZeroGPU allowance (each run reserves 120 s of GPU
+  // time, Space app.py duration=120; the anonymous allowance is to be
+  // confirmed on the first live run). A token gives runs the person's own
+  // quota (free 5, PRO 40 minutes a day); past that, Hugging Face may bill a
+  // PRO account for extra ZeroGPU time.
+  // https://huggingface.co/docs/hub/spaces-zerogpu
+  { key: 'HF_TOKEN', label: 'Hugging Face', credential: 'token', placeholder: 'hf_...',
+    url: 'https://huggingface.co/settings/tokens',
+    brand: ['Idol'], note: 'Optional. Gives Idol your own daily GPU time.',
+    // TODO(Justin): which token scope to ask for, and whether to say the token goes to Speridlabs' Space.
+    caveat: 'Idol runs without a token on a small free daily allowance. With your token, runs use your own '
+      + 'Hugging Face allowance instead. On a PRO account, Hugging Face can bill you for time past it.' },
   // BytePlus Service Specific Terms (Model Services): "The BytePlus Model
   // Services are not available in the United States." Models need activating
   // first (404 ModelNotOpen otherwise). docs/api-guides/byteplus.md.
-  // Optional. The Idol node runs on Speridlabs' Hugging Face Space without a
-  // token, on the anonymous ZeroGPU quota (2 minutes a day). A token gives
-  // runs the person's own quota (free 5, PRO 40 minutes a day); past that,
-  // Hugging Face may bill a PRO account for extra ZeroGPU time.
-  // https://huggingface.co/docs/hub/spaces-zerogpu
-  { key: 'HF_TOKEN', label: 'Hugging Face', placeholder: 'hf_...', url: 'https://huggingface.co/settings/tokens',
-    brand: ['Idol'], note: 'Optional: your own daily GPU time for Idol',
-    caveat: 'Idol runs without a token, on a small shared daily allowance. With a read token, runs use your own '
-      + 'Hugging Face allowance instead. On a PRO account, Hugging Face can bill you for time past it.' },
   { key: 'BYTEPLUS_API_KEY', label: 'BytePlus · ModelArk', placeholder: 'ModelArk API key',
     url: 'https://ai.byteplus.com/ark/region:ap-southeast-1/apiKey', brand: ['Seedream', 'Seedance'],
     note: 'Seedream and Seedance on ByteDance\'s own API',

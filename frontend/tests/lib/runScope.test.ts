@@ -106,6 +106,17 @@ describe('run cost', () => {
     expect(describeRunScope(summary)).toContain('No list price for Writer');
   });
 
+  it('shows a sourced $0 run as "$0", not "~$0" (Idol on its free Space, GM PR #203 r1)', () => {
+    const shipped = { pricing: shippedTable as unknown as PricingTable, apiKeys: {} };
+    const summary = summarizeRunScope([priced('i', 'speridlabs-idol', {}, 'Idol')], [], { kind: 'graph' }, shipped);
+    expect(summary.cost?.low).toBe(0);
+    expect(summary.cost?.high).toBe(0);
+    expect(runChipLabel(summary)).toBe('$0');
+    // A run that rounds to $0 but isn't 0 keeps its "~".
+    const tiny = { ...summary, cost: { ...summary.cost!, low: 0.0001, high: 0.0001 } };
+    expect(runChipLabel(tiny)).not.toBe('$0');
+  });
+
   it('falls back to counting paid nodes when nothing is priced or the table is missing', () => {
     const graph = [priced('c', 'claude-chat')];
     expect(runChipLabel(summarizeRunScope(graph, [], { kind: 'graph' }, context))).toBe('1 paid');

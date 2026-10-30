@@ -104,10 +104,16 @@ def parse_splat_ply_header(prefix: bytes, *, max_points: int = SPLAT_PLY_MAX_POI
     missing = [name for name in REQUIRED_PROPERTIES if name not in properties]
     if missing:
         raise SplatPlyError(f"the PLY is missing 3DGS properties {', '.join(missing)}")
-    rest = sum(1 for name in properties if name.startswith("f_rest_"))
+    rest_names = {name for name in properties if name.startswith("f_rest_")}
+    rest = len(rest_names)
     degrees = [degree for degree, count in _SH_REST_BY_DEGREE.items() if count == rest]
     if not degrees:
         raise SplatPlyError(f"{rest} f_rest properties match no spherical-harmonics degree")
+    # Spark reads f_rest_0 .. f_rest_{n-1} by name: a set with a gap or a
+    # stray index (f_rest_0..7 and f_rest_20) has the right count but no
+    # coefficient Spark can find, and it throws.
+    if rest_names != {f"f_rest_{index}" for index in range(rest)}:
+        raise SplatPlyError(f"the f_rest properties aren't f_rest_0 to f_rest_{rest - 1}")
     if vertex_count > max_points:
         raise SplatPlyError(f"the PLY declares {vertex_count:,} Gaussians, above the {max_points:,} limit")
     return SplatPlyHeader(

@@ -117,6 +117,31 @@ describe('ProviderSwitcher rows', () => {
   });
 });
 
+describe('ProviderSwitcher on a keyless route (Idol, GM PR #203 r1)', () => {
+  const IDOL = NODE_DEFINITIONS['speridlabs-idol'];
+  const renderIdol = () => render(<ProviderSwitcher definition={IDOL} params={{}} variant="inspector" onPick={vi.fn()} />);
+
+  it('leaves the key cell empty without the token: no third state, no "Add key"', () => {
+    withKeys({});
+    renderIdol();
+    const space = row(/^Speridlabs/).closest('[data-provider-row]') as HTMLElement;
+    // The cell keeps its column but says nothing.
+    expect(space.querySelector('.provider-switcher__key')).toBeEmptyDOMElement();
+    expect(within(space).queryByText(/Add key|Optional|Connected/)).toBeNull();
+    expect(row(/^Speridlabs/)).toHaveTextContent(
+      'Free. Runs on Hugging Face with a small daily allowance. Add your Hugging Face token to use your own.');
+  });
+
+  it('shows the green dot and "Connected" with the token', () => {
+    withKeys({ HF_TOKEN: KEY });
+    renderIdol();
+    const space = row(/^Speridlabs/).closest('[data-provider-row]') as HTMLElement;
+    const cell = space.querySelector('.provider-switcher__key--connected');
+    expect(cell).toHaveTextContent(/^Connected$/);
+    expect(cell?.querySelector('.provider-switcher__dot')).toHaveAttribute('aria-hidden', 'true');
+  });
+});
+
 describe('ProviderSwitcher picks', () => {
   it('a switch writes _provider and snaps the values the new route lacks, with a note', () => {
     withKeys({ BFL_API_KEY: KEY, FAL_KEY: KEY });

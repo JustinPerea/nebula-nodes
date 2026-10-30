@@ -20,7 +20,7 @@ function RemoveKeyButton({ label, removing, onConfirm }: { label: string; removi
   if (!armed) {
     return (
       <button type="button" ref={trigger} className="settings__button settings__button--ghost settings__remove-key settings__button--danger"
-        aria-label={`Remove ${label} API key`} disabled={removing} onClick={() => setArmed(true)}>
+        aria-label={`Remove ${label}`} disabled={removing} onClick={() => setArmed(true)}>
         {removing ? 'Removing…' : 'Remove'}
       </button>
     );
@@ -28,11 +28,11 @@ function RemoveKeyButton({ label, removing, onConfirm }: { label: string; removi
   return (
     // Capture phase: the dock closes on Escape from a native listener that
     // runs before React's bubble handlers, so disarming has to claim it first.
-    <span className="settings__remove-confirm" role="group" data-claims-escape="" aria-label={`Remove the ${label} API key?`}
+    <span className="settings__remove-confirm" role="group" data-claims-escape="" aria-label={`Remove the ${label}?`}
       onKeyDownCapture={(event) => { if (event.key === 'Escape') { event.preventDefault(); disarm(); } }}>
       <button type="button" className="settings__button" autoFocus onClick={disarm}>Keep</button>
       <button type="button" className="settings__button settings__confirm--danger"
-        aria-label={`Confirm removing the ${label} API key`} onClick={() => { setArmed(false); onConfirm(); }}>Remove</button>
+        aria-label={`Confirm removing the ${label}`} onClick={() => { setArmed(false); onConfirm(); }}>Remove</button>
     </span>
   );
 }
@@ -51,6 +51,8 @@ export function KeyRow({ spec, configured }: { spec: ProviderKeySpec; configured
   const firstAction = useRef<HTMLButtonElement>(null);
   const wasOpen = useRef(open);
   const serviceAccount = spec.input === 'service-account';
+  // "Hugging Face token", "OpenAI API key": what screen readers hear.
+  const credentialName = `${spec.label} ${spec.credential ?? 'API key'}`;
 
   useEffect(() => {
     if (!takeRowFocus(spec.key)) return;
@@ -128,7 +130,7 @@ export function KeyRow({ spec, configured }: { spec: ProviderKeySpec; configured
               <a className="settings__button settings__button--ghost" href={spec.url} target="_blank" rel="noopener noreferrer">
                 Key page ↗
               </a>
-              <RemoveKeyButton label={spec.label} removing={pending} onConfirm={() => {
+              <RemoveKeyButton label={credentialName} removing={pending} onConfirm={() => {
                 focusRowAfterMove(spec.key);
                 void removeKey(spec.key).then((ok) => { if (!ok) cancelRowFocus(spec.key); });
               }} />
@@ -155,14 +157,14 @@ export function KeyRow({ spec, configured }: { spec: ProviderKeySpec; configured
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
                   placeholder={spec.placeholder}
-                  aria-label={`${spec.label} API key`}
+                  aria-label={credentialName}
                   aria-invalid={!!error || undefined}
                   data-provider-key={spec.key}
                   autoComplete="off"
                   spellCheck={false}
                 />
                 <button type="button" className="settings-key__reveal" onClick={() => setRevealed((on) => !on)}
-                  aria-label={`${revealed ? 'Hide' : 'Show'} ${spec.label} API key`}>{revealed ? 'Hide' : 'Show'}</button>
+                  aria-label={`${revealed ? 'Hide' : 'Show'} ${credentialName}`}>{revealed ? 'Hide' : 'Show'}</button>
               </div>
             )}
             {spec.caveat && <p className="settings-hint">{spec.caveat}</p>}

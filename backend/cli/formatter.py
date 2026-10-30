@@ -110,6 +110,12 @@ def format_node_detail(node: dict[str, Any]) -> str:
     key = node.get("envKeyName", "?")
     if isinstance(key, list):
         key = " or ".join(key)
+    routes_list = node.get("routes") if isinstance(node.get("routes"), list) else []
+    optional_keys = list(dict.fromkeys(str(k) for route in routes_list if isinstance(route, dict)
+                                       for k in route.get("optionalKeys") or []))
+    if not key and optional_keys:
+        # A keyless route (Idol): runs with no key, uses this one when set.
+        key = f"none (optional {' or '.join(optional_keys)})"
     pattern = node.get("executionPattern", "?")
     lines.append(f"Provider: {provider} | Key: {key} | Exec: {pattern}")
     routes = node.get("routes") if isinstance(node.get("routes"), list) else []
@@ -118,7 +124,9 @@ def format_node_detail(node: dict[str, Any]) -> str:
         # route, in Auto order, and how to pick one.
         lines.append("ROUTES (_provider; auto takes the first with its key set):")
         for route in routes:
-            keys = " or ".join(str(k) for k in route.get("keys") or []) or "-"
+            keys = " or ".join(str(k) for k in route.get("keys") or []) or (
+                f"none (optional {' or '.join(str(k) for k in route['optionalKeys'])})"
+                if route.get("optionalKeys") else "-")
             tags = [tag for tag in ("maker" if route.get("maker") else "",
                                     f"Krea plan {route['plan']}" if route.get("plan") else "") if tag]
             lines.append(f"  {str(route.get('id')):<16}{str(route.get('provider')):<14}{keys}"
@@ -263,6 +271,9 @@ def format_keys(settings: dict[str, Any], nodes: list[dict[str, Any]]) -> str:
     configured_map = settings.get("configured") if isinstance(settings.get("configured"), dict) else {}
 
     key_to_nodes: dict[str, list[str]] = {}
+    # A keyless route's optionalKeys (Idol's HF_TOKEN): the node runs without
+    # the key and uses it when set.
+    optional_to_nodes: dict[str, list[str]] = {}
     all_keys: set[str] = {str(name) for name in configured_map}
     for n in nodes:
         env = n.get("envKeyName", "")
@@ -270,21 +281,30 @@ def format_keys(settings: dict[str, Any], nodes: list[dict[str, Any]]) -> str:
         for k in keys_list:
             all_keys.add(k)
             key_to_nodes.setdefault(k, []).append(n.get("displayName", n["id"]))
+        optional = {str(k) for route in n.get("routes") or [] if isinstance(route, dict)
+                    for k in route.get("optionalKeys") or []} - set(keys_list)
+        for k in sorted(optional):
+            all_keys.add(k)
+            optional_to_nodes.setdefault(k, []).append(n.get("displayName", n["id"]))
 
     configured: list[str] = []
     missing: list[str] = []
 
     for key_name in sorted(all_keys):
         node_names = key_to_nodes.get(key_name, [])
+        optional_names = optional_to_nodes.get(key_name, [])
         count = len(node_names)
-        preview = ", ".join(node_names[:3])
-        if len(node_names) > 3:
+        users = node_names + optional_names
+        preview = ", ".join(users[:3])
+        if len(users) > 3:
             preview += ", ..."
-        uses = f"{count} nodes ({preview})" if count else "no node uses it"
+        uses = f"{len(users)} nodes ({preview})" if users else "no node uses it"
         if configured_map.get(key_name) is True:
             configured.append(f"  {key_name:<25}{'set':<10}{uses}")
-        else:
+        elif count or not optional_names:
             missing.append(f"  {key_name:<25}{'':10}{count} nodes unavailable")
+        else:
+            missing.append(f"  {key_name:<25}{'':10}optional: {len(optional_names)} nodes run without it ({preview})")
 
     lines: list[str] = []
     if configured:

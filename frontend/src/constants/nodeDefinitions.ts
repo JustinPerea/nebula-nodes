@@ -4618,7 +4618,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             65536: '65,536', 131072: '131,072', 262144: '262,144', 524288: '524,288', 1048576: '1,048,576',
           },
         },
-        note: 'Free on Hugging Face GPU time. Add a Hugging Face token for your own daily allowance.',
+        note: 'Free. Runs on Hugging Face with a small daily allowance. Add your Hugging Face token to use your own.',
       },
     ],
   },

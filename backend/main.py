@@ -4741,6 +4741,10 @@ def _agent_node_row(definition: Mapping[str, Any], context: Mapping[str, Any]) -
         estimate = model_pricing.estimate_node(entry, definition, {}, provider)
         row["price"] = ([round(estimate["low"], 4), round(estimate["high"], 4)]
                         if estimate and estimate.get("currency") == "usd" else None)
+        if row["price"] == [0.0, 0.0]:
+            # A sourced $0 (Idol on its free Hugging Face Space) reads like
+            # every other free node.
+            row["price"] = "free"
         note = model_pricing.size_note(model_pricing.entry_for_route(entry, provider), definition)
         if row["price"] is None and note:
             # Priced at run time from the input file (model_pricing sizing).
@@ -4856,6 +4860,13 @@ def _describe_routes(
         if row["price"] and model_pricing.route_price_unconfirmed(
                 (pricing.get("nodes") or {}).get(str(definition.get("id") or "")), definition, str(spec["id"])):
             row["priceUnconfirmed"] = True
+        if node_route.is_keyless(spec):
+            # Runs with no key (keys []); a key here is used when it is set,
+            # and then the run is on that person's own account and quota
+            # (Idol: their Hugging Face ZeroGPU time, which Hugging Face can
+            # bill a PRO account for past its free minutes).
+            row["optionalKeys"] = [{"key": key, "set": bool(api_keys.get(key))}
+                                   for key in node_route.keys(spec.get("optionalKeys"))]
         if spec.get("maker"):
             row["maker"] = True
         if spec.get("plan"):
@@ -14526,8 +14537,12 @@ def world_splat_summaries(value: Any) -> dict[str, Any] | None:
             continue
         try:
             summary["splats"].append({"id": splat.id, **summarize_splat_ply(path)})
-        except (OSError, SplatPlyError) as exc:
+        except SplatPlyError as exc:
+            # The preflight's reason: Nebula's own words, never a path.
             summary["splats"].append({"id": splat.id, "error": f"The splat file can't be read: {exc}"})
+        except OSError:
+            # An OSError's text names the file's absolute path.
+            summary["splats"].append({"id": splat.id, "error": "The splat file can't be read from Nebula's outputs."})
     return summary
 
 

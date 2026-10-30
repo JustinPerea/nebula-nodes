@@ -427,6 +427,8 @@ export function runChipLabel({ paid, cost }: RunScopeSummary): string | null {
   const amount = exact ? formatUsd(cost.high) : formatUsdRange(cost.low, cost.high);
   // "+" when part of the run has no list price, so the real total can be higher.
   if (cost.unpriced.length > 0 || cost.plus.length > 0) return `${amount}+`;
+  // A sourced $0 (Idol on its free Space) is exact, not an estimate (GM, PR #203 r1).
+  if (cost.low === 0 && cost.high === 0) return '$0';
   return exact ? `~${amount}` : amount;
 }
 

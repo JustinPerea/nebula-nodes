@@ -3,6 +3,7 @@ import { gzipSync } from 'node:zlib';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkBuiltFonts } from './check-built-fonts.mjs';
+import { sparkImportCycles } from './check-chunk-cycles.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.resolve(scriptDir, process.env.NEBULA_DESKTOP_BUILD === '1' ? '../dist-desktop' : '../dist');
@@ -41,36 +42,13 @@ for (const assetName of assetNames.filter((name) => name.endsWith('.js'))) {
   }
 }
 
-// Spark builds three objects at module top level (a FullScreenQuad from
-// three's Pass.js). If a chunk Spark imports also imports Spark, the cycle can
-// run Spark before that chunk defines them, and every World viewer fails with
-// "FullScreenQuad is not a constructor" (2026-10-29; vite.config.ts keeps
-// Pass.js in spark-vendor). Static imports only.
-const jsNames = assetNames.filter((name) => name.endsWith('.js'));
-const imports = new Map();
-for (const name of jsNames) {
-  const source = await readFile(path.join(distDir, 'assets', name), 'utf8');
-  // Minified: `import{t as e}from"./x.js";` and `import"./x.js";`, anywhere on a line.
-  imports.set(name, [...source.matchAll(/\bimport\s*(?:[\w${},*\s]+?\s*from\s*)?["']\.\/([^"']+\.js)["']/g)]
-    .map((match) => match[1]));
+// Spark must not share an import cycle with another chunk (check-chunk-cycles.mjs says why).
+const jsChunks = new Map();
+for (const name of assetNames.filter((asset) => asset.endsWith('.js'))) {
+  jsChunks.set(name, await readFile(path.join(distDir, 'assets', name), 'utf8'));
 }
-const reachable = (start) => {
-  const seen = new Set();
-  const stack = [...(imports.get(start) ?? [])];
-  while (stack.length) {
-    const next = stack.pop();
-    if (seen.has(next)) continue;
-    seen.add(next);
-    stack.push(...(imports.get(next) ?? []));
-  }
-  return seen;
-};
-const sparkChunks = jsNames.filter((name) => name.startsWith('spark-vendor'));
-for (const spark of sparkChunks) {
-  const back = [...reachable(spark)].filter((name) => !sparkChunks.includes(name) && reachable(name).has(spark));
-  if (back.length) {
-    throw new Error(`${spark} is in an import cycle with ${back.join(', ')}; Spark would run before what it imports`);
-  }
+for (const { spark, back } of sparkImportCycles(jsChunks)) {
+  throw new Error(`${spark} is in an import cycle with ${back.join(', ')}; Spark would run before what it imports`);
 }
 
 // The app ships its own fonts; nothing in the build may ask a font CDN.

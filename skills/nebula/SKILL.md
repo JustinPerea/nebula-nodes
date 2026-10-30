@@ -252,6 +252,7 @@ nebula run-all         # the whole canvas
 nebula result <run-id> --wait 100   # a run still going (exit 2 = still running)
 nebula cancel <run-id>
 nebula path n5         # the local file of a node's image
+nebula splat n7        # a World splat's numbers: Gaussians, bounding box, size, seed, axes
 nebula status
 ```
 
@@ -845,7 +846,7 @@ Connections must match types; `Any` connects to anything.
 | Video | .mp4, .mov files |
 | Audio | .mp3, .wav files |
 | Mesh | .glb, .obj, .fbx files |
-| World | A 3D world or object: a World Labs world, or a Gaussian splat (.ply) from Idol. `view_output` gives its Gaussian count, bounding box, file size and seed |
+| World | A 3D world or object: a World Labs world, or a Gaussian splat (.ply) from Idol. `view_output`, or `nebula splat <node>` from the CLI, gives its Gaussian count, bounding box, file size, seed and axes |
 | SVG | .svg files or SVG text |
 | Array | Lists of the above |
 | Moodboard | A saved moodboard |

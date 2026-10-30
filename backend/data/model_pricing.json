@@ -16317,7 +16317,7 @@
               "price": 0
             }
           ],
-          "notes": "Idol runs on Speridlabs' own Hugging Face Space on ZeroGPU, which Hugging Face offers free to every user, so Nebula and the Space bill nothing. Each run uses the caller's daily ZeroGPU time: the anonymous allowance (2 minutes a day) without a token, or the account's own with the person's HF_TOKEN (free 5 minutes, PRO and Team 40, Enterprise 60). Past that allowance a PRO, Team or Enterprise account is billed from its prepaid Hugging Face credits at $1 per 10 GPU-minutes; that charge is the person's own and Nebula can't see it. GPU seconds per Idol run are not published or measured (the Space asks for up to 120 s per call).",
+          "notes": "Idol runs on Speridlabs' own Hugging Face Space on ZeroGPU, which Hugging Face offers free to every user, so Nebula and the Space bill nothing. Each run uses the caller's daily ZeroGPU time: without a token, the small anonymous allowance; with the person's HF_TOKEN, the account's own (free 5 minutes, PRO and Team 40, Enterprise 60). Each Idol call reserves 120 s of GPU (app.py spaces.GPU(duration=120)), and ZeroGPU checks the reserved duration against the quota, so the anonymous allowance may fit about one run a day; to be confirmed on the first live run. Past that allowance a PRO, Team or Enterprise account is billed from its prepaid Hugging Face credits at $1 per 10 GPU-minutes; that charge is the person's own and Nebula can't see it. The GPU seconds a run really uses are not published or measured.",
           "sources": [
             {
               "url": "https://huggingface.co/docs/hub/spaces-zerogpu",
@@ -16325,7 +16325,7 @@
             },
             {
               "url": "https://huggingface.co/docs/hub/spaces-zerogpu",
-              "quote": "Unauthenticated | 2 minutes | Low; Free account | 5 minutes | Medium; PRO account | 40 minutes (extensible) | Highest"
+              "quote": "Free account | 5 minutes | Medium; PRO account | 40 minutes (extensible) | Highest"
             },
             {
               "url": "https://huggingface.co/docs/hub/spaces-zerogpu",

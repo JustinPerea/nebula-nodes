@@ -305,6 +305,17 @@ class NebulaClient:
                 raise RuntimeError(connect_failure(self.base_url, exc)) from exc
             raise RuntimeError(exc.detail) from exc
 
+    def get_splat_summary(self, node_id: str, port: str | None = None) -> dict[str, Any]:
+        """Call GET /api/graph/node/{id}/splat-summary (a World output's PLY
+        splats as numbers). Raises RuntimeError with a message for stderr."""
+        try:
+            return self.api.request("GET", f"/api/graph/node/{node_id}/splat-summary", timeout=30,
+                                    params={"port": port} if port else None, headers=self._identity_headers())
+        except NebulaAPIError as exc:
+            if exc.kind == "connect":
+                raise RuntimeError(connect_failure(self.base_url, exc)) from exc
+            raise RuntimeError(exc.detail) from exc
+
     def clear_graph(self, force: bool = False) -> dict[str, Any]:
         """Empty the open project. The backend refuses a project that has
         nodes without force (409), whoever asks."""

@@ -40,30 +40,33 @@ describe('the Idol node runs without a key (a keyless route)', () => {
   it('reads as needing no key, with the token offered in Settings', () => {
     const anonymous = modelReadiness(IDOL, {}, { apiKeys: {}, loaded: true }, HEALTH);
     expect(anonymous).toMatchObject({ label: 'No key needed', tone: 'neutral',
-      setupTarget: { kind: 'api-key', key: 'HF_TOKEN' } });
+      setupTarget: { kind: 'api-key', key: 'HF_TOKEN' },
+      connectionLabel: 'Hugging Face token', connectionNote: 'Optional' });
     expect(anonymous.detail).toBe(
-      'Runs without a key on a small shared daily allowance. Add a Hugging Face token in Settings to use your own.');
+      'Runs without a key on a small free daily allowance. Add your Hugging Face token in Settings to use your own.');
     const signedIn = modelReadiness(IDOL, {}, { apiKeys: { HF_TOKEN: TOKEN }, loaded: true }, HEALTH);
     expect(signedIn.label).toBe('Configured · not checked');
     expect(signedIn.detail).toMatch(/^Runs on your own Hugging Face allowance\./);
   });
 
-  it('switcher: the Space row offers an optional key, never "Add key"', () => {
+  it('switcher: the Space row has no third key state, empty without the token, "Connected" with it', () => {
     const anonymous = providerSwitchState(IDOL, {}, { apiKeys: {}, kreaSignedIn: false });
     expect(anonymous.rows.map((row) => [row.id, row.label, row.keyState])).toEqual([
       ['auto', 'Auto · runs on Speridlabs', null],
-      ['hf-space', 'Speridlabs', 'optional'],
+      ['hf-space', 'Speridlabs', 'none'],
     ]);
+    expect(anonymous.rows[1].info).toBe(
+      'Free. Runs on Hugging Face with a small daily allowance. Add your Hugging Face token to use your own.');
     expect(anonymous.rows[1].setup).toEqual({ kind: 'api-key', key: 'HF_TOKEN' });
     expect(anonymous.blocked).toBe(false);
     const signedIn = providerSwitchState(IDOL, {}, { apiKeys: { HF_TOKEN: TOKEN }, kreaSignedIn: false });
-    expect(signedIn.rows[1].keyState).toBe('set');
+    expect(signedIn.rows[1].keyState).toBe('connected');
   });
 
   it('switcher: a keyed route beside a keyless one still needs its key', () => {
     const state = providerSwitchState(KEYLESS, { _provider: 'fal' }, { apiKeys: {}, kreaSignedIn: false });
     expect(state.rows.map((row) => [row.id, row.keyState])).toEqual([
-      ['auto', null], ['hf-space', 'optional'], ['fal', 'missing'],
+      ['auto', null], ['hf-space', 'none'], ['fal', 'missing'],
     ]);
     expect(state.blocked).toBe(true);
     expect(state.alternatives.map((alternative) => alternative.routeId)).toEqual(['hf-space']);
@@ -82,7 +85,8 @@ describe('the Idol node runs without a key (a keyless route)', () => {
 
   it('Settings lists Idol under the Hugging Face token', () => {
     expect(nodesForKey('HF_TOKEN').map((node) => node.id)).toEqual(['speridlabs-idol']);
-    expect(unlockSummary(PROVIDER_KEY_SPECS.HF_TOKEN, 'add')).toBe('Optional: your own daily GPU time for Idol');
+    expect(unlockSummary(PROVIDER_KEY_SPECS.HF_TOKEN, 'add')).toBe('Optional. Gives Idol your own daily GPU time.');
+    expect(PROVIDER_KEY_SPECS.HF_TOKEN).toMatchObject({ label: 'Hugging Face', credential: 'token' });
   });
 });
 
@@ -105,7 +109,9 @@ describe('a World v2 splat in the preview', () => {
   it('turns each up axis to Three\'s +Y up', () => {
     expect(upAxisToThreeRotation('y')).toEqual([0, 0, 0]);
     expect(upAxisToThreeRotation('-y')).toEqual([Math.PI, 0, 0]);
-    // Idol: -Y up, +Z forward. Turned 180 degrees about X, the face points at -Z.
+    // Idol: -Y up, +X forward (its value's forwardAxis). Turned 180 degrees
+    // about X, +X stays +X.
+    expect(forwardInThree('-y', 'x')).toEqual([1, 0, 0]);
     expect(forwardInThree('-y', 'z')).toEqual([0, 0, -1]);
     expect(forwardInThree('y', 'z')).toEqual([0, 0, 1]);
     // Z-up (Blender's frame), -Y forward, faces +Z in Three.
