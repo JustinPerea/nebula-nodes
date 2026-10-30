@@ -1116,6 +1116,11 @@ def _commons_edit_line(edit: Any) -> str:
 def _asset_change_lines(view: dict[str, Any], where: str | None) -> list[str]:
     lines = [f"  asks   {view.get('summary') or 'a change'}"]
     if view.get("kind") == "commons":
+        # The summary names no reference (GM, PR #202 r4: it is the Agent log's
+        # words); the proposing agent's own view still says which one.
+        target = (view.get("target") or {}).get("id")
+        if target:
+            lines.append(f"  on     Commons reference {target}")
         lines.extend(_commons_edit_line(edit) for edit in (view.get("change") or {}).get("edits") or [])
     for key, values in (view.get("change") or {}).items():
         if isinstance(values, dict):

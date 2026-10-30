@@ -6,7 +6,7 @@ export function coverProposal(overrides: Partial<AssetProposalView> = {}): Asset
     id: 'pa_00000001', status: 'open', agent: { id: 'claude-code', name: 'Claude Code', color: '#5B9DFF' },
     note: 'The new grade reads better', kind: 'project', target: { kind: 'project', id: 'dusk', name: 'Dusk' },
     change: { cover: { from: '/api/outputs/a.png', to: '/api/outputs/c.png', fromBy: { kind: 'person', name: 'You' } } },
-    summary: 'make another image the cover of project "Dusk"', decideIn: 'projects',
+    summary: 'make another image the cover of “Dusk”', decideIn: 'projects',
     createdAt: Date.now(), expiresAt: Date.now() + 15 * 60_000, reason: null, applied: null, ...overrides,
   };
 }
@@ -25,6 +25,6 @@ export function commonsProposal(overrides: Partial<AssetProposalView> = {}): Ass
     before: [{ value: 'A loud poster' }, { present: false },
       { label: 'headline', note: null, status: 'proposed', box: [0.1, 0.1, 0.3, 0.2] },
       { role: 'neutral', why: 'loud poster', in_inbox: false }],
-    summary: 'make 4 changes to Commons reference ast_1', decideIn: 'commons', ...overrides,
+    summary: 'make 4 changes to an image in the Commons', decideIn: 'commons', ...overrides,
   });
 }

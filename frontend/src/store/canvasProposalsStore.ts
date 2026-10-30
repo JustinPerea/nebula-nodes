@@ -421,6 +421,10 @@ onPersonPromoted(() => {
 // never on load. An id the server no longer has answers not_found, which
 // releaseApproval lets pass, so it is done either way. A tab whose storage
 // throws keeps them in memory only, as before.
+// Review 20 NIT-1: a duplicated tab copies sessionStorage, held ids included
+// (and the credential with them), so both tabs release the same approval on
+// their promotes. The second gets not_found, which is harmless: the approval is
+// already gone, and nothing runs or spends either way.
 export const HELD_RELEASES_KEY = 'nebula.heldRunReleases';
 
 function readHeldReleases(): string[] {

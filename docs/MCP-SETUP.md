@@ -2386,8 +2386,16 @@ key goes only to `/ws` sockets that said hello with the person token
 screen), never to REST, the journal or MCP results. `assetProposalClosed`
 `{proposalId, status, reason, kind, targetId}` goes to every socket. The
 Agent log names the proposal ("Asks to make another image the cover of
-project "Dusk" (decide on the Projects screen)"), since no cursor can go
-there. Memory only: lost on restart.
+“Dusk” (decide on the Projects screen)"), since no cursor can go there, and
+a withdrawal the same way under the agent's name, by any route
+(`withdraw_proposal`, `nebula proposal withdraw`, `DELETE
+/api/canvas/proposals/{id}`): "Withdrew its request to make another image
+the cover of “Dusk”". A Commons ask names its reference only as "an image in
+the Commons", never by its id, filename, page title or collection, and
+carries no Commons text (no labels, values, whys or keywords): "Asks to set
+an image in the Commons to avoid", "Asks to add a region to an image in the
+Commons", "Asks to make 3 changes to an image in the Commons". The proposal's
+`summary` is the same words; its `target.id` says which reference. Memory only: lost on restart.
 
 **The Update.** Each asset proposal also posts an Update in the Updates
 corner (Justin's Q92 a, 2026-10-21), on the open project's list, written by
@@ -2398,13 +2406,23 @@ generators", "Claude Code asks to change a reference in the Commons" (or
 "asks to make 3 changes to a reference in the Commons", "asks to take a
 reference out of the inbox"). Names only: never the agent's note, a board's
 notes, a private note or Commons text. It carries `proposal: {id, kind,
-targetId}` and one **Review** action (`proposal.review`), which takes the
+targetId, since}`, where `since` is when that ask was made (ms, as the
+proposal's `createdAt`; after the Update falls back to your older ask on the
+same target, that ask's). Plus, for a cover, `cover`: `"automatic"` or
+`"image"` (which kind, never which image), and for a Commons ask `changes`
+(how many edits) (1 to 999) and `inbox: true` when it only asks to take a
+reference out of the inbox.
+A tab that isn't connected as the person sees only the Update, and its
+placeholder card and the Commons proposals line read these, never the text. It has one **Review** action (`proposal.review`), which takes the
 person to the Projects screen with that card's strip in view, to Moodboard
 Studio on that board, or to the Commons on that reference, from whichever
 screen they are on. One per agent and
 target: a new proposal on the same target replaces the agent's earlier
 Update (the socket's `removed`), and while the agent still has another
-proposal open there, closing one leaves the Update asking about the other.
+proposal open there, closing one leaves the Update asking about the other:
+its text and its `proposal` ref change in place to that one's (op
+`changed`, same id, read state kept), as they do when an undo reopens a
+proposal.
 When the last one closes the Update gets `resolvedAt`, `resolvedBy` (`person`,
 the agent, or `system`), `readAt` and a short `outcome` ("Accepted: the cover
 changed", "You kept your cover", "You kept the notes here", "Applied",

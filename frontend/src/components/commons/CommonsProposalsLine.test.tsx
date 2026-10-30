@@ -26,7 +26,7 @@ describe('CommonsProposalsLine', () => {
     render(<CommonsProposalsLine onOpen={onOpen} />);
     const lines = screen.getAllByRole('status');
     expect(lines.map((line) => line.textContent)).toEqual([
-      'Claude Code and Codex ask to change a reference (2 proposals)Review',
+      'Claude Code and Codex have 2 requests to change a referenceReview',
       'Claude Code asks to change a referenceReview',
     ]);
     fireEvent.click(screen.getAllByRole('button', { name: 'Review' })[1]);
