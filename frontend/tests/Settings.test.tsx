@@ -994,6 +994,20 @@ describe('Settings — preferences', () => {
     openTab('Preferences');
     expect(await screen.findByText("Couldn't load the connected apps. Only the person can do this from the Nebula canvas.")).toBeInTheDocument();
   });
+
+  it('PR #204 r6 (GM r6 2): refused as not connected, the because line, and the read runs again on the promote', async () => {
+    const session = await import('../src/lib/personSession');
+    session.resetPersonSessionForTests();
+    getOutsideSpendMock.mockRejectedValueOnce(new RequestFailedError("Couldn't load the connected apps.", 403,
+      { reason: 'Only the person can do this.', code: 'person_required' }));
+    await renderSettings({ apiKeys: {}, runCostConfirmUsd: 1 });
+    openTab('Preferences');
+    expect(await screen.findByText('Nebula couldn’t load the connected apps because this tab isn’t connected as you. Open the link Nebula printed when it started.')).toBeInTheDocument();
+    const calls = getOutsideSpendMock.mock.calls.length;
+    act(() => { session.notePersonPromoted(); });
+    await waitFor(() => expect(getOutsideSpendMock.mock.calls.length).toBe(calls + 1));
+    await waitFor(() => expect(screen.queryByText(/load the connected apps because/)).not.toBeInTheDocument());
+  });
 });
 
 // ---------------------------------------------------------------------------

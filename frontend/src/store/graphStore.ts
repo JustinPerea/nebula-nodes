@@ -92,8 +92,10 @@ import {
   RequestFailedError, copyForAnswer, detailText, failureKind, failureCopy, isBackendUnreachable, failureDetails,
   PERSON_REQUIRED_CODE, failureMessage, headedLine, isNamedLine, readRefusal, requestError,
   saysPersonRequired, warnFailure, nodeNameList,
+  lastPersonRefusalSentAt,
 } from '../lib/errorCopy';
-import { clearRefusedOnPromote } from '../lib/clearsOnPromote';
+import { isBeforePromote } from '../lib/personSession';
+import { clearRefusedOnPromote, isPersonRefusal } from '../lib/clearsOnPromote';
 import { CANVAS_NOTICE_EVENT, showNotice, type CanvasNoticeDetail } from '../lib/canvasNotice';
 import { sceneRetryingLine, sceneStoppedLine, sceneStopStateLine, type SceneStopCause, sceneOutpacedLine, type SceneOutpacedBy, type SceneWriter, sceneWriterOf,
   sameSceneWriter, UNKNOWN_WRITER, sceneDeletedLine, sceneRunLockLine, sceneOtherStopLine, sceneClashLine,
@@ -383,7 +385,8 @@ function markNodesErrored(
   // Review 3 NIT-2 (#204 r5): what the refusal covered, so the promote puts each node back as
   // it was (a complete node shows its image again), not idle.
   const before = new Map(nodes.filter((node) => nodeIds.has(node.id)).map((node) => [node.id,
-    beforeQueued.get(node.id) ?? Object.fromEntries(REFUSED_START_FIELDS.map((key) => [key, node.data[key]]))]));
+    beforeQueued.get(node.id) ?? (UNSETTLED.has(node.data.state) ? IDLE_FIELDS : settledFields(node))]));
+  for (const id of nodeIds) beforeQueued.delete(id);
   clearsOnPromoteIf(failure, () => useGraphStore.setState((state) => ({ nodes: withoutRefusedStart(state.nodes, before, line) }))); // clears-on-promote: graph.run-start
   return nodes.map((node) => {
     if (!nodeIds.has(node.id)) return node;
@@ -5808,14 +5811,31 @@ const nodeWrites = new Map<string, WireWrite>();
 const REFUSED_START_FIELDS = ['state', 'error', 'errorCategory', 'errorFriendly', 'errorPerson', 'errorProviderText',
   'errorProvider', 'progress', 'streamingText', 'streamingPartials', 'streamingSvg'] as const;
 
-/** Each node as it was before the latest start queued it (review 3 NIT-2): what a refused start
- * puts back, since by the refusal the node reads 'queued'. Every start queues first, so the
- * entry is always the latest start's. */
+/** Each node as it last settled before a start queued it (review 3 NIT-2): what a refused start
+ * puts back, since by the refusal the node reads 'queued'. Review 4 LOW-4 (round 6): only a
+ * settled state (idle, complete, error, skipped) is kept; a node queued again while queued or
+ * running keeps the settled one it had, and one with none goes back idle, never to 'queued' or
+ * 'executing'. A refusal takes its nodes' entries, and the map stays bounded. */
 const beforeQueued = new Map<string, Partial<NodeData>>();
+const BEFORE_QUEUED_MAX = 500;
+const UNSETTLED: ReadonlySet<string> = new Set(['queued', 'executing']);
 function queuedFrom(node: Node<NodeData>): Node<NodeData> {
-  beforeQueued.set(node.id, Object.fromEntries(REFUSED_START_FIELDS.map((key) => [key, node.data[key]])) as Partial<NodeData>);
+  if (UNSETTLED.has(node.data.state)) {
+    if (!beforeQueued.has(node.id)) beforeQueued.set(node.id, IDLE_FIELDS);
+    return node;
+  }
+  beforeQueued.delete(node.id);
+  beforeQueued.set(node.id, settledFields(node));
+  if (beforeQueued.size > BEFORE_QUEUED_MAX) beforeQueued.delete(beforeQueued.keys().next().value!);
   return node;
 }
+/** Idle, with none of a run's readings (its outputs stay: they aren't run fields). */
+const IDLE_FIELDS: Partial<NodeData> = { ...Object.fromEntries(REFUSED_START_FIELDS.map((key) => [key, undefined])), state: 'idle' };
+function settledFields(node: Node<NodeData>): Partial<NodeData> {
+  return Object.fromEntries(REFUSED_START_FIELDS.map((key) => [key, node.data[key]])) as Partial<NodeData>;
+}
+/** Tests: how many nodes have a settled state kept for a refused start. */
+export function beforeQueuedSizeForTests(): number { return beforeQueued.size; }
 
 /** The nodes a refused start marked, back as they were before it (review 3 NIT-2): only those
  * still showing its line, so a node that ran again and failed otherwise keeps its new line. */
@@ -11080,7 +11100,14 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     });
     if (shownId === null) return;
     const id = shownId;
-    clearsOnPromoteIf(saysPersonRequired(text) ? { code: PERSON_REQUIRED_CODE } : options?.error, () => useGraphStore.setState((state) => (state.undoNotice?.id === id // clears-on-promote: graph.notify
+    // Review 4 LOW-2 (held-state-ui): the refusal itself when given, so its send-time
+    // stamp comes with it; a line that only says the gate held gets a bare code.
+    const refusal = isPersonRefusal(options?.error) ? options?.error
+      // A line built from a refusal's words (backendRejectionReason, a reason in a heading):
+      // the latest person-gate refusal's send-time stamp (readRefusal keeps it).
+      : saysPersonRequired(text) ? { code: PERSON_REQUIRED_CODE, sentBeforePromote: isBeforePromote(lastPersonRefusalSentAt()) }
+        : options?.error;
+    clearsOnPromoteIf(refusal, () => useGraphStore.setState((state) => (state.undoNotice?.id === id // clears-on-promote: graph.notify
       ? { undoNotice: null } : state.messageNotice?.id === id ? { messageNotice: null } : {})));
   },
 
@@ -13081,7 +13108,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
         // Create's line clears on the promote when its only reason was this tab.
         const refused = err instanceof RequestFailedError ? err : null;
         throw new FailureNotice(GENERATE_HEADING, `${CLUSTER_NOT_ADDED} ${clusterFailureReason(err)}`,
-          { code: refused?.code ?? null, sentBeforePromote: refused?.sentBeforePromote });
+          { code: refused?.code ?? null, sentAt: refused?.sentAt ?? null });
       } finally {
         synced.stop();
       }
@@ -14403,7 +14430,7 @@ useGraphStore.subscribe(fixAddsBelowNewSteps);
 if (typeof window !== 'undefined') {
   window.addEventListener(CANVAS_NOTICE_EVENT, (event) => {
     const detail = (event as CustomEvent<CanvasNoticeDetail>).detail;
-    if (detail?.text) useGraphStore.getState().notify(detail.text, detail.tone);
+    if (detail?.text) useGraphStore.getState().notify(detail.text, detail.tone, { error: detail.error });
   });
 }
 

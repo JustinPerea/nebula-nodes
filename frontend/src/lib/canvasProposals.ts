@@ -34,16 +34,16 @@ export interface AcceptedProposal {
 /** A refused accept or reject: heading + reason like every request's error
  * (GM, error-copy round 2); `status` tells a gone proposal from a refusal. */
 export class ProposalRequestError extends RequestFailedError {
-  constructor(status: number, reason: string, options: { heading?: string; detail?: unknown; code?: string | null; sentBeforePromote?: boolean } = {}) {
+  constructor(status: number, reason: string, options: { heading?: string; detail?: unknown; code?: string | null; sentAt?: number | null; sentBeforePromote?: boolean } = {}) {
     super(options.heading ?? '', status, { reason, detail: options.detail, code: options.code,
-      sentBeforePromote: options.sentBeforePromote });
+      sentAt: options.sentAt, sentBeforePromote: options.sentBeforePromote });
     this.name = 'ProposalRequestError';
   }
 }
 
 const asProposalError = (error: RequestFailedError) =>
   new ProposalRequestError(error.status, error.reason, { heading: error.heading, detail: error.detail, code: error.code,
-    sentBeforePromote: error.sentBeforePromote });
+    sentAt: error.sentAt });
 
 /**
  * Accept a proposal. The key came only over this canvas's WebSocket; the

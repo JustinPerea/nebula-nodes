@@ -5,7 +5,7 @@ import { TAB_HEADER, TAB_ID } from './tabId';
 import { noteParamsOutdated, PARAMS_VERSION_HEADER } from './paramsOutdated';
 import { GRAPH_PARAMS_VERSION } from './savedParamsUpgrades';
 import {
-  browserPersonCredential, noteSentBeforePromote, personCredential, personPromotions, reportPersonRequired, sentBeforePromote,
+  browserPersonCredential, noteSentUnder, personCredential, personPromotions, reportPersonRequired, sentBeforePromote,
 } from './personSession';
 import {
   DEFAULT_BACKEND_PORT,
@@ -320,8 +320,12 @@ function notePersonRequired(response: Response): void {
   // An answer to a request sent before the latest promote is the old state's (review 3
   // LOW-1): the server has since promoted this tab, so it holds nothing.
   if (sentBeforePromote(response)) return;
+  // Review 4 LOW-1 (round 6): read again once the body is in; a promote while it was parsed
+  // makes this the old state's answer too.
   void response.clone().json()
-    .then((body: { code?: unknown } | null) => { if (body?.code === 'person_required') reportPersonRequired(); })
+    .then((body: { code?: unknown } | null) => {
+      if (body?.code === 'person_required' && !sentBeforePromote(response)) reportPersonRequired();
+    })
     .catch(() => { /* not JSON: not a person-gate refusal */ });
 }
 
@@ -447,20 +451,26 @@ export async function apiFetch(path: string, init?: RequestInit,
   // key. Only read-only requests may transparently rediscover and replay.
   const mayReplayAfterDiscovery = method === 'GET' || method === 'HEAD';
 
-  // Which promote this request was sent under (review 3 LOW-1, PR #204 r5).
+  // Which promote this request was sent under (review 3 LOW-1, PR #204 r5), recorded on its
+  // answer and compared whenever it is read (review 4 LOW-1, round 6).
   const promotions = personPromotions();
   const stamp = (response: Response): Response => {
-    if (personPromotions() !== promotions) noteSentBeforePromote(response);
+    noteSentUnder(response, promotions);
+    return response;
+  };
+  // One stamp and one check for every answer (review 4 NIT-2, round 6), the discovery replay's too.
+  const answered = (response: Response): Response => {
+    stamp(response);
+    notePersonRequired(response);
+    noteParamsOutdated(response);
     return response;
   };
   try {
-    const response = stamp(await send(requestUrl));
-    notePersonRequired(response);
-    noteParamsOutdated(response);
+    const response = answered(await send(requestUrl));
     if (mayReplayAfterDiscovery && shouldRetryWithDiscovery(baseUrl, response)) {
       const retryBaseUrl = await getBackendBaseUrl({ force: true });
       if (retryBaseUrl !== baseUrl) {
-        return stamp(await send(joinBackendPath(retryBaseUrl, path)));
+        return answered(await send(joinBackendPath(retryBaseUrl, path)));
       }
     }
     return response;
@@ -468,7 +478,7 @@ export async function apiFetch(path: string, init?: RequestInit,
     if (!mayReplayAfterDiscovery || !shouldRetryWithDiscovery(baseUrl)) throw err;
     const retryBaseUrl = await getBackendBaseUrl({ force: true });
     if (retryBaseUrl === baseUrl) throw err;
-    return stamp(await send(joinBackendPath(retryBaseUrl, path)));
+    return answered(await send(joinBackendPath(retryBaseUrl, path)));
   }
 }
 

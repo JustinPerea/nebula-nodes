@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { callersOf, gatedRoutes, keepsLine } from './personGatedCallers';
+import { callersOf, gatedRoutes } from './personGatedCallers';
 
 /**
  * GM, PR #204 round 3 (2026-10-30): "on promote, every line whose only reason
@@ -105,6 +105,8 @@ const SITES: Record<string, string> = {
   'settings.apps': 'components/panels/settings/ConnectedApps.tsx',
   'settings.spend-load': 'components/panels/settings/AgentSpendSection.tsx',
   'settings.agents-load': 'components/panels/settings/PersonalAgentsSection.tsx',
+  'settings.spend-load-retry': 'components/panels/settings/AgentSpendSection.tsx',
+  'settings.agents-load-retry': 'components/panels/settings/PersonalAgentsSection.tsx',
   'settings.agents': 'components/panels/settings/PersonalAgentsSection.tsx',
   'settings.write': 'lib/settingsWrites.ts',
   'krea.connection': 'components/panels/settings/useKreaConnection.ts',
@@ -130,7 +132,8 @@ const SITES: Record<string, string> = {
   'project.error': 'store/projectStore.ts',
   'project.save': 'store/projectStore.ts',
   'project.save-retry': 'store/projectStore.ts',
-  'create.style': 'components/create-studio/CreateView.tsx',
+  'project.load-retry': 'store/projectStore.ts',
+  'create.style-retry': 'components/create-studio/CreateView.tsx',
   'create.generate': 'components/create-studio/CreateView.tsx',
   'graph.refusal': 'store/graphStore.ts',
   'graph.notify': 'store/graphStore.ts',
@@ -143,7 +146,7 @@ type Surface = string[] | { none: string };
 
 /** Each gated backend function: the registrations that clear its refusal's lines. */
 const GATED: Record<string, Surface> = {
-  list_personal_agents: ['settings.agents-load'],
+  list_personal_agents: ['settings.agents-load', 'settings.agents-load-retry'],
   create_personal_agent: ['settings.agents'],
   update_personal_agent: ['settings.agents'],
   delete_personal_agent: ['settings.agents'],
@@ -153,7 +156,7 @@ const GATED: Record<string, Surface> = {
   cancel_antigravity_sign_in: ['settings.agents'],
   sign_out_antigravity: ['settings.agents'],
   acknowledge_personal_agent_warning: ['settings.agent-warning'],
-  list_agent_apps: ['settings.spend-load'],
+  list_agent_apps: ['settings.spend-load', 'settings.spend-load-retry'],
   create_agent_app: ['settings.apps'],
   update_agent_app: ['settings.apps'],
   revoke_agent_app: ['settings.apps'],
@@ -190,8 +193,8 @@ const GATED: Record<string, Surface> = {
   _require_spend_approval: ['graph.run-start', 'graph.shot-start', 'graph.refusal'],
   // Create's Save style (POST /api/presets, _check_style_write) and Generate (POST
   // /api/graph/cluster) answer with it too (review 3 MEDIUM-1, round 5).
-  _refuse_agent_billing_change: ['project.save', 'project.save-retry', 'project.error', 'graph.notify', 'graph.run-start',
-    'graph.refusal', 'create.style', 'create.generate'],
+  _refuse_agent_billing_change: ['project.save', 'project.save-retry', 'project.load-retry', 'project.error', 'graph.notify', 'graph.run-start',
+    'graph.refusal', 'create.style-retry', 'create.generate'],
   _refuse_graph_over_save_limit_on_its_own: ['graph.notify', 'graph.refusal'],
   _refuse_agent_growth_past_save_limit: ['graph.notify', 'graph.refusal'],
   _reader_spend_hold: NO_LINE('POST /api/moodboards/{id}/read: no tab calls it (agents and the CLI only)'),
@@ -258,8 +261,7 @@ const NO_FRONTEND: Record<string, string> = {
   'PUT /api/presets/{preset_id}': 'no tab edits a style in place: Create saves a new one (POST) or deletes it',
 };
 
-const KEEPS = (why: string) => ({ keeps: why });
-type Caller = string[] | { none: string } | { keeps: string };
+type Caller = string[] | { none: string };
 
 /** Round 5: each function that sends a gated route but doesn't keep its line with the mechanism
  * in its own file. Keys are `file#function`; a lib/ key also stops the trace there. */
@@ -272,20 +274,26 @@ const CALLERS: Record<string, Caller> = {
   'lib/canvasProposals.ts#releaseApproval': NO_LINE('releaseApproval swallows every failure: the approval expires on its own'),
   'components/panels/ChatPanel.tsx#load': NO_LINE('a failed read of the agents falls back to an empty list; the Settings tab shows the refusal'),
   'components/panels/Inspector.tsx#renderUniversalModelControl': NO_LINE('a favourite\'s star: a failed save is ignored (.catch(() => undefined))'),
-  'store/graphStore.ts#cancelWithinTimeLimit': NO_LINE('throws to requestTrackedCancellation, which keeps the Stop and asks again (see _refuse_stopping_the_persons_run)'),
+  // Round 6 (review 4 LOW-4, MEDIUM-1): cancelWithinTimeLimit throws on to its two callers.
+  'store/graphStore.ts#fencePaidUnknownRun': NO_LINE('the 404 rule\'s Stop for a paid World Labs start: a refusal logs; the Stop stays on the run and the person\'s own Stop sends it again'),
   'store/graphStore.ts#refused': NO_LINE('an offline refusal built locally: nothing is sent'),
   'store/graphStore.ts#saves': NO_LINE('describes a cut-off save from its path; sends nothing'),
   'store/graphStore.ts#typingSaves': NO_LINE('describes typing a cut-off save held; sends nothing'),
   'store/projectStore.ts#keepReplacedCanvasAsCopy': NO_LINE('.catch(() => null): a copy not made; the held edits\' screen offers it again'),
-  // A line that stays through the promote on purpose: the screen's own Try again is the way on.
-  'store/projectStore.ts#recoverPendingWork': KEEPS('throws to initialize and the params reload, whose load screen keeps its Try again: clearing it would strand a tab that hasn\'t loaded'),
-  'store/projectStore.ts#followProjectSwitch': KEEPS('the handoff after an agent\'s switch: its failure becomes a recovered copy, and the line says where it went'),
+  // GM r7 (2): the load screens retry on the promote (showNotConnectedLoad in each catch).
+  // The handoff save after an agent's switch: a refusal becomes a recovered copy (recoverPendingWork,
+  // which throws on), whose refusal lands in this function's outer catch (GM r7 2).
+  'store/projectStore.ts#followProjectSwitch': ['project.load-retry'],
 };
 
 /** Round 5, GM r5 (1): the requests that retry on the promote, through `retryOnPromote` only. */
 const RETRIES: Record<string, string> = {
   'notes.read-retry': 'store/agentNotesStore.ts',
   'project.save-retry': 'store/projectStore.ts',
+  'project.load-retry': 'store/projectStore.ts',
+  'create.style-retry': 'components/create-studio/CreateView.tsx',
+  'settings.spend-load-retry': 'components/panels/settings/AgentSpendSection.tsx',
+  'settings.agents-load-retry': 'components/panels/settings/PersonalAgentsSection.tsx',
 };
 
 const usesMechanism = (source: string) => /from '[./]*(?:lib\/)?clearsOnPromote'/.test(source)
@@ -378,7 +386,8 @@ describe('GM, PR #204: a line whose only reason was this tab clears on the promo
       const starts = COMPOSED[`${route.method} ${route.path}`] ?? [];
       for (const [id, unit] of callersOf(route, starts, stops)) {
         seen.add(id);
-        if (keepsLine(unit) && !(id in CALLERS)) continue;
+        // Round 6 (review 4 MEDIUM-1): the catch on this call registers (outcomeAt), not just the function.
+        if (unit.outcome === 'keeps' && !(id in CALLERS)) continue;
         if (!(id in CALLERS)) undeclared.set(id, [...(undeclared.get(id) ?? []), `${route.method} ${route.path}`]);
       }
     }
@@ -390,7 +399,7 @@ describe('GM, PR #204: a line whose only reason was this tab clears on the promo
         expect(caller.length, id).toBeGreaterThan(0);
         for (const site of caller) expect(site in SITES, `${id}: ${site}`).toBe(true);
       } else {
-        expect(('none' in caller ? caller.none : caller.keeps).length, id).toBeGreaterThan(20);
+        expect(caller.none.length, id).toBeGreaterThan(20);
       }
     }
   });

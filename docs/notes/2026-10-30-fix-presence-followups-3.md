@@ -540,3 +540,143 @@ The first full backend run on the merged tree failed 9 tests.
     timed out starting while the full pytest ran, the canvas once didn't open on the
     first try, and the prompt input selector was wrong. None of these was a product
     failure.
+
+## Round 6 (review 4 on 6e130e26; GM `gm-pr204-r6`, `gm-pr204-r7`)
+
+- **Save style (GM r6 1).** A Save style the gate refused as "not connected" is sent
+  again on the promote, once, through `retryOnPromote` (`create.style-retry`), only
+  while the project it was made in is still open.
+  - Its line is the "because" form: "Nebula couldn’t save the style because this tab
+    isn’t connected as you. Open the link Nebula printed when it started."
+  - Every Save style line now shows in the app's notice region (graphStore `notify`,
+    with the error, so it clears on the promote), not in Creator Studio's toolbar row.
+    The toolbar's span and its CSS are gone; New draft and History don't move.
+  - Flagged, not changed: Generate's run error still sits in the toolbar row
+    (`create-view__run-error`). GM's rule ("a refusal sentence doesn't belong in a
+    toolbar") reads as covering it too; that's GM's call.
+- **The shared-line rule (GM r6 2).** A "not connected" refusal of anything that
+  retries on the promote uses the because form (`notConnectedBecause`, errorCopy).
+  `saysPersonRequired` recognises it.
+  - Changed to the because form, because each retries on the promote:
+    - mark-read (`markReadRefusedCopy`, already);
+    - the project save ("save the project");
+    - Save style ("save the style");
+    - the first load ("load your work"), the update reload's recovered copy ("save your
+      unsaved edits": GM said to fit the verb to the screen, and that screen saves the
+      edits as a copy) and an agent's switch ("switch projects");
+    - Settings' connected apps ("load the connected apps") and your agents ("load your
+      agents").
+  - Kept on the generic line ("… then try again" / "This change needs your OK"),
+    because each is one-shot: the person presses it again, nothing retries. These are
+    every other site in the ratchet's SITES table: Settings writes, pins, chat, canvas
+    edits, proposals' Accept and Reject, question Send and Dismiss, project rename,
+    cover, delete and trash, Commons, Krea, Moodboard and Cinema writes, run starts.
+  - Ratchet (`presenceRound6.ratchet.test.ts`): every `retryOnPromote(` call's
+    enclosing function words its line with `notConnectedBecause(` or
+    `markReadRefusedCopy(`; a fixture mutant with the generic line fails it.
+- **Check a (GM r6 3).** Both paths try mark-read: `openList` calls `markRead` whenever
+  the list opens with unread Updates, held or not. Fresh held and demoted-after-reading
+  were already the same in code; the new tests pin both (the line and one retry). The
+  r5 live shot was taken before the refusal landed: its wait returned on the header
+  text alone. The round 6 harness waits for the line.
+- **Question form on demotion (GM r7 1).** The form stays open with its draft and caret,
+  and typing stays live. Send and Dismiss lock in place (aria-disabled, focusable, "You
+  can answer this when this tab is connected as you." as their tooltip, the 150 ms
+  rule through `useTabHeld`/`useLockPending`) and unlock in place on the promote.
+  `agentQuestionsStore` send and dismiss refuse while `personUnconfirmed()`.
+- **Load screens (GM r7 2).** `showNotConnectedLoad` in the three catches
+  (`initialize`, the params reload, `followProjectSwitch`): the because line, no Try
+  again (`errorRetry: null`), and `retryOnPromote('project.load', …)` runs what Try
+  again's 'load' does, only while that line is still the screen's. Any other failure
+  keeps its own line and Try again. `recoverPendingWork` and `followProjectSwitch`
+  left KEEPS (the kind is gone); the ratchet's KEEPS entries are replaced by
+  `project.load-retry`.
+- **The pin's Send note (GM r7 3).** PinComposer reads `useTabHeld` and
+  `useLockPending` (PromptDialog's confirm takes the pending look and does nothing on a
+  press). No component reads `personGateHeld` any more. Remaining readers, all store
+  bookkeeping, not locks: `clearsOnPromote` (a refusal after the promote clears at once
+  only if the tab isn't held again), `assetProposalsStore` (`awaitingSync` after a
+  refusal), `canvasProposalsStore` (a release held while refused).
+- **Review 4 gates-security.**
+  - MEDIUM-1: the trace reads what the catch on each call does (`outcomeAt`): it
+    registers ('keeps'), throws on ('passes': followed to the callers, a store action
+    by property name through `getState().x()` and selectors `useStore((s) => s.x)`),
+    or neither ('drops': must be declared). A Response-returning call reads the try's
+    own `throw` of `!res.ok`, or else the function's handling. Keeper calls are matched
+    as calls (`console.error` no longer counts as `error(`). Mutants: CreateView's
+    `create.generate` removed, and a new component calling
+    `getState().authorGenerationCluster()` with `failureMessage`, both fail. The new
+    precision found `fencePaidUnknownRun` (declared) and moved the declarations onto
+    the functions that keep: `cancelWithinTimeLimit` and `recoverPendingWork` throw on.
+  - LOW-1: the frontend trace now finds `${BASE}/api/…`, a top-level const path,
+    `'/api/' + 'x'`, a written `?query`, a renamed re-export, `export *`, a default
+    export, an object-property helper (`styles.save()`) and a lib class method on an
+    imported instance. It fails closed: a lib helper it reaches but can't follow (a
+    class built with `new`) is returned as a caller, and /api/ text it can't place is
+    listed and must be declared (UNTRACED: prefix lists and prose).
+  - LOW-2: backend discovery is `tests/personGateRoutes.py` (Python ast, run from the
+    test): multi-line decorators, either quote, `api_route`, helpers in services/ and
+    other modules, aliases, a class's static method, PersonGateError and
+    PERSON_REQUIRED written inline, `Depends(person_only)` in a parameter or a
+    router's `dependencies=`. It finds the same 66 routes the line scan did; ten
+    fixture probes pin the forms.
+  - LOW-3: the seven server surfaces are named in the PR body. The server doesn't
+    change; it goes to Justin.
+  - LOW-4: `cancelWithinTimeLimit`'s reason now names its two callers; the
+    `followProjectSwitch` reason went with KEEPS.
+  - NIT-1: the broadcast test has a distinct `others=` payload and a claimed socket
+    with the person's view, which must get the others form.
+  - NIT-2: one stamp and one check for every answer: apiFetch's discovery replay now
+    goes through the same `answered()` (it skipped the person-gate check before), and
+    the chat socket's person_required error is stamped with the promote count its
+    message went out under (`personRefusalSentAt`). `presenceRound6.stamp.test.tsx` pins
+    the chat case and LOW-2's `showNotice` case.
+- **Review 4 held-state-ui.**
+  - LOW-1: the stamp is the promote count at send (`noteSentUnder`, a
+    WeakMap<Response, number>). Errors carry `sentAt`; `sentBeforePromote` is a getter
+    read against the promotes so far, so a promote during parsing or before
+    registration counts. `notePersonRequired` checks again after the body is read.
+  - LOW-2: `notify` uses the error's own stamp when given; `showNotice` takes the error
+    and its callers pass it. A line built from a refusal's words (`backendRejectionReason`,
+    cinemaMotion's `refusalReason`) gets the latest person-gate refusal's stamp
+    (`lastPersonRefusalSentAt`). That is the latest one read, not necessarily this
+    line's; since the clear runs only when the tab isn't held, the worst case is a
+    "not connected" line clearing while the tab is connected.
+  - LOW-3: Settings' two reloads moved onto `retryOnPromote` (`settings.spend-load-retry`,
+    `settings.agents-load-retry`, in RETRIES), with because lines. A ratchet fails any
+    clear callback that makes a request (retry, save, send, dismiss, load, fetch,
+    flush, refresh, hydrate, setAttempt…), inline or by name; a fixture with
+    `setAttempt` in a clear (M18) fails it.
+  - LOW-4: a refused run restores the state the node last settled in. A node queued
+    again while queued or executing keeps the earlier settled snapshot, or goes back
+    idle; a refusal takes its nodes' entries, and the map is capped at 500. Found while
+    testing: every start path calls `resetExecution()` before it queues, which already
+    turns queued and executing nodes idle, so today a node never reads queued or
+    executing when `queuedFrom` sees it. That branch is a guard for a future path; the two
+    tests for it pass on 6e130e26 for the same reason. The consume and the cap are new
+    and are what the tests pin.
+  - NIT-1: tests kill M2 (a press in the lock's first moment sends nothing), M9 (the
+    save retry skips another open project), M16 (the discovery replay is stamped and
+    checked) and M18.
+  - NIT-2, not done: the header total stays the list's length. The server sends no
+    total; adding one touches every agent-notes op the backend sends (about 20 return
+    sites and the socket messages) and the store's handling of each. There is no cap in
+    `list_canvas_agent_notes`, so the two agree today. Flagged for a decision.
+  - NIT-3: the header count is a polite, atomic status; the promote changes it once.
+- **MCP, CLI and docs.** No agent-visible behaviour changed: every change is in the
+  tab (lines, retries, locks) or in tests. The server, MCP tools, the CLI and
+  MCP-SETUP are unchanged, and MCP-SETUP's security wording is still accurate.
+- **Round 6 gates.**
+  - On 6e130e26 (round 6's test helpers copied in), 25 of the 69 new frontend tests fail;
+    with round 5's trace, 52. 12 changed tests fail there too, because they expect the new
+    lines. The 2 backend tests pass there: they strengthen a test, and the server is unchanged.
+  - Mutants: 23 of 23 frontend and 1 of 1 backend caught. The cap mutant survived until the
+    cap test was added.
+  - tsc and lint are clean.
+  - vitest: 8,686 passed in 686 files. The first full run, beside the backend suite, timed
+    out in four heavy files; all four passed alone (212 of 212).
+  - build: 450,270 B raw. Backend: 12,347 passed.
+  - Live on 8795/5795: 27 of 27, with four distinct shots. The load screen shot is staged.
+  - Seen live, not changed: in Creator Studio the header's left group narrowed by 41 px
+    between entering and the demote, with the same text. New draft, History and Updates
+    didn't move.

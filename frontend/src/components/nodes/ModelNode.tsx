@@ -69,7 +69,7 @@ async function downloadOutput(url: string, filename: string): Promise<void> {
     // "Couldn't download the output. <reason>" (downloadWorldAsset's own
     // lines keep their reason; anything else reads GM's general line).
     // A canvas notice, not a window.alert (round 3f).
-    showNotice(failureMessage(err, "Couldn't download the output."));
+    showNotice(failureMessage(err, "Couldn't download the output."), 'error', err);
   }
 }
 

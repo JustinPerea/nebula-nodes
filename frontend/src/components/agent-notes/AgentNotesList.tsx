@@ -140,7 +140,9 @@ export function AgentNotesList({
     >
       <div className="agent-notes-panel__head">
         <span className="agent-notes-panel__title">Updates</span>
-        <span className="agent-notes-panel__count">{`${total} · ${state}`}</span>
+        {/* Review 4 NIT-3 (round 6): its changes ("2 · all unread" to "2 · all read" on the
+            promote) are read out politely, once each, as one phrase. */}
+        <span className="agent-notes-panel__count" role="status" aria-live="polite" aria-atomic="true">{`${total} · ${state}`}</span>
         {single && <span className="agent-notes-panel__kept">{single.adapter.keptWith}</span>}
       </div>
       {top}

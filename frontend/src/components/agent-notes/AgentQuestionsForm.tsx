@@ -2,6 +2,8 @@ import { useEffect, useId, useRef, type CSSProperties, type KeyboardEvent, type 
 import type { AgentQuestion } from '../../lib/agentQuestions';
 import { canSend, useAgentQuestionsStore } from '../../store/agentQuestionsStore';
 import { AuthorDot } from './AgentNoteParts';
+import { useLockPending, useTabHeld } from './heldLock';
+import { HELD_QUESTIONS_LINE } from '../../store/heldAssetProposals';
 
 /**
  * The answer form (Q125 item 1): a popover from the Updates corner, at the
@@ -31,6 +33,17 @@ export function AgentQuestionsForm({
   const setText = useAgentQuestionsStore((s) => s.setText);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const headingId = useId();
+  // GM r7 (1): a form open when the tab stops being confirmed as the person (demoted, or held)
+  // stays open with its draft and caret, and typing stays live; Send and Dismiss lock where
+  // they are (aria-disabled, still focusable, the reason as their tooltip, the 150 ms rule)
+  // and unlock in place on the promote. The store refuses them too (agentQuestionsStore).
+  const tabHeld = useTabHeld();
+  const lockPending = useLockPending(tabHeld);
+  const lockProps = tabHeld ? {
+    'aria-disabled': true as const, 'data-held-pending': lockPending ? '' : undefined,
+    title: lockPending ? undefined : HELD_QUESTIONS_LINE,
+  } : {};
+  const lockClass = tabHeld ? ' agent-notes-btn--held' : '';
 
   // Focus starts on the first control, so Tab walks the questions in order.
   useEffect(() => {
@@ -43,12 +56,12 @@ export function AgentQuestionsForm({
   const heading = many ? `Questions from ${view.agent.name}` : `A question from ${view.agent.name}`;
 
   async function send() {
-    if (!sendable || busy) return;
+    if (!sendable || busy || tabHeld) return;
     if (await useAgentQuestionsStore.getState().send(setId)) onClose();
   }
 
   async function dismiss() {
-    if (busy) return;
+    if (busy || tabHeld) return;
     if (await useAgentQuestionsStore.getState().dismiss(setId)) onClose();
   }
 
@@ -138,13 +151,15 @@ export function AgentQuestionsForm({
       </div>
       {error && <div className="agent-notes-panel__error" role="alert">{error}</div>}
       <div className="agent-questions-form__foot">
-        <button type="button" className="agent-notes-btn" disabled={busy} onClick={() => void dismiss()}>
+        <button type="button" className={`agent-notes-btn${lockClass}`} disabled={busy} {...lockProps}
+          onClick={() => void dismiss()}>
           Dismiss
         </button>
         <button
           type="button"
-          className="agent-notes-btn agent-notes-btn--primary"
+          className={`agent-notes-btn agent-notes-btn--primary${lockClass}`}
           disabled={!sendable || busy}
+          {...lockProps}
           aria-busy={busy || undefined}
           onClick={() => void send()}
         >

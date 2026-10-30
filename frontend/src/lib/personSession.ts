@@ -352,13 +352,24 @@ if (typeof window !== 'undefined') {
  */
 let personPromotionsNow = 0;
 export const personPromotions = (): number => personPromotionsNow;
-const answeredAfterPromote = new WeakSet<object>();
-/** Mark an answer whose request was sent before the latest promote. */
-export function noteSentBeforePromote(response: object): void {
-  answeredAfterPromote.add(response);
+/** Review 4 LOW-1 (round 6): the promote count each answer's request was sent under, recorded
+ * at send time, so "sent before the promote" is read against the promotes so far whenever it is
+ * asked (at parse, at a line's registration), never frozen when the answer was parsed. */
+const sentUnder = new WeakMap<object, number>();
+/** Record the promote count a request was sent under, on its answer. */
+export function noteSentUnder(response: object, promotions: number): void {
+  sentUnder.set(response, promotions);
+}
+/** The promote count an answer's request was sent under (null: not one apiFetch sent). */
+export function sentUnderPromote(response: object): number | null {
+  return sentUnder.get(response) ?? null;
+}
+/** Whether a request sent under promote count `sentAt` went out before the latest promote. */
+export function isBeforePromote(sentAt: number | null | undefined): boolean {
+  return typeof sentAt === 'number' && sentAt < personPromotionsNow;
 }
 export function sentBeforePromote(response: object): boolean {
-  return answeredAfterPromote.has(response);
+  return isBeforePromote(sentUnder.get(response));
 }
 
 /** The server promoted this tab's canvas socket as the person: its hello was

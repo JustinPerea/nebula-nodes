@@ -25,7 +25,7 @@
 
 import { isOfflineRefusal } from './backendConnection';
 import { OFFLINE_VERBS, reconnectsLine } from './useBackendOffline';
-import { inDesktopShell, personUnavailableReason, sentBeforePromote } from './personSession';
+import { inDesktopShell, isBeforePromote, personUnavailableReason, sentUnderPromote } from './personSession';
 
 /** No answer at all: the connection dropped, or the backend isn't there.
  * Round 3f (GM): ""Check your connection" sends people to their Wi-Fi, but
@@ -90,11 +90,28 @@ export const MARK_READ_REFUSED_APP_COPY =
 export const MARK_READ_REFUSED_DEV_COPY =
   'Nebula couldn’t mark the updates as read because this window isn’t connected as you. The notice below says why.';
 
+/**
+ * GM, PR #204 r6 (2026-10-30), the rule for the shared line: "a 'not connected' refusal of
+ * anything that retries on promote uses this 'because' form, with no 'then try again' and
+ * no 'This change needs your OK'. Keep the r2 generic line only for one-shot actions that
+ * can't retry." `what` is what Nebula was doing ("save the style", "load your work"). Every
+ * caller registered with retryOnPromote words its line through this (the ratchet checks).
+ * The desktop app's two forms follow personSession's banners for a window, as mark-read's.
+ */
+export function notConnectedBecause(what: string, desktop: boolean = inDesktopShell(),
+  reason: string = personUnavailableReason()): string {
+  if (!desktop) return `Nebula couldn’t ${what} because this tab isn’t connected as you. Open the link Nebula printed when it started.`;
+  const fix = reason === 'debug-port' || reason === 'dev-renderer' ? 'The notice below says why.' : 'Quit Nebula and open it again.';
+  return `Nebula couldn’t ${what} because this window isn’t connected as you. ${fix}`;
+}
+
 export function markReadRefusedCopy(desktop: boolean = inDesktopShell(),
   reason: string = personUnavailableReason()): string {
-  if (!desktop) return MARK_READ_REFUSED_COPY;
-  return reason === 'debug-port' || reason === 'dev-renderer' ? MARK_READ_REFUSED_DEV_COPY : MARK_READ_REFUSED_APP_COPY;
+  return notConnectedBecause('mark the updates as read', desktop, reason);
 }
+
+/** The "because" form's reason, whatever it was doing (GM r6): a line of that shape. */
+const NOT_CONNECTED_BECAUSE = /^Nebula couldn’t .+ because this (?:tab|window) isn’t connected as you\. /;
 
 const isPersonRequiredCopy = (line: string) =>
   line === PERSON_REQUIRED_COPY || line === PERSON_REQUIRED_APP_COPY || line === PERSON_REQUIRED_DEV_COPY;
@@ -103,7 +120,7 @@ const isPersonRequiredCopy = (line: string) =>
  * forms, alone or after a heading): its only reason was this tab (lib/clearsOnPromote). */
 export function saysPersonRequired(line: string): boolean {
   return line.includes(PERSON_REQUIRED_COPY) || line.includes(PERSON_REQUIRED_APP_COPY)
-    || line.includes(PERSON_REQUIRED_DEV_COPY);
+    || line.includes(PERSON_REQUIRED_DEV_COPY) || NOT_CONNECTED_BECAUSE.test(line);
 }
 
 /** GM's WRAP rule (round 2): "when the surface already has a retry button,
@@ -318,14 +335,19 @@ export class RequestFailedError extends Error {
    * failing. storageLimit stays null for it, as for any too-large request. */
   readonly overSaveLimit: boolean;
   readonly sizeBytes: number | null;
-  /** The request was sent before the server's latest promote of this tab (review 3 LOW-1):
-   * its refusal is the old state's, so its line clears at once (lib/clearsOnPromote). */
-  readonly sentBeforePromote: boolean;
+  /** The promote count its request was sent under (review 4 LOW-1, round 6; null: unknown). */
+  readonly sentAt: number | null;
+  /** The request was sent before the server's latest promote of this tab (review 3 LOW-1),
+   * read against the promotes so far each time it is asked: its refusal is the old state's, so
+   * its line clears at once (lib/clearsOnPromote). */
+  get sentBeforePromote(): boolean {
+    return isBeforePromote(this.sentAt);
+  }
 
   constructor(heading: string, status: number,
     options: { detail?: unknown; reason?: string; cause?: unknown; storageFull?: boolean;
       storageLimit?: StorageLimit | null; code?: string | null; overSaveLimit?: boolean; sizeBytes?: number | null;
-      sentBeforePromote?: boolean } = {}) {
+      sentAt?: number | null; sentBeforePromote?: boolean } = {}) {
     const reason = copyForAnswer(status, options.detail, options.code ?? null, options.reason);
     super(oneLine({ heading, reason }), 'cause' in options ? { cause: options.cause } : undefined);
     this.name = 'RequestFailedError';
@@ -338,7 +360,7 @@ export class RequestFailedError extends Error {
     this.code = options.code ?? null;
     this.overSaveLimit = options.overSaveLimit === true;
     this.sizeBytes = options.sizeBytes ?? null;
-    this.sentBeforePromote = options.sentBeforePromote === true;
+    this.sentAt = sentAtOf(options);
   }
 
   get kind(): FailureKind {
@@ -361,19 +383,37 @@ export class FailureNotice extends Error {
   /** The refusal's `code` when the line came from one (`person_required`: clearsOnPromote
    * reads it, so a line refused only for this tab goes on the promote; PR #204 round 4). */
   readonly code: string | null;
-  /** As RequestFailedError's: refused for a request sent before the latest promote. */
-  readonly sentBeforePromote: boolean;
+  /** The promote count its request was sent under, as RequestFailedError's. */
+  readonly sentAt: number | null;
+  /** The request was sent before the server's latest promote of this tab (review 3 LOW-1),
+   * read against the promotes so far each time it is asked: its refusal is the old state's, so
+   * its line clears at once (lib/clearsOnPromote). */
+  get sentBeforePromote(): boolean {
+    return isBeforePromote(this.sentAt);
+  }
 
   constructor(heading: string, reason: string,
-    options: { standalone?: boolean; code?: string | null; sentBeforePromote?: boolean } = {}) {
+    options: { standalone?: boolean; code?: string | null; sentAt?: number | null; sentBeforePromote?: boolean } = {}) {
     super(oneLine({ heading, reason }));
     this.name = 'FailureNotice';
     this.heading = heading;
     this.reason = reason;
     this.standalone = options.standalone === true;
     this.code = options.code ?? null;
-    this.sentBeforePromote = options.sentBeforePromote === true;
+    this.sentAt = sentAtOf(options);
   }
+}
+
+/** A person-gate refusal that came on a socket, not as a Response (the chat socket's error):
+ * stamped with the promote count its message went out under, checked as apiFetch's are. */
+export function personRefusalSentAt(sentAt: number): FailureNotice {
+  return new FailureNotice('', personRequiredCopy(), { code: PERSON_REQUIRED_CODE, sentAt });
+}
+
+/** `sentAt` as given, or (an error built by hand) `sentBeforePromote: true` as before any promote. */
+function sentAtOf(options: { sentAt?: number | null; sentBeforePromote?: boolean }): number | null {
+  if (typeof options.sentAt === 'number') return options.sentAt;
+  return options.sentBeforePromote === true ? -1 : null;
 }
 
 /** A step written in the browser that says it all on its own ("The project
@@ -499,9 +539,16 @@ export async function readDetail(response: Response): Promise<unknown> {
 /** An answer's `detail` and `code` (the person gate's, when it has one), from
  * one read of its body, for a caller that words the failure itself
  * (copyForAnswer). */
-export async function readRefusal(response: Response): Promise<{ detail: unknown; code: string | null; sentBeforePromote: boolean }> {
+/** The send-time stamp of the latest person-gate refusal read (review 4 LOW-2): what a line
+ * built from a refusal's words, with no error object, is stamped with in graphStore notify. */
+let lastPersonRefusal: number | null = null;
+export const lastPersonRefusalSentAt = (): number | null => lastPersonRefusal;
+
+export async function readRefusal(response: Response): Promise<{ detail: unknown; code: string | null; sentAt: number | null; sentBeforePromote: boolean }> {
   const { detail, code } = await readFailureBody(response);
-  return { detail, code, sentBeforePromote: sentBeforePromote(response) };
+  const sentAt = sentUnderPromote(response);
+  if (code === PERSON_REQUIRED_CODE) lastPersonRefusal = sentAt;
+  return { detail, code, sentAt, sentBeforePromote: isBeforePromote(sentAt) };
 }
 
 /** An answer's `detail`, and whether it says the disk is full (the backend's
@@ -627,7 +674,7 @@ export async function requestError(heading: string, response: Response,
   warnFailure(heading, response.status, body.detail);
   return new RequestFailedError(heading, response.status, { detail: body.detail, reason: options.reason,
     storageFull: body.storageFull, storageLimit: body.storageLimit, code: body.code,
-    overSaveLimit: body.overSaveLimit, sizeBytes: body.sizeBytes, sentBeforePromote: sentBeforePromote(response) });
+    overSaveLimit: body.overSaveLimit, sizeBytes: body.sizeBytes, sentAt: sentUnderPromote(response) });
 }
 
 /**

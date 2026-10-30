@@ -33,7 +33,9 @@ export function PromptDialog({ request, onDone, maxLength, cap, revealCounter = 
   onChange?: (value: string) => void;
   /** The OK button's state when something else decides it (the canvas lock's
    * `act()`: disabled, its marks and tooltip). Enter does nothing then. */
-  confirm?: ActProps;
+  /** `aria-disabled` with `data-held-pending`: a lock in its first moment (GM r5 2a), which keeps
+   * the button's look and does nothing on a press. */
+  confirm?: ActProps & { 'aria-disabled'?: true; 'data-held-pending'?: '' };
   /** Enter or OK pressed while `confirm` is disabled. */
   onRefused?: () => void;
   /** A text that may run to several lines (the note for agents, fix round 1
@@ -137,6 +139,7 @@ export function PromptDialog({ request, onDone, maxLength, cap, revealCounter = 
       onRefused?.();
       return;
     }
+    if (confirm?.['aria-disabled']) return;
     onDone(value);
   };
   return (

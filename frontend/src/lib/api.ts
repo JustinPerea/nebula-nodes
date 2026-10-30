@@ -53,8 +53,8 @@ export interface ExecutionStatusResult {
  * carries a heading (the call's, when it came from one) and a reason. */
 export class ExecutionStartRejectedError extends RequestFailedError {
   constructor(reason: string, status: number,
-    options: { heading?: string; detail?: unknown; code?: string | null; sentBeforePromote?: boolean } = {}) {
-    super(options.heading ?? '', status, { reason, detail: options.detail, code: options.code, sentBeforePromote: options.sentBeforePromote });
+    options: { heading?: string; detail?: unknown; code?: string | null; sentAt?: number | null; sentBeforePromote?: boolean } = {}) {
+    super(options.heading ?? '', status, { reason, detail: options.detail, code: options.code, sentAt: options.sentAt, sentBeforePromote: options.sentBeforePromote });
     this.name = 'ExecutionStartRejectedError';
   }
 }
@@ -100,7 +100,7 @@ async function executionStartResponseError(heading: string, response: Response):
   // 507 is Nebula's explicit pre-provider durable-safety rejection.
   if ((response.status >= 500 && response.status !== 507) || response.status === 408) return error;
   return new ExecutionStartRejectedError(error.reason, response.status,
-    { heading, detail: error.detail, code: error.code, sentBeforePromote: error.sentBeforePromote });
+    { heading, detail: error.detail, code: error.code, sentAt: error.sentAt });
 }
 
 /* Every call below names its action (GM, error-copy round 2: "Couldn't

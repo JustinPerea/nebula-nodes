@@ -14,7 +14,9 @@ const mocks = vi.hoisted(() => ({
   saveToFolder: vi.fn(), revealInFinder: vi.fn(),
   ui: { createSessionId: 'test-session', settingsCache: { apiKeys: {} }, consumePendingPreset: () => null },
   graph: { nodes: [] as Node<NodeData>[], edges: [], runHistory: [], activeRuns: [],
-    createLaunchingIds: [], createCancelledLaunchIds: [], isImportingGraph: false, unsavedScenes: {} },
+    createLaunchingIds: [], createCancelledLaunchIds: [], isImportingGraph: false, unsavedScenes: {},
+    // GM, #204 r6: Save style's lines show in the app's notice region (graphStore notify).
+    notify: vi.fn() },
 }));
 
 vi.mock('../../src/store/uiStore', () => ({
@@ -38,6 +40,7 @@ beforeEach(() => {
   mocks.saveToFolder.mockReset().mockResolvedValue({ savedPath: '/tmp/synthetic-result.png' });
   mocks.revealInFinder.mockReset();
   mocks.graph.nodes = [];
+  mocks.graph.notify.mockReset();
   publishOpenProject({ id: 'project-one', name: 'First project' });
 });
 afterEach(() => vi.restoreAllMocks());
@@ -98,7 +101,9 @@ describe('Create style saving', () => {
     await waitFor(() => expect(mocks.createPreset).toHaveBeenCalledTimes(1));
     expect(view.getByRole('button', { name: 'Saving…' })).toBeDisabled();
     await act(async () => { reject(new RequestFailedError("Couldn't save the style.", 409, { reason: 'Preset storage unavailable.' })); });
-    expect(view.getByRole('alert')).toHaveTextContent('Preset storage unavailable');
+    expect(mocks.graph.notify).toHaveBeenCalledWith(expect.stringContaining('Preset storage unavailable'), 'error', expect.anything());
+    // Not in the toolbar row (GM r6): the row keeps its layout.
+    expect(view.container.querySelector('.create-view__topbar [role="alert"]')).toBeNull();
     fireEvent.click(view.getByRole('button', { name: 'Save current' }));
     expect(await view.findByRole('textbox', { name: 'Name this style:' })).toHaveValue('Retry name');
     fireEvent.click(await view.findByRole('button', { name: 'OK' }));
@@ -113,7 +118,7 @@ describe('Create style saving', () => {
       { filePath: 'https://images.example.com/x.png', previewUrl: '' }] })));
     fireEvent.click(view.getByRole('button', { name: 'Styles' }));
     fireEvent.click(await view.findByRole('button', { name: 'Save current' }));
-    expect(await view.findByRole('alert')).toHaveTextContent('image link from outside Nebula');
+    await waitFor(() => expect(mocks.graph.notify).toHaveBeenCalledWith(expect.stringContaining('image link from outside Nebula'), 'error', expect.anything()));
     expect(view.queryByRole('dialog', { name: 'Name this style:' })).toBeNull();
     expect(mocks.createPreset).not.toHaveBeenCalled();
   });

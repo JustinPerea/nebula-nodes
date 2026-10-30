@@ -3,7 +3,8 @@ import { PromptDialog, type PromptRequest } from '../PromptDialog';
 import { KEPT_FEWER, KEPT_SHOWN, keptMoreLabel, keptNoteDisplay, keptNoteLine, MAX_PIN_TEXT, noteIsEmpty, noteLength, NOTE_KEPT_COPY, PIN_REFUSAL_COPY,
   pinDisplayText, pinTextSettled, pinTextSettling, type KeptNote } from '../../lib/canvasPins';
 import { nodeCardTitle, useGraphStore } from '../../store/graphStore';
-import { personBannerShown, personGateHeld, subscribePersonBanner, subscribePersonGate } from '../../lib/personSession';
+import { personBannerShown, subscribePersonBanner } from '../../lib/personSession';
+import { useLockPending, useTabHeld } from '../../hooks/useTabHeld';
 import { useCurrentProjectId } from '../../lib/currentProject';
 import { getProjectContext } from '../../lib/projectContext';
 import { useCanvasPinsStore } from '../../store/canvasPinsStore';
@@ -72,8 +73,11 @@ export function PinComposer() {
   // GM r27 item 2: and after the banner's ×, while the tab still isn't
   // connected as the person (× hides the banner, not the condition).
   const bannerUp = useSyncExternalStore(subscribePersonBanner, personBannerShown);
-  const gateHeld = useSyncExternalStore(subscribePersonGate, personGateHeld);
-  const gateBanner = bannerUp || gateHeld;
+  // GM r7 (3): the one held state (useTabHeld: held, demoted, or not answered yet), with the
+  // same lock and the 150 ms rule as every other ask (useLockPending), never a second flag.
+  const tabHeld = useTabHeld();
+  const heldPending = useLockPending(tabHeld) && !bannerUp;
+  const gateBanner = bannerUp || (tabHeld && !heldPending);
   const lock = useCanvasLock();
   // Review 13 L-2: the dialog counts only once the Unicode data is in (its
   // own chunk, fetched as lib/canvasPins loads; a few milliseconds at most).
@@ -314,9 +318,10 @@ export function PinComposer() {
           headingLabel={titleShared ? `${headingText} ${targetNode}` : headingText}
           confirmLabel="Send note"
           onChange={setDraft}
-          confirm={lock.act({ offline: 'send notes', ...(targetGone ? { disabled: true, title: PIN_REFUSAL_COPY.nodeGone }
+          confirm={{ ...lock.act({ offline: 'send notes', ...(targetGone ? { disabled: true, title: PIN_REFUSAL_COPY.nodeGone }
             : gateBanner ? { disabled: true, title: PIN_REFUSAL_COPY.sendWhenConnected }
-            : noteEmpty ? { disabled: true, title: PIN_REFUSAL_COPY.writeFirst } : {}) })}
+            : noteEmpty ? { disabled: true, title: PIN_REFUSAL_COPY.writeFirst } : {}) }),
+            ...(heldPending && !targetGone ? { 'aria-disabled': true as const, 'data-held-pending': '' as const } : {}) }}
           onRefused={() => { if (!targetGone && !gateBanner && !noteEmpty) refuseCanvasEdit(); }}
           onDone={(value) => {
             if (value === null || !value.trim()) cancel();

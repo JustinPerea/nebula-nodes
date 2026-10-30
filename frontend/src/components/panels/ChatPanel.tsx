@@ -39,8 +39,8 @@ import { clearCanvasFromChat } from '../../lib/chatCanvasClear';
 import '../../styles/personal-agents.css';
 import { apiFetch, backendAssetUrlSync, backendWebSocketUrl, personTokenForSocket } from '../../lib/backend';
 import { DEFAULT_BACKEND_PORT, devProxyPort } from '../../lib/devBackendPort';
-import { clearSetterOnPromote, clearsOnPromote } from '../../lib/clearsOnPromote';
-import { CONNECTION_LOST_COPY, NO_ANSWER_STATUS, PERSON_REQUIRED_CODE, isBackendUnreachable, personRequiredCopy, readDetail, requestError, warnFailure, failureMessage, failureCopy, oneLine } from '../../lib/errorCopy';
+import { clearRefusedOnPromote, clearSetterOnPromote, clearsOnPromote } from '../../lib/clearsOnPromote';
+import { CONNECTION_LOST_COPY, NO_ANSWER_STATUS, PERSON_REQUIRED_CODE, isBackendUnreachable, personRefusalSentAt, personRequiredCopy, readDetail, requestError, warnFailure, failureMessage, failureCopy, oneLine } from '../../lib/errorCopy';
 import { ErrorDetails } from '../failure/ErrorDetails';
 import { chatUploadChipError } from '../../lib/chatUploadCopy';
 import { refuseEditWhileOffline } from '../../lib/backendConnection';
@@ -48,7 +48,7 @@ import { chatAuthority } from '../../lib/commonsChatAuthority';
 import {
   CHAT_CLEARED_CANVAS, CHAT_CLEARED_CANVAS_KEPT, CHAT_CLEARED_CANVAS_UNCONFIRMED,
 } from '../../lib/chatClear';
-import { onPersonConnected, reportPersonRequired } from '../../lib/personSession';
+import { onPersonConnected, personPromotions, reportPersonRequired } from '../../lib/personSession';
 import { normalizeAgentEventSource } from '../../lib/agentEvents';
 import {
   chatCancellationDisconnectNotice,
@@ -862,6 +862,9 @@ export function ChatPanel() {
   }, [brand, busy]);
 
   const wsRef = useRef<WebSocket | null>(null);
+  // Review 4 NIT-2 (round 6): the promote count the latest message on the chat socket went out
+  // under, so its person_required error is stamped like apiFetch's answers.
+  const sentUnder = useRef(personPromotions());
   useEffect(() => {
     closePersonalSessionRef.current = (id: string) => {
       const ws = wsRef.current;
@@ -1230,8 +1233,11 @@ export function ChatPanel() {
             // words, written for agents, go behind Details (Q116 a).
             const personRequired = event.code === PERSON_REQUIRED_CODE;
             if (personRequired) {
-              reportPersonRequired();
-              clearsOnPromote(() => setMessages((prev) => withoutPersonGateLines(prev))); // clears-on-promote: chat.transcript
+              // One stamp and one check (review 4 NIT-2): an answer to what went out before the
+              // promote is the old state's; it holds nothing, and its line goes at once.
+              const refusal = personRefusalSentAt(sentUnder.current);
+              if (!refusal.sentBeforePromote) reportPersonRequired();
+              clearRefusedOnPromote(refusal, () => setMessages((prev) => withoutPersonGateLines(prev))); // clears-on-promote: chat.transcript
             }
             // The personal agent stopped (crash, idle timeout, closed): the next send starts a new one.
             if (event.code === 'personal_session_ended') setSessionId(null);
@@ -1614,6 +1620,7 @@ export function ChatPanel() {
     applyCancellationEvent({ type: 'send' });
     setInput((current) => current.trim() === raw ? '' : current);
 
+    sentUnder.current = personPromotions();
     ws.send(
       JSON.stringify({
         type: 'send',
@@ -1660,6 +1667,7 @@ export function ChatPanel() {
     setPersonalOptions((current) => current.map((option) => option.id === configId ? { ...option, current: value } : option));
     void personTokenForSocket(ws.url).then((personToken) => {
       if (ws.readyState !== WebSocket.OPEN) return;
+      sentUnder.current = personPromotions();
       ws.send(JSON.stringify({ type: 'personal_option', sessionId, configId, value,
         ...(personToken ? { personToken } : {}) }));
     });
@@ -1679,6 +1687,7 @@ export function ChatPanel() {
     }));
     void personTokenForSocket(ws.url).then((personToken) => {
       if (ws.readyState !== WebSocket.OPEN) return;
+      sentUnder.current = personPromotions();
       ws.send(JSON.stringify({ type: 'permission', requestId, decision, ...(personToken ? { personToken } : {}) }));
     });
   }, [upsertAssistant]);

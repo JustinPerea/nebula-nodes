@@ -8,9 +8,9 @@ import {
 } from '../../../store/settingsDraftStore';
 import { useUIStore } from '../../../store/uiStore';
 import { ConnectedApps } from './ConnectedApps';
-import { failureMessage } from '../../../lib/errorCopy';
+import { failureMessage, notConnectedBecause } from '../../../lib/errorCopy';
 import { formatSpentUsd } from '../../../lib/pricing';
-import { clearRefusedOnPromote } from '../../../lib/clearsOnPromote';
+import { clearSetterOnPromote, isPersonRefusal, retryOnPromote } from '../../../lib/clearsOnPromote';
 
 const SESSION_CHOICES = [2, 5, 10, 25, 50, 100] as const;
 const PLAN_RUN_CHOICES = [5, 10, 25, 50, 100, 250] as const;
@@ -37,20 +37,20 @@ const spentUsd = formatSpentUsd;
 function useOutsideSpend() {
   const [view, setView] = useState<OutsideSpend | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Bumped by the promote after a person-gate refusal, so the read runs again.
-  const [attempt, setAttempt] = useState(0);
-  const reload = useCallback(() => {
+  const reload = useCallback(function readAgain() {
     getOutsideSpend()
       .then((next) => { setView(next); setError(null); })
       .catch((exc: unknown) => {
-        const line = failureMessage(exc, "Couldn't load the connected apps.");
+        // GM r6 (2): what retries on the promote says why in the "because" form.
+        const line = isPersonRefusal(exc) ? notConnectedBecause('load the connected apps') : failureMessage(exc, "Couldn't load the connected apps.");
         setError(line);
-        // GM, #204 r3: refused only because this tab isn't connected as you:
-        // on the promote the line goes and the read runs again.
-        clearRefusedOnPromote(exc, () => { setError((now) => (now === line ? null : now)); setAttempt((n) => n + 1); }); // clears-on-promote: settings.spend-load
+        // GM, #204 r3 and r6: refused only because this tab isn't connected as you: on the
+        // promote the line goes and the read runs again, through retryOnPromote.
+        clearSetterOnPromote(exc, setError, line, null); // clears-on-promote: settings.spend-load
+        retryOnPromote(exc, 'settings.spend-load', () => { readAgain(); }); // clears-on-promote: settings.spend-load-retry
       });
   }, []);
-  useEffect(() => { reload(); }, [reload, attempt]);
+  useEffect(() => { reload(); }, [reload]);
   return { view, error, reload };
 }
 

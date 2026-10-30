@@ -54,6 +54,8 @@ describe('the rule', () => {
  */
 const HAND_BUILT: { file: string; text: string; why: string }[] = [
   { file: 'lib/errorCopy.ts', text: '`${heading} ${reason}`', why: 'headedLine itself: the one place the rule is applied' },
+  { file: 'lib/errorCopy.ts', text: '`Nebula couldn’t ${what} because this window isn’t connected as you. ${fix}`',
+    why: "GM's because form (PR #204 r6) in the desktop window: the tail is one of its two fixed sentences" },
   { file: 'lib/worldLabsWaiting.ts', text: '`${heading} ${WORLD_LABS_NEEDS_CHECK}`',
     why: "GM's own World Labs line: the tail is a fixed sentence, never a named line" },
   { file: 'lib/worldLabsWaiting.ts', text: '`${heading} It${RECOVERY_ID_FORGET_TAIL}`',

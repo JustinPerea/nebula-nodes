@@ -28,9 +28,10 @@ import { BOTTOM_BAR_ATTR } from '../../lib/bottomBar';
 import type { AttachedRef } from './ReferenceTray';
 import '../../styles/create-studio.css';
 import '../../styles/create-gallery.css';
-import { FailureNotice, failureMessage } from '../../lib/errorCopy';
+import { FailureNotice, failureMessage, notConnectedBecause } from '../../lib/errorCopy';
 import { isOfflineRefusal } from '../../lib/backendConnection';
-import { clearSetterOnPromote } from '../../lib/clearsOnPromote';
+import { clearSetterOnPromote, isPersonRefusal, retryOnPromote } from '../../lib/clearsOnPromote';
+import { currentProject } from '../../lib/currentProject';
 
 const MAX_CONCURRENT = 2;
 /** A Generate that didn't start, named by its button (error copy round 3e). */
@@ -105,7 +106,6 @@ export function CreateView() {
   const [presetReloadKey, setPresetReloadKey] = useState(0);
   const [ask, promptElement] = usePrompt();
   const [savingStyle, setSavingStyle] = useState(false);
-  const [styleSaveError, setStyleSaveError] = useState<string | null>(null);
   const [styleNote, setStyleNote] = useState<string | null>(null);
   const [reusedDraft, setReusedDraft] = useState<{ previous: CreateDraftSeed; fingerprint: string; removedAttachments: boolean } | null>(null);
   const focusDraft = useRef(false);
@@ -162,19 +162,42 @@ export function CreateView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // GM, #204 r6: a refusal sentence doesn't belong in the toolbar row; Save
+  // style's lines show in the app's notice region, with the other save lines.
+  const styleLine = (line: string, error?: unknown) => useGraphStore.getState().notify(line, 'error', { error });
+
+  /** Send one Style. GM r6 (1): refused only because this tab isn't connected
+   * as the person, it says so in the "because" form and sends the same Style
+   * again on the promote (the person shouldn't redo a save Nebula already
+   * has), for the project it was made in only. */
+  const saveStyle = async (body: Parameters<typeof createPreset>[0]): Promise<void> => {
+    const projectId = currentProject()?.id ?? null;
+    try {
+      await createPreset(body);
+      if (styleName.current === body.name) styleName.current = null;
+      if (mounted.current) setPresetReloadKey((k) => k + 1);
+    } catch (err) {
+      if (!isPersonRefusal(err)) { styleLine(failureMessage(err, "Couldn't save the style."), err); return; }
+      styleLine(notConnectedBecause('save the style'), err);
+      retryOnPromote(err, `create.style:${projectId}:${body.name}`, () => { // clears-on-promote: create.style-retry
+        if ((currentProject()?.id ?? null) !== projectId) return;
+        void saveStyle(body);
+      });
+    }
+  };
+
   const handleSaveCurrentStyle = async () => {
     if (!modelDef || styleSavePending.current) return;
     if (uploads.length > 0) {
-      setStyleSaveError('Finish attaching references or remove them before saving this style.');
+      styleLine('Finish attaching references or remove them before saving this style.');
       return;
     }
     // A Style holds only Nebula's own images; the backend refuses others too.
     if (refs.some((ref) => storedImageView(ref.filePath).outside)) {
-      setStyleSaveError('A reference is an image link from outside Nebula. Remove it, or upload the image, before saving this style.');
+      styleLine('A reference is an image link from outside Nebula. Remove it, or upload the image, before saving this style.');
       return;
     }
     styleSavePending.current = true;
-    setStyleSaveError(null);
     try {
       const name = (await ask('Name this style:', styleName.current ?? (prompt.slice(0, 40) || modelDef.displayName)))?.trim();
       if (!name || !mounted.current) return;
@@ -200,15 +223,7 @@ export function CreateView() {
       }
       // The draft is current: loadDrafts and the backend upgrade saved drafts,
       // presets are upgraded when read, and "Reuse settings" upgrades its run.
-      await createPreset({ name, category: 'My Styles', prompt, params, modelId: modelDef.id, refImages: refs.map((r) => r.filePath), scope: 'project', thumbnail, paramsVersion: GRAPH_PARAMS_VERSION });
-      styleName.current = null;
-      if (mounted.current) setPresetReloadKey((k) => k + 1);
-    } catch (err) {
-      const line = failureMessage(err, "Couldn't save the style.");
-      if (mounted.current) setStyleSaveError(line);
-      // Review 3 MEDIUM-1 (#204 r5): refused only for this tab (a style that bills the plan,
-      // main._check_style_write): the line goes on the promote.
-      if (mounted.current) clearSetterOnPromote(err, setStyleSaveError, line, null); // clears-on-promote: create.style
+      await saveStyle({ name, category: 'My Styles', prompt, params, modelId: modelDef.id, refImages: refs.map((r) => r.filePath), scope: 'project', thumbnail, paramsVersion: GRAPH_PARAMS_VERSION });
     } finally {
       styleSavePending.current = false;
       if (mounted.current) setSavingStyle(false);
@@ -224,7 +239,6 @@ export function CreateView() {
     clearCreateReferenceUploads(sessionId);
     useCreateDraftStore.getState().resetDraft(sessionId, defaultDraft());
     setGenerationError(null);
-    setStyleSaveError(null);
     setStyleNote(null);
     setReusedDraft(null);
   };
@@ -245,7 +259,6 @@ export function CreateView() {
     useCreateDraftStore.getState().resetDraft(sessionId, structuredClone(context.reusableDraft));
     setReusedDraft({ previous, fingerprint: JSON.stringify(useCreateDraftStore.getState().drafts[sessionId]), removedAttachments: current.uploads.length > 0 });
     setGenerationError(null);
-    setStyleSaveError(null);
   };
 
   const handleUndoReuse = () => {
@@ -353,7 +366,6 @@ export function CreateView() {
       <WorkspaceHeader title="Creator Studio" onBack={exitCreateView} className="create-view__topbar"
         navigation={<WorkspaceModeNavigation />}>
         <button type="button" className="create-view__back" onClick={handleNewDraft}>New draft</button>
-        {styleSaveError && <span className="create-view__save-error" role="alert">{styleSaveError}</span>}
         {styleNote && <span className="create-view__style-note" role="status">{styleNote}</span>}
         {generationError && <span className="create-view__run-error" role="alert">{generationError}</span>}
         {createLaunchingIds.length > 0 && <span role="status">Preparing generation…</span>}

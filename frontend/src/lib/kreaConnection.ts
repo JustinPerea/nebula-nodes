@@ -129,8 +129,8 @@ async function kreaJson<T>(heading: string, path: string, init?: RequestInit): P
     throw new FailureNotice(heading, copyForError(error));
   }
   if (!response.ok) {
-    const { code, sentBeforePromote } = await readRefusal(response);
-    throw new FailureNotice(heading, copyForAnswer(response.status, undefined, code), { code, sentBeforePromote });
+    const { code, sentAt } = await readRefusal(response);
+    throw new FailureNotice(heading, copyForAnswer(response.status, undefined, code), { code, sentAt });
   }
   try {
     return await response.json() as T;

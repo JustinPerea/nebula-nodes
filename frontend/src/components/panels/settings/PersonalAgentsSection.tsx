@@ -10,8 +10,8 @@ import {
 } from '../../../lib/api';
 import { PERSONAL_AGENTS_CHANGED_EVENT } from '../../../lib/personalAgentsEvents';
 import '../../../styles/personal-agents.css';
-import { failureMessage } from '../../../lib/errorCopy';
-import { clearRefusedOnPromote, clearSetterOnPromote } from '../../../lib/clearsOnPromote';
+import { failureMessage, notConnectedBecause } from '../../../lib/errorCopy';
+import { clearSetterOnPromote, isPersonRefusal, retryOnPromote } from '../../../lib/clearsOnPromote';
 
 const STATUS_TEXT: Record<PersonalAgent['status'], string> = {
   ready: 'Ready',
@@ -128,21 +128,21 @@ export function PersonalAgentsSection() {
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState({ id: '', displayName: '', command: '', args: '' });
 
-  // Bumped by the promote after a person-gate refusal, so the list loads again.
-  const [attempt, setAttempt] = useState(0);
-  const load = useCallback(() => {
+  const load = useCallback(function readAgain() {
     fetchPersonalAgents()
       .then((next) => { setList(next); setError(null); })
       .catch((exc: unknown) => {
-        const line = failureMessage(exc, "Couldn't load your agents.");
+        // GM r6 (2): what retries on the promote says why in the "because" form.
+        const line = isPersonRefusal(exc) ? notConnectedBecause('load your agents') : failureMessage(exc, "Couldn't load your agents.");
         setError(line);
-        // GM, #204 r3: refused only because this tab isn't connected as you:
-        // on the promote the line goes and the list loads.
-        clearRefusedOnPromote(exc, () => { setError((now) => (now === line ? null : now)); setAttempt((n) => n + 1); }); // clears-on-promote: settings.agents-load
+        // GM, #204 r3 and r6: refused only because this tab isn't connected as you: on the
+        // promote the line goes and the read runs again, through retryOnPromote.
+        clearSetterOnPromote(exc, setError, line, null); // clears-on-promote: settings.agents-load
+        retryOnPromote(exc, 'settings.agents-load', () => { readAgain(); }); // clears-on-promote: settings.agents-load-retry
       });
   }, []);
 
-  useEffect(() => { load(); }, [load, attempt]);
+  useEffect(() => { load(); }, [load]);
 
   // Follow a download or sign-in while it runs.
   const following = (list?.agents ?? []).some(personalAgentBusy);

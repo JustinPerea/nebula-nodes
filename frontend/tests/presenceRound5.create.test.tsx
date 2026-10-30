@@ -39,7 +39,7 @@ beforeEach(() => {
   useGraphStore.getState().resetExecution();
   localStorage.clear();
   useCreateDraftStore.setState({ drafts: {} });
-  useGraphStore.setState({ nodes: [], edges: [], runHistory: [], providerStartAmbiguities: [], createLaunchingIds: [] });
+  useGraphStore.setState({ nodes: [], edges: [], runHistory: [], providerStartAmbiguities: [], createLaunchingIds: [], undoNotice: null, messageNotice: null });
   useUIStore.setState({ createSessionId: 'create-session', viewMode: 'create' });
   answers.clear();
   publishOpenProject({ id: 'p1', name: 'Followups' });
@@ -93,8 +93,10 @@ describe('review 3 MEDIUM-1: Create\'s lines clear on the promote', () => {
     render(<CreateView />);
     fireEvent.click(screen.getByRole('button', { name: 'Styles' }));
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save current style' })); });
-    await waitFor(() => expect(alerts().some((line) => line.includes(PERSON_LINE))).toBe(true));
+    // GM r6: the line is in the notice region now (graphStore notify), not the toolbar.
+    const notice = () => { const state = useGraphStore.getState(); return state.messageNotice?.text ?? state.undoNotice?.text ?? ''; };
+    await waitFor(() => expect(notice()).toContain(PERSON_LINE));
     act(() => { session.notePersonPromoted(); });
-    await waitFor(() => expect(alerts().some((line) => line.includes(PERSON_LINE))).toBe(false));
+    await waitFor(() => expect(notice()).not.toContain(PERSON_LINE));
   });
 });

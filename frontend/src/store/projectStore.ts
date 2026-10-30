@@ -29,9 +29,9 @@ import { showNotice } from '../lib/canvasNotice';
 import { isBackendOffline, isOfflineRefusal, subscribeBackendConnection, waitUntilOnline } from '../lib/backendConnection';
 import {
   FailureNotice, PERSON_REQUIRED_CODE, REFUSED_FALLBACK_COPY, RequestFailedError, canTryAgain, failureCopy, failureDetails,
-  failureMessage, isNoAnswer, oneLine, shortReason,
+  failureMessage, isNoAnswer, notConnectedBecause, oneLine, shortReason,
 } from '../lib/errorCopy';
-import { clearLineOnPromote, retryOnPromote } from '../lib/clearsOnPromote';
+import { clearLineOnPromote, isPersonRefusal, retryOnPromote } from '../lib/clearsOnPromote';
 import { WORLD_LABS_NEEDS_CHECK } from '../lib/worldLabsWaiting';
 import type { ProjectSnapshot, ProjectSummary, SavedProject, TrashedProject } from '../lib/projects';
 
@@ -561,17 +561,36 @@ const RETRY_HEADINGS: Record<ProjectRetry['action'], string> = {
  * refused for good (then no Try again). The line is GM's mapping (error copy
  * round 3e): a written failure keeps its heading and reason, anything else
  * reads the action's heading over GM's general line, never its own message. */
-function showError(error: unknown, retry: ProjectRetry | null = null): void {
+function showError(error: unknown, retry: ProjectRetry | null = null, written?: string): void {
   // Refused while offline (round 15): nothing was sent and nothing is said;
   // the banner pulsed.
   if (isOfflineRefusal(error)) return;
-  const line = failureMessage(error, RETRY_HEADINGS[retry?.action ?? 'save']);
+  // `written`: a line the caller worded (GM r6's "because" form for what retries on the promote).
+  const line = written ?? failureMessage(error, RETRY_HEADINGS[retry?.action ?? 'save']);
   useProjectStore.setState({ error: line, errorDetails: detailsFor(line, error),
     errorRetry: refusedForGood(error) ? null : retry });
   // GM, #204 r3: refused only because this tab isn't connected as the person
   // (a cover pin, Delete for good): the line and its Try again go on the promote.
   clearLineOnPromote(error, () => useProjectStore.getState().error, line, // clears-on-promote: project.error
     () => useProjectStore.setState({ error: null, errorDetails: null, errorRetry: null }));
+}
+/** GM r7 (2): a load screen whose load was refused only because this tab isn't
+ * connected as the person says so in the "because" form, shows no Try again
+ * (the promote is the way on, not a click), and loads again on the promote,
+ * as Try again's 'load' does. Anything else returns false and the caller's own
+ * line (with its Try again) stays. `extra` is the rest of the caller's state. */
+function showNotConnectedLoad(error: unknown, what: 'load your work' | 'save your unsaved edits' | 'switch projects',
+  extra: Partial<ProjectState> = {}): boolean {
+  if (!isPersonRefusal(error)) return false;
+  const line = notConnectedBecause(what);
+  useProjectStore.setState({ ...extra, error: line, errorDetails: detailsFor(line, error), errorRetry: null });
+  retryOnPromote(error, 'project.load', () => { // clears-on-promote: project.load-retry
+    // Only while this line is still the screen's: a load that got on by
+    // another way (a Try again elsewhere, a switch) isn't run twice.
+    if (useProjectStore.getState().error !== line) return;
+    void useProjectStore.getState().retry();
+  });
+  return true;
 }
 /** What counts as unsaved work when the tab stops for a params version: run
  * records that never ran are left out, and so is node run state (queued,
@@ -923,6 +942,9 @@ function handleParamsVersionChange(backendVersion: number | null): Promise<void>
       paramsVersionChange = null;
       // Refused for good: the held edits' screen says it (holdRefusedEdits).
       if (error instanceof EditsRefused) return;
+      // GM r7 (2): refused only because this tab isn't connected as the person. The verb fits
+      // what this screen was doing: saving the unsaved edits as a recovered copy.
+      if (showNotConnectedLoad(error, 'save your unsaved edits')) return;
       // Try again sends the same recovered copy again (initialize does it first).
       const line = sentences(
         "Nebula was updated while this tab was open, and your unsaved edits haven't been saved yet.",
@@ -1514,6 +1536,8 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
   } catch (error) {
     // Refused for good: the held edits' screen says it (holdRefusedEdits).
     if (error instanceof EditsRefused) { noteAgentOpening(latest(), alreadyHeld); return; }
+    // GM r7 (2): refused only because this tab isn't connected as the person.
+    if (showNotConnectedLoad(error, 'switch projects', { screen: 'home', initialized: false, dirty: Boolean(pendingRecovery) })) return;
     const newest = latest();
     const who = newest.actor?.name ?? 'Another app';
     // Try again loads what is open now (initialize), as the line says.
@@ -1601,7 +1625,7 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
       console.error('[nebula] project copy download', error);
       // GM's heading (2026-10-25), the button's own words; past the string
       // cap the error carries "It's too big to download in a browser."
-      showNotice(failureMessage(error, "Couldn't download a copy."));
+      showNotice(failureMessage(error, "Couldn't download a copy."), 'error', error);
     }
   },
   dismissSwitchNotice: () => set({ switchNotice: null }),
@@ -1653,6 +1677,8 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
         // reload does: the general line says "reload", which drops them.
         // A full disk is read from the answer (RequestFailedError.storageFull,
         // the backend's storage refusal), never from its words (round 3f).
+        // GM r7 (2): refused only because this tab isn't connected as the person.
+        if (showNotConnectedLoad(error, 'load your work')) return;
         const copy = failureCopy(error, { heading: LOAD_HEADING });
         const general = copy.reason === REFUSED_FALLBACK_COPY;
         const reason = error instanceof RequestFailedError && error.storageFull ? LOAD_DISK_FULL
@@ -1889,7 +1915,8 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
         // notice's "See what's large" goes with the panel (review).
         if (wasPaused) resumePending = true;
         const notice = get().sizeNotice;
-        const saveLine = failureMessage(error, "Couldn't save the project.");
+        // GM r6: it retries on the promote, so a "not connected" refusal says the "because" form.
+        const saveLine = isPersonRefusal(error) ? notConnectedBecause('save the project') : failureMessage(error, "Couldn't save the project.");
         set({ dirty: true, saveStatus: 'error', saveError: saveLine,
           ...(state.savePaused ? { savePaused: null, sizePanelOpen: false, ...(notice?.action ? { sizeNotice: null } : {}) } : {}) });
         // PR #204 round 4 (review 2 MEDIUM): a save the gate refused for this tab only (a held tab
@@ -1903,7 +1930,7 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
           const now = get();
           if (now.activeProject?.id === context.id && now.saveStatus === 'error') void now.retrySave();
         });
-        showError(error, { action: 'save' });
+        showError(error, { action: 'save' }, saveLine);
         throw error;
       } finally { inFlight = null; }
     });

@@ -11,6 +11,7 @@ import {
 } from '../lib/agentQuestions';
 import { failureMessage } from '../lib/errorCopy';
 import { clearLineOnPromote } from '../lib/clearsOnPromote';
+import { personUnconfirmed } from '../lib/personSession';
 
 /**
  * Questions agents asked the person (Q125 item 1), from the socket:
@@ -195,7 +196,8 @@ export const useAgentQuestionsStore = create<AgentQuestionsState>((set, get) => 
 
     send: async (setId) => {
       const entry = get().sets[setId];
-      if (!answerable(entry) || get().busy[setId]) return false;
+      // GM r7 (1): a tab not confirmed as the person sends nothing (its form's buttons lock).
+      if (!answerable(entry) || get().busy[setId] || personUnconfirmed()) return false;
       const inputs = answerInputs(entry.view, get().drafts[setId]);
       if (inputs.length === 0) return false;
       set((state) => ({ busy: { ...state.busy, [setId]: true }, errors: without(state.errors, setId) }));
@@ -217,7 +219,8 @@ export const useAgentQuestionsStore = create<AgentQuestionsState>((set, get) => 
 
     dismiss: async (setId) => {
       const entry = get().sets[setId];
-      if (!answerable(entry) || get().busy[setId]) return false;
+      // GM r7 (1): a tab not confirmed as the person sends nothing (its form's buttons lock).
+      if (!answerable(entry) || get().busy[setId] || personUnconfirmed()) return false;
       set((state) => ({ busy: { ...state.busy, [setId]: true }, errors: without(state.errors, setId) }));
       try {
         await dismissQuestions(setId, entry.answerKey);
