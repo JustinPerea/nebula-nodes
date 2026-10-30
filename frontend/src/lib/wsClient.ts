@@ -150,6 +150,14 @@ export interface ProjectsChangedEvent {
   projectId: string | null;
 }
 
+/** A key was set, replaced or removed (PUT /api/settings, a key's DELETE, the
+ *  desktop credential bridge: backend main.py _broadcast_settings_changed).
+ *  No values travel; the tab reads GET /api/settings again
+ *  (store/settingsChangedSocket.ts). */
+export interface SettingsChangedEvent {
+  type: 'settingsChanged';
+}
+
 /** The active project's pins, sent after graphSync and on every pin change. */
 export interface CanvasPinsEvent {
   type: 'canvasPins';
@@ -171,6 +179,14 @@ export interface ProposalCost {
   name?: string;
   account?: string;
 }
+
+/** Why a paid node leaves the total open (backend model_pricing.estimate_run
+ * reasons), in the Run chip's kinds (runScope UnpricedReason): the Accept
+ * chip writes the same reason lines (GM, PR #203 r17 item 4). */
+export type ProposalCostReason =
+  | { kind: 'noPrice' | 'cantRun' | 'awaitingInput' | 'sizeUnreadable' }
+  | { kind: 'missingKey'; keys?: string[] }
+  | { kind: 'leftOut'; plus?: string };
 
 /** List-price total for a proposal's run (backend canvas_proposals.summarize_cost). */
 export interface ProposalEstimate {
@@ -248,7 +264,9 @@ export interface ProposalView {
     providers: string[];
     /** `definitionId`: which node type, so a key-billing node's class is
      * read again with the keys set now (canvasProposals liveKeyBilling). */
-    nodes: Array<ProposalCost & { ref: string; nodeId: string | null; missing?: string; definitionId?: string }>;
+    nodes: Array<ProposalCost & {
+      ref: string; nodeId: string | null; missing?: string; definitionId?: string; reason?: ProposalCostReason;
+    }>;
     /** Run nodes that can't run here as set up, when the proposal was made
      * (backend main._not_ready_nodes, in find_nodes' words). Accept still runs. */
     notReady?: ProposalNotReady[];
@@ -361,6 +379,7 @@ export type ExecutionEvent = (
   | AgentNotesEvent
   | StoredAssetChangedEvent
   | ProjectsChangedEvent
+  | SettingsChangedEvent
   | ProposalOpenedEvent
   | ProposalSyncEvent
   | ProposalClosedEvent

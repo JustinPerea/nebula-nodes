@@ -1,0 +1,89 @@
+{
+ "_comment": "The one cost class for a key-billing route, as node_route.key_billing, key_billing_account and key_billing_label give it; frontend directRoute keyBilling, keyBillingAccount and keyBillingLabel must agree (review 8 of PR #203, LOW-3). Regenerate from the backend when a key-billing route is added.",
+ "cases": [
+  {
+   "definitionId": "speridlabs-idol",
+   "params": {},
+   "apiKeys": {},
+   "kind": "free",
+   "account": "Hugging Face",
+   "label": "free · Hugging Face"
+  },
+  {
+   "definitionId": "speridlabs-idol",
+   "params": {},
+   "apiKeys": {
+    "HF_TOKEN": "hf_fixture"
+   },
+   "kind": "mayCost",
+   "account": "Hugging Face",
+   "label": "may cost · Hugging Face"
+  },
+  {
+   "definitionId": "speridlabs-idol",
+   "params": {},
+   "apiKeys": {
+    "HF_TOKEN": "​﻿"
+   },
+   "kind": "free",
+   "account": "Hugging Face",
+   "label": "free · Hugging Face"
+  },
+  {
+   "definitionId": "speridlabs-idol",
+   "params": {},
+   "apiKeys": {
+    "HF_TOKEN": " hf_fixture\n"
+   },
+   "kind": "mayCost",
+   "account": "Hugging Face",
+   "label": "may cost · Hugging Face"
+  },
+  {
+   "definitionId": "speridlabs-idol",
+   "params": {
+    "_provider": "hf-space"
+   },
+   "apiKeys": {},
+   "kind": "free",
+   "account": "Hugging Face",
+   "label": "free · Hugging Face"
+  },
+  {
+   "definitionId": "speridlabs-idol",
+   "params": {
+    "_provider": "hf-space"
+   },
+   "apiKeys": {
+    "HF_TOKEN": "hf_fixture"
+   },
+   "kind": "mayCost",
+   "account": "Hugging Face",
+   "label": "may cost · Hugging Face"
+  },
+  {
+   "definitionId": "speridlabs-idol",
+   "params": {
+    "_provider": "hf-space"
+   },
+   "apiKeys": {
+    "HF_TOKEN": "​﻿"
+   },
+   "kind": "free",
+   "account": "Hugging Face",
+   "label": "free · Hugging Face"
+  },
+  {
+   "definitionId": "speridlabs-idol",
+   "params": {
+    "_provider": "hf-space"
+   },
+   "apiKeys": {
+    "HF_TOKEN": " hf_fixture\n"
+   },
+   "kind": "mayCost",
+   "account": "Hugging Face",
+   "label": "may cost · Hugging Face"
+  }
+ ]
+}

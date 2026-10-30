@@ -59,6 +59,7 @@ def test_a_sized_run_is_priced_from_its_measured_input(case):
         assert result["priced"]["n1"]["low"] == pytest.approx(expected["low"])
         assert result["priced"]["n1"]["high"] == pytest.approx(expected["high"])
     assert ("n1" in result["awaitingInput"]) is expected["awaitingInput"]
+    assert result["reasons"].get("n1") == expected["reason"]
 
 
 def test_seedvr2_entry_is_sourced_unconfirmed_and_says_how_it_counts():

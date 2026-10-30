@@ -886,7 +886,13 @@ def estimate_run(
     (batch runs times a cinema scene's shots). ``low``/``high`` are None when
     nothing is priced. A route-table node whose chosen route (or Auto's)
     can't run is in ``unpriced`` too, and ``unavailable`` maps it to the
-    reason (node_route.route_unavailable), never to another route's price."""
+    reason (node_route.route_unavailable), never to another route's price.
+
+    ``reasons`` maps each node that leaves the total open to why, in the
+    kinds the Run chip's tooltip uses (runScope UnpricedReason): noPrice,
+    cantRun, awaitingInput, missingKey with the ``keys`` it needs, and
+    leftOut with the ``plus`` its price leaves out, so the proposal bar's
+    Accept chip writes the same reason lines (GM, PR #203 r17 item 4)."""
     from services import node_route
 
     nodes_pricing = pricing.get("nodes") or {}
@@ -898,6 +904,7 @@ def estimate_run(
     plus: list[str] = []
     unavailable: dict[str, str] = {}
     awaiting: list[str] = []
+    reasons: dict[str, dict[str, Any]] = {}
     # Every priced node's own row is a sourced $0, so the total is exact, not
     # an estimate that rounds to zero (zero runs of a paid node): GM, PR #203
     # r11 item 4, "$0" against "~$0".
@@ -911,6 +918,7 @@ def estimate_run(
             nested = cinema_scene_base(params)
             if nested is None or not definitions.get(nested[0]):
                 unpriced.append(node_id)
+                reasons[node_id] = {"kind": "noPrice"}
                 continue
             billed, params, calls = nested
             definition = definitions[billed]
@@ -922,6 +930,7 @@ def estimate_run(
             # with none (vision-llm QC) it is unpriced.
             if not nodes_pricing.get(str(definition.get("id") or "")):
                 unpriced.append(node_id)
+                reasons[node_id] = {"kind": "noPrice"}
                 continue
         elif not definition or definition.get("apiProvider") == "utility":
             continue
@@ -929,20 +938,35 @@ def estimate_run(
         # (node_route.with_wired_blockers), as the router does, and a wired
         # input can block or unblock a route-table node's plan route.
         routed = node_route.with_wired_blockers(definition, params, ports)
+        # A route that is free unless the person's key is set, and then may
+        # bill their own account (mayBillWithKey: Idol), adds nothing to any
+        # estimate: not "$0", since past the allowance the cost is real, and
+        # not unpriced (GM, PR #203 r11 item 2: "Estimate line: show nothing
+        # for Idol"). One place for every caller: a proposal's estimate, the
+        # run's, and the placeholder confirm's (review 8, LOW-2).
+        if node_route.key_billing(definition, routed, api_keys) is not None:
+            continue
         if uses_krea_account(definition, routed):
             plan.append(node_id)
             plan_runs[node_id] = {"model": str(definition.get("id") or item.get("definitionId") or ""),
                                   "runs": (multipliers or {}).get(node_id, (1, 1))[1] * calls}
             continue
+        # No key for any of the node's providers: a missing key, never "no
+        # listed price" (runScope keyUnset).
+        key_unset = False
         if node_route.has_routes(definition):
             missing = node_route.route_unavailable(definition, routed, api_keys)
             if missing is not None:
                 unpriced.append(node_id)
                 unavailable[node_id] = missing["message"]
+                reasons[node_id] = ({"kind": "cantRun"} if missing.get("block")
+                                    else {"kind": "missingKey", "keys": list(missing.get("missing") or [])})
                 continue
             price_key = route_price_key(definition, node_route.select_route(definition, routed, api_keys))
         else:
-            price_key = route_provider(definition, api_keys, routed)
+            route = node_route.select_route(definition, routed, api_keys)
+            price_key = route.provider
+            key_unset = route.kind == node_route.UNSET
         entry = nodes_pricing.get(definition.get("id") or item.get("definitionId"))
         size = (sizes or {}).get(node_id) if str(item.get("definitionId")) != CINEMA_SCENE else None
         estimate = estimate_node(entry, definition, params, price_key, ports, size)
@@ -950,6 +974,11 @@ def estimate_run(
             unpriced.append(node_id)
             if size is None and awaits_input(entry_for_route(entry, price_key)):
                 awaiting.append(node_id)
+                reasons[node_id] = {"kind": "awaitingInput"}
+            elif key_unset and node_route.env_keys(definition):
+                reasons[node_id] = {"kind": "missingKey", "keys": node_route.env_keys(definition)}
+            else:
+                reasons[node_id] = {"kind": "noPrice"}
             continue
         run_low, run_high = (multipliers or {}).get(node_id, (1, 1))
         line = {"low": estimate["low"] * run_low * calls, "high": estimate["high"] * run_high * calls,
@@ -961,6 +990,8 @@ def estimate_run(
         high += line["high"]
         if estimate.get("plus") and estimate["plus"] not in plus:
             plus.append(estimate["plus"])
+        if estimate.get("plus"):
+            reasons[node_id] = {"kind": "leftOut", "plus": estimate["plus"]}
     return {
         "currency": "usd",
         "low": round(low, 6) if priced else None,
@@ -972,6 +1003,7 @@ def estimate_run(
         "plus": plus,
         "unavailable": unavailable,
         "awaitingInput": awaiting,
+        "reasons": reasons,
         "sourcedZero": bool(priced) and sourced_zero,
     }
 

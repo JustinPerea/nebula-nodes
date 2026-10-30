@@ -9,7 +9,20 @@ import shippedTable from '../../../backend/data/model_pricing.json';
 import type { ModelNodeDefinition, NodeData } from '../../src/types';
 import pricingCases from '../../../backend/tests/fixtures/pricing_cases.json';
 import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
-import { routeUnavailable, withWiredBlockers } from '../../src/lib/directRoute';
+import { keyPhrase, routeUnavailable, withWiredBlockers } from '../../src/lib/directRoute';
+import type { RunCost } from '../../src/lib/runScope';
+
+/** A case's backend reason (model_pricing.estimate_run reasons, expected.reason
+ * in pricing_cases.json) as the Run chip records it, so the Accept chip,
+ * which reads the backend's, writes the same lines (GM, PR #203 r17 item 4). */
+type SharedReason = { kind: string; keys?: string[]; plus?: string } | null;
+function sameReason(cost: RunCost, expected: SharedReason) {
+  const got = cost.reasons?.find((entry) => entry.name === 'Node')?.reason;
+  if (!expected) return expect(got).toBeUndefined();
+  if (expected.kind === 'missingKey') return expect(got).toEqual({ kind: 'missingKey', key: keyPhrase(expected.keys ?? []) });
+  if (expected.kind === 'leftOut') return expect(got).toEqual({ kind: 'leftOut', plus: expected.plus });
+  return expect(got).toEqual({ kind: expected.kind });
+}
 
 const node = (id: string, definitionId: string, label = ''): Node<NodeData> => ({
   id, position: { x: 0, y: 0 }, data: { definitionId, label, params: {} } as unknown as NodeData,
@@ -111,11 +124,12 @@ describe('run cost', () => {
     const summary = summarizeRunScope([priced('a', 'nano-banana')], [], { kind: 'graph' }, { pricing: free, apiKeys: {} });
     expect(summary.cost?.sourcedZero).toBe(true);
     expect(runChipLabel(summary)).toBe('$0');
-    expect(runChipTitle(summary)).toBe('This costs nothing to run.');
+    // The paid lead first, as every cost tooltip (GM, PR #203 r17 item 3).
+    expect(runChipTitle(summary)).toBe('“Nano Banana” calls a paid provider. This costs nothing to run.');
     // A closed 0 with no sourced zero (a figure that only rounds to it) is an estimate.
     const rounded = { ...summary, cost: { ...summary.cost!, sourcedZero: undefined } };
     expect(runChipLabel(rounded)).toBe('~$0');
-    expect(runChipTitle(rounded)).toBe('Estimated cost');
+    expect(runChipTitle(rounded)).toBe('“Nano Banana” calls a paid provider. Estimated cost $0.');
     // A paid priced line beside it: not a sourced zero.
     const mixed = summarizeRunScope([priced('a', 'nano-banana'), priced('b', 'veo-3')], [], { kind: 'graph' },
       { pricing: free, apiKeys: { GOOGLE_API_KEY: 'set' } });
@@ -147,7 +161,14 @@ describe('run cost', () => {
       [], { kind: 'graph' }, { pricing, apiKeys: keys });
     expect(unpricedPair.paid).toEqual(['Writer', 'Editor']);
     expect(runChipLabel({ ...unpricedPair, cost: undefined })).toBe('2 paid · 1 may cost');
-    expect(runChipTitle({ ...unpricedPair, cost: undefined })).toBe('Idol can use your Hugging Face credits.');
+    // Review 8 of PR #203, copy LOW-1, and GM r17 item 3: the paid nodes lead
+    // whether or not they have a list price, each reason on its own line,
+    // Idol's sentence last; before the price table loads, the lead alone.
+    expect(runChipLabel(unpricedPair)).toBe('2 paid · 1 may cost');
+    expect(runChipTitle(unpricedPair)).toBe('“Writer” and “Editor” call paid providers.\n'
+      + '“Writer” and “Editor” have no listed price.\nIdol can use your Hugging Face credits.');
+    expect(runChipTitle({ ...unpricedPair, cost: undefined }))
+      .toBe('“Writer” and “Editor” call paid providers. Idol can use your Hugging Face credits.');
     const withPrice = summarizeRunScope([idol, priced('a', 'nano-banana')], [], { kind: 'graph' }, { pricing, apiKeys: keys });
     // GM, PR #203 r14 item 4: "~$0.13 + 1 may cost", the tooltip in item 3's shape, no bare heading line.
     expect(runChipLabel(withPrice)).toBe('~$0.05 + 1 may cost');
@@ -326,7 +347,7 @@ describe('run estimate for a route-table node (cases shared with the backend)', 
   type RunCase = {
     name: string; nodeId: string; params: Record<string, unknown>; apiKeys: Record<string, string>;
     wiredCounts?: Record<string, number>;
-    expected: { low: number | null; high: number | null; unavailable: boolean; plan: boolean };
+    expected: { low: number | null; high: number | null; unavailable: boolean; plan: boolean; reason: SharedReason };
   };
   const fixture = pricingCases as unknown as {
     definitions: Record<string, ModelNodeDefinition>; pricing: PricingTable; runCases: RunCase[];
@@ -356,6 +377,7 @@ describe('run estimate for a route-table node (cases shared with the backend)', 
       else expect([line!.low, line!.high]).toEqual([testCase.expected.low, testCase.expected.high]);
       expect(Boolean(cost!.unavailable?.Node)).toBe(testCase.expected.unavailable);
       expect(cost!.plan.includes('Node')).toBe(testCase.expected.plan);
+      sameReason(cost!, testCase.expected.reason);
       if (testCase.expected.unavailable) {
         const definition = fixture.definitions.table;
         const routed = withWiredBlockers(definition, testCase.params, new Map(Object.entries(testCase.wiredCounts ?? {})));
@@ -372,7 +394,7 @@ describe('run estimate for a shipped route-table node (cases shared with the bac
   // pricing_cases.json shippedRunCases; test_flux3_nodes.py runs them too.
   type ShippedRunCase = {
     name: string; nodeId: string; params: Record<string, unknown>; apiKeys: Record<string, string>; wired: string[];
-    expected: { low: number | null; high: number | null; unavailable: boolean; plan: boolean };
+    expected: { low: number | null; high: number | null; unavailable: boolean; plan: boolean; reason: SharedReason };
   };
   const cases = (pricingCases as unknown as { shippedRunCases: ShippedRunCase[] }).shippedRunCases;
   for (const testCase of cases) {
@@ -393,6 +415,7 @@ describe('run estimate for a shipped route-table node (cases shared with the bac
       }
       expect(Boolean(cost!.unavailable?.Node)).toBe(testCase.expected.unavailable);
       expect(cost!.plan.includes('Node')).toBe(testCase.expected.plan);
+      sameReason(cost!, testCase.expected.reason);
     });
   }
 });
@@ -402,7 +425,7 @@ describe('a run priced from its input file (cases shared with the backend)', () 
   type SizedRunCase = {
     name: string; nodeId: string; params: Record<string, unknown>; apiKeys: Record<string, string>; port: string;
     size?: Record<string, number>;
-    expected: { low: number | null; high: number | null; awaitingInput: boolean };
+    expected: { low: number | null; high: number | null; awaitingInput: boolean; reason: SharedReason };
   };
   const cases = (pricingCases as unknown as { sizedRunCases: SizedRunCase[] }).sizedRunCases;
   for (const testCase of cases) {
@@ -429,6 +452,7 @@ describe('a run priced from its input file (cases shared with the backend)', () 
         expect(line!.high).toBeCloseTo(testCase.expected.high!, 9);
       }
       expect(cost!.awaitingInput.includes('Node')).toBe(testCase.expected.awaitingInput);
+      sameReason(cost!, testCase.expected.reason);
     });
   }
 

@@ -128,12 +128,9 @@ export function KeyRow({ spec, configured }: { spec: ProviderKeySpec; configured
         {open === 'manage' && (
           <div id={bodyId} className="settings-row__manage">
             <div className="settings-row__buttons">
+              {/* GM, PR #203 r16 item 5: the actions on the key, together on
+                  one row; the key's page is a reference, on its own line below. */}
               <button ref={firstAction} type="button" className="settings__button" onClick={() => setOpen('edit')}>Replace key</button>
-              {/* GM, PR #203 r14 item 5: a key with its own link words ("Open
-                  Hugging Face tokens") uses them here too. */}
-              <a className="settings__button settings__button--ghost" href={spec.url} target="_blank" rel="noopener noreferrer">
-                {spec.keyLink ? <>{spec.keyLink}<span aria-hidden="true"> ↗</span></> : 'Key page ↗'}
-              </a>
               <RemoveKeyButton label={credentialName} removing={pending} onConfirm={() => {
                 focusRowAfterMove(spec.key);
                 void removeKey(spec.key).then((ok) => { if (!ok) cancelRowFocus(spec.key); });
@@ -143,6 +140,14 @@ export function KeyRow({ spec, configured }: { spec: ProviderKeySpec; configured
               {serviceAccount ? 'Service-account key saved.' : <>Saved key ending in <span className="settings-mono">{saved.replace(/^\*+/, '') || '····'}</span>.</>}
               {/* "Saved" needs no more words; a check result explains itself. */}
               {state.status !== 'Saved' && <> {readiness.detail}</>}
+            </p>
+            {/* Under "Saved key ending in …" (GM, PR #203 r16 item 5), as the
+                edit view shows it; a key with its own link words ("Open
+                Hugging Face tokens", r14 item 5) uses them here too. */}
+            <p className="settings-hint settings-row__key-link">
+              <a href={spec.url} target="_blank" rel="noopener noreferrer">
+                {spec.keyLink ?? 'Key page'}<span aria-hidden="true"> ↗</span>
+              </a>
             </p>
             {spec.caveat && <p className="settings-hint">{spec.caveat}</p>}
             {error && <p className="settings-row__error" role="alert">{error}</p>}

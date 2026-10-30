@@ -433,7 +433,7 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
     fireEvent.click(screen.getByRole('button', { name: 'Manage OpenAI' }));
     expect(screen.getByRole('button', { name: 'Replace key' })).toHaveFocus();
-    expect(screen.getByRole('link', { name: 'Key page ↗' })).toHaveAttribute('href', 'https://platform.openai.com/api-keys');
+    expect(screen.getByRole('link', { name: 'Key page' })).toHaveAttribute('href', 'https://platform.openai.com/api-keys');
     fireEvent.click(screen.getByRole('button', { name: 'Replace key' }));
     const input = await screen.findByLabelText('OpenAI API key');
     fireEvent.change(input, { target: { value: 'fixture-new' } });
@@ -534,7 +534,27 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
     expect(within(row('Hugging Face')).queryByRole('link', { name: /Key page/ })).toBeNull();
     // Every other key keeps the shared words.
     fireEvent.click(screen.getByRole('button', { name: 'Manage OpenAI' }));
-    expect(within(row('OpenAI')).getByRole('link', { name: 'Key page ↗' })).toBeInTheDocument();
+    expect(within(row('OpenAI')).getByRole('link', { name: 'Key page' })).toHaveTextContent('Key page ↗');
+  });
+
+  it('keeps the actions on the key together and puts its page on its own line, every provider (GM, PR #203 r16 item 5)', async () => {
+    await renderSettings({ apiKeys: { HF_TOKEN: '***aaaa', OPENAI_API_KEY: '***bbbb' } });
+    for (const [name, words] of [['Hugging Face', 'Open Hugging Face tokens'], ['OpenAI', 'Key page']] as const) {
+      fireEvent.click(screen.getByRole('button', { name: `Manage ${name}` }));
+      const manage = row(name).querySelector('.settings-row__manage')!;
+      // [Replace key] and [Remove] on one row, and nothing else on it.
+      const buttons = manage.querySelector('.settings-row__buttons')!;
+      expect([...buttons.children].map((child) => child.textContent)).toEqual(['Replace key', 'Remove']);
+      expect(buttons.querySelector('a')).toBeNull();
+      // The page link on its own line, right under "Saved key ending in …".
+      const lines = [...manage.children];
+      const saved = lines.findIndex((line) => /^Saved key ending in /.test(line.textContent ?? ''));
+      expect(saved).toBeGreaterThan(-1);
+      const link = lines[saved + 1];
+      expect(link.tagName).toBe('P');
+      expect(link.children).toHaveLength(1);
+      expect(within(link as HTMLElement).getByRole('link', { name: words })).toHaveTextContent(`${words} ↗`);
+    }
   });
 
   it('removes a Hugging Face token by its name', async () => {

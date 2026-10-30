@@ -81,6 +81,12 @@ function useCanvasRunName(): (nodeId: string) => string | null {
   };
 }
 
+/** Where a canvas node sits, so the Accept chip's reasons read left to
+ * right as the Run chip's do (runScope reasonSentences). */
+function canvasAt(nodeId: string): { x: number; y: number } | null {
+  return useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId)?.position ?? null;
+}
+
 export function ProposalBar() {
   const proposals = useCanvasProposalsStore((s) => s.proposals);
   const pending = useCanvasProposalsStore((s) => s.pending);
@@ -132,7 +138,7 @@ export function ProposalBar() {
   const acceptLockId = useId();
   const countChip = current ? acceptCountChip(current.view) : null;
   const canvasName = useCanvasRunName();
-  const mayCostTitle = current ? acceptChipTitle(current.view, canvasName) : null;
+  const acceptTitle = current ? acceptChipTitle(current.view, canvasName, canvasAt) : null;
   const [noteRef, noteClamped] = useClamped(current?.view.note);
 
   useEffect(() => {
@@ -356,7 +362,7 @@ export function ProposalBar() {
               // "2 paid · 1 may cost", as the Run chip counts it. The space
               // keeps the button's name "Accept and run 1 paid"; a flex
               // container draws no space-only text.
-              <>{' '}<span className="proposal-bar__count" title={mayCostTitle ?? undefined}>{countChip}</span></>
+              <>{' '}<span className="proposal-bar__count" title={acceptTitle ?? undefined}>{countChip}</span></>
             )}
           </button>
           {acceptLock && <span id={acceptLockId} className="toolbar__sr-only">{acceptLock}</span>}

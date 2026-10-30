@@ -184,23 +184,26 @@ describe('the price chip\'s tooltips (GM)', () => {
     cost: { low: 0.067, high: 0.067, lines: [{ name: 'GPT Image 2.5', low: 0.067, high: 0.067, runs: [1, 1] }],
       unpriced: [], plan: [], plus: [], awaitingInput: [], ...cost } });
 
-  it('"~$X": "Estimated cost"', () => {
+  // Every cost tooltip is a sentence shape that leads with the paid nodes,
+  // no bare "Estimated cost" heading (GM, PR #203 r16 item 3, r17 item 3).
+  it('"~$X": the paid nodes, then "Estimated cost $X."', () => {
     expect(runChipLabel(summary({}))).toBe('~$0.07');
-    expect(runChipTitle(summary({}))).toBe('Estimated cost');
+    expect(runChipTitle(summary({}))).toBe('“GPT Image 2.5” calls a paid provider. Estimated cost $0.07.');
   });
 
   it('"$X + unpriced": the priced part leads (GM, PR #198 r6 and r7 item 3)', () => {
     expect(runChipLabel(summary({ unpriced: ['Kling'] }))).toBe('$0.07 + unpriced');
-    expect(runChipTitle(summary({ unpriced: ['Kling'] }))).toBe('The priced part of this run costs about $0.07.');
-    expect(runChipTitle(summary({ plus: ['input images'] }))).toBe('The priced part of this run costs about $0.07.');
+    expect(runChipTitle(summary({ unpriced: ['Kling'] })))
+      .toBe('“GPT Image 2.5” calls a paid provider. The priced part of this run costs about $0.07.\n“Kling” has no listed price.');
+    expect(runChipTitle(summary({ plus: ['input images'] }))).toBe('“GPT Image 2.5” calls a paid provider. The priced part of this run costs about $0.07.');
     // A range with a "+" is in the range form (GM, PR #198 r2 ask 2).
     expect(runChipTitle(summary({ low: 0.05, high: 0.43, unpriced: ['Kling'] })))
-      .toBe('The priced part of this run costs between $0.05 and $0.43.');
+      .toBe('“GPT Image 2.5” calls a paid provider. The priced part of this run costs between $0.05 and $0.43.\n“Kling” has no listed price.');
   });
 
-  it('a plain range says "Between" (PR #198 r2 ask 2); "N paid" has no tooltip', () => {
-    expect(runChipTitle(summary({ low: 0.05, high: 0.43 }))).toBe('Between $0.05 and $0.43.');
-    expect(runChipTitle({ total: 1, paid: ['X'] })).toBeUndefined();
+  it('a plain range says "Between" (PR #198 r2 ask 2); "N paid" names its paid nodes (GM, PR #203 r17 item 3)', () => {
+    expect(runChipTitle(summary({ low: 0.05, high: 0.43 }))).toBe('“GPT Image 2.5” calls a paid provider. Between $0.05 and $0.43.');
+    expect(runChipTitle({ total: 1, paid: ['X'] })).toBe('“X” calls a paid provider.');
   });
 
   it('both Run chips carry it', () => {

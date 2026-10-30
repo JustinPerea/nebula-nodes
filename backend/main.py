@@ -85,6 +85,7 @@ from services.settings import (
     clear_provider_validation_cache,
     is_injected_mode,
     update_injected_keys,
+    hf_token_character_line,
 )
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
@@ -5045,14 +5046,15 @@ HF_SPACE_BILLING_FREE = (
     "Free here: no HF_TOKEN is set, so it runs on Hugging Face's shared ZeroGPU and agents run it as any free "
     "node. With the person's HF_TOKEN set it would run on their own ZeroGPU allowance, and past the daily quota "
     "Hugging Face bills a PRO, Team or Enterprise account's prepaid credits at $1 per 10 minutes of GPU time "
-    "(https://huggingface.co/docs/hub/spaces-zerogpu); then an agent can't run it and proposes it instead "
-    "(propose_change)."
+    "(https://huggingface.co/docs/hub/spaces-zerogpu); then an agent can't run it, or any run that includes it, "
+    "and proposes the run instead (propose_change)."
 )
 HF_SPACE_BILLING_TOKEN = (
     "May cost here: the person's HF_TOKEN is set, so it runs on their own ZeroGPU allowance, and past the daily "
     "quota Hugging Face bills a PRO, Team or Enterprise account's prepaid credits at $1 per 10 minutes of GPU "
-    "time (https://huggingface.co/docs/hub/spaces-zerogpu). Nebula prices it at $0, but an agent can't run it "
-    "while the token is set: propose it (propose_change), and the person accepts on the canvas."
+    "time (https://huggingface.co/docs/hub/spaces-zerogpu). Nebula prices it at $0, but while the token is set an "
+    "agent can't run it, or any run that includes it, even for a node after it: propose the run "
+    "(propose_change), and the person accepts on the canvas."
 )
 
 
@@ -5061,16 +5063,16 @@ def hf_space_billing_note(token_set: bool) -> str:
     return HF_SPACE_BILLING_TOKEN if token_set else HF_SPACE_BILLING_FREE
 
 
-def _space_billing(definition: Mapping[str, Any], api_keys: Mapping[str, Any]) -> str | None:
-    """hf_space_billing_note for a node with a Hugging Face Space route, with
-    its optional token as set in ``api_keys`` (node_route.key_set), else None."""
-    if not node_route.has_routes(definition):
+def _space_billing(definition: Mapping[str, Any], api_keys: Mapping[str, Any],
+                   params: Mapping[str, Any] | None = None) -> str | None:
+    """The billing note for a node whose run may bill the person's own
+    account with their key (a Hugging Face Space: Idol), from its cost class
+    (node_route.key_billing, the one function every surface reads; review 8
+    of PR #203, LOW-3), else None. ``params`` picks the route ({} is Auto's)."""
+    cost_class = node_route.key_billing(definition, params or {}, api_keys)
+    if cost_class is None:
         return None
-    spaces = [route for route in node_route.routes_of(definition) if route.get("handler") == "hf-space"]
-    if not spaces:
-        return None
-    return hf_space_billing_note(any(node_route.key_set(api_keys, key) for route in spaces
-                                     for key in node_route.keys(route.get("optionalKeys"))))
+    return hf_space_billing_note(cost_class == node_route.MAY_COST)
 
 
 def _describe_routes(
@@ -5129,10 +5131,11 @@ def _describe_routes(
             # can bill a PRO account for past its free minutes).
             row["optionalKeys"] = [{"key": key, "set": node_route.key_set(api_keys, key)}
                                    for key in node_route.keys(spec.get("optionalKeys"))]
-        if spec.get("handler") == "hf-space":
-            # Agents spend the person's allowance: say who can bill past it.
-            row["billing"] = hf_space_billing_note(any(
-                node_route.key_set(api_keys, key) for key in node_route.keys(spec.get("optionalKeys"))))
+        # A route that may bill the person's own account with their key:
+        # say who can bill, from its cost class on this route.
+        billing = _space_billing(definition, api_keys, {node_route.PROVIDER_PARAM: spec.get("id")})
+        if billing is not None:
+            row["billing"] = billing
         if spec.get("maker"):
             row["maker"] = True
         if spec.get("plan"):
@@ -7869,6 +7872,12 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
                            wired=wired),
                 "price": {"low": line["low"], "high": line["high"]} if line else None,
             })
+            # Why this node leaves the total open, in the Run chip's kinds
+            # (model_pricing.estimate_run reasons), so the Accept chip writes
+            # the same reason lines (GM, PR #203 r17 item 4).
+            reason = (estimate or {}).get("reasons", {}).get(node_id)
+            if reason and entries[-1].get("kind") == "paid":
+                entries[-1]["reason"] = reason
             if entries[-1].get("kind") in ("free", "mayCost") and node_route.key_billing(
                     definition, candidate.nodes[node_id].get("params") or {}, api_keys):
                 key_params[entries[-1]["ref"]] = copy.deepcopy(candidate.nodes[node_id].get("params") or {})
@@ -7964,13 +7973,8 @@ def _estimate_proposal_run(
     )
     wired = model_pricing.wired_counts(
         items, [(str(e.get("source")), str(e.get("target")), e.get("targetHandle")) for e in graph_edges])
-    # A route that is free unless the person's key is set, and then may bill
-    # their own account (mayBillWithKey: Idol), adds nothing to the estimate:
-    # not "$0", since past the allowance the cost is real, and not unpriced
-    # (GM, PR #203 r11 item 2: "Estimate line: show nothing for Idol").
-    items = [item for item in items
-             if not node_route.key_billing(definitions.get(str(item.get("definitionId") or "")),
-                                           item.get("params") or {}, api_keys)]
+    # A key-billing route (Idol) adds nothing: model_pricing.estimate_run
+    # leaves it out for every caller.
     # Measured from the file the run would get: an upload, or an ancestor's
     # output that already exists (it isn't in the run: see _proposal_cost).
     return model_pricing.estimate_run(items, pricing, definitions, api_keys, multipliers, wired, measured.sizes)
@@ -9765,6 +9769,9 @@ async def get_settings() -> dict:
         # Everything else learns which providers are set, and nothing more."
         # An agent's curl or `nebula keys` sees a bare "***" for a set key.
         person = _is_person_request()
+        # load_settings has read every key through node_route.key_text, the
+        # one key-state function: one that is empty once trimmed isn't in it,
+        # so the canvas reads it as unset, as the gate does (review 8, LOW-1).
         masked["apiKeys"] = {
             k: (("***" + v[-4:] if len(v) > 4 else "***") if person else "***") if v else ""
             for k, v in masked["apiKeys"].items()
@@ -9801,14 +9808,18 @@ async def update_settings(body: dict[str, Any]) -> dict:
             not isinstance(value, str) for value in body["apiKeys"].values()
         ):
             raise HTTPException(400, "apiKeys must be an object of string values")
+        for k, v in body["apiKeys"].items():
+            refusal = _key_refusal(k, v)
+            if refusal is not None:
+                raise HTTPException(400, refusal)
     # Do not mutate a loaded/shared object until the complete request is valid.
     current = copy.deepcopy(load_settings())
     if "apiKeys" in body and accepts_keys:
         current_keys = current.get("apiKeys", {})
         for k, v in body["apiKeys"].items():
-            # A pasted Hugging Face token's leading and trailing spaces and
-            # line breaks go (GM, PR #203 r2); Settings trims the same.
-            v = v.strip() if k == "HF_TOKEN" else v
+            # A pasted key's spaces, line breaks and invisible marks at its
+            # ends go (GM, PR #203 r2; node_route.key_text, as Settings trims).
+            v = node_route.key_text(v)
             if v and not v.startswith("***"):
                 current_keys[k] = v
         current["apiKeys"] = current_keys
@@ -9831,7 +9842,17 @@ async def update_settings(body: dict[str, Any]) -> dict:
     # GET /api/health/providers re-checks providers instead of serving stale
     # status for up to PROVIDER_CHECK_TTL_SECONDS.
     clear_provider_validation_cache()
+    await _broadcast_settings_changed()
     return {"status": "saved"}
+
+
+async def _broadcast_settings_changed() -> None:
+    """Every socket hears that the settings changed, with no values in it:
+    each open tab reads them again (GET /api/settings, masked as ever), so a
+    key added or removed in another window, another tab, the desktop app or
+    a script calling the API reaches every cost class, chip, ghost card and lock on the canvas
+    without a reload (review 8 of PR #203, NIT-3 and copy LOW-2)."""
+    await manager.broadcast_raw({"type": "settingsChanged"})
 
 
 # The credential-update allowlist (services/credential_catalog.py; the
@@ -9857,6 +9878,7 @@ async def remove_settings_api_key(provider: str) -> dict:
     current["apiKeys"] = current_keys
     save_settings(current)
     clear_provider_validation_cache()
+    await _broadcast_settings_changed()
     return {"status": "removed"}
 
 
@@ -9888,8 +9910,34 @@ async def credentials_update(body: dict[str, Any]) -> dict:
             detail=f"unknown provider: {provider}",
         )
 
-    update_injected_keys(provider, key.strip() if provider == "HF_TOKEN" else key)
+    refusal = _key_refusal(provider, key)
+    if refusal is not None:
+        raise HTTPException(status_code=422, detail=refusal)
+    update_injected_keys(provider, node_route.key_text(key))
+    await _broadcast_settings_changed()
     return {"status": "updated"}
+
+
+# A key with something in it that is empty once trimmed: no key at all, so
+# it is refused rather than stored (GM, PR #203 r17 item 1), as the Settings
+# field refuses it (frontend settingsWrites: Save stays off).
+KEY_ONLY_INVISIBLE = ("This key is only spaces or invisible characters once trimmed. Copy it again, then "
+                      "paste it here.")
+
+
+def _key_refusal(name: str, value: str) -> str | None:
+    """Why PUT /api/settings or /api/credentials/update refuses this key
+    value, or None: "" is no change (or, for the credential bridge, a
+    removal); something that is empty once trimmed (node_route.key_text) is
+    refused; a Hugging Face token with a character no token has is refused
+    with the Settings field's own line (settings.hf_token_character_line)."""
+    if value == "" or value.startswith("***"):
+        return None
+    if not node_route.key_text(value):
+        return KEY_ONLY_INVISIBLE
+    if name == "HF_TOKEN":
+        return hf_token_character_line(value)
+    return None
 
 
 def _execution_is_cancelling(run_id: str) -> bool:
@@ -10265,7 +10313,7 @@ def _paid_placeholders(nodes: list[GraphNode], ready: Iterable[str], api_keys: M
         if node is None:
             continue
         definition = node_registry.get(node.definition_id) or {}
-        if node_route.key_billing(definition, node.params or {}, api_keys) == "free":
+        if node_route.key_billing(definition, node.params or {}, api_keys) == node_route.FREE_WITHOUT_KEY:
             continue
         if not model_pricing.is_local(definition, node.params or {}):
             paid.append(node_id)
@@ -10333,7 +10381,7 @@ def _run_estimate_high(nodes: list[GraphNode], edges: list[GraphEdge], *, passes
 
 
 def _placeholder_confirm_refusal(run_id: str, paid: list[str], estimate: Mapping[str, Any] | None = None, *,
-                                 shot: bool = False) -> HTTPException:
+                                 shot: bool = False, may_cost: Iterable[str] = ()) -> HTTPException:
     """409 for the person's direct run of agents' paid placeholders without
     their confirmation (or at a higher cost than they confirmed): GM - Design's
     round-4 words, 2026-10-25, verbatim, which the node shows as its run error
@@ -10345,7 +10393,9 @@ def _placeholder_confirm_refusal(run_id: str, paid: list[str], estimate: Mapping
     last reviewed it." and never shows this message): the paid placeholders,
     each one's agent (``agents``, for a tab that hasn't heard of the flag yet)
     and Nebula's own ``estimate`` of the run (_run_estimate), which a
-    confirmation of its ``high`` passes."""
+    confirmation of its ``high`` passes. ``may_cost``: those of ``paid``
+    whose class is "may cost" (node_route.key_billing; Idol with a token),
+    which the message counts as such, never as paid (GM, PR #203 r17 item 2)."""
     canvas_events.forget_run(run_id)
     owners: list[str] = []
     agents: dict[str, Any] = {}
@@ -10361,9 +10411,17 @@ def _placeholder_confirm_refusal(run_id: str, paid: list[str], estimate: Mapping
     one = len(paid) == 1
     again = ("Generate again to review it." if shot
              else f"Click “Run” again to review {'it' if one else 'them'}.")
-    if paid:
+    may = [node_id for node_id in paid if node_id in set(may_cost)]
+    if paid and not may:
         message = (f"Nothing ran. This run includes {len(paid)} paid {'node' if one else 'nodes'} {who} still "
                    f"setting up, and Nebula asks before running those. {again}")
+    elif paid:
+        priced = len(paid) - len(may)
+        nodes = 'node' if len(may) == 1 else 'nodes'
+        what = (f"{len(may)} {nodes} that may cost" if priced == 0
+                else f"{priced} paid {'node' if priced == 1 else 'nodes'} and {len(may)} that may cost")
+        message = (f"Nothing ran. This run includes {what}, which {who} still setting up, and Nebula asks "
+                   f"before running those. {again}")
     else:
         # No placeholder left (their agents finished them while the dialog
         # was open), but the run now costs more than the person confirmed
@@ -10411,10 +10469,14 @@ async def _require_placeholder_confirmation(
     paid = _paid_placeholders(nodes, ready, api_keys)
     if not paid and confirmed_cost is None:
         return
+    by_id = {node.id: node for node in nodes}
+    may_cost = [node_id for node_id in paid if node_route.key_billing(
+        node_registry.get(by_id[node_id].definition_id) or {}, by_id[node_id].params or {}, api_keys)
+        == node_route.MAY_COST]
     sizes = await _measure_confirmed_run(nodes, edges)
     estimate = _run_estimate(nodes, edges, passes=passes, api_keys=api_keys, sizes=sizes)
     if paid and sorted(set(confirmed or [])) != sorted(paid):
-        raise _placeholder_confirm_refusal(run_id, paid, estimate, shot=shot)
+        raise _placeholder_confirm_refusal(run_id, paid, estimate, shot=shot, may_cost=may_cost)
     high = None if estimate is None else estimate["high"]
     if high is None:
         return  # nothing in it has a list price: the person confirmed the rows
@@ -10423,7 +10485,7 @@ async def _require_placeholder_confirmation(
     # roundUpToCent), so a run Nebula prices even a millionth higher than that
     # is refused and asked again at Nebula's numbers.
     if confirmed_cost is None or high > confirmed_cost:
-        raise _placeholder_confirm_refusal(run_id, paid, estimate, shot=shot)
+        raise _placeholder_confirm_refusal(run_id, paid, estimate, shot=shot, may_cost=may_cost)
 
 
 async def _measure_confirmed_run(nodes: list[GraphNode], edges: list[GraphEdge]) -> dict[str, dict[str, Any]]:
@@ -18835,9 +18897,8 @@ async def quick_execute(body: dict[str, Any]) -> dict:
     measured = await _measure_run_inputs(temp_nodes, temp_edges)
     _require_spend_approval(temp_nodes, temp_edges, run_id=quick_run, on_canvas=False, settings=settings,
                             measured=measured, how_to_ask=(
-        f"Add it to the canvas instead (`nebula create {definition_id}`), then propose the run: "
-        "`nebula propose --note \"<why>\" --run <node id>` (MCP: propose_change). "
-        "The person accepts on the canvas, and the canvas runs it."
+        f"Add it to the canvas instead (edit_canvas, a {definition_id} node), then propose the run: "
+        "propose_change (run: <node id>). The person accepts on the canvas, and the canvas runs it."
     ))
 
     results: dict[str, Any] = {}

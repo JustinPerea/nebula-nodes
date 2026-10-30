@@ -3,7 +3,7 @@ import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { NodeData } from '../types';
 import { batchSizeCap, parseBatchItems } from './batch';
 import {
-  envKeyNames, hasRoutes, isDefaultTitle, keyBilling, keyPhrase, mayCostAccount, nameOnRoute, routePriceKey, routeUnavailable,
+  envKeyNames, hasRoutes, isDefaultTitle, keyBilling, keyBillingAccount, keyPhrase, nameOnRoute, routePriceKey, routeUnavailable,
   selectRoute, withWiredBlockers,
 } from './directRoute';
 import { namesSeveral, nodeNameList } from './errorCopy';
@@ -367,9 +367,10 @@ export function summarizeRunScope(
     const name = definition.providerVia ? (node.data?.label || definition.displayName || node.id) : runNodeName(node, provider);
     // Free unless the person's key is set, and then it may bill their own
     // account: never paid, never priced (GM, PR #203 r11 item 2, r12).
-    const billing = keyBilling(definition, withWiredBlockers(definition, params, ports), costContext?.apiKeys ?? {});
+    const keyed = withWiredBlockers(definition, params, ports);
+    const billing = keyBilling(definition, keyed, costContext?.apiKeys ?? {});
     if (billing) {
-      if (billing === 'mayCost') mayCost.push({ name, account: mayCostAccount(definition) });
+      if (billing === 'mayCost') mayCost.push({ name, account: keyBillingAccount(definition, keyed, costContext?.apiKeys ?? {}) ?? '' });
       continue;
     }
     if (definition.providerVia?.kind === 'model') {
@@ -526,35 +527,46 @@ export function paidSentence(names: string[]): string | null {
 }
 
 /** A priced part as a sentence, never with "~" inside it (GM, PR #203 r14
- * item 3): "Estimated cost $0.13.", "Estimated cost under $0.01.", a sourced
- * $0's "This costs nothing to run.", and the closed "Up to $Y." and
- * "Between $X and $Y." (pricing chipTitle) as they are. An open estimate
- * (part of it unpriced) is its priced part's sentence, or '' (none). */
+ * item 3, r16 item 3): pricing chipTitle's "Estimated cost $0.13.",
+ * "Estimated cost under $0.01.", "Up to $Y." and "Between $X and $Y.", a
+ * sourced $0's "This costs nothing to run.", and an open estimate's priced
+ * part ("The priced part of this run costs up to $0.43.", or '' for none). */
 export function estimateSentence(low: number, high: number, open: boolean, sourcedZero = false): string {
   if (!open && sourcedZero) return SOURCED_ZERO_TITLE;
-  const chip = chipEstimate(low, high, open);
-  if (open) return chipTitle(chip);
-  switch (chip.kind) {
-    case 'free': return 'Estimated cost $0.';
-    case 'under': return 'Estimated cost under $0.01.';
-    case 'exact': return `Estimated cost ${chip.amount}.`;
-    default: return chipTitle(chip);
-  }
+  return chipTitle(chipEstimate(low, high, open));
+}
+
+/** What a cost tooltip says, from either chip's own parts. */
+export interface CostTitleParts {
+  /** Every paid node's name, with a list price or not (GM, PR #203 r17 item 3). */
+  paid: string[];
+  /** The priced part, or null when no paid node has a price (or the price
+   * table hasn't loaded). */
+  estimate: { low: number; high: number; open: boolean; sourcedZero?: boolean } | null;
+  /** Why each unpriced part is unpriced, as the Run chip records it. */
+  reasons: NonNullable<RunCost['reasons']>;
+  mayCost?: RunScopeSummary['mayCost'];
 }
 
 /**
- * A cost tooltip for a run with paid nodes and one that may bill the
- * person's own account, in GM's shape (PR #203 r14 item 3, verbatim): "“A”
- * and “B” call paid providers. Estimated cost $0.13. Idol can use your
- * Hugging Face credits." One line; each reason for an unpriced part goes on
- * its own line under the first (GM, PR #198 r9 bug 2), the may-cost
- * sentence last. Shared by the toolbar's Run chip (runChipTitle) and the
- * proposal bar's Accept chip (canvasProposals acceptChipTitle).
+ * Every cost tooltip: the toolbar's Run chip (runChipTitle) and the
+ * proposal bar's Accept chip (canvasProposals acceptChipTitle), one
+ * formatter (GM, PR #203 r16 item 3; r17 items 3 and 4). Line 1 names the
+ * paid nodes, priced or not, then the priced part as a sentence: "“A”
+ * calls a paid provider. Estimated cost $0.13." No heading. Each reason for
+ * an unpriced part goes on its own line under line 1 ("“B” has no listed
+ * price.": GM, PR #198 r9 bug 2), and the may-cost sentence comes last
+ * ("Idol can use your Hugging Face credits."); with no reasons it is all one
+ * line. Undefined when nothing is paid or may cost.
  */
-export function mixedCostTitle(paidNames: string[], estimate: string, reasons: string[], may: string): string {
-  const lead = [paidSentence(paidNames), estimate].filter(Boolean).join(' ');
-  if (reasons.length === 0) return [lead, may].filter(Boolean).join(' ');
-  return [lead, ...reasons, may].filter(Boolean).join('\n');
+export function costTitle({ paid, estimate, reasons, mayCost }: CostTitleParts): string | undefined {
+  const may = mayCostSentence(mayCost);
+  const priced = paid.length > 0 && estimate
+    ? estimateSentence(estimate.low, estimate.high, estimate.open, estimate.sourcedZero === true) : '';
+  const lead = [paidSentence(paid), priced].filter(Boolean).join(' ');
+  const lines = paid.length > 0 ? reasonSentences(reasons) : [];
+  if (lines.length === 0) return [lead, may].filter(Boolean).join(' ') || undefined;
+  return [lead, ...lines, may].filter(Boolean).join('\n') || undefined;
 }
 
 /** The sourced "$0" chip's tooltip (GM, PR #203 r11 item 4). */
@@ -612,44 +624,20 @@ function reasonSentences(reasons: NonNullable<RunCost['reasons']>): string[] {
   return [...groups.values()].map(({ line, names }) => line(nodeNameList(names), namesSeveral(names)));
 }
 
-/** The Run chip's tooltip, from the same parts as its label (pricing.ts
- * chipTitle): every chip form has one, "N paid" has none (the button's own
- * title has the details). An open chip leads with the priced part, then a
- * sentence per reason, no colons (GM, PR #198 r7 item 3): "The priced part
- * of this run costs up to $0.43. “Brief” has no listed price." */
+/** The Run chip's tooltip, from the same parts as its label (costTitle,
+ * the one cost-tooltip formatter): whenever the chip shows, its paid nodes
+ * first, priced or not (GM, PR #203 r17 item 3), then the priced part, a
+ * sentence per reason, and the may-cost sentence last. */
 export function runChipTitle(summary: RunScopeSummary): string | undefined {
-  // The may-cost sentence comes last (GM, PR #203 r11 item 2); alone, it is
-  // the whole tooltip.
-  const may = mayCostSentence(summary.mayCost);
   const { paid, cost } = summary;
-  // Beside a priced part: GM's mixed shape, no bare "Estimated cost" line
-  // (PR #203 r14 item 4).
-  if (may && paid.length > 0 && cost && cost.lines.length > 0) {
-    const open = costOpen(cost);
-    const reasons = open ? reasonSentences(cost.reasons?.length ? cost.reasons
-      : cost.unpriced.map((name) => ({ name, reason: { kind: 'noPrice' as const } }))) : [];
-    return mixedCostTitle(paid, estimateSentence(cost.low, cost.high, open, cost.sourcedZero === true), reasons, may);
-  }
-  const title = paidChipTitle(summary);
-  return [title, may].filter(Boolean).join('\n') || undefined;
-}
-
-function paidChipTitle({ paid, cost }: RunScopeSummary): string | undefined {
-  if (paid.length === 0 || !cost || cost.lines.length === 0) return undefined;
-  const open = costOpen(cost);
-  if (!open && cost.sourcedZero) return SOURCED_ZERO_TITLE;
-  const lead = chipTitle(chipEstimate(cost.low, cost.high, open));
-  // A free priced part has no line of its own (GM r8: "$0 is a price, not
-  // unpriced"): the reasons start the tooltip.
-  // Past the ceiling the lead is no line either (GM r9): no tooltip.
-  if (!open) return lead || undefined;
+  const open = cost ? costOpen(cost) : false;
   // A summary with no reasons recorded (one built before them) names its
-  // unpriced nodes as having no listed price, so a free lead never leaves
-  // the chip without a tooltip.
-  const reasons = cost.reasons?.length ? cost.reasons
-    : lead ? [] : cost.unpriced.map((name) => ({ name, reason: { kind: 'noPrice' as const } }));
-  // GM r9 bug 2: each reason on its own line under the priced part's.
-  return [lead, ...reasonSentences(reasons)].filter(Boolean).join('\n') || undefined;
+  // unpriced nodes as having no listed price.
+  const reasons = !cost || !open ? [] : cost.reasons?.length ? cost.reasons
+    : cost.unpriced.map((name) => ({ name, reason: { kind: 'noPrice' as const } }));
+  const estimate = cost && cost.lines.length > 0
+    ? { low: cost.low, high: cost.high, open, sourcedZero: cost.sourcedZero === true } : null;
+  return costTitle({ paid, estimate, reasons, mayCost: summary.mayCost });
 }
 
 const AWAITING = 'Priced when its input is known:';

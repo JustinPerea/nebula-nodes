@@ -648,7 +648,10 @@ describe('ProposalBar with Idol, keyless (GM, PR #203 r11 item 2 and r12)', () =
     expect(screen.getByRole('button', { name: 'Accept and run 2 paid' })).toBeTruthy();
     // Without Idol's clause the shared form stands, tag and all (GM: the wording batch).
     expect(document.querySelector('.proposal-bar__summary')?.textContent).toBe('Adds 2 nodes · runs 2 paid models (google) · ~$0.13');
-    expect(document.querySelector('.proposal-bar__count')).not.toHaveAttribute('title');
+    // The chip still has its cost tooltip, by the Run chip's formatter (GM,
+    // PR #203 r17 item 4); n4 isn't on this canvas, so it goes by its id.
+    expect(document.querySelector('.proposal-bar__count')).toHaveAttribute('title',
+      '“Nano Banana” and “n4” call paid providers. Estimated cost $0.13.');
     // And added again: "may cost" comes back without a new proposal.
     act(() => useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: '***abcd' }, loaded: true } }));
     expect(screen.getByRole('button', { name: 'Accept and run 2 paid · 1 may cost' })).toBeTruthy();

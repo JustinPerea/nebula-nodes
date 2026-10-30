@@ -113,12 +113,26 @@ The server exposes these tools for building and running (see
   with the token set, every agent run route (`run_nodes`, `nebula run`,
   `nebula quick`, the HTTP run routes, a Cinema shot) refuses a run that
   includes Idol, at any spending limit, even when the node asked for comes
-  after Idol, and says why and what to do: propose the run with
-  `propose_change` and `run` (`nebula propose --run <node>`), or run only
-  nodes that don't need Idol. The person's own Run, and an accepted
-  proposal, run it as usual. The `billing` note says which state holds now
-  ("Free here" or "May cost here"); `nebula info` prints it as its
-  `BILLING:` line in the CLI's words.
+  after Idol, and says why and what to do: propose the run, or run only
+  nodes that don't need Idol. The refusal names the surface's own way to
+  propose, from one source: over MCP "Propose it instead: propose_change
+  (run: n2). The person accepts on the canvas, and the canvas runs it.",
+  from the CLI `` `nebula propose --note "<why>" --run n2` ``. The person's
+  own Run, and an accepted proposal, run it as usual. The `billing` note
+  says which state holds now ("Free here" or "May cost here"), and both
+  state the downstream rule (no agent run that includes it, "even for a
+  node after it"); `nebula info` prints it as its `BILLING:` line in the
+  CLI's words. Whether the token is set is read one way everywhere: a key
+  that is only spaces or invisible characters once trimmed is unset, even
+  one already saved that way, and PUT /api/settings refuses one (400). When
+  a key is set, replaced or removed, every browser tab gets
+  `{"type": "settingsChanged"}` (no values) and reads its settings again,
+  so an open proposal's "may cost" follows a token added from anywhere;
+  `get_proposal`, `list_proposals` and `nebula proposals` already read the
+  keys set at each call. A proposal's cost entries carry `reason` for a
+  paid node that leaves the total open (`noPrice`, `cantRun`,
+  `awaitingInput`, `missingKey` with its `keys`, `leftOut` with its
+  `plus`), the reason the canvas's Accept chip prints.
   `definition_id` is the id, or
   the node type's exact display name (any case, outer spaces ignored) when
   one node type has it: `describe_node(definition_id="Moodboard")` answers

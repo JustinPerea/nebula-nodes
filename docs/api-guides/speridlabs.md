@@ -34,6 +34,10 @@ Idol runs without a token on Hugging Face’s shared GPUs, which can be busy or 
 
 Add the token in **Settings → Providers → Hugging Face**; create it at
 [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens).
+Once it's saved, the row's **…** menu has **Replace key** and **Remove**,
+with **Open Hugging Face tokens ↗** on the line under "Saved key ending in
+…". A token of only spaces or invisible characters isn't saved, and Nebula
+treats one saved that way as no token.
 Nebula shows Idol at $0 a run, since
 [Hugging Face offers ZeroGPU free](https://huggingface.co/docs/hub/spaces-zerogpu).
 Any bill for time past your allowance is between you and Hugging Face;
@@ -43,11 +47,15 @@ With a token set, an agent can't run Idol on its own, or anything that
 runs after it: it proposes the run, and you accept it on the canvas. The
 proposal says "may use your Hugging Face credits", its card reads "may cost ·
 Hugging Face", and the Run chip counts Idol as "may cost" ("~$0.13 + 1 may
-cost" beside priced models), never as paid. Running an agent's unfinished
+cost" beside priced models), never as paid. Hover the Run chip or the Accept chip for the
+whole picture: the paid nodes first, then the estimate, a line for each node
+with no listed price, and Idol's sentence last. Neither adds anything for
+Idol to the estimate. Running an agent's unfinished
 Idol node yourself asks first, as a paid one does. Without a token nothing
 can bill: the card reads "free · Hugging Face", agents run it as they run
 any free node, and it asks nothing. Adding or removing the token changes
-all of this at once, open proposals included.
+all of this at once, open proposals included, and in every open window,
+whichever window, script or app changed it.
 
 Whether a fine-grained token with no repository access applies your own
 allowance isn't confirmed yet; Hugging Face's docs don't say.

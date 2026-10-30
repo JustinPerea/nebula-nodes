@@ -138,8 +138,10 @@ def test_an_agents_run_with_idol_and_a_token_is_sent_to_a_proposal(gated, node_r
     response = _execute(gated, CLAUDE, "r1", idol if node_run else None)
     assert response.status_code == 403, response.text
     detail = response.json()["detail"]
-    assert WHO in detail and "Propose it instead: `nebula propose" in detail
-    assert f"--run {idol}" in detail or not node_run
+    # MCP's words; the CLI prints its own command (review 8 of PR #203, NIT-4).
+    assert WHO in detail and "Propose it instead: propose_change (run: " in detail
+    assert "nebula propose" not in detail
+    assert f"propose_change (run: {idol})" in detail or not node_run
     assert gated.ran == []
 
 
@@ -188,7 +190,7 @@ def test_quick_with_a_token_sends_an_agent_to_a_proposal_and_runs_the_persons(ga
     assert response.status_code == 403, response.text
     detail = response.json()["detail"]
     assert detail.startswith("Needs the person's approval: ") and WHO in detail
-    assert "`nebula create speridlabs-idol`" in detail and called == []
+    assert "edit_canvas, a speridlabs-idol node" in detail and called == []
     response, called = _quick(gated, monkeypatch, PERSON)
     assert response.status_code == 200, response.text
     assert called == [1]

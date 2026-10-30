@@ -78,8 +78,12 @@ allowance.", which wraps rather than ending in "…" (GM r14 item 1), then
 r11's instruction, link and caveat. The caveat holds in both states: "With
 your token, Idol runs on your Hugging Face allowance. With Hugging Face PRO,
 time past your allowance uses your prepaid Hugging Face credits." With a
-token, the row's manage view links "Open Hugging Face tokens ↗", as the edit
-view does, in place of the shared "Key page ↗" (r14 item 5). No copy names a
+token, the row's manage view keeps the actions on the key together on one
+row, [Replace key] and [Remove], and puts "Open Hugging Face tokens ↗" on
+its own line under "Saved key ending in …", since it's a reference, not an
+action (GM r16 item 5; the words are r14 item 5's, as the edit view has
+them). Every provider's manage view is the same component, so the others
+put "Key page ↗" there too. No copy names a
 run count or an allowance number: they are Hugging Face's to change, and
 whose pool a call with no token draws on isn't known.
 
@@ -88,7 +92,16 @@ mark and zero-width characters are trimmed from its ends
 (`node_route.key_text`, frontend `directRoute.keyText`, both reading
 `backend/tests/fixtures/key_text_cases.json`). The agent gate, the handler,
 the settings check and Settings all read it, so a token of only invisible
-characters is unset for all of them (review 7, NIT-4).
+characters is unset for all of them (review 7, NIT-4). It's one key state
+everywhere (GM r17 item 1; review 8, LOW-1): `services.settings.load_settings`
+returns every key as `key_text` gives it and drops one that's empty, so a
+value already stored that way reads as unset to every backend reader, the
+masked GET /api/settings included, and the canvas's cache with it.
+PUT /api/settings and the desktop credential bridge
+(`/api/credentials/update`) refuse such a key, as the Settings field does
+("This key is only spaces or invisible characters once trimmed. Copy it
+again, then paste it here."), and store every other key trimmed. The
+switcher's "key is set" is `directRoute.isKeySet` too.
 
 ### The token can bill: agents ask first
 
@@ -112,32 +125,58 @@ $0 and spend tracking never counts it as paid.
   Face token is set, so it can bill their Hugging Face account: … An agent
   can't start a run that includes it, at any spending limit, even for a node
   after it: propose the run, or run only nodes that don't need it." (review
-  7, NIT-3). The person's own Run needs no proposal. Without a token nothing
-  can bill, so an agent runs Idol as before.
+  7, NIT-3), then how to propose in the surface's own words, from one
+  source (`agent_spend.propose_hint`; review 8, NIT-4): MCP reads "Propose
+  it instead: propose_change (run: n1). The person accepts on the canvas,
+  and the canvas runs it.", and the CLI prints the same refusal with its
+  command, `` `nebula propose --note "<why>" --run n1` `` (`cli/client._fail`
+  through `cli/formatter._cli_words`). The person's own Run needs no
+  proposal. Without a token nothing can bill, so an agent runs Idol as
+  before.
 - **Every agent surface says it, as the token is set now** (review 7,
   LOW-1). `describe_node`'s route `billing`, the `find_nodes` row's
   `billing` and `start_here`'s notes read "Free here: no HF_TOKEN is set, …"
   without the token and "May cost here: the person's HF_TOKEN is set, …"
-  with it (`main.hf_space_billing_note`). Each surface names its own way to
-  propose: MCP `propose_change`, the CLI `` `nebula propose` ``
+  with it (`main.hf_space_billing_note`). Both state the downstream rule:
+  an agent can't run it, "or any run that includes it, even for a node
+  after it" (review 8, NIT-2). Each surface names its own way to propose:
+  MCP `propose_change`, the CLI `` `nebula propose` ``
   (`nebula info`'s and `nebula nodes`' `BILLING:` lines,
   `cli/formatter._cli_words`; `nebula context`, `main._cli_words`).
 - **The canvas counts it as "may cost", never "paid"** (GM r11 item 2).
   `node_route.key_billing` (frontend `directRoute.keyBilling`) is "mayCost"
   with the token and "free" without, and it is the one function every cost
-  surface reads (GM r15 item 2): the chips, the bar's cost line, the ghost
-  card, the confirm before a run over an agent's placeholder, and the agent
-  listing. The proposal's cost has `mayCostRuns` and `mayCost` (names and
-  the account) beside `paidRuns`.
+  surface reads (GM r15 item 2; review 8, LOW-3): the agent gate
+  (`may_bill` is `key_billing == MAY_COST`), the billing note
+  (`main._space_billing`, per route in `describe_node`), the chips, the
+  bar's cost line, the ghost card, the confirm before a run over an agent's
+  placeholder, and the agent listing. The account it names and the card's
+  label come from `key_billing_account` and `key_billing_label` (frontend
+  `keyBillingAccount`, `keyBillingLabel`), and
+  `backend/tests/fixtures/key_billing_cases.json` holds both sides to the
+  same answers. Only `key_billing` reads `mayBillWithKey`:
+  `test_cost_for_keys_ratchet.py` (backend) and `tests/idolRound9.test.ts`
+  (frontend) fail on a second reader. The proposal's cost has `mayCostRuns`
+  and `mayCost` (names and the account) beside `paidRuns`.
   - Toolbar Run chip (GM r14 item 4): "1 may cost" alone, "2 paid · 1 may
     cost" beside paid nodes with no list price, "~$0.13 + 1 may cost" beside
-    a priced part. Its tooltip, with a priced part: "“A” and “B” call paid
-    providers. Estimated cost $0.13. Idol can use your Hugging Face
-    credits." (no "~" inside a sentence, no bare "Estimated cost" line;
-    `runScope.mixedCostTitle`). The Run button's description puts Idol's
-    sentence after the estimate too.
-  - Accept chip: counts ("2 paid · 1 may cost"), its tooltip the same shape
-    (`canvasProposals.acceptChipTitle`).
+    a priced part. The Run button's description puts Idol's sentence after
+    the estimate too.
+  - Every cost tooltip, the Run chip's and the Accept chip's, comes from
+    one formatter, `runScope.costTitle` (GM r16 item 3, r17 items 3 and 4).
+    Line 1 names the paid nodes, priced or not, then the priced part as a
+    sentence: "“A” calls a paid provider. Estimated cost $0.13." There's no
+    bare "Estimated cost" heading anywhere (`pricing.chipTitle` gives the
+    sentence), and no "~" inside a sentence. Each reason for an unpriced
+    part goes on its own line under line 1 ("“B” has no listed price."),
+    and Idol's sentence comes last: "“A” and “B” call paid providers.
+    Estimated cost $0.13. Idol can use your Hugging Face credits." The
+    Accept chip gets its reasons from the backend
+    (`model_pricing.estimate_run` `reasons`, on each paid cost entry as
+    `reason`), in the Run chip's kinds; `pricing_cases.json`'s run cases
+    pin the two sides to the same reason.
+  - Accept chip: counts ("2 paid · 1 may cost"), with that tooltip whenever
+    the chip shows (`canvasProposals.acceptChipTitle`).
   - The bar (GM r14 item 2): "Runs Idol · may use your Hugging Face credits",
     or with paid models "Runs 2 paid models and Idol · Idol may use your
     Hugging Face credits", no provider tag, and the amount leads the line
@@ -157,11 +196,25 @@ $0 and spend tracking never counts it as paid.
     is free and asks nothing on its own; with one it "may cost", the dialog
     asks, and its row's price reads "may cost" (`main._paid_placeholders`,
     `placeholderRunConfirm`).
-  Idol adds nothing to the estimate (`main._estimate_proposal_run` leaves it
-  out): not "$0", since past the allowance the cost is real. Without a token
-  Idol is free and adds no chip, like any free node.
+  Idol adds nothing to any estimate (`model_pricing.estimate_run` skips
+  every key-billing node, so the proposal's, the run's and the placeholder
+  confirm's estimates all leave it out; review 8, LOW-2): not "$0", since
+  past the allowance the cost is real. The re-ask over an Idol-only
+  placeholder matches the first ask, with no total line, and the 409
+  behind it says "may cost", never "paid": "Nothing ran. This run includes
+  1 node that may cost, which Claude Code is still setting up, and Nebula
+  asks before running those. …" (GM r17 item 2; with paid nodes too, "2
+  paid nodes and 1 that may cost"). Without a token Idol is free and adds
+  no chip, like any free node.
+  - A token added or removed anywhere reaches every open tab (review 8,
+    NIT-3): PUT /api/settings, a key's DELETE and the desktop credential
+    bridge broadcast `{"type": "settingsChanged"}`, with no values, and
+    each tab reads GET /api/settings again
+    (`store/settingsChangedSocket.ts`), so a token set from a second
+    window, a script calling the API, or the desktop app flips an open bar
+    without a reload. A reconnected socket reads them again too.
 
-## Request contract## Request contract
+## Request contract
 
 `/run` takes, in order: `image` (ImageData), `mode` ("Synthetic" or "Real
 photo"), `steps` (10-100, default 50), `cfg_scale` (0-10, default 3),

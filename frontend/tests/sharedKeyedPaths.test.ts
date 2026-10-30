@@ -5,7 +5,8 @@
  * for example"): the sourced-$0 chip and its tooltip (runScope runChipLabel /
  * runChipTitle, canvasProposals proposalEstimateLabel), and the key lock
  * lines (runKeyLock: the Run line, withKeyLock, Accept's line through
- * proposalAcceptLock). Each is exercised here on a synthetic keyed route
+ * proposalAcceptLock, and a Run History replay's: historyRunKeyLock through
+ * canKeyLock, review 8 of PR #203, copy NIT-1). Each is exercised here on a synthetic keyed route
  * that is not Idol, so a later Idol-only shortcut can't pass them.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -13,8 +14,10 @@ import type { Node } from '@xyflow/react';
 import { NODE_DEFINITIONS } from '../src/constants/nodeDefinitions';
 import { proposalEstimateLabel } from '../src/lib/canvasProposals';
 import type { PricingTable } from '../src/lib/pricing';
+import { historyRunKeyLock } from '../src/lib/historyRunKeyLock';
 import { proposalAcceptLock } from '../src/lib/proposalAcceptLock';
-import { runKeyLockLine, withKeyLock } from '../src/lib/runKeyLock';
+import type { RunRecord } from '../src/lib/runHistory';
+import { canKeyLock, runKeyLockLine, withKeyLock } from '../src/lib/runKeyLock';
 import { runChipLabel, runChipTitle, SOURCED_ZERO_TITLE, summarizeRunScope } from '../src/lib/runScope';
 import type { ProposalView } from '../src/lib/wsClient';
 import type { ModelNodeDefinition, NodeData } from '../src/types';
@@ -53,7 +56,7 @@ describe('the sourced $0 lives in the shared formatter', () => {
     expect(summary.paid).toEqual(['Synthetic']);
     expect(summary.cost?.sourcedZero).toBe(true);
     expect(runChipLabel(summary)).toBe('$0');
-    expect(runChipTitle(summary)).toBe(SOURCED_ZERO_TITLE);
+    expect(runChipTitle(summary)).toBe(`“Synthetic” calls a paid provider. ${SOURCED_ZERO_TITLE}`);
   });
 
   it('a proposal whose estimate is a sourced $0 reads "$0", one that rounds to it "~$0"', () => {
@@ -83,5 +86,19 @@ describe('the key lock lines live in the shared lock helper', () => {
     expect(proposalAcceptLock(view, undefined, { nodes: [], edges: [] }, settings({})))
       .toBe('You can accept this after you add your Replicate API token in Settings.');
     expect(proposalAcceptLock(view, undefined, { nodes: [], edges: [] }, settings({ [KEY]: 'set' }))).toBeNull();
+  });
+
+  it('a Run History replay of the route is locked with its line until the key is set (copy NIT-1, M21)', () => {
+    expect(canKeyLock(ID)).toBe(true);
+    const record = (targetNodeId?: string): RunRecord => ({
+      id: 'r1', status: 'complete', trigger: targetNodeId ? 'node' : 'graph', startedAt: 1, targetNodeId,
+      snapshot: { nodes: [{ id: 's1', definitionId: ID, params: {}, outputs: {} }], edges: [] },
+    } as RunRecord);
+    for (const replay of [record(), record('s1')]) {
+      expect(historyRunKeyLock(replay, [], settings({}))).toBe(LINE);
+      expect(historyRunKeyLock(replay, [], settings({ [KEY]: 'set' }))).toBeNull();
+      // An invisible-only key is no key (review 8, LOW-1).
+      expect(historyRunKeyLock(replay, [], settings({ [KEY]: '\u200b' }))).toBe(LINE);
+    }
   });
 });

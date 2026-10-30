@@ -104,7 +104,12 @@ def test_summarize_passes_a_sourced_zero_on_and_only_then():
 def test_estimate_run_says_sourced_zero_only_when_every_priced_row_is_zero():
     pricing = model_pricing.load_pricing()
     idol = [{"id": "n1", "definitionId": "speridlabs-idol", "params": {}}]
-    assert model_pricing.estimate_run(idol, pricing, DEFINITIONS, {})["sourcedZero"] is True
+    # A key-billing node (Idol) adds nothing to any estimate, with or without
+    # its token: not "$0", not unpriced (review 8 of PR #203, LOW-2).
+    for keys in ({}, {"HF_TOKEN": "hf_x"}):
+        alone = model_pricing.estimate_run(idol, pricing, DEFINITIONS, keys)
+        assert alone["priced"] == {} and alone["high"] is None and alone["unpriced"] == []
+        assert alone["sourcedZero"] is False
     paid = [{"id": "n2", "definitionId": "nano-banana", "params": {}}]
     both = model_pricing.estimate_run(idol + paid, pricing, DEFINITIONS, {"GEMINI_API_KEY": "k"})
     assert both["high"] and both["high"] > 0

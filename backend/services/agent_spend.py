@@ -800,7 +800,8 @@ def decide(
     # makes the run theirs.
     may_bill = may_bill_nodes(items, definitions, api_keys)
     if may_bill:
-        return refuse(may_bill_reason(may_bill, labels, definitions, definition_of))
+        params_of = {str(item["id"]): item.get("params") or {} for item in items}
+        return refuse(may_bill_reason(may_bill, labels, definitions, definition_of, params_of, api_keys))
 
     # Plan-run limits stand on their own: a Krea plan cap (on by default)
     # doesn't make unpriced nodes need a proposal when no USD limit is set.
@@ -862,16 +863,16 @@ def decide(
     return decision(None)
 
 
-# Who a may-bill run can bill, by the route's handler (RouteSpec
-# mayBillWithKey). Agent-facing, so plain facts:
+# Who a may-bill run can bill, by the account it runs on
+# (node_route.key_billing_account). Agent-facing, so plain facts:
 # https://huggingface.co/docs/hub/spaces-zerogpu, "Extending quota with credits".
-# Why a may-bill node stops an agent's run, by its route's handler: the key
+# Why a may-bill node stops an agent's run, by its account: the key
 # that is set, the account it can bill, and how. Review 7 of PR #203, NIT-3:
 # the rule stays conservative (an agent can't start any run that includes
 # Idol while the token is set, even for a node after it), and the line says
 # why and what to do instead.
 MAY_BILL_WHO = {
-    "hf-space": ("the person's Hugging Face token is set",
+    "Hugging Face": ("the person's Hugging Face token is set",
                  "their Hugging Face account: a PRO, Team or Enterprise account's prepaid credits are billed past "
                  "its daily ZeroGPU allowance ($1 per 10 GPU-minutes), a cost Nebula can't see or limit"),
 }
@@ -889,14 +890,17 @@ def may_bill_nodes(items: list[Mapping[str, Any]], definitions: Mapping[str, Map
 
 
 def may_bill_reason(ids: list[str], labels: Mapping[str, str], definitions: Mapping[str, Mapping[str, Any]],
-                    definition_of: Mapping[str, str]) -> str:
+                    definition_of: Mapping[str, str], params_of: Mapping[str, Mapping[str, Any]] | None = None,
+                    api_keys: Mapping[str, Any] | None = None) -> str:
     """Why an agent can't start a run with these may-bill nodes itself."""
-    handlers = {str(route.get("handler") or "")
-                for node_id in ids
-                for route in node_route.routes_of(definitions.get(definition_of.get(node_id, "")) or {})
-                if route.get("mayBillWithKey")}
-    key, account = MAY_BILL_WHO[next(iter(handlers))] if len(handlers) == 1 and next(iter(handlers)) in MAY_BILL_WHO \
-        else MAY_BILL_GENERIC
+    # The account each may bill, from the one cost class (node_route
+    # key_billing_account; review 8 of PR #203, LOW-3), never re-read from
+    # the route table here.
+    accounts = {node_route.key_billing_account(definitions.get(definition_of.get(node_id, "")) or {},
+                                               (params_of or {}).get(node_id) or {}, api_keys or {})
+                for node_id in ids}
+    only = next(iter(accounts)) if len(accounts) == 1 else None
+    key, account = MAY_BILL_WHO[only] if only in MAY_BILL_WHO else MAY_BILL_GENERIC
     one = len(ids) == 1
     it, them = ("it", "it") if one else ("they", "them")
     return (f"{_names(ids, labels)} {'is' if one else 'are'} in this run and {key}, so {it} can bill {account}. "
@@ -905,9 +909,13 @@ def may_bill_reason(ids: list[str], labels: Mapping[str, str], definitions: Mapp
 
 
 def propose_hint(run_ids: list[str]) -> str:
-    """The sentence pointing an agent at a proposal for these canvas nodes."""
-    targets = " ".join(f"--run {node_id}" for node_id in run_ids[:6]) or "--run <node>"
+    """The sentence pointing an agent at a proposal for these canvas nodes, in
+    MCP words: each surface names its own way to propose, from this one
+    source (review 8 of PR #203, NIT-4). The CLI prints it with its command
+    and the same nodes (cli/formatter._cli_words: `nebula propose --note
+    "<why>" --run n2`)."""
+    targets = ", ".join(run_ids[:6]) or "<node id>"
     return (
-        f"Propose it instead: `nebula propose --note \"<why>\" {targets}` "
-        "(MCP: propose_change). The person accepts on the canvas, and the canvas runs it."
+        f"Propose it instead: propose_change (run: {targets}). "
+        "The person accepts on the canvas, and the canvas runs it."
     )

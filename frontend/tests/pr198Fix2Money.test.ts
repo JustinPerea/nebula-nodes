@@ -18,8 +18,15 @@ const MONEY = JSON.parse(readFileSync(resolve(__dirname, '../../contracts/fixtur
 };
 
 const summary = (low: number, high: number, open: boolean) => ({
-  paid: [{}], cost: { low, high, lines: [{}], unpriced: open ? ['Kling'] : [], plus: [] },
+  paid: open ? ['Veo', 'Kling'] : ['Veo'], cost: { low, high, lines: [{}], unpriced: open ? ['Kling'] : [], plus: [] },
 }) as unknown as RunScopeSummary;
+
+/** The whole tooltip around a chip's priced-part sentence (runScope
+ * costTitle; GM, PR #203 r16 item 3 and r17 item 3): the paid nodes first,
+ * then the sentence, then each reason on its own line. */
+const fullTitle = (open: boolean, sentence: string) =>
+  [open ? '“Veo” and “Kling” call paid providers.' : '“Veo” calls a paid provider.', sentence].filter(Boolean).join(' ')
+  + (open ? '\n“Kling” has no listed price.' : '');
 
 describe('one money formatter (L4)', () => {
   it.each(MONEY.spent)('spent $amount reads $text, as the backend writes it', ({ amount, text }) => {
@@ -30,15 +37,16 @@ describe('one money formatter (L4)', () => {
   });
 });
 
-/** Every chip form, its tooltip (GM's asks 1 and 2), as built. */
-const CHIPS: [number, number, boolean, string, string | undefined][] = [
-  [0, 0, false, '~$0', 'Estimated cost'],
+/** Every chip form and its priced part's sentence (GM's asks 1 and 2; no
+ * bare "Estimated cost" heading, GM, PR #203 r16 item 3), as built. */
+const CHIPS: [number, number, boolean, string, string][] = [
+  [0, 0, false, '~$0', 'Estimated cost $0.'],
   // GM, PR #198 r6 and r7 item 3: an open chip reads " + unpriced", and its
   // tooltip leads with the priced part (the reasons need the run's scope).
   // GM r8 (PR #198 round 6): no line for a free priced part; the reason leads.
-  [0, 0, true, '$0 + unpriced', '“Kling” has no listed price.'],
-  [0, 0.0047, false, '<$0.01', 'Estimated cost under $0.01'],
-  [0.0047, 0.0047, false, '<$0.01', 'Estimated cost under $0.01'],
+  [0, 0, true, '$0 + unpriced', ''],
+  [0, 0.0047, false, '<$0.01', 'Estimated cost under $0.01.'],
+  [0.0047, 0.0047, false, '<$0.01', 'Estimated cost under $0.01.'],
   [0.0047, 0.0047, true, '<$0.01 + unpriced', 'The priced part of this run costs under $0.01.'],
   // GM r6 item 2: a range from $0 reads "Up to $Y".
   [0, 0.43, false, 'Up to $0.43', 'Up to $0.43.'],
@@ -50,14 +58,14 @@ const CHIPS: [number, number, boolean, string, string | undefined][] = [
   [0.0099, 0.0101, false, 'Up to $0.01', 'Up to $0.01.'],
   [0.0099, 0.0101, true, 'Up to $0.01 + unpriced', 'The priced part of this run costs up to $0.01.'],
   [0.009, 0.0104, false, 'Up to $0.01', 'Up to $0.01.'],
-  [0.01, 0.0149, false, '~$0.01', 'Estimated cost'],
+  [0.01, 0.0149, false, '~$0.01', 'Estimated cost $0.01.'],
   [0.02, 0.43, true, '$0.02–0.43 + unpriced', 'The priced part of this run costs between $0.02 and $0.43.'],
   [0.05, 0.43, false, '$0.05–0.43', 'Between $0.05 and $0.43.'],
   [0.05, 0.05, true, '$0.05 + unpriced', 'The priced part of this run costs about $0.05.'],
-  [0.05, 0.05, false, '~$0.05', 'Estimated cost'],
-  [0.04, 0.044, false, '~$0.04', 'Estimated cost'],
-  [0.0995, 0.1, false, '~$0.10', 'Estimated cost'],
-  [9.996, 10.2, false, '~$10', 'Estimated cost'],
+  [0.05, 0.05, false, '~$0.05', 'Estimated cost $0.05.'],
+  [0.04, 0.044, false, '~$0.04', 'Estimated cost $0.04.'],
+  [0.0995, 0.1, false, '~$0.10', 'Estimated cost $0.10.'],
+  [9.996, 10.2, false, '~$10', 'Estimated cost $10.'],
   // GM r4: the same decimals on both ends.
   [9.5, 12, false, '$9.50–12.00', 'Between $9.50 and $12.00.'],
 ];
@@ -72,13 +80,13 @@ describe('the chips and their tooltips (GM asks 1 and 2)', () => {
   it.each(CHIPS)('%s–%s open=%s: "%s", titled "%s"', (low, high, open, chip, title) => {
     expect(runChipLabel(summary(low, high, open))).toBe(runChip(low, high, open, chip));
     expect(formatChipEstimate(low, high, open)).toBe(chip);
-    expect(runChipTitle(summary(low, high, open))).toBe(title);
+    expect(runChipTitle(summary(low, high, open))).toBe(fullTitle(open, title));
   });
 
   it('a sourced $0 reads "$0", titled "This costs nothing to run.", on the chip and the card; open, the reasons still say what is unpriced', () => {
-    const sourced = { paid: [{}], cost: { low: 0, high: 0, lines: [{}], unpriced: [], plus: [], sourcedZero: true } } as unknown as RunScopeSummary;
+    const sourced = { paid: ['Veo'], cost: { low: 0, high: 0, lines: [{}], unpriced: [], plus: [], sourcedZero: true } } as unknown as RunScopeSummary;
     expect(runChipLabel(sourced)).toBe('$0');
-    expect(runChipTitle(sourced)).toBe('This costs nothing to run.');
+    expect(runChipTitle(sourced)).toBe('“Veo” calls a paid provider. This costs nothing to run.');
     expect(proposalEstimateLabel({ run: ['n1'], cost: { estimate: { low: 0, high: 0, open: false, sourcedZero: true } } } as never)).toBe('$0');
     const open = { ...sourced, cost: { ...sourced.cost, unpriced: ['Kling'] } } as unknown as RunScopeSummary;
     expect(runChipLabel(open)).toBe('$0 + unpriced');

@@ -1,5 +1,5 @@
 {
-  "about": "Shared by backend/tests/test_model_pricing.py and frontend/tests/lib/pricing.test.ts so the two estimators agree. A case's optional `wired` lists input ports with an edge into them. The `table` node is a five-route table (services/node_route.py routes): its price entry keys each route by its `pricing` or id, `runCases` price a whole run (estimate_run / summarizeRunScope) with the keys in `apiKeys`, and `routeEstimateCases` give each route's price (estimate_routes / estimateRoutes). A route entry with `unconfirmed: true` is a price the provider's page doesn't state exactly (the switcher marks it with *; route_price_unconfirmed / routePriceUnconfirmed). The `moded` node prices by `(mode)`, a price variable read from the wired ports (v2v with start_video, i2v with start_image, keyframes or end_image, else t2v; model_pricing.VIDEO_MODE / pricing.ts VIDEO_MODE), and `tooled` by run-time quantities of its source clip ((source seconds), (output megapixels): RUN_TIME_VARIABLES), so it is unpriced before the run. `shippedRouteCases` price the registry's route-table nodes with the shipped table (backend/data/model_pricing.json): each route's price as a number, a [low, high] range, or null, and optionally `unconfirmed`: whether each route's price is marked at those params (route_price_unconfirmed / routePriceUnconfirmed; a row may carry its own `unconfirmed`, as FLUX.2's Flash and Klein rows on fal do). `shippedRunCases` price a whole run of a registry node on the shipped table (estimate_run / summarizeRunScope) with the keys in `apiKeys` and the ports in `wired` (one edge each). Krea 3 also prices by `(references)`, read from the wired ports: `some` with an edge into `images`, else `none` (model_pricing.REFERENCES / pricing.ts REFERENCES). The `tiered` node prices by `(wired refs)`, read from the wired ports: `yes` with an edge into `refs`, else `no` (model_pricing.WIRED_PREFIX / pricing.ts WIRED_PREFIX); every row that reads the `refs` param also reads `(wired refs)`, so a wire into `refs` is priced, not unknown, while the `loose` node's row reads `refs` alone and stays unpriced with it wired. Krea 2 prices by k2BillingTier this way (shippedRunCases), and its entries list the params the handler strips in `whitespaceUnset`, so a whitespace-only value there prices as unset (only those params: `tiered` counts a whitespace `refs` as set). A case's optional `size` is the measured input of the port its entry's `sizing` names ({width, height, seconds, frames}: model_pricing.estimate_node size / pricing.ts estimateNode size): the `sized` node prices per megapixel of the larger of input and output, rounded up, and `tooled` per megapixel-second of output; without a size both are unpriced. `sizedRunCases` price a whole run of a registry node on the shipped table with its sizing port wired from an Image Input or Video Input whose file measured `size` (estimate_run sizes / summarizeRunScope sizes); `awaitingInput` is whether the node is unpriced only because its input's size isn't known.",
+  "about": "Shared by backend/tests/test_model_pricing.py and frontend/tests/lib/pricing.test.ts so the two estimators agree. A case's optional `wired` lists input ports with an edge into them. The `table` node is a five-route table (services/node_route.py routes): its price entry keys each route by its `pricing` or id, `runCases` price a whole run (estimate_run / summarizeRunScope) with the keys in `apiKeys`, and `routeEstimateCases` give each route's price (estimate_routes / estimateRoutes). A route entry with `unconfirmed: true` is a price the provider's page doesn't state exactly (the switcher marks it with *; route_price_unconfirmed / routePriceUnconfirmed). The `moded` node prices by `(mode)`, a price variable read from the wired ports (v2v with start_video, i2v with start_image, keyframes or end_image, else t2v; model_pricing.VIDEO_MODE / pricing.ts VIDEO_MODE), and `tooled` by run-time quantities of its source clip ((source seconds), (output megapixels): RUN_TIME_VARIABLES), so it is unpriced before the run. `shippedRouteCases` price the registry's route-table nodes with the shipped table (backend/data/model_pricing.json): each route's price as a number, a [low, high] range, or null, and optionally `unconfirmed`: whether each route's price is marked at those params (route_price_unconfirmed / routePriceUnconfirmed; a row may carry its own `unconfirmed`, as FLUX.2's Flash and Klein rows on fal do). `shippedRunCases` price a whole run of a registry node on the shipped table (estimate_run / summarizeRunScope) with the keys in `apiKeys` and the ports in `wired` (one edge each). Krea 3 also prices by `(references)`, read from the wired ports: `some` with an edge into `images`, else `none` (model_pricing.REFERENCES / pricing.ts REFERENCES). The `tiered` node prices by `(wired refs)`, read from the wired ports: `yes` with an edge into `refs`, else `no` (model_pricing.WIRED_PREFIX / pricing.ts WIRED_PREFIX); every row that reads the `refs` param also reads `(wired refs)`, so a wire into `refs` is priced, not unknown, while the `loose` node's row reads `refs` alone and stays unpriced with it wired. Krea 2 prices by k2BillingTier this way (shippedRunCases), and its entries list the params the handler strips in `whitespaceUnset`, so a whitespace-only value there prices as unset (only those params: `tiered` counts a whitespace `refs` as set). A case's optional `size` is the measured input of the port its entry's `sizing` names ({width, height, seconds, frames}: model_pricing.estimate_node size / pricing.ts estimateNode size): the `sized` node prices per megapixel of the larger of input and output, rounded up, and `tooled` per megapixel-second of output; without a size both are unpriced. `sizedRunCases` price a whole run of a registry node on the shipped table with its sizing port wired from an Image Input or Video Input whose file measured `size` (estimate_run sizes / summarizeRunScope sizes); `awaitingInput` is whether the node is unpriced only because its input's size isn't known. Every run case's `expected.reason` is why the node leaves the total open, or null (estimate_run `reasons` / summarizeRunScope `reasons`): {kind: noPrice | cantRun | awaitingInput | missingKey with the `keys` it needs | leftOut with its `plus`}; the proposal bar's Accept chip writes its reason lines from it.",
   "definitions": {
     "img": {
       "id": "img",
@@ -2205,7 +2205,8 @@
         "low": 0.03,
         "high": 0.03,
         "unavailable": false,
-        "plan": false
+        "plan": false,
+        "reason": null
       }
     },
     {
@@ -2221,7 +2222,8 @@
         "low": 0.035,
         "high": 0.035,
         "unavailable": false,
-        "plan": false
+        "plan": false,
+        "reason": null
       }
     },
     {
@@ -2238,7 +2240,8 @@
         "low": 0.04,
         "high": 0.04,
         "unavailable": false,
-        "plan": false
+        "plan": false,
+        "reason": null
       }
     },
     {
@@ -2254,7 +2257,13 @@
         "low": null,
         "high": null,
         "unavailable": true,
-        "plan": false
+        "plan": false,
+        "reason": {
+          "kind": "missingKey",
+          "keys": [
+            "REPLICATE_API_TOKEN"
+          ]
+        }
       }
     },
     {
@@ -2271,7 +2280,10 @@
         "low": null,
         "high": null,
         "unavailable": true,
-        "plan": false
+        "plan": false,
+        "reason": {
+          "kind": "cantRun"
+        }
       }
     },
     {
@@ -2283,7 +2295,17 @@
         "low": null,
         "high": null,
         "unavailable": true,
-        "plan": false
+        "plan": false,
+        "reason": {
+          "kind": "missingKey",
+          "keys": [
+            "BFL_API_KEY",
+            "FAL_KEY",
+            "REPLICATE_API_TOKEN",
+            "OPENROUTER_API_KEY",
+            "KREA_API_TOKEN"
+          ]
+        }
       }
     },
     {
@@ -2302,7 +2324,10 @@
         "low": null,
         "high": null,
         "unavailable": true,
-        "plan": false
+        "plan": false,
+        "reason": {
+          "kind": "cantRun"
+        }
       }
     },
     {
@@ -2317,7 +2342,8 @@
         "low": null,
         "high": null,
         "unavailable": false,
-        "plan": true
+        "plan": true,
+        "reason": null
       }
     },
     {
@@ -2337,7 +2363,10 @@
         "low": null,
         "high": null,
         "unavailable": true,
-        "plan": false
+        "plan": false,
+        "reason": {
+          "kind": "cantRun"
+        }
       }
     },
     {
@@ -2358,7 +2387,8 @@
         "low": null,
         "high": null,
         "unavailable": false,
-        "plan": true
+        "plan": true,
+        "reason": null
       }
     }
   ],
@@ -2809,7 +2839,8 @@
         "low": 0.85,
         "high": 0.85,
         "unavailable": false,
-        "plan": false
+        "plan": false,
+        "reason": null
       }
     },
     {
@@ -2825,7 +2856,8 @@
         "low": null,
         "high": null,
         "unavailable": false,
-        "plan": true
+        "plan": true,
+        "reason": null
       }
     },
     {
@@ -2843,7 +2875,8 @@
         "low": 0.03,
         "high": 0.03,
         "unavailable": false,
-        "plan": false
+        "plan": false,
+        "reason": null
       }
     },
     {
@@ -2863,7 +2896,8 @@
         "low": 0.03,
         "high": 0.59,
         "unavailable": false,
-        "plan": false
+        "plan": false,
+        "reason": null
       }
     },
     {
@@ -2884,7 +2918,8 @@
         "low": 0.03,
         "high": 0.03,
         "unavailable": false,
-        "plan": false
+        "plan": false,
+        "reason": null
       }
     },
     {
@@ -2906,7 +2941,8 @@
         "low": 0.07,
         "high": 0.07,
         "unavailable": false,
-        "plan": false
+        "plan": false,
+        "reason": null
       }
     },
     {
@@ -2928,7 +2964,10 @@
         "low": null,
         "high": null,
         "unavailable": true,
-        "plan": false
+        "plan": false,
+        "reason": {
+          "kind": "cantRun"
+        }
       }
     },
     {
@@ -2943,7 +2982,8 @@
         "low": 0.03,
         "high": 0.03,
         "unavailable": false,
-        "plan": false
+        "plan": false,
+        "reason": null
       }
     },
     {
@@ -2960,7 +3000,8 @@
         "low": 0.06,
         "high": 0.06,
         "unavailable": false,
-        "plan": false
+        "plan": false,
+        "reason": null
       }
     },
     {
@@ -2977,7 +3018,8 @@
         "low": 0.035,
         "high": 0.035,
         "unavailable": false,
-        "plan": false
+        "plan": false,
+        "reason": null
       }
     },
     {
@@ -2996,7 +3038,8 @@
         "low": 0.04,
         "high": 0.04,
         "unavailable": false,
-        "plan": false
+        "plan": false,
+        "reason": null
       }
     },
     {
@@ -3013,7 +3056,8 @@
         "low": 0.035,
         "high": 0.04,
         "unavailable": false,
-        "plan": false
+        "plan": false,
+        "reason": null
       }
     },
     {
@@ -3030,7 +3074,8 @@
         "low": null,
         "high": null,
         "unavailable": false,
-        "plan": true
+        "plan": true,
+        "reason": null
       }
     },
     {
@@ -3045,7 +3090,8 @@
         "low": 0.03,
         "high": 0.03,
         "unavailable": false,
-        "plan": false
+        "plan": false,
+        "reason": null
       }
     },
     {
@@ -3062,7 +3108,8 @@
         "low": 0.035,
         "high": 0.035,
         "unavailable": false,
-        "plan": false
+        "plan": false,
+        "reason": null
       }
     },
     {
@@ -3077,7 +3124,8 @@
         "low": 0.06,
         "high": 0.06,
         "unavailable": false,
-        "plan": false
+        "plan": false,
+        "reason": null
       }
     },
     {
@@ -3095,7 +3143,8 @@
         "low": 0.07,
         "high": 0.07,
         "unavailable": false,
-        "plan": false
+        "plan": false,
+        "reason": null
       }
     },
     {
@@ -3110,7 +3159,8 @@
         "low": 0.015,
         "high": 0.015,
         "unavailable": false,
-        "plan": false
+        "plan": false,
+        "reason": null
       }
     },
     {
@@ -3127,7 +3177,8 @@
         "low": 0.0175,
         "high": 0.0175,
         "unavailable": false,
-        "plan": false
+        "plan": false,
+        "reason": null
       }
     },
     {
@@ -3144,7 +3195,8 @@
         "low": 0.03,
         "high": 0.04,
         "unavailable": false,
-        "plan": false
+        "plan": false,
+        "reason": null
       }
     },
     {
@@ -3163,7 +3215,8 @@
         "low": 0.035,
         "high": 0.04,
         "unavailable": false,
-        "plan": false
+        "plan": false,
+        "reason": null
       }
     },
     {
@@ -3180,7 +3233,8 @@
         "low": 0.03,
         "high": 0.04,
         "unavailable": false,
-        "plan": false
+        "plan": false,
+        "reason": null
       }
     },
     {
@@ -3199,7 +3253,8 @@
         "low": 0.07,
         "high": 0.07,
         "unavailable": false,
-        "plan": false
+        "plan": false,
+        "reason": null
       }
     },
     {
@@ -3217,7 +3272,8 @@
         "low": 0.03,
         "high": 0.03,
         "unavailable": false,
-        "plan": false
+        "plan": false,
+        "reason": null
       }
     },
     {
@@ -3234,7 +3290,8 @@
         "low": 0.03,
         "high": 0.03,
         "unavailable": false,
-        "plan": false
+        "plan": false,
+        "reason": null
       }
     },
     {
@@ -3252,7 +3309,8 @@
         "low": 0.06,
         "high": 0.06,
         "unavailable": false,
-        "plan": false
+        "plan": false,
+        "reason": null
       }
     },
     {
@@ -3269,7 +3327,8 @@
         "low": 0.0175,
         "high": 0.0175,
         "unavailable": false,
-        "plan": false
+        "plan": false,
+        "reason": null
       }
     }
   ],
@@ -3289,7 +3348,8 @@
       "expected": {
         "low": 0.004,
         "high": 0.004,
-        "awaitingInput": false
+        "awaitingInput": false,
+        "reason": null
       }
     },
     {
@@ -3303,7 +3363,10 @@
       "expected": {
         "low": null,
         "high": null,
-        "awaitingInput": true
+        "awaitingInput": true,
+        "reason": {
+          "kind": "awaitingInput"
+        }
       }
     },
     {
@@ -3324,7 +3387,8 @@
       "expected": {
         "low": 0.003,
         "high": 0.003,
-        "awaitingInput": false
+        "awaitingInput": false,
+        "reason": null
       }
     },
     {
@@ -3345,7 +3409,8 @@
       "expected": {
         "low": 0.012,
         "high": 0.012,
-        "awaitingInput": false
+        "awaitingInput": false,
+        "reason": null
       }
     },
     {
@@ -3365,7 +3430,8 @@
       "expected": {
         "low": 0.1115136,
         "high": 0.1115136,
-        "awaitingInput": false
+        "awaitingInput": false,
+        "reason": null
       }
     },
     {
@@ -3379,7 +3445,10 @@
       "expected": {
         "low": null,
         "high": null,
-        "awaitingInput": true
+        "awaitingInput": true,
+        "reason": {
+          "kind": "awaitingInput"
+        }
       }
     },
     {
@@ -3401,7 +3470,8 @@
       "expected": {
         "low": 1.23046875,
         "high": 1.23046875,
-        "awaitingInput": false
+        "awaitingInput": false,
+        "reason": null
       }
     },
     {
@@ -3421,7 +3491,8 @@
       "expected": {
         "low": 1.8432,
         "high": 1.8432,
-        "awaitingInput": false
+        "awaitingInput": false,
+        "reason": null
       }
     },
     {
@@ -3441,7 +3512,10 @@
       "expected": {
         "low": null,
         "high": null,
-        "awaitingInput": false
+        "awaitingInput": false,
+        "reason": {
+          "kind": "noPrice"
+        }
       }
     },
     {
@@ -3461,7 +3535,8 @@
       "expected": {
         "low": 0.15,
         "high": 0.15,
-        "awaitingInput": false
+        "awaitingInput": false,
+        "reason": null
       }
     },
     {
@@ -3481,7 +3556,8 @@
       "expected": {
         "low": 0.15,
         "high": 0.15,
-        "awaitingInput": false
+        "awaitingInput": false,
+        "reason": null
       }
     },
     {
@@ -3495,7 +3571,10 @@
       "expected": {
         "low": null,
         "high": null,
-        "awaitingInput": true
+        "awaitingInput": true,
+        "reason": {
+          "kind": "awaitingInput"
+        }
       }
     }
   ]

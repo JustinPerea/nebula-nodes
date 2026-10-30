@@ -1066,3 +1066,160 @@ Both staged paths live in shared helpers, not Idol branches, so both stay:
   nodes.
 - In the manage view the longer "Open Hugging Face tokens ↗" pushes
   "Remove" to a second row at Settings' width ("Key page ↗" fit on one).
+
+## Round 9 (2026-10-30): one key state, one cost class, one tooltip formatter (GM r16, r17, review 8)
+
+No live call to the Space. The live check ran on an isolated backend (8793)
+and Vite (5793) with fake keys, ports 8000-8010 and 5173 blocked (canaries
+blocked), every Hugging Face host blocked; nothing was run or accepted.
+
+### One key state (GM r17 item 1; review 8, LOW-1)
+
+- `services.settings.load_settings` returns every key as `node_route.key_text`
+  gives it and drops one that's empty once trimmed. Every backend reader goes
+  through it, so a token already stored as only spaces or invisible
+  characters reads as unset everywhere: the gate, the handlers,
+  `describe_node`, and the masked GET /api/settings the canvas caches. The
+  GET mask no longer trims on its own (a mutant showed it was dead code once
+  the load does it).
+- PUT /api/settings and `/api/credentials/update` refuse such a key (400 and
+  422) with "This key is only spaces or invisible characters once trimmed.
+  Copy it again, then paste it here." and keep what was saved. Every other
+  key is stored trimmed, not only `HF_TOKEN`. A Hugging Face token with a
+  character no token has gets the Settings field's own line. GM hasn't
+  worded the invisible-only line; only API callers see it, since the field
+  disables Save.
+- The switcher's "key is set" (`providerSwitch.isSet`) is
+  `directRoute.isKeySet`; it used `.trim()`, which keeps a zero-width space.
+
+### One cost class (review 8, LOW-3, NIT-1 and NIT-2)
+
+- `may_bill` is `key_billing(...) == MAY_COST`. `main._space_billing` reads
+  `key_billing` for the route (`describe_node` passes each route's id), so a
+  keyed route on another handler gets its note from the class, not the
+  handler.
+- New `node_route.key_billing_account` and `key_billing_label` (frontend
+  `keyBillingAccount`, `keyBillingLabel`) name the account and build the
+  card's label for `cost_for`, `agent_spend.may_bill_reason`,
+  `liveKeyBilling` and the Run chip. `mayCostAccount` is gone.
+  `backend/tests/fixtures/key_billing_cases.json` (generated from the
+  backend) pins both sides.
+- Only `key_billing` reads `mayBillWithKey`: the backend ratchet
+  (`test_cost_for_keys_ratchet.py`) and the frontend one
+  (`tests/idolRound9.test.ts`) fail on any other reader, and each proves
+  itself on planted files. The backend ratchet also catches `dict()` and a
+  name bound to an empty mapping.
+- Both billing notes now state the downstream rule: an agent can't run it
+  "or any run that includes it, even for a node after it".
+
+### The estimate and the re-ask (GM r17 item 2; review 8, LOW-2)
+
+- `model_pricing.estimate_run` skips every key-billing node, so the
+  proposal's, the run's and the placeholder confirm's estimates all leave
+  Idol out (`_estimate_proposal_run`'s own filter is gone). The re-ask over
+  an Idol-only placeholder has no total line, as the first ask.
+- The 409 counts by class: "This run includes 1 node that may cost, …" or
+  "2 paid nodes and 1 that may cost"; only paid placeholders keep the old
+  sentence.
+
+### One cost tooltip (GM r16 item 3, r17 items 3 and 4; review 8, copy LOW-1)
+
+- `runScope.costTitle` builds every cost tooltip: line 1 names the paid
+  nodes, priced or not, then the priced part as a sentence; each reason on
+  its own line under it; the may-cost sentence last. `mixedCostTitle` and
+  `paidChipTitle` are gone. `pricing.chipTitle`'s closed forms are
+  sentences: "Estimated cost $0.13.", "Estimated cost $0.", "Estimated cost
+  under $0.01.".
+- Tooltips that changed:
+  - Toolbar Run chip and the selection toolbar's chip (both
+    `runChipTitle`): every form now leads with the paid nodes; "~$X" reads
+    "“A” calls a paid provider. Estimated cost $X." (was the bare
+    "Estimated cost"); "+ unpriced" adds the paid lead and the reason lines;
+    "N paid" (nothing priced, or prices not loaded) now has a tooltip, the
+    paid lead and its reasons; a past-the-ceiling chip has the paid lead
+    (it had none); a sourced $0 reads "“A” calls a paid provider. This
+    costs nothing to run.".
+  - The mixed Run chip beside Idol no longer needs a priced line: with only
+    unpriced paid nodes it reads "“Writer” calls a paid provider.\n“Writer”
+    has no listed price.\nIdol can use your Hugging Face credits." (copy
+    LOW-1; `runScope.test.ts` pins it).
+  - The Accept chip: a tooltip whenever its count shows (it had one only
+    with a may-cost node), from the same formatter, with the Run chip's
+    reason lines. The live check read the same text on both chips.
+- The Accept chip's reasons come from the backend: `estimate_run` returns
+  `reasons` per node (noPrice, cantRun, awaitingInput, missingKey with its
+  `keys`, leftOut with its `plus`), and `_proposal_cost` puts each paid
+  node's on its cost entry as `reason`. Every run case in
+  `pricing_cases.json` now has `expected.reason`, and both estimators are
+  held to it. A proposal made before this falls back to "no listed price"
+  for its unpriced refs. Reasons read left to right: a new node by its
+  ghost's position, a canvas node by where it sits (`canvasAt`).
+- Line 1 of the bar wraps and is never cut (GM r16 item 4): no rule for
+  `.proposal-bar__summary` clips it (pinned); live at 760 px it took two
+  lines, nothing clipped.
+
+### Every tab hears a key change (review 8, NIT-3)
+
+- PUT /api/settings, DELETE of a key and `/api/credentials/update` broadcast
+  `{"type": "settingsChanged"}` with no values. `store/settingsChangedSocket.ts`
+  (imported by App) turns it, and a reconnected socket, into the same
+  'nebula:settings-saved' signal a save in this tab sends, so App's settings
+  cache, provider readiness and the zoom manifest read GET /api/settings
+  again.
+- Live: an open proposal read "Accept and run 2 paid"; a PUT of a fake
+  token from a second client flipped it to "Accept and run 2 paid · 1 may
+  cost" and "Runs 2 paid models and Idol · Idol may use your Hugging Face
+  credits" with no reload (a window marker survived, one navigation entry);
+  a DELETE flipped it back. A backend test does the same with a real second
+  socket.
+
+### The refusal per surface (review 8, NIT-4)
+
+- `agent_spend.propose_hint` is in MCP words: "Propose it instead:
+  propose_change (run: n2). The person accepts on the canvas, and the
+  canvas runs it." The quick hint names `edit_canvas`, then
+  `propose_change (run: <node id>)`. `cli/formatter._cli_words` turns
+  "propose_change (run: a, b)" into `` `nebula propose --note "<why>" --run a
+  --run b` `` and `edit_canvas` into `nebula apply`; `cli/client._fail`
+  prints every refusal through it.
+
+### Manage view (GM r16 item 5)
+
+- [Replace key] and [Remove] on one row; the key's page on its own line
+  under "Saved key ending in …", as the edit view shows it. Every provider
+  uses this component, so OpenAI and the rest put "Key page ↗" there too
+  (its accessible name is now "Key page", the arrow hidden as on Hugging
+  Face's). Live at Settings' 400 px: both buttons on one row, nothing
+  wrapped or clipped, for Hugging Face and OpenAI. Krea's sign-in row and
+  Nous's are separate components and unchanged.
+
+### Review 8's coverage NITs
+
+- `isReturningFocus` stays: with a comparison open, ordinary focus leaving
+  it is pulled back, and `returnFocusTo` a target outside it isn't
+  (`tests/modalFocusReturn.round9.test.tsx`, kills M18). A spy pins
+  `focus({ preventScroll: true, focusVisible: true })` (kills M19). A Run
+  History replay of the synthetic keyed route locks with its line
+  (`sharedKeyedPaths.test.ts`, kills M21).
+
+### Base check and mutants
+
+- Every new behaviour test fails on b9a2ace9 (83 backend, 27 frontend). The
+  three coverage pins for M18, M19 and M21 pass there, as they should: they
+  pin code that was already right.
+- 40 mutants written (22 backend, 18 frontend). First pass: B5 (the GET
+  mask's own trim) survived and turned out to be dead code, now removed;
+  B20 (no leftOut reason) and B22 (no reason on the entry) survived and
+  have tests now; B11 needed a unique anchor. Second pass: all killed,
+  except one equivalent mutant on the simplified mask (`v.strip()` on a
+  value the load already trimmed).
+
+### Questions for GM
+
+- A sourced $0 now reads "“A” calls a paid provider. This costs nothing to
+  run.", by the one rule. It reads oddly; say if a sourced $0 should drop
+  the paid lead.
+- "N paid" chips, which had no tooltip, now name their paid nodes and
+  reasons.
+- The invisible-only refusal line ("This key is only spaces or invisible
+  characters once trimmed. Copy it again, then paste it here.") is mine.

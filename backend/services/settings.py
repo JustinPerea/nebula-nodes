@@ -112,7 +112,27 @@ def load_settings() -> dict[str, Any]:
     if _INJECTED_KEYS:
         settings["apiKeys"] = dict(_INJECTED_KEYS)
 
+    # Every key as Nebula reads it (node_route.key_text, the one key-state
+    # function): trimmed, and one that is empty once trimmed (only spaces or
+    # invisible marks, already stored that way) isn't set at all, for every
+    # reader alike: the run gate, the handlers, describe_node, the masked
+    # GET /api/settings the canvas reads (GM, PR #203 r17 item 1; review 8,
+    # LOW-1).
+    if isinstance(settings, dict) and isinstance(settings.get("apiKeys"), dict):
+        settings["apiKeys"] = read_keys(settings["apiKeys"])
+
     return settings
+
+
+def read_keys(api_keys: dict[str, Any]) -> dict[str, str]:
+    """``api_keys`` as Nebula reads them (load_settings): each key_text,
+    without those that are empty once trimmed."""
+    kept: dict[str, str] = {}
+    for name, value in api_keys.items():
+        text = _key_text(value)
+        if text:
+            kept[name] = text
+    return kept
 
 
 def save_settings(settings: dict[str, Any]) -> None:
@@ -397,7 +417,7 @@ HF_TOKEN_CHARACTER_LINE = ("This token has a character Hugging Face tokens canâ€
 _HF_TOKEN_CHARACTERS = re.compile(r"[\x21-\x7e]+")
 
 
-def _key_text(key: str) -> str:
+def _key_text(key: Any) -> str:
     """The key as every surface reads it (node_route.key_text: trimmed of
     spaces, line breaks and invisible marks; review 7 of PR #203, NIT-4)."""
     from services import node_route

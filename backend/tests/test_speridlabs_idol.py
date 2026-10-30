@@ -1670,12 +1670,17 @@ def test_credentials_update_trims_the_hugging_face_token(monkeypatch, person):
     response = client.post("/api/credentials/update", json={"provider": "HF_TOKEN", "key": "  hf_x\r\n"})
     assert response.status_code == 200, response.text
     assert settings_service._INJECTED_KEYS["HF_TOKEN"] == "hf_x"
-    response = client.post("/api/credentials/update", json={"provider": "HF_TOKEN", "key": " \n"})
+    # Empty once trimmed: refused, as the Settings field refuses it, and the
+    # saved token stays (GM, PR #203 r17 item 1). "" still removes it.
+    response = client.post("/api/credentials/update", json={"provider": "HF_TOKEN", "key": " \n\u200b"})
+    assert response.status_code == 422, response.text
+    assert settings_service._INJECTED_KEYS["HF_TOKEN"] == "hf_x"
+    response = client.post("/api/credentials/update", json={"provider": "HF_TOKEN", "key": ""})
     assert response.status_code == 200, response.text
     assert "HF_TOKEN" not in settings_service._INJECTED_KEYS
-    # Only the Hugging Face token is trimmed; another key is stored as sent.
+    # Every key is read through the one key-state function (node_route.key_text).
     client.post("/api/credentials/update", json={"provider": "OPENAI_API_KEY", "key": " sk-x "})
-    assert settings_service._INJECTED_KEYS["OPENAI_API_KEY"] == " sk-x "
+    assert settings_service._INJECTED_KEYS["OPENAI_API_KEY"] == "sk-x"
 
 
 def test_the_signed_in_duration_line_stays_in_code_unused():

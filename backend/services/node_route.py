@@ -826,18 +826,18 @@ def route_key(route: Mapping[str, Any], api_keys: Mapping[str, Any]) -> str | No
     return None
 
 
+# key_billing's two classes, as the cost entries and the canvas name them.
+MAY_COST = "mayCost"
+FREE_WITHOUT_KEY = "free"
+
+
 def may_bill(definition: Mapping[str, Any] | None, params: Mapping[str, Any] | None,
              api_keys: Mapping[str, Any]) -> bool:
     """Whether a run of this node with these params and keys can bill the key
-    owner's own provider account (RouteSpec ``mayBillWithKey``: the route it
-    takes runs with one of its optional keys set). Its list price is unchanged."""
-    if not definition or not has_routes(definition):
-        return False
-    route = select_route(definition, params, api_keys)
-    if not route.route_id or not route.key:
-        return False
-    spec = route_by_id(definition, route.route_id)
-    return bool(spec and spec.get("mayBillWithKey") is True and route.key in keys(spec.get("optionalKeys")))
+    owner's own provider account: key_billing's "mayCost", the one cost class
+    every surface reads (GM, PR #203 r15 item 2; review 8, LOW-3). Its list
+    price is unchanged."""
+    return key_billing(definition, params, api_keys) == MAY_COST
 
 
 def key_billing(definition: Mapping[str, Any] | None, params: Mapping[str, Any] | None,
@@ -853,7 +853,31 @@ def key_billing(definition: Mapping[str, Any] | None, params: Mapping[str, Any] 
     spec = route_by_id(definition, route.route_id) if route.route_id else None
     if not spec or spec.get("mayBillWithKey") is not True:
         return None
-    return "mayCost" if route.key and route.key in keys(spec.get("optionalKeys")) else "free"
+    return MAY_COST if route.key and route.key in keys(spec.get("optionalKeys")) else FREE_WITHOUT_KEY
+
+
+def key_billing_account(definition: Mapping[str, Any] | None, params: Mapping[str, Any] | None,
+                        api_keys: Mapping[str, Any]) -> str | None:
+    """The account a key-billing run (key_billing not None) runs on and may
+    bill, as every surface names it ("Hugging Face"): a Space route's host,
+    else its provider's PROVIDER_LABELS name. None for any other node.
+    frontend directRoute.keyBillingAccount is the twin, from the same table
+    (tests/fixtures/key_billing_cases.json pins both)."""
+    if key_billing(definition, params, api_keys) is None:
+        return None
+    route = select_route(definition or {}, params, api_keys)
+    spec = route_by_id(definition or {}, route.route_id) if route.route_id else None
+    if spec and spec.get("handler") == "hf-space":
+        return PROVIDER_LABELS["huggingface"]
+    provider = str(route.provider or "")
+    return PROVIDER_LABELS.get(provider, provider or "provider")
+
+
+def key_billing_label(cost_class: str, account: str) -> str:
+    """A key-billing node's cost label, by the ghost-card convention ("free ·
+    runs locally"): "may cost · Hugging Face" or "free · Hugging Face" (GM,
+    PR #203 r15 item 1). frontend directRoute.keyBillingLabel is the twin."""
+    return f"{'may cost' if cost_class == MAY_COST else 'free'} · {account}"
 
 
 def _union_keys(definition: Mapping[str, Any]) -> tuple[str, ...]:

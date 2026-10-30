@@ -891,12 +891,29 @@ export function keyBilling(
   return route.key && keyList(spec.optionalKeys).includes(route.key) ? 'mayCost' : 'free';
 }
 
-/** The account a may-cost run can bill, by the key it runs on ("Hugging
- * Face"), for the chip's sentence and the bar's clause. */
-export function mayCostAccount(definition: ModelNodeDefinition | undefined): string {
-  const spec = definition?.routes?.find((route) => route.mayBillWithKey === true);
-  const key = keyList(spec?.optionalKeys)[0];
-  return (key && Object.hasOwn(KEY_NAMES, key) ? KEY_NAMES[key][0] : null) ?? providerLabel(spec?.provider);
+/** The account a key-billing run (keyBilling not null) runs on and may
+ * bill, as every surface names it ("Hugging Face"): a Space route's host,
+ * else its provider's PROVIDER_LABELS name. Null for any other node.
+ * node_route.key_billing_account is the twin, from the same table
+ * (backend/tests/fixtures/key_billing_cases.json pins both; review 8 of PR
+ * #203, LOW-3). */
+export function keyBillingAccount(
+  definition: ModelNodeDefinition | undefined,
+  params: Record<string, unknown> | undefined,
+  apiKeys: ApiKeys,
+): string | null {
+  if (!definition || keyBilling(definition, params, apiKeys) === null) return null;
+  const route = selectRoute(definition, params, apiKeys);
+  const spec = route.routeId ? routeById(definition, route.routeId) : undefined;
+  if (spec?.handler === 'hf-space') return PROVIDER_LABELS.huggingface;
+  return providerLabel(route.provider);
+}
+
+/** A key-billing node's cost label, by the ghost-card convention ("free ·
+ * runs locally"): "may cost · Hugging Face" or "free · Hugging Face" (GM,
+ * PR #203 r15 item 1). node_route.key_billing_label is the twin. */
+export function keyBillingLabel(costClass: 'free' | 'mayCost', account: string): string {
+  return `${costClass === 'mayCost' ? 'may cost' : 'free'} · ${account}`;
 }
 
 /** The key under model_pricing.json `routes` that prices this route

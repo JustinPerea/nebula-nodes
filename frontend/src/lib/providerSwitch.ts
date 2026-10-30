@@ -1,7 +1,7 @@
 import type { ModelNodeDefinition, ParamDefinition, RouteSpec } from '../types';
 import {
   allParamDefinitions, AUTO, blockedSetting, effectiveValues, hiddenStops, matchValue, personWords, portLimitName,
-  isKeylessRoute, KEY_NAMES, PROVIDER_PARAM, providerChoice,
+  isKeylessRoute, isKeySet, KEY_NAMES, PROVIDER_PARAM, providerChoice,
   providerLabel, routeAcceptRule, routeBlock, routeById, routeParamDefinitions, routeSentKeys, routesOf, routeSwitch,
   routeTakesValue,
   routeUnavailable, selectRoute, settingText, usesRoutePlan, withWiredBlockers, type DirectBlock, type HiddenStop,
@@ -108,9 +108,12 @@ export function chipText(full: string, short: string, blocked: boolean): string 
   return [...full].length <= (blocked ? CHIP_ROOM_BLOCKED : CHIP_ROOM) ? full : short;
 }
 
+/** The one "key is set" predicate (directRoute isKeySet, keyText: a value
+ * empty once trimmed of spaces and invisible characters is not set), so the
+ * switcher, the router and every cost surface agree (review 8 of PR #203,
+ * LOW-1). */
 function isSet(apiKeys: SwitchContext['apiKeys'], key: string): boolean {
-  const value = apiKeys[key];
-  return typeof value === 'string' && value.trim() !== '';
+  return isKeySet(apiKeys, key);
 }
 
 function kreaPlanPicked(params: Params): boolean {

@@ -521,12 +521,10 @@ def cost_for(
         # its Space): never "paid" (GM, PR #203 r11 item 2, r12).
         billing = node_route.key_billing(definition, params, api_keys)
         if billing:
-            # Named by who it runs on and may bill: a Space's host.
-            spec = node_route.route_by_id(definition, route.route_id) or {}
-            host = (node_route.PROVIDER_LABELS["huggingface"] if spec.get("handler") == "hf-space"
-                    else node_route.PROVIDER_LABELS.get(routed or "", routed or "provider"))
-            word = "may cost" if billing == "mayCost" else "free"
-            return {"kind": billing, "provider": routed, "label": f"{word} · {host}",
+            # Named by who it runs on and may bill: a Space's host (the one
+            # cost class and its account, node_route; review 8, LOW-3).
+            host = node_route.key_billing_account(definition, params, api_keys) or "provider"
+            return {"kind": billing, "provider": routed, "label": node_route.key_billing_label(billing, host),
                     "name": str(definition.get("displayName") or definition.get("id") or ""), "account": host}
         return {"kind": "paid", "provider": routed, "label": _paid_label(definition, routed)}
 
@@ -613,7 +611,8 @@ def summarize_cost(
     not_ready: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """The proposal's run set: each entry is {ref, nodeId, kind, provider, label, price},
-    plus `missing` when that node can't run here as set up.
+    plus `missing` when that node can't run here as set up, and `reason` when
+    a paid node leaves the total open (model_pricing.estimate_run reasons).
 
     ``estimate`` is ``model_pricing.estimate_run`` output keyed by the same
     refs; it becomes {currency, low, high, open, unpriced, plan, plus}, or

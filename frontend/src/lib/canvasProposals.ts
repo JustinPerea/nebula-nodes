@@ -4,11 +4,11 @@ import { apiFetch } from './backend';
 import { apiRequest } from './apiRequest';
 import { RequestFailedError } from './errorCopy';
 import { formatChipEstimate } from './pricing';
-import { estimateSentence, mayCostSentence, mixedCostTitle } from './runScope';
+import { costTitle, mayCostSentence, type UnpricedReason } from './runScope';
 import { resolveAnchor, type Point } from './agentCursorMotion';
-import type { ProposalCost, ProposalNotReady, ProposalPersonValues, ProposalView } from './wsClient';
+import type { ProposalCost, ProposalCostReason, ProposalNotReady, ProposalPersonValues, ProposalView } from './wsClient';
 import { BILLING_PARAM_LABELS, providerChoiceLabel } from './billingParams';
-import { keyBilling, mayCostAccount, PROVIDER_PARAM } from './directRoute';
+import { keyBilling, keyBillingAccount, keyBillingLabel, keyPhrase, PROVIDER_PARAM } from './directRoute';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { nodeKeyStatus, usesKreaAccount, type CredentialReadiness } from './kreaConnection';
 import { missingKeyTitle } from './nodeKeys';
@@ -281,8 +281,10 @@ export function liveKeyBilling(
     if (!definition || !params || (cost.kind !== 'free' && cost.kind !== 'mayCost')) return cost;
     const billing = keyBilling(definition, params, apiKeys);
     if (!billing) return cost;
-    const account = mayCostAccount(definition);
-    const label = `${billing === 'mayCost' ? 'may cost' : 'free'} · ${account}`;
+    // The one cost class and its label (directRoute keyBilling,
+    // keyBillingAccount, keyBillingLabel; review 8 of PR #203, LOW-3).
+    const account = keyBillingAccount(definition, params, apiKeys) ?? '';
+    const label = keyBillingLabel(billing, account);
     if (billing === cost.kind && label === cost.label) return cost;
     return { ...cost, kind: billing, label, name: cost.name ?? definition.displayName, account };
   };
@@ -434,27 +436,54 @@ export function proposalMayCostSentence(view: ProposalView): string | null {
   return mayCostSentence(mayCostRows(view));
 }
 
+/** A paid node's reason from the backend (model_pricing.estimate_run
+ * reasons) as the Run chip records it (runScope UnpricedReason). */
+function entryReason(why: ProposalCostReason): UnpricedReason {
+  switch (why.kind) {
+    case 'missingKey': return { kind: 'missingKey', key: keyPhrase(why.keys ?? []) };
+    case 'leftOut': return { kind: 'leftOut', plus: why.plus ?? '' };
+    default: return { kind: why.kind };
+  }
+}
+
 /**
- * The Accept chip's tooltip. With paid models beside a may-cost node, GM's
- * shape (PR #203 r14 item 3, verbatim): "“A” and “B” call paid providers.
- * Estimated cost $0.13. Idol can use your Hugging Face credits." (runScope
- * mixedCostTitle, the toolbar Run chip's too; no "~" inside a sentence).
- * A may-cost node alone: its sentence. Null otherwise. `canvasName` names
- * a canvas node the run starts; a new node is named as its ghost card is.
+ * The Accept chip's tooltip, by the Run chip's formatter (runScope
+ * costTitle; GM, PR #203 r17 item 4: the same reason lines, one formatter):
+ * "“A” and “B” call paid providers. Estimated cost $0.13.", then "“B” has
+ * no listed price." on its own line, the may-cost sentence last. Null when
+ * the chip doesn't show. `canvasName` names a canvas node the run starts
+ * and `canvasAt` gives its place, so reasons read left to right as the Run
+ * chip's do; a new node is named and placed as its ghost card is.
  */
-export function acceptChipTitle(view: ProposalView, canvasName: (nodeId: string) => string | null | undefined): string | null {
-  const may = proposalMayCostSentence(view);
-  if (!may) return null;
-  const paid = view.cost.nodes.filter((entry) => entry.kind === 'paid');
-  if (paid.length === 0 || view.cost.paidRuns === 0) return may;
-  const ghosts = new Map(view.nodes.map((node) => [node.ref, node.name]));
-  const names = paid.map((entry) => (entry.nodeId === null ? ghosts.get(entry.ref) : canvasName(entry.nodeId))
-    ?? entry.nodeId ?? entry.ref);
+export function acceptChipTitle(
+  view: ProposalView,
+  canvasName: (nodeId: string) => string | null | undefined,
+  canvasAt?: (nodeId: string) => { x: number; y: number } | null | undefined,
+): string | null {
+  if (!acceptCountChip(view)) return null;
+  const ghosts = new Map(view.nodes.map((node) => [node.ref, node]));
+  type Entry = ProposalView['cost']['nodes'][number];
+  const nameOf = (entry: Entry) => (entry.nodeId === null ? ghosts.get(entry.ref)?.name : canvasName(entry.nodeId))
+    ?? entry.nodeId ?? entry.ref;
+  const atOf = (entry: Entry) => (entry.nodeId === null ? ghosts.get(entry.ref)?.position : canvasAt?.(entry.nodeId));
+  const paid = view.cost.paidRuns > 0 ? view.cost.nodes.filter((entry) => entry.kind === 'paid') : [];
   const estimate = view.cost.estimate;
-  const sentence = estimate
-    ? estimateSentence(estimate.low, estimate.high, Boolean(estimate.open), estimate.sourcedZero === true)
-    : '';
-  return mixedCostTitle(names, sentence, [], may);
+  // A proposal made before reasons were sent: its unpriced nodes have no listed price.
+  const unpriced = new Set(estimate?.unpriced ?? []);
+  const reasons = paid.flatMap((entry) => {
+    const reason: UnpricedReason | null = entry.reason ? entryReason(entry.reason)
+      : unpriced.has(entry.ref) ? { kind: 'noPrice' } : null;
+    if (!reason) return [];
+    const at = atOf(entry);
+    return [{ name: nameOf(entry), reason, ...(at && Number.isFinite(at.x) && Number.isFinite(at.y) ? { at } : {}) }];
+  });
+  return costTitle({
+    paid: paid.map(nameOf),
+    estimate: estimate ? { low: estimate.low, high: estimate.high, open: Boolean(estimate.open),
+      sourcedZero: estimate.sourcedZero === true } : null,
+    reasons,
+    mayCost: mayCostRows(view),
+  }) ?? null;
 }
 
 /** The count chip beside "Accept and run" (GM, PR #203 r11 item 2): "1
