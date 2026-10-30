@@ -4504,8 +4504,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   // run asks ZeroGPU for 120 s, which spaces 0.51.3 multiplies by 1.5 on the
   // Blackwell GPUs ZeroGPU runs on, so 180 s, past the 120 s a day an
   // anonymous caller gets (docs/model-providers/speridlabs/idol.md). If the
-  // first live run shows 120 s, the route goes back to keyless (keys: [],
-  // optionalKeys: ['HF_TOKEN'], envKeyName and directKeyName []). Speridlabs' own Platform
+  // first live run shows 120 s, the route can go back to keyless: the route
+  // keys, the JSON mirror and the generated tables, the copy (which needs new
+  // keyless copy ruled first) and the tests that pin the keyed state change
+  // with it (docs/model-providers/speridlabs/idol.md lists each). Speridlabs' own Platform
   // API isn't open yet (speridlabs.com/platform, 2026-10-29); it becomes
   // routes[0] when it is. Params are the Space's /run inputs
   // (https://speridlabs-idol.hf.space/gradio_api/info, read 2026-10-29),
@@ -4513,8 +4515,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'speridlabs-idol': {
     id: 'speridlabs-idol',
     displayName: 'Idol',
-    description: 'Speridlabs Idol: one image to a 3D object as a Gaussian splat (.ply), shown as a World. '
-      + "Runs on Speridlabs' Hugging Face Space with your Hugging Face token, free within your Hugging Face allowance.",
+    // GM, PR #203 r6 item 5, word for word.
+    description: 'Turns one image into a 3D Gaussian splat you can explore. Made by Speridlabs, it runs on Hugging Face '
+      + 'with your token and is free within your Hugging Face allowance.',
     category: '3d-gen',
     apiProvider: 'speridlabs',
     apiEndpoint: 'speridlabs/idol',
@@ -4621,7 +4624,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             65536: '65,536', 131072: '131,072', 262144: '262,144', 524288: '524,288', 1048576: '1,048,576',
           },
         },
-        note: 'Free with a Hugging Face token. A free account gives a run or two a day.',
+        note: 'Free with a Hugging Face token. A free account gives a few runs a day.',
         missingKeyLine: 'You can run Idol after you add your Hugging Face token in Settings.',
       },
     ],

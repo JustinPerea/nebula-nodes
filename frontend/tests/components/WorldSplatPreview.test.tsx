@@ -41,11 +41,24 @@ vi.mock('../../src/lib/backend', () => ({
   backendAssetUrlSync: (value: string) => value,
 }));
 
+const downloads = vi.hoisted(() => ({ fail: null as unknown }));
+vi.mock('../../src/lib/worldDownload', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/lib/worldDownload')>();
+  return {
+    ...actual,
+    downloadWorldAsset: async (...args: Parameters<typeof actual.downloadWorldAsset>) => {
+      if (downloads.fail) throw downloads.fail;
+      return actual.downloadWorldAsset(...args);
+    },
+  };
+});
+
 import { RepresentationViewer } from '../../src/components/nodes/RepresentationViewer';
 import {
-  IDOL_SPLAT_GONE_LINE, SPLAT_DAMAGED_LINE, SPLAT_GONE_LINE, SPLAT_LOAD_LINE, SPLAT_NO_WEBGL_LINE, SPLAT_ORBIT_HINT,
-  SPLAT_TOO_LARGE_LINE,
+  IDOL_SPLAT_GONE_LINE, SPLAT_DAMAGED_LINE, SPLAT_DOWNLOAD_FAILED, SPLAT_GONE_LINE, SPLAT_LOAD_LINE, SPLAT_NO_WEBGL_LINE,
+  SPLAT_ORBIT_HINT, SPLAT_TOO_LARGE_LINE,
 } from '../../src/components/nodes/WorldSplatPreview';
+import { FailureNotice } from '../../src/lib/errorCopy';
 
 const EXPLORE = 'Explore “Idol object” in 3D';
 
@@ -154,7 +167,9 @@ describe('World v2 splat preview', () => {
     expect(dialog).not.toHaveTextContent('Interactive preview unavailable');
     expect(within(dialog).getByRole('status')).toBeEmptyDOMElement();
     expect(dialog).not.toHaveTextContent(SPLAT_ORBIT_HINT);
-    expect(dialog).toHaveAttribute('aria-describedby', message.querySelector('p')!.id);
+    // Announced once, by the alert (review r3 NIT-2): not the dialog's description too.
+    expect(dialog).not.toHaveAttribute('aria-describedby');
+    expect(document.querySelectorAll('[role="alert"]')).toHaveLength(1);
     expect(within(dialog).queryByRole('button', { name: 'Reset camera' })).not.toBeInTheDocument();
     expect(within(dialog).queryByRole('button', { name: 'Download splat' }) !== null).toBe(downloadable);
     expect(within(dialog).queryByRole('button', { name: 'Try again' }) !== null).toBe(failure === 'load');
@@ -216,6 +231,25 @@ describe('World v2 splat preview', () => {
     dialog.focus();
     fireEvent.keyDown(window, { key: 'Tab' });
     expect(close).toHaveFocus();
+  });
+
+  it.each([
+    ['an answered failure', () => new FailureNotice('Nebula couldn’t download the splat.', 'The file is gone.')],
+    ['no answer', () => new TypeError('Failed to fetch')],
+  ])('says GM\'s one download line, whatever the reason (%s; PR #203 r6 item 10)', async (_name, failure) => {
+    downloads.fail = failure();
+    try {
+      render(<RepresentationViewer type="World" value={idolWorld} />);
+      await waitFor(() => expect(screen.getByRole('button', { name: EXPLORE })).toBeEnabled());
+      fireEvent.click(screen.getByRole('button', { name: EXPLORE }));
+      const dialog = await screen.findByRole('dialog', { name: 'Idol object' });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Download splat' }));
+      const line = await within(dialog).findByText(SPLAT_DOWNLOAD_FAILED);
+      expect(SPLAT_DOWNLOAD_FAILED).toBe('Nebula couldn’t download the splat. Try again.');
+      expect(line).toHaveTextContent(/^Nebula couldn’t download the splat\. Try again\.$/);
+    } finally {
+      downloads.fail = null;
+    }
   });
 
   it('keeps Tab inside the dialog, including from outside it', async () => {

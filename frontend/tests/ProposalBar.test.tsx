@@ -307,6 +307,38 @@ describe('ProposalBar', () => {
     expect(screen.queryByRole('list', { name: "Can't run here" })).toBeNull();
   });
 
+  it('locks Accept with GM\'s line while its run needs a Hugging Face token (PR #203 r6 item 1)', () => {
+    const LINE = 'You can accept this after you add your Hugging Face token in Settings.';
+    const idol = proposal('p_a', {
+      nodes: [{ ...proposal('p_a').nodes[0], ref: '+idol', definitionId: 'speridlabs-idol', name: 'Idol' }],
+      run: ['+idol'],
+    });
+    idol.cost = { ...idol.cost, paidRuns: 0, freeRuns: 1, notReady: [
+      { ref: '+idol', nodeId: null, name: 'Idol', missing: 'needs HF_TOKEN in Settings > Providers',
+        person: 'You can run Idol after you add your Hugging Face token in Settings.' },
+    ] };
+    open(idol);
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    render(<ProposalBar />);
+    const accept = screen.getByRole('button', { name: /^Accept/ }) as HTMLButtonElement;
+    expect(accept).toHaveAttribute('aria-disabled', 'true');
+    expect(accept.disabled).toBe(false);
+    expect(accept).toHaveAttribute('title', LINE);
+    expect(accept).toHaveAccessibleDescription(LINE);
+    accept.focus();
+    expect(document.activeElement).toBe(accept);
+    fireEvent.click(accept);
+    expect(net.apiFetch).not.toHaveBeenCalled();
+    // Reject still works: only what would run is locked.
+    expect(screen.getByRole('button', { name: 'Reject' })).not.toHaveAttribute('aria-disabled');
+
+    // The person adds the token: Accept is Accept again.
+    act(() => useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: 'set' }, loaded: true } }));
+    const ready = screen.getByRole('button', { name: /^Accept/ });
+    expect(ready).not.toHaveAttribute('aria-disabled');
+    expect(ready).not.toHaveAttribute('title', LINE);
+  });
+
   it('keeps a reason the canvas cannot re-check, and moves a long list into the details', () => {
     const many = proposal('p_a');
     many.cost = { ...many.cost, notReady: ['+a', '+b', '+c', '+d'].map((ref) => ({

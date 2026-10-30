@@ -26,6 +26,8 @@ from tests.speridlabs_fakes import (
     API, HUB, IMAGE, INFO, INFO_PATH, PNG, RESULT_URL, SPACE, UPLOADED, complete, idol_hosts, public_dns,
     run_schema, space_routes, splat_ply, sse,
 )
+from tests.test_canvas_proposals import api  # noqa: F401 - fixture
+from tests.test_pending_nodes import pend  # noqa: F401 - fixture
 from tests.test_route_clients import FakeHosts, quick, registry_handler, validate  # noqa: F401
 
 TOKEN = "hf_fixturetoken0123456789abcdefghijklmnop"
@@ -472,7 +474,9 @@ DURATION_OWN_LINE = ("Idol needs more GPU time per run than your Hugging Face ac
     (SPACE_LIMIT, True, NOT_APPLIED_LINE),
     (QUEUE_NO_IP, True, NOT_APPLIED_LINE),
     (DURATION, False, DURATION_ANON_LINE),
-    (DURATION, True, DURATION_OWN_LINE),
+    # GM r6 #7: signed in, a duration refusal means the token didn't apply
+    # (any account's allowance is past the Space's ask).
+    (DURATION, True, NOT_APPLIED_LINE),
 ])
 async def test_a_zerogpu_refusal_says_what_happened(monkeypatch, message, signed_in, line):
     idol_hosts(monkeypatch, stream=sse(("error", json.dumps(message))))
@@ -627,13 +631,21 @@ async def test_a_space_that_is_down_says_so_before_any_call(monkeypatch, stage):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("keys", [None, SIGNED_IN])
 @pytest.mark.parametrize("answer", [
-    httpx.Response(404, json={"error": "not found"}),
+    httpx.Response(404, json={"error": "not found"}, headers={"x-error-code": "RepoNotFound"}),
     # huggingface_hub's rule: RepoNotFound, or any 401 but a bad token's, is
     # a missing repo (or a private or gated one the caller can't see).
     httpx.Response(401, json={"error": "Repository not found"},
                    headers={"x-error-code": "RepoNotFound", "x-error-message": "Repository not found"}),
     httpx.Response(401, json={"error": "Repository not found"}),
     httpx.Response(403, json={"error": "gated"}, headers={"x-error-code": "RepoNotFound"}),
+    # Gated and disabled come first in huggingface_hub's order, ahead of the
+    # token rule: with a token, the token is fine and the Space can't be used.
+    httpx.Response(403, json={"error": "gated"}, headers={"x-error-code": "GatedRepo"}),
+    httpx.Response(401, json={"error": "gated"}, headers={"x-error-code": "GatedRepo"}),
+    httpx.Response(403, json={"error": "disabled"},
+                   headers={"x-error-message": "Access to this resource is disabled."}),
+    httpx.Response(410, json={"error": "disabled"},
+                   headers={"x-error-message": "Access to this resource is disabled."}),
 ])
 async def test_a_space_hugging_face_says_is_missing_says_so(monkeypatch, keys, answer):
     hosts = idol_hosts(monkeypatch, stage=answer)
@@ -641,6 +653,25 @@ async def test_a_space_hugging_face_says_is_missing_says_so(monkeypatch, keys, a
         await run_direct(keys=keys)
     assert person_line(excinfo.value) == MISSING_LINE
     assert not hosts.sent("GET", re.escape(f"{API}/info")) and not hosts.sent("POST", r".*")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("keys", [None, SIGNED_IN])
+async def test_a_bare_404_from_the_hub_is_not_missing(monkeypatch, keys):
+    """huggingface_hub reads a 404 as RepoNotFound only with that error code:
+    a bare one (a moved API path) is skipped like any odd stage answer."""
+    hosts = idol_hosts(monkeypatch, stage=httpx.Response(404, json={"error": "not found"}))
+    await run_direct(keys=keys)
+    assert hosts.sent("POST", re.escape(f"{API}/call/run"))
+
+
+@pytest.mark.asyncio
+async def test_a_disabled_space_names_what_the_hub_said_for_agents(monkeypatch):
+    idol_hosts(monkeypatch, stage=httpx.Response(
+        403, json={"error": "disabled"}, headers={"x-error-message": "Access to this resource is disabled."}))
+    with pytest.raises(idol.IdolSpaceError) as excinfo:
+        await run_direct(keys=SIGNED_IN)
+    assert "disabled (Hub API answered 403, Access to this resource is disabled.)" in str(excinfo.value)
 
 
 @pytest.mark.asyncio
@@ -1419,3 +1450,172 @@ def test_describe_node_tells_agents_who_can_bill_past_the_allowance():
     assert "$1 per 10" in row["billing"] and "PRO, Team or Enterprise" in row["billing"]
     assert "https://huggingface.co/docs/hub/spaces-zerogpu" in row["billing"]
     assert row["keys"] == ["HF_TOKEN"] and row["keySet"] is True
+
+
+# -- round 4 -------------------------------------------------------------------
+
+IDOL_KEY_LINE = "You can run Idol after you add your Hugging Face token in Settings."
+
+
+def _quick_idol(pend, monkeypatch, keys, *, headers):
+    called = []
+
+    async def fake(**kwargs):
+        called.append(1)
+
+    monkeypatch.setattr(pend.main, "execute_graph", fake)
+    monkeypatch.setattr(pend.main, "load_settings", lambda: {"apiKeys": dict(keys)})
+    response = pend.client.post("/api/quick", headers=headers, json={
+        "definitionId": "speridlabs-idol", "inputs": {"image": "https://example.com/a.png"}, "params": {}})
+    return response, called
+
+
+def test_quick_without_a_token_is_refused_before_the_spend_check(pend, monkeypatch):
+    """`nebula quick` / /api/quick says what every other run path says, in the
+    refusal shape the other quick refusals use, before anything is priced."""
+    from tests.conftest import PERSON
+    from tests.test_canvas_proposals import CLAUDE
+
+    for headers in (CLAUDE, PERSON):
+        for keys in ({}, {"HF_TOKEN": ""}):
+            response, called = _quick_idol(pend, monkeypatch, keys, headers=headers)
+            assert response.status_code == 400, response.text
+            assert response.json()["detail"] == f"Nothing ran, so nothing was spent. {IDOL_KEY_LINE}"
+            assert called == [] and pend.priced == []
+
+
+def test_quick_with_a_token_reaches_the_run(pend, monkeypatch):
+    from tests.test_canvas_proposals import CLAUDE
+
+    response, called = _quick_idol(pend, monkeypatch, {"HF_TOKEN": TOKEN}, headers=CLAUDE)
+    assert response.status_code == 200, response.text
+    assert called == [1]
+
+
+@pytest.mark.asyncio
+async def test_the_download_asks_for_the_file_as_it_is(monkeypatch):
+    public_dns(monkeypatch)
+    hosts = FakeHosts(monkeypatch, _ply_routes(_streamed(splat_ply(64))))
+    world_of(await run_direct(keys=SIGNED_IN))
+    [download] = hosts.sent("GET", re.escape(f"{API}/file=") + ".*")
+    assert download.headers["accept-encoding"] == "identity"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("encoding", ["gzip", "GZIP", "deflate"])
+async def test_a_compressed_download_its_server_sent_anyway_is_kept(monkeypatch, encoding):
+    """Content-Length counts the compressed body; the decoded bytes are the
+    splat, so a valid file isn't refused after the GPU time is spent."""
+    import gzip
+    import zlib
+
+    body = splat_ply(4096)
+    packed = gzip.compress(body) if encoding.lower() == "gzip" else zlib.compress(body)
+    assert len(packed) < len(body)
+    public_dns(monkeypatch)
+    FakeHosts(monkeypatch, _ply_routes(_streamed(packed, headers={
+        "content-encoding": encoding, "content-length": str(len(packed))})))
+    world = world_of(await run_direct())
+    assert world["assets"]["splats"][0]["asset"]["byteLength"] == len(body)
+
+
+@pytest.mark.asyncio
+async def test_a_compressed_download_is_still_held_to_its_headers_size(monkeypatch):
+    import gzip
+
+    body = splat_ply(64) + b"\0" * 200_000
+    packed = gzip.compress(body)
+    public_dns(monkeypatch)
+    FakeHosts(monkeypatch, _ply_routes(_streamed(packed, headers={
+        "content-encoding": "gzip", "content-length": str(len(packed))})))
+    with pytest.raises(idol.IdolSpaceError) as excinfo:
+        await run_direct()
+    assert f"runs past the {len(splat_ply(64)):,} bytes its header declares" in str(excinfo.value)
+
+
+SETTINGS_FIELD_LINE = ("This token has a character Hugging Face tokens can’t have. "
+                       "Copy it again from Hugging Face, then paste it here.")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("saved", ["hf_a b", "hf_a\nb", "hf_a\rb", "hf_a\tb", "hf_a\x00b", "hf_aéb", " hf_a b\n"])
+async def test_the_settings_check_sends_nothing_for_a_token_with_an_inner_bad_character(monkeypatch, saved):
+    from services import settings as settings_service
+
+    sent = []
+
+    class Client:
+        async def get(self, url, headers=None, **_kwargs):
+            sent.append(url)
+            return httpx.Response(200)
+
+    monkeypatch.setattr(settings_service, "load_settings", lambda: {"apiKeys": {"HF_TOKEN": saved}})
+    check = settings_service.PROVIDER_CHECKS["Hugging Face"]
+    result = await settings_service._check_one(Client(), "Hugging Face", check)
+    assert result["status"] == "invalid" and result["configured"] is True
+    assert result["detail"] == SETTINGS_FIELD_LINE
+    assert sent == []
+
+
+@pytest.mark.asyncio
+async def test_the_settings_check_still_sends_a_clean_token(monkeypatch):
+    from services import settings as settings_service
+
+    sent = []
+
+    class Client:
+        async def get(self, url, headers=None, **_kwargs):
+            sent.append((url, headers))
+            return httpx.Response(200)
+
+    monkeypatch.setattr(settings_service, "load_settings", lambda: {"apiKeys": {"HF_TOKEN": f" {TOKEN}\n"}})
+    check = settings_service.PROVIDER_CHECKS["Hugging Face"]
+    result = await settings_service._check_one(Client(), "Hugging Face", check)
+    assert result["status"] == "valid"
+    assert sent == [("https://huggingface.co/api/whoami-v2", {"Authorization": f"Bearer {TOKEN}"})]
+
+
+def test_the_settings_line_is_the_fields_word_for_word():
+    from services.settings import HF_TOKEN_CHARACTER_LINE
+
+    source = (Path(__file__).parents[2] / "frontend" / "src" / "lib" / "settingsWrites.ts").read_text()
+    assert HF_TOKEN_CHARACTER_LINE == SETTINGS_FIELD_LINE
+    assert "'This token has a character Hugging Face tokens can’t have. '\n  + 'Copy it again from Hugging Face, then paste it here.'" in source
+
+
+@pytest.mark.parametrize("saved", ["   ", "\n", " \r\n\t"])
+def test_a_whitespace_only_token_is_no_token(monkeypatch, saved):
+    from services import settings as settings_service
+
+    monkeypatch.setattr(settings_service, "_INJECTED_KEYS", {"HF_TOKEN": saved})
+    assert settings_service.get_api_key("HF_TOKEN") is None
+    assert node_route._is_set({"HF_TOKEN": saved}, "HF_TOKEN") is False
+
+
+def test_credentials_update_trims_the_hugging_face_token(monkeypatch, person):
+    from fastapi.testclient import TestClient
+
+    import main as main_mod
+    from services import settings as settings_service
+
+    monkeypatch.setattr(settings_service, "_INJECTED_KEYS", {"OPENAI_API_KEY": "sk-" + "kept"})
+    client = TestClient(main_mod.app, headers=person.headers)
+    response = client.post("/api/credentials/update", json={"provider": "HF_TOKEN", "key": "  hf_x\r\n"})
+    assert response.status_code == 200, response.text
+    assert settings_service._INJECTED_KEYS["HF_TOKEN"] == "hf_x"
+    response = client.post("/api/credentials/update", json={"provider": "HF_TOKEN", "key": " \n"})
+    assert response.status_code == 200, response.text
+    assert "HF_TOKEN" not in settings_service._INJECTED_KEYS
+    # Only the Hugging Face token is trimmed; another key is stored as sent.
+    client.post("/api/credentials/update", json={"provider": "OPENAI_API_KEY", "key": " sk-x "})
+    assert settings_service._INJECTED_KEYS["OPENAI_API_KEY"] == " sk-x "
+
+
+def test_the_signed_in_duration_line_stays_in_code_unused():
+    """GM r6 #7: kept for the first live run, not shown today."""
+    from execution.person_line import person_line as line_of
+
+    assert line_of(idol.duration_error(detail="x", signed_in=True)) == DURATION_OWN_LINE
+    error = idol.classify_space_error(DURATION, signed_in=True)
+    assert line_of(error) == NOT_APPLIED_LINE
+    assert "most likely because the token didn't apply" in str(error)

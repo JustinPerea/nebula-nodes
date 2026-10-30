@@ -210,17 +210,18 @@ any Hugging Face host, no Run.
   average 102 from other sessions; the next pass at normal load was 0.74 s.
 - The app has no dark theme, so there are no dark shots.
 
-### Waiting on GM or Justin
+### Pending
 
-- TODO(Justin): which token scope Settings asks for.
-- TODO(Justin): whether Settings says the token goes to Speridlabs' Space.
-- TODO(Justin): agent runs on a PRO token, which Hugging Face can bill past
-  the quota; the spend gate admits them at $0 today.
-- GM: the token-unusable line and the remaining Idol lines that aren't
-  GM's copy (curly quotes only).
-- Justin's first live run: confirm the duration texts, and whether an
-  anonymous run can fit 120 s at all (if not, readiness must say a token is
-  needed, per GM).
+- A product decision: which token scope Settings asks for.
+- A product decision: whether Settings says the token goes to Speridlabs'
+  Space.
+- A product decision: whether agents ask before runs that can bill a PRO
+  account (Hugging Face bills past the quota); the spend gate admits them
+  at $0 today.
+- The design reviewer: the token-unusable line and the remaining Idol lines
+  that aren't ruled copy (curly quotes only).
+- The first live run: confirm the duration texts, and whether an anonymous
+  run can fit 120 s at all (if not, readiness must say a token is needed).
 
 
 ## Round 3 (2026-10-30): review fixes, GM's r3 copy, and the token requirement (r4)
@@ -282,8 +283,9 @@ confirmed by the first live run's error text.
    result URL is refused.
 9. **Agents' billing note**: `describe_node` adds `billing` on Space routes
    (the ZeroGPU docs' $1 per 10 minutes past the quota on PRO, Team and
-   Enterprise; Nebula prices it at $0). The spend gate is unchanged
-   (TODO(Justin), Q141).
+   Enterprise; Nebula prices it at $0). The spend gate is unchanged, pending
+   a product decision on whether agents ask before runs that can bill a PRO
+   account.
 10. **Dialog**: the focus trap treats the dialog itself as outside (Tab goes
     to the first control, Shift+Tab to the last); every failure line is
     centred in the stage in the neutral colour, the toolbar status is empty,
@@ -321,8 +323,8 @@ confirmed by the first live run's error text.
   desktop `credentials_update`), so a token saved by an agent's settings
   write or an older client is clean too, not only the Settings field's.
 - **The billing note is facts, not a gate**: it says who can bill and how
-  much; whether an agent may run Idol on a PRO token stays Justin's
-  (TODO(Justin), Q141).
+  much; whether agents ask before runs that can bill a PRO account is a
+  product decision still pending.
 - **`fetchFailure` is module-private** (react-refresh lint: a component file
   exports only components and types).
 
@@ -351,3 +353,104 @@ it trimmed.
   download only for damaged and no WebGL 2. Try again on the 500 loaded
   the splat in 1.4 s, with focus still in the dialog.
 - 0 page errors.
+
+
+## Round 4 (2026-10-30): review fixes and GM's r5 and r6 rulings
+
+Built from the round 4 brief and GM's r5 and r6 rulings, copy verbatim.
+
+### Nothing runs without the token (GM r6)
+
+- `lib/runKeyLock.ts` holds every lock line: the node's own
+  (`routeKeyLockReason`), the canvas's (`canvasKeyLockReason`, "You can run
+  this canvas after you add your Hugging Face token in Settings.") and
+  Accept's (`acceptKeyLockLine`, "You can accept this after you add your
+  Hugging Face token in Settings."). `keyLockedProps` gives a locked control
+  `aria-disabled`, the reason as `aria-describedby` and `data-key-locked`
+  (one not-allowed cursor, in `styles/disabled-buttons.css`). Nothing is
+  natively disabled, so every locked Run keeps its focus and its tooltip.
+- The toolbar's Run locks for the whole canvas and reads the lock reason as
+  its scope line. The selection toolbar, Inspector and context menu lock a
+  node's run when it would run Idol (Idol itself or a node it feeds,
+  through `nodesThatRun`).
+- Every run path in the store (`refuseKeyLockedRun`, ahead of the
+  unchosen-model check) shows the line as a neutral (`info`) notice and
+  sends nothing: Cmd+Enter, the palette's "Run graph", a node's own run.
+- Proposal Accept locks on the first still-not-ready run node whose route
+  needs the key (`useProposalReadiness`). The backend refusal stays.
+- `nebula quick` and `/api/quick` refuse before the spend check with
+  "Nothing ran, so nothing was spent." plus the route's line.
+
+### What changed, by item
+
+1. **GM r5/r6 copy**: readiness "Hugging Face token · Needed"; the Auto row
+   "Auto · needs a key"; the switcher's key button "Add key for Hugging Face
+   in Settings"; the chip's name "Provider for X: Auto." plus the lock
+   reason, never "Can't run"; GM's node description; "a few runs a day";
+   "Nebula couldn’t download the splat. Try again."
+2. **Keyless strings** stay in code behind the route switch, unshown, with a
+   neutral TODO to re-rule them with the design reviewer using the first
+   live run's numbers.
+3. **Signed-in duration**: shows the token-not-applied line
+   (`duration_token_not_applied_error`); the signed-in duration line stays in
+   code, unused.
+4. **Settings check**: `ProviderCheck.refuse_before_sending` refuses a token
+   with an inner bad character with the Settings field's line, without a
+   request. `get_api_key` treats a whitespace-only key as unset.
+5. **Missing Space**: `hub_says_missing` follows `huggingface_hub` 2.4.0's
+   order (GatedRepo, "Access to this resource is disabled.", RepoNotFound,
+   then a 401 that isn't the bad-token message). A bare 404 isn't missing.
+6. **Download**: asks for `Accept-Encoding: identity`; Content-Length is
+   compared only for an uncompressed body; a gzip or deflate body is kept.
+7. **×20,000 object**: `objectUnitScale` draws an object at unit radius
+   before framing, so the zoom-out limit stays in range.
+8. **OrbitControls** are made in an effect and disposed; StrictMode's second
+   render left a copy that doubled every wheel step.
+9. **The failure line is announced once** (no `aria-describedby` on a
+   failure; the alert carries it).
+10. **Agents' billing note**: find_nodes rows, start_here, `nebula info`
+    (BILLING line) and SKILL.md.
+11. **Docs**: idol.md (switching back to keyless in four steps, admission
+    separate from the charge, the runs-a-day table as a floor, the
+    `duration_factor` sources), PROVIDER-ROUTES, the Speridlabs guide,
+    spatial-foundation. Private tracker ids and names are gone.
+
+### Decisions and corrections
+
+- **Toolbar.test's store mock** now gives its node a `data.definitionId`:
+  the toolbar reads node definitions for the canvas lock.
+- **One click guard per surface**: SelectionToolbar's `runSelection` had a
+  second `keyLock` check behind its only caller's; the mutation check showed
+  it couldn't fail, so it's gone.
+- **The live-check seed**: a project's snapshot is saved while it is open,
+  then another project is opened and the seeded one opened again. Saving a
+  project that isn't open is refused (409), and an open project's save is
+  replaced by the live canvas on the next switch unless it is reopened.
+
+### Seen in the live check, not changed
+
+- Without the token, Idol counts as paid: the toolbar's chip reads "3 paid",
+  the proposal "Runs 1 paid model", "No list price" and "Accept & run (1
+  paid)". The cost row marks a route that can't run as paid with no price.
+  Idol is free within the allowance; this needs a design ruling.
+- The proposal bar sits above the 3D viewer dialog and covers its help line.
+
+### Live check (isolated, 2026-10-30)
+
+Backend 8793 (temp HOME, settings, state and output; outbound HTTP to a dead
+proxy) and Vite 5793, headless Chrome on the real GPU (ANGLE Metal, Apple M5
+Max); 8000-8010, 5173 and every Hugging Face host blocked (both canaries
+blocked). No token. 0 Hugging Face requests, 0 run or accept requests, 0
+page errors, 0 console errors. Run and Accept were never clicked.
+
+- Readiness: "Hugging Face token · Needed", with GM's detail.
+- Switcher: "Auto · needs a key", the Speridlabs row's note with "a few runs
+  a day", "Add key for Hugging Face in Settings"; the chip's name ends with
+  the lock reason.
+- Selection toolbar Run (node), toolbar Run (canvas) and Accept: each
+  aria-disabled, not disabled, `data-key-locked`, not-allowed cursor,
+  focusable with `:focus-visible`, its line as title and description.
+- Cmd+Enter and the palette's "Run graph": the canvas line as a polite
+  status notice; no request.
+- The ×20,000 object at the zoom-out limit fills 51% of the stage height,
+  the same as the 1 m ball (51%); it opens at 79%, the same as the ball.

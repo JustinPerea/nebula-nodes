@@ -155,7 +155,7 @@ function autoReason(definition: ModelNodeDefinition, unavailable: NonNullable<Re
   const spec = unavailable.routeId ? routeById(definition, unavailable.routeId) : undefined;
   const label = providerLabel(spec?.provider);
   const block = unavailable.block;
-  if (!spec) return unavailable.missing.length ? 'no provider key set' : 'no route can take it';
+  if (!spec) return 'no route can take it';
   if (!block) return `no ${label} key`;
   if (block.reason === 'hidden' || block.reason === 'unsupported' || block.reason === 'blocked') {
     return `${label} doesn't take ${blockedSetting(definition, block, params)}`;
@@ -166,6 +166,16 @@ function autoReason(definition: ModelNodeDefinition, unavailable: NonNullable<Re
   }
   const note = rowBlock(definition, spec, block as DirectBlock, params);
   return note.charAt(0).toLowerCase() + note.slice(1, -1);
+}
+
+/** The Auto row when the run can't start. No key set for any route is GM's
+ * one shared string (PR #203 r5 item 4): "Auto · needs a key". */
+export const AUTO_NEEDS_A_KEY = 'Auto · needs a key';
+
+function autoLabel(definition: ModelNodeDefinition, unavailable: NonNullable<ReturnType<typeof routeUnavailable>>,
+  params: Params): string {
+  if (!unavailable.routeId && unavailable.missing.length) return AUTO_NEEDS_A_KEY;
+  return `Auto · can't run: ${autoReason(definition, unavailable, params)}`;
 }
 
 function price(definition: ModelNodeDefinition, route: RouteSpec, estimates: ReturnType<typeof estimateRoutes>,
@@ -203,7 +213,7 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
 
   const rows: ProviderRow[] = [{
     id: AUTO, routeId: null, plan: false,
-    label: autoUnavailable ? `Auto · can't run: ${autoReason(definition, autoUnavailable, { ...routed, [PROVIDER_PARAM]: AUTO })}` : `Auto · runs on ${autoName}`,
+    label: autoUnavailable ? autoLabel(definition, autoUnavailable, { ...routed, [PROVIDER_PARAM]: AUTO }) : `Auto · runs on ${autoName}`,
     keyState: null, price: autoUnavailable || !autoSpec ? '-'
       : price(definition, autoSpec, estimates, context.pricing, autoRoute.kind === 'plan', saved, wiredPorts).price,
     block: null, selected: choice === AUTO, writes: billingWrites(definition, AUTO, false),

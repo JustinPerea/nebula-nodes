@@ -71,12 +71,13 @@ function openSetup(target: ProviderSetupTarget | undefined) {
   if (target) useUIStore.getState().openProviderSetup(target);
 }
 
-/** "Speridlabs key" for most rows; a row whose key is another provider's
- * (Idol's Hugging Face token) names that key. */
-function missingKeyName(row: ProviderRow): string {
+/** Whose key the row's "Add key →" adds: the row's provider, or the
+ * provider the key belongs to when that's another (Idol's row is
+ * Speridlabs, its key Hugging Face's). */
+function keyProviderName(row: ProviderRow): string {
   const key = row.setup?.kind === 'api-key' ? row.setup.key : undefined;
   const named = key && Object.hasOwn(KEY_NAMES, key) ? KEY_NAMES[key] : undefined;
-  return named && named[0] !== row.label ? `${named[0]} ${named[1]}` : `${row.label} key`;
+  return named ? named[0] : row.label;
 }
 
 function keyCell(row: ProviderRow, onSetup: (row: ProviderRow) => void): ReactNode {
@@ -95,7 +96,9 @@ function keyCell(row: ProviderRow, onSetup: (row: ProviderRow) => void): ReactNo
     const text = row.keyState === 'missing' ? 'Add key →' : 'Sign in';
     return (
       <button type="button" role="menuitem" tabIndex={-1} className="provider-switcher__setup"
-        aria-label={row.keyState === 'missing' ? `Add a ${missingKeyName(row)} in Settings` : 'Sign in to Krea in Settings'}
+        // The name holds the visible text (GM, PR #203 r6 item 10):
+        // "Add key for Hugging Face in Settings".
+        aria-label={row.keyState === 'missing' ? `Add key for ${keyProviderName(row)} in Settings` : 'Sign in to Krea in Settings'}
         onClick={(event) => { event.stopPropagation(); onSetup(row); }}>
         {text}
       </button>
@@ -257,7 +260,9 @@ function ProviderPopoverTrigger({ state, variant, displayName, onPick, onFix }: 
     <>
       <button ref={triggerRef} type="button" className={className}
         aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined}
-        aria-label={`Provider for ${displayName}: ${state.chipName}${state.blocked ? `. Can't run: ${state.message ?? ''}` : ''}`}
+        // Blocked, the name ends with the reason itself, never a "Can't run"
+        // prefix (GM, PR #203 r6 item 2): each reason is a whole sentence.
+        aria-label={`Provider for ${displayName}: ${state.chipName}${state.blocked && state.message ? `. ${state.message}` : ''}`}
         title={state.blocked ? state.message ?? undefined : `Runs on ${state.chipName}. Change provider`}
         onMouseDown={(event) => event.stopPropagation()}
         onClick={(event) => { event.stopPropagation(); setOpen((value) => !value); }}

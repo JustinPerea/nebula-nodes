@@ -77,7 +77,7 @@ describe('providerSwitchState', () => {
   });
 
   it('says when no provider has a key, and names the chosen route that lacks one', () => {
-    expect(providerSwitchState(TABLE, {}, context({})).rows[0].label).toBe("Auto · can't run: no provider key set");
+    expect(providerSwitchState(TABLE, {}, context({})).rows[0].label).toBe('Auto · needs a key');
     const chosen = providerSwitchState(TABLE, { _provider: 'replicate' }, context({ BFL_API_KEY: KEY }));
     // Round 3g (GM, rule 9): the full name wherever it fits the chip.
     expect(chosen.chip).toBe('Replicate');

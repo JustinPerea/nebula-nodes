@@ -196,11 +196,17 @@ function spaceReadiness(
   }
   if (!keyless && tokenKey) {
     if (!cache.loaded) return { ...keyReadiness(tokenKey, cache, health), connectionLabel };
+    // GM r5 item 1: "Hugging Face token · Needed": the connection label
+    // says what is needed, the status only that it is.
     return {
-      label: `Needs a ${name} token`, tone: 'warning', setupTarget: { kind: 'api-key', key: tokenKey }, connectionLabel,
-      detail: `Add your ${name} token in Settings to run ${def.displayName}. A free ${name} account gives a run or two a day.`,
+      label: 'Needed', tone: 'warning', setupTarget: { kind: 'api-key', key: tokenKey }, connectionLabel,
+      detail: `Add your ${name} token in Settings to run ${def.displayName}. A free ${name} account gives a few runs a day.`,
     };
   }
+  // A keyless Space route: no node has one today (Idol needs its token, GM
+  // PR #203 r4), so these lines are never shown. TODO: re-rule with the
+  // design reviewer using the first live run's numbers before the keyless
+  // route ships.
   return {
     label: 'Free daily allowance', tone: 'neutral',
     ...(tokenKey ? { setupTarget: { kind: 'api-key', key: tokenKey } as const, connectionLabel,

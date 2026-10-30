@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { stillNotReady, type ProposalNotReady } from '../lib/canvasProposals';
+import { acceptKeyLockLine } from '../lib/runKeyLock';
 import type { ProposalEntry } from '../store/canvasProposalsStore';
 import { useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
@@ -12,6 +13,18 @@ import { useUIStore } from '../store/uiStore';
  * canvas node at its params with the proposed changes applied.
  */
 export function useProposalNotReady(entry: ProposalEntry | undefined): ProposalNotReady[] {
+  return useProposalReadiness(entry).notReady;
+}
+
+/**
+ * The proposal's not-ready rows, and GM's Accept lock when one of them can't
+ * run without its key (PR #203 r6 item 1: "You can accept this after you add
+ * your Hugging Face token in Settings."; lib/runKeyLock acceptKeyLockLine).
+ */
+export function useProposalReadiness(entry: ProposalEntry | undefined): {
+  notReady: ProposalNotReady[];
+  acceptLock: string | null;
+} {
   const cache = useUIStore((s) => s.settingsCache);
   // Only the canvas nodes the rows name, as text, so a drag elsewhere
   // doesn't re-render the ghosts.
@@ -22,11 +35,11 @@ export function useProposalNotReady(entry: ProposalEntry | undefined): ProposalN
       .map((node) => [node.id, node.data.definitionId, node.data.params]));
   });
   return useMemo(() => {
-    if (!entry) return [];
+    if (!entry) return { notReady: [], acceptLock: null };
     const { view, values } = entry;
     const nodes = new Map((JSON.parse(named) as Array<[string, string, Record<string, unknown>]>)
       .map(([id, definitionId, params]) => [id, { definitionId, params }]));
-    return stillNotReady(view, cache, (row) => {
+    const nodeFor = (row: ProposalNotReady) => {
       if (row.nodeId === null) {
         const ghost = view.nodes.find((node) => node.ref === row.ref);
         if (!ghost) return null;
@@ -37,6 +50,16 @@ export function useProposalNotReady(entry: ProposalEntry | undefined): ProposalN
       const changes = values?.params[row.nodeId] ?? view.params.find((change) => change.nodeId === row.nodeId)?.changes ?? {};
       const proposed = Object.fromEntries(Object.entries(changes).map(([key, change]) => [key, change.to]));
       return { definition: NODE_DEFINITIONS[node.definitionId], params: { ...node.params, ...proposed } };
-    });
+    };
+    const notReady = stillNotReady(view, cache, nodeFor);
+    let acceptLock: string | null = null;
+    if (cache.loaded && view.run.length > 0) {
+      for (const row of notReady) {
+        const node = nodeFor(row);
+        acceptLock = node ? acceptKeyLockLine(node.definition, node.params, cache.apiKeys) : null;
+        if (acceptLock) break;
+      }
+    }
+    return { notReady, acceptLock };
   }, [entry, cache, named]);
 }

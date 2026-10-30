@@ -261,7 +261,8 @@ export function proposalEstimateLabel(view: ProposalView): string | null {
   const exact = formatUsd(estimate.low) === formatUsd(estimate.high);
   const amount = exact ? formatUsd(estimate.high) : formatUsdRange(estimate.low, estimate.high);
   if (estimate.open) return `${amount}+`;
-  // A sourced $0 (Idol on its free Space) is exact, not an estimate (GM, PR #203 r1).
+  // A sourced $0 (a Hugging Face Space on the person's allowance) is exact,
+  // not an estimate (GM, PR #203 r1).
   if (estimate.low === 0 && estimate.high === 0) return '$0';
   return exact ? `~${amount}` : amount;
 }

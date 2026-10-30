@@ -4,6 +4,7 @@ import asyncio
 import copy
 import json
 import os
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -138,7 +139,8 @@ def get_api_key(provider_key_name: str | list[str]) -> str | None:
 
     for name in names:
         key = api_keys.get(name)
-        if key:
+        # Spaces alone are no key (the router's _is_set reads them as unset).
+        if key and (not isinstance(key, str) or key.strip()):
             return key
     return None
 
@@ -183,6 +185,10 @@ class ProviderCheck:
     # single authenticated GET. Returns an error detail (never echoing the
     # secret) or None when the credential is well-formed.
     local_validator: Callable[[str], str | None] | None = None
+    # Optional offline refusal ahead of the probe: a detail (never echoing the
+    # secret) when the credential can't be sent as it is, so nothing is sent;
+    # None lets the probe go out as usual.
+    refuse_before_sending: Callable[[str], str | None] | None = None
 
 
 def validate_google_service_account_json(raw: str) -> str | None:
@@ -334,11 +340,14 @@ PROVIDER_CHECKS: dict[str, ProviderCheck] = {
     # Hugging Face access token (the Idol node's Space route needs it). GET
     # /api/whoami-v2 is free and read-only, 200 for a valid token and 401 for
     # a bad one; it never starts a Space or spends quota. Leading and trailing
-    # spaces and line breaks are trimmed, as Settings and the handler do.
+    # spaces and line breaks are trimmed, as Settings and the handler do; a
+    # token with any other character a Hugging Face token can't have is
+    # refused before anything is sent, with the Settings field's own line.
     "Hugging Face": ProviderCheck(
         ("HF_TOKEN",),
         "https://huggingface.co/api/whoami-v2",
         lambda key: {"Authorization": f"Bearer {key.strip()}"},
+        refuse_before_sending=lambda key: hf_token_character_line(key),
     ),
     "Nous": ProviderCheck(
         (),
@@ -379,6 +388,21 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+# The Settings field's line for a Hugging Face token with a character no
+# token has (frontend/src/lib/settingsWrites.ts HF_TOKEN_CHARACTER_LINE, word
+# for word). A token is printable ASCII with no space once leading and
+# trailing spaces and line breaks are trimmed (handlers/speridlabs_idol.py
+# clean_token reads the same).
+HF_TOKEN_CHARACTER_LINE = ("This token has a character Hugging Face tokens can’t have. "
+                           "Copy it again from Hugging Face, then paste it here.")
+_HF_TOKEN_CHARACTERS = re.compile(r"[\x21-\x7e]+")
+
+
+def hf_token_character_line(key: str) -> str | None:
+    """The field's line when the trimmed token can't be sent as it is, or None."""
+    return None if _HF_TOKEN_CHARACTERS.fullmatch(key.strip()) else HF_TOKEN_CHARACTER_LINE
+
+
 @dataclass(frozen=True)
 class _ResolvedCheck:
     url: str
@@ -408,6 +432,15 @@ def _resolve_check(name: str, check: ProviderCheck) -> _ResolvedCheck | None:
                 preflight_configured=True,
                 preflight_detail=error
                 or "credential is well-formed; not verified with the provider",
+            )
+        refused = check.refuse_before_sending(key) if check.refuse_before_sending else None
+        if refused:
+            return _ResolvedCheck(
+                url="",
+                headers={},
+                preflight_status=PROVIDER_STATUS_INVALID,
+                preflight_configured=True,
+                preflight_detail=refused,
             )
         return _ResolvedCheck(url=check.url, headers=check.auth_headers(key))
 

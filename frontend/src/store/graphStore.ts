@@ -110,6 +110,7 @@ import { usePricingStore } from './pricingStore';
 import { useInputSizeStore } from './inputSizeStore';
 import { useStoredAssetsStore } from './storedAssetsStore';
 import { nodesThatRun, repeatRun, runCostConfirmMessage, shouldConfirmRunCost, summarizeRunScope, type RunScope, type RunScopeSummary } from '../lib/runScope';
+import { canvasKeyLockReason, nodesKeyLockReason } from '../lib/runKeyLock';
 import { PRICE_DEPENDS_ON_INPUT, PRICE_NOT_LISTED, mayBeRefused, mergeRunEstimates, movedRowIds, modelNotChosenText, planDecidesRefusal, placeholderRefusalOf, placeholderRunConfirm, runPlaceholders, withRefusalFlags, withRunEstimate, type PlaceholderRunConfirm, type PlaceholderRunOptions, type RunEstimate } from '../lib/placeholderRunConfirm';
 import { placeholderRunDialogModule } from '../lib/placeholderRunDialogModule';
 import { useCreateDraftStore } from './createDraftStore';
@@ -7189,11 +7190,26 @@ function refuseUnchosenModel(nodes: Node<NodeData>[], edges: Edge[], scope: RunS
   // wires, the Krea plan's sign-in. Before the settings load, the backend
   // refuses on the route it knows instead.
   const { settingsCache } = useUIStore.getState();
+  // GM, PR #203 r6 item 1: a run with a node that can't start without its
+  // key (Idol without a Hugging Face token) sends nothing, on every path
+  // (Cmd+Enter, the palette's Run graph, a replay, a node's Run): a neutral
+  // one-line notice, the canvas's line for the whole graph, else the node's.
+  if (refuseKeyLockedRun(nodes, edges, scope, settingsCache)) return true;
   const context = settingsCache.loaded ? { apiKeys: settingsCache.apiKeys, edges,
     planReady: settingsCache.kreaConnection?.status === 'connected' } : undefined;
   const text = modelNotChosenText(nodesThatRun(nodes, edges, scope), names, context);
   if (!text) return false;
   useGraphStore.getState().notify(text);
+  return true;
+}
+
+function refuseKeyLockedRun(nodes: Node<NodeData>[], edges: Edge[], scope: RunScope,
+  settings: { loaded: boolean; apiKeys: Readonly<Record<string, string | undefined>> }): boolean {
+  const running = nodesThatRun(nodes, edges, scope);
+  const line = scope.kind === 'graph' ? canvasKeyLockReason(running, settings)
+    : nodesKeyLockReason(running, running.map((node) => node.id), settings);
+  if (!line) return false;
+  useGraphStore.getState().notify(line, 'info');
   return true;
 }
 

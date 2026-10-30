@@ -16317,7 +16317,7 @@
               "price": 0
             }
           ],
-          "notes": "Idol runs on Speridlabs' own Hugging Face Space on ZeroGPU, which Hugging Face offers free to every user, so Nebula and the Space bill nothing. The route needs the person's HF_TOKEN, and each run uses that account's daily ZeroGPU time (free 5 minutes, PRO and Team 40, Enterprise 60; the docs give unauthenticated visitors 2 minutes, which may not apply to server-side calls). Each call asks for 120 s of GPU (app.py spaces.GPU(duration=120)); spaces 0.51.3 multiplies that by the GPU's duration_factor (spaces/zero/configs.json: 1.0 on H200, 1.5 on RTX PRO 6000 Blackwell), so a run reserves 120 s, or 180 s on Blackwell, the docs' default ZeroGPU size. Which one the Space asks for, and how many runs a day fit, is to be confirmed on the first live run. Past the daily quota a PRO, Team or Enterprise account is billed from its prepaid Hugging Face credits at $1 per 10 GPU-minutes; that charge is the person's own and Nebula can't see it. The GPU seconds a run really uses are not published or measured.",
+          "notes": "Idol runs on Speridlabs' own Hugging Face Space on ZeroGPU, which Hugging Face offers free to every user, so Nebula and the Space bill nothing. The route needs the person's HF_TOKEN, and each run uses that account's daily ZeroGPU time (free 5 minutes, PRO and Team 40, Enterprise 60; the docs give unauthenticated visitors 2 minutes, which may not apply to server-side calls). Each call asks for 120 s of GPU (app.py spaces.GPU(duration=120)); spaces 0.51.3 multiplies that by the GPU's duration_factor (spaces/zero/configs.json: 1.0 on H200, 1.5 on RTX PRO 6000 Blackwell), so a run starts only with 120 s, or 180 s on Blackwell (the docs' default ZeroGPU size), left in the day's quota, and the quota is charged the seconds the run uses (the docs' xlarge note counts an effective task duration). How many runs a day fit is to be confirmed on the first live run. Past the daily quota a PRO, Team or Enterprise account is billed from its prepaid Hugging Face credits at $1 per 10 GPU-minutes; that charge is the person's own and Nebula can't see it. The GPU seconds a run really uses are not published or measured.",
           "sources": [
             {
               "url": "https://huggingface.co/docs/hub/spaces-zerogpu",
@@ -16334,6 +16334,18 @@
             {
               "url": "https://huggingface.co/spaces/speridlabs/idol/blob/main/app.py",
               "quote": "gpu = spaces.GPU(duration=120)"
+            },
+            {
+              "url": "https://files.pythonhosted.org/packages/f5/b3/f6c0dfa766e0fc5ae66466235c13be580e543d8d2d9023f678ba5859adca/spaces-0.51.3-py3-none-any.whl#spaces/zero/configs.json",
+              "quote": "\"model\": \"NVIDIA RTX PRO 6000 Blackwell Server Edition\", … \"duration_factor\": 1.5"
+            },
+            {
+              "url": "https://files.pythonhosted.org/packages/f5/b3/f6c0dfa766e0fc5ae66466235c13be580e543d8d2d9023f678ba5859adca/spaces-0.51.3-py3-none-any.whl#spaces/zero/client.py",
+              "quote": "duration_seconds *= zerogpu_config['duration_factor']"
+            },
+            {
+              "url": "https://huggingface.co/docs/hub/spaces-zerogpu",
+              "quote": "xlarge consumes 2× more daily quota than large (e.g. a 45s effective task duration consumes 90s of quota)"
             },
             {
               "url": "https://huggingface.co/docs/hub/spaces-zerogpu",

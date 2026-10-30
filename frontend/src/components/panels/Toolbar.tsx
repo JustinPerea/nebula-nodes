@@ -40,6 +40,7 @@ import '../../styles/panels.css';
 import '../../styles/canvas-toolbar.css';
 import { refuseEditWhileOffline } from '../../lib/backendConnection';
 import { useCanvasLock } from '../../lib/canvasLock';
+import { canvasKeyLockReason, keyLockedProps } from '../../lib/runKeyLock';
 
 const CLEAR_CANVAS = "Couldn't clear the canvas.";
 
@@ -85,6 +86,13 @@ export function Toolbar() {
   useEffect(() => { if (sizeRefs?.length) requestSizes(sizeRefs); }, [sizeRefs, requestSizes]);
   const runChip = runChipLabel(runScope);
   const runScopeId = useId();
+  // GM, PR #203 r6 item 1: a node that can't run without its key (Idol
+  // without a Hugging Face token) locks the whole canvas's Run, in the
+  // following look (aria-disabled: focusable, with its tooltip), and the
+  // scope line it reads out is the lock reason (r6 item 3).
+  const settingsLoaded = useUIStore((s) => s.settingsCache.loaded);
+  const keyLock = useMemo(() => canvasKeyLockReason(graphNodes ?? [], { loaded: settingsLoaded, apiKeys }),
+    [graphNodes, settingsLoaded, apiKeys]);
   const autoLayout = useGraphStore((s) => s.autoLayout);
   const resetPanelLayout = useUIStore((s) => s.resetPanelLayout);
   const [actionsOpen, setActionsOpen] = useState(false);
@@ -290,18 +298,21 @@ export function Toolbar() {
       ) : (
         <button
           type="button"
-          className={`toolbar__button toolbar__button--primary${following ? ' toolbar__button--waiting' : ''}`}
+          className={`toolbar__button toolbar__button--primary${following || keyLock ? ' toolbar__button--waiting' : ''}`}
           // Round 20 (GM follow-up 3): disabled while the tab follows an
           // agent's switch, with its tooltip (aria-disabled keeps the tooltip
           // and the focus; a click only pulses the project bar). Offline it
-          // is disabled outright (round 15 of PR #114).
-          onClick={() => { if (refuseEditWhileFollowing()) return; void executeGraph(); }}
+          // is disabled outright (round 15 of PR #114). A missing key locks
+          // it the same way (keyLockedProps); a click sends nothing.
+          onClick={() => { if (refuseEditWhileFollowing()) return; if (keyLock) return; void executeGraph(); }}
           disabled={nodeCount === 0 || isImportingGraph || runStarting || offline}
-          aria-disabled={following ? true : undefined}
-          {...lock.mark}
           aria-describedby={nodeCount > 0 ? runScopeId : undefined}
+          {...keyLockedProps(keyLock, runScopeId)}
+          aria-disabled={following || keyLock ? true : undefined}
+          {...lock.mark}
           title={following ? waitToOpenTooltip(following.projectName)
-            : isImportingGraph ? 'Wait for the graph import to finish' : `Run graph. ${describeRunScope(runScope)} (${displayKey('Mod')}${displayKey('Enter')})`}
+            : isImportingGraph ? 'Wait for the graph import to finish'
+              : keyLock ?? `Run graph. ${describeRunScope(runScope)} (${displayKey('Mod')}${displayKey('Enter')})`}
         >
           <ToolbarIcon name="run" />
           <span className="toolbar__label">Run</span>
@@ -310,7 +321,7 @@ export function Toolbar() {
           )}
         </button>
       )}
-      <span id={runScopeId} className="toolbar__sr-only">{describeRunScope(runScope)}</span>
+      <span id={runScopeId} className="toolbar__sr-only">{keyLock ?? describeRunScope(runScope)}</span>
       <div className="toolbar__divider" aria-hidden="true" />
       <div className="toolbar__actions" ref={actionsRoot} onKeyDown={onActionsKeyDown}>
         <button type="button" ref={actionsTrigger} className="toolbar__button toolbar__button--actions"

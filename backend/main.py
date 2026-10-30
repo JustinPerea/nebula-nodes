@@ -4742,9 +4742,12 @@ def _agent_node_row(definition: Mapping[str, Any], context: Mapping[str, Any]) -
         row["price"] = ([round(estimate["low"], 4), round(estimate["high"], 4)]
                         if estimate and estimate.get("currency") == "usd" else None)
         if row["price"] == [0.0, 0.0]:
-            # A sourced $0 (Idol on its free Hugging Face Space) reads like
-            # every other free node.
+            # A sourced $0 (a Hugging Face Space on the person's allowance)
+            # reads like every other free node, with who can bill past it.
             row["price"] = "free"
+            billing = _space_billing(definition)
+            if billing:
+                row["billing"] = billing
         note = model_pricing.size_note(model_pricing.entry_for_route(entry, provider), definition)
         if row["price"] is None and note:
             # Priced at run time from the input file (model_pricing sizing).
@@ -4812,12 +4815,23 @@ PROVIDER_CHOICE_NOTE = (
 
 
 # https://huggingface.co/docs/hub/spaces-zerogpu, "Extending quota with
-# credits". TODO(Justin, Q141): whether agents may run a Space on a PRO token.
+# credits". Pending a product decision on whether agents ask before runs that
+# can bill a PRO account; until then agents are told, on every surface that
+# lists the node (describe_node's route `billing`, find_nodes and start_here,
+# `nebula info`'s BILLING line).
 HF_SPACE_BILLING_NOTE = (
     "Runs on the person's own Hugging Face ZeroGPU allowance (HF_TOKEN). Nebula prices it at $0, but past "
     "the daily quota Hugging Face bills a PRO, Team or Enterprise account's prepaid credits at $1 per 10 "
     "minutes of GPU time (https://huggingface.co/docs/hub/spaces-zerogpu)."
 )
+
+
+def _space_billing(definition: Mapping[str, Any]) -> str | None:
+    """HF_SPACE_BILLING_NOTE for a node with a Hugging Face Space route, else None."""
+    if not node_route.has_routes(definition):
+        return None
+    return (HF_SPACE_BILLING_NOTE
+            if any(route.get("handler") == "hf-space" for route in node_route.routes_of(definition)) else None)
 
 
 def _describe_routes(
@@ -4872,8 +4886,8 @@ def _describe_routes(
         if node_route.is_keyless(spec):
             # Runs with no key (keys []); a key here is used when it is set,
             # and then the run is on that person's own account and quota
-            # (Idol: their Hugging Face ZeroGPU time, which Hugging Face can
-            # bill a PRO account for past its free minutes).
+            # (a Hugging Face Space: their ZeroGPU time, which Hugging Face
+            # can bill a PRO account for past its free minutes).
             row["optionalKeys"] = [{"key": key, "set": bool(api_keys.get(key))}
                                    for key in node_route.keys(spec.get("optionalKeys"))]
         if spec.get("handler") == "hf-space":
@@ -5813,6 +5827,9 @@ def _start_node_notes(rows: list[dict[str, Any]], context: Mapping[str, Any], vi
     if any(row.get("providers") for row in ready):
         notes.append(f"A node with providers runs on one route (_provider; {look} lists them); switching it is "
                      f"the person's call: {propose} it.")
+    billed = [str(row["id"]) for row in ready if row.get("billing")]
+    if billed:
+        notes.append(f"{', '.join(billed)}: free here. {HF_SPACE_BILLING_NOTE}")
     if via == "cli":
         # find_nodes' hints name MCP tools; a shell-only agent reads the `nebula` commands.
         notes = [_cli_words(note) for note in notes]
@@ -17607,6 +17624,19 @@ async def quick_execute(body: dict[str, Any]) -> dict:
     unchosen = unchosen_model_errors([temp_nodes[-1]], temp_edges, api_keys)
     if unchosen:
         raise HTTPException(status_code=400, detail=f"Nothing ran, so nothing was spent. {unchosen[0].message}")
+    # A route-table node whose route can't start (Idol with no Hugging Face
+    # token) is refused the same way, before the spend check, in the router's
+    # own words (the engine's preflight says the same on every other path).
+    quick_main = temp_nodes[-1]
+    quick_definition = node_registry.get(definition_id) or {}
+    wired = {edge.target_handle for edge in temp_edges if edge.target == quick_main.id}
+    from services.krea_account import uses_account
+    if node_route.has_routes(quick_definition) and not uses_account(quick_main, quick_definition, wired):
+        routed = node_route.with_wired_blockers(quick_definition, quick_main.params, wired)
+        unavailable = node_route.route_unavailable(quick_definition, routed, api_keys)
+        if unavailable is not None:
+            raise HTTPException(status_code=400,
+                                detail=f"Nothing ran, so nothing was spent. {unavailable['message']}")
     # A quick run has no canvas node to propose, so point at one.
     quick_run = f"quick-{uuid4().hex}"
     measured = await _measure_run_inputs(temp_nodes, temp_edges)

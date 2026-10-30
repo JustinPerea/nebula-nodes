@@ -371,6 +371,39 @@ def test_find_nodes_lists_idol_as_ready_and_free_only_with_its_token(real_nodes,
     body = TestClient(main.app).get("/api/agent/nodes", params={"query": "idol"}).json()
     row = next(node for node in body["nodes"] if node["id"] == "speridlabs-idol")
     assert row["price"] == "free" and row["runsWith"]
+    # "free" comes with who can bill past the allowance (review r3 L4).
+    assert row["billing"] == main.HF_SPACE_BILLING_NOTE
+    other = TestClient(main.app).get("/api/agent/nodes", params={"query": "text input"}).json()
+    assert all("billing" not in node for node in other["nodes"])
+
+
+def test_start_here_notes_who_can_bill_past_idols_allowance():
+    from tests.test_cli_commands import _start_notes
+
+    for via in ("mcp", "cli"):
+        notes = _start_notes({"HF_TOKEN": "hf_x"}, via=via)
+        [note] = [note for note in notes if note.startswith("speridlabs-idol")]
+        assert note == f"speridlabs-idol: free here. {main.HF_SPACE_BILLING_NOTE}"
+    # Not ready without the token, so nothing to note.
+    assert not [note for note in _start_notes({}) if "speridlabs-idol" in note]
+
+
+def test_nebula_info_prints_idols_billing_line(monkeypatch, capsys):
+    from cli.client import NebulaClient
+    from cli.commands import nodes
+    from cli.formatter import format_billing_line
+
+    monkeypatch.setattr(main, "load_settings", lambda: {"apiKeys": {"HF_TOKEN": "hf_x"}})
+    client = NebulaClient("http://testserver")
+    client._client = TestClient(main.app)
+    nodes.run_info(client, "speridlabs-idol")
+    lines = capsys.readouterr().out.splitlines()
+    price = next(index for index, line in enumerate(lines) if line.startswith("PRICE:"))
+    assert lines[price + 1] == f"BILLING: {main.HF_SPACE_BILLING_NOTE}"
+    nodes.run_info(client, "text-input")
+    assert "BILLING" not in capsys.readouterr().out
+    assert format_billing_line({"routes": [{"billing": "a"}, {"billing": "a"}, {}]}) == "BILLING: a"
+    assert format_billing_line({}) is None
 
 
 def test_nebula_info_names_idols_token_and_a_keyless_routes_optional_one():

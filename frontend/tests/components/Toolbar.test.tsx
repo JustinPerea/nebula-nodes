@@ -12,7 +12,7 @@ interface ToolbarGraph {
   createLaunchingIds: string[];
   providerStartAmbiguities: unknown[];
   providerRecoveries: unknown[];
-  nodes: { id: string }[];
+  nodes: { id: string; data: { definitionId: string } }[];
   executeGraph: () => void;
   cancelExecution: () => void;
   autoLayout: () => void;
@@ -54,7 +54,7 @@ vi.mock('../../src/store/graphStore', async () => {
   const { create } = await import('zustand');
   mocks.graph = create<ToolbarGraph>(() => ({
     isExecuting: false, isImportingGraph: false, isCancelling: false,
-    createLaunchingIds: [], providerStartAmbiguities: [], providerRecoveries: [], nodes: [{ id: 'n1' }],
+    createLaunchingIds: [], providerStartAmbiguities: [], providerRecoveries: [], nodes: [{ id: 'n1', data: { definitionId: 'text-input' } }],
     executeGraph: mocks.execute, cancelExecution: mocks.cancel, autoLayout: mocks.layout,
     clearGraph: mocks.clear, loadGraph: mocks.load,
     beginUndoStep: () => { mocks.beginStep(); return mocks.undoStep; }, cancelUndoStep: mocks.cancelStep,

@@ -89,7 +89,7 @@ describe('ProviderSwitcher rows', () => {
     const bfl = row(/^Black Forest Labs/).closest('[data-provider-row]') as HTMLElement;
     expect(within(bfl).getByText('Key set')).toBeVisible();
     expect(within(bfl).getByText('$0.03')).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Add a fal.ai key in Settings' })).toHaveTextContent('Add key →');
+    expect(screen.getByRole('menuitem', { name: 'Add key for fal.ai in Settings' })).toHaveTextContent('Add key →');
     expect(screen.getByRole('menuitem', { name: 'Sign in to Krea in Settings' })).toHaveTextContent('Sign in');
     // fal can't take 9:21: a block note, and no price.
     const fal = row(/^fal\.ai/);
@@ -110,7 +110,7 @@ describe('ProviderSwitcher rows', () => {
     const open = vi.spyOn(useUIStore.getState(), 'openProviderSetup');
     useUIStore.setState({ openProviderSetup: open });
     render(<Controlled />);
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Add a Replicate key in Settings' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Add key for Replicate in Settings' }));
     expect(open).toHaveBeenLastCalledWith({ kind: 'api-key', key: 'REPLICATE_API_TOKEN' });
     fireEvent.click(screen.getByRole('menuitem', { name: 'Sign in to Krea in Settings' }));
     expect(open).toHaveBeenLastCalledWith({ kind: 'krea-mcp' });
@@ -127,12 +127,21 @@ describe('ProviderSwitcher on Idol\'s keyed Space route (GM PR #203 r1 and r4)',
     useUIStore.setState({ openProviderSetup: open });
     renderIdol();
     const space = row(/^Speridlabs/).closest('[data-provider-row]') as HTMLElement;
-    const add = within(space).getByRole('menuitem', { name: 'Add a Hugging Face token in Settings' });
+    const add = within(space).getByRole('menuitem', { name: 'Add key for Hugging Face in Settings' });
     expect(add).toHaveTextContent('Add key →');
     expect(within(space).queryByText(/Optional|Connected/)).toBeNull();
-    expect(row(/^Speridlabs/)).toHaveTextContent('Free with a Hugging Face token. A free account gives a run or two a day.');
+    expect(row(/^Speridlabs/)).toHaveTextContent('Free with a Hugging Face token. A free account gives a few runs a day.');
     fireEvent.click(add);
     expect(open).toHaveBeenLastCalledWith({ kind: 'api-key', key: 'HF_TOKEN' });
+  });
+
+  it('names the lock reason on the card chip, never prefixed with "Can\'t run" (GM r6 item 2)', () => {
+    withKeys({});
+    render(<ProviderSwitcher definition={IDOL} params={{}} variant="chip" onPick={vi.fn()} />);
+    const chip = screen.getByRole('button', { name: /^Provider for Idol:/ });
+    expect(chip).toHaveAccessibleName(
+      'Provider for Idol: Auto. You can run Idol after you add your Hugging Face token in Settings.');
+    expect(chip.getAttribute('aria-label')).not.toMatch(/can't run/i);
   });
 
   it('shows the green dot and "Connected" with the token', () => {
@@ -202,7 +211,7 @@ describe('ProviderSwitcher picks', () => {
     rerender(<ProviderSwitcher definition={TABLE} params={params} variant="chip" onPick={onPick} />);
     expect(onPick).not.toHaveBeenCalled();
     expect(params).toEqual({ resolution: '1.5k' });
-    const blocked = screen.getByRole('button', { name: /^Provider for Fixture Route Table: Auto · fal\.ai\. Can't run/ });
+    const blocked = screen.getByRole('button', { name: /^Provider for Fixture Route Table: Auto · fal\.ai\. (?!Can't run)\S/ });
     expect(blocked).toHaveClass('model-node__provider-chip--blocked');
     expect(blocked).toHaveTextContent('⚠');
   });
@@ -220,7 +229,7 @@ describe('ProviderSwitcher keyboard', () => {
     expect(document.activeElement).toBe(row(/^fal\.ai/));
     fireEvent.keyDown(menu, { key: 'ArrowDown' });
     // The next item in the menu: fal's own "Add key →".
-    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Add a fal.ai key in Settings' }));
+    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Add key for fal.ai in Settings' }));
     fireEvent.keyDown(menu, { key: 'ArrowDown' });
     expect(document.activeElement).toBe(row(/^Replicate/));
     fireEvent.keyDown(menu, { key: 'Home' });
@@ -319,7 +328,7 @@ describe('Inspector and pills show only the route options', () => {
     }
     render(<Pills />);
     const pills = document.querySelector('.param-pills')!;
-    expect(pills.firstElementChild).toHaveAccessibleName(/^Provider for Fixture Route Table: Auto · fal\.ai\. Can't run/);
+    expect(pills.firstElementChild).toHaveAccessibleName(/^Provider for Fixture Route Table: Auto · fal\.ai\. (?!Can't run)\S/);
     const resolution = screen.getByTitle('Resolution').querySelector('select')!;
     expect(optionValues(resolution)).toEqual(['768sq', '1k', '2k', '4k']);
     expect(screen.getByRole('option', { name: '1.5k (not on fal.ai)' })).toBeDisabled();
@@ -466,7 +475,7 @@ describe('hidden settings: a provider shows only what it offers (PR 5)', () => {
       data: { definitionId: 'flux-2-pro', label: 'FLUX.2', params: { model: 'klein-9b', safety_tolerance: '5' }, state: 'idle', outputs: {} } };
     useGraphStore.setState({ nodes: [node], edges: [] });
     render(<ModelNode {...({ id: 'n1', data: node.data, selected: false } as NodeProps)} />);
-    fireEvent.click(screen.getByRole('button', { name: /^Provider for FLUX\.2: Auto · fal\.ai\. Can't run/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Provider for FLUX\.2: Auto · fal\.ai\. (?!Can't run)\S/ }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Set Safety back to 2' }));
     expect(useGraphStore.getState().nodes[0].data.params).toMatchObject({ model: 'klein-9b', safety_tolerance: '2' });
     expect(screen.queryByRole('menu')).toBeNull();
@@ -499,7 +508,7 @@ describe('the card', () => {
   it('shows the provider chip in place of the missing-key badge, and the switch note until dismissed', () => {
     withKeys({ FAL_KEY: KEY });
     renderCard({ _provider: 'replicate' });
-    const chip = screen.getByRole('button', { name: /^Provider for Fixture Route Table: Replicate\. Can't run/ });
+    const chip = screen.getByRole('button', { name: /^Provider for Fixture Route Table: Replicate\. (?!Can't run)\S/ });
     expect(chip).toHaveClass('model-node__provider-chip--blocked');
     expect(document.querySelector('.model-node__badge--warning')).toBeNull();
     act(() => useProviderNoteStore.getState().show('n1', ["1.5k isn't on fal.ai: set to 2k"]));

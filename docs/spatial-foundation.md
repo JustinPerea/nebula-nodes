@@ -238,9 +238,18 @@ splats' own size, 3 times the 98th-percentile Gaussian scale
 (`sampleWorldSplatExtents`), so one Gaussian or a splat whose centres all
 sit at one point opens outside it. A radius with nothing to measure falls
 back to 0.5. The camera's near plane is 0.05 of the closest zoom and its far
-plane is past the farthest zoom plus the object, so a 1 mm object and a
-10 km one both open framed and can zoom without clipping. Environments keep
-their own minimum orbit distance (0.01).
+plane is past the farthest zoom plus the object.
+
+Round 4: an object is drawn at one size, whatever its file's units. Before
+framing, the viewer scales the mesh so its bounding sphere has radius 1
+(`objectUnitScale`, `OBJECT_VIEW_UNIT_RADIUS`), then samples and frames it
+again. So the camera, the orbit range and the clip planes are the same
+numbers for a 1 mm object and a 10 km one. In file units, a ×20,000 object
+(radius about 7,000) went black near its zoom-out limit once the camera was
+past about 65,000 units, though the far plane still covered it. The orbit
+controls are made in an effect with a cleanup, so StrictMode's second render
+leaves no extra copy listening on the canvas. Environments keep their own
+units and minimum orbit distance (0.01).
 
 Every PLY passes a bounded preflight before Spark sees a byte, in the browser
 (`lib/splatPly.ts`) and in the backend (`services/splat_ply.py`), with the

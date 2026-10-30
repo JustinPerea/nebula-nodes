@@ -34,8 +34,11 @@ seed for a different object.
 Idol needs your Hugging Face token. Add it in **Settings → Providers →
 Hugging Face**; create one at
 [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens).
-Until it's set, Run on an Idol node is disabled: "You can run Idol after you
-add your Hugging Face token in Settings."
+Until it's set, nothing on the canvas runs Idol: Run on the node says "You
+can run Idol after you add your Hugging Face token in Settings.", the
+toolbar's Run says "You can run this canvas after you add your Hugging Face
+token in Settings.", and an agent's proposal that would run it can't be
+accepted yet.
 
 It runs on Hugging Face ZeroGPU, which
 [Hugging Face offers free](https://huggingface.co/docs/hub/spaces-zerogpu),
@@ -47,10 +50,10 @@ table, which may not apply to calls from a server like Nebula's).
 Why the token: the Space asks for 120 seconds of GPU a run, and on
 ZeroGPU's Blackwell cards Hugging Face's `spaces` package counts that as
 180 seconds (`duration_factor` 1.5), more than the 2 minutes without an
-account. If every run used all 180 seconds, a free account would get 1 run a
-day and PRO 13 (on H200 cards, at 120 seconds: 2 and 20). The first live run
-will confirm the number: the quota error names the seconds asked for. If it's
-120, Idol can go back to running without a token.
+account. A run needs that much left in your day to start, but is charged the
+time it uses, so a free account gets a few runs a day: at least 1, and more
+when runs are short (PRO at least 13). The first live run will confirm the
+numbers: the quota error names the seconds asked for and left.
 
 **On a PRO, Team or Enterprise account, Hugging Face can bill you** for GPU
 time past your daily quota, from your prepaid credits at $1 per 10 minutes.

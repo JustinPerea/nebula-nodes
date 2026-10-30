@@ -12,7 +12,7 @@ import { Download, Orbit, RotateCcw, X } from 'lucide-react';
 import type { WorldValueV2 } from '../../types/spatial';
 import { gaussianCountText, previewSplat, splatSourceLine } from '../../lib/worldV2Splat';
 import { downloadWorldAsset, worldAssetFilename } from '../../lib/worldDownload';
-import { failureMessage } from '../../lib/errorCopy';
+import { isOfflineRefusal } from '../../lib/backendConnection';
 import { useDialogFocusTrap } from '../../hooks/useDialogFocusTrap';
 import type { WorldViewerFailure, WorldViewerStatus } from './WorldEnvironmentViewer';
 import { ModalPortal } from '../ModalPortal';
@@ -24,6 +24,10 @@ const LazyWorldEnvironmentViewer = lazy(() =>
 
 /** GM's lines (PR #203 r1 to r3) for a splat the viewer can't show, centred
  * in the stage in place of the splat (never beside a generic one). */
+// GM, PR #203 r6 item 10. The heading is what the download's own failure
+// logs under; the dialog shows the line.
+const SPLAT_DOWNLOAD_HEADING = 'Nebula couldn’t download the splat.';
+export const SPLAT_DOWNLOAD_FAILED = 'Nebula couldn’t download the splat. Try again.';
 export const SPLAT_DAMAGED_LINE = 'Nebula can’t open this splat. Download it to try a desktop 3D viewer.';
 export const SPLAT_TOO_LARGE_LINE = 'This splat is too large to open in the browser. '
   + 'Download it to open in a desktop 3D viewer.';
@@ -74,7 +78,6 @@ function WorldSplatPreviewComponent({ world, compact = false }: WorldSplatPrevie
   const downloadRef = useRef<AbortController | null>(null);
   const titleId = useId();
   const helpId = useId();
-  const failureId = useId();
 
   const close = useCallback(() => {
     downloadRef.current?.abort();
@@ -104,13 +107,16 @@ function WorldSplatPreviewComponent({ world, compact = false }: WorldSplatPrevie
     try {
       await downloadWorldAsset(splat.asset.uri, worldAssetFilename(world.displayName, 'splat', splat.format), {
         signal: controller.signal,
-        heading: "Couldn't download the splat.",
+        heading: SPLAT_DOWNLOAD_HEADING,
       });
       if (downloadRef.current === controller) setDownload(null);
     } catch (error) {
       if (controller.signal.aborted) return;
       if (downloadRef.current === controller) {
-        setDownload({ status: 'error', message: failureMessage(error, "Couldn't download the splat.") });
+        // GM, PR #203 r6 item 10: one line, whatever the reason (the
+        // reason is logged where the request failed). Offline says nothing:
+        // the banner already pulsed.
+        setDownload({ status: 'error', message: isOfflineRefusal(error) ? '' : SPLAT_DOWNLOAD_FAILED });
       }
     } finally {
       if (downloadRef.current === controller) downloadRef.current = null;
@@ -168,7 +174,9 @@ function WorldSplatPreviewComponent({ world, compact = false }: WorldSplatPrevie
               role="dialog"
               aria-modal="true"
               aria-labelledby={titleId}
-              aria-describedby={failed ? failureId : helpId}
+              // The failure line is announced once, by its alert (review r3
+              // NIT-2): the dialog isn't described by it as well.
+              aria-describedby={failed ? undefined : helpId}
               tabIndex={-1}
               onClick={(event) => event.stopPropagation()}
               data-testid="world-splat-dialog"
@@ -242,7 +250,7 @@ function WorldSplatPreviewComponent({ world, compact = false }: WorldSplatPrevie
                 {!failed && <p id={helpId} className="world-modal__help">{SPLAT_ORBIT_HINT}</p>}
                 {failed && (
                   <div className="world-modal__failure" role="alert" data-splat-failure={failureKind}>
-                    <p id={failureId}>{failureLine(failureKind, world)}</p>
+                    <p>{failureLine(failureKind, world)}</p>
                     {failureKind === 'load' && (
                       <button type="button" className="world-modal__button" onClick={retry}>Try again</button>
                     )}

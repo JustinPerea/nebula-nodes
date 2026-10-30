@@ -194,7 +194,22 @@ def token_not_applied_error(*, detail: str) -> IdolSpaceError:
         "Check your token in Settings, then try again.")
 
 
+def duration_token_not_applied_error(*, detail: str) -> IdolSpaceError:
+    # A signed-in account gets at least 5 GPU minutes a day (the ZeroGPU
+    # docs' tier table), more than the Space's 180 s ask, so a duration
+    # refusal with HF_TOKEN sent most likely means the token didn't apply
+    # (spaces then gives the anonymous 120 s cap).
+    return with_provider_line(
+        IdolSpaceError("HF_TOKEN was sent, but ZeroGPU refused the Idol Space's per-run GPU ask as over the "
+                       f"maximum, most likely because the token didn't apply ({detail})"),
+        "Idol ran without your Hugging Face token and hit the free allowance. "
+        "Check your token in Settings, then try again.")
+
+
 def duration_error(*, detail: str, signed_in: bool) -> IdolSpaceError:
+    # The signed-in line isn't used today: a signed-in duration refusal reads
+    # as a token that didn't apply (duration_token_not_applied_error). It
+    # stays for the first live run to confirm or replace.
     if signed_in:
         return with_provider_line(
             IdolSpaceError(f"The Idol Space asks ZeroGPU for more time per run than this Hugging Face "
@@ -259,7 +274,9 @@ def classify_space_error(message: Any, *, signed_in: bool, token: str | None = N
     if kind == "token-not-applied":
         return token_not_applied_error(detail=text)
     if kind == "duration":
-        return duration_error(detail=text, signed_in=signed_in)
+        if signed_in:
+            return duration_token_not_applied_error(detail=text)
+        return duration_error(detail=text, signed_in=False)
     if "upload an image" in text.lower():
         return with_person_line(IdolSpaceError("The Idol Space got no image (it said: upload an image)"),
                                 "The image Idol got is empty. Check the node that makes it, then run Idol again.")
@@ -350,25 +367,33 @@ def clean_token(raw: Any) -> str | None:
 
 def space_missing_error(*, status: int, code: str | None) -> IdolSpaceError:
     # Hugging Face answers the same for a deleted Space and a private or
-    # gated one the caller can't see.
+    # gated one the caller can't see; a disabled one says so in its message.
     return with_person_line(
-        IdolSpaceError(f"Hugging Face reports the Idol Space (speridlabs/idol) missing: deleted, private "
-                       f"or gated (Hub API answered {status}, {code or 'no error code'})"),
+        IdolSpaceError(f"Hugging Face reports the Idol Space (speridlabs/idol) missing: deleted, private, "
+                       f"gated or disabled (Hub API answered {status}, {code or 'no error code'})"),
         "Nebula can’t find Idol on Hugging Face, so it can’t run. Use another 3D node instead.")
 
 
-# huggingface_hub's own rule (utils/_http.py hf_raise_for_status): the Hub
-# says RepoNotFound for a missing repo, and for a private or gated one the
-# caller can't see; any 401 on a repo API but a bad token's is that too.
+# huggingface_hub's own rule (2.4.0 utils/_http.py hf_raise_for_status, read
+# in its order on an error answer): X-Error-Code GatedRepo, then X-Error-Message
+# "Access to this resource is disabled.", then X-Error-Code RepoNotFound or a
+# 401 on a repo API with any message but a bad token's. Each one means the
+# caller can't use the Space, so the person reads the missing line, even
+# with a token (the token is fine). A 404 without the RepoNotFound code is no
+# "missing" to huggingface_hub either: the stage check skips it.
+# https://github.com/huggingface/huggingface_hub/blob/v2.4.0/src/huggingface_hub/utils/_http.py
 _BAD_TOKEN_MESSAGE = "Invalid credentials in Authorization header"
+_DISABLED_MESSAGE = "Access to this resource is disabled."
 
 
 def hub_says_missing(response: httpx.Response) -> bool:
-    if response.status_code == 404:
+    if response.status_code < 400:
+        return False
+    code = response.headers.get("x-error-code")
+    message = response.headers.get("x-error-message")
+    if code in ("GatedRepo", "RepoNotFound") or message == _DISABLED_MESSAGE:
         return True
-    if response.headers.get("x-error-code") == "RepoNotFound":
-        return True
-    return response.status_code == 401 and response.headers.get("x-error-message") != _BAD_TOKEN_MESSAGE
+    return response.status_code == 401 and message != _BAD_TOKEN_MESSAGE
 
 
 def _number_text(value: float) -> str:
@@ -419,7 +444,8 @@ async def wait_until_running(client: httpx.AsyncClient, token: str | None) -> No
             _log(f"stage check skipped: {type(exc).__name__}")
             return
         if hub_says_missing(response):
-            raise space_missing_error(status=response.status_code, code=response.headers.get("x-error-code"))
+            raise space_missing_error(status=response.status_code, code=(
+                response.headers.get("x-error-code") or response.headers.get("x-error-message")))
         if response.status_code in (401, 403) and token:
             # The Hub refuses a bad or revoked token even on a public Space.
             raise token_refused(status=response.status_code)
@@ -649,17 +675,25 @@ async def _download_ply(client: httpx.AsyncClient, url: str, token: str | None,
                         destination: Path) -> SplatPlyHeader:
     """Stream the result to ``.part``: the header is checked from the first
     bytes (up to 64 KiB), and the stream is cut as soon as it is refused,
-    passes the size the header declares, or disagrees with Content-Length."""
+    passes the size the header declares, or disagrees with Content-Length.
+
+    The download asks for the file as it is (``Accept-Encoding: identity``).
+    A server that compresses it anyway is still read: httpx hands over the
+    decoded bytes, and Content-Length then counts the compressed body, so it
+    is compared only when the body isn't encoded. The decoded bytes are held
+    to the header's size either way."""
     partial = destination.with_name(destination.name + ".part")
     received = 0
     try:
-        async with client.stream("GET", url, headers=_headers(url, token)) as response:
+        headers = {**_headers(url, token), "Accept-Encoding": "identity"}
+        async with client.stream("GET", url, headers=headers) as response:
             if response.status_code != 200:
                 raise with_provider_line(
                     # no API status: a download of a result file, not the Space's API
                     IdolSpaceError(f"The Idol Space's .ply download answered {response.status_code}"),
                     "Nebula couldn’t download the object from Idol. Try again in a minute.")
-            raw_declared = response.headers.get("content-length")
+            encoding = response.headers.get("content-encoding", "").strip().lower()
+            raw_declared = response.headers.get("content-length") if encoding in ("", "identity") else None
             declared = int(raw_declared) if raw_declared and raw_declared.isdigit() else None
             if declared is not None and declared > MAX_PLY_BYTES:
                 raise _too_large(what=f"is {declared:,} bytes, above Nebula's {MAX_PLY_BYTES:,}-byte limit")
@@ -754,10 +788,12 @@ async def run_idol(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: 
         image.value if image is not None else None)
     if not image_value:
         raise as_person_line(ValueError("Idol needs an image. Connect one, then run it again."))
-    # TODO(Justin, Q141): an agent's run on a PRO, Team or Enterprise token
-    # can be billed by Hugging Face past the daily quota ($1 per 10 GPU
-    # minutes, https://huggingface.co/docs/hub/spaces-zerogpu); the spend
-    # gate admits it at $0 today, and describe_node tells agents so.
+    # An agent's run on a PRO, Team or Enterprise token can be billed by
+    # Hugging Face past the daily quota ($1 per 10 GPU minutes,
+    # https://huggingface.co/docs/hub/spaces-zerogpu). The spend gate admits
+    # it at $0 today, and every agent surface says so (HF_SPACE_BILLING_NOTE),
+    # pending a product decision on whether agents ask before runs that can
+    # bill a PRO account.
     # Settings and the settings check trim too; this is the backstop.
     token = clean_token(api_keys.get(TOKEN_KEY))
     params = dict(node.params)

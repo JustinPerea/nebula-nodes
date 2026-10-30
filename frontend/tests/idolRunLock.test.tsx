@@ -6,9 +6,14 @@ import type { NodeData } from '../src/types';
 
 /**
  * GM, PR #203 r4: without a Hugging Face token, Run on an Idol node is
- * disabled in the shared disabled style with the lock reason as its tooltip,
+ * locked in the shared disabled style with the lock reason as its tooltip,
  * so a sure-to-fail run is never sent. Every Run surface: the selection
- * toolbar, the Inspector and the node's context menu.
+ * toolbar, the Inspector and the node's context menu. Review r3 LOW-2: it is
+ * aria-disabled, not natively disabled, so a keyboard reaches it and its
+ * reason (its accessible description), as the toolbar Run is while
+ * following; one cursor on every surface. GM r6: a node fed by Idol locks
+ * too (its run would run Idol), and the whole canvas's Run, Cmd+Enter and
+ * the palette's Run graph say the canvas's line.
  */
 
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn(() => () => {}), disconnect: vi.fn() } }));
@@ -31,16 +36,24 @@ const INITIAL_GRAPH_STATE = { ...useGraphStore.getState() };
 const INITIAL_UI_STATE = { ...useUIStore.getState() };
 const LOCK = 'You can run Idol after you add your Hugging Face token in Settings.';
 
+
 function idolNode(id: string, selected = true): Node<NodeData> {
   return { id, type: 'model-node', position: { x: 0, y: 0 }, selected,
     data: { label: 'Idol', definitionId: 'speridlabs-idol', params: {}, outputs: {}, state: 'idle' } };
 }
 
+function previewNode(id: string, selected = false): Node<NodeData> {
+  return { id, type: 'model-node', position: { x: 300, y: 0 }, selected,
+    data: { label: 'Preview', definitionId: 'preview', params: {}, outputs: {}, state: 'idle' } };
+}
+
 let executeNode: ReturnType<typeof vi.fn>;
+let runCluster: ReturnType<typeof vi.fn>;
 
 function setup(apiKeys: Record<string, string>, loaded = true) {
   executeNode = vi.fn(async () => undefined);
-  useGraphStore.setState({ nodes: [idolNode('n1')], edges: [], executeNode } as never);
+  runCluster = vi.fn(async () => undefined);
+  useGraphStore.setState({ nodes: [idolNode('n1')], edges: [], executeNode, executeCluster: runCluster } as never);
   useUIStore.setState({ settingsCache: { apiKeys, loaded } });
 }
 
@@ -73,20 +86,46 @@ const surfaces = [
 
 describe('Idol without a Hugging Face token: Run is locked', () => {
   for (const [where, mount] of surfaces) {
-    it(`${where}: disabled with GM's reason, and a click sends nothing`, () => {
+    it(`${where}: locked with GM's reason, focusable, and a click or key sends nothing`, () => {
       setup({});
       const run = mount();
-      expect(run).toBeDisabled();
+      expect(run).toHaveAttribute('aria-disabled', 'true');
+      expect(run).not.toBeDisabled();
+      expect(run).toHaveAttribute('data-key-locked', '');
       expect(run).toHaveAttribute('title', LOCK);
+      expect(run).toHaveAccessibleDescription(LOCK);
+      run.focus();
+      expect(document.activeElement).toBe(run);
       fireEvent.click(run);
+      fireEvent.keyDown(run, { key: 'Enter' });
       expect(executeNode).not.toHaveBeenCalled();
+      expect(runCluster).not.toHaveBeenCalled();
     });
 
     it(`${where}: runs once a token is set`, () => {
       setup({ HF_TOKEN: '***abcd' });
       const run = mount();
       expect(run).toBeEnabled();
+      expect(run).not.toHaveAttribute('aria-disabled');
+      expect(run).not.toHaveAttribute('data-key-locked');
       expect(run).not.toHaveAttribute('title', LOCK);
+    });
+
+    it(`${where}: a node fed by Idol is locked with Idol's line (its run would run Idol)`, () => {
+      setup({});
+      useGraphStore.setState({ nodes: [idolNode('n1', false), previewNode('n2', true)],
+        edges: [{ id: 'e1', source: 'n1', target: 'n2', sourceHandle: 'world', targetHandle: 'input' }] } as never);
+      if (where === 'the Inspector') useUIStore.getState().selectNode('n2');
+      if (where === 'the context menu') {
+        useUIStore.getState().showContextMenu({ x: 20, y: 30 }, 'n2', null);
+        render(<ContextMenu />);
+      }
+      const run = where === 'the context menu' ? screen.getByRole('button', { name: 'Run This Node' })
+        : where === 'the Inspector' ? (render(<Inspector embedded />), screen.getByRole('button', { name: /^Run/ }))
+          : (render(<ReactFlowProvider><SelectionToolbar /></ReactFlowProvider>),
+            screen.getByRole('button', { name: 'Run selected nodes' }));
+      expect(run).toHaveAttribute('aria-disabled', 'true');
+      expect(run).toHaveAccessibleDescription(LOCK);
     });
 
     it(`${where}: nothing locks before Settings load`, () => {

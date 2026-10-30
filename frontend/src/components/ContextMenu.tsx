@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { useUIStore } from '../store/uiStore';
 import { useGraphStore } from '../store/graphStore';
 import { useCanvasPinsStore } from '../store/canvasPinsStore';
@@ -7,7 +7,8 @@ import { floatingBottomLimit } from '../lib/bottomBar';
 import { useCanvasLock } from '../lib/canvasLock';
 import '../styles/panels.css';
 import { keyBlockedByModal } from '../lib/canvasShortcutScope';
-import { nodesKeyLockReason } from '../lib/runKeyLock';
+import { keyLockedProps, nodesKeyLockReason } from '../lib/runKeyLock';
+import { nodesThatRun } from '../lib/runScope';
 
 /** How close the menu may come to the window's edges. */
 const MENU_EDGE = 8;
@@ -19,6 +20,8 @@ interface MenuItem {
   disabled?: boolean;
   /** The tooltip, e.g. why Run is disabled. */
   title?: string;
+  /** Locked by a missing key: aria-disabled with this reason (keyLockedProps). */
+  keyLock?: string | null;
   action: () => void;
 }
 
@@ -38,6 +41,8 @@ export function ContextMenu() {
   // to open." while following.
   const lock = useCanvasLock();
   const graphNodes = useGraphStore((s) => s.nodes);
+  const graphEdges = useGraphStore((s) => s.edges);
+  const keyLockId = useId();
   const settingsCache = useUIStore((s) => s.settingsCache);
   const menuRef = useRef<HTMLDivElement>(null);
   const [place, setPlace] = useState<{ left: number; top: number } | null>(null);
@@ -111,13 +116,16 @@ export function ContextMenu() {
     );
   }
 
-  // A node that can't run without its key (Idol's Hugging Face token).
-  const keyLock = nodesKeyLockReason(graphNodes, [nodeId], settingsCache);
+  // A node that can't run without its key (Idol's Hugging Face token), this
+  // one or one feeding it: locked as the other Runs are (keyLockedProps).
+  const running = nodesThatRun(graphNodes, graphEdges, { kind: 'node', nodeId });
+  const keyLock = nodesKeyLockReason(running, running.map((node) => node.id), settingsCache);
   const items: MenuItem[] = [
     {
       label: 'Run This Node',
-      disabled: isExecuting || runStarting || Boolean(keyLock),
+      disabled: isExecuting || runStarting,
       title: keyLock ?? undefined,
+      keyLock,
       action: () => {
         if (keyLock) return;
         executeNode(nodeId);
@@ -166,11 +174,13 @@ export function ContextMenu() {
           className={`context-menu__item ${item.danger ? 'context-menu__item--danger' : ''}`}
           onClick={item.action}
           {...lock.act({ disabled: item.disabled, title: item.title })}
+          {...keyLockedProps(item.keyLock ?? null, keyLockId)}
         >
           <span>{item.label}</span>
           {item.shortcut && <span className="context-menu__shortcut">{item.shortcut}</span>}
         </button>
       ))}
+      {keyLock && <span id={keyLockId} className="toolbar__sr-only">{keyLock}</span>}
     </div>
   );
 }

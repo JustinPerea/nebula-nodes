@@ -368,7 +368,7 @@ MULTI_ROUTED: set[str] = {
     "flux-video-upscale", "krea-3",
     # PR 4: FLUX.2 (BFL first, then the fal route it always ran on).
     "flux-2-pro",
-    # Idol on its maker's Hugging Face Space (a keyless route).
+    # Idol on its maker's Hugging Face Space (a keyed route).
     "speridlabs-idol",
 }
 

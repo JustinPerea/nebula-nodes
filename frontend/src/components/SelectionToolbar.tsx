@@ -13,7 +13,7 @@ import { useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
 import { useCanvasPinsStore } from '../store/canvasPinsStore';
 import { isBackendNodeId } from '../lib/canvasPins';
-import { describeRunScope, runChipLabel, summarizeRunScope } from '../lib/runScope';
+import { describeRunScope, nodesThatRun, runChipLabel, summarizeRunScope } from '../lib/runScope';
 import { usePricingStore } from '../store/pricingStore';
 import { useInputSizeStore } from '../store/inputSizeStore';
 import { setSelectionActionSlot } from '../lib/selectionActionSlot';
@@ -24,7 +24,7 @@ import {
 } from '../lib/canvasSelection';
 import { failureMessage } from '../lib/errorCopy';
 import { useCanvasLock } from '../lib/canvasLock';
-import { nodesKeyLockReason } from '../lib/runKeyLock';
+import { keyLockedProps, nodesKeyLockReason } from '../lib/runKeyLock';
 
 
 export function SelectionToolbar() {
@@ -62,10 +62,15 @@ export function SelectionToolbar() {
   const pricing = usePricingStore((s) => s.table);
   const apiKeys = useUIStore((s) => s.settingsCache.apiKeys);
   const settingsLoaded = useUIStore((s) => s.settingsCache.loaded);
-  // A node that can't run without its key (Idol's Hugging Face token):
-  // Run is disabled with its line as the reason (GM, PR #203 r4).
-  const keyLock = useMemo(() => nodesKeyLockReason(nodes, ids, { loaded: settingsLoaded, apiKeys }),
-    [nodes, ids, settingsLoaded, apiKeys]);
+  // A node that can't run without its key (Idol's Hugging Face token), the
+  // selection's or one feeding it: Run is locked with its line as the reason
+  // (GM, PR #203 r4), aria-disabled so it keeps its focus and tooltip, and the
+  // scope line it reads out is that line (r6 item 3).
+  const keyLock = useMemo(() => {
+    const running = nodesThatRun(nodes, edges ?? [],
+      ids.length === 1 ? { kind: 'node', nodeId: ids[0] } : { kind: 'cluster', nodeIds: ids });
+    return nodesKeyLockReason(running, running.map((node) => node.id), { loaded: settingsLoaded, apiKeys });
+  }, [nodes, edges, ids, settingsLoaded, apiKeys]);
   const sizes = useInputSizeStore((s) => s.sizes);
   const requestSizes = useInputSizeStore((s) => s.request);
   const runScope = useMemo(() => summarizeRunScope(nodes, edges ?? [],
@@ -112,7 +117,6 @@ export function SelectionToolbar() {
   }
 
   function runSelection() {
-    if (keyLock) return;
     if (ids.length === 1) {
       // Use the established target-node path so the backend derives the
       // authoritative target-plus-ancestors closure from the full graph.
@@ -156,11 +160,12 @@ export function SelectionToolbar() {
       <button
         type="button"
         className="selection-toolbar__button selection-toolbar__button--primary"
-        onClick={runSelection}
-        {...lock.act({ disabled: isExecuting || runStarting || Boolean(keyLock),
+        onClick={() => { if (keyLock) return; runSelection(); }}
+        {...lock.act({ disabled: isExecuting || runStarting,
           title: keyLock ?? `Run selected nodes. ${describeRunScope(runScope)}` })}
         aria-label="Run selected nodes"
         aria-describedby={runScopeId}
+        {...keyLockedProps(keyLock, runScopeId)}
       >
         <Play size={17} fill="currentColor" aria-hidden="true" />
         <span>Run</span>
@@ -168,7 +173,7 @@ export function SelectionToolbar() {
           <span className="selection-toolbar__paid" aria-hidden="true">{runChip}</span>
         )}
       </button>
-      <span id={runScopeId} className="toolbar__sr-only">{describeRunScope(runScope)}</span>
+      <span id={runScopeId} className="toolbar__sr-only">{keyLock ?? describeRunScope(runScope)}</span>
       {/* One node selected: it portals its own actions (Next step, Edit video,
           Settings) here. Keyed by node so a new selection gets a fresh slot. */}
       {ids.length === 1 && (

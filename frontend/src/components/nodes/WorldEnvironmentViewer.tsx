@@ -21,6 +21,7 @@ import {
 } from '../../lib/worldTransform';
 import {
   objectFraming,
+  objectUnitScale,
   placeWorldCamera,
   robustWorldSceneBounds,
   sampleWorldSplatCenters,
@@ -260,9 +261,19 @@ function WorldSplatScene({
         }
 
         mesh.updateMatrixWorld(true);
-        const sampledCenters = mesh.packedSplats
+        let sampledCenters = mesh.packedSplats
           ? sampleWorldSplatCenters(mesh.packedSplats, mesh.matrixWorld)
           : [];
+        if (framing === 'object' && mesh.packedSplats) {
+          // An object is drawn at one size whatever its file's units
+          // (objectUnitScale, review r3 LOW-3), then framed.
+          const unit = objectUnitScale(sampledCenters, sampleWorldSplatExtents(mesh.packedSplats, mesh.matrixWorld));
+          if (unit !== 1) {
+            mesh.scale.multiplyScalar(unit);
+            mesh.updateMatrixWorld(true);
+            sampledCenters = sampleWorldSplatCenters(mesh.packedSplats, mesh.matrixWorld);
+          }
+        }
         const fallbackCenter = resetPosition
           ? { x: resetPosition[0], y: resetPosition[1], z: resetPosition[2] }
           : { x: 0, y: 0, z: 0 };
@@ -417,22 +428,31 @@ function OrbitNavigation({
 }) {
   const { camera, gl } = useThree();
   const perspectiveCamera = camera as PerspectiveCamera;
-  const controls = useMemo(() => {
+  // Made in an effect, with its cleanup (review r3 LOW-4): the constructor
+  // attaches its listeners, so a memo's discarded copy (StrictMode renders
+  // twice) stayed on the canvas and every wheel zoomed twice.
+  const controlsRef = useRef<OrbitControls | null>(null);
+  useEffect(() => {
     const next = new OrbitControls(perspectiveCamera, gl.domElement);
     next.enableDamping = true;
     next.dampingFactor = 0.08;
     next.screenSpacePanning = true;
     next.minDistance = ENVIRONMENT_ORBIT_MIN_DISTANCE;
     next.target = target;
-    return next;
+    controlsRef.current = next;
+    return () => {
+      if (controlsRef.current === next) controlsRef.current = null;
+      next.dispose();
+    };
   }, [gl, perspectiveCamera, target]);
 
+  // After the one above in the same commit, so new controls get the bounds.
   useEffect(() => {
-    syncOrbitControls(controls, bounds, target);
-  }, [bounds, controls, resetToken, target]);
+    const controls = controlsRef.current;
+    if (controls) syncOrbitControls(controls, bounds, target);
+  }, [bounds, gl, perspectiveCamera, resetToken, target]);
 
-  useEffect(() => () => controls.dispose(), [controls]);
-  useFrame(() => controls.update());
+  useFrame(() => controlsRef.current?.update());
   return null;
 }
 

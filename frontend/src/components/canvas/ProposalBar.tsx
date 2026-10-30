@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { ChevronDown, ChevronLeft, ChevronRight, Eye, X } from 'lucide-react';
 import {
@@ -10,7 +10,8 @@ import {
   proposalChanges,
   proposalSummary,
 } from '../../lib/canvasProposals';
-import { useProposalNotReady } from '../../hooks/useProposalReadiness';
+import { useProposalReadiness } from '../../hooks/useProposalReadiness';
+import { keyLockedProps } from '../../lib/runKeyLock';
 import { useCanvasProposalsStore, type ProposalEntry } from '../../store/canvasProposalsStore';
 import { InNoticeRegion } from '../InNoticeRegion';
 import '../../styles/canvasProposals.css';
@@ -107,7 +108,12 @@ export function ProposalBar() {
   const errorLeave = useLeave(live ? errors[live.view.id] ?? null : null, 'row');
   const currentId = live?.view.id ?? null;
   const position = live ? open.indexOf(live) : 0;
-  const notReady = useProposalNotReady(current);
+  // GM, PR #203 r6 item 1: a proposal whose run can't start without a key
+  // (Idol without a Hugging Face token) can't be accepted yet: Accept is
+  // locked with GM's line, as Run is (keyLockedProps). The backend still
+  // refuses the run if one is sent.
+  const { notReady, acceptLock } = useProposalReadiness(current);
+  const acceptLockId = useId();
   const [noteRef, noteClamped] = useClamped(current?.view.note);
 
   useEffect(() => {
@@ -321,13 +327,16 @@ export function ProposalBar() {
             type="button"
             className="proposal-bar__button proposal-bar__button--primary"
             {...lock.act({ disabled: Boolean(pending[current.view.id]) || gateHeld,
-              title: gateHeld ? PROPOSAL_GATE_COPY.accept : undefined })}
+              title: gateHeld ? PROPOSAL_GATE_COPY.accept : acceptLock ?? undefined })}
+            {...keyLockedProps(acceptLock, acceptLockId)}
             onClick={() => {
+              if (acceptLock) return;
               if (settled()) void accept(current.view.id);
             }}
           >
             {pending[current.view.id] === 'accept' ? 'Accepting…' : acceptLabel(current.view)}
           </button>
+          {acceptLock && <span id={acceptLockId} className="toolbar__sr-only">{acceptLock}</span>}
         </div>
       </div>
     </InNoticeRegion>

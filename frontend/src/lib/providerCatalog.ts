@@ -76,7 +76,7 @@ export const PROVIDER_KEYS: readonly ProviderKeySpec[] = [
   { key: 'HF_TOKEN', label: 'Hugging Face', credential: 'token', placeholder: 'hf_...',
     url: 'https://huggingface.co/settings/tokens',
     brand: ['Idol'], note: 'Needed to run Idol.',
-    // TODO(Justin): which token scope to ask for.
+    // Pending a product decision: which token scope Settings asks for.
     caveat: 'Idol runs on your Hugging Face allowance. With Hugging Face PRO, time past your allowance uses '
       + 'your prepaid Hugging Face credits.' },
   // BytePlus Service Specific Terms (Model Services): "The BytePlus Model

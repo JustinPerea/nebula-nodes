@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useMemo } from 'react';
+import { useRef, useEffect, useState, useMemo, useId } from 'react';
 import { Brush, Copy, Info, Play, Plus, RefreshCw, Star, Trash2, Upload, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { storedAssetId } from '../../store/storedAssetsStore';
@@ -21,11 +21,11 @@ import { JevResultDetails } from './JevResultDetails';
 import { StructuredOutputs } from '../nodes/StructuredValuePreview';
 import { structuredOutputEntries } from '../../lib/structuredValue';
 import { isJevNode, parseJevOutputs } from '../../lib/jev';
-import { routeKeyLockReason } from '../../lib/runKeyLock';
+import { keyLockedProps, nodesKeyLockReason } from '../../lib/runKeyLock';
 import { allParamDefinitions, paramDefinitionsForRun, providerLabel, routeById, routeSwitch, selectRoute, shownRouteId, visibleParams as visibleParamsFor, withWiredBlockers } from '../../lib/directRoute';
 import { definitionSnap, definitionStartShapeNote, sizeNote } from '../../lib/makerSizes';
 import { paramDefaultFor, snapParamDefaults, type DefaultSnapNote } from '../../lib/paramDefaults';
-import { nodeWiredCounts, nodeWiredPorts } from '../../lib/runScope';
+import { nodeWiredCounts, nodeWiredPorts, nodesThatRun } from '../../lib/runScope';
 import { ProviderSwitcher } from '../nodes/ProviderSwitcher';
 import { InspectorFoot } from './InspectorFoot';
 import { useProviderNoteStore } from '../../store/providerNoteStore';
@@ -158,11 +158,16 @@ export function Inspector({ embedded = false }: InspectorProps) {
     const routed = withWiredBlockers(definition, nodeParams, wiredKey ? wiredKey.split('\n') : []);
     return paramDefinitionsForRun(definition, routed, settingsCache.loaded ? settingsCache.apiKeys : {}, { seedOptIn: false });
   }, [definition, nodeParams, wiredKey, settingsCache.loaded, settingsCache.apiKeys]);
-  // A node that can't run without its key (Idol's Hugging Face token): Run
-  // is disabled with its line as the reason (GM, PR #203 r4).
-  const keyLock = useMemo(() => (settingsCache.loaded
-    ? routeKeyLockReason(definition, nodeParams, settingsCache.apiKeys) : null),
-  [definition, nodeParams, settingsCache.loaded, settingsCache.apiKeys]);
+  // A node that can't run without its key (Idol's Hugging Face token), this
+  // one or one feeding it: Run is locked with its line as the reason (GM, PR
+  // #203 r4), aria-disabled so it keeps its focus and tooltip, and it reads
+  // the line out (keyLockedProps).
+  const keyLock = useMemo(() => {
+    if (!renderNodeId) return null;
+    const running = nodesThatRun(nodes, edges, { kind: 'node', nodeId: renderNodeId });
+    return nodesKeyLockReason(running, running.map((node) => node.id), settingsCache);
+  }, [renderNodeId, nodes, edges, settingsCache]);
+  const keyLockId = useId();
 
   // A maker that takes a fixed size list (Ideogram 3, Ideogram 2a, Runway
   // Gen-4 Image) gets the nearest one on its route, and Seedance 2.5 on
@@ -1203,7 +1208,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button"
-            {...lock.act({ disabled: Boolean(keyLock), title: keyLock ?? 'Run this node and its dependencies' })}
+            {...lock.act({ title: keyLock ?? 'Run this node and its dependencies' })}
+            {...keyLockedProps(keyLock, keyLockId)}
             onClick={() => { if (!keyLock) void executeNode(renderNode.id); }}
           >
             <Play
@@ -1215,6 +1221,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
             />
             <span>Run</span>
           </button>
+          {/* The locked Run's description (toolbar__sr-only: read out, not shown). */}
+          {keyLock && <span id={keyLockId} className="toolbar__sr-only">{keyLock}</span>}
           <button
             type="button"
             className="inspector__action-button"

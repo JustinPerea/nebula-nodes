@@ -282,6 +282,22 @@ export interface ObjectFraming {
 /** The object's robust bounding sphere from the sampled centers: the trimmed
  * box's center (as robustWorldSceneBounds takes it, Y included) and the
  * 98th-percentile distance from it. */
+/** The object viewer draws every object at this radius (review r3 LOW-3):
+ * the mesh is scaled by objectUnitScale before it is framed, so the camera,
+ * the orbit range and the clip planes are the same numbers at 1 mm and at
+ * 10 km. In the file's own units, a ×20,000 object (radius about 7,000) went
+ * black at its zoom-out limit once the camera was past about 65,000 units,
+ * while the far plane still covered it. */
+export const OBJECT_VIEW_UNIT_RADIUS = 1;
+
+/** The mesh scale that brings an object's bounding sphere (objectBoundingSphere)
+ * to OBJECT_VIEW_UNIT_RADIUS; 1 when there is nothing to measure. */
+export function objectUnitScale(sampledCenters: readonly WorldPoint[], extents: readonly number[] = []): number {
+  const { radius } = objectBoundingSphere(sampledCenters, undefined, extents);
+  const scale = OBJECT_VIEW_UNIT_RADIUS / radius;
+  return Number.isFinite(scale) && scale > 0 ? scale : 1;
+}
+
 export function objectBoundingSphere(
   sampledCenters: readonly WorldPoint[],
   fallbackCenter: WorldPoint = { x: 0, y: 0, z: 0 },

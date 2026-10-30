@@ -33,7 +33,7 @@ Nine route-table nodes ship (PR 3 and PR 4, 2026-10-15; Idol, 2026-10-29). The n
 | `flux-video-upscale` FLUX Video Upscale | `bfl` (maker), `fal`, `replicate`, `krea` (API token or plan) | `creativity` (precise/creative) and `upscale_factor` 1.5-3; optional prompt. Priced by the output's megapixel-seconds or tier, so unpriced until the run. Replaces `krea-enhance-black-forest-labs-flux-video-upscale`. |
 | `flux-2-pro` FLUX.2 | `bfl` (maker), `fal` | `model` picks the endpoint on both routes: FLUX.2 [pro], [max], [flex], [klein] 9B and [klein] 4B on both, fal's FLUX 2 Flash on fal only. The option labels are the providers' own names (BFL's, and fal's for Flash; 2026-10-16), the values unchanged. Param names are fal's (the node ran on fal before); BFL gets `width`/`height` from the preset, integer `safety_tolerance`, `steps`/`guidance` (shown on Flex only; a hidden value left from Flex isn't sent). Each route's `accepts` lists its models, so a `model` outside them (`"MAX"`) stops instead of running Pro. `enable_safety_checker` is fal's own. fal's Flash and Klein prices are `unconfirmed` row by row. Was a fal-only handler; saved graphs make the same fal requests (`test_flux2_nodes.py`), except that Flash no longer sends `safety_tolerance` (`APPROVED_LEGACY_DELTA`, PR 5). |
 | `krea-3` Krea 3 | `krea` (maker, API token or plan; early access for beta workspaces), `fal` | Up to 8 reference images. Krea's options (`thinking_mode`, `resolution`, `aspect_ratio`, `regional_edit`) and fal's (`model`, `reasoning_level`, `image_size`, ...) are each route's own; only `seed` is shared. |
-| `speridlabs-idol` Idol | `hf-space` (maker; `HF_TOKEN` required, with its own `missingKeyLine`) | One image to a Gaussian splat on Speridlabs' Hugging Face Space, returned as World v2 with a PLY splat. $0 (ZeroGPU, on the person's own allowance). The token is required because the Space likely asks for 180 s a run, more than the 2-minute anonymous allowance (GM, PR #203 r4; to be confirmed on the first live run, and a one-line switch back to keyless if it's 120 s). No `randomize` setting: the run cache would replay a random seed. See [model-providers/speridlabs/idol.md](model-providers/speridlabs/idol.md). |
+| `speridlabs-idol` Idol | `hf-space` (maker; `HF_TOKEN` required, with its own `missingKeyLine`) | One image to a Gaussian splat on Speridlabs' Hugging Face Space, returned as World v2 with a PLY splat. $0 (ZeroGPU, on the person's own allowance). The token is required because the Space likely asks for 180 s a run, more than the 2-minute anonymous allowance (GM, PR #203 r4; to be confirmed on the first live run. A switch back to keyless if it's 120 s takes the route keys, new keyless copy ruled first, the tests that pin the keyed state and the regenerated tables: [idol.md](model-providers/speridlabs/idol.md#switching-back-to-keyless)). No `randomize` setting: the run cache would replay a random seed. See [model-providers/speridlabs/idol.md](model-providers/speridlabs/idol.md). |
 
 The three Krea FLUX nodes the catalog generated before are now the `krea` routes of these nodes: `scripts/sync-krea-catalog.py` `FOLDED` (see Adding a route-table node). Saved graphs that still name the old ids load as the new nodes (below).
 
@@ -127,7 +127,7 @@ A route-table node keeps its usual fields (`apiProvider` is the maker, `envKeyNa
 
 A maker's free endpoint can run with no key while a key still changes how it
 runs (a Hugging Face token gives a Space run the person's own ZeroGPU quota
-instead of the shared anonymous one). Such a route says `keys: []` and
+instead of the anonymous one). Such a route says `keys: []` and
 `optionalKeys: ["HF_TOKEN"]`. No shipped node uses one today: Idol was keyless
 until GM's r4 ruling made its token required, and its switch back is this
 shape (`test_route_agent_surfaces.py` `_keyless_idol` keeps it tested).
@@ -162,13 +162,22 @@ A keyed route can carry `missingKeyLine`, one sentence for the person when its
 key isn't set (Idol: "You can run Idol after you add your Hugging Face token
 in Settings.", GM PR #203 r4). With it:
 
-- The canvas disables Run on the node (selection toolbar, Inspector, context
-  menu) once Settings have loaded, with the line as the reason
-  (`lib/runKeyLock.ts`, `directRoute.routeMissingKeyLine`).
+- Once Settings have loaded, the canvas locks every Run that would run the
+  node (`lib/runKeyLock.ts`, `directRoute.routeMissingKeyLine`; GM PR #203
+  r6): Run on it or on a node it feeds (selection toolbar, Inspector, context
+  menu) with the line as the reason; the toolbar's Run for the whole canvas
+  with "You can run this canvas after you add your … in Settings."; a
+  proposal's Accept with "You can accept this after you add your … in
+  Settings.". Each is `aria-disabled` (focusable, its tooltip kept, the line
+  as its accessible description, the not-allowed cursor), never natively
+  disabled. Cmd+Enter, the palette's Run graph and every other run path send
+  nothing and show the line as a neutral notice.
 - The engine's preflight and `maker_routes` refuse the run with it before any
   request (`node_route.missing_key_line_for`, used by
   `route_unavailable_message` and `route_unavailable_line`), so agent and CLI
-  runs get the same refusal.
+  runs get the same refusal. `/api/quick` (`nebula quick`) checks the route
+  before the spend check and answers 400 "Nothing ran, so nothing was spent."
+  followed by the line.
 - It applies only when the route is missing its key and nothing else blocks
   it. With Auto and no key set, it applies when every runnable route has
   one, so a node with another route keeps the usual "add a key or choose

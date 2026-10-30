@@ -224,8 +224,8 @@ def called_provider(definition_id: str, params: Mapping[str, Any] | None,
         route = _route(definition_id, params or {}, api_keys or {})
         key = route.key
         if key is None and route.kind != node_route.PLAN and route.route_id is not None:
-            # A keyless route run anonymously (Idol on its Hugging Face Space)
-            # still called a provider: the one its optional key belongs to.
+            # A keyless route run anonymously (a Hugging Face Space without a
+            # token) still called a provider: the one its optional key belongs to.
             spec = node_route.route_by_id(definition_for(definition_id), route.route_id) or {}
             if node_route.is_keyless(spec):
                 key = next(iter(node_route.keys(spec.get("optionalKeys"))), None)

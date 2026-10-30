@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { PerspectiveCamera, Vector3 } from 'three';
+import { PerspectiveCamera, Vector3, type Object3D } from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const viewerHarness = vi.hoisted(() => ({
@@ -148,7 +148,7 @@ import { WorldEnvironmentViewer } from '../../src/components/nodes/WorldEnvironm
 import { RequestFailedError } from '../../src/lib/errorCopy';
 import { disposeSparkQuietly } from '../../src/lib/sparkDispose';
 import {
-  OBJECT_ORBIT_MAX_DISTANCE_FACTOR, OBJECT_ORBIT_MIN_RADIUS_FACTOR, OBJECT_VIEW_MARGIN,
+  OBJECT_ORBIT_MAX_DISTANCE_FACTOR, OBJECT_ORBIT_MIN_RADIUS_FACTOR, OBJECT_VIEW_MARGIN, OBJECT_VIEW_UNIT_RADIUS,
 } from '../../src/lib/worldNavigation';
 
 describe('WorldEnvironmentViewer', () => {
@@ -355,9 +355,13 @@ describe('WorldEnvironmentViewer', () => {
 
     const offset = camera.position.clone();
     const distance = offset.length();
+    // Drawn at the unit radius (review r3 LOW-3): the 0.4 sphere is scaled 2.5x.
+    const scale = (viewerHarness.meshes.at(-1) as Object3D).scale.x;
+    expect(scale * 0.4).toBeCloseTo(OBJECT_VIEW_UNIT_RADIUS, 1);
+    const radius = 0.4 * scale;
     // Sphere radius 0.4 (98th percentile), fov 58 at 800x600: the vertical half
     // is the narrower, so r / sin(29 deg) x margin.
-    expect(distance).toBeCloseTo((0.4 / Math.sin((29 * Math.PI) / 180)) * OBJECT_VIEW_MARGIN, 1);
+    expect(distance).toBeCloseTo((radius / Math.sin((29 * Math.PI) / 180)) * OBJECT_VIEW_MARGIN, 1);
     const direction = offset.normalize();
     // Idol's +X front, 30 degrees off it about +Y and 15 degrees above.
     const pitch = (15 * Math.PI) / 180;
@@ -372,9 +376,9 @@ describe('WorldEnvironmentViewer', () => {
     const controls = viewerHarness.controls.at(-1) as { maxDistance: number; minDistance: number };
     expect(controls.maxDistance).toBeCloseTo(distance * OBJECT_ORBIT_MAX_DISTANCE_FACTOR, 1);
     // It zooms in to a fifth of its radius, and the clip planes come from it.
-    expect(controls.minDistance).toBeCloseTo(0.4 * OBJECT_ORBIT_MIN_RADIUS_FACTOR, 2);
+    expect(controls.minDistance).toBeCloseTo(radius * OBJECT_ORBIT_MIN_RADIUS_FACTOR, 2);
     expect(camera.near).toBeLessThan(controls.minDistance);
-    expect(camera.far).toBeGreaterThanOrEqual(controls.maxDistance + 2 * 0.4);
+    expect(camera.far).toBeGreaterThanOrEqual(controls.maxDistance + 2 * radius);
   });
 
   it('opens a 1 mm object at the same share of the stage, zoomable, with clip planes at its scale (review LOW 2)', async () => {
@@ -399,12 +403,51 @@ describe('WorldEnvironmentViewer', () => {
     const camera = viewerHarness.threeState?.camera as PerspectiveCamera;
     await waitFor(() => expect(camera.position.length()).toBeGreaterThan(0.0005));
     const distance = camera.position.length();
+    // Drawn at the unit radius: scaled 2,000x.
+    const scale = (viewerHarness.meshes.at(-1) as Object3D).scale.x;
+    expect(scale * 0.0005).toBeCloseTo(OBJECT_VIEW_UNIT_RADIUS, 1);
+    const radius = 0.0005 * scale;
     // The same framing as the 0.4 sphere above, to within 2%, a million times smaller.
-    expect(distance / ((0.0005 / Math.sin((29 * Math.PI) / 180)) * OBJECT_VIEW_MARGIN)).toBeCloseTo(1, 1);
+    expect(distance / ((radius / Math.sin((29 * Math.PI) / 180)) * OBJECT_VIEW_MARGIN)).toBeCloseTo(1, 1);
     const controls = viewerHarness.controls.at(-1) as { minDistance: number; maxDistance: number };
     // Orbit's old 0.01 floor pushed the camera 7x back; the near plane hid it.
     expect(controls.minDistance).toBeLessThan(distance);
-    expect(camera.near).toBeLessThan(distance - 0.0005);
+    expect(camera.near).toBeLessThan(distance - radius);
+  });
+
+  it('draws a ×20,000 object at the unit radius, so its zoom-out limit stays in range (review r3 LOW-3)', async () => {
+    viewerHarness.renderScene = true;
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      getExtension: vi.fn().mockReturnValue(null),
+    } as unknown as WebGL2RenderingContext);
+    // A normal object (radius 0.35) made 20,000 times larger: radius 7,000.
+    viewerHarness.splatCount = 64;
+    viewerHarness.getSplat.mockImplementation((index: number) => {
+      const theta = (index / 64) * Math.PI * 2 * 7;
+      const z = (index / 63) * 2 - 1;
+      const ring = Math.sqrt(1 - z * z);
+      return { center: new Vector3(Math.cos(theta) * ring * 7_000, Math.sin(theta) * ring * 7_000, z * 7_000),
+        scales: new Vector3(140, 140, 140), opacity: 1 };
+    });
+    const onStatusChange = vi.fn();
+    render(
+      <WorldEnvironmentViewer src="/api/outputs/run/huge.ply" format="ply" label="Huge" navigationMode="orbit"
+        resetToken={0} upAxis="-y" forwardAxis="x" framing="object" onStatusChange={onStatusChange} />,
+    );
+    await waitFor(() => expect(onStatusChange).toHaveBeenCalledWith('ready'));
+    const camera = viewerHarness.threeState?.camera as PerspectiveCamera;
+    await waitFor(() => expect(camera.position.length()).toBeGreaterThan(1));
+    const scale = (viewerHarness.meshes.at(-1) as Object3D).scale.x;
+    expect(scale * 7_000).toBeCloseTo(OBJECT_VIEW_UNIT_RADIUS, 1);
+    const controls = viewerHarness.controls.at(-1) as { minDistance: number; maxDistance: number };
+    // The same numbers as any other object: the farthest Gaussian at the
+    // zoom-out limit is about a dozen units away, nowhere near 65,000.
+    const opening = (OBJECT_VIEW_UNIT_RADIUS / Math.sin((29 * Math.PI) / 180)) * OBJECT_VIEW_MARGIN;
+    expect(camera.position.length() / opening).toBeCloseTo(1, 1);
+    expect(controls.maxDistance).toBeCloseTo(opening * OBJECT_ORBIT_MAX_DISTANCE_FACTOR, 1);
+    expect(controls.maxDistance + OBJECT_VIEW_UNIT_RADIUS).toBeLessThan(100);
+    // The far plane covers the whole object from the zoom-out limit.
+    expect(camera.far).toBeGreaterThanOrEqual(controls.maxDistance + 2 * OBJECT_VIEW_UNIT_RADIUS);
   });
 
   it('reports a splat whose file is gone (404) as missing, another failed request as other', async () => {

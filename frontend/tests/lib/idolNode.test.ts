@@ -75,9 +75,9 @@ describe('the Idol node needs a Hugging Face token (GM, PR #203 r4)', () => {
 
   it('reads in GM\'s words without the token, and only "Runs on your own Hugging Face allowance." with it', () => {
     const anonymous = modelReadiness(IDOL, {}, { apiKeys: {}, loaded: true }, HEALTH);
-    expect(anonymous).toEqual({ label: 'Needs a Hugging Face token', tone: 'warning',
+    expect(anonymous).toEqual({ label: 'Needed', tone: 'warning',
       setupTarget: { kind: 'api-key', key: 'HF_TOKEN' }, connectionLabel: 'Hugging Face token',
-      detail: 'Add your Hugging Face token in Settings to run Idol. A free Hugging Face account gives a run or two a day.' });
+      detail: 'Add your Hugging Face token in Settings to run Idol. A free Hugging Face account gives a few runs a day.' });
     const signedIn = modelReadiness(IDOL, {}, { apiKeys: { HF_TOKEN: TOKEN }, loaded: true }, HEALTH);
     // GM r3: the specific line replaces the generic one, never both; the
     // label waits for the wording batch.
@@ -93,7 +93,7 @@ describe('the Idol node needs a Hugging Face token (GM, PR #203 r4)', () => {
       ['auto', null], ['hf-space', 'missing'],
     ]);
     expect(anonymous.rows[1].label).toBe('Speridlabs');
-    expect(anonymous.rows[1].info).toBe('Free with a Hugging Face token. A free account gives a run or two a day.');
+    expect(anonymous.rows[1].info).toBe('Free with a Hugging Face token. A free account gives a few runs a day.');
     expect(anonymous.rows[1].setup).toEqual({ kind: 'api-key', key: 'HF_TOKEN' });
     const signedIn = providerSwitchState(IDOL, {}, { apiKeys: { HF_TOKEN: TOKEN }, kreaSignedIn: false });
     expect(signedIn.rows[1].keyState).toBe('connected');

@@ -114,7 +114,7 @@ def format_node_detail(node: dict[str, Any]) -> str:
     optional_keys = list(dict.fromkeys(str(k) for route in routes_list if isinstance(route, dict)
                                        for k in route.get("optionalKeys") or []))
     if not key and optional_keys:
-        # A keyless route (Idol): runs with no key, uses this one when set.
+        # A keyless route: runs with no key, uses this one when set.
         key = f"none (optional {' or '.join(optional_keys)})"
     pattern = node.get("executionPattern", "?")
     lines.append(f"Provider: {provider} | Key: {key} | Exec: {pattern}")
@@ -275,8 +275,8 @@ def format_keys(settings: dict[str, Any], nodes: list[dict[str, Any]]) -> str:
     configured_map = settings.get("configured") if isinstance(settings.get("configured"), dict) else {}
 
     key_to_nodes: dict[str, list[str]] = {}
-    # A keyless route's optionalKeys (Idol's HF_TOKEN): the node runs without
-    # the key and uses it when set.
+    # A keyless route's optionalKeys: the node runs without the key and uses
+    # it when set.
     optional_to_nodes: dict[str, list[str]] = {}
     all_keys: set[str] = {str(name) for name in configured_map}
     for n in nodes:
@@ -461,6 +461,16 @@ def format_price_line(detail: dict[str, Any]) -> str | None:
         billed = f" on {price['billedBy']}" if price.get("billedBy") else ""
         return f"PRICE: {_price(at)} per run at default settings{billed}{unconfirmed}"
     return "PRICE: no list price at default settings"
+
+
+def format_billing_line(detail: dict[str, Any]) -> str | None:
+    """`nebula info`'s BILLING line, from describe_node's answer: who can be
+    billed past a free allowance (a Hugging Face Space route's `billing`),
+    once per distinct note; None when no route has one."""
+    notes = [str(route["billing"]) for route in detail.get("routes") or []
+             if isinstance(route, dict) and route.get("billing")]
+    unique = list(dict.fromkeys(notes))
+    return f"BILLING: {' '.join(unique)}" if unique else None
 
 
 def format_start(start: dict[str, Any]) -> str:
