@@ -145,6 +145,23 @@ describe('ProposalLayer', () => {
       .toBe('Nano Banana runs on fal here, which needs FAL_KEY in Settings > Providers');
   });
 
+  it('an Idol ghost reads "may cost · Hugging Face" with a token and "free · Hugging Face" without, as the keys are now (GM, PR #203 r15 item 1)', () => {
+    const idol = proposal();
+    idol.nodes[0] = { ...idol.nodes[0], ref: '+idol', definitionId: 'speridlabs-idol', name: 'Idol', params: {},
+      cost: { kind: 'free', provider: 'speridlabs', label: 'free · Hugging Face' } };
+    useCanvasProposalsStore.getState().open(idol, 'key-a');
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    const { container } = render(<ProposalLayer />);
+    const label = () => container.querySelector('[data-ref="+idol"] .proposal-ghost__cost');
+    expect(label()?.textContent).toBe('free · Hugging Face');
+    expect(label()).toHaveClass('proposal-ghost__cost--free');
+    act(() => useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: '***abcd' }, loaded: true } }));
+    expect(label()?.textContent).toBe('may cost · Hugging Face');
+    expect(label()).toHaveClass('proposal-ghost__cost--mayCost');
+    act(() => useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: '' }, loaded: true } }));
+    expect(label()?.textContent).toBe('free · Hugging Face');
+  });
+
   it('fades closing proposals', () => {
     useCanvasProposalsStore.getState().close({ proposalId: 'p_a', status: 'rejected' });
     const { container } = render(<ProposalLayer />);

@@ -51,7 +51,7 @@ function Host({ fallback, modal }: { fallback?: () => HTMLElement | null; modal?
 }
 
 describe('ModalPortal isolates the page behind an aria-modal dialog', () => {
-  it('hides every other body child, keeps the notices, and puts back each one\'s own attributes', () => {
+  it('hides every other body child, keeps the notices, and puts back each one\'s own attributes', async () => {
     const { root, opener, notices, was } = page();
     opener.focus();
     const view = render(<Dialog />, { container: document.body.appendChild(document.createElement('div')) });
@@ -70,6 +70,8 @@ describe('ModalPortal isolates the page behind an aria-modal dialog', () => {
     // An element that was inert before stays as it was.
     expect(was).toHaveAttribute('inert', '');
     expect(was).toHaveAttribute('aria-hidden', 'true');
+    // Focus goes back once the close's other effects have run (a microtask).
+    await act(async () => {});
     expect(opener).toHaveFocus();
   });
 
@@ -79,13 +81,13 @@ describe('ModalPortal isolates the page behind an aria-modal dialog', () => {
     expect(root).not.toHaveAttribute('inert');
   });
 
-  it('returns focus to the dialog\'s fallback when the opener is gone', () => {
+  it('returns focus to the dialog\'s fallback when the opener is gone', async () => {
     const { opener, fallback } = page();
     opener.focus();
     const container = document.body.appendChild(document.createElement('div'));
     render(<Host fallback={() => fallback} />, { container });
     opener.remove();
-    act(() => { (container.querySelector('[data-close]') as HTMLButtonElement).click(); });
+    await act(async () => { (container.querySelector('[data-close]') as HTMLButtonElement).click(); });
     expect(fallback).toHaveFocus();
   });
 

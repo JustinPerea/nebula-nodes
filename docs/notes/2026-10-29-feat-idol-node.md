@@ -910,3 +910,159 @@ applies the person's quota.
   run" and the count chip.
 - The helper `useKeyedIdol` became `keyIdolInEachTest` (the hooks lint rule read the
   `use` prefix as a React hook).
+
+## Round 8 (2026-10-30): one cost class read live, GM r14 and r15, review 7
+
+No live call to the Space. The live check ran on an isolated backend and Vite
+with a fake token; nothing was run or accepted.
+
+### One cost class, read with the keys set now (GM r15 items 1 and 2)
+
+- `node_route.key_billing` (frontend `directRoute.keyBilling`) is the one
+  answer for a `mayBillWithKey` route: "mayCost" with the token, "free"
+  without. The chips, the bar's cost line, the ghost card, the confirm before
+  the person runs over an agent's placeholder and the agent listing all read
+  it.
+- `canvas_proposals.cost_for` takes the person's keys as a required argument
+  and `ProposalBook.view` as a required keyword; the keyless branch is gone.
+  `backend/tests/test_cost_for_keys_ratchet.py` reads every backend caller
+  (AST) and fails on a call without keys or with a literal `{}`/`None`; it
+  proves itself on a planted file.
+- A proposal's key-billing runs are re-read on every view (`live_cost`, from
+  the params they were priced with, kept on the proposal as `key_params` and
+  never shown), so adding or removing the token changes an open proposal's
+  bar, chip, ghost card and listing (review 7, NIT-5). The canvas does the
+  same once Settings has loaded (`canvasProposals.liveKeyBilling`,
+  `hooks/useLiveProposalView.ts`).
+- Ghost card: "may cost · Hugging Face" with the token, "free · Hugging
+  Face" without. Its may-cost style is the neutral one: only `--paid` has a
+  colour.
+- Placeholder confirm: with no token an Idol placeholder adds no paid
+  confirm; with one it is a "may cost" row and still asks (the button reads
+  plain "Run", since no price is known). Until Settings has loaded, keys
+  unread, it counts as paid, as before.
+
+### GM r14 copy
+
+- Settings helper wraps (`ProviderRow wrapSummary`, set when the summary is
+  the note) and never ends in "…"; the new caveat verbatim.
+- The mixed bar: line 1 "Runs 2 paid models and Idol · Idol may use your
+  Hugging Face credits" (no provider tag; proposals without Idol keep theirs
+  until the wording batch), line 2 "~$0.13 · List prices, not a quote ·
+  expires in 14:59" (`canvasProposals.proposalMetaLine`). The bar still puts
+  "Adds N nodes · " ahead of line 1 when the proposal adds nodes.
+- Accept chip tooltip and the toolbar Run chip's tooltip:
+  "“Nano Banana” and “Nano Banana 2” call paid providers. Estimated cost
+  $0.13. Idol can use your Hugging Face credits." (`runScope.mixedCostTitle`,
+  `canvasProposals.acceptChipTitle`). No "~" inside the sentence. The chip
+  reads "~$0.13 + 1 may cost"; the Accept chip keeps its counts. The bare
+  "Estimated cost" line is gone from the mixed tooltip; the tooltips with no
+  Idol keep it.
+- The Run button's title and screen-reader description put Idol's sentence
+  after the estimate (review 7, NIT-4).
+- Manage view: "Open Hugging Face tokens ↗" (the key's own link words) in
+  place of "Key page ↗".
+- `.agent-name`: every place that cuts it at 16em now carries the full name
+  in both `title` and `aria-label` (15 spans; `agentNameNoWrap.test.ts`
+  checks each).
+
+### Staged code: what stayed (GM r14 item 6)
+
+Both staged paths live in shared helpers, not Idol branches, so both stay:
+
+- The sourced "$0" and its tooltip: `runScope` (`runChipLabel`,
+  `runChipTitle`, `SOURCED_ZERO_TITLE`) and `canvasProposals.proposalEstimateLabel`.
+  Any node priced at a sourced $0 reaches it.
+- The key lock lines: `runKeyLock` (`runKeyLockLine`, `withKeyLock`) and
+  `proposalAcceptLock`. Any keyed route without its key reaches them, through
+  Run and through Accept.
+- `frontend/tests/sharedKeyedPaths.test.ts` exercises each through the shared
+  helper on a synthetic keyed route that isn't Idol
+  (`synthetic-keyed-route`, `REPLICATE_API_TOKEN`), so a later Idol-only
+  shortcut can't pass them and they can't rot.
+
+### Agent surfaces (review 7, may-bill LOW-1, NIT-2, NIT-3, NIT-4, LOW-3)
+
+- Billing text follows the token: "Free here: no HF_TOKEN is set, …" or "May
+  cost here: the person's HF_TOKEN is set, …" (`main.hf_space_billing_note`),
+  and `optionalKeys[].set` reads the shared predicate. MCP names
+  `propose_change`; the CLI names `` `nebula propose` `` (`_cli_words`, also in
+  `format_billing_line`). MCP docstrings for run_nodes, find_nodes,
+  describe_node and propose_change say the classes are live.
+- The refusal says why and what to do: Idol is in the run and the token is
+  set; propose the run, or run only nodes that don't need it. The
+  conservative rule (anything after Idol is refused too) is unchanged; it
+  waits on a product decision.
+- One "token is set and usable" predicate: `node_route.key_text`/`key_set`,
+  frontend `directRoute.keyText`/`isKeySet`, both checked against
+  `backend/tests/fixtures/key_text_cases.json`. The gate, the handler's
+  `clean_token`, the settings auth header and character check, and Settings'
+  save all use it, so a BOM or zero-width-only token is unset everywhere.
+- Mutants from review 7 killed: the "every limit off" case and the Cinema
+  shot route (`/api/cinema/generate-shot`), both now in
+  `test_idol_may_bill.py`. Stale pointers fixed (mayBillWithKey's doc,
+  `run_hf_space`'s docstring, the test module docstring, MCP-SETUP's "Accept &
+  run (N…" and the main.py comment).
+
+### Modals (GM r15 items 4 and 5; review 7 copy MEDIUM-1, LOW-1 to LOW-3, NITs)
+
+- A press that closes a dialog no longer moves focus, fixed in ModalPortal
+  for every dialog: the portal notes the pointerdown or mousedown being
+  dispatched; when a dialog closes inside it, a mousedown's default is
+  prevented, and for a pointerdown the mousedown still to come is prevented
+  until the press ends. A grep finds three dialogs that close on a press: the
+  command palette and the model picker (mousedown) and Keyboard shortcuts
+  (pointerdown); the onboarding backdrop already prevents its own. The
+  toolbar's and result card's outside-press menus aren't dialogs and keep
+  their behaviour. The test runs the browser's default (a blur) by
+  hand, since jsdom doesn't.
+- Focus goes to the nearest opener still on the page, up the chain of
+  dialogs (`openersOf`), then the dialog's fallback, with a visible ring
+  (`focusVisible: true`). Live: palette opened from the rail's Search with
+  the mouse, closed by a real mouse press on its backdrop: focus on Search,
+  `:focus-visible`, a 2px outline.
+- The return runs a microtask after the close. React hears no events during
+  a commit, so a return made in the cleanup never reached the opener's own
+  `onFocus` (NIT-5); and StrictMode's remount cancels the queued return, so
+  "?" in dev keeps focus in Keyboard shortcuts (NIT-1). The quiet focusin is
+  gone: `modalFocus.returnFocusTo` sets `isReturningFocus()` for the one
+  call, and the onboarding and comparison traps ignore that move.
+- `hideBehind` is reference-counted per element (`hiddenBy`), so stacked
+  dialogs close in any order and leave the page as it was (LOW-2; 2 and 3
+  dialogs, six orders). A dialog that becomes aria-modal after mount
+  isolates the page (NIT-2, test added).
+- The ratchet resolves an import to its real module path (`isLibModule`,
+  posix resolution), so `../evil/lib/runKeyLock` no longer passes (LOW-1).
+
+### Tests changed by the microtask return
+
+- Ten existing tests read focus right after a close (OnboardingOverlay six,
+  ResultComparison three, ResultsGallery one); each now flushes the
+  microtask first (`await act(async () => {})`). modalPortalIsolation and
+  proposalBarBehindModals do the same.
+- `test_node_readiness.py` pins `services.settings`' direct imports; it now
+  imports `services.node_route` for `key_text` (standard library only, no
+  network), so the pin lists it.
+
+### Mutants
+
+- 41 written (16 backend, 25 frontend), all killed. Four needed more: the
+  describe row's `optionalKeys[].set` read a raw truthy value (an
+  invisible-only token case now pins it); StrictMode's cancelled return
+  (the page's inertness alone stopped a stray return, so a dialog opened
+  from a notice, which stays usable, pins it); the store passing the loaded
+  keys to the placeholder confirm (`graphStore.idolPlaceholder.test.ts`);
+  and the CLI words in `start_here`'s notes (the first mutant didn't
+  compile).
+
+### Questions for GM
+
+- The ghost card's "may cost" style is neutral; only paid has a colour.
+- A may-cost placeholder row in the confirm reads "may cost" with no price,
+  so the confirm button reads plain "Run".
+- Tooltips with no Idol in them still start with the bare "Estimated cost"
+  line.
+- "Adds N nodes · " stays ahead of the mixed line 1 when the proposal adds
+  nodes.
+- In the manage view the longer "Open Hugging Face tokens ↗" pushes
+  "Remove" to a second row at Settings' width ("Key page ↗" fit on one).

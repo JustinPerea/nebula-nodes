@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResultComparison, type ComparisonResult } from '../../src/components/create-studio/ResultComparison';
 import type { ResultContext } from '../../src/lib/resultContext';
@@ -149,7 +149,7 @@ describe('pinned result comparison', () => {
 });
 
 describe('comparison modal ownership', () => {
-  it('takes focus, includes video and recipe disclosures in the Tab loop, and restores its opener', () => {
+  it('takes focus, includes video and recipe disclosures in the Tab loop, and restores its opener', async () => {
     const view = render(<ResultComparison items={pair('video')} onClose={() => {}} onReuseSettings={vi.fn()} />);
     const close = screen.getByRole('button', { name: 'Close comparison' });
     const last = screen.getByRole('button', { name: 'Reuse settings from second result' });
@@ -167,6 +167,7 @@ describe('comparison modal ownership', () => {
     fireEvent.keyDown(last, { key: 'Tab' });
     expect(close).toHaveFocus();
     view.unmount();
+    await act(async () => {}); // ModalPortal returns focus a microtask after the close.
     expect(opener).toHaveFocus();
     expect(workspace).not.toHaveAttribute('inert');
     expect(workspace).not.toHaveAttribute('aria-hidden');
@@ -197,11 +198,12 @@ describe('comparison modal ownership', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('restores a stable gallery control when the original opener has been removed', () => {
+  it('restores a stable gallery control when the original opener has been removed', async () => {
     render(<Closable />);
     opener.remove();
     fireEvent.click(screen.getByRole('button', { name: 'Close comparison' }));
     expect(screen.queryByRole('dialog')).toBeNull();
+    await act(async () => {}); // ModalPortal returns focus a microtask after the close.
     expect(fallback).toHaveFocus();
     expect(workspace).not.toHaveAttribute('inert');
   });
@@ -221,6 +223,7 @@ describe('comparison modal ownership', () => {
       fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
       expect(laterPortal).not.toHaveAttribute('inert');
       expect(laterPortal).toHaveAttribute('aria-hidden', 'false');
+      await act(async () => {}); // ModalPortal returns focus a microtask after the close.
       expect(opener).toHaveFocus();
     } finally { laterPortal.remove(); }
   });

@@ -377,9 +377,33 @@ def uses_krea_plan(definition: Mapping[str, Any], params: Mapping[str, Any] | No
     return (params or {}).get("_kreaAuth", "api-token") == "mcp"
 
 
+# What a pasted key can carry at its ends that is no part of it: whitespace,
+# a byte-order mark, zero-width spaces and joiners. The same characters, by
+# code point, as frontend directRoute KEY_EDGE (Python's str.strip and JS's
+# String.trim differ: JS strips a BOM, Python doesn't; neither strips a
+# zero-width space). Review 7 of PR #203, NIT-4.
+KEY_EDGE = ("\t\n\v\f\r \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007"
+            "\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\u200b\u200c\u200d\u2060\ufeff")
+
+
+def key_text(value: Any) -> str:
+    """A key as Nebula reads it: the text without KEY_EDGE characters at
+    either end, "" when nothing is left (or it isn't text). Whether a key
+    is set is whether this is non-empty, for every surface: the agent spend
+    gate (may_bill, key_billing), the run's handler (an Idol token,
+    handlers/speridlabs_idol.clean_token), describe_node's ``set`` and
+    Settings (frontend directRoute keyText, its twin; both read
+    tests/fixtures/key_text_cases.json)."""
+    return value.strip(KEY_EDGE) if isinstance(value, str) else ""
+
+
+def key_set(api_keys: Mapping[str, Any], key: str) -> bool:
+    """Whether ``key`` is set in ``api_keys`` (key_text non-empty)."""
+    return bool(key_text(api_keys.get(key)))
+
+
 def _is_set(api_keys: Mapping[str, Any], key: str) -> bool:
-    value = api_keys.get(key)
-    return isinstance(value, str) and bool(value.strip())
+    return key_set(api_keys, key)
 
 
 def _today() -> str:

@@ -389,6 +389,14 @@ body.app-slava-restraint .settings-row__summary {
   text-overflow: ellipsis;
 }
 
+/* A sentence summary wraps rather than ending in "…" (GM, PR #203 r14 item 1). */
+body.app-slava-restraint .settings-row__summary--wrap {
+  overflow: visible;
+  white-space: normal;
+  text-overflow: clip;
+  overflow-wrap: break-word;
+}
+
 body.app-slava-restraint .settings-row__status--ok { color: var(--sr-success); }
 body.app-slava-restraint .settings-row__status--warn { color: var(--sr-warning); }
 

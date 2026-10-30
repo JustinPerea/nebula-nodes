@@ -180,9 +180,34 @@ export function fallbackProvider(definition: Pick<ModelNodeDefinition, 'envKeyNa
   return key ? KEY_PROVIDERS[key] : undefined;
 }
 
+/** What a pasted key can carry at its ends that is no part of it:
+ * whitespace, a byte-order mark, zero-width spaces and joiners. The same
+ * code points as backend node_route.KEY_EDGE (JS trim strips a BOM and Python
+ * strip doesn't; neither strips a zero-width space). Review 7 of PR #203, NIT-4. */
+const KEY_EDGE = new Set('\t\n\v\f\r \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007'
+  + '\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\u200b\u200c\u200d\u2060\ufeff');
+
+/** A key as Nebula reads it: its text without KEY_EDGE characters at either
+ * end, '' when nothing is left (or it isn't text). A key is set when this
+ * is non-empty, for the agent gate, the run's handler and Settings alike
+ * (backend node_route.key_text is the twin; both read
+ * backend/tests/fixtures/key_text_cases.json). */
+export function keyText(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  let start = 0;
+  let end = value.length;
+  while (start < end && KEY_EDGE.has(value[start])) start += 1;
+  while (end > start && KEY_EDGE.has(value[end - 1])) end -= 1;
+  return value.slice(start, end);
+}
+
+/** Whether `key` is set in `apiKeys` (keyText non-empty). */
+export function isKeySet(apiKeys: ApiKeys, key: string): boolean {
+  return keyText(apiKeys[key]) !== '';
+}
+
 function isSet(apiKeys: ApiKeys, key: string): boolean {
-  const value = apiKeys[key];
-  return typeof value === 'string' && Boolean(value.trim());
+  return isKeySet(apiKeys, key);
 }
 
 /** The first direct key that is configured, if any. */

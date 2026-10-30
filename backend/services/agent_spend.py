@@ -865,12 +865,18 @@ def decide(
 # Who a may-bill run can bill, by the route's handler (RouteSpec
 # mayBillWithKey). Agent-facing, so plain facts:
 # https://huggingface.co/docs/hub/spaces-zerogpu, "Extending quota with credits".
+# Why a may-bill node stops an agent's run, by its route's handler: the key
+# that is set, the account it can bill, and how. Review 7 of PR #203, NIT-3:
+# the rule stays conservative (an agent can't start any run that includes
+# Idol while the token is set, even for a node after it), and the line says
+# why and what to do instead.
 MAY_BILL_WHO = {
-    "hf-space": ("can bill the person's Hugging Face account: with their Hugging Face token set, a PRO, Team or "
-                 "Enterprise account's prepaid credits are billed past its daily ZeroGPU allowance ($1 per 10 "
-                 "GPU-minutes), a cost Nebula can't see or limit."),
+    "hf-space": ("the person's Hugging Face token is set",
+                 "their Hugging Face account: a PRO, Team or Enterprise account's prepaid credits are billed past "
+                 "its daily ZeroGPU allowance ($1 per 10 GPU-minutes), a cost Nebula can't see or limit"),
 }
-MAY_BILL_GENERIC = "can bill the person's own provider account past its free allowance, a cost Nebula can't see or limit."
+MAY_BILL_GENERIC = ("the person's own key is set",
+                    "their own provider account past its free allowance, a cost Nebula can't see or limit")
 
 
 def may_bill_nodes(items: list[Mapping[str, Any]], definitions: Mapping[str, Mapping[str, Any]],
@@ -889,9 +895,13 @@ def may_bill_reason(ids: list[str], labels: Mapping[str, str], definitions: Mapp
                 for node_id in ids
                 for route in node_route.routes_of(definitions.get(definition_of.get(node_id, "")) or {})
                 if route.get("mayBillWithKey")}
-    who = MAY_BILL_WHO[next(iter(handlers))] if len(handlers) == 1 and next(iter(handlers)) in MAY_BILL_WHO \
+    key, account = MAY_BILL_WHO[next(iter(handlers))] if len(handlers) == 1 and next(iter(handlers)) in MAY_BILL_WHO \
         else MAY_BILL_GENERIC
-    return f"{_names(ids, labels)} {who} An agent can't start it itself, at any spending limit."
+    one = len(ids) == 1
+    it, them = ("it", "it") if one else ("they", "them")
+    return (f"{_names(ids, labels)} {'is' if one else 'are'} in this run and {key}, so {it} can bill {account}. "
+            f"An agent can't start a run that includes {them}, at any spending limit, even for a node after "
+            f"{them}: propose the run, or run only nodes that don't need {them}.")
 
 
 def propose_hint(run_ids: list[str]) -> str:

@@ -105,7 +105,7 @@ export function AgentNotesList({
       >
         <div className="agent-notes-entry__who">
           <AuthorDot author={note.author} />
-          <span className="agent-notes-entry__name agent-name">{note.author.name}</span>
+          <span className="agent-notes-entry__name agent-name" title={note.author.name} aria-label={note.author.name}>{note.author.name}</span>
           {label && <span className="agent-notes-entry__label">{label}</span>}
           <time className="agent-notes-entry__time" dateTime={note.at}>{clockTime(note.at, today)}</time>
         </div>

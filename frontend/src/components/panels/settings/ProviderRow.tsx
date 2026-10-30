@@ -5,7 +5,7 @@ import type { RowTone } from './rowHelpers';
  * One provider line: status dot, name, a one-line summary, a trailing action,
  * and an optional body that opens in place underneath.
  */
-export function ProviderRow({ id, tone, name, status, statusTone, summary, title, action, children, setup, rowRef }: {
+export function ProviderRow({ id, tone, name, status, statusTone, summary, wrapSummary, title, action, children, setup, rowRef }: {
   id: string;
   tone: RowTone;
   name: string;
@@ -13,6 +13,9 @@ export function ProviderRow({ id, tone, name, status, statusTone, summary, title
   status?: string;
   statusTone?: 'ok' | 'warn';
   summary?: string;
+  /** The summary is a sentence (the key's own note): it wraps, never cut
+   * with "…" (GM, PR #203 r14 item 1). A list of node names stays one line. */
+  wrapSummary?: boolean;
   /** Longer explanation of the status, on hover. */
   title?: string;
   action: ReactNode;
@@ -30,7 +33,7 @@ export function ProviderRow({ id, tone, name, status, statusTone, summary, title
       <div className="settings-row__text" title={title}>
         <div className="settings-row__name">{name}</div>
         {(status || summary) && (
-          <div className="settings-row__summary">
+          <div className={`settings-row__summary${wrapSummary ? ' settings-row__summary--wrap' : ''}`}>
             {status && <span className={statusTone ? `settings-row__status--${statusTone}` : undefined}>{status}</span>}
             {status && summary && ' · '}
             {summary}

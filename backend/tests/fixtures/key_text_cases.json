@@ -1,0 +1,57 @@
+{
+ "_about": "Keys as Nebula reads them (node_route.key_text, frontend directRoute keyText): each raw value and the text left, \"\" when it is not set. Both tests read this file.",
+ "cases": [
+  {
+   "raw": "hf_abc",
+   "text": "hf_abc"
+  },
+  {
+   "raw": "  hf_abc\n",
+   "text": "hf_abc"
+  },
+  {
+   "raw": "\ufeffhf_abc",
+   "text": "hf_abc"
+  },
+  {
+   "raw": "\ufeff",
+   "text": ""
+  },
+  {
+   "raw": "\u200b",
+   "text": ""
+  },
+  {
+   "raw": "\u200b\ufeff \u2060\u200c\u200d",
+   "text": ""
+  },
+  {
+   "raw": "\u00a0\u3000",
+   "text": ""
+  },
+  {
+   "raw": "\t\r\n\u2028\u2029",
+   "text": ""
+  },
+  {
+   "raw": "",
+   "text": ""
+  },
+  {
+   "raw": "hf_a\u200bbc",
+   "text": "hf_a\u200bbc"
+  },
+  {
+   "raw": "hf_\u00e9",
+   "text": "hf_\u00e9"
+  },
+  {
+   "raw": null,
+   "text": ""
+  },
+  {
+   "raw": 5,
+   "text": ""
+  }
+ ]
+}

@@ -149,8 +149,11 @@ describe('run cost', () => {
     expect(runChipLabel({ ...unpricedPair, cost: undefined })).toBe('2 paid · 1 may cost');
     expect(runChipTitle({ ...unpricedPair, cost: undefined })).toBe('Idol can use your Hugging Face credits.');
     const withPrice = summarizeRunScope([idol, priced('a', 'nano-banana')], [], { kind: 'graph' }, { pricing, apiKeys: keys });
-    expect(runChipLabel(withPrice)).toBe('~$0.05');
-    expect(runChipTitle(withPrice)).toBe('Estimated cost\nIdol can use your Hugging Face credits.');
+    // GM, PR #203 r14 item 4: "~$0.13 + 1 may cost", the tooltip in item 3's shape, no bare heading line.
+    expect(runChipLabel(withPrice)).toBe('~$0.05 + 1 may cost');
+    expect(runChipTitle(withPrice)).toBe(
+      `“${withPrice.paid[0]}” calls a paid provider. Estimated cost $0.05. Idol can use your Hugging Face credits.`);
+    expect(runChipTitle(withPrice)).not.toMatch(/~|\n/);
   });
 
   it('falls back to counting paid nodes when nothing is priced or the table is missing', () => {

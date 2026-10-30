@@ -41,7 +41,7 @@ export function DeferredRunNotice() {
   return (
     <div className="proposal-bar proposal-bar--notice" role="status" {...leave.props}>
       <p className="proposal-bar__summary">
-        Added <span className="agent-name">{shown.agentName}</span>&apos;s nodes. Run them when the current run finishes.
+        Added <span className="agent-name" title={shown.agentName} aria-label={shown.agentName}>{shown.agentName}</span>&apos;s nodes. Run them when the current run finishes.
       </p>
       <div className="proposal-bar__actions">
         <button

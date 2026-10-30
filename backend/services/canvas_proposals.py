@@ -473,9 +473,9 @@ def clean_positions(raw: Any, refs: Iterable[str]) -> dict[str, dict[str, float]
 
 def cost_for(
     definition: Mapping[str, Any] | None,
-    params: Mapping[str, Any] | None = None,
-    definitions: Mapping[str, Mapping[str, Any]] | None = None,
-    api_keys: Mapping[str, Any] | None = None,
+    params: Mapping[str, Any] | None,
+    definitions: Mapping[str, Mapping[str, Any]] | None,
+    api_keys: Mapping[str, Any],
     *,
     wired: Any = (),
 ) -> dict[str, Any]:
@@ -491,8 +491,12 @@ def cost_for(
     (node_route.select_route with ``api_keys``); when that route can't run,
     ``provider`` is None, ``unavailable`` says why and, for a setting the
     route doesn't offer, ``fixes`` lists route_unavailable's one-click
-    param edits ([{param, value}], value None = clear). Without ``api_keys``
-    it names the explicit route's provider, or under Auto the maker's.
+    param edits ([{param, value}], value None = clear).
+
+    ``api_keys`` is required, the person's keys as set now (GM, PR #203 r15
+    item 1): who bills a route-table node, and whether a ``mayBillWithKey``
+    route is "free" or "may cost", depend on them, so no surface prices one
+    without them (tests/test_cost_for_keys_ratchet.py reads every caller).
 
     Any other node that can run on more than one provider (a Krea copy that
     runs on its maker's API with the person's key, a fal copy on its maker's)
@@ -503,33 +507,27 @@ def cost_for(
     from services import model_pricing, node_readiness, node_route
 
     if definition and node_route.has_routes(definition):
-        if api_keys is not None:
-            route = node_route.select_route(definition, params, api_keys)
-            if route.kind == node_route.UNSET:
-                why = node_route.route_unavailable(definition, params, api_keys) or {}
-                # A stop on a setting the route doesn't offer can be fixed in
-                # place: route_unavailable's one-click param edits.
-                return {"kind": "paid", "provider": None, "label": "paid · can't run as set",
-                        "unavailable": str(why.get("message") or ""),
-                        **({"fixes": list(why["fixes"])} if why.get("fixes") else {})}
-            routed = str(route.provider or "") or None
-            # A route that is free unless the person's own key is set, and
-            # then may bill their account (RouteSpec mayBillWithKey: Idol on
-            # its Space): never "paid" (GM, PR #203 r11 item 2, r12).
-            billing = node_route.key_billing(definition, params, api_keys)
-            if billing:
-                # Named by who it runs on and may bill: a Space's host.
-                spec = node_route.route_by_id(definition, route.route_id) or {}
-                host = (node_route.PROVIDER_LABELS["huggingface"] if spec.get("handler") == "hf-space"
-                        else node_route.PROVIDER_LABELS.get(routed or "", routed or "provider"))
-                word = "may cost" if billing == "mayCost" else "free"
-                return {"kind": billing, "provider": routed, "label": f"{word} · {host}",
-                        "name": str(definition.get("displayName") or definition.get("id") or ""), "account": host}
-        else:
-            choice = node_route.provider_choice(params)
-            spec = (node_route.route_by_id(definition, choice) if choice != node_route.AUTO
-                    else node_route.maker_route(definition) or next(iter(node_route.routes_of(definition)), None))
-            routed = str((spec or {}).get("provider") or "") or None
+        route = node_route.select_route(definition, params, api_keys)
+        if route.kind == node_route.UNSET:
+            why = node_route.route_unavailable(definition, params, api_keys) or {}
+            # A stop on a setting the route doesn't offer can be fixed in
+            # place: route_unavailable's one-click param edits.
+            return {"kind": "paid", "provider": None, "label": "paid · can't run as set",
+                    "unavailable": str(why.get("message") or ""),
+                    **({"fixes": list(why["fixes"])} if why.get("fixes") else {})}
+        routed = str(route.provider or "") or None
+        # A route that is free unless the person's own key is set, and
+        # then may bill their account (RouteSpec mayBillWithKey: Idol on
+        # its Space): never "paid" (GM, PR #203 r11 item 2, r12).
+        billing = node_route.key_billing(definition, params, api_keys)
+        if billing:
+            # Named by who it runs on and may bill: a Space's host.
+            spec = node_route.route_by_id(definition, route.route_id) or {}
+            host = (node_route.PROVIDER_LABELS["huggingface"] if spec.get("handler") == "hf-space"
+                    else node_route.PROVIDER_LABELS.get(routed or "", routed or "provider"))
+            word = "may cost" if billing == "mayCost" else "free"
+            return {"kind": billing, "provider": routed, "label": f"{word} · {host}",
+                    "name": str(definition.get("displayName") or definition.get("id") or ""), "account": host}
         return {"kind": "paid", "provider": routed, "label": _paid_label(definition, routed)}
 
     if (definition or {}).get("id") == model_pricing.CINEMA_SCENE:
@@ -538,7 +536,7 @@ def cost_for(
         provider = str((base or {}).get("apiProvider") or "") or None
         return {"kind": "paid", "provider": provider, "label": f"paid · {provider or 'provider'}, per shot"}
     provider = str((definition or {}).get("apiProvider") or "") or None
-    if definition and api_keys is not None and provider not in (None, "utility"):
+    if definition and provider not in (None, "utility"):
         routed = node_route.with_wired_blockers(definition, params or {}, wired or ())
         provider = str(node_route.select_route(definition, routed, api_keys).provider or "") or provider
     if provider == "utility" and not model_pricing.is_local(definition or {}, params or {}):
@@ -568,6 +566,46 @@ def _paid_label(definition: Mapping[str, Any] | None, provider: str | None) -> s
     if built and built != name:
         return f"paid · {built}"
     return f"paid · {provider or 'provider'}"
+
+
+def live_cost(proposal: "Proposal", definitions: Mapping[str, Mapping[str, Any]],
+              api_keys: Mapping[str, Any]) -> dict[str, Any]:
+    """The proposal's run cost with each key-billing node's class read from
+    the keys set now (node_route.key_billing through cost_for): a token
+    added after the proposal makes Idol "may cost", one removed makes it
+    "free" (GM, PR #203 r15 item 2; review 7, NIT-5). Prices and paid runs
+    are as proposed: no key-billing node is paid or priced."""
+    cost = copy.deepcopy(proposal.cost)
+    entries = cost.get("nodes")
+    if not isinstance(entries, list):
+        return cost
+    changed = False
+    for index, entry in enumerate(entries):
+        definition = definitions.get(str(entry.get("definitionId") or ""))
+        if not definition or entry.get("kind") not in ("free", "mayCost"):
+            continue
+        # The params it was priced with (main._proposal_cost: the staged
+        # graph's, after the proposal's own param changes).
+        params = proposal.key_params.get(str(entry.get("ref")))
+        if params is None or not _key_billing(definition, params, api_keys):
+            continue
+        fresh = cost_for(definition, params, definitions, api_keys)
+        entries[index] = {**entry, **fresh}
+        changed = True
+    if changed:
+        may_cost = [entry for entry in entries if entry.get("kind") == "mayCost"]
+        paid = sum(1 for entry in entries if entry.get("kind") == "paid")
+        cost["mayCostRuns"] = len(may_cost)
+        cost["mayCost"] = [{"name": name, "account": account} for name, account in dict.fromkeys(
+            (str(entry.get("name") or ""), str(entry.get("account") or "")) for entry in may_cost)]
+        cost["freeRuns"] = len(entries) - paid - len(may_cost)
+    return cost
+
+
+def _key_billing(definition: Mapping[str, Any], params: Mapping[str, Any], api_keys: Mapping[str, Any]) -> str | None:
+    from services import node_route
+
+    return node_route.key_billing(definition, params, api_keys)
 
 
 def summarize_cost(
@@ -806,6 +844,10 @@ class Proposal:
     # What the listed runs would start, per node (new nodes by ref), at submit
     # time. Accept refuses when the live graph would run anything else.
     run_fingerprint: dict[str, str] = field(default_factory=dict)
+    # The params each key-billing run entry was priced with, by its ref
+    # (main._proposal_cost): live_cost re-reads its class with the keys set
+    # at each view. Never in view(), REST or logs.
+    key_params: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
     status: str = OPEN
     reason: str | None = None
     # Only ever sent to browser sockets; never in view(), REST, journal or logs.
@@ -898,6 +940,7 @@ class ProposalBook:
         cost: dict[str, Any],
         existing: dict[str, dict[str, Any]] | None = None,
         run_fingerprint: dict[str, str] | None = None,
+        key_params: dict[str, dict[str, Any]] | None = None,
     ) -> Proposal:
         """Build and open a proposal (enforcing the open caps)."""
         now = self._clock()
@@ -912,6 +955,7 @@ class ProposalBook:
             cost=cost,
             existing=copy.deepcopy(existing or {}),
             run_fingerprint=dict(run_fingerprint or {}),
+            key_params=copy.deepcopy(key_params or {}),
         )
         self.open(proposal)
         return proposal
@@ -1072,7 +1116,11 @@ class ProposalBook:
             self._items.pop(proposal.id, None)
 
     # -- what agents and the canvas see (never the accept key) ---------------
-    def view(self, proposal: Proposal, *, registry: Any) -> dict[str, Any]:
+    def view(self, proposal: Proposal, *, registry: Any, api_keys: Mapping[str, Any]) -> dict[str, Any]:
+        """``api_keys``: the person's keys as set now. The ghost cards' costs
+        and the run's key-billing classes are read with them (GM, PR #203
+        r15 items 1 and 2), so a token added or removed after the proposal
+        changes "free" and "may cost" in every listing."""
         from services import node_route
 
         definitions = registry.get_all() if registry is not None else {}
@@ -1093,7 +1141,8 @@ class ProposalBook:
                 "category": str(definition.get("category") or ""),
                 "params": safe_value(node.params, key="params"),
                 "position": dict(proposal.positions.get(node.ref) or node.position or {"x": 0.0, "y": 0.0}),
-                "cost": cost_for(definition, node.params, definitions if isinstance(definitions, dict) else None),
+                "cost": cost_for(definition, node.params, definitions if isinstance(definitions, dict) else None,
+                                 api_keys),
                 "runs": node.ref in spec.run,
                 "willRun": node.ref in node_costs,
                 "ports": _ports_for(node.ref, definition, spec.edges),
@@ -1124,7 +1173,7 @@ class ProposalBook:
             "edges": [edge.as_dict() for edge in spec.edges],
             "params": params,
             "run": list(spec.run),
-            "cost": copy.deepcopy(proposal.cost),
+            "cost": live_cost(proposal, definitions if isinstance(definitions, dict) else {}, api_keys),
             "references": sorted(proposal.references, key=_node_sort_key),
             "reason": proposal.reason,
             "idMap": dict(proposal.id_map) if proposal.id_map else None,

@@ -78,13 +78,14 @@ def format_agent_nodes(rows: list[dict[str, Any]], *, ranked: bool,
         if row.get("runsWith") and row.get("billing"):
             billed.setdefault(str(row["billing"]), []).append(str(row.get("id")))
     for note, ids in billed.items():
-        lines.append(f"BILLING: {', '.join(ids)}: free here. {note}")
+        lines.append(f"BILLING: {', '.join(ids)}: {_cli_words(note)}")
     return "\n".join(lines).rstrip("\n")
 
 
 def _cli_words(text: str) -> str:
-    """An agent route's MCP words in `nebula` words (main._cli_words)."""
-    return text.replace("describe_node", "`nebula info <id>`")
+    """An agent route's MCP words in `nebula` words (main._cli_words): the
+    CLI names its own command, never the MCP tool (review 7 of PR #203, LOW-1)."""
+    return text.replace("describe_node", "`nebula info <id>`").replace("propose_change", "`nebula propose`")
 
 
 def _route_takes(node: dict[str, Any], route: dict[str, Any]) -> str:
@@ -478,7 +479,7 @@ def format_billing_line(detail: dict[str, Any]) -> str | None:
     once per distinct note; None when no route has one."""
     notes = [str(route["billing"]) for route in detail.get("routes") or []
              if isinstance(route, dict) and route.get("billing")]
-    unique = list(dict.fromkeys(notes))
+    unique = list(dict.fromkeys(_cli_words(note) for note in notes))
     return f"BILLING: {' '.join(unique)}" if unique else None
 
 

@@ -86,8 +86,10 @@ The server exposes these tools for building and running (see
   someone's own allowance has `billing`, saying who can still be billed past
   it (Idol: with the person's `HF_TOKEN` set, Hugging Face bills a PRO,
   Team or Enterprise account's prepaid credits past the daily ZeroGPU
-  quota, so with it set an agent proposes the run instead of running it);
-  `nebula nodes` prints it as a `BILLING:` line under the table. Every word of `query`
+  quota, so with it set an agent proposes the run instead of running it).
+  It is worded for the token as set now: "Free here: …" without it, "May
+  cost here: …" with it, naming `propose_change`; `nebula nodes` prints it
+  as a `BILLING:` line under the table, naming `` `nebula propose` ``. Every word of `query`
   must be in the id, name or description. Its CLI twin is `nebula nodes`
   (and `nebula find`), on the same route: by default the node types that
   run here, by category, each with `runsWith` and its price, then one line
@@ -110,9 +112,13 @@ The server exposes these tools for building and running (see
   daily quota from the person's prepaid credits ($1 per 10 minutes). So
   with the token set, every agent run route (`run_nodes`, `nebula run`,
   `nebula quick`, the HTTP run routes, a Cinema shot) refuses a run that
-  includes Idol, at any spending limit, and says to propose it:
-  `propose_change` with `run` (`nebula propose --run <node>`). The person's
-  own Run, and an accepted proposal, run it as usual.
+  includes Idol, at any spending limit, even when the node asked for comes
+  after Idol, and says why and what to do: propose the run with
+  `propose_change` and `run` (`nebula propose --run <node>`), or run only
+  nodes that don't need Idol. The person's own Run, and an accepted
+  proposal, run it as usual. The `billing` note says which state holds now
+  ("Free here" or "May cost here"); `nebula info` prints it as its
+  `BILLING:` line in the CLI's words.
   `definition_id` is the id, or
   the node type's exact display name (any case, outer spaces ignored) when
   one node type has it: `describe_node(definition_id="Moodboard")` answers
@@ -1674,8 +1680,13 @@ Rules:
 An agent can propose a change instead of making it: new nodes, connections, param
 changes on existing nodes, and which nodes to run. The person sees ghost
 nodes and dashed connections in the agent's colour and a bar at the bottom of the
-canvas with **Show**, **Reject** and **Accept** (or **Accept & run (N
-paid)**). They can drag ghosts before accepting; the nodes land where they
+canvas with **Show**, **Reject** and **Accept** (or **Accept and run**, with a
+count chip beside it: "2 paid", "2 paid · 1 may cost"). Each ghost card names
+its cost ("paid · fal", "free · runs locally", and for Idol "may cost ·
+Hugging Face" with the person's token, "free · Hugging Face" without), and
+the proposal's cost classes are read with the keys set when it is shown:
+a token added or removed after you proposed changes them in `get_proposal`,
+`list_proposals` and `nebula proposals`. They can drag ghosts before accepting; the nodes land where they
 dropped them. Accept adds everything in one step (one undo) and starts the
 runs from the canvas, as if the person had clicked Run. Use proposals before
 anything that costs money or reworks the person's graph.

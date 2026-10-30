@@ -10452,7 +10452,11 @@ function directRunConfirm(
   if (typeof window === 'undefined') return null;
   let summary = canvasRunSummary(nodes, edges, nodeId, passes);
   if (estimate) summary = withRunEstimate(summary, estimate, nodes);
-  return placeholderRunConfirm(nodes, edges, nodeId, summary, options);
+  // A key-billing placeholder is paid by the keys this tab read (GM, PR #203
+  // r15 item 2): Idol with no token needs no confirm of its own.
+  const { settingsCache } = useUIStore.getState();
+  return placeholderRunConfirm(nodes, edges, nodeId, summary,
+    settingsCache.loaded ? { apiKeys: settingsCache.apiKeys, ...options } : options);
 }
 
 /** The direct run of `nodeId` as the canvas prices it: each node on the
@@ -10763,7 +10767,8 @@ async function sendDirectRun<T>(
       const routeUnknown = () => !keysRead && useUIStore.getState().settingsCache === cacheRead;
       if (!stillOurs()) throw error;
       const estimate = refusal.estimate;
-      const nodes = withRefusalFlags(agreed.nodes, refusal);
+      const keys = useUIStore.getState().settingsCache;
+      const nodes = withRefusalFlags(agreed.nodes, refusal, keys.loaded ? keys.apiKeys : undefined);
       const model = directRunConfirm(nodes, agreed.edges, nodeId, passes, estimate,
         { ...wording, shown: agreed.shown, gone: agreed.gone, changed: agreed.changed, routeUnknown: routeUnknown() });
       if (!model) throw error;

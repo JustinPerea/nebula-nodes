@@ -8,11 +8,15 @@ import {
   countdown,
   ghostBoxes,
   notReadyBarLines,
+  acceptChipTitle,
   proposalChanges,
-  proposalMayCostSentence,
+  proposalMetaLine,
   proposalSummary,
 } from '../../lib/canvasProposals';
 import { useProposalAcceptLock, useProposalNotReady } from '../../hooks/useProposalReadiness';
+import { useLiveProposalEntry } from '../../hooks/useLiveProposalView';
+import { runNodeName } from '../../lib/runScope';
+import { useGraphStore } from '../../store/graphStore';
 import { withKeyLock } from '../../lib/runKeyLock';
 import { useCanvasProposalsStore, type ProposalEntry } from '../../store/canvasProposalsStore';
 import { InNoticeRegion } from '../InNoticeRegion';
@@ -69,6 +73,14 @@ function useNow(active: boolean): number {
  * run, and Accept / Reject. There is deliberately no keyboard shortcut for
  * Accept, so a stray keypress can never approve paid runs.
  */
+/** A canvas node's name as the run names it (runScope runNodeName), read when asked. */
+function useCanvasRunName(): (nodeId: string) => string | null {
+  return (nodeId) => {
+    const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
+    return node ? runNodeName(node, null) : null;
+  };
+}
+
 export function ProposalBar() {
   const proposals = useCanvasProposalsStore((s) => s.proposals);
   const pending = useCanvasProposalsStore((s) => s.pending);
@@ -106,7 +118,8 @@ export function ProposalBar() {
   // answer 2): the last proposal stays drawn, inert, until its scale-out
   // ends. Its inline error line leaves as a row.
   const leave = useLeave(live ?? null);
-  const current = leave.shown ?? undefined;
+  // Its key-billing nodes read with the keys set now (GM, PR #203 r15 item 2).
+  const current = useLiveProposalEntry(leave.shown ?? undefined);
   const errorLeave = useLeave(live ? errors[live.view.id] ?? null : null, 'row');
   const currentId = live?.view.id ?? null;
   const position = live ? open.indexOf(live) : 0;
@@ -118,7 +131,8 @@ export function ProposalBar() {
   const acceptLock = useProposalAcceptLock(current);
   const acceptLockId = useId();
   const countChip = current ? acceptCountChip(current.view) : null;
-  const mayCostTitle = current ? proposalMayCostSentence(current.view) : null;
+  const canvasName = useCanvasRunName();
+  const mayCostTitle = current ? acceptChipTitle(current.view, canvasName) : null;
   const [noteRef, noteClamped] = useClamped(current?.view.note);
 
   useEffect(() => {
@@ -203,7 +217,7 @@ export function ProposalBar() {
         <div className="proposal-bar__main">
           <div className="proposal-bar__who">
             <span className="proposal-bar__dot" aria-hidden="true" />
-            <span className="proposal-bar__agent agent-name">{current.view.agent.name}</span>
+            <span className="proposal-bar__agent agent-name" title={current.view.agent.name} aria-label={current.view.agent.name}>{current.view.agent.name}</span>
             <span className="proposal-bar__proposes">proposes</span>
             {open.length > 1 && (
               <span className="proposal-bar__pager">
@@ -244,12 +258,7 @@ export function ProposalBar() {
               )}
             </ul>
           )}
-          <p className="proposal-bar__meta">
-            {current.view.run.length > 0 && current.view.cost.paidRuns > 0
-              ? (current.view.cost.estimate ? 'List prices, not a quote · ' : 'No list price · ')
-              : ''}
-            expires in {countdown(current.view.expiresAt, now)}
-          </p>
+          <p className="proposal-bar__meta">{proposalMetaLine(current.view, countdown(current.view.expiresAt, now))}</p>
           {hasDetails && (
             <button
               type="button"

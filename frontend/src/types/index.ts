@@ -246,7 +246,8 @@ export interface RouteSpec {
    *  the key owner's own account past a free allowance (Idol: a Hugging Face
    *  PRO, Team or Enterprise account's prepaid credits). Its price stays the
    *  sourced one; the chips say "may cost", and an agent must propose such a
-   *  run (lib/mayBill.ts, backend agent_spend.may_bill_nodes). */
+   *  run (lib/directRoute.ts keyBilling, backend node_route.key_billing and
+   *  agent_spend.may_bill_nodes). */
   mayBillWithKey?: true;
   /** A Krea route that can bill the signed-in plan: 'optional' when
    *  `_kreaAuth` is 'mcp', 'only' always. */

@@ -4962,7 +4962,7 @@ def _agent_node_row(definition: Mapping[str, Any], context: Mapping[str, Any]) -
             # A sourced $0 (a Hugging Face Space on the person's allowance)
             # reads like every other free node, with who can bill past it.
             row["price"] = "free"
-            billing = _space_billing(definition)
+            billing = _space_billing(definition, settings.get("apiKeys") or {})
             if billing:
                 row["billing"] = billing
         note = model_pricing.size_note(model_pricing.entry_for_route(entry, provider), definition)
@@ -5035,25 +5035,42 @@ PROVIDER_CHOICE_NOTE = (
 # credits". A product decision (PR #203 round 7): with the person's Hugging
 # Face token set, an agent proposes Idol runs instead of starting them
 # (agent_spend.may_bill_nodes, RouteSpec mayBillWithKey); without it, agents
-# run it as any free node. Every surface that lists the node says so:
-# describe_node's route `billing` (`nebula info`'s BILLING line), the
-# find_nodes row's `billing` where it runs free (`nebula nodes` prints it
-# under the table), and start_here's notes (`nebula context`).
-HF_SPACE_BILLING_NOTE = (
-    "Runs free without a token on Hugging Face's shared ZeroGPU. With the person's HF_TOKEN set it runs on "
-    "their own ZeroGPU allowance instead, and past the daily quota Hugging Face bills a PRO, Team or "
-    "Enterprise account's prepaid credits at $1 per 10 minutes of GPU time "
-    "(https://huggingface.co/docs/hub/spaces-zerogpu). Nebula prices it at $0, but with HF_TOKEN set an agent "
-    "can't run it: propose it instead (propose_change), and the person accepts on the canvas."
+# run it as any free node. Every surface that lists the node says so, as the
+# token is set now (review 7 of PR #203, LOW-1): describe_node's route
+# `billing` (`nebula info`'s BILLING line), the find_nodes row's `billing`
+# where it runs free (`nebula nodes` prints it under the table), and
+# start_here's notes (`nebula context`). The notes name the MCP tool; the
+# CLI prints its own command for it (cli/formatter._cli_words, _cli_words).
+HF_SPACE_BILLING_FREE = (
+    "Free here: no HF_TOKEN is set, so it runs on Hugging Face's shared ZeroGPU and agents run it as any free "
+    "node. With the person's HF_TOKEN set it would run on their own ZeroGPU allowance, and past the daily quota "
+    "Hugging Face bills a PRO, Team or Enterprise account's prepaid credits at $1 per 10 minutes of GPU time "
+    "(https://huggingface.co/docs/hub/spaces-zerogpu); then an agent can't run it and proposes it instead "
+    "(propose_change)."
+)
+HF_SPACE_BILLING_TOKEN = (
+    "May cost here: the person's HF_TOKEN is set, so it runs on their own ZeroGPU allowance, and past the daily "
+    "quota Hugging Face bills a PRO, Team or Enterprise account's prepaid credits at $1 per 10 minutes of GPU "
+    "time (https://huggingface.co/docs/hub/spaces-zerogpu). Nebula prices it at $0, but an agent can't run it "
+    "while the token is set: propose it (propose_change), and the person accepts on the canvas."
 )
 
 
-def _space_billing(definition: Mapping[str, Any]) -> str | None:
-    """HF_SPACE_BILLING_NOTE for a node with a Hugging Face Space route, else None."""
+def hf_space_billing_note(token_set: bool) -> str:
+    """Who can bill a Hugging Face Space run, as the token is set now."""
+    return HF_SPACE_BILLING_TOKEN if token_set else HF_SPACE_BILLING_FREE
+
+
+def _space_billing(definition: Mapping[str, Any], api_keys: Mapping[str, Any]) -> str | None:
+    """hf_space_billing_note for a node with a Hugging Face Space route, with
+    its optional token as set in ``api_keys`` (node_route.key_set), else None."""
     if not node_route.has_routes(definition):
         return None
-    return (HF_SPACE_BILLING_NOTE
-            if any(route.get("handler") == "hf-space" for route in node_route.routes_of(definition)) else None)
+    spaces = [route for route in node_route.routes_of(definition) if route.get("handler") == "hf-space"]
+    if not spaces:
+        return None
+    return hf_space_billing_note(any(node_route.key_set(api_keys, key) for route in spaces
+                                     for key in node_route.keys(route.get("optionalKeys"))))
 
 
 def _describe_routes(
@@ -5086,7 +5103,7 @@ def _describe_routes(
             "id": spec["id"], "provider": spec.get("provider"),
             "name": node_route.provider_label(spec.get("provider")),
             "keys": list(spec.get("keys") or []),
-            "keySet": any(api_keys.get(key) for key in spec.get("keys") or []),
+            "keySet": any(node_route.key_set(api_keys, key) for key in spec.get("keys") or []),
             # What this route takes: the shared params and its own, each as
             # it offers them (enums cut, ranges narrowed), the list the
             # Inspector shows on this provider.
@@ -5110,11 +5127,12 @@ def _describe_routes(
             # and then the run is on that person's own account and quota
             # (a Hugging Face Space: their ZeroGPU time, which Hugging Face
             # can bill a PRO account for past its free minutes).
-            row["optionalKeys"] = [{"key": key, "set": bool(api_keys.get(key))}
+            row["optionalKeys"] = [{"key": key, "set": node_route.key_set(api_keys, key)}
                                    for key in node_route.keys(spec.get("optionalKeys"))]
         if spec.get("handler") == "hf-space":
             # Agents spend the person's allowance: say who can bill past it.
-            row["billing"] = HF_SPACE_BILLING_NOTE
+            row["billing"] = hf_space_billing_note(any(
+                node_route.key_set(api_keys, key) for key in node_route.keys(spec.get("optionalKeys"))))
         if spec.get("maker"):
             row["maker"] = True
         if spec.get("plan"):
@@ -6371,13 +6389,22 @@ def _start_node_notes(rows: list[dict[str, Any]], context: Mapping[str, Any], vi
     if any(row.get("providers") for row in ready):
         notes.append(f"A node with providers runs on one route (_provider; {look} lists them); switching it is "
                      f"the person's call: {propose} it.")
-    billed = [str(row["id"]) for row in ready if row.get("billing")]
-    if billed:
-        notes.append(f"{', '.join(billed)}: free here. {HF_SPACE_BILLING_NOTE}")
+    if any(row.get("billing") for row in ready):
+        # Each row's own note, as the token is set now (_space_billing).
+        for note, ids in _group_by_note(row for row in ready if row.get("billing")).items():
+            notes.append(f"{', '.join(ids)}: {note}")
     if via == "cli":
         # find_nodes' hints name MCP tools; a shell-only agent reads the `nebula` commands.
         notes = [_cli_words(note) for note in notes]
     return notes
+
+
+def _group_by_note(rows: Iterable[Mapping[str, Any]]) -> dict[str, list[str]]:
+    """Node ids by their `billing` note, in order: one line per distinct note."""
+    grouped: dict[str, list[str]] = {}
+    for row in rows:
+        grouped.setdefault(str(row["billing"]), []).append(str(row["id"]))
+    return grouped
 
 
 _CLI_WORDS = {"describe_node": "`nebula info <id>`", "propose_change": "`nebula propose`",
@@ -7490,7 +7517,10 @@ async def _sweep_proposals() -> None:
 
 
 def _proposal_view(proposal: Proposal) -> dict[str, Any]:
-    return canvas_proposals.view(proposal, registry=node_registry)
+    # Priced with the keys set now (GM, PR #203 r15 item 1): who bills a
+    # node, and whether Idol is "free" or "may cost", follow them.
+    return canvas_proposals.view(proposal, registry=node_registry,
+                                 api_keys=load_settings().get("apiKeys", {}) or {})
 
 
 def _spec_models_wanted(spec: ProposalSpec) -> list[tuple[str, str]]:
@@ -7739,7 +7769,7 @@ def _proposal_run_scope(
     (``skips``, pending_nodes.run_skips). The run after Accept isn't the
     person's direct run, so it skips them (main._skip_placeholders) and
     nothing is spent on them: they are left out of ``chosen`` and ``scope``,
-    so the cost the person sees before Accept & run prices only what runs
+    so the cost the person sees before Accept and run prices only what runs
     (GM - Design, 2026-10-25)."""
     graph_nodes, graph_edges = candidate.to_execute_format()
     nodes = [GraphNode.model_validate(node) for node in graph_nodes]
@@ -7796,6 +7826,11 @@ async def _measure_proposal_inputs(candidate: CLIGraph, run_ids: list[str]) -> i
     return await input_sizes.measure_run(copy.deepcopy(items), wired, pricing, node_registry.get_all(), known)
 
 
+# The key under which _proposal_cost hands create_canvas_proposal the params
+# of its key-billing runs (popped before the cost is stored or shown).
+KEY_PARAMS = "_keyParams"
+
+
 def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[str], *,
                    measured: input_sizes.Measured) -> dict[str, Any]:
     """Which nodes a run after acceptance may start: the targets plus ancestors without outputs.
@@ -7810,6 +7845,10 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
     # Who would bill a route-table node depends on the keys set (cost_for).
     api_keys = load_settings().get("apiKeys", {}) or {}
     entries: list[dict[str, Any]] = []
+    # The params of each key-billing run (Idol), by ref, kept on the
+    # proposal and never shown: its class is re-read from them with the keys
+    # set at each view (canvas_proposals.live_cost).
+    key_params: dict[str, dict[str, Any]] = {}
     up_to = False
     if run_ids:
         graph_nodes, graph_edges, chosen, scope, up_to, items, skips = _proposal_run_scope(candidate, run_ids)
@@ -7823,10 +7862,16 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
             entries.append({
                 "ref": ref_for.get(node_id, node_id),
                 "nodeId": None if node_id in ref_for else node_id,
+                # Which node type, so a listing re-reads a key-billing node's
+                # class with the keys set then (canvas_proposals.live_cost).
+                "definitionId": str(candidate.nodes[node_id].get("definitionId") or ""),
                 **cost_for(definition, candidate.nodes[node_id].get("params") or {}, definitions, api_keys,
                            wired=wired),
                 "price": {"low": line["low"], "high": line["high"]} if line else None,
             })
+            if entries[-1].get("kind") in ("free", "mayCost") and node_route.key_billing(
+                    definition, candidate.nodes[node_id].get("params") or {}, api_keys):
+                key_params[entries[-1]["ref"]] = copy.deepcopy(candidate.nodes[node_id].get("params") or {})
         if estimate:
             estimate = {
                 **estimate,
@@ -7846,6 +7891,7 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
             # Agents' placeholders (and what needs them) the run will skip,
             # left out of the cost above (Q125 item 3).
             cost["pendingSkipped"] = skipped
+        cost[KEY_PARAMS] = key_params
         return cost
     return summarize_cost(entries, up_to=up_to)
 
@@ -8002,6 +8048,7 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
     measured = await _measure_proposal_inputs(candidate, run_ids)
     _refuse_if_graph_moved(fence)
     cost = _proposal_cost(candidate, id_map, run_ids, measured=measured)
+    key_params = cost.pop(KEY_PARAMS, {})
     run_fingerprint = _proposal_run_fingerprint(candidate, id_map, run_ids)
     existing = {
         node_id: {
@@ -8019,6 +8066,7 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
             cost=cost,
             existing=existing,
             run_fingerprint=run_fingerprint,
+            key_params=key_params,
         )
     except ProposalError as exc:
         raise _proposal_http_error(exc) from exc
@@ -10204,16 +10252,22 @@ async def _skip_placeholders(
             [edge for edge in edges if edge.source not in skips and edge.target not in skips], skips, ready)
 
 
-def _paid_placeholders(nodes: list[GraphNode], ready: Iterable[str]) -> list[str]:
+def _paid_placeholders(nodes: list[GraphNode], ready: Iterable[str], api_keys: Mapping[str, Any]) -> list[str]:
     """The placeholders among ``ready`` that call a paid model with the params
-    this run sends (model_pricing.is_local; an unknown type counts as paid)."""
+    this run sends (model_pricing.is_local; an unknown type counts as paid).
+    A key-billing node is read with the keys set (node_route.key_billing, the
+    class every cost surface reads; GM, PR #203 r15 item 2): "free" (Idol
+    with no token) is not paid, and "may cost" (with one) still asks."""
     by_id = {node.id: node for node in nodes}
     paid = []
     for node_id in ready:
         node = by_id.get(node_id)
         if node is None:
             continue
-        if not model_pricing.is_local(node_registry.get(node.definition_id) or {}, node.params or {}):
+        definition = node_registry.get(node.definition_id) or {}
+        if node_route.key_billing(definition, node.params or {}, api_keys) == "free":
+            continue
+        if not model_pricing.is_local(definition, node.params or {}):
             paid.append(node_id)
     return sorted(paid, key=_node_order)
 
@@ -10352,7 +10406,9 @@ async def _require_placeholder_confirmation(
     nothing is a placeholder any more."""
     if identify_agent(current_request_headers()) is not None or not _is_person_request():
         return
-    paid = _paid_placeholders(nodes, ready)
+    if api_keys is None:
+        api_keys = load_settings().get("apiKeys", {}) or {}
+    paid = _paid_placeholders(nodes, ready, api_keys)
     if not paid and confirmed_cost is None:
         return
     sizes = await _measure_confirmed_run(nodes, edges)

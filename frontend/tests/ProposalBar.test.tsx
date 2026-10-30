@@ -610,18 +610,70 @@ describe('ProposalBar with Idol, keyless (GM, PR #203 r11 item 2 and r12)', () =
     expect(screen.queryByText(/paid|No list price|\$0/)).toBeNull();
   });
 
-  it('mixed: "2 paid · 1 may cost", "Runs 2 paid models and Idol", the estimate kept and Idol adding nothing to it', () => {
-    const view = proposal('p_a', { nodes: [idolNode()], edges: [], params: [], run: ['+idol', '+up'] });
+  const mixed = () => {
+    const view = proposal('p_a', { nodes: [idolNode(), proposal('p_a').nodes[0]], edges: [], params: [], run: ['+idol', '+up', 'n4'] });
     view.cost = { ...view.cost, paidRuns: 2, freeRuns: 0, mayCostRuns: 1, upTo: false, providers: ['google'],
       mayCost: [{ name: 'Idol', account: 'Hugging Face' }],
-      estimate: { currency: 'usd', low: 0.4, high: 0.4, open: false, unpriced: [], plan: [], plus: [] } };
+      nodes: [
+        { ref: '+idol', nodeId: null, definitionId: 'speridlabs-idol', kind: 'mayCost', provider: 'speridlabs',
+          label: 'may cost · Hugging Face', name: 'Idol', account: 'Hugging Face' },
+        { ref: '+up', nodeId: null, definitionId: 'nano-banana', kind: 'paid', provider: 'google', label: 'paid · google' },
+        { ref: 'n4', nodeId: 'n4', definitionId: 'nano-banana', kind: 'paid', provider: 'google', label: 'paid · google' },
+      ],
+      estimate: { currency: 'usd', low: 0.13, high: 0.13, open: false, unpriced: [], plan: [], plus: [] } };
+    return view;
+  };
+
+  it('mixed: GM r14 items 2 and 3, verbatim: two lines, no provider tag, and the Accept chip\'s sentences', () => {
+    graph.state.nodes = [{ id: 'n4', data: { definitionId: 'nano-banana', label: 'Hero still', params: {} } }] as never;
+    open(mixed());
+    useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: 'set' }, loaded: true } });
+    render(<ProposalBar />);
+    const accept = screen.getByRole('button', { name: 'Accept and run 2 paid · 1 may cost' });
+    expect(document.querySelector('.proposal-bar__summary')?.textContent).toBe(
+      'Adds 2 nodes · runs 2 paid models and Idol · Idol may use your Hugging Face credits');
+    expect(document.querySelector('.proposal-bar__meta')?.textContent).toMatch(
+      /^~\$0\.13 · List prices, not a quote · expires in \d+:\d\d$/);
+    expect(document.querySelector('.proposal-bar__summary')?.textContent).not.toMatch(/google|\(/);
+    expect(accept.querySelector('.proposal-bar__count')).toHaveAttribute('title',
+      '“Nano Banana” and “Hero still” call paid providers. Estimated cost $0.13. Idol can use your Hugging Face credits.');
+    graph.state.nodes = [];
+  });
+
+  it('re-reads Idol from the keys set now, both ways (GM r15 item 2; review 7, NIT-5)', () => {
+    // Proposed with the token; the person removed it since.
+    open(mixed());
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    render(<ProposalBar />);
+    expect(screen.getByRole('button', { name: 'Accept and run 2 paid' })).toBeTruthy();
+    // Without Idol's clause the shared form stands, tag and all (GM: the wording batch).
+    expect(document.querySelector('.proposal-bar__summary')?.textContent).toBe('Adds 2 nodes · runs 2 paid models (google) · ~$0.13');
+    expect(document.querySelector('.proposal-bar__count')).not.toHaveAttribute('title');
+    // And added again: "may cost" comes back without a new proposal.
+    act(() => useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: '***abcd' }, loaded: true } }));
+    expect(screen.getByRole('button', { name: 'Accept and run 2 paid · 1 may cost' })).toBeTruthy();
+    cleanup();
+    // Proposed without it (free), the token added since: "may cost".
+    const view = mixed();
+    view.cost = { ...view.cost, mayCostRuns: 0, mayCost: [], freeRuns: 1,
+      nodes: view.cost.nodes.map((entry) => (entry.ref === '+idol'
+        ? { ...entry, kind: 'free' as const, label: 'free · Hugging Face' } : entry)) };
+    view.nodes = view.nodes.map((node) => (node.ref === '+idol'
+      ? { ...node, cost: { kind: 'free', provider: 'speridlabs', label: 'free · Hugging Face' } } : node));
+    useCanvasProposalsStore.setState({ proposals: {} });
     open(view);
     useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: 'set' }, loaded: true } });
     render(<ProposalBar />);
     expect(screen.getByRole('button', { name: 'Accept and run 2 paid · 1 may cost' })).toBeTruthy();
-    expect(document.querySelector('.proposal-bar__summary')).toHaveTextContent(
-      'Adds 1 node · runs 2 paid models (google) and Idol · ~$0.40 · Idol may use your Hugging Face credits');
-    expect(document.querySelector('.proposal-bar__meta')?.textContent).toMatch(/^List prices, not a quote · expires in/);
+    expect(document.querySelector('.proposal-bar__summary')?.textContent).toBe(
+      'Adds 2 nodes · runs 2 paid models and Idol · Idol may use your Hugging Face credits');
+  });
+
+  it('before this tab has read the keys, the backend\'s classes stand', () => {
+    open(mixed());
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: false } });
+    render(<ProposalBar />);
+    expect(screen.getByRole('button', { name: 'Accept and run 2 paid · 1 may cost' })).toBeTruthy();
   });
 
   it('without a token Idol is free: plain "Accept and run", nothing locked, no chip', () => {

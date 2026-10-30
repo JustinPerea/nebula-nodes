@@ -4,11 +4,12 @@ import { apiFetch } from './backend';
 import { apiRequest } from './apiRequest';
 import { RequestFailedError } from './errorCopy';
 import { formatChipEstimate } from './pricing';
-import { mayCostSentence } from './runScope';
+import { estimateSentence, mayCostSentence, mixedCostTitle } from './runScope';
 import { resolveAnchor, type Point } from './agentCursorMotion';
-import type { ProposalNotReady, ProposalPersonValues, ProposalView } from './wsClient';
+import type { ProposalCost, ProposalNotReady, ProposalPersonValues, ProposalView } from './wsClient';
 import { BILLING_PARAM_LABELS, providerChoiceLabel } from './billingParams';
-import { PROVIDER_PARAM } from './directRoute';
+import { keyBilling, mayCostAccount, PROVIDER_PARAM } from './directRoute';
+import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { nodeKeyStatus, usesKreaAccount, type CredentialReadiness } from './kreaConnection';
 import { missingKeyTitle } from './nodeKeys';
 
@@ -259,6 +260,61 @@ export function notReadyWarning(row: ProposalNotReady | undefined): string | nul
   return row.person?.trim() || row.missing;
 }
 
+/**
+ * The view with every key-billing node's class read from the keys set now
+ * (directRoute keyBilling, the class every cost surface reads): a token
+ * added after the agent proposed makes Idol "may cost", one removed makes
+ * it "free", on the ghost card, in the run's counts and so on the bar and
+ * the Accept chip (GM, PR #203 r15 items 1 and 2; review 7, NIT-5). The
+ * backend's listing does the same for agents (canvas_proposals.live_cost).
+ * `paramsOf` reads the params a run node would run with: a new node's as
+ * Accept writes them, a canvas node's with the proposal's changes on top
+ * (useLiveProposalView); null when it isn't known, and then its class stays
+ * as proposed. No price changes: a key-billing node is never paid or priced.
+ */
+export function liveKeyBilling(
+  view: ProposalView, apiKeys: Readonly<Record<string, string>>,
+  paramsOf: (ref: string, nodeId: string | null) => Record<string, unknown> | null | undefined,
+): ProposalView {
+  const relabel = <T extends ProposalCost>(cost: T, definition: ModelNodeDefinition | undefined,
+    params: Record<string, unknown> | null | undefined): T => {
+    if (!definition || !params || (cost.kind !== 'free' && cost.kind !== 'mayCost')) return cost;
+    const billing = keyBilling(definition, params, apiKeys);
+    if (!billing) return cost;
+    const account = mayCostAccount(definition);
+    const label = `${billing === 'mayCost' ? 'may cost' : 'free'} · ${account}`;
+    if (billing === cost.kind && label === cost.label) return cost;
+    return { ...cost, kind: billing, label, name: cost.name ?? definition.displayName, account };
+  };
+  let changed = false;
+  const nodes = view.nodes.map((node) => {
+    const cost = relabel(node.cost, NODE_DEFINITIONS[node.definitionId], paramsOf(node.ref, null));
+    if (cost === node.cost) return node;
+    changed = true;
+    return { ...node, cost };
+  });
+  const byRef = new Map(view.nodes.map((node) => [node.ref, node]));
+  const entries = view.cost.nodes.map((entry) => {
+    const definitionId = entry.definitionId ?? (entry.nodeId === null ? byRef.get(entry.ref)?.definitionId : undefined);
+    const cost = relabel(entry, definitionId ? NODE_DEFINITIONS[definitionId] : undefined, paramsOf(entry.ref, entry.nodeId));
+    if (cost !== entry) changed = true;
+    return cost;
+  });
+  if (!changed) return view;
+  const may = entries.filter((entry) => entry.kind === 'mayCost');
+  const seen = new Set<string>();
+  const mayCost = may.flatMap((entry) => {
+    const row = { name: entry.name ?? '', account: entry.account ?? '' };
+    const key = `${row.name}\u0000${row.account}`;
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [row];
+  });
+  const paid = entries.filter((entry) => entry.kind === 'paid').length;
+  return { ...view, nodes, cost: { ...view.cost, nodes: entries, mayCostRuns: may.length, mayCost,
+    freeRuns: entries.length - paid - may.length } };
+}
+
 /** "Adds 1 node · 1 connection · changes n4 · runs up to 1 paid model (fal)". */
 export function proposalSummary(view: ProposalView): string {
   const parts: string[] = [];
@@ -274,12 +330,17 @@ export function proposalSummary(view: ProposalView): string {
     // and Idol · Idol may use your Hugging Face credits".
     const mayCost = mayCostRows(view);
     const mayNames = joinNames(mayCost.map((row) => row.name));
-    if (paidRuns > 0) {
+    if (paidRuns > 0 && mayNames) {
+      // GM, PR #203 r14 item 2, verbatim: "Runs 2 paid models and Idol ·
+      // Idol may use your Hugging Face credits", no provider tag; the amount
+      // leads the line under it (proposalMetaLine).
+      parts.push(`runs ${upTo ? 'up to ' : ''}${plural(paidRuns, 'paid model')} and ${mayNames}`,
+        mayCostClauses(mayCost, true));
+    } else if (paidRuns > 0) {
       const who = providers.length ? ` (${providers.join(', ')})` : '';
-      parts.push(`runs ${upTo ? 'up to ' : ''}${plural(paidRuns, 'paid model')}${who}${mayNames ? ` and ${mayNames}` : ''}`);
+      parts.push(`runs ${upTo ? 'up to ' : ''}${plural(paidRuns, 'paid model')}${who}`);
       const amount = proposalEstimateLabel(view);
       if (amount) parts.push(amount);
-      if (mayNames) parts.push(mayCostClauses(mayCost, true));
     } else if (mayNames) {
       // A named node takes no "up to" (GM: "Runs Idol").
       parts.push(`runs ${mayNames}`, mayCostClauses(mayCost, false));
@@ -297,6 +358,23 @@ export function proposalSummary(view: ProposalView): string {
   }
   const text = parts.join(' · ');
   return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** The bar's line under the summary: "List prices, not a quote · expires
+ * in 3:05", "No list price · …", or "expires in 3:05" for a free run. With
+ * paid models and a may-cost node the amount leads it (GM, PR #203 r14 item
+ * 2, verbatim): "~$0.13 · List prices, not a quote · expires in 14:59". */
+export function proposalMetaLine(view: ProposalView, countdownText: string): string {
+  const parts: string[] = [];
+  if (view.run.length > 0 && view.cost.paidRuns > 0) {
+    if (mayCostRows(view).length > 0) {
+      const amount = proposalEstimateLabel(view);
+      if (amount) parts.push(amount);
+    }
+    parts.push(view.cost.estimate ? 'List prices, not a quote' : 'No list price');
+  }
+  parts.push(`expires in ${countdownText}`);
+  return parts.join(' · ');
 }
 
 /** The proposal card's chip, as the Run chip writes it (lib/pricing
@@ -354,6 +432,29 @@ export function acceptLabel(view: ProposalView): string {
  * 2, as the Run chip's last sentence). Null otherwise. */
 export function proposalMayCostSentence(view: ProposalView): string | null {
   return mayCostSentence(mayCostRows(view));
+}
+
+/**
+ * The Accept chip's tooltip. With paid models beside a may-cost node, GM's
+ * shape (PR #203 r14 item 3, verbatim): "“A” and “B” call paid providers.
+ * Estimated cost $0.13. Idol can use your Hugging Face credits." (runScope
+ * mixedCostTitle, the toolbar Run chip's too; no "~" inside a sentence).
+ * A may-cost node alone: its sentence. Null otherwise. `canvasName` names
+ * a canvas node the run starts; a new node is named as its ghost card is.
+ */
+export function acceptChipTitle(view: ProposalView, canvasName: (nodeId: string) => string | null | undefined): string | null {
+  const may = proposalMayCostSentence(view);
+  if (!may) return null;
+  const paid = view.cost.nodes.filter((entry) => entry.kind === 'paid');
+  if (paid.length === 0 || view.cost.paidRuns === 0) return may;
+  const ghosts = new Map(view.nodes.map((node) => [node.ref, node.name]));
+  const names = paid.map((entry) => (entry.nodeId === null ? ghosts.get(entry.ref) : canvasName(entry.nodeId))
+    ?? entry.nodeId ?? entry.ref);
+  const estimate = view.cost.estimate;
+  const sentence = estimate
+    ? estimateSentence(estimate.low, estimate.high, Boolean(estimate.open), estimate.sourcedZero === true)
+    : '';
+  return mixedCostTitle(names, sentence, [], may);
 }
 
 /** The count chip beside "Accept and run" (GM, PR #203 r11 item 2): "1

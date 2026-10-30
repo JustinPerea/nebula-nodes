@@ -1502,16 +1502,18 @@ def test_the_hugging_face_settings_check_trims_the_token():
 
 
 def test_describe_node_tells_agents_who_can_bill_past_the_allowance():
-    from main import HF_SPACE_BILLING_NOTE, _describe_routes
+    from main import HF_SPACE_BILLING_FREE, HF_SPACE_BILLING_TOKEN, _describe_routes
 
     for keys, is_set in (({}, False), (SIGNED_IN, True)):
         out = _describe_routes(registry()["speridlabs-idol"], keys, lambda _route: [])
         [row] = out["routes"]
-        assert row["billing"] == HF_SPACE_BILLING_NOTE
+        # As the token is set now (review 7 of PR #203, LOW-1).
+        assert row["billing"] == (HF_SPACE_BILLING_TOKEN if is_set else HF_SPACE_BILLING_FREE)
         assert "$1 per 10" in row["billing"] and "PRO, Team or Enterprise" in row["billing"]
         assert "https://huggingface.co/docs/hub/spaces-zerogpu" in row["billing"]
         # Round 7: keyless, and with the token set an agent proposes it.
-        assert "Runs free without a token" in row["billing"] and "propose it instead (propose_change)" in row["billing"]
+        assert row["billing"].startswith("May cost here" if is_set else "Free here")
+        assert "(propose_change)" in row["billing"]
         assert row["keys"] == [] and row["optionalKeys"] == [{"key": "HF_TOKEN", "set": is_set}]
 
 

@@ -461,7 +461,8 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
     const order = [
       'Create a fine-grained token in your Hugging Face settings and give it no repository access. Nebula uses it only for Idol’s GPU time on Hugging Face.',
       'Open Hugging Face tokens',
-      'Idol runs on your Hugging Face allowance. With Hugging Face PRO, time past your allowance uses your prepaid Hugging Face credits.',
+      // GM, PR #203 r14 item 1, verbatim.
+      'With your token, Idol runs on your Hugging Face allowance. With Hugging Face PRO, time past your allowance uses your prepaid Hugging Face credits.',
     ].map((line) => text.indexOf(line));
     expect(order.every((at) => at >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
@@ -481,6 +482,20 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
     expect(document.querySelector('.settings-row__error')).toBeNull();
   });
 
+  it('trims a byte-order mark and zero-width spaces as the agent gate and the run do (review 7 of PR #203, NIT-4)', async () => {
+    providerApiFetchMock.mockResolvedValue(healthResponse({ 'Hugging Face': 'valid' }));
+    await renderSettings({ apiKeys: {} });
+    fireEvent.click(within(row('Hugging Face')).getByRole('button', { name: 'Add Hugging Face key' }));
+    const input = await screen.findByLabelText('Hugging Face token');
+    // Only invisible characters: nothing to save.
+    fireEvent.change(input, { target: { value: '\u200b\ufeff' } });
+    expect(screen.getByRole('button', { name: 'Save key' })).toBeDisabled();
+    fireEvent.change(input, { target: { value: '\ufeffhf_fixture0123\u200b' } });
+    fireEvent.submit(input.closest('form')!);
+    await screen.findByText('Hugging Face key saved. Checking it now.');
+    expect(updateSettingsMock.mock.calls).toEqual([[{ apiKeys: { HF_TOKEN: 'hf_fixture0123' } }]]);
+  });
+
   it.each(['hf_abc def', 'hf_abc’def', 'hf_été', 'hf_abc\tdef'])(
     'refuses a Hugging Face token with a character tokens can\'t have, by the field (%j)', async (bad) => {
       await renderSettings({ apiKeys: {} });
@@ -495,6 +510,32 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
       // The text stays in the field to fix.
       expect(screen.getByLabelText('Hugging Face token')).toHaveValue(bad);
     });
+
+  it('wraps the Hugging Face helper instead of cutting it, and keeps a name list on one line (GM, PR #203 r14 item 1)', async () => {
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    const summary = row('Hugging Face').querySelector('.settings-row__summary');
+    expect(summary).toHaveTextContent('Optional. Gives Idol your own Hugging Face allowance.');
+    expect(summary).toHaveClass('settings-row__summary--wrap');
+    expect(summary?.textContent).not.toMatch(/…$/);
+    // A list of node names is no sentence: it stays one line.
+    expect(row('OpenAI').querySelector('.settings-row__summary')).not.toHaveClass('settings-row__summary--wrap');
+    const css = (await import('node:fs')).readFileSync(`${process.cwd()}/src/styles/settings.css`, 'utf8');
+    const rule = css.match(/\.settings-row__summary--wrap\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(rule).toMatch(/white-space:\s*normal/);
+    expect(rule).toMatch(/text-overflow:\s*clip/);
+  });
+
+  it('opens Hugging Face tokens from the manage view with a token set (GM, PR #203 r14 item 5)', async () => {
+    await renderSettings({ apiKeys: { HF_TOKEN: '***aaaa', OPENAI_API_KEY: '***bbbb' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Manage Hugging Face' }));
+    const link = within(row('Hugging Face')).getByRole('link', { name: 'Open Hugging Face tokens' });
+    expect(link).toHaveAttribute('href', 'https://huggingface.co/settings/tokens');
+    expect(link).toHaveTextContent('Open Hugging Face tokens ↗');
+    expect(within(row('Hugging Face')).queryByRole('link', { name: /Key page/ })).toBeNull();
+    // Every other key keeps the shared words.
+    fireEvent.click(screen.getByRole('button', { name: 'Manage OpenAI' }));
+    expect(within(row('OpenAI')).getByRole('link', { name: 'Key page ↗' })).toBeInTheDocument();
+  });
 
   it('removes a Hugging Face token by its name', async () => {
     await renderSettings({ apiKeys: { HF_TOKEN: '***aaaa' } });

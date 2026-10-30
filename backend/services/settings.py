@@ -346,7 +346,7 @@ PROVIDER_CHECKS: dict[str, ProviderCheck] = {
     "Hugging Face": ProviderCheck(
         ("HF_TOKEN",),
         "https://huggingface.co/api/whoami-v2",
-        lambda key: {"Authorization": f"Bearer {key.strip()}"},
+        lambda key: {"Authorization": f"Bearer {_key_text(key)}"},
         refuse_before_sending=lambda key: hf_token_character_line(key),
     ),
     "Nous": ProviderCheck(
@@ -390,17 +390,24 @@ def _utc_now_iso() -> str:
 
 # The Settings field's line for a Hugging Face token with a character no
 # token has (frontend/src/lib/settingsWrites.ts HF_TOKEN_CHARACTER_LINE, word
-# for word). A token is printable ASCII with no space once leading and
-# trailing spaces and line breaks are trimmed (handlers/speridlabs_idol.py
-# clean_token reads the same).
+# for word). A token is printable ASCII with no space once node_route.key_text
+# has trimmed it (handlers/speridlabs_idol.py clean_token reads the same).
 HF_TOKEN_CHARACTER_LINE = ("This token has a character Hugging Face tokens can’t have. "
                            "Copy it again from Hugging Face, then paste it here.")
 _HF_TOKEN_CHARACTERS = re.compile(r"[\x21-\x7e]+")
 
 
+def _key_text(key: str) -> str:
+    """The key as every surface reads it (node_route.key_text: trimmed of
+    spaces, line breaks and invisible marks; review 7 of PR #203, NIT-4)."""
+    from services import node_route
+
+    return node_route.key_text(key)
+
+
 def hf_token_character_line(key: str) -> str | None:
     """The field's line when the trimmed token can't be sent as it is, or None."""
-    return None if _HF_TOKEN_CHARACTERS.fullmatch(key.strip()) else HF_TOKEN_CHARACTER_LINE
+    return None if _HF_TOKEN_CHARACTERS.fullmatch(_key_text(key)) else HF_TOKEN_CHARACTER_LINE
 
 
 @dataclass(frozen=True)

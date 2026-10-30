@@ -196,3 +196,79 @@ def test_a_proposal_that_runs_only_idol_has_no_estimate_line(keyed, api_keys):
     cost = response.json()["proposal"]["cost"]
     assert cost["estimate"] is None
     assert {node["ref"]: node["price"] for node in cost["nodes"]}["+idol"] is None
+
+
+# -- the ghost card and every listing read the keys set now (GM, PR #203 r15) -----------
+
+
+def _ghost(proposal, ref="+idol"):
+    return next(node for node in proposal["nodes"] if node["ref"] == ref)
+
+
+def _listed(api, proposal_id):
+    """What an agent's listing (MCP list_proposals, `nebula proposals`) reads."""
+    listed = api.client.get("/api/canvas/proposals", headers=CLAUDE).json()["proposals"]
+    return next(proposal for proposal in listed if proposal["id"] == proposal_id)
+
+
+def test_the_ghost_card_prices_idol_with_the_token_as_the_run_does(keyed):
+    keyed.keys({**SIGNED_IN, "GEMINI_API_KEY": "k"})
+    proposal = _propose(keyed, _idol_and_paid(keyed)).json()["proposal"]
+    assert _ghost(proposal)["cost"]["label"] == "may cost · Hugging Face"
+    assert _ghost(proposal)["cost"]["kind"] == "mayCost"
+    listed = _listed(keyed, proposal["id"])
+    assert _ghost(listed)["cost"]["label"] == "may cost · Hugging Face"
+    assert listed["cost"]["mayCostRuns"] == 1
+
+
+def test_the_ghost_card_without_a_token_is_free(keyed):
+    keyed.keys({"GEMINI_API_KEY": "k"})
+    proposal = _propose(keyed, _idol_and_paid(keyed)).json()["proposal"]
+    assert _ghost(proposal)["cost"]["label"] == "free · Hugging Face"
+    assert _ghost(_listed(keyed, proposal["id"]))["cost"]["label"] == "free · Hugging Face"
+
+
+def test_a_token_added_after_the_proposal_makes_idol_may_cost_everywhere(keyed):
+    """Review 7, NIT-5: the count isn't frozen at propose time."""
+    keyed.keys({"GEMINI_API_KEY": "k"})
+    proposal = _propose(keyed, _idol_and_paid(keyed)).json()["proposal"]
+    assert proposal["cost"]["mayCostRuns"] == 0 and proposal["cost"]["freeRuns"] == 1
+    keyed.keys({**SIGNED_IN, "GEMINI_API_KEY": "k"})
+    listed = _listed(keyed, proposal["id"])
+    assert _ghost(listed)["cost"]["label"] == "may cost · Hugging Face"
+    cost = listed["cost"]
+    assert cost["mayCostRuns"] == 1 and cost["freeRuns"] == 0 and cost["paidRuns"] == 1
+    assert cost["mayCost"] == [{"name": "Idol", "account": "Hugging Face"}]
+    assert {node["ref"]: node["kind"] for node in cost["nodes"]}["+idol"] == "mayCost"
+    # The estimate is unchanged: Idol adds nothing to it either way.
+    assert cost["estimate"] == proposal["cost"]["estimate"]
+
+
+def test_a_token_removed_after_the_proposal_makes_idol_free_everywhere(keyed):
+    keyed.keys({**SIGNED_IN, "GEMINI_API_KEY": "k"})
+    proposal = _propose(keyed, _idol_and_paid(keyed)).json()["proposal"]
+    assert proposal["cost"]["mayCostRuns"] == 1
+    keyed.keys({"GEMINI_API_KEY": "k"})
+    listed = _listed(keyed, proposal["id"])
+    assert _ghost(listed)["cost"]["label"] == "free · Hugging Face"
+    cost = listed["cost"]
+    assert cost["mayCostRuns"] == 0 and cost["mayCost"] == [] and cost["freeRuns"] == 1
+    assert {node["ref"]: node["label"] for node in cost["nodes"]}["+idol"] == "free · Hugging Face"
+
+
+def test_an_idol_on_the_canvas_in_the_run_follows_the_token(keyed):
+    """A canvas node the run starts: its class comes from the params it was
+    priced with, kept on the proposal (never shown)."""
+    keyed.keys({})
+    image = keyed.graph.add_node("image-input", {"filePath": "/x.png"})
+    keyed.graph.nodes[image]["outputs"] = {"image": {"type": "Image", "value": "/x.png"}}
+    idol = keyed.graph.add_node("speridlabs-idol", {})
+    keyed.graph.connect(image, "image", idol, "image")
+    response = _propose(keyed, {"note": "run the world", "run": [idol]})
+    assert response.status_code == 201, response.text
+    proposal = response.json()["proposal"]
+    assert proposal["cost"]["freeRuns"] == 1 and proposal["cost"]["mayCostRuns"] == 0
+    assert "_keyParams" not in proposal["cost"] and "keyParams" not in str(proposal)
+    keyed.keys(SIGNED_IN)
+    cost = _listed(keyed, proposal["id"])["cost"]
+    assert cost["mayCostRuns"] == 1 and cost["freeRuns"] == 0

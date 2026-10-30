@@ -99,8 +99,8 @@ describe('the Idol node runs free without a token, and on the person\'s allowanc
       instruction: 'Create a fine-grained token in your Hugging Face settings and give it no repository access. '
         + 'Nebula uses it only for Idol’s GPU time on Hugging Face.',
       keyLink: 'Open Hugging Face tokens', url: 'https://huggingface.co/settings/tokens',
-      caveat: 'Idol runs on your Hugging Face allowance. With Hugging Face PRO, time past your allowance uses '
-        + 'your prepaid Hugging Face credits.' });
+      caveat: 'With your token, Idol runs on your Hugging Face allowance. With Hugging Face PRO, time past your '
+        + 'allowance uses your prepaid Hugging Face credits.' });
   });
 });
 

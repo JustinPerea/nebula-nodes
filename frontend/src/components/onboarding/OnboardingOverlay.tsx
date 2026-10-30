@@ -4,7 +4,7 @@ import { useUIStore } from '../../store/uiStore';
 import './onboarding.css';
 import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
 import { ModalPortal } from '../ModalPortal';
-import { inNoticeAboveDialogs } from '../../lib/modalFocus';
+import { inNoticeAboveDialogs, isReturningFocus } from '../../lib/modalFocus';
 
 const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -50,6 +50,8 @@ export function OnboardingOverlay() {
     // The page behind, the proposal bar with it, is inert while it is open:
     // ModalPortal does that for every modal dialog (PR #203 round 7).
     const containFocus = (event: FocusEvent) => {
+      // A closing dialog's focus return (ModalPortal) is no slip.
+      if (isReturningFocus()) return;
       // A modal dialog opened over the tour keeps its own focus.
       if (keyBlockedByModal(overlay)) return;
       // The app's notices are the trap's second region (GM r25); the

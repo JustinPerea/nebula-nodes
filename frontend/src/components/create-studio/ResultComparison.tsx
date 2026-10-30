@@ -5,7 +5,7 @@ import { ResultDetails, ResultMetadata } from './ResultDetails';
 import '../../styles/result-comparison.css';
 import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
 import { ModalPortal } from '../ModalPortal';
-import { inNoticeAboveDialogs } from '../../lib/modalFocus';
+import { inNoticeAboveDialogs, isReturningFocus } from '../../lib/modalFocus';
 
 export interface ComparisonResult {
   key: string;
@@ -57,6 +57,8 @@ export function ResultComparison({ items, onClose, onReuseSettings }: ResultComp
     // The page behind, the proposal bar with it, is inert while it is open:
     // ModalPortal does that for every modal dialog (PR #203 round 7).
     const containFocus = (event: FocusEvent) => {
+      // A closing dialog's focus return (ModalPortal) is no slip.
+      if (isReturningFocus()) return;
       // A modal dialog opened over the comparison keeps its own focus.
       if (keyBlockedByModal(panel)) return;
       // The app's notices are the trap's second region (GM r25).

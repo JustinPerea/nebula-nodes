@@ -74,9 +74,21 @@ Readiness, the provider switcher and Settings say which (GM PR #203 r12):
 | Token set | "Hugging Face token · Saved": "Idol uses your Hugging Face allowance." | "Uses your Hugging Face allowance." | "Auto" |
 
 The Settings row's helper is "Optional. Gives Idol your own Hugging Face
-allowance.", then r11's instruction, link and caveat. No copy names a run
-count or an allowance number: they are Hugging Face's to change, and whose
-pool a call with no token draws on isn't known.
+allowance.", which wraps rather than ending in "…" (GM r14 item 1), then
+r11's instruction, link and caveat. The caveat holds in both states: "With
+your token, Idol runs on your Hugging Face allowance. With Hugging Face PRO,
+time past your allowance uses your prepaid Hugging Face credits." With a
+token, the row's manage view links "Open Hugging Face tokens ↗", as the edit
+view does, in place of the shared "Key page ↗" (r14 item 5). No copy names a
+run count or an allowance number: they are Hugging Face's to change, and
+whose pool a call with no token draws on isn't known.
+
+A token is set when anything is left once spaces, line breaks, a byte-order
+mark and zero-width characters are trimmed from its ends
+(`node_route.key_text`, frontend `directRoute.keyText`, both reading
+`backend/tests/fixtures/key_text_cases.json`). The agent gate, the handler,
+the settings check and Settings all read it, so a token of only invisible
+characters is unset for all of them (review 7, NIT-4).
 
 ### The token can bill: agents ask first
 
@@ -91,22 +103,61 @@ $0 and spend tracking never counts it as paid.
   `optionalKeys` set (`node_route.may_bill`), at any spending limit, and says
   to propose instead. It sits in the spend check every agent run goes
   through (`main._require_spend_approval`), so it covers `/api/execute`,
-  `/api/execute-node`, `/api/graph/run` (`nebula run`, MCP `run_nodes`) and
-  `/api/quick` (`nebula quick`), each pinned in
-  `backend/tests/test_idol_may_bill.py`. The person's own Run needs no
-  proposal. Without a token nothing can bill, so an
-  agent runs Idol as before. `describe_node`, `find_nodes`, `start_here`,
-  `nebula info`, `nebula nodes`, SKILL.md and docs/MCP-SETUP.md say so
-  (`main.HF_SPACE_BILLING_NOTE`).
+  `/api/execute-node`, `/api/graph/run` (`nebula run`, MCP `run_nodes`),
+  `/api/quick` (`nebula quick`) and `/api/cinema/generate-shot`, each pinned
+  in `backend/tests/test_idol_may_bill.py`, at every limit, all of them off
+  included. The rule is conservative: a run that includes Idol is refused
+  even when the node the agent asked for comes after it, and the refusal
+  says why and what to do: "n1 (Idol) is in this run and the person's Hugging
+  Face token is set, so it can bill their Hugging Face account: … An agent
+  can't start a run that includes it, at any spending limit, even for a node
+  after it: propose the run, or run only nodes that don't need it." (review
+  7, NIT-3). The person's own Run needs no proposal. Without a token nothing
+  can bill, so an agent runs Idol as before.
+- **Every agent surface says it, as the token is set now** (review 7,
+  LOW-1). `describe_node`'s route `billing`, the `find_nodes` row's
+  `billing` and `start_here`'s notes read "Free here: no HF_TOKEN is set, …"
+  without the token and "May cost here: the person's HF_TOKEN is set, …"
+  with it (`main.hf_space_billing_note`). Each surface names its own way to
+  propose: MCP `propose_change`, the CLI `` `nebula propose` ``
+  (`nebula info`'s and `nebula nodes`' `BILLING:` lines,
+  `cli/formatter._cli_words`; `nebula context`, `main._cli_words`).
 - **The canvas counts it as "may cost", never "paid"** (GM r11 item 2).
   `node_route.key_billing` (frontend `directRoute.keyBilling`) is "mayCost"
-  with the token and "free" without; the proposal's cost has `mayCostRuns` and
-  `mayCost` (names and the account) beside `paidRuns`. Chips: "1 may cost"
-  alone, "2 paid · 1 may cost" beside paid nodes with no list price; a priced
-  chip keeps its amount and the tooltip ends "Idol can use your Hugging Face
-  credits.". The bar: "Runs Idol · may use your Hugging Face credits", or
-  "Runs 2 paid models and Idol · Idol may use your Hugging Face credits". Idol
-  adds nothing to the estimate line (`main._estimate_proposal_run` leaves it
+  with the token and "free" without, and it is the one function every cost
+  surface reads (GM r15 item 2): the chips, the bar's cost line, the ghost
+  card, the confirm before a run over an agent's placeholder, and the agent
+  listing. The proposal's cost has `mayCostRuns` and `mayCost` (names and
+  the account) beside `paidRuns`.
+  - Toolbar Run chip (GM r14 item 4): "1 may cost" alone, "2 paid · 1 may
+    cost" beside paid nodes with no list price, "~$0.13 + 1 may cost" beside
+    a priced part. Its tooltip, with a priced part: "“A” and “B” call paid
+    providers. Estimated cost $0.13. Idol can use your Hugging Face
+    credits." (no "~" inside a sentence, no bare "Estimated cost" line;
+    `runScope.mixedCostTitle`). The Run button's description puts Idol's
+    sentence after the estimate too.
+  - Accept chip: counts ("2 paid · 1 may cost"), its tooltip the same shape
+    (`canvasProposals.acceptChipTitle`).
+  - The bar (GM r14 item 2): "Runs Idol · may use your Hugging Face credits",
+    or with paid models "Runs 2 paid models and Idol · Idol may use your
+    Hugging Face credits", no provider tag, and the amount leads the line
+    under it: "~$0.13 · List prices, not a quote · expires in 14:59".
+  - The ghost card (GM r15 item 1): "may cost · Hugging Face" with the
+    token, "free · Hugging Face" without.
+  - Read with the keys set now, never frozen at propose time (review 7,
+    NIT-5): `canvas_proposals.view` takes the keys and re-reads each
+    key-billing run (`live_cost`, from the params it was priced with, kept
+    on the proposal and never shown), so `get_proposal`, `list_proposals`
+    and `nebula proposals` change when a token is added or removed; the
+    canvas does the same (`canvasProposals.liveKeyBilling`,
+    `useLiveProposalEntry`). `cost_for` takes the keys as a required
+    argument and `backend/tests/test_cost_for_keys_ratchet.py` fails on any
+    caller that leaves them out.
+  - The person's run over an agent's Idol placeholder: without a token Idol
+    is free and asks nothing on its own; with one it "may cost", the dialog
+    asks, and its row's price reads "may cost" (`main._paid_placeholders`,
+    `placeholderRunConfirm`).
+  Idol adds nothing to the estimate (`main._estimate_proposal_run` leaves it
   out): not "$0", since past the allowance the cost is real. Without a token
   Idol is free and adds no chip, like any free node.
 

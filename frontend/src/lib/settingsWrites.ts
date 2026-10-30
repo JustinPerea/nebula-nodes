@@ -1,5 +1,6 @@
 import { isOfflineRefusal, refuseEditWhileOffline } from './backendConnection';
 import { deleteSettingsApiKey, updateCredential, updateSettings } from './api';
+import { keyText } from './directRoute';
 import { PROVIDER_KEY_SPECS } from './providerCatalog';
 import { RUN_COST_CONFIRM_SETTING } from './runCostConfirm';
 import { useSettingsDraftStore, type SettingsDraft, type SettingsField } from '../store/settingsDraftStore';
@@ -82,9 +83,10 @@ function labelFor(key: string) {
 }
 
 // GM (PR #203 r2): a Hugging Face token is printable ASCII with no space.
-// Leading and trailing spaces and line breaks are trimmed without a word
-// (saveKey's trim); any other stray character is refused by the field. The
-// backend's settings check and the Idol handler trim and refuse the same.
+// Leading and trailing spaces, line breaks and invisible marks are trimmed
+// without a word (saveKey's keyText); any other stray character is refused by
+// the field. The backend's settings check and the Idol handler trim
+// (node_route.key_text) and refuse the same.
 export const HF_TOKEN_CHARACTER_LINE = 'This token has a character Hugging Face tokens can’t have. '
   + 'Copy it again from Hugging Face, then paste it here.';
 
@@ -96,7 +98,8 @@ export function keyCharacterLine(key: string, value: string): string | null {
 
 /** Save one provider key, then check it (read-only; nothing is generated). */
 export function saveKey(key: string, raw: string): Promise<boolean> {
-  const value = raw.trim();
+  // Trimmed as every surface reads a key (directRoute keyText; review 7 of PR #203, NIT-4).
+  const value = keyText(raw);
   if (!value) return Promise.resolve(false);
   const refused = keyCharacterLine(key, value);
   if (refused) {
@@ -105,7 +108,7 @@ export function saveKey(key: string, raw: string): Promise<boolean> {
   }
   setPending(key, true);
   return enqueue(async () => {
-    const wasConfigured = !!useSettingsDraftStore.getState().saved?.apiKeys[key]?.trim();
+    const wasConfigured = keyText(useSettingsDraftStore.getState().saved?.apiKeys[key]) !== '';
     // Offline, not even the Keychain is written: the backend couldn't hear
     // about it, and the two would disagree. The text stays in the field.
     if (refuseEditWhileOffline()) { setPending(key, false); return false; }

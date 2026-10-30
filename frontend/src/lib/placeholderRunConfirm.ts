@@ -1,7 +1,7 @@
 import type { Edge, Node } from '@xyflow/react';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { NodeData } from '../types';
-import { allParamDefinitions, canvasTitle, hasRoutes, isDefaultTitle, nameOnRoute, nodeTitle, providerLabel, routeById, routeDependsOnKeys,
+import { allParamDefinitions, canvasTitle, hasRoutes, isDefaultTitle, keyBilling, nameOnRoute, nodeTitle, providerLabel, routeById, routeDependsOnKeys,
   selectRoute, withWiredBlockers } from './directRoute';
 import { isLocalRun, modelChoice } from './nodeKeys';
 import { cleanPending, type PendingAgent } from './pendingNodes';
@@ -139,12 +139,19 @@ export interface PlaceholderRunOptions {
    * verbatim: "“Grok Imagine 2.0” · $0.06", "“Alt still” · Grok Imagine 2.0
    * · $0.06"). Its price stays Nebula's. */
   routeUnknown?: boolean;
+  /** The keys this tab read. A key-billing node (directRoute keyBilling, the
+   * class every cost surface reads; GM, PR #203 r15 item 2) is paid by them:
+   * "free" (Idol with no token) needs no confirm of its own, "may cost" (with
+   * one) still asks, its row's price "may cost". Unset: counted as paid. */
+  apiKeys?: Readonly<Record<string, string>>;
 }
 
 /** A row's price words (GM - Design, rounds 4 and 6, verbatim). */
 export const PRICE_NOT_LISTED = 'price not listed';
 export const PRICE_DEPENDS_ON_INPUT = 'price depends on its input';
 export const PRICE_ON_KREA_PLAN = 'on your Krea plan';
+/** A may-cost row's price (GM, PR #203 r15 item 2): no dollar amount covers it. */
+export const PRICE_MAY_COST = 'may cost';
 
 /** The params that pick the model a node runs (backend main._MODEL_SELECT_KEYS
  * and _MODEL_TEXT_KEYS): a select labelled Model, or a free-text model id. */
@@ -529,10 +536,21 @@ export function rowSegments(row: PlaceholderRunRow): string[] {
   return [row.name, ...(row.model ? [row.model] : []), ...(row.setting ? row.setting.split(' · ') : []), row.price];
 }
 
-/** Calls a provider (backend model_pricing.is_local): an unknown type counts as paid. */
-function isPaid(node: Node<NodeData>): boolean {
+/** Calls a provider (backend model_pricing.is_local): an unknown type counts
+ * as paid. With `apiKeys`, a key-billing node that is "free" with them is
+ * not (backend main._paid_placeholders reads the same). */
+function isPaid(node: Node<NodeData>, apiKeys?: Readonly<Record<string, string>>): boolean {
   const definition = NODE_DEFINITIONS[node.data?.definitionId];
-  return !definition || !isLocalRun(definition, (node.data?.params ?? {}) as Record<string, unknown>);
+  const params = (node.data?.params ?? {}) as Record<string, unknown>;
+  if (definition && apiKeys && keyBilling(definition, params, apiKeys) === 'free') return false;
+  return !definition || !isLocalRun(definition, params);
+}
+
+/** A key-billing node that may bill the person's own account with these keys. */
+function mayCost(node: Node<NodeData>, apiKeys?: Readonly<Record<string, string>>): boolean {
+  const definition = NODE_DEFINITIONS[node.data?.definitionId];
+  return Boolean(definition && apiKeys
+    && keyBilling(definition, (node.data?.params ?? {}) as Record<string, unknown>, apiKeys) === 'mayCost');
 }
 
 /** The node and every node feeding it: the person's direct run (summarizeRunScope's node scope). */
@@ -667,7 +685,7 @@ export function placeholderRunConfirm(
     const flag = cleanPending(node.data?.pending);
     return flag ? [{ node, agent: flag.agent }] : [];
   });
-  const paid = placeholders.filter(({ node }) => isPaid(node));
+  const paid = placeholders.filter(({ node }) => isPaid(node, options.apiKeys));
   // Placeholders a dialog of this run showed that their agents have finished
   // since (H1): still in the run, no longer placeholders.
   const gone = (node: Node<NodeData>) => options.gone?.has(node.id) === true && !cleanPending(node.data?.pending);
@@ -717,7 +735,8 @@ export function placeholderRunConfirm(
   const row = (node: Node<NodeData>): PlaceholderRunRow => {
     const label = labelOf(node);
     const model = modelOnRoute(node, routeOf(node), options.routeUnknown);
-    const price = rowPrice(node.id, summary, runNodeName(node, routeOf(node)));
+    const price = mayCost(node, options.apiKeys) ? { text: PRICE_MAY_COST, missing: true }
+      : rowPrice(node.id, summary, runNodeName(node, routeOf(node)));
     if (price.missing) anyMissing = true;
     if (price.text === PRICE_NOT_LISTED) unlisted.push(`“${label}”`);
     if (price.text === PRICE_DEPENDS_ON_INPUT) byInput.push(`“${label}”`);
@@ -730,7 +749,7 @@ export function placeholderRunConfirm(
     return { nodeId: node.id, name: `“${label}”`, model: shownModel, modelKey: model,
       setting: kreaSetting(node), price: price.text, agent: agentOf.get(node.id) ?? null };
   };
-  const paidNodes = scope.filter(isPaid);
+  const paidNodes = scope.filter((node) => isPaid(node, options.apiKeys));
   // The agents' rows first (with their dots), then the run's other paid nodes, muted.
   const rows = [...paidNodes.filter((node) => agentOf.has(node.id)), ...paidNodes.filter((node) => !agentOf.has(node.id))]
     .map(row);
@@ -954,7 +973,9 @@ export function mergeRunEstimates(refused: RunEstimate, canvas: RunCost | undefi
  * a paid one the tab hasn't heard of yet gets its agent's flag from the
  * refusal, and a paid one it lists no longer (an agent made it normal) loses
  * it, so the dialog asks over what Nebula will hold the run to. */
-export function withRefusalFlags(nodes: Node<NodeData>[], refusal: PlaceholderRefusal): Node<NodeData>[] {
+export function withRefusalFlags(
+  nodes: Node<NodeData>[], refusal: PlaceholderRefusal, apiKeys?: Readonly<Record<string, string>>,
+): Node<NodeData>[] {
   const listed = new Set(refusal.placeholders);
   return nodes.map((node) => {
     const flag = cleanPending(node.data?.pending);
@@ -962,7 +983,7 @@ export function withRefusalFlags(nodes: Node<NodeData>[], refusal: PlaceholderRe
       const agent = refusal.agents[node.id];
       return agent ? { ...node, data: { ...node.data, pending: { agent, at: 0 } } } : node;
     }
-    if (!listed.has(node.id) && flag && isPaid(node)) {
+    if (!listed.has(node.id) && flag && isPaid(node, apiKeys)) {
       const data = { ...node.data } as NodeData & { pending?: unknown };
       delete data.pending;
       return { ...node, data };

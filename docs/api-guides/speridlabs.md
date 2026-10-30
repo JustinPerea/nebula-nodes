@@ -39,10 +39,15 @@ Nebula shows Idol at $0 a run, since
 Any bill for time past your allowance is between you and Hugging Face;
 Nebula can't see it.
 
-With a token set, an agent can't run Idol on its own: it proposes the run,
-and you accept it on the canvas. The proposal says "may use your Hugging Face
-credits", and the Run chip counts Idol as "may cost", never as paid. Without
-a token nothing can bill, so agents run it as they run any free node.
+With a token set, an agent can't run Idol on its own, or anything that
+runs after it: it proposes the run, and you accept it on the canvas. The
+proposal says "may use your Hugging Face credits", its card reads "may cost ·
+Hugging Face", and the Run chip counts Idol as "may cost" ("~$0.13 + 1 may
+cost" beside priced models), never as paid. Running an agent's unfinished
+Idol node yourself asks first, as a paid one does. Without a token nothing
+can bill: the card reads "free · Hugging Face", agents run it as they run
+any free node, and it asks nothing. Adding or removing the token changes
+all of this at once, open proposals included.
 
 Whether a fine-grained token with no repository access applies your own
 allowance isn't confirmed yet; Hugging Face's docs don't say.

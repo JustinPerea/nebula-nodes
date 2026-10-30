@@ -156,7 +156,7 @@ function NodeMarkView({ nodeId, box, marks, zoom, focused }: {
           style={{ '--anm-color': first.agent.color } as CSSProperties}
         >
           <Dot mark={first} />
-          <span className="agent-node-mark__name agent-name">{first.agent.name}</span>
+          <span className="agent-node-mark__name agent-name" title={first.agent.name} aria-label={first.agent.name}>{first.agent.name}</span>
           <span className="agent-node-mark__status">{first.text}</span>
         </span>
         {rest.length > 0 && (
@@ -180,7 +180,7 @@ function NodeMarkView({ nodeId, box, marks, zoom, focused }: {
             <li key={mark.agent.id} className="agent-node-mark__other" title={markTitle(mark)}
               style={{ '--anm-color': mark.agent.color } as CSSProperties}>
               <Dot mark={mark} />
-              <span className="agent-node-mark__name agent-name">{mark.agent.name}</span>
+              <span className="agent-node-mark__name agent-name" title={mark.agent.name} aria-label={mark.agent.name}>{mark.agent.name}</span>
               <span className="agent-node-mark__status">{mark.text}</span>
             </li>
           ))}

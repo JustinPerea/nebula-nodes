@@ -773,7 +773,13 @@ def propose_change(
     Returns {"proposal": {...}} with `id`, `status`, and `cost`: nodes are
     "free" (run locally) or "paid · <provider>" (the provider the run would
     go through with the keys set, as its price is; a Krea copy on its
-    maker's key names both: "paid · Grok Imagine 2.0 via xAI"), and `cost.estimate` sums
+    maker's key names both: "paid · Grok Imagine 2.0 via xAI"), or, for a
+    node on the person's own allowance (Idol on Hugging Face), "may cost ·
+    Hugging Face" with their token set and "free · Hugging Face" without
+    (kind `mayCost` or `free`, counted in `cost.mayCostRuns` apart from
+    `paidRuns`). Those are read with the keys set when you look: a token
+    added or removed after you proposed changes them in get_proposal and
+    list_proposals, on each node and in the run's counts. `cost.estimate` sums
     list prices in USD where Nebula has them (null when none do; `open` when
     some paid node has none). `cost.notReady` lists the run's nodes that
     can't run here as set up (no key, no Krea sign-in), each with `missing`
@@ -1121,8 +1127,9 @@ def find_nodes(query: str = "", category: str = "", ready_only: bool = True, lim
     row with `needsKeyFor` (the Video QC nodes) calls a provider in another
     mode, with no list price. A row that runs free on someone's own allowance
     has `billing`, saying who can still be billed past it (Idol on a
-    Hugging Face PRO, Team or Enterprise account): with that key set, propose
-    the run (propose_change) instead of running it. With ready_only=false,
+    Hugging Face PRO, Team or Enterprise account), as the key is set now: it
+    starts "Free here" without it and "May cost here" with it, and then you
+    propose the run (propose_change) instead of running it. With ready_only=false,
     nodes that can't run here are included with `missing` saying what to set up.
     """
     # `nebula nodes` (cli/commands/nodes.py) reads the same route: keep them twins.
@@ -1159,8 +1166,9 @@ def describe_node(definition_id: str, ctx: Context | None = None) -> dict[str, A
     without the token it runs free on Hugging Face's shared GPUs; with it, on
     the person's own ZeroGPU allowance, and past its daily quota Hugging Face
     bills a PRO, Team or Enterprise account's prepaid credits at $1 per 10
-    GPU-minutes, though Nebula prices it at $0. So with the token set an agent
-    can't run it (run tools refuse it): propose it with propose_change.
+    GPU-minutes, though Nebula prices it at $0. The note is worded for the
+    token as set now ("Free here" or "May cost here"). With the token set an
+    agent can't run it (run tools refuse it): propose it with propose_change.
     A route never receives a setting it doesn't offer;
     a saved non-default value of one stops the run when another route
     would use it. The fix for such a stop comes as `fixes` ([{param, value}],
@@ -1641,10 +1649,12 @@ async def run_nodes(node_id: str | None = None, wait_seconds: float = DEFAULT_RU
 
     The run is checked against the person's spending limits first. If it is
     over one, or a node has no list price, it is refused with what to do:
-    usually send the same nodes as propose_change with `run`. A node that
-    can bill the person's own provider account is refused at any limit (Idol
-    with HF_TOKEN set: a Hugging Face PRO, Team or Enterprise account's
-    prepaid credits past its daily allowance): propose it. A node priced
+    usually send the same nodes as propose_change with `run`. A run that
+    includes a node that can bill the person's own provider account is
+    refused at any limit (Idol with HF_TOKEN set: a Hugging Face PRO, Team or
+    Enterprise account's prepaid credits past its daily allowance), even
+    when the node you run comes after it: propose the run, or run only nodes
+    that don't need it. A node priced
     from its input file's size (SeedVR2 Upscale) is checked at the size of
     the file it gets, measured only in Nebula's output folder (add a file
     of yours with upload_file first); an input another node makes in this

@@ -161,10 +161,15 @@ export type ProposalStatus = 'open' | 'accepted' | 'rejected' | 'withdrawn' | 'e
 
 /** One node's run cost: free or paid, with its list price when Nebula has one. */
 export interface ProposalCost {
-  kind: 'free' | 'paid';
+  /** `mayCost`: a key-billing route with the person's key set (Idol with a
+   * Hugging Face token; backend canvas_proposals.cost_for), never paid. */
+  kind: 'free' | 'paid' | 'mayCost';
   provider: string | null;
   label: string;
   price?: { low: number; high: number } | null;
+  /** A key-billing node's name and the account it may bill. */
+  name?: string;
+  account?: string;
 }
 
 /** List-price total for a proposal's run (backend canvas_proposals.summarize_cost). */
@@ -241,7 +246,9 @@ export interface ProposalView {
     estimate: ProposalEstimate | null;
     upTo: boolean;
     providers: string[];
-    nodes: Array<ProposalCost & { ref: string; nodeId: string | null; missing?: string }>;
+    /** `definitionId`: which node type, so a key-billing node's class is
+     * read again with the keys set now (canvasProposals liveKeyBilling). */
+    nodes: Array<ProposalCost & { ref: string; nodeId: string | null; missing?: string; definitionId?: string }>;
     /** Run nodes that can't run here as set up, when the proposal was made
      * (backend main._not_ready_nodes, in find_nodes' words). Accept still runs. */
     notReady?: ProposalNotReady[];

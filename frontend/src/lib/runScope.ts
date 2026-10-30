@@ -512,8 +512,49 @@ export function runChipLabel({ paid, cost, mayCost }: RunScopeSummary): string |
   if (!cost || cost.lines.length === 0) return may ? `${paid.length} paid · ${may}` : `${paid.length} paid`;
   // GM, PR #203 r11 item 4, by source: a sourced $0 (every priced row is
   // 0) is exact, "$0"; an estimate that rounds to zero is "~$0".
-  if (!costOpen(cost) && cost.sourcedZero) return '$0';
-  return formatChipEstimate(cost.low, cost.high, costOpen(cost));
+  const amount = !costOpen(cost) && cost.sourcedZero ? '$0' : formatChipEstimate(cost.low, cost.high, costOpen(cost));
+  // GM, PR #203 r14 item 4: beside a priced part, "~$0.13 + 1 may cost".
+  return may ? `${amount} + ${may}` : amount;
+}
+
+/** "“Hero still” calls a paid provider." / "“A” and “B” call paid
+ * providers.": the first sentence of a mixed cost tooltip (GM, PR #203 r14
+ * item 3), the names by errorCopy nodeNameList (a count from 4). */
+export function paidSentence(names: string[]): string | null {
+  if (names.length === 0) return null;
+  return `${nodeNameList(names)} ${names.length === 1 ? 'calls a paid provider' : 'call paid providers'}.`;
+}
+
+/** A priced part as a sentence, never with "~" inside it (GM, PR #203 r14
+ * item 3): "Estimated cost $0.13.", "Estimated cost under $0.01.", a sourced
+ * $0's "This costs nothing to run.", and the closed "Up to $Y." and
+ * "Between $X and $Y." (pricing chipTitle) as they are. An open estimate
+ * (part of it unpriced) is its priced part's sentence, or '' (none). */
+export function estimateSentence(low: number, high: number, open: boolean, sourcedZero = false): string {
+  if (!open && sourcedZero) return SOURCED_ZERO_TITLE;
+  const chip = chipEstimate(low, high, open);
+  if (open) return chipTitle(chip);
+  switch (chip.kind) {
+    case 'free': return 'Estimated cost $0.';
+    case 'under': return 'Estimated cost under $0.01.';
+    case 'exact': return `Estimated cost ${chip.amount}.`;
+    default: return chipTitle(chip);
+  }
+}
+
+/**
+ * A cost tooltip for a run with paid nodes and one that may bill the
+ * person's own account, in GM's shape (PR #203 r14 item 3, verbatim): "“A”
+ * and “B” call paid providers. Estimated cost $0.13. Idol can use your
+ * Hugging Face credits." One line; each reason for an unpriced part goes on
+ * its own line under the first (GM, PR #198 r9 bug 2), the may-cost
+ * sentence last. Shared by the toolbar's Run chip (runChipTitle) and the
+ * proposal bar's Accept chip (canvasProposals acceptChipTitle).
+ */
+export function mixedCostTitle(paidNames: string[], estimate: string, reasons: string[], may: string): string {
+  const lead = [paidSentence(paidNames), estimate].filter(Boolean).join(' ');
+  if (reasons.length === 0) return [lead, may].filter(Boolean).join(' ');
+  return [lead, ...reasons, may].filter(Boolean).join('\n');
 }
 
 /** The sourced "$0" chip's tooltip (GM, PR #203 r11 item 4). */
@@ -579,8 +620,18 @@ function reasonSentences(reasons: NonNullable<RunCost['reasons']>): string[] {
 export function runChipTitle(summary: RunScopeSummary): string | undefined {
   // The may-cost sentence comes last (GM, PR #203 r11 item 2); alone, it is
   // the whole tooltip.
+  const may = mayCostSentence(summary.mayCost);
+  const { paid, cost } = summary;
+  // Beside a priced part: GM's mixed shape, no bare "Estimated cost" line
+  // (PR #203 r14 item 4).
+  if (may && paid.length > 0 && cost && cost.lines.length > 0) {
+    const open = costOpen(cost);
+    const reasons = open ? reasonSentences(cost.reasons?.length ? cost.reasons
+      : cost.unpriced.map((name) => ({ name, reason: { kind: 'noPrice' as const } }))) : [];
+    return mixedCostTitle(paid, estimateSentence(cost.low, cost.high, open, cost.sourcedZero === true), reasons, may);
+  }
   const title = paidChipTitle(summary);
-  return [title, mayCostSentence(summary.mayCost)].filter(Boolean).join('\n') || undefined;
+  return [title, may].filter(Boolean).join('\n') || undefined;
 }
 
 function paidChipTitle({ paid, cost }: RunScopeSummary): string | undefined {
@@ -635,12 +686,14 @@ export function describeRunScope(summary: RunScopeSummary): string {
   const may = mayCostSentence(summary.mayCost)?.replace(/\.$/, '');
   if (paid.length === 0) return [`Runs ${nodes} · no paid providers`, may, included].filter(Boolean).join('. ');
   const parts = [`Runs ${nodes} · ${paid.length} ${paid.length === 1 ? 'calls a paid provider' : 'call paid providers'}: ${nameList(paid)}`];
-  if (may) parts.push(may);
   if (cost && cost.lines.length > 0) {
     const total = formatUsdRange(cost.low, cost.high);
     const detail = cost.lines.map((line) => `${line.name} ${formatUsdRange(line.low, line.high)}${runsLabel(line.runs)}`);
     parts.push(`Estimated ${total} at list prices (${detail.join('; ')})`);
   }
+  // The may-cost sentence after the estimate, as the tooltip orders them
+  // (GM, PR #203 r14 item 3; review 7, NIT-4).
+  if (may) parts.push(may);
   if (included) parts.push(included);
   if (cost?.plus.length) parts.push(`Not included: ${cost.plus.join(', ')}`);
   const unavailable = Object.keys(cost?.unavailable ?? {});

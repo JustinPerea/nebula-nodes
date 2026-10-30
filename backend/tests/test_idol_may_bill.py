@@ -8,8 +8,9 @@ carries a separate "may bill" flag (RouteSpec ``mayBillWithKey``), and
 ``agent_spend.decide`` refuses an agent's run that includes such a node, at
 any spending limit, pointing it at a proposal. Every agent run route goes
 through that check (``main._require_spend_approval``): /api/execute and
-/api/execute-node (MCP run_nodes, `nebula run`, an agent's apply and run),
-/api/quick (`nebula quick`) and /api/cinema/generate-shot. Without the token
+/api/execute-node (the canvas's runs and an agent's apply and run),
+/api/graph/run (MCP run_nodes and `nebula run` post it), /api/quick
+(`nebula quick`) and /api/cinema/generate-shot. Without the token
 nothing can bill, so an agent runs Idol like any free node. The person's own
 run is their consent, and an accepted proposal's run is theirs.
 """
@@ -25,7 +26,7 @@ from tests.test_pending_nodes import _execute_body, pend  # noqa: F401 - fixture
 
 TOKEN = "hf_fixturetoken0123456789abcdefghijklmnop"
 SIGNED_IN = {"HF_TOKEN": TOKEN}
-WHO = "can bill the person's Hugging Face account"
+WHO = "is in this run and the person's Hugging Face token is set, so it can bill their Hugging Face account"
 
 import main as _main  # noqa: E402 - the real gate, before the pend fixture stubs it
 
@@ -47,12 +48,18 @@ TEXT = {"id": "t1", "definitionId": "text-input", "params": {"value": "a"}}
 
 
 def test_an_agent_run_with_idol_and_a_token_needs_a_proposal_at_any_limit():
-    for settings in ({}, {"runCostConfirmUsd": 100}):
+    # Review 7, LOW-3: with every limit off, too.
+    every_limit_off = {"runCostConfirmUsd": None,
+                       "agentSpend": {"sessionUsd": None, "outsideDailyUsd": None, "models": {}}}
+    for settings in ({}, {"runCostConfirmUsd": 100}, every_limit_off):
         decision = _decide([TEXT, IDOL], SIGNED_IN, **settings)
         assert decision.refusal is not None
         assert decision.refusal.startswith("Needs the person's approval: n1 (Idol) " + WHO)
         assert "PRO, Team or Enterprise account's prepaid credits" in decision.refusal
-        assert decision.refusal.endswith("An agent can't start it itself, at any spending limit. Propose it.")
+        # Review 7, NIT-3: why, and what to do instead.
+        assert decision.refusal.endswith(
+            "An agent can't start a run that includes it, at any spending limit, even for a node after it: "
+            "propose the run, or run only nodes that don't need it. Propose it.")
         # Idol is never counted as paid: its price stays the sourced $0.
         assert decision.charge.get("speridlabs-idol", 0) == 0
 
@@ -87,7 +94,9 @@ def test_the_flag_not_the_price_decides():
 
 def test_two_flagged_nodes_are_named_together():
     decision = _decide([IDOL, {**IDOL, "id": "n2"}], SIGNED_IN)
-    assert decision.refusal.startswith("Needs the person's approval: n1 (Idol), n2 (Idol) " + WHO)
+    assert decision.refusal.startswith("Needs the person's approval: n1 (Idol), n2 (Idol) are in this run and the "
+                                       "person's Hugging Face token is set, so they can bill their Hugging Face account")
+    assert "includes them" in decision.refusal and "don't need them" in decision.refusal
 
 
 # -- every agent run route -------------------------------------------------------
@@ -206,3 +215,109 @@ def test_nebula_run_and_mcp_run_nodes_send_an_agents_idol_run_with_a_token_to_a_
     response = gated.client.post("/api/graph/run", headers=CLAUDE, json=body)
     assert response.status_code == 200, response.text
     assert any(idol in ran for ran in gated.ran)
+
+
+# -- a Cinema shot (review 7, LOW-3) and the person's run over a placeholder ---------------
+
+
+def _idol_shot(api, headers):
+    """/api/cinema/generate-shot over a scene that reads an Idol node's output."""
+    image, idol = _idol_graph(api)
+    cine = api.graph.add_node("cinema-scene", {"scene": {
+        "version": 1, "base": {"model": "seedream-4-5"}, "aspectRatio": "16:9",
+        "shots": [{"id": "a", "prompt": "a cat"}]}})
+    nodes, edges = api.graph.to_execute_format()
+    edges = [*edges, {"id": "e-idol", "source": idol, "sourceHandle": "world",
+                      "target": cine, "targetHandle": "character_refs"}]
+    return api.client.post("/api/cinema/generate-shot", headers=headers,
+                           json={"nodes": nodes, "edges": edges, "nodeId": cine, "shotId": "a"}), idol
+
+
+def test_an_agents_cinema_shot_reading_idol_with_a_token_is_sent_to_a_proposal(gated):
+    gated.keys(SIGNED_IN)
+    response, idol = _idol_shot(gated, CLAUDE)
+    assert response.status_code == 403, response.text
+    assert WHO in response.json()["detail"] and gated.ran == []
+
+
+def test_an_agents_cinema_shot_reading_idol_without_a_token_is_not_held_for_idol(gated):
+    """Without the token Idol can't bill: any refusal is the scene's own
+    (it has no list price at the fixture's limits), never Idol's."""
+    gated.keys({})
+    response, _idol = _idol_shot(gated, CLAUDE)
+    assert WHO not in response.text and "Hugging Face" not in response.text
+
+
+def _idol_placeholder(api):
+    """An agent's Idol placeholder fed by a free image input."""
+    from tests.test_pending_nodes import _apply
+
+    image = api.graph.add_node("image-input", {"filePath": "/x.png"})
+    response = _apply(api, {"note": "a world", "nodes": [{"ref": "+w", "definitionId": "speridlabs-idol"}],
+                            "edges": [{"source": image, "sourceHandle": "image", "target": "+w",
+                                       "targetHandle": "image"}], "pending": True})
+    assert response.status_code == 200, response.text
+    return response.json()["idMap"]["+w"]
+
+
+def test_the_persons_run_over_an_idol_placeholder_without_a_token_needs_no_confirm(gated):
+    """GM, PR #203 r15 item 2: free with no token, so no paid confirm on its own."""
+    gated.keys({})
+    idol = _idol_placeholder(gated)
+    response = _execute(gated, PERSON, "r-free", idol)
+    assert response.status_code == 200, response.text
+    assert any(idol in ran for ran in gated.ran)
+
+
+def test_the_persons_run_over_an_idol_placeholder_with_a_token_still_asks(gated):
+    """"May cost" with the token: the person confirms it like a paid one."""
+    gated.keys(SIGNED_IN)
+    idol = _idol_placeholder(gated)
+    response = _execute(gated, PERSON, "r-may", idol)
+    assert response.status_code == 409, response.text
+    detail = response.json()["detail"]
+    assert detail["code"] == "placeholder_confirm_required" and detail["placeholders"] == [idol]
+    assert gated.ran == []
+
+
+# -- one "token is set" for the gate, the handler and Settings (review 7, NIT-4) -----------
+
+
+def _key_cases():
+    import json
+    from pathlib import Path
+
+    path = Path(__file__).parent / "fixtures" / "key_text_cases.json"
+    return json.loads(path.read_text(encoding="utf-8"))["cases"]
+
+
+@pytest.mark.parametrize("case", _key_cases(), ids=lambda case: repr(case["raw"]))
+def test_key_text_reads_each_shared_case(case):
+    assert node_route.key_text(case["raw"]) == case["text"]
+
+
+@pytest.mark.parametrize("token", ["\ufeff", "\u200b", " \u2060\ufeff\n", "\u00a0"])
+def test_an_invisible_only_token_is_unset_for_the_gate_and_the_handler(token):
+    """Before: the gate read a BOM-only token as set (may bill), the handler as
+    a bad character, and Settings (JS trim) as unset. Now unset for all."""
+    from handlers.speridlabs_idol import clean_token
+
+    keys = {"HF_TOKEN": token}
+    assert _decide([TEXT, IDOL], keys).refusal is None
+    assert node_route.key_billing(NodeRegistry().get("speridlabs-idol"), {}, keys) == "free"
+    assert clean_token(token) is None
+    assert node_route.key_set(keys, "HF_TOKEN") is False
+
+
+def test_a_padded_token_is_set_for_all_three_and_sent_trimmed():
+    from handlers.speridlabs_idol import clean_token
+
+    from services.settings import PROVIDER_CHECKS, hf_token_character_line
+
+    keys = {"HF_TOKEN": f"\ufeff{TOKEN}\u200b\n"}
+    assert _decide([TEXT, IDOL], keys).refusal is not None
+    assert clean_token(keys["HF_TOKEN"]) == TOKEN
+    assert node_route.key_set(keys, "HF_TOKEN") is True
+    # The Settings check trims the same way, so it checks the token the run sends.
+    assert hf_token_character_line(keys["HF_TOKEN"]) is None
+    assert PROVIDER_CHECKS["Hugging Face"].auth_headers(keys["HF_TOKEN"]) == {"Authorization": f"Bearer {TOKEN}"}

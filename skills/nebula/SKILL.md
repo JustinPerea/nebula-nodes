@@ -898,7 +898,7 @@ Connections must match types; `Any` connects to anything.
 | Video | .mp4, .mov files |
 | Audio | .mp3, .wav files |
 | Mesh | .glb, .obj, .fbx files |
-| World | A 3D world or object: a World Labs world, or a Gaussian splat (.ply) from Idol. `view_output`, or `nebula splat <node>` from the CLI, gives its Gaussian count, bounding box, file size, seed and axes. Idol runs free on Hugging Face without a token. With the person's Hugging Face token set it uses their own allowance, and past it Hugging Face bills a PRO, Team or Enterprise account's prepaid credits ($1 per 10 GPU minutes), so with the token set `nebula run` and `nebula quick` refuse it: `nebula propose --run <node>` instead. `nebula info speridlabs-idol` prints it as BILLING |
+| World | A 3D world or object: a World Labs world, or a Gaussian splat (.ply) from Idol. `view_output`, or `nebula splat <node>` from the CLI, gives its Gaussian count, bounding box, file size, seed and axes. Idol runs free on Hugging Face without a token. With the person's Hugging Face token set it uses their own allowance, and past it Hugging Face bills a PRO, Team or Enterprise account's prepaid credits ($1 per 10 GPU minutes), so with the token set `nebula run` and `nebula quick` refuse any run that includes it, even for a node after it: `nebula propose --run <node>` instead, or run only nodes that don't need it. `nebula info speridlabs-idol` prints it as BILLING, worded for the token as set now ("Free here" or "May cost here"); a proposal's Idol cost ("may cost" or "free") follows the token too |
 | SVG | .svg files or SVG text |
 | Array | Lists of the above |
 | Moodboard | A saved moodboard |

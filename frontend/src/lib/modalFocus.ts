@@ -92,10 +92,20 @@ export function inNoticeAboveDialogs(node: EventTarget | null): boolean {
  * leaving proposal's, lib/noticeLeave.ts) is never touched.
  */
 export function hideBehind(own: Element): () => void {
-  const prior = new Map<Element, { inert: string | null; hidden: string | null }>();
+  // This call's hold on each element it hid. The element's own attributes
+  // are kept once, by the first modal that hides it (`hidden`), and put back
+  // when the last one lets go, whatever order the modals close in (review 7
+  // of PR #203, LOW-2: closing the lower of two first left the page inert).
+  const mine = new Set<Element>();
   const hide = (element: Element) => {
-    if (prior.has(element)) return;
-    prior.set(element, { inert: element.getAttribute('inert'), hidden: element.getAttribute('aria-hidden') });
+    if (mine.has(element)) return;
+    mine.add(element);
+    const held = hiddenBy.get(element);
+    if (held) {
+      held.count += 1;
+      return;
+    }
+    hiddenBy.set(element, { count: 1, inert: element.getAttribute('inert'), hidden: element.getAttribute('aria-hidden') });
     element.setAttribute('inert', '');
     element.setAttribute('aria-hidden', 'true');
   };
@@ -108,15 +118,48 @@ export function hideBehind(own: Element): () => void {
   // body child arriving is the only change to watch.
   const observer = new MutationObserver(isolate);
   observer.observe(document.body, { childList: true });
+  let released = false;
   return () => {
+    if (released) return;
+    released = true;
     observer.disconnect();
-    for (const [element, was] of prior) {
+    for (const element of mine) {
+      const was = hiddenBy.get(element);
+      if (!was) continue;
+      was.count -= 1;
+      if (was.count > 0) continue;
+      hiddenBy.delete(element);
       if (was.inert === null) element.removeAttribute('inert');
       else element.setAttribute('inert', was.inert);
       if (was.hidden === null) element.removeAttribute('aria-hidden');
       else element.setAttribute('aria-hidden', was.hidden);
     }
   };
+}
+
+/** Every element a modal hid (hideBehind), with how many open modals hide
+ * it and its own attributes from before the first. */
+const hiddenBy = new Map<Element, { count: number; inert: string | null; hidden: string | null }>();
+
+/** Whether focus is moving back to a closing dialog's opener (ModalPortal).
+ * A dialog's own focus trap that may still be listening ignores this one
+ * focusin: it is the close, not focus leaving the dialog. The opener's own
+ * focus handlers still hear it (review 7 of PR #203, NIT-5). */
+let returning = false;
+export function isReturningFocus(): boolean {
+  return returning;
+}
+
+/** Focus `target` as a dialog's close returns it there (isReturningFocus). */
+export function returnFocusTo(target: HTMLElement): void {
+  returning = true;
+  try {
+    // A visible ring wherever the close came from (GM, PR #203 r15 item 4):
+    // the person sees where they are.
+    target.focus({ preventScroll: true, focusVisible: true } as FocusOptions);
+  } finally {
+    returning = false;
+  }
 }
 
 /** Whether focus can go back to this control on a dialog's close: on the

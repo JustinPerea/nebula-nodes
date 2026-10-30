@@ -50,10 +50,27 @@ describe('agent names never wrap (GM, PR #203 r11 item 6)', () => {
     ['components/panels/settings/AgentSpendSection.tsx', 'agent.name'],
   ];
   for (const [file, expression] of sites) {
-    it(`${file}: {${expression}} sits in a span with the agent-name class`, () => {
+    // GM, PR #203 r14 item 5: a name cut at 16em keeps the full name in its
+    // title (on hover) and aria-label (read out), at every place it is drawn.
+    it(`${file}: {${expression}} sits in a span with the agent-name class, its full name in title and aria-label`, () => {
       const escaped = expression.replace(/\./g, '\\.');
-      const drawn = new RegExp(`<span className="[^"]*\\bagent-name\\b[^"]*">\\{${escaped}\\}</span>`);
+      const drawn = new RegExp(`<span className="[^"]*\\bagent-name\\b[^"]*" title=\\{${escaped}\\} `
+        + `aria-label=\\{${escaped}\\}>\\{${escaped}\\}</span>`);
       expect(read(file)).toMatch(drawn);
     });
   }
+
+  it('no other place draws the agent-name class without its full name', () => {
+    const files = Object.keys(import.meta.glob('../src/**/*.tsx', { eager: false }));
+    const bare = files.flatMap((file) => {
+      const text = readFileSync(resolve(__dirname, file), 'utf8');
+      return [...text.matchAll(/<span className="[^"]*\bagent-name\b[^"]*"([^>]*)>/g)]
+        .filter((match) => !/title=\{/.test(match[1]) || !/aria-label=\{/.test(match[1]))
+        .map(() => file);
+    });
+    expect(bare).toEqual([]);
+    const drawn = files.reduce((count, file) => count
+      + (readFileSync(resolve(__dirname, file), 'utf8').match(/\bagent-name\b"/g) ?? []).length, 0);
+    expect(drawn).toBe(sites.length);
+  });
 });

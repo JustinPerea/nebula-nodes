@@ -40,7 +40,7 @@ export function AgentQuestionsForm({
   if (!entry || entry.view.status !== 'open') return null;
   const { view } = entry;
   const many = view.questions.length > 1;
-  const heading = <>{many ? 'Questions from' : 'A question from'} <span className="agent-name">{view.agent.name}</span></>;
+  const heading = <>{many ? 'Questions from' : 'A question from'} <span className="agent-name" title={view.agent.name} aria-label={view.agent.name}>{view.agent.name}</span></>;
 
   async function send() {
     if (!sendable || busy) return;

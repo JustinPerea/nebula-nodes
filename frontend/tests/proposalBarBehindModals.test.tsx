@@ -140,11 +140,13 @@ describe.each(MODALS)('the proposal bar behind the $label (review r5 MEDIUM-1)',
     expect(document.activeElement).toBe(home());
   });
 
-  it('on close the bar is back as it was, a leaving proposal\'s own inert kept, and focus goes back to the opener, not the bar', () => {
+  it('on close the bar is back as it was, a leaving proposal\'s own inert kept, and focus goes back to the opener, not the bar', async () => {
     const { slot, item, accept } = bar({ leaving: true });
     open();
     expect(slot.hasAttribute('inert')).toBe(true);
     close();
+    // ModalPortal returns focus once the close's other effects have run.
+    await act(async () => {});
     expect(slot.hasAttribute('inert')).toBe(false);
     expect(slot.hasAttribute('aria-hidden')).toBe(false);
     // The leaving item's own inert is its own (lib/noticeLeave.ts), untouched.

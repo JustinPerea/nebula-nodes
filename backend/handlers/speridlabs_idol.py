@@ -377,12 +377,14 @@ def token_bad_character() -> IdolSpaceError:
 
 
 def clean_token(raw: Any) -> str | None:
-    """The token as Nebula sends it: trimmed of leading and trailing spaces
-    and line breaks, or None when nothing is left. Raises
-    ``token_bad_character`` for any other character a token can't have."""
-    if not isinstance(raw, str):
-        return None
-    token = raw.strip()
+    """The token as Nebula sends it: trimmed of leading and trailing spaces,
+    line breaks and invisible marks (node_route.key_text, the predicate the
+    agent gate and Settings read too, so a token is set for all three or
+    none), or None when nothing is left. Raises ``token_bad_character`` for
+    any other character a token can't have."""
+    from services import node_route
+
+    token = node_route.key_text(raw)
     if not token:
         return None
     if not (token.isascii() and token.isprintable()) or any(ch.isspace() for ch in token):
@@ -841,7 +843,7 @@ async def run_idol(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: 
     # https://huggingface.co/docs/hub/spaces-zerogpu). So with the token set
     # an agent can't start it: the spend gate sends it to a proposal
     # (agent_spend.may_bill_nodes, the route's mayBillWithKey), and every
-    # agent surface says so (main.HF_SPACE_BILLING_NOTE). The person's own
+    # agent surface says so (main.hf_space_billing_note). The person's own
     # Run and an accepted proposal run here as usual.
     # Settings and the settings check trim too; this is the backstop.
     token = clean_token(api_keys.get(TOKEN_KEY))

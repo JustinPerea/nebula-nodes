@@ -87,8 +87,9 @@ export const PROVIDER_KEYS: readonly ProviderKeySpec[] = [
     instruction: 'Create a fine-grained token in your Hugging Face settings and give it no repository access. '
       + 'Nebula uses it only for Idol’s GPU time on Hugging Face.',
     keyLink: 'Open Hugging Face tokens',
-    caveat: 'Idol runs on your Hugging Face allowance. With Hugging Face PRO, time past your allowance uses '
-      + 'your prepaid Hugging Face credits.' },
+    // GM, PR #203 r14 item 1, verbatim.
+    caveat: 'With your token, Idol runs on your Hugging Face allowance. With Hugging Face PRO, time past your '
+      + 'allowance uses your prepaid Hugging Face credits.' },
   // BytePlus Service Specific Terms (Model Services): "The BytePlus Model
   // Services are not available in the United States." Models need activating
   // first (404 ModelNotOpen otherwise). docs/api-guides/byteplus.md.

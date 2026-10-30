@@ -18,6 +18,7 @@ import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { useProposalNotReady } from '../../hooks/useProposalReadiness';
 import { useCanvasProposalsStore, type ProposalEntry } from '../../store/canvasProposalsStore';
 import { useUIStore } from '../../store/uiStore';
+import { useLiveProposalEntry } from '../../hooks/useLiveProposalView';
 import '../../styles/canvasProposals.css';
 
 const ENTER_FROM = 0.92;
@@ -128,7 +129,7 @@ function GhostCard({
         <span className={`proposal-ghost__cost proposal-ghost__cost--${node.cost.kind}`}>{node.cost.label}</span>
         <p className="proposal-ghost__caption">
           {node.model ? `${node.ref} · ${node.model}` : node.ref} ·{' '}
-          <span className="proposal-ghost__by">proposed by <span className="agent-name">{agentName}</span></span>
+          <span className="proposal-ghost__by">proposed by <span className="agent-name" title={agentName} aria-label={agentName}>{agentName}</span></span>
         </p>
       </div>
       {node.ports.inputs.map((port, row) => (
@@ -163,6 +164,10 @@ function ProposalGhosts({ entry }: { entry: ProposalEntry }) {
   // backend's reason this run node can't run (a route, a sign-in).
   const cache = useUIStore((s) => s.settingsCache);
   const notReady = useProposalNotReady(entry);
+  // Each card's "free" or "may cost" from the keys set now, as the run's
+  // counts read it (GM, PR #203 r15 item 1).
+  const live = useLiveProposalEntry(entry) ?? entry;
+  const liveCost = new Map(live.view.nodes.map((node) => [node.ref, node.cost]));
   const apply = useRef<() => void>(() => {});
 
   useLayoutEffect(() => {
@@ -278,7 +283,7 @@ function ProposalGhosts({ entry }: { entry: ProposalEntry }) {
         <GhostCard
           key={node.ref}
           proposalId={view.id}
-          node={node}
+          node={(liveCost.get(node.ref) ?? node.cost) === node.cost ? node : { ...node, cost: liveCost.get(node.ref)! }}
           exact={entry.values?.nodes[node.ref]}
           agentName={view.agent.name}
           warning={ghostKeyWarning(NODE_DEFINITIONS[node.definitionId], entry.values?.nodes[node.ref] ?? node.params, cache)

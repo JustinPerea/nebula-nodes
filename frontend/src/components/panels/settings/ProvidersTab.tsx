@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Search } from 'lucide-react';
 import { NODE_DEFINITIONS } from '../../../constants/nodeDefinitions';
+import { isKeySet } from '../../../lib/directRoute';
 import { matchesModelSearch } from '../../../lib/modelDiscovery';
 import { supportsKreaAccount } from '../../../lib/kreaConnection';
 import { providerCheckIsCurrent } from '../../../lib/providerReadiness';
@@ -57,7 +58,8 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
 
   const entries: Entry[] = [
     ...PROVIDER_KEYS.map((spec, order) => {
-      const connected = !!saved.apiKeys[spec.key]?.trim();
+      // Set as the agent gate and the run read it (directRoute isKeySet; review 7 of PR #203, NIT-4).
+      const connected = isKeySet(saved.apiKeys, spec.key);
       return { id: spec.key, connected, reach: unlockCount(spec), order,
         matches: (q: string) => providerMatches(spec, q),
         render: () => <KeyRow key={spec.key} spec={spec} configured={connected} /> };

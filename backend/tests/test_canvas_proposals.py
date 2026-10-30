@@ -160,16 +160,16 @@ def test_parse_spec_shapes_refs_and_caps():
 
 
 def test_cost_never_has_numbers():
-    assert cost_for({"apiProvider": "utility"}) == {"kind": "free", "provider": None, "label": "free · runs locally"}
-    assert cost_for({"apiProvider": "fal"}) == {"kind": "paid", "provider": "fal", "label": "paid · fal"}
+    assert cost_for({"apiProvider": "utility"}, {}, None, {}) == {"kind": "free", "provider": None, "label": "free · runs locally"}
+    assert cost_for({"apiProvider": "fal"}, {}, None, {}) == {"kind": "paid", "provider": "fal", "label": "paid · fal"}
     # A local node whose mode calls a vision model is paid, with no list price.
     import json
     from pathlib import Path
     qc = json.loads((Path(__file__).resolve().parent.parent / "data" / "node_definitions.json").read_text())["qc-frame-review"]
-    assert cost_for(qc, {"mode": "vision-llm"}) == {
+    assert cost_for(qc, {"mode": "vision-llm"}, None, {}) == {
         "kind": "paid", "provider": "vision", "label": "paid · vision model, no list price"}
-    assert cost_for(qc, {"mode": ""})["kind"] == "paid"
-    assert cost_for(qc, {"mode": "heuristic"}) == cost_for(qc, {}) == {
+    assert cost_for(qc, {"mode": ""}, None, {})["kind"] == "paid"
+    assert cost_for(qc, {"mode": "heuristic"}, None, {}) == cost_for(qc, {}, None, {}) == {
         "kind": "free", "provider": None, "label": "free · runs locally"}
 
 
@@ -1404,9 +1404,9 @@ def test_a_cinema_scene_is_paid_by_its_base_model():
     definitions = {"nano-banana": {"id": "nano-banana", "apiProvider": "google"}}
     scene = {"id": "cinema-scene", "apiProvider": "utility"}
     params = {"scene": {"base": {"model": "nano-banana"}, "shots": [{"id": "a"}]}}
-    assert cost_for(scene, params, definitions) == {
+    assert cost_for(scene, params, definitions, {}) == {
         "kind": "paid", "provider": "google", "label": "paid · google, per shot"}
-    assert cost_for(scene, {"scene": "unreadable"}, definitions)["kind"] == "paid"
+    assert cost_for(scene, {"scene": "unreadable"}, definitions, {})["kind"] == "paid"
 
 
 # -- a proposal that can't run here: kept, and the agent withdraws it before proposing something else (Q109) --
