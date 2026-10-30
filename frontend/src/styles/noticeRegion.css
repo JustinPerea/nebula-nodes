@@ -39,11 +39,17 @@
      nothing overshoots on the way out: x(t) = 1 - (1 + 7t)e^(-7t). */
   --notice-exit: linear(0, 0.035, 0.116, 0.218, 0.325, 0.428, 0.522, 0.605, 0.677, 0.737, 0.788, 0.83, 0.864, 0.892, 0.914, 0.932, 0.947, 0.958, 0.967, 0.974, 0.98, 0.984, 0.988, 0.991, 1);
   --notice-exit-ms: 294ms;
-  position: fixed;
+  /* No layer of its own (GM r7, PR #203): each item takes its own, so the
+     notices stay above every dialog's backdrop (GM r25) while the proposal
+     bar sits under every modal's scrim. A fixed box would make one layer of
+     them all, so it is placed on the page's own box instead, which never
+     scrolls (App.css: html, body and #root are the viewport, overflow
+     hidden). */
+  position: absolute;
   left: var(--page-gutter, 16px);
   right: var(--page-gutter, 16px);
   bottom: calc(var(--bottom-bar-clearance, calc(var(--sr-space-6, 24px) - var(--notice-gap))) + var(--notice-gap));
-  z-index: var(--sr-layer-notice, 20010);
+  z-index: auto;
   display: flex;
   justify-content: center;
   pointer-events: none;
@@ -83,11 +89,20 @@
   pointer-events: none;
 }
 
-/* Every item: at least one line tall, and it takes clicks. */
+/* Every item: at least one line tall, and it takes clicks, on the notices'
+   layer, above every dialog's backdrop (GM r25). */
 .notice-region__slot > * {
   box-sizing: border-box;
   min-height: var(--notice-h);
   pointer-events: auto;
+  z-index: var(--sr-layer-notice, 20010);
+}
+
+/* The proposal bar: under every modal's scrim (GM r7, PR #203), so an open
+   dialog dims it like the rest of the canvas, and above everything else on
+   the screen (slava-restraint.css --sr-layer-proposal). */
+.notice-region__slot[data-notice-slot='proposal'] > * {
+  z-index: var(--sr-layer-proposal, 59);
 }
 
 /* The cap for any row whose own CSS sets none (zero specificity, so an

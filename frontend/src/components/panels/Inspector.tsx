@@ -21,11 +21,11 @@ import { JevResultDetails } from './JevResultDetails';
 import { StructuredOutputs } from '../nodes/StructuredValuePreview';
 import { structuredOutputEntries } from '../../lib/structuredValue';
 import { isJevNode, parseJevOutputs } from '../../lib/jev';
-import { keyLockedProps, nodesKeyLockReason } from '../../lib/runKeyLock';
+import { keyLockedProps, runKeyLockLine } from '../../lib/runKeyLock';
 import { allParamDefinitions, paramDefinitionsForRun, providerLabel, routeById, routeSwitch, selectRoute, shownRouteId, visibleParams as visibleParamsFor, withWiredBlockers } from '../../lib/directRoute';
 import { definitionSnap, definitionStartShapeNote, sizeNote } from '../../lib/makerSizes';
 import { paramDefaultFor, snapParamDefaults, type DefaultSnapNote } from '../../lib/paramDefaults';
-import { nodeWiredCounts, nodeWiredPorts, nodesThatRun } from '../../lib/runScope';
+import { nodeWiredCounts, nodeWiredPorts } from '../../lib/runScope';
 import { ProviderSwitcher } from '../nodes/ProviderSwitcher';
 import { InspectorFoot } from './InspectorFoot';
 import { useProviderNoteStore } from '../../store/providerNoteStore';
@@ -164,8 +164,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
   // the line out (keyLockedProps).
   const keyLock = useMemo(() => {
     if (!renderNodeId) return null;
-    const running = nodesThatRun(nodes, edges, { kind: 'node', nodeId: renderNodeId });
-    return nodesKeyLockReason(running, running.map((node) => node.id), settingsCache);
+    return runKeyLockLine(nodes, edges, { kind: 'node', nodeId: renderNodeId }, settingsCache);
   }, [renderNodeId, nodes, edges, settingsCache]);
   const keyLockId = useId();
 

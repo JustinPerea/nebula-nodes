@@ -454,3 +454,122 @@ page errors, 0 console errors. Run and Accept were never clicked.
   status notice; no request.
 - The ×20,000 object at the zoom-out limit fills 51% of the stage height,
   the same as the 1 m ball (51%); it opens at 79%, the same as the ball.
+
+## Round 5 (2026-10-30): one run-plan lock, dialogs over the bar, GM's r7 and r8
+
+Built from the round 5 brief, review r4 and GM's r7 and r8 rulings, copy
+verbatim. The "(1 paid)" labels stay as they are: GM moved "Accept and run"
+to the later cost-row round.
+
+### One rule for every scope (review r4 MEDIUM-1, GM r8 items 1-2)
+
+- `lib/runKeyLock.ts` `runKeyLockLine(nodes, edges, scope, settings)` is the
+  one lock: it reads the nodes the run would run (`lib/runScope`
+  `nodesThatRun`) and locks only when one is a real Idol without its token.
+  The toolbar's Run, the selection toolbar, the Inspector, the context menu
+  and the store's run paths (Cmd+Enter, the palette, a node's run, a replay)
+  all call it. `runKeyLockNodeLine` is the same rule with Idol's own line
+  for every scope (Run History, the held "Run now").
+- The bug was the toolbar alone: it locked over every node on the canvas,
+  while the store already refused over the run plan. A canvas run skips an
+  agent's placeholder and what needs it, so a placeholder Idol next to Text
+  locked the toolbar while Cmd+Enter ran Text.
+- **The two selection cases GM asked about: neither was the bug.** Export
+  alone is locked because its run pulls in the Idol that feeds it. Export
+  with Text is open because a selection runs only the selected nodes
+  (`executeCluster`), so Idol isn't in its plan. Tests pin both, and both
+  pass on f9124269.
+- **Open for GM:** the person's own Run of a placeholder Idol, or of a node
+  it feeds, locks. That run makes the placeholder real and runs it (the
+  placeholder dialog first), and the backend refuses it the same way. Read
+  literally, "a placeholder never locks anywhere" would leave that Run open
+  to a sure refusal. Shot: `1440-r5-placeholder-direct-run.png`.
+- The backend already validated after `_skip_placeholders`;
+  `tests/test_idol_run_scope.py` pins both sides of it.
+
+### Accept reads its own run (review r4 LOW-1, LOW-2)
+
+- `lib/proposalAcceptLock.ts`: the canvas as Accept leaves it (the
+  proposal's nodes at the values Accept writes, the proposed param changes,
+  both sets of wires), over the run Accept starts (one node with what feeds
+  it, several with their ancestors), with the keys set now. The bar's hook
+  (`useProposalAcceptLock`) follows the settings, so removing the token
+  locks Accept on a proposal made while it was set.
+- The store's `accept` refuses the same way, before anything is sent, with
+  GM's Accept line as a neutral notice. That covers every accept path.
+
+### Run History and "Run now" (GM r8 item 3)
+
+- Rerun, Retry and "Rerun with latest source", and the held "Run now", are
+  aria-disabled, focusable, with Idol's line as title and description; a
+  click does nothing. `runDeferred` and the replay paths refuse with a
+  notice as the backstop.
+- `historyRunKeyLock` lives in `lib/historyRunKeyLock.ts`, not the graph
+  store. Imported from the 500 KB store, it made the ratchet's test G walk
+  the store from RunHistoryPanel: 183 s for that one file, past the 120 s
+  limit.
+
+### Dialogs over the proposal bar (GM r7)
+
+- The notice region takes no layer of its own (`position: absolute`,
+  `z-index: auto`): a fixed box would make one layer of all its items. Each
+  item carries its own: the notices `--sr-layer-notice` (20010, above every
+  dialog, GM r25), the proposal bar the new `--sr-layer-proposal`, one under
+  `--sr-layer-modal`, the lowest layer any modal uses (60). html, body and
+  #root are the viewport and never scroll, so absolute places it as fixed
+  did.
+- A dialog's Tab order skips the bar (`noticeTabbables`); it sits under the
+  scrim.
+- Checked: every modal root in `tests/proposalBarStacking.test.ts` (the Idol
+  and World v1 viewers, mesh viewer, prompt dialogs, command palette,
+  keyboard shortcuts, model picker, result comparison, lightbox, Commons
+  prompt, personal warning, onboarding, mask painter) is above the bar and
+  under the notices. Live: the viewer and the palette over a live proposal,
+  and a notice over the viewer.
+- Follows from it: popovers at 60 or more (the provider switcher, the
+  Commons leave menu), the following bar (1002), the chat model picker
+  (1100) and the drag layer now draw over the bar where they meet it.
+- At 1440×900 the 3D viewer's panel covers the bar's spot entirely, so the
+  bar is not seen at all there; under the palette it shows dimmed through
+  the scrim.
+
+### The rest
+
+- GM r8 item 4: a compressed download that won't decode (httpx
+  `DecodingError`) says "Nebula couldn’t download the object from Idol. Try
+  again in a minute." It keeps the call's facts (`with_call_facts`).
+- GM r8 item 5: no run counts. The readiness detail is "Add your Hugging
+  Face token in Settings to run Idol.", the switcher row "Free with a
+  Hugging Face token."; idol.md has "Open: can a free account run Idol at
+  all?"
+- NIT-3, Spark's "No target" on Escape mid-drag: Spark 2.1.0's
+  `driveSort` sets a timer that calls itself after the renderer is disposed.
+  The teardown now cancels it (`stopSparkSorting`: clear the pending
+  timeout, mark nothing dirty) before `disposeSparkQuietly`. Nothing is
+  swallowed.
+- NIT-1 (the orbit-sync deps mutation, M15) is killed by a camera-swap test.
+- `nebula nodes` prints the `BILLING:` line; find_nodes and MCP-SETUP list
+  `billing`.
+
+### Tests and checks
+
+- New tests fail on f9124269, except those that pin behaviour that was
+  already right: the selection cases, the store's Cmd+Enter with a
+  placeholder, the backend's run plan, the keyless helpers and the M15
+  test. Those were checked by mutation instead.
+- Mutations: 32 cases on the new guards, all killed.
+- Two existing tests changed for the new layers. `agentPresenceFollowups.r27`
+  put its notices in the first slot, which is now the bar's (skipped by a
+  dialog's Tab order); it uses the canvas notice's slot.
+  `agentPresenceFollowups.r34deferred` stands in uiStore as it stands in the
+  graph store.
+- Live check, isolated as round 4: 0 Hugging Face requests, 0 run or accept
+  requests, 0 page or console errors, both canaries blocked.
+
+### Follow-ups
+
+- `uiStore` reads localStorage unguarded as it loads (`loadCanvasPref`,
+  `loadOnboarded`). A tab with site data blocked throws there. Out of scope
+  here; the other loaders already guard.
+- The "(1 paid)" labels on a route that can't run, held for the cost-row
+  round.

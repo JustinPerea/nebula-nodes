@@ -10,6 +10,10 @@ const api = vi.hoisted(() => ({ releaseApproval: vi.fn() }));
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { subscribe: () => () => {} } }));
 vi.mock('../src/store/graphStore', () => ({ useGraphStore: { getState: () => ({ nodes: [], isExecuting: false }) },
   watchGraphSyncs: () => ({ seen: new Set<string>(), stop: () => {} }) }));
+// The store reads the keys for Accept's and Run's key lock (PR #203 r5); the
+// real uiStore reads localStorage unguarded as it loads, so stand it in, as
+// the canvas store is.
+vi.mock('../src/store/uiStore', () => ({ useUIStore: { getState: () => ({ settingsCache: { apiKeys: {}, loaded: false } }) } }));
 vi.mock('../src/lib/canvasProposals', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/lib/canvasProposals')>()), releaseApproval: api.releaseApproval }));
 

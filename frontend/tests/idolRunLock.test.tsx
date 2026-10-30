@@ -135,3 +135,32 @@ describe('Idol without a Hugging Face token: Run is locked', () => {
     });
   }
 });
+
+describe('the selection toolbar reads the run plan of the selection (GM, PR #203 r8 item 2)', () => {
+  function chain(selected: string[]) {
+    const pick = (n: Node<NodeData>) => ({ ...n, selected: selected.includes(n.id) });
+    const text: Node<NodeData> = { id: 'text', type: 'model-node', position: { x: 0, y: 200 },
+      data: { label: 'Text', definitionId: 'text-input', params: { value: 'a cube' }, outputs: {}, state: 'idle' } };
+    const exporter: Node<NodeData> = { id: 'export', type: 'model-node', position: { x: 600, y: 0 },
+      data: { label: 'Export', definitionId: 'worldlabs-world-export', params: {}, outputs: {}, state: 'idle' } };
+    useGraphStore.setState({ nodes: [idolNode('n1', false), exporter, text].map(pick),
+      edges: [{ id: 'e1', source: 'n1', target: 'export', sourceHandle: 'world', targetHandle: 'world' }] } as never);
+    render(<ReactFlowProvider><SelectionToolbar /></ReactFlowProvider>);
+    return screen.getByRole('button', { name: 'Run selected nodes' });
+  }
+
+  it('Export with Text: the selection runs only those two, so Idol is not in it and Run is open', () => {
+    setup({ WORLDLABS_API_KEY: '***abcd' });
+    const run = chain(['export', 'text']);
+    expect(run).not.toHaveAttribute('aria-disabled');
+    expect(run).not.toHaveAttribute('data-key-locked');
+    expect(run).not.toHaveAttribute('title', LOCK);
+  });
+
+  it("Export alone: its run pulls in the Idol that feeds it, so Run is locked with Idol's line", () => {
+    setup({ WORLDLABS_API_KEY: '***abcd' });
+    const run = chain(['export']);
+    expect(run).toHaveAttribute('aria-disabled', 'true');
+    expect(run).toHaveAccessibleDescription(LOCK);
+  });
+});

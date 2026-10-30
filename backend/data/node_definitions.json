@@ -24216,7 +24216,7 @@
             "1048576": "1,048,576"
           }
         },
-        "note": "Free with a Hugging Face token. A free account gives a few runs a day.",
+        "note": "Free with a Hugging Face token.",
         "missingKeyLine": "You can run Idol after you add your Hugging Face token in Settings."
       }
     ]

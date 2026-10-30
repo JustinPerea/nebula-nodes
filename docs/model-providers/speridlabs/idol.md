@@ -41,8 +41,8 @@ Read 2026-10-29 (GET requests that run nothing):
   release is current when it was last built.
 - [`huggingface_hub` 2.4.0 `utils/_http.py`](https://github.com/huggingface/huggingface_hub/blob/v2.4.0/src/huggingface_hub/utils/_http.py)
   `hf_raise_for_status`: how the Hub says a repo is missing, gated or disabled
-- [hub-docs `spaces-zerogpu.md` line 116](https://github.com/huggingface/hub-docs/blob/main/docs/hub/spaces-zerogpu.md?plain=1#L116):
-  quota is charged on the effective task duration
+- [hub-docs `spaces-zerogpu.md` line 115 at d035e18f](https://github.com/huggingface/hub-docs/blob/d035e18fdd808e4dced8c51b61c19287fe5c5323/docs/hub/spaces-zerogpu.md?plain=1#L115)
+  (2026-09-07): the `xlarge` note counts an "effective" task duration
 - [gradio-app/gradio PR #11700](https://github.com/gradio-app/gradio/pull/11700),
   `gradio_client` 1.11.1+ and Hugging Face's MCP server: the
   `X-HF-Authorization` header
@@ -109,7 +109,8 @@ run on the anonymous allowance. That is not a one-line change:
    `ProviderSwitcher`, `ProviderReadinessBadge`). Round 4 added more that pin
    it (`idolCanvasLock`, the Accept lock in `ProposalBar`, the quick refusal),
    so count again at that point. The keyless rules keep their own tests
-   (`_keyless_idol`, `keyless_idol`).
+   (`_keyless_idol`, `keyless_idol`), which build the keyless route from
+   the current one either way, so they pass before and after step 1.
 4. **The generated tables**: the route tables
    (`generate-route-tables.py`) and `docs/MODEL_REFERENCE.md`, then
    `scripts/check-node-contracts.mjs`, which CI runs.
@@ -128,7 +129,9 @@ A run is:
    sleeping or building Space is woken with one `GET /gradio_api/info` and
    polled for up to 180 s; a paused, stopped or failed one stops the run
    before any call. The Space reads as missing by `huggingface_hub`'s rule
-   (2.4.0 `hf_raise_for_status`, read in its order on an error answer):
+   (2.4.0 `hf_raise_for_status`, in its order on an error answer:
+   `RevisionNotFound` and `EntryNotFound` come first and aren't missing; the
+   bucket and job branches don't apply to `/api/spaces/{id}`):
    `X-Error-Code: GatedRepo`, then `X-Error-Message: Access to this resource
    is disabled.`, then `X-Error-Code: RepoNotFound` (Hugging Face answers that
    for a deleted Space and for a private one the caller can't see) or a 401
@@ -280,22 +283,32 @@ Starting a run and paying for it are two different checks:
   The refusal names both numbers, "({requested}s requested vs. {left}s
   left)" (`spaces/zero/client.py` 0.51.3, the quota branch of the schedule
   call).
-- **Charge**: the quota is charged the seconds the run uses. The docs say so
-  for `xlarge` (line 116): "`xlarge` consumes **2×** more daily quota than
-  `large` (e.g. a 45s **effective** task duration consumes 90s of quota)".
+- **Charge**: the quota is likely charged only the seconds the run uses. The
+  docs say so only for `xlarge` (line 115): "`xlarge` consumes **2×** more
+  daily quota than `large` (e.g. a 45s **effective** task duration consumes
+  90s of quota)". The first live run will show it.
 
-So the runs a day below are a floor, the count if every run used its whole
-ask. Without a token it is still 0 on Blackwell, since 180 s never fits in
-120 s. With a free or PRO account it depends on how long a run really takes,
-which only the first live run will show. GM's line in readiness and the
-switcher is "a few runs a day".
+Daily quotas, from the docs' table: free 300 s, PRO and Team 2,400 s,
+Enterprise 3,600 s, unauthenticated 120 s.
 
-| Account | Quota | Blackwell, 180 s ask (floor) | H200, 120 s ask (floor) |
-|---|---|---|---|
-| Unauthenticated | 120 s | 0 (refused) | 1 |
-| Free | 300 s | 1 | 2 |
-| PRO or Team | 2,400 s | 13 | 20 |
-| Enterprise | 3,600 s | 20 | 30 |
+### Open: can a free account run Idol at all?
+
+Nebula says no run count until the first live run (GM, PR #203 r8). Two
+limits apply, and only the daily quota is published:
+
+- **The per-task cap.** ZeroGPU refuses a task whose ask is over the
+  account's maximum for one task: "The requested GPU duration ({requested}s)
+  is larger than the maximum allowed" (`spaces/zero/client.py` 0.51.3, when
+  the schedule answer's `wait` is negative). On an API call, for no account
+  or a free ("regular") one, it adds "Subscribe to Hugging Face PRO to allow
+  GPU tasks up to 40 min". The cap for a free account isn't published, so a
+  free account may be refused the 180 s ask even with its whole day's quota
+  left.
+- **The daily quota.** A run starts only with the whole ask left (above).
+
+If a free account fits, the count comes back with the real number. If it
+doesn't, Idol needs a PRO account, and the copy (including the node
+description's "free within your Hugging Face allowance") is ruled again.
 
 **To be confirmed on the first live run**: ZeroGPU's quota and duration
 errors name the seconds requested. If the live run shows 120 s, see
@@ -315,7 +328,7 @@ The card's lines are GM's (PR #203 r1 to r4), with curly apostrophes.
 | The Space's own GPU limit | "Idol has reached its own limit on Hugging Face for now. Try again later." |
 | A token was sent but didn't apply (no IP token reached the Space, or the quota text is the IP-only one) | "Idol ran without your Hugging Face token and hit the free allowance. Check your token in Settings, then try again." |
 | The run's ask (120 s, or 180 s on Blackwell) is more than the allowance per run, no token | "Idol needs more GPU time per run than the free allowance gives. Add your Hugging Face token in Settings, then try again." |
-| The same with a token (any account's allowance is past the ask, so the token most likely didn't apply; GM r6 #7) | "Idol ran without your Hugging Face token and hit the free allowance. Check your token in Settings, then try again." The signed-in duration line ("Idol needs more GPU time per run than your Hugging Face account allows. Raise your allowance on Hugging Face, then try again.") stays in code, unused, for the first live run to confirm or replace. |
+| The same with a token (either the token didn't apply, or a free account's per-task cap is under the ask; the text is the same for both, so the first live run settles it; until then GM r6 #7 shows the token line) | "Idol ran without your Hugging Face token and hit the free allowance. Check your token in Settings, then try again." The signed-in duration line ("Idol needs more GPU time per run than your Hugging Face account allows. Raise your allowance on Hugging Face, then try again.") stays in code, unused, for the first live run to confirm or replace. |
 | Space sleeping or building past 180 s | "Idol is still starting on Hugging Face. Try again in a few minutes." |
 | Space paused, stopped or failed | "Idol isn’t running on Hugging Face right now. Try again later." |
 | Space missing (deleted, private, gated or disabled; with or without a token) | "Nebula can’t find Idol on Hugging Face, so it can’t run. Use another 3D node instead." |

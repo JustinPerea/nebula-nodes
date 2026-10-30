@@ -75,7 +75,7 @@ def keyless_idol() -> dict[str, Any]:
     definition = json.loads(json.dumps(registry()["speridlabs-idol"]))
     route = definition["routes"][0]
     route["keys"], route["optionalKeys"] = [], ["HF_TOKEN"]
-    route.pop("missingKeyLine")
+    route.pop("missingKeyLine", None)
     definition["envKeyName"], definition["directKeyName"] = [], []
     return definition
 
@@ -1618,4 +1618,58 @@ def test_the_signed_in_duration_line_stays_in_code_unused():
     assert line_of(idol.duration_error(detail="x", signed_in=True)) == DURATION_OWN_LINE
     error = idol.classify_space_error(DURATION, signed_in=True)
     assert line_of(error) == NOT_APPLIED_LINE
-    assert "most likely because the token didn't apply" in str(error)
+    # Review r4 LOW-3: agents read both causes; the text is the same for both.
+    assert "either the token didn't apply, or a free account's per-task cap is under the ask" in str(error)
+
+
+# -- round 5 -------------------------------------------------------------------
+
+def test_the_keyless_helpers_survive_the_switch_back(monkeypatch):
+    """Review r4 LOW-2: idol.md says the keyless rules' tests pass before and
+    after the switch back (step 1 drops missingKeyLine). Here the registry is
+    already keyless, as after step 1, and both helpers still build it."""
+    from services.node_registry import NodeRegistry
+    from tests import test_route_agent_surfaces as surfaces
+
+    switched = keyless_idol()
+    assert "missingKeyLine" not in switched["routes"][0]
+    real = NodeRegistry.get_all
+
+    def get_all(self):
+        return {**real(self), "speridlabs-idol": json.loads(json.dumps(switched))}
+
+    monkeypatch.setattr(NodeRegistry, "get_all", get_all)
+    monkeypatch.setitem(surfaces.REGISTRY, "speridlabs-idol", json.loads(json.dumps(switched)))
+    assert keyless_idol() == switched
+    assert surfaces._keyless_idol() == switched
+
+
+@pytest.mark.parametrize("answer, missing", [
+    # Review r4 NIT-2: huggingface_hub checks these two first, and neither is
+    # a missing repo, whatever the status or message with them.
+    (httpx.Response(401, headers={"x-error-code": "RevisionNotFound"}), False),
+    (httpx.Response(404, headers={"x-error-code": "EntryNotFound",
+                                  "x-error-message": "Access to this resource is disabled."}), False),
+    (httpx.Response(401, headers={"x-error-code": "EntryNotFound"}), False),
+    # The rest of the order still reads as missing.
+    (httpx.Response(401), True),
+    (httpx.Response(403, headers={"x-error-message": "Access to this resource is disabled."}), True),
+])
+def test_the_hub_rule_reads_revision_and_entry_answers_first(answer, missing):
+    assert idol.hub_says_missing(answer) is missing
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("encoding", ["gzip", "deflate"])
+async def test_a_compressed_download_that_wont_decode_says_the_download_line(monkeypatch, encoding):
+    """GM, PR #203 r8 item 4: httpx's DecodingError is an HTTPError, which the
+    run read as no connection. It is a failed download, in GM's line."""
+    from execution.person_line import person_line as line_of
+
+    public_dns(monkeypatch)
+    FakeHosts(monkeypatch, _ply_routes(_streamed(b"\x1f\x8b\x08\x00 not really compressed" * 50, headers={
+        "content-encoding": encoding})))
+    with pytest.raises(idol.IdolSpaceError) as excinfo:
+        await run_direct()
+    assert line_of(excinfo.value) == "Nebula couldn’t download the object from Idol. Try again in a minute."
+    assert "couldn't be decoded" in str(excinfo.value)

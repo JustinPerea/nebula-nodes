@@ -10,7 +10,7 @@ import {
   proposalChanges,
   proposalSummary,
 } from '../../lib/canvasProposals';
-import { useProposalReadiness } from '../../hooks/useProposalReadiness';
+import { useProposalAcceptLock, useProposalNotReady } from '../../hooks/useProposalReadiness';
 import { keyLockedProps } from '../../lib/runKeyLock';
 import { useCanvasProposalsStore, type ProposalEntry } from '../../store/canvasProposalsStore';
 import { InNoticeRegion } from '../InNoticeRegion';
@@ -112,7 +112,8 @@ export function ProposalBar() {
   // (Idol without a Hugging Face token) can't be accepted yet: Accept is
   // locked with GM's line, as Run is (keyLockedProps). The backend still
   // refuses the run if one is sent.
-  const { notReady, acceptLock } = useProposalReadiness(current);
+  const notReady = useProposalNotReady(current);
+  const acceptLock = useProposalAcceptLock(current);
   const acceptLockId = useId();
   const [noteRef, noteClamped] = useClamped(current?.view.note);
 

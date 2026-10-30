@@ -7,8 +7,7 @@ import { floatingBottomLimit } from '../lib/bottomBar';
 import { useCanvasLock } from '../lib/canvasLock';
 import '../styles/panels.css';
 import { keyBlockedByModal } from '../lib/canvasShortcutScope';
-import { keyLockedProps, nodesKeyLockReason } from '../lib/runKeyLock';
-import { nodesThatRun } from '../lib/runScope';
+import { keyLockedProps, runKeyLockLine } from '../lib/runKeyLock';
 
 /** How close the menu may come to the window's edges. */
 const MENU_EDGE = 8;
@@ -118,8 +117,7 @@ export function ContextMenu() {
 
   // A node that can't run without its key (Idol's Hugging Face token), this
   // one or one feeding it: locked as the other Runs are (keyLockedProps).
-  const running = nodesThatRun(graphNodes, graphEdges, { kind: 'node', nodeId });
-  const keyLock = nodesKeyLockReason(running, running.map((node) => node.id), settingsCache);
+  const keyLock = runKeyLockLine(graphNodes, graphEdges, { kind: 'node', nodeId }, settingsCache);
   const items: MenuItem[] = [
     {
       label: 'Run This Node',

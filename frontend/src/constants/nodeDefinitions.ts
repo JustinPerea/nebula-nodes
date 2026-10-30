@@ -4624,7 +4624,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             65536: '65,536', 131072: '131,072', 262144: '262,144', 524288: '524,288', 1048576: '1,048,576',
           },
         },
-        note: 'Free with a Hugging Face token. A free account gives a few runs a day.',
+        note: 'Free with a Hugging Face token.',
         missingKeyLine: 'You can run Idol after you add your Hugging Face token in Settings.',
       },
     ],

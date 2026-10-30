@@ -334,7 +334,7 @@ def _keyless_idol() -> dict:
     definition = json.loads(json.dumps(REGISTRY["speridlabs-idol"]))
     route = definition["routes"][0]
     route["keys"], route["optionalKeys"] = [], ["HF_TOKEN"]
-    route.pop("missingKeyLine")
+    route.pop("missingKeyLine", None)
     definition["envKeyName"], definition["directKeyName"] = [], []
     return definition
 
@@ -430,3 +430,20 @@ def test_nebula_keys_counts_idols_token_and_a_keyless_routes_optional_one():
     assert "optional: 1 node runs without it (Idol)" in keyless_text and "unavailable" not in keyless_text
     two = format_keys({"configured": {"HF_TOKEN": False}}, [idol, {**idol, "id": "idol-2", "displayName": "Idol 2"}])
     assert "2 nodes unavailable" in two
+
+
+def test_nebula_nodes_prints_idols_billing_line_under_the_table():
+    """Review r4 LOW-1: `nebula nodes` (find_nodes' CLI twin) says who can
+    bill past Idol's allowance, as every other agent surface does; once per
+    note, only for a row that runs free here."""
+    from cli.formatter import format_agent_nodes
+
+    idol_row = {"id": "speridlabs-idol", "name": "Idol", "category": "3d-gen", "runsWith": "key",
+                "price": "free", "billing": main.HF_SPACE_BILLING_NOTE}
+    text_row = {"id": "text-input", "name": "Text", "category": "utility", "runsWith": "free", "price": "free"}
+    out = format_agent_nodes([idol_row, text_row], ranked=False)
+    billing = [line for line in out.splitlines() if line.startswith("BILLING:")]
+    assert billing == [f"BILLING: speridlabs-idol: free here. {main.HF_SPACE_BILLING_NOTE}"]
+    # Not ready here: no billing line (its row says what's missing instead).
+    out = format_agent_nodes([{**idol_row, "runsWith": None, "missing": "HF_TOKEN"}, text_row], ranked=False)
+    assert "BILLING:" not in out

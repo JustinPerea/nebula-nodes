@@ -279,9 +279,6 @@ export interface ObjectFraming {
   far: number;
 }
 
-/** The object's robust bounding sphere from the sampled centers: the trimmed
- * box's center (as robustWorldSceneBounds takes it, Y included) and the
- * 98th-percentile distance from it. */
 /** The object viewer draws every object at this radius (review r3 LOW-3):
  * the mesh is scaled by objectUnitScale before it is framed, so the camera,
  * the orbit range and the clip planes are the same numbers at 1 mm and at
@@ -298,6 +295,9 @@ export function objectUnitScale(sampledCenters: readonly WorldPoint[], extents: 
   return Number.isFinite(scale) && scale > 0 ? scale : 1;
 }
 
+/** The object's robust bounding sphere from the sampled centers: the trimmed
+ * box's center (as robustWorldSceneBounds takes it, Y included) and the
+ * 98th-percentile distance from it. */
 export function objectBoundingSphere(
   sampledCenters: readonly WorldPoint[],
   fallbackCenter: WorldPoint = { x: 0, y: 0, z: 0 },

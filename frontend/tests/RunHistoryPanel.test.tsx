@@ -69,6 +69,47 @@ describe('RunHistoryPanel replay actions', () => {
     expect(rerunHistoryRecord).toHaveBeenCalledWith('complete-run');
   });
 
+  it("locks Rerun and Retry while the replay would run Idol without its token, focusable (GM, PR #203 r8 item 3)", () => {
+    const LINE = 'You can run Idol after you add your Hugging Face token in Settings.';
+    const idol = (run: RunRecord): RunRecord => ({ ...run, snapshot: {
+      nodes: [{ id: 'img', definitionId: 'image-input', params: { filePath: '/x.png' }, outputs: {} },
+        { id: 'idol', definitionId: 'speridlabs-idol', params: {}, outputs: {} }],
+      edges: [{ id: 'e1', source: 'img', sourceHandle: 'image', target: 'idol', targetHandle: 'image' }],
+    } });
+    const rerunHistoryRecord = vi.fn(async () => undefined);
+    const retryFailedRun = vi.fn(async () => undefined);
+    useGraphStore.setState({
+      runHistory: [idol(record('failed-run', 'failed', 'idol')), idol(record('complete-run', 'complete'))],
+      isExecuting: false,
+      rerunHistoryRecord,
+      retryFailedRun,
+    });
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    const { unmount } = render(<RunHistoryPanel />);
+    for (const name of ['Retry failed Single node run', 'Rerun Full graph']) {
+      const button = screen.getByRole('button', { name });
+      expect(button).toHaveAttribute('aria-disabled', 'true');
+      expect(button).not.toBeDisabled();
+      expect(button).toHaveAttribute('data-key-locked', '');
+      expect(button).toHaveAttribute('title', LINE);
+      expect(button).toHaveAccessibleDescription(LINE);
+      button.focus();
+      expect(document.activeElement).toBe(button);
+      fireEvent.click(button);
+    }
+    expect(retryFailedRun).not.toHaveBeenCalled();
+    expect(rerunHistoryRecord).not.toHaveBeenCalled();
+    unmount();
+
+    // With the token they replay as before.
+    useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: 'set' }, loaded: true } });
+    render(<RunHistoryPanel />);
+    const rerun = screen.getByRole('button', { name: 'Rerun Full graph' });
+    expect(rerun).not.toHaveAttribute('aria-disabled');
+    fireEvent.click(rerun);
+    expect(rerunHistoryRecord).toHaveBeenCalledWith('complete-run');
+  });
+
   it('disables every replay while another run is active', () => {
     useGraphStore.setState({
       runHistory: [record('failed-run', 'failed'), record('complete-run', 'complete')],

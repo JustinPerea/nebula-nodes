@@ -1,5 +1,8 @@
+import { useId, useMemo } from 'react';
 import { Play, X } from 'lucide-react';
-import { useCanvasProposalsStore } from '../../store/canvasProposalsStore';
+import { deferredRunKeyLock, useCanvasProposalsStore } from '../../store/canvasProposalsStore';
+import { useUIStore } from '../../store/uiStore';
+import { keyLockedProps } from '../../lib/runKeyLock';
 import { useGraphStore } from '../../store/graphStore';
 import '../../styles/canvasProposals.css';
 import { useLeave } from '../../lib/noticeLeave';
@@ -18,6 +21,15 @@ export function DeferredRunNotice() {
   const isExecuting = useGraphStore((s) => s.isExecuting);
   // A run waiting for its inputs counts as starting (review 15, M-B).
   const runStarting = useGraphStore((s) => s.runStarting);
+  // GM, PR #203 r8 item 3: locked while what it runs needs a key that isn't
+  // set (Idol without a Hugging Face token), focusable, its line as the
+  // reason; runDeferred refuses the same way.
+  const nodes = useGraphStore((s) => s.nodes);
+  const edges = useGraphStore((s) => s.edges);
+  const settingsCache = useUIStore((s) => s.settingsCache);
+  const keyLock = useMemo(() => (deferredRun ? deferredRunKeyLock(deferredRun, { nodes, edges }, settingsCache) : null),
+    [deferredRun, nodes, edges, settingsCache]);
+  const keyLockId = useId();
   // It leaves as it entered (fix round 7 of PR #200, GM r11 answer 2).
   const leave = useLeave(deferredRun);
   if (!leave.shown) return null;
@@ -32,11 +44,14 @@ export function DeferredRunNotice() {
           type="button"
           className="proposal-bar__button proposal-bar__button--primary"
           disabled={isExecuting || runStarting}
-          onClick={() => void runDeferred()}
+          title={keyLock ?? undefined}
+          {...keyLockedProps(keyLock, keyLockId)}
+          onClick={() => { if (!keyLock) void runDeferred(); }}
         >
           <Play size={13} aria-hidden="true" />
           Run
         </button>
+        {keyLock && <span id={keyLockId} className="toolbar__sr-only">{keyLock}</span>}
         <button type="button" className="proposal-bar__button" aria-label="Dismiss" onClick={dismissDeferred}>
           <X size={13} aria-hidden="true" />
         </button>

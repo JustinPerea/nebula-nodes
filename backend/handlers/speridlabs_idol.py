@@ -36,6 +36,7 @@ so a random seed would replay one result. Change Seed for a new object.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import math
 import re
@@ -48,7 +49,7 @@ from urllib.parse import quote, urlsplit, urlunsplit
 
 import httpx
 
-from execution.person_line import as_person_line, with_api_status, with_person_line, with_provider_line
+from execution.person_line import as_person_line, with_api_status, with_call_facts, with_person_line, with_provider_line
 from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
 from services.splat_ply import (
@@ -195,13 +196,16 @@ def token_not_applied_error(*, detail: str) -> IdolSpaceError:
 
 
 def duration_token_not_applied_error(*, detail: str) -> IdolSpaceError:
-    # A signed-in account gets at least 5 GPU minutes a day (the ZeroGPU
-    # docs' tier table), more than the Space's 180 s ask, so a duration
-    # refusal with HF_TOKEN sent most likely means the token didn't apply
-    # (spaces then gives the anonymous 120 s cap).
+    # A duration refusal with HF_TOKEN sent can mean the token didn't apply
+    # (spaces then gives the anonymous cap), or that a free ("regular")
+    # account's per-task cap, which isn't published, is under the Space's
+    # ask. The text is the same for both (spaces 0.51.3 zero/client.py), so
+    # the first live run settles it; until then GM's r6 #7 ruling shows the
+    # token line.
     return with_provider_line(
         IdolSpaceError("HF_TOKEN was sent, but ZeroGPU refused the Idol Space's per-run GPU ask as over the "
-                       f"maximum, most likely because the token didn't apply ({detail})"),
+                       "maximum: either the token didn't apply, or a free account's per-task cap is under the ask "
+                       f"({detail})"),
         "Idol ran without your Hugging Face token and hit the free allowance. "
         "Check your token in Settings, then try again.")
 
@@ -374,13 +378,16 @@ def space_missing_error(*, status: int, code: str | None) -> IdolSpaceError:
         "Nebula can’t find Idol on Hugging Face, so it can’t run. Use another 3D node instead.")
 
 
-# huggingface_hub's own rule (2.4.0 utils/_http.py hf_raise_for_status, read
-# in its order on an error answer): X-Error-Code GatedRepo, then X-Error-Message
-# "Access to this resource is disabled.", then X-Error-Code RepoNotFound or a
-# 401 on a repo API with any message but a bad token's. Each one means the
-# caller can't use the Space, so the person reads the missing line, even
-# with a token (the token is fine). A 404 without the RepoNotFound code is no
-# "missing" to huggingface_hub either: the stage check skips it.
+# huggingface_hub's own rule (2.4.0 utils/_http.py hf_raise_for_status). Its
+# full order on an error answer: X-Error-Code RevisionNotFound, then
+# EntryNotFound (neither is a missing repo), then GatedRepo, then
+# X-Error-Message "Access to this resource is disabled.", then RepoNotFound on
+# a bucket URL and a 404 on a job URL (neither applies to /api/spaces/{id}),
+# then RepoNotFound, or a 401 on a repo API with any message but a bad
+# token's. Gated, disabled and RepoNotFound each mean the caller can't use the
+# Space, so the person reads the missing line, even with a token (the token is
+# fine). A 404 without the RepoNotFound code is no "missing" to
+# huggingface_hub either: the stage check skips it.
 # https://github.com/huggingface/huggingface_hub/blob/v2.4.0/src/huggingface_hub/utils/_http.py
 _BAD_TOKEN_MESSAGE = "Invalid credentials in Authorization header"
 _DISABLED_MESSAGE = "Access to this resource is disabled."
@@ -391,6 +398,8 @@ def hub_says_missing(response: httpx.Response) -> bool:
         return False
     code = response.headers.get("x-error-code")
     message = response.headers.get("x-error-message")
+    if code in ("RevisionNotFound", "EntryNotFound"):
+        return False
     if code in ("GatedRepo", "RepoNotFound") or message == _DISABLED_MESSAGE:
         return True
     return response.status_code == 401 and message != _BAD_TOKEN_MESSAGE
@@ -671,6 +680,23 @@ def _checked_header(prefix: bytes) -> SplatPlyHeader:
     return header
 
 
+DOWNLOAD_LINE = "Nebula couldn’t download the object from Idol. Try again in a minute."
+
+
+async def _decoded_chunks(response: httpx.Response) -> AsyncIterator[bytes]:
+    """The body, decoded. A compressed body that won't decode (httpx's
+    DecodingError, an HTTPError the run would read as no connection) is a
+    download that failed, in GM's download line (PR #203 r8 item 4)."""
+    try:
+        async for chunk in response.aiter_bytes():
+            yield chunk
+    except httpx.DecodingError as exc:
+        raise with_call_facts(with_provider_line(
+            IdolSpaceError(f"The Idol Space's .ply download couldn't be decoded "
+                           f"({response.headers.get('content-encoding', 'no encoding')}: {exc})"),
+            DOWNLOAD_LINE), exc) from None
+
+
 async def _download_ply(client: httpx.AsyncClient, url: str, token: str | None,
                         destination: Path) -> SplatPlyHeader:
     """Stream the result to ``.part``: the header is checked from the first
@@ -691,7 +717,7 @@ async def _download_ply(client: httpx.AsyncClient, url: str, token: str | None,
                 raise with_provider_line(
                     # no API status: a download of a result file, not the Space's API
                     IdolSpaceError(f"The Idol Space's .ply download answered {response.status_code}"),
-                    "Nebula couldn’t download the object from Idol. Try again in a minute.")
+                    DOWNLOAD_LINE)
             encoding = response.headers.get("content-encoding", "").strip().lower()
             raw_declared = response.headers.get("content-length") if encoding in ("", "identity") else None
             declared = int(raw_declared) if raw_declared and raw_declared.isdigit() else None
@@ -700,22 +726,23 @@ async def _download_ply(client: httpx.AsyncClient, url: str, token: str | None,
             header: SplatPlyHeader | None = None
             prefix = bytearray()
             with partial.open("wb") as handle:
-                async for chunk in response.aiter_bytes():
-                    received += len(chunk)
-                    if header is None:
-                        prefix += chunk
-                        if b"end_header\n" in prefix or len(prefix) >= SPLAT_PLY_MAX_HEADER_BYTES:
-                            header = _checked_header(bytes(prefix))
-                            if declared is not None and declared != header.expected_bytes:
-                                raise _unreadable(detail=f"Content-Length is {declared:,} bytes, but its header "
-                                                  f"declares {header.expected_bytes:,}")
-                            prefix = bytearray()
-                    limit = header.expected_bytes if header is not None else MAX_PLY_BYTES
-                    if received > limit:
+                async with contextlib.aclosing(_decoded_chunks(response)) as chunks:
+                    async for chunk in chunks:
+                        received += len(chunk)
                         if header is None:
-                            raise _too_large(what=f"passed Nebula's {MAX_PLY_BYTES:,}-byte limit")
-                        raise _unreadable(detail=f"it runs past the {header.expected_bytes:,} bytes its header declares")
-                    handle.write(chunk)
+                            prefix += chunk
+                            if b"end_header\n" in prefix or len(prefix) >= SPLAT_PLY_MAX_HEADER_BYTES:
+                                header = _checked_header(bytes(prefix))
+                                if declared is not None and declared != header.expected_bytes:
+                                    raise _unreadable(detail=f"Content-Length is {declared:,} bytes, but its header "
+                                                      f"declares {header.expected_bytes:,}")
+                                prefix = bytearray()
+                        limit = header.expected_bytes if header is not None else MAX_PLY_BYTES
+                        if received > limit:
+                            if header is None:
+                                raise _too_large(what=f"passed Nebula's {MAX_PLY_BYTES:,}-byte limit")
+                            raise _unreadable(detail=f"it runs past the {header.expected_bytes:,} bytes its header declares")
+                        handle.write(chunk)
         if header is None:
             # The whole file came before a complete header did.
             _checked_header(bytes(prefix))

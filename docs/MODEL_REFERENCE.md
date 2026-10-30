@@ -5657,7 +5657,7 @@ No settings.
 
 | Route | Provider | Keys | Endpoint | Notes |
 |---|---|---|---|---|
-| `hf-space` | Speridlabs | HF_TOKEN | `speridlabs/idol` | maker; Free with a Hugging Face token. A free account gives a few runs a day. |
+| `hf-space` | Speridlabs | HF_TOKEN | `speridlabs/idol` | maker; Free with a Hugging Face token. |
 
 **Speridlabs (`hf-space`) settings**
 

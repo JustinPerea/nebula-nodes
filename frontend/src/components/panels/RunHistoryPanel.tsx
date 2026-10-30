@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { X, RotateCcw, ShieldCheck, Square, Trash2 } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
+import { historyRunKeyLock } from '../../lib/historyRunKeyLock';
+import { keyLockedProps } from '../../lib/runKeyLock';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { PaperRunInspection } from './PaperRunInspection';
 import { BatchRunInspection } from './BatchRunInspection';
@@ -58,6 +60,15 @@ export function RunHistoryPanel() {
   // Retry, Recover and Forget ID are disabled and look it.
   const lock = useCanvasLock();
   const locked = lock.locked;
+  // GM, PR #203 r8 item 3: a replay that would run a node that can't start
+  // without its key (Idol without a Hugging Face token) is locked as the
+  // other Runs are (aria-disabled, focusable, its line as the reason). The
+  // store's refusal stays behind it.
+  const settingsCache = useUIStore((s) => s.settingsCache);
+  const keyLocks = useMemo(() => new Map(runHistory.map((record) => [record.id,
+    record.status === 'running' ? null : historyRunKeyLock(record, nodes, settingsCache)])),
+  [runHistory, nodes, settingsCache]);
+  const keyLockIdBase = useId();
   const off = lock.mark;
 
   const [now, setNow] = useState(() => Date.now());
@@ -204,6 +215,8 @@ export function RunHistoryPanel() {
               const executedUnit = r.batchOutputs ? 'step' : 'node';
               const recoveryReplayBlocked = isWorldLabsRecoveryReplayBlocked(r);
               const recoveryReplayReady = isWorldLabsRecoveryReplayReady(r);
+              const keyLock = keyLocks.get(r.id) ?? null;
+              const keyLockId = `${keyLockIdBase}-${r.id}`;
               const latestSourceReady = r.paperInputs?.every((input) => {
                 const source = nodes.find((node) => node.id === input.nodeId)?.data.params._paperSource as PaperSourceRecord | undefined;
                 return source?.state === 'current' && Boolean(source.snapshot);
@@ -260,6 +273,7 @@ export function RunHistoryPanel() {
                         type="button"
                         className="run-history__replay"
                         onClick={() => {
+                          if (keyLock) return;
                           if (r.status === 'failed') void retryFailedRun(r.id);
                           else void rerunHistoryRecord(r.id);
                         }}
@@ -270,9 +284,10 @@ export function RunHistoryPanel() {
                           offline: recoveryReplayReady ? OFFLINE_RECOVER : r.status === 'failed' ? OFFLINE_RETRY : OFFLINE_RERUN,
                           title: isExecuting
                           ? 'Wait for the run to finish first.'
-                          : recoveryReplayReady
+                          : keyLock ?? (recoveryReplayReady
                             ? 'Resume this run from its saved checkpoint'
-                            : 'Run this again with the same nodes and settings' })}
+                            : 'Run this again with the same nodes and settings') })}
+                        {...keyLockedProps(keyLock, keyLockId)}
                         aria-label={recoveryReplayReady
                           ? `Recover ${runTriggerLabel(r.trigger)} run`
                           : r.status === 'failed'
@@ -288,13 +303,15 @@ export function RunHistoryPanel() {
                           className="run-history__replay"
                           {...lock.act({ disabled: isExecuting || !latestSourceReady, offline: OFFLINE_RERUN, title: isExecuting
                             ? 'Wait for the run to finish first.'
-                            : latestSourceReady
+                            : keyLock ?? (latestSourceReady
                               ? 'Run again with the same settings and the latest artwork from Paper'
-                              : 'Refresh or reconnect the Paper source first.' })}
-                          onClick={() => void rerunHistoryWithLatestPaperSource(r.id)}
+                              : 'Refresh or reconnect the Paper source first.') })}
+                          {...keyLockedProps(keyLock, keyLockId)}
+                          onClick={() => { if (!keyLock) void rerunHistoryWithLatestPaperSource(r.id); }}
                           aria-label={`Rerun ${runTriggerLabel(r.trigger)} with latest source`}
                         >Rerun with latest source</button>
                       )}
+                      {keyLock && <span id={keyLockId} className="toolbar__sr-only">{keyLock}</span>}
                     </span>
                   )}
                   {recoveryReplayBlocked && (

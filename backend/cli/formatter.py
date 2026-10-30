@@ -70,6 +70,15 @@ def format_agent_nodes(rows: list[dict[str, Any]], *, ranked: bool,
                 line = f"{head}  {row.get('missing') or 'needs setup'}"
             lines.append(line.rstrip())
         lines.append("")
+    # Who can be billed past a free allowance (a Hugging Face Space route's
+    # `billing`, on a row that runs free here), as every other agent surface
+    # says it (review r4 LOW-1): once per distinct note, naming its nodes.
+    billed: dict[str, list[str]] = {}
+    for row in rows:
+        if row.get("runsWith") and row.get("billing"):
+            billed.setdefault(str(row["billing"]), []).append(str(row.get("id")))
+    for note, ids in billed.items():
+        lines.append(f"BILLING: {', '.join(ids)}: free here. {note}")
     return "\n".join(lines).rstrip("\n")
 
 

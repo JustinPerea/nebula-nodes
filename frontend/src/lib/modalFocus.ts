@@ -62,9 +62,14 @@ export function tabbablesIn(root: Element | null): HTMLElement[] {
     .sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
 }
 
-/** The notices' controls Tab reaches. */
+/** The proposal bar's slot: under every modal's scrim (GM r7, PR #203), so
+ * an open dialog's Tab never reaches it. */
+const PROPOSAL_SLOT = '[data-notice-slot="proposal"]';
+
+/** The notices' controls Tab reaches with a dialog open: every notice's, not
+ * the proposal bar's, which sits behind the dialog. */
 export function noticeTabbables(): HTMLElement[] {
-  return tabbablesIn(document.querySelector(NOTICE_REGION));
+  return tabbablesIn(document.querySelector(NOTICE_REGION)).filter((element) => !element.closest(PROPOSAL_SLOT));
 }
 
 /** Where focus goes in a dialog that gets it back: its field (a prompt's

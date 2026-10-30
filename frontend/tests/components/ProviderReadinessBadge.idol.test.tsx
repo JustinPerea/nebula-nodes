@@ -21,7 +21,7 @@ describe('ProviderReadinessBadge on Idol (GM, PR #203 r3 and r4)', () => {
     const label = screen.getByText('Needed').closest('.provider-readiness__label');
     expect(label).toHaveTextContent(/^Hugging Face token · Needed$/);
     expect(label).toHaveAttribute('title',
-      'Add your Hugging Face token in Settings to run Idol. A free Hugging Face account gives a few runs a day.');
+      'Add your Hugging Face token in Settings to run Idol.');
     // No "Optional" any more (GM r4).
     expect(container.querySelector('.provider-readiness__note')).toBeNull();
     expect(screen.getByRole('button', { name: 'Connection settings for Idol' })).toHaveTextContent('Set up');

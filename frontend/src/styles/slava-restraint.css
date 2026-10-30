@@ -312,6 +312,13 @@ body.app-slava-restraint {
   --sr-layer-popover: 40;
   --sr-layer-modal: 60;
   --sr-layer-modal-control: 61;
+  /* GM r7 (PR #203): every modal sits above the proposal bar, which stays
+   * visible under the modal's scrim, dimmed like the rest of the canvas. Its
+   * layer is the one under the lowest a modal draws (--sr-layer-modal; the
+   * palette's, the dialogs' and the World viewers' are higher), and still
+   * above every panel, the Agent log, popovers (40) and the Studios with
+   * their docks (55). tests/proposalBarStacking.test.ts pins both sides. */
+  --sr-layer-proposal: calc(var(--sr-layer-modal) - 1);
   /* GM r25 (PR #200 fix round 16): and above every dialog's backdrop (the
    * World viewer's is 20000), so a notice is always usable. Before: */
   /* The app's notices (NoticeRegion): above every panel, the Agent log, the

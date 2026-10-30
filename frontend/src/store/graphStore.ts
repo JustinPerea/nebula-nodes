@@ -110,7 +110,7 @@ import { usePricingStore } from './pricingStore';
 import { useInputSizeStore } from './inputSizeStore';
 import { useStoredAssetsStore } from './storedAssetsStore';
 import { nodesThatRun, repeatRun, runCostConfirmMessage, shouldConfirmRunCost, summarizeRunScope, type RunScope, type RunScopeSummary } from '../lib/runScope';
-import { canvasKeyLockReason, nodesKeyLockReason } from '../lib/runKeyLock';
+import { runKeyLockLine } from '../lib/runKeyLock';
 import { PRICE_DEPENDS_ON_INPUT, PRICE_NOT_LISTED, mayBeRefused, mergeRunEstimates, movedRowIds, modelNotChosenText, planDecidesRefusal, placeholderRefusalOf, placeholderRunConfirm, runPlaceholders, withRefusalFlags, withRunEstimate, type PlaceholderRunConfirm, type PlaceholderRunOptions, type RunEstimate } from '../lib/placeholderRunConfirm';
 import { placeholderRunDialogModule } from '../lib/placeholderRunDialogModule';
 import { useCreateDraftStore } from './createDraftStore';
@@ -7205,9 +7205,7 @@ function refuseUnchosenModel(nodes: Node<NodeData>[], edges: Edge[], scope: RunS
 
 function refuseKeyLockedRun(nodes: Node<NodeData>[], edges: Edge[], scope: RunScope,
   settings: { loaded: boolean; apiKeys: Readonly<Record<string, string | undefined>> }): boolean {
-  const running = nodesThatRun(nodes, edges, scope);
-  const line = scope.kind === 'graph' ? canvasKeyLockReason(running, settings)
-    : nodesKeyLockReason(running, running.map((node) => node.id), settings);
+  const line = runKeyLockLine(nodes, edges, scope, settings);
   if (!line) return false;
   useGraphStore.getState().notify(line, 'info');
   return true;

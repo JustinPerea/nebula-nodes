@@ -4816,9 +4816,10 @@ PROVIDER_CHOICE_NOTE = (
 
 # https://huggingface.co/docs/hub/spaces-zerogpu, "Extending quota with
 # credits". Pending a product decision on whether agents ask before runs that
-# can bill a PRO account; until then agents are told, on every surface that
-# lists the node (describe_node's route `billing`, find_nodes and start_here,
-# `nebula info`'s BILLING line).
+# can bill a PRO account; until then agents are told on every surface that
+# lists the node: describe_node's route `billing` (`nebula info`'s BILLING
+# line), the find_nodes row's `billing` where it runs free (`nebula nodes`
+# prints it under the table), and start_here's notes (`nebula context`).
 HF_SPACE_BILLING_NOTE = (
     "Runs on the person's own Hugging Face ZeroGPU allowance (HF_TOKEN). Nebula prices it at $0, but past "
     "the daily quota Hugging Face bills a PRO, Team or Enterprise account's prepaid credits at $1 per 10 "

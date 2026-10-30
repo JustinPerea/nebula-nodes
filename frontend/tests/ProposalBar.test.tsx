@@ -14,6 +14,7 @@ const graph = vi.hoisted(() => ({
     beginUndoStep: vi.fn(() => ({})),
     cancelUndoStep: vi.fn(),
     endUndoStep: vi.fn(),
+    notify: vi.fn(),
   },
 }));
 const net = vi.hoisted(() => ({ apiFetch: vi.fn() }));
@@ -62,7 +63,7 @@ beforeEach(() => {
   useCanvasProposalsStore.setState({ proposals: {}, drag: {}, pending: {}, errors: {}, focusedId: null, deferredRun: null });
   graph.state.isExecuting = false;
   for (const fn of [graph.state.executeNode, graph.state.executeCluster, graph.state.adoptAcceptedProposal,
-    net.apiFetch, flow.fitBounds, flow.getInternalNode]) fn.mockReset();
+    net.apiFetch, flow.fitBounds, flow.getInternalNode, graph.state.notify]) fn.mockReset();
   // As the real store: once adopted, the run's nodes are on the canvas (the
   // accept's run is sent only while they are: review 11, L-5).
   graph.state.adoptAcceptedProposal.mockImplementation((result: { runNodeIds?: string[] }) => {
@@ -170,6 +171,39 @@ describe('ProposalBar', () => {
     });
     expect(graph.state.executeNode).not.toHaveBeenCalled();
     expect(screen.getByText(/Run them when the current run finishes/)).toBeTruthy();
+  });
+
+  it('locks the held "Run" while its nodes need the token, focusable, and runDeferred refuses too (GM r8 item 3)', async () => {
+    const LINE = 'You can run Idol after you add your Hugging Face token in Settings.';
+    const before = graph.state.nodes;
+    graph.state.nodes = [{ id: 'n9', data: { label: 'Idol', definitionId: 'speridlabs-idol', params: {} } } as never];
+    try {
+      useCanvasProposalsStore.setState({ deferredRun: { agentName: 'Codex', nodeIds: ['n9'], approvalId: 'ap-1' } });
+      useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+      render(<DeferredRunNotice />);
+      const run = screen.getByRole('button', { name: 'Run' });
+      expect(run).toHaveAttribute('aria-disabled', 'true');
+      expect(run).not.toBeDisabled();
+      expect(run).toHaveAttribute('data-key-locked', '');
+      expect(run).toHaveAttribute('title', LINE);
+      expect(run).toHaveAccessibleDescription(LINE);
+      run.focus();
+      expect(document.activeElement).toBe(run);
+      fireEvent.click(run);
+      expect(graph.state.executeNode).not.toHaveBeenCalled();
+      // A locked button does nothing on a click, as the toolbar's Run: its reason is its description.
+      expect(graph.state.notify).not.toHaveBeenCalled();
+      // The store's backstop: the same refusal as a notice, nothing sent, the offer kept.
+      await useCanvasProposalsStore.getState().runDeferred();
+      expect(graph.state.executeNode).not.toHaveBeenCalled();
+      expect(graph.state.notify).toHaveBeenCalledWith(LINE, 'info');
+      expect(useCanvasProposalsStore.getState().deferredRun?.nodeIds).toEqual(['n9']);
+      // With the token it is Run again.
+      act(() => useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: 'set' }, loaded: true } }));
+      expect(screen.getByRole('button', { name: 'Run' })).not.toHaveAttribute('aria-disabled');
+    } finally {
+      graph.state.nodes = before;
+    }
   });
 
   it('rejects with the key', async () => {
@@ -337,6 +371,69 @@ describe('ProposalBar', () => {
     const ready = screen.getByRole('button', { name: /^Accept/ });
     expect(ready).not.toHaveAttribute('aria-disabled');
     expect(ready).not.toHaveAttribute('title', LINE);
+  });
+
+  it('locks Accept once the token is removed, for a proposal made while it was set (review r4 LOW-1)', () => {
+    const LINE = 'You can accept this after you add your Hugging Face token in Settings.';
+    // Made while the token was set: the backend listed nothing that can't run.
+    const idol = proposal('p_a', {
+      nodes: [{ ...proposal('p_a').nodes[0], ref: '+idol', definitionId: 'speridlabs-idol', name: 'Idol' }],
+      run: ['+idol'],
+    });
+    idol.cost = { ...idol.cost, paidRuns: 0, freeRuns: 1 };
+    open(idol);
+    useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: 'set' }, loaded: true } });
+    render(<ProposalBar />);
+    expect(screen.getByRole('button', { name: /^Accept/ })).not.toHaveAttribute('aria-disabled');
+    act(() => useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } }));
+    const accept = screen.getByRole('button', { name: /^Accept/ });
+    expect(accept).toHaveAttribute('aria-disabled', 'true');
+    expect(accept).toHaveAccessibleDescription(LINE);
+    fireEvent.click(accept);
+    expect(net.apiFetch).not.toHaveBeenCalled();
+  });
+
+  it("locks Accept when its run pulls in an Idol already on the canvas (the run's plan)", () => {
+    const LINE = 'You can accept this after you add your Hugging Face token in Settings.';
+    const before = graph.state.nodes;
+    graph.state.nodes = [{ id: 'n1', data: { label: 'Idol', definitionId: 'speridlabs-idol', params: {} } } as never];
+    try {
+      const fed = proposal('p_a', {
+        nodes: [{ ...proposal('p_a').nodes[0], ref: '+prev', definitionId: 'preview', name: 'Preview',
+          cost: { kind: 'free', provider: null, label: 'free' } } as never],
+        edges: [{ source: 'n1', sourceHandle: 'world', target: '+prev', targetHandle: 'input' }],
+        params: [], run: ['+prev'], references: ['n1'],
+      });
+      fed.cost = { ...fed.cost, paidRuns: 0, freeRuns: 1 };
+      open(fed);
+      useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+      render(<ProposalBar />);
+      expect(screen.getByRole('button', { name: /^Accept/ })).toHaveAccessibleDescription(LINE);
+    } finally {
+      graph.state.nodes = before;
+    }
+  });
+
+  it("every way to accept refuses in the store with GM's line and sends nothing (review r4 LOW-2)", async () => {
+    const LINE = 'You can accept this after you add your Hugging Face token in Settings.';
+    const idol = proposal('p_a', {
+      nodes: [{ ...proposal('p_a').nodes[0], ref: '+idol', definitionId: 'speridlabs-idol', name: 'Idol' }],
+      run: ['+idol'],
+    });
+    open(idol);
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    // Not the bar's button: the store's accept, which the layer's ghost
+    // card, the keyboard and agents' prompts all call.
+    await useCanvasProposalsStore.getState().accept('p_a');
+    expect(net.apiFetch).not.toHaveBeenCalled();
+    expect(graph.state.notify).toHaveBeenCalledWith(LINE, 'info');
+    expect(useCanvasProposalsStore.getState().pending.p_a).toBeUndefined();
+    expect(graph.state.executeNode).not.toHaveBeenCalled();
+    // With the token, the same call is sent.
+    net.apiFetch.mockResolvedValue(respond(200, { status: 'accepted', idMap: { '+idol': 'n9' }, runNodeIds: ['n9'] }));
+    useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: 'set' }, loaded: true } });
+    await useCanvasProposalsStore.getState().accept('p_a');
+    expect(net.apiFetch).toHaveBeenCalled();
   });
 
   it('keeps a reason the canvas cannot re-check, and moves a long list into the details', () => {

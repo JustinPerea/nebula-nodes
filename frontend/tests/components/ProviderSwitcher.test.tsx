@@ -130,7 +130,7 @@ describe('ProviderSwitcher on Idol\'s keyed Space route (GM PR #203 r1 and r4)',
     const add = within(space).getByRole('menuitem', { name: 'Add key for Hugging Face in Settings' });
     expect(add).toHaveTextContent('Add key →');
     expect(within(space).queryByText(/Optional|Connected/)).toBeNull();
-    expect(row(/^Speridlabs/)).toHaveTextContent('Free with a Hugging Face token. A free account gives a few runs a day.');
+    expect(row(/^Speridlabs/)).toHaveTextContent('Free with a Hugging Face token.');
     fireEvent.click(add);
     expect(open).toHaveBeenLastCalledWith({ kind: 'api-key', key: 'HF_TOKEN' });
   });

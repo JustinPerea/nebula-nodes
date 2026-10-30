@@ -17,6 +17,7 @@ const viewerHarness = vi.hoisted(() => ({
   getSplat: vi.fn(),
   splatCount: 16,
   controls: [] as unknown[],
+  sparks: [] as Array<{ sortDirty: boolean; sortTimeoutId: number; disposedWith: { sortDirty: boolean; sortTimeoutId: number } | null }>,
 }));
 
 vi.mock('@react-three/fiber', async () => {
@@ -86,7 +87,16 @@ vi.mock('@sparkjsdev/spark', async () => {
   const three = await vi.importActual<typeof import('three')>('three');
 
   class MockSparkRenderer extends three.Object3D {
-    dispose = vi.fn();
+    sortDirty = true;
+    sortTimeoutId = -1;
+    disposedWith: { sortDirty: boolean; sortTimeoutId: number } | null = null;
+    // What the sort state was when it was disposed (review r4 NIT-3).
+    dispose = vi.fn(() => { this.disposedWith = { sortDirty: this.sortDirty, sortTimeoutId: this.sortTimeoutId }; });
+
+    constructor() {
+      super();
+      viewerHarness.sparks.push(this);
+    }
   }
 
   class MockSplatMesh extends three.Object3D {
@@ -160,6 +170,7 @@ describe('WorldEnvironmentViewer', () => {
     viewerHarness.frameCallbacks.length = 0;
     viewerHarness.splatCount = 16;
     viewerHarness.controls.length = 0;
+    viewerHarness.sparks.length = 0;
     viewerHarness.fetchWorldSplatBytes.mockReset();
     viewerHarness.fetchWorldSplatBytes.mockResolvedValue(new Uint8Array([1, 2, 3]));
     viewerHarness.getSplat.mockReset();
@@ -517,5 +528,52 @@ describe('WorldEnvironmentViewer', () => {
     await waitFor(() => expect(onStatusChange).toHaveBeenLastCalledWith('ready'));
     expect(viewerHarness.fetchWorldSplatBytes.mock.calls.length).toBeGreaterThan(1);
     expect(screen.getByRole('application', { name: 'Idol object, interactive 3D object' })).toBeInTheDocument();
+  });
+  it('gives orbit controls made for a new camera the object\'s bounds (review r4 NIT-1)', async () => {
+    viewerHarness.renderScene = true;
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      getExtension: vi.fn().mockReturnValue(null),
+    } as unknown as WebGL2RenderingContext);
+    viewerHarness.splatCount = 64;
+    viewerHarness.getSplat.mockImplementation((index: number) => {
+      const theta = (index / 64) * Math.PI * 2 * 7;
+      const z = (index / 63) * 2 - 1;
+      const ring = Math.sqrt(1 - z * z);
+      return { center: new Vector3(Math.cos(theta) * ring * 0.4, Math.sin(theta) * ring * 0.4, z * 0.4), opacity: 1 };
+    });
+    const onStatusChange = vi.fn();
+    const viewer = () => (
+      <WorldEnvironmentViewer src="/api/outputs/run/idol.ply" format="ply" label="Idol object" navigationMode="orbit"
+        resetToken={0} upAxis="-y" forwardAxis="x" framing="object" onStatusChange={onStatusChange} />
+    );
+    const { rerender } = render(viewer());
+    await waitFor(() => expect(onStatusChange).toHaveBeenCalledWith('ready'));
+    const first = viewerHarness.controls.at(-1) as { maxDistance: number; minDistance: number };
+    await waitFor(() => expect(first.maxDistance).not.toBe(1_000));
+    // A new camera (R3F swaps it when the Canvas's camera changes): the
+    // controls are made again, and the sync after them gives them the bounds.
+    const made = viewerHarness.controls.length;
+    viewerHarness.threeState!.camera = new PerspectiveCamera(58, 1, 0.01, 10_000);
+    rerender(viewer());
+    await waitFor(() => expect(viewerHarness.controls.length).toBeGreaterThan(made));
+    const next = viewerHarness.controls.at(-1) as { maxDistance: number; minDistance: number };
+    expect(next).not.toBe(first);
+    expect(next.maxDistance).toBeCloseTo(first.maxDistance, 6);
+    expect(next.minDistance).toBeCloseTo(first.minDistance, 6);
+  });
+  it('cancels the renderer\'s pending sort before it is disposed (review r4 NIT-3)', () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      getExtension: vi.fn().mockReturnValue(null),
+    } as unknown as WebGL2RenderingContext);
+    viewerHarness.renderScene = true;
+    const { unmount } = render(
+      <WorldEnvironmentViewer src="/api/outputs/run/idol.ply" format="ply" label="Idol object" navigationMode="orbit"
+        resetToken={0} framing="object" />,
+    );
+    const spark = viewerHarness.sparks.at(-1)!;
+    const pending = vi.fn();
+    spark.sortTimeoutId = setTimeout(pending, 5) as unknown as number;
+    unmount();
+    expect(spark.disposedWith).toEqual({ sortDirty: false, sortTimeoutId: -1 });
   });
 });

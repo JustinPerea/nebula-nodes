@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { disposeSparkQuietly, isSparkWorkerTerminate, SPARK_WORKER_TERMINATE } from '../../src/lib/sparkDispose';
+import { disposeSparkQuietly, isSparkWorkerTerminate, SPARK_WORKER_TERMINATE, stopSparkSorting } from '../../src/lib/sparkDispose';
 
 /** Spark's SplatWorker.dispose rejects in-flight calls with
  * Error("Worker terminate"), and SparkRenderer's sort never catches it. */
@@ -52,5 +52,26 @@ describe('disposeSparkQuietly', () => {
     expect(isSparkWorkerTerminate(new Error('Worker terminate'))).toBe(true);
     expect(isSparkWorkerTerminate({ message: 'Worker terminate' })).toBe(false);
     expect(isSparkWorkerTerminate(new Error('Worker terminate '))).toBe(false);
+  });
+});
+
+describe('stopSparkSorting (review r4 NIT-3)', () => {
+  it('cancels the pending sort and leaves nothing dirty, so no sort starts after the dispose', () => {
+    vi.useFakeTimers();
+    try {
+      const driveSort = vi.fn();
+      const renderer = { sortDirty: true, sortTimeoutId: -1 as number };
+      // As Spark's driveSort waits out its minimum interval.
+      renderer.sortTimeoutId = setTimeout(driveSort, 12) as unknown as number;
+      stopSparkSorting(renderer);
+      vi.advanceTimersByTime(100);
+      expect(driveSort).not.toHaveBeenCalled();
+      expect(renderer).toEqual({ sortDirty: false, sortTimeoutId: -1 });
+      // Nothing pending: only the flag.
+      stopSparkSorting(renderer);
+      expect(renderer).toEqual({ sortDirty: false, sortTimeoutId: -1 });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

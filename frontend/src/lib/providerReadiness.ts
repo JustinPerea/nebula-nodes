@@ -200,7 +200,7 @@ function spaceReadiness(
     // says what is needed, the status only that it is.
     return {
       label: 'Needed', tone: 'warning', setupTarget: { kind: 'api-key', key: tokenKey }, connectionLabel,
-      detail: `Add your ${name} token in Settings to run ${def.displayName}. A free ${name} account gives a few runs a day.`,
+      detail: `Add your ${name} token in Settings to run ${def.displayName}.`,
     };
   }
   // A keyless Space route: no node has one today (Idol needs its token, GM

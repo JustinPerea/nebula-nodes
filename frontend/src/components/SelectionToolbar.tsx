@@ -13,7 +13,7 @@ import { useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
 import { useCanvasPinsStore } from '../store/canvasPinsStore';
 import { isBackendNodeId } from '../lib/canvasPins';
-import { describeRunScope, nodesThatRun, runChipLabel, summarizeRunScope } from '../lib/runScope';
+import { describeRunScope, runChipLabel, summarizeRunScope } from '../lib/runScope';
 import { usePricingStore } from '../store/pricingStore';
 import { useInputSizeStore } from '../store/inputSizeStore';
 import { setSelectionActionSlot } from '../lib/selectionActionSlot';
@@ -24,7 +24,7 @@ import {
 } from '../lib/canvasSelection';
 import { failureMessage } from '../lib/errorCopy';
 import { useCanvasLock } from '../lib/canvasLock';
-import { keyLockedProps, nodesKeyLockReason } from '../lib/runKeyLock';
+import { keyLockedProps, runKeyLockLine } from '../lib/runKeyLock';
 
 
 export function SelectionToolbar() {
@@ -66,11 +66,9 @@ export function SelectionToolbar() {
   // selection's or one feeding it: Run is locked with its line as the reason
   // (GM, PR #203 r4), aria-disabled so it keeps its focus and tooltip, and the
   // scope line it reads out is that line (r6 item 3).
-  const keyLock = useMemo(() => {
-    const running = nodesThatRun(nodes, edges ?? [],
-      ids.length === 1 ? { kind: 'node', nodeId: ids[0] } : { kind: 'cluster', nodeIds: ids });
-    return nodesKeyLockReason(running, running.map((node) => node.id), { loaded: settingsLoaded, apiKeys });
-  }, [nodes, edges, ids, settingsLoaded, apiKeys]);
+  const keyLock = useMemo(() => runKeyLockLine(nodes, edges ?? [],
+    ids.length === 1 ? { kind: 'node', nodeId: ids[0] } : { kind: 'cluster', nodeIds: ids },
+    { loaded: settingsLoaded, apiKeys }), [nodes, edges, ids, settingsLoaded, apiKeys]);
   const sizes = useInputSizeStore((s) => s.sizes);
   const requestSizes = useInputSizeStore((s) => s.request);
   const runScope = useMemo(() => summarizeRunScope(nodes, edges ?? [],

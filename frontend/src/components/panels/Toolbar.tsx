@@ -40,7 +40,7 @@ import '../../styles/panels.css';
 import '../../styles/canvas-toolbar.css';
 import { refuseEditWhileOffline } from '../../lib/backendConnection';
 import { useCanvasLock } from '../../lib/canvasLock';
-import { canvasKeyLockReason, keyLockedProps } from '../../lib/runKeyLock';
+import { keyLockedProps, runKeyLockLine } from '../../lib/runKeyLock';
 
 const CLEAR_CANVAS = "Couldn't clear the canvas.";
 
@@ -91,8 +91,10 @@ export function Toolbar() {
   // following look (aria-disabled: focusable, with its tooltip), and the
   // scope line it reads out is the lock reason (r6 item 3).
   const settingsLoaded = useUIStore((s) => s.settingsCache.loaded);
-  const keyLock = useMemo(() => canvasKeyLockReason(graphNodes ?? [], { loaded: settingsLoaded, apiKeys }),
-    [graphNodes, settingsLoaded, apiKeys]);
+  // Over exactly what a graph run runs (agents' placeholders skipped), the
+  // same line Cmd+Enter and the palette refuse with (runKeyLockLine).
+  const keyLock = useMemo(() => runKeyLockLine(graphNodes ?? [], graphEdges ?? [], { kind: 'graph' },
+    { loaded: settingsLoaded, apiKeys }), [graphNodes, graphEdges, settingsLoaded, apiKeys]);
   const autoLayout = useGraphStore((s) => s.autoLayout);
   const resetPanelLayout = useUIStore((s) => s.resetPanelLayout);
   const [actionsOpen, setActionsOpen] = useState(false);

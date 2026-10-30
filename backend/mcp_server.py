@@ -1111,8 +1111,10 @@ def find_nodes(query: str = "", category: str = "", ready_only: bool = True, lim
     its input file's size, e.g. SeedVR2 Upscale, or null when Nebula has no
     list price). "free" is at the node's defaults: a
     row with `needsKeyFor` (the Video QC nodes) calls a provider in another
-    mode, with no list price. With ready_only=false, nodes that can't run here
-    are included with `missing` saying what to set up.
+    mode, with no list price. A row that runs free on someone's own allowance
+    has `billing`, saying who can still be billed past it (Idol on a
+    Hugging Face PRO, Team or Enterprise account). With ready_only=false,
+    nodes that can't run here are included with `missing` saying what to set up.
     """
     # `nebula nodes` (cli/commands/nodes.py) reads the same route: keep them twins.
     params = {"query": query, "category": category, "ready_only": str(bool(ready_only)).lower(),

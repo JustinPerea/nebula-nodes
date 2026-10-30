@@ -50,10 +50,12 @@ table, which may not apply to calls from a server like Nebula's).
 Why the token: the Space asks for 120 seconds of GPU a run, and on
 ZeroGPU's Blackwell cards Hugging Face's `spaces` package counts that as
 180 seconds (`duration_factor` 1.5), more than the 2 minutes without an
-account. A run needs that much left in your day to start, but is charged the
-time it uses, so a free account gets a few runs a day: at least 1, and more
-when runs are short (PRO at least 13). The first live run will confirm the
-numbers: the quota error names the seconds asked for and left.
+account. A run needs that much left in your day to start, and is likely
+charged only the time it uses. Hugging Face doesn't publish the longest task
+a free account may run, and for longer tasks its `spaces` package points free
+accounts to PRO, so whether a free account can run Idol is open until the
+first live run. That run will settle it: ZeroGPU's errors name the seconds
+asked for and left.
 
 **On a PRO, Team or Enterprise account, Hugging Face can bill you** for GPU
 time past your daily quota, from your prepaid credits at $1 per 10 minutes.

@@ -82,7 +82,11 @@ The server exposes these tools for building and running (see
   output, rounded up to a whole megapixel; priced from your image's size when
   you run it"). `ready_only=false` also lists nodes that can't run here, with what's
   `missing`. "free" is at the node's defaults: a row with `needsKeyFor` (the
-  Video QC nodes) calls a provider in another mode. Every word of `query`
+  Video QC nodes) calls a provider in another mode. A row that runs free on
+  someone's own allowance has `billing`, saying who can still be billed past
+  it (Idol: Hugging Face bills a PRO, Team or Enterprise account's prepaid
+  credits past the daily ZeroGPU quota); `nebula nodes` prints it as a
+  `BILLING:` line under the table. Every word of `query`
   must be in the id, name or description. Its CLI twin is `nebula nodes`
   (and `nebula find`), on the same route: by default the node types that
   run here, by category, each with `runsWith` and its price, then one line

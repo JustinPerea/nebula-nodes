@@ -1,6 +1,8 @@
+import type { Edge, Node } from '@xyflow/react';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
-import type { ModelNodeDefinition } from '../types';
+import type { ModelNodeDefinition, NodeData } from '../types';
 import { keyPhrase, routeMissingKeyLine, selectRoute, type ApiKeys } from './directRoute';
+import { nodesThatRun, type RunScope } from './runScope';
 
 /**
  * A route that can't run without its key says so in its own words
@@ -38,10 +40,10 @@ function routeKeyLock(
 
 interface LockableNode {
   id: string;
-  data: { definitionId: string; params?: Record<string, unknown> };
+  data?: { definitionId: string; params?: Record<string, unknown> };
 }
 
-interface LockSettings {
+export interface LockSettings {
   loaded: boolean;
   apiKeys: ApiKeys;
 }
@@ -51,7 +53,9 @@ function firstLock(nodes: readonly LockableNode[], ids: readonly string[] | null
   const candidates = ids === null ? nodes : ids.map((id) => nodes.find((node) => node.id === id));
   for (const node of candidates) {
     if (!node) continue;
-    const lock = routeKeyLock(NODE_DEFINITIONS[node.data.definitionId], node.data.params, settings.apiKeys);
+    const definitionId = node.data?.definitionId;
+    if (!definitionId) continue;
+    const lock = routeKeyLock(NODE_DEFINITIONS[definitionId], node.data?.params, settings.apiKeys);
     if (lock) return lock;
   }
   return null;
@@ -81,16 +85,48 @@ export function canvasKeyLockReason(nodes: readonly LockableNode[], settings: Lo
   return phrase ? `You can run this canvas after you add your ${phrase} in Settings.` : lock.line;
 }
 
-/** GM, PR #203 r6 item 1: a proposal whose run needs the key can't be
- * accepted yet ("You can accept this after you add your Hugging Face token in
- * Settings."), for one of its run nodes at the values Accept would run. The
- * backend still refuses the run if it is sent. Null when it can run. */
-export function acceptKeyLockLine(
-  definition: ModelNodeDefinition | undefined,
-  params: Record<string, unknown> | undefined,
-  apiKeys: ApiKeys,
+/**
+ * The one lock line for a run of `scope`, over exactly the nodes that run
+ * would run (nodesThatRun: a graph run skips agents' placeholders and what
+ * needs them, as the backend's _skip_placeholders does; a node's own run
+ * takes what feeds it). The whole graph says the canvas's line, a node or a
+ * selection the node's own. Every Run surface and every store run path use
+ * this, so the toolbar can't lock a canvas Cmd+Enter would run (review r4
+ * MEDIUM-1). Null when that run can go.
+ */
+export function runKeyLockLine(
+  nodes: readonly Node<NodeData>[],
+  edges: readonly Edge[],
+  scope: RunScope,
+  settings: LockSettings,
 ): string | null {
-  const lock = routeKeyLock(definition, params, apiKeys);
+  if (!settings.loaded) return null;
+  const running = nodesThatRun([...nodes], [...edges], scope);
+  return scope.kind === 'graph' ? canvasKeyLockReason(running, settings)
+    : nodesKeyLockReason(running, running.map((node) => node.id), settings);
+}
+
+/** runKeyLockLine's rule with the node's own line for every scope ("You can
+ * run Idol after you add your Hugging Face token in Settings."): a Run
+ * History replay and the deferred "Run now" say which node needs the key
+ * (GM, PR #203 r8 item 3). */
+export function runKeyLockNodeLine(
+  nodes: readonly Node<NodeData>[],
+  edges: readonly Edge[],
+  scope: RunScope,
+  settings: LockSettings,
+): string | null {
+  if (!settings.loaded) return null;
+  const running = nodesThatRun([...nodes], [...edges], scope);
+  return nodesKeyLockReason(running, running.map((node) => node.id), settings);
+}
+
+/** GM, PR #203 r6 item 1: Accept's line when one of the nodes its run would
+ * run can't start without its key ("You can accept this after you add your
+ * Hugging Face token in Settings."); lib/proposalAcceptLock reads which nodes
+ * those are. Null when they can all run. */
+export function acceptKeyLockPhraseLine(nodes: readonly LockableNode[], settings: LockSettings): string | null {
+  const lock = firstLock(nodes, null, settings);
   if (!lock) return null;
   const phrase = keyPhrase(lock.keys);
   return phrase ? `You can accept this after you add your ${phrase} in Settings.` : lock.line;
