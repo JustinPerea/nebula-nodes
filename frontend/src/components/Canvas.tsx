@@ -19,6 +19,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useGraphStore, wiresDeletedWith } from '../store/graphStore';
+import { RUN_LOCK_VERBS, runFinishesLine } from '../lib/runLock';
 import { useUIStore } from '../store/uiStore';
 import { useIsValidConnection } from '../hooks/useIsValidConnection';
 import { CANVAS_EDGE_TYPES, CANVAS_NODE_TYPES } from './canvasTypes';
@@ -522,6 +523,14 @@ export function Canvas() {
     if (target.closest('.react-flow__handle') || target.closest('.react-flow__node')) return;
     const elementsAtDrop = document.elementsFromPoint(point.x, point.y);
     if (elementsAtDrop.some((el) => el.closest('.react-flow__handle') || el.closest('.react-flow__node'))) return;
+    // GM PR #205 r2 item 5: during this tab's run the picker doesn't open (a
+    // list of locked items is a dead end); the drop says the lock line where
+    // the key presses' lines show. Drawing a wire between two nodes isn't
+    // run-locked (onConnect), so the drag itself goes on.
+    if (useGraphStore.getState().isExecuting) {
+      useGraphStore.getState().sayRunLocked(runFinishesLine(RUN_LOCK_VERBS.addNode));
+      return;
+    }
 
     showConnectionPopup({
       position: point,

@@ -1068,6 +1068,50 @@ describe('Settings — storage', () => {
     expect(useUIStore.getState().panels.settings.visible).toBe(false);
     expect(useUIStore.getState().onboardingActive).toBe(true);
   });
+
+  // GM, PR #205 r1 answer 6: a switch saving its own change follows the held
+  // rule: its new position at once, the enabled look for 150 ms, then the
+  // locked look with the thumb where the person put it; a quick save never
+  // greys; a failed save puts back the saved position.
+  it('demo telemetry while its save is out: the new position at once, held, then locked after 150 ms', async () => {
+    let answer!: (value: unknown) => void;
+    updateSettingsMock.mockImplementationOnce(() => new Promise((resolve) => { answer = resolve; }));
+    await renderSettings({ apiKeys: {}, zoomTelemetryEnabled: false });
+    openTab('Storage');
+    await screen.findByRole('switch', { name: /Demo zoom telemetry/ });
+    const toggle = () => screen.getByRole('switch', { name: /Demo zoom telemetry/ });
+    fireEvent.click(toggle());
+    expect(toggle()).toBeChecked();
+    expect(toggle()).toBeEnabled();
+    expect(toggle()).toHaveAttribute('aria-disabled', 'true');
+    expect(toggle()).toHaveAttribute('data-held-pending');
+    await waitFor(() => expect(toggle()).toHaveAttribute('data-held-look'));
+    expect(toggle()).toBeChecked();
+    await act(async () => { answer({ status: 'ok' }); });
+    await waitFor(() => expect(toggle()).not.toHaveAttribute('aria-disabled'));
+    expect(toggle()).toBeChecked();
+  });
+
+  it('demo telemetry: a quick save never greys, and a failed one puts the switch back', async () => {
+    await renderSettings({ apiKeys: {}, zoomTelemetryEnabled: false });
+    openTab('Storage');
+    await screen.findByRole('switch', { name: /Demo zoom telemetry/ });
+    const toggle = () => screen.getByRole('switch', { name: /Demo zoom telemetry/ });
+    const greyed: string[] = [];
+    const watch = new MutationObserver(() => { if (toggle().hasAttribute('data-held-look')) greyed.push('grey'); });
+    watch.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['data-held-look'] });
+    fireEvent.click(toggle());
+    await waitFor(() => expect(toggle()).not.toHaveAttribute('aria-disabled'));
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    watch.disconnect();
+    expect(greyed).toEqual([]);
+    expect(toggle()).toBeChecked();
+    updateSettingsMock.mockRejectedValueOnce(new Error('offline'));
+    fireEvent.click(toggle());
+    expect(toggle()).not.toBeChecked();
+    await waitFor(() => expect(toggle()).not.toHaveAttribute('aria-disabled'));
+    expect(toggle()).toBeChecked();
+  });
 });
 
 // Round 15 of PR #114 (GM): "Settings stays enabled so the panel opens, but

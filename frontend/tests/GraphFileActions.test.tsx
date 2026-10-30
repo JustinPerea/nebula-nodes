@@ -112,7 +112,7 @@ describe('workspace-independent graph file actions', () => {
     mocks.transform = [0, 0, 1];
     mocks.getViewport.mockReturnValue({ x: 0, y: 0, zoom: 1 });
     rendered.rerender(<><GraphFileActions /><CommandPalette /></>);
-    paletteCommand('Save graph');
+    paletteCommand('Save canvas');
     await waitFor(() => expect(mocks.saveToFile).toHaveBeenCalledOnce());
     expect(mocks.saveToFile).toHaveBeenCalledWith([node('existing')], [], { x: 10, y: 20, zoom: 0.75 }, undefined);
     expect(useUIStore.getState().viewMode).toBe(viewMode);
@@ -146,7 +146,7 @@ describe('workspace-independent graph file actions', () => {
     let resolveImport!: (response: Response) => void;
     mocks.apiFetch.mockReturnValue(new Promise<Response>((resolve) => { resolveImport = resolve; }));
     render(<><GraphFileActions /><CommandPalette /></>);
-    paletteCommand('Load graph');
+    paletteCommand('Load canvas');
     await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledOnce());
     expect(useGraphStore.getState().nodes[0].id).toBe('existing');
     expect(useUIStore.getState().viewMode).toBe(viewMode);
@@ -409,8 +409,9 @@ describe('workspace-independent graph file actions', () => {
     expect(mocks.loadFromFile).not.toHaveBeenCalled();
     expect(mocks.apiFetch).not.toHaveBeenCalled();
     fireEvent.keyDown(document, { key: 'k', metaKey: true });
-    expect(screen.getByRole('button', { name: 'Save graph' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Load graph' })).toBeDisabled();
+    // GM PR #205 r2 item 3: the palette's items say "canvas".
+    expect(screen.getByRole('button', { name: /^Save canvas/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Load canvas/ })).toBeDisabled();
   });
 
   it.each(['execution', 'preparation'] as const)('rechecks %s ownership acquired while the picker was open', async (owner) => {
@@ -477,7 +478,7 @@ describe('workspace-independent graph file actions', () => {
       await store.retryFailedRun(source.id);
       await expect(store.authorGenerationCluster({ definitionId: 'nano-banana', prompt: 'fixture', params: {},
         refPaths: [], quantity: 1, layoutOrigin: { x: 0, y: 0 }, genId: 'blocked', sessionId: 'fixture-session' }))
-        .rejects.toThrow('Wait for the graph import to finish.');
+        .rejects.toThrow('You can start the generation when the import finishes.');
     });
     expect(api.executeGraph).not.toHaveBeenCalled();
     expect(api.executeNode).not.toHaveBeenCalled();

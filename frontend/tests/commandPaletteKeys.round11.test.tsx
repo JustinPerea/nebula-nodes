@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { ReactFlowProvider } from '@xyflow/react';
 
-// Review 10, L-1: with focus on a palette item (Cmd+K, Tab to "Run graph"),
+// Review 10, L-1: with focus on a palette item (Cmd+K, Tab to "Run canvas"),
 // Escape and the arrows did nothing: only the search field handled them. The
 // dialog itself now handles them: Escape closes it (or leaves the agent
 // prompt, as from the field), and the arrows move the active item and focus
@@ -98,7 +98,7 @@ describe('the palette: Escape and the arrows with focus on an item', () => {
 
   it('a disabled item is passed over (it cannot take focus)', async () => {
     await openPalette();
-    // "Run graph" is disabled on an empty canvas, and it is the first item.
+    // "Run canvas" is disabled on an empty canvas, and it is the first item.
     const all = [...document.querySelectorAll<HTMLButtonElement>('.command-palette__item')];
     expect(all[0].disabled).toBe(true);
     const items = enabledItems();

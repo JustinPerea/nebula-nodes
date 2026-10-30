@@ -7,7 +7,7 @@
  */
 import type { ActiveRun } from './runHistory';
 import { nodeNameList } from './errorCopy';
-import { RUN_LOCK_VERBS, runFinishesLine } from './runLock';
+import { RUN_LOCK_VERBS, lockLine, runFinishesLine } from './runLock';
 import type { CinemaSceneSpec, CinemaShot, NodeState } from '../types';
 
 export const DEFAULT_SCENE_MODEL = 'seedream-4-5';
@@ -117,9 +117,11 @@ export function shotRemovalBlock(activeRuns: readonly ActiveRun[], nodeId: strin
   return isRecord(shot.output) && shot.output.status === 'running' ? 'wait' : null;
 }
 
-/** GM's tooltip for a blocked ×: "Stop the run first." or "Wait for “Shot 2” to finish." */
+/** GM's tooltip for a blocked ×: "Stop the run first.", or (GM PR #205 r1,
+ * the lock pattern with the ×'s own verb) "You can remove “Shot 2” when it
+ * finishes." */
 export function shotRemovalBlockTitle(block: 'stop' | 'wait', shotName: string): string {
-  return block === 'stop' ? 'Stop the run first.' : `Wait for “${shotName}” to finish.`;
+  return block === 'stop' ? 'Stop the run first.' : lockLine(`remove “${shotName}”`, { finishes: 'it' });
 }
 
 /** The shots of a scene a run is rendering that a change would take away:
@@ -170,37 +172,40 @@ export function renderingRemovalLine(action: 'undo' | 'redo', shots: RenderingSh
 }
 
 /** GM, PR #198 r4 item 3: the Delete over several scenes with shots
- * rendering: "Stop the runs first." with a Stop control, else "Wait for the
- * running shots to finish." */
+ * rendering: "Stop the runs first." with a Stop control, else (GM PR #205
+ * r1) "You can delete them when the running shots finish." */
 export function scenesDeleteBlockTitle(stoppable: boolean): string {
-  return stoppable ? 'Stop the runs first.' : 'Wait for the running shots to finish.';
+  return stoppable ? 'Stop the runs first.' : lockLine(RUN_LOCK_VERBS.deleteThem, 'runningShots');
 }
 
-/** GM, PR #198 r5 item 2, with r39 item 2's lock line: what failed first,
- * then what unlocks it, by its own verb (lib/runLock). "Couldn't delete “X”.
- * You can delete it when the run finishes." ("the node" with no name),
- * "Couldn't delete 3 nodes. You can delete them …", "Couldn't undo. You can
- * undo when the run finishes.", "Couldn't redo. …". */
-export function runLockedLine(action: 'delete' | 'undo' | 'redo', count = 1, name?: string, names?: readonly string[]): string {
-  if (action !== 'delete') return `Couldn’t ${action}. ${runFinishesLine(RUN_LOCK_VERBS[action])}`;
+/** GM, PR #205 r1 answer 2: a refusal after a key press is the lock line
+ * alone (the thing is plainly still there): "You can delete “X” when the run
+ * finishes." (several named by the shared name-list rule, "the node" with no
+ * name, "3 nodes" with no names), "You can undo when the run finishes.",
+ * "You can redo when the run finishes." Cmd+D and Cmd+V the same (GM PR #205 r2 item 4). */
+export function runLockedLine(action: 'delete' | 'duplicate' | 'undo' | 'redo' | 'paste', count = 1, name?: string,
+  names?: readonly string[]): string {
+  // GM PR #205 r2 item 4: Cmd+D says "You can duplicate “X” when the run
+  // finishes." as Delete does, and Cmd+V "You can paste when the run finishes."
+  if (action !== 'delete' && action !== 'duplicate') return runFinishesLine(RUN_LOCK_VERBS[action]);
   // GM r6: several nodes are named, up to 3, grouped by title, counted from 4.
-  const several = names && names.length > 1 ? true : count > 1;
   const what = names && names.length > 1 ? nodeNameList([...names]) : count === 1 ? name ?? 'the node' : `${count} nodes`;
-  return `Couldn’t delete ${what}. ${runFinishesLine(several ? RUN_LOCK_VERBS.deleteThem : RUN_LOCK_VERBS.deleteIt)}`;
+  return runFinishesLine(`${action} ${what}`);
 }
 
 /** The run lock over a selection of only wires (PR #198 review 5, N1): the
- * Delete key is off during the run, and never silently. GM's pattern;
- * "connection" as the canvas's other wire lines say it. */
+ * Delete key is off during the run, and never silently. GM PR #205 r1: "You
+ * can delete the connection when the run finishes." ("the 2 connections"). */
 export function runLockedWiresLine(count: number): string {
-  return `Couldn’t delete ${count === 1 ? 'the connection' : `${count} connections`}. ${runFinishesLine(count === 1 ? RUN_LOCK_VERBS.deleteIt : RUN_LOCK_VERBS.deleteThem)}`;
+  return runFinishesLine(`delete ${count === 1 ? 'the connection' : `the ${count} connections`}`);
 }
 
 /** GM, PR #198 r3 item 1: the scene's Delete, disabled while a shot
- * renders: "Stop the run first." with a Stop control, else "Wait for
- * “Scene” to finish." */
+ * renders: "Stop the run first." with a Stop control, else (GM PR #205 r1's
+ * pattern, the Delete's own verb) "You can delete “Scene” when it
+ * finishes." */
 export function sceneDeleteBlockTitle(scene: string, shots: RenderingShots): string {
-  return shots.stoppable ? STOP_FIRST : `Wait for “${scene}” to finish.`;
+  return shots.stoppable ? STOP_FIRST : lockLine(`delete “${scene}”`, { finishes: 'it' });
 }
 
 /** GM, PR #198 r3 item 1: a refused delete (the Delete key, the context

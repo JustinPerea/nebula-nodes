@@ -40,7 +40,7 @@ import '../../styles/panels.css';
 import '../../styles/canvas-toolbar.css';
 import { refuseEditWhileOffline } from '../../lib/backendConnection';
 import { useCanvasLock } from '../../lib/canvasLock';
-import { RUN_LOCK_VERBS, RUN_LOCKED_FILES_LINE, runFinishesLine } from '../../lib/runLock';
+import { FILES_VERB, RUN_LOCK_VERBS, lockLine, runFinishesLine, type LockWait } from '../../lib/runLock';
 
 const CLEAR_CANVAS = "Couldn't clear the canvas.";
 
@@ -96,14 +96,16 @@ export function Toolbar() {
   const actionsId = useId();
   const blockedId = useId();
   // The panel's one line for the group (GM r39 item 2's pattern; each
-  // control's tooltip names its own verb, lib/runLock).
-  const loadBlockedReason = isPreparing
-    ? 'Wait for generation preparation to finish.'
-    : isImportingGraph
-      ? 'Wait for the graph import to finish.'
-      : RUN_LOCKED_FILES_LINE;
+  // control's tooltip names its own verb, lib/runLock). GM PR #205 r1: the
+  // preparation and the import say what unlocks them the same way.
+  // Review 1 of PR #205 (NIT-4): each control's true reason; this tab's run
+  // first (its lock line wins on each control, canvasLock), then a Create
+  // launch's preparation, then an import.
+  const filesWait: LockWait = isExecuting ? 'run' : isPreparing ? 'preparing' : isImportingGraph ? 'import' : 'run';
+  const loadBlockedReason = lockLine(FILES_VERB, filesWait);
+  const filesLine = (verb: string) => lockLine(verb, filesWait);
   const saveBlockedReason = !canLoad
-    ? (loadBlockedReason === RUN_LOCKED_FILES_LINE ? runFinishesLine(RUN_LOCK_VERBS.saveCanvas) : loadBlockedReason)
+    ? filesLine(RUN_LOCK_VERBS.saveCanvas)
     : 'Check the waiting World Labs run before you save.';
 
   const closeActions = useCallback((restoreFocus = false) => {
@@ -304,7 +306,7 @@ export function Toolbar() {
           {...lock.mark}
           aria-describedby={nodeCount > 0 ? runScopeId : undefined}
           title={following ? waitToOpenTooltip(following.projectName)
-            : isImportingGraph ? 'Wait for the graph import to finish' : `Run graph. ${describeRunScope(runScope)} (${displayKey('Mod')}${displayKey('Enter')})`}
+            : isImportingGraph ? lockLine(RUN_LOCK_VERBS.runGraph, 'import') : `Run graph. ${describeRunScope(runScope)} (${displayKey('Mod')}${displayKey('Enter')})`}
         >
           <ToolbarIcon name="run" />
           <span className="toolbar__label">Run</span>
@@ -342,19 +344,19 @@ export function Toolbar() {
                 <ToolbarIcon name="save" /><span>Save graph</span><kbd aria-hidden="true">Ctrl / ⌘ S</kbd>
               </button>
               <button type="button" className="toolbar__action"
-                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Load graph (Ctrl+O or ⌘O)' }, { run: isExecuting, runTitle: runFinishesLine(RUN_LOCK_VERBS.loadCanvas) })}
+                {...lock.act({ disabled: !canLoad, title: !canLoad ? filesLine(RUN_LOCK_VERBS.loadCanvas) : 'Load graph (Ctrl+O or ⌘O)' }, { run: isExecuting, runTitle: runFinishesLine(RUN_LOCK_VERBS.loadCanvas) })}
                 aria-describedby={!canLoad ? blockedId : undefined}
                 aria-keyshortcuts="Control+o Meta+o" onClick={() => runSecondaryAction(requestGraphLoad)}>
                 <ToolbarIcon name="load" /><span>Load graph</span><kbd aria-hidden="true">Ctrl / ⌘ O</kbd>
               </button>
               <button type="button" className="toolbar__action"
-                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Import graph built by Nebula CLI' }, { run: isExecuting, runTitle: runFinishesLine(RUN_LOCK_VERBS.importCanvas) })}
+                {...lock.act({ disabled: !canLoad, title: !canLoad ? filesLine(RUN_LOCK_VERBS.importCanvas) : 'Import graph built by Nebula CLI' }, { run: isExecuting, runTitle: runFinishesLine(RUN_LOCK_VERBS.importCanvas) })}
                 aria-describedby={!canLoad ? blockedId : undefined}
                 onClick={() => runSecondaryAction(() => void handleImportCLI())}>
                 <ToolbarIcon name="cli" /><span>Import CLI graph</span>
               </button>
               <button type="button" className="toolbar__action toolbar__action--danger"
-                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Clear canvas — asks for confirmation' }, { run: isExecuting, runTitle: runFinishesLine(RUN_LOCK_VERBS.clearCanvas) })}
+                {...lock.act({ disabled: !canLoad, title: !canLoad ? filesLine(RUN_LOCK_VERBS.clearCanvas) : 'Clear canvas — asks for confirmation' }, { run: isExecuting, runTitle: runFinishesLine(RUN_LOCK_VERBS.clearCanvas) })}
                 aria-describedby={!canLoad ? blockedId : undefined}
                 onClick={() => runSecondaryAction(() => void handleClear())}>
                 <ToolbarIcon name="clear" /><span>Clear canvas…</span>

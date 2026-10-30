@@ -4008,11 +4008,11 @@ A call you can make next is code, in backticks with its own quotes
 (`` `get_run('run_ab12')` ``).
 
 The canvas blocks the same things: the shot's × is disabled, titled "Stop
-the run first." or "Wait for “Shot 2” to finish."; the scene's Delete (the
+the run first." or "You can remove “Shot 2” when it finishes."; the scene's Delete (the
 context menu, the Inspector, and the selection toolbar when only rendering
-scenes are selected) is disabled, titled "Stop the run first." or "Wait for
-“Scene” to finish." ("Stop the runs first." / "Wait for the running shots to
-finish." for several scenes).
+scenes are selected) is disabled, titled "Stop the run first." or "You can delete
+“Scene” when it finishes." ("Stop the runs first." / "You can delete them
+when the running shots finish." for several scenes).
 
 How a delete or an undo reads depends on whose run it is:
 
@@ -4023,10 +4023,17 @@ How a delete or an undo reads depends on whose run it is:
   line ("Couldn’t delete “Scene”. “Shot 2” is still running. Stop the run
   first."), an undo that would remove a rendering shot reads "Couldn’t undo.
   It would remove “Shot 2”, which is still running. Stop the run first.",
-  and anything else reads the lock's own reason: "Couldn’t delete “Brief”.
-  You can delete it when the run finishes.", "Couldn’t delete 3 nodes. You
-  can delete them when the run finishes.", "Couldn’t undo. You can undo
-  when the run finishes." ("Couldn’t redo. …"). Nothing is sent.
+  and anything else reads the lock's own line alone: "You can delete
+  “Brief” when the run finishes.", "You can delete “A”, “B” and “C” when the
+  run finishes.", "You can delete the connection when the run finishes.",
+  "You can undo when the run finishes." ("You can redo …"). Cmd+D and
+  Cmd+V say theirs in the same place: "You can duplicate “Brief” when the
+  run finishes.", "You can paste when the run finishes." A wire dropped on
+  empty canvas opens no node picker; the drop reads "You can add a node
+  when the run finishes." (drawing a wire between two nodes isn't locked).
+  The command palette's Run canvas, Save canvas and Load canvas stay listed,
+  greyed, each with its line as its own text ("You can run the canvas when
+  the run finishes."). Nothing is sent.
 - **A run another window (or an agent) started** doesn't lock the canvas.
   The Delete key over a selection deletes the rest and keeps the scene and
   its connections: "Deleted 3 nodes. “Scene” wasn't deleted because “Shot 2” is

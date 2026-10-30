@@ -242,8 +242,9 @@ describe('Canvas toolbar hierarchy', () => {
 
   it.each([
     [{ isExecuting: true }, 'You can save, load, import or clear the canvas when the run finishes.'],
-    [{ isImportingGraph: true }, 'Wait for the graph import to finish.'],
-    [{ createLaunchingIds: ['preparing'] }, 'Wait for generation preparation to finish.'],
+    // GM, PR #205 r1: the import and the preparation say what unlocks them too.
+    [{ isImportingGraph: true }, 'You can save, load, import or clear the canvas when the import finishes.'],
+    [{ createLaunchingIds: ['preparing'] }, 'You can save, load, import or clear the canvas when Nebula finishes preparing the run.'],
   ])('keeps replacement and saving blocked while unavailable: %j', (state, reason) => {
     mocks.graph!.setState(state);
     const onSave = vi.fn();

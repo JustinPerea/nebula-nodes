@@ -55,7 +55,7 @@ describe('Forget ID never shows a raw message', () => {
   it('the store\'s own refusals (no request made) are written lines, not developer text', async () => {
     useGraphStore.setState({ providerRecoveries: [checkpoint], isExecuting: true });
     await expect(useGraphStore.getState().deleteProviderRecovery('paid-run', 'world-node'))
-      .rejects.toThrow(`${FORGET} Let the run finish, then try again.`);
+      .rejects.toThrow(`${FORGET} You can forget the recovery safeguard when the run finishes.`);
     useGraphStore.setState({ providerRecoveries: [], isExecuting: false });
     await expect(useGraphStore.getState().deleteProviderRecovery('paid-run', 'world-node'))
       .rejects.toThrow(`${FORGET} That recovery safeguard isn't there anymore. Reload to get the latest run history.`);

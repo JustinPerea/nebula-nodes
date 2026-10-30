@@ -44,7 +44,7 @@ export interface CanvasLock {
    * the run lock holds it now (the caller reads isExecuting, or a wider
    * condition such as a run that is starting, so a card that draws no run
    * lock never re-renders when a run starts); its line then wins. */
-  act(own?: LockOwn, options?: RunLock): ActProps;
+  act(own?: LockOwn, options?: RunLock & LockShown): ActProps;
   /** The tooltip `act` gives, for a control that isn't disabled by it (a
    * read-only field). */
   title(own?: LockOwn): string | undefined;
@@ -63,9 +63,33 @@ export interface LockOwn {
  * back to a generic line. */
 export type RunLock = { run?: undefined; runTitle?: undefined } | { run: boolean; runTitle: string };
 
+/**
+ * GM, PR #205 round 1: when a control's lock reason is already on screen
+ * beside it (the deferred run notice's line, Cinema's line under Generate),
+ * a tooltip only repeats it and covers what is next to it. `shown` names that
+ * line (its element's id and its text): when the reason a locked control
+ * would give as its tooltip is that text, whichever lock gave it, the
+ * control has no tooltip and points aria-describedby at the line, so the
+ * reason still reaches the keyboard and a screen reader. Any other reason
+ * (following, offline, a different line) keeps its tooltip.
+ */
+export interface LockShown {
+  shown?: { id: string; text: string | undefined };
+}
+
+/** `shown`'s rule, applied in `act` (so lockedAction, which starts from it,
+ * keeps it; offline, lockedAction's offline line is a different reason and
+ * sets its tooltip again). */
+export function tellOnce<P extends ActProps>(props: P, shown?: LockShown['shown']): P {
+  if (!shown?.text || !props.disabled || props.title !== shown.text) return props;
+  return { ...props, title: undefined, 'aria-describedby': shown.id };
+}
+
 export interface ActProps {
   disabled: boolean;
   title: string | undefined;
+  /** Set by `shown` (GM PR #205 r1): the on-screen line that gives the reason. */
+  'aria-describedby'?: string;
   'data-following-disabled'?: '';
   'data-offline-disabled'?: '';
 }
@@ -81,7 +105,7 @@ export interface ActProps {
  * Following plus offline keeps the following tooltip (GM round 22, A).
  */
 export function lockedAction(lock: CanvasLock, own: LockOwn = {},
-  options: { verb?: OfflineVerb; neutral?: boolean; offlineTooltip?: boolean } & RunLock = {}): ActProps & { 'data-offline-neutral'?: '' } {
+  options: { verb?: OfflineVerb; neutral?: boolean; offlineTooltip?: boolean } & RunLock & LockShown = {}): ActProps & { 'data-offline-neutral'?: '' } {
   const props: ActProps & { 'data-offline-neutral'?: '' } = lock.act(own, options);
   if (!lock.offline || options.run) return props;
   if (options.neutral) props[OFFLINE_NEUTRAL] = '';
@@ -103,14 +127,14 @@ export function canvasLockOf(following: FollowingSwitch | null, offline: boolean
     : offline && own.offline ? offlineDisabledReason(own.offline === true ? undefined : own.offline) : own.title);
   return {
     locked, following, offline, mark, title,
-    act: (own = {}, options = {}) => (options.run
+    act: (own = {}, options = {}) => tellOnce(options.run
       // The run's line first, alone (PR #198 M2, N1).
       ? { disabled: true, title: options.runTitle }
       : {
         ...mark,
         disabled: locked || Boolean(own.disabled),
         title: title(own),
-      }),
+      }, options.shown),
   };
 }
 

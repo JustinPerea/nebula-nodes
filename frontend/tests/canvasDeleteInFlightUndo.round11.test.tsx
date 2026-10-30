@@ -59,7 +59,7 @@ vi.mock('../src/lib/canvasSelection', () => ({
 }));
 
 import { Canvas } from '../src/components/Canvas';
-import { useGraphStore } from '../src/store/graphStore';
+import { forgetHeldHistoryForTests, useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { wsClient, type ExecutionEvent } from '../src/lib/wsClient';
 import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
@@ -112,7 +112,16 @@ describe('Cmd+Z while a delete is on its way', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     useUIStore.setState({ ...initialUI, viewMode: 'canvas' }, true);
   });
-  afterEach(() => {
+  afterEach(async () => {
+    // Review 1 of PR #205 (NIT-2): each test on its own. A test that timed
+    // out left its Delete on its way and its press held, and every later
+    // test read them; answer what is still on its way, then forget the rest.
+    for (const [id, resolve] of [...net.held]) {
+      net.held.delete(id);
+      await act(async () => { resolve({ status: 200, body: { status: 'deleted', id } }); });
+    }
+    await settle();
+    forgetHeldHistoryForTests();
     cleanup();
     document.body.innerHTML = '';
     vi.unstubAllGlobals();

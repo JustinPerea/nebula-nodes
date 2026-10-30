@@ -352,6 +352,9 @@ describe('review 16 LOW-1 (GM r27 answer 1): while a clash waits, Codex’s edit
     h.failNext(0);
     useGraphStore.getState().deleteNode('n1');
     await vi.waitFor(() => expect(h.state.deleted).toBe(true), { timeout: 3000, interval: 5 });
+    // The delete answered in this tab too, not only recorded (graphStore.fix16's deleteAnswered).
+    const deleteStep = useGraphStore.getState().undoStack.at(-1);
+    await vi.waitFor(() => expect(Boolean(deleteStep) && !store.stepInFlightForTests(deleteStep)).toBe(true), { timeout: 3000, interval: 5 });
     useGraphStore.getState().undo();
     await vi.waitFor(() => expect(clashes16().n1?.line).toBe(CLASH16), { timeout: 3000, interval: 5 });
     await sleep(60);

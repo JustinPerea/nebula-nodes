@@ -236,7 +236,7 @@ const SURFACES: Record<string, Surface> = {
     },
     // The search field; Save exports a file; Fit view, the views and the
     // panels only look.
-    looks: [/^Search commands and nodes/, /^Save graph/, /^Fit view/, /^Open Creator Studio/, /^Keyboard shortcuts/, /^Toggle /],
+    looks: [/^Search commands and nodes/, /^Save canvas/, /^Fit view/, /^Open Creator Studio/, /^Keyboard shortcuts/, /^Toggle /],
   },
   CreateComposer: {
     mount: () => at(<CreateComposer modelDef={NODE_DEFINITIONS['nano-banana'] as never} prompt="Synthetic prompt" params={{}}

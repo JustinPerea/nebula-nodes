@@ -13,6 +13,7 @@ import { shortLine } from '../../lib/errorCopy';
 import { NodeError } from '../nodes/NodeError';
 import { OFFLINE_VERBS } from '../../lib/useBackendOffline';
 import { lockedAction, useCanvasLock } from '../../lib/canvasLock';
+import { RUN_LOCK_VERBS, lockLine } from '../../lib/runLock';
 
 interface CinemaShotPanelProps {
   cinemaNodeId: string;
@@ -24,6 +25,7 @@ interface CinemaShotPanelProps {
 export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: CinemaShotPanelProps) {
   const refInputRef = useRef<HTMLInputElement>(null);
   const promptId = useId();
+  const reasonId = useId();
   const [variationCount, setVariationCount] = useState(2);
 
   const executeShot = useGraphStore((s) => s.executeShot);
@@ -101,12 +103,14 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
   const shotRunning = Boolean(shotRun) || status === 'running';
   const shotBlocked = shotRunning || overlappingGraph || admissionBlocked || Boolean(referenceIssue);
   const sharedInputsBlocked = admissionBlocked && !shotRunning && !overlappingGraph && !referenceIssue;
-  const sharedInputsMessage = isImportingGraph
-    ? 'Wait for the graph import to finish.'
-    : 'Another run is using shared inputs. Wait for it to finish or stop it.';
+  // GM, PR #205 r1: the lock pattern, "You can generate this shot when …".
+  const sharedInputsMessage = lockLine(RUN_LOCK_VERBS.generateShot, isImportingGraph ? 'import' : 'otherRun');
   // GM bug 3 (fix round 1 of PR #200): Generate shot and Generate N say the
   // same reason, and one line under their row says it too.
   const blockedReason = referenceIssue ?? (sharedInputsBlocked ? sharedInputsMessage : undefined);
+  // That line shows under the row (one of the two below), so the Generate
+  // buttons point at it instead of repeating it as a tooltip (GM PR #205 r1).
+  const reasonShown = { id: reasonId, text: blockedReason };
   const shotStopping = shotRun?.status === 'cancelling';
   const handleGenerateShot = () => {
     if (getCinemaUploadIssue(cinemaNodeId, shot.id)) return;
@@ -202,7 +206,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
             className="cinema-shot-panel__action cinema-shot-panel__action--primary"
             onClick={handleGenerateShot}
             {...lockedAction(lock, { disabled: shotBlocked, title: blockedReason, offline: 'generate' },
-              { verb: OFFLINE_VERBS.generate, neutral: true })}
+              { verb: OFFLINE_VERBS.generate, neutral: true, shown: reasonShown })}
           >
             {shotRunning ? 'Generating…' : 'Generate shot'}
           </button>
@@ -246,14 +250,14 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
             className="cinema-shot-panel__action"
             onClick={handleGenerateVariations}
             {...lockedAction(lock, { disabled: shotBlocked, title: blockedReason, offline: 'generate' },
-              { verb: OFFLINE_VERBS.generate, neutral: true })}
+              { verb: OFFLINE_VERBS.generate, neutral: true, shown: reasonShown })}
           >
             Generate {variationCount}
           </button>
         </div>
 
-        {sharedInputsBlocked && <div className="cinema-shot-panel__variations-label" role="status">{sharedInputsMessage}</div>}
-        {referenceIssue && <div className="cinema-reference-upload__message" role="status">{referenceIssue}</div>}
+        {sharedInputsBlocked && <div className="cinema-shot-panel__variations-label" role="status" id={reasonId}>{sharedInputsMessage}</div>}
+        {referenceIssue && <div className="cinema-reference-upload__message" role="status" id={reasonId}>{referenceIssue}</div>}
         {!referenceIssue && allReferenceIssue && <div className="cinema-reference-upload__message" role="status">{allReferenceIssue} Generate all will be available when the other shot’s references are resolved.</div>}
 
         <div className="cinema-shot-panel__motion">

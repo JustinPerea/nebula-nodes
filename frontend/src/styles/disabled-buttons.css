@@ -136,6 +136,15 @@
   opacity: 1 !important;
 }
 
+/* The command palette's rows (GM PR #205 r2 item 3): a locked row keeps
+   its place and its keyboard highlight; its title and its lock line (the
+   row's own secondary text) take the shared grey, with no extra dimming. */
+.command-palette__item:is(:disabled, [aria-disabled='true']),
+.command-palette__item:is(:disabled, [aria-disabled='true']) .command-palette__item-sub {
+  color: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
+  opacity: 1 !important;
+}
+
 /* The swatch's × keeps its dark bubble (the chip's own enabled fill) when
    locked; only the × goes to the shared grey, with no hover change (fix
    round 5 of PR #200, GM r7 answer 1). After the ghost rule, which clears
@@ -322,13 +331,17 @@
    takes the disabled look, and that look covers the on state too: the grey
    track whether on or off, the thumb in the ghost grey, never the accent
    (review 2 L-4, "never orange but disabled"), no extra dimming. The thumb
-   keeps its place, so on and off still read apart. */
-body.app-slava-restraint .settings-switch:is(:disabled, [aria-disabled='true']) {
+   keeps its place, so on and off still read apart. GM, PR #205 r1 answer
+   6: a switch saving its own change is held (Settings' SettingsSwitch,
+   useHeldLook): its first 150 ms (data-held-pending) keep the enabled look,
+   so a quick save never flashes grey; after that this look, the thumb where
+   the person put it. */
+body.app-slava-restraint .settings-switch:is(:disabled, [aria-disabled='true']:not([data-held-pending])) {
   background: var(--sr-disabled-fill, rgba(255, 255, 255, 0.1)) !important;
   opacity: 1 !important;
 }
 
-body.app-slava-restraint .settings-switch:is(:disabled, [aria-disabled='true'])::before {
+body.app-slava-restraint .settings-switch:is(:disabled, [aria-disabled='true']:not([data-held-pending]))::before {
   background: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
   box-shadow: none !important;
 }
@@ -338,15 +351,25 @@ body.app-slava-restraint .settings-switch:is(:disabled, [aria-disabled='true']):
    stay unfilled with the disabled edge (a grey fill would make every cell
    brighter than it is enabled; review 3 M-3: no-label buttons get a disabled
    look of their own). After the two list rules, so they find their own
-   first. GM, PR #198 r39 item 1: the chosen cell is a chosen state, not a
-   disabled one, so no rule here names it ([data-active]); enabled it keeps
-   remotion-editor.css's look until GM's pressed-state sweep, and locked this
-   look covers it as it covers the others. */
+   first. GM, PR #198 r39 item 1: enabled, the chosen cell keeps
+   remotion-editor.css's look (no rule here names it unlocked), and locked
+   this look covers it as it covers the others. */
 :is(.remotion-properties-panel__anchor-button):is(:disabled, [aria-disabled='true']),
 :is(.remotion-properties-panel__anchor-button):is(:disabled, [aria-disabled='true']):hover {
   background: transparent !important;
   border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important;
   cursor: default;
   opacity: 1 !important;
+}
+
+/* GM, PR #205 r1 answer 1: which anchor is chosen must stay readable while
+   locked, so the chosen cell keeps the shared selected mark in the shared
+   grey, as the selected variation, film-look chip and cover choice do (the
+   switch keeps it by its thumb's place). Unfilled, like every locked cell;
+   the grey stays dimmer than the enabled accent. */
+:is(.remotion-properties-panel__anchor-button[aria-pressed='true']):is(:disabled, [aria-disabled='true']),
+:is(.remotion-properties-panel__anchor-button[aria-pressed='true']):is(:disabled, [aria-disabled='true']):hover {
+  border-color: var(--sr-disabled-ink, rgba(255, 255, 255, 0.55)) !important;
+  box-shadow: inset 0 0 0 1px var(--sr-disabled-ink, rgba(255, 255, 255, 0.55)) !important;
 }
 

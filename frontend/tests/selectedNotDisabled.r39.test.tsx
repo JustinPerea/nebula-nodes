@@ -12,10 +12,12 @@ import { SwitchRow } from '../src/components/panels/settings/Switch';
  */
 
 /** GM r33's disabled tokens and #200's, by name, and the r33 values a rule could spell out. */
-const DISABLED_TOKEN = /--(?:sr-)?disabled-(?:fill|label|ink|edge|fill-label)\b/;
-const DISABLED_VALUE = /rgba?\(\s*255,\s*255,\s*255,\s*0?\.(?:42|55)\s*\)|rgb\(\s*255 255 255 \/ 0?\.(?:42|55)\s*\)|rgba?\(\s*17,\s*17,\s*17,\s*0?\.62\s*\)|rgb\(\s*17 17 17 \/ 0?\.62\s*\)/;
-/** A selected, checked, pressed or chosen state in a selector. */
-const SELECTED = /aria-(?:pressed|checked|selected|current)|:checked|--(?:active|selected|chosen|on)\b|\[data-(?:active|selected|chosen)\b/;
+const DISABLED_TOKEN = /--(?:sr-)?disabled-(?:fill|label|ink|edge|fill-label)\b|--(?:sr-)?disabled-opacity[\w-]*/;
+/** The same values spelled out, in either rgb() syntax and as a fraction or a percentage (review 1 of PR #205, NIT-1). */
+const DISABLED_VALUE = /rgba?\(\s*255\s*,\s*255\s*,\s*255\s*,\s*(?:0?\.(?:42|55)|42%|55%)\s*\)|rgba?\(\s*255\s+255\s+255\s*\/\s*(?:0?\.(?:42|55)|42%|55%)\s*\)|rgba?\(\s*17\s*,\s*17\s*,\s*17\s*,\s*(?:0?\.62|62%)\s*\)|rgba?\(\s*17\s+17\s+17\s*\/\s*(?:0?\.62|62%)\s*\)/;
+/** A selected, checked, pressed or chosen state in a selector (review 1 of
+ * PR #205, NIT-1: the app's `.is-active` too, and the other spellings). */
+const SELECTED = /aria-(?:pressed|checked|selected|current)|:checked|--(?:active|selected|chosen|on|checked|pressed|current)\b|\.is-(?:active|selected|checked|pressed|current|on)\b|\[data-(?:active|selected|chosen|state|checked|pressed)\b/;
 /** A state that locks the control. */
 const LOCKED = /:disabled|\[disabled\]|aria-disabled|data-offline-disabled|data-following-disabled|data-held-look|:is\([^)]*:disabled/;
 
@@ -24,17 +26,37 @@ afterEach(() => { cleanup(); document.body.className = ''; });
 
 const value = (element: Element, key: string) => cascaded(element).get(key)?.value ?? '';
 
+/** A rule that gives a selected state the disabled look without a lock. */
+const borrows = (rule: { selector: string; decls: Array<{ value: string }> }) => SELECTED.test(rule.selector)
+  && rule.decls.some((decl) => DISABLED_TOKEN.test(decl.value) || DISABLED_VALUE.test(decl.value))
+  && !LOCKED.test(rule.selector);
+
 describe('the ratchet: a selected state never borrows a disabled token unless it is locked too', () => {
   it('every rule that names a selected state and uses a disabled token or value also requires a locked state', () => {
-    const offenders = appRules()
-      .filter((rule) => SELECTED.test(rule.selector))
-      .filter((rule) => rule.decls.some((decl) => DISABLED_TOKEN.test(decl.value) || DISABLED_VALUE.test(decl.value)))
-      .filter((rule) => !LOCKED.test(rule.selector))
-      .map((rule) => `${rule.file}: ${rule.selector}`);
+    const offenders = appRules().filter(borrows).map((rule) => `${rule.file}: ${rule.selector}`);
     expect(offenders).toEqual([]);
   });
 
-  it('the locked selected marks that remain are the reviewed ones (GM\'s image-only and chip rule), never the switch or the anchor', () => {
+  // Review 1 of PR #205 (NIT-1): the selected forms and disabled values the
+  // ratchet missed, each caught; the same with a lock, and an enabled look, are not.
+  it.each([
+    ['.preset-library__cat.is-active', 'var(--disabled-fill)', true],
+    ['.foo--checked', 'var(--sr-disabled-fill)', true],
+    ['.foo--pressed', 'var(--disabled-label)', true],
+    ['.foo[data-state=\'on\']', 'var(--disabled-label)', true],
+    ['.foo--active', 'var(--sr-disabled-opacity-strong)', true],
+    ['.foo--active', 'var(--disabled-opacity)', true],
+    ['.foo--active', 'rgb(255 255 255 / 55%)', true],
+    ['.foo--active', 'rgba(255, 255, 255, 55%)', true],
+    ['.foo--active', 'rgba(255,255,255,.55)', true],
+    ['.foo.is-active:disabled', 'var(--disabled-fill)', false],
+    ['.foo[data-state=\'on\'][aria-disabled=\'true\']', 'var(--disabled-label)', false],
+    ['.foo.is-active', 'var(--sr-accent)', false],
+  ])('%s { %s } is caught: %s', (selector, value, caught) => {
+    expect(borrows({ selector, decls: [{ value }] })).toBe(caught);
+  });
+
+  it('the locked selected marks are the reviewed ones (GM\'s image-only and chip rule, and the anchor by PR #205 r1), never the switch', () => {
     const marks = [...new Set(appRules()
       .filter((rule) => SELECTED.test(rule.selector) && LOCKED.test(rule.selector))
       .filter((rule) => rule.decls.some((decl) => DISABLED_TOKEN.test(decl.value) || DISABLED_VALUE.test(decl.value)))
@@ -43,6 +65,7 @@ describe('the ratchet: a selected state never borrows a disabled token unless it
       "styles/disabled-buttons.css: :is(.cinema-shared-controls__chip--active):is(:disabled, [aria-disabled='true'])",
       "styles/disabled-buttons.css: :is(.cinema-shot-panel__variation--active):is(:disabled, [aria-disabled='true'])",
       "styles/disabled-buttons.css: :is(.project-home__cover-choice[aria-pressed='true']):is(:disabled, [aria-disabled='true'])",
+      "styles/disabled-buttons.css: :is(.remotion-properties-panel__anchor-button[aria-pressed='true']):is(:disabled, [aria-disabled='true'])",
     ]);
   });
 });
@@ -105,11 +128,14 @@ describe('Remotion\'s anchor cells', () => {
     done();
   });
 
-  it('chosen and locked: the cell\'s disabled look, the same as every locked cell', () => {
+  it('chosen and locked: the cell\'s disabled look, with the shared grey selected mark so the choice still reads (GM PR #205 r1)', () => {
     const { chosen, other, done } = cells(true);
+    for (const key of ['|background', '|opacity']) expect(value(chosen, key), key).toBe(value(other, key));
     expect(value(chosen, '|background')).toBe('transparent');
-    expect(value(chosen, '|border-color')).toMatch(/^var\(--sr-disabled-edge/);
-    for (const key of ['|background', '|border-color', '|opacity']) expect(value(chosen, key), key).toBe(value(other, key));
+    expect(value(other, '|border-color')).toMatch(/^var\(--sr-disabled-edge/);
+    expect(value(chosen, '|border-color')).toMatch(/^var\(--sr-disabled-ink/);
+    expect(value(chosen, '|box-shadow')).toMatch(/^inset 0 0 0 1px var\(--sr-disabled-ink/);
+    expect(value(other, '|box-shadow')).toBe('');
     done();
   });
 });

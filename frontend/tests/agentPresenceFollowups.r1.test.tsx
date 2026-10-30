@@ -198,7 +198,9 @@ const button = (root: HTMLElement, text: string) => [...root.querySelectorAll('b
   .find((item) => item.textContent?.trim() === text) as HTMLButtonElement;
 
 describe('GM bug 3: a failed reference disables Generate shot and Generate 2 alike', () => {
-  it('both disabled, the same reason as each tooltip, and one reason line under the row', () => {
+  // GM PR #205 r1: the reason is already on screen under the row, so the
+  // buttons carry no tooltip of it; each is described by that line instead.
+  it('both disabled, described by the one reason line under the row (no tooltip repeating it)', () => {
     const spec = cinemaScene();
     useCinemaUploadStore.setState({ uploads: [{ id: 'u1', attempt: 'x', nodeId: 'n1', shotId: 'a', name: 'reference.png',
       status: 'error', error: 'Upload failed.', canRetry: true }] });
@@ -207,7 +209,8 @@ describe('GM bug 3: a failed reference disables Generate shot and Generate 2 ali
     for (const label of ['Generate shot', 'Generate 2']) {
       const control = button(root, label);
       expect(control, label).toBeDisabled();
-      expect(control, label).toHaveAttribute('title', reason);
+      expect(control, label).not.toHaveAttribute('title');
+      expect(control, label).toHaveAccessibleDescription(reason);
     }
     const lines = [...root.querySelectorAll('[role="status"]')].filter((line) => line.textContent === reason);
     expect(lines).toHaveLength(1);

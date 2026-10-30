@@ -140,7 +140,7 @@ import { noteCanvasReplaced, type CanvasReplacement } from '../lib/canvasReplace
 import { boundingRect, findOpenGroupOffset, UNMEASURED_NODE_SIZE, type NodeRect } from '../lib/nodePlacement';
 import { withParamDefaults } from '../lib/paramDefaults';
 import { replaceChanged, shareUnchanged } from '../lib/structuralShare';
-import { RUN_LOCK_VERBS, runFinishesLine } from '../lib/runLock';
+import { lockLine, runFinishesLine } from '../lib/runLock';
 
 export type TrackItemOrderAction = 'send-to-back' | 'send-backward' | 'bring-forward' | 'bring-to-front';
 
@@ -1033,6 +1033,9 @@ interface GraphState {
    * in mono (a model id, GM round 15 of PR #114). An empty line says nothing
    * (a write refused while offline). */
   notify: (text: string, tone?: 'error' | 'info', options?: { mono?: string }) => void;
+  /** A run-locked key press or drop: its lock line, where Delete's, Undo's
+   * and Redo's show (GM PR #205 r1 answer 2, r2 items 4 and 5). */
+  sayRunLocked: (text: string) => void;
 
   // Clipboard
   clipboard: CanvasClipboard | null;
@@ -5888,6 +5891,12 @@ function noteHeldCopies(held: Map<string, boolean>, incoming: Node<NodeData>[], 
   for (const id of held.keys()) {
     const node = byId.get(id) ?? null;
     const before = heldCopies.get(id);
+    // GM PR #205 r2 item 2: Nebula's sync without a node whose Delete is on
+    // its way says the Delete is done there; the copy synced before it (an
+    // agent's edit) is what the Delete's step brings back, so it goes into
+    // the step now, before this sync's "gone" replaces it.
+    const deleting = node ? undefined : deletesInFlight.get(id);
+    if (deleting && before?.node) carrySyncedCopy(deleting, id, before);
     heldCopies.set(id, {
       node,
       edges: node ? edges.filter((edge) => edge.source === id || edge.target === id) : [],
@@ -6180,6 +6189,10 @@ function changeCanvasNodes(
     for (const nodeId of confirmed) {
       deferredParamPushes.delete(nodeId);
       unsavedParamEdits.delete(nodeId);
+      // GM PR #205 r2 item 2: Undo brings back what the person deleted, as
+      // Nebula last had it: an agent's edit synced while the Delete was on
+      // its way goes into the step, for the held Undo and a later one alike.
+      carrySyncedCopy(undoStep, nodeId, heldCopies.get(nodeId));
       heldCopies.delete(nodeId);
     }
     if (removals.length > 0) {
@@ -6190,6 +6203,11 @@ function changeCanvasNodes(
     }
     if (failed.length > 0) putBackFailedDeletes(failed);
     for (const done of holds.values()) done(false);
+    // GM PR #205 r2 item 1: a give-up line said for this step ("Try Undo
+    // again") is no longer true once the Delete answers; the Delete's own
+    // line takes its place (giveUpTakeover, after the lines below). A late
+    // ok leaves it: the node is still off, and Undo again does bring it back.
+    const takeover = failed.length > 0 ? giveUpTakeover(undoStep, get) : null;
     // What Nebula synced of a node that came back while it was held (M-2),
     // with its wires as Nebula has them (review 18, M-B).
     applyHeldCopies(failed, { wires: true });
@@ -6254,6 +6272,7 @@ function changeCanvasNodes(
       reportNodeDeletionFailure(unsaid, unsaid.length, failed.length === 1 && unsaid.length === failures.length
         ? namedOnCanvas(onCanvas, failed[0]) : undefined);
     }
+    takeover?.(set, get);
   }
   /** The nodes whose delete failed come back where they were, with their
    * wires, unselected; the steps taken since hold them again. Nothing was
@@ -6261,6 +6280,9 @@ function changeCanvasNodes(
    * happen is no step), unless it also took wires (deleteCanvasElements). */
   function putBackFailedDeletes(failed: string[]): void {
     const back = new Set(failed);
+    // Review 1 of PR #205 (LOW-1): what stays on the canvas isn't brought
+    // back by this step's Undo, and its lines never name it.
+    forgetRemoved(undoStep, back);
     // GM (round 20, B): the node comes back unselected, in the UI's
     // selection too (the ring and the settings pill read selectedNodeId).
     const selectedInUi = useUIStore.getState().selectedNodeId;
@@ -7035,9 +7057,9 @@ function withoutRenderingScenes(state: GraphState, changes: NodeChange[], set: G
  * (isExecuting: a run of the graph, a Cinema shot run, a Create launch), no
  * node is deleted, and never silently (GM r5 item 2). When every node asked
  * for is a scene with a shot rendering, GM's scene line says why (r3 item 1,
- * r4 item 2); otherwise what failed, then the lock's line (GM r39 item 2):
- * "Couldn't delete “Brief”. You can delete it when the run finishes." /
- * "Couldn't delete 4 nodes. You can delete them …". True when it refused;
+ * r4 item 2); otherwise the lock's line alone (GM PR #205 r1 answer 2):
+ * "You can delete “Brief” when the run finishes." / "You can delete 4 nodes
+ * when the run finishes.". True when it refused;
  * nothing is sent.
  */
 function refuseRunLockedDelete(state: GraphState, ids: readonly string[], set: GraphSet): boolean {
@@ -8158,6 +8180,21 @@ function withFreshKeyStatus(nodes: Node<NodeData>[], before: Node<NodeData>[]): 
 const stepsInFlight = new Set<UndoEntry>();
 const HOLD_LIMIT_MS = 15_000;
 
+/** Tests: whether `step` (an undo stack entry) still waits for its request's
+ * answer. A test that acts once the backend has recorded a request (rather
+ * than once this tab has its answer) races the answer; this is what to wait
+ * for instead (graphStore.fix16). */
+export function stepInFlightForTests(step: unknown): boolean {
+  return stepsInFlight.has(step as UndoEntry);
+}
+
+/** Tests: forget every held press, step in flight and held copy, as a new
+ * canvas does, so one test's leftovers (a press it timed out holding) never
+ * reach the next (review 1 of PR #205, NIT-2). */
+export function forgetHeldHistoryForTests(): void {
+  forgetStepsInFlight();
+}
+
 /*
  * Review 11, M-1 (round 12), and review 12 (round 13): a held press is bound
  * to the step it was pressed for. The old queue replayed its presses against
@@ -8824,6 +8861,7 @@ function besideFailure(state: Pick<GraphState, 'undoNotice'>, text: string): Par
  * line isn't cleared or covered by that graph's own notice (review 12, L-2). */
 function forgetStepsInFlight(): DroppedPresses {
   const dropped = dropHeldPresses();
+  giveUpShown = null;
   stepsInFlight.clear();
   deletesInFlight.clear();
   deferredParamPushes.clear();
@@ -8904,7 +8942,67 @@ function giveUpHeld(step: UndoEntry, set: GraphSet): void {
     announceDrop(set, dropped);
     return;
   }
-  set((state) => besideFailure(state, bringBackFailedText(namesBroughtBack(step, state.nodes))));
+  set((state) => {
+    const patch = besideFailure(state, bringBackFailedText(namesBroughtBack(step, state.nodes)));
+    const id = patch.undoNotice?.id ?? patch.messageNotice?.id;
+    if (id !== undefined) giveUpShown = { step, id };
+    return patch;
+  });
+}
+
+/** The give-up line on show for a Delete step (GM PR #205 r2 item 1). */
+let giveUpShown: { step: UndoEntry; id: number } | null = null;
+
+/** When `step`'s Delete answers after its give-up line: a function that,
+ * once that answer's own lines are written, puts the newest of them in the
+ * give-up line's place (same notice, same spot) and leaves the other place
+ * as it was; with no line of its own, the give-up line just goes. A line
+ * whose statement became false is replaced or removed, never left standing. */
+function giveUpTakeover(step: UndoEntry, get: GraphGet): ((set: GraphSet, get: GraphGet) => void) | null {
+  const shown = giveUpShown;
+  if (!shown || successorOf(shown.step) !== successorOf(step)) return null;
+  giveUpShown = null;
+  const before = get();
+  const field = before.undoNotice?.id === shown.id ? 'undoNotice' : before.messageNotice?.id === shown.id ? 'messageNotice' : null;
+  if (!field) return null;
+  const was = { undoNotice: before.undoNotice, messageNotice: before.messageNotice };
+  return (set) => set((state) => {
+    const fresh = (['undoNotice', 'messageNotice'] as const).filter((key) => state[key] && state[key] !== was[key])
+      .sort((a, b) => (state[b]?.id ?? 0) - (state[a]?.id ?? 0))[0];
+    if (!fresh) return state[field]?.id === shown.id ? { [field]: null } : {};
+    const line = { ...state[fresh]!, id: shown.id };
+    return fresh === field ? { [field]: line } : { [field]: line, [fresh]: was[fresh] };
+  });
+}
+
+/** The nodes a failed Delete left on the canvas are no longer what its step
+ * (or a step re-pushed in its place) brings back (review 1 of PR #205, LOW-1). */
+function forgetRemoved(step: UndoEntry, kept: ReadonlySet<string>): void {
+  for (let at: UndoEntry | undefined = step; at; ) {
+    const removed = removedBy.get(at);
+    if (removed) for (const id of kept) removed.delete(id);
+    const next = stepSuccessors.get(at);
+    at = next && next !== at ? next : undefined;
+  }
+}
+
+/** GM PR #205 r2 item 2: the copy Nebula synced while `nodeId`'s Delete was
+ * on its way (an agent's edit) replaces the delete-time copy in its step and
+ * the steps re-pushed in its place, so an Undo restores it, not the older one. */
+function carrySyncedCopy(step: UndoEntry, nodeId: string, copy: HeldCopy | undefined): void {
+  if (!copy?.node) return;
+  for (let at: UndoEntry | undefined = step; at; ) {
+    if (!isSliceStep(at)) {
+      const index = at.nodes.findIndex((node) => node.id === nodeId);
+      if (index >= 0) {
+        const merged = mergeSyncedNode(copy.node, at.nodes[index], copy.moved ? [nodeId] : [], useUIStore.getState().settingsCache);
+        const [taken] = createSnapshot([{ ...merged, selected: false }], []).nodes;
+        at.nodes = at.nodes.map((node, i) => (i === index ? taken : node));
+      }
+    }
+    const next = stepSuccessors.get(at);
+    at = next && next !== at ? next : undefined;
+  }
 }
 
 /** What a delete step brings back, named as the canvas shows each node now
@@ -8978,6 +9076,8 @@ function runHeldPresses(set: GraphSet, get: GraphGet): void {
           && sameTarget(held.target, { entry: below }));
         if (below && !taken) {
           press.target = { entry: below };
+          // Review 1 of PR #205 (NIT-1): the step below is not the Delete it was held on.
+          press.onDelete = isDeleteInFlight(below);
           continue;
         }
         heldPresses.shift();
@@ -9219,7 +9319,7 @@ function applyHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet, tar
 /** An undo or redo pressed (or coming due) while this tab runs something:
  * nothing moves, and the line says why (PR #198 review 4, M1; GM r5 item 2):
  * GM's shot line when the step would take away a shot that is rendering,
- * else the run lock's ("Couldn't undo. You can undo when the run finishes.").
+ * else the run lock's ("You can undo when the run finishes.", GM PR #205 r1).
  * Nothing is read off the canvas into the step (no captureOwnAdd). */
 function refuseRunLockedStep(action: 'undo' | 'redo', state: GraphState, set: GraphSet, target?: UndoEntry): void {
   const from = action === 'undo' ? state.undoStack : state.redoStack;
@@ -11074,6 +11174,10 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     set((state) => noticeLine(state, text, tone, options?.mono));
   },
 
+  sayRunLocked: (text) => {
+    set({ undoNotice: { id: ++undoNoticeSeq, text, offer: null } });
+  },
+
   // ---------------------------------------------------------------------------
   // Clipboard: copy/paste with UUID regeneration
   // ---------------------------------------------------------------------------
@@ -11100,7 +11204,11 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   pasteClipboard: (target) => {
     const state = get();
     const { clipboard, isExecuting } = state;
-    if (isExecuting) return [];
+    // GM PR #205 r2 item 4: never silently, where Delete's and Undo's lines show.
+    if (isExecuting) {
+      if (clipboard && clipboard.nodes.length > 0) set({ undoNotice: { id: ++undoNoticeSeq, text: runLockedLine('paste'), offer: null } });
+      return [];
+    }
     if (!clipboard || clipboard.nodes.length === 0) return [];
 
     const safeParams = clipboardPasteParams(state, clipboard);
@@ -11172,8 +11280,18 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   duplicateSelected: () => {
     const state = get();
     const { nodes, edges, isExecuting } = state;
-    if (isExecuting) return;
     const selected = nodes.filter((n) => n.selected);
+    if (isExecuting) {
+      // GM PR #205 r2 item 4: "You can duplicate “X” when the run finishes.",
+      // where Delete's and Undo's lines show, named as Delete names them.
+      if (selected.length > 0) {
+        const ids = selected.map((node) => node.id);
+        set({ undoNotice: { id: ++undoNoticeSeq, offer: null, text: runLockedLine('duplicate', ids.length,
+          ids.length === 1 ? namedOnCanvas(nodes, ids[0]) : undefined,
+          inCanvasOrder(ids, nodes).map((id) => listedNodeTitle(nodes, id))) } });
+      }
+      return;
+    }
     if (selected.length === 0) return;
 
     const safeParams = new Map<string, Record<string, unknown>>();
@@ -11326,9 +11444,11 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     const fail = (reason: string) => reportNodeCreationFailure(definition?.displayName ?? definitionId, reason);
     if (!definition) return fail('This node is no longer available.');
     const before = get();
-    // GM r39 item 2's pattern for the run; the import keeps its own line.
-    if (before.isExecuting) return fail(runFinishesLine(RUN_LOCK_VERBS.addIt));
-    if (before.isImportingGraph) return fail('Wait for the graph import to finish.');
+    // GM, PR #205 r1 answer 2: the lock line alone, "You can add “X” when the
+    // run finishes." (the import's: "… when the import finishes.").
+    const addWhat = `add “${definition.displayName}”`;
+    if (before.isExecuting) return refuseAdd(lockLine(addWhat, 'run'));
+    if (before.isImportingGraph) return refuseAdd(lockLine(addWhat, 'import'));
     if (pendingConnectedNodeCreationAttempt || pendingNodeCreationAttempt) return fail('Another node-create request is still unresolved. Wait for the exact connected pair to sync, or reload the canvas before trying again.');
     if (connect.newNodeIs !== 'source' && connect.newNodeIs !== 'target') return fail('The connection direction is invalid.');
     if (!Number.isFinite(position.x) || !Number.isFinite(position.y)) return fail('The canvas position is invalid.');
@@ -12987,7 +13107,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   },
 
   authorGenerationCluster: async (request) => {
-    if (get().isImportingGraph) throw new FailureNotice("Couldn't start the generation.", 'Wait for the graph import to finish.');
+    // GM, PR #205 r1: a thrown refusal with no single control says the
+    // refused action, as a line of its own.
+    if (get().isImportingGraph) throw new FailureNotice("Couldn't start the generation.", lockLine('start the generation', 'import'), { standalone: true });
     const def = NODE_DEFINITIONS[request.definitionId];
     if (!def) return { modelNodeIds: [], allNodeIds: [] };
 
@@ -14244,7 +14366,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     // Round 3b: the person reads these (Run History alerts them), so they are
     // written lines under the button's heading, not developer text.
     if (get().isExecuting) {
-      throw new FailureNotice(FORGET_RECOVERY_HEADING, 'Let the run finish, then try again.');
+      // GM, PR #205 r1: the refused action's lock line, standing alone.
+      throw new FailureNotice(FORGET_RECOVERY_HEADING, runFinishesLine('forget the recovery safeguard'), { standalone: true });
     }
     const expected = get().providerRecoveries.find(
       (checkpoint) => checkpoint.runId === runId && checkpoint.nodeId === nodeId,
@@ -14531,7 +14654,7 @@ export const NOT_GRAPH_EDITS: ReadonlySet<string> = new Set<string>([
   // Undo bookkeeping (the edits they bracket are gated themselves).
   'beginUndoStep', 'cancelUndoStep', 'endUndoStep', 'noteOwnAdd', 'noteRenameDraft',
   // Notices.
-  'dismissUndoNotice', 'dismissLateNotice', 'dismissMessageNotice', 'notify', 'dismissProviderRecoveryWarning',
+  'dismissUndoNotice', 'dismissLateNotice', 'dismissMessageNotice', 'notify', 'sayRunLocked', 'dismissProviderRecoveryWarning',
   // Reads and selection.
   'copySelected', 'selectAll', 'allowCanvasDelete', 'canSwitchProject', 'isShotAdmissionBlocked',
   // Stopping a run or a launch (never refused: it stops spend) and the locks around them.

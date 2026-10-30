@@ -129,12 +129,12 @@ describe('M2: the run lock comes first, and carries no following mark', () => {
     follow();
     useGraphStore.getState().deleteSelected();
     expect(useGraphStore.getState().nodes).toHaveLength(1);
-    expect(useGraphStore.getState().undoNotice?.text).toBe('Couldn’t delete “Brief”. You can delete it when the run finishes.');
+    expect(useGraphStore.getState().undoNotice?.text).toBe('You can delete “Brief” when the run finishes.');
     const step = { kind: 'snapshot', nodes: [], edges: [] };
     useGraphStore.setState({ undoNotice: null, undoStack: [step], redoStack: [] } as never);
     useGraphStore.getState().undo();
     expect(useGraphStore.getState().nodes).toHaveLength(1);
-    expect(useGraphStore.getState().undoNotice?.text).toBe('Couldn’t undo. You can undo when the run finishes.');
+    expect(useGraphStore.getState().undoNotice?.text).toBe('You can undo when the run finishes.');
   });
 });
 
@@ -173,7 +173,9 @@ describe('fix round 8, L5 (review 7): the last run-locked buttons read canvasLoc
     const run = screen.getByRole('button', { name: /Run/ });
     expect(run).toBeDisabled();
     // GM r40 item 3: the notice's own line, read live (no node n1 on this canvas: "it").
-    expect(run.getAttribute('title')).toBe('You can run it when the current run finishes.');
+    // GM PR #205 r1: the line is beside [Run], so no tooltip; [Run] points at it.
+    expect(run.hasAttribute('title')).toBe(false);
+    expect(run).toHaveAccessibleDescription('You can run it when the current run finishes.');
     expect(run.hasAttribute(FOLLOWING_MARK)).toBe(false);
     act(() => useGraphStore.setState({ isExecuting: false }));
     expect(screen.getByRole('button', { name: /Run/ }).getAttribute('title')).toBe(WAIT);
@@ -185,7 +187,7 @@ describe('fix round 8, L5 (review 7): the last run-locked buttons read canvasLoc
     const sites: [string, RegExp][] = [
       ['nodes/ModelNode.tsx', /lock\.act\(\{ disabled: !latestPaperSourceReady,[\s\S]{0,240}\{ run: isExecuting, runTitle: runFinishesLine\(OFFLINE_VERBS\.rerun\) \}\)\}\s*onClick[\s\S]{0,240}Rerun with latest source/],
       ['panels/RunHistoryPanel.tsx', /lock\.act\(\{ disabled: clearingRecovery === key, title: FORGET_TITLE \}, \{ run: isExecuting, runTitle: runFinishesLine\(RUN_LOCK_VERBS\.forgetRun\) \}\)/],
-      ['canvas/DeferredRunNotice.tsx', /lock\.act\(\{\}, \{ run: running, runTitle: line \}\)/],
+      ['canvas/DeferredRunNotice.tsx', /lock\.act\(\{\}, \{ run: running, runTitle: line, shown: \{ id: lineId, text: line \} \}\)/],
     ];
     for (const [file, pattern] of sites) {
       const source = readFileSync(resolve(root, file), 'utf8');

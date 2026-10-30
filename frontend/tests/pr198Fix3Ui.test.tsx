@@ -199,12 +199,12 @@ describe('G1 / GM 1: Delete is disabled while the scene has a shot rendering', (
     expect(remove).toHaveAttribute('title', 'Stop the run first.');
   });
 
-  it('rendering with no Stop here: "Wait for “Opening” to finish."', () => {
+  it('rendering with no Stop here: "You can delete “Opening” when it finishes."', () => {
     useGraphStore.setState({ nodes: [cinemaNode(scene([{ id: 's1', prompt: 'a', output: { status: 'running' } }]), 'n4')],
       activeRuns: [] } as never);
     open();
     render(<ContextMenu />);
-    expect(screen.getByRole('button', { name: /Delete/ })).toHaveAttribute('title', 'Wait for “Opening” to finish.');
+    expect(screen.getByRole('button', { name: /Delete/ })).toHaveAttribute('title', 'You can delete “Opening” when it finishes.');
   });
 
   it('nothing rendering: Delete is enabled', () => {

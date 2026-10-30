@@ -116,7 +116,7 @@ describe.each([['ModelNode', false], ['DynamicNode', true]] as const)('%s video 
     act(() => useGraphStore.setState({ isImportingGraph: true }));
     const edit = screen.getByRole('button', { name: 'Edit video' });
     expect(edit).toBeDisabled();
-    expect(edit).toHaveAttribute('title', 'Wait for the graph import to finish');
+    expect(edit).toHaveAttribute('title', 'You can edit this video result when the import finishes.');
     fireEvent.click(edit);
     expect(useUIStore.getState().viewMode).toBe('canvas');
     act(() => useGraphStore.setState({ isImportingGraph: false }));

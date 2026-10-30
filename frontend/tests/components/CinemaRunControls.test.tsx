@@ -85,7 +85,10 @@ describe('Cinema tracked run controls', () => {
     const view = render(<CinemaShotPanel cinemaNodeId="n1" scene={scene} shot={scene.shots[1]} onChangeShot={vi.fn()} />);
     expect(screen.getByRole('button', { name: 'Generate shot' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Generate 2' })).toBeDisabled();
-    expect(screen.getByRole('status')).toHaveTextContent('Another run is using shared inputs');
+    // GM, PR #205 r1: the lock pattern; the buttons point at the line under them.
+    expect(screen.getByRole('status')).toHaveTextContent('You can generate this shot when the other run finishes or after you stop it.');
+    expect(screen.getByRole('button', { name: 'Generate shot' })).not.toHaveAttribute('title');
+    expect(screen.getByRole('button', { name: 'Generate shot' })).toHaveAccessibleDescription('You can generate this shot when the other run finishes or after you stop it.');
     fireEvent.click(screen.getByRole('button', { name: 'Generate shot' }));
     expect(executeShot).not.toHaveBeenCalled();
     act(() => useGraphStore.setState({ isShotAdmissionBlocked: () => false }));

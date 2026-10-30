@@ -97,7 +97,7 @@ describe('M1: the Delete key during the tab\'s own run', () => {
     useGraphStore.setState(initialGraph, true);
   });
 
-  it('says "Couldn’t delete “Brief”. You can delete it when the run finishes." and keeps the node', async () => {
+  it('says "You can delete “Brief” when the run finishes." and keeps the node', async () => {
     await act(async () => {
       void useGraphStore.getState().executeShot('n4', 's2');
       await new Promise((resolve) => setTimeout(resolve, 40));
@@ -105,11 +105,11 @@ describe('M1: the Delete key during the tab\'s own run', () => {
     expect(useGraphStore.getState().isExecuting).toBe(true);
     render(<Canvas />);
     act(() => { document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true })); });
-    expect(useGraphStore.getState().undoNotice?.text).toBe("Couldn’t delete “Brief”. You can delete it when the run finishes.");
+    expect(useGraphStore.getState().undoNotice?.text).toBe("You can delete “Brief” when the run finishes.");
     expect(useGraphStore.getState().nodes.map((node) => node.id)).toEqual(['n4', 'n5']);
     act(() => { useGraphStore.setState({ undoNotice: null } as never); });
     act(() => { document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true })); });
-    expect(useGraphStore.getState().undoNotice?.text).toBe("Couldn’t delete “Brief”. You can delete it when the run finishes.");
+    expect(useGraphStore.getState().undoNotice?.text).toBe("You can delete “Brief” when the run finishes.");
   });
 
   // Merged with #195: the canvas's handler owns the Delete key (React Flow's

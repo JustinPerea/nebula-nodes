@@ -128,14 +128,14 @@ describe('GM r39 item 2: each run-locked control says its own verb', () => {
       .toHaveAttribute('title', 'You can clear the run history when the run finishes.');
   });
 
-  it('Cinema\'s Generate: "You can generate this shot when the run finishes."', () => {
+  it('Cinema\'s Generate all: "You can generate the shots when the run finishes." (GM PR #205 r1 answer 3)', () => {
     useGraphStore.setState({ isExecuting: true, nodes: [{ id: 'n1', type: 'cinemaSceneNode', position: { x: 0, y: 0 },
       data: { label: 'Opening', definitionId: 'cinema-scene', state: 'idle', outputs: {},
         params: { scene: { version: 1, base: { model: 'seedream-4-5' }, aspectRatio: '16:9', shots: [{ id: 's1', prompt: 'a' }] } } } }] as never });
     render(<CinemaStudioToolbar cinemaNodeId="n1" />);
     const generate = screen.getByRole('button', { name: /^Generat/ });
     expect(generate).toBeDisabled();
-    expect(generate).toHaveAttribute('title', 'You can generate this shot when the run finishes.');
+    expect(generate).toHaveAttribute('title', 'You can generate the shots when the run finishes.');
   });
 
   it('a model node\'s next step: "You can run it when the run finishes."', () => {
@@ -149,21 +149,22 @@ describe('GM r39 item 2: each run-locked control says its own verb', () => {
     expect(next).toHaveAttribute('title', 'You can run it when the run finishes.');
   });
 
-  it('the run-lock refusals take the same lock line after what failed', () => {
-    expect(runLockedLine('delete', 1, '“Brief”')).toBe('Couldn’t delete “Brief”. You can delete it when the run finishes.');
-    expect(runLockedLine('delete', 2, undefined, ['A', 'B'])).toBe('Couldn’t delete “A” and “B”. You can delete them when the run finishes.');
-    expect(runLockedLine('undo')).toBe('Couldn’t undo. You can undo when the run finishes.');
-    expect(runLockedLine('redo')).toBe('Couldn’t redo. You can redo when the run finishes.');
-    expect(runLockedWiresLine(2)).toBe('Couldn’t delete 2 connections. You can delete them when the run finishes.');
+  it('the run-lock refusals are the lock line alone (GM PR #205 r1 answer 2)', () => {
+    expect(runLockedLine('delete', 1, '“Brief”')).toBe('You can delete “Brief” when the run finishes.');
+    expect(runLockedLine('delete', 2, undefined, ['A', 'B'])).toBe('You can delete “A” and “B” when the run finishes.');
+    expect(runLockedLine('undo')).toBe('You can undo when the run finishes.');
+    expect(runLockedLine('redo')).toBe('You can redo when the run finishes.');
+    expect(runLockedWiresLine(1)).toBe('You can delete the connection when the run finishes.');
+    expect(runLockedWiresLine(2)).toBe('You can delete the 2 connections when the run finishes.');
   });
 
-  it('adding a connected node while this tab runs: the add heading, then "You can add it when the run finishes."', async () => {
+  it('adding a connected node while this tab runs: "You can add “Text Input” when the run finishes."', async () => {
     const said: string[] = [];
     useGraphStore.setState({ nodes: [textNode('n1', 'Brief', false)], edges: [], isExecuting: true, notify: (text: string) => { said.push(text); } } as never);
     await useGraphStore.getState().addNodeAndConnect('text-input', { x: 0, y: 0 },
       { source: 'n1', sourceHandle: 'text', target: 'new', targetHandle: 'text', newNodeIs: 'target' });
-    // The heading is addHeading's own, unchanged here.
-    expect(said).toEqual(["Couldn't add “Text Input”. You can add it when the run finishes."]);
+    // GM PR #205 r1 answer 2: the lock line alone, no add heading before it.
+    expect(said).toEqual(['You can add “Text Input” when the run finishes.']);
   });
 
   it('no person UI says the old line, and every run lock names its own line', () => {
@@ -215,14 +216,15 @@ describe('GM r40 item 3: the deferred run notice is a state line, read live', ()
     expect(deferredRunLine(['', ' '], false)).toBe('You can run it now.');
   });
 
-  it('while a run goes: the line, [Run] disabled with it as its tooltip, [Dismiss] enabled; then it swaps in place', () => {
+  it('while a run goes: the line, [Run] disabled and described by it (no tooltip, GM PR #205 r1), [Dismiss] enabled; then it swaps in place', () => {
     useGraphStore.setState({ nodes: [textNode('n3', 'Brief', false)], edges: [], isExecuting: true });
     hold(['n3']);
     render(<DeferredRunNotice />);
     const region = screen.getByRole('status');
     expect(summary()).toBe('You can run “Brief” when the current run finishes.');
     expect(runButton()).toBeDisabled();
-    expect(runButton()).toHaveAttribute('title', 'You can run “Brief” when the current run finishes.');
+    expect(runButton()).not.toHaveAttribute('title');
+    expect(runButton()).toHaveAccessibleDescription('You can run “Brief” when the current run finishes.');
     expect(screen.getByRole('button', { name: 'Dismiss' })).toBeEnabled();
     const notices = { undo: useGraphStore.getState().undoNotice, message: useGraphStore.getState().messageNotice };
     act(() => useGraphStore.setState({ isExecuting: false }));
@@ -231,6 +233,7 @@ describe('GM r40 item 3: the deferred run notice is a state line, read live', ()
     expect(summary()).toBe('You can run “Brief” now.');
     expect(runButton()).toBeEnabled();
     expect(runButton().getAttribute('title')).toBeNull();
+    expect(runButton()).not.toHaveAttribute('aria-describedby');
     expect({ undo: useGraphStore.getState().undoNotice, message: useGraphStore.getState().messageNotice }).toEqual(notices);
   });
 
@@ -242,14 +245,14 @@ describe('GM r40 item 3: the deferred run notice is a state line, read live', ()
     expect(runButton()).toBeDisabled();
   });
 
-  it('a rename of the held node while it waits shows at once, in the line and the tooltip', () => {
+  it('a rename of the held node while it waits shows at once, in the line and [Run]\'s description', () => {
     useGraphStore.setState({ nodes: [textNode('n3', 'Brief', false), textNode('n4', 'Other', false)], edges: [], isExecuting: true });
     hold(['n3']);
     render(<DeferredRunNotice />);
     act(() => useGraphStore.setState((state) => ({ nodes: state.nodes.map((node) => (node.id === 'n3'
       ? { ...node, data: { ...node.data, label: 'Hero brief' } } : node)) })));
     expect(summary()).toBe('You can run “Hero brief” when the current run finishes.');
-    expect(runButton()).toHaveAttribute('title', 'You can run “Hero brief” when the current run finishes.');
+    expect(runButton()).toHaveAccessibleDescription('You can run “Hero brief” when the current run finishes.');
     act(() => useGraphStore.setState({ isExecuting: false }));
     expect(summary()).toBe('You can run “Hero brief” now.');
   });

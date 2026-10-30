@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { useShallow } from 'zustand/react/shallow';
 import { useGraphStore } from '../store/graphStore';
@@ -44,6 +44,7 @@ export function CommandPalette() {
   // Round 23 (review 22, L-3): the commands that change the canvas (acts)
   // take the canvas lock, as every other surface does.
   const lock = useCanvasLock();
+  const paletteId = useId();
   // Fit view includes an open proposal's ghosts.
   const fitCanvasView = useFitCanvasView();
   const addNode = useGraphStore((s) => s.addNode);
@@ -139,6 +140,7 @@ export function CommandPalette() {
         canRun: nodeCount > 0 && !isExecuting && !runStarting && !isImportingGraph,
         canSave,
         canLoad,
+        running: isExecuting || runStarting,
         canvasNodes,
         focusNode,
       }),
@@ -347,11 +349,19 @@ export function CommandPalette() {
                   const isSel = index === safeSelected;
                   const act = cmd.acts ? lock.act({ disabled: cmd.enabled === false }) : null;
                   const disabled = act ? act.disabled : cmd.enabled === false;
+                  // GM PR #205 r2 item 3: the run's lock line is the row's own
+                  // text (a canvas lock's title, when there is one, wins).
+                  const lockLine = disabled && !act?.title ? cmd.lockLine : undefined;
+                  const lockId = lockLine ? `${paletteId}-lock-${index}` : undefined;
                   return (
                     <button
                       key={cmd.id}
                       type="button"
                       className={`command-palette__item${isSel ? ' command-palette__item--selected' : ''}${disabled ? ' command-palette__item--disabled' : ''}`}
+                      // The lock line below (GM PR #205 r2 item 3) describes the row, so
+                      // its name is the title alone (not read twice); act's spread has none.
+                      aria-label={lockLine ? cmd.title : undefined}
+                      aria-describedby={lockId}
                       onMouseEnter={() => setSelected(index)}
                       onFocus={() => setSelected(index)}
                       onClick={() => run(cmd)}
@@ -359,7 +369,9 @@ export function CommandPalette() {
                       disabled={disabled}
                     >
                       <span className="command-palette__item-title">{cmd.title}</span>
-                      {cmd.subtitle && (
+                      {lockLine ? (
+                        <span className="command-palette__item-sub command-palette__item-lock" id={lockId}>{lockLine}</span>
+                      ) : cmd.subtitle && (
                         <span className="command-palette__item-sub">{cmd.subtitle}</span>
                       )}
                     </button>

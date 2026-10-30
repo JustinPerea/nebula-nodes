@@ -9,10 +9,14 @@ import '../../styles/commons-evaluation.css';
 import '../../styles/commons-review.css';
 import { failureMessage } from '../../lib/errorCopy';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { lockLine } from '../../lib/runLock';
 
 const pretty = (text: string) => text === 'n_a' ? 'Not applicable' : text.replaceAll('_', ' ');
 
 type DraftActions = { save: () => Promise<SaveResult>; discard: () => void };
+
+/** A save refused while a grade is still being written (GM, PR #205 r1). */
+const GRADE_LOCK_LINE = lockLine('save this review', 'grade');
 
 /**
  * Agent review. `onWork` is the panel contract (commons-leave): unsaved
@@ -110,8 +114,8 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
     }
   }
   function accept(item: ReviewItem, labels: EvaluationLabels): Promise<SaveResult> {
-    if (pendingWrites.current) return Promise.resolve({ ok: false, reason: 'Wait for the grade in progress to finish.',
-      message: 'Wait for the grade in progress to finish.', retry: true });
+    // GM, PR #205 r1: the lock line, by the refused action.
+    if (pendingWrites.current) return Promise.resolve({ ok: false, reason: GRADE_LOCK_LINE, message: GRADE_LOCK_LINE, retry: true });
     pendingWrites.current++;
     requestVersion.current++;
     setError('');

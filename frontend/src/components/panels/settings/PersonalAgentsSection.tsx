@@ -11,6 +11,7 @@ import {
 import { PERSONAL_AGENTS_CHANGED_EVENT } from '../../../lib/personalAgentsEvents';
 import '../../../styles/personal-agents.css';
 import { failureMessage } from '../../../lib/errorCopy';
+import { SettingsSwitch } from './Switch';
 
 const STATUS_TEXT: Record<PersonalAgent['status'], string> = {
   ready: 'Ready',
@@ -37,8 +38,21 @@ function personalAgentBusy(agent: PersonalAgent): boolean {
 
 type Run = (work: () => Promise<unknown>) => Promise<void>;
 
+/** A switch whose own change is being saved, and the position the person
+ * gave it (GM, PR #205 r1 answer 6: shown at once, held while it saves). */
+type Switching = { id: string; field: 'enabled' | 'useNebulaKey'; to: boolean };
+type Toggle = (switching: Switching, work: () => Promise<unknown>) => void;
+
+/** One switch of the section: the person's new position while its own save
+ * is out; any switch here is held while the section is busy (held, then the
+ * locked look after 150 ms, so a quick save greys nothing). */
+function switchState(busy: boolean, switching: Switching | null, id: string, field: Switching['field'], saved: boolean) {
+  const own = switching && switching.id === id && switching.field === field ? switching : null;
+  return { checked: own ? own.to : saved, saving: busy };
+}
+
 /** Gemini: hand the CLI the Gemini API key saved in Settings, only when the person turns it on. */
-function KeyOption({ agent, busy, run }: { agent: PersonalAgent; busy: boolean; run: Run }) {
+function KeyOption({ agent, busy, switching, toggle }: { agent: PersonalAgent; busy: boolean; switching: Switching | null; toggle: Toggle }) {
   const option = agent.keyOption;
   if (!option) return null;
   const blocked = option.blocked ?? (!option.keySaved && !option.enabled
@@ -46,9 +60,9 @@ function KeyOption({ agent, busy, run }: { agent: PersonalAgent; busy: boolean; 
   return (
     <span className="personal-agents__option" data-testid="personal-agent-key-option">
       <label className="personal-agents__option-label">
-        <input type="checkbox" role="switch" className="settings-switch" checked={option.enabled}
-          disabled={busy || (Boolean(blocked) && !option.enabled)}
-          onChange={(event) => void run(() => updatePersonalAgent(agent.id, { useNebulaKey: event.target.checked }))} />
+        <SettingsSwitch {...switchState(busy, switching, agent.id, 'useNebulaKey', option.enabled)}
+          disabled={Boolean(blocked) && !option.enabled}
+          onChange={(to) => toggle({ id: agent.id, field: 'useNebulaKey', to }, () => updatePersonalAgent(agent.id, { useNebulaKey: to }))} />
         Use my Gemini API key from Nebula
       </label>
       <span className="personal-agents__fine">{option.billing}</span>
@@ -125,13 +139,12 @@ export function PersonalAgentsSection() {
   const [list, setList] = useState<PersonalAgentList | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [switching, setSwitching] = useState<Switching | null>(null);
   const [draft, setDraft] = useState({ id: '', displayName: '', command: '', args: '' });
 
-  const load = useCallback(() => {
-    fetchPersonalAgents()
-      .then((next) => { setList(next); setError(null); })
-      .catch((exc: unknown) => setError(failureMessage(exc, "Couldn't load your agents.")));
-  }, []);
+  const load = useCallback(() => fetchPersonalAgents()
+    .then((next) => { setList(next); setError(null); })
+    .catch((exc: unknown) => setError(failureMessage(exc, "Couldn't load your agents."))), []);
 
   useEffect(() => { load(); }, [load]);
 
@@ -148,13 +161,20 @@ export function PersonalAgentsSection() {
     setError(null);
     try {
       await work();
-      load();
+      // The list answers before the hold ends, so a switch never shows its
+      // old position between the save and the reload.
+      await load();
       announceChange();
     } catch (exc) {
       setError(failureMessage(exc, "Couldn't update your agents."));
     } finally {
       setBusy(false);
     }
+  };
+
+  const toggle: Toggle = (next, work) => {
+    setSwitching(next);
+    void run(work).finally(() => setSwitching(null));
   };
 
   const addCustom = () => run(async () => {
@@ -190,14 +210,14 @@ export function PersonalAgentsSection() {
                 <code>{[agent.command, ...agent.args].join(' ')}</code>
                 {agent.termsNote && <span className="personal-agents__terms" role="note">{agent.termsNote}</span>}
               </span>
-              <KeyOption agent={agent} busy={busy} run={run} />
+              <KeyOption agent={agent} busy={busy} switching={switching} toggle={toggle} />
               <DownloadAndSignIn agent={agent} busy={busy} run={run} />
             </span>
             <span className="settings-model-limit__controls">
               {agent.startable && (
-                <input type="checkbox" role="switch" className="settings-switch" checked={agent.enabled}
-                  aria-label={`Use ${agent.displayName} in chat`} disabled={busy}
-                  onChange={(event) => void run(() => updatePersonalAgent(agent.id, { enabled: event.target.checked }))} />
+                <SettingsSwitch {...switchState(busy, switching, agent.id, 'enabled', agent.enabled)}
+                  aria-label={`Use ${agent.displayName} in chat`}
+                  onChange={(to) => toggle({ id: agent.id, field: 'enabled', to }, () => updatePersonalAgent(agent.id, { enabled: to }))} />
               )}
               {agent.kind === 'custom' && (
                 <button type="button" className="settings__button settings__button--danger" disabled={busy}

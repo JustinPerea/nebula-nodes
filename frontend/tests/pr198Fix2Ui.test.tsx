@@ -184,11 +184,11 @@ describe('GM: a shot that is rendering can\'t be removed', () => {
     }
   });
 
-  it('rendering with no Stop here (the run still starting): "Wait for “Shot 2” to finish."', () => {
+  it('rendering with no Stop here (the run still starting): "You can remove “Shot 2” when it finishes."', () => {
     const scene = { ...SCENE, shots: [SCENE.shots[0], { ...SCENE.shots[1], output: { status: 'running' as const } }] };
     render(<CinemaShotsRail cinemaNodeId="n1" scene={scene} selectedShotId="s1" onSelect={() => {}}
       onAddShot={() => {}} onRemoveShot={() => {}} onReorder={() => {}} />);
-    expect(screen.getByRole('button', { name: 'Remove Shot 2' })).toHaveAttribute('title', 'Wait for “Shot 2” to finish.');
+    expect(screen.getByRole('button', { name: 'Remove Shot 2' })).toHaveAttribute('title', 'You can remove “Shot 2” when it finishes.');
     expect(screen.getByRole('button', { name: 'Remove Shot 2' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Remove Shot 1' })).toBeEnabled();
   });

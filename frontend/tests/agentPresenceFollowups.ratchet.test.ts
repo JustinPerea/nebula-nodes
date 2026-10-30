@@ -1839,7 +1839,9 @@ function cssRules(css: string): Array<{ selector: string; body: string }> {
  */
 function importantPaintOnLocked(css: string, file: string, covered: (className: string) => boolean): string[] {
   const LOCKED = /:disabled|\[disabled\]|\[aria-disabled|\[data-offline-disabled\]|\[data-following-disabled\]|data-held-look/;
-  const PAINT = /(?:^|;)\s*(?:background(?:-[\w-]+)?|color|border(?:-[\w-]+)*|outline(?:-[\w-]+)?|box-shadow|opacity)\s*:[^;]*!important/;
+  // Review 1 of PR #205 (NIT-2): svg paint, filter and the text fill too;
+  // "! important" with a space; a property in any case.
+  const PAINT = /(?:^|;)\s*(?:background(?:-[\w-]+)?|color|border(?:-[\w-]+)*|outline(?:-[\w-]+)?|box-shadow|opacity|fill|stroke|filter|-webkit-text-fill-color)\s*:[^;]*!\s*important/i;
   const found: string[] = [];
   for (const { selector, body } of cssRules(css)) {
     if (!PAINT.test(body)) continue;
@@ -1847,11 +1849,14 @@ function importantPaintOnLocked(css: string, file: string, covered: (className: 
       if (/:not\(\.app-slava-restraint\)/.test(one)) continue;
       // Each compound on its own: the locked one may be the subject or an ancestor.
       const compounds = one.replace(/:not\([^)]*\)/g, '').split(/\s*[>+~]\s*|\s+(?![^(]*\))/).filter(Boolean);
-      const hit = compounds.some((compound) => {
-        if (!LOCKED.test(compound)) return false;
-        const classes = [...compound.matchAll(/\.([\w-]+)/g)].map((m) => m[1]);
-        return /^button\b/.test(compound) || classes.some((name) => covered(name));
-      });
+      const buttonish = (compound: string) => /^button\b/.test(compound)
+        || [...compound.matchAll(/\.([\w-]+)/g)].some((m) => covered(m[1]));
+      // The locked compound is the button (or an ancestor of the painted
+      // part), or (review 1 of PR #205, NIT-2) any ancestor is locked and the
+      // subject is a button or a covered class (`fieldset:disabled .x-button`).
+      const subject = compounds[compounds.length - 1] ?? '';
+      const hit = compounds.some((compound) => LOCKED.test(compound) && buttonish(compound))
+        || (compounds.some((compound) => LOCKED.test(compound)) && buttonish(subject));
       if (hit) found.push(`${file}: ${one.replace(/\s+/g, ' ')}`);
     }
   }
@@ -2098,6 +2103,17 @@ describe('GM r24 item 2 and PR #200 answer 6: a disabled button is neutral grey 
       ['.proposal-bar__button:is(:disabled, [aria-disabled=\'true\']) > svg { color: red !important; }', true],
       ['.proposal-bar__button:not(:disabled):hover { background: #555 !important; }', false],
       ['.some-uncovered-thing:disabled { color: red !important; }', false],
+      // Review 1 of PR #205 (NIT-2): the forms that slipped through.
+      ['.proposal-bar__button:disabled svg { fill: red !important; }', true],
+      ['.proposal-bar__button:disabled svg { stroke: red !important; }', true],
+      ['.proposal-bar__button:disabled { filter: brightness(2) !important; }', true],
+      ['.proposal-bar__button:disabled { -webkit-text-fill-color: red !important; }', true],
+      ['.proposal-bar__button:disabled { background: red ! important; }', true],
+      ['.proposal-bar__button:disabled { BACKGROUND: red !IMPORTANT; }', true],
+      ['fieldset:disabled .proposal-bar__button { background: red !important; }', true],
+      ['fieldset:disabled button { color: red !important; }', true],
+      ['fieldset:disabled .some-uncovered-thing { color: red !important; }', false],
+      ['.proposal-bar__button:disabled { fill: red; }', false],
     ];
     for (const [css, caught] of cases) expect(importantPaintOnLocked(css, 'zz_cases.css', covered).length > 0, css).toBe(caught);
   });

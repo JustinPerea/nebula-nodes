@@ -302,3 +302,394 @@ updated. SKILL.md has no copy of either. Nothing else agent-visible.
    save, a personal agent's while busy) counts as locked, so a switch the
    person just turned on shows the locked look until the save answers.
    Right, or should a save in flight keep the on look?
+
+GM answered all six on PR #205 (round 1, below): keep 1 and add the anchor;
+2 yes, but the key-press refusals drop "Couldn’t …"; 3 "the shots"; 4 keep
+the drop; 5 fine; 6 the held rule.
+
+# Round 2 (PR #205, GM's round 1 answers)
+
+## 1. The Remotion anchor keeps a locked selected mark
+
+A locked chosen anchor now has the shared grey selected mark (border and a
+1 px inset ring in `--sr-disabled-ink`), as the variation, the chip and the
+cover choice do. Without the mark, the chosen cell went transparent like
+the others, so you couldn't tell which one was chosen. The rest of the cell
+keeps the locked cell's look (unfilled, no extra dimming). It is pinned in
+`selectedNotDisabled.r39` as the fourth reviewed mark.
+
+## 2. Key-press refusals: the lock line alone
+
+`runLockedLine` and `runLockedWiresLine` now return only the lock line:
+- "You can delete “Brief” when the run finishes."
+- "You can delete “A”, “B” and “C” when the run finishes." (the name-list
+  helper; "the node" with no name, "3 nodes" with no names)
+- "You can undo when the run finishes." and "You can redo …"
+- "You can delete the connection when the run finishes." ("the 2
+  connections" for several)
+
+The add refusal is "You can add “Text Input” when the run finishes." and,
+during an import, "… when the import finishes.". It now goes out through
+`refuseAdd`, so no "Couldn't add" heading comes before it. `addIt` has left
+the table.
+
+## 3. Generate all
+
+"You can generate the shots when the run finishes." (`generateShots`).
+During an import it is disabled too, and now says "You can generate the
+shots when the import finishes." (before, it fell back to its enabled
+title).
+
+## 4. Kept as built
+
+The drop when a newer edit lands during the Delete, and the 15 s give-up.
+
+## 5. The held switch
+
+`SettingsSwitch` in `panels/settings/Switch.tsx` is one switch for every
+Settings switch (`SwitchRow` uses it). With `saving`:
+- The caller shows the person's new position.
+- The switch is held through `useHeldLook`: aria-disabled at once, and
+  `data-held-pending` for 150 ms, which the shared switch rule now skips
+  (`:not([data-held-pending])`), so it keeps its enabled look.
+- After 150 ms it gets `data-held-look` and the locked look, with the thumb
+  where the person put it.
+- A press while it is held does nothing.
+- `disabled` stays a lock of its own (the locked look at once).
+
+Where it's used:
+- **Demo zoom telemetry** (Storage). It shows the value being saved while
+  the PUT is out (`telemetryTo`). A failed save shows the saved value
+  again.
+- **Personal agents** (both switches). The switch the person pressed shows
+  its new position (`switching`). Every switch in the section is held while
+  the section is busy, so a quick save greys none of them (before, all of
+  them went grey at once). The section's `run` now awaits the list reload
+  before the hold ends, so the switch never flips back to its old position
+  between the save and the reload.
+
+Both paths are tested in Settings and ChatPanel.personal (slow: held, then
+locked, then enabled again; quick: no grey ever; failed: put back), plus the
+cascade in lockLines.pr205r1.
+
+## 6. A reason already on screen is no tooltip
+
+This is a rule of the helper, `canvasLock`'s `shown` option, not a
+one-off. A control passes the line it sits beside (its id and text). When
+the reason the lock would give as its tooltip is that text, whichever lock
+gave it, the control gets no `title` and `aria-describedby` points at the
+line. Any other reason keeps its tooltip: following, offline, a different
+line, an enabled control. It is applied in `act`, so `lockedAction`, which
+starts from `act`, keeps it. Users:
+- **The deferred run notice's [Run].** [Dismiss] shows, sits on top and is
+  enabled (live check: elementFromPoint at its centre is [Dismiss]).
+- **Cinema's Generate shot and Generate N**, beside the line under their
+  row (shared inputs, or a reference issue).
+
+The Canvas actions panel's group line is not the Load, Import and Clear
+tooltips (each names its own verb), so those keep theirs.
+
+## 7. The lines left alone, on the pattern
+
+`lib/runLock` now has `LOCK_WAITS` (run, import, preparing, grade,
+otherRun, runningShots) and `lockLine(verb, wait | { finishes })`.
+`runFinishesLine` is `lockLine(verb, 'run')`.
+- **Cinema shared inputs** (the line under Generate shot and Generate N):
+  "You can generate this shot when the other run finishes or after you stop
+  it."; during an import, "You can generate this shot when the import
+  finishes."
+- **Cinema's shot lines**, each by its control's verb:
+  - The shot's ×: "You can remove “Shot 2” when it finishes." GM's line said
+    "generate this shot", but the control is the ×, which removes the shot
+    (question 1).
+  - The Delete over several scenes: "You can delete them when the running
+    shots finish."
+  - The scene's own Delete, also GM r3's and on the same pattern: "You can
+    delete “Opening” when it finishes."
+  - "Stop the run first." / "Stop the runs first." stay. They already say
+    what unlocks (question 2).
+- **The import:**
+  - Canvas actions: the group line, plus each control's own: "You can load
+    a canvas when the import finishes.", "You can import a canvas …",
+    "You can clear the canvas …", "You can save the canvas …".
+  - The canvas Run: "You can run the graph when the import finishes."
+  - A video result's Edit: "You can edit this video result when the import
+    finishes."
+  - Create's thrown refusal, as a standalone line: "You can start the
+    generation when the import finishes."
+- **The preparation:** the same Canvas actions controls, "… when Nebula
+  finishes preparing the run."
+- **Commons:** a save refused while a grade is being written: "You can save
+  this review when the grade finishes."
+- **deleteProviderRecovery** (a thrown refusal, no single control): "You
+  can forget the recovery safeguard when the run finishes.", standalone.
+
+Not moved:
+- The backend's agent refusals, as ruled.
+- Run-blocked refusals that explain what is running: "Couldn’t undo. It
+  would remove “Shot 2”, which is still running. Stop the run first." and
+  the scene's "Couldn’t delete “Scene”. “Shot 2” is still running. …". The
+  backend's 409 says the same words (main.py `_removal_person_line`), so a
+  frontend-only change would split them (question 3).
+- Lines outside GM's list: "Wait for this result to sync with the backend"
+  (a model node's next step before its id syncs), "Wait for reference
+  uploads to finish before generating." (Cinema), and canvasFollow's "Wait
+  for “X” to open." (GM's own).
+
+MCP-SETUP.md's run-lock and shot × paragraphs quote the new lines.
+
+## 8. CI on f6a793de: graphStore.fix16
+
+Two tests failed in CI: "nothing unsaved: the person’s delete and Undo …"
+and "400: the clash prompt is the only line …". The cause is a race in the
+test harness, not a product regression:
+- The fake backend marks n1 deleted when the DELETE arrives, echoes, then
+  answers 2 ms later. The tests waited for `h.state.deleted` and then
+  pressed Undo (or restored from another window). On a slow runner that
+  falls between the backend recording the Delete and this tab getting its
+  answer.
+- The earlier test, "the values the same once it is back", restores the
+  node from another window in that window. Its delete step then waits for
+  an echo that can't come, stays in flight until the 15 s limit, and leaks
+  into the next tests (module state). In "nothing unsaved" the leaked step
+  leaves the Delete's own step with a snapshot that lacks n1, so the held
+  Undo finds nothing to change and is dropped ("Nothing was undone …").
+- The LOW-2 test then fails behind it.
+
+Reproduced by widening the backend's 2 ms in a scratch copy:
+- 38bb573a (before round 1): 3 tests fail at 4 ms, 4 at 5–60 ms, the same
+  two among them.
+- f6a793de: 1 at 4 ms, 3 at 5–60 ms.
+
+So this is not round 1's held Undo: the base fails at least as easily,
+where its Undo is refused outright.
+
+The fix:
+- The tests wait for the Delete's answer in this tab, not only for the
+  backend to record it. `deleteAnswered` waits until the delete's step
+  leaves flight, using `stepInFlightForTests`, a read-only test hook in
+  graphStore.
+- fix17 and fix18 had the same pattern; each now waits the same way.
+- With the fix, fix16 passes at 2, 4, 8, 60 and 200 ms; fix16+17+18 pass
+  28/28.
+
+Product note: a delete whose node another window restores before the
+answer arrives keeps its step in flight for 15 s. That is pre-existing and
+unchanged here (question 4).
+
+## Round 2 questions for GM
+
+1. The shot's ×: "You can remove “Shot 2” when it finishes." Your line said
+   "generate this shot when “Shot 2” finishes", but this control removes
+   the shot and Shot 2 is the shot itself. Right, or other words?
+2. "Stop the run first." / "Stop the runs first." (a Stop is here) stay as
+   they are. Do they move to "You can … after you stop the run."?
+3. The refusals that explain what is running ("Couldn’t undo. It would
+   remove “Shot 2”, which is still running. Stop the run first.") stay,
+   since the backend's 409 shares their words. Leave them?
+4. A delete whose node another window restores before its answer keeps a
+   held Undo waiting up to 15 s (seen in the fix16 race). Worth a fix of
+   its own?
+
+# Round 2, continued (review 1 of PR #205, GM's r2 answers)
+
+## 9. Held undo (review 1)
+
+- **LOW-1, a Delete partly refused.** `putBackFailedDeletes` now takes the
+  refused nodes out of the step's removed set (`forgetRemoved`, through
+  the successor chain). The restore and both bring-back lines name only
+  what left. A multi-node Delete brings its refused nodes back only once
+  every DELETE has answered, so the give-up can't fire with a node already
+  back. The reviewer's give-up variant can't happen; the line is true when
+  it is said.
+- **LOW-2, the intermittent live failure.** The harness now records when
+  each DELETE's answer reached the page (CDP `Network.responseReceived`).
+  An answer under 14 s is judged as "no bring-back line". One after 15.5 s
+  is judged as the give-up order, and one in between only by its end
+  state. The order in the product: only `giveUpHeld` (the 15 s timer) and
+  a refused restore write the bring-back line, and the failing run sent no
+  restore. That is the give-up, after the answer slipped past 15 s under
+  load. With GM r2 item 1 (below), both orders now end on the same screen.
+- **LOW-3 → GM r2 item 2**, below.
+- **NIT-1, a press handed on from its Delete.** When the `changesNothing`
+  branch hands a held press to the step below, its `onDelete` is
+  recomputed for that step (`isDeleteInFlight(below)`). A refused restore
+  of the edit below now says "Couldn’t undo …", not the bring-back line.
+  Test: two Deletes and two presses; a plain sync puts the first node back
+  as it was, so its step changes nothing. The mutant without the fix fails
+  it. `giveUpHeld`'s `pressTarget(front) === step` conjunct can't fail:
+  `waitFor` sets `heldFor` to the front press's target, and the timer
+  checks `heldFor === step`. With the fix, `onDelete` always matches that
+  target. The conjunct stays as a guard; its mutant is equivalent.
+- **NIT-2, round11 cascades.** Its `afterEach` answers every DELETE still
+  on its way, then `forgetHeldHistoryForTests()` (the canvas-replacement
+  reset, `forgetStepsInFlight`). Proof: a scratch copy whose first test
+  hangs mid-hold (1.5 s timeout). Old `afterEach`: 12 of 14 failed. New:
+  only the hang (13 of 14 pass).
+- **NIT-3**: the PR body says 64 restored tests (64 of 146 fail on base).
+
+## 10. GM r2 item 1: a late refusal after the give-up
+
+The give-up line records its notice id (`giveUpShown`). When that step's
+Delete answers with a refusal, `giveUpTakeover` runs after the answer's own
+lines are written. It puts the newest of them in the give-up line's place,
+with the same notice and the same id, and puts the other place back as it
+was. With no line of its own, the give-up line just goes. A late ok
+doesn't take over: the node is still off and Undo does bring it back. Its
+"Deleted the node." (with Undo) replaces the line as before, also true.
+Tests cover both places (the undo notice; the message beside an error) and
+the late ok. Live: `giveuprefused`, the give-up at 15 s, then the Delete's
+line in notice 12, alone.
+
+## 11. GM r2 item 2: the newest synced copy
+
+`carrySyncedCopy` writes the copy Nebula synced while a node's Delete was on
+its way (`heldCopies`, review 17's M-2) into the Delete's step and the steps
+re-pushed in its place. The held Undo and an Undo pressed later both restore
+from that step, so one change fixes both paths, main's included. It isn't a
+follow-up; it's about 40 lines.
+
+The live check found a second gap. The real backend syncs its graph without
+the node after the agent's sync and before the DELETE's answer, and that
+sync replaced the copy with "gone". When a sync shows a node gone while its
+Delete is on its way, the copy it had now goes into the step first
+(`noteHeldCopies`). The FakeNebula tests send the syncs in that order now;
+the mutant without the fix fails both. Live: `agentedit` (held) and
+`agenteditafter` (main's path): "Agent renamed"/AGENT on the canvas and in
+Nebula, one restore.
+
+Not carried: wires an agent drew to the node while its Delete was on its
+way. The restore brings back the step's wires, as before.
+
+## 12. GM r2 item 3: the command palette
+
+- The items are "Run canvas", "Save canvas" and "Load canvas". "graph"
+  stays as a search keyword.
+- `PaletteContext.running`: while this tab's run goes (or starts), a row
+  the run locks carries `lockLine` ("You can run the canvas when the run
+  finishes.", "You can save the canvas …", "You can load a canvas …").
+- The row stays in place and disabled. The line is its secondary text
+  (`.command-palette__item-lock`), `aria-describedby` points at it, and
+  `aria-label` is the title alone so the line isn't read twice. There is
+  no tooltip.
+- A canvas lock's own title (following, offline) wins over the line.
+- disabled-buttons.css greys the row and its line with the shared ink at
+  opacity 1. The old 0.4 dimming is overridden, and the keyboard highlight
+  stays.
+- Live: the three rows, ArrowDown-selected, rgba(255, 255, 255, 0.55) at
+  opacity 1 (shot).
+- Other old names, left for GM (question 5): Canvas actions' "Save graph",
+  "Load graph" and "Import CLI graph" (its heading reads "Graph"), and the
+  shortcuts sheet's "Run graph", "Fit the graph" and its "Graph" group.
+  The CLI's help text says "Load graph" for the canvas action.
+  docs/notes are history.
+
+## 13. GM r2 item 4: Cmd+D and Cmd+V
+
+`duplicateSelected` and `pasteClipboard` say their line during a run, in the
+undo notice where Delete's, Undo's and Redo's show:
+- "You can duplicate “Brief” when the run finishes." Several are named by
+  the shared rule, as Delete's are ("“Brief” and “Note”").
+- "You can paste when the run finishes."
+
+Cmd+V with nothing copied stays silent, as it is with no run. The menu and
+toolbar Duplicate controls are disabled with their own titles, as before.
+
+## 14. GM r2 item 5: a wire dropped during a run
+
+Drawing a wire between two nodes isn't run-locked: `onConnect` and
+`isValidConnection` don't read `isExecuting`. So the drag goes on. A drop
+on empty canvas during a run opens no picker. It says "You can add a node
+when the run finishes." (`sayRunLocked`) in the key-press line's place.
+
+A picker already open when a run starts closes on a press and says the same
+line. Live: with no run the same drag opens the picker; during a run there
+is no picker, the line shows, and no wire is drawn (shot).
+
+## 15. Review 1's lock-line NITs
+
+- **NIT-1, the selected ratchet.** `SELECTED` now also matches `.is-active`
+  (and `.is-selected` and the like), `--checked`, `--pressed`, `--current`
+  and `[data-state|checked|pressed]`. `DISABLED_TOKEN` matches
+  `--(sr-)disabled-opacity*`. `DISABLED_VALUE` matches either rgb() syntax
+  with a fraction or a percentage. There are 12 crafted cases, the
+  reviewer's survivors among them, plus the same with a lock and an
+  enabled look. No new offenders in the app.
+- **NIT-2, the !important ratchet.** `PAINT` gains `fill`, `stroke`,
+  `filter` and `-webkit-text-fill-color`, matches `! important` and
+  ignores case. It also counts a locked ancestor of any kind when the
+  subject is a button or a covered class (`fieldset:disabled
+  .proposal-bar__button`). There are 10 new cases, 2 of them negatives.
+  No new offenders.
+- **NIT-3, the deferred notice's exit.** It keeps the line it last showed
+  through its exit: "now", with [Run] enabled. The freeze is keyed on
+  `deferredRun` itself, because on the render where it goes, useLeave
+  hasn't marked it leaving yet; the first try overwrote the frozen line on
+  that render.
+- **NIT-4, Canvas actions.** Round 2 item 7 had already given a Create
+  launch its own wait ("when Nebula finishes preparing the run") on Load,
+  Import, Clear and the group line. What was left: with both a run and a
+  launch going, the group line said "preparing" while each control said
+  the run. The run now leads.
+
+## Round 2, continued: questions for GM
+
+5. "Graph" left elsewhere: Canvas actions' "Save graph", "Load graph" and
+   "Import CLI graph" under a "Graph" heading, and the shortcuts sheet's
+   "Run graph", "Fit the graph" and "Graph" group. Rename them to canvas,
+   as the palette now is?
+6. The palette's Run, Save and Load locked by an import or a Create launch
+   (not a run) are disabled with no line, as before. Should they say the
+   import's or the preparation's line the same way?
+7. On this skin the palette's keyboard highlight (`rgba(0, 0, 0, 0.06)` on
+   the near-black panel) is barely visible on any row, locked or not
+   (pre-existing; see the palette shot). Worth its own fix?
+
+## Round 2 proof
+
+- **tsc -b and lint:** rc 0.
+- **vite build and the budget:** pass; 444,836 B raw, 136,619 B gzip.
+- **Full vitest** (maxWorkers 4, load average 17–45): 8,626 tests in all.
+  - 4 failed: a 300 s timeout in the round-17 property test (31 s alone),
+    and 3 load flakes (the ratchet, modalStyles.round11, NodeLibrary).
+  - 1 worker failed to start (graphStore.connectedStep).
+  - Each of those passes alone: 84/84, 9/9, 35/35.
+  - The run before the last test edits found 4 real failures, now fixed,
+    each one this round's ruled change:
+    - round21Store: `sayRunLocked` is listed as not an edit.
+    - round23Surfaces: Save canvas is a look-only row.
+    - errorCopy.namedLine: three reviewed "Couldn’t …" run-lock lines are
+      gone since answer 2.
+    - agentPresenceFollowups.r1: Generate shot's reason line is on screen,
+      so no tooltip, with aria-describedby (r1's rule).
+- **New and changed tests on f6a793de:** 27 fail.
+  - heldUndo.pr205r2: 6/6 (they also need the new test hook).
+  - heldUndoSyncedCopy: 4/5 (not the control).
+  - lockLines.pr205r2: 12/15 (not the no-run controls).
+  - ChatPanel.personal: 2.
+  - agentPresenceFollowups.r1: 1.
+  - selectedNotDisabled: 2.
+  - The ratchet case tables pass on the base by design, since they test
+    the test's own patterns; their mutants carry the proof.
+- **Mutation:** 71 mutants (round 2's 37, and 34 for this part) on each
+  guard's own files, with --retry=2, counted against a clean baseline
+  (0 failures).
+  - The first pass killed 67. Four survived, each missing a test:
+    - cinemaNoShown: its test is agentPresenceFollowups.r1.
+    - agentsNoAwaitReload: added "the hold lasts until the reload
+      answers".
+    - carryOff: added the order where the Delete answers before the
+      "gone" sync.
+    - paletteGreyOff: it mutated the aria branch the rows don't use; now
+      the `:disabled` branch, read through the cascade on a rendered row.
+  - Rerun: all 4 killed, so 71/71.
+  - The Canvas drop guard was mutated live: without it, the picker opened
+    and no line showed (FAIL); with it, PASS.
+  - The equivalent mutant (`pressTarget(front) === step`) is explained in
+    section 9.
+- **Live** (8797/5797, isolated, canary to 8001 refused, 0 reached
+  8000–8010/5173): 25/25 on the final code.
+  - Covered: deferred, keypress, switch, heldundo (text and scene),
+    restorefail, refused (answered in 830 ms), giveuprefused, agentedit,
+    agenteditafter, palette, wiredrop, duplicate (Cmd+D, Cmd+V) and giveup.
+  - 17 shots in scratchpad/lock-lines/shots2/; md5 `uniq -d` is empty.

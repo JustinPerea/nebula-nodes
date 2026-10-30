@@ -60,12 +60,8 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
     why: "GM's own World Labs line: the tail is a fixed sentence" },
   { file: 'lib/worldLabsWaiting.ts', text: '`Couldn\'t delete them. ${waiting} waiting on World Labs. Check Marble, then ${then}`',
     why: "GM's own World Labs line: the interpolations are its fixed words" },
-  // GM r39 item 2: the tail is the lock's own "You can <verb> when the run finishes." (lib/runLock).
-  { file: 'lib/cinemaScene.ts', text: '`Couldn’t ${action}. ${runFinishesLine(RUN_LOCK_VERBS[action])}`', why: 'GM\'s run-lock line: the tail is a fixed sentence' },
-  { file: 'lib/cinemaScene.ts', text: '`Couldn’t delete ${what}. ${runFinishesLine(several ? RUN_LOCK_VERBS.deleteThem : RUN_LOCK_VERBS.deleteIt)}`',
-    why: 'GM\'s run-lock line: the tail is a fixed sentence' },
-  { file: 'lib/cinemaScene.ts', text: '`Couldn’t delete ${count === 1 ? \'the connection\' : `${count} connections`}. ${runFinishesLine(count === 1 ? RUN_LOCK_VERBS.deleteIt : RUN_LOCK_VERBS.deleteThem)}`',
-    why: 'GM\'s run-lock line for wires: the tail is a fixed sentence' },
+  // GM r39 item 2's "Couldn’t …. You can …" run-lock lines are gone: PR #205 r1 answer 2 made
+  // the key-press refusals the lock line alone (lib/cinemaScene runLockedLine), no heading.
   { file: 'store/graphStore.ts', text: '`${heading} ${REFUSED_FALLBACK_COPY}`', why: 'the fixed fallback after a heading' },
   { file: 'store/graphStore.ts', text: '`${heading} ${err.raw}`', why: "the Agent log's raw form (agents read the raw text)" },
   { file: 'lib/cinemaScene.ts', text: '`Couldn’t delete “${scene}”. ${text} ${several ? \'are\' : \'is\'} still running. ${shots.stoppable ? STOP_FIRST : WAIT_FOR_IT}`',

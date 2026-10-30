@@ -10,11 +10,12 @@ import { nodeNameList } from './errorCopy';
  * - Context-menu rows (and the Inspector's and the selection toolbar's,
  *   which act the same way): the row's verb plus "it" ("them" for a
  *   selection of several nodes).
- * - Cinema's Generate, a model node's next step, Run history's Forget,
+ * - Cinema's Generate all, a model node's next step, Run history's Forget,
  *   Auto-layout, Load, Import and Clear: GM's words.
- * - The rest are the builder's, on GM's pattern, for GM to confirm: Save,
- *   Run history's Clear, Arrange (the selection's), Undo and Redo, and the
- *   add-a-node refusal.
+ * - Save, Run history's Clear, Arrange (the selection's), Undo and Redo:
+ *   on GM's pattern, confirmed in PR #205 r1.
+ * The waits other than the run (an import, preparation, a grade, Cinema's
+ * other run and running shots) are LOCK_WAITS below, the same sentence.
  */
 export const RUN_LOCK_VERBS = {
   runIt: 'run it',
@@ -25,6 +26,9 @@ export const RUN_LOCK_VERBS = {
   deleteThem: 'delete them',
   arrangeThem: 'arrange them',
   generateShot: 'generate this shot',
+  /** Cinema's toolbar "Generate all" (GM PR #205 r1 answer 3). */
+  generateShots: 'generate the shots',
+  runGraph: 'run the graph',
   forgetRun: 'forget this run',
   arrangeCanvas: 'arrange the canvas',
   loadCanvas: 'load a canvas',
@@ -32,22 +36,58 @@ export const RUN_LOCK_VERBS = {
   clearCanvas: 'clear the canvas',
   saveCanvas: 'save the canvas',
   clearRunHistory: 'clear the run history',
-  addIt: 'add it',
   undo: 'undo',
   redo: 'redo',
+  /** Cmd+V during a run (GM PR #205 r2 item 4). */
+  paste: 'paste',
+  /** A wire dropped on empty canvas during a run (GM PR #205 r2 item 5). */
+  addNode: 'add a node',
+  /** The command palette's rows (GM PR #205 r2 item 3). */
+  runCanvas: 'run the canvas',
 } as const;
 export type RunLockVerb = typeof RUN_LOCK_VERBS[keyof typeof RUN_LOCK_VERBS];
+
+/**
+ * GM, PR #205 round 1: every lock reason says what unlocks it, in one
+ * pattern, "You can <verb> <when>.", with the control's own verb (or, for a
+ * thrown refusal with no single control, the refused action). These are the
+ * waits a control can name; `lockLine` is the one place the sentence is
+ * built.
+ */
+export const LOCK_WAITS = {
+  /** This tab's run (GM r37, r39). */
+  run: 'when the run finishes',
+  /** A graph import (GM PR #205 r1). */
+  import: 'when the import finishes',
+  /** Generation preparation (Create's launch; GM PR #205 r1). */
+  preparing: 'when Nebula finishes preparing the run',
+  /** Commons: a grade still being written (GM PR #205 r1). */
+  grade: 'when the grade finishes',
+  /** Cinema: another run holds the shot's shared inputs (GM PR #205 r1). */
+  otherRun: 'when the other run finishes or after you stop it',
+  /** Cinema: the scenes' shots still rendering (GM PR #205 r1, after r4). */
+  runningShots: 'when the running shots finish',
+} as const;
+export type LockWait = keyof typeof LOCK_WAITS;
+
+/** "You can <verb> <when>.": a wait from the table, or a named thing still
+ * running ("when “Shot 2” finishes", GM PR #205 r1 after r3). */
+export function lockLine(verb: string, wait: LockWait | { finishes: string }): string {
+  const when = typeof wait === 'string' ? LOCK_WAITS[wait] : `when ${wait.finishes} finishes`;
+  return `You can ${verb} ${when}.`;
+}
 
 /** GM r37: "You can rerun it when the run finishes." Any verb: Run history's
  * replays pass their offline verbs ("rerun it", "retry it", "recover it"). */
 export function runFinishesLine(verb: string): string {
-  return `You can ${verb} when the run finishes.`;
+  return lockLine(verb, 'run');
 }
 
 /** The canvas actions panel's one line over its Graph group while a run
  * holds it (Save, Load, Import and Clear each say their own verb too). The
  * builder's, on GM's pattern, for GM to confirm. */
-export const RUN_LOCKED_FILES_LINE = runFinishesLine('save, load, import or clear the canvas');
+export const FILES_VERB = 'save, load, import or clear the canvas';
+export const RUN_LOCKED_FILES_LINE = runFinishesLine(FILES_VERB);
 
 /** "it" for one node, "them" for several: a selection's own verb. */
 export function itOrThem(count: number, one: RunLockVerb, several: RunLockVerb): RunLockVerb {
