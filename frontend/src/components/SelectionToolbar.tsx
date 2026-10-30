@@ -9,11 +9,11 @@ import {
   StickyNote,
   Trash2,
 } from 'lucide-react';
-import { useGraphStore } from '../store/graphStore';
+import { sceneDeleteDisabledTitle, useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
 import { useCanvasPinsStore } from '../store/canvasPinsStore';
 import { isBackendNodeId } from '../lib/canvasPins';
-import { describeRunScope, runChipLabel, summarizeRunScope } from '../lib/runScope';
+import { describeRunScope, runChipLabel, runChipTitle, summarizeRunScope } from '../lib/runScope';
 import { usePricingStore } from '../store/pricingStore';
 import { useInputSizeStore } from '../store/inputSizeStore';
 import { setSelectionActionSlot } from '../lib/selectionActionSlot';
@@ -23,11 +23,7 @@ import {
   selectedNodeIds,
 } from '../lib/canvasSelection';
 import { failureMessage } from '../lib/errorCopy';
-import { useCanvasLock } from '../lib/canvasLock';
-
-
-/** A run going: the lock reason after kept, before following (GM r16, 4). */
-const RUN_GOING = 'Wait for the active run to finish';
+import { useCanvasLock, type LockOwn } from '../lib/canvasLock';
 
 export function SelectionToolbar() {
   const nodes = useGraphStore((state) => state.nodes);
@@ -40,11 +36,15 @@ export function SelectionToolbar() {
   // Note, Duplicate, Arrange and Delete are disabled and look it, with "Wait
   // for “<project>” to open." while following; Copy, Download and the
   // node's Settings stay. While the canvas is kept after a restore (GM r16
-  // and r17 on PR #199) what writes to Nebula or spends is disabled, each
+  // to r18 on PR #199) what writes to Nebula or spends is disabled, each
   // with its own "You can … after you save it as a project."; Copy,
-  // Download, Settings and Duplicate (its copies stay on this tab, as
-  // typing does) stay.
+  // Download, Settings, Duplicate, Arrange and Delete stay (they change only
+  // this tab, as typing does, and Undo takes them back: graphStore KeptStep).
   const lock = useCanvasLock();
+  // A control this tab's own run also locks (#198's run lock): its reason
+  // wins over following's and offline's, in lib/canvasLock (GM r9 answer 3:
+  // run, follow, offline; the Next step its node portals here reads the same).
+  const runLocked = (running: boolean, own: LockOwn) => lock.act(own, { run: running });
   const executeNode = useGraphStore((state) => state.executeNode);
   const executeCluster = useGraphStore((state) => state.executeCluster);
   const copySelected = useGraphStore((state) => state.copySelected);
@@ -59,6 +59,9 @@ export function SelectionToolbar() {
 
   const selectedNodes = useMemo(() => nodes.filter((node) => node.selected), [nodes]);
   const ids = useMemo(() => selectedNodeIds(nodes), [nodes]);
+  // Every selected node a scene with a shot rendering: nothing to delete yet
+  // (GM, PR #198 r3 item 1). With others selected, Delete takes the rest.
+  const sceneHeld = useGraphStore((state) => sceneDeleteDisabledTitle(state, ids));
   const outputCount = useMemo(
     () => collectDownloadableOutputs(selectedNodes).length,
     [selectedNodes],
@@ -157,14 +160,14 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button selection-toolbar__button--primary"
         onClick={runSelection}
-        {...lock.act({ disabled: isExecuting || runStarting, title: `Run selected nodes. ${describeRunScope(runScope)}`, kept: 'run' })}
+        {...runLocked(isExecuting || runStarting, { title: `Run selected nodes. ${describeRunScope(runScope)}`, kept: 'run' })}
         aria-label="Run selected nodes"
         aria-describedby={runScopeId}
       >
         <Play size={17} fill="currentColor" aria-hidden="true" />
         <span>Run</span>
         {runChip && (
-          <span className="selection-toolbar__paid" aria-hidden="true">{runChip}</span>
+          <span className="selection-toolbar__paid" aria-hidden="true" title={runChipTitle(runScope)}>{runChip}</span>
         )}
       </button>
       <span id={runScopeId} className="toolbar__sr-only">{describeRunScope(runScope)}</span>
@@ -181,7 +184,7 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button"
         onClick={duplicateSelected}
-        {...lock.act({ busy: isExecuting ? RUN_GOING : null, title: 'Duplicate selected nodes', kept: 'live' })}
+        {...runLocked(isExecuting, { title: 'Duplicate selected nodes', kept: 'live' })}
       >
         <Files size={17} aria-hidden="true" />
         <span className="selection-toolbar__label--compact">Duplicate</span>
@@ -190,7 +193,7 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button"
         onClick={autoLayoutSelected}
-        {...lock.act({ disabled: ids.length < 2, busy: isExecuting ? RUN_GOING : null, title: 'Arrange selected nodes', kept: 'arrange' })}
+        {...runLocked(isExecuting, { disabled: ids.length < 2, title: 'Arrange selected nodes', kept: 'live' })}
       >
         <LayoutGrid size={17} aria-hidden="true" />
         <span className="selection-toolbar__label--compact">Arrange</span>
@@ -217,7 +220,7 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button selection-toolbar__button--danger"
         onClick={removeSelection}
-        {...lock.act({ busy: isExecuting ? RUN_GOING : null, title: 'Delete selected nodes', kept: 'delete' })}
+        {...runLocked(isExecuting, { disabled: sceneHeld !== null, title: sceneHeld ?? 'Delete selected nodes', kept: 'live' })}
         aria-label="Delete selected nodes"
       >
         <Trash2 size={17} aria-hidden="true" />

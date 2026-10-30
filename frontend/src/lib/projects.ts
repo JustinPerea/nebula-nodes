@@ -64,6 +64,10 @@ export interface CatalogRestore {
   /** Found in the damaged file but not put back; `name` when it could be read. */
   notAddedBack?: { id: string; reason: string; name?: string; trashed?: boolean }[];
   notAddedBackCount: number;
+  /** Of those, the readable ones left out because the list was at its
+   * project limit (reason "limit"), and that limit (GM r18 on PR #199, Q5). */
+  notAddedBackLimitCount?: number;
+  projectLimit?: number;
   /** What the copy decided (review 1 of PR #199, M1): (a) back to the copy's
    * version (`liveCanvas`: the open project, whose graph came from the live
    * canvas), (b) deleted after the copy and back, (c) restored after the copy

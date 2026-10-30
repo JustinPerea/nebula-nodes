@@ -9,7 +9,8 @@ import { ScrollFade } from '../ScrollFade';
 import { ForgetRecoveryConfirm } from './ForgetRecoveryConfirm';
 import { FORGET_LABEL, FORGET_TITLE, forgetAriaLabel, recordNodeName, recoveryIdLabel } from '../../lib/worldLabsWaiting';
 import { FORGET_RECOVERY_HEADING } from '../../lib/api';
-import { failureMessage } from '../../lib/errorCopy';
+import { failureMessage, OFFLINE_RECOVER, OFFLINE_RERUN, OFFLINE_RETRY } from '../../lib/errorCopy';
+import { runFinishesLine } from '../../lib/useBackendOffline';
 import { showNotice } from '../../lib/canvasNotice';
 import type { PaperSourceRecord } from '../../lib/paperSource';
 import {
@@ -22,7 +23,7 @@ import {
 } from '../../lib/runHistory';
 import '../../styles/panels.css';
 import '../../styles/run-history.css';
-import { useCanvasLock } from '../../lib/canvasLock';
+import { lockedAction, useCanvasLock } from '../../lib/canvasLock';
 
 const STATUS_LABEL: Record<RunRecord['status'], string> = {
   running: 'Running',
@@ -57,8 +58,6 @@ export function RunHistoryPanel() {
   // agent's switch (GM round 22, A: one state, lib/canvasLock): Rerun,
   // Retry, Recover and Forget ID are disabled and look it.
   const lock = useCanvasLock();
-  const locked = lock.locked;
-  const off = lock.mark;
 
   const [now, setNow] = useState(() => Date.now());
   const [clearingRecovery, setClearingRecovery] = useState<string | null>(null);
@@ -120,7 +119,7 @@ export function RunHistoryPanel() {
           </button>
           <button
             type="button"
-            className="panel__header-action run-history__action"
+            className="panel__header-action run-history__action run-history__action--clear"
             onClick={clearRunHistory}
             disabled={runHistory.length === 0
               || isExecuting
@@ -173,15 +172,15 @@ export function RunHistoryPanel() {
                     {checkpoint.durable !== false && (
                       <button
                         type="button"
+                        className="run-history__forget"
                         onClick={() => setConfirmingForget({ runId: checkpoint.runId, nodeId: checkpoint.nodeId })}
-                        disabled={isExecuting || clearingRecovery === key || locked}
-                        {...off}
+                        // Review 7, L5: canvasLock's order (run, then
+                        // following, then offline); GM, round 15 of PR #114's title.
+                        {...lock.act({ disabled: clearingRecovery === key, title: FORGET_TITLE, kept: 'unlock' }, { run: isExecuting })}
                         // GM, round 14: its name says which ID it forgets;
                         // its row (node and ID) stays its description.
                         aria-label={forgetAriaLabel(recordNodeName(nodes, checkpoint.nodeId, true))}
                         aria-describedby={`run-history-recovery-${key}`}
-                        // GM, round 15 of PR #114.
-                        title={FORGET_TITLE}
                       >
                         <ShieldCheck size={11} aria-hidden="true" />
                         {clearingRecovery === key ? 'Clearing…' : FORGET_LABEL}
@@ -262,18 +261,21 @@ export function RunHistoryPanel() {
                           if (r.status === 'failed') void retryFailedRun(r.id);
                           else void rerunHistoryRecord(r.id);
                         }}
-                        disabled={isExecuting || locked}
-                        {...off}
+                        // L6 (GM r9 answer 3): one order, as the toolbar's:
+                        // the run, then following, then offline (lib/canvasLock).
+                        // Offline, its own verb (PR #200 review 3 LOW-1; GM
+                        // #200 r4 item 2: "You can rerun it when Nebula reconnects.").
+                        {...lockedAction(lock, { kept: 'run', title: recoveryReplayReady
+                          ? 'Resume this run from its saved checkpoint'
+                          : 'Run this again with the same nodes and settings',
+                        offline: recoveryReplayReady ? OFFLINE_RECOVER : r.status === 'failed' ? OFFLINE_RETRY : OFFLINE_RERUN },
+                        // GM r37: while a run goes, what unlocks it, by its own verb.
+                        { run: isExecuting, runTitle: runFinishesLine(recoveryReplayReady ? OFFLINE_RECOVER : r.status === 'failed' ? OFFLINE_RETRY : OFFLINE_RERUN) })}
                         aria-label={recoveryReplayReady
                           ? `Recover ${runTriggerLabel(r.trigger)} run`
                           : r.status === 'failed'
                           ? `Retry failed ${runTriggerLabel(r.trigger)} run`
                           : `Rerun ${runTriggerLabel(r.trigger)}`}
-                        title={isExecuting
-                          ? 'Wait for the run to finish first.'
-                          : recoveryReplayReady
-                            ? 'Resume this run from its saved checkpoint'
-                            : 'Run this again with the same nodes and settings'}
                       >
                         <RotateCcw size={11} strokeWidth={2} aria-hidden="true" focusable="false" />
                         {recoveryReplayReady ? 'Recover' : r.status === 'failed' ? 'Retry failed' : 'Rerun'}
@@ -282,15 +284,11 @@ export function RunHistoryPanel() {
                         <button
                           type="button"
                           className="run-history__replay"
-                          disabled={isExecuting || !latestSourceReady || locked}
-                          {...off}
+                          {...lockedAction(lock, { kept: 'run', disabled: !latestSourceReady, offline: OFFLINE_RERUN, title: latestSourceReady
+                            ? 'Run again with the same settings and the latest artwork from Paper'
+                            : 'Refresh or reconnect the Paper source first.' }, { run: isExecuting, runTitle: runFinishesLine(OFFLINE_RERUN) })}
                           onClick={() => void rerunHistoryWithLatestPaperSource(r.id)}
                           aria-label={`Rerun ${runTriggerLabel(r.trigger)} with latest source`}
-                          title={isExecuting
-                            ? 'Wait for the run to finish first.'
-                            : latestSourceReady
-                              ? 'Run again with the same settings and the latest artwork from Paper'
-                              : 'Refresh or reconnect the Paper source first.'}
                         >Rerun with latest source</button>
                       )}
                     </span>

@@ -141,7 +141,7 @@ export function KreaSignInRow({ krea, mode }: { krea: KreaController; mode: Krea
                   {busy ? 'Working…' : status === 'connecting' ? 'Restart sign-in' : 'Reconnect'}
                 </button>
                 <button type="button" className="settings__button settings__button--ghost" disabled={busy} onClick={krea.check}>Check connection</button>
-                <button type="button" className="settings__button settings__button--ghost" disabled={busy} onClick={krea.disconnect}>Disconnect</button>
+                <button type="button" className="settings__button settings__button--ghost settings__button--danger" disabled={busy} onClick={krea.disconnect}>Disconnect</button>
               </div>
             )}
             {status === 'connecting' && <p className="settings-hint">Finish signing in in your browser, then come back. If no page opened, use Open Krea sign-in.</p>}

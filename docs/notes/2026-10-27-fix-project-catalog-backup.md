@@ -467,3 +467,59 @@ Supersedes the bullets above where they disagree: `.bak` is now one commit behin
   - DELETE2: a .bak of 4 projects with the limit at 3 restores whole. The home reads "Delete 2 projects and Nebula will save it."; the listing has `deletes` 2 in total and per canvas; the note, `nebula projects` and `nebula context` say "Moving 2 projects"; an agent's create gets 413 with `projectLimit` 3.
   - The first runs failed on the harness: a run through the API gives a file path, not a URL, so there was no Download output, and a click landed on the floating toolbar. They also failed on the product bug above, which is now fixed.
 - **Gates.** Backend full (no -n): 12,175 passed, 71 skipped, 1 failed, the fix1 stub above. After the stub fix, fix1, fix3, fix13 and test_projects pass 108/108 alone. Frontend gate set: 1,178/1,178 across 80 files. Full frontend suite: 7,287/7,287 across 577 files. tsc (app and node), lint and the slava CSS scope check are clean. The build budget is 432,837 bytes raw (limit 512,000).
+
+## Fix round 14 (GM r18)
+
+- **Q3: a kept tab is a full scratch canvas.** Move, delete, duplicate, Arrange, Clear, Undo and Redo change only this tab and send nothing. Only server writes stay disabled with their line.
+  - Kept history: `keptUndo`/`keptRedo` in graphStore, separate from the server `undoStack`/`redoStack`. They start empty when the canvas is kept (only on the first keep) and reset on release, so Undo walks the kept tab's own steps and stops silently at the first kept edit: it never steps into the history Nebula saved. A `KeptStep` holds only what changed (removed nodes and wires with their indices, added nodes, moved positions), so undoing a delete keeps typing done since.
+  - Routing: while kept, the gate wrapper sends `undo`/`redo` to the kept history, `deleteCanvasElements` to `keptRemove`, duplicates to `keptRecordAdd`, and Arrange (`autoLayoutSelected`, `autoLayout`) to `keptRecordMove`, which lays out on the tab and sends no PUT. `deleteSelected`, `deleteNode` and `deleteGeneration` reach the kept branch through the gated `onNodesChange`. React Flow's position changes apply on the tab and the drop becomes one move step; `persistNodePositions` returns early while kept. While the save is on its way, every kept edit is refused with a pulse.
+  - Clear stays live because Undo brings everything back: `clearKeptCanvas` takes every node and wire off as one step. The kept confirm reads "Clear the canvas? N nodes will be removed. Undo brings them back." (builder's copy).
+  - The undo notice's button acts on a kept step only while it is on top of the kept stack; a notice for a saved step shows no button while kept.
+  - Typing is not in kept Undo (text fields keep their own undo), as before. Remotion track items are not pruned by a kept delete.
+- **Q1 list re-checked.** Live, no line: Delete (toolbar, Inspector, context menu, Create's result card), Arrange (selection toolbar and "Arrange nodes"), Clear canvas, Undo/Redo, plus round 13's Duplicate, Copy, Settings and Download. Still disabled with a line (server writes): add-node (`createNodeOnBackend` POSTs `/api/graph/node`), next-step, rewrite, load, proposal, unlock, edit-video, generate, scene, run, note, ask, paste and connect. `KeptAction` drops delete, duplicate, arrange, clear and undo.
+- **Q1 lines.** Unlock: "You can unlock nodes after you save it as a project." The Generate buttons read "Generate" / "Generate all", so its line keeps "generate".
+- **Q2.** The Ask line names the chat's agent without quotes (Codex, Claude) and says "your agent" when none is picked or for a personal agent.
+- **Q4.** `_canvas_not_filed_note` past the limit: "The project list has 4 projects, over the limit of 3. Move 2 to Recently deleted to make room." At the limit: "The project list is at its limit of 3 projects. Move 2 to Recently deleted to make room." MCP and CLI read the same note.
+- **Q5.** Reconcile marks a record it leaves out at the limit `reason: "limit"`; the restore record adds `notAddedBackLimitCount` and `projectLimit`, and the view passes both. The home banner's `leftOutAtLimitLine` uses the shared name list (names up to 3, a count from 4): "“Alpha” and “Beta” weren’t added back because you’ve reached the limit of 500 projects. They’re still in the damaged file, which was kept." It replaces "couldn’t be added back" for those records, "which was kept" is said once, and "may be missing" stays only for what Nebula couldn't read. The listing's own limit wins over the recorded one, and a left-out project that is back in the list drops from the line. Agents read the same fact in `_catalog_restore_note`.
+- **Live check** (8799/5799; 8000-8010 and 5173 blocked; the canary unreachable; 0 blocked requests): 44/44. The 24 round-13 checks, with Arrange and Delete now live; plus a drag move on the tab with Nebula's layout unchanged, Delete with "Deleted the node." and Undo, ⌘Z bringing the node back and then the move, Undo stopping at the first kept edit (the move saved before keep and the typing stay), Clear live, Clear with Undo, Undo after Clear bringing every kept edit back, the unlock line (a World Labs hold staged in the tab's store, no paid run), the Q4 note in the listing, `nebula projects` and `nebula context`, and LEFTOUT2/LEFTOUT4 (a damaged list at limit 3: no record past it, the 2-name and 4-count lines, "may be missing" only for the cut end, agents' plain text).
+- **Gates (round 14, before the merge).** Backend full (isolated): 12,180 passed, 71 skipped. Frontend gate set: 1,195/1,195 across 82 files. Full frontend suite: 7,304/7,304 across 579 files. tsc (app and node), lint and the slava CSS scope check are clean. The build budget is 433,771 bytes raw (limit 512,000).
+
+## Merge of origin/main (#198, #200, #202) into #199 (2026-10-30)
+
+Justin approved kept mode for #199 on 2026-10-30. Round 14 was saved as a patch, the worktree was reset to da2c8703, `git merge --no-commit origin/main` (38bb573a) ran, and then the patch was applied with `--3way` on top. The merge is left staged.
+
+- **canvasLock.** `act(own, { run, runTitle })` serves both sides. `LockOwn.kept` stays required, and `title()` takes `LockTitleOwn` with no `kept`.
+  - The order is the run, then following, then offline, then kept. A control the run lock holds gets only the run's line; following and offline give their marks and lines; then comes the kept line and its mark.
+  - #199's own `busy` (round 12) is gone in favour of #198's run lock.
+  - The store's gate refuses offline before kept, and `refuseCanvasEdit` reads following, offline, then kept.
+  - `lockedAction(lock, own, …)` needs `own` now.
+- **Controls that #198, #200 and #202 added, each with its kept action.**
+  - Scene edits, the scene clash prompt, stop lines and Retry: `scene`.
+  - The deferred Run, Rerun, Recover and "Rerun with latest source": `run`.
+  - Forget ID, in the run history and its confirm: `unlock` (it unblocks a paid run, as "I've checked Marble" does).
+  - Video render, export and final export: `edit-video`.
+  - The Cinema fieldsets' own title: `live`, since the controls inside carry their own lines.
+  - Param edits that stay on this tab, as typing does: `live`. These are the provider switch rows, the Inspector's palette swatches, the chat's Apply, and the mask painter's tools and Save. The chat's Apply and the mask painter's strokes go through the new `refuseTabOnlyEdit()`, which refuses while following, while offline and while the kept save is on its way, so they work while kept.
+- **Disabled looks** come from #198's `disabled-buttons.css`. #199's `.selection-toolbar__button--danger:disabled` (0.45) and its Cinema/Create kept-disabled rules are gone, since the shared rule covers them.
+- **Bottom bar Run.** It keeps `{...lock.mark}` (the ratchet's G check), and the kept mark and line follow following and offline.
+  - The kept Clear now goes through `clearKeptTab()` in lib/keptCanvas, which graphStore registers (`setKeptCanvasClearer`, as `setReplacedCanvasKeeper` does).
+  - Importing the store's kept history into Toolbar made the ratchet's G analysis of Toolbar take 411 s (it timed out at 120 s). Through lib/keptCanvas it takes 0.3 s.
+- **Projects home.** #200's notice stack and its focus rule are kept. #199's restore, waiting and held-unreadable notices sit above the stack, and their × moves focus to "Recent projects", the stack's fallback.
+  - GM r6 bug 4 ("no ring on a tabindex -1 target, keyboard or not") gives way to #200's GM r17 rule: rings come from `:focus-visible` only.
+  - `retry` offers `'save'` and `'reloadNebula'`.
+  - "Open Recently deleted" is declared neutral (`project-home__restore-action--neutral`) and reviewed in `REVIEWED_NEUTRAL`: it opens a list and deletes nothing.
+- **Backend.** `graph_write` keeps #199's `canvas_action` on #200's re-checking wrapper, on both the in-route and the wrapped route. Clear, create, open and delete call `_note_canvas_change()` and settle the waiting canvas, and opening passes `dropped_ports` and `stray_log`. `workspaceSync` counts unsaved scene edits as unsaved (#198 review 12, M-1). `cli_graph` keeps both `owner`/`copy_note` and `removed_shot_media`.
+- **Test updates for the merge.**
+  - `setViewing` was added to five of main's wsClient mocks.
+  - #198's source checks now include the `kept:` prop.
+  - #198's literal-opacity list now includes `[data-kept-disabled]`.
+  - #200's r6 selector now includes the `[aria-disabled="true"]` skip (#199 review 6, L-4).
+  - `refuseTabOnlyEdit` is listed in the ratchet's REFUSERS.
+  - #199's lock-order tests now test the new order.
+  - #199's focus tests now target "Recent projects".
+- **Gates on the merged tree.**
+  - Backend full (isolated): 12,736 passed, 71 skipped.
+  - Full frontend suite: 8,782 of 8,783 across 696 files. The one failure, `MaskPainterPortal.round10` "so is the painter", is a timing wait under load: it passes alone (2/2) and passed in the first merged run.
+  - tsc (app and node), lint and the slava CSS scope check are clean.
+  - The build budget is 474,169 bytes raw and 144,550 gzip (limit 512,000).
+- **Live check on the merged tree** (8799/5799, with 8000-8010 and 5173 blocked; the canary unreachable): 44/44, with 0 blocked requests.

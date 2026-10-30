@@ -103,8 +103,11 @@ function expectInRegion(element: HTMLElement, root: HTMLElement) {
   expect(element.closest('.react-flow')).toBeNull();
   expect(element.closest('[data-testid="studio"]')).toBeNull();
   expect(element.closest('.panel')).toBeNull();
-  // Mounted by App itself, beside the screens, never inside one.
-  expect(region!.parentElement).toBe(root);
+  // Mounted by App itself, beside the screens, never inside one; GM r25
+  // (PR #200 fix round 16): portalled to <body>, outside the app's root, so
+  // a modal that makes the page inert never hides it.
+  expect(root.contains(region)).toBe(false);
+  expect(region!.parentElement).toBe(document.body);
   expect(document.querySelectorAll('[data-notice-region]')).toHaveLength(1);
 }
 
@@ -121,7 +124,7 @@ function undidAgentEdit() {
   const entry = { agentName: 'Claude Code', agentColor: '#E8825A' } as never;
   useGraphStore.setState({
     redoStack: [entry],
-    undoNotice: { id: 9001, text: 'Undid Claude Code\'s edit', agentColor: '#E8825A', offer: 'redo', entry },
+    undoNotice: { id: 9001, text: 'Undid Claude Code’s edit.', agentColor: '#E8825A', offer: 'redo', entry },
   });
 }
 
@@ -130,7 +133,7 @@ describe('one app-level notice region', () => {
     const { container } = render(<App />);
     await screen.findByTestId('canvas');
     act(undidAgentEdit);
-    const notice = await noticeWith('Undid Claude Code\'s edit');
+    const notice = await noticeWith('Undid Claude Code’s edit.');
     expect(notice).toHaveAttribute('role', 'status');
     expectInRegion(notice, container);
     const redo = screen.getByRole('button', { name: 'Redo' });

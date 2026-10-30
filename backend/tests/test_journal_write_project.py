@@ -63,7 +63,7 @@ class Race:
             _request_headers.reset(held)
 
     def _hooked(self, into: list[dict]):
-        async def hook(data: dict) -> None:
+        async def hook(data: dict, **_kw: object) -> None:
             into.append(data)
             if self.armed and "pin" not in self.done and self.when(data):
                 self.done["at"] = data.get("type")

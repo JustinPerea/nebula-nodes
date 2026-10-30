@@ -2305,7 +2305,9 @@ def test_the_listener_bounds_a_pin_check_that_never_answers():
     # PIN_CHECK_TIMEOUT, and the pins wait for the retry. Review 7, item 3:
     # on the listener's own clock and sleep, like its other waits (it ran on
     # real time, so a fake clock never saw it fire): this rig's clock moves
-    # only through those waits, and the test has one real second.
+    # only through those waits. PR #198 review 6, N5: the fake clock ends the
+    # test (_Done past 130 s); the real bound is only a hang guard, wide
+    # enough that a loaded CI box never cancels it mid-way (it was 1 s).
     state = ChannelState(now=0.0)
     state.last_person = 100.0
     state.observe(resp(pin(1)), now=100.0)
@@ -2341,7 +2343,7 @@ def test_the_listener_bounds_a_pin_check_that_never_answers():
     listener._take_check_answer = take
 
     async def main():
-        with anyio.fail_after(1):
+        with anyio.fail_after(30):
             try:
                 await listener._push_when_due()
             except _Done:

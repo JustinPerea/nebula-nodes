@@ -36,6 +36,10 @@ interface SheetRule {
   base: string;
   /** ":focus-visible", "::placeholder", "" for the element at rest. */
   state: string;
+  /** `base` without attribute selectors or :not(): every state the element
+   * can take ([data-open], [aria-expanded="true"] …), for a check that has
+   * to see them all (review 12 NIT-2, the frame ratchet). */
+  loose: string;
   specificity: [number, number, number];
   order: number;
   decls: Array<{ prop: string; value: string; important: boolean }>;
@@ -73,60 +77,83 @@ function specificityOf(selector: selectorParser.Selector): [number, number, numb
 
 let cached: SheetRule[] | null = null;
 
+/** The style rules of one stylesheet, once per selector in its list, ordered from `order`. */
+function rulesOf(css: string, file: string, order: { next: number }, from?: string): SheetRule[] {
+  const rules: SheetRule[] = [];
+  const root = postcss.parse(css, from ? { from } : undefined);
+  root.walkRules((rule: Rule) => {
+    for (let parent = rule.parent; parent && parent.type !== 'root'; parent = parent.parent) {
+      if (parent.type === 'atrule' && /keyframes|font-face/.test((parent as AtRule).name)) return;
+    }
+    const decls = rule.nodes.flatMap((node) => node.type === 'decl'
+      ? [{ prop: node.prop.toLowerCase(), value: node.value.replace(/\s+/g, ' ').trim(), important: Boolean(node.important) }]
+      : []);
+    if (decls.length === 0) return;
+    order.next += 1;
+    for (const selector of rule.selectors) {
+      let state = '';
+      let base = selector;
+      let specificity: [number, number, number] = [0, 0, 0];
+      try {
+        selectorParser((root) => {
+          const sel = root.first;
+          specificity = specificityOf(sel);
+          const states: string[] = [];
+          sel.walkPseudos((pseudo) => {
+            const insideNot = pseudo.parent?.parent?.type === 'pseudo';
+            if (pseudo.value.startsWith('::') || pseudo.value === ':before' || pseudo.value === ':after') {
+              states.push(pseudo.value);
+              pseudo.remove();
+            } else if (STATES.has(pseudo.value)) {
+              if (insideNot) {
+                // ":not(:hover)": may match, so the whole :not goes.
+                pseudo.parent?.parent?.remove();
+              } else {
+                states.push(pseudo.value);
+                pseudo.remove();
+              }
+            }
+          });
+          state = states.join('');
+          base = sel.toString().trim() || '*';
+          if (/[\s>+~]$/.test(base)) base = `${base}*`;
+        }).processSync(selector);
+      } catch {
+        continue;
+      }
+      let loose = base;
+      try {
+        selectorParser((root) => {
+          root.walkAttributes((attribute) => { attribute.remove(); });
+          root.walkPseudos((pseudo) => { if (pseudo.value === ':not') pseudo.remove(); });
+          // A compound left empty ("> [data-x]") matches anything: "*".
+          root.each((sel) => {
+            let empty = true;
+            for (const node of [...sel.nodes]) {
+              if (node.type === 'combinator') {
+                if (empty) sel.insertBefore(node, selectorParser.universal());
+                empty = true;
+              } else if (node.type !== 'comment') empty = false;
+            }
+            if (empty) sel.append(selectorParser.universal());
+          });
+          loose = root.toString().trim() || '*';
+        }).processSync(base);
+      } catch {
+        loose = base;
+      }
+      rules.push({ file, selector, base, state, loose, specificity, order: order.next, decls });
+    }
+  });
+  return rules;
+}
+
 /** Every style rule in the app's stylesheets, once per selector in its list. */
 export function appRules(): SheetRule[] {
   if (cached) return cached;
-  const rules: SheetRule[] = [];
-  let order = 0;
-  for (const path of cssFiles(SRC).sort()) {
-    const file = relative(SRC, path);
-    const root = postcss.parse(readFileSync(path, 'utf8'), { from: path });
-    root.walkRules((rule: Rule) => {
-      for (let parent = rule.parent; parent && parent.type !== 'root'; parent = parent.parent) {
-        if (parent.type === 'atrule' && /keyframes|font-face/.test((parent as AtRule).name)) return;
-      }
-      const decls = rule.nodes.flatMap((node) => node.type === 'decl'
-        ? [{ prop: node.prop.toLowerCase(), value: node.value.replace(/\s+/g, ' ').trim(), important: Boolean(node.important) }]
-        : []);
-      if (decls.length === 0) return;
-      order += 1;
-      for (const selector of rule.selectors) {
-        let state = '';
-        let base = selector;
-        let specificity: [number, number, number] = [0, 0, 0];
-        try {
-          selectorParser((root) => {
-            const sel = root.first;
-            specificity = specificityOf(sel);
-            const states: string[] = [];
-            sel.walkPseudos((pseudo) => {
-              const insideNot = pseudo.parent?.parent?.type === 'pseudo';
-              if (pseudo.value.startsWith('::') || pseudo.value === ':before' || pseudo.value === ':after') {
-                states.push(pseudo.value);
-                pseudo.remove();
-              } else if (STATES.has(pseudo.value)) {
-                if (insideNot) {
-                  // ":not(:hover)": may match, so the whole :not goes.
-                  pseudo.parent?.parent?.remove();
-                } else {
-                  states.push(pseudo.value);
-                  pseudo.remove();
-                }
-              }
-            });
-            state = states.join('');
-            base = sel.toString().trim() || '*';
-            if (/[\s>+~]$/.test(base)) base = `${base}*`;
-          }).processSync(selector);
-        } catch {
-          continue;
-        }
-        rules.push({ file, selector, base, state, specificity, order, decls });
-      }
-    });
-  }
-  cached = rules;
-  return rules;
+  const order = { next: 0 };
+  cached = cssFiles(SRC).sort().flatMap((path) => rulesOf(readFileSync(path, 'utf8'), relative(SRC, path), order, path));
+  return cached;
 }
 
 function wins(a: { important: boolean; specificity: [number, number, number]; order: number },
@@ -139,11 +166,13 @@ function wins(a: { important: boolean; specificity: [number, number, number]; or
 type Winner = { value: string; important: boolean; specificity: [number, number, number]; order: number; selector: string };
 
 /** The rules that match `element` (any state), with the winning declaration per state|property. */
-export function cascaded(element: Element): Map<string, Winner> {
+export function cascaded(element: Element, extraCss?: string, { loose = false }: { loose?: boolean } = {}): Map<string, Winner> {
   const out = new Map<string, Winner>();
-  for (const rule of appRules()) {
+  // A test's own stylesheet comes after the app's, as a later sheet would.
+  const extra = extraCss ? rulesOf(extraCss, 'extra.css', { next: appRules().length + 1 }) : [];
+  for (const rule of [...appRules(), ...extra]) {
     let hit = false;
-    try { hit = element.matches(rule.base); } catch { hit = false; }
+    try { hit = element.matches(loose ? rule.loose : rule.base); } catch { hit = false; }
     if (!hit) continue;
     for (const decl of rule.decls) {
       const key = `${rule.state}|${decl.prop}`;

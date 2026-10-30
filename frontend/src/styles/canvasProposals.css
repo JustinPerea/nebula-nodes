@@ -235,7 +235,9 @@
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 12px;
   pointer-events: auto;
-  animation: proposal-fade-in 180ms ease-out;
+  /* Its own surface in the notice region: it scales in on the toasts'
+     spring (GM r9 answer 2; noticeRegion.css). */
+  animation: notice-surface-in 420ms var(--notice-spring) both;
 }
 
 .proposal-bar--notice {
@@ -256,8 +258,12 @@
   outline-offset: var(--sr-focus-offset, 2px);
 }
 
+/* The entrance stays first in the list, so the flash neither restarts it
+   nor cuts it short. */
 .proposal-bar[data-review='true'] {
-  animation: proposal-bar-review 1600ms var(--agent-log-spring, cubic-bezier(0.2, 0.9, 0.3, 1.2)) both;
+  animation:
+    notice-surface-in 420ms var(--notice-spring) both,
+    proposal-bar-review 1600ms var(--agent-log-spring, cubic-bezier(0.2, 0.9, 0.3, 1.2)) both;
 }
 
 @keyframes proposal-bar-review {
@@ -464,6 +470,10 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 .proposal-bar__error {
   margin: 2px 0 0;
   color: #ff8a80;
+  /* An inline line inside the bar: it expands into place (GM r9 answer 2). */
+  overflow: clip;
+  interpolate-size: allow-keywords;
+  animation: notice-row-in 420ms var(--notice-spring) both;
 }
 
 .proposal-bar__actions {
@@ -577,8 +587,59 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   font-weight: 600;
 }
 
-.canvas-undo-notice__action:hover {
+/* Enabled only: a disabled one stays the shared grey (review 2 M-3). */
+.canvas-undo-notice__action:hover:not(:disabled) {
   background: #fff;
+}
+
+/* The second of two choices (a scene's clash: Use theirs beside Keep mine,
+   GM r9): the same size, no fill. */
+.canvas-undo-notice__action--quiet {
+  border-color: rgb(255 255 255 / 0.28);
+  background: transparent;
+  color: rgb(255 255 255 / 0.9);
+  font-weight: 500;
+}
+
+.canvas-undo-notice__action--quiet:hover {
+  background: rgb(255 255 255 / 0.08);
+}
+
+/* GM r33: every notice button that is held or locked reads the one
+   disabled token set (slava-restraint.css), never a whole-control opacity:
+   a filled button takes the grey fill, a ghost or text button greys its
+   label and gets no fill, and hover changes nothing. Since round 25 (GM r37,
+   option c) the [Try again], Keep mine, Undo, Redo, Open copy and Save
+   paused actions take that look from the app's one shared rule
+   (styles/disabled-buttons.css: .canvas-undo-notice__action is a filled
+   button there, its quiet variant a ghost one). A button held while its
+   action is on its way is aria-disabled at once and keeps its own look for
+   the first ~150 ms (useHeldLook's data-held-pending, which the shared rule
+   passes over), so a fast try never flickers; a button the canvas lock
+   disables (following, offline) is :disabled, and the lock's own
+   whole-control dim (App.css) gives way here. */
+body.app-slava-restraint .canvas-undo-notice button[aria-disabled='true'][data-held-look],
+body.app-slava-restraint .canvas-undo-notice button:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+/* Held, not yet greyed (the first ~150 ms): hover leaves it as it is. */
+body.app-slava-restraint .canvas-undo-notice__action[aria-disabled='true']:hover {
+  background: rgb(255 255 255 / 0.9);
+}
+
+body.app-slava-restraint .canvas-undo-notice__action--quiet[aria-disabled='true']:hover {
+  background: transparent;
+}
+
+/* The × isn't one of the shared rule's buttons: the ghost grey here. */
+body.app-slava-restraint .canvas-undo-notice__close[aria-disabled='true'][data-held-look],
+body.app-slava-restraint .canvas-undo-notice__close[aria-disabled='true'][data-held-look]:hover,
+body.app-slava-restraint .canvas-undo-notice__close:disabled,
+body.app-slava-restraint .canvas-undo-notice__close:disabled:hover {
+  background: transparent;
+  color: var(--disabled-label);
 }
 
 .canvas-undo-notice__close {
@@ -595,8 +656,11 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   color: rgb(255 255 255 / 0.9);
 }
 
+/* Fix round 5 of PR #200 (GM r7): every toast in the notice region springs
+   in within its own slot, a scale and a fade, never sliding across a
+   neighbour (the open kept-notes list sits right below some). */
 @keyframes canvas-undo-notice-in {
-  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  from { opacity: 0; transform: scale(0.96); }
   30% { opacity: 1; }
   to { opacity: 1; transform: none; }
 }
@@ -608,11 +672,16 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .proposal-ghosts,
+  .proposal-ghosts {
+    animation: none;
+    transition: none;
+  }
+  /* Opacity only (GM r9 answer 2). */
   .proposal-bar,
   .proposal-bar[data-review='true'],
+  .proposal-bar__error,
   .canvas-undo-notice {
-    animation: none;
+    animation: notice-fade-in 180ms ease-out both;
     transition: none;
   }
   .proposal-bar[data-review='true'] {
@@ -640,4 +709,23 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 .canvas-undo-notice__mono {
   font-family: var(--sr-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 0.95em;
+}
+
+/* GM r12 item 1: a stopped scene save's popover, the toast's surface fixed
+   beside its card's "Unsaved" mark (anchoredPopover). */
+.scene-unsaved-popover {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: var(--sr-layer-modal-control, 61);
+  --notice-max-w: 360px;
+}
+
+/* GM r14 FOCUS: the popover's [Try again] takes focus when it opens. The
+   ring is :focus-visible only: none after a click on the mark, the neutral
+   ring when it was opened from the keyboard (the browser rings
+   :focus-visible only). Never a forced ring. */
+.scene-unsaved-popover .canvas-undo-notice__action:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid #fff);
+  outline-offset: var(--sr-focus-offset, 2px);
 }

@@ -199,7 +199,7 @@ describe("review 7: the person's direct run once the placeholder dialog has show
     const agentUndo = () => {
       const entry = { id: 'x' };
       useGraphStore.setState({ undoStack: [entry] as never,
-        undoNotice: { id: 99, text: 'Codex changed the canvas', offer: 'undo', agentColor: '#F2C14E', entry } as never });
+        undoNotice: { id: 99, text: 'Codex changed the canvas.', offer: 'undo', agentColor: '#F2C14E', entry } as never });
       return entry;
     };
 
@@ -212,15 +212,15 @@ describe("review 7: the person's direct run once the placeholder dialog has show
       });
       await useGraphStore.getState().executeNode('b');
       expect(execute).not.toHaveBeenCalled();
-      expect(useGraphStore.getState().undoNotice).toMatchObject({ text: 'Codex changed the canvas', offer: 'undo' });
-      expect(lines()).toEqual(['Codex changed the canvas', ANOTHER_RUN]);
+      expect(useGraphStore.getState().undoNotice).toMatchObject({ text: 'Codex changed the canvas.', offer: 'undo' });
+      expect(lines()).toEqual(['Codex changed the canvas.', ANOTHER_RUN]);
     });
 
     it('every notice keeps an open Undo the same way', () => {
       agentUndo();
       useGraphStore.getState().notify("Couldn't save the file.");
       expect(useGraphStore.getState().undoNotice).toMatchObject({ offer: 'undo' });
-      expect(lines()).toEqual(['Codex changed the canvas', "Couldn't save the file."]);
+      expect(lines()).toEqual(['Codex changed the canvas.', "Couldn't save the file."]);
     });
 
     it('with no Undo showing, a notice is the canvas notice as before', () => {

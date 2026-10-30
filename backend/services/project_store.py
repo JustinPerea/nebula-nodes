@@ -1458,6 +1458,11 @@ class ProjectStore:
             "addedBack": rows(merged.added), "addedBackCount": len(merged.added),
             "updatedFromDisk": rows(merged.updated), "updatedFromDiskCount": len(merged.updated),
             "notAddedBack": rows(merged.not_added), "notAddedBackCount": len(merged.not_added),
+            # Readable records left out because the list was at its project
+            # limit (reconcile adds none past it), and that limit: GM r18 on
+            # PR #199, Q5 (their own line, never "may be missing").
+            "notAddedBackLimitCount": sum(1 for row in merged.not_added if row.get("reason") == "limit"),
+            "projectLimit": MAX_PROJECTS,
             "reverted": rows(merged.reverted), "revertedCount": len(merged.reverted),
             "cameBack": rows(merged.came_back), "cameBackCount": len(merged.came_back),
             "backInTrash": rows(merged.back_in_trash), "backInTrashCount": len(merged.back_in_trash),

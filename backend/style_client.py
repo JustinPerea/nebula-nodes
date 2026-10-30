@@ -66,10 +66,10 @@ def find_style(api: NebulaAPI, ref: str, headers: dict[str, str] | None = None) 
         candidates.extend(list_styles(api, project=project_id, include_global=False, headers=headers))
     matches = [style for style in candidates if str(style.get("name", "")).casefold() == ref.casefold()]
     if not matches:
-        raise StyleError(f"no Style '{ref}' (`nebula style list` or style_list shows them)")
+        raise StyleError(f"no Style “{ref}” (`nebula style list` or style_list shows them)")
     if len(matches) > 1:
         ids = ", ".join(str(style.get("id")) for style in matches)
-        raise StyleError(f"{len(matches)} Styles are named '{ref}' ({ids}); use the id")
+        raise StyleError(f"{len(matches)} Styles are named “{ref}” ({ids}); use the id")
     return matches[0]
 
 

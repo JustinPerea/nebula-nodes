@@ -391,7 +391,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         {hasMediaPreview && <button type="button"
           className={inToolbar ? 'selection-toolbar__button nodrag' : 'model-node__next-step nodrag'}
           data-next-step-anchor={id}
-          {...lock.act({ disabled: !nextStepSource || isExecuting || !/^n\d+$/.test(id), title: nextStepTitle, kept: 'next-step' })}
+          {...lock.act({ disabled: !nextStepSource || !/^n\d+$/.test(id), title: nextStepTitle, kept: 'next-step' }, { run: isExecuting })}
           onMouseDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
@@ -537,8 +537,12 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         <div className="model-node__source-stale nodrag nopan" role="status">
           <strong>Out of date — source updated</strong>
           {nodeData.outputFreshness.outOfDateReasons.map((reason) => <span key={reason}>{reason}</span>)}
-          {nodeData.outputFreshness.runId && <button type="button" disabled={isExecuting || !latestPaperSourceReady}
-            title={latestPaperSourceReady ? 'Reuse the saved recipe with the latest exported artwork' : 'Refresh or reconnect the Paper source first'}
+          {/* A run: it takes the canvas lock (fix round 1 of PR #200: the ratchet's new control check found it), in
+            canvasLock's order (PR #198 review 7, L5: run, then following, then offline). */}
+          {nodeData.outputFreshness.runId && <button type="button"
+            {...lock.act({ disabled: !latestPaperSourceReady, offline: 'rerun', kept: 'run',
+              title: latestPaperSourceReady ? 'Reuse the saved recipe with the latest exported artwork' : 'Refresh or reconnect the Paper source first' },
+            { run: isExecuting })}
             onClick={(event) => {
             event.stopPropagation();
             const runId = nodeData.outputFreshness?.runId;

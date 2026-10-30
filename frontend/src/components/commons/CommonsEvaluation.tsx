@@ -13,13 +13,20 @@ const pretty = (value: string) => value === 'n_a' ? 'Not applicable' : value.rep
 const emptyLabels = (): EvaluationLabels => ({ tags: {}, axes: {}, palette_roles: {}, keywords: [], no_keywords: false, flagged: false });
 
 /** Round 17 of PR #114 (rename-style lines for a label draft dropped on
- * reconnect; builder's wording, GM to confirm). */
+ * reconnect; GM r18: confirmed, with "changed" for the accents too). */
 export const LABELS_CHANGED_ELSEWHERE = "You changed this reference's labels in another window while Nebula was offline, so your changes here weren't saved.";
-export const ACCENTS_CHANGED_ELSEWHERE = "You saved this reference's accents in another window while Nebula was offline, so your changes here weren't saved.";
+export const ACCENTS_CHANGED_ELSEWHERE = "You changed this reference’s accents in another window while Nebula was offline, so your changes here weren’t saved.";
+/** GM, PR #198 r1 item 4: the image at this position, or the whole batch,
+ * was replaced in another window (review 17 L3's case), not relabeled. */
+export const IMAGE_REPLACED_ELSEWHERE = "You replaced this reference’s image in another window while Nebula was offline, so your changes here weren’t saved.";
+export const BATCH_REPLACED_ELSEWHERE = "You replaced this batch in another window while Nebula was offline, so your changes here weren’t saved.";
 
-/** What a reference has saved: a draft is based on it. */
-const savedStateOf = (item: EvaluationItem) => JSON.stringify([item.accent_locked ?? false, item.accents ?? null,
-  item.no_accents ?? false, item.labels ?? null]);
+/** What a reference has saved: a draft is based on it. The image and the
+ * batch it is in come first (review 17 L3): saves go by position, so after a
+ * batch closed and a new one was prepared in another window, the same
+ * position can hold another image with the same (empty) saved state. */
+const savedStateOf = (item: EvaluationItem, batch: EvaluationBatch) => JSON.stringify([batch.manifest_hash,
+  item.image_sha256, item.accent_locked ?? false, item.accents ?? null, item.no_accents ?? false, item.labels ?? null]);
 
 /** The open reference's draft: its own save and discard, for the Commons' leave popover. */
 type DraftActions = { save: () => Promise<SaveResult>; discard: () => void };
@@ -136,10 +143,12 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
       if (!now.dirty || !fresh) { setBatch(fresh); return; }
       const before = now.batch.items[now.index];
       const after = fresh.items[now.index];
-      if (before && after && savedStateOf(before) === savedStateOf(after)) { setBatch(fresh, true); return; }
+      if (before && after && savedStateOf(before, now.batch) === savedStateOf(after, fresh)) { setBatch(fresh, true); return; }
       setBatch(fresh);
       setDirty(false);
-      setNotice(before?.accent_locked ? LABELS_CHANGED_ELSEWHERE : ACCENTS_CHANGED_ELSEWHERE);
+      setNotice(fresh.manifest_hash !== now.batch.manifest_hash ? BATCH_REPLACED_ELSEWHERE
+        : before && after && before.image_sha256 !== after.image_sha256 ? IMAGE_REPLACED_ELSEWHERE
+          : before?.accent_locked ? LABELS_CHANGED_ELSEWHERE : ACCENTS_CHANGED_ELSEWHERE);
     }, () => undefined);
     return () => { cancelled = true; };
   }, [readOnly, setBatch]);
@@ -291,7 +300,7 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef }: {
       {!item.accent_locked ? <>
         <small>C2 · ACCENT OBSERVATIONS</small><h3 className="evaluation-step">What catches your eye?</h3><p>Choose the colors that stand out, even when they occupy very little space.</p>
         {points.map((point, n) => <div className="evaluation-point" key={n}>Accent {n + 1} · {Math.round(point.x * 100)}%, {Math.round(point.y * 100)}%
-          <button className="commons-button" disabled={readonly} onClick={() => { setPoints(points.filter((_, i) => i !== n)); onDirty(true); }}>Remove accent {n + 1}</button></div>)}
+          <button className="commons-button commons-button--remove" disabled={readonly} onClick={() => { setPoints(points.filter((_, i) => i !== n)); onDirty(true); }}>Remove accent {n + 1}</button></div>)}
         <label><input type="checkbox" checked={noAccents} disabled={readonly || !url} onChange={(e) => { setNoAccents(e.target.checked); setPoints([]); onDirty(true); }} /> I don’t see any accent colors</label>
         <div className="evaluation-save"><button className="commons-button commons-button--primary" disabled={readonly || !url || (!points.length && !noAccents) || offline} {...offlineMark(offline)}
           onClick={() => void saveAccents()}>Save accents & reveal labels</button>{unsavedMark}</div>
@@ -313,7 +322,7 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef }: {
             const roles = { ...labels.palette_roles }; if (e.target.value) roles[p.index] = e.target.value; else delete roles[p.index]; change({ palette_roles: roles });
           }}><option value="">Choose a role…</option>{batch.roles.map((role) => <option key={role}>{role}</option>)}</select></label>)}
         <h4 className="evaluation-subhead">Keywords · {labels.keywords.length} / 12</h4>
-        <div className="evaluation-keywords">{labels.keywords.map((word) => <button className="commons-button" key={word} onClick={() => change({ keywords: labels.keywords.filter((w) => w !== word) })}>{pretty(word)} ×</button>)}</div>
+        <div className="evaluation-keywords">{labels.keywords.map((word) => <button className="commons-button commons-button--remove" key={word} aria-label={`Remove ${pretty(word)}`} onClick={() => change({ keywords: labels.keywords.filter((w) => w !== word) })}>{pretty(word)} ×</button>)}</div>
         <input aria-label="Search keywords" placeholder="Search the shared vocabulary…" value={query} onChange={(e) => setQuery(e.target.value)} />
         <div className="evaluation-keywords">{query.trim() && batch.keywords.filter((word) => word.includes(query.trim().toLowerCase().replaceAll(' ', '_')) && !labels.keywords.includes(word)).slice(0, 20).map((word) =>
           <button className="commons-button" key={word} disabled={labels.keywords.length >= 12} onClick={() => { change({ keywords: [...labels.keywords, word], no_keywords: false }); setQuery(''); }}>{pretty(word)}</button>)}</div>
@@ -321,7 +330,7 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef }: {
         <label><input type="checkbox" checked={labels.flagged} onChange={(e) => change({ flagged: e.target.checked })} /> I need to revisit this reference</label>
         <div className="evaluation-save"><button className="commons-button commons-button--primary" disabled={!dirty || offline} {...offlineMark(offline)} onClick={() => void saveLabels()}>Save labels</button>{unsavedMark}</div>
       </fieldset>}
-      {dirty && !busy && <button className="commons-button" onClick={discard}>Discard unsaved changes</button>}
+      {dirty && !busy && <button className="commons-button commons-button--danger" onClick={discard}>Discard unsaved changes</button>}
       <p role="status">{batch.sealed ? 'Sealed · read only' : batch.state === 'closed' ? 'Closed · read only' : busy ? 'Saving…' : dirty ? 'Save before changing reference' : 'Saved on this computer'}</p>
     </div>
   </>;

@@ -65,7 +65,7 @@ export function CharacterStudioToolbar({
       {onDelete && (
         <button
           type="button"
-          className="character-studio-toolbar__retry"
+          className="character-studio-toolbar__retry character-studio-toolbar__delete"
           title="Move to Recently deleted"
           disabled={deleteDisabled}
           onClick={onDelete}

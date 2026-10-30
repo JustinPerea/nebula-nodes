@@ -67,10 +67,10 @@ def split_outputs(
             continue
         if port_id not in conditional:
             name = (definition or {}).get("displayName") or "This node"
-            raise RuntimeError(f"{name} withheld '{port_id}', which isn't a conditional output")
+            raise RuntimeError(f"{name} withheld {port_id}, which isn't a conditional output")
         reason = " ".join(str(entry.get(WITHHELD_KEY) or "").split())
         if not reason:
-            raise RuntimeError(f"Withheld output '{port_id}' has no reason")
+            raise RuntimeError(f"Withheld output {port_id} has no reason")
         held[port_id] = reason
     # "Jev Decide (judge / classify / yes-no)" -> "Jev Decide".
     name = str((definition or {}).get("displayName") or "The node").split(" (")[0]

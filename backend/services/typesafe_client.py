@@ -633,7 +633,7 @@ class JevResult:
     def answer(self, question_id: str, kind: str) -> JevAnswer:
         found = self.answers.get(question_id)
         if found is None or found.type != kind:
-            raise TypeSafeError(f"TypeSafe's response has no {kind} answer for {question_id!r}",
+            raise TypeSafeError(f"TypeSafe's response has no {kind} answer for {question_id}",
                                 request_id=self.request_id)
         return found
 

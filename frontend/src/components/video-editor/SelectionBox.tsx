@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PointerEvent, RefObject } from 'react';
 import { useGraphStore } from '../../store/graphStore';
-import { refuseCanvasEdit } from '../../lib/canvasLock';
+import { canvasLockNow, refuseCanvasEdit } from '../../lib/canvasLock';
 import { useUIStore } from '../../store/uiStore';
 import type { TrackItem, VideoGraphManifest } from '../../types/video';
 import { screenToComposition } from '../../lib/video/coordinates';
@@ -293,6 +293,13 @@ export function SelectionBox({
   const handlePointerMove = (e: PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== e.pointerId) return;
+    // A gesture under way when the lock starts ends there, writing nothing
+    // more (fix round 4 of PR #200, review 4 LOW-2's twin, found by LOW-4's
+    // per-handler check).
+    if (canvasLockNow().locked) {
+      endDrag(e);
+      return;
+    }
 
     const dxScreen = e.clientX - drag.startClientX;
     const dyScreen = e.clientY - drag.startClientY;

@@ -353,8 +353,7 @@ html body .moodboard-board-panel .moodboard-def__row {
 }
 
 .moodboard-board-panel__remove:hover {
-  border-color: #e0796b;
-  color: #e0796b;
+  border-color: var(--mb-board-ink); /* GM r12: Undo puts it back, so neutral */
 }
 
 /* The Board / List switch in the header. The thumb slides on a spring. */
@@ -470,7 +469,8 @@ html body .moodboard-board-panel .moodboard-def__row {
   font-weight: 600;
 }
 
-.moodboard-board-toast__action:hover {
+/* Enabled only: a disabled one stays the shared grey (review 2 M-3). */
+.moodboard-board-toast__action:hover:not(:disabled) {
   background: #fff;
 }
 
@@ -494,8 +494,11 @@ html body .moodboard-board-panel .moodboard-def__row {
   outline-offset: 1px;
 }
 
+/* Fix round 5 of PR #200 (GM r7): every toast in the notice region springs
+   in within its own slot, a scale and a fade, never sliding across a
+   neighbour (the open kept-notes list sits right below some). */
 @keyframes moodboard-board-toast-in {
-  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  from { opacity: 0; transform: scale(0.96); }
   30% { opacity: 1; }
   to { opacity: 1; transform: none; }
 }
@@ -505,7 +508,8 @@ html body .moodboard-board-panel .moodboard-def__row {
     transition: none;
   }
 
+  /* Opacity only (GM r9 answer 2). */
   .moodboard-board-toast {
-    animation: none;
+    animation: notice-fade-in 180ms ease-out both;
   }
 }

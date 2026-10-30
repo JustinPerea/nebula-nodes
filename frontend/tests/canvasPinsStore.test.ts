@@ -12,7 +12,7 @@ const api = vi.hoisted(() => ({
 vi.mock('../src/lib/wsClient', () => ({
   wsClient: { subscribe: (handler: (event: unknown) => void) => { ws.handlers.push(handler); return () => {}; } },
 }));
-vi.mock('../src/lib/canvasPins', () => ({ ...api, MAX_PIN_TEXT: 280 }));
+vi.mock('../src/lib/canvasPins', async (importOriginal) => ({ ...await importOriginal<typeof import('../src/lib/canvasPins')>(), ...api, MAX_PIN_TEXT: 280 }));
 
 const { useCanvasPinsStore } = await import('../src/store/canvasPinsStore');
 
@@ -76,7 +76,8 @@ describe('canvas pins store', () => {
     useCanvasPinsStore.setState({ pins: [pin('pin_a')] });
     await useCanvasPinsStore.getState().remove('pin_a');
     expect(useCanvasPinsStore.getState().pins.map((p) => p.id)).toEqual(['pin_a']);
-    expect(useCanvasPinsStore.getState().error).toMatch(/Only the person/);
+    // GM r20 Q1: one neutral line, whatever the answer said.
+    expect(useCanvasPinsStore.getState().error).toBe('Nebula couldn’t delete this note. Try again in a moment.');
   });
 
   it('submits the composer target and closes it', async () => {

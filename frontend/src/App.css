@@ -39,8 +39,11 @@ a {
    is shorter than the banner, so the banner sits under that line with the
    same 8px gap floating panels keep (lib/bottomBar.ts floatingTopLimit):
    92 + 50 + 8. It takes no pointer events. */
-.backend-connection {
+:root {
   --backend-offline-spring: linear(0, 0.062, 0.215, 0.411, 0.615, 0.799, 0.95, 1.059, 1.126, 1.158, 1.161, 1.145, 1.116, 1.083, 1.051, 1.023, 1.001, 0.986, 0.977, 0.974, 0.974, 0.978, 0.983, 0.988, 0.994, 0.998, 1.001, 1.003, 1);
+}
+
+.backend-connection {
   position: fixed;
   z-index: 10000;
   top: 150px;
@@ -64,6 +67,69 @@ a {
    above the welcome heading instead of over it. */
 .backend-connection[data-placement='home'] {
   top: 81px;
+}
+
+/* GM, PR #198 r2: on every screen but the canvas (Cinema, Character,
+   Moodboard, Create, Remotion, the video editor, the Commons) the banner is
+   a row of the screen's own layout right under its top header
+   (StudioOfflineRow, the `offline` area of each studio's grid in
+   styles/workspace-header.css): centred, 8px above and below, pushing the
+   content down. The row opens and closes on the panel spring: its one track
+   goes 0fr → 1fr, so the content below moves with it. */
+.studio-offline-row {
+  display: grid;
+  grid-area: offline;
+  grid-template-rows: 0fr;
+  min-width: 0;
+  /* The panel spring (styles/workspace-rail.css :root), as the dock panels open. */
+  transition: grid-template-rows var(--workspace-dock-spring);
+}
+
+.studio-offline-row[data-open='true'] {
+  grid-template-rows: 1fr;
+}
+
+.studio-offline-row__clip {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.studio-offline-row__pad {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.studio-offline-row__pill {
+  max-width: min(92vw, 560px);
+  padding: 8px 14px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 999px;
+  background: rgb(32 16 13 / 96%);
+  color: #ffb49f;
+  font-size: 12px;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  text-align: center;
+}
+
+.studio-offline-row__pill[data-pulse='spring'] {
+  animation: studio-offline-nudge 700ms var(--backend-offline-spring) both;
+}
+
+@keyframes studio-offline-nudge {
+  from { transform: scale(1.045); }
+  to { transform: scale(1); }
+}
+
+.studio-offline-row__pill[data-pulse='flash'] {
+  animation: backend-offline-flash 600ms steps(1, end) both;
+}
+
+/* Reduced motion: the row opens and closes at once, and a pulse flashes. */
+@media (prefers-reduced-motion: reduce) {
+  .studio-offline-row { transition: none; }
+  .studio-offline-row__pill[data-pulse='spring'] { animation: backend-offline-flash 600ms steps(1, end) both; }
 }
 
 /* A blocked edit nudges the banner once (GM, round 14): it springs from a
@@ -119,6 +185,20 @@ a {
   opacity: 0.6;
 }
 
+/* A paid or saving action disabled offline (lib/useBackendOffline.ts
+   offlineAction; GM, PR #198 r2) loses its accent: the neutral control look,
+   never the orange of Generate or Export. Only buttons carry it; named so
+   (the merge with PR #200): a bare attribute rule reads as every element to
+   the ratchet's loose cascade (tests/helpers/cssCascade), which then saw no
+   frame on any ancestor. */
+button[data-offline-neutral],
+button[data-offline-neutral]:hover {
+  background: var(--sr-surface-control) !important;
+  border-color: var(--sr-edge) !important;
+  color: var(--sr-ink-light) !important;
+  box-shadow: none !important;
+}
+
 /* Placed by the app's notice region (NoticeRegion), like every toast. */
 .person-required {
   display: flex;
@@ -126,15 +206,26 @@ a {
   gap: 10px;
   width: max-content;
   max-width: min(92vw, var(--notice-max-w, 560px));
-  padding: 8px 8px 8px 14px;
-  border: 1px solid rgb(255 255 255 / 14%);
-  border-radius: 12px;
-  box-shadow: 0 8px 30px rgb(0 0 0 / 45%);
-  background: rgb(32 16 13 / 96%);
-  color: #ffb49f;
+  padding: 8px 10px 8px 12px;
+  /* GM r24 (PR #200 fix round 15): neutral, never orange-red. The shared
+     notice colours the pin toast beside it uses (noticeRegion.css). */
+  border: 1px solid var(--notice-neutral-edge, #333);
+  border-radius: 6px;
+  box-shadow: 0 4px 20px rgb(0 0 0 / 0.5);
+  background: var(--notice-neutral-fill, #1a1a1a);
+  color: var(--notice-neutral-ink, #d8d8d8);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 12px;
   line-height: 1.35;
   letter-spacing: 0.01em;
+  /* Its own surface in the notice region (GM r9 answer 2; noticeRegion.css). */
+  animation: notice-surface-in 420ms var(--notice-spring) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .person-required {
+    animation: notice-fade-in 180ms ease-out both;
+  }
 }
 
 .person-required__dismiss {
@@ -145,7 +236,7 @@ a {
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: inherit;
+  color: #999;
   font-size: 15px;
   line-height: 1;
   cursor: pointer;

@@ -240,13 +240,13 @@ describe('the Projects home notice', () => {
     expect(filled && before.includes(filled)).toBe(true);
   });
 
-  it('puts focus on the page heading after × from the keyboard', () => {
+  it('puts focus on "Recent projects" after × from the keyboard (the notice stack’s fallback)', () => {
     const onDismissCatalogRestore = vi.fn();
     render(<ProjectHome {...props({ catalogRestore: restore(), onDismissCatalogRestore })} />);
     const close = screen.getByRole('button', { name: 'Dismiss' });
     close.focus();
     fireEvent.click(close);
-    expect(document.activeElement?.id).toBe('project-home-title');
+    expect(document.activeElement?.id).toBe('recent-projects-title');
   });
 
   it('opens Recently deleted from the notice and moves focus there', () => {

@@ -181,8 +181,8 @@ def test_a_project_switch_during_the_deletes_graphsync_leaves_the_other_projects
     bound.graph.add_node("text-input", {"value": "A's node"})
     real = main.manager.broadcast_raw
 
-    async def switching(data):
-        await real(data)
+    async def switching(data, **kw):
+        await real(data, **kw)
         if data.get("type") == "graphSync" and data.get("edit"):
             with store.transaction() as catalog:
                 catalog["activeProjectId"] = b
@@ -419,8 +419,8 @@ def _during_the_replacements_sync(api, monkeypatch, step) -> dict:
     real = main.manager.broadcast_raw
     seen: dict = {}
 
-    async def broadcasting(data):
-        await real(data)
+    async def broadcasting(data, **kw):
+        await real(data, **kw)
         if data.get("type") == "graphSync" and data.get("graphReplaced") and "ran" not in seen:
             seen["ran"] = True
             seen["result"] = await step()

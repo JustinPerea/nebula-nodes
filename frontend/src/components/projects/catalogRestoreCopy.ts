@@ -54,6 +54,18 @@ const KEPT = 'The damaged file was kept.';
 
 const quoted = (name: string) => `“${name}”`;
 
+/** GM r18 on PR #199, Q5, verbatim: readable records the restore left out
+ * because the list was at its project limit (reconcile adds none past it).
+ * Named up to RESTORE_NAMED_MAX (`names`, from namesFor), counted from 4:
+ * "“Alpha” and “Beta” weren’t added back because you’ve reached the limit of
+ * 500 projects. They’re still in the damaged file, which was kept." */
+export function leftOutAtLimitLine(names: string[] | null, count: number, limit: number, fileKept = true): string {
+  const one = names ? names.length === 1 : count === 1;
+  const who = names ? namedList(names) : `${count} ${count === 1 ? 'project' : 'projects'}`;
+  const where = fileKept ? ` ${one ? 'It’s' : 'They’re'} still in the damaged file, which was kept.` : '';
+  return `${who} ${one ? 'wasn’t' : 'weren’t'} added back because you’ve reached the limit of ${limit} projects.${where}`;
+}
+
 /** The name the backend gives the live canvas when which project it was
  * isn't known (main.RECOVERED_CANVAS_NAME). */
 const RECOVERED_CANVAS = 'Recovered canvas';
@@ -422,6 +434,8 @@ function personsSavedToast(name: string, filed: SavedCanvasRow[], overSaveLimit:
  * only what still holds against them (GM r4's stale-lines rule). */
 export interface NoticeNow {
   projects: { id: string; name: string }[];
+  /** How many projects the list may hold now (the listing's `projectLimit`). */
+  projectLimit?: number;
   trash: { id: string; name?: string }[];
   canvasNotFiled?: { reason: CanvasLimit; projectLimit?: number; canvases?: CanvasLimitContext['canvases']; deletes?: number | null } | null;
 }
@@ -510,7 +524,7 @@ function holding<R extends { id?: string; trashed?: boolean }>(rows: R[] | undef
 }
 
 type NoticeInput = Pick<CatalogRestore, 'kind' | 'addedBack' | 'addedBackCount' | 'notAddedBackCount'>
-  & Partial<Pick<CatalogRestore, 'source' | 'copyAt' | 'damagedFile' | 'setAside' | 'notAddedBack' | 'reverted'
+  & Partial<Pick<CatalogRestore, 'source' | 'copyAt' | 'damagedFile' | 'setAside' | 'notAddedBack' | 'notAddedBackLimitCount' | 'projectLimit' | 'reverted'
     | 'revertedCount' | 'cameBack' | 'cameBackCount' | 'backInTrash' | 'backInTrashCount' | 'recoveredCanvas'
     | 'canvasNotFiled' | 'damagedReadWhole' | 'openProjectMissing' | 'alsoFiled' | 'agentCopies'>>;
 
@@ -615,10 +629,22 @@ export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.no
   const savedFrom = restore.recoveredCanvas ? restore.openProjectMissing ?? null : null;
   const failedListed = (restore.notAddedBack ?? []).filter((row) => savedFrom === null || row.id !== savedFrom);
   const failedOut = (restore.notAddedBack ?? []).length - failedListed.length;
-  const recordedFailed = Math.max(0, total(restore.notAddedBackCount, restore.notAddedBack) - failedOut);
-  const failedHeld = holding(failedListed, 'gone', current);
+  const recordedNotAdded = Math.max(0, total(restore.notAddedBackCount, restore.notAddedBack) - failedOut);
+  // GM r18, Q5: readable records left out because the list was at its
+  // project limit have their own line; the rest (records Nebula couldn't
+  // read or add) keep "couldn’t be added back".
+  const isLimit = (row: { reason?: string }) => row.reason === 'limit';
+  const limitListed = failedListed.filter(isLimit);
+  const limitOut = (restore.notAddedBack ?? []).filter(isLimit).length - limitListed.length;
+  const recordedLimit = Math.min(recordedNotAdded,
+    Math.max(0, total(restore.notAddedBackLimitCount, (restore.notAddedBack ?? []).filter(isLimit)) - limitOut));
+  const recordedFailed = recordedNotAdded - recordedLimit;
+  const failedHeld = holding(failedListed.filter((row) => !isLimit(row)), 'gone', current);
   const failedRows = failedHeld.rows;
   const failed = Math.max(0, recordedFailed - failedHeld.dropped);
+  const limitHeld = holding(limitListed, 'gone', current);
+  const limitRows = limitHeld.rows;
+  const leftOut = Math.max(0, recordedLimit - limitHeld.dropped);
   // (a): the open project whose graph came back from the live canvas isn't
   // reverted for the person, and a project they deleted isn't news.
   const revertedListed = (restore.reverted ?? []).filter((row) => !row.liveCanvas && !row.trashed);
@@ -677,6 +703,10 @@ export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.no
     else if (names) outcomes.push(`${namedList(names)}, newer projects, couldn’t be added back.`);
     else outcomes.push(`${failed} newer ${failed === 1 ? 'project' : 'projects'} couldn’t be added back.`);
   }
+  if (leftOut > 0) {
+    const limit = current?.projectLimit ?? restore.projectLimit ?? current?.canvasNotFiled?.projectLimit ?? DEFAULT_PROJECT_LIMIT;
+    outcomes.push(leftOutAtLimitLine(namesFor(limitRows, leftOut), leftOut, limit, kept));
+  }
 
   // (a) Reverted to the copy's version.
   if (reverted > 0) {
@@ -716,7 +746,7 @@ export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.no
   // say, never because the other lines have since gone.
   const filedSince = (restore.alsoFiled ?? []).length > 0 || (restore.agentCopies ?? []).length > 0;
   const saidAtFirst = recordedLiveAdded > 0 || recordedTrashedAdded.length > 0 || recordedFailed > 0
-    || recordedReverted > 0 || recordedCameBack > 0 || recordedBackInTrash > 0
+    || recordedLimit > 0 || recordedReverted > 0 || recordedCameBack > 0 || recordedBackInTrash > 0
     || Boolean(restore.recoveredCanvas) || Boolean(restore.canvasNotFiled) || filedSince || (!readWhole && kept);
   if (!saidAtFirst && readWhole) outcomes.push('No projects were missing.');
   // GM r9: held canvases that couldn't be read, merged in as one more
@@ -724,8 +754,9 @@ export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.no
   const held = extras?.heldUnreadable;
   if (held) outcomes.push(canvasHeldUnreadableLine(held.count, false));
   // Only when the file really is kept AND something may be lost (as the
-  // restore found it: it stays when the lines that called for it go).
-  const restoreKept = kept && (recordedFailed > 0 || recordedReverted > 0 || Boolean(restore.recoveredCanvas)
+  // restore found it: it stays when the lines that called for it go). The
+  // left-out line says "which was kept" itself (GM r18, Q5), so not twice.
+  const restoreKept = kept && leftOut === 0 && (recordedFailed > 0 || recordedReverted > 0 || Boolean(restore.recoveredCanvas)
     || Boolean(restore.canvasNotFiled) || filedSince || !readWhole);
   const closing = held ? (kept ? KEPT_BOTH : KEPT) : restoreKept ? KEPT : null;
   // "Open Recently deleted" while Recently deleted holds one of the notice's

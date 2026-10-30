@@ -1,7 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { ChevronDown, ChevronLeft, ChevronRight, Eye, X } from 'lucide-react';
 import {
+  PROPOSAL_GATE_COPY,
   acceptLabel,
   countdown,
   ghostBoxes,
@@ -14,6 +15,8 @@ import { useCanvasProposalsStore, type ProposalEntry } from '../../store/canvasP
 import { InNoticeRegion } from '../InNoticeRegion';
 import '../../styles/canvasProposals.css';
 import { useCanvasLock } from '../../lib/canvasLock';
+import { useLeave } from '../../lib/noticeLeave';
+import { personGateHeld, subscribePersonGate } from '../../lib/personSession';
 
 /** How long Accept/Reject ignore clicks after the shown proposal changes on its own. */
 const SWITCH_GUARD_MS = 600;
@@ -75,6 +78,10 @@ export function ProposalBar() {
   // agent's switch (GM round 22, A: one state, lib/canvasLock): Accept and
   // Reject are disabled and look it; Show still works.
   const lock = useCanvasLock();
+  // GM r30 item 7: while this tab isn't connected as the person (the hold the
+  // server's demote sets and its promote clears, lib/personSession), Accept
+  // and Reject wait, disabled with their reasons; Show still works.
+  const gateHeld = useSyncExternalStore(subscribePersonGate, personGateHeld);
   const pruneExpired = useCanvasProposalsStore((s) => s.pruneExpired);
   const { fitBounds, getInternalNode } = useReactFlow();
   // Track the shown proposal by id, never by position: a proposal that
@@ -91,9 +98,15 @@ export function ProposalBar() {
     .filter((entry) => !entry.closing)
     .sort((a, b) => a.view.createdAt - b.view.createdAt || a.view.id.localeCompare(b.view.id));
   const now = useNow(open.length > 0);
-  const current = open.find((entry) => entry.view.id === (focusedId ?? selectedId)) ?? open[0];
-  const currentId = current?.view.id ?? null;
-  const position = current ? open.indexOf(current) : 0;
+  const live = open.find((entry) => entry.view.id === (focusedId ?? selectedId)) ?? open[0];
+  // The bar leaves as it entered, a surface (fix round 7 of PR #200, GM r11
+  // answer 2): the last proposal stays drawn, inert, until its scale-out
+  // ends. Its inline error line leaves as a row.
+  const leave = useLeave(live ?? null);
+  const current = leave.shown ?? undefined;
+  const errorLeave = useLeave(live ? errors[live.view.id] ?? null : null, 'row');
+  const currentId = live?.view.id ?? null;
+  const position = live ? open.indexOf(live) : 0;
   const notReady = useProposalNotReady(current);
   const [noteRef, noteClamped] = useClamped(current?.view.note);
 
@@ -173,6 +186,7 @@ export function ProposalBar() {
         role="region"
         aria-label={`Proposal from ${current.view.agent.name}`}
         style={{ ['--agent-color' as string]: current.view.agent.color }}
+        {...leave.props}
       >
         <div className="proposal-bar__main">
           <div className="proposal-bar__who">
@@ -278,8 +292,8 @@ export function ProposalBar() {
               ))}
             </div>
           )}
-          {errors[current.view.id] && (
-            <p className="proposal-bar__error" role="alert">{errors[current.view.id]}</p>
+          {errorLeave.shown && (
+            <p className="proposal-bar__error" role="alert" {...errorLeave.props}>{errorLeave.shown}</p>
           )}
         </div>
         <div className="proposal-bar__actions">
@@ -294,7 +308,8 @@ export function ProposalBar() {
           <button
             type="button"
             className="proposal-bar__button"
-            {...lock.act({ disabled: Boolean(pending[current.view.id]), kept: 'proposal' })}
+            {...lock.act({ disabled: Boolean(pending[current.view.id]) || gateHeld, kept: 'proposal',
+              title: gateHeld ? PROPOSAL_GATE_COPY.reject : undefined })}
             onClick={() => {
               if (settled()) void reject(current.view.id);
             }}
@@ -305,7 +320,8 @@ export function ProposalBar() {
           <button
             type="button"
             className="proposal-bar__button proposal-bar__button--primary"
-            {...lock.act({ disabled: Boolean(pending[current.view.id]), kept: 'proposal' })}
+            {...lock.act({ disabled: Boolean(pending[current.view.id]) || gateHeld, kept: 'proposal',
+              title: gateHeld ? PROPOSAL_GATE_COPY.accept : undefined })}
             onClick={() => {
               if (settled()) void accept(current.view.id);
             }}

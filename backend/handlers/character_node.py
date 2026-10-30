@@ -70,10 +70,10 @@ async def handle_character_node(
         character = None
     if character is None:
         if _in_trash(character_id):
-            raise with_person_line(ValueError(f"Character {character_id!r} is in Recently deleted. Restore it (Character Studio, "
+            raise with_person_line(ValueError(f"Character {character_id} is in Recently deleted. Restore it (Character Studio, "
                              f"or nebula trash restore character {character_id}) and run again."),
                 "This node's character is in Recently deleted. Restore it in Character Studio, then run the node again.")
-        raise with_person_line(ValueError(f"Character {character_id!r} not found; it may have been deleted for good. "
+        raise with_person_line(ValueError(f"Character {character_id} not found; it may have been deleted for good. "
                          "Pick another character for this node."),
             "This node's character can't be found. It may have been deleted for good. Pick another character for this node.")
 

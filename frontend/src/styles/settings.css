@@ -237,11 +237,38 @@ body.app-slava-restraint .settings__button--primary:hover:not(:disabled) { filte
 
 body.app-slava-restraint .settings__remove-confirm { display: inline-flex; gap: 6px; }
 
-body.app-slava-restraint .settings__remove-key--armed,
-body.app-slava-restraint .settings__remove-key--armed:hover:not(:disabled) {
-  border-color: var(--sr-danger-border);
-  background: var(--sr-danger-soft);
-  color: var(--sr-danger);
+/* GM r11 answer 3: the Delete red, never the orange. The armed confirm of
+   removing a key or revoking an app: what it removes can't come back by
+   adding again (GM r12's rule), so it is a danger control. */
+/* GM r18 capture 1 (PR #200 fix round 12): an armed confirm is the filled
+   confirm every destructive confirm uses (the prompt dialog's, the Projects
+   and asset-trash confirms): the red fill and near-black ink, the lighter
+   fill on hover and pressed. Its trigger stays the ghost that turns red. */
+body.app-slava-restraint .settings__confirm--danger {
+  border-color: var(--sr-danger-fill, #ff887d);
+  background: var(--sr-danger-fill, #ff887d);
+  color: var(--sr-on-danger, #1f1f1f);
+  font-weight: 600;
+}
+
+body.app-slava-restraint .settings__confirm--danger:hover:not(:disabled),
+body.app-slava-restraint .settings__confirm--danger:active:not(:disabled) {
+  border-color: var(--sr-danger-fill-hover, #ff9a91);
+  background: var(--sr-danger-fill-hover, #ff9a91);
+  color: var(--sr-on-danger, #1f1f1f);
+}
+
+/* GM r13: removing a personal agent deletes a standalone thing with its own
+   settings, so it is red whatever its label says. It has no confirm, so it
+   rests neutral like every Settings button and turns red on hover. */
+body.app-slava-restraint .settings__button--danger:hover:not(:disabled) {
+  border-color: var(--sr-danger-edge);
+  background: var(--sr-danger-tint);
+  color: var(--sr-danger-ink, #ff887d);
+}
+
+body.app-slava-restraint .settings__button--danger:active:not(:disabled) {
+  color: var(--sr-danger-ink-hover, #ff9a91);
 }
 
 body.app-slava-restraint .settings__select {
@@ -828,6 +855,6 @@ body.app-slava-restraint .settings-notice__undo:focus-visible { outline: var(--s
   opacity: 1;
 }
 .settings__fieldset:disabled :disabled {
-  opacity: var(--sr-disabled-opacity, 0.48);
+  opacity: var(--sr-disabled-opacity);
   cursor: not-allowed;
 }

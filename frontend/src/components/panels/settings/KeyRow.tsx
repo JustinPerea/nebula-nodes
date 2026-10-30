@@ -19,7 +19,7 @@ function RemoveKeyButton({ label, removing, onConfirm }: { label: string; removi
   const disarm = () => { setArmed(false); requestAnimationFrame(() => trigger.current?.focus()); };
   if (!armed) {
     return (
-      <button type="button" ref={trigger} className="settings__button settings__button--ghost settings__remove-key"
+      <button type="button" ref={trigger} className="settings__button settings__button--ghost settings__remove-key settings__button--danger"
         aria-label={`Remove ${label} API key`} disabled={removing} onClick={() => setArmed(true)}>
         {removing ? 'Removing…' : 'Remove'}
       </button>
@@ -31,7 +31,7 @@ function RemoveKeyButton({ label, removing, onConfirm }: { label: string; removi
     <span className="settings__remove-confirm" role="group" data-claims-escape="" aria-label={`Remove the ${label} API key?`}
       onKeyDownCapture={(event) => { if (event.key === 'Escape') { event.preventDefault(); disarm(); } }}>
       <button type="button" className="settings__button" autoFocus onClick={disarm}>Keep</button>
-      <button type="button" className="settings__button settings__remove-key--armed"
+      <button type="button" className="settings__button settings__confirm--danger"
         aria-label={`Confirm removing the ${label} API key`} onClick={() => { setArmed(false); onConfirm(); }}>Remove</button>
     </span>
   );

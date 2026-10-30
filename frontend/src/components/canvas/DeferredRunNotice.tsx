@@ -1,7 +1,9 @@
 import { Play, X } from 'lucide-react';
 import { useCanvasProposalsStore } from '../../store/canvasProposalsStore';
 import { useGraphStore } from '../../store/graphStore';
+import { useCanvasLock } from '../../lib/canvasLock';
 import '../../styles/canvasProposals.css';
+import { useLeave } from '../../lib/noticeLeave';
 
 /**
  * The proposal bar's own notice: an agent's proposal was accepted while a run
@@ -17,17 +19,22 @@ export function DeferredRunNotice() {
   const isExecuting = useGraphStore((s) => s.isExecuting);
   // A run waiting for its inputs counts as starting (review 15, M-B).
   const runStarting = useGraphStore((s) => s.runStarting);
-  if (!deferredRun) return null;
+  const lock = useCanvasLock();
+  // It leaves as it entered (fix round 7 of PR #200, GM r11 answer 2).
+  const leave = useLeave(deferredRun);
+  if (!leave.shown) return null;
+  const shown = leave.shown;
   return (
-    <div className="proposal-bar proposal-bar--notice" role="status">
+    <div className="proposal-bar proposal-bar--notice" role="status" {...leave.props}>
       <p className="proposal-bar__summary">
-        Added {deferredRun.agentName}&apos;s nodes. Run them when the current run finishes.
+        Added {shown.agentName}&apos;s nodes. Run them when the current run finishes.
       </p>
       <div className="proposal-bar__actions">
         <button
           type="button"
           className="proposal-bar__button proposal-bar__button--primary"
-          disabled={isExecuting || runStarting}
+          // Review 7, L5: canvasLock's order (run, then following, then offline).
+          {...lock.act({ kept: 'run' }, { run: isExecuting || runStarting })}
           onClick={() => void runDeferred()}
         >
           <Play size={13} aria-hidden="true" />

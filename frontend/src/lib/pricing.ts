@@ -1,5 +1,8 @@
 import type { ModelNodeDefinition } from '../types';
 import { allParamDefinitions, hasRoutes, routeBlock, routeById, routesOf, withWiredBlockers } from './directRoute';
+import {
+  CEILING_USD, OVER_CEILING_SPENT_USD, OVER_CEILING_USD, OVER_TITLE, PRICED_PART, UNPRICED_SUFFIX,
+} from './unpricedCopy';
 
 /** One curated price entry from backend/data/model_pricing.json. The format
  * and its rules live in backend/services/model_pricing.py; this file mirrors
@@ -352,19 +355,240 @@ export function estimateNode(
   return result;
 }
 
-/** "$0.0047", "$0.04", "$0.10", "$1.20", "$12". Cents from a dime up,
- * two significant figures below it so sub-cent prices stay readable. */
-export function formatUsd(amount: number): string {
-  if (amount <= 0) return '$0';
-  if (amount >= 10) return `$${Math.round(amount)}`;
-  if (amount >= 0.1) return `$${amount.toFixed(2)}`;
-  return `$${Number(amount.toPrecision(2))}`;
+/* Money, written the one way Nebula writes it (PR #198 review 2, L4). The
+ * backend's services/money.py is the same code: both read the table in
+ * contracts/fixtures/money/cases.json, so neither side can drift.
+ * Rounding is spelled out (half up on the binary value) instead of left to
+ * toFixed, so Python and JavaScript agree on every amount. Negative and
+ * non-finite amounts are nothing: a cost or a spend is a sum of prices, and
+ * the only way below zero is float noise from a subtraction (a limit minus
+ * what was used), where "nothing left" is the true reading ("$-0.00" never
+ * shows). Amounts above CEILING_USD read as more than it (PR #198 review 5,
+ * N4: past it, a float's whole dollars are written as an exponent, and
+ * money.py's cents overflow), on both sides. */
+
+/** An amount that can be shown: a finite, positive number, else 0. */
+function clampUsd(amount: unknown): number {
+  return typeof amount === 'number' && Number.isFinite(amount) && amount > 0 ? amount : 0;
 }
 
-/** "$0.04" for an exact price, "$0.0047–0.43" for a range. */
+const halfUp = (value: number): number => Math.floor(value + 0.5);
+
+const grouped = (whole: number): string => String(whole).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+function centsText(cents: number): string {
+  return `$${grouped(Math.floor(cents / 100))}.${String(cents % 100).padStart(2, '0')}`;
+}
+
+/** An amount rounded the way formatUsd shows it: the rounded value and how
+ * many decimals its text has (two significant figures under $0.10, cents
+ * under $10, whole dollars from $10). */
+interface RoundedUsd { value: number; decimals: number }
+
+/** The smallest amount formatUsd writes in figures: below it, "<$0.000001"
+ * (money.py TINY_USD; PR #198 review 3, L5: two significant figures of a
+ * float denormal are 324 decimals, past what toFixed can write). */
+const TINY_USD = 0.000001;
+const UNDER_TINY = '<$0.000001';
+
+function roundUsd(amount: number): RoundedUsd {
+  const value = clampUsd(amount);
+  if (value === 0) return { value: 0, decimals: 0 };
+  if (value < 0.1) {
+    const exponent = Math.floor(Math.log10(value));
+    const decimals = 1 - exponent;
+    const scale = 10 ** decimals;
+    const rounded = halfUp(value * scale) / scale;
+    if (rounded < 0.1) {
+      // "0.040" is "0.04": a trailing zero is dropped, as money.py does.
+      const text = rounded.toFixed(decimals).replace(/0+$/, '');
+      return { value: rounded, decimals: text.split('.')[1]?.length ?? 0 };
+    }
+  }
+  const cents = halfUp(value * 100);
+  if (cents < 1000) return { value: cents / 100, decimals: 2 };
+  return { value: halfUp(value), decimals: 0 };
+}
+
+function roundedText({ value, decimals }: RoundedUsd): string {
+  if (value === 0) return '$0';
+  if (decimals === 0) return `$${grouped(value)}`;
+  if (value >= 0.1) return centsText(Math.round(value * 100));
+  return `$${value.toFixed(decimals)}`;
+}
+
+/** "$0.0047", "$0.04", "$0.10", "$1.20", "$12", "$1,235": a price, a limit
+ * or a cost in a line. Two significant figures under a dime, cents under
+ * $10, whole dollars from $10, picked from the rounded value ($0.0995 is
+ * "$0.10", $9.996 is "$10"). "$0" only for nothing (money.py usd_amount). */
+export function formatUsd(amount: number): string {
+  const value = clampUsd(amount);
+  if (value > CEILING_USD) return OVER_CEILING_USD;
+  if (value > 0 && value < TINY_USD) return UNDER_TINY;
+  return roundedText(roundUsd(amount));
+}
+
+/** How many decimals two significant figures of `value` (under a dime) take. */
+function twoFigureDecimals(value: number): number {
+  return Math.max(0, 1 - Math.floor(Math.log10(value)));
+}
+
+/** Two rounded ends, the same number of decimals when both are under a dime
+ * ("$0.010–0.015", never "$0.01–0.015"), but never more than two
+ * significant figures on either ("$0.0099–0.010", never "$0.0099–0.0100";
+ * review 3, N3); null when they read the same. An end under TINY_USD reads
+ * as formatUsd writes it. */
+function rangeEnds(low: number, high: number): [string, string] | null {
+  if (clampUsd(low) > 0 && clampUsd(low) < TINY_USD) return clampUsd(high) < TINY_USD ? null : [UNDER_TINY, formatUsd(high)];
+  const from = roundUsd(low);
+  const to = roundUsd(high);
+  if (from.value === to.value) return null;
+  if (from.value > 0 && from.value < 0.1 && to.value < 0.1) {
+    const decimals = Math.max(from.decimals, to.decimals);
+    return [`$${from.value.toFixed(Math.min(decimals, twoFigureDecimals(from.value)))}`,
+      `$${to.value.toFixed(Math.min(decimals, twoFigureDecimals(to.value)))}`];
+  }
+  return [roundedText(from), roundedText(to)];
+}
+
+/** A detail line's estimate (the Run button's title, the cost confirm, the
+ * provider switcher's rows): "$0.04" for an exact price, "$0.0047–$0.43"
+ * for a range, each end written in full with its exact figure (GM, PR #198
+ * r6 item 3). Chips write their own form (chipEstimate). A high end that
+ * isn't a number, or is under the low end, says nothing of its own: the low
+ * end alone (PR #198 review 4, L2: never "$0.02–0.00" or "$0.05–0.02"). */
 export function formatUsdRange(low: number, high: number): string {
-  if (formatUsd(low) === formatUsd(high)) return formatUsd(high);
-  return `${formatUsd(low)}–${formatUsd(high).slice(1)}`;
+  if (typeof high !== 'number' || !Number.isFinite(high) || clampUsd(high) < clampUsd(low)) return formatUsd(low);
+  if (clampUsd(low) > CEILING_USD) return OVER_CEILING_USD;
+  if (clampUsd(high) > CEILING_USD) return `${formatUsd(low)}–${OVER_CEILING_USD}`;
+  const ends = rangeEnds(low, high);
+  return ends ? `${ends[0]}–${ends[1]}` : formatUsd(high);
+}
+
+/** What was spent, to the cent ("$3.40", "$1,234.50", "$0.00" for nothing).
+ * A non-zero amount that rounds to no cents is "<$0.01": "$0.00" only ever
+ * means nothing (GM, PR #198 r1 item 6; money.py usd_spent). */
+export function formatSpentUsd(amount: number): string {
+  const value = clampUsd(amount);
+  if (value > CEILING_USD) return OVER_CEILING_SPENT_USD;
+  const cents = halfUp(value * 100);
+  if (cents === 0) return value > 0 ? CHIP_UNDER_FLOOR : '$0.00';
+  return centsText(cents);
+}
+
+/** A chip's smallest amount (GM, PR #198 r1 item 6): "$0" only ever means
+ * free, so a non-zero amount under a cent reads "<$0.01" on a chip, and its
+ * tooltip says "under $0.01" / "less than $0.01". Detail lines keep
+ * formatUsd's figures. */
+export const CHIP_FLOOR_USD = 0.01;
+export const CHIP_UNDER_FLOOR = '<$0.01';
+
+/** What a chip shows, worked out once for its label and its tooltip, which
+ * say the same figures (PR #198 review 4, L2). GM, r4: "chips never show
+ * sub-cent precision": every figure is to the cent under $10 and in whole
+ * dollars from $10 (chipUsd), and a range has the same decimals on both
+ * ends ("$9.50–12.00", never "$9.50–12").
+ * - `free`: "~$0" ($0 known; "$0 + unpriced" when open);
+ * - `under`: a non-zero amount under a cent, "<$0.01";
+ * - `upTo`: a range whose low end is under a cent, $0 included, "Up to
+ *   $0.43" (GM r4, and r6 item 2 for $0);
+ * - `exact`: one figure, "~$0.04" ("$0.04 + unpriced" when open);
+ * - `range`: two figures, "$0.05–0.43". A range whose ends read the same is
+ *   one figure.
+ * - `over`: a high end past CEILING_USD, ">$10,000,000,000,000" (review 5, N4).
+ * `open`: part of the run has no known price (runScope's `unpriced`) or a
+ * priced node's estimate leaves a cost out (`plus`), so the real total can
+ * be higher: the label adds " + unpriced" (GM r6, UNPRICED_SUFFIX). */
+export type ChipEstimate =
+  | { kind: 'free' | 'under' | 'over'; open: boolean }
+  | { kind: 'exact' | 'upTo'; amount: string; open: boolean }
+  | { kind: 'range'; low: string; high: string; open: boolean };
+
+/** A chip's figure (GM, PR #198 r4: never sub-cent): cents under $10,
+ * whole dollars from $10, from the rounded value ($9.996 is "$10"); with
+ * `cents`, cents at any size ("$12.00", for the other end of a range from
+ * under $10). An amount under a cent is never written: callers say "<$0.01". */
+function chipUsd(amount: number, cents = false): string {
+  const value = clampUsd(amount);
+  const rounded = halfUp(value * 100);
+  if (rounded === 0) return '$0';
+  return rounded < 1000 || cents ? centsText(rounded) : `$${grouped(halfUp(value))}`;
+}
+
+/** Whether a chip writes `amount` in cents (under $10 once rounded). */
+const inCents = (amount: number) => halfUp(clampUsd(amount) * 100) < 1000;
+
+export function chipEstimate(low: number, high: number, open: boolean): ChipEstimate {
+  // A high end that isn't a number (NaN, Infinity) has no price: the chip
+  // reads its low end with the rest unknown, never "~$0" (review 3, L5:
+  // "$0" only ever means free).
+  if (typeof high !== 'number' || !Number.isFinite(high)) {
+    return chipEstimate(low, clampUsd(low), true);
+  }
+  const bottom = clampUsd(low);
+  // A high end under the low end says nothing of its own: the low end alone,
+  // as formatUsdRange reads it (review 5, N3: never "~$0" for 0.43 to -1).
+  const top = Math.max(clampUsd(high), bottom);
+  if (top > CEILING_USD) return { kind: 'over', open };
+  if (top === 0) return { kind: 'free', open };
+  if (top < CHIP_FLOOR_USD) return { kind: 'under', open };
+  // GM, r4: a range whose low end is under a cent is "Up to $Y" (its low end
+  // has no figure a chip can write), whatever $Y is; r6 item 2: from $0 too.
+  if (bottom < CHIP_FLOOR_USD) return { kind: 'upTo', amount: chipUsd(top), open };
+  const cents = inCents(bottom) || inCents(top);
+  const from = chipUsd(bottom, cents);
+  const to = chipUsd(top, cents);
+  if (halfUp(bottom * 100) === halfUp(top * 100) || (!cents && halfUp(bottom) === halfUp(top))) {
+    return { kind: 'exact', amount: chipUsd(top), open };
+  }
+  return { kind: 'range', low: from, high: to, open };
+}
+
+/** A chip's estimate: "~$0.04", "<$0.01", "Up to $0.43", "$0.04–0.05",
+ * with " + unpriced" when part of it has no known price (`open`). Shared by
+ * the Run chips (runScope) and the proposal card (canvasProposals). */
+export function formatChipEstimate(low: number, high: number, open: boolean): string {
+  return chipLabel(chipEstimate(low, high, open));
+}
+
+export function chipLabel(chip: ChipEstimate): string {
+  const more = chip.open ? UNPRICED_SUFFIX : '';
+  switch (chip.kind) {
+    case 'free': return chip.open ? `$0${more}` : '~$0';
+    case 'under': return `${CHIP_UNDER_FLOOR}${more}`;
+    case 'over': return `${OVER_CEILING_USD}${more}`;
+    case 'exact': return chip.open ? `${chip.amount}${more}` : `~${chip.amount}`;
+    case 'upTo': return `Up to ${chip.amount}${more}`;
+    case 'range': return `${chip.low}–${chip.high.replace(/^\$/, '')}${more}`;
+  }
+}
+
+/** A chip's tooltip, from the same figures as its label.
+ * Closed (GM - Design, r18 of PR #114, r1 to r4 of PR #198): "~$0" and "~$X"
+ * read "Estimated cost"; "<$0.01" "Estimated cost under $0.01"; a range
+ * "Between $X and $Y."; "Up to $Y" "Up to $Y.".
+ * Open ("+ unpriced"): the priced part's sentence (GM r7 item 3,
+ * unpricedCopy PRICED_PART), "The priced part of this run costs up to
+ * $0.43."; the Run chips add a sentence per reason (runScope runChipTitle). */
+export function chipTitle(chip: ChipEstimate): string {
+  if (chip.open) {
+    switch (chip.kind) {
+      case 'free': return PRICED_PART.free;
+      case 'under': return PRICED_PART.under;
+      case 'over': return PRICED_PART.over;
+      case 'exact': return PRICED_PART.exact(chip.amount);
+      case 'upTo': return PRICED_PART.upTo(chip.amount);
+      case 'range': return PRICED_PART.range(chip.low, chip.high);
+    }
+  }
+  switch (chip.kind) {
+    case 'free': return 'Estimated cost';
+    case 'under': return 'Estimated cost under $0.01';
+    case 'over': return OVER_TITLE;
+    case 'exact': return 'Estimated cost';
+    case 'upTo': return `Up to ${chip.amount}.`;
+    case 'range': return `Between ${chip.low} and ${chip.high}.`;
+  }
 }
 
 /** {route id: the estimate on that route, or null} for a route-table node:

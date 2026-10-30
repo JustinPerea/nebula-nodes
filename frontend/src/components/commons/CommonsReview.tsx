@@ -245,14 +245,14 @@ function ReviewForm({ batch, item, dirty, saving, generating, onDirty, onAccept,
           {batch.roles.map((role) => <option key={role}>{role}</option>)}</select> : <strong>{labels.palette_roles[p.index]}</strong>}
       </label>)}
       <h4 className="evaluation-subhead">Keywords</h4><div className="evaluation-keywords">{labels.keywords.map((word) => editing ?
-        <button className="commons-button" key={word} onClick={() => { const words = labels.keywords.filter((w) => w !== word); change({ keywords: words, no_keywords: !words.length }); }}>{pretty(word)} ×</button>
+        <button className="commons-button commons-button--remove" key={word} aria-label={`Remove ${pretty(word)}`} onClick={() => { const words = labels.keywords.filter((w) => w !== word); change({ keywords: words, no_keywords: !words.length }); }}>{pretty(word)} ×</button>
         : <span className="review-keyword" key={word}>{pretty(word)}</span>)}{!labels.keywords.length && <span>No applicable keywords</span>}</div>
       {editing && <><input aria-label="Search keywords" value={query} placeholder="Add a keyword…" onChange={(e) => setQuery(e.target.value)} />
         <div className="evaluation-keywords">{query.trim() && batch.keywords.filter((word) => word.includes(query.trim().toLowerCase().replaceAll(' ', '_')) && !labels.keywords.includes(word)).slice(0, 20).map((word) =>
           <button className="commons-button" key={word} disabled={labels.keywords.length >= 12} onClick={() => { change({ keywords: [...labels.keywords, word], no_keywords: false }); setQuery(''); }}>{pretty(word)}</button>)}</div></>}
     </fieldset>
     <div className="evaluation-save">{agreement}</div>
-    {dirty && <button className="commons-button" disabled={disabled} onClick={discard}>Discard changes</button>}
+    {dirty && <button className="commons-button commons-button--danger" disabled={disabled} onClick={discard}>Discard changes</button>}
     <p role="status">{dirty ? 'Save before changing reference' : item.reviewed_at ? 'Reviewed by you · saved on this computer' : 'Awaiting your review · nothing accepted yet'}</p>
     <details><summary>Original agent grade</summary><dl>
       {Object.entries(item.proposal.labels.tags).map(([key, value]) => <div key={key}><dt>{pretty(key)}</dt><dd>{pretty(value)}</dd></div>)}

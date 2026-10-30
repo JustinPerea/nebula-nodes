@@ -260,7 +260,8 @@ describe('in the region', () => {
       // PR #199 review 11 (GM r15, Q11): the kept-edits line sits under the project switch.
       'proposal', 'run-later', 'person-required', 'project-switch', 'kept-edits', 'save-paused', 'project-home',
       // Review 7, L3: a line beside an Undo has its own slot above the late count.
-      'pin', 'board', 'asset-trash', 'message', 'late', 'notice',
+      // GM r28 (PR #198 round 19): the scenes' stop lines, a state above every event.
+      'pin', 'board', 'asset-trash', 'scene-clash', 'scene-stop', 'message', 'late', 'notice',
     ]);
   });
 

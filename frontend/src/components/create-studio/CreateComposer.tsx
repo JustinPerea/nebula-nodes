@@ -7,7 +7,7 @@ import { ParamPills } from './ParamPills';
 import { isCreateModel } from '../../lib/createModels';
 import { ProviderReadinessBadge } from '../ProviderReadinessBadge';
 import { failureMessage } from '../../lib/errorCopy';
-import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
+import { lockedAction, refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 
 interface CreateComposerProps {
   modelDef: ModelNodeDefinition | null;
@@ -48,7 +48,7 @@ export function CreateComposer({
   const [prevPrompt, setPrevPrompt] = useState<string | null>(null);
   const [enhanceError, setEnhanceError] = useState<string | null>(null);
   const modelSupported = Boolean(modelDef && isCreateModel(modelDef));
-  const canGenerate = modelSupported && !isLaunching && !referencesBlocked && activeCount < maxConcurrent;
+  const canGenerate = modelSupported && !isLaunching && !referencesBlocked && activeCount < maxConcurrent && !lock.offline;
   const canEnhance = prompt.trim().length > 0 && !enhancing;
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -172,7 +172,7 @@ export function CreateComposer({
         <button
           type="button"
           className="create-composer__generate"
-          {...lock.act({ disabled: !canGenerate, kept: 'generate' })}
+          {...lockedAction(lock, { disabled: !canGenerate, kept: 'generate' }, { neutral: true, offlineTooltip: false })}
           onClick={(e) => { if (e.detail <= 1 && canGenerate && !refuseCanvasEdit()) onGenerate(); }}
         >
           <Sparkles size={16} strokeWidth={1.9} aria-hidden="true" />

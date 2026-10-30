@@ -11,7 +11,7 @@ import { clearCreateReferenceUploads } from '../../src/lib/createUploads';
 interface FakeGraph {
   nodes: Node<NodeData>[]; edges: Edge[];
   runHistory: { id: string; status: string; createOrigin?: { genId: string; prompt: string; ts: number; sessionId: string; modelNodeIds: string[]; allNodeIds: string[] } }[];
-  activeRuns: []; createLaunchingIds: string[]; createCancelledLaunchIds: []; isImportingGraph: boolean;
+  activeRuns: []; createLaunchingIds: string[]; createCancelledLaunchIds: []; isImportingGraph: boolean; unsavedScenes: Record<string, string>;
   reserveCreateGeneration: (id: string) => boolean;
   releaseCreateGeneration: (id: string) => void;
   authorGenerationCluster: (...args: unknown[]) => Promise<{ modelNodeIds: string[]; allNodeIds: string[] }>;
@@ -41,7 +41,7 @@ vi.mock('../../src/store/uiStore', () => {
 vi.mock('../../src/store/graphStore', async () => {
   const { create } = await import('zustand');
   const store = create<FakeGraph>(() => ({
-    nodes: [], edges: [], runHistory: [], activeRuns: [], createLaunchingIds: [], createCancelledLaunchIds: [], isImportingGraph: false,
+    nodes: [], edges: [], runHistory: [], activeRuns: [], createLaunchingIds: [], createCancelledLaunchIds: [], unsavedScenes: {}, isImportingGraph: false,
     reserveCreateGeneration: (id) => { store.setState({ createLaunchingIds: [...store.getState().createLaunchingIds, id] }); return true; },
     releaseCreateGeneration: (id) => store.setState({ createLaunchingIds: store.getState().createLaunchingIds.filter((entry) => entry !== id) }),
     authorGenerationCluster: (...args) => mocks.author(...args),

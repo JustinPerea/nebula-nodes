@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useGraphStore } from '../../store/graphStore';
 import { useUIStore } from '../../store/uiStore';
 import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
+import { refuseCanvasEdit } from '../../lib/canvasLock';
 
 interface UseRemotionKeyboardOptions {
   remotionNodeId: string;
@@ -29,6 +30,9 @@ export function useRemotionKeyboard({ remotionNodeId, currentFrame }: UseRemotio
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (!selectedId) return;
         e.preventDefault();
+        // Read-only while following an agent's switch or offline (the canvas
+        // lock, follow-up to PR #195): the key is taken, nothing changes.
+        if (refuseCanvasEdit()) return;
         useGraphStore.getState().deleteTrackItem(remotionNodeId, selectedId);
         useUIStore.getState().setSelectedTrackItem(null);
         return;
@@ -38,6 +42,7 @@ export function useRemotionKeyboard({ remotionNodeId, currentFrame }: UseRemotio
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'd') {
         if (!selectedId) return;
         e.preventDefault();
+        if (refuseCanvasEdit()) return;
         useGraphStore.getState().duplicateTrackItemAtPlayhead(remotionNodeId, selectedId, currentFrame);
         return;
       }

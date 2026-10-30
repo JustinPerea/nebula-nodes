@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { keepCanvasLocally, releaseKeptCanvas, runsThatNeverStarted, setReplacedCanvasKeeper, useGraphStore } from './graphStore';
+import { hasUnsavedSceneEdits, keepCanvasLocally, releaseKeptCanvas, runsThatNeverStarted, setReplacedCanvasKeeper, useGraphStore } from './graphStore';
 import { isCanvasKept, setKeptCanvasSaving } from '../lib/keptCanvas';
 import { useUIStore } from './uiStore';
 import { readDraft, useCreateDraftStore } from './createDraftStore';
@@ -95,18 +95,33 @@ export type ProjectRetry =
   | { action: 'cover'; id: string; url: string | null }
   /** GM r12 on PR #199, 1: the edits a restore stopped, kept in this tab,
    * saved as their own "(recovered)" project ([Save as a project]). */
-  | { action: 'saveRecovered' };
+  | { action: 'saveRecovered' }
+  /** GM r9 decision 1: [Reload Nebula] after an update, with the edits kept
+   * in their recovered copy; the reload opens it. */
+  | { action: 'reloadForUpdate'; version: number | null };
+
+/** GM r12 item 5: where an update's recovered copy went, when the reload
+ * couldn't open it: a neutral notice (the restored copy's notice's look) with
+ * × to close; a copy in Recently deleted also offers [Restore]. */
+export interface CopyNotice {
+  line: string;
+  restore: { id: string; name: string } | null;
+  /** GM #198 r22 Q2: [Open] for a recovered copy that is in the list. */
+  open?: { id: string; name: string } | null;
+}
 
 /** What the Projects screen offers beside its error: 'redo' (Try again
  * redoes the failure, so the reason is GM's short line), 'reload' (Try again
  * reloads the saved projects, as the line says; the whole line stays),
  * 'save' (GM r12 on PR #199, 1: [Save as a project] after a restore stopped
- * this tab's edits; the whole line stays) or 'none' (no button; the whole line). */
-export type ProjectRetryOffer = 'redo' | 'reload' | 'save' | 'none';
+ * this tab's edits; the whole line stays), 'reloadNebula' ([Reload Nebula]
+ * after an update) or 'none' (no button; the whole line). */
+export type ProjectRetryOffer = 'redo' | 'reload' | 'save' | 'none' | 'reloadNebula';
 
 export function projectRetryOffer(state: { error: string | null; errorRetry: ProjectRetry | null }): ProjectRetryOffer {
   if (!state.error || !state.errorRetry) return 'none';
   if (state.errorRetry.action === 'saveRecovered') return 'save';
+  if (state.errorRetry.action === 'reloadForUpdate') return 'reloadNebula';
   return state.errorRetry.action === 'load' && state.errorRetry.full ? 'reload' : 'redo';
 }
 
@@ -223,6 +238,14 @@ interface ProjectState {
   /** The file those edits were downloaded as, for GM's line after it, and
    * whether Load graph can open it (a copy past its limits can't). */
   editsSavedAs: SavedEditsFile | null;
+  /** GM r12 item 5: an update's recovered copy the reload couldn't open. */
+  copyNotice: CopyNotice | null;
+  /** Its [Restore]: restore the copy from Recently deleted and open it. */
+  restoreCopyNotice: () => Promise<void>;
+  /** Its ×. */
+  dismissCopyNotice: () => void;
+  /** Its [Open] (GM #198 r22 Q2): open the recovered copy it names. */
+  openCopyNotice: () => Promise<void>;
   /** "Download your edits": write the held copy as a .nebula file, then load
    * the projects. A cancelled save picker keeps the two choices. */
   downloadUnsavedEdits: () => Promise<void>;
@@ -354,6 +377,12 @@ let reloadingForParams = false;
  * window whose frontend build is still older after a reload stops instead of
  * reloading again. */
 const PARAMS_RELOAD_KEY = 'nebula:paramsReloadedFor';
+/** GM r9 decision 1: the recovered copy an update's stop saved the edits to
+ * ({id, name}), kept across the reload, so the reloaded tab opens it with
+ * GM's notice instead of landing on Projects silently. Written as soon as the
+ * copy exists, so any reload (the button, the person's own, a forced one)
+ * finds it. */
+const RECOVERED_FOR_UPDATE_KEY = 'nebula:recoveredForUpdate';
 /** Projects lists again on every projectsChanged (another writer made,
  * renamed, saved or deleted a project). Off Projects it waits for goHome. */
 let listingStale = false;
@@ -597,6 +626,7 @@ const RETRY_HEADINGS: Record<ProjectRetry['action'], string> = {
   create: "Couldn't create the project.", rename: "Couldn't rename the project.", delete: "Couldn't delete the project.",
   restore: "Couldn't restore the project.", purge: "Couldn't delete the project for good.",
   emptyTrash: "Couldn't empty Recently deleted.", cover: "Couldn't set the cover.", saveRecovered: LOAD_HEADING,
+  reloadForUpdate: LOAD_HEADING,
 };
 /** Show `error` with what Try again does for it: `retry`, unless the backend
  * refused for good (then no Try again). The line is GM's mapping (error copy
@@ -642,6 +672,11 @@ function preserveWorkspaceConflict(message: string, neverRan?: Set<string>, capt
     try { saved = lastSaved ? JSON.parse(lastSaved) as ProjectSnapshot : null; } catch { saved = null; }
     dirty = Boolean(context) && (!saved || paramsStopWork(snapshot, neverRan) !== paramsStopWork(saved, new Set()));
   } else dirty = Boolean(context) && JSON.stringify(snapshot) !== lastSaved;
+  // Review 12, M-1: a scene card's edits Nebula doesn't have count too, even
+  // when the autosave already sent a snapshot with them (the switch then
+  // saved Nebula's own canvas, without them). They are in the snapshot: the
+  // card shows them.
+  if (!dirty && context && hasUnsavedSceneEdits()) dirty = true;
   if (dirty && context) pendingRecovery = pendingRecoveryOf(context.id, snapshot);
   // Try again reloads the saved projects (initialize), as these lines say.
   useProjectStore.setState({ screen: 'home', initialized: false, loading: false, dirty, error: message, errorRetry: retry });
@@ -789,15 +824,18 @@ async function recoverPendingWork(): Promise<boolean> {
  * idempotent by its id); one over the save limit isn't sent. Null when no
  * project is open; the promise is null when no copy was made.
  */
-function keepReplacedCanvasAsCopy(): Promise<{ id: string; name: string } | null> | null {
+function keepReplacedCanvasAsCopy(): (() => Promise<{ id: string; name: string } | null>) | null {
   const context = getProjectContext();
   if (!context) return null;
+  // The canvas as it is now, before the replacement changes it; the copy is
+  // sent when graphStore calls back (at once, or once a save on its way is
+  // refused: follow-up to PR #195, review 23 L-5).
   const snapshot = captureProjectSnapshot();
   if (projectSizeBytes(snapshot) > PROJECT_SAVE_LIMIT_BYTES) return null;
   const recovery = pendingRecoveryOf(context.id, snapshot);
   // A request that throws before it is sent is a copy not made, never a
   // replacement left half done.
-  return new Promise<Awaited<ReturnType<typeof api.recoverProject>>>((resolve) => {
+  return () => new Promise<Awaited<ReturnType<typeof api.recoverProject>>>((resolve) => {
     resolve(api.recoverProject(recovery.sourceProjectId, recovery.snapshot, recovery.recoveryId, recovery.paramsVersion));
   })
     .then((copy) => (copy && typeof copy.name === 'string' ? { id: copy.id ?? recovery.recoveryId, name: copy.name } : null))
@@ -985,6 +1023,81 @@ function reloadOnceFor(backendVersion: number | null): 'reload' | 'reloaded' | '
 function clearParamsReloadMark(): void {
   try { window.sessionStorage.removeItem(PARAMS_RELOAD_KEY); } catch { /* Nothing to clear. */ }
 }
+/** Whether this tab already reloaded for `backendVersion` (reloadOnceFor
+ * without marking it): 'reload' when it hasn't. */
+function reloadDueFor(backendVersion: number | null): 'reload' | 'reloaded' | 'unmarked' {
+  try {
+    return window.sessionStorage.getItem(PARAMS_RELOAD_KEY) === String(backendVersion ?? 'unknown') ? 'reloaded' : 'reload';
+  } catch { return 'unmarked'; }
+}
+function rememberCopyForUpdate(copy: { id: string; name: string }): boolean {
+  try {
+    window.sessionStorage.setItem(RECOVERED_FOR_UPDATE_KEY, JSON.stringify(copy));
+    return true;
+  } catch { return false; }
+}
+function takeCopyForUpdate(): { id: string; name: string } | null {
+  try {
+    const raw = window.sessionStorage.getItem(RECOVERED_FOR_UPDATE_KEY);
+    window.sessionStorage.removeItem(RECOVERED_FOR_UPDATE_KEY);
+    const copy = raw ? JSON.parse(raw) as { id?: unknown; name?: unknown } : null;
+    return copy && typeof copy.id === 'string' && typeof copy.name === 'string' ? { id: copy.id, name: copy.name } : null;
+  } catch { return null; }
+}
+
+/** GM r8 (the line beside [Reload Nebula]) and r9 decision 1 (the notice
+ * after the reload), verbatim but for “X”: the stop keeps a whole project's
+ * edits, so the builder's form drops the scene's name. */
+export function reloadForUpdateLine(project: string): string {
+  return `Couldn’t save your changes because Nebula was updated. Reload Nebula and they’ll open in a recovered copy of “${project}”.`;
+}
+/** GM #198 r22 Q2, verbatim but for “X”: Try again saved a stale tab's
+ * unsaved edits as a recovered project (the active project changed in
+ * another window). Shown in the banner's place, with [Open] and ×. */
+export function editsSavedAsProjectLine(copy: string): string {
+  return `Your latest edits were saved as their own project, “${copy}”.`;
+}
+export function openedAfterUpdateLine(copy: string): string {
+  return `These are the changes Nebula couldn’t save before it updated. They’re in “${copy}”.`;
+}
+/** GM r12 wording, verbatim but for “X”: the copy was deleted before the
+ * reload opened it. */
+export function copyDeletedAfterUpdateLine(copy: string, permanently: boolean): string {
+  return `Nebula couldn’t save some changes before it updated. They were kept in “${copy}”, which ${
+    permanently ? "was permanently deleted, so they can’t be brought back" : 'is in Recently deleted'}.`;
+}
+
+/** After a reload for an update: the copy the edits went to opens, with GM's
+ * notice. A copy in Recently deleted says so with [Restore] and ×; one
+ * deleted for good says so with × only: the reload left this tab none of the
+ * edits (sessionStorage keeps the copy's id and name), so there is nothing
+ * to apply (GM r11 answer 2's permanent case). Both are neutral notices (GM
+ * r12 item 5). A copy that won't open says the notice anyway. */
+async function openCopyAfterUpdate(): Promise<void> {
+  const copy = takeCopyForUpdate();
+  if (!copy) return;
+  const store = useProjectStore.getState();
+  if (!store.projects.some((project) => project.id === copy.id)) {
+    const trashed = store.trash.find((entry) => entry.id === copy.id);
+    const name = trashed?.name || copy.name;
+    useProjectStore.setState({ screen: 'home', copyNotice: { line: copyDeletedAfterUpdateLine(name, !trashed),
+      restore: trashed ? { id: copy.id, name } : null } });
+    return;
+  }
+  await store.open(copy.id);
+  const opened = useProjectStore.getState();
+  if (opened.activeProject?.id === copy.id && opened.screen === 'workspace') {
+    useGraphStore.getState().notify(openedAfterUpdateLine(copy.name), 'info');
+  } else if (opened.screen !== 'workspace') {
+    // Review 7, L4: the open's failure is the person's to retry from the
+    // copy's card; the notice says where the changes are first.
+    if (opened.error) {
+      useProjectStore.setState({ error: sentences(openedAfterUpdateLine(copy.name), opened.error) });
+    } else {
+      useProjectStore.setState({ copyNotice: { line: openedAfterUpdateLine(copy.name), restore: null } });
+    }
+  }
+}
 
 const PARAMS_UPDATED = 'Nebula was updated while this tab was open.';
 /** The backend runs another params version than this bundle (graphSync, the
@@ -1023,6 +1136,17 @@ function handleParamsVersionChange(backendVersion: number | null): Promise<void>
     const kept = recovered ? ' Your unsaved edits were saved as a recovered project.' : ' Your saved work is kept.';
     useProjectStore.setState({ dirty: false });
     const newer = backendVersion === null || backendVersion > GRAPH_PARAMS_VERSION;
+    // GM r9 decision 1: with edits kept in a recovered copy, Nebula never
+    // reloads by itself; GM's line and [Reload Nebula] wait for the person,
+    // and the reload opens the copy (openCopyAfterUpdate). The copy is
+    // remembered first, so a reload that comes anyway still opens it.
+    const copy = recovered ? lastRecoveredCopy : null;
+    if (copy && newer && !editsDownloaded && reloadDueFor(backendVersion) === 'reload' && rememberCopyForUpdate(copy)) {
+      const source = useProjectStore.getState().activeProject?.name
+        ?? copy.name.replace(/ \(recovered\)$/, '');
+      useProjectStore.setState({ error: reloadForUpdateLine(source), errorRetry: { action: 'reloadForUpdate', version: backendVersion } });
+      return;
+    }
     const marked = newer ? reloadOnceFor(backendVersion) : null;
     // After a download the tab asks for the reload it would make (the
     // 'unmarked' line; the mark counts the person's reload): reloading now
@@ -1421,7 +1545,10 @@ function releaseLoadedProject(): void {
 
 /** Load what the backend has open now (the listing and its active project).
  * Startup, Retry, and following an agent's switch all come through here. */
+/** The last listing ran this bundle's params version (loadWorkspace). */
+let backendParamsCurrent = false;
 async function loadWorkspace(): Promise<void> {
+  backendParamsCurrent = false;
   const set = useProjectStore.setState;
   // Whatever it loads, the tab didn't get there by the person's own open.
   setPersonOpened(null);
@@ -1434,6 +1561,7 @@ async function loadWorkspace(): Promise<void> {
     return;
   }
   clearParamsReloadMark();
+  backendParamsCurrent = true;
   if (generation === listingGeneration) set({ projects: list.projects, trash: list.trash ?? [], ...listingNotices(list) });
   set({ workspaceRevision: list.workspaceRevision });
   if (list.activeProjectId) {
@@ -1548,11 +1676,18 @@ function savedCopyHolds(saved: ProjectSnapshot, held: ProjectSnapshot): boolean 
   return !held.createDraft || sameValue(copy.createDraft, held.createDraft);
 }
 
-async function projectAlreadyHolds(projectId: string, held: ProjectSnapshot): Promise<boolean> {
+/** Whether nothing in `held` would be lost by dropping it: the project's
+ * saved copy already holds it, or, when that copy can't be read (an agent
+ * deleted the project while Nebula was offline: review 17 L1), what this tab
+ * last saved or loaded for that project does. The view isn't work either
+ * way, so a pan alone never makes a recovered copy. */
+async function projectAlreadyHolds(projectId: string, held: ProjectSnapshot, lastSavedThere: string): Promise<boolean> {
   try {
     return savedCopyHolds((await api.getProject(projectId)).snapshot, held);
   } catch {
-    return false;
+    let saved: ProjectSnapshot | null = null;
+    try { saved = lastSavedThere ? JSON.parse(lastSavedThere) as ProjectSnapshot : null; } catch { saved = null; }
+    return saved ? savedCopyHolds(saved, held) : false;
   }
 }
 
@@ -1591,6 +1726,8 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
   const following = { notices: [notice] };
   followingSwitch = following;
   const latest = () => following.notices[following.notices.length - 1];
+  // What this tab last saved or loaded for the project it is leaving.
+  const lastSavedThere = lastSaved;
   let keptCopy = false;
   let copy: { id: string; name: string } | null = null;
   try {
@@ -1621,7 +1758,7 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
         // PR #114), or a write was cut off (a delete still out isn't in the
         // snapshot as something held: round 21, the merge); then GM's line
         // says the handoff failed (round 19).
-        if (cutOff.length > 0 || !(await projectAlreadyHolds(context.id, snapshot))) {
+        if (cutOff.length > 0 || !(await projectAlreadyHolds(context.id, snapshot, lastSavedThere))) {
           handoffFailed = true;
           pendingRecovery = pendingRecoveryOf(context.id, snapshot);
           lastRecoveredCopy = null;
@@ -1656,13 +1793,16 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
     const reopened = (loaded?.id ?? landed.projectId) === left;
     // Round 21 (review 20, L-7): the project loaded, and the last agent
     // that switched (a second agent's switch during the follow is the one
-    // that landed).
-    useProjectStore.setState({ switchNotice: {
+    // that landed). The way back only to a project the listing
+    // loadWorkspace just read still has (PR #198 review 17 L1): offline, an
+    // agent's delete of it arrived before this notice existed, so no relist
+    // could drop it.
+    useProjectStore.setState((state) => ({ switchNotice: wayBackIn({
       actorName: agentNameOf(latest()), created: landed.created === true && landed.projectId === (loaded?.id ?? landed.projectId),
       projectName: loaded?.name ?? landed.projectName,
       previousProjectId: reopened ? null : left,
       previousProjectName: reopened ? null : notice.previousProjectName, keptCopy,
-    } });
+    }, state.projects) }));
   } catch (error) {
     // Refused for good: the held edits' screen says it (holdRefusedEdits).
     if (error instanceof EditsRefused) { noteAgentOpening(latest(), alreadyHeld); return; }
@@ -1734,7 +1874,7 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
   screen: 'home', initialized: false, loading: true, busy: false,
   projects: [], activeProject: null, trash: [], lastDeleted: null, projectLimit: DEFAULT_PROJECT_LIMIT, catalogRestore: null, canvasNotFiled: null, canvasSaved: null, editsRecoveredAs: null, agentClosedNote: null, keptEdits: null, canvasHeldUnreadable: null, workspaceRevision: '', error: null, errorDetails: null,
   errorRetry: null, saveError: null, saveStatus: 'saved', dirty: false, switchNotice: null,
-  unsavedEdits: null, editsSavedAs: null, savePaused: null, sizeNotice: null, sizePanelOpen: false,
+  unsavedEdits: null, editsSavedAs: null, copyNotice: null, savePaused: null, sizeNotice: null, sizePanelOpen: false,
   openSizePanel: () => { if (get().savePaused) set({ sizePanelOpen: true }); },
   closeSizePanel: () => set({ sizePanelOpen: false }),
   dismissSizeNotice: () => set({ sizeNotice: null }),
@@ -1760,6 +1900,13 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
   switchBack: async () => {
     const back = get().switchNotice?.previousProjectId;
     if (!back) return;
+    // Gone since the toast came up (deleted, or in Recently deleted): the
+    // toast closes quietly rather than send an open that can't work (review
+    // 17 L1).
+    if (!get().projects.some((project) => project.id === back)) {
+      set({ switchNotice: null });
+      return;
+    }
     await get().open(back);
     if (get().activeProject?.id === back) set({ switchNotice: null });
   },
@@ -1808,6 +1955,9 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
           errorRetry: refusedForGood(error) ? { action: 'load', full: true } : { action: 'load' } });
       }
       finally { set({ loading: false }); initializing = null; }
+      // GM r9 decision 1: back from a reload for an update, in the copy
+      // (once the projects are loaded, as Open on its card would).
+      if (backendParamsCurrent && get().initialized && !get().error) await openCopyAfterUpdate();
     })();
     return initializing;
   },
@@ -1951,6 +2101,26 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
     dismissedHeldNotes.add(note.at);
     void api.dismissCanvasHeldUnreadable(note.at).catch(() => undefined);
   },
+  dismissCopyNotice: () => set({ copyNotice: null }),
+  openCopyNotice: async () => {
+    const target = get().copyNotice?.open;
+    if (!target) return;
+    set({ copyNotice: null });
+    await get().open(target.id);
+  },
+  restoreCopyNotice: async () => {
+    const copy = get().copyNotice?.restore;
+    if (!copy) return;
+    set({ copyNotice: null });
+    // A failed restore says its own line (with its Try again).
+    await get().restore(copy.id);
+    if (!get().projects.some((project) => project.id === copy.id)) return;
+    await get().open(copy.id);
+    const opened = get();
+    if (opened.activeProject?.id === copy.id && opened.screen === 'workspace') {
+      useGraphStore.getState().notify(openedAfterUpdateLine(copy.name), 'info');
+    }
+  },
   goHome: async () => {
     // The person's own way to Projects: refused, as the corner's Review is.
     refuseWhileCommonsUnsaved();
@@ -2083,6 +2253,13 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
   },
   retry: async () => {
     const failed = get().errorRetry;
+    if (failed?.action === 'reloadForUpdate') {
+      // The person's [Reload Nebula]: the reload is marked as this version's.
+      reloadingForParams = true;
+      reloadOnceFor(failed.version);
+      reloadPage();
+      return;
+    }
     set({ error: null, errorRetry: null });
     switch (failed?.action) {
       case 'save': return get().retrySave();
@@ -2129,12 +2306,21 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
       paramsVersionChange = null;
       paramsHandling += 1;
     }
+    // GM #198 r22 Q2: a Try again that saves the stale tab's edits as a
+    // recovered project says where they went, in the banner's place.
+    const recovering = pendingRecovery;
+    const copyBefore = lastRecoveredCopy;
     if (!get().initialized) await get().initialize();
     else {
       try {
         await get().flush();
         await listNow();
       } catch (error) { showError(error, { action: 'list' }); }
+    }
+    const copy = lastRecoveredCopy;
+    if (recovering && pendingRecovery !== recovering && copy && copy !== copyBefore && !reloadingForParams
+      && !get().error && !get().unsavedEdits && get().projects.some((project) => project.id === copy.id)) {
+      set({ copyNotice: { line: editsSavedAsProjectLine(copy.name), restore: null, open: { id: copy.id, name: copy.name } } });
     }
     // An open whose reply was lost: finish it, unless it already landed.
     const reopen = failed?.action === 'load' ? failed.reopen : undefined;
@@ -2329,7 +2515,10 @@ function workspaceSync(event: GraphSyncEvent, synthetic = false): void {
     return;
   }
   const snapshot = captureProjectSnapshot();
-  const unsaved = JSON.stringify(snapshot) !== lastSaved;
+  // Review 12, M-1 (PR #198): as on the agent-switch path (beginAgentSwitch),
+  // a scene edit Nebula doesn't have is unsaved though the snapshot matches
+  // what the autosave sent; the recovered copy keeps it (GM r20 answer 3).
+  const unsaved = JSON.stringify(snapshot) !== lastSaved || hasUnsavedSceneEdits();
   const restored = restoredSinceSync;
   restoredSinceSync = false;
   const closedBy = savedFromUnder !== null && savedFromUnder.projectId === context.id ? savedFromUnder : null;
@@ -2465,7 +2654,9 @@ export function subscribeProjectAutosave(): () => void {
   const outdated = onParamsOutdated((backendVersion) => { void handleParamsVersionChange(backendVersion); });
   for (const type of ['focus', 'online']) window.addEventListener(type, relistIfStale);
   const beforeUnload = (event: BeforeUnloadEvent) => {
-    if (reloadingForParams || !useProjectStore.getState().dirty) return;
+    // Review 9, M-3: a scene card's unsaved edits count too (they are
+    // saved by their own request, not the project's autosave).
+    if (reloadingForParams || (!useProjectStore.getState().dirty && !hasUnsavedSceneEdits())) return;
     event.preventDefault();
     event.returnValue = '';
   };

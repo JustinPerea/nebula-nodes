@@ -6,6 +6,7 @@ from typing import Any
 # The readiness rule lives with the backend so the CLI and MCP server agree.
 from services.node_readiness import node_access  # noqa: F401 (re-exported for tests and callers)
 from services.agent_params import ASSET_PARAM_TYPES
+from services.canvas_pins import agent_text, note_block, one_line  # an event is one line (PR #200 fix round 3, LOW-5)
 from services.canvas_undo import UNDONE_VERBS, nothing_went_back
 from services.maker_sizes import rule_note
 from services import node_categories
@@ -523,7 +524,7 @@ def format_start(start: dict[str, Any]) -> str:
     for pin in pins.get("open") or []:
         anchor = pin.get("anchor") or {}
         at = anchor.get("nodeId") or f"({anchor.get('x')},{anchor.get('y')})"
-        lines.append(f"  {pin.get('id')} on {at}: {json.dumps(pin.get('text') or '', ensure_ascii=False)}")
+        lines.append("  " + pin_line(f"{pin.get('id')} on {at}", pin.get("text")))
     if pins.get("more"):
         lines.append(f"  ({pins['more']})")
 
@@ -789,6 +790,27 @@ def _ago(iso: Any, now: float | None = None) -> str:
     return f"{seconds // 86400}d ago"
 
 
+def quote_note(text: Any) -> str:
+    """A one-line note in quotes, JSON-escaped."""
+    return json.dumps(str(text or ""), ensure_ascii=False)
+
+
+def pin_line(head: str, text: Any, tail: str = "", indent: str = "    ", after: str = "") -> str:
+    """`head: "note"tail after` for a one-line note. A note of several lines
+    goes under `head tail:`, each line indented the same (`indent`, two past
+    the two-space row it sits in), blank lines empty: the lines the person
+    typed keep their shape, lists included (fix round 5 of PR #200, review 5
+    LOW-4, GM 2026-10-28 r7 answer 4). The channel push prints it the same
+    way. `after` (an answer) follows the note, as on one line: under it, on
+    its own line at the row's indent, where no line of the note can start
+    (fix round 6, review 6 N-3)."""
+    note = agent_text(text)  # an output path: no control byte (GM r15), no variation selector (GM r23)
+    if "\n" not in note:
+        return f"{head}: {quote_note(note)}{tail}{after}"
+    block = f"{head}{tail}:\n" + note_block(note, indent)
+    return block + (f"\n{indent[:-2]}{after.strip()}" if after else "")
+
+
 def format_pin(pin: dict[str, Any], now: float | None = None) -> str:
     """One pin as `pin_8c41d2aa on n4: "warmer" (12m ago)`."""
     anchor = pin.get("anchor") or {}
@@ -801,14 +823,14 @@ def format_pin(pin: dict[str, Any], now: float | None = None) -> str:
             where = "on the canvas"
         if pin.get("detached") and pin.get("detachedFrom"):
             where += f" (its node {pin['detachedFrom']} was removed)"
-    text = json.dumps(str(pin.get("text") or ""), ensure_ascii=False)
+    head = f"{pin.get('id', '?')} {where}"
     reply = pin.get("reply") or {}
     if pin.get("status") == "resolved" and reply:
         agent = (reply.get("agent") or {}).get("name") or "an agent"
-        answer = json.dumps(str(reply.get("text") or ""), ensure_ascii=False)
-        return f"{pin.get('id', '?')} {where}: {text} — resolved by {agent}: {answer}"
+        answer = json.dumps(agent_text(reply.get("text"), multiline=False), ensure_ascii=False)
+        return pin_line(head, pin.get("text"), after=f" — resolved by {agent}: {answer}")
     ago = _ago(pin.get("createdAt"), now)
-    return f"{pin.get('id', '?')} {where}: {text}" + (f" ({ago})" if ago else "")
+    return pin_line(head, pin.get("text"), f" ({ago})" if ago else "")
 
 
 def _actor_label(actor: dict[str, Any] | None) -> str:
@@ -865,7 +887,7 @@ def format_event(event: dict[str, Any]) -> str:
     elif kind == "proposal.reopened" and data.get("proposalId"):
         summary = (f"{summary} — waiting for the person again "
                    f"(nebula proposal {data['proposalId']} --wait)")
-    return f"[{event.get('seq', '?')}] {clock}  {_actor_label(event.get('actor'))}  {summary}"
+    return f"[{event.get('seq', '?')}] {clock}  {_actor_label(event.get('actor'))}  {one_line(summary)}"
 
 
 def format_events(response: dict[str, Any]) -> str:
@@ -1111,6 +1133,11 @@ def _commons_edit_line(edit: Any) -> str:
 def _asset_change_lines(view: dict[str, Any], where: str | None) -> list[str]:
     lines = [f"  asks   {view.get('summary') or 'a change'}"]
     if view.get("kind") == "commons":
+        # The summary names no reference (GM, PR #202 r4: it is the Agent log's
+        # words); the proposing agent's own view still says which one.
+        target = (view.get("target") or {}).get("id")
+        if target:
+            lines.append(f"  on     Commons reference {target}")
         lines.extend(_commons_edit_line(edit) for edit in (view.get("change") or {}).get("edits") or [])
     for key, values in (view.get("change") or {}).items():
         if isinstance(values, dict):

@@ -143,7 +143,7 @@ describe('Commons chat integration', () => {
     await waitFor(() => expect(socket.sent).toHaveLength(1));
     const backendWords = 'Only the person can start a chat, from a Nebula canvas connected as them.';
     await act(async () => { socket.receive({ type: 'error', code: 'person_required', message: backendWords }); socket.receive({ type: 'done' }); });
-    const line = await screen.findByText("This change needs your OK, and this tab isn't connected as you. Open the link Nebula printed when it started, then try again.");
+    const line = await screen.findByText("This change needs your OK, and this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.");
     const details = line.parentElement?.querySelector('details') ?? null;
     expect(details).not.toBeNull();
     expect(details!.open).toBe(false);
@@ -159,7 +159,7 @@ describe('Commons chat integration', () => {
     try {
       const backendWords = 'Only the person can start a chat, from a Nebula canvas connected as them.';
       await act(async () => { socket.receive({ type: 'error', code: 'person_required', message: backendWords }); socket.receive({ type: 'done' }); });
-      const line = await screen.findByText("This change needs your OK, and this window isn't connected as you. Quit Nebula and open it again, then try again.");
+      const line = await screen.findByText("This change needs your OK, and this window isn’t connected as you. Quit Nebula and open it again, then try again.");
       expect(line.parentElement?.querySelector('details')?.textContent).toContain(backendWords);
     } finally {
       delete (window as unknown as Record<string, unknown>).nebulaDesktop;

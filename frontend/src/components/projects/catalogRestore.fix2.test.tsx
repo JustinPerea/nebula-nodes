@@ -200,7 +200,7 @@ describe('review 2, L6: "Open Recently deleted"', () => {
     act(() => { fireEvent.click(screen.getByRole('button', { name: OPEN_RECENTLY_DELETED })); });
     // The person restores Hero: the trash empties and the list goes.
     rerender(<ProjectHome {...props({ trash: [] })} />);
-    const heading = document.getElementById('project-home-title');
+    const heading = document.getElementById('recent-projects-title');
     act(() => { heading?.focus(); });
     // An agent deletes Dunes: the list comes back.
     rerender(<ProjectHome {...props({ trash: [trashed('Dunes', 'd'.repeat(32))] })} />);

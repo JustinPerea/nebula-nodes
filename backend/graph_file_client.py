@@ -271,7 +271,7 @@ def _words(via: str) -> dict[str, str]:
     if via == "cli":
         return {"size": "`nebula project size`", "trim": "`nebula apply` or `nebula delete`",
                 "back": "`nebula project open {id}`"}
-    return {"size": "project_size", "trim": "edit_canvas or remove_from_canvas", "back": "open_project('{id}')"}
+    return {"size": "project_size", "trim": "edit_canvas or remove_from_canvas", "back": "`open_project('{id}')`"}
 
 
 def _size(api: NebulaAPI, project_id: str, headers: dict[str, str]) -> dict[str, Any] | None:

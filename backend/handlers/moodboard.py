@@ -45,10 +45,10 @@ async def handle_moodboard_node(
         moodboard = None
     if moodboard is None:
         if _in_trash(moodboard_id):
-            raise with_person_line(ValueError(f"Moodboard {moodboard_id!r} is in Recently deleted. Restore it (Moodboard Studio, "
+            raise with_person_line(ValueError(f"Moodboard {moodboard_id} is in Recently deleted. Restore it (Moodboard Studio, "
                              f"or nebula trash restore moodboard {moodboard_id}) and run again."),
                 "This node's board is in Recently deleted. Restore it in Moodboard Studio, then run the node again.")
-        raise with_person_line(ValueError(f"Moodboard {moodboard_id!r} not found; it may have been deleted for good. "
+        raise with_person_line(ValueError(f"Moodboard {moodboard_id} not found; it may have been deleted for good. "
                          "Pick another board for this node."),
             "This node's board can't be found. It may have been deleted for good. Pick another board for this node.")
 
@@ -89,7 +89,7 @@ async def handle_moodboard_node(
     ]
     if outside:
         count = len(outside)
-        add_run_note(f"{count} image{'s' if count != 1 else ''} on Moodboard '{moodboard.get('name')}' "
+        add_run_note(f"{count} image{'s' if count != 1 else ''} on Moodboard “{moodboard.get('name')}” "
                      f"{'are image links' if count != 1 else 'is an image link'} from outside Nebula, so "
                      f"{'they were' if count != 1 else 'it was'} left out. Replace "
                      f"{'them' if count != 1 else 'it'} with an upload in Moodboard Studio.")
@@ -99,7 +99,7 @@ async def handle_moodboard_node(
     analysis = generator_analysis(moodboard, analysis, brief)
     representative = analysis.get("representativeImages") or rank_representative_images(images)
     if brief["override"]["stale"]:
-        add_run_note(f"Moodboard '{moodboard.get('name')}' changed after its brief was edited by hand; "
+        add_run_note(f"Moodboard “{moodboard.get('name')}” changed after its brief was edited by hand; "
                      "this run used the edited brief. Keep or Regenerate it in Moodboard Studio.")
     hints = copy.deepcopy(analysis.get("providerHints") or {})
     if isinstance(hints.get("krea"), dict):

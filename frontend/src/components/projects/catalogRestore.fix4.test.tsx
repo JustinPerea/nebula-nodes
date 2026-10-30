@@ -139,17 +139,21 @@ describe('GM r6 bug 2: 6px between the lines, the line height within one stays',
   });
 });
 
-describe('GM r6 bug 4: a focus target the page moves focus to never shows a ring', () => {
-  it('suppresses the outline on every tabindex -1 target, keyboard or not', () => {
-    expect(css).toMatch(/\.project-home \[tabindex="-1"\]:focus(-visible)?[^{]*\{[^}]*outline:\s*none/);
-    expect(css).not.toMatch(/#project-home-title:focus-visible\s*[,{][^}]*outline:\s*var\(--sr-focus-outline\)/);
-    expect(css).not.toMatch(/\.project-home__notice:focus-visible\s*[,{][^}]*outline:\s*var\(--sr-focus-outline\)/);
+// GM r6 bug 4 ("never a ring, keyboard or not") is superseded by main's
+// notice-stack rule (PR #200, GM pr200 r16 #2 and r17): a target the page
+// moves focus to rings from :focus-visible only, so a notice closed from the
+// keyboard rings what takes focus next and one closed with a click rings
+// nothing; with no notice left, "Recent projects" takes it.
+describe('a focus target the page moves focus to rings from the keyboard only (PR #200 GM r17)', () => {
+  it('rings "Recent projects" and the notices from :focus-visible, never from :focus', () => {
+    expect(css).toMatch(/\.project-home #recent-projects-title:focus-visible\s*\{[^}]*outline:\s*var\(--sr-focus-outline\)/);
+    expect(css).not.toMatch(/\[tabindex="-1"\]:focus\s*[,{][^}]*outline:\s*var\(--sr-focus-outline\)/);
   });
 
-  it('keeps the heading as the target after a dismiss', () => {
+  it('moves focus to "Recent projects" after a dismiss', () => {
     render(<ProjectHome {...props({ catalogRestore: restore() })} />);
     fireEvent.click(screen.getAllByRole('button', { name: 'Dismiss' })[0]);
-    expect(document.activeElement?.id).toBe('project-home-title');
+    expect(document.activeElement?.id).toBe('recent-projects-title');
     expect(document.activeElement?.getAttribute('tabindex')).toBe('-1');
   });
 

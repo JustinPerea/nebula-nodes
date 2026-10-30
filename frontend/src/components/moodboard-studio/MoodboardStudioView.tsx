@@ -21,6 +21,7 @@ import { storedImageView } from '../../lib/storedImage';
 import { OutsideImageNote } from '../OutsideImageNote';
 import { WorkspaceHeader } from '../WorkspaceHeader';
 import { useAssetStudioDraft } from '../../hooks/useAssetStudioDraft';
+import { useOfflineHiddenNotice } from '../../hooks/useOfflineHiddenNotice';
 import { assetStudioDraftKey, resolveAssetStudioDraftKey, useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
 import { NEW_MOODBOARD_SENTINEL } from '../../lib/studioSentinels';
 import { NO_PROJECT_OPEN, currentProject, useCurrentProject } from '../../lib/currentProject';
@@ -56,6 +57,7 @@ import { boardCover } from '../../lib/moodboardCover';
 import { FieldStepTracker, fieldGroups, fieldStepKeys, type FieldStep } from './fieldSteps';
 import '../../styles/moodboard-studio.css';
 import '../../styles/moodboard-board.css';
+import { NoticeLeave } from '../../lib/noticeLeave';
 
 interface MoodboardDraft {
   name: string;
@@ -309,6 +311,16 @@ export function MoodboardStudioView() {
   useEffect(() => {
     setUploading(false);
   }, [key, epoch]);
+
+  // A load-failure notice ("Moodboard not found…") is hidden while Nebula is
+  // offline, and the board is checked again on reconnect (GM, PR #198 r2): a
+  // failed load is retried, and a not-found one reloaded unless the person
+  // has started a new board here since.
+  const shownLoadError = useOfflineHiddenNotice(loadError, () => {
+    if (!projectReady) return;
+    if (!loaded) patch({ loadError: null, revision: revision + 1 });
+    else if (!dirty && !isDraftId && moodboardEditorId) patch({ loaded: false, loadError: null, revision: revision + 1 });
+  });
 
   useEffect(() => {
     if (!projectReady || loaded) return;
@@ -1038,7 +1050,7 @@ export function MoodboardStudioView() {
           disabled={deleting.busy || Boolean(pendingSaveId) || analyzing} />
       )}
       {savedId && !isDraftId && (
-        <button type="button" className="moodboard-studio-toolbar__button" title="Move to Recently deleted"
+        <button type="button" className="moodboard-studio-toolbar__button moodboard-studio-toolbar__button--delete" title="Move to Recently deleted"
           disabled={deleting.busy || Boolean(pendingSaveId) || analyzing} onClick={() => void deleteBoard()}>
           Delete
         </button>
@@ -1080,15 +1092,15 @@ export function MoodboardStudioView() {
       {/* Retry loading reloads the board, so it shows (with GM's short line)
           only for a load that failed; with no project open there's nothing
           to reload, and the line says what to do (round 3b). */}
-      {loadError ? <div role="alert"><FailureLines failure={loadError} retry={projectReady} /></div> : 'Loading Moodboard...'}
-      {loadError && projectReady && <button type="button" className="moodboard-studio-toolbar__button"
+      {shownLoadError ? <div role="alert"><FailureLines failure={shownLoadError} retry={projectReady} /></div> : 'Loading Moodboard...'}
+      {shownLoadError && projectReady && <button type="button" className="moodboard-studio-toolbar__button"
         onClick={() => patch({ loadError: null, revision: revision + 1 })}>Retry loading</button>}
     </div>
   );
 
   const notices = (
     <>
-      {loadError && <div className="moodboard-studio__notice moodboard-studio__notice--warn"><FailureLines failure={loadError} /></div>}
+      {shownLoadError && <div className="moodboard-studio__notice moodboard-studio__notice--warn"><FailureLines failure={shownLoadError} /></div>}
       {/* A delete's failure shows here even while the last delete's Undo toast is up (round 3b). */}
       {deleting.deleteError && (
         <div className="moodboard-studio__notice moodboard-studio__notice--error" role="alert"><FailureLines failure={deleting.deleteError} /></div>
@@ -1238,10 +1250,13 @@ export function MoodboardStudioView() {
   );
 
   const shownToast = toast && toast.key === key ? toast : null;
-  const trashToast = deleting.lastDeleted && (
-    <UndoDeleteToast key={deleting.lastDeleted.id} name={deleting.lastDeleted.name} busy={deleting.busy}
-      error={deleting.undoError} onDismiss={deleting.dismiss}
-      onUndo={() => { void deleting.undo().then((asset) => { if (asset) openRestored(asset.id, asset.scope); }); }} />
+  // Both toasts leave as they entered (fix round 7 of PR #200, GM r11 answer 2).
+  const trashToast = (
+    <NoticeLeave value={deleting.lastDeleted}>{(last, leave) => (
+      <UndoDeleteToast key={last.id} name={last.name} busy={deleting.busy}
+        error={deleting.undoError} onDismiss={deleting.dismiss}
+        onUndo={() => { void deleting.undo().then((asset) => { if (asset) openRestored(asset.id, asset.scope); }); }} leave={leave} />
+    )}</NoticeLeave>
   );
 
   if (view === 'board') {
@@ -1255,7 +1270,7 @@ export function MoodboardStudioView() {
               <div className="moodboard-studio-view__board-notices">{notices}</div>
               <BoardCanvas key={key} boardKey={key} images={draft.images} onMove={moveCards} onDropFiles={dropFiles}
                 uploading={uploading} />
-              {shownToast && <BoardUndoToast key={shownToast.id} toast={shownToast} onDismiss={dismissToast} />}
+              <NoticeLeave value={shownToast}>{(last, leave) => <BoardUndoToast key={last.id} toast={last} onDismiss={dismissToast} leave={leave} />}</NoticeLeave>
             </>
           )}
         </main>
@@ -1308,7 +1323,7 @@ export function MoodboardStudioView() {
           </>
         )}
       </main>
-      {shownToast && <BoardUndoToast key={shownToast.id} toast={shownToast} onDismiss={dismissToast} />}
+      <NoticeLeave value={shownToast}>{(last, leave) => <BoardUndoToast key={last.id} toast={last} onDismiss={dismissToast} leave={leave} />}</NoticeLeave>
       {trashToast}
     </div>
   );

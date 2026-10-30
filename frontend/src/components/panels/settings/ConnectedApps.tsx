@@ -10,6 +10,7 @@ import {
   type OutsideSpend,
 } from '../../../lib/api';
 import { failureMessage } from '../../../lib/errorCopy';
+import { formatSpentUsd } from '../../../lib/pricing';
 
 const APP_LIMIT_CHOICES = [1, 2, 5, 10, 25, 50] as const;
 /** Cursor colors on offer. Bright enough to read on the dark canvas; null keeps the one derived from the app's id. */
@@ -232,7 +233,7 @@ export function ConnectedApps({ view, loadError, onChanged }: {
               </span>
               <span className="settings-pref__description">
                 {labelOf(app.client) ? `${labelOf(app.client)} · ` : ''}
-                ${app.spentUsd.toFixed(2)} in the last 24 h
+                {formatSpentUsd(app.spentUsd)} in the last 24 h
                 {app.kreaPlanRuns > 0 && `, ${app.kreaPlanRuns} Krea plan runs`}
               </span>
             </span>
@@ -241,7 +242,7 @@ export function ConnectedApps({ view, loadError, onChanged }: {
                 onChange={(dailyUsd) => void run(async () => { await setConnectedAppLimit(app.id, dailyUsd); })} />
               {armed === app.id ? (
                 <span className="settings__remove-confirm">
-                  <button type="button" className="settings__button settings__remove-key--armed" disabled={busy}
+                  <button type="button" className="settings__button settings__confirm--danger" disabled={busy}
                     onClick={() => void run(async () => { await revokeConnectedApp(app.id); setArmed(null); })}>
                     Revoke {app.name}
                   </button>
@@ -249,7 +250,7 @@ export function ConnectedApps({ view, loadError, onChanged }: {
                     onClick={() => setArmed(null)}>Keep</button>
                 </span>
               ) : (
-                <button type="button" className="settings__button" disabled={busy}
+                <button type="button" className="settings__button settings__button--danger" disabled={busy}
                   aria-label={`Revoke the token for ${app.name}`} onClick={() => setArmed(app.id)}>Revoke</button>
               )}
             </span>

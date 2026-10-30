@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef } from 'react';
+import { lazy, Suspense, useEffect, useRef, type ReactNode } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { Canvas } from './components/Canvas';
 import { CanvasTabs } from './components/CanvasTabs';
@@ -35,6 +35,8 @@ import { getKreaConnection, normalizeKreaMode, nodeKeyStatus } from './lib/kreaC
 import { useUIStore } from './store/uiStore';
 import { usePricingStore } from './store/pricingStore';
 import { useGraphStore } from './store/graphStore';
+import { StudioBoundary } from './components/StudioBoundary';
+import { nodeDataProblem, type StudioScreen } from './lib/studioBoundary';
 import { useCommonsCapability } from './hooks/useCommonsCapability';
 import { useZoomManifest } from './hooks/useZoomManifest';
 import { useMoodboardDeepLink } from './hooks/useMoodboardDeepLink';
@@ -51,6 +53,8 @@ import './App.css';
 import './styles/layouts.css';
 // The single supported appearance is available to every workspace.
 import './styles/slava-restraint.css';
+// GM r24 item 2: one disabled look for every button, whatever the reason.
+import './styles/disabled-buttons.css';
 
 // Alternate studios carry large, view-specific dependencies (Remotion,
 // timeline editors, brand demos). Keep the canvas startup path lean and load
@@ -96,6 +100,30 @@ const CommonsView = lazy(() =>
 function ZoomManifestRecorder() {
   useZoomManifest();
   return null;
+}
+
+/** A studio inside its boundary (PR #198 review 2, M2): one that can't
+ * render shows GM's line and Back to canvas instead of blanking the app.
+ * Keyed by screen and node, so opening another starts clean. */
+function StudioScreenBoundary({ screen, children }: { screen: StudioScreen; children: ReactNode }) {
+  const nodeId = useUIStore((s) => (screen === 'cinema-editor' ? s.cinemaEditorNodeId
+    : screen === 'remotion-editor' ? s.remotionEditorTargetNodeId : screen === 'editor' ? s.editorTargetNodeId : null));
+  const label = useGraphStore((s) => (nodeId ? s.nodes.find((node) => node.id === nodeId)?.data.label ?? null : null));
+  // The data check for the node the studio edits (Cinema, the video editor,
+  // the composition editor): "missing or damaged" only when it names a field
+  // (review 4, L3). A node that's gone is missing (GM r6 item 4: the code
+  // knows which).
+  const problem = () => {
+    if (!nodeId) return null;
+    const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
+    return node ? nodeDataProblem(node.data) : { field: 'node', state: 'missing' as const };
+  };
+  return (
+    <StudioBoundary key={`${screen}:${nodeId ?? ''}`} studio={screen} node={nodeId ? { id: nodeId, label } : null}
+      problem={problem}>
+      {children}
+    </StudioBoundary>
+  );
 }
 
 export default function App() {
@@ -272,12 +300,14 @@ export default function App() {
       unsavedEdits={projects.unsavedEdits} editsSavedAs={projects.editsSavedAs}
       onDownloadEdits={() => void projects.downloadUnsavedEdits()}
       onContinueWithoutEdits={() => void projects.continueWithoutEdits()}
-      catalogRestore={projects.catalogRestore} onDismissCatalogRestore={projects.dismissCatalogRestore}
+      catalogRestore={projects.catalogRestore} onDismissCatalogRestore={projects.dismissCatalogRestore} projectLimit={projects.projectLimit}
       canvasNotFiled={projects.canvasNotFiled} canvasSaved={projects.canvasSaved} onDismissCanvasSaved={projects.dismissCanvasSaved}
       editsRecoveredAs={projects.editsRecoveredAs} onDismissEditsRecovered={projects.dismissEditsRecovered}
       agentClosedNote={projects.agentClosedNote} onDismissAgentClosedNote={projects.dismissAgentClosedNote}
       canvasHeldUnreadable={projects.canvasHeldUnreadable}
-      onDismissCanvasHeldUnreadable={projects.dismissCanvasHeldUnreadable} />;
+      onDismissCanvasHeldUnreadable={projects.dismissCanvasHeldUnreadable}
+      copyNotice={projects.copyNotice} onRestoreCopy={() => void projects.restoreCopyNotice()}
+      onDismissCopy={projects.dismissCopyNotice} onOpenCopy={() => void projects.openCopyNotice()} />;
   } else if (isCanvas) {
     mainView = <Canvas />;
   } else if (isCommons) {
@@ -297,10 +327,16 @@ export default function App() {
   } else {
     mainView = <EditorView />;
   }
+  if (!isHome && !isCanvas) {
+    const screen: StudioScreen = isCommons ? 'commons' : isBrandShowcase ? 'brand-showcase' : isRemotion ? 'remotion-editor'
+      : isCinema ? 'cinema-editor' : isCharacter ? 'character-editor' : isMoodboard ? 'moodboard-editor'
+        : isCreate ? 'create' : 'editor';
+    mainView = <StudioScreenBoundary screen={screen}>{mainView}</StudioScreenBoundary>;
+  }
 
   return (
     <ReactFlowProvider>
-      <BackendConnectionStatus placement={isHome ? 'home' : 'workspace'} />
+      <BackendConnectionStatus placement={isHome ? 'home' : isCanvas ? 'workspace' : 'studio'} />
       <PersonRequiredBanner />
       <ProviderRecoveryStatus />
       <ProjectCoordinator />

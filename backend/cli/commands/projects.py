@@ -59,10 +59,15 @@ def run_open(client: NebulaClient, project_id: str) -> None:
         print(f"{project_id} is already open.")
         return
     if not any(project.get("id") == project_id for project in listing.get("projects") or []):
-        print(f"error: no project '{project_id}' (`nebula projects` lists them)", file=sys.stderr)
+        print(f"error: no project {project_id} (`nebula projects` lists them)", file=sys.stderr)
         sys.exit(1)
     result = client.open_project(project_id, listing.get("workspaceRevision", ""))
     print(f"Opened {result.get('project', {}).get('name', project_id)}. The canvas now shows it.")
+    # What opening changed (a folded node's connections, a scene's shot
+    # output no shot owns and its connections; PR #198 review 5, L3), as
+    # `nebula load` prints its own.
+    for warning in result.get("warnings") or []:
+        print(f"note: {warning}", file=sys.stderr)
 
 
 def run_new(client: NebulaClient, name: str) -> None:

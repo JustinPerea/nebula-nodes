@@ -9,6 +9,7 @@ import { NodeSettingsAction } from '../src/components/nodes/NodeSettingsAction';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { canvasLockOf, KEPT_MARK } from '../src/lib/canvasLock';
+import { RUN_LOCK_REASON } from '../src/lib/cinemaScene';
 import {
   KEPT_GENERIC_LINE, keptLockTitle, resetKeptCanvasForTests, setCanvasKept, subscribeKeptPulse,
 } from '../src/lib/keptCanvas';
@@ -16,15 +17,17 @@ import { buildCommands } from '../src/lib/commandPalette';
 import { setSelectionActionSlot } from '../src/lib/selectionActionSlot';
 
 /**
- * GM r16 and r17 on PR #199: while the canvas is kept in this tab after a
- * restore, every control that writes to Nebula or spends is disabled in the
- * shared disabled look, its tooltip saying what unlocks it, one line per
- * control (the generic line is only a safety net nobody sees). What only
+ * GM r16, r17 and r18 on PR #199: while the canvas is kept in this tab
+ * after a restore, every control that writes to Nebula or spends is disabled
+ * in the shared disabled look, its tooltip saying what unlocks it, one line
+ * per control (the generic line is only a safety net nobody sees). What only
  * changes this tab's canvas stays live: typing, Duplicate (its copies are
- * this tab's own nodes) and Settings (it opens the Inspector, whose param
- * edits are typing); Copy, Download, zoom, pan and the Agent log too. The
- * lock reasons go kept, run, follow, offline; the keyboard shortcuts for the
- * disabled actions are refused the same way.
+ * this tab's own nodes), Settings (it opens the Inspector, whose param edits
+ * are typing) and, GM r18 (Q3), Delete, Arrange, Clear canvas and Undo on
+ * the kept tab's own steps (tests/keptScratchCanvas.fix14.test.tsx); Copy,
+ * Download, zoom, pan and the Agent log too. The lock reasons go run,
+ * follow, offline, then kept (PR #198's run lock first); the keyboard shortcuts for the disabled actions are
+ * refused the same way.
  */
 const original = {
   executeNode: useGraphStore.getState().executeNode,
@@ -54,13 +57,12 @@ afterEach(() => {
 const button = (name: RegExp) => screen.getByRole('button', { name });
 
 describe('GM r16/r17: the selection toolbar while the canvas is kept', () => {
-  it('disables Ask, Run, Arrange and Delete with their own lines; Copy, Download and Duplicate stay', () => {
+  it('disables Ask and Run with their own lines; Copy, Download, Duplicate, Arrange and Delete stay (GM r18, Q3)', () => {
     render(<SelectionToolbar />);
     expect(button(/^Run selected nodes$/)).not.toBeDisabled();
     act(() => setCanvasKept(true));
     const locked: [RegExp, string][] = [
       [/^Ask$/, keptLockTitle('ask')], [/^Run selected nodes$/, keptLockTitle('run')],
-      [/^Arrange$/, keptLockTitle('arrange')], [/^Delete selected nodes$/, keptLockTitle('delete')],
     ];
     for (const [name, title] of locked) {
       const control = button(name);
@@ -68,11 +70,13 @@ describe('GM r16/r17: the selection toolbar while the canvas is kept', () => {
       expect(control).toHaveAttribute('title', title);
       expect(control).toHaveAttribute(KEPT_MARK, '');
     }
-    for (const live of [/^Copy$/, /^Duplicate$/]) {
+    for (const live of [/^Copy$/, /^Duplicate$/, /^Arrange$/, /^Delete selected nodes$/]) {
       expect(button(live)).not.toBeDisabled();
       expect(button(live)).not.toHaveAttribute(KEPT_MARK);
     }
     expect(button(/^Duplicate$/)).toHaveAttribute('title', 'Duplicate selected nodes');
+    expect(button(/^Arrange$/)).toHaveAttribute('title', 'Arrange selected nodes');
+    expect(button(/^Delete selected nodes$/)).toHaveAttribute('title', 'Delete selected nodes');
     // Download: disabled only for having no outputs, never by the kept lock.
     expect(button(/Download selected outputs/)).not.toHaveAttribute(KEPT_MARK);
     act(() => setCanvasKept(false));
@@ -90,13 +94,15 @@ describe('GM r16/r17: the selection toolbar while the canvas is kept', () => {
     expect(download).toHaveAttribute('title', 'Download 1 selected output');
   });
 
-  it("GM r17's lines, verbatim; Ask names the chat's agent", () => {
+  it("GM r17's and r18's lines, verbatim; Ask names the chat's agent, unquoted", () => {
     expect(keptLockTitle('note')).toBe('You can add notes after you save it as a project.');
-    expect(keptLockTitle('duplicate')).toBe('You can duplicate nodes after you save it as a project.');
-    expect(keptLockTitle('arrange')).toBe('You can arrange nodes after you save it as a project.');
     expect(keptLockTitle('settings')).toBe('You can change settings after you save it as a project.');
     expect(keptLockTitle('run')).toBe('You can run this after you save it as a project.');
-    expect(keptLockTitle('delete')).toBe('You can delete this after you save it as a project.');
+    // GM r18, Q1.
+    expect(keptLockTitle('unlock')).toBe('You can unlock nodes after you save it as a project.');
+    expect(keptLockTitle('generate')).toBe('You can generate after you save it as a project.');
+    // GM r18, Q2: "your agent" when none is picked.
+    expect(keptLockTitle('ask')).toBe('You can ask your agent after you save it as a project.');
     window.localStorage.setItem('nebula:chat-selection', JSON.stringify({ agent: 'codex' }));
     expect(keptLockTitle('ask')).toBe('You can ask Codex after you save it as a project.');
     window.localStorage.setItem('nebula:chat-selection', JSON.stringify({ agent: 'claude' }));
@@ -126,7 +132,7 @@ describe('GM r16/r17: the selection toolbar while the canvas is kept', () => {
     act(() => setCanvasKept(true));
     render(<SelectionToolbar />);
     const kept = [...document.querySelectorAll(`[${KEPT_MARK}]`)];
-    expect(kept.length).toBeGreaterThanOrEqual(4);
+    expect(kept.length).toBeGreaterThanOrEqual(3);
     for (const control of kept) expect(control.getAttribute('title')).not.toBe(KEPT_GENERIC_LINE);
   });
 });
@@ -153,7 +159,8 @@ describe('GM r17, Q2: every control names its own kept line', () => {
     });
     expect(calls.length).toBeGreaterThan(40);
     for (const { path, call } of calls) {
-      expect(call, path).toMatch(/kept: (item\.kept|paletteKeptAction\(cmd\.id\)|'[a-z-]+')/);
+      // SelectionToolbar's runLocked(running, own) passes its own LockOwn, whose `kept` tsc requires.
+      expect(call, path).toMatch(/kept: (item\.kept|paletteKeptAction\(cmd\.id\)|'[a-z-]+')|^lock\.act\(own, \{ run: running \}\)$/);
       expect(call, path).not.toMatch(/kept: 'other'/);
     }
   });
@@ -172,12 +179,22 @@ describe('GM r17, Q2: every control names its own kept line', () => {
   });
 });
 
-describe('GM r16, 4: the lock reasons go kept, run, follow, offline', () => {
+describe('the lock reasons go run, follow, offline, then kept (PR #198 merged into PR #199)', () => {
   const following = { projectId: 'p', projectName: 'Delta' } as never;
-  it('kept first, over a run, a follow and offline', () => {
-    const lock = canvasLockOf(following, true, true);
-    expect(lock.act({ busy: 'Wait for the active run to finish', title: 'Arrange selected nodes', kept: 'arrange' }))
-      .toEqual({ [KEPT_MARK]: '', disabled: true, title: keptLockTitle('arrange') });
+  it('a run first, alone: its line and no mark, over a follow, offline and kept', () => {
+    expect(canvasLockOf(following, true, true).act({ title: 'Run selected nodes', kept: 'run' }, { run: true }))
+      .toEqual({ disabled: true, title: RUN_LOCK_REASON });
+  });
+  it('then the follow, then offline, each over kept', () => {
+    expect(canvasLockOf(following, true, true).act({ title: 'Run selected nodes', kept: 'run' }))
+      .toMatchObject({ disabled: true, title: 'Wait for “Delta” to open.', 'data-following-disabled': '' });
+    const offline = canvasLockOf(null, true, true).act({ title: 'Run selected nodes', kept: 'run' });
+    expect(offline).toMatchObject({ disabled: true, title: 'Run selected nodes', 'data-offline-disabled': '' });
+    expect(offline).not.toHaveProperty(KEPT_MARK);
+  });
+  it('then kept: its own line and its mark only', () => {
+    expect(canvasLockOf(null, false, true).act({ title: 'Run selected nodes', kept: 'run' }))
+      .toEqual({ [KEPT_MARK]: '', disabled: true, title: keptLockTitle('run') });
     // Typing stays: fields read `locked`, which the kept canvas alone never sets.
     expect(canvasLockOf(null, false, true).locked).toBe(false);
   });
@@ -185,20 +202,13 @@ describe('GM r16, 4: the lock reasons go kept, run, follow, offline', () => {
     expect(canvasLockOf(null, false, true).act({ title: 'Duplicate selected nodes', kept: 'live' }))
       .toEqual({ disabled: false, title: 'Duplicate selected nodes' });
     expect(canvasLockOf(following, false, true).act({ title: 'Duplicate selected nodes', kept: 'live' }).title).toBe('Wait for “Delta” to open.');
-    expect(canvasLockOf(null, false, true).act({ busy: 'Wait for the active run to finish', kept: 'live' }).disabled).toBe(true);
-  });
-  it('then a run going, over a follow', () => {
-    const act = canvasLockOf(following, false, false).act({ busy: 'Wait for the active run to finish', title: 'Arrange selected nodes', kept: 'arrange' });
-    expect(act).toMatchObject({ disabled: true, title: 'Wait for the active run to finish' });
-  });
-  it('then the follow, then offline (no tooltip of its own)', () => {
-    expect(canvasLockOf(following, true, false).act({ title: 'Arrange selected nodes', kept: 'arrange' }).title).toBe('Wait for “Delta” to open.');
-    expect(canvasLockOf(null, true, false).act({ title: 'Arrange selected nodes', kept: 'arrange' })).toMatchObject({ disabled: true, title: 'Arrange selected nodes' });
+    expect(canvasLockOf(null, false, true).act({ kept: 'live' }, { run: true }).disabled).toBe(true);
+    expect(canvasLockOf(null, true, true).act({ kept: 'live' }).disabled).toBe(true);
   });
 });
 
 describe('the keyboard shortcuts while kept', () => {
-  it('Delete, Run, Arrange, Undo and Paste change nothing and send nothing, and each pulses the kept line', async () => {
+  it('Run, Paste and an add change nothing and send nothing, and each pulses the kept line', async () => {
     act(() => setCanvasKept(true));
     let pulses = 0;
     const stop = subscribeKeptPulse(() => { pulses += 1; });
@@ -212,11 +222,12 @@ describe('the keyboard shortcuts while kept', () => {
       await run();
       expect(pulses, name).toBe(was + 1);
     };
-    await each('delete (Delete)', () => store.deleteCanvasElements(['n1'], []));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
     await each('run (⌘Enter)', () => store.executeGraph());
-    await each('arrange', () => store.autoLayoutSelected());
-    await each('undo (⌘Z)', () => store.undo());
     await each('paste (⌘V)', () => store.pasteClipboard({ view: null }));
+    // An add creates the node on Nebula (POST /api/graph/node): a server write.
+    await each('add a node', () => store.addNode('text-input', { x: 0, y: 0 }));
+    expect(fetchSpy).not.toHaveBeenCalled();
     expect(useGraphStore.getState().isExecuting).toBe(false);
     expect(useGraphStore.getState().nodes.map(({ id, position }) => ({ id, position })))
       .toEqual(before.map(({ id, position }) => ({ id, position })));
@@ -247,18 +258,18 @@ describe('the keyboard shortcuts while kept', () => {
     let pulses = 0;
     const stop = subscribeKeptPulse(() => { pulses += 1; });
     vi.spyOn(Date, 'now').mockReturnValue(50_000);
-    fireEvent.pointerDown(button(/^Arrange$/));
+    fireEvent.pointerDown(button(/^Run selected nodes$/));
     expect(pulses).toBe(1);
     stop();
     useProjectStore.setState({ keptEdits: null });
   });
 });
 
-describe('GM r17: the disabled trash is neutral at 0.45, never a dim red', () => {
-  it('canvas.css sets the disabled Delete to the toolbar colour at 0.45', () => {
+describe('GM r17: the disabled trash is neutral, never a dim red', () => {
+  it('the shared disabled look (PR #198, disabled-buttons.css) covers it; canvas.css adds no look of its own', () => {
+    const shared = readFileSync(join(__dirname, '../src/styles/disabled-buttons.css'), 'utf8');
+    expect(shared).toContain('.selection-toolbar__button,');
     const css = readFileSync(join(__dirname, '../src/styles/canvas.css'), 'utf8');
-    expect(css).toMatch(/\.selection-toolbar__button--danger:disabled \{\s*color: inherit;\s*opacity: 0\.45;\s*\}/);
-    // After the toolbar's own :disabled (same specificity: the later wins).
-    expect(css.indexOf('.selection-toolbar__button--danger:disabled')).toBeGreaterThan(css.indexOf('.selection-toolbar__button:disabled'));
+    expect(css).not.toMatch(/\.selection-toolbar__button--danger:disabled/);
   });
 });

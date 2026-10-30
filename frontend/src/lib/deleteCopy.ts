@@ -1,3 +1,5 @@
+import { nodeNameList } from './errorCopy';
+
 /**
  * GM - Design, round 20 (item 1, 2026-10-27), verbatim: a failed delete
  * whose cause really is no answer from Nebula (isBackendUnreachable: no
@@ -5,16 +7,16 @@
  *   "Couldn't delete “<node>”. Nebula isn't answering. Make sure it's
  *    running, then try again."
  *   Several nodes: up to 3 names ("“A” and “B”", "“A”, “B” and “C”"); from
- *   4 up, "Couldn't delete <N> nodes."
+ *   4 up, "Couldn't delete <N> nodes." Named by errorCopy nodeNameList, so
+ *   same-titled nodes are grouped ("2 “Text” nodes", the PR #198 merge).
  * Other causes keep their reason under the old heading.
  */
 export const DELETE_NO_ANSWER_REASON = "Nebula isn't answering. Make sure it's running, then try again.";
 
 export function deleteNoAnswerLine(names: string[]): string {
-  const quoted = names.map((name) => `“${name}”`);
-  const what = quoted.length >= 4 ? `${quoted.length} nodes`
-    : quoted.length <= 1 ? quoted.join('') : `${quoted.slice(0, -1).join(', ')} and ${quoted[quoted.length - 1]}`;
-  return `Couldn't delete ${what}. ${DELETE_NO_ANSWER_REASON}`;
+  // The shared name list (errorCopy nodeNameList, GM 2026-10-27): same
+  // titles grouped with a count, "4 nodes" from 4.
+  return `Couldn't delete ${nodeNameList(names)}. ${DELETE_NO_ANSWER_REASON}`;
 }
 
 /**
@@ -29,9 +31,7 @@ export function deleteNoAnswerLine(names: string[]): string {
  * never in the line.
  */
 export function deleteServerErrorLine(names: string[]): string {
-  const quoted = names.map((name) => `“${name}”`);
-  const what = quoted.length >= 4 ? `${quoted.length} nodes`
-    : quoted.length <= 1 ? quoted.join('') : `${quoted.slice(0, -1).join(', ')} and ${quoted[quoted.length - 1]}`;
+  const what = nodeNameList(names);
   const back = names.length === 1 ? "it's back on the canvas" : "they're back on the canvas";
   return `Couldn't delete ${what}. Nebula ran into an error, so ${back}. Try again, and if it keeps happening, restart Nebula.`;
 }

@@ -57,7 +57,8 @@ def _activate(store: ProjectStore, project_id: str) -> None:
 # -- text and caps ----------------------------------------------------------
 
 def test_text_is_plain_single_line_and_capped():
-    assert clean_text("  warmer\n\tplease\x00\x1b[31m ‮ ", limit=280) == "warmer please[31m"
+    # A break and a tab read as spaces, kept inside (GM r19 answer 1, PR #200 fix round 12).
+    assert clean_text("  warmer\n\tplease\x00\x1b[31m ‮ ", limit=280) == "warmer  please"  # the colour code goes whole (PR #200 fix round 6, review 6 N-4)
     assert clean_text("x" * MAX_PIN_TEXT, limit=MAX_PIN_TEXT) == "x" * MAX_PIN_TEXT
     for bad in ("", "   \n", None, 42, "x" * (MAX_PIN_TEXT + 1)):
         with pytest.raises(PinError) as exc:
@@ -144,7 +145,7 @@ def test_resolve_detach_and_agent_view(tmp_path):
     other = pins.add("later", position={"x": 0, "y": 0}, graph_nodes=nodes)
     resolved = pins.resolve(pin["id"], "Warmed  the grade\non n7", CODEX)
     assert resolved["status"] == "resolved"
-    assert resolved["reply"]["text"] == "Warmed the grade on n7"
+    assert resolved["reply"]["text"] == "Warmed  the grade on n7"  # spaces inside as typed (GM r19)
     assert resolved["reply"]["agent"]["name"] == "Codex"
     again = pins.resolve(pin["id"], "Second answer", CODEX)
     assert again["reply"]["text"] == "Second answer"
@@ -209,7 +210,7 @@ def api(tmp_path, monkeypatch, person):
     journal = CanvasEventJournal()
     sent: list[dict] = []
 
-    async def capture(data):
+    async def capture(data, **kw):
         sent.append(data)
 
     monkeypatch.setattr(main_module, "cli_graph", graph)
@@ -682,7 +683,7 @@ def test_a_pin_added_between_a_switchs_commit_and_its_broadcast_wakes_claude(api
     added: dict = {}
     capture = main_module.manager.broadcast_raw
 
-    async def pin_mid_switch(data):
+    async def pin_mid_switch(data, **kw):
         await capture(data)
         if data.get("type") == "graphSync" and data.get("graphReplaced") and not added:
             added["at"] = store.read()["activeProjectId"]
@@ -725,7 +726,7 @@ def test_a_pin_route_journals_before_a_switch_can_overtake_it(api, monkeypatch, 
         assert first.status_code == 201, first.text
         first_id = first.json()["pin"]["id"]
 
-    async def switch_and_pin(data):
+    async def switch_and_pin(data, **kw):
         await capture(data)
         if data.get("type") == "canvasPins" and "armed" in done and "pin" not in done:
             done["pin"] = None

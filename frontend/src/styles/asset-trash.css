@@ -120,15 +120,35 @@ body.app-slava-restraint .asset-trash__button {
 }
 
 body.app-slava-restraint .asset-trash__button svg { width: 12px; height: 12px; }
-body.app-slava-restraint .asset-trash__button:hover:not(:disabled) { border-color: #f59e0b; color: #f59e0b; }
+/* Fix round 7 of PR #200 (GM r11 answer 3): Restore, Delete forever and
+   Empty hover neutral, as Projects' Recently deleted does; amber (#f59e0b)
+   marked the destructive ones orange. */
+body.app-slava-restraint .asset-trash__button:hover:not(:disabled) { background: var(--sr-surface-control-hover); }
 body.app-slava-restraint .asset-trash__button:disabled { opacity: var(--sr-disabled-opacity); cursor: default; }
 
-body.app-slava-restraint .asset-trash__button--danger,
-body.app-slava-restraint .asset-trash__button--danger:hover:not(:disabled) {
-  border-color: var(--sr-danger);
-  background: var(--sr-danger);
-  color: #fff;
+/* GM r8 (fix round 6 of PR #200): the red fill, near-black ink; hover lighter. */
+/* GM r13: the trigger that arms a Delete forever or an Empty turns red on hover. */
+body.app-slava-restraint .asset-trash__button.asset-trash__trigger--danger:hover:not(:disabled) {
+  border-color: var(--sr-danger-edge);
+  background: var(--sr-danger-tint);
+  color: var(--sr-danger-ink, #ff887d);
+}
+
+body.app-slava-restraint .asset-trash__button.asset-trash__trigger--danger:active:not(:disabled) {
+  color: var(--sr-danger-ink-hover, #ff9a91);
+}
+
+body.app-slava-restraint .asset-trash__button--danger {
+  border-color: var(--sr-danger-fill, #ff887d);
+  background: var(--sr-danger-fill, #ff887d);
+  color: var(--sr-on-danger, #1f1f1f);
   font-weight: 600;
+}
+
+body.app-slava-restraint .asset-trash__button--danger:hover:not(:disabled) {
+  border-color: var(--sr-danger-fill-hover, #ff9a91);
+  background: var(--sr-danger-fill-hover, #ff9a91);
+  color: var(--sr-on-danger, #1f1f1f);
 }
 
 body.app-slava-restraint .asset-trash__confirm { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
@@ -194,12 +214,15 @@ body.app-slava-restraint .character-node__open-error {
   line-height: 1.35;
 }
 
+/* Fix round 5 of PR #200 (GM r7): every toast in the notice region springs
+   in within its own slot, a scale and a fade, never sliding across a
+   neighbour (the open kept-notes list sits right below some). */
 @keyframes asset-trash-toast-in {
-  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  from { opacity: 0; transform: scale(0.98); }
   to { opacity: 1; transform: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  body.app-slava-restraint .asset-trash__toast { animation: none; }
+  body.app-slava-restraint .asset-trash__toast { animation: notice-fade-in 180ms ease-out both; /* opacity only (GM r9 answer 2) */ }
   body.app-slava-restraint .asset-trash__toggle svg { transition: none; }
 }

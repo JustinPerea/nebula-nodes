@@ -125,9 +125,9 @@ describe('formatUsd', () => {
     expect(formatUsd(0)).toBe('$0');
   });
 
-  it('collapses equal bounds and joins a range with one dollar sign', () => {
+  it('collapses equal bounds and writes each end of a range in full (GM, PR #198 r6 item 3)', () => {
     expect(formatUsdRange(0.04, 0.04)).toBe('$0.04');
-    expect(formatUsdRange(0.0047, 0.428)).toBe('$0.0047–0.43');
+    expect(formatUsdRange(0.0047, 0.428)).toBe('$0.0047–$0.43');
   });
 });
 

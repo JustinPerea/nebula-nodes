@@ -16,9 +16,20 @@ interface EditClipShape {
 }
 
 export function EditNode({ id, data, selected }: NodeProps) {
-  const enterEditor = useUIStore((s) => s.enterEditor);
+  // Fix round 2 of PR #200 (review 2 L-6, GM 2026-10-28 answer 4): this is
+  // the edit node, so Open Editor opens its own editor (uiStore
+  // openEditNode) and writes nothing. It stays available while following or
+  // offline; the editor opens read-only there (its keys, clips and
+  // transport take the canvas lock), and the follow bar or the offline row
+  // above it says why.
+  const openEditNode = useUIStore((s) => s.openEditNode);
   const params = ((data as { params?: Record<string, unknown> }).params ?? {}) as Record<string, unknown>;
-  const clips = ((params.clips as EditClipShape[]) ?? []);
+  // Read through a guard (PR #198 review 3, L4): damaged clips still draw the card.
+  const num = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : undefined);
+  const clips: EditClipShape[] = (Array.isArray(params.clips) ? params.clips : [])
+    .filter((clip): clip is Record<string, unknown> => Boolean(clip) && typeof clip === 'object')
+    .map((clip) => ({ duration: num(clip.duration), sourceIn: num(clip.sourceIn), sourceOut: num(clip.sourceOut),
+      volume: num(clip.volume), mute: clip.mute === true }));
 
   // Output duration is the sum of clip.duration (after the refactor, duration
   // IS the output extent for each clip — speed is derived).
@@ -57,9 +68,10 @@ export function EditNode({ id, data, selected }: NodeProps) {
     .join(' · ');
 
   function handleOpenEditor() {
+    // Only an edit node wired to a source has an editor to open (as before).
     const state = useGraphStore.getState();
     const edge = state.edges.find((e) => e.target === id && e.targetHandle === 'video_in');
-    if (edge) enterEditor(edge.source);
+    if (edge) openEditNode(id);
   }
 
   return (

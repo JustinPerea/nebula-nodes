@@ -46,6 +46,7 @@ import json
 from typing import Any, Iterable, Mapping
 
 from services import node_categories
+from services.canvas_pins import agent_text
 
 CHARS_PER_TOKEN = 4
 BUDGETS: dict[str, int] = {
@@ -137,6 +138,15 @@ def tokens(value: Any) -> int:
 def _cut(text: Any, limit: int) -> str:
     flat = " ".join(str(text or "").split())
     return flat if len(flat) <= limit else flat[: limit - 1] + "…"
+
+
+def _cut_note(text: Any, limit: int) -> str:
+    """A pin's note as stored, its lines and spacing kept (fix round 2 of PR
+    #200: agents get the note as written; round 3 N-6: the same spacing as
+    look_at_canvas), cut at `limit`."""
+    lines = [line.rstrip() for line in str(text or "").splitlines()]
+    note = "\n".join(lines).strip()
+    return note if len(note) <= limit else note[: limit - 1].rstrip() + "…"
 
 
 def _short_value(value: Any) -> Any:
@@ -238,12 +248,13 @@ def pins_part(pins: Iterable[Mapping[str, Any]], *, via: str) -> dict[str, Any]:
     used = size(part) + size({"more": HINTS[via]["pins"]})
     cut = False
     for pin in open_pins[:MAX_PINS]:
-        text = str(pin.get("text") or "")
-        row = {"id": pin.get("id"), "text": _cut(text, PIN_CHARS), "anchor": pin.get("anchor")}
+        # Stripped here too, whatever the caller passes (review 10 NIT-3).
+        text = agent_text(pin.get("text"))  # agents' form (GM r23)
+        row = {"id": pin.get("id"), "text": _cut_note(text, PIN_CHARS), "anchor": pin.get("anchor")}
         cost = size(row) + 2
         if used + cost > budget:
             break
-        cut = cut or row["text"] != " ".join(text.split())
+        cut = cut or row["text"] != _cut_note(text, len(text) + 1)
         part["open"].append(row)
         used += cost
     if cut or len(part["open"]) < len(open_pins):

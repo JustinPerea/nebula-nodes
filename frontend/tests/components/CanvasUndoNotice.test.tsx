@@ -44,11 +44,11 @@ describe('CanvasUndoNotice', () => {
   it('names the agent, undoes its edit, then offers Redo', () => {
     render(<CanvasUndoNotice />);
     act(() => agentAdds('n2'));
-    expect(screen.getByRole('status')).toHaveTextContent('Claude changed the canvas');
+    expect(screen.getByRole('status')).toHaveTextContent('Claude changed the canvas.');
 
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
     expect(useGraphStore.getState().nodes.map((n) => n.id)).toEqual(['n1']);
-    expect(screen.getByRole('status')).toHaveTextContent('Undid Claude’s edit');
+    expect(screen.getByRole('status')).toHaveTextContent('Undid Claude’s edit.');
 
     fireEvent.click(screen.getByRole('button', { name: 'Redo' }));
     expect(useGraphStore.getState().nodes.map((n) => n.id)).toEqual(['n1', 'n2']);
@@ -116,6 +116,6 @@ describe('CanvasUndoNotice', () => {
     render(<CanvasUndoNotice />);
     act(() => agentAdds('n2'));
     expect(screen.getByRole('status').classList.contains('canvas-undo-notice--message')).toBe(false);
-    expect(noticeHoldMs('Claude changed the canvas', 'undo')).toBe(UNDO_NOTICE_MS);
+    expect(noticeHoldMs('Claude changed the canvas.', 'undo')).toBe(UNDO_NOTICE_MS);
   });
 });

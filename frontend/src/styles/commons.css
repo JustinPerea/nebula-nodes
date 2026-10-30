@@ -157,9 +157,18 @@ body.app-slava-restraint .commons-button--primary {
   color: var(--sr-accent);
 }
 
-body.app-slava-restraint .commons-button--danger {
-  border-color: var(--sr-danger-border);
-  color: var(--sr-danger);
+/* "Delete and purge": GM r11 answer 3 (fix round 7 of PR #200): the Delete red, never the orange. An outline
+   button, neutral at rest, its edge and label red on hover (over the
+   accent hover every other Commons button has). */
+body.app-slava-restraint .commons-button--danger:hover:not(:disabled) {
+  border-color: var(--sr-danger-ink, #ff887d);
+  background: var(--sr-danger-tint);
+  color: var(--sr-danger-ink, #ff887d);
+}
+
+body.app-slava-restraint .commons-button--danger:active:not(:disabled) {
+  border-color: var(--sr-danger-ink-hover, #ff9a91);
+  color: var(--sr-danger-ink-hover, #ff9a91);
 }
 
 body.app-slava-restraint .commons-link {
@@ -176,6 +185,21 @@ body.app-slava-restraint .commons-link {
 
 body.app-slava-restraint .commons-link:hover:not(:disabled) {
   color: var(--sr-accent);
+}
+
+/* GM r14: a region's Delete is red (it deletes the region), never the
+   accent the link hovers elsewhere. */
+body.app-slava-restraint .commons-link.commons-region__delete:hover:not(:disabled) {
+  color: var(--sr-danger-ink, #ff887d);
+}
+
+body.app-slava-restraint .commons-link.commons-region__delete:active:not(:disabled) {
+  color: var(--sr-danger-ink-hover, #ff9a91);
+}
+
+/* Clearing a filter's range is a reset, so neutral (GM r13). */
+body.app-slava-restraint .commons-link.commons-filter__reset:hover:not(:disabled) {
+  color: var(--sr-ink-bold);
 }
 
 body.app-slava-restraint .commons-link:disabled {
@@ -379,6 +403,21 @@ body.app-slava-restraint .commons-notice--proposal {
   color: var(--sr-ink);
 }
 
+/* GM, PR #202 r1: each asking agent's dot, in its colour, before its name. */
+body.app-slava-restraint .commons-notice__dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--agent-color, #5b9dff);
+  vertical-align: 0.05em;
+}
+
+body.app-slava-restraint .commons-notice__dot + .commons-notice__dot {
+  margin-left: -2px;
+}
+
 body.app-slava-restraint .commons-notice + .commons-notice {
   margin-top: 6px;
 }
@@ -514,7 +553,7 @@ body.app-slava-restraint .commons-chip {
   font-size: 11px;
 }
 
-body.app-slava-restraint .commons-chip button {
+body.app-slava-restraint .commons-chip__remove {
   border: 0;
   background: none;
   color: var(--sr-ink-meta);
@@ -523,8 +562,17 @@ body.app-slava-restraint .commons-chip button {
   cursor: pointer;
 }
 
-body.app-slava-restraint .commons-chip button:hover {
-  color: var(--sr-danger);
+/* GM r12: a keyword chip's × is an edit, so neutral, the same as a
+   moodboard chip's (moodboard-studio.css). */
+body.app-slava-restraint .commons-chip__remove:hover {
+  color: var(--sr-ink-bold);
+}
+
+/* A keyword's × in the evaluation and review forms: the same edit, so the
+   neutral hover, never the accent every other Commons button takes. */
+body.app-slava-restraint .commons-button--remove:hover:not(:disabled) {
+  border-color: var(--sr-edge-strong);
+  color: var(--sr-ink-bold);
 }
 
 /* -- grid --------------------------------------------------------------------- */
@@ -1200,6 +1248,6 @@ body.app-slava-restraint .commons-analysis-failure__details .error-details__raw 
 }
 
 .commons-fieldset:disabled :is(button, input, select, textarea):disabled {
-  opacity: var(--sr-disabled-opacity, 0.48);
+  opacity: var(--sr-disabled-opacity);
   cursor: not-allowed;
 }

@@ -4,7 +4,7 @@
  * - H1: the handoff save names the settings and renames Nebula may not have
  *   (`pendingParams`, `pendingLabels`), and Nebula merges exactly those onto
  *   its copy of the project left.
- * - GM follow-up 2: a failed handoff is one line, "Couldn't save “<setting>”
+ * - GM follow-up 2: a failed handoff is one line, "Couldn’t save “<setting>”
  *   for “<node>” in “<old project>” when <agent> switched projects. Your
  *   edits were saved as a copy, “<copy name>”." with "Open copy"; the toast
  *   no longer says "Edits saved as a copy." beside it.
@@ -197,7 +197,7 @@ describe('GM follow-up 2: a failed handoff is one line, with Open copy', () => {
     vi.mocked(projects.recoverProject).mockResolvedValue({ ...project('recovered'), name: 'Glass campaign (recovered)' });
     agentOpens();
     await vi.waitFor(() => expect(useProjectStore.getState().activeProject?.id).toBe('beta'));
-    const line = "Couldn't save “Text” for “Hero prompt” in “Glass\u00a0campaign” when Claude Code switched projects. "
+    const line = "Couldn’t save “Text” for “Hero prompt” in “Glass\u00a0campaign” when Claude Code switched projects. "
       + 'Your edits were saved as a copy, “Glass\u00a0campaign\u00a0(recovered)”.';
     await vi.waitFor(() => expect(lines()).toContain(line));
     const notice = [useGraphStore.getState().undoNotice, useGraphStore.getState().messageNotice].find((item) => item?.text === line);

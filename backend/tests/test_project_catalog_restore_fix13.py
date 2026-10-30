@@ -3,7 +3,9 @@
 - Past the limit (an Undo that passed it, then a canvas waiting): the count
   is named. The listing's `deletes` (per canvas and in total) and the agents'
   `note` that MCP (start_here, list_projects) and the CLI (`nebula projects`,
-  `nebula context`) print say "Moving 2 projects …"; at the limit itself
+  `nebula context`) print say, GM r18 (Q4), "The project list has 4
+  projects, over the limit of 3. Move 2 to Recently deleted to make room.";
+  at the limit itself
   the line is as before ("Moving a project …").
 - Q4: MCP new_project past the limit carries the limit and its number, as
   the HTTP body does; the 409 canvas_kept_in_tab detail uses ’.
@@ -51,7 +53,7 @@ def test_past_the_limit_the_listing_counts_and_the_agents_note_names_the_number(
     assert waiting["reason"] == "projects"
     assert waiting["deletes"] == 2
     assert [row["deletes"] for row in waiting["canvases"]] == [2]
-    assert "holds 4 projects and its limit is 3. Moving 2 projects to Recently deleted makes room" in waiting["note"]
+    assert "The project list has 4 projects, over the limit of 3. Move 2 to Recently deleted to make room." in waiting["note"]
     assert "Moving a project" not in waiting["note"]
 
 
@@ -70,17 +72,17 @@ def test_mcp_and_the_cli_say_the_number(app, monkeypatch, capsys):
     monkeypatch.setattr(mcp_server, "_api", lambda: NebulaAPI("http://testserver", client=client))
     started = asyncio.run(mcp_server.mcp.call_tool("start_here", {}))
     text = str(started)
-    assert "Moving 3 projects to Recently deleted makes room" in text
+    assert "The project list has 5 projects, over the limit of 3. Move 3 to Recently deleted to make room." in text
     listed = asyncio.run(mcp_server.mcp.call_tool("list_projects", {}))
-    assert "Moving 3 projects to Recently deleted makes room" in str(listed)
+    assert "The project list has 5 projects, over the limit of 3. Move 3 to Recently deleted to make room." in str(listed)
 
     class Client:
         def list_projects(self):
             return client.get("/api/projects", headers=AGENT).json()
     projects_cli.run_list(Client())  # type: ignore[arg-type]
-    assert "Moving 3 projects to Recently deleted makes room" in capsys.readouterr().out
+    assert "The project list has 5 projects, over the limit of 3. Move 3 to Recently deleted to make room." in capsys.readouterr().out
     start = client.get("/api/agent/start", headers=AGENT).json()
-    assert "Moving 3 projects to Recently deleted makes room" in format_start(start)
+    assert "The project list has 5 projects, over the limit of 3. Move 3 to Recently deleted to make room." in format_start(start)
 
 
 def test_q4_mcp_new_project_past_the_limit_carries_the_limit_and_its_number(app, monkeypatch):

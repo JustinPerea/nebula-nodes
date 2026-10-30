@@ -199,6 +199,19 @@ def _valid_port_ids(
     ]
 
 
+def input_takes_one(
+    definition_id: str,
+    port_id: str | None,
+    params: Mapping[str, Any] | None,
+    definitions: Mapping[str, Mapping[str, Any]],
+) -> bool:
+    """Whether this input takes a single connection (fix round 10, N-1: an
+    ``onlyIfFree`` connect is refused only there; an input that takes several
+    is held to its own maxConnections, as any connect is)."""
+    port = _declared_port(definition_id, port_id, port_key="inputPorts", definitions=definitions, params=params).definition
+    return port is not None and _input_connection_limit(port) == 1
+
+
 def _input_connection_limit(port: Mapping[str, Any] | None) -> int | None:
     if port is None:
         return None
@@ -233,7 +246,7 @@ def validate_edge_contracts(
                 PortContractIssue(
                     node_id=node.node_id,
                     port_id="",
-                    message=f"Duplicate node id '{node.node_id}' makes edge endpoints ambiguous",
+                    message=f"Duplicate node id {node.node_id} makes edge endpoints ambiguous",
                 )
             )
             continue
@@ -265,7 +278,7 @@ def validate_edge_contracts(
                 PortContractIssue(
                     node_id=edge.target,
                     port_id=target_handle,
-                    message=f"Duplicate edge id '{edge.edge_id}' at edge index {index}",
+                    message=f"Duplicate edge id {edge.edge_id} at edge index {index}",
                     edge_index=index,
                 )
             )
@@ -292,7 +305,7 @@ def validate_edge_contracts(
                 PortContractIssue(
                     node_id=edge.source,
                     port_id=source_handle,
-                    message=f"Edge '{edge.edge_id}' references missing or ambiguous source node '{edge.source}'",
+                    message=f"Edge {edge.edge_id} references missing or ambiguous source node {edge.source}",
                     edge_index=index,
                 )
             )
@@ -301,7 +314,7 @@ def validate_edge_contracts(
                 PortContractIssue(
                     node_id=edge.target,
                     port_id=target_handle,
-                    message=f"Edge '{edge.edge_id}' references missing or ambiguous target node '{edge.target}'",
+                    message=f"Edge {edge.edge_id} references missing or ambiguous target node {edge.target}",
                     edge_index=index,
                 )
             )
@@ -333,7 +346,7 @@ def validate_edge_contracts(
                     port_id=source_handle,
                     message=(
                         f"Cannot validate source handle '{source_handle}' on node "
-                        f"'{edge.source}': unknown definition '{source_node.definition_id}'"
+                        f"{edge.source}: unknown definition {source_node.definition_id}"
                     ),
                     edge_index=index,
                 )
@@ -346,8 +359,8 @@ def validate_edge_contracts(
                     node_id=edge.source,
                     port_id=source_handle,
                     message=(
-                        f"Invalid source handle '{source_handle}' on node '{edge.source}' "
-                        f"(definition '{source_node.definition_id}'). Valid outputPorts: "
+                        f"Invalid source handle '{source_handle}' on node {edge.source} "
+                        f"(definition {source_node.definition_id}). Valid outputPorts: "
                         f"{_valid_port_ids({'outputPorts': valid_outputs}, 'outputPorts') or '(none)'}"
                     ),
                     edge_index=index,
@@ -362,7 +375,7 @@ def validate_edge_contracts(
                     port_id=target_handle,
                     message=(
                         f"Cannot validate target handle '{target_handle}' on node "
-                        f"'{edge.target}': unknown definition '{target_node.definition_id}'"
+                        f"{edge.target}: unknown definition {target_node.definition_id}"
                     ),
                     edge_index=index,
                 )
@@ -375,8 +388,8 @@ def validate_edge_contracts(
                     node_id=edge.target,
                     port_id=target_handle,
                     message=(
-                        f"Invalid target handle '{target_handle}' on node '{edge.target}' "
-                        f"(definition '{target_node.definition_id}'). Valid inputPorts: "
+                        f"Invalid target handle '{target_handle}' on node {edge.target} "
+                        f"(definition {target_node.definition_id}). Valid inputPorts: "
                         f"{_valid_port_ids({'inputPorts': valid_inputs}, 'inputPorts') or '(none)'}"
                         + (_REPLICATE_PARAMS_HINT if target_node.definition_id == "replicate-universal"
                            and stored_ports(target_node.definition_id, target_node.params) is not None else "")
@@ -402,8 +415,8 @@ def validate_edge_contracts(
                         port_id=target_handle,
                         message=(
                             f"Incompatible port types: source '{source_handle}' on node "
-                            f"'{edge.source}' outputs {source_type}, but target "
-                            f"'{target_handle}' on node '{edge.target}' accepts {target_type}"
+                            f"{edge.source} outputs {source_type}, but target "
+                            f"'{target_handle}' on node {edge.target} accepts {target_type}"
                             + (f". {hint}" if (hint := PORT_TYPE_HINTS.get(
                                 (target_node.definition_id, str(target_handle)))) else "")
                         ),
@@ -423,12 +436,12 @@ def validate_edge_contracts(
             if limit is not None and current_count >= limit:
                 if limit == 1:
                     message = (
-                        f"Input port '{target_handle}' on node '{edge.target}' "
+                        f"Input port '{target_handle}' on node {edge.target} "
                         "does not allow multiple connections"
                     )
                 else:
                     message = (
-                        f"Input port '{target_handle}' on node '{edge.target}' "
+                        f"Input port '{target_handle}' on node {edge.target} "
                         f"exceeds maxConnections {limit}"
                     )
                 edge_issues.append(

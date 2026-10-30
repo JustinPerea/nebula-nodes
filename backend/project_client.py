@@ -114,7 +114,7 @@ def undo_rename_hint(project_id: str, previous: str, via: str) -> str:
         # option, so a name that starts with a dash gets `--` before it.
         sep = "-- " if previous.startswith("-") else ""
         return f"`nebula project rename {project_id} {sep}{shlex.quote(previous)}` puts the old name back."
-    return f"rename_project('{project_id}', {previous!r}) puts the old name back."
+    return f"`rename_project('{project_id}', {previous!r})` puts the old name back."
 
 
 def rename_project(api: NebulaAPI, project_id: str, name: str, *, headers: dict[str, str] | None = None,

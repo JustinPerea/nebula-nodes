@@ -1,4 +1,4 @@
-import { REFUSED_FALLBACK_COPY } from './errorCopy';
+import { REFUSED_FALLBACK_COPY, headedLine } from './errorCopy';
 
 export type ChatCancellationState = 'idle' | 'requested' | 'failed';
 
@@ -22,7 +22,8 @@ export interface ChatCancellationNotice {
 
 /** A failed Stop, GM's pattern (error-copy round 2): "Couldn't stop the
  * reply." then a written reason (the caller's), never "failed:" or raw text;
- * GM's general line when there is none. */
+ * GM's general line when there is none. Through headedLine (review 5, L4):
+ * a reason that already says "Couldn't stop the reply. …" shows once. */
 export function chatCancellationNotice(
   status: 'requested' | 'confirmed' | 'failed',
   reason?: string,
@@ -30,7 +31,7 @@ export function chatCancellationNotice(
   if (status === 'requested') return { text: 'Cancellation requested…' };
   if (status === 'confirmed') return { text: 'Cancelled.' };
   return {
-    text: `Couldn't stop the reply. ${reason || REFUSED_FALLBACK_COPY}`,
+    text: headedLine("Couldn’t stop the reply.", reason || REFUSED_FALLBACK_COPY),
     tone: 'error',
   };
 }

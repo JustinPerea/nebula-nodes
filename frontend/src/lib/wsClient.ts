@@ -1,5 +1,5 @@
 import { backendWebSocketUrl, personTokenForSocket } from './backend';
-import { onPersonConnected, reportPersonRequired } from './personSession';
+import { notePersonPromoted, onPersonConnected, reportPersonRequired } from './personSession';
 import type { PortValue, VariantScope } from '../types';
 import type { ExecutionStatusResult } from './api';
 import type { AgentNotesEvent } from './agentNotes';
@@ -48,9 +48,12 @@ export interface AgentPresenceEvent {
   from?: AgentCursorAnchor;
   action: 'move' | 'click' | 'drag' | 'look';
   say: string;
-  /** The Agent log's words when they differ from the cursor's (GM - Design,
-   * round 16): a field the card shows no label for, which the bubble leaves
-   * out, is named here by its key. Absent: the log uses `say`. */
+  /** The Agent log's words when they differ from the bubble's (GM - Design,
+   * round 16 of PR #195; PR #198 r1, GM item 7): a field the card shows no
+   * label for, which the bubble leaves out, is named here by its key; an
+   * action whose bubble says nothing (a universal node's setting with no
+   * label) still has its line here. Absent: the log uses `say` (and a bare
+   * cursor move has none). */
   log?: string;
   /** Backend wall-clock milliseconds. */
   at: number;
@@ -380,6 +383,9 @@ class WebSocketClient {
   private forceDiscoveryOnReconnect = false;
   /** A socket has opened before, so the next open is a reconnect. */
   private everOpened = false;
+  /** The socket the server promoted as the person (its person-only
+   * `proposalSync` came, which the backend sends on a verified hello only). */
+  private promoted: WebSocket | null = null;
 
   constructor(path: string) {
     this.path = path;
@@ -463,7 +469,11 @@ class WebSocketClient {
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
     void personTokenForSocket(socket.url).then((personToken) => {
       if (this.ws !== socket) return;
-      if (personToken) this.sayHello(socket, socket.url);
+      // GM r29 item 3 (fix round 19): the backend ignores a second hello on a
+      // socket it already promoted, so a link taken in then (the same link
+      // reopened) reconnects, and the new socket's hello is what the server
+      // promotes, or refuses.
+      if (personToken && this.promoted !== socket) this.sayHello(socket, socket.url);
       else socket.close(); // onclose reconnects, now to the pinned backend
     });
   }
@@ -503,8 +513,18 @@ class WebSocketClient {
           try {
             const parsed = JSON.parse(event.data) as ExecutionEvent | { type: 'personRequired' };
             if (parsed.type === 'personRequired') {
+              // The server refused this socket's hello: demoted (GM r29 item 3).
+              if (this.promoted === socket) this.promoted = null;
               reportPersonRequired();
               return;
+            }
+            // GM r29 item 3: the person-only proposalSync comes on promote
+            // only (backend websocket_endpoint), by whatever path the hello
+            // came: a new link, the same link again, a reconnect, the desktop
+            // app's token. The hold and the banner follow it.
+            if (parsed.type === 'proposalSync' && this.ws === socket) {
+              this.promoted = socket;
+              notePersonPromoted();
             }
             this.dispatch(parsed);
           } catch (err) {
@@ -513,6 +533,7 @@ class WebSocketClient {
         };
 
         socket.onclose = () => {
+          if (this.promoted === socket) this.promoted = null;
           this.forceDiscoveryOnReconnect = true;
           console.log('[ws] disconnected, reconnecting in 3s...');
           this.scheduleReconnect();

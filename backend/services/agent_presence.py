@@ -212,7 +212,7 @@ def parse_target(raw: Any, graph_nodes: Mapping[str, Any], label: str = "target"
         if not isinstance(node_id, str) or not _NODE_ID_RE.fullmatch(node_id):
             raise PresenceError(f"{label}.nodeId is invalid")
         if node_id not in graph_nodes:
-            raise PresenceError(f"{label}.nodeId '{node_id}' is not on the canvas")
+            raise PresenceError(f"{label}.nodeId {node_id} is not on the canvas")
         target: dict[str, Any] = {"nodeId": node_id}
         handle = raw.get("handle")
         if handle is not None:
@@ -272,6 +272,7 @@ class AgentPresence:
         say: Any = None,
         did: Mapping[str, Any] | None = None,
         project_id: str | None = None,
+        log: Any = None,
     ) -> dict[str, Any]:
         """The broadcast event for one agent action.
 
@@ -288,7 +289,9 @@ class AgentPresence:
         with that action's own time: the event's ``did`` carries
         ``secondsAgo``, 0 for an action that just happened.
         ``project_id`` is the project open when it happened: the roster
-        lists a cursor only in its own project.
+        lists a cursor only in its own project. ``log`` is the Agent log's
+        line when it isn't ``say`` (PR #198 r1): an action whose bubble says
+        nothing still has one; the event carries it only when given.
         """
         if action not in ACTIONS:
             raise PresenceError(f"action must be one of {', '.join(ACTIONS)}")
@@ -301,6 +304,9 @@ class AgentPresence:
             "at": int(now * 1000),
             "projectId": project_id,
         }
+        logged = _clean_say(log)
+        if logged:
+            event["log"] = logged
         if target is None:
             return event
         event["target"] = target

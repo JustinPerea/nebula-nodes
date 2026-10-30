@@ -12,6 +12,7 @@ come to be shared; their refusal names the node the text was the name of
 from __future__ import annotations
 
 import difflib
+import re
 from typing import Any, Mapping, NamedTuple
 
 Definitions = Mapping[str, Mapping[str, Any]]
@@ -86,7 +87,7 @@ def _either(items: list[str]) -> str:
 
 
 def write_hint(text: str, definitions: Definitions) -> str:
-    """What follows "unknown node definition 'x'" on a write: the node types
+    """What follows "unknown node definition x" on a write: the node types
     the text is the name of, with their names ("did you mean nebula-moodboard
     (Moodboard)?"), else close ids, else nothing."""
     matches = list(named(text, definitions))
@@ -96,6 +97,22 @@ def write_hint(text: str, definitions: Definitions) -> str:
     return f": did you mean {_either(close)}?" if close else ""
 
 
+# GM #198 r23 answer 3: an id-shaped value stays bare; anything else (a
+# space, a character no node id has) is in “…” so it reads where it ends.
+_ID_SHAPED = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/@+-]*")
+# GM #198 r23 answer 3, verbatim: no value at all has its own line.
+NO_DEFINITION = "No node definition was given."
+
+
+def shown_definition(text: str) -> str:
+    """A refused definition as a line shows it: bare when id-shaped, else “X”."""
+    return text if _ID_SHAPED.fullmatch(text) else f"“{text}”"
+
+
 def unknown_definition(text: str, definitions: Definitions) -> str:
-    """The write paths' refusal for a definition id that isn't one."""
-    return f"unknown node definition '{text}'{write_hint(text, definitions)}"
+    """The write paths' refusal for a definition id that isn't one. Empty
+    (or only spaces) shows the raw value, `unknown node definition ""`: the
+    agent's detail (the person reads NO_DEFINITION; main.py)."""
+    if not text.strip():
+        return f'unknown node definition "{text}"'
+    return f"unknown node definition {shown_definition(text)}{write_hint(text, definitions)}"

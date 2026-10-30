@@ -268,7 +268,7 @@ describe('GM round 21: an agent\'s clear is one toast, its line carrying Undo', 
     emit({ type: 'graphSync', workspaceRevision: 'rev-a', paramsVersion: GRAPH_PARAMS_VERSION, empty: true, cleared: true,
       canvasRevision: '9', nodes: [], edges: [], edit: { id: 'ed_1', actor: { kind: 'agent', name: 'Codex' } } });
     await vi.waitFor(() => expect(useGraphStore.getState().undoNotice?.text).toBe(
-      "Codex cleared the canvas while you were editing “Text” for “Hero prompt”. That change wasn't saved."));
+      "Codex cleared the canvas while you were editing “Text” for “Hero prompt”. That change wasn’t saved."));
     expect(useGraphStore.getState().undoNotice?.offer).toBe('undo');
     expect(useGraphStore.getState().messageNotice).toBeNull();
   });

@@ -9,6 +9,7 @@ import { Timeline } from './Timeline';
 import { useBottomBarClearance } from '../../hooks/useBottomBarClearance';
 import './EditorView.css';
 import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
+import { refuseCanvasEdit } from '../../lib/canvasLock';
 
 export function EditorView() {
   const editorTargetNodeId = useUIStore((s) => s.editorTargetNodeId);
@@ -93,6 +94,14 @@ export function EditorView() {
       if (!editNode) return;
       const ui = useUIStore.getState();
       const graph = useGraphStore.getState();
+      // Each key below edits the edit node: refused while the canvas is
+      // read-only (following an agent's switch, or offline: the canvas lock,
+      // follow-up to PR #195), as the transport's buttons are. The key is
+      // still taken (preventDefault), so nothing else acts on it.
+      const refused = (event: KeyboardEvent) => {
+        event.preventDefault();
+        return refuseCanvasEdit();
+      };
 
       // Cut at playhead — bare B (Blade, matching FCPX + DaVinci Resolve)
       // or ⌘K / Ctrl+K (Premiere's "Add Edit"). Bare S was the original
@@ -101,13 +110,13 @@ export function EditorView() {
       if (
         (e.key === 'b' || e.key === 'B') && !e.metaKey && !e.ctrlKey && !e.altKey
       ) {
-        e.preventDefault();
+        if (refused(e)) return;
         const srcT = (window as Window & { __editorPlayheadSourceTime?: number }).__editorPlayheadSourceTime ?? 0;
         graph.cutEditNodeAtSource(editNode.id, srcT);
         return;
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
+        if (refused(e)) return;
         const srcT = (window as Window & { __editorPlayheadSourceTime?: number }).__editorPlayheadSourceTime ?? 0;
         graph.cutEditNodeAtSource(editNode.id, srcT);
         return;
@@ -115,7 +124,7 @@ export function EditorView() {
 
       // Delete selected clip — Backspace or Delete
       if ((e.key === 'Backspace' || e.key === 'Delete') && ui.selectedClipId) {
-        e.preventDefault();
+        if (refused(e)) return;
         graph.removeEditNodeClip(editNode.id, ui.selectedClipId);
         setSelectedClip(null);
         return;
@@ -124,7 +133,7 @@ export function EditorView() {
       // Mute toggle — bare M
       if ((e.key === 'm' || e.key === 'M') && !e.metaKey && !e.ctrlKey && !e.altKey) {
         if (!ui.selectedClipId) return;
-        e.preventDefault();
+        if (refused(e)) return;
         const params = (editNode.data as { params?: Record<string, unknown> }).params ?? {};
         const clips = (params.clips as Array<{ id: string; mute: boolean }>) ?? [];
         const clip = clips.find((c) => c.id === ui.selectedClipId);
@@ -139,7 +148,7 @@ export function EditorView() {
         !e.metaKey && !e.ctrlKey && !e.altKey
       ) {
         if (!ui.selectedClipId) return;
-        e.preventDefault();
+        if (refused(e)) return;
         const srcT = (window as Window & { __editorPlayheadSourceTime?: number }).__editorPlayheadSourceTime ?? 0;
         const params = (editNode.data as { params?: Record<string, unknown> }).params ?? {};
         const clips = (params.clips as Array<{

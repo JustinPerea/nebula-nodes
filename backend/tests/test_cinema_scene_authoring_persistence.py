@@ -418,3 +418,266 @@ async def test_cached_context_cinema_result_syncs_rebound_runtime_without_copyin
     assert graph.nodes["n1"]["outputs"] == {"shot_new": {"type": "Image", "value": None}, "shot_a": results[0].outputs["shot_a"]}
     assert recipe.params["scene"]["shots"][0]["prompt"] == "Cached recipe"
     assert "_cinema_produced_outputs" not in recipe.model_dump()
+
+
+# Fix round 9 of PR #200 (GM r13): a shot's × is neutral because Undo puts the
+# shot back whole. The write that takes a shot out keeps its run media on the
+# server, and the restore (or any write) that brings the same shot back gets it.
+RUN_MEDIA = {
+    "output": {"status": "done", "imageUrl": "https://fixture.example/b1.png", "hash": "h-b"},
+    "variations": [{"url": "https://fixture.example/b0.png", "seed": 7}, {"url": "https://fixture.example/b1.png", "seed": 8}],
+    "selectedVariation": 1,
+}
+
+
+def _with_media(graph):
+    graph.nodes["n1"]["params"]["scene"]["shots"][1].update(copy.deepcopy(RUN_MEDIA))
+    graph.nodes["n1"]["outputs"]["shot_b"] = {"type": "Image", "value": "https://fixture.example/b1.png"}
+    return copy.deepcopy(graph.nodes["n1"]["params"]["scene"])
+
+
+def _authored(scene_value, keep):
+    out = copy.deepcopy(scene_value)
+    out["shots"] = [{k: v for k, v in shot.items() if k not in ("output", "variations", "selectedVariation")}
+                    for shot in out["shots"] if shot["id"] in keep]
+    return out
+
+
+def test_r9_undo_of_a_shot_x_brings_its_images_back(authoring_client):
+    client, graph, path, _ = authoring_client
+    before = _with_media(graph)
+    removed = client.put("/api/graph/node/n1", json={"params": {"scene": _authored(before, {"a"})}})
+    assert removed.status_code == 200
+    assert [shot["id"] for shot in removed.json()["params"]["scene"]["shots"]] == ["a"]
+    assert "shot_b" not in graph.nodes["n1"]["outputs"]
+    # The canvas's Undo sends the scene as authored: shot b without its media.
+    restored = client.post("/api/graph/restore", json={"action": "undo", "nodes": [
+        {"id": "n1", "definitionId": "cinema-scene", "params": {**graph.nodes["n1"]["params"], "scene": _authored(before, {"a", "b"})}}]})
+    assert restored.status_code == 200, restored.text
+    shot_b = graph.nodes["n1"]["params"]["scene"]["shots"][1]
+    assert shot_b["prompt"] == "Sibling"
+    assert {key: shot_b[key] for key in RUN_MEDIA} == RUN_MEDIA
+    assert graph.nodes["n1"]["outputs"]["shot_b"] == {"type": "Image", "value": "https://fixture.example/b1.png"}
+    assert graph.removed_shot_media == {}
+    # It holds through a reload of the saved graph.
+    reloaded = CLIGraph()
+    reloaded.load(path)
+    assert reloaded.get_state()["nodes"][0]["params"]["scene"]["shots"][1]["variations"] == RUN_MEDIA["variations"]
+
+
+def test_r9_redo_takes_it_out_again_and_a_second_undo_brings_it_back_again(authoring_client):
+    client, graph, _, _ = authoring_client
+    before = _with_media(graph)
+    for _ in range(2):
+        assert client.put("/api/graph/node/n1", json={"params": {"scene": _authored(before, {"a"})}}).status_code == 200
+        assert client.put("/api/graph/node/n1", json={"params": {"scene": _authored(before, {"a", "b"})}}).status_code == 200
+        assert graph.nodes["n1"]["params"]["scene"]["shots"][1]["variations"] == RUN_MEDIA["variations"]
+
+
+def test_r9_a_new_shot_starts_idle_and_a_client_cannot_supply_media(authoring_client):
+    client, graph, _, _ = authoring_client
+    before = _with_media(graph)
+    fresh = _authored(before, {"a", "b"})
+    fresh["shots"].append({"id": "c", "prompt": "New", **copy.deepcopy(RUN_MEDIA)})
+    response = client.put("/api/graph/node/n1", json={"params": {"scene": fresh}})
+    assert response.status_code == 200
+    shot_c = graph.nodes["n1"]["params"]["scene"]["shots"][2]
+    assert shot_c["output"] == {"status": "idle"}
+    assert "variations" not in shot_c and "selectedVariation" not in shot_c
+
+
+def test_r9_kept_media_belongs_to_its_canvas(authoring_client, tmp_path):
+    client, graph, path, _ = authoring_client
+    before = _with_media(graph)
+    assert client.put("/api/graph/node/n1", json={"params": {"scene": _authored(before, {"a"})}}).status_code == 200
+    assert ("n1", "b") in graph.removed_shot_media
+    assert graph.clone().removed_shot_media == graph.removed_shot_media
+    other = CLIGraph()
+    other.load(path)
+    assert other.removed_shot_media == {}
+    graph.clear()
+    assert graph.removed_shot_media == {}
+
+
+def test_r9_kept_media_is_capped_oldest_first():
+    graph = CLIGraph()
+    for index in range(main._REMOVED_SHOT_MEDIA_CAP + 5):
+        main._keep_removed_shot_media(graph, "n1", f"s{index}", {"output": {"status": "done"}})
+    assert len(graph.removed_shot_media) == main._REMOVED_SHOT_MEDIA_CAP
+    assert ("n1", "s0") not in graph.removed_shot_media
+    assert ("n1", f"s{main._REMOVED_SHOT_MEDIA_CAP + 4}") in graph.removed_shot_media
+
+
+# PR #200 fix round 10 (review 9 LOW-1, GM r16 answer 4): a returning shot id
+# gets its media back only when its prompt and settings match what was taken
+# out; otherwise it starts idle, and only the kept link goes (no file).
+
+def test_r10_a_different_shot_reusing_a_removed_id_starts_idle_and_the_kept_link_goes(authoring_client):
+    client, graph, _, _ = authoring_client
+    before = _with_media(graph)
+    assert client.put("/api/graph/node/n1", json={"params": {"scene": _authored(before, {"a"})}}).status_code == 200
+    assert ("n1", "b") in graph.removed_shot_media
+    reused = _authored(before, {"a"})
+    reused["shots"].append({"id": "b", "prompt": "An agent's brand-new unrelated shot"})
+    assert client.put("/api/graph/node/n1", json={"params": {"scene": reused}}).status_code == 200
+    shot_b = graph.nodes["n1"]["params"]["scene"]["shots"][1]
+    assert shot_b["output"] == {"status": "idle"}
+    assert "variations" not in shot_b and "selectedVariation" not in shot_b
+    assert "shot_b" not in graph.nodes["n1"]["outputs"]
+    assert ("n1", "b") not in graph.removed_shot_media
+    # The Undo that comes later can't bring the old media back onto it either.
+    assert client.put("/api/graph/node/n1", json={"params": {"scene": _authored(before, {"a"})}}).status_code == 200
+    assert client.put("/api/graph/node/n1", json={"params": {"scene": _authored(before, {"a", "b"})}}).status_code == 200
+    assert graph.nodes["n1"]["params"]["scene"]["shots"][1]["output"] == {"status": "idle"}
+
+
+def test_r10_the_same_prompt_with_a_changed_setting_is_a_different_shot(authoring_client):
+    client, graph, _, _ = authoring_client
+    before = _with_media(graph)
+    assert client.put("/api/graph/node/n1", json={"params": {"scene": _authored(before, {"a"})}}).status_code == 200
+    changed = _authored(before, {"a", "b"})
+    changed["shots"][1]["aspectRatio"] = "9:16"
+    assert client.put("/api/graph/node/n1", json={"params": {"scene": changed}}).status_code == 200
+    assert graph.nodes["n1"]["params"]["scene"]["shots"][1]["output"] == {"status": "idle"}
+
+
+def test_r10_the_matching_shot_comes_back_whole_and_key_order_does_not_matter(authoring_client):
+    client, graph, _, _ = authoring_client
+    before = _with_media(graph)
+    before["shots"][1]["aspectRatio"] = "16:9"
+    graph.nodes["n1"]["params"]["scene"]["shots"][1]["aspectRatio"] = "16:9"
+    assert client.put("/api/graph/node/n1", json={"params": {"scene": _authored(before, {"a"})}}).status_code == 200
+    back = _authored(before, {"a", "b"})
+    back["shots"][1] = dict(reversed(list(back["shots"][1].items())))
+    assert client.put("/api/graph/node/n1", json={"params": {"scene": back}}).status_code == 200
+    shot_b = graph.nodes["n1"]["params"]["scene"]["shots"][1]
+    assert {key: shot_b[key] for key in RUN_MEDIA} == RUN_MEDIA
+    assert graph.nodes["n1"]["outputs"]["shot_b"] == {"type": "Image", "value": "https://fixture.example/b1.png"}
+
+
+def test_r10_dropping_kept_media_never_deletes_a_file(authoring_client):
+    """GM r16 answer 4: "Dropped" is only the link from the shot; generated
+    files stay in the outputs folder, as Projects promises."""
+    client, graph, _, _ = authoring_client
+    folder = main.OUTPUT_ROOT / "r10-shot-files"
+    folder.mkdir(parents=True, exist_ok=True)
+    files = [folder / "b0.png", folder / "b1.png"]
+    for item in files:
+        item.write_bytes(b"\x89PNG fixture")
+    before_listing = sorted(p for p in main.OUTPUT_ROOT.rglob("*"))
+    media = {
+        "output": {"status": "done", "imageUrl": "/api/outputs/r10-shot-files/b1.png"},
+        "variations": [{"url": "/api/outputs/r10-shot-files/b0.png"}, {"url": "/api/outputs/r10-shot-files/b1.png"}],
+        "selectedVariation": 1,
+    }
+    graph.nodes["n1"]["params"]["scene"]["shots"][1].update(copy.deepcopy(media))
+    before = copy.deepcopy(graph.nodes["n1"]["params"]["scene"])
+    assert client.put("/api/graph/node/n1", json={"params": {"scene": _authored(before, {"a"})}}).status_code == 200
+    reused = _authored(before, {"a"})
+    reused["shots"].append({"id": "b", "prompt": "Different"})
+    assert client.put("/api/graph/node/n1", json={"params": {"scene": reused}}).status_code == 200
+    for index in range(main._REMOVED_SHOT_MEDIA_CAP + 2):  # and the cap pushing entries out
+        main._keep_removed_shot_media(graph, "n1", f"s{index}", copy.deepcopy(media))
+    graph.clear()
+    assert all(item.read_bytes() == b"\x89PNG fixture" for item in files)
+    assert set(before_listing) <= set(main.OUTPUT_ROOT.rglob("*"))
+
+
+# PR #200 fix round 11 (review 10 LOW-2, GM r12 answer 4): "settings match"
+# is value equality. 1.0 is 1 (exact, no epsilon); a missing field is its
+# default (no prompt is "", no refs are [], no overrides are {}), and a null,
+# {} or [] anywhere is the same as missing; key order never counts.
+
+def _remove_then_return(client, graph, stored_b: dict, returning_b: dict) -> dict:
+    graph.nodes["n1"]["params"]["scene"]["shots"][1].update(copy.deepcopy(stored_b))
+    before = copy.deepcopy(graph.nodes["n1"]["params"]["scene"])
+    assert client.put("/api/graph/node/n1", json={"params": {"scene": _authored(before, {"a"})}}).status_code == 200
+    back = _authored(before, {"a"})
+    back["shots"].append(returning_b)
+    assert client.put("/api/graph/node/n1", json={"params": {"scene": back}}).status_code == 200
+    return graph.nodes["n1"]["params"]["scene"]["shots"][1]
+
+
+def test_r11_an_agents_float_setting_matches_the_browsers_int(authoring_client):
+    """The reviewer's live case: an agent wrote contrast 1.0; the browser's
+    JSON round trip sends it back as 1. Same shot, so its media comes back."""
+    client, graph, _, _ = authoring_client
+    _with_media(graph)
+    stored = {"prompt": "Agent shot", "overrides": {"look": {"contrast": 1.0, "grain": 0.25}}}
+    assert isinstance(stored["overrides"]["look"]["contrast"], float)
+    shot_b = _remove_then_return(client, graph, stored,
+                                 {"id": "b", "overrides": {"look": {"grain": 0.25, "contrast": 1}}, "prompt": "Agent shot"})
+    assert {key: shot_b[key] for key in RUN_MEDIA} == RUN_MEDIA
+
+
+def test_r11_a_missing_field_matches_its_default_on_either_side(authoring_client):
+    client, graph, _, _ = authoring_client
+    _with_media(graph)
+    # Stored with the defaults written out; it comes back without them.
+    shot_b = _remove_then_return(client, graph,
+                                 {"prompt": "Keeper", "refImageUrls": [], "overrides": {"look": {}, "palette": None}, "note": None},
+                                 {"id": "b", "prompt": "Keeper"})
+    assert {key: shot_b[key] for key in RUN_MEDIA} == RUN_MEDIA
+    assert main._shot_authoring({"id": "b"}) == main._shot_authoring({"id": "b", "prompt": "", "refImageUrls": [], "overrides": {}})
+    assert main._shot_authoring({"id": "b", "prompt": "x"}) == main._shot_authoring({"prompt": "x", "id": "b", "overrides": {"look": {"contrast": None}}})
+
+
+def test_r11_value_equality_is_exact():
+    """No epsilon, a bool is not a number, and a set override never matches a
+    missing one (missing means "the scene's", not any number)."""
+    fp = main._shot_authoring
+    base = {"id": "b", "prompt": "p", "overrides": {"look": {"contrast": 1.0}}}
+    assert fp(base) == fp({"id": "b", "prompt": "p", "overrides": {"look": {"contrast": 1}}})
+    assert fp(base) != fp({"id": "b", "prompt": "p", "overrides": {"look": {"contrast": 1.0000001}}})
+    assert fp(base) != fp({"id": "b", "prompt": "p", "overrides": {"look": {"contrast": True}}})
+    assert fp(base) != fp({"id": "b", "prompt": "p"})
+    assert fp({"id": "b", "prompt": "p", "overrides": {"look": {"contrast": 0}}}) != fp({"id": "b", "prompt": "p"})
+    assert fp({"id": "b", "prompt": " p"}) != fp({"id": "b", "prompt": "p"})
+
+
+def test_r11_a_changed_float_is_still_a_different_shot(authoring_client):
+    client, graph, _, _ = authoring_client
+    _with_media(graph)
+    shot_b = _remove_then_return(client, graph, {"prompt": "Agent shot", "overrides": {"look": {"contrast": 1.0}}},
+                                 {"id": "b", "prompt": "Agent shot", "overrides": {"look": {"contrast": 1.5}}})
+    assert shot_b["output"] == {"status": "idle"} and "variations" not in shot_b
+
+
+# The merge of PR #198 into #200: a returning shot gets its media back two
+# ways, the trusted undo's (#198 returning_media) and the media the server
+# kept when it was taken out (#200). A newer image a run landed after the
+# shot left (its live shot_<id> port) wins over the kept one, as it does
+# over a trusted undo's.
+def test_merge_a_late_image_wins_over_the_kept_media(authoring_client):
+    client, graph, _, _ = authoring_client
+    before = _with_media(graph)
+    removed = client.put("/api/graph/node/n1", json={"params": {"scene": _authored(before, {"a"})}})
+    assert removed.status_code == 200
+    assert ("n1", "b") in graph.removed_shot_media
+    # A run that was out lands after the shot left: its port holds the newer image.
+    graph.nodes["n1"]["outputs"]["shot_b"] = {"type": "Image", "value": "https://fixture.example/late.png"}
+    back = client.put("/api/graph/node/n1", json={"params": {"scene": _authored(before, {"a", "b"})}})
+    assert back.status_code == 200, back.text
+    shot_b = graph.nodes["n1"]["params"]["scene"]["shots"][1]
+    assert shot_b["output"] == {"imageUrl": "https://fixture.example/late.png", "status": "done"}
+    # The kept variations stay; the late image isn't one of them, so nothing is selected.
+    assert shot_b["variations"] == RUN_MEDIA["variations"]
+    assert "selectedVariation" not in shot_b
+    assert graph.nodes["n1"]["outputs"]["shot_b"] == {"type": "Image", "value": "https://fixture.example/late.png"}
+    assert graph.removed_shot_media == {}
+
+
+def test_merge_a_trusted_undo_with_media_uses_its_own_and_drops_the_kept_link(authoring_client, monkeypatch):
+    client, graph, _, _ = authoring_client
+    before = _with_media(graph)
+    assert client.put("/api/graph/node/n1", json={"params": {"scene": _authored(before, {"a"})}}).status_code == 200
+    assert ("n1", "b") in graph.removed_shot_media
+    monkeypatch.setattr(main, "_is_person_request", lambda: True)
+    # The person's Undo carries the shot as it had it (#198): a finished shot, its media.
+    restored = client.post("/api/graph/restore", json={"action": "undo", "nodes": [
+        {"id": "n1", "definitionId": "cinema-scene", "params": {**graph.nodes["n1"]["params"], "scene": before}}]})
+    assert restored.status_code == 200, restored.text
+    shot_b = graph.nodes["n1"]["params"]["scene"]["shots"][1]
+    assert {key: shot_b[key] for key in RUN_MEDIA} == RUN_MEDIA
+    assert graph.nodes["n1"]["outputs"]["shot_b"]["value"] == "https://fixture.example/b1.png"
+    assert graph.removed_shot_media == {}

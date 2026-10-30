@@ -3,7 +3,7 @@ import { Brush, Copy, Info, Play, Plus, RefreshCw, Star, Trash2, Upload, X } fro
 import { useUIStore } from '../../store/uiStore';
 import { storedAssetId } from '../../store/storedAssetsStore';
 import { StoredAssetPicker } from './StoredAssetPicker';
-import { useGraphStore } from '../../store/graphStore';
+import { sceneDeleteDisabledTitle, useGraphStore } from '../../store/graphStore';
 import { usesKreaAccount } from '../../lib/kreaConnection';
 import { keysNeeded } from '../../lib/nodeKeys';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
@@ -21,6 +21,7 @@ import { JevResultDetails } from './JevResultDetails';
 import { StructuredOutputs } from '../nodes/StructuredValuePreview';
 import { structuredOutputEntries } from '../../lib/structuredValue';
 import { isJevNode, parseJevOutputs } from '../../lib/jev';
+import { universalSettingLabel } from '../../lib/universalSettingLabel';
 import { allParamDefinitions, paramDefinitionsForRun, providerLabel, routeById, routeSwitch, selectRoute, shownRouteId, visibleParams as visibleParamsFor, withWiredBlockers } from '../../lib/directRoute';
 import { definitionSnap, definitionStartShapeNote, sizeNote } from '../../lib/makerSizes';
 import { paramDefaultFor, snapParamDefaults, type DefaultSnapNote } from '../../lib/paramDefaults';
@@ -35,7 +36,7 @@ import '../../styles/mask-painter.css';
 import { failureMessage } from '../../lib/errorCopy';
 import { extractPaletteFromImage, paletteNotice } from '../../lib/paletteExtract';
 import { fileNameParam, inputFileName } from '../../lib/fileName';
-import { useCanvasLock } from '../../lib/canvasLock';
+import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 
 type InspectorParamDefinition = ParamDefinition | DynamicParamDefinition;
 
@@ -68,6 +69,14 @@ export function Inspector({ embedded = false }: InspectorProps) {
   // open." while following.
   const lock = useCanvasLock();
   const readOnly = lock.locked;
+  // A file picker is a <label> around a hidden input: the input is disabled,
+  // and the label carries the lock's look and reason (follow, then offline;
+  // GM r9 answer 3: "You can choose a file when Nebula reconnects.").
+  const lockedPicker = (title: string | undefined, offline: string) => ({
+    ...lock.mark,
+    title: lock.title({ title, offline }),
+    'aria-disabled': readOnly || undefined,
+  });
   const panelVisible = useUIStore((s) => s.panels.inspector.visible);
   const position = useUIStore((s) => s.panels.inspector.position);
   const selectedNodeId = useUIStore((s) => s.selectedNodeId);
@@ -143,6 +152,12 @@ export function Inspector({ embedded = false }: InspectorProps) {
   const settingsCache = useUIStore((s) => s.settingsCache);
   const nodeParams = nodeData?.params;
   const renderNodeId = renderNode?.id;
+  // A scene with a shot rendering can't be deleted yet (GM, PR #198 r3 item 1).
+  const sceneHeld = useGraphStore((s) => (renderNodeId ? sceneDeleteDisabledTitle(s, [renderNodeId]) : null));
+  // This tab's own run locks Run, Duplicate and Delete, and its line wins
+  // (PR #198 review 6, N2: as the selection toolbar and the context menu).
+  const runLocked = useGraphStore((s) => s.isExecuting);
+  const runStarting = useGraphStore((s) => s.runStarting);
   const wiredKey = useMemo(() => (renderNodeId ? nodeWiredPorts(renderNodeId, edges).join('\n') : ''), [renderNodeId, edges]);
   const resolvedParams: ParamDefinition[] = useMemo(() => {
     if (!definition) return [];
@@ -484,8 +499,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
               type="button"
               className={
                 isFavorite
-                  ? 'inspector__favorite-button inspector__favorite-button--active'
-                  : 'inspector__favorite-button'
+                  ? 'inspector__favorite-button inspector__favorite-button--active inspector__favorite-remove'
+                  : 'inspector__favorite-button inspector__favorite-remove'
               }
               title={isFavorite ? 'Remove favorite' : 'Add favorite'}
               aria-label={isFavorite ? 'Remove model from favorites' : 'Add model to favorites'}
@@ -681,9 +696,11 @@ export function Inspector({ embedded = false }: InspectorProps) {
                     <button
                       type="button"
                       className="inspector__palette-remove"
-                      title="Remove swatch"
                       aria-label={`Remove swatch ${idx + 1}`}
-                      disabled={readOnly} {...lock.mark}
+                      // Fix round 5 of PR #200 (review 5 LOW-2, GM r7): the
+                      // lock's own tooltip, the follow reason first, then
+                      // offline's verb; "Remove swatch" when live.
+                      {...lock.act({ title: 'Remove swatch', offline: 'remove swatches', kept: 'live' })}
                       onClick={() => writeSwatches(swatches.filter((_, i) => i !== idx))}
                     >
                       <X
@@ -703,8 +720,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
             <button
               type="button"
               className="inspector__action-button"
-              title="Add a swatch"
-              disabled={readOnly} {...lock.mark}
+              // Fix round 6 of PR #200 (review 6 LOW-1, GM r8): the lock's
+              // reason, not "Add a swatch", while it can't add.
+              {...lock.act({ title: 'Add a swatch', offline: 'add swatches', kept: 'live' })}
               onClick={() => writeSwatches([...swatches, '#808080'])}
             >
               <Plus
@@ -716,7 +734,10 @@ export function Inspector({ embedded = false }: InspectorProps) {
               />
               <span>Add</span>
             </button>
-            <label className="inspector__file-button" title="Extract a palette from an image">
+            {/* A <label> can't be disabled: locked, it says so itself (the
+                shared grey, the lock's reason, no hover; fix round 6 of PR
+                #200, review 6 LOW-1, GM r9 answer 3). */}
+            <label className="inspector__file-button" {...lockedPicker('Extract a palette from an image', 'extract a palette')}>
               <Upload
                 className="inspector__action-icon"
                 size={14}
@@ -732,6 +753,10 @@ export function Inspector({ embedded = false }: InspectorProps) {
                 disabled={extracting || readOnly}
                 {...lock.mark}
                 onChange={(e) => {
+                  // Fix round 7 of PR #200 (review 7 N-2): refused here too, so
+                  // a file set on the input from outside, or picked just before
+                  // the lock, uploads nothing (no orphan in output/).
+                  if (refuseCanvasEdit()) { e.target.value = ''; return; }
                   const file = e.target.files?.[0];
                   if (!file) return;
                   // Reset the input so the same file can be picked again later.
@@ -780,7 +805,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           : 'image/*,video/*,audio/*';
       return (
         <div className="inspector__control-stack">
-          <label className="inspector__file-button">
+          <label className="inspector__file-button" {...lockedPicker(undefined, 'choose a file')}>
             <Upload
               className="inspector__action-icon"
               size={14}
@@ -795,6 +820,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
               disabled={readOnly} {...lock.mark}
               className="inspector__file-input"
               onChange={(e) => {
+                // Review 7 N-2: refused here too (see Extract's onChange).
+                if (refuseCanvasEdit()) { e.target.value = ''; return; }
                 const file = e.target.files?.[0];
                 if (!file) return;
                 const formData = new FormData();
@@ -1159,7 +1186,10 @@ export function Inspector({ embedded = false }: InspectorProps) {
           const dynData = nodeData as unknown as DynamicNodeData;
           const hasDynamicParams = dynData?.isDynamic && dynData.dynamicParams?.length > 0;
           if (!hasDynamicParams) return null;
-          return dynData.dynamicParams.map((param) => renderParamSection(param, 'dynamic'));
+          // A provider setting's label is its key in sentence case (GM, PR
+          // #198 r1 item 7), as the agent's cursor names it; a node saved
+          // before that keeps a Title Case label in its data.
+          return dynData.dynamicParams.map((param) => renderParamSection({ ...param, label: universalSettingLabel(param.key) }, 'dynamic'));
         })()}
 
         <div className="inspector__section inspector__section--separated">
@@ -1177,7 +1207,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button"
-            {...lock.act({ title: 'Run this node and its dependencies', kept: 'run' })}
+            {...lock.act({ title: 'Run this node and its dependencies', kept: 'run' }, { run: runLocked || runStarting })}
             onClick={() => executeNode(renderNode.id)}
           >
             <Play
@@ -1192,7 +1222,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button"
-            {...lock.act({ title: 'Duplicate this node', kept: 'live' })}
+            {...lock.act({ title: 'Duplicate this node', kept: 'live' }, { run: runLocked })}
             onClick={() => duplicateNode(renderNode.id)}
           >
             <Copy
@@ -1207,7 +1237,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button inspector__action-button--danger"
-            {...lock.act({ title: 'Delete this node', kept: 'delete' })}
+            {...lock.act({ disabled: sceneHeld !== null, title: sceneHeld ?? 'Delete this node', kept: 'live' }, { run: runLocked })}
             onClick={() => {
               // A World Labs hold refuses, with its notice; otherwise it deletes at
               // once and says "Deleted the node." with Undo (GM, 2026-10-23).

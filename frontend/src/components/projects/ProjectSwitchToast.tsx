@@ -4,6 +4,7 @@ import { switchMessage, useProjectStore, type ProjectSwitchNotice } from '../../
 import { useUIStore } from '../../store/uiStore';
 import { InNoticeRegion } from '../InNoticeRegion';
 import './ProjectSwitchToast.css';
+import { useLeave } from '../../lib/noticeLeave';
 
 const VISIBLE_MS = 15000;
 
@@ -39,18 +40,21 @@ export function ProjectSwitchToast() {
     const timer = window.setTimeout(() => useProjectStore.getState().dismissSwitchNotice(), VISIBLE_MS);
     return () => window.clearTimeout(timer);
   }, [notice, paused, held]);
-  if (!notice) return null;
+  // It leaves as it entered (fix round 7 of PR #200, GM r11 answer 2).
+  const leave = useLeave(notice);
+  if (!leave.shown) return null;
+  const shown = leave.shown;
   // In the app's notice region, like every toast (GM - Design, 2026-10-23).
   return (
     <InNoticeRegion slot="project-switch">
-      <div className="project-switch-toast" role="status" aria-live="polite"
+      <div className="project-switch-toast" role="status" aria-live="polite" {...leave.props}
         onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
         onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
-        <span className="project-switch-toast__text">{switchMessage(notice)}</span>
-        {notice.previousProjectId && (
+        <span className="project-switch-toast__text">{switchMessage(shown)}</span>
+        {shown.previousProjectId && (
           <button type="button" className="project-switch-toast__back" disabled={busy}
             onClick={() => void useProjectStore.getState().switchBack()}>
-            Back to “{notice.previousProjectName ?? 'previous project'}”
+            Back to “{shown.previousProjectName ?? 'previous project'}”
           </button>
         )}
         <button type="button" className="project-switch-toast__close" aria-label="Dismiss"

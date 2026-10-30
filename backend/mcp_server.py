@@ -6,6 +6,7 @@ import functools
 import inspect
 import json as _json
 import os
+import secrets
 import re as _re
 import sys
 import time as _time
@@ -106,7 +107,7 @@ def _signature(schema: dict[str, Any], keep: list[str]) -> str:
 
 def _example(name: str, schema: dict[str, Any]) -> str:
     required = [param for param in (schema.get("properties") or {}) if param in set(schema.get("required") or [])]
-    return f" Call {name}({', '.join(f'{param}=...' for param in required)})." if required else ""
+    return f" Call `{name}({', '.join(f'{param}=...' for param in required)})`." if required else ""
 
 
 def argument_problem(tool: Any, arguments: dict[str, Any]) -> str | None:
@@ -372,9 +373,16 @@ def _agent_name(client: str) -> str:
     return "MCP agent" if client == "unknown" else client.replace("-", " ").replace("_", " ").title()
 
 
+# One per server process, so one agent session's scene reads are its own:
+# two sessions of one agent (two Codex lanes) never share one (fix round 9,
+# M-2; services/scene_keys.py). NEBULA_AGENT_SESSION overrides it.
+_AGENT_SESSION = os.environ.get("NEBULA_AGENT_SESSION") or secrets.token_hex(8)
+
+
 def _agent_headers(ctx: Context | None) -> dict[str, str]:
-    """Who this agent is on the canvas (its cursor name); nebula_api adds the token."""
-    return {"X-Nebula-Agent": _cursor_name(ctx)}
+    """Who this agent is on the canvas (its cursor name) and this session;
+    nebula_api adds the token."""
+    return {"X-Nebula-Agent": _cursor_name(ctx), "X-Nebula-Agent-Session": _AGENT_SESSION}
 
 
 def _canvas_call(method: str, path: str, ctx: Context | None, timeout: float = 10.0, **kwargs: Any) -> dict[str, Any]:
@@ -417,7 +425,9 @@ def start_here(ctx: Context | None = None) -> str:
       first, then on screen), the rest in `others` by id and name, with
       `truncated`; look_at_canvas has every node in full.
     - `pins`: the person's open pins (id, text, anchor), newest first, and
-      `openCount`. Each is a request: act on it, then resolve_pin.
+      `openCount`. Each is a request: act on it, then resolve_pin. A note
+      keeps the person's lines (newlines in `text`) and its spacing, as
+      look_at_canvas has it.
     - `proposals`: open proposals waiting for the person, and `count`.
     - `boards`: every moodboard, the current project's first, then Global,
       then other projects (`where`), with its image count, whether it is
@@ -461,7 +471,8 @@ def look_at_canvas(ctx: Context | None = None) -> dict[str, Any]:
     to do (a node saved before Replicate outputs were typed: set its
     model_id again). `events.cursor` is where wait_for_canvas_change should start (`since`).
     `pins` are short notes the person pinned for agents ("warmer", "redo this
-    one"), open ones first, each anchored to a node or a canvas spot. Treat an
+    one"), open ones first, each anchored to a node or a canvas spot; a note
+    keeps the lines the person wrote (newlines in `text`). Treat an
     open pin as the person's request: act on it, then answer with resolve_pin.
     `proposals` are the open ones waiting for the person (id, agent, note,
     status); get_proposal reads one in full. `providerHolds` are paid starts
@@ -690,7 +701,8 @@ def wait_for_canvas_change(
     node.renamed, edge.added, selection.changed, run.finished,
     run.skipped, canvas.replaced, edit.undone, board.moved, board.fields,
     ...), the `actor` who did it (`person`, an `agent`,
-    or `anonymous`), `nodeId`, `data` and a one-line `summary`. An event
+    or `anonymous`), `nodeId`, `data` and a one-line `summary` (a line
+    break in a note shows there as " ⏎ "; `data.text` has the note whole). An event
     from a canvas edit has `edit`: your edit_canvas events carry its `id`
     (your `undo.editId`); an undo's events carry `undoes` (the edit id it
     reverted) and `of` (whose edit), and end with `edit.undone` (only a
@@ -1248,6 +1260,13 @@ def load_graph_file(path: str, ctx: Context | None = None) -> dict[str, Any]:
     open project is left as it was: `previousProject` and the `note` say how
     to go back (open_project). Saving the new project is paused until it is
     under the limit (`savingPaused`); project_size shows what's large.
+    A Cinema scene in the file is read leniently, as a saved project is: what
+    can't be read is converted, not refused (docs/MCP-SETUP.md, Cinema scenes
+    over MCP), so look_at_canvas the scene after loading a file you didn't
+    write. A shot that lost its id gets a new one and keeps its own image
+    port (`shot_s2` becomes `shot_s3`) and connections; a shot output no shot
+    owns, and its connections, are left out, each with a line in `warnings` (and the
+    Agent log). Refused with 409 while a run is going.
 
     Returns `loaded`, `project`, `openedAsNewProject`, `nodeCount`,
     `edgeCount`, `idMap` (the file's node ids to the canvas's), `filesRestored`,
@@ -1323,6 +1342,44 @@ def edit_canvas(
       result is `status: "stopped"` with `failedStep`, `error`, what the
       earlier steps `applied` (and the ids their refs became), and their undo
       tokens, so you can fix that step and send the rest, or undo what landed.
+    A new cinema-scene node needs only {"scene": {"shots": [{"id": "s1",
+    "prompt": "..."}]}}: its version, base model and aspect ratio are filled
+    in, and a 400 names any field that can't be (`base` written as a model
+    name, a prompt that isn't text, a shot id used twice). An existing scene
+    is edited in Cinema, not here. A scene that is rendering a shot can't be
+    removed (409 naming the shots and the run; over HTTP its body has `code`
+    "rendering_shots" and `rendering` {shotIds, shots, stoppable}: the shot
+    ids, their rail numbers and whether a Stop can end them yet). A shot run
+    holds the scenes upstream of it the same way until it ends. Over HTTP the
+    other whole-edit refusals carry a `code` beside the detail too:
+    `workspace_moved` (another project opened since) or `canvas_replaced`
+    (the canvas was cleared or replaced since), both with `project` and
+    `switchedBy`, `paid_start`, `approved_run`
+    (docs/MCP-SETUP.md, Cinema scenes over MCP); here you read the detail.
+    MCP has no scene write: an existing scene can't be changed here (400).
+    Its write over HTTP (PUT /api/graph/node/{id}, `nebula set`) is held to
+    what you read (this server sends its own X-Nebula-Agent-Session,
+    NEBULA_AGENT_SESSION to choose it; a write with no session is held to its
+    own last `nebula look`, and only if it never looked to the newest read by
+    any session of your name, these looks included; a look here never
+    refreshes a `nebula look`): changed
+    since, it is refused with 409 `scene_changed` (`scene`, `sceneKey`,
+    `sceneRev`, `changedBy`) and nothing is saved; read it again and redo
+    your change (a refusal is not a read). A write to a node someone
+    deleted is 404 `node_gone` with `deletedBy` (who, or null); the person's
+    canvas says it in your delete's own toast (one sentence when your
+    write did more, and when your undo deleted it). If the scene comes back
+    by any path while the person's clash with your change still differs, they
+    are asked again, and that prompt is the only line for the scene. The
+    person's own scene save refused 400 or 413 shows one line per status and
+    waits for them (behind a waiting clash, after their answer, or after your
+    write that ends the clash with their value); its Agent log line carries
+    the status and code. While their scene is stopped or its clash waits,
+    your edits about it alone go only to the Agent log; deleting it or a new
+    clash says so instead, and a connection from it into another node toasts as
+    usual (docs/MCP-SETUP.md). Ids and ports in details are
+    bare (`Node n4 not found`); a name that matches nothing is in “…”
+    (`no Style “Neon dusk”`); a next call is in backticks.
     Who bills a run is the person's call: Krea billing (`_kreaAuth`: API token
     or the Krea plan) and a multi-provider node's route (`_provider`: a route id
     or auto; describe_node lists them and the values each takes). Send a change
@@ -1450,7 +1507,7 @@ def _switch(path: str, body: dict[str, Any], ctx: Context | None) -> dict[str, A
     if previous and previous_id != project.get("id"):
         reply["previousProject"] = {"id": previous_id, "name": previous.get("name")}
         reply["note"] = (f"The canvas now shows {project.get('name')}. {previous.get('name')} is saved as it was; "
-                         f"open_project('{previous_id}') goes back.")
+                         f"`open_project('{previous_id}')` goes back.")
     if result.get("warnings"):
         reply["warnings"] = result["warnings"]
     return reply
@@ -1485,6 +1542,9 @@ def open_project(project_id: str, ctx: Context | None = None) -> dict[str, Any]:
     A canvas waiting to be saved as a project (list_projects `canvasNotFiled`)
     is held aside first, whole, and saved as its own project once there is
     room, so opening works then too.
+    `warnings` lists what opening changed: a folded node's connections, or a
+    Cinema scene's shot output no shot owns and its connections, left out
+    (a renumbered shot keeps its own port and connections).
     """
     from urllib.parse import quote
 
@@ -1498,7 +1558,13 @@ def remove_from_canvas(node_ids: list[str] | None = None, wires: list[dict] | No
 
     `wires` are [{"source", "sourceHandle", "target", "targetHandle"}] as
     look_at_canvas lists them. Their outputs stay in Nebula's output folder.
-    Ask first before deleting the person's own work. Deleting a node detaches
+    Ask first before deleting the person's own work. A Cinema scene one of
+    whose shots is rendering can't be deleted: 409 "Couldn’t delete “Scene”,
+    node n4. “Shot 2” is still running, run <id>." (over HTTP with `code`
+    "rendering_shots" and `rendering` {"shotIds": ["s2"], "shots": [2],
+    "stoppable": true}; stop it with cancel_run, or wait). A
+    shot run holds the scenes upstream of it until the run ends, through
+    every variation pass. Deleting a node detaches
     the person's pins on it and closes the proposals that read it; `removals`
     lists them per node (with its `projectId`, `definitionId` and, when it
     supersedes an earlier delete of the same node, `replaces`), and
@@ -1596,7 +1662,7 @@ def _preview_with_error(node_id: str, port: str | None, size: str, ctx: Context 
 
     params = {"size": size, **({"port": port} if port else {})}
     response = _api().send("GET", f"/api/graph/node/{node_id}/preview", params=params, timeout=60.0,
-                           headers={"X-Nebula-Agent": _cursor_name(ctx)})
+                           headers=_agent_headers(ctx))
     kind = response.headers.get("content-type", "image/jpeg").split(";")[0]
     failed = response.headers.get("x-nebula-last-run-error")
     return (Image(data=response.content, format="png" if kind == "image/png" else "jpeg"),
@@ -1638,7 +1704,7 @@ def _run_result(payload: dict[str, Any], ctx: Context | None) -> list:
         # closest it could get to your 1000x560."
         shown["notes"] = payload["notes"]
     if status == "running":
-        shown["next"] = (f"Still running. get_run('{payload.get('runId')}', wait_seconds=...) collects it; "
+        shown["next"] = (f"Still running. `get_run('{payload.get('runId')}', wait_seconds=...)` collects it; "
                          "cancel_run stops it.")
     elif payload.get("noRecord"):
         shown["next"] = run_no_record_next(payload.get("runId"))
@@ -1729,7 +1795,9 @@ def cancel_run(run_id: str, ctx: Context | None = None) -> dict[str, Any]:
 
     A run the person started is theirs to stop and is refused (403). If they
     ask you to stop it, tell them to press Stop in Nebula (the toolbar, or
-    the run in Run history).
+    the run in Run history). A shot can't be removed from a Cinema scene,
+    nor the scene deleted, while a run renders it (409 naming the run): stop
+    that run here first, or wait for it to finish.
 
     A run id Nebula hasn't started yet (its start still on the way) answers
     `pendingAdmission: true`: the stop is recorded and Nebula refuses to
@@ -2045,7 +2113,7 @@ def commons_concentration(brand: str | None = None, ctx: Context | None = None) 
 # downloaded by this process, never by the backend.
 
 def _board_headers(ctx: Context | None) -> dict[str, str]:
-    return {"X-Nebula-Agent": _cursor_name(ctx)}
+    return _agent_headers(ctx)
 
 
 def _board_call(fn, *args: Any, **kwargs: Any) -> Any:
@@ -2601,7 +2669,9 @@ def model_schema(provider: str, model_id: str, ctx: Context | None = None) -> di
 
     "replicate" with `model_id` "owner/name": also the model's latest
     `versionId`, `params` (its other inputs, set as params of the same name:
-    key, type, required, default, options, min, max) and the raw
+    key, label, type, required, default, options, min, max; the label is the
+    key in sentence case, "Guidance scale", as the Inspector and the
+    person's view of your cursor name it) and the raw
     `inputSchema` and `outputSchema`. Set the node's `model_id` to the
     owner/name with edit_canvas.
 
@@ -2634,7 +2704,7 @@ def model_schema(provider: str, model_id: str, ctx: Context | None = None) -> di
     _, node, param = _MODEL_CATALOGS[key]
     found = next((row for row in _catalog_models(key, ctx) if row.get("id") == model), None)
     if found is None:
-        raise ValueError(f"{key} has no model '{model[:120]}': model_catalog('{key}', query=...) lists them")
+        raise ValueError(f"{key} has no model “{model[:120]}”: `model_catalog('{key}', query=...)` lists them")
     result: dict[str, Any] = {"provider": key, "node": node, "param": param, "model": found}
     if isinstance(node, str) and _universal_ports.is_universal(node):
         configured = _model_ports(node, model, found)
@@ -2951,7 +3021,7 @@ CHANNEL_CAPABILITY = "claude/channel"
 async def _channel_fetch(path: str, params: dict[str, Any], timeout: float, agent: str) -> dict[str, Any]:
     """A GET as this agent, async on the event loop (cancellable mid long-poll, no thread held)."""
     url = await _offload(_current_url)  # NEBULA_URL_FILE is re-verified each time, as for the tools
-    headers = with_identity({"X-Nebula-Agent": agent})
+    headers = with_identity({"X-Nebula-Agent": agent, "X-Nebula-Agent-Session": _AGENT_SESSION})
     async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
         try:
             response = await client.get(f"{url}{path}", params=params, headers=headers)

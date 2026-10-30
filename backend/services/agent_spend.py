@@ -138,7 +138,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
-from services import model_pricing, node_route
+from services import model_pricing, money, node_route
 from services.node_names import quoted
 from services.retired_nodes import merged_into
 
@@ -581,7 +581,9 @@ class Decision:
 
 
 def _usd(amount: float) -> str:
-    return f"${amount:,.2f}" if amount >= 0.01 or amount == 0 else f"${amount:.3f}"
+    """A cost, limit or amount used in a refusal line: services/money.py's
+    one form for an amount ("$0.0004", never "$0.000"; review 2, L4)."""
+    return money.usd_amount(amount)
 
 
 def _runs(count: int) -> str:

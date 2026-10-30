@@ -65,7 +65,7 @@ def api(tmp_path, monkeypatch, person):
     sent: list[dict] = []
     browser: list[dict] = []
 
-    async def capture(data):
+    async def capture(data, **kw):
         sent.append(data)
 
     async def capture_browser(data):

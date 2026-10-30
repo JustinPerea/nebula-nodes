@@ -9,6 +9,7 @@ import type { ProviderSetupTarget } from '../../lib/providerReadiness';
 import { useUIStore } from '../../store/uiStore';
 import { useSwitchContext } from '../../hooks/useSwitchContext';
 import { floatingBottomLimit } from '../../lib/bottomBar';
+import { useCanvasLock } from '../../lib/canvasLock';
 import '../../styles/provider-switcher.css';
 
 /**
@@ -103,6 +104,11 @@ interface ProviderMenuProps {
  * one row is in the tab order (roving tabindex). */
 export function ProviderMenu({ state, onPick, onFix, inline = false, labelledBy, label, onClose }: ProviderMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
+  // Fix round 2 of PR #200 (review 2 L-5): a pick writes the node's params
+  // (updateNodeData, which the store refuses while following or offline), so
+  // every provider, fix and switch row takes the canvas lock: disabled,
+  // marked, the reason as its tooltip. The key cell only opens Settings.
+  const lock = useCanvasLock();
   const checkedIndex = Math.max(0, state.rows.findIndex((row) => row.selected));
   // The row in the tab order when the menu is in place: the last one
   // focused, else the checked one.
@@ -156,7 +162,7 @@ export function ProviderMenu({ state, onPick, onFix, inline = false, labelledBy,
           <button type="button" role="menuitemradio" aria-checked={row.selected}
             tabIndex={inline && index === active ? 0 : -1}
             className="provider-switcher__item"
-            title={row.block ?? row.info}
+            {...lock.act({ title: row.block ?? row.info, offline: true, kept: 'live' })}
             onClick={() => { onPick(row); onClose?.(true); }}>
             <span className="provider-switcher__check" aria-hidden="true">
               {row.selected && <Check size={12} strokeWidth={2} />}
@@ -178,6 +184,7 @@ export function ProviderMenu({ state, onPick, onFix, inline = false, labelledBy,
               {state.fixes.map((choice) => (
                 <button key={choice.param} type="button" role="menuitem" tabIndex={-1}
                   className="provider-switcher__alternative provider-switcher__fix"
+                  {...lock.act({ offline: true, kept: 'live' })}
                   onClick={() => {
                     onFix(choice);
                     onClose?.(true);
@@ -192,6 +199,7 @@ export function ProviderMenu({ state, onPick, onFix, inline = false, labelledBy,
               {state.alternatives.map((alternative) => (
                 <button key={alternative.routeId} type="button" role="menuitem" tabIndex={-1}
                   className="provider-switcher__alternative"
+                  {...lock.act({ offline: true, kept: 'live' })}
                   onClick={() => {
                     onPick({ writes: alternative.writes, routeId: alternative.routeId });
                     onClose?.(true);

@@ -28,7 +28,7 @@ import { BOTTOM_BAR_ATTR, BOTTOM_BAR_PANEL } from '../../lib/bottomBar';
 import { useBottomBarClearance } from '../../hooks/useBottomBarClearance';
 import { CANVAS_FIT_DURATION, CANVAS_ZOOM_DURATION, computeCanvasFitPadding } from '../../lib/canvasFit';
 import { displayKey } from '../../lib/keyboardShortcuts';
-import { describeRunScope, runChipLabel, summarizeRunScope } from '../../lib/runScope';
+import { describeRunScope, runChipLabel, runChipTitle, summarizeRunScope } from '../../lib/runScope';
 import { usePricingStore } from '../../store/pricingStore';
 import { useInputSizeStore } from '../../store/inputSizeStore';
 import type { NodeData } from '../../types';
@@ -40,7 +40,7 @@ import '../../styles/panels.css';
 import '../../styles/canvas-toolbar.css';
 import { refuseEditWhileOffline } from '../../lib/backendConnection';
 import { KEPT_MARK, useCanvasLock } from '../../lib/canvasLock';
-import { keptLockTitle } from '../../lib/keptCanvas';
+import { clearKeptTab, isCanvasKept, keptLockTitle } from '../../lib/keptCanvas';
 
 const CLEAR_CANVAS = "Couldn't clear the canvas.";
 
@@ -179,6 +179,15 @@ export function Toolbar() {
   const handleClear = useCallback(async () => {
     // Offline is read-only (GM, round 14 of PR #114): no confirm, no request.
     if (refuseEditWhileOffline()) return;
+    // Kept in this tab (GM r18 on PR #199, Q3): the clear is this tab's own,
+    // one step that Undo brings back; nothing is sent.
+    if (isCanvasKept()) {
+      const count = useGraphStore.getState().nodes.length;
+      if (count === 0) return;
+      if (!window.confirm(`Clear the canvas? ${count} node${count === 1 ? '' : 's'} will be removed. Undo brings them back.`)) return;
+      clearKeptTab();
+      return;
+    }
     if (!canLoadGraph(useGraphStore.getState())) return;
     const { nodes } = useGraphStore.getState();
     const msg =
@@ -269,6 +278,12 @@ export function Toolbar() {
     }
   }, [fitView]);
 
+  // The bottom Run while the canvas is kept (PR #199, GM r16, 4), after
+  // following and offline as lib/canvasLock orders them: its mark and line.
+  const runKept = lock.kept && !lock.locked;
+  const runKeptMark = runKept ? { [KEPT_MARK]: '' } : {};
+  const runKeptTitle = runKept ? keptLockTitle('run') : undefined;
+
   return (
     <div ref={barRoot} className={`toolbar toolbar--grouped${actionsOpen ? ' toolbar--actions-open' : ''}`} role="group" aria-label="Canvas controls"
       {...{ [BOTTOM_BAR_ATTR]: '' }}>
@@ -298,17 +313,17 @@ export function Toolbar() {
           // is disabled outright (round 15 of PR #114).
           onClick={() => { if (refuseEditWhileFollowing()) return; void executeGraph(); }}
           disabled={nodeCount === 0 || isImportingGraph || runStarting || offline || lock.kept}
-          aria-disabled={following && !lock.kept ? true : undefined}
-          // Kept first (GM r16 on PR #199, 4): its mark and its tooltip.
-          {...(lock.kept ? { [KEPT_MARK]: '' } : lock.mark)}
+          aria-disabled={following ? true : undefined}
+          {...lock.mark}
+          {...runKeptMark}
           aria-describedby={nodeCount > 0 ? runScopeId : undefined}
-          title={lock.kept ? keptLockTitle('run') : following ? waitToOpenTooltip(following.projectName)
-            : isImportingGraph ? 'Wait for the graph import to finish' : `Run graph. ${describeRunScope(runScope)} (${displayKey('Mod')}${displayKey('Enter')})`}
+          title={following ? waitToOpenTooltip(following.projectName) : runKeptTitle
+            ?? (isImportingGraph ? 'Wait for the graph import to finish' : `Run graph. ${describeRunScope(runScope)} (${displayKey('Mod')}${displayKey('Enter')})`)}
         >
           <ToolbarIcon name="run" />
           <span className="toolbar__label">Run</span>
           {runChip && (
-            <span className="toolbar__run-paid" aria-hidden="true">{runChip}</span>
+            <span className="toolbar__run-paid" aria-hidden="true" title={runChipTitle(runScope)}>{runChip}</span>
           )}
         </button>
       )}
@@ -329,6 +344,9 @@ export function Toolbar() {
             {canLoad && !canSave && providerStartAmbiguities.length > 0 && (
               <p className="toolbar__blocked" id={blockedId} role="status">{saveBlockedReason}</p>
             )}
+            {/* PR #198 review 6, M2: this tab's run locks Load, Import, Clear and
+                Arrange too, and its line wins over following's and offline's
+                (lib/canvasLock), as Save graph and the line above say. */}
             <div className="toolbar__action-group" role="group" aria-label="Graph files">
               <h2 className="toolbar__action-heading">Graph</h2>
               <button type="button" className="toolbar__action" disabled={!canSave}
@@ -338,19 +356,19 @@ export function Toolbar() {
                 <ToolbarIcon name="save" /><span>Save graph</span><kbd aria-hidden="true">Ctrl / ⌘ S</kbd>
               </button>
               <button type="button" className="toolbar__action"
-                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Load graph (Ctrl+O or ⌘O)', kept: 'load' })}
+                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Load graph (Ctrl+O or ⌘O)', kept: 'load' }, { run: isExecuting, runTitle: loadBlockedReason })}
                 aria-describedby={!canLoad ? blockedId : undefined}
                 aria-keyshortcuts="Control+o Meta+o" onClick={() => runSecondaryAction(requestGraphLoad)}>
                 <ToolbarIcon name="load" /><span>Load graph</span><kbd aria-hidden="true">Ctrl / ⌘ O</kbd>
               </button>
               <button type="button" className="toolbar__action"
-                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Import graph built by Nebula CLI', kept: 'load' })}
+                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Import graph built by Nebula CLI', kept: 'load' }, { run: isExecuting, runTitle: loadBlockedReason })}
                 aria-describedby={!canLoad ? blockedId : undefined}
                 onClick={() => runSecondaryAction(() => void handleImportCLI())}>
                 <ToolbarIcon name="cli" /><span>Import CLI graph</span>
               </button>
               <button type="button" className="toolbar__action toolbar__action--danger"
-                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Clear canvas — asks for confirmation', kept: 'clear' })}
+                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Clear canvas — asks for confirmation', kept: 'live' }, { run: isExecuting, runTitle: loadBlockedReason })}
                 aria-describedby={!canLoad ? blockedId : undefined}
                 onClick={() => runSecondaryAction(() => void handleClear())}>
                 <ToolbarIcon name="clear" /><span>Clear canvas…</span>
@@ -359,10 +377,10 @@ export function Toolbar() {
             <div className="toolbar__action-group" role="group" aria-label="Canvas layout">
               <h2 className="toolbar__action-heading">Layout</h2>
               <button type="button" className="toolbar__action"
-                {...lock.act({ disabled: nodeCount === 0, title: 'Arrange nodes by dependency', kept: 'arrange' })} onClick={() => runSecondaryAction(autoLayout)}>
+                {...lock.act({ disabled: nodeCount === 0, title: 'Arrange nodes by dependency', kept: 'live' }, { run: isExecuting })} onClick={() => runSecondaryAction(autoLayout)}>
                 <ToolbarIcon name="layout" /><span>Arrange nodes</span>
               </button>
-              <button type="button" className="toolbar__action" title="Reset panel positions and sizes"
+              <button type="button" className="toolbar__action toolbar__layout-reset" title="Reset panel positions and sizes"
                 onClick={() => runSecondaryAction(handleResetLayout)}>
                 <ToolbarIcon name="reset" /><span>Reset panels</span>
               </button>
@@ -377,7 +395,7 @@ export function Toolbar() {
           onClick={() => void zoomOut({ duration: CANVAS_ZOOM_DURATION })}>
           <Minus className="toolbar__icon" size={14} strokeWidth={1.6} aria-hidden="true" />
         </button>
-        <button type="button" className="toolbar__button toolbar__zoom-level"
+        <button type="button" className="toolbar__button toolbar__zoom-level toolbar__zoom-reset"
           aria-label={`Zoom ${zoomPercent}%, reset to 100%`} title={`Reset zoom to 100% (${displayKey('Shift')}0)`}
           aria-keyshortcuts="Shift+0"
           onClick={() => void zoomTo(1, { duration: CANVAS_ZOOM_DURATION })}>

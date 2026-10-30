@@ -26,6 +26,7 @@ import {
   type VideoExportResolution,
 } from '../../lib/renderJobs';
 import { useRenderJob } from '../../hooks/useRenderJob';
+import { offlineMark } from '../../lib/useBackendOffline';
 import { type EditClip, totalOutputDuration, clipSpeed, clampSpeedToFloor } from '../../lib/editor/virtualPlayback';
 import { formatSmpte } from '../../lib/editor/timecode';
 import type { NodeData } from '../../types';
@@ -47,6 +48,13 @@ interface Props {
  * someone edits."). It wraps to two rows when a clip is selected; the
  * clearance follows (it is measured whenever the row changes size). */
 export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
+  // Offline is read-only (round 15 of PR #114; GM r18 for this screen): what
+  // edits a clip or asks Nebula to render renders disabled with the offline
+  // mark. Play, the edit points, the zoom and the timecode stay usable. It is
+  // read from the canvas lock, the one source for offline (#195 round 22).
+  const lock = useCanvasLock();
+  const offline = lock.offline;
+  const off = offlineMark(offline);
   const [isRendering, setIsRendering] = useState(false);
   const [hasRendered, setHasRendered] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -65,9 +73,12 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
   const updateClip = useGraphStore((s) => s.updateEditNodeClip);
   // Round 23 (review 22, L-3): Cut, the speed and volume controls and Mute
   // edit the clip on the canvas, so they take the canvas lock. Play, the edit
-  // points, Trim/Speed/Vol (they select and focus), zoom, Render Preview and
-  // Export only look or make a file, and stay enabled.
-  const lock = useCanvasLock();
+  // points, Trim/Speed/Vol (they select and focus) and zoom only look, and
+  // stay enabled while following. Render Preview and Export… start a render
+  // on the backend (while following, of the canvas that is going away;
+  // offline it can't start), so they lock too (PR #200 review 3 LOW-4), with
+  // the follow or reconnect tooltip. (`lock` is read at the top: offline is
+  // read-only here too, PR #198.)
   const cutAtSource = useGraphStore((s) => s.cutEditNodeAtSource);
   const speedSliderRef = useRef<HTMLInputElement>(null);
   const volSliderRef = useRef<HTMLInputElement>(null);
@@ -186,11 +197,11 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
       </div>
       <span className="editor-transport__divider" />
       <div className="editor-transport__group">
-        <button className="editor-transport__tool" type="button" onClick={handleTrim} disabled={clips.length === 0} title="Drag the clip edges to trim">
+        <button className="editor-transport__tool" type="button" onClick={handleTrim} disabled={clips.length === 0 || offline} {...off} title="Drag the clip edges to trim">
           <Scissors className="editor-transport__icon" aria-hidden="true" focusable="false" />
           <span>Trim</span>
         </button>
-        <button className="editor-transport__tool" type="button" onClick={handleSpeed} disabled={clips.length === 0} title="Adjust playback speed">
+        <button className="editor-transport__tool" type="button" onClick={handleSpeed} disabled={clips.length === 0 || offline} {...off} title="Adjust playback speed">
           <Gauge className="editor-transport__icon" aria-hidden="true" focusable="false" />
           <span>Speed</span>
         </button>
@@ -198,7 +209,7 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
           <Split className="editor-transport__icon" aria-hidden="true" focusable="false" />
           <span>Cut</span>
         </button>
-        <button className="editor-transport__tool" type="button" onClick={handleVol} disabled={clips.length === 0} title="Adjust volume / mute">
+        <button className="editor-transport__tool" type="button" onClick={handleVol} disabled={clips.length === 0 || offline} {...off} title="Adjust volume / mute">
           <Volume2 className="editor-transport__icon" aria-hidden="true" focusable="false" />
           <span>Vol</span>
         </button>
@@ -277,7 +288,7 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
         </button>
         <button
           type="button"
-          className="editor-transport__btn"
+          className="editor-transport__btn editor-transport__zoom-reset"
           onClick={() => useUIStore.getState().resetTimelineZoom()}
           title="Reset zoom (⌘0)"
         >
@@ -296,7 +307,7 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
         type="button"
         className="editor-transport__btn editor-transport__btn--render"
         onClick={handleRender}
-        disabled={isRendering || clips.length === 0}
+        {...lock.act({ disabled: isRendering || clips.length === 0, offline: true, kept: 'edit-video' })}
       >
         <RotateCw className="editor-transport__icon" aria-hidden="true" focusable="false" />
         <span>{isRendering ? 'Rendering...' : hasRendered ? 'Re-render' : 'Render Preview'}</span>
@@ -306,7 +317,7 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
           type="button"
           className="editor-transport__btn editor-transport__btn--export"
           onClick={() => setExportOpen((open) => !open)}
-          disabled={clips.length === 0}
+          {...lock.act({ disabled: clips.length === 0, offline: true, kept: 'edit-video' })}
         >
           <Download className="editor-transport__icon" aria-hidden="true" focusable="false" />
           <span>Export…</span>
@@ -359,7 +370,7 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
                 <button type="button" onClick={renderJob.reset}>New export</button>
               </div>
             ) : (
-              <button type="button" className="final-export__start" onClick={handleFinalExport}>
+              <button type="button" className="final-export__start" onClick={handleFinalExport} {...lock.act({ offline: true, kept: 'edit-video' })}>
                 Export {exportFormat.toUpperCase()}
               </button>
             )}

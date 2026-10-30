@@ -1,27 +1,18 @@
-import { useLayoutEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { WorkspaceHeader } from '../WorkspaceHeader';
 import { useUIStore } from '../../store/uiStore';
+import { CINEMA_CATEGORY_COLOR } from '../../lib/cinemaCategoryColor';
 import { useGraphStore } from '../../store/graphStore';
 import { CinemaStudioToolbar } from './CinemaStudioToolbar';
 import { CinemaSharedControls } from './CinemaSharedControls';
 import { CinemaShotsRail } from './CinemaShotsRail';
 import { CinemaShotPanel } from './CinemaShotPanel';
 import { cinemaConnectedInputs, type CinemaConnectedInput } from '../../lib/cinemaInputs';
+import { normalizeCinemaScene } from '../../lib/cinemaScene';
+import { isModalDialogOpen } from '../../lib/canvasShortcutScope';
 import type { CinemaSceneSpec, CinemaShot } from '../../types';
 import '../../styles/cinema-studio.css';
 
-/** A minimal valid scene for a node that has none yet (e.g. dragged from the
- *  library before the Studio seeded it). License guard (spec §10): the default
- *  base must be commercial-OK — never FLUX.1-dev. Mirrors graphStore's
- *  createDefaultScene so the editor and store agree on the empty shape. */
-function emptyScene(): CinemaSceneSpec {
-  return {
-    version: 1,
-    base: { model: 'seedream-4-5' },
-    aspectRatio: '16:9',
-    shots: [],
-  };
-}
 
 /** Full-screen Cinema Studio host. Mounted by App.tsx when uiStore
  *  .cinemaEditorNodeId is set — mirrors RemotionEditorView's mount pattern.
@@ -40,13 +31,36 @@ export function CinemaStudioView() {
   const nodes = useGraphStore((s) => s.nodes);
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z step the canvas history here too (fix
+  // round 9 of PR #200, GM r13): a shot's × is neutral because Undo puts the
+  // shot back, and this view replaces the canvas, whose keys aren't mounted.
+  // Text fields keep their own undo; a dialog keeps its keys.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || isModalDialogOpen()) return;
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== 'z') return;
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.isContentEditable
+        || target.closest('input, textarea, select, [role="dialog"], [aria-modal="true"]'))) return;
+      event.preventDefault();
+      if (event.shiftKey) useGraphStore.getState().redo();
+      else useGraphStore.getState().undo();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   const selectedShotId = useUIStore((s) => cinemaNodeId ? s.cinemaSelectedShotIds[cinemaNodeId] : null);
   const setSelectedShotId = (shotId: string | null) => {
     if (cinemaNodeId) useUIStore.getState().setCinemaSelectedShot(cinemaNodeId, shotId);
   };
 
-  const scene: CinemaSceneSpec =
-    (node?.data as { params?: { scene?: CinemaSceneSpec } } | undefined)?.params?.scene ?? emptyScene();
+  // A node with no scene yet (dragged from the library before the Studio
+  // seeded it), or one saved without its base or aspect, reads through the
+  // defaults a new scene has (lib/cinemaScene; PR #198 review 2, M2). License
+  // guard (spec §10): the default base is commercial-OK, never FLUX.1-dev.
+  const rawScene = (node?.data as { params?: { scene?: unknown } } | undefined)?.params?.scene;
+  const scene: CinemaSceneSpec = useMemo(() => normalizeCinemaScene(rawScene), [rawScene]);
 
   // Derive a valid effective selection during render: keep the stored id when it
   // still refers to a real shot, otherwise fall back to the first shot (or null).
@@ -125,7 +139,8 @@ export function CinemaStudioView() {
   };
 
   return (
-    <div className="cinema-studio-view">
+    // The shared selected style for the film look and the variation too (review 2 L-4).
+    <div className="cinema-studio-view" style={{ ['--node-category-color' as string]: CINEMA_CATEGORY_COLOR }}>
       <CinemaStudioToolbar cinemaNodeId={cinemaNodeId} />
 
       <div className="cinema-studio-view__body">

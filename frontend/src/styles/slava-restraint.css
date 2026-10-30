@@ -91,6 +91,21 @@ body.app-slava-restraint {
   --sr-disabled-opacity: 0.48;
   --sr-disabled-opacity-strong: 0.36;
   --sr-disabled-opacity-muted: 0.50;
+  /* GM r33 (PR #198): the one disabled look, by kind of control, never a
+     whole-control opacity on a text button. Always: no hover change, no
+     pointer cursor.
+     - Text buttons: the label goes neutral grey at 0.55; the outline is
+       never brighter than the enabled edge; a ghost button gets no fill.
+     - Filled buttons: the grey fill (the held [Try again] of round 21),
+       its edge the fill itself, a dark label on it.
+     - Image-only buttons: 0.45 and greyscale.
+     The notice buttons read these now (canvasProposals.css); the rest of
+     the app moves over in the pressed-state sweep. */
+  --disabled-label: var(--sr-ink-light);
+  --disabled-fill: rgb(255 255 255 / 0.42);
+  --disabled-fill-label: rgb(17 17 17 / 0.62);
+  --disabled-opacity: 0.45;
+  --disabled-filter: grayscale(1);
 
   /* Brand-surface palette — Crab (M1, NN-45) gradient, radial.
    * BRAND SURFACES ONLY — README hero, OG card, swag, in-app splash.
@@ -312,12 +327,14 @@ body.app-slava-restraint {
   --sr-layer-popover: 40;
   --sr-layer-modal: 60;
   --sr-layer-modal-control: 61;
+  /* GM r25 (PR #200 fix round 16): and above every dialog's backdrop (the
+   * World viewer's is 20000), so a notice is always usable. Before: */
   /* The app's notices (NoticeRegion): above every panel, the Agent log, the
    * chat, popovers and the Studios with their docks (Settings over a Studio is
    * 56), below a modal that blocks the app (GM - Design, 2026-10-23: "one
    * app-level region above every panel ... A notice with an action never sits
    * under anything"). */
-  --sr-layer-notice: 58;
+  --sr-layer-notice: 20010;
   --sr-layer-node-preview: 1;
   --sr-layer-node-header: 2;
   --sr-layer-node-floating: 3;
@@ -713,9 +730,15 @@ body.app-slava-restraint .context-menu__item:disabled {
   opacity: var(--sr-disabled-opacity-strong);
 }
 
+/* Fix round 5 of PR #200 (review 5 N-4, GM r7 answer 2): every Delete hovers
+   to the danger red (#ff887d), pressed #ff9a91; orange is never destructive. */
 body.app-slava-restraint .context-menu__item--danger:hover:not(:disabled) {
-  background: var(--sr-danger-soft);
-  color: var(--sr-danger);
+  background: var(--sr-danger-tint);
+  color: var(--sr-danger-ink, #ff887d);
+}
+
+body.app-slava-restraint .context-menu__item--danger:active:not(:disabled) {
+  color: var(--sr-danger-ink-hover, #ff9a91);
 }
 
 body.app-slava-restraint .context-menu__shortcut,
@@ -1170,10 +1193,13 @@ body.app-slava-restraint .chat__tool-output {
   font-family: var(--sr-mono);
 }
 
+/* Enabled: the normal ink with its outline, clearly apart from the
+   disabled grey (GM 2026-10-28 answer 2; review 2 M-1: at ink-light it read
+   the same enabled and disabled). */
 body.app-slava-restraint .chat__codeblock-apply {
   border-top: 1px solid var(--sr-edge);
   background: rgba(255, 255, 255, 0.04);
-  color: var(--sr-ink-light);
+  color: var(--sr-ink);
   font-family: var(--sr-ui);
   letter-spacing: 0;
 }
@@ -1786,9 +1812,10 @@ body.app-slava-restraint .toolbar__button--executing .toolbar__icon {
   opacity: 0;
 }
 
-/* GM r17 (A): the dots sit in the icon's own slot, a fixed 14px box left of
-   the label (the run icon's size), so "Stop" never moves and is never
-   covered. The 19px matrix is scaled to the slot. */
+/* GM r17 (A): the dots sit in the icon's own slot, a fixed box left of the
+   label, so "Stop" never moves and is never covered. GM r18 (G4): the slot
+   is Run's 16px, so the label doesn't shift when Run and Stop swap. The 19px
+   matrix is scaled to 14px and centred in it: (16 - 14) / 2 on each side. */
 body.app-slava-restraint .toolbar__icon-slot {
   position: relative;
   z-index: 1;
@@ -1796,15 +1823,15 @@ body.app-slava-restraint .toolbar__icon-slot {
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
 body.app-slava-restraint .toolbar__button--executing .toolbar__icon-slot::before {
   content: '';
   position: absolute;
-  left: 0;
-  top: 0;
+  left: 1px;
+  top: 1px;
   width: 4px;
   height: 4px;
   border-radius: 50%;
@@ -2064,8 +2091,15 @@ body.app-slava-restraint .inspector__favorite-button {
   transition: color var(--sr-motion-fast), transform var(--sr-motion-fast);
 }
 
-body.app-slava-restraint .inspector__favorite-button:hover,
-body.app-slava-restraint .inspector__favorite-button--active {
+/* An off star brightens in neutral ink on hover, as the other icon buttons
+   do; only the on state is the accent, hovered or not, so hover never looks
+   like "on" (GM r17 item 1, review 10 LOW-1 of PR #200). */
+body.app-slava-restraint .inspector__favorite-button:hover:not(.inspector__favorite-button--active) {
+  color: var(--sr-ink-bold);
+}
+
+body.app-slava-restraint .inspector__favorite-button--active,
+body.app-slava-restraint .inspector__favorite-button--active:hover {
   color: var(--sr-accent);
 }
 
@@ -2143,12 +2177,14 @@ body.app-slava-restraint .inspector__info-meta {
 }
 
 body.app-slava-restraint .inspector__file-button,
+/* The normal ink (review 2 M-1): at ink-light (0.55) it read the same as
+   the shared disabled grey. */
 body.app-slava-restraint .inspector__action-button {
   min-height: var(--sr-control-h-md);
   border: 1px solid var(--sr-edge);
   border-radius: var(--sr-radius-control);
   background: var(--sr-surface-control);
-  color: var(--sr-ink-light);
+  color: var(--sr-ink);
   font-family: var(--sr-ui);
   font-size: var(--sr-type-body);
   transition:
@@ -2162,17 +2198,23 @@ body.app-slava-restraint .inspector__action-button:disabled {
   cursor: not-allowed;
 }
 
-body.app-slava-restraint .inspector__file-button:hover,
+body.app-slava-restraint .inspector__file-button:hover:not([aria-disabled='true']),
 body.app-slava-restraint .inspector__action-button:hover:not(:disabled) {
   border-color: var(--sr-edge-strong);
   background: var(--sr-surface-control-hover);
   color: var(--sr-ink-bold);
 }
 
+/* Fix round 5 of PR #200 (review 5 N-4, GM r7 answer 2): every Delete hovers
+   to the danger red (#ff887d), pressed #ff9a91; orange is never destructive. */
 body.app-slava-restraint .inspector__action-button--danger:hover:not(:disabled) {
-  border-color: var(--sr-danger-border);
-  background: var(--sr-danger-soft);
-  color: var(--sr-danger);
+  border-color: var(--sr-danger-edge);
+  background: var(--sr-danger-tint);
+  color: var(--sr-danger-ink, #ff887d);
+}
+
+body.app-slava-restraint .inspector__action-button--danger:active:not(:disabled) {
+  color: var(--sr-danger-ink-hover, #ff9a91);
 }
 
 body.app-slava-restraint .inspector__file-preview {
@@ -2196,13 +2238,19 @@ body.app-slava-restraint .inspector__palette-hex {
   font-family: var(--sr-mono);
 }
 
+/* Fix round 5 of PR #200 (review 5 LOW-2, GM r7): the palette × is a
+   control the lock greys, so its enabled ink is above the shared grey
+   (it was --sr-ink-faint, dimmer than its own disabled look). It hovers
+   neutral, the ghost hover (GM r12, reversing round 6's red: a × that takes
+   a swatch out of the palette is an edit, never red, never the accent). */
 body.app-slava-restraint .inspector__palette-remove {
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink);
   transition: color var(--sr-motion-fast);
 }
 
-body.app-slava-restraint .inspector__palette-remove:hover {
-  color: var(--sr-accent);
+body.app-slava-restraint .inspector__palette-remove:hover:not(:disabled) {
+  background: var(--sr-surface-control-hover);
+  color: var(--sr-ink-bold);
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -2314,6 +2362,34 @@ body.app-slava-restraint .toolbar__button--active:hover::after {
 body.app-slava-restraint .toolbar__button--active .toolbar__icon {
   color: rgba(255, 255, 255, 0.96);
   filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.18));
+}
+/* GM r18 (PR #200 fix round 12): these three neutral controls had no
+   pressed state, so a held press looked like hover. They take the toolbar's
+   press: scale down fast on press, ease back on release. The release lives
+   in the base rule (review 12 NIT-1: with it only in :active, the scale
+   snapped back), the toolbar's 220ms spring, with each control's own
+   colour, background, border, shadow and opacity fades. */
+body.app-slava-restraint .editor-transport__btn.editor-transport__zoom-reset,
+body.app-slava-restraint .world-modal__icon-button.world-modal__camera-reset,
+body.app-slava-restraint .mask-painter__tool.mask-painter__tool--erase {
+  transition:
+    color 120ms ease,
+    background-color 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    opacity 120ms ease,
+    transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+body.app-slava-restraint .editor-transport__zoom-reset:active:not(:disabled),
+body.app-slava-restraint .world-modal__camera-reset:active:not(:disabled),
+body.app-slava-restraint .mask-painter__tool--erase:active:not(:disabled) {
+  transform: scale(0.96);
+  transition:
+    color 120ms ease,
+    background-color 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    transform 80ms ease-out;
 }
 body.app-slava-restraint .toolbar__button:active {
   transform: scale(0.96);
@@ -2713,7 +2789,9 @@ body.app-slava-restraint .agent-log__empty-status {
 body.app-slava-restraint .agent-log__entry {
   --agent-log-source-color: var(--sr-ink-meta);
   display: grid;
-  /* The time's column is as wide as its text: "03:46:22 PM" never wraps (GM, round 17). */
+  /* The time takes its own width and never wraps ("03:46:22 PM", GM, round
+     17 of PR #195 and PR #198 r2); it is zero-padded and tabular, so every
+     row's time column is the same width. */
   grid-template-columns: 8px max-content 70px 1fr;
   gap: 8px;
   align-items: baseline;
@@ -4094,6 +4172,14 @@ body.app-slava-restraint .canvas-tabs-wrap {
   gap: 6px;
 }
 
+/* While following, above the mask painter's scrim (1000) and agent cursors
+   (1001), as CanvasTabs.css raises it; this skin rule is more specific, so
+   it needs its own twin (fix round 3 of PR #200, LOW-3: live, the scrim
+   still covered the bar). */
+body.app-slava-restraint .canvas-tabs-wrap[data-following] {
+  z-index: 1002;
+}
+
 body.app-slava-restraint .canvas-tabs__wordmark {
   color: var(--sr-ink-faint);
   font-family: var(--sr-mono);
@@ -4387,8 +4473,8 @@ body.app-slava-restraint .editor-transport__icon {
 }
 
 body.app-slava-restraint .editor-transport__btn:hover:not(:disabled),
-body.app-slava-restraint .editor-transport__tool:hover,
-body.app-slava-restraint .editor-transport__preset:hover {
+body.app-slava-restraint .editor-transport__tool:hover:not(:disabled),
+body.app-slava-restraint .editor-transport__preset:hover:not(:disabled) {
   color: var(--sr-ink-bold);
   background: var(--sr-surface-control-hover);
 }
@@ -4545,6 +4631,28 @@ body.app-slava-restraint .editor-transport__range:disabled {
   opacity: var(--sr-disabled-opacity);
 }
 
+/* GM r18: offline (or with no clips) Trim, Speed, Cut and Vol and the clip
+   presets read as disabled, like the transport's other buttons. */
+body.app-slava-restraint .editor-transport__tool:disabled,
+body.app-slava-restraint .editor-transport__preset:disabled {
+  opacity: var(--sr-disabled-opacity);
+  cursor: not-allowed;
+}
+
+/* GM r18: a disabled Render Preview or Export is the neutral disabled style,
+   with no accent outline. Orange only ever means "you can press this". */
+body.app-slava-restraint .editor-transport__btn--render:disabled {
+  border-color: var(--sr-edge);
+  background: var(--sr-surface-control);
+}
+
+body.app-slava-restraint .editor-transport__btn--export:disabled {
+  border-color: var(--sr-edge);
+  background: var(--sr-surface-control);
+  cursor: not-allowed;
+  opacity: var(--sr-disabled-opacity);
+}
+
 body.app-slava-restraint .editor-transport__divider {
   background: var(--sr-edge);
 }
@@ -4682,10 +4790,8 @@ body.app-slava-restraint .editor-tl__playhead {
 /* ─────────────────────────────────────────────────────────────────────
  * Selection + scrollbars
  * ───────────────────────────────────────────────────────────────────── */
-body.app-slava-restraint ::selection {
-  background: var(--sr-accent);
-  color: var(--sr-on-accent);
-}
+/* Text selection keeps the platform's own colour (fix round 1 of PR #200,
+   GM bug 2): the accent means "you can press this", never "selected". */
 
 body.app-slava-restraint ::-webkit-scrollbar {
   width: 8px;
