@@ -67,7 +67,7 @@ async function expectOneAgentStepThatRedoesArranged() {
   const { undoStack, undoNotice } = useGraphStore.getState();
   expect(undoStack).toHaveLength(1);
   expect(undoStack[0]).toMatchObject({ kind: 'foreign', agentName: 'Claude', source: 'agent' });
-  expect(undoNotice).toMatchObject({ text: 'Claude changed the canvas', offer: 'undo', entry: undoStack[0] });
+  expect(undoNotice).toMatchObject({ text: 'Claude changed the canvas.', offer: 'undo', entry: undoStack[0] });
 
   useGraphStore.getState().undo();
   expect(position('n2')).toBeUndefined();

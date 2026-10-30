@@ -3,7 +3,7 @@ import type { ModelNodeDefinition, NodeData } from '../types';
 import { apiFetch } from './backend';
 import { apiRequest } from './apiRequest';
 import { RequestFailedError } from './errorCopy';
-import { formatUsd, formatUsdRange } from './pricing';
+import { formatChipEstimate } from './pricing';
 import { resolveAnchor, type Point } from './agentCursorMotion';
 import type { ProposalNotReady, ProposalPersonValues, ProposalView } from './wsClient';
 import { BILLING_PARAM_LABELS, providerChoiceLabel } from './billingParams';
@@ -203,8 +203,15 @@ export function stillNotReady(
   nodeFor: (row: ProposalNotReady) => { definition: ModelNodeDefinition | undefined; params: Record<string, unknown> } | null,
 ): ProposalNotReady[] {
   return (view.cost.notReady ?? []).filter((row) => {
-    if (!cache.loaded || !row.missing.startsWith('needs ')) return true;
+    if (!cache.loaded) return true;
     const node = nodeFor(row);
+    // A missing key, in either wording: find_nodes' "needs <key>", or a
+    // route's own line (RouteSpec.missingKeyLine: Idol's "You can run Idol
+    // after you add your Hugging Face token in Settings."). PR #203 round 6:
+    // with the token added, Idol's line stayed beside an unlocked Accept.
+    const keyRow = row.missing.startsWith('needs ')
+      || Boolean(node?.definition?.routes?.some((route) => route.missingKeyLine && route.missingKeyLine === row.missing));
+    if (!keyRow) return true;
     return !node?.definition || nodeKeyStatus(node.definition, node.params, cache) === 'missing';
   });
 }
@@ -254,17 +261,17 @@ export function proposalSummary(view: ProposalView): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-/** "~$0.07", "$0.0047–0.43", "$0.07+" when part of the run has no list price. */
+/** The proposal card's chip, as the Run chip writes it (lib/pricing
+ * formatChipEstimate): "~$0.07", "Up to $0.43", "$0.07 + unpriced" when part
+ * of the run has no known price. The card has no tooltip for it. */
 export function proposalEstimateLabel(view: ProposalView): string | null {
   const estimate = view.cost.estimate;
   if (!estimate || view.run.length === 0) return null;
-  const exact = formatUsd(estimate.low) === formatUsd(estimate.high);
-  const amount = exact ? formatUsd(estimate.high) : formatUsdRange(estimate.low, estimate.high);
-  if (estimate.open) return `${amount}+`;
   // A sourced $0 (a Hugging Face Space on the person's allowance) is exact,
-  // not an estimate (GM, PR #203 r1).
-  if (estimate.low === 0 && estimate.high === 0) return '$0';
-  return exact ? `~${amount}` : amount;
+  // not an estimate (GM, PR #203 r1): "$0", where the chip's own free label
+  // is "~$0".
+  if (!estimate.open && estimate.low === 0 && estimate.high === 0) return '$0';
+  return formatChipEstimate(estimate.low, estimate.high, Boolean(estimate.open));
 }
 
 /** A proposal whose whole run waits on agents' placeholders: its run skips

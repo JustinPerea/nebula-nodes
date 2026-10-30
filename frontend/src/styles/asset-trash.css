@@ -171,7 +171,8 @@ body.app-slava-restraint .asset-trash__toast {
   animation: asset-trash-toast-in 420ms var(--asset-trash-spring) both;
 }
 
-body.app-slava-restraint .asset-trash__toast-text { min-width: 0; margin-right: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* GM, #198 r8: a toast wraps (up to 3 lines) and never cuts a sentence. */
+body.app-slava-restraint .asset-trash__toast-text { min-width: 0; margin-right: 8px; overflow-wrap: anywhere; line-height: 1.4; }
 
 body.app-slava-restraint .asset-trash__toast-undo {
   flex-shrink: 0;

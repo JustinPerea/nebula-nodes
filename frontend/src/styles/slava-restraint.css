@@ -91,6 +91,21 @@ body.app-slava-restraint {
   --sr-disabled-opacity: 0.48;
   --sr-disabled-opacity-strong: 0.36;
   --sr-disabled-opacity-muted: 0.50;
+  /* GM r33 (PR #198): the one disabled look, by kind of control, never a
+     whole-control opacity on a text button. Always: no hover change, no
+     pointer cursor.
+     - Text buttons: the label goes neutral grey at 0.55; the outline is
+       never brighter than the enabled edge; a ghost button gets no fill.
+     - Filled buttons: the grey fill (the held [Try again] of round 21),
+       its edge the fill itself, a dark label on it.
+     - Image-only buttons: 0.45 and greyscale.
+     The notice buttons read these now (canvasProposals.css); the rest of
+     the app moves over in the pressed-state sweep. */
+  --disabled-label: var(--sr-ink-light);
+  --disabled-fill: rgb(255 255 255 / 0.42);
+  --disabled-fill-label: rgb(17 17 17 / 0.62);
+  --disabled-opacity: 0.45;
+  --disabled-filter: grayscale(1);
 
   /* Brand-surface palette — Crab (M1, NN-45) gradient, radial.
    * BRAND SURFACES ONLY — README hero, OG card, swag, in-app splash.
@@ -312,13 +327,27 @@ body.app-slava-restraint {
   --sr-layer-popover: 40;
   --sr-layer-modal: 60;
   --sr-layer-modal-control: 61;
-  /* GM r7 (PR #203): every modal sits above the proposal bar, which stays
-   * visible under the modal's scrim, dimmed like the rest of the canvas. Its
-   * layer is the one under the lowest a modal draws (--sr-layer-modal; the
-   * palette's, the dialogs' and the World viewers' are higher), and still
-   * above every panel, the Agent log, popovers (40) and the Studios with
-   * their docks (55). tests/proposalBarStacking.test.ts pins both sides. */
-  --sr-layer-proposal: calc(var(--sr-layer-modal) - 1);
+  /* The proposal bar's layer. GM r10 (PR #203 round 6), the rule: anything
+   * the person opened draws above the proposal bar, and lasting chrome they
+   * didn't open draws under it. A new floating surface takes its side from
+   * that, without a new question:
+   * - above: every panel (10 and up: the Inspector, the library, the chat,
+   *   Run History, the Agent log), Settings (30), context menus and popovers
+   *   (40, the provider switcher's 60, Final export's 100), the chat model
+   *   picker (1100), the drag layer (10000) and every modal (60 and up: the
+   *   palette, the 3D viewers, the dialogs), whose scrim dims the bar with
+   *   the canvas (GM r7). Nothing stops above the bar's top edge to make
+   *   room (GM r10: Settings keeps its full height at 1280; it is where the
+   *   token that unlocks Accept goes).
+   * - under: --sr-layer-ambient, the bars that are always there: the bottom
+   *   bar and the canvas tabs, the following bar included while a proposal
+   *   shows and no modal is open (below, after the tabs' own rules). The
+   *   two bars also never meet: the notice stack stops below the top bars
+   *   (noticeRegion.css, GM r9 item 2).
+   * Notices stay above all of it (--sr-layer-notice, GM r25).
+   * tests/proposalBarStacking.test.ts pins both sides. */
+  --sr-layer-proposal: calc(var(--sr-layer-panel) - 1);
+  --sr-layer-ambient: calc(var(--sr-layer-proposal) - 1);
   /* GM r25 (PR #200 fix round 16): and above every dialog's backdrop (the
    * World viewer's is 20000), so a notice is always usable. Before: */
   /* The app's notices (NoticeRegion): above every panel, the Agent log, the
@@ -1804,9 +1833,10 @@ body.app-slava-restraint .toolbar__button--executing .toolbar__icon {
   opacity: 0;
 }
 
-/* GM r17 (A): the dots sit in the icon's own slot, a fixed 14px box left of
-   the label (the run icon's size), so "Stop" never moves and is never
-   covered. The 19px matrix is scaled to the slot. */
+/* GM r17 (A): the dots sit in the icon's own slot, a fixed box left of the
+   label, so "Stop" never moves and is never covered. GM r18 (G4): the slot
+   is Run's 16px, so the label doesn't shift when Run and Stop swap. The 19px
+   matrix is scaled to 14px and centred in it: (16 - 14) / 2 on each side. */
 body.app-slava-restraint .toolbar__icon-slot {
   position: relative;
   z-index: 1;
@@ -1814,15 +1844,15 @@ body.app-slava-restraint .toolbar__icon-slot {
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
 body.app-slava-restraint .toolbar__button--executing .toolbar__icon-slot::before {
   content: '';
   position: absolute;
-  left: 0;
-  top: 0;
+  left: 1px;
+  top: 1px;
   width: 4px;
   height: 4px;
   border-radius: 50%;
@@ -2248,7 +2278,8 @@ body.app-slava-restraint .inspector__palette-remove:hover:not(:disabled) {
  * Toolbar — translucent node-radius surface (keeps default position)
  * ───────────────────────────────────────────────────────────────────── */
 body.app-slava-restraint .toolbar {
-  z-index: var(--sr-layer-panel);
+  /* Lasting chrome: under the proposal bar (--sr-layer-proposal, GM r10). */
+  z-index: var(--sr-layer-ambient);
   bottom: var(--sr-space-6);
   background: var(--sr-glass-raised);
   backdrop-filter: var(--sr-blur-panel);
@@ -2780,7 +2811,9 @@ body.app-slava-restraint .agent-log__empty-status {
 body.app-slava-restraint .agent-log__entry {
   --agent-log-source-color: var(--sr-ink-meta);
   display: grid;
-  /* The time's column is as wide as its text: "03:46:22 PM" never wraps (GM, round 17). */
+  /* The time takes its own width and never wraps ("03:46:22 PM", GM, round
+     17 of PR #195 and PR #198 r2); it is zero-padded and tabular, so every
+     row's time column is the same width. */
   grid-template-columns: 8px max-content 70px 1fr;
   gap: 8px;
   align-items: baseline;
@@ -4157,7 +4190,8 @@ body.app-slava-restraint .model-node__error-details summary {
  * ───────────────────────────────────────────────────────────────────── */
 body.app-slava-restraint .canvas-tabs-wrap {
   top: var(--sr-space-6);
-  z-index: var(--sr-layer-panel);
+  /* Lasting chrome: under the proposal bar (--sr-layer-proposal, GM r10). */
+  z-index: var(--sr-layer-ambient);
   gap: 6px;
 }
 
@@ -4167,6 +4201,15 @@ body.app-slava-restraint .canvas-tabs-wrap {
    still covered the bar). */
 body.app-slava-restraint .canvas-tabs-wrap[data-following] {
   z-index: 1002;
+}
+
+/* GM r9 item 2 and r10 (PR #203 round 6): with a proposal showing and no
+   modal open, the following bar is lasting chrome like the rest of the
+   tabs, so where it meets the proposal bar, the proposal bar (a decision
+   with a clock) is on top. A modal open (the mask painter) keeps the raise
+   above: the proposal bar is then under that modal's scrim anyway. */
+body:has(.notice-region__slot[data-notice-slot='proposal'] > :not([data-leaving])):not(:has(> .modal-portal)) .canvas-tabs-wrap[data-following] {
+  z-index: var(--sr-layer-ambient);
 }
 
 body.app-slava-restraint .canvas-tabs__wordmark {
@@ -4462,8 +4505,8 @@ body.app-slava-restraint .editor-transport__icon {
 }
 
 body.app-slava-restraint .editor-transport__btn:hover:not(:disabled),
-body.app-slava-restraint .editor-transport__tool:hover,
-body.app-slava-restraint .editor-transport__preset:hover {
+body.app-slava-restraint .editor-transport__tool:hover:not(:disabled),
+body.app-slava-restraint .editor-transport__preset:hover:not(:disabled) {
   color: var(--sr-ink-bold);
   background: var(--sr-surface-control-hover);
 }
@@ -4617,6 +4660,28 @@ body.app-slava-restraint .editor-transport__range:focus-visible {
 
 body.app-slava-restraint .editor-transport__btn:disabled,
 body.app-slava-restraint .editor-transport__range:disabled {
+  opacity: var(--sr-disabled-opacity);
+}
+
+/* GM r18: offline (or with no clips) Trim, Speed, Cut and Vol and the clip
+   presets read as disabled, like the transport's other buttons. */
+body.app-slava-restraint .editor-transport__tool:disabled,
+body.app-slava-restraint .editor-transport__preset:disabled {
+  opacity: var(--sr-disabled-opacity);
+  cursor: not-allowed;
+}
+
+/* GM r18: a disabled Render Preview or Export is the neutral disabled style,
+   with no accent outline. Orange only ever means "you can press this". */
+body.app-slava-restraint .editor-transport__btn--render:disabled {
+  border-color: var(--sr-edge);
+  background: var(--sr-surface-control);
+}
+
+body.app-slava-restraint .editor-transport__btn--export:disabled {
+  border-color: var(--sr-edge);
+  background: var(--sr-surface-control);
+  cursor: not-allowed;
   opacity: var(--sr-disabled-opacity);
 }
 

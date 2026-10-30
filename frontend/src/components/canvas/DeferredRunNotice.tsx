@@ -2,8 +2,9 @@ import { useId, useMemo } from 'react';
 import { Play, X } from 'lucide-react';
 import { deferredRunKeyLock, useCanvasProposalsStore } from '../../store/canvasProposalsStore';
 import { useUIStore } from '../../store/uiStore';
-import { keyLockedProps } from '../../lib/runKeyLock';
+import { withKeyLock } from '../../lib/runKeyLock';
 import { useGraphStore } from '../../store/graphStore';
+import { useCanvasLock } from '../../lib/canvasLock';
 import '../../styles/canvasProposals.css';
 import { useLeave } from '../../lib/noticeLeave';
 
@@ -30,9 +31,12 @@ export function DeferredRunNotice() {
   const keyLock = useMemo(() => (deferredRun ? deferredRunKeyLock(deferredRun, { nodes, edges }, settingsCache) : null),
     [deferredRun, nodes, edges, settingsCache]);
   const keyLockId = useId();
+  const lock = useCanvasLock();
   // It leaves as it entered (fix round 7 of PR #200, GM r11 answer 2).
   const leave = useLeave(deferredRun);
   if (!leave.shown) return null;
+  const runProps = withKeyLock(lock.act({}, { run: isExecuting || runStarting }), keyLock, keyLockId);
+  const runKeyLocked = runProps['data-key-locked'] !== undefined;
   const shown = leave.shown;
   return (
     <div className="proposal-bar proposal-bar--notice" role="status" {...leave.props}>
@@ -43,15 +47,15 @@ export function DeferredRunNotice() {
         <button
           type="button"
           className="proposal-bar__button proposal-bar__button--primary"
-          disabled={isExecuting || runStarting}
-          title={keyLock ?? undefined}
-          {...keyLockedProps(keyLock, keyLockId)}
-          onClick={() => { if (!keyLock) void runDeferred(); }}
+          // Review 7, L5: canvasLock's order (run, then following, then
+          // offline), then the missing key (withKeyLock, PR #203 round 6).
+          {...runProps}
+          onClick={() => { if (!runKeyLocked) void runDeferred(); }}
         >
           <Play size={13} aria-hidden="true" />
           Run
         </button>
-        {keyLock && <span id={keyLockId} className="toolbar__sr-only">{keyLock}</span>}
+        {runKeyLocked && <span id={keyLockId} className="toolbar__sr-only">{keyLock}</span>}
         <button type="button" className="proposal-bar__button" aria-label="Dismiss" onClick={dismissDeferred}>
           <X size={13} aria-hidden="true" />
         </button>

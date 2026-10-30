@@ -22,6 +22,7 @@ interface FakeGraph {
   activeRuns: [];
   createLaunchingIds: string[];
   createCancelledLaunchIds: [];
+  unsavedScenes: Record<string, string>;
   isImportingGraph: boolean;
   reserveCreateGeneration: (id: string) => boolean;
   releaseCreateGeneration: (id: string) => void;
@@ -56,7 +57,7 @@ vi.mock('../../src/store/uiStore', () => {
 vi.mock('../../src/store/graphStore', async () => {
   const { create } = await import('zustand');
   const store = create<FakeGraph>(() => ({
-    nodes: [], edges: [], runHistory: [], activeRuns: [], createLaunchingIds: [], createCancelledLaunchIds: [], isImportingGraph: false,
+    nodes: [], edges: [], runHistory: [], activeRuns: [], createLaunchingIds: [], createCancelledLaunchIds: [], unsavedScenes: {}, isImportingGraph: false,
     reserveCreateGeneration: (id) => { store.setState({ createLaunchingIds: [...store.getState().createLaunchingIds, id] }); return true; },
     releaseCreateGeneration: (id) => store.setState({ createLaunchingIds: store.getState().createLaunchingIds.filter((entry) => entry !== id) }),
     authorGenerationCluster: (...args) => mocks.author(...args),

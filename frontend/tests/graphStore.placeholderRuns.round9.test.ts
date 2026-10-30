@@ -52,7 +52,7 @@ const lines = () => {
 const agentUndo = () => {
   const entry = { id: 'x' };
   useGraphStore.setState({ undoStack: [entry] as never,
-    undoNotice: { id: 99, text: 'Codex changed the canvas', offer: 'undo', agentColor: '#F2C14E', entry } as never });
+    undoNotice: { id: 99, text: 'Codex changed the canvas.', offer: 'undo', agentColor: '#F2C14E', entry } as never });
 };
 
 const OPENROUTER_EDGES = [{ id: 'e1', source: 'p', target: 'u', sourceHandle: 'image', targetHandle: 'images' }];
@@ -190,7 +190,7 @@ describe('review 8', () => {
       answer(new Response(JSON.stringify({ detail: 'Those ports do not fit.' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }));
       await vi.waitFor(() => expect(lines()).toHaveLength(2));
-      expect(useGraphStore.getState().undoNotice).toMatchObject({ text: 'Codex changed the canvas', offer: 'undo' });
+      expect(useGraphStore.getState().undoNotice).toMatchObject({ text: 'Codex changed the canvas.', offer: 'undo' });
       expect(lines()[1]).toMatch(/^Couldn't make that connection\./);
     });
 
@@ -199,7 +199,7 @@ describe('review 8', () => {
         providerRecoveries: [{ runId: 'r', nodeId: 'w', resumeOperationId: 'op', existingWorldId: null }] } as never);
       agentUndo();
       expect(useGraphStore.getState().allowCanvasDelete(['w'])).toBe(false);
-      expect(useGraphStore.getState().undoNotice).toMatchObject({ text: 'Codex changed the canvas', offer: 'undo' });
+      expect(useGraphStore.getState().undoNotice).toMatchObject({ text: 'Codex changed the canvas.', offer: 'undo' });
       expect(lines()).toHaveLength(2);
     });
   });

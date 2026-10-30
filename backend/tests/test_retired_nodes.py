@@ -110,7 +110,8 @@ def test_sora_retirement_message_names_the_alternatives(definition_id):
     message = retired_nodes.retired_message(definition_id)
     assert "2026-09-24" in message
     for alternative in ("veo-3", "grok-imagine-video", "runway-video"):
-        assert f"'{alternative}'" in message
+        # GM r19 answer 1 (PR #198 fix round 12): ids bare.
+        assert f" {alternative}" in message and f"'{alternative}'" not in message
         assert alternative in NodeRegistry().get_all()
     assert definition_id not in NodeRegistry().get_all(), "hidden for new graphs"
 
@@ -250,7 +251,7 @@ def test_a_renamed_folded_node_keeps_its_title():
 
 def test_folded_retirement_message_names_the_new_node():
     assert retired_nodes.retired_message(FLUX_UPSCALE) == (
-        f"'{FLUX_UPSCALE}' is now part of 'flux-video-upscale' (provider: Krea). Use 'flux-video-upscale' instead.")
+        f"{FLUX_UPSCALE} is now part of flux-video-upscale (provider: Krea). Use flux-video-upscale instead.")
 
 
 def test_migrate_graph_remaps_ports_moves_typed_values_and_warns_on_dropped_outputs():
@@ -465,7 +466,7 @@ def test_creating_a_folded_node_by_its_old_id_names_the_new_one(app_client):
     _main, client = app_client
     response = client.post("/api/graph/node", json={"definitionId": FLUX_VIDEO, "params": {}})
     assert response.status_code == 400
-    assert "is now part of 'flux-3-video' (provider: Krea)" in response.json()["detail"]
+    assert "is now part of flux-3-video (provider: Krea)" in response.json()["detail"]
 
 
 def test_a_saved_project_with_the_folded_nodes_opens_as_the_new_nodes():

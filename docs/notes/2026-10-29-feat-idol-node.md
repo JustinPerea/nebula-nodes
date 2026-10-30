@@ -573,3 +573,181 @@ to the later cost-row round.
   here; the other loaders already guard.
 - The "(1 paid)" labels on a route that can't run, held for the cost-row
   round.
+
+## Round 6 (2026-10-30): the bar between what the person opened and the chrome, GM's r9 and r10
+
+Built from the round 6 brief, review r5 (stacking and a11y, run lock and
+viewer, backend and docs) and GM's r9 and r10 rulings.
+
+### The stacking rule (GM r10, r9 item 2)
+
+- GM's rule, now the comment beside `--sr-layer-proposal`: anything the
+  person opened draws above the proposal bar, and lasting chrome they didn't
+  open draws under it.
+- `--sr-layer-proposal` is `calc(var(--sr-layer-panel) - 1)` (9): under
+  every panel, Settings, context menus and popovers, the chat model picker,
+  the drag layer and every modal. The new `--sr-layer-ambient` (8) is one
+  under it: the bottom bar (`.toolbar`) and the canvas tabs. The bottom
+  bar's open Canvas actions keeps its popover layer (40), since the person
+  opened it.
+- The following bar keeps 1002 over a modal's scrim (the mask painter,
+  review 3 LOW-3 of PR #200). With a proposal showing and no modal portal
+  open, a `body:has(...)` rule drops it to the ambient layer, so where the
+  two meet the proposal bar is on top. With a modal open the bar is under
+  that modal's scrim anyway.
+- Nothing stops at the bar's top edge (GM r10). Settings keeps its full
+  height at 1280 (16 to 784 of 800).
+- Make room (GM r9 item 2): the stack never grows into the top bars.
+  `lib/bottomBar.ts` `keepNoticesBelowTopBars` writes `--notice-room` (from
+  the region's bottom line up to `floatingTopLimit`, the line floating
+  panels stop below) and caps the stack with it. Past it the region is
+  `data-notice-crowded` and the stack scrolls. Items never shrink
+  (`flex-shrink: 0`). Measured live at 1440×900: the following bar ends at
+  64, the bar starts at 686, 622 px apart; with 14 probe notices the stack
+  stops at 150 (the selection toolbar's line) and scrolls.
+- Left as they were, since they never meet the bar: the workspace rail and
+  panel launcher (12, left edge), the agent notes chip (46), the offline
+  banner (10000, above dialogs by design).
+- `tests/proposalBarStacking.test.ts` pins both sides. It checks the rule
+  comment, the tokens, each surface GM named, the cascaded layer of the
+  toolbar, the tabs and the following bar (with and without a proposal and
+  a modal), the derived modal roots (review r5 NIT-1: every `<ModalPortal>`
+  and `aria-modal="true"` element's layered root, so a new dialog is checked
+  without a list), and no stacking context on the region, its stack or its
+  slots (review r5 LOW-3, with the reason in noticeRegion.css).
+
+### The bar behind page-hiding modals (review r5 MEDIUM-1, GM r10 item 2)
+
+- `lib/modalFocus.ts` `hideBehind(own)` is the one isolate for the tour and
+  the result comparison. Every body child behind the modal goes inert and
+  aria-hidden, as before, and now the proposal bar's slot does too.
+  `restore()` puts each element's own attributes back. The slot is the
+  bar's container, so a leaving proposal's own `inert` is never touched.
+- `inNoticeAboveDialogs(node)`, next to `noticeTabbables`: a notice yes, the
+  bar no. The two modals' focus and key traps use it, and so does
+  `noticeKeys`, which used to keep a key on the bar from reaching the
+  dialog's trap (Enter then pressed Accept).
+- On close, focus goes back to whatever opened the modal, never to the bar.
+- Live (1440): with the tour open, the slot is inert and aria-hidden, the
+  AX tree shows only the tour's three buttons, focusing Accept puts focus
+  back on the card, and Enter sent nothing. A probe notice stayed usable.
+  On close, focus is back on "Open help and onboarding".
+
+### GM r9's other items
+
+- Item 1, the locked text buttons. `.run-history__replay` (Rerun, "Retry
+  failed", "Rerun with latest source") wasn't in
+  `styles/disabled-buttons.css`. Its sheet's slava ink (`--sr-ink`) won, so
+  a key-locked Rerun kept its white label. It is in the shared ghost list
+  now, and its own `opacity: 0.4` is gone (the ratchet's sweep list shrank by
+  one). "Run now" was already in the filled list. After the merge of #198
+  the shared rule paints GM r33's tokens: Rerun and Retry take the ghost
+  `--disabled-label`, "Run now" the filled `--disabled-fill-label` on
+  `--disabled-fill`. Live (before the merge, same 0.55 white): locked Rerun
+  `rgba(255, 255, 255, 0.55)` unfocused and focused, ring 2px white on top.
+- Item 3, expiry with the viewer open: **no notice.** A proposal that
+  expires (`pruneExpired`, or the backend's `proposalClosed` "expired")
+  leaves the bar silently, viewer or not. Follow-up below, not built.
+- Item 4: `tests/idolRunScope.test.tsx` pins the person's own run of a
+  placeholder Idol: it locks with Idol's line and sends nothing.
+
+### Found in the live check: Idol's not-ready line stayed after the token
+
+- After adding the token in Settings, Accept unlocked but the bar still read
+  "You can run Idol after you add your Hugging Face token in Settings."
+  The backend sends Idol's route line as the row's `missing`, and
+  `stillNotReady` only cleared rows worded "needs <key>". It now also clears
+  a row whose `missing` is the node's own `missingKeyLine` once the key is
+  set. The old test's fixture used find_nodes' wording; a new one uses the
+  backend's.
+
+### Run lock, viewer, storage, backend and docs
+
+- LOW-1, Spark's running sort: `disposeSparkWhenSettled` waits for a sort
+  already running (polls every 16 ms, gives up at 2 s) before disposing.
+  The error filter is unchanged. Live: 6 Escape-mid-drag cycles, 0 page
+  errors.
+- LOW-2: the reviewer's probe is `tests/proposalRunScope.test.ts`, and a
+  RunHistoryPanel test removes the token after the first render and sees
+  Rerun relock.
+- LOW-3: every localStorage read and write in uiStore is guarded with a safe
+  default (an unreadable "onboarded" reads as done). The r34deferred mock is
+  gone; `tests/uiStoreBlockedStorage.test.ts` imports the store with storage
+  throwing.
+- NIT-1: Run History's lock map is rebuilt from the records, the keys and
+  `placeholderKey(nodes)` (the ids of the live placeholders), so a drag
+  doesn't rebuild it. A replay with no lockable node returns at once
+  (`canKeyLock`).
+- Backend: idol.md points to L116 (the xlarge quote, checked at d035e18f) at
+  both spots, and lists `nebula nodes` with its BILLING line. The three
+  mixed tests are split into keyed and keyless halves. With step 1 applied
+  in a scratch copy, every keyless test passed and 15 keyed tests failed, as
+  step 3 says. The BILLING dedupe has a test: two rows with one note give
+  one line naming both ids.
+
+### Merge of main (#198, 38bb573a)
+
+Merged `origin/main` into the branch in this round. Every conflict, and how
+it was settled:
+
+- `ContextMenu`, `SelectionToolbar`, `DeferredRunNotice`, `Inspector`,
+  `RunHistoryPanel`: #198 put each run control on the canvas lock
+  (`lock.act`, `lockedAction`, "You can rerun it when the run finishes.");
+  this branch had a key lock on the same controls. One helper decides both
+  now, `withKeyLock` in `lib/runKeyLock.ts`: the canvas lock first (a run
+  going, the following bar, offline), then the control's own disabled state,
+  then the missing key. A run going leads because it ends by itself; the
+  token line comes back when it does (a RunHistoryPanel test pins both).
+- `canvasProposals.ts` and `runScope.ts`: #198 moved the chip to
+  `formatChipEstimate`, which writes a free run as "~$0". The PR #203 r1
+  ruling keeps "$0" for a closed, sourced 0, so both call it after that
+  check. #198's chip table (`tests/pr198Fix2Money.test.ts`) pinned a closed
+  0–0 run chip and proposal card as "~$0"; it now expects "$0" for those
+  two, and the shared formatter keeps "~$0". An open 0–0 is #198's
+  "$0 + unpriced" (this branch's old "$0+" test moved to it). Open question
+  for GM: the closed 0–0 chip's tooltip still reads "Estimated cost".
+- `styles/disabled-buttons.css`: both lists kept, on #198's
+  `:not([data-held-pending])`. Round 6 adds `.run-history__replay` to the
+  ghost list.
+- Auto-merged: `noticeRegion.css` (#198's agent-log clearance on `right`),
+  the notice slots (the new scene slots). The held-notice 150 ms look
+  doesn't touch the key lock: a key lock never sets `data-held-pending`.
+- `tests/lockedTextButtonsInk.test.ts` reads #198's tokens.
+- #198's lock ratchet (`agentPresenceFollowups.ratchet`, G) didn't know
+  `withKeyLock` and flagged the four wrapped run controls. It counts
+  `withKeyLock(<lock spread>, …)` from `lib/runKeyLock` now, as it counts
+  `lockedAction`, and a new test reads its body: props a lock disabled come
+  back unchanged, and it never writes `disabled`. A wrapper around a plain
+  object, or one from another module, is still caught.
+- #198's scan for ids in quotes (`test_pr198_fix12`) caught this branch's
+  splat-summary 404, `Node '{node_id}' not found`; it reads
+  `Node {node_id} not found` now, as main's do.
+- Live check rerun on the merged tree (isolated 8793/5793): same numbers as
+  before the merge (gap 622 at 1440, 522 at 1280; context menu z 40 and
+  Settings z 30 over the bar; Rerun locked at 0.55 white, focused too; the
+  tour hides the bar; Accept unlocked with no stale line after the fake
+  token). In phase b the key field once didn't open in time, and saving
+  the fake token failed three times with the browser's
+  `ERR_FAILED` on `/api/settings` (the request never reached the backend)
+  before it saved; the app's own `updateSettings` from the same page saved
+  every time. Logged as a harness flake under load, not a merged-tree bug.
+
+### Tests and checks
+
+- New tests fail on 457da822, except those that pin behaviour that was
+  already right: "Run now"'s grey label (it was already in the shared
+  list), the placeholder's direct run, the reviewer's probe, Rerun
+  relocking when the token goes, the backend splits and the BILLING dedupe.
+  Those were checked by mutation.
+- Changed for the new layers: `agentPresenceFollowups.r29` put its notices
+  in the first slot (the bar's); it uses the canvas notice's slot, as r27
+  does.
+
+### Follow-ups
+
+- A proposal that expires raises no notice, with the viewer open or not
+  (GM r9 item 3). The bar just leaves. A notice ("Claude Code's proposal
+  expired") would sit above dialogs.
+- When the notices outgrow the room, the stack scrolls from the top (the
+  bar first), so the newest notice at the bottom can be out of view until
+  scrolled. That needs 10+ notices at once.

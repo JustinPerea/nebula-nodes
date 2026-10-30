@@ -113,8 +113,18 @@ def modality_ports(row: Mapping[str, Any]) -> tuple[list[dict[str, Any]], list[d
 
 
 def _title(key: str) -> str:
-    """`key.replace(/_/g, ' ').replace(/\\b\\w/g, upper)`, as the picker labels."""
+    """A Replicate file input's port label, in the Title Case every other
+    port label uses ("input_image" → "Input Image")."""
     return re.sub(r"\b\w", lambda match: match.group(0).upper(), key.replace("_", " "), flags=re.ASCII)
+
+
+def setting_label(key: str) -> str:
+    """A universal node's provider setting as the Inspector and an agent's
+    cursor name it (GM, PR #198 r1 item 7): the key in sentence case,
+    "guidance_scale" → "Guidance scale". The frontend's twin is
+    lib/universalSettingLabel.ts."""
+    words = key.replace("_", " ")
+    return words[:1].upper() + words[1:]
 
 
 def replicate_inputs(schema: Mapping[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -136,7 +146,7 @@ def replicate_inputs(schema: Mapping[str, Any]) -> tuple[list[dict[str, Any]], l
         param_type = ("integer" if kind == "integer" else "float" if kind == "number"
                       else "boolean" if kind == "boolean" else "enum" if prop.get("enum") else "string")
         description = prop.get("description") if isinstance(prop.get("description"), str) else ""
-        param: dict[str, Any] = {"key": key, "label": _title(key), "type": param_type, "required": key in required}
+        param: dict[str, Any] = {"key": key, "label": setting_label(key), "type": param_type, "required": key in required}
         if "default" in prop:
             param["default"] = prop["default"]
         param["placeholder"] = description[:80]

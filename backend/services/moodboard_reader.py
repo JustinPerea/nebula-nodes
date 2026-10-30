@@ -269,7 +269,7 @@ def reader_entry(model_id: str, models: Mapping[str, Any] | None = None) -> dict
     entry = catalog.get(str(model_id or "").strip())
     if not isinstance(entry, dict):
         known = ", ".join(sorted(catalog)) or "none"
-        raise ReaderError(f"No reader called '{model_id}'. Read with one of: {known}.")
+        raise ReaderError(f"No reader called {model_id}. Read with one of: {known}.")
     return {**entry, "id": str(model_id).strip()}
 
 

@@ -48,9 +48,12 @@ export interface AgentPresenceEvent {
   from?: AgentCursorAnchor;
   action: 'move' | 'click' | 'drag' | 'look';
   say: string;
-  /** The Agent log's words when they differ from the cursor's (GM - Design,
-   * round 16): a field the card shows no label for, which the bubble leaves
-   * out, is named here by its key. Absent: the log uses `say`. */
+  /** The Agent log's words when they differ from the bubble's (GM - Design,
+   * round 16 of PR #195; PR #198 r1, GM item 7): a field the card shows no
+   * label for, which the bubble leaves out, is named here by its key; an
+   * action whose bubble says nothing (a universal node's setting with no
+   * label) still has its line here. Absent: the log uses `say` (and a bare
+   * cursor move has none). */
   log?: string;
   /** Backend wall-clock milliseconds. */
   at: number;

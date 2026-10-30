@@ -114,7 +114,7 @@ describe('ProposalBar', () => {
     open(proposal('p_a', { cost: { paidRuns: 1, freeRuns: 0, upTo: true, providers: ['google'], nodes: [], note: '',
       estimate: { currency: 'usd', low: 0.067, high: 0.067, open: false, unpriced: [], plan: [], plus: [] } } }));
     render(<ProposalBar />);
-    expect(screen.getByText('Adds 1 node · 1 connection · changes n1 · runs up to 1 paid model (google) · ~$0.067')).toBeTruthy();
+    expect(screen.getByText('Adds 1 node · 1 connection · changes n1 · runs up to 1 paid model (google) · ~$0.07')).toBeTruthy();
     expect(screen.getByText(/List prices, not a quote ·/)).toBeTruthy();
   });
 
@@ -371,6 +371,26 @@ describe('ProposalBar', () => {
     const ready = screen.getByRole('button', { name: /^Accept/ });
     expect(ready).not.toHaveAttribute('aria-disabled');
     expect(ready).not.toHaveAttribute('title', LINE);
+  });
+
+  it('the bar\'s "can\'t run here" line for Idol goes once the token is added, as the backend words it (PR #203 round 6)', () => {
+    // The row as the backend sends it: Idol's route line is `missing` too
+    // (node_readiness.instance_missing), not find_nodes' "needs HF_TOKEN".
+    const ROW = 'You can run Idol after you add your Hugging Face token in Settings.';
+    const idol = proposal('p_a', {
+      nodes: [{ ...proposal('p_a').nodes[0], ref: '+idol', definitionId: 'speridlabs-idol', name: 'Idol' }],
+      run: ['+idol'],
+    });
+    idol.cost = { ...idol.cost, paidRuns: 0, freeRuns: 1, notReady: [
+      { ref: '+idol', nodeId: null, name: 'Idol', missing: ROW, person: ROW },
+    ] };
+    open(idol);
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    render(<ProposalBar />);
+    expect(screen.getByText(ROW)).toBeTruthy();
+    act(() => useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: 'set' }, loaded: true } }));
+    expect(screen.queryByText(ROW)).toBeNull();
+    expect(screen.getByRole('button', { name: /^Accept/ })).not.toHaveAttribute('aria-disabled');
   });
 
   it('locks Accept once the token is removed, for a proposal made while it was set (review r4 LOW-1)', () => {

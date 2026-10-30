@@ -2,7 +2,7 @@ import type { Edge, Node } from '@xyflow/react';
 import type { NodeData } from '../types';
 import { cleanPending } from './pendingNodes';
 import { currentRunSnapshot, type RunRecord } from './runHistory';
-import { runKeyLockNodeLine, type LockSettings } from './runKeyLock';
+import { canKeyLock, runKeyLockNodeLine, type LockSettings } from './runKeyLock';
 
 /**
  * A Run History replay's key lock (GM, PR #203 r8 item 3): the saved graph a
@@ -19,6 +19,8 @@ import { runKeyLockNodeLine, type LockSettings } from './runKeyLock';
 export function historyRunKeyLock(record: RunRecord, live: readonly Node<NodeData>[], settings: LockSettings): string | null {
   if (!settings.loaded) return null;
   const snapshot = currentRunSnapshot(record);
+  // Most replays hold no node a key can lock: nothing more to read.
+  if (!snapshot.nodes.some((saved) => canKeyLock(saved.definitionId))) return null;
   const byId = new Map(live.map((node) => [node.id, node]));
   const nodes = snapshot.nodes.map((saved) => {
     const flag = cleanPending(byId.get(saved.id)?.data?.pending);
@@ -32,4 +34,11 @@ export function historyRunKeyLock(record: RunRecord, live: readonly Node<NodeDat
     sourceHandle: edge.sourceHandle ?? null, targetHandle: edge.targetHandle ?? null })) as Edge[];
   const target = record.cinemaShot?.nodeId ?? record.targetNodeId;
   return runKeyLockNodeLine(nodes, edges, target ? { kind: 'node', nodeId: target } : { kind: 'graph' }, settings);
+}
+
+/** The live canvas's agent placeholders, as a key that changes only when one
+ * comes or goes (not on a drag): the one thing of the live canvas a replay's
+ * lock reads (review r5 NIT-1 of PR #203). */
+export function placeholderKey(live: readonly Node<NodeData>[]): string {
+  return live.filter((node) => cleanPending(node.data?.pending)).map((node) => node.id).sort().join(' ');
 }

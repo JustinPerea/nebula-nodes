@@ -1,3 +1,4 @@
+import { headedLine, isNamedLine } from './errorCopy';
 import { lastNodeLabel } from './lastNodeLabels';
 
 /**
@@ -142,7 +143,12 @@ export function deleteRefusalText(heading: string, count: number, reasons: reado
   const heldCount = reasons.filter(isHeldReason).length;
   const unique = [...new Set(reasons)];
   const held = unique.filter(isHeldReason);
-  if (held.length === 0) return `${heading} ${unique.join(' ')}`;
+  if (held.length === 0) {
+    // A reason that is a line of its own shows alone (GM, PR #198 r5 item 3).
+    const named = unique.filter(isNamedLine);
+    const plain = unique.filter((reason) => !isNamedLine(reason));
+    return [...named, ...(plain.length > 0 || named.length === 0 ? [headedLine(heading, plain.join(' '))] : [])].join(' ');
+  }
   const unlock = held.some(isUnlockReason);
   const others = unique.filter((reason) => !isHeldReason(reason));
   // One node: its name, from the caller or from the backend's recovery line.

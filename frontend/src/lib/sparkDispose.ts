@@ -42,7 +42,8 @@ export function disposeSparkQuietly(target: { dispose: () => void }): void {
 
 /** The SparkRenderer fields its depth sort is driven by (Spark 2.1.0,
  * SparkRenderer.d.ts: public). */
-interface SortDriver {
+export interface SortDriver {
+  sorting: boolean;
   sortDirty: boolean;
   sortTimeoutId: number;
 }
@@ -53,8 +54,9 @@ interface SortDriver {
  * Disposed before it fires (Escape mid-drag), that sort reads the disposed
  * render target and throws "No target" from a promise nothing catches. Before
  * the renderer is disposed, its pending sort is cancelled and nothing is left
- * marked dirty, so no sort starts after it. A sort already running ends on
- * the worker's "Worker terminate" (disposeSparkQuietly).
+ * marked dirty, so no sort starts after it. Off the scene, nothing marks it
+ * dirty again (only its onBeforeRender does), so the `driveSort()` a running
+ * sort ends with returns at once.
  */
 export function stopSparkSorting(renderer: SortDriver): void {
   if (renderer.sortTimeoutId !== -1) {
@@ -62,4 +64,32 @@ export function stopSparkSorting(renderer: SortDriver): void {
     renderer.sortTimeoutId = -1;
   }
   renderer.sortDirty = false;
+}
+
+/** How often a teardown looks whether the running sort has settled, and how
+ * long it waits at most. */
+export const SORT_SETTLE_POLL_MS = 16;
+export const SORT_SETTLE_CAP_MS = 2_000;
+
+/**
+ * Review r5 LOW-1 of PR #203: a sort already running when the viewer closes
+ * (Spark's `sorting`) reads the render target after a 1 ms pause, so a
+ * dispose then still throws "No target". With no sort queued and none able to
+ * start (stopSparkSorting), the dispose waits for the running one to settle,
+ * looking every SORT_SETTLE_POLL_MS, at most SORT_SETTLE_CAP_MS. The renderer
+ * is already off the scene, so nothing draws meanwhile. No error is caught.
+ */
+export function disposeSparkWhenSettled(renderer: SortDriver & { dispose: () => void }): void {
+  stopSparkSorting(renderer);
+  if (!renderer.sorting || typeof window === 'undefined') {
+    disposeSparkQuietly(renderer);
+    return;
+  }
+  const started = Date.now();
+  const timer = window.setInterval(() => {
+    if (renderer.sorting && Date.now() - started < SORT_SETTLE_CAP_MS) return;
+    window.clearInterval(timer);
+    stopSparkSorting(renderer);
+    disposeSparkQuietly(renderer);
+  }, SORT_SETTLE_POLL_MS);
 }

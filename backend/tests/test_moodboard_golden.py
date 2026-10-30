@@ -421,6 +421,10 @@ def _without_krea_refs(expected: dict[str, Any]) -> str:
             ((check.get("checks") or {}).get("words") or {}).pop("version", None)
         _without_weight_zero(outputs)
         _without_outside_links(outputs)
+        # PR #198 fix round 13 (GM r21 answer 1): a run note names its board in
+        # “…”, where it had straight quotes; nothing else in it changed.
+        if isinstance(outputs.get("runNotes"), list):
+            outputs["runNotes"] = [re.sub(r"Moodboard “([^”]*)”", r"Moodboard '\1'", str(note)) for note in outputs["runNotes"]]
     canonical = json.dumps(rest, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 

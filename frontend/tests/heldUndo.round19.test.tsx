@@ -323,7 +323,7 @@ describe('round 19 (review 18)', () => {
       type('n1', 'B');
       const cut = await store().drainGraphWrites('switch');
       await switchProject(cut);
-      expect(lines()).toEqual(["Couldn't save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when you switched."]);
+      expect(lines()).toEqual(["Couldn’t save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when you switched."]);
     });
 
     it('a save that never answers holds the switch for 15 s at most, then is named', async () => {
@@ -341,7 +341,7 @@ describe('round 19 (review 18)', () => {
       nebula().holdAnswers = false;
       while (nebula().releaseAnswer()) await settle();
       await tick(2000);
-      expect(lines()).toEqual(["Couldn't save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when you switched."]);
+      expect(lines()).toEqual(["Couldn’t save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when you switched."]);
       expect(stale()).toEqual([]);
     });
 
@@ -378,7 +378,7 @@ describe('round 19 (review 18)', () => {
       expect(writes()).toEqual(['PUT /api/graph/node/n1']);
       expect(fake.sent.filter((call) => call.method !== 'GET').every((call) => call.context === null
         || (call.context as { id: string }).id === 'p1' || call.project !== 'unset')).toBe(true);
-      expect(lines()).toEqual(["Couldn't save “Text” for “n2” in “Glass campaign”. It was still saving when you switched."]);
+      expect(lines()).toEqual(["Couldn’t save “Text” for “n2” in “Glass campaign”. It was still saving when you switched."]);
     });
 
     it('S1: an undo, a delete and typing all still out: one line, never the out-of-date line', async () => {
@@ -396,7 +396,7 @@ describe('round 19 (review 18)', () => {
       nebula().holdAnswers = false;
       while (nebula().releaseAnswer()) await settle();
       await tick(6000);
-      expect(lines()).toEqual(["Couldn't save your last change in “Glass campaign”. It was still saving when you switched."]);
+      expect(lines()).toEqual(["Couldn’t save your last change in “Glass campaign”. It was still saving when you switched."]);
     });
 
     it('an import: the ending says the import replaced the canvas', async () => {
@@ -408,7 +408,7 @@ describe('round 19 (review 18)', () => {
       store().loadGraph([], []);
       store().finishCanvasReplacement({ kind: 'import', project: 'Glass campaign', cutOff: cut, show: true });
       await settle();
-      expect(lines()).toEqual(["Couldn't save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when the import replaced the canvas."]);
+      expect(lines()).toEqual(["Couldn’t save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when the import replaced the canvas."]);
     });
 
     it('an agent\'s import while typing waits behind an undo: GM\'s import line, not the out-of-date line', async () => {
@@ -432,29 +432,29 @@ describe('round 19 (review 18)', () => {
       while (nebula().releaseAnswer()) await settle();
       await tick(6000);
       expect(writes()).not.toContain('PUT /api/graph/node/n2');
-      expect(lines()).toContain("Couldn't save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when the import replaced the canvas.");
+      expect(lines()).toContain("Couldn’t save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when the import replaced the canvas.");
       expect(stale()).toEqual([]);
     });
 
     it('GM\'s lines, word for word', () => {
       expect(savingCutOffLine([{ node: 'Hero prompt', setting: 'Text' }], 'Glass campaign', { kind: 'switch' }))
-        .toBe("Couldn't save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when you switched.");
+        .toBe("Couldn’t save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when you switched.");
       expect(savingCutOffLine([], 'Glass campaign', { kind: 'switch' }))
-        .toBe("Couldn't save your last change in “Glass campaign”. It was still saving when you switched.");
+        .toBe("Couldn’t save your last change in “Glass campaign”. It was still saving when you switched.");
       expect(savingCutOffLine([{ node: 'Hero prompt', setting: 'Text' }, { node: 'n2', setting: 'Text' }], 'Glass campaign', { kind: 'switch' }))
-        .toBe("Couldn't save your last change in “Glass campaign”. It was still saving when you switched.");
+        .toBe("Couldn’t save your last change in “Glass campaign”. It was still saving when you switched.");
       expect(savingCutOffLine([{ node: 'Hero prompt', setting: null }], 'Glass campaign', { kind: 'import' }))
-        .toBe("Couldn't save your last change in “Glass campaign”. It was still saving when the import replaced the canvas.");
+        .toBe("Couldn’t save your last change in “Glass campaign”. It was still saving when the import replaced the canvas.");
       expect(savingCutOffLine([{ node: 'Hero prompt', setting: 'Text' }], 'Glass campaign', { kind: 'import' }))
-        .toBe("Couldn't save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when the import replaced the canvas.");
+        .toBe("Couldn’t save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when the import replaced the canvas.");
       expect(savingCutOffLine([{ node: 'Hero prompt', setting: 'Text' }], 'Glass campaign', { kind: 'agent', agent: 'Claude Code' }))
-        .toBe("Couldn't save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when Claude Code switched projects.");
+        .toBe("Couldn’t save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when Claude Code switched projects.");
       expect(savingCutOffLine([], 'Glass campaign', { kind: 'agent', agent: 'Claude Code' }))
-        .toBe("Couldn't save your last change in “Glass campaign”. It was still saving when Claude Code switched projects.");
+        .toBe("Couldn’t save your last change in “Glass campaign”. It was still saving when Claude Code switched projects.");
       expect(savingCutOffLine([{ node: 'Hero prompt', setting: 'Text' }], 'Glass campaign', { kind: 'agent', agent: null }))
-        .toBe("Couldn't save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when an agent switched projects.");
+        .toBe("Couldn’t save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when an agent switched projects.");
       expect(savingCutOffLine([], 'Glass campaign', { kind: 'agent', agent: null }))
-        .toBe("Couldn't save your last change in “Glass campaign”. It was still saving when an agent switched projects.");
+        .toBe("Couldn’t save your last change in “Glass campaign”. It was still saving when an agent switched projects.");
     });
   });
 
@@ -579,7 +579,7 @@ describe('round 19 (review 18)', () => {
       await tick(6000);
       expect(nebula().nodes.get('n1')?.params).toEqual({ value: 'A', note: 'y' });
       expect(nodeOf('n1')?.data.params).toEqual({ value: 'A', note: 'y' });
-      expect(lines()).toContain("Couldn't undo that. Nope.");
+      expect(lines()).toContain("Couldn’t undo that. Nope.");
     });
   });
 

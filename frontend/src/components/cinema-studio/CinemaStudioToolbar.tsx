@@ -2,7 +2,8 @@ import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { getCinemaUploadIssue, useCinemaUploadStore } from '../../store/cinemaUploadStore';
 import { WorkspaceHeader } from '../WorkspaceHeader';
-import { useCanvasLock } from '../../lib/canvasLock';
+import { lockedAction, useCanvasLock } from '../../lib/canvasLock';
+import { OFFLINE_VERBS } from '../../lib/useBackendOffline';
 
 interface CinemaStudioToolbarProps {
   cinemaNodeId: string;
@@ -19,8 +20,9 @@ export function CinemaStudioToolbar({ cinemaNodeId }: CinemaStudioToolbarProps) 
   const activeRuns = useGraphStore((s) => s.activeRuns);
   const cancelRun = useGraphStore((s) => s.cancelRun);
   // Round 23 (review 22, L-3): Generate all acts, so it takes the canvas
-  // lock. Run history only looks and Stop scene stops a run already going
-  // (a stop is never refused), so both stay enabled.
+  // lock (following, offline); offline it reads GM's verb line and drops
+  // its accent (PR #198). Run history only looks and Stop scene stops a run
+  // already going (a stop is never refused), so both stay enabled.
   const lock = useCanvasLock();
   useCinemaUploadStore((state) => state.uploads);
   const referenceIssue = getCinemaUploadIssue(cinemaNodeId, undefined, true);
@@ -53,11 +55,12 @@ export function CinemaStudioToolbar({ cinemaNodeId }: CinemaStudioToolbarProps) 
         onClick={() => {
           if (!getCinemaUploadIssue(cinemaNodeId, undefined, true)) executeNode(cinemaNodeId, { verb: 'Generate' });
         }}
-        {...lock.act({
-          disabled: isExecuting || runStarting || isImportingGraph || Boolean(referenceIssue),
+        // M2: this tab's run says its line first (lib/canvasLock's order).
+        {...lockedAction(lock, {
+          disabled: isImportingGraph || Boolean(referenceIssue),
           title: referenceIssue ?? 'Generate every shot using the current scene settings',
           offline: 'generate',
-        })}
+        }, { verb: OFFLINE_VERBS.generate, neutral: true, run: isExecuting || runStarting })}
       >
         {sceneRuns.length > 0 ? 'Generating…' : 'Generate all'}
       </button>

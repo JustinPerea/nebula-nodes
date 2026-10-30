@@ -38,7 +38,7 @@ import {
   WorldSplatTooLargeError,
 } from '../../lib/worldSplat';
 import { RequestFailedError } from '../../lib/errorCopy';
-import { disposeSparkQuietly, stopSparkSorting } from '../../lib/sparkDispose';
+import { disposeSparkQuietly, disposeSparkWhenSettled } from '../../lib/sparkDispose';
 
 /** Error copy round 3e (GM): the SPZ format check's line on the card. */
 const WORLD_SPZ_FORMAT_LINE = "This world's preview file is damaged or in a format Nebula can't open. "
@@ -213,12 +213,12 @@ function WorldSplatScene({
 
   useEffect(() => () => {
     spark.removeFromParent();
-    // No sort starts after the dispose (a drag's pending one read the
-    // disposed target: "No target"; stopSparkSorting).
-    stopSparkSorting(spark);
-    // Spark's sort worker rejects its pending sort with "Worker terminate"
-    // when disposed mid-sort, and nothing in Spark catches it.
-    disposeSparkQuietly(spark);
+    // No sort starts after the dispose, and a running one settles before it
+    // (a sort that reads the disposed target throws "No target";
+    // disposeSparkWhenSettled). Spark's sort worker rejects a sort still in
+    // its worker with "Worker terminate", and nothing in Spark catches it
+    // (disposeSparkQuietly).
+    disposeSparkWhenSettled(spark);
   }, [spark]);
 
   useEffect(() => {

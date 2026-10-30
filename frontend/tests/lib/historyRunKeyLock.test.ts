@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Node } from '@xyflow/react';
-import { historyRunKeyLock } from '../../src/lib/historyRunKeyLock';
+import { historyRunKeyLock, placeholderKey } from '../../src/lib/historyRunKeyLock';
 import type { RunRecord } from '../../src/lib/runHistory';
 import type { NodeData } from '../../src/types';
 
@@ -44,5 +44,19 @@ describe('historyRunKeyLock', () => {
     expect(historyRunKeyLock(record('text'), live(false), NO_TOKEN)).toBeNull();
     expect(historyRunKeyLock(record(), live(false), { loaded: true, apiKeys: { HF_TOKEN: 'set' } })).toBeNull();
     expect(historyRunKeyLock(record(), live(false), { loaded: false, apiKeys: {} })).toBeNull();
+  });
+});
+
+describe('placeholderKey (review r5 NIT-1)', () => {
+  it('changes when a placeholder comes or goes, never when a node moves', () => {
+    const moved = live(true).map((node) => ({ ...node, position: { x: 400, y: 90 } }));
+    expect(placeholderKey(moved)).toBe(placeholderKey(live(true)));
+    expect(placeholderKey(live(true))).toBe('idol');
+    expect(placeholderKey(live(false))).toBe('');
+  });
+
+  it('a replay holding no node a key can lock reads nothing more', () => {
+    const textOnly: RunRecord = { ...record(), snapshot: { nodes: [record().snapshot.nodes[0]], edges: [] } };
+    expect(historyRunKeyLock(textOnly, [], NO_TOKEN)).toBeNull();
   });
 });

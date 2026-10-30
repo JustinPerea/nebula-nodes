@@ -28,7 +28,7 @@ import { BOTTOM_BAR_ATTR, BOTTOM_BAR_PANEL } from '../../lib/bottomBar';
 import { useBottomBarClearance } from '../../hooks/useBottomBarClearance';
 import { CANVAS_FIT_DURATION, CANVAS_ZOOM_DURATION, computeCanvasFitPadding } from '../../lib/canvasFit';
 import { displayKey } from '../../lib/keyboardShortcuts';
-import { describeRunScope, runChipLabel, summarizeRunScope } from '../../lib/runScope';
+import { describeRunScope, runChipLabel, runChipTitle, summarizeRunScope } from '../../lib/runScope';
 import { usePricingStore } from '../../store/pricingStore';
 import { useInputSizeStore } from '../../store/inputSizeStore';
 import type { NodeData } from '../../types';
@@ -319,7 +319,7 @@ export function Toolbar() {
           <ToolbarIcon name="run" />
           <span className="toolbar__label">Run</span>
           {runChip && (
-            <span className="toolbar__run-paid" aria-hidden="true">{runChip}</span>
+            <span className="toolbar__run-paid" aria-hidden="true" title={runChipTitle(runScope)}>{runChip}</span>
           )}
         </button>
       )}
@@ -340,6 +340,9 @@ export function Toolbar() {
             {canLoad && !canSave && providerStartAmbiguities.length > 0 && (
               <p className="toolbar__blocked" id={blockedId} role="status">{saveBlockedReason}</p>
             )}
+            {/* PR #198 review 6, M2: this tab's run locks Load, Import, Clear and
+                Arrange too, and its line wins over following's and offline's
+                (lib/canvasLock), as Save graph and the line above say. */}
             <div className="toolbar__action-group" role="group" aria-label="Graph files">
               <h2 className="toolbar__action-heading">Graph</h2>
               <button type="button" className="toolbar__action" disabled={!canSave}
@@ -349,19 +352,19 @@ export function Toolbar() {
                 <ToolbarIcon name="save" /><span>Save graph</span><kbd aria-hidden="true">Ctrl / ⌘ S</kbd>
               </button>
               <button type="button" className="toolbar__action"
-                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Load graph (Ctrl+O or ⌘O)' })}
+                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Load graph (Ctrl+O or ⌘O)' }, { run: isExecuting, runTitle: loadBlockedReason })}
                 aria-describedby={!canLoad ? blockedId : undefined}
                 aria-keyshortcuts="Control+o Meta+o" onClick={() => runSecondaryAction(requestGraphLoad)}>
                 <ToolbarIcon name="load" /><span>Load graph</span><kbd aria-hidden="true">Ctrl / ⌘ O</kbd>
               </button>
               <button type="button" className="toolbar__action"
-                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Import graph built by Nebula CLI' })}
+                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Import graph built by Nebula CLI' }, { run: isExecuting, runTitle: loadBlockedReason })}
                 aria-describedby={!canLoad ? blockedId : undefined}
                 onClick={() => runSecondaryAction(() => void handleImportCLI())}>
                 <ToolbarIcon name="cli" /><span>Import CLI graph</span>
               </button>
               <button type="button" className="toolbar__action toolbar__action--danger"
-                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Clear canvas — asks for confirmation' })}
+                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Clear canvas — asks for confirmation' }, { run: isExecuting, runTitle: loadBlockedReason })}
                 aria-describedby={!canLoad ? blockedId : undefined}
                 onClick={() => runSecondaryAction(() => void handleClear())}>
                 <ToolbarIcon name="clear" /><span>Clear canvas…</span>
@@ -370,7 +373,7 @@ export function Toolbar() {
             <div className="toolbar__action-group" role="group" aria-label="Canvas layout">
               <h2 className="toolbar__action-heading">Layout</h2>
               <button type="button" className="toolbar__action"
-                {...lock.act({ disabled: nodeCount === 0, title: 'Arrange nodes by dependency' })} onClick={() => runSecondaryAction(autoLayout)}>
+                {...lock.act({ disabled: nodeCount === 0, title: 'Arrange nodes by dependency' }, { run: isExecuting })} onClick={() => runSecondaryAction(autoLayout)}>
                 <ToolbarIcon name="layout" /><span>Arrange nodes</span>
               </button>
               <button type="button" className="toolbar__action toolbar__layout-reset" title="Reset panel positions and sizes"

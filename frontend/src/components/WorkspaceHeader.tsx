@@ -2,6 +2,7 @@ import type { ReactNode, Ref } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { ProjectWorkspaceControls } from './projects/ProjectWorkspaceControls';
 import { UpdatesSlot } from './agent-notes/UpdatesSlot';
+import { StudioOfflineRow } from './StudioOfflineRow';
 import '../styles/workspace-header.css';
 
 interface WorkspaceHeaderProps {
@@ -21,12 +22,17 @@ interface WorkspaceHeaderProps {
   /** Keep room at the end for the Updates chip (Q107 a). The canvas's pill
    * leaves it out: there the chip has its own corner. */
   updatesSlot?: boolean;
+  /** The offline banner as a row of the layout right under this header
+   * (GM, PR #198 r2; StudioOfflineRow). Every studio has it; the canvas's
+   * header leaves it out (the canvas keeps its floating banner). */
+  offlineRow?: boolean;
 }
 
 /** One current workspace identity, with its actual return destination. */
 export function WorkspaceHeader({ title, onBack, backLabel = 'Canvas', backDisabled = false, backRef, backBusy = false,
-  onHome, homeBusy, className = '', navigation, children, updatesSlot = true }: WorkspaceHeaderProps) {
+  onHome, homeBusy, className = '', navigation, children, updatesSlot = true, offlineRow = true }: WorkspaceHeaderProps) {
   return (
+    <>
     <header className={`workspace-header${updatesSlot ? ' workspace-header--updates-slot' : ''} ${className}`} aria-label="Workspace">
       <div className="workspace-header__identity">
         <ProjectWorkspaceControls onHome={onHome} homeBusy={homeBusy} />
@@ -45,5 +51,7 @@ export function WorkspaceHeader({ title, onBack, backLabel = 'Canvas', backDisab
           (workspace-header.css, layouts.css). */}
       {updatesSlot && <UpdatesSlot />}
     </header>
+    {offlineRow && <StudioOfflineRow />}
+    </>
   );
 }

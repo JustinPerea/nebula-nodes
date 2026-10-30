@@ -66,14 +66,27 @@ export function defaultRunHistoryPosition(viewportWidth?: number): { x: number; 
   };
 }
 
+// Every storage read and write here is guarded (review r5 LOW-3 of PR #203):
+// a tab with site data blocked throws on any access, and the store loads
+// with the app, so a throw here would stop the app. Each falls back to a
+// safe default and keeps a choice for the session only.
 function loadOnboarded(): boolean {
   if (typeof window === 'undefined') return true; // SSR: treat as done (never auto-open)
-  return window.localStorage.getItem(ONBOARDED_KEY) === '1';
+  try {
+    return window.localStorage.getItem(ONBOARDED_KEY) === '1';
+  } catch {
+    // Unreadable: as done, so a tab that can't remember never reopens the tour on every load.
+    return true;
+  }
 }
 
 function persistOnboarded(done: boolean): void {
   if (typeof window === 'undefined') return;
-  window.localStorage.setItem(ONBOARDED_KEY, done ? '1' : '0');
+  try {
+    window.localStorage.setItem(ONBOARDED_KEY, done ? '1' : '0');
+  } catch {
+    // Storage blocked: the choice holds for this session only.
+  }
 }
 
 function loadCreateSessionId(): string | null {
@@ -141,13 +154,21 @@ function persistAgentLogEnabled(enabled: boolean): void {
 // Render culling and zoom LOD default on; optional canvas chrome defaults off.
 function loadCanvasPref(key: string, defaultValue = true): boolean {
   if (typeof window === 'undefined') return defaultValue;
-  const raw = window.localStorage.getItem(key);
-  return raw === null ? defaultValue : raw === '1';
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw === null ? defaultValue : raw === '1';
+  } catch {
+    return defaultValue;
+  }
 }
 
 function persistCanvasPref(key: string, enabled: boolean): void {
   if (typeof window === 'undefined') return;
-  window.localStorage.setItem(key, enabled ? '1' : '0');
+  try {
+    window.localStorage.setItem(key, enabled ? '1' : '0');
+  } catch {
+    // Storage blocked: the choice holds for this session only.
+  }
 }
 
 /** null means never ask. Anything unreadable falls back to the default. */

@@ -3,7 +3,7 @@
 Round 3c split a node's run error in two: `error` is the specific text for
 agents, `person` is the line the canvas card shows. The pre-run check
 (execution/engine.validate_graph) still gave one text to both: "Missing API
-key: OPENAI_API_KEY", "Required input port 'prompt' is not connected",
+key: OPENAI_API_KEY", "Required input port prompt is not connected",
 "Batch has 3 items, exceeding its batch_size_cap of 2. ...". GM's rules: no
 ids, parameter keys or env-var names in what the person reads (a field by its
 label, an input in words); "people get the written line and agents keep the
@@ -106,7 +106,7 @@ def test_an_unconfigured_universal_node_with_no_key_names_its_provider():
 
 def test_an_unwired_required_input_names_it_in_words():
     [error] = _for(validate_graph([_node("n1", "gpt-image-1-generate")], [], {"OPENAI_API_KEY": "set"}), "n1")
-    assert error.message == "Required input port 'prompt' is not connected"
+    assert error.message == "Required input port prompt is not connected"
     assert _clean(error.person) == PROMPT_LINE
 
 
@@ -119,7 +119,7 @@ def test_an_unwired_required_input_names_it_in_words():
 def test_other_inputs_read_by_their_label(definition_id: str, line: str):
     keys = {key: "set" for key in ("ELEVENLABS_API_KEY", "FAL_KEY", "ANTHROPIC_API_KEY", "RUNWAY_API_KEY")}
     [error] = _for(validate_graph([_node("n1", definition_id)], [], keys), "n1")
-    assert error.message.startswith("Required input port '")
+    assert error.message.startswith("Required input port ") and "'" not in error.message
     assert _clean(error.person) == line
 
 
@@ -253,7 +253,7 @@ def _contracts(nodes: list[tuple[str, str]], edges: list[tuple[str, str, str, st
 
 def test_a_wire_of_the_wrong_kind_names_the_input_by_its_label():
     [issue] = _contracts([("a", "image-input"), ("b", "gpt-image-1-generate")], [("a", "image", "b", "prompt")])
-    assert issue.message.startswith("Incompatible port types: source 'image' on node 'a'")
+    assert issue.message.startswith("Incompatible port types: source 'image' on node a")
     # Round 3g (GM): the port's label in quotes.
     assert _clean(issue.person) == ("The connection into “Prompt” brings something it can't take. "
                                     "Remove that connection, then connect a matching output.")
@@ -263,14 +263,14 @@ def test_too_many_wires_into_one_input_has_a_line():
     issues = _contracts([("a", "text-input"), ("c", "text-input"), ("b", "gpt-image-1-generate")],
                         [("a", "text", "b", "prompt"), ("c", "text", "b", "prompt")])
     [issue] = [i for i in issues if "multiple connections" in i.message]
-    assert issue.message == "Input port 'prompt' on node 'b' does not allow multiple connections"
+    assert issue.message == "Input port 'prompt' on node b does not allow multiple connections"
     # Round 3g (GM): the port's label in quotes.
     assert _clean(issue.person) == "“Prompt” takes one connection. Remove the extra one, then run the node again."
 
 
 def test_a_wire_into_an_input_the_node_no_longer_has_has_a_line():
     [issue] = _contracts([("a", "text-input"), ("b", "gpt-image-1-generate")], [("a", "text", "b", "gone")])
-    assert issue.message.startswith("Invalid target handle 'gone' on node 'b'")
+    assert issue.message.startswith("Invalid target handle 'gone' on node b")
     assert _clean(issue.person) == ("A connection into this node no longer matches its inputs. Remove it, then "
                                     "connect it again.")
 
@@ -322,19 +322,19 @@ def test_the_canvas_reads_the_person_line_and_agents_the_specific_text(canvas):
     assert canvas_run["status"] == "validation_error"
     by_message = {error["message"]: error for error in canvas_run["errors"]}
     assert by_message["Missing API key: OPENAI_API_KEY"]["person"] == KEY_LINE
-    assert by_message["Required input port 'prompt' is not connected"]["person"] == PROMPT_LINE
+    assert by_message["Required input port prompt is not connected"]["person"] == PROMPT_LINE
 
     # The socket's event carries the line too (another tab, an agent's run).
     [event] = [m for m in sent if m.get("type") == "validationError"]
     assert {e["message"]: e.get("person") for e in event["errors"]} == {
-        "Required input port 'prompt' is not connected": PROMPT_LINE,
+        "Required input port prompt is not connected": PROMPT_LINE,
         "Missing API key: OPENAI_API_KEY": KEY_LINE,
     }
 
     # A reload's graph gives the card both, as the run's answer did.
     exported = client.get("/api/graph/export").json()
     data = next(n for n in exported["nodes"] if n["id"] == node)["data"]
-    assert data["error"] == "Required input port 'prompt' is not connected; Missing API key: OPENAI_API_KEY"
+    assert data["error"] == "Required input port prompt is not connected; Missing API key: OPENAI_API_KEY"
     assert data["errorPerson"] == f"{PROMPT_LINE} {KEY_LINE}"
 
     # Agents: look_at_canvas keeps the specific text, no person line.
@@ -346,7 +346,7 @@ def test_an_agents_refused_run_keeps_its_text_word_for_word(canvas):
     client, main, sent, node = canvas
     body = client.post("/api/graph/run", json={"targetNodeId": node}, headers=CLAUDE).json()
     assert body["status"] == "failed"
-    assert body["errors"] == {node: "Required input port 'prompt' is not connected; Missing API key: OPENAI_API_KEY"}
+    assert body["errors"] == {node: "Required input port prompt is not connected; Missing API key: OPENAI_API_KEY"}
     assert "person" not in json.dumps(body)
     assert client.get(f"/api/graph/runs/{body['runId']}").json()["errors"] == body["errors"]
     # The agent's cursor on the canvas says the person's line, not the keys.
@@ -360,7 +360,7 @@ def test_a_validation_event_serializes_its_person_line():
 
     event = ValidationErrorEvent(run_id="r1", errors=[
         ValidationErrorDetail(node_id="n1", port_id="", message="Missing API key: OPENAI_API_KEY", person=KEY_LINE),
-        ValidationErrorDetail(node_id="n2", port_id="", message="Edge 'e1' references missing ..."),
+        ValidationErrorDetail(node_id="n2", port_id="", message="Edge e1 references missing ..."),
     ])
     camel = main._event_to_camel(event)
     assert camel["errors"][0]["person"] == KEY_LINE
@@ -373,11 +373,11 @@ def test_a_validation_event_serializes_its_person_line():
 def test_node_errors_keep_the_person_line_for_the_card_only():
     errors = NodeErrors()
     errors.record_validation([
-        ValidationErrorDetail(node_id="n1", port_id="prompt", message="Required input port 'prompt' is not connected",
+        ValidationErrorDetail(node_id="n1", port_id="prompt", message="Required input port prompt is not connected",
                               person=PROMPT_LINE),
         ValidationErrorDetail(node_id="n1", port_id="", message="Missing API key: OPENAI_API_KEY", person=KEY_LINE),
     ])
-    assert errors.get("n1") == {"error": "Required input port 'prompt' is not connected; Missing API key: OPENAI_API_KEY"}
+    assert errors.get("n1") == {"error": "Required input port prompt is not connected; Missing API key: OPENAI_API_KEY"}
     assert errors.card("n1")["errorPerson"] == f"{PROMPT_LINE} {KEY_LINE}"
 
 

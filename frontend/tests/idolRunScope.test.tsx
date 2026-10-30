@@ -127,6 +127,13 @@ describe("the store's selection runs read the same plan (GM r8 item 2)", () => {
     expect(useGraphStore.getState().undoNotice?.text).toBe(IDOL_LOCK);
   });
 
+  it("the person's own run of the placeholder Idol itself makes it real, so it locks with Idol's line (GM r9 item 1)", async () => {
+    setup(true);
+    await useGraphStore.getState().executeNode('idol');
+    expect(sentRuns()).toEqual([]);
+    expect(useGraphStore.getState().undoNotice?.text).toBe(IDOL_LOCK);
+  });
+
   it("Export alone over a placeholder Idol: the person's own run makes it run, so it locks", async () => {
     setup(true);
     await useGraphStore.getState().executeNode('export');

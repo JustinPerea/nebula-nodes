@@ -24,7 +24,12 @@ export function EditNode({ id, data, selected }: NodeProps) {
   // above it says why.
   const openEditNode = useUIStore((s) => s.openEditNode);
   const params = ((data as { params?: Record<string, unknown> }).params ?? {}) as Record<string, unknown>;
-  const clips = ((params.clips as EditClipShape[]) ?? []);
+  // Read through a guard (PR #198 review 3, L4): damaged clips still draw the card.
+  const num = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : undefined);
+  const clips: EditClipShape[] = (Array.isArray(params.clips) ? params.clips : [])
+    .filter((clip): clip is Record<string, unknown> => Boolean(clip) && typeof clip === 'object')
+    .map((clip) => ({ duration: num(clip.duration), sourceIn: num(clip.sourceIn), sourceOut: num(clip.sourceOut),
+      volume: num(clip.volume), mute: clip.mute === true }));
 
   // Output duration is the sum of clip.duration (after the refactor, duration
   // IS the output extent for each clip — speed is derived).

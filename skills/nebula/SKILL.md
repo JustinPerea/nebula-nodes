@@ -34,7 +34,8 @@ yourself.
 
 Set `NEBULA_AGENT_NAME` (for example `export NEBULA_AGENT_NAME="Claude Code"`)
 so your cursor and edits show under your name (the person's Agent log lists
-each of your edits, runs and moodboard changes under it too). `nebula apply` and
+each of your edits, runs and moodboard changes under it too; a setting is
+named by its label as the Inspector shows it, never its key). `nebula apply` and
 `nebula propose` need it (or `--as NAME`).
 
 ## Start here
@@ -306,7 +307,10 @@ yet. Nebula won't start it now, so nothing runs and nothing is spent." That
 id is stopped for good: a start still on its way is refused, so nothing ran
 and nothing was spent. `nebula result` on it prints "Run <id> was stopped
 before it started, so nothing ran and nothing was spent." To run the same
-nodes again, start a new run.
+nodes again, start a new run. A run id that was stopped can never start
+again, whether or not it ran: a request re-sent with that id is refused
+(409) with a line saying so, such as "run '<id>' was already stopped, so
+this id can’t start again. Start a new run with a new id."
 
 If Nebula has no record of the id at all (it may have run before Nebula
 restarted, or the id is wrong), both commands print "Nebula has no record
@@ -403,6 +407,54 @@ provider's answer such as "Meshy is busy. ..." with `errorProviderText`) that
 you shouldn't parse. A failed Cinema shot's `output` works the same: read its
 `error`; its `errorCategory`, `errorFriendly`, `errorPerson`,
 `errorProviderText`, `errorProvider` and `errorRaw` are for the Cinema panel.
+A new Cinema scene needs only `{"scene": {"shots": [{"id": "s1", "prompt": "…"}]}}`:
+Nebula fills in `version`, `base` (`seedream-4-5`) and `aspectRatio` (16:9),
+and a 400 names any field it can't fill (`base` as a bare model name, a prompt
+that isn't text, a shot id used twice). `--param scene='<json>'` works: the
+text is read as the object. Removing a shot, or deleting the whole scene, while
+a run renders it is refused (409, naming the shots and the run; over HTTP the
+body adds `code: "rendering_shots"` and `rendering: {"shotIds": [...],
+"shots": [...], "stoppable": ...}`, and nothing in that write was taken): stop
+that run (`nebula cancel <id>`) or wait, then try again. Other refusals of a
+whole edit have a `code` over HTTP too (`workspace_moved` with the `project`
+open now and `switchedBy`, `canvas_replaced` when the canvas was cleared or
+replaced since, with the same fields, `paid_start`, `approved_run`); `nebula`
+prints the detail. A scene write (`nebula set n4 scene=…`) is held to
+the scene you last read (`nebula look`, the export, or your own last write
+of it; over HTTP an explicit `ifSceneKey`, each scene's key being in
+`sceneKeys`): when the person or another agent changed it since, it is
+refused ("“Opening” changed since you last read it, so nothing was changed.
+Read it again and redo your change."; over HTTP 409 `scene_changed`, with
+`scene`, `sceneKey`, `sceneRev` and `changedBy`) and nothing is saved; a
+write to a scene node someone deleted is 404 `node_gone` with `deletedBy`
+(who deleted it, or null). Ids and ports in details take no quotes (`Node n4 not
+found`): copy them as they are. A name that matches nothing comes back in
+“…” (`no Style “Neon dusk”`); a next call comes in backticks
+(`` `get_run('run_x')` ``). A node definition the registry doesn't have
+is 400 `unknown_definition` with `definitionId` (the value you sent), shown
+bare when it looks like an id and in “…” when it doesn't. A
+refusal is not a read: run `nebula look`, then redo your change on what it
+shows; sending the same copy again is refused again. A scene you never read
+is written as you send it, and a write whose scene is already Nebula's is
+never refused. A write with no session (`nebula set` by default) is held
+to your own last `nebula look`; only if you never looked is it held to the
+newest read by any session of that name, your MCP looks included. An MCP
+look never refreshes a `nebula look`: after one, a `nebula set` built on an
+older `nebula look` is refused, so run `nebula look` and redo it. Set
+`NEBULA_AGENT_SESSION` to a name of your own when two lanes of one agent
+work on the same canvas, and use it for both reading and writing. The person's canvas merges your change
+into theirs and only asks them when you both changed the same thing. A shot run holds the
+scenes upstream of it too, until it ends. A saved project, a graph file you
+import (`nebula load`, also when you load it) and the person's own edits are
+never refused for their scene: what can't be read is converted (see
+docs/MCP-SETUP.md, Cinema scenes over MCP), so `nebula look` a scene you
+loaded. A converted shot never takes the id of a removed shot's leftover port,
+but a shot that lost its id keeps its own image port under its new id, connections
+included. A shot output no shot owns, and its connections, are dropped on load or
+open. Each node that lost a connection that way is a line in `warnings`
+("Removed the connection to shot port s2 on “Opening”, node n4. That shot no
+longer exists."; `nebula load` and `nebula project open` print them as
+`note:`); every dropped port is in `canvas.replaced`'s `droppedPorts`.
 Round 3f rewrote the card lines to GM's rules; nothing you read changed (a
 proposal's `cost.notReady` rows add a `person` line beside `missing`: read
 `missing`). A job the

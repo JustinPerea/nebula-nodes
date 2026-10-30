@@ -1,8 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { backendAssetUrlSync } from '../../lib/backend';
-import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
+import { lockedAction, refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 import { useGraphStore } from '../../store/graphStore';
+import { shotRemovalBlock, shotRemovalBlockTitle } from '../../lib/cinemaScene';
+import { OFFLINE_VERBS } from '../../lib/useBackendOffline';
 import type { CinemaSceneSpec, CinemaShot } from '../../types';
 import { CINEMA_CATEGORY_COLOR } from '../../lib/cinemaCategoryColor';
 
@@ -42,6 +44,8 @@ export function CinemaShotsRail({
   const addRef = useRef<HTMLButtonElement>(null);
   const pendingFocus = useRef<{ shotId: string | null; removedId?: string } | null>(null);
   const activeRuns = useGraphStore((state) => state.activeRuns);
+  // A run of the graph holds the shots only while it is on this scene (L2).
+  const sceneState = useGraphStore((state) => state.nodes.find((node) => node.id === cinemaNodeId)?.data.state);
   const tabStopId = scene.shots.some((shot) => shot.id === selectedShotId)
     ? selectedShotId : scene.shots[0]?.id;
   const orderedShotIds = JSON.stringify(scene.shots.map((shot) => shot.id));
@@ -65,6 +69,9 @@ export function CinemaShotsRail({
   }, [scene.shots]);
 
   const reorder = (shotId: string, targetIndex: number, focusSelector: boolean) => {
+    // Offline or following the order can't save (the store refuses it): the
+    // arrows are disabled, a drag doesn't start, and Alt + arrow keys do
+    // nothing but pulse the banner or the project bar (PR #198 r5, #195 r23).
     if (refuseCanvasEdit()) return;
     const shots = [...scene.shots];
     const from = shots.findIndex((shot) => shot.id === shotId);
@@ -127,12 +134,15 @@ export function CinemaShotsRail({
           description: owner.status === 'cancelling' ? 'Stopping' : 'Generating',
         } : statusBadge(shot);
         const thumb = shot.output?.imageUrl ?? null;
+        // A shot that is rendering can't be removed (GM, PR #198 r2): × is
+        // disabled and says why; the store and the backend refuse it too.
+        const block = shotRemovalBlock(activeRuns, cinemaNodeId, shot, sceneState);
         return (
           <div
             key={shot.id}
             className={`cinema-shots-rail__shot ${selected ? 'cinema-shots-rail__shot--selected' : ''} ${dragId === shot.id ? 'cinema-shots-rail__shot--dragging' : ''}`}
             draggable={!lock.locked}
-            onDragStart={() => setDragId(shot.id)}
+            onDragStart={() => { if (!lock.locked) setDragId(shot.id); }}
             onDragEnd={() => setDragId(null)}
             onDragOver={(event) => event.preventDefault()}
             onDrop={() => handleDrop(shot.id)}
@@ -168,22 +178,27 @@ export function CinemaShotsRail({
               {selected && <>
                 <button type="button" className="cinema-shots-rail__move"
                   aria-label={`Move Shot ${idx + 1} earlier`}
-                  {...lock.act({ disabled: idx === 0, title: 'Move shot earlier', offline: 'reorder shots' })}
+                  {...lockedAction(lock, { disabled: idx === 0, title: 'Move shot earlier', offline: 'reorder shots' }, { verb: OFFLINE_VERBS.reorderShots })}
                   onClick={() => reorder(shot.id, idx - 1, true)}>←</button>
                 <button type="button" className="cinema-shots-rail__move"
                   aria-label={`Move Shot ${idx + 1} later`}
-                  {...lock.act({ disabled: idx === scene.shots.length - 1, title: 'Move shot later', offline: 'reorder shots' })}
+                  {...lockedAction(lock, { disabled: idx === scene.shots.length - 1, title: 'Move shot later', offline: 'reorder shots' }, { verb: OFFLINE_VERBS.reorderShots })}
                   onClick={() => reorder(shot.id, idx + 1, true)}>→</button>
               </>}
               <button type="button" className="cinema-shots-rail__remove"
-                aria-label={`Remove Shot ${idx + 1}`} {...lock.act({ title: 'Remove shot', offline: 'remove shots' })}
+                aria-label={`Remove Shot ${idx + 1}`}
+                // M2: a run that holds the shot says so first, over following
+                // and offline (lib/canvasLock's order).
+                {...lockedAction(lock, { title: 'Remove shot', offline: 'remove shots' }, { verb: OFFLINE_VERBS.removeShots, run: Boolean(block),
+                  runTitle: block ? shotRemovalBlockTitle(block, `Shot ${idx + 1}`) : undefined })}
                 onClick={() => handleRemove(shot.id, idx)}>×</button>
             </div>
           </div>
         );
       })}
       <button ref={addRef} type="button" className="cinema-shots-rail__add"
-        {...lock.act({ offline: 'add shots' })} onClick={() => { if (!refuseCanvasEdit()) onAddShot(); }}>
+        {...lockedAction(lock, { offline: 'add shots' }, { verb: OFFLINE_VERBS.addShots, neutral: true })}
+        onClick={() => { if (!refuseCanvasEdit()) onAddShot(); }}>
         + Add shot
       </button>
     </div>

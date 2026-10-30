@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { RegionNotices } from './canvas/DeferredCanvasOverlays';
 import { NOTICE_SLOTS, setNoticeSlot, type NoticeSlot } from '../lib/noticeSlots';
 import { keepNoticeFocus, noticeKeys } from '../lib/modalFocus';
+import { keepNoticesBelowTopBars } from '../lib/bottomBar';
 import '../styles/noticeRegion.css';
 
 /** What a screen shows in the region besides the toasts. */
@@ -50,7 +51,9 @@ export function NoticeRegion({ screen }: { screen: NoticeRegionScreen }) {
     window.addEventListener('keydown', noticeKeys, true);
     const region = regionRef.current;
     const stopKeeping = region ? keepNoticeFocus(region) : () => {};
-    return () => { window.removeEventListener('keydown', noticeKeys, true); stopKeeping(); };
+    // GM r9 item 2 (PR #203): the stack never grows into the top bars.
+    const stopRoom = region ? keepNoticesBelowTopBars(region) : () => {};
+    return () => { window.removeEventListener('keydown', noticeKeys, true); stopKeeping(); stopRoom(); };
   }, []);
 
   return createPortal(

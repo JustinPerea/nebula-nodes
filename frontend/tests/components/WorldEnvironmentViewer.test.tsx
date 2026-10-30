@@ -87,11 +87,14 @@ vi.mock('@sparkjsdev/spark', async () => {
   const three = await vi.importActual<typeof import('three')>('three');
 
   class MockSparkRenderer extends three.Object3D {
+    sorting = false;
     sortDirty = true;
     sortTimeoutId = -1;
-    disposedWith: { sortDirty: boolean; sortTimeoutId: number } | null = null;
-    // What the sort state was when it was disposed (review r4 NIT-3).
-    dispose = vi.fn(() => { this.disposedWith = { sortDirty: this.sortDirty, sortTimeoutId: this.sortTimeoutId }; });
+    disposedWith: { sorting: boolean; sortDirty: boolean; sortTimeoutId: number } | null = null;
+    // What the sort state was when it was disposed (review r4 NIT-3, r5 LOW-1).
+    dispose = vi.fn(() => {
+      this.disposedWith = { sorting: this.sorting, sortDirty: this.sortDirty, sortTimeoutId: this.sortTimeoutId };
+    });
 
     constructor() {
       super();
@@ -574,6 +577,30 @@ describe('WorldEnvironmentViewer', () => {
     const pending = vi.fn();
     spark.sortTimeoutId = setTimeout(pending, 5) as unknown as number;
     unmount();
-    expect(spark.disposedWith).toEqual({ sortDirty: false, sortTimeoutId: -1 });
+    expect(spark.disposedWith).toEqual({ sorting: false, sortDirty: false, sortTimeoutId: -1 });
+  });
+
+  it('waits for a sort already running to settle before the renderer is disposed (review r5 LOW-1)', () => {
+    vi.useFakeTimers();
+    try {
+      vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+        getExtension: vi.fn().mockReturnValue(null),
+      } as unknown as WebGL2RenderingContext);
+      viewerHarness.renderScene = true;
+      const { unmount } = render(
+        <WorldEnvironmentViewer src="/api/outputs/run/idol.ply" format="ply" label="Idol object" navigationMode="orbit"
+          resetToken={0} framing="object" />,
+      );
+      const spark = viewerHarness.sparks.at(-1)!;
+      spark.sorting = true;
+      unmount();
+      vi.advanceTimersByTime(100);
+      expect(spark.dispose).not.toHaveBeenCalled();
+      spark.sorting = false;
+      vi.advanceTimersByTime(20);
+      expect(spark.disposedWith).toEqual({ sorting: false, sortDirty: false, sortTimeoutId: -1 });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

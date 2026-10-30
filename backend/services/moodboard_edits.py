@@ -234,7 +234,7 @@ class _Batch:
         found = next((f for f in self.frames if f.get("id") == text), None)
         found = found or next((f for f in self.frames if str(f.get("name", "")).casefold() == text.casefold()), None)
         if found is None and not missing_ok:
-            raise EditError(f"no frame '{text[:60]}' on this board")
+            raise EditError(f"no frame “{text[:60]}” on this board")
         return found
 
     def frame_label(self, frame_id: Any) -> str:

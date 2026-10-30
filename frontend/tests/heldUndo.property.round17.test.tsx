@@ -98,7 +98,29 @@ async function freshStore(): Promise<void> {
 }
 const store = () => useGraphStore.getState();
 const tick = (ms: number) => vi.advanceTimersByTimeAsync(ms);
-const settle = async () => { for (let i = 0; i < 12; i += 1) await tick(5); };
+/** The real setTimeout, taken before any block fakes the clock. */
+const REAL_SET_TIMEOUT = globalThis.setTimeout;
+/** The slice of the shared fake clock a seed is advancing now, if any. */
+let sliceInFlight: Promise<unknown> = Promise.resolve();
+/** Review 14 NIT-2: the shared fake timers advance in slices of at most a
+ * second, and an abandoned block's run (`mine` no longer the generation)
+ * stops before and after every slice, so it never finishes a step or its
+ * final phase against the next block's canvas. Review 15 NIT-2: and the
+ * slice in flight when it was abandoned finishes before the next block
+ * starts (afterEach waits for it), so it can't advance that block's clock. */
+function guardedTimers(mine: number) {
+  const guard = () => { if (generation !== mine) throw new Abandoned(); };
+  const sliced = async (ms: number) => {
+    for (let left = ms; left > 0; left -= 1000) {
+      guard();
+      const slice = tick(Math.min(1000, left));
+      sliceInFlight = slice.catch(() => {});
+      await slice;
+    }
+    guard();
+  };
+  return { guard, tick: sliced, settle: async () => { for (let i = 0; i < 12; i += 1) await sliced(5); } };
+}
 
 const SEEDS = Number(process.env.UNDO_PROPERTY_SEEDS ?? 120);
 const FIRST = Number(process.env.UNDO_PROPERTY_FIRST ?? 1);
@@ -135,6 +157,17 @@ interface Failure { seed: number; step: number; what: string; log: string[]; cal
 
 type Variant = 'plain' | 'foreign' | 'refuse' | 'clear';
 
+/** PR #198 fix round 14 (review 13's flake): a block vitest timed out isn't
+ * cancelled; its seed loop went on against the shared fake Nebula and store
+ * while the next block ran, so the next block read the abandoned block's
+ * typing ("pre-clear typing landed on the new canvas", seeds 10 and 24
+ * under load; reproduced by forcing the block before it to time out). Each
+ * block runs under its own generation; an abandoned one stops at its next
+ * step; review 14 NIT-2: and at every await within a step and in the final
+ * phase (guardedTimers). */
+let generation = 0;
+class Abandoned extends Error {}
+
 async function runSeed(seed: number, variant: Variant = 'plain'): Promise<Failure | null> {
   const refuser = rng(seed + 7_000_000);
   fake.refuseDelete = variant === 'refuse' ? () => refuser() < 0.3 : null;
@@ -145,7 +178,12 @@ async function runSeed(seed: number, variant: Variant = 'plain'): Promise<Failur
 }
 
 async function runSeedInner(seed: number, foreign: boolean, clearing = false): Promise<Failure | null> {
+  const mine = generation;
+  // Shadow the shared timers for everything this seed does (its steps, its
+  // presses and its final delivery): an abandoned run stops at its next await.
+  const { guard, tick, settle } = guardedTimers(mine);
   await freshStore();
+  guard();
   const random = rng(seed);
   const pick = <T,>(items: T[]): T | undefined => items[Math.floor(random() * items.length)];
   const log: string[] = [];
@@ -235,6 +273,7 @@ async function runSeedInner(seed: number, foreign: boolean, clearing = false): P
       }
     }
     await Promise.allSettled(pending);
+    guard();
     await settle();
   };
 
@@ -247,6 +286,7 @@ async function runSeedInner(seed: number, foreign: boolean, clearing = false): P
   const push = log.push.bind(log);
   if (debug) log.push = (...items: string[]) => { const n = push(...items); push(state()); return n; };
   for (let step = 0; step < OPS; step += 1) {
+    guard();
     const roll = random();
     // A person's action comes after every echo whose answer already landed
     // (Nebula writes the echo first: FakeNebula.catchUp).
@@ -418,6 +458,11 @@ describe('round 17 (review 16, H1): random sequences of edits, undos and echoes'
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
   afterEach(async () => {
+    // Review 15 NIT-2: a block vitest timed out is over: its run stops at its
+    // next await, and the slice it has in flight ends here, on this block's
+    // clock, before the next block fakes its own (at most 10 s of real time).
+    generation += 1;
+    await Promise.race([sliceInFlight, new Promise((resolve) => REAL_SET_TIMEOUT(resolve, 10_000))]);
     await tick(20_000);
     vi.useRealTimers();
     vi.restoreAllMocks();
@@ -449,10 +494,17 @@ describe('round 17 (review 16, H1): random sequences of edits, undos and echoes'
     ...refuse.map(([range, seeds]) => [`${range}, 30% of deletes refused`, seeds, 'refuse'] as const),
     ...clear.map(([range, seeds]) => [`${range}, an agent clears`, seeds, 'clear'] as const)])('seeds %s', async (_range, seeds, variant) => {
     const failures: Failure[] = [];
+    const mine = ++generation;
     for (const seed of seeds) {
-      const failure = await runSeed(seed, variant);
+      if (generation !== mine) return;
+      const failure = await runSeed(seed, variant).catch((error: unknown) => {
+        // Only a run a newer block took over stops this way; a live one rethrows.
+        if (error instanceof Abandoned && generation !== mine) return null;
+        throw error;
+      });
+      if (generation !== mine) return;
       if (failure) failures.push(failure);
-      await tick(20_000);
+      for (let left = 20_000; left > 0 && generation === mine; left -= 1000) await tick(1000);
     }
     if (failures.length > 0) {
       const first = failures[0];

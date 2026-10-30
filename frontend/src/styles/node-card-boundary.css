@@ -1,0 +1,61 @@
+/* A canvas card that couldn't draw (components/nodes/NodeCardBoundary.tsx,
+ * PR #198 review 3, L4): GM's boundary line at card size, in the card's own
+ * frame, so the rest of the canvas keeps working. Its handles stay so the
+ * wires into it stay drawn. */
+body.app-slava-restraint .node-card-boundary {
+  width: 200px;
+  padding: 12px 14px;
+  background: var(--sr-glass);
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-node, 6px);
+  color: var(--sr-ink);
+  cursor: default;
+}
+
+/* GM, PR #198 r7 item 2: one selection style, the model card's, in the
+   card's category colour (orange stays for primary actions and the pin). */
+body.app-slava-restraint .node-card-boundary--selected {
+  border-color: var(--node-category-color, var(--sr-accent));
+  border-width: var(--sr-node-card-selected-border-width);
+  animation: slava-select-breathe var(--sr-node-selected-duration) ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .node-card-boundary--selected {
+    animation: none;
+    box-shadow:
+      0 0 0 var(--sr-node-ring-width) var(--node-category-color, var(--sr-accent)),
+      0 0 var(--sr-node-selected-glow-reduced-size) color-mix(in srgb, var(--node-category-color, var(--sr-accent)) var(--sr-node-selected-glow-reduced-mix), transparent),
+      var(--sr-shadow-node);
+  }
+}
+
+body.app-slava-restraint .node-card-boundary__line {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--sr-ink);
+}
+
+body.app-slava-restraint .node-card-boundary__handle {
+  background: var(--sr-ink-light);
+}
+
+/* GM, PR #198 r4: the card keeps its header (icon and label); only the body
+ * is the boundary's line. */
+body.app-slava-restraint .node-card-boundary__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  min-width: 0;
+}
+
+body.app-slava-restraint .node-card-boundary__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--sr-ink);
+}

@@ -41,7 +41,7 @@ Read 2026-10-29 (GET requests that run nothing):
   release is current when it was last built.
 - [`huggingface_hub` 2.4.0 `utils/_http.py`](https://github.com/huggingface/huggingface_hub/blob/v2.4.0/src/huggingface_hub/utils/_http.py)
   `hf_raise_for_status`: how the Hub says a repo is missing, gated or disabled
-- [hub-docs `spaces-zerogpu.md` line 115 at d035e18f](https://github.com/huggingface/hub-docs/blob/d035e18fdd808e4dced8c51b61c19287fe5c5323/docs/hub/spaces-zerogpu.md?plain=1#L115)
+- [hub-docs `spaces-zerogpu.md` line 116 at d035e18f](https://github.com/huggingface/hub-docs/blob/d035e18fdd808e4dced8c51b61c19287fe5c5323/docs/hub/spaces-zerogpu.md?plain=1#L116)
   (2026-09-07): the `xlarge` note counts an "effective" task duration
 - [gradio-app/gradio PR #11700](https://github.com/gradio-app/gradio/pull/11700),
   `gradio_client` 1.11.1+ and Hugging Face's MCP server: the
@@ -108,9 +108,12 @@ run on the anonymous allowance. That is not a one-line change:
    route-case tests) and 11 frontend ones (`idolNode`, `idolRunLock`,
    `ProviderSwitcher`, `ProviderReadinessBadge`). Round 4 added more that pin
    it (`idolCanvasLock`, the Accept lock in `ProposalBar`, the quick refusal),
-   so count again at that point. The keyless rules keep their own tests
-   (`_keyless_idol`, `keyless_idol`), which build the keyless route from
-   the current one either way, so they pass before and after step 1.
+   so count again at that point. The keyless rules keep their own tests,
+   each built only on `keyless_idol` or `_keyless_idol` (which build the
+   keyless route from the current one either way), so they pass before and
+   after step 1. Round 5's review split the three tests that mixed a keyed
+   half in; with step 1 applied in a scratch copy (round 6), every keyless
+   test passed and 15 keyed backend tests failed, as step 3 expects.
 4. **The generated tables**: the route tables
    (`generate-route-tables.py`) and `docs/MODEL_REFERENCE.md`, then
    `scripts/check-node-contracts.mjs`, which CI runs.
@@ -231,8 +234,9 @@ your daily quota is exhausted, any additional GPU usage is automatically
 billed against your credit balance"). That charge is on the person's own
 Hugging Face account; Nebula can't see it and doesn't count it. `describe_node`
 tells agents so (`billing` on the route, `main.HF_SPACE_BILLING_NOTE`), and so
-do `find_nodes` (a `billing` field next to "free"), `start_here` (a note),
-`nebula info` (a `BILLING:` line) and `skills/nebula/SKILL.md`. Agents' spend
+do `find_nodes` (a `billing` field next to "free"), `nebula nodes` (a
+`BILLING:` line under the table), `start_here` (a note), `nebula info` (a
+`BILLING:` line) and `skills/nebula/SKILL.md`. Agents' spend
 gate admits the run at $0, like other free nodes, pending a product decision
 on whether agents ask before runs that can bill a PRO account.
 
@@ -284,7 +288,7 @@ Starting a run and paying for it are two different checks:
   left)" (`spaces/zero/client.py` 0.51.3, the quota branch of the schedule
   call).
 - **Charge**: the quota is likely charged only the seconds the run uses. The
-  docs say so only for `xlarge` (line 115): "`xlarge` consumes **2×** more
+  docs say so only for `xlarge` (line 116): "`xlarge` consumes **2×** more
   daily quota than `large` (e.g. a 45s **effective** task duration consumes
   90s of quota)". The first live run will show it.
 

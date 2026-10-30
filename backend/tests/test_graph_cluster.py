@@ -524,5 +524,5 @@ def test_imported_atlas_placeholder_cannot_enter_executable_catalog():
     })
 
     assert response.status_code == 400
-    assert "unknown node definition 'worldlabs-atlas'" in response.json()["detail"]
+    assert "unknown node definition worldlabs-atlas" in response.json()["detail"]
     assert main_module.cli_graph.get_state() == before

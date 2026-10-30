@@ -144,11 +144,18 @@ def _backend_result(case: dict) -> dict:
     }
 
 
+def _expected(case: dict) -> dict:
+    """The picker's result, with the fixture's `backendChanges` for the case:
+    a fixed table, written out, never derived from the code under test (PR
+    #198 review 2, N1). A Replicate model's settings are labeled by their key
+    in sentence case there ("Guidance scale"; GM, PR #198 r1 item 7)."""
+    return {**case["expected"], **{key: value for key, value in PICKER["backendChanges"].get(case["name"], {}).items()
+                                   if key != "why"}}
+
+
 @pytest.mark.parametrize("case", PICKER["cases"], ids=[case["name"] for case in PICKER["cases"]])
 def test_the_rules_are_the_pickers_rules(case):
-    expected = {**case["expected"], **{key: value for key, value in PICKER["backendChanges"].get(case["name"], {}).items()
-                                       if key != "why"}}
-    assert _backend_result(case) == expected
+    assert _backend_result(case) == _expected(case)
 
 
 def test_a_configured_node_keeps_its_ports_for_its_model_only():
@@ -237,7 +244,7 @@ def test_an_agent_builds_a_vision_node_and_an_image_node_wired_onward(api):
     errors = validate_graph([GraphNode.model_validate(n) for n in graph_nodes],
                             [GraphEdge.model_validate(e) for e in graph_edges], {"OPENROUTER_API_KEY": "or-test"})
     # (image-compare's second image is unwired; that's all the check finds.)
-    assert [e.message for e in errors] == ["Required input port 'imageB' is not connected"]
+    assert [e.message for e in errors] == ["Required input port imageB is not connected"]
 
 
 def test_an_agent_wires_a_replicate_file_input(api):
@@ -474,7 +481,7 @@ def test_the_picker_route_for_replicate_returns_the_inspectors_controls(api):
     assert response.status_code == 200, response.text
     body = response.json()
     case = next(case for case in PICKER["cases"] if case["name"] == "replicate image edit")
-    assert body["dynamicParams"] == case["expected"]["dynamicParams"]
+    assert body["dynamicParams"] == _expected(case)["dynamicParams"]
     assert body["providerMeta"] == {"version_id": "v-kontext", "description": "Edit images with text"}
 
     missing = api.client.post(f"/api/graph/node/{node}/model", headers=PERSON, json={"model": "nobody/uncached"})

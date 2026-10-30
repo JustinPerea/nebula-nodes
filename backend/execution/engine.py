@@ -931,7 +931,7 @@ def validate_graph(
                         ValidationErrorDetail(
                             node_id=node.id,
                             port_id=port["id"],
-                            message=f"Required input port '{port['id']}' is not connected",
+                            message=f"Required input port {port['id']} is not connected",
                             person=port_line(port.get("label") or ""),
                         )
                     )
@@ -1637,7 +1637,7 @@ async def _execute_graph(
                     else:
                         node_outputs = {}
                 else:
-                    raise RuntimeError(f"No handler registered for '{node.definition_id}'")
+                    raise RuntimeError(f"No handler registered for {node.definition_id}")
             else:
                 # The only provider entry point: the spending limits count a
                 # node only if its run got here (execution/provider_calls.py).

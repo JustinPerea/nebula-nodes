@@ -412,6 +412,11 @@ def test_nebula_info_names_idols_token_and_a_keyless_routes_optional_one():
     route_line = next(line for line in text.splitlines() if line.strip().startswith("hf-space"))
     assert "HF_TOKEN" in route_line and "optional" not in route_line
     assert "or a keyless one" in text
+
+
+def test_nebula_info_names_a_keyless_routes_optional_token():
+    """The keyless half (review r5 LOW-2): passes before and after idol.md's
+    switch back."""
     keyless = format_node_detail(_keyless_idol())
     assert "Key: none (optional HF_TOKEN)" in keyless
     assert "none (optional HF_TOKEN)" in next(line for line in keyless.splitlines()
@@ -426,10 +431,17 @@ def test_nebula_keys_counts_idols_token_and_a_keyless_routes_optional_one():
     assert "HF_TOKEN" in set_text and "1 node (Idol)" in set_text and "1 nodes" not in set_text
     unset_text = format_keys({"configured": {"HF_TOKEN": False}}, [idol])
     assert "1 node unavailable" in unset_text and "optional" not in unset_text
-    keyless_text = format_keys({"configured": {"HF_TOKEN": False}}, [_keyless_idol()])
-    assert "optional: 1 node runs without it (Idol)" in keyless_text and "unavailable" not in keyless_text
     two = format_keys({"configured": {"HF_TOKEN": False}}, [idol, {**idol, "id": "idol-2", "displayName": "Idol 2"}])
     assert "2 nodes unavailable" in two
+
+
+def test_nebula_keys_counts_a_keyless_routes_optional_token():
+    """The keyless half (review r5 LOW-2): passes before and after idol.md's
+    switch back."""
+    from cli.formatter import format_keys
+
+    keyless_text = format_keys({"configured": {"HF_TOKEN": False}}, [_keyless_idol()])
+    assert "optional: 1 node runs without it (Idol)" in keyless_text and "unavailable" not in keyless_text
 
 
 def test_nebula_nodes_prints_idols_billing_line_under_the_table():
@@ -444,6 +456,11 @@ def test_nebula_nodes_prints_idols_billing_line_under_the_table():
     out = format_agent_nodes([idol_row, text_row], ranked=False)
     billing = [line for line in out.splitlines() if line.startswith("BILLING:")]
     assert billing == [f"BILLING: speridlabs-idol: free here. {main.HF_SPACE_BILLING_NOTE}"]
+    # Review r5 NIT-1: once per note, naming every row that carries it.
+    twin = {**idol_row, "id": "idol-2", "name": "Idol 2"}
+    out = format_agent_nodes([idol_row, text_row, twin], ranked=False)
+    billing = [line for line in out.splitlines() if line.startswith("BILLING:")]
+    assert billing == [f"BILLING: speridlabs-idol, idol-2: free here. {main.HF_SPACE_BILLING_NOTE}"]
     # Not ready here: no billing line (its row says what's missing instead).
     out = format_agent_nodes([{**idol_row, "runsWith": None, "missing": "HF_TOKEN"}, text_row], ranked=False)
     assert "BILLING:" not in out

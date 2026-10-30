@@ -110,6 +110,39 @@ describe('RunHistoryPanel replay actions', () => {
     expect(rerunHistoryRecord).toHaveBeenCalledWith('complete-run');
   });
 
+  it('relocks Rerun when the token is removed after it showed unlocked (review r5 LOW-2)', () => {
+    const LINE = 'You can run Idol after you add your Hugging Face token in Settings.';
+    const run: RunRecord = { ...record('complete-run', 'complete'), snapshot: {
+      nodes: [{ id: 'idol', definitionId: 'speridlabs-idol', params: {}, outputs: {} }], edges: [] } };
+    useGraphStore.setState({ runHistory: [run], isExecuting: false });
+    useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: 'set' }, loaded: true } });
+    render(<RunHistoryPanel />);
+    expect(screen.getByRole('button', { name: 'Rerun Full graph' })).not.toHaveAttribute('aria-disabled');
+    act(() => useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } }));
+    const rerun = screen.getByRole('button', { name: 'Rerun Full graph' });
+    expect(rerun).toHaveAttribute('aria-disabled', 'true');
+    expect(rerun).toHaveAccessibleDescription(LINE);
+  });
+
+  // Merge of #198 (round 6): one helper decides both reasons. While a run
+  // goes, the run's lock leads; the missing token comes back once it ends.
+  it('a run going leads the missing token; when it ends the token line is the reason', () => {
+    const LINE = 'You can run Idol after you add your Hugging Face token in Settings.';
+    const run: RunRecord = { ...record('complete-run', 'complete'), snapshot: {
+      nodes: [{ id: 'idol', definitionId: 'speridlabs-idol', params: {}, outputs: {} }], edges: [] } };
+    useGraphStore.setState({ runHistory: [run], isExecuting: true });
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    render(<RunHistoryPanel />);
+    const going = screen.getByRole('button', { name: 'Rerun Full graph' });
+    expect(going).toHaveAttribute('title', 'You can rerun it when the run finishes.');
+    expect(going).not.toHaveAttribute('data-key-locked');
+    act(() => useGraphStore.setState({ isExecuting: false }));
+    const ended = screen.getByRole('button', { name: 'Rerun Full graph' });
+    expect(ended).toHaveAttribute('aria-disabled', 'true');
+    expect(ended).toHaveAttribute('data-key-locked');
+    expect(ended).toHaveAccessibleDescription(LINE);
+  });
+
   it('disables every replay while another run is active', () => {
     useGraphStore.setState({
       runHistory: [record('failed-run', 'failed'), record('complete-run', 'complete')],
@@ -120,6 +153,26 @@ describe('RunHistoryPanel replay actions', () => {
 
     expect(screen.getByRole('button', { name: 'Retry failed Full graph run' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Rerun Full graph' })).toBeDisabled();
+  });
+
+  // GM r37 (PR #198 round 25): a lock reason says what unlocks it, by the
+  // control's own verb: "You can rerun it when the run finishes.", never
+  // "Wait for the active run to finish."
+  it('while a run goes, each replay says what unlocks it, by its own verb', () => {
+    const recovered = record('world-recovered', 'cancelled', 'world');
+    recovered.snapshot.nodes[0] = { id: 'world', definitionId: 'worldlabs-environment', params: { existing_world_id: 'world_already_accepted' }, outputs: {} };
+    recovered.statusNote = WORLD_LABS_RECOVERY_READY_NOTE;
+    const paper = { ...record('paper-run', 'complete', 'paper-target'), paperInputs: [{ nodeId: 'paper-node', snapshot: { id: 'snap', hash: 'A', previewUrl: '/x.png',
+      capturedAt: 'now', width: 1, height: 1, identity: { objectName: 'Frame' }, exportSettings: { scale: 1 } } }] } as unknown as RunRecord;
+    useGraphStore.setState({ runHistory: [record('failed-run', 'failed'), record('complete-run', 'complete'), recovered, paper], isExecuting: true });
+    render(<RunHistoryPanel />);
+    expect(screen.getByRole('button', { name: 'Rerun Full graph' })).toHaveAttribute('title', 'You can rerun it when the run finishes.');
+    expect(screen.getByRole('button', { name: 'Retry failed Full graph run' })).toHaveAttribute('title', 'You can retry it when the run finishes.');
+    expect(screen.getByRole('button', { name: 'Recover Single node run' })).toHaveAttribute('title', 'You can recover it when the run finishes.');
+    const latest = screen.getByRole('button', { name: 'Rerun Single node with latest source' });
+    expect(latest).toBeDisabled();
+    expect(latest).toHaveAttribute('title', 'You can rerun it when the run finishes.');
+    expect(document.body.innerHTML).not.toMatch(/Wait for the active run to finish/);
   });
 
   it('disables repeated cancellation while the backend is still stopping', () => {

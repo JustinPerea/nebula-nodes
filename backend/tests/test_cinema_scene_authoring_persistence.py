@@ -641,3 +641,43 @@ def test_r11_a_changed_float_is_still_a_different_shot(authoring_client):
     shot_b = _remove_then_return(client, graph, {"prompt": "Agent shot", "overrides": {"look": {"contrast": 1.0}}},
                                  {"id": "b", "prompt": "Agent shot", "overrides": {"look": {"contrast": 1.5}}})
     assert shot_b["output"] == {"status": "idle"} and "variations" not in shot_b
+
+
+# The merge of PR #198 into #200: a returning shot gets its media back two
+# ways, the trusted undo's (#198 returning_media) and the media the server
+# kept when it was taken out (#200). A newer image a run landed after the
+# shot left (its live shot_<id> port) wins over the kept one, as it does
+# over a trusted undo's.
+def test_merge_a_late_image_wins_over_the_kept_media(authoring_client):
+    client, graph, _, _ = authoring_client
+    before = _with_media(graph)
+    removed = client.put("/api/graph/node/n1", json={"params": {"scene": _authored(before, {"a"})}})
+    assert removed.status_code == 200
+    assert ("n1", "b") in graph.removed_shot_media
+    # A run that was out lands after the shot left: its port holds the newer image.
+    graph.nodes["n1"]["outputs"]["shot_b"] = {"type": "Image", "value": "https://fixture.example/late.png"}
+    back = client.put("/api/graph/node/n1", json={"params": {"scene": _authored(before, {"a", "b"})}})
+    assert back.status_code == 200, back.text
+    shot_b = graph.nodes["n1"]["params"]["scene"]["shots"][1]
+    assert shot_b["output"] == {"imageUrl": "https://fixture.example/late.png", "status": "done"}
+    # The kept variations stay; the late image isn't one of them, so nothing is selected.
+    assert shot_b["variations"] == RUN_MEDIA["variations"]
+    assert "selectedVariation" not in shot_b
+    assert graph.nodes["n1"]["outputs"]["shot_b"] == {"type": "Image", "value": "https://fixture.example/late.png"}
+    assert graph.removed_shot_media == {}
+
+
+def test_merge_a_trusted_undo_with_media_uses_its_own_and_drops_the_kept_link(authoring_client, monkeypatch):
+    client, graph, _, _ = authoring_client
+    before = _with_media(graph)
+    assert client.put("/api/graph/node/n1", json={"params": {"scene": _authored(before, {"a"})}}).status_code == 200
+    assert ("n1", "b") in graph.removed_shot_media
+    monkeypatch.setattr(main, "_is_person_request", lambda: True)
+    # The person's Undo carries the shot as it had it (#198): a finished shot, its media.
+    restored = client.post("/api/graph/restore", json={"action": "undo", "nodes": [
+        {"id": "n1", "definitionId": "cinema-scene", "params": {**graph.nodes["n1"]["params"], "scene": before}}]})
+    assert restored.status_code == 200, restored.text
+    shot_b = graph.nodes["n1"]["params"]["scene"]["shots"][1]
+    assert {key: shot_b[key] for key in RUN_MEDIA} == RUN_MEDIA
+    assert graph.nodes["n1"]["outputs"]["shot_b"]["value"] == "https://fixture.example/b1.png"
+    assert graph.removed_shot_media == {}

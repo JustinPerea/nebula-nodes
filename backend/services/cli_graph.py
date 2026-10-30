@@ -9,6 +9,12 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from services.cinema_scene_spec import (
+    claim_stray_ports,
+    normalize_params as normalize_scene_params,
+    rekeyed_outputs,
+    shot_port_ids,
+)
 from services.file_access import require_allowed_path, validate_file_references
 from services.retired_nodes import migrate_graph, migrate_node
 from services.saved_graph_upgrades import PARAMS_VERSION, stored_version, upgrade_flat_nodes
@@ -97,17 +103,21 @@ class CLIGraph:
         else:
             match = SHORT_ID_RE.fullmatch(node_id)
             if match is None:
-                raise ValueError(f"'{node_id}' is not a short node id like n3")
+                raise ValueError(f"{node_id} is not a short node id like n3")
             if node_id in self.nodes:
-                raise ValueError(f"Node '{node_id}' already exists")
+                raise ValueError(f"Node {node_id} already exists")
             if int(match.group(1)) > max(self._counter, MAX_ID_JUMP):
-                raise ValueError(f"'{node_id}' is higher than any id this graph has handed out")
+                raise ValueError(f"{node_id} is higher than any id this graph has handed out")
             short_id = node_id
             self._counter = max(self._counter, int(match.group(1)))
         node: dict[str, Any] = {
             "id": short_id,
             "definitionId": definition_id,
-            "params": dict(params),
+            # A Cinema scene's missing fields filled in, a transient run status
+            # settled (services/cinema_scene_spec.py). Routes refuse what can't
+            # be filled before they get here; this is the backstop.
+            "params": dict(normalize_scene_params(definition_id, params, strict=False,
+                                                  reserved=shot_port_ids(outputs))),
             "outputs": dict(outputs) if outputs else {},
         }
         if position is not None:
@@ -128,9 +138,9 @@ class CLIGraph:
     ) -> dict[str, str]:
         """Connect two nodes by port. Returns the created edge dict."""
         if src_id not in self.nodes:
-            raise ValueError(f"Source node '{src_id}' not found")
+            raise ValueError(f"Source node {src_id} not found")
         if dst_id not in self.nodes:
-            raise ValueError(f"Target node '{dst_id}' not found")
+            raise ValueError(f"Target node {dst_id} not found")
 
         # len+1 alone can land on a live edge's id after a removal.
         taken = {str(e.get("id")) for e in self.edges}
@@ -151,21 +161,21 @@ class CLIGraph:
     def update_params(self, node_id: str, params: dict[str, Any]) -> None:
         """Merge *params* into the node's existing params dict."""
         if node_id not in self.nodes:
-            raise ValueError(f"Node '{node_id}' not found")
+            raise ValueError(f"Node {node_id} not found")
         self.nodes[node_id]["params"].update(params)
         self._maybe_persist()
 
     def set_params(self, node_id: str, params: dict[str, Any]) -> None:
         """Replace the node's params (``update_params`` merges)."""
         if node_id not in self.nodes:
-            raise ValueError(f"Node '{node_id}' not found")
+            raise ValueError(f"Node {node_id} not found")
         self.nodes[node_id]["params"] = dict(params)
         self._maybe_persist()
 
     def set_label(self, node_id: str, label: str | None) -> None:
         """Give a node a custom name, or clear it (None) to show the model's name."""
         if node_id not in self.nodes:
-            raise ValueError(f"Node '{node_id}' not found")
+            raise ValueError(f"Node {node_id} not found")
         if label is None:
             self.nodes[node_id].pop("label", None)
         else:
@@ -181,7 +191,7 @@ class CLIGraph:
         """
         unknown = [node_id for node_id in positions if node_id not in self.nodes]
         if unknown:
-            raise ValueError(f"Node '{unknown[0]}' not found")
+            raise ValueError(f"Node {unknown[0]} not found")
         for node_id, position in positions.items():
             x = float(position["x"])
             y = float(position["y"])
@@ -196,7 +206,7 @@ class CLIGraph:
     def remove_node(self, node_id: str) -> None:
         """Remove a node and any edges touching it. Raises if node_id is unknown."""
         if node_id not in self.nodes:
-            raise ValueError(f"Node '{node_id}' not found")
+            raise ValueError(f"Node {node_id} not found")
         del self.nodes[node_id]
         self.edges = [
             e for e in self.edges if e["source"] != node_id and e["target"] != node_id
@@ -379,7 +389,21 @@ class CLIGraph:
         # Build everything first and assign together, so a file that fails
         # part way leaves the previous graph whole (main keeps it on failure,
         # and the next save would write new nodes with old edges otherwise).
-        nodes = {n["id"]: _migrate_retired(n) for n in migrated}
+        nodes = {n["id"]: _normalized_scene(_migrate_retired(n)) for n in migrated}
+        # A shot that lost its id in the file was given a new one: the port
+        # it owned (its image) moves to its new id, with its wires (PR #198
+        # review 5, L3). A port no shot owns stays: a removed shot's late
+        # image, which an undo that brings the shot back takes.
+        raw_params = {n["id"]: n.get("params") for n in migrated}
+        for node_id, node in nodes.items():
+            claimed = claim_stray_ports(raw_params.get(node_id), node.get("params"), node.get("outputs")) \
+                if node.get("definitionId") == "cinema-scene" else {}
+            if not claimed:
+                continue
+            nodes[node_id] = {**node, "outputs": rekeyed_outputs(node["outputs"], claimed)}
+            for edge in edges:
+                if isinstance(edge, dict) and edge.get("source") == node_id and edge.get("sourceHandle") in claimed:
+                    edge["sourceHandle"] = claimed[edge["sourceHandle"]]
         # A file written before an upgrade existed gets it once; the next save
         # records the current version, so a value set afterwards is kept.
         version = stored_version(data.get("paramsVersion"))
@@ -388,6 +412,17 @@ class CLIGraph:
         self.removed_shot_media = {}
         self.upgraded_on_load = upgraded
         self.params_advanced_on_load = version < PARAMS_VERSION
+
+
+def _normalized_scene(node: dict[str, Any]) -> dict[str, Any]:
+    """A saved Cinema scene with its missing fields filled in and no shot
+    left rendering (nothing renders across a load); every other node as is."""
+    params = node.get("params")
+    if not isinstance(params, dict):
+        return node
+    normalized = normalize_scene_params(str(node.get("definitionId", "")), params, strict=False,
+                                        reserved=shot_port_ids(node.get("outputs")))
+    return node if normalized is params else {**node, "params": normalized}
 
 
 def _migrate_retired(node: dict[str, Any]) -> dict[str, Any]:

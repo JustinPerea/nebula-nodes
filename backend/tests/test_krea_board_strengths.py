@@ -125,7 +125,7 @@ async def test_an_image_too_light_to_steer_is_left_out_with_a_note() -> None:
     })
     refs, notes = await _refs(board)
     assert refs == [{"url": "https://assets.example/1.png", "strength": 0.7}]
-    assert "Board 'Dusk': #2 is too light to steer at this board strength, so it wasn't sent." in notes
+    assert "Board “Dusk”: #2 is too light to steer at this board strength, so it wasn't sent." in notes
 
 
 @pytest.mark.asyncio
@@ -144,7 +144,7 @@ async def test_krea_board_run_note_lists_strengths() -> None:
     refs, notes = await _refs(board)
     # The plan's example (section 4.8 item 7): prebrief_v2_plain's weights.
     assert [ref["strength"] for ref in refs] == [0.1892, 0.1892, 0.1513, 0.1135, 0.0568]
-    assert notes == ["Board 'Dusk' sent 5 images; their strengths add up to the board's 0.70 "
+    assert notes == ["Board “Dusk” sent 5 images; their strengths add up to the board's 0.70 "
                      "(#1 0.19, #2 0.19, #3 0.15, #4 0.11, #5 0.06)."]
 
 
@@ -162,7 +162,7 @@ async def test_a_light_image_that_went_never_reads_as_zero_in_the_note() -> None
     assert refs[-1]["strength"] == 0.0039
     assert _exact_sum(refs) == Decimal("0.7")
     assert len(notes) == 1
-    assert notes[0].startswith("Board 'Dusk' sent 10 images; their strengths add up to the board's 0.70 (#1 0.08, ")
+    assert notes[0].startswith("Board “Dusk” sent 10 images; their strengths add up to the board's 0.70 (#1 0.08, ")
     assert notes[0].endswith(", #9 0.08, #10 0.0039).")
     assert not re.search(r" 0\.00[,)]", notes[0])
 
@@ -288,5 +288,5 @@ async def test_a_five_image_board_through_the_engine_sends_strengths_that_add_up
     assert [ref["strength"] for ref in refs] == [0.1892, 0.1892, 0.1513, 0.1135, 0.0568]
     assert _exact_sum(refs) == Decimal("0.7")
     executed = next(e for e in events if isinstance(e, ExecutedEvent) and e.node_id == "krea")
-    assert ("Board 'Dusk' sent 5 images; their strengths add up to the board's 0.70 "
+    assert ("Board “Dusk” sent 5 images; their strengths add up to the board's 0.70 "
             "(#1 0.19, #2 0.19, #3 0.15, #4 0.11, #5 0.06).") in (executed.notes or [])

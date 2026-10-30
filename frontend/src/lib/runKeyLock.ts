@@ -38,6 +38,13 @@ function routeKeyLock(
   return line ? { line, keys: route.missing ?? [] } : null;
 }
 
+/** Whether a node of this kind can ever be locked for a missing key: one of
+ * its routes has its own missing-key line (routeMissingKeyLine). A cheap
+ * test before reading a whole run's plan. */
+export function canKeyLock(definitionId: string | undefined): boolean {
+  return Boolean(definitionId && NODE_DEFINITIONS[definitionId]?.routes?.some((route) => Boolean(route.missingKeyLine)));
+}
+
 interface LockableNode {
   id: string;
   data?: { definitionId: string; params?: Record<string, unknown> };
@@ -153,4 +160,21 @@ export interface KeyLockedProps {
 export function keyLockedProps(reason: string | null, reasonId: string): KeyLockedProps {
   if (!reason) return {};
   return { 'aria-disabled': true, 'aria-describedby': reasonId, [KEY_LOCK_MARK]: '' };
+}
+
+/**
+ * One order for a control that the canvas lock and the key lock can both
+ * hold (PR #203 round 6, on PR #198's run lock): the canvas lock's reasons
+ * first, in its own order (this tab's run, then following, then offline:
+ * lib/canvasLock `act`), then the control's own disabled reason, then the
+ * missing key, as the control's own title comes last there. A control one
+ * of those holds is natively disabled with that line alone; only a control
+ * nothing else holds is key-locked (aria-disabled, focusable, the key line
+ * as its title and description).
+ */
+export function withKeyLock<T extends { disabled: boolean; title?: string | undefined }>(
+  props: T, reason: string | null | undefined, reasonId: string,
+): T & KeyLockedProps {
+  if (props.disabled || !reason) return props;
+  return { ...props, title: reason, ...keyLockedProps(reason, reasonId) };
 }

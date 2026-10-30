@@ -57,6 +57,7 @@ describe('proposalEstimateLabel', () => {
   it('shows a sourced $0 as "$0", not "~$0" (GM, PR #203 r1)', () => {
     expect(proposalEstimateLabel(priced(0, 0))).toBe('$0');
     expect(proposalEstimateLabel(priced(0.07, 0.07))).toBe('~$0.07');
-    expect(proposalEstimateLabel(priced(0, 0, true))).toBe('$0+');
+    // An open run is an estimate: the shared formatter's form (PR #198).
+    expect(proposalEstimateLabel(priced(0, 0, true))).toBe('$0 + unpriced');
   });
 });

@@ -21,6 +21,7 @@ import { storedImageView } from '../../lib/storedImage';
 import { OutsideImageNote } from '../OutsideImageNote';
 import { WorkspaceHeader } from '../WorkspaceHeader';
 import { useAssetStudioDraft } from '../../hooks/useAssetStudioDraft';
+import { useOfflineHiddenNotice } from '../../hooks/useOfflineHiddenNotice';
 import { assetStudioDraftKey, resolveAssetStudioDraftKey, useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
 import { NEW_MOODBOARD_SENTINEL } from '../../lib/studioSentinels';
 import { NO_PROJECT_OPEN, currentProject, useCurrentProject } from '../../lib/currentProject';
@@ -310,6 +311,16 @@ export function MoodboardStudioView() {
   useEffect(() => {
     setUploading(false);
   }, [key, epoch]);
+
+  // A load-failure notice ("Moodboard not found…") is hidden while Nebula is
+  // offline, and the board is checked again on reconnect (GM, PR #198 r2): a
+  // failed load is retried, and a not-found one reloaded unless the person
+  // has started a new board here since.
+  const shownLoadError = useOfflineHiddenNotice(loadError, () => {
+    if (!projectReady) return;
+    if (!loaded) patch({ loadError: null, revision: revision + 1 });
+    else if (!dirty && !isDraftId && moodboardEditorId) patch({ loaded: false, loadError: null, revision: revision + 1 });
+  });
 
   useEffect(() => {
     if (!projectReady || loaded) return;
@@ -1081,15 +1092,15 @@ export function MoodboardStudioView() {
       {/* Retry loading reloads the board, so it shows (with GM's short line)
           only for a load that failed; with no project open there's nothing
           to reload, and the line says what to do (round 3b). */}
-      {loadError ? <div role="alert"><FailureLines failure={loadError} retry={projectReady} /></div> : 'Loading Moodboard...'}
-      {loadError && projectReady && <button type="button" className="moodboard-studio-toolbar__button"
+      {shownLoadError ? <div role="alert"><FailureLines failure={shownLoadError} retry={projectReady} /></div> : 'Loading Moodboard...'}
+      {shownLoadError && projectReady && <button type="button" className="moodboard-studio-toolbar__button"
         onClick={() => patch({ loadError: null, revision: revision + 1 })}>Retry loading</button>}
     </div>
   );
 
   const notices = (
     <>
-      {loadError && <div className="moodboard-studio__notice moodboard-studio__notice--warn"><FailureLines failure={loadError} /></div>}
+      {shownLoadError && <div className="moodboard-studio__notice moodboard-studio__notice--warn"><FailureLines failure={shownLoadError} /></div>}
       {/* A delete's failure shows here even while the last delete's Undo toast is up (round 3b). */}
       {deleting.deleteError && (
         <div className="moodboard-studio__notice moodboard-studio__notice--error" role="alert"><FailureLines failure={deleting.deleteError} /></div>

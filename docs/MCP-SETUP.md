@@ -119,7 +119,7 @@ The server exposes these tools for building and running (see
   `create`/`quick` and a Style's `model_id` (`style_create`/`style_update`,
   `nebula style new/set --model`) take ids only, because they store and bill by id and a
   display name can be renamed or come to be shared; given a name they refuse
-  with "unknown node definition 'moodboard': did you mean nebula-moodboard
+  with "unknown node definition moodboard: did you mean nebula-moodboard
   (Moodboard)?". (Before, `nebula create` stored a node of any type it was
   given and `nebula quick` tried to run it.) A local node that still calls
   a provider also has `runsWithOptions`: readiness per value of the param that
@@ -634,14 +634,23 @@ own eye-off button or Settings > Preferences > "Agent log"): the agent's
 name in its cursor colour, the cursor's words ("Added “Moodboard”", "Running
 “Krea 2”", "Connecting “Prompt” to “Krea 2”", "Accepted"; a node by its name in
 curly quotes, else its type's name), and the time. A params change names the
-fields by the labels the card shows them under, in the card's order: "Set
-“Aspect ratio”", "Set “Aspect ratio” and “Resolution”", and "Changed 3 settings" for
-three or more on the cursor (the Agent log names them all; a universal
-node's own fields follow the card's order too). A field the card shows no label for is left out of the bubble
-and its count (with none labelled the cursor moves without words), and the
-Agent log names it by its key instead, after the labelled fields ("Set
-“Aspect ratio”, “Seed” and seed_mode", "Set seed_mode"), up to four names
-and then a count ("Set “Aspect ratio”, “Seed”, seed_mode, cfg and 2 more"). Moodboard writes are listed there too
+fields by the labels the card shows them under, in the card's order, never
+the param key: "Set “Aspect ratio”", "Set “Aspect ratio” and “Resolution”",
+and "Changed 3 settings" for three or more on the cursor (the Agent log
+names them all; a universal node's own fields follow the card's order too).
+A Replicate model's own settings are named by their key in sentence case,
+"Set “Guidance scale”". A field the card shows no label for is left out of
+the bubble and its count (with none labelled the cursor moves without
+words), and the Agent log names it by its key instead, after the labelled
+fields ("Set “Aspect ratio”, “Seed” and seed_mode", "Set seed_mode"), up to
+four names and then a count ("Set “Aspect ratio”, “Seed”, seed_mode, cfg and
+2 more"). A universal node's extra provider param that no Inspector control
+shows (on the FAL, OpenRouter and Nous nodes) is never named by its key:
+when a change is only those, the cursor moves without words and the log says
+"Changed a setting on “<node>”" or "Changed 3 settings on “<node>”". No
+action is left out: the presence event carries `log`, the Agent log's line,
+when it differs from `say`, and an action with no words at all is listed in
+the Agents panel's words ("Changed “Hero”"). Moodboard writes are listed there too
 (your edit batch's `say`, else the journal's words: "Set aside #1 on board
 Dusk"; "Analyzed board Dusk"), and so is a run of the
 whole canvas ("Running 4 nodes"); neither has one place on the canvas, so
@@ -1092,7 +1101,20 @@ and shot runs (`/api/cinema/generate-shot`) check both at their first check
 and again at the last one before the run is registered, with nothing
 awaited in between, so a start that began before the Stop landed is refused
 with 409 "run '<id>' was cancelled before it started" and nothing is sent or
-spent. What each surface says:
+spent. A start under an id a Stop was recorded for is always refused the
+same way (409); its `detail` says only what this process knows (review 17
+L4): "run '<id>' was already stopped, so this id can’t start again. Start a
+new run with a new id." for a run that registered here and was stopped;
+"run '<id>' already ran, so this id can’t start again. …" for one that
+ended before its Stop; "… was cancelled before it started" only when the
+Stop reached the id while this process was admitting its start; otherwise
+(a run from before a restart, a Stop for an id never seen) "run '<id>' was
+stopped, so this id can’t start again. Start a new run with a new id."
+A Stop that lands at a World Labs node's paid-start claim, the last step
+before the run registers, is refused in the same words (PR #198 review 1).
+Agents and the CLI never pick a run id (`run_nodes`, `/api/graph/run` and
+`nebula run` make one), so they meet this only by re-sending a request a
+script built; start a new run instead. What each surface says:
 
 - `DELETE /api/executions/{runId}` and `GET /api/executions/{runId}` answer
   `{"status": "cancelled", "pendingAdmission": true}`.
@@ -1133,9 +1155,12 @@ recovery journal, durable Stop state), and the canvas says "Couldn't start
 the run. Nebula couldn't save its run safeguards, so nothing was started.
 Restart Nebula, then try again." `project_store` is the project catalog
 (an unreadable `catalog.json` or a storage error): nothing was started
-either (the project is read before the run exists), but a restart doesn't
-clear it, so the canvas gives its general line. Repairing the catalog or
-the storage does, and the same start then works. Don't parse `detail`.
+either (the project is read before the run exists), and a restart doesn't
+clear it, so the canvas says "Couldn't run “<node>”." (or "Couldn't start
+the run." for more than one node) and then "Nebula can't read its project
+list, so nothing was started. Check that the drive Nebula saves to is
+connected and has space, then try again." Repairing the catalog or the
+storage clears it, and the same start then works. Don't parse `detail`.
 
 Every process the backend starts (agents, the Commons reader, ffmpeg, the
 Remotion renderer, git, `open`, `ps`, `sips`, `brctl`) gets the backend's
@@ -1285,7 +1310,7 @@ Round 3e gave the pre-run check the same split. A run the check refuses
 that no longer fits) still answers agents exactly as before: `run_nodes`,
 `/api/graph/run` and `nebula run` list each node's `message` in `errors`,
 word for word ("Missing API key: OPENAI_API_KEY", "Required input port
-'prompt' is not connected", "Batch has 3 items, exceeding its
+prompt is not connected", "Batch has 3 items, exceeding its
 batch_size_cap of 2. ..."), and `look_at_canvas` / `nebula look` show it
 as the node's `error`. Only the canvas's own answer (`/api/execute`,
 `/api/execute-node`, a shot run) and the `validationError` socket event
@@ -2164,7 +2189,7 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   Generate again when it finishes."); if a graph import is running,
   "Nothing ran. Nebula is still importing. Click “Run” again when it
   finishes." (from Cinema, "… Generate again when it finishes."). A notice
-  that arrives while "Codex changed the canvas" offers its Undo shows above
+  that arrives while "Codex changed the canvas." offers its Undo shows above
   it and leaves the Undo in place. While the dialog is open, focus stays in
   it (if the rows stop scrolling while they have focus, focus moves to
   Cancel) and no key acts behind it: not Cmd+Enter, Delete or Backspace,
@@ -2599,6 +2624,15 @@ How it works (`backend/services/agent_spend.py`):
 - The cost is the upper estimate at list prices over every node the run
   includes, batches counted. Nebula can't know in advance what the cache will
   skip, so the estimate never undercounts.
+- Amounts are written one way on both sides (`backend/services/money.py`,
+  `frontend/src/lib/pricing.ts`, one table in
+  `contracts/fixtures/money/cases.json`): what was spent to the cent
+  ("$3.40", "$1,234.50", "<$0.01" for a non-zero amount under half a cent,
+  "$0.00" only for nothing), and a price, limit or estimate with two
+  significant figures under $0.10 ("$0.0047", "$0.044"), cents under $10
+  ("$0.43") and whole dollars from $10 ("$12"), picked after rounding
+  ("$0.10", never "$0.1"; "$10", never "$10.00"). A negative amount reads
+  as nothing ("$0.00", "$0"), never "$-0.00".
 - A cinema scene counts as its base image model (`scene.base.model`, default
   `seedream-4-5`), once per shot, and falls under that model's own limits. A
   base without a list price means the run must be proposed. A shot request
@@ -2683,7 +2717,10 @@ How it works (`backend/services/agent_spend.py`):
   change from anyone without the person token.
 
 `nebula spend` (or `GET /api/agent/spend`) shows an agent its limits and what
-its session has used. `budget` is `chat`, `shared` or `app`; outside callers
+its session has used, to the cent; an amount under half a cent that isn't
+nothing reads "<$0.01" (Settings shows spend the same way, and a Run or
+proposal chip shows any amount under a cent as "<$0.01": "$0" only ever
+means free). `budget` is `chat`, `shared` or `app`; outside callers
 also get `outsideSpent`, the shared 24-hour total.
 
 ### Personal agents' session tokens
@@ -3089,6 +3126,10 @@ its own `detail`:
 | Open or make a project (`open_project`, `new_project`, `nebula project open` / `new`) | `POST /api/projects/{id}/open`, `POST /api/projects` | "Cannot switch projects while a run is active. Wait for the run to finish or stop it first." |
 | Delete the open project (the Projects screen) | `DELETE /api/projects/{id}` | "Cannot delete the open project while a run is active. Wait for the run to finish or stop it first." |
 
+The person reads "A run is still going. Wait for it to finish or stop it
+first." for a Clear or a loaded graph (PR #198 review 4, N2: an import from
+the File menu during a run used to show the agent's text).
+
 A quick run (`nebula quick`, `POST /api/quick`) doesn't count: its nodes
 are temporary and never on the canvas, so nothing waits for it.
 
@@ -3176,6 +3217,9 @@ model's file inputs are its ports. One backend module has the rules
   model's ports from the same function.
 - `POST /api/universal/ports {definitionId, model, params?}` returns a
   model's ports without a node (and, for Replicate, its params and version).
+  A Replicate param's `label` is its key in sentence case ("Guidance
+  scale"), as the Inspector and your cursor's bubble show it; a port's
+  label stays in Title Case ("Input Image").
 - The canvas export, the connection checks (`port_contracts.node_ports`) and the
   run check read `_model_ports`, so the canvas draws the ports and connections an
   agent made without a reload. A node saved before 2026-10-20 has no
@@ -3323,7 +3367,7 @@ answers.
 How it works: a graphSync caused by an edit request carries `edit` =
 `{actor, tab?, id?, undoes?}`. `id` names an agent's apply or undo (its
 `undo.editId`), and `undoes` says the sync is an agent undoing that edit
-(the notice then reads "Claude undid its edit"). `actor` is the request's journal actor (a named agent, the
+(the notice then reads "Claude undid its edit."). `actor` is the request's journal actor (a named agent, the
 person, or anonymous). `tab` is the canvas tab that sent it (`X-Nebula-Tab`,
 set by the canvas on every write), so that tab skips the echo of its own
 edit. Only the person's canvas (this launch's person token) gets a `tab`:
@@ -3486,6 +3530,519 @@ Nebula's log). `wait` waits for it to end,
 as for a CLI run. A CLI run that is still going also carries `nodes` and
 `startedBy`; once it ends it answers exactly as its start did. The run id
 comes from the `run.started` journal events (`wait_for_canvas_change`).
+
+### Cinema scenes over MCP
+
+A `cinema-scene` node's `scene` is filled in on every write that sets it
+(`backend/services/cinema_scene_spec.py`, PR #198 reviews 2 and 3). Only
+`shots` is needed; a missing `version` is 1, a missing or empty `base` (or
+`base.model`) is `{"model": "seedream-4-5"}`, a missing or empty
+`aspectRatio` is "16:9", a shot without `prompt` gets "". A scene sent as JSON
+text (`nebula add cinema-scene --param scene='{…}'`, since the CLI sends every
+`--param` as text) is read as the object it spells.
+
+What happens to a scene that can't be filled in depends on who wrote it:
+
+- **An agent-authored write is refused** with 400 and a `detail` naming the
+  field (`scene.shots must be a list of shots`, `scene.shots[1].id 's1' is
+  used twice`, `scene.base must be an object like {"model": "seedream-4-5"}`,
+  `scene.shots[0].prompt must be text`, `scene.version must be a whole
+  number`) and an example of the shape, so you can fix the call. These are
+  strict: `edit_canvas` and `nebula apply` adding the node, `propose_change`
+  (and its Accept), `POST /api/graph/node` (`nebula add`) and `PUT
+  /api/graph/node/{id}` (`nebula set`) from an agent, the CLI or a script,
+  and a cluster an agent adds.
+- **Everything else converts it and never refuses**: a project's open, every
+  project save and autosave, the handoff save after a switch, a recovered
+  copy, `/api/graph/import` and `load_graph_file`, a `.nebula` file, the
+  saved `state.json`, the person's own create and edits in Cinema, and every
+  undo or redo (`/api/graph/restore`). These are lenient whoever calls them:
+  an agent's `load_graph_file`, `nebula load`, `/api/graph/import` or
+  `/api/graph/restore` converts a damaged scene too, without a 400, so check
+  the scene with `look_at_canvas` after loading one you didn't write. A
+  saved project always opens and saves, so the results it holds stay
+  reachable. The conversion: a `base`
+  written as a model name becomes `{"model": "<name>"}`; a `version` that
+  isn't a whole number becomes 1; a prompt that is a number becomes its text
+  and any other non-text prompt becomes ""; a shot with no id, or with an id
+  an earlier shot has, gets a new one no shot in the scene has ("s1", "s2",
+  …; the first shot with an id keeps it, with its port and connections). A new id
+  is never one a `shot_<id>` output on the node still names (a removed
+  shot's late image), so a converted shot never takes over that image or its
+  connections. A shot that lost its id keeps its own port, though: on a lenient
+  open, import or `state.json` load, a `shot_<id>` port whose image is a
+  renumbered shot's `output.imageUrl` moves to that shot's new id
+  (`shot_s2` to `shot_s3`), and its connections go with it. On an open or import,
+  an output port no shot can claim (a removed shot's late image, an id whose
+  case differs, a scene that can't be read), and a saved connection from it, are
+  dropped instead of refusing the file. Each node that lost a connection
+  that way gets a line in the answer's `warnings` (`/api/graph/import`,
+  `load_graph_file`, `nebula load`, `open_project`; the person reads it in
+  the "Opened." notice) and, for an agent's load or open, in the Agent log:
+  "Removed the connection to shot port s2 on “Opening”, node n4. That shot
+  no longer exists.", or "Removed 3 connections to shot ports on “Opening”,
+  node n4. Those shots no longer exist."; opening a project adds "while
+  loading the project" before the first period. The Agent log says up to 5
+  of these, then one line for the rest ("…on “A”, “B”, “C” and 4 more…").
+  Every dropped port and connection, including a port nothing was connected
+  to (which has no line), is in the `canvas.replaced` event's `droppedPorts`
+  ([{nodeId, handle, port, connections}]). An undo or redo
+  (`/api/graph/restore`) that puts a scene back keeps such a port when it
+  holds an image, as the live node had it, so undoing the shot's removal
+  next takes that image. A shot
+  that is only text becomes a shot with that prompt; anything else that
+  can't be read (a `shots` that isn't a list, a shot that isn't an object, an
+  `aspectRatio` that isn't text, a `base.params` that isn't an object) takes
+  the default. The same scene always converts the same way, so the ids an
+  open gives are the ones the next save keeps.
+
+Cinema reads a scene through the same defaults. A card the canvas still
+can't draw keeps its header (icon and label) and shows a contained line in
+its body instead of blanking the canvas, and a studio (Cinema, the video
+editor, the composition editor) shows its line under its header with Back
+to canvas. Which line depends on a check of the node's data (a known
+`definitionId`, a text `label`, `params` and `outputs` objects, a scene's
+shots and base, an edit's `clips`, a composition's `manifest.timeline`):
+
+- the check names a field: the card reads "Couldn't show “<node>”. Some of
+  its data is missing or damaged.", the studio "Couldn't open “<node>”. Some
+  of its data is missing or damaged, so Nebula can't show it.", and the
+  Agent log "Couldn't open “<node>”, node n4. <field> is missing.";
+- the data checks out (the fault is Nebula's drawing): the card reads
+  "Couldn't show “<node>”. Nebula ran into a problem drawing it, but its data
+  is fine. Reload Nebula to try again." (the studio: "Couldn't open “<node>”.
+  Nebula ran into a problem showing it, but its data is fine. …"), and the
+  Agent log "Couldn't draw “<node>”, node n4. <error message>". Changing the
+  node's data won't help here; tell the person to reload.
+
+A shot's stored `output.status` is never `running`: a run writes `done` or
+`error`, so a `running` (or `queued`) a write or a saved file carries is
+settled to `done` when the shot has an image, else `idle`. An undo that
+brings a removed shot back keeps its image only when it was `done` or
+`error`; when a run put a newer image on the shot's port after it left, the
+shot takes that image and the port keeps it, with the variation batch that
+image came from (when Nebula still has it) or, for a single image, its old
+variations with none selected unless the image is one of them.
+
+A run protects what it renders, from the moment its start reaches Nebula
+(before its spending check) until the engine is done with it:
+
+- a shot run, its own shot and every shot of the scenes upstream of it
+  that it renders first, until the run ends (through every variation pass,
+  and released when it finishes, is stopped or fails);
+- a run that includes a scene (Run on the canvas, `nebula run`, a run of a
+  node the scene feeds), every shot of that scene until the scene's own node
+  finishes, fails or is skipped (a cached scene frees at once); a downstream
+  video's render doesn't hold it. A run that includes several scenes
+  protects each one.
+
+While protected:
+
+- a write that would remove a rendering shot is refused with 409 and changes
+  nothing: "Shot 2 (s2) of “Opening” (n4) is still rendering (run <id>), so
+  it can’t be removed. Stop the run first (cancel_run, or `nebula cancel
+  <id>`; a run the person started is theirs to stop) or wait for it to
+  finish, then try again. Nothing changed." The person reads GM's line
+  instead: an undo or redo reads "Couldn’t undo. It would remove “Shot 2”,
+  which is still running. Stop the run first." ("Couldn’t redo. …"; "…Wait
+  for it to finish." while the run is still being admitted), and the canvas
+  refuses that undo itself before sending it;
+- deleting the scene (`remove_from_canvas`, `edit_canvas` `remove`, `DELETE
+  /api/graph/node/{id}`, an undo of its add) is refused with 409: "Couldn’t
+  delete “Scene”, node n4. “Shot 2” is still running, run <id>." (two or
+  three shots are named, four or more counted: "4 shots are still
+  running"). The Agent log shows the same line under the agent's name. The
+  person reads "Couldn’t delete “Scene”. “Shot 2” is still running. Stop
+  the run first." ("…Wait for it to finish." with no Stop for it), alone:
+  never after a generic "Couldn't delete the node.". The 409 body carries
+  `rendering: {"shots": [2], "stoppable": true}` beside `detail` (the shot
+  numbers still running, and whether a Stop can end them yet: `false` while
+  the run is still being admitted), so a client can say which scene was kept
+  without reading the text;
+- a scene write that removes a rendering shot (an edit in Cinema, the
+  shot's ×) from a window that doesn't own the run is refused the same way;
+  that window puts the scene back as Nebula has it (the shot, its image and
+  its connections stay) and shows the backend's line, and a later edit never sends
+  the refused removal again.
+
+Every one of these 409s (the scene write `PUT /api/graph/node/{id}`, the
+canvas's undo or redo `POST /api/graph/restore`, and the scene's delete)
+answers the same body, for agents and the person alike, beside the `detail`
+each reads:
+
+```json
+{"detail": "…", "code": "rendering_shots",
+ "rendering": {"shotIds": ["s2"], "shots": [2], "stoppable": true}}
+```
+
+`shotIds` are the refused shots' ids in scene order, `shots` their numbers
+as the rail shows them, and `stoppable` whether a Stop can end the run yet.
+Nothing else in the write was taken: to keep the rest, send it again with
+those shots in it.
+
+#### A scene that changed since you read it (`scene_changed`)
+
+Every Cinema scene has a `sceneKey` (PR #198 fix round 8,
+`backend/services/scene_keys.py`): a name for its authoring, everything but
+the shots' runtime (`output`, `variations`, `selectedVariation`, which runs
+write). It also has a `sceneRev` (fix round 9): a number that grows each
+time Nebula holds another authoring of that scene, across restarts too, so a
+client can tell an older scene from a newer one. `GET /api/graph/export`,
+`GET /api/graph` and `GET /api/canvas/snapshot` list them as `sceneKeys` and
+`sceneRevs` ({node id: key}, {node id: revision}; both left out when the
+canvas has no scene), every graphSync carries them, and the answer to a
+scene write (`PUT /api/graph/node/{id}` with `params.scene`) has the new
+ones as `sceneKey` and `sceneRev`.
+
+A scene write is held to the scene it was built on, the same rule for
+agents and the person (it is symmetric, so neither side's older copy goes
+back over the other's change):
+
+- with `ifSceneKey` in the body, against that key;
+- without one, for an agent, against the scene that reader last read: its
+  export, snapshot or `GET /api/graph`, or its own last write of that
+  scene. An agent that read the scene before the person typed in it is
+  refused; one that never read it writes it as it sends it (the last
+  writer), as before;
+- the person's canvas sends `ifSceneKey` on every scene save.
+
+A write whose scene is the one Nebula has now is never refused (it changes
+nothing in the scene; its other params are saved).
+
+**Who a reader is.** A read belongs to a session: a verified agent token
+(`Authorization: Agent <token>`) is its chat session's reader, apart from
+everyone else; otherwise the name in `X-Nebula-Agent` together with
+`X-Nebula-Agent-Session`. The MCP server sends a session of its own (one per
+server process; set `NEBULA_AGENT_SESSION` to choose it), and the CLI sends
+`NEBULA_AGENT_SESSION` only when it is set. A write is checked against its
+own channel's read first, and falls back only when that channel never read
+the scene:
+
+- with a session, against that session's own read (two lanes with their own
+  sessions never share a read); if that session never read it, against the
+  newest read by any session of that name, else the name's read with no
+  session;
+- with no session (as `nebula set` and a plain PUT send by default), against
+  the name's own read with no session (`nebula look`); if it never read the
+  scene, against the newest read by any session of that name.
+
+So a scene you looked at over MCP guards a later `nebula set` that never
+read it, but an MCP look never refreshes a CLI read: a `nebula set` built
+on an older `nebula look` is refused even after a fresh MCP look, though
+the MCP look saw the current scene. That refusal is the safe failure: run
+`nebula look`, then redo your change on what it shows. MCP and the CLI share
+one read only when both send the same `NEBULA_AGENT_SESSION`. A lane that
+writes with its own session must read with that session too.
+
+**What counts as a read.** The export, the snapshot and `GET /api/graph`
+(`nebula look`), every time: a loop that polls the export as an agent keeps
+that session's read current, so its next write is checked against the
+latest poll, not against what the agent last looked at. A refusal is not a read: the CLI prints only its detail, so an agent
+that sends the same copy again is refused again until it reads. Reads are
+kept per canvas (its project and canvas epoch) and survive a project switch
+away and back; a canvas clear or import starts new ones.
+
+**MCP has no scene write.** `edit_canvas` answers 400 "Cinema scenes can't
+be changed by an edit; edit them in Cinema" for an existing scene; the
+writes held to this rule are `PUT /api/graph/node/{id}` and `nebula set`.
+
+A write built on a scene that changed since is refused with 409, and
+nothing in it was saved:
+
+```json
+{"detail": "“Opening” changed since you last read it, so nothing was changed. Read it again and redo your change.",
+ "code": "scene_changed", "scene": {"version": 1, "shots": […]}, "sceneKey": "…", "sceneRev": 1761650000000123,
+ "changedBy": {"kind": "person", "name": "You"}}
+```
+
+`scene` is the scene Nebula has now, `sceneKey` and `sceneRev` its key and
+revision, and `changedBy` who last changed it (`agent` with its name,
+`person` as "You", `anonymous` for a request with neither an agent marker
+nor the person's token, `system` for Nebula itself; `null` when Nebula
+doesn't know, after a restart). A restore (the canvas's undo or redo, your
+undo) counts as a write by whoever restored. Read
+the scene again (`nebula look`), put your change on top and send it; over
+HTTP you can instead take `scene` from this answer and send your change on
+it with `ifSceneKey` set to this answer's `sceneKey`. A change to a shot's
+runtime alone (a run's image) is no change, and the other params of the
+node are never held to the key. Nothing is shown to the person for an
+agent's refusal: no Agent log row, no toast (the change is the agent's to
+redo).
+
+The person never reads this line. Their canvas merges the two changes
+(each side's fields kept) and sends again, silently; only when both
+changed the same thing does the card ask, with one line for the clash
+("Codex changed “Opening” while you were editing it." [Use Codex’s]
+[Keep mine]; for a reorder "Codex reordered the shots in “Opening” while you
+were editing them."; for shots you removed that they were editing "Codex
+removed “Shot 2” and “Shot 3” while you were editing them."; when a removed
+shot comes back with other text, "Codex changed “Shot 2” while you were
+editing it."). "In another window" is said only for the person's own other
+tab; for any writer Nebula can't name (`anonymous`, `system`, none) the
+line says nothing of who: "“Opening” changed while you were editing it.",
+"The shots in “Opening” were reordered while you were editing them.",
+"“Shot 2” was removed while you were editing it." It is never a "Couldn't save" line and never counts toward
+the canvas's retries. When a writer refuses it 20 times in a row the save
+stops, "Unsaved" with [Try again], and the line names you: "Codex kept
+changing “Opening”, so your changes aren’t saved yet. Nebula will try
+again when Codex stops." ("An agent kept changing…" with no name; "…kept
+changing in another window…" for the person's other window; "“Opening”
+kept changing, so your changes aren’t saved yet. Nebula will try again when
+it stops." for a writer Nebula can't name). It goes
+again with the person's next change, [Try again] or a reconnect, and once
+by itself about 2 s after the last change another writer brings, so stop
+writing that scene for a moment and their edits land. The canvas ignores
+any scene below a revision it has already seen from the same backend
+process (a sync that arrives late), and any sync from a process it has
+seen replaced (the health answer and the socket's first `graphSync` carry
+`bootId` and `bootStartedAt`, when that process started, in microseconds,
+so the newer of two processes wins whatever order their messages arrive
+in); a restarted Nebula starts the count again. So when you change a scene the
+person is editing, your change stays unless they changed the same field and
+choose Keep mine; read the scene again before a second write. Once the
+person answers, the prompt stays while the answer's save is on its way,
+its buttons held (they take the disabled look after a moment), and goes
+when that save is answered: saved, nothing more shows; failed, the line for
+that failure takes its place (a stopped scene's stop line in the same
+moment); a write of yours that clashes again asks again with a new prompt.
+The prompt waits 15 seconds at most: past that it goes, the person's answer
+stands, and the save carries on as an ordinary save (saved later, nothing
+shows; failed, its own stop line). On a stopped scene the answer is the one
+try, and past 15 seconds the scene is stopped again in the same moment.
+
+When Keep mine brings back a shot you removed, its connections go back
+with `POST /api/graph/connect` and `"onlyIfFree": true`: if that input
+takes one connection (a single-connection input) and holds another one now
+(yours, say), Nebula refuses with 409 `input_taken` and nothing changes;
+the card then says "“Shot 2” is back without its connection to “Edit A”."
+Into an input that takes several, `onlyIfFree` changes nothing: the connect
+is held to that input's `maxConnections`, as any connect is. A connect
+without `onlyIfFree` is as before.
+
+The other whole-write refusals of a scene write carry a `code` too, so a
+client picks its words by the cause, not the text (each `detail` is as it
+was):
+
+| `code` | Status | Why | Also |
+|---|---|---|---|
+| `paid_start` | 409 | a World Labs paid start is settling; try again in a moment | |
+| `approved_run` | 409 | an agent's edit to a run the person approved and the canvas hasn't started (never the person's) | |
+| `workspace_moved` | 409 | another project was opened, made or deleted since the caller read it (a tab's `X-Nebula-Workspace-Revision`, or a write that waited); nothing changed | `project`: `{id, name}` of the project open now (`null` for the unfiled canvas); `switchedBy`: `{kind, name}` of who did it (`agent` with its name, `person` as "You"), or `null` when Nebula doesn't know (it restarted since) |
+| `canvas_replaced` | 409 | the same project is open, but its canvas was cleared or replaced (a graph import) since the caller read it (a tab's `X-Nebula-Canvas-Revision`, or a write that waited), so node ids may name new nodes; nothing changed | the same `project` and `switchedBy` as `workspace_moved` |
+| `scene_changed` | 409 | a scene write built on a scene that changed since (its `ifSceneKey`, or for an agent the scene that session last read); nothing was saved (above) | `scene`, `sceneKey`, `sceneRev`, `changedBy` |
+| `node_gone` | 404 | a node write (`PUT /api/graph/node/{id}`) to a node that isn't on the canvas: someone deleted it (the detail for an agent is `Node n4 not found`, the id bare) | `deletedBy`: `{kind, name}` of who deleted it, as `changedBy` names a writer, or `null` when Nebula didn't see the delete |
+| `unknown_definition` | 400 | a node write named a node definition the registry doesn't have (`unknown node definition moodboard`; a value with spaces or other characters no id has is in “…”: `unknown node definition “GPT Image 2”`), or none at all (`unknown node definition ""`; the person reads "No node definition was given.") | `definitionId`: the raw value sent (`""` for none) |
+| `input_taken` | 409 | a connect with `"onlyIfFree": true` into a single-connection input that holds another connection; nothing changed (above) | |
+| `params_outdated` | 409 | the tab was built for another params version; reload | `paramsVersion` |
+| `run_safeguards` | 507 | the paid-start fence can't be read or written | |
+
+The same codes come from every route that refuses for those causes (a
+project switch, an import, a clear, a restore), always beside `detail`.
+
+On the person's canvas a deleted scene says so once ("Codex deleted
+“Opening”, so your changes to it can’t be saved."; "…was deleted in another
+window…" for the person's other tab; "“Opening” was deleted, so your changes
+to it can’t be saved." when Nebula didn't see who) and stops saving it. Your
+delete's own toast says it, with your edit's Undo: when your write only
+deleted the scene the toast is that line; when it did more, it is one
+sentence: "Codex changed the canvas and deleted “Opening”, so your changes
+to it can’t be saved.". When your undo (`undo_canvas_edit`, `nebula undo`)
+deleted the scene, however much else it undid, it is one sentence too:
+"Codex undid its edit and deleted “Opening”, so your changes to it can’t be
+saved.". If the
+delete is undone (that Undo, the person's Cmd+Z, or yours), the scene comes
+back as Nebula had it (the canvas's own Undo puts back Nebula's scene, not
+the card as it was shown, so it doesn't pick a value) and the person's
+edits are merged onto it and saved, with no new line;
+a field the person was still being asked about (your change clashed with
+theirs when you deleted it) is asked again, against the scene as it came
+back, unless your restored value is the person's. That holds for every
+way the scene comes back, each time: your undo, the canvas's Undo, the
+person's Redo and Undo again, their own delete undone, or another window's
+restore. No way back counts as an answer, and the person's own delete or
+Redo says nothing. While it is asked again the prompt is the only line
+for that scene: the delete toast, the Undo's own "Undid Codex’s edit.",
+"Codex undid its edit." with its [Undo], "Restored the node." with its
+[Redo] and any other line about that scene give way, and they don't come
+back once the person answers (lines about other nodes stay). Undo and Redo
+work from the keyboard, so no stale [Undo] can delete the scene behind an
+open question. The prompt has no ×, so focus
+goes to the prompt itself, never Keep mine. A
+`workspace_moved` refusal says nothing on the card: the project switch's
+own handling says it once (an agent's switch hands the edits over; any
+other stops on the outdated-workspace banner with its Reload, whose Try
+again keeps the person's scene edits as a recovered project, even ones the
+autosave had already sent). Once that copy is saved, a neutral notice takes
+the banner's place on Projects: "Your latest edits were saved as their own
+project, “Recovered canvas (recovered)”.", with [Open] (opens that copy)
+and ×. The copy is an ordinary project in `list_projects`, named after
+the project with "(recovered)" after it.
+
+A scene save refused 400 or 413 can't succeed as it is, whichever save it
+was: an ordinary one, the quiet try a stopped save makes when the writer
+that kept changing it goes quiet, the save the person's clash answer
+sends, a Try again or an edit. There is one line per status: 400 "Nebula
+can’t save your changes to “Opening”.", 413 "“Opening” is too big to
+save. Remove something from it, then try again.". Neither promises a
+retry. The card shows it as the scene's stop line (below), with
+Try again (there and in the "Unsaved" mark's popover), and nothing
+more goes until the person edits the scene or presses Try again; one of
+those refused the same way again keeps the same line and Try again, and
+your writes meanwhile never send it. Refused while a clash waits for the
+person, the clash prompt stays the only line for that scene and nothing for
+it is sent, on your writes or theirs, until they answer; then it is stopped
+the same way, with its line and Try again, unless the answer left nothing
+unsaved (Use Codex’s on the only changed field), when the stop and the
+"Unsaved" mark simply go. Your own write can end that clash too (it writes
+the person's value into the clashing field): that counts as their answer,
+with the same two outcomes. Other scenes keep saving.
+
+While a server error's timed retries run, the scene says an event line,
+"Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula
+is trying again."; it goes when the save lands, stops or the scene leaves
+the canvas, so it never sits under the stop line below.
+
+A stopped save's line is a state, not an event: the canvas shows the stop
+lines in their own place above its toasts, one line per cause, and no toast
+pushes one out. Scenes stopped for the same cause share one line, named up
+to three in reading order on the canvas (top to bottom, then left to right;
+cards whose tops are within a quarter of the smaller card's height read
+as one row, so a mirrored pair reads the same either way round), then
+counted: "Nebula can’t save your changes to “Opening” and
+“Ref scene”." (400); "Nebula couldn’t save your changes to “Opening” and
+“Ref scene”. They’re kept, and Nebula will try again with your next
+change." (a server error that went on past the retries); "“Opening” and
+“Ref scene” are too big to save. Remove something from them, then try
+again." (413; from four, "4 scenes are too big to save. …"); "Nebula
+couldn’t save your changes to “Opening” and “Ref scene”. Try again, or
+reload if it keeps happening." (a refusal Nebula has no line of its own
+for, when the backend gave no reason). A reason the backend wrote goes
+after the same heading but stays one line per scene, even when two scenes
+have the same text ("Nebula couldn’t save your changes to “Opening”. Shot
+2 has no model."), and so does a whole line the backend wrote. One scene
+keeps its own line, and "…kept changing…" stays one line per scene. None
+of these lines has a ×. Every line, and the "Unsaved" mark, names the
+scenes as their cards are named now: rename a scene while it is stopped,
+or while its Try again is on its way, and the line says the new name at
+once.
+
+A scene stopped by a refusal Nebula has no line of its own for differs
+from 400 and 413 in one way: when another writer (you, or another window)
+changes the scene, it makes one quiet try, since the scene as it is now
+might save. If that try is refused the same way, the scene is stopped
+again with its line and waits for the person (their edit, Try again or a
+clash answer); further changes from other writers send nothing more until
+the person acts. Refused another way, it is a stop of that kind under that
+kind's rule: after a server error it shows the server line, and the next
+change makes a quiet try again; after a 400 it waits. A delete and Undo
+don't buy another quiet try. While Nebula is retrying a server error by
+itself, the "Unsaved" mark names the scene as its card is named now, too.
+The
+line's Try again tries every scene it names once: those that save leave
+the line, those that fail stay in it, and no new round of retries starts.
+While those tries run, the line stays (marked busy) and Try again (there
+and in the "Unsaved" mark's popover) is disabled, its label unchanged, so a
+second press sends nothing; it takes the disabled look only after about
+150 ms, so a try that answers at once doesn't flicker. A try with no answer
+within 15 seconds counts as failed: the scene is stopped again with the
+same line and a live Try again. Every such try is tracked, so pressing Try
+again twice, each past 15 seconds, gives each its own late answer. If a
+try's save lands late while the card still holds what it sent, the stop
+and the "Unsaved" mark go at once; after the person changed the scene the
+stop stays (their next change sends it), and a late failure changes
+nothing (no retries start, nothing is said). A try refused because a run's inputs are locked (a paid
+start or an approved run) isn't a stop, and neither is any save a run's
+lock refuses: it isn't a failure. The scene's line waits in the same place
+as a state, with no Try again and no ×: "Your changes to “Opening” are
+kept. Nebula will save them when the run finishes." (merged the same way:
+"Your changes to “Opening” and “Ref scene” are kept. …", from four "Your
+changes to 4 scenes are kept. …"). It clears when the save goes after the
+run ends. If the save that a run held was a stopped scene's one try (Try
+again, the person's clash answer, Undo bringing a stopped scene back) and
+it still fails after the run, that is still the one try: the scene goes
+back to stopped with its line and Try again, with no new round of retries.
+That save has the same 15-second bound: with no answer by then the run's
+line gives way (in one step) to the line of the stop the scene was in
+before, with Try again: a 400 or 413 stop comes back as itself and keeps
+waiting for the person, and a stop for a reason Nebula has no line for
+keeps its reason. Its late answer, if it comes, follows the same rule as
+any try's. Every one try that gets no answer in time goes back to its own
+stop that way. A stopped scene's quiet try that a run holds swaps its stop
+line for the run's in one step.
+A scene leaves its line whenever its stop clears: it saved, or your write
+made it match the person's values (then the stop, the line and the
+"Unsaved" mark go together, and nothing is said or sent).
+
+While a scene has a line of its own (its stop line, or a clash prompt,
+the first time or asked again), your edits about that scene alone go only
+to the Agent log, with no "Codex changed
+the canvas." toast. Undo and Redo of them work from the keyboard. An edit
+to the clashed field rewrites the prompt to the latest state; one that
+makes it the person's value ends the clash (above). When your edit changes
+the situation, its own line replaces the scene's: you deleted the scene
+(the delete line above) or started a new clash (the clash prompt). Your
+edits about other nodes show their toast as usual, a connection from the scene
+into another node included (it changes that node's input), below the stop
+lines. The person's own toasts ("Deleted the node.", "Restored the node.",
+"Undid Codex’s edit.") show the same way; when their own Undo leaves
+nothing unsaved (the card is Nebula's scene again), the stop and the
+"Unsaved" mark go. When the person deletes a stopped scene, "Deleted the
+node." with Undo is the only line. That holds in every state the stop can
+be in: stopped, a Try again or an earlier Undo's save still on its way, or
+a clash waiting over the stop. Undo (theirs, or any that puts the scene
+back) brings it back with its "Unsaved" mark and sends one save at once;
+when a clash was waiting, it is asked again instead and sends nothing, and
+the person's answer is that one save.
+If it saves, the mark goes and no stop line ever shows. If it fails,
+whatever the cause, the scene is stopped again, with its line and Try
+again, and nothing more goes until the person acts (no new round of
+retries). A scene that comes back matching the
+person's values has no stop at all. While the person has a scene's
+"Unsaved" popover open, that scene leaves the stop line (its line is in
+the popover) and is back in it when the popover closes. The Agent log's
+line for a 400 or 413 carries the status and the code (`Couldn’t save
+“Opening”, node n1: HTTP 400 bad_params. <detail>`); the person's line
+never does.
+
+Ids and handles in details, run errors and CLI output take no quotes
+(`run run_ab12 already ran…`, `Node n4 not found`, `Required input port
+prompt is not connected`, `n4 has no output video`), so a copied id never
+carries a quote mark. A name you wrote that matches nothing takes “…”
+(`no Style “Neon dusk”`, `no board “Dusk”`, `2 boards are named “Dusk”`,
+`“grain” isn't on the Avoid list`, `openai has no model “gpt-9”`). A node
+definition you sent is bare when it looks like an id and in “…” when it
+doesn't (`unknown node definition “GPT Image 2”`); none at all is
+`unknown node definition ""` (code `unknown_definition`).
+A call you can make next is code, in backticks with its own quotes
+(`` `get_run('run_ab12')` ``).
+
+The canvas blocks the same things: the shot's × is disabled, titled "Stop
+the run first." or "Wait for “Shot 2” to finish."; the scene's Delete (the
+context menu, the Inspector, and the selection toolbar when only rendering
+scenes are selected) is disabled, titled "Stop the run first." or "Wait for
+“Scene” to finish." ("Stop the runs first." / "Wait for the running shots to
+finish." for several scenes).
+
+How a delete or an undo reads depends on whose run it is:
+
+- **A run this window started** locks every delete, undo and redo on the
+  canvas until it ends (the toolbar's are disabled, titled "Wait for the
+  active run to finish."). The Delete key, the menu's Delete and Undo/Redo
+  are never silent: a selection of only rendering scenes reads GM's scene
+  line ("Couldn’t delete “Scene”. “Shot 2” is still running. Stop the run
+  first."), an undo that would remove a rendering shot reads "Couldn’t undo.
+  It would remove “Shot 2”, which is still running. Stop the run first.",
+  and anything else reads the lock's own reason: "Couldn't delete “Brief”.
+  Wait for the active run to finish.", "Couldn't delete 3 nodes. Wait for
+  the active run to finish.", "Couldn't undo. Wait for the active run to
+  finish." ("Couldn't redo. …"). Nothing is sent.
+- **A run another window (or an agent) started** doesn't lock the canvas.
+  The Delete key over a selection deletes the rest and keeps the scene and
+  its connections: "Deleted 3 nodes. “Scene” wasn't deleted because “Shot 2” is
+  still running." (with Undo); two or three kept scenes are named, four or
+  more counted: "4 scenes weren't deleted because their shots are still
+  running." An undo that would remove a rendering shot is refused before
+  it's sent, with the line above.
 
 ### Universal nodes over MCP
 

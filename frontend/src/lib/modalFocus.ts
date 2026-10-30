@@ -72,6 +72,53 @@ export function noticeTabbables(): HTMLElement[] {
   return tabbablesIn(document.querySelector(NOTICE_REGION)).filter((element) => !element.closest(PROPOSAL_SLOT));
 }
 
+/** Whether `node` is in a notice that stays usable over a dialog: in the
+ * notice region, and not in the proposal bar's slot, which sits behind every
+ * dialog (review r5 MEDIUM-1 of PR #203). A dialog's focus and key traps let
+ * these through, as Tab does (noticeTabbables). */
+export function inNoticeAboveDialogs(node: EventTarget | null): boolean {
+  return inNoticeRegion(node) && node instanceof Element && node.closest(PROPOSAL_SLOT) === null;
+}
+
+/**
+ * A modal that hides the rest of the page while it is open (onboarding, the
+ * result comparison): every child of <body> that sits behind it goes inert
+ * and aria-hidden, and so does the proposal bar's slot inside the notice
+ * region (review r5 MEDIUM-1 of PR #203, GM r10 item 2), which the scrim
+ * dims like the canvas; the notices around it stay usable (GM r25). It holds
+ * as the page changes (a body child, the notice region, added later). The
+ * returned function puts back each element's own attributes, as they were
+ * before: the slot is the bar's container, so the bar's own `inert` (a
+ * leaving proposal's, lib/noticeLeave.ts) is never touched.
+ */
+export function hideBehind(own: Element): () => void {
+  const prior = new Map<Element, { inert: string | null; hidden: string | null }>();
+  const hide = (element: Element) => {
+    if (prior.has(element)) return;
+    prior.set(element, { inert: element.getAttribute('inert'), hidden: element.getAttribute('aria-hidden') });
+    element.setAttribute('inert', '');
+    element.setAttribute('aria-hidden', 'true');
+  };
+  const isolate = () => {
+    for (const sibling of document.body.children) if (sitsBehind(sibling, own)) hide(sibling);
+    for (const slot of document.querySelectorAll(`${NOTICE_REGION} ${PROPOSAL_SLOT}`)) if (!slot.contains(own)) hide(slot);
+  };
+  isolate();
+  // The region's slots come with it (NoticeRegion renders every slot), so a
+  // body child arriving is the only change to watch.
+  const observer = new MutationObserver(isolate);
+  observer.observe(document.body, { childList: true });
+  return () => {
+    observer.disconnect();
+    for (const [element, was] of prior) {
+      if (was.inert === null) element.removeAttribute('inert');
+      else element.setAttribute('inert', was.inert);
+      if (was.hidden === null) element.removeAttribute('aria-hidden');
+      else element.setAttribute('aria-hidden', was.hidden);
+    }
+  };
+}
+
 /** Where focus goes in a dialog that gets it back: its field (a prompt's
  * text, a palette's search), else its first control, else itself. */
 export function dialogStart(dialog: Element | null): HTMLElement | null {
@@ -156,12 +203,16 @@ function noticeOf(node: Element): Element | null {
  *   With no dialog open, the screen's own keys still work from a notice (the
  *   Studio's Cmd+Z from its undo toast).
  * - Tab is noticeTab's (the walk through the open dialog and the notices).
+ * - The proposal bar is no notice while a dialog is open (it is behind it).
  * Escape from inside a dialog is the dialog's own.
  */
 export function noticeKeys(event: KeyboardEvent): void {
   if (event.key === 'Tab' || event.isComposing) return;
   const target = event.target;
   if (!(target instanceof Element) || !inNoticeRegion(target)) return;
+  // The proposal bar sits behind an open dialog (review r5 MEDIUM-1 of PR
+  // #203): a key there is the page's, which the dialog's own trap takes.
+  if (!inNoticeAboveDialogs(target) && openModalDialog()) return;
   if (event.key !== 'Escape') {
     if (openModalDialog()) event.stopImmediatePropagation();
     return;

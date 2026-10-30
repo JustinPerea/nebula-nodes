@@ -355,7 +355,7 @@ def test_health_reports_the_params_version_and_keeps_its_identity():
     # person token, no params header.
     body = TestClient(main_module.app).get("/api/health").json()
     assert body == {"status": "ok", "app": "nebula", "version": "0.1.0", "paramsVersion": PARAMS_VERSION,
-                    "bootId": main_module.BACKEND_BOOT_ID}
+                    "bootId": main_module.BACKEND_BOOT_ID, "bootStartedAt": main_module.BACKEND_BOOT_STARTED_AT}
 
 
 def test_health_names_the_backend_process():

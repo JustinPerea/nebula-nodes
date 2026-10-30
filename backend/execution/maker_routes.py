@@ -53,7 +53,7 @@ def _definitions() -> dict[str, dict[str, Any]]:
 def definition_for(definition_id: str) -> dict[str, Any]:
     definition = _definitions().get(definition_id)
     if not definition:
-        raise ValueError(f"Unknown node definition {definition_id!r}")
+        raise ValueError(f"Unknown node definition {definition_id}")
     return definition
 
 

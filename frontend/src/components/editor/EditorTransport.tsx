@@ -26,6 +26,7 @@ import {
   type VideoExportResolution,
 } from '../../lib/renderJobs';
 import { useRenderJob } from '../../hooks/useRenderJob';
+import { offlineMark } from '../../lib/useBackendOffline';
 import { type EditClip, totalOutputDuration, clipSpeed, clampSpeedToFloor } from '../../lib/editor/virtualPlayback';
 import { formatSmpte } from '../../lib/editor/timecode';
 import type { NodeData } from '../../types';
@@ -47,6 +48,13 @@ interface Props {
  * someone edits."). It wraps to two rows when a clip is selected; the
  * clearance follows (it is measured whenever the row changes size). */
 export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
+  // Offline is read-only (round 15 of PR #114; GM r18 for this screen): what
+  // edits a clip or asks Nebula to render renders disabled with the offline
+  // mark. Play, the edit points, the zoom and the timecode stay usable. It is
+  // read from the canvas lock, the one source for offline (#195 round 22).
+  const lock = useCanvasLock();
+  const offline = lock.offline;
+  const off = offlineMark(offline);
   const [isRendering, setIsRendering] = useState(false);
   const [hasRendered, setHasRendered] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -66,11 +74,11 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
   // Round 23 (review 22, L-3): Cut, the speed and volume controls and Mute
   // edit the clip on the canvas, so they take the canvas lock. Play, the edit
   // points, Trim/Speed/Vol (they select and focus) and zoom only look, and
-  // stay enabled. Render Preview and Export… start a render on the backend
-  // (while following, of the canvas that is going away; offline it can't
-  // start), so they lock too (review 3 LOW-4), with the follow or reconnect
-  // tooltip.
-  const lock = useCanvasLock();
+  // stay enabled while following. Render Preview and Export… start a render
+  // on the backend (while following, of the canvas that is going away;
+  // offline it can't start), so they lock too (PR #200 review 3 LOW-4), with
+  // the follow or reconnect tooltip. (`lock` is read at the top: offline is
+  // read-only here too, PR #198.)
   const cutAtSource = useGraphStore((s) => s.cutEditNodeAtSource);
   const speedSliderRef = useRef<HTMLInputElement>(null);
   const volSliderRef = useRef<HTMLInputElement>(null);
@@ -189,11 +197,11 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
       </div>
       <span className="editor-transport__divider" />
       <div className="editor-transport__group">
-        <button className="editor-transport__tool" type="button" onClick={handleTrim} disabled={clips.length === 0} title="Drag the clip edges to trim">
+        <button className="editor-transport__tool" type="button" onClick={handleTrim} disabled={clips.length === 0 || offline} {...off} title="Drag the clip edges to trim">
           <Scissors className="editor-transport__icon" aria-hidden="true" focusable="false" />
           <span>Trim</span>
         </button>
-        <button className="editor-transport__tool" type="button" onClick={handleSpeed} disabled={clips.length === 0} title="Adjust playback speed">
+        <button className="editor-transport__tool" type="button" onClick={handleSpeed} disabled={clips.length === 0 || offline} {...off} title="Adjust playback speed">
           <Gauge className="editor-transport__icon" aria-hidden="true" focusable="false" />
           <span>Speed</span>
         </button>
@@ -201,7 +209,7 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
           <Split className="editor-transport__icon" aria-hidden="true" focusable="false" />
           <span>Cut</span>
         </button>
-        <button className="editor-transport__tool" type="button" onClick={handleVol} disabled={clips.length === 0} title="Adjust volume / mute">
+        <button className="editor-transport__tool" type="button" onClick={handleVol} disabled={clips.length === 0 || offline} {...off} title="Adjust volume / mute">
           <Volume2 className="editor-transport__icon" aria-hidden="true" focusable="false" />
           <span>Vol</span>
         </button>

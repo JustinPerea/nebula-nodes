@@ -388,6 +388,11 @@ def test_the_space_route_rules_are_validated():
     route["handler"] = "hf-space"
     route["missingKeyLine"] = " "
     assert any("missingKeyLine must be a sentence" in p for p in node_route.routes_problems(definition))
+
+
+def test_a_keyless_route_cant_carry_a_missing_key_line():
+    """The keyless half (review r5 LOW-2): built from keyless_idol, so it
+    passes before and after idol.md's switch back."""
     keyless = keyless_idol()
     keyless["routes"][0]["missingKeyLine"] = NEEDS_TOKEN
     assert any("missingKeyLine needs keys" in p for p in node_route.routes_problems(keyless))

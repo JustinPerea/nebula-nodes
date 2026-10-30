@@ -5,7 +5,7 @@ import { ResultDetails, ResultMetadata } from './ResultDetails';
 import '../../styles/result-comparison.css';
 import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
 import { ModalPortal } from '../ModalPortal';
-import { inNoticeRegion, sitsBehind } from '../../lib/modalFocus';
+import { hideBehind, inNoticeAboveDialogs } from '../../lib/modalFocus';
 
 export interface ComparisonResult {
   key: string;
@@ -47,27 +47,17 @@ export function ResultComparison({ items, onClose, onReuseSettings }: ResultComp
     const panel = panelRef.current;
     if (!overlay || !panel) return;
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const background = new Map<Element, { inert: string | null; hidden: string | null }>();
     const hadScrollLock = document.body.classList.contains('result-comparison-open');
     const focusClose = () => panel.querySelector<HTMLButtonElement>('.result-comparison__close')?.focus();
     // Move focus before hiding the opener's subtree from assistive technology.
     focusClose();
-    const isolate = () => {
-      for (const sibling of document.body.children) {
-        if (!sitsBehind(sibling, overlay) || background.has(sibling)) continue;
-        background.set(sibling, { inert: sibling.getAttribute('inert'), hidden: sibling.getAttribute('aria-hidden') });
-        sibling.setAttribute('inert', '');
-        sibling.setAttribute('aria-hidden', 'true');
-      }
-    };
-    isolate();
-    const observer = new MutationObserver(isolate);
-    observer.observe(document.body, { childList: true });
+    // The page behind, the proposal bar with it (review r5 MEDIUM-1).
+    const restore = hideBehind(overlay);
     const containFocus = (event: FocusEvent) => {
       // A modal dialog opened over the comparison keeps its own focus.
       if (keyBlockedByModal(panel)) return;
       // The app's notices are the trap's second region (GM r25).
-      if (event.target instanceof Node && !overlay.contains(event.target) && !inNoticeRegion(event.target)) focusClose();
+      if (event.target instanceof Node && !overlay.contains(event.target) && !inNoticeAboveDialogs(event.target)) focusClose();
     };
     const containKey = (event: KeyboardEvent) => {
       // A modal dialog opened over the comparison owns the keys (review 8, L-d).
@@ -75,7 +65,7 @@ export function ResultComparison({ items, onClose, onReuseSettings }: ResultComp
       // Review 15 LOW-A (fix round 18): a notice's keys are its own (Enter
       // and Space press its button, Tab and Shift+Tab: lib/modalFocus; Escape:
       // GM r27, noticeKeys), never the comparison's.
-      if (inNoticeRegion(event.target)) return;
+      if (inNoticeAboveDialogs(event.target)) return;
       // Keep global Canvas shortcuts out of the modal, including a body-level
       // event after browser focus loss. Native video/disclosure defaults remain.
       event.stopImmediatePropagation();
@@ -97,15 +87,9 @@ export function ResultComparison({ items, onClose, onReuseSettings }: ResultComp
     document.addEventListener('keydown', containKey, true);
     document.body.classList.add('result-comparison-open');
     return () => {
-      observer.disconnect();
       document.removeEventListener('focusin', containFocus);
       document.removeEventListener('keydown', containKey, true);
-      for (const [element, prior] of background) {
-        if (prior.inert === null) element.removeAttribute('inert');
-        else element.setAttribute('inert', prior.inert);
-        if (prior.hidden === null) element.removeAttribute('aria-hidden');
-        else element.setAttribute('aria-hidden', prior.hidden);
-      }
+      restore();
       if (!hadScrollLock) document.body.classList.remove('result-comparison-open');
       if (opener && opener !== document.body && available(opener)) {
         opener.focus({ preventScroll: true });

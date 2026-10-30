@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { disposeSparkQuietly, isSparkWorkerTerminate, SPARK_WORKER_TERMINATE, stopSparkSorting } from '../../src/lib/sparkDispose';
+import {
+  disposeSparkQuietly, disposeSparkWhenSettled, isSparkWorkerTerminate, SORT_SETTLE_CAP_MS, SORT_SETTLE_POLL_MS,
+  SPARK_WORKER_TERMINATE, stopSparkSorting,
+} from '../../src/lib/sparkDispose';
 
 /** Spark's SplatWorker.dispose rejects in-flight calls with
  * Error("Worker terminate"), and SparkRenderer's sort never catches it. */
@@ -60,18 +63,58 @@ describe('stopSparkSorting (review r4 NIT-3)', () => {
     vi.useFakeTimers();
     try {
       const driveSort = vi.fn();
-      const renderer = { sortDirty: true, sortTimeoutId: -1 as number };
+      const renderer = { sorting: false, sortDirty: true, sortTimeoutId: -1 as number };
       // As Spark's driveSort waits out its minimum interval.
       renderer.sortTimeoutId = setTimeout(driveSort, 12) as unknown as number;
       stopSparkSorting(renderer);
       vi.advanceTimersByTime(100);
       expect(driveSort).not.toHaveBeenCalled();
-      expect(renderer).toEqual({ sortDirty: false, sortTimeoutId: -1 });
+      expect(renderer).toEqual({ sorting: false, sortDirty: false, sortTimeoutId: -1 });
       // Nothing pending: only the flag.
       stopSparkSorting(renderer);
-      expect(renderer).toEqual({ sortDirty: false, sortTimeoutId: -1 });
+      expect(renderer).toEqual({ sorting: false, sortDirty: false, sortTimeoutId: -1 });
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('disposeSparkWhenSettled (review r5 LOW-1)', () => {
+  function renderer(sorting: boolean) {
+    const state = { sorting, sortDirty: true, sortTimeoutId: -1 as number, disposedWhileSorting: null as boolean | null };
+    return Object.assign(state, { dispose: vi.fn(() => { state.disposedWhileSorting = state.sorting; }) });
+  }
+
+  it('with no sort running, disposes at once', () => {
+    vi.useFakeTimers();
+    const spark = renderer(false);
+    disposeSparkWhenSettled(spark);
+    expect(spark.dispose).toHaveBeenCalledTimes(1);
+    expect(spark.sortDirty).toBe(false);
+  });
+
+  it('with a sort running, waits for it to settle, then disposes, never while it runs', () => {
+    vi.useFakeTimers();
+    const spark = renderer(true);
+    disposeSparkWhenSettled(spark);
+    vi.advanceTimersByTime(SORT_SETTLE_POLL_MS * 5);
+    expect(spark.dispose).not.toHaveBeenCalled();
+    // The running sort reads the target and ends.
+    spark.sorting = false;
+    vi.advanceTimersByTime(SORT_SETTLE_POLL_MS);
+    expect(spark.dispose).toHaveBeenCalledTimes(1);
+    expect(spark.disposedWhileSorting).toBe(false);
+    vi.advanceTimersByTime(SORT_SETTLE_CAP_MS);
+    expect(spark.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('a sort that never settles is disposed at the cap', () => {
+    vi.useFakeTimers();
+    const spark = renderer(true);
+    disposeSparkWhenSettled(spark);
+    vi.advanceTimersByTime(SORT_SETTLE_CAP_MS - SORT_SETTLE_POLL_MS);
+    expect(spark.dispose).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(SORT_SETTLE_POLL_MS * 2);
+    expect(spark.dispose).toHaveBeenCalledTimes(1);
   });
 });
