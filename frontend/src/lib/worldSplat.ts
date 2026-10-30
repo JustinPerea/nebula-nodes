@@ -3,6 +3,7 @@ import { backendAssetUrlSync, fetchUrl } from './backend';
 import { AssetByteLimitError, readBoundedAssetResponse } from './boundedAsset';
 import { isSafeWorldUrl } from './worldValue';
 import { requestError, requestSucceeded } from './errorCopy';
+import { preflightSplatPly, SplatPlyFormatError, SplatPlyTooLargeError } from './splatPly';
 
 /** GM's heading for the world preview (error-copy round 2). */
 const LOAD_WORLD = "Couldn't load the world.";
@@ -31,6 +32,9 @@ export interface FetchWorldSplatOptions {
   signal?: AbortSignal;
   maxBytes?: number;
   variant?: string;
+  /** The file's format: gzip SPZ (World Labs, the default) or a 3DGS PLY
+   * (World v2 splats, Idol). Each has its own bounded preflight. */
+  format?: 'spz' | 'ply';
 }
 
 export interface WorldSpzHeader {
@@ -188,6 +192,16 @@ export async function fetchWorldSplatBytes(
       options.maxBytes ?? WORLD_SPLAT_MAX_SOURCE_BYTES,
       { heading: LOAD_WORLD },
     );
+    if (options.format === 'ply') {
+      try {
+        preflightSplatPly(bytes);
+      } catch (error) {
+        if (error instanceof SplatPlyTooLargeError) throw new WorldSplatTooLargeError(error.message);
+        if (error instanceof SplatPlyFormatError) throw new WorldSplatFormatError(error.message);
+        throw error;
+      }
+      return bytes;
+    }
     const header = preflightWorldSpz(bytes, options.variant);
     await validateWorldSpzInflation(bytes, header.expectedUncompressedBytes, options.signal);
     return bytes;

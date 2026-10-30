@@ -83,6 +83,13 @@ export const DeferredWorldPreview = lazyWithPreload(
   (module) => module.WorldPreview,
 );
 
+// A World v2 card's "Explore in 3D" button and its viewer dialog (Idol's
+// splats). Spark still loads only when the dialog opens.
+export const DeferredWorldSplatPreview = lazyWithPreload(
+  () => import('../components/nodes/WorldSplatPreview'),
+  (module) => module.WorldSplatPreview,
+);
+
 // The Moodboard line on a node card (components/nodes/MoodboardAdapterRow.tsx
 // draws its empty box until it arrives), with the adapter table's store.
 export const DeferredMoodboardAdapterLine = lazyWithPreload(
@@ -178,6 +185,7 @@ export const DEFERRED_PRELOADS: readonly (() => Promise<unknown>)[] = [
   DeferredConnectionPopup.preload,
   DeferredMeshPreview.preload,
   DeferredWorldPreview.preload,
+  DeferredWorldSplatPreview.preload,
   DeferredMaskPainterModal.preload,
   DeferredMoodboardAdapterLine.preload,
   DeferredChatPanel.preload,
@@ -230,6 +238,7 @@ export const DEFERRED_MODULES: readonly string[] = [
   'components/panels/MaskPainterModal.tsx',
   'components/nodes/MeshPreview.tsx',
   'components/nodes/WorldPreview.tsx',
+  'components/nodes/WorldSplatPreview.tsx',
   'components/nodes/MoodboardAdapterLine.tsx',
   'lib/moodboardAdapters.ts',
   'store/moodboardAdapterStore.ts',

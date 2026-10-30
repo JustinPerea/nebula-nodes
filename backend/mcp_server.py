@@ -1647,7 +1647,9 @@ def view_output(node_id: str, port: str | None = None, size: str = "medium", ctx
     """Look at a node's output. Images come back as an image (`size` small
     512 px, medium 1024, large 1568), videos as three frames side by side,
     image lists as up to four tiles. Text comes back as text; audio and 3D
-    as their type and URL. `port` picks an output when a node has several.
+    as their type and URL, and a World v2 Gaussian splat (Idol) also with a
+    `splat` summary: Gaussian count, bounding box, file size, seed,
+    provider and model. `port` picks an output when a node has several.
     A node whose last run failed and made nothing answers with that error
     ({"nodeId", "state": "error", "error"}); one that still has an output
     from before says so beside it."""
@@ -1672,6 +1674,17 @@ def view_output(node_id: str, port: str | None = None, size: str = "medium", ctx
     chosen = {port: outputs[port]} if port and port in outputs else outputs
     whole = {name: {"type": entry.get("type"), "value": _absolute(entry.get("value"))}
              for name, entry in chosen.items() if isinstance(entry, dict)}
+    # A World v2 splat (Idol's .ply) can't be looked at, so it comes back as
+    # numbers the backend reads from the file: Gaussian count, bounding box,
+    # file size, seed, provider and model.
+    for name, entry in chosen.items():
+        if isinstance(entry, dict) and entry.get("type") == "World" and isinstance(entry.get("value"), dict) \
+                and entry["value"].get("schemaVersion") == 2:
+            try:
+                summary = _canvas_call("GET", f"/api/graph/node/{node_id}/splat-summary", ctx, params={"port": name})
+            except NebulaAPIError:
+                continue
+            whole[name]["splat"] = {key: value for key, value in summary.items() if key not in ("nodeId", "port")}
     # A value from before a run that failed says so, as a picture does.
     note = {"note": f"This output is from before its last run, which failed: {unquote(failed)}"} if failed else {}
     return [_json.dumps({"nodeId": node_id, **note, "outputs": whole})]

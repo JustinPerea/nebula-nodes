@@ -332,7 +332,7 @@ UNLINED_BASELINE: dict[str, int] = {
     "handlers/qc_base.py": 1, "handlers/quiver.py": 6, "handlers/remotion_node.py": 5,
     "handlers/replicate_model.py": 12, "handlers/replicate_universal.py": 4, "handlers/runway.py": 11,
     "handlers/spatial.py": 12, "handlers/style_reference.py": 3, "handlers/veo.py": 10,
-    "handlers/video_edit.py": 4, "handlers/worldlabs.py": 87, "handlers/xai_image.py": 2,
+    "handlers/video_edit.py": 4, "handlers/worldlabs.py": 86, "handlers/xai_image.py": 2,
     "execution/async_poll_runner.py": 6, "execution/engine.py": 6, "execution/gating.py": 3,
     "execution/maker_routes.py": 5, "execution/maker_routes_byteplus.py": 4,
     "execution/maker_routes_byteplus_seedance.py": 3, "execution/maker_routes_elevenlabs.py": 1,

@@ -1,6 +1,6 @@
 # Nebula Nodes - API Guides
 
-Nebula integrates **20 external AI/media API families** (image, video, audio, 3D/world, text/LLM, SVG, and typed decisions). This directory holds the **user-facing guide** for each provider plus a **coverage + agent-skill audit** measuring how much of each provider's API surface Nebula actually wires up, and whether an agent skill exists to drive those nodes.
+Nebula integrates **21 external AI/media API families** (image, video, audio, 3D/world, text/LLM, SVG, and typed decisions). This directory holds the **user-facing guide** for each provider plus a **coverage + agent-skill audit** measuring how much of each provider's API surface Nebula actually wires up, and whether an agent skill exists to drive those nodes.
 
 Per-provider guides live alongside this file at `./<provider>.md` (e.g. [`./fal.md`](./fal.md)).
 
@@ -21,6 +21,7 @@ Sorted by node count (desc). **API coverage** = share of the provider's publishe
 | [Krea](./krea.md) | 3 | ~10% | complete | Video generation entirely unused (Veo, Kling, Runway, Hailuo, Seedance, Wan, Ray 2, LTX, Grok — 30+ models) |
 | [BytePlus ModelArk](./byteplus.md) | 18 (as direct routes) | Seedream images and Seedance video tasks | complete | Seedream 5.0 flash; eu-west-1 region; billing from the reported usage tokens |
 | [QuiverAI (Arrow)](./quiver.md) | 2 | ~85% | complete | No user-facing model browser (GET /v1/models data only fills the dropdown) |
+| [Speridlabs (Idol)](./speridlabs.md) | 1 | ~100% (the Space's one `/run` endpoint) | none | No agent skill yet; the Space has no other endpoint |
 | [World Labs (Marble)](./worldlabs.md) | 2 | ~42% | complete | World/media lifecycle, listing, sharing, and depth-panorama conversion are not exposed as nodes |
 | [xAI (Grok Imagine)](./xai.md) | 1 (+6 direct routes) | ~20% | complete | `grok-imagine-image-quality` and video extensions; Grok Imagine images run on the xAI key since 2026-10-14 (fal and Krea copies) |
 | [Replicate](./replicate.md) | 1 (+3 FLUX 3 routes) | ~20% | complete | Real-time streaming of model output (SSE via urls.stream) — the big one for chat/LLM models |

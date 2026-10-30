@@ -16306,6 +16306,36 @@
       ],
       "checked": "2026-10-21"
     },
+    "speridlabs-idol": {
+      "routes": {
+        "hf-space": {
+          "currency": "usd",
+          "per": "request",
+          "rows": [
+            {
+              "match": {},
+              "price": 0
+            }
+          ],
+          "notes": "Idol runs on Speridlabs' own Hugging Face Space on ZeroGPU, which Hugging Face offers free to every user, so Nebula and the Space bill nothing. Each run uses the caller's daily ZeroGPU time: the anonymous allowance (2 minutes a day) without a token, or the account's own with the person's HF_TOKEN (free 5 minutes, PRO and Team 40, Enterprise 60). Past that allowance a PRO, Team or Enterprise account is billed from its prepaid Hugging Face credits at $1 per 10 GPU-minutes; that charge is the person's own and Nebula can't see it. GPU seconds per Idol run are not published or measured (the Space asks for up to 120 s per call).",
+          "sources": [
+            {
+              "url": "https://huggingface.co/docs/hub/spaces-zerogpu",
+              "quote": "ZeroGPU Spaces are available to use for free to all users."
+            },
+            {
+              "url": "https://huggingface.co/docs/hub/spaces-zerogpu",
+              "quote": "Unauthenticated | 2 minutes | Low; Free account | 5 minutes | Medium; PRO account | 40 minutes (extensible) | Highest"
+            },
+            {
+              "url": "https://huggingface.co/docs/hub/spaces-zerogpu",
+              "quote": "PRO, Team, and Enterprise users can continue using ZeroGPU Spaces beyond their included daily quota by consuming pre-paid credits at the rate of $1 per 10 minutes of GPU time."
+            }
+          ],
+          "checked": "2026-10-29"
+        }
+      }
+    },
     "veo-3": {
       "currency": "usd",
       "per": "second",

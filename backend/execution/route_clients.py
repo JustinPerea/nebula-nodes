@@ -662,6 +662,35 @@ async def run_krea(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: 
     return rekey(definition, result, "Krea")
 
 
+# -- A maker's Hugging Face Space (handlers/speridlabs_idol.py) ----------------
+# The Space's Gradio API is pinned in
+# tests/fixtures/provider_schemas/speridlabs_idol_gradio_info.json (read
+# 2026-10-29). Each Space is its own request shape, so the client takes only
+# the Spaces it has a handler for.
+
+HF_SPACE_HANDLERS: dict[str, str] = {"speridlabs/idol": "handlers.speridlabs_idol"}
+
+
+async def run_hf_space(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: dict[str, str], *,
+                       route: Mapping[str, Any], emit: Any = None, endpoint: Any = None) -> dict[str, Any]:
+    """A keyless route (node_route.is_keyless) on the maker's own Space. The
+    person's HF_TOKEN, when set, gives the run their own ZeroGPU quota; the
+    handler sends it only to Hugging Face."""
+    import importlib
+
+    definition = _definition(node)
+    space = str(endpoint if endpoint is not None else route.get("endpoint") or "")
+    where = where_for(node, route, f"the Hugging Face Space {space}")
+    module = HF_SPACE_HANDLERS.get(space)
+    if module is None:
+        raise refuse(where, "has no request shape in this version of Nebula",
+                     "can't run in this version of Nebula. Choose another provider.")
+    refuse_unwired(inputs, {"image"}, where)
+    handler = importlib.import_module(module)
+    result = await handler.run_idol(node, inputs, api_keys, emit=emit)
+    return rekey(definition, result, "Hugging Face")
+
+
 # handler name (node_route.ROUTE_HANDLERS) -> client.
 ROUTE_CLIENTS: dict[str, RouteClient] = {
     "bfl": RouteClient(run_bfl),
@@ -670,6 +699,7 @@ ROUTE_CLIENTS: dict[str, RouteClient] = {
     "openrouter-images": RouteClient(run_openrouter_images),
     "openrouter-videos": RouteClient(run_openrouter_videos),
     "krea": RouteClient(run_krea),
+    "hf-space": RouteClient(run_hf_space),
 }
 
 

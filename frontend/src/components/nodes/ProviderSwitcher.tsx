@@ -74,11 +74,12 @@ function openSetup(target: ProviderSetupTarget | undefined) {
 function keyCell(row: ProviderRow, onSetup: (row: ProviderRow) => void): ReactNode {
   if (row.keyState === 'set') return <span className="provider-switcher__key">Key set</span>;
   if (row.keyState === 'signed-in') return <span className="provider-switcher__key">Signed in</span>;
-  if (row.keyState === 'missing' || row.keyState === 'sign-in') {
-    const text = row.keyState === 'missing' ? 'Add key →' : 'Sign in';
+  if (row.keyState === 'missing' || row.keyState === 'optional' || row.keyState === 'sign-in') {
+    const text = row.keyState === 'missing' ? 'Add key →' : row.keyState === 'optional' ? 'Optional key →' : 'Sign in';
     return (
       <button type="button" role="menuitem" tabIndex={-1} className="provider-switcher__setup"
-        aria-label={row.keyState === 'missing' ? `Add a ${row.label} key in Settings` : 'Sign in to Krea in Settings'}
+        aria-label={row.keyState === 'missing' ? `Add a ${row.label} key in Settings`
+          : row.keyState === 'optional' ? `Add an optional key for ${row.label} in Settings` : 'Sign in to Krea in Settings'}
         onClick={(event) => { event.stopPropagation(); onSetup(row); }}>
         {text}
       </button>

@@ -224,6 +224,7 @@ KEY_NAMES: dict[str, tuple[str, str]] = {
     "FAL_KEY": ("fal.ai", "API key"),
     "GOOGLE_API_KEY": ("Gemini", "API key"),
     "GOOGLE_VERTEX_CREDENTIALS": ("Google Vertex AI", "credentials"),
+    "HF_TOKEN": ("Hugging Face", "access token"),
     "HIGGSFIELD_API_KEY": ("Higgsfield", "API key"),
     "IDEOGRAM_API_KEY": ("Ideogram", "API key"),
     "KREA_API_TOKEN": ("Krea", "API token"),

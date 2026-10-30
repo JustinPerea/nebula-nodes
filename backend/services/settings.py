@@ -331,6 +331,14 @@ PROVIDER_CHECKS: dict[str, ProviderCheck] = {
         "https://api.worldlabs.ai/marble/v1/credits",
         lambda key: {"WLT-Api-Key": key},
     ),
+    # Hugging Face access token (optional: the Idol node's Space route runs
+    # without it). GET /api/whoami-v2 is free and read-only, 200 for a valid
+    # token and 401 for a bad one; it never starts a Space or spends quota.
+    "Hugging Face": ProviderCheck(
+        ("HF_TOKEN",),
+        "https://huggingface.co/api/whoami-v2",
+        lambda key: {"Authorization": f"Bearer {key}"},
+    ),
     "Nous": ProviderCheck(
         (),
         "",  # resolved from the Hermes credential's inference base URL

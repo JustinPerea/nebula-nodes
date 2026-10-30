@@ -12,7 +12,13 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { SparkRenderer, SplatMesh } from '@sparkjsdev/spark';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Euler, MathUtils, Vector2, Vector3, type PerspectiveCamera } from 'three';
-import { MARBLE_RAW_OPENCV_FRAME, marbleRawToThreeTransform } from '../../lib/worldTransform';
+import {
+  forwardInThree,
+  MARBLE_RAW_OPENCV_FRAME,
+  marbleRawToThreeTransform,
+  upAxisToThreeRotation,
+  type WorldAxis,
+} from '../../lib/worldTransform';
 import {
   placeWorldCamera,
   robustWorldSceneBounds,
@@ -32,6 +38,9 @@ import {
 /** Error copy round 3e (GM): the SPZ format check's line on the card. */
 const WORLD_SPZ_FORMAT_LINE = "This world's preview file is damaged or in a format Nebula can't open. "
   + 'Use the panorama or the downloaded splat in a 3D viewer.';
+/** The same check's line for a World v2 PLY splat (Idol), which has no panorama. */
+const WORLD_PLY_FORMAT_LINE = "This splat file is damaged or in a format Nebula can't open. "
+  + 'Download it and open it in a 3D viewer.';
 
 export type WorldNavigationMode = 'orbit' | 'fly';
 export type WorldViewerStatus = 'loading' | 'ready' | 'error';
@@ -46,6 +55,16 @@ export interface WorldEnvironmentViewerProps {
   metricScaleFactor?: number;
   groundPlaneOffset?: number;
   coordinateFrame?: string;
+  /** The splat's file format (World v2): gzip SPZ, the default, or a 3DGS
+   * PLY, each with its own preflight (lib/worldSplat.ts, lib/splatPly.ts). */
+  format?: 'spz' | 'ply';
+  /** A World v2 coordinate system's axes: the splat turns so `upAxis` is up,
+   * and with `framing: 'object'` the camera starts on its `forwardAxis` side. */
+  upAxis?: WorldAxis;
+  forwardAxis?: WorldAxis;
+  /** 'environment' (World Labs: the camera stands inside, at eye height) or
+   * 'object' (Idol: the camera stands outside and orbits the object). */
+  framing?: 'environment' | 'object';
   describedById?: string;
   onStatusChange?: (status: WorldViewerStatus) => void;
 }
@@ -104,13 +123,30 @@ function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
 }
 
-function fileNameForSource(src: string): string {
+function fileNameForSource(src: string, format: 'spz' | 'ply' = 'spz'): string {
+  // Spark picks its reader from the name's extension, so it must match the
+  // format the preflight checked.
   try {
     const pathname = new URL(src, window.location.href).pathname;
-    return pathname.split('/').pop() || 'world.spz';
+    const name = pathname.split('/').pop() || `world.${format}`;
+    return name.toLowerCase().endsWith(`.${format}`) ? name : `world.${format}`;
   } catch {
-    return 'world.spz';
+    return `world.${format}`;
   }
+}
+
+/** Where an object's reset camera stands: on its front side, far enough
+ * that the whole object fits the 58-degree view with a margin. */
+function objectFraming(
+  bounds: WorldSceneBounds,
+  front: [number, number, number],
+): Pick<WorldSceneBounds, 'resetPosition' | 'resetTarget'> {
+  const distance = Math.max(bounds.clipRadius, bounds.radius, 0.05) * 2.4;
+  const [cx, cy, cz] = bounds.center;
+  return {
+    resetPosition: [cx + front[0] * distance, cy + front[1] * distance, cz + front[2] * distance],
+    resetTarget: [cx, cy, cz],
+  };
 }
 
 function supportsSparkRenderer(): boolean {
@@ -131,6 +167,10 @@ function WorldSplatScene({
   metricScaleFactor,
   groundPlaneOffset,
   coordinateFrame,
+  format,
+  upAxis,
+  forwardAxis,
+  framing,
   onReady,
   onError,
 }: {
@@ -139,6 +179,10 @@ function WorldSplatScene({
   metricScaleFactor?: number;
   groundPlaneOffset?: number;
   coordinateFrame?: string;
+  format?: 'spz' | 'ply';
+  upAxis?: WorldAxis;
+  forwardAxis?: WorldAxis;
+  framing?: 'environment' | 'object';
   onReady: (bounds: WorldSceneBounds) => void;
   onError: (message?: string) => void;
 }) {
@@ -165,12 +209,13 @@ function WorldSplatScene({
         const fileBytes = await fetchWorldSplatBytes(src, {
           signal: controller.signal,
           variant: splatVariant,
+          format,
         });
         if (cancelled) return;
 
         const mesh = new SplatMesh({
           fileBytes,
-          fileName: fileNameForSource(src),
+          fileName: fileNameForSource(src, format),
         });
         currentMesh = mesh;
         let resetPosition: [number, number, number] | undefined;
@@ -181,6 +226,9 @@ function WorldSplatScene({
           mesh.rotation.set(...transform.rotation);
           mesh.updateMatrixWorld(true);
           resetPosition = [...transform.position];
+        } else if (upAxis) {
+          mesh.rotation.set(...upAxisToThreeRotation(upAxis));
+          mesh.updateMatrixWorld(true);
         }
         await mesh.initialized;
         if (cancelled) {
@@ -203,6 +251,9 @@ function WorldSplatScene({
           fallbackCenter,
         );
         if (resetPosition) bounds.resetPosition = resetPosition;
+        if (framing === 'object') {
+          Object.assign(bounds, objectFraming(bounds, forwardInThree(upAxis ?? 'y', forwardAxis ?? 'z')));
+        }
         setLoadedSplat({ src, mesh });
         onReady(bounds);
       } catch (error) {
@@ -213,7 +264,8 @@ function WorldSplatScene({
           // console above; the card reads a written line.
           onError(
             error instanceof WorldSplatTooLargeError ? error.message
-              : error instanceof WorldSplatFormatError ? WORLD_SPZ_FORMAT_LINE
+              : error instanceof WorldSplatFormatError
+                ? (format === 'ply' ? WORLD_PLY_FORMAT_LINE : WORLD_SPZ_FORMAT_LINE)
               : undefined,
           );
         }
@@ -230,7 +282,8 @@ function WorldSplatScene({
         currentMesh.dispose();
       }
     };
-  }, [coordinateFrame, groundPlaneOffset, metricScaleFactor, onError, onReady, splatVariant, src]);
+  }, [coordinateFrame, format, forwardAxis, framing, groundPlaneOffset, metricScaleFactor, onError, onReady,
+    splatVariant, src, upAxis]);
 
   return (
     <>
@@ -544,6 +597,10 @@ export function WorldEnvironmentViewer({
   metricScaleFactor,
   groundPlaneOffset,
   coordinateFrame,
+  format,
+  upAxis,
+  forwardAxis,
+  framing,
   describedById,
   onStatusChange,
 }: WorldEnvironmentViewerProps) {
@@ -583,7 +640,8 @@ export function WorldEnvironmentViewer({
     <ViewerFallback
       thumbnail={thumbnail}
       label={label}
-      detail={viewerState.src === src ? viewerState.errorMessage : undefined}
+      detail={(viewerState.src === src ? viewerState.errorMessage : undefined)
+        ?? (format === 'ply' ? 'Download the splat and open it in a 3D viewer.' : undefined)}
     />
   );
   if (!supported || status === 'error') return fallback;
@@ -610,6 +668,10 @@ export function WorldEnvironmentViewer({
             metricScaleFactor={metricScaleFactor}
             groundPlaneOffset={groundPlaneOffset}
             coordinateFrame={coordinateFrame}
+            format={format}
+            upAxis={upAxis}
+            forwardAxis={forwardAxis}
+            framing={framing}
             onReady={handleReady}
             onError={handleError}
           />

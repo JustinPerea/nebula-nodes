@@ -85,6 +85,9 @@ def hosts_for(monkeypatch, provider: str, video: bool) -> FakeHosts:
         out = "https://replicate.delivery/x/out." + ("mp4" if video else "webp")
         return replicate_hosts(monkeypatch, [{"id": "p1", "status": "succeeded", "output": out}], out,
                                MP4 if video else PNG)
+    if provider == "speridlabs":
+        from tests.speridlabs_fakes import idol_hosts
+        return idol_hosts(monkeypatch)
     return {"fal": fal_hosts, "krea": krea_hosts, "openrouter": openrouter_hosts}[provider](monkeypatch, video)
 
 

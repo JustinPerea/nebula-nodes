@@ -791,6 +791,87 @@
           }
         }
       ]
+    },
+    "routes-keyless": {
+      "id": "routes-keyless",
+      "displayName": "Fixture Keyless",
+      "category": "3d-gen",
+      "apiProvider": "speridlabs",
+      "executionPattern": "async-poll",
+      "envKeyName": [
+        "FAL_KEY"
+      ],
+      "inputPorts": [
+        {
+          "id": "image",
+          "label": "Image",
+          "dataType": "Image",
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "id": "world",
+          "label": "World",
+          "dataType": "World",
+          "required": false
+        }
+      ],
+      "params": [
+        {
+          "key": "_provider",
+          "label": "Provider",
+          "type": "enum",
+          "required": false,
+          "default": "auto",
+          "options": [
+            {
+              "label": "auto",
+              "value": "auto"
+            },
+            {
+              "label": "hf-space",
+              "value": "hf-space"
+            },
+            {
+              "label": "fal",
+              "value": "fal"
+            }
+          ],
+          "hidden": true
+        }
+      ],
+      "sharedParams": [
+        {
+          "key": "seed",
+          "label": "Seed",
+          "type": "integer",
+          "required": false,
+          "default": 42
+        }
+      ],
+      "routes": [
+        {
+          "id": "hf-space",
+          "provider": "speridlabs",
+          "maker": true,
+          "keys": [],
+          "optionalKeys": [
+            "HF_TOKEN"
+          ],
+          "handler": "hf-space",
+          "endpoint": "speridlabs/idol"
+        },
+        {
+          "id": "fal",
+          "provider": "fal",
+          "keys": [
+            "FAL_KEY"
+          ],
+          "handler": "fal",
+          "endpoint": "fixture/keyless"
+        }
+      ]
     }
   },
   "cases": [
@@ -11522,6 +11603,195 @@
         "draft",
         "duration",
         "generate_audio"
+      ]
+    },
+    {
+      "name": "keyless: Auto with no key runs on the maker's Space, anonymously",
+      "nodeId": "routes-keyless",
+      "params": {},
+      "apiKeys": {},
+      "expected": {
+        "kind": "direct",
+        "provider": "speridlabs",
+        "key": null,
+        "routeId": "hf-space",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "unavailableLine": null,
+      "paramKeys": [
+        "seed"
+      ]
+    },
+    {
+      "name": "keyless: Auto with the optional token runs on the Space with it",
+      "nodeId": "routes-keyless",
+      "params": {},
+      "apiKeys": {
+        "HF_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "speridlabs",
+        "key": "HF_TOKEN",
+        "routeId": "hf-space",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "unavailableLine": null,
+      "paramKeys": [
+        "seed"
+      ]
+    },
+    {
+      "name": "keyless: Auto with only a fal key still runs on the maker's Space",
+      "nodeId": "routes-keyless",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "speridlabs",
+        "key": null,
+        "routeId": "hf-space",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "unavailableLine": null,
+      "paramKeys": [
+        "seed"
+      ]
+    },
+    {
+      "name": "keyless: the Space picked explicitly runs without a key",
+      "nodeId": "routes-keyless",
+      "params": {
+        "_provider": "hf-space"
+      },
+      "apiKeys": {},
+      "expected": {
+        "kind": "direct",
+        "provider": "speridlabs",
+        "key": null,
+        "routeId": "hf-space",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "unavailableLine": null,
+      "paramKeys": [
+        "seed"
+      ]
+    },
+    {
+      "name": "keyless: fal picked without its key stops, naming the Space",
+      "nodeId": "routes-keyless",
+      "params": {
+        "_provider": "fal"
+      },
+      "apiKeys": {},
+      "expected": {
+        "kind": "unset",
+        "provider": "fal",
+        "key": null,
+        "routeId": "fal",
+        "block": null,
+        "missing": [
+          "FAL_KEY"
+        ]
+      },
+      "unavailable": {
+        "routeId": "fal",
+        "missing": [
+          "FAL_KEY"
+        ],
+        "block": null,
+        "alternatives": [
+          "hf-space"
+        ],
+        "fixes": [],
+        "message": "Fixture Keyless is set to fal.ai, which needs FAL_KEY. Add it in Settings > Providers or choose another provider. Speridlabs can take it."
+      },
+      "unavailableLine": "Fixture Keyless is set to fal.ai, which needs your fal.ai API key. Add it in Settings, or choose another provider. Speridlabs can take it.",
+      "paramKeys": [
+        "seed"
+      ]
+    },
+    {
+      "name": "keyless: fal picked with its key runs on fal",
+      "nodeId": "routes-keyless",
+      "params": {
+        "_provider": "fal"
+      },
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY",
+        "routeId": "fal",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "unavailableLine": null,
+      "paramKeys": [
+        "seed"
+      ]
+    },
+    {
+      "name": "Idol: Auto with no key runs on its Hugging Face Space",
+      "nodeId": "speridlabs-idol",
+      "params": {},
+      "apiKeys": {},
+      "expected": {
+        "kind": "direct",
+        "provider": "speridlabs",
+        "key": null,
+        "routeId": "hf-space",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "unavailableLine": null,
+      "paramKeys": [
+        "cfg_scale",
+        "gaussians",
+        "mode",
+        "rescale_t",
+        "seed",
+        "steps"
+      ]
+    },
+    {
+      "name": "Idol: a Hugging Face token gives the run the person's own quota",
+      "nodeId": "speridlabs-idol",
+      "params": {},
+      "apiKeys": {
+        "HF_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "speridlabs",
+        "key": "HF_TOKEN",
+        "routeId": "hf-space",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "unavailableLine": null,
+      "paramKeys": [
+        "cfg_scale",
+        "gaussians",
+        "mode",
+        "rescale_t",
+        "seed",
+        "steps"
       ]
     }
   ]

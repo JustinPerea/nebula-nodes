@@ -1,7 +1,7 @@
 import type { ModelNodeDefinition, ParamDefinition, RouteSpec } from '../types';
 import {
   allParamDefinitions, AUTO, blockedSetting, effectiveValues, hiddenStops, matchValue, personWords, portLimitName,
-  PROVIDER_PARAM, providerChoice,
+  isKeylessRoute, PROVIDER_PARAM, providerChoice,
   providerLabel, routeAcceptRule, routeBlock, routeById, routeParamDefinitions, routeSentKeys, routesOf, routeSwitch,
   routeTakesValue,
   routeUnavailable, selectRoute, settingText, usesRoutePlan, withWiredBlockers, type DirectBlock, type HiddenStop,
@@ -32,7 +32,9 @@ export interface SwitchContext {
   wired?: ReadonlyMap<string, number>;
 }
 
-export type KeyState = 'set' | 'missing' | 'signed-in' | 'sign-in';
+/** 'optional': a keyless route (RouteSpec.optionalKeys, e.g. Idol on a
+ * Hugging Face Space) runs without its key; the cell offers to add one. */
+export type KeyState = 'set' | 'missing' | 'optional' | 'signed-in' | 'sign-in';
 
 export interface ProviderRow {
   /** 'auto', a route id, or `${route id}:plan` for a Krea route's plan row. */
@@ -207,15 +209,17 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
   for (const spec of routesOf(definition)) {
     const block = routeBlock(definition, spec, routed);
     const note = block ? rowBlock(definition, spec, block, routed) : null;
-    const keyed = spec.keys.some((key) => isSet(context.apiKeys, key));
+    const keyless = isKeylessRoute(spec);
+    const setupKey = keyless ? spec.optionalKeys?.[0] : spec.keys[0];
+    const keyed = (keyless ? spec.optionalKeys ?? [] : spec.keys).some((key) => isSet(context.apiKeys, key));
     const label = providerLabel(spec.provider);
     if (spec.plan !== 'only') {
       const both = spec.plan === 'optional';
       rows.push({
         id: spec.id, routeId: spec.id, plan: false,
         label: both ? `${label} · API balance` : label,
-        keyState: keyed ? 'set' : 'missing',
-        setup: spec.keys[0] ? { kind: 'api-key', key: spec.keys[0] } : undefined,
+        keyState: keyed ? 'set' : keyless ? 'optional' : 'missing',
+        setup: setupKey ? { kind: 'api-key', key: setupKey } : undefined,
         ...(block ? { price: '-', priceTitle: note ?? undefined } : price(definition, spec, estimates, context.pricing, false, saved, wiredPorts)),
         block: note,
         ...(spec.note && !note ? { info: spec.note } : {}),
@@ -435,10 +439,11 @@ export function providerKeyWarnings(
     const route = choice === AUTO ? undefined : routeById(definition, choice);
     if (route) {
       const planRow = route.plan === 'only' || (route.plan === 'optional' && params._kreaAuth === 'mcp');
-      if (!planRow && !route.keys.some((key) => isSet(apiKeys, key))) {
+      if (!planRow && !isKeylessRoute(route) && !route.keys.some((key) => isSet(apiKeys, key))) {
         warnings.push(`${name} is set to ${providerLabel(route.provider)}, which you have no key for.`);
       }
-    } else if (choice === AUTO && !routesOf(definition).some((spec) => spec.keys.some((key) => isSet(apiKeys, key)))) {
+    } else if (choice === AUTO && !routesOf(definition).some((spec) => isKeylessRoute(spec)
+      || spec.keys.some((key) => isSet(apiKeys, key)))) {
       warnings.push(`${name} is on Auto, and none of its providers has a key here.`);
     }
   }

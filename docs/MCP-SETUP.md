@@ -319,7 +319,12 @@ The server exposes these tools for building and running (see
   this server, has them too. None generates, uploads or spends; anything
   else is refused before Krea is called.
 - `view_output`: a node's output as an image (videos as three frames, image
-  lists as tiles), or as text. For a node whose last run failed it returns
+  lists as tiles), or as text. A World v2 Gaussian splat (Idol's `.ply`)
+  can't be looked at, so it also comes back with a `splat` summary the
+  backend reads from the file (`GET /api/graph/node/{id}/splat-summary`,
+  `services/splat_ply.py`): per splat its Gaussian count, bounding box,
+  file size, spherical-harmonics degree and opacity spread, and the
+  world's provider, model, seed and axes. For a node whose last run failed it returns
   the error instead of "no output yet"; if an older output is still on the
   card it returns that with a note that the last run failed.
 - `get_spend_limits`: the limits and what this session has used.

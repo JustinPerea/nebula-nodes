@@ -21,7 +21,7 @@ flowchart TD
 
 ## The nodes
 
-Eight route-table nodes ship (PR 3 and PR 4, 2026-10-15). The node library's provider line names every route in Auto order (`modelDiscovery.ts` `libraryProviderLine`): "BFL · fal · Replicate · OpenRouter · Krea".
+Nine route-table nodes ship (PR 3 and PR 4, 2026-10-15; Idol, 2026-10-29). The node library's provider line names every route in Auto order (`modelDiscovery.ts` `libraryProviderLine`): "BFL · fal · Replicate · OpenRouter · Krea".
 
 | Node | Routes, in Auto order | Notes |
 |---|---|---|
@@ -33,6 +33,7 @@ Eight route-table nodes ship (PR 3 and PR 4, 2026-10-15). The node library's pro
 | `flux-video-upscale` FLUX Video Upscale | `bfl` (maker), `fal`, `replicate`, `krea` (API token or plan) | `creativity` (precise/creative) and `upscale_factor` 1.5-3; optional prompt. Priced by the output's megapixel-seconds or tier, so unpriced until the run. Replaces `krea-enhance-black-forest-labs-flux-video-upscale`. |
 | `flux-2-pro` FLUX.2 | `bfl` (maker), `fal` | `model` picks the endpoint on both routes: FLUX.2 [pro], [max], [flex], [klein] 9B and [klein] 4B on both, fal's FLUX 2 Flash on fal only. The option labels are the providers' own names (BFL's, and fal's for Flash; 2026-10-16), the values unchanged. Param names are fal's (the node ran on fal before); BFL gets `width`/`height` from the preset, integer `safety_tolerance`, `steps`/`guidance` (shown on Flex only; a hidden value left from Flex isn't sent). Each route's `accepts` lists its models, so a `model` outside them (`"MAX"`) stops instead of running Pro. `enable_safety_checker` is fal's own. fal's Flash and Klein prices are `unconfirmed` row by row. Was a fal-only handler; saved graphs make the same fal requests (`test_flux2_nodes.py`), except that Flash no longer sends `safety_tolerance` (`APPROVED_LEGACY_DELTA`, PR 5). |
 | `krea-3` Krea 3 | `krea` (maker, API token or plan; early access for beta workspaces), `fal` | Up to 8 reference images. Krea's options (`thinking_mode`, `resolution`, `aspect_ratio`, `regional_edit`) and fal's (`model`, `reasoning_level`, `image_size`, ...) are each route's own; only `seed` is shared. |
+| `speridlabs-idol` Idol | `hf-space` (maker, keyless; `HF_TOKEN` optional) | One image to a Gaussian splat on Speridlabs' Hugging Face Space, returned as World v2 with a PLY splat. $0 (ZeroGPU). No `randomize` setting: the run cache would replay a random seed. See [model-providers/speridlabs/idol.md](model-providers/speridlabs/idol.md). |
 
 The three Krea FLUX nodes the catalog generated before are now the `krea` routes of these nodes: `scripts/sync-krea-catalog.py` `FOLDED` (see Adding a route-table node). Saved graphs that still name the old ids load as the new nodes (below).
 
@@ -107,9 +108,10 @@ A route-table node keeps its usual fields (`apiProvider` is the maker, `envKeyNa
 | `id` | What `_provider` names. Usually the provider; two routes on one provider need different ids. |
 | `provider` | Who bills: a `KEY_PROVIDERS` value (`bfl`, `fal`, `replicate`, `openrouter`, `krea`, ...). |
 | `maker` | `true` on the model maker's own API. At most one. |
-| `keys` | Any one of these keys runs it. |
+| `keys` | Any one of these keys runs it. `[]` on a keyless route. |
+| `optionalKeys` | A keyless route: it runs with no key, and uses the first of these that is set. See [Keyless routes](#keyless-routes). |
 | `plan` | Krea only: `optional` (API token or the Krea plan, by `_kreaAuth`) or `only` (plan only; Auto skips it). |
-| `handler` | Which client runs it (`bfl`, `fal`, `replicate-model`, `openrouter-images`, `openrouter-videos`, `krea`). |
+| `handler` | Which client runs it (`bfl`, `fal`, `replicate-model`, `openrouter-images`, `openrouter-videos`, `krea`, `hf-space`). |
 | `endpoint`, `endpointWhen` | The provider's model or path, and an override when settings match (`{"images": "(set)"}` for an edit endpoint once images are wired). |
 | `params` | Settings only this route takes. |
 | `rename`, `valueMap` | Our spelling to the provider's: a param name, or a value (`1k` to `1K`). A `valueMap` also says which values the route takes. |
@@ -119,6 +121,29 @@ A route-table node keeps its usual fields (`apiProvider` is the maker, `envKeyNa
 | `note` | One line for the person, shown under the route's API row in the switcher (Krea 3's "Early access"); a "Doesn't take ..." note replaces it. |
 
 `node_route.routes_problems` and `scripts/check-node-contracts.mjs` both check this shape.
+
+### Keyless routes
+
+A maker's free endpoint (Idol on its Hugging Face Space) runs with no key,
+but a key can still change how it runs: Idol's `HF_TOKEN` gives a run the
+person's own ZeroGPU quota instead of the shared anonymous one. Such a route
+says `keys: []` and `optionalKeys: ["HF_TOKEN"]`:
+
+- `is_keyless` / `isKeylessRoute`: a route that declares `optionalKeys` (even
+  `[]`). It counts as runnable with no key set (`_can_run_keyed` /
+  `canRunKeyed`), so Auto lands on it, and a route that needs a key names it
+  among its alternatives.
+- `Route.key` is the first optional key that is set, or `null`
+  (`route_key` / `routeKey`). The client reads the key from `api_keys` itself.
+- An optional key is not in `envKeyName`: the node reads as free
+  (`node_readiness.instance_access` is `free` without it and `key` with it),
+  the card shows no missing-key mark, and the switcher's row says "Optional
+  key →" instead of "Add key →" (keyState `optional`). Settings lists the node
+  under that key (`providerCatalog.nodesForKey`).
+- `routes_problems` refuses `optionalKeys` beside non-empty `keys`, a name
+  Settings doesn't store (`KEY_PROVIDERS`), and a keyless route that bills a
+  plan. The key-coverage checks (`settings.example.json`, provider health)
+  count optional keys as used.
 
 ## Hidden settings (paramVisibleWhen)
 
@@ -162,6 +187,7 @@ flowchart TD
 | `replicate-model` | `handlers/replicate_model.py` `run_model`: `POST /v1/models/{owner}/{name}/predictions` | `images` (and a video's frames, in order) → `images`, `start_video` → `start_video`; a model whose one input is a source video takes it under its own field (`REPLICATE_SOURCE_VIDEO`: `black-forest-labs/flux-video-upscale` `video` → `input_video`, prompt optional) | Local files go up through `POST /v1/files` first. The output is saved as the node's port type, fetched with the token only from `replicate.delivery`. Cancel: `POST /v1/predictions/{id}/cancel`. |
 | `openrouter-images` | `handlers/openrouter_media.py`: `POST /api/v1/images` | `images` → `input_references` | Params outside the documented request fields go under `provider.options[<owner slug>]` (FLUX: `safety_tolerance`). Saves `data[0].b64_json`. |
 | `openrouter-videos` | `POST /api/v1/videos`, poll `GET /api/v1/videos/{id}`, download `unsigned_urls[0]` | `start_image`/`end_image` → `frame_images` (`first_frame`/`last_frame`) | A source video isn't sent: its request shape isn't documented. Frames go only as public http(s) URLs: OpenRouter documents data URLs for `/images` references but not for `/videos` `frame_images`, so a local output wired to a frame stops before any request and points to another provider. No cancel (OpenRouter has none for video). |
+| `hf-space` | The Space's module in `HF_SPACE_HANDLERS` (`speridlabs/idol`: `handlers/speridlabs_idol.py` `run_idol`): the Gradio queue (`/gradio_api/upload`, `/gradio_api/call/run`, its event stream, `/gradio_api/file=`) | `image` → the first `/run` input (a public URL as itself, anything else uploaded) | Keyless. Checks the Space's stage on the Hub and its `/gradio_api/info` signature before calling; `HF_TOKEN`, when set, goes only to `huggingface.co` and `*.hf.space`. Gradio's `/call` has no cancel: a stop ends Nebula's wait only. |
 | `krea` | `handlers/krea_gateway.py` `handle_krea_catalog`: the catalog model the `endpoint` names (a catalog key, or the `/generate/...` path one entry serves) | by name: Krea's request fields are its port ids, except where the catalog entry's `portFields` names another (`krea_inputs`: Krea 3 `images` → `image_urls`, FLUX Video Upscale `video` → `video_url`) | Bills by the `_kreaAuth` the router sets. The plan runs through the same account path as every Krea node. |
 
 - **Nothing is dropped.** A wired input the chosen endpoint can't take stops the run before any request, and so does a recipe the provider can't express (a video and images together). An end image with no start image or keyframes before it stops on every video route (`route_clients.refuse_end_alone`), even where the provider's schema would take it alone, so no provider opens the clip on its closing frame. Each error says what to disconnect or that another provider would take it.

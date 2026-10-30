@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import type { WorldPreviewProps } from './WorldPreview';
-import { DeferredMeshPreview, DeferredWorldPreview } from '../../lib/deferredChunks';
+import { DeferredMeshPreview, DeferredWorldPreview, DeferredWorldSplatPreview } from '../../lib/deferredChunks';
+import type { WorldSplatPreviewProps } from './WorldSplatPreview';
 import { isSplatExport, meshFormatLabel } from '../../lib/meshFormat';
 import { parseWorldValue } from '../../lib/worldValue';
 import { InvalidWorldFace, WorldPreviewFace } from './WorldPreviewFace';
@@ -79,6 +80,33 @@ export function WorldPreview(props: WorldPreviewProps) {
     <DeferredBoundary chunk={DeferredWorldPreview} failed={<WorldPreviewFallback {...props} />}>
       <Suspense fallback={<WorldPreviewFallback {...props} />}>
         <DeferredWorldPreview {...props} />
+      </Suspense>
+    </DeferredBoundary>
+  );
+}
+
+/** The same button the World v2 splat viewer draws, disabled until its chunk
+ * arrives, so the card keeps its height. */
+function WorldSplatPreviewFallback({ world, compact = false }: WorldSplatPreviewProps) {
+  return (
+    <button
+      type="button"
+      className={`world-splat-preview__open nodrag nowheel${compact ? ' world-splat-preview__open--compact' : ''}`}
+      disabled
+      aria-label={`Explore in 3D: ${world.displayName}`}
+      data-deferred-fallback="world-splat"
+    >
+      <span className="world-splat-preview__glyph" aria-hidden="true" />
+      Explore in 3D
+    </button>
+  );
+}
+
+export function WorldSplatPreview(props: WorldSplatPreviewProps) {
+  return (
+    <DeferredBoundary chunk={DeferredWorldSplatPreview} failed={<WorldSplatPreviewFallback {...props} />}>
+      <Suspense fallback={<WorldSplatPreviewFallback {...props} />}>
+        <DeferredWorldSplatPreview {...props} />
       </Suspense>
     </DeferredBoundary>
   );

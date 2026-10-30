@@ -62,6 +62,15 @@ export const PROVIDER_KEYS: readonly ProviderKeySpec[] = [
   // BytePlus Service Specific Terms (Model Services): "The BytePlus Model
   // Services are not available in the United States." Models need activating
   // first (404 ModelNotOpen otherwise). docs/api-guides/byteplus.md.
+  // Optional. The Idol node runs on Speridlabs' Hugging Face Space without a
+  // token, on the anonymous ZeroGPU quota (2 minutes a day). A token gives
+  // runs the person's own quota (free 5, PRO 40 minutes a day); past that,
+  // Hugging Face may bill a PRO account for extra ZeroGPU time.
+  // https://huggingface.co/docs/hub/spaces-zerogpu
+  { key: 'HF_TOKEN', label: 'Hugging Face', placeholder: 'hf_...', url: 'https://huggingface.co/settings/tokens',
+    brand: ['Idol'], note: 'Optional: your own daily GPU time for Idol',
+    caveat: 'Idol runs without a token, on a small shared daily allowance. With a read token, runs use your own '
+      + 'Hugging Face allowance instead. On a PRO account, Hugging Face can bill you for time past it.' },
   { key: 'BYTEPLUS_API_KEY', label: 'BytePlus · ModelArk', placeholder: 'ModelArk API key',
     url: 'https://ai.byteplus.com/ark/region:ap-southeast-1/apiKey', brand: ['Seedream', 'Seedance'],
     note: 'Seedream and Seedance on ByteDance\'s own API',
@@ -76,11 +85,12 @@ export const PROVIDER_KEY_SPECS: Readonly<Record<string, ProviderKeySpec>> = Obj
 
 const NODES = Object.values(NODE_DEFINITIONS);
 
-/** Nodes that can run with this key (alone or as one of their routes). */
+/** Nodes that can run with this key (alone or as one of their routes), or
+ * use it when set (a keyless route's optionalKeys: Idol's Hugging Face token). */
 export function nodesForKey(key: string) {
   return NODES.filter((node) => {
     const keys = Array.isArray(node.envKeyName) ? node.envKeyName : [node.envKeyName];
-    return keys.includes(key);
+    return keys.includes(key) || (node.routes ?? []).some((route) => route.optionalKeys?.includes(key));
   });
 }
 

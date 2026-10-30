@@ -34,6 +34,9 @@ export const KEY_PROVIDERS: Readonly<Record<string, APIProvider>> = {
   BYTEPLUS_API_KEY: 'bytedance',
   // Black Forest Labs' own API (api.bfl.ai), the maker of FLUX.
   BFL_API_KEY: 'bfl',
+  // A Hugging Face access token: optional on a keyless Space route
+  // (RouteSpec.optionalKeys), never needed.
+  HF_TOKEN: 'huggingface',
 };
 
 /** How a card line names each key Settings stores: the provider's own
@@ -47,6 +50,7 @@ export const KEY_NAMES: Readonly<Record<string, readonly [string, string]>> = {
   FAL_KEY: ['fal.ai', 'API key'],
   GOOGLE_API_KEY: ['Gemini', 'API key'],
   GOOGLE_VERTEX_CREDENTIALS: ['Google Vertex AI', 'credentials'],
+  HF_TOKEN: ['Hugging Face', 'access token'],
   HIGGSFIELD_API_KEY: ['Higgsfield', 'API key'],
   IDEOGRAM_API_KEY: ['Ideogram', 'API key'],
   KREA_API_TOKEN: ['Krea', 'API token'],
@@ -72,6 +76,7 @@ export const PROVIDER_LABELS: Readonly<Record<APIProvider, string>> = {
   recraft: 'Recraft', ideogram: 'Ideogram', openrouter: 'OpenRouter', bfl: 'Black Forest Labs',
   higgsfield: 'Higgsfield', meshy: 'Meshy', quiver: 'QuiverAI', krea: 'Krea',
   worldlabs: 'World Labs', nous: 'Nous', typesafe: 'TypeSafe', utility: 'Local tools',
+  speridlabs: 'Speridlabs', huggingface: 'Hugging Face',
 };
 
 /** The params that decide who bills a run: the provider choice and the Krea
@@ -762,6 +767,23 @@ function setKeys(route: RouteSpec, apiKeys: ApiKeys): string[] {
   return keyList(route.keys).filter((key) => isSet(apiKeys, key));
 }
 
+/** A route that runs without any key (`optionalKeys` declared;
+ * node_route.is_keyless). */
+export function isKeylessRoute(route: RouteSpec): boolean {
+  return Array.isArray(route.optionalKeys);
+}
+
+/** The route's key condition holds (node_route._can_run_keyed). */
+function canRunKeyed(route: RouteSpec, apiKeys: ApiKeys): boolean {
+  return isKeylessRoute(route) || setKeys(route, apiKeys).length > 0;
+}
+
+/** The key a run on this route uses, or null for a keyless route run
+ * anonymously (node_route.route_key). */
+function routeKey(route: RouteSpec, apiKeys: ApiKeys): string | null {
+  return [...keyList(route.keys), ...keyList(route.optionalKeys)].find((key) => isSet(apiKeys, key)) ?? null;
+}
+
 function unionKeys(definition: RoutedDefinition): string[] {
   return [...new Set(routesOf(definition).flatMap((route) => keyList(route.keys)))];
 }
@@ -782,18 +804,18 @@ function selectFromRoutes(definition: RoutedDefinition, params: Record<string, u
     return { kind: 'plan', provider: 'krea', key: null, routeId: plan.id, block: null, missing: [] };
   }
   const keyed = (route: RouteSpec): NodeRoute => ({
-    kind: route.maker ? 'direct' : 'fallback', provider: route.provider, key: setKeys(route, apiKeys)[0],
+    kind: route.maker ? 'direct' : 'fallback', provider: route.provider, key: routeKey(route, apiKeys),
     routeId: route.id, block: null, missing: [],
   });
   if (choice !== AUTO) {
     const route = routeById(definition, choice);
     if (!route) return unset(first, null, { reason: 'unknown-provider', param: PROVIDER_PARAM, on: null, detail: choice });
-    if (!setKeys(route, apiKeys).length) return unset(route.provider, route.id, null, keyList(route.keys));
+    if (!canRunKeyed(route, apiKeys)) return unset(route.provider, route.id, null, keyList(route.keys));
     const block = routeBlock(definition, route, params);
     if (block) return unset(route.provider, route.id, block);
     return keyed(route);
   }
-  const route = routes.find((candidate) => candidate.plan !== 'only' && setKeys(candidate, apiKeys).length > 0);
+  const route = routes.find((candidate) => candidate.plan !== 'only' && canRunKeyed(candidate, apiKeys));
   if (!route) return unset(first, null, null, unionKeys(definition));
   // Auto never moves on: who bills depends on the choice and the keys.
   const block = routeBlock(definition, route, params);
@@ -1148,12 +1170,12 @@ export function routeUnavailable(
   if (route.kind !== 'unset') return null;
   const alternatives = routesOf(definition)
     .filter((candidate) => candidate.id !== route.routeId && candidate.plan !== 'only'
-      && setKeys(candidate, apiKeys).length > 0 && routeBlock(definition, candidate, values) === null)
+      && canRunKeyed(candidate, apiKeys) && routeBlock(definition, candidate, values) === null)
     .map((candidate) => candidate.id);
   const hidden = route.block?.reason === 'hidden';
   const honoredBy = hidden ? route.block?.on : null;
   const honoredSpec = honoredBy ? routeById(definition, honoredBy) : undefined;
-  const keyless = hidden && !alternatives.length && honoredBy && honoredSpec && !setKeys(honoredSpec, apiKeys).length
+  const keyless = hidden && !alternatives.length && honoredBy && honoredSpec && !canRunKeyed(honoredSpec, apiKeys)
     ? [honoredBy] : [];
   return {
     routeId: route.routeId ?? null,

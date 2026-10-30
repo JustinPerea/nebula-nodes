@@ -19,7 +19,7 @@ const inline = (cases as unknown as { definitions: Record<string, ModelNodeDefin
 
 function shown(route: RouteSpec): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  for (const key of ['id', 'provider', 'maker', 'keys', 'plan', 'handler', 'pricing'] as const) {
+  for (const key of ['id', 'provider', 'maker', 'keys', 'optionalKeys', 'plan', 'handler', 'pricing'] as const) {
     if (route[key] !== undefined) out[key] = route[key];
   }
   out.paramKeys = (route.params ?? []).map((param) => param.key);

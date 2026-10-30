@@ -845,6 +845,7 @@ Connections must match types; `Any` connects to anything.
 | Video | .mp4, .mov files |
 | Audio | .mp3, .wav files |
 | Mesh | .glb, .obj, .fbx files |
+| World | A 3D world or object: a World Labs world, or a Gaussian splat (.ply) from Idol. `view_output` gives its Gaussian count, bounding box, file size and seed |
 | SVG | .svg files or SVG text |
 | Array | Lists of the above |
 | Moodboard | A saved moodboard |

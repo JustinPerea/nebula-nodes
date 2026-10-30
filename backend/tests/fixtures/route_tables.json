@@ -20,7 +20,8 @@
   "TYPESAFE_API_KEY": "typesafe",
   "GOOGLE_VERTEX_CREDENTIALS": "google",
   "BYTEPLUS_API_KEY": "bytedance",
-  "BFL_API_KEY": "bfl"
+  "BFL_API_KEY": "bfl",
+  "HF_TOKEN": "huggingface"
  },
  "providerLabels": {
   "openai": "OpenAI",
@@ -46,7 +47,9 @@
   "worldlabs": "World Labs",
   "nous": "Nous",
   "typesafe": "TypeSafe",
-  "utility": "Local tools"
+  "utility": "Local tools",
+  "speridlabs": "Speridlabs",
+  "huggingface": "Hugging Face"
  },
  "keyNames": {
   "ANTHROPIC_API_KEY": [
@@ -76,6 +79,10 @@
   "GOOGLE_VERTEX_CREDENTIALS": [
    "Google Vertex AI",
    "credentials"
+  ],
+  "HF_TOKEN": [
+   "Hugging Face",
+   "access token"
   ],
   "HIGGSFIELD_API_KEY": [
    "Higgsfield",
@@ -12993,6 +13000,46 @@
     ]
    }
   },
+  "routes-keyless": {
+   "routes": [
+    {
+     "id": "hf-space",
+     "provider": "speridlabs",
+     "maker": true,
+     "keys": [],
+     "optionalKeys": [
+      "HF_TOKEN"
+     ],
+     "handler": "hf-space",
+     "paramKeys": []
+    },
+    {
+     "id": "fal",
+     "provider": "fal",
+     "keys": [
+      "FAL_KEY"
+     ],
+     "handler": "fal",
+     "paramKeys": []
+    }
+   ],
+   "allParamKeys": [
+    "_provider",
+    "seed"
+   ],
+   "routeParams": {
+    "hf-space": [
+     {
+      "key": "seed"
+     }
+    ],
+    "fal": [
+     {
+      "key": "seed"
+     }
+    ]
+   }
+  },
   "routes-krea": {
    "routes": [
     {
@@ -14579,6 +14626,71 @@
    "allParamKeys": [
     "expected_type"
    ]
+  },
+  "speridlabs-idol": {
+   "routes": [
+    {
+     "id": "hf-space",
+     "provider": "speridlabs",
+     "maker": true,
+     "keys": [],
+     "optionalKeys": [
+      "HF_TOKEN"
+     ],
+     "handler": "hf-space",
+     "paramKeys": []
+    }
+   ],
+   "allParamKeys": [
+    "_provider",
+    "mode",
+    "gaussians",
+    "steps",
+    "cfg_scale",
+    "rescale_t",
+    "seed"
+   ],
+   "routeParams": {
+    "hf-space": [
+     {
+      "key": "mode",
+      "options": [
+       "synthetic",
+       "real"
+      ]
+     },
+     {
+      "key": "gaussians",
+      "options": [
+       65536,
+       131072,
+       262144,
+       524288,
+       1048576
+      ]
+     },
+     {
+      "key": "steps",
+      "min": 10,
+      "max": 100
+     },
+     {
+      "key": "cfg_scale",
+      "min": 0,
+      "max": 10
+     },
+     {
+      "key": "rescale_t",
+      "min": 1,
+      "max": 6
+     },
+     {
+      "key": "seed",
+      "min": 0,
+      "max": 2147483647
+     }
+    ]
+   }
   },
   "stable-audio-25": {
    "routes": [

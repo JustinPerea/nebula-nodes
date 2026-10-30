@@ -110,6 +110,11 @@ def _schema_for(provider: str, url: str, sent: dict[str, Any]) -> list[dict[str,
         return [SCHEMAS["replicate"][match.group(1)]]
     if provider == "openrouter":
         return [SCHEMAS["openrouter"][parsed.path.removeprefix("/api/v1/") + "/" + sent["model"]]]
+    if provider == "speridlabs":
+        # The Space's /call/run body, from its pinned /gradio_api/info.
+        from tests.speridlabs_fakes import run_schema
+        assert parsed.path == "/gradio_api/call/run", url
+        return [run_schema()]
     return [entry["requestSchema"] for entry in CATALOG.values() if entry["endpoint"] == parsed.path]
 
 

@@ -50,6 +50,7 @@ export const ALLOWED_PROVIDERS = Object.freeze([
   'WORLDLABS_API_KEY',
   'KREA_USAGE_KEY',
   'GOOGLE_VERTEX_CREDENTIALS',
+  'HF_TOKEN',
 ]);
 
 /** Prefix for the encrypted-blob wire format. */

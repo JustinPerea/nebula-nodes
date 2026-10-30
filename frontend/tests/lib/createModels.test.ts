@@ -26,7 +26,8 @@ describe('createModels', () => {
   it('keeps World Labs out of untracked concurrent Create runs', () => {
     expect(getCreateModels().some((model) => model.id === 'worldlabs-environment')).toBe(false);
     expect(getFeaturedModels().some((model) => model.id === 'worldlabs-environment')).toBe(false);
-    expect(searchModels('world labs')).toEqual([]);
+    // Idol (speridlabs) matches "world" (its World output) and "labs"; it is free and may run from Create.
+    expect(searchModels('world labs').filter((model) => model.apiProvider === 'worldlabs')).toEqual([]);
   });
 
   it('search matches display name, provider, and category (case-insensitive)', () => {

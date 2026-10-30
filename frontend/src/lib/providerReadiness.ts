@@ -1,7 +1,10 @@
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { ModelNodeDefinition } from '../types';
 import { supportsKreaAccount, usesKreaAccount, type CredentialReadiness } from './kreaConnection';
-import { directBlock, directKeyNames, fallbackKeyNames, KEY_PROVIDERS, selectRoute, type DirectBlock, type NodeRoute } from './directRoute';
+import {
+  directBlock, directKeyNames, fallbackKeyNames, isKeylessRoute, KEY_PROVIDERS, routeById, selectRoute,
+  type DirectBlock, type NodeRoute,
+} from './directRoute';
 import { modelChoice, paramCallsProvider, paramRoute, paramValue } from './nodeKeys';
 
 export type ProviderSetupTarget =
@@ -39,7 +42,7 @@ export const PROVIDER_KEY_LABELS: Readonly<Record<string, string>> = {
   MINIMAX_API_KEY: 'MiniMax', XAI_API_KEY: 'xAI', HIGGSFIELD_API_KEY: 'Higgsfield',
   QUIVER_API_KEY: 'QuiverAI', KREA_API_TOKEN: 'Krea', KREA_USAGE_KEY: 'Krea usage', IDEOGRAM_API_KEY: 'Ideogram',
   WORLDLABS_API_KEY: 'World Labs', TYPESAFE_API_KEY: 'TypeSafe', BYTEPLUS_API_KEY: 'BytePlus',
-  BFL_API_KEY: 'Black Forest Labs',
+  BFL_API_KEY: 'Black Forest Labs', HF_TOKEN: 'Hugging Face',
 };
 
 export function providerCheckIsCurrent(entry: ProviderHealthEntry | undefined, completedAt: number | null, now = Date.now()): entry is ProviderHealthEntry {
@@ -140,6 +143,8 @@ export function modelReadiness(def: ModelNodeDefinition, params: Record<string, 
     return { ...ready, connectionLabel: `${PROVIDER_KEY_LABELS[key] ?? key} API`,
       detail: `Calls a ${route.provider} model with ${how}${own ? '' : '; no list price'}. ${ready.detail}` };
   }
+  const keyless = keylessReadiness(def, params, cache, health);
+  if (keyless) return keyless;
   const keys = (Array.isArray(def.envKeyName) ? def.envKeyName : [def.envKeyName]).filter(Boolean);
   if (!keys.length) return { label: 'No API key required', tone: 'neutral',
     detail: 'This node has no API-key requirement. Its inputs and local tools may still need setup.' };
@@ -160,6 +165,35 @@ export function modelReadiness(def: ModelNodeDefinition, params: Record<string, 
   const blockNote = block ? ` ${directBlockNote(def, block)}` : '';
   return { ...ready, connectionLabel: connectionLabelFor(key),
     detail: `${routeDetail(def, route, key, directOk)}${blockNote} ${ready.detail}` };
+}
+
+/** A keyless route (RouteSpec.optionalKeys: Idol on its Hugging Face Space)
+ * runs without a key; its optional key, when set, is checked like any other
+ * (node_readiness.instance_access: free without it, key with it). */
+function keylessReadiness(
+  def: ModelNodeDefinition,
+  params: Record<string, unknown>,
+  cache: CredentialReadiness,
+  health: ProviderHealthState,
+): ModelReadiness | null {
+  if (!def.routes?.length) return null;
+  const route = selectRoute(def, params, cache.loaded ? cache.apiKeys : {});
+  const spec = route.routeId ? routeById(def, route.routeId) : undefined;
+  if (!spec || !isKeylessRoute(spec)) return null;
+  const optional = spec.optionalKeys?.[0];
+  const name = optional ? PROVIDER_KEY_LABELS[optional] ?? optional : null;
+  if (route.key) {
+    const ready = keyReadiness(route.key, cache, health);
+    return { ...ready, connectionLabel: `${PROVIDER_KEY_LABELS[route.key] ?? route.key} token`,
+      detail: `Runs on your own ${PROVIDER_KEY_LABELS[route.key] ?? route.key} allowance. ${ready.detail}` };
+  }
+  return {
+    label: 'No key needed', tone: 'neutral',
+    ...(optional ? { setupTarget: { kind: 'api-key', key: optional } as const, connectionLabel: `${name} token (optional)` } : {}),
+    detail: name
+      ? `Runs without a key on a small shared daily allowance. Add a ${name} token in Settings to use your own.`
+      : 'Runs without a key.',
+  };
 }
 
 /** Why this recipe can't run on the maker's own API (lib/directRoute.ts directBlock). */

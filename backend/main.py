@@ -14488,6 +14488,69 @@ async def preview_node_output(node_id: str, port: str | None = None, size: str =
                     headers={"X-Nebula-Preview-Port": name, **(_last_run_error_header(node_id) or {})})
 
 
+def world_splat_summaries(value: Any) -> dict[str, Any] | None:
+    """What an agent can know about a World v2 value's PLY splats without
+    seeing them (view_output): per splat its Gaussian count, bounding box and
+    file size (services/splat_ply.py), with the world's provider, model and
+    seed. None for a value that isn't a World v2 with a PLY splat (World v1
+    is Marble's SPZ; its preview is the panorama)."""
+    from models.spatial import parse_spatial_value
+    from services.splat_ply import SplatPlyError, summarize_splat_ply
+
+    if not isinstance(value, dict) or value.get("schemaVersion") != 2:
+        return None
+    try:
+        world = parse_spatial_value("World", value)
+    except (TypeError, ValueError):
+        return None
+    plys = [splat for splat in world.assets.splats if splat.format == "ply"]
+    if not plys:
+        return None
+    tags = dict(tag.split(":", 1) for tag in world.session.tags if ":" in tag)
+    seed = tags.get("seed")
+    summary: dict[str, Any] = {
+        "world": world.id,
+        "provider": world.session.provider,
+        "model": world.session.model,
+        "seed": int(seed) if seed is not None and seed.lstrip("-").isdigit() else None,
+        "coordinateSystem": {"handedness": world.coordinateSystem.handedness,
+                             "upAxis": world.coordinateSystem.upAxis,
+                             "forwardAxis": world.coordinateSystem.forwardAxis,
+                             "unit": world.coordinateSystem.unit},
+        "splats": [],
+    }
+    for splat in plys:
+        path = _output_path_from_ref(splat.asset.uri)
+        if path is None or not path.is_file():
+            summary["splats"].append({"id": splat.id, "error": "The splat file is missing from Nebula's outputs."})
+            continue
+        try:
+            summary["splats"].append({"id": splat.id, **summarize_splat_ply(path)})
+        except (OSError, SplatPlyError) as exc:
+            summary["splats"].append({"id": splat.id, "error": f"The splat file can't be read: {exc}"})
+    return summary
+
+
+@app.get("/api/graph/node/{node_id}/splat-summary")
+async def splat_summary_node_output(node_id: str, port: str | None = None) -> dict[str, Any]:
+    """A World v2 output's PLY splats as numbers for agents (view_output):
+    Gaussian count, bounding box, file size, seed, provider and model. Only
+    files in Nebula's outputs are read."""
+    node = cli_graph.nodes.get(node_id)
+    if node is None:
+        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+    outputs = node.get("outputs") or {}
+    names = [port] if port is not None else [name for name, entry in outputs.items()
+                                              if isinstance(entry, dict) and entry.get("type") == "World"]
+    for name in names:
+        entry = outputs.get(name)
+        if isinstance(entry, dict) and entry.get("type") == "World":
+            summary = await asyncio.to_thread(world_splat_summaries, entry.get("value"))
+            if summary is not None:
+                return {"nodeId": node_id, "port": name, **summary}
+    raise HTTPException(status_code=404, detail=f"{node_id} has no World output with a PLY splat.")
+
+
 def _last_run_error_header(node_id: str) -> dict[str, str] | None:
     """The node's output is from before a run that failed: view_output says
     so beside it, a picture (200) or a value (415) alike."""

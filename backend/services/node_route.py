@@ -49,6 +49,11 @@ KEY_PROVIDERS: dict[str, str] = {
     "BYTEPLUS_API_KEY": "bytedance",
     # Black Forest Labs' own API (api.bfl.ai), the maker of FLUX.
     "BFL_API_KEY": "bfl",
+    # A Hugging Face access token. No route needs it: a Space route lists it
+    # in ``optionalKeys`` and runs anonymously without it. Set, it gives the
+    # run the person's own ZeroGPU quota, which Hugging Face may bill them
+    # for past the free minutes (https://huggingface.co/docs/hub/spaces-zerogpu).
+    "HF_TOKEN": "huggingface",
 }
 
 # How errors and readiness name a provider. frontend/src/lib/directRoute.ts
@@ -60,6 +65,7 @@ PROVIDER_LABELS: dict[str, str] = {
     "recraft": "Recraft", "ideogram": "Ideogram", "openrouter": "OpenRouter", "bfl": "Black Forest Labs",
     "higgsfield": "Higgsfield", "meshy": "Meshy", "quiver": "QuiverAI", "krea": "Krea",
     "worldlabs": "World Labs", "nous": "Nous", "typesafe": "TypeSafe", "utility": "Local tools",
+    "speridlabs": "Speridlabs", "huggingface": "Hugging Face",
 }
 
 # A direct route that also needs a param set, else the run takes the fallback.
@@ -153,6 +159,10 @@ class RouteSpec(TypedDict, total=False):
       ``keys[0]``, except a plan-only route).
     - ``maker``: the model maker's own API; at most one, and it is routes[0].
     - ``keys``: any of them runs it, tried in order.
+    - ``optionalKeys``: a route that runs with no key at all (a maker's free
+      Hugging Face Space). The keys listed here are used when set (the
+      person's own quota) but never needed, and stay out of ``envKeyName``,
+      so the node reads as free, not as missing a key. ``keys`` is then [].
     - ``plan``: a Krea route that can bill the signed-in plan ("optional":
       when ``_kreaAuth`` is "mcp"; "only": always).
     - ``handler``: the client that runs it (execution/route_clients.py).
@@ -185,6 +195,7 @@ class RouteSpec(TypedDict, total=False):
     provider: str
     maker: bool
     keys: list[str]
+    optionalKeys: list[str]
     plan: str
     handler: str
     endpoint: str
@@ -763,6 +774,26 @@ def _set_keys(route: Mapping[str, Any], api_keys: Mapping[str, Any]) -> list[str
     return [key for key in keys(route.get("keys")) if _is_set(api_keys, key)]
 
 
+def is_keyless(route: Mapping[str, Any]) -> bool:
+    """A route that runs without any key (``optionalKeys`` declared)."""
+    return isinstance(route.get("optionalKeys"), list)
+
+
+def _can_run_keyed(route: Mapping[str, Any], api_keys: Mapping[str, Any]) -> bool:
+    """The route's key condition holds: one of its keys is set, or it needs none."""
+    return is_keyless(route) or bool(_set_keys(route, api_keys))
+
+
+def route_key(route: Mapping[str, Any], api_keys: Mapping[str, Any]) -> str | None:
+    """The key a run on this route uses: the first of its keys that is set,
+    else the first of its optional keys that is set, else None (a keyless
+    route run anonymously)."""
+    for key in [*keys(route.get("keys")), *keys(route.get("optionalKeys"))]:
+        if _is_set(api_keys, key):
+            return key
+    return None
+
+
 def _union_keys(definition: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(key for route in routes_of(definition) for key in keys(route.get("keys"))))
 
@@ -770,7 +801,7 @@ def _union_keys(definition: Mapping[str, Any]) -> tuple[str, ...]:
 def _keyed(route: Mapping[str, Any], api_keys: Mapping[str, Any]) -> Route:
     """A route that can take the run, with the first of its keys that is set."""
     kind = DIRECT if route.get("maker") else FALLBACK
-    return Route(kind, route.get("provider"), _set_keys(route, api_keys)[0], route.get("id"))
+    return Route(kind, route.get("provider"), route_key(route, api_keys), route.get("id"))
 
 
 def _select_from_routes(
@@ -790,13 +821,13 @@ def _select_from_routes(
         route = route_by_id(definition, choice)
         if route is None:
             return Route(UNSET, first, None, None, DirectBlock(UNKNOWN_PROVIDER, PROVIDER_PARAM, None, choice))
-        if not _set_keys(route, api_keys):
+        if not _can_run_keyed(route, api_keys):
             return Route(UNSET, route.get("provider"), None, route.get("id"), None, tuple(keys(route.get("keys"))))
         block = route_block(definition, route, params)
         if block is not None:
             return Route(UNSET, route.get("provider"), None, route.get("id"), block)
         return _keyed(route, api_keys)
-    route = next((r for r in routes if r.get("plan") != "only" and _set_keys(r, api_keys)), None)
+    route = next((r for r in routes if r.get("plan") != "only" and _can_run_keyed(r, api_keys)), None)
     if route is None:
         return Route(UNSET, first, None, None, None, _union_keys(definition))
     block = route_block(definition, route, params)
@@ -1564,11 +1595,11 @@ def _unavailable_route(
     if route.kind != UNSET:
         return None
     alternatives = [str(r.get("id")) for r in routes_of(definition)
-                    if r.get("id") != route.route_id and r.get("plan") != "only" and _set_keys(r, api_keys)
+                    if r.get("id") != route.route_id and r.get("plan") != "only" and _can_run_keyed(r, api_keys)
                     and route_block(definition, r, values) is None]
     hidden = route.block is not None and route.block.reason == HIDDEN
     keyless = ([str(route.block.on)] if hidden and not alternatives and route.block.on
-               and not _set_keys(route_by_id(definition, route.block.on) or {}, api_keys) else [])
+               and not _can_run_keyed(route_by_id(definition, route.block.on) or {}, api_keys) else [])
     return route, alternatives, keyless
 
 
@@ -1910,9 +1941,9 @@ def price_row_problems(definition: Mapping[str, Any], route_key: str, rows: Any,
     return problems[:5]
 
 # The clients a route can name (execution/route_clients.py ROUTE_CLIENTS).
-ROUTE_HANDLERS = ("bfl", "fal", "replicate-model", "openrouter-images", "openrouter-videos", "krea")
-_ROUTE_FIELDS = {"id", "provider", "maker", "keys", "plan", "handler", "endpoint", "endpointWhen", "params",
-                 "rename", "valueMap", "rules", "paramVisibleWhen", "pricing", "note"}
+ROUTE_HANDLERS = ("bfl", "fal", "replicate-model", "openrouter-images", "openrouter-videos", "krea", "hf-space")
+_ROUTE_FIELDS = {"id", "provider", "maker", "keys", "optionalKeys", "plan", "handler", "endpoint", "endpointWhen",
+                 "params", "rename", "valueMap", "rules", "paramVisibleWhen", "pricing", "note"}
 _ROUTE_RULE_KEYS = set(_RULE_KEYS) | {"ports"}
 
 
@@ -1965,8 +1996,20 @@ def routes_problems(definition: Mapping[str, Any]) -> list[str]:
             problems.append(f"{where}.plan must be 'optional' or 'only'")
         if plan and route.get("provider") != "krea":
             problems.append(f"{where} only a Krea route can bill the plan")
-        if plan != "only" and not route_keys:
-            problems.append(f"{where} needs keys (only a plan-only route runs without one)")
+        optional = route.get("optionalKeys")
+        if optional is not None:
+            if not isinstance(optional, list) or not all(isinstance(k, str) and k for k in optional):
+                problems.append(f"{where}.optionalKeys must be a list of key names")
+                optional = []
+            if route_keys:
+                problems.append(f"{where} lists keys and optionalKeys; a keyless route's keys must be []")
+            for key in optional:
+                if key not in KEY_PROVIDERS:
+                    problems.append(f"{where}.optionalKeys names {key}, which Settings doesn't store")
+            if plan:
+                problems.append(f"{where} a keyless route can't bill a plan")
+        if plan != "only" and not route_keys and optional is None:
+            problems.append(f"{where} needs keys (only a plan-only or keyless route runs without one)")
         if route_keys and KEY_PROVIDERS.get(route_keys[0]) != route.get("provider"):
             problems.append(f"{where}.provider must be {KEY_PROVIDERS.get(route_keys[0])!r}, who bills {route_keys[0]}")
         if route.get("handler") not in ROUTE_HANDLERS:

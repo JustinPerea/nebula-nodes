@@ -69,6 +69,13 @@ portable descriptive data; its session provider/model fields are not proof of
 a provider resource identity. Exporting v2 requires a future backend-verified
 provider-resource binding and currently fails before any HTTP request.
 
+The first provider node that emits World v2 is Idol (`speridlabs-idol`,
+2026-10-29, [model-providers/speridlabs/idol.md](model-providers/speridlabs/idol.md)):
+one image to a 3DGS PLY splat, as `assets.splats = [{format: "ply", ...}]`
+with session `{source: "generated", provider: "speridlabs", model: "idol"}`
+and a right-handed, -Y-up, +Z-forward coordinate system in `custom` units.
+World Labs Export refuses it before any request, as it does every v2 value.
+
 ## Strict spatial contracts
 
 The authoritative backend contracts are in
@@ -195,10 +202,74 @@ state rather than ad hoc property access.
 The registry covers World v1/v2, camera pose/path, spatial context, depth
 map/sequence, point cloud, sensor rig/stream, and spatial session. It is reused
 by standard nodes, dynamic nodes, and Create Studio output rendering. World v1
-keeps the dedicated lazy interactive Marble/SPZ preview. World v2 and the other
-types currently render bounded summary cards and local download links; this is
+keeps the dedicated lazy interactive Marble/SPZ preview. World v2 renders its
+summary card plus, when it has a splat at a local `/api/outputs/` URL, an
+**Explore in 3D** button (see [World v2 splat preview](#world-v2-splat-preview)).
+The other types render bounded summary cards and local download links; this is
 not a claim that Nebula has interactive renderers or authoring nodes for every
 representation.
+
+## World v2 splat preview
+
+`WorldSplatPreview` (`components/nodes/WorldSplatPreview.tsx`) is a deferred
+chunk (`lib/deferredChunks.ts`, `DeferredWorldSplatPreview`): the card loads
+only the button, the dialog loads the World viewer, and the viewer loads Spark,
+so the first-load budget is unchanged. `lib/worldV2Splat.ts` `previewSplat`
+picks the value's SPZ first, else its PLY. The viewer
+(`WorldEnvironmentViewer`) takes the splat's `format`, turns the value's
+`upAxis` to Three's +Y (`worldTransform.upAxisToThreeRotation`: -Y up is 180
+degrees about X), and with `framing="object"` puts the reset camera on the
+`forwardAxis` side at 2.4 times the bounding radius, looking at the centre.
+
+Every PLY passes a bounded preflight before Spark sees a byte, in the browser
+(`lib/splatPly.ts`) and in the backend (`services/splat_ply.py`), with the
+same rules: binary little-endian 1.0, one `vertex` element, float properties
+only, the 14 required 3DGS properties (x y z, f_dc_0..2, opacity, scale_0..2,
+rot_0..3), optional normals and 0, 9, 24 or 45 `f_rest_*`, nothing else; at
+most 2,000,000 Gaussians and 128 MiB; and the file exactly the header plus
+one record per Gaussian. The fetch keeps its streamed byte cap.
+
+Spark 2.1.0's PLY reader tries a `new Function` parser first and falls back
+to its ordinary one when that throws. Nebula's build replaces both of Spark's
+`new Function(` calls with a throwing call (`vite.config.ts`
+`sparkWithoutRuntimeCodegen`), so the production build always takes the
+fallback, and `check-build-budget.mjs` fails a build with runtime code
+generation in any chunk.
+
+Measured 2026-10-29 on a production build served with a CSP of
+`script-src 'self' 'wasm-unsafe-eval'` (no `unsafe-eval`), headless Chrome on
+SwiftShader (software GL), from click to the dialog's "ready":
+
+| File | PLY fetch | First open | Later opens |
+|---|---|---|---|
+| Synthetic, 262,144 Gaussians (17.8 MB) | 76-120 ms | 0.9-1.2 s when it's the first splat opened | 0.33-0.48 s |
+| Synthetic, 1,048,576 Gaussians (71.3 MB) | 210-310 ms | 11.6-12.3 s | 0.39-0.49 s |
+| The Space's backpack example, 262,144 Gaussians | 72-108 ms | 1.1 s first; 52-58 s third | 0.34-0.45 s |
+
+No CSP violations and no page errors came from the viewer, so the fallback
+parser holds without `unsafe-eval`. The PLY fetch is never the slow part.
+The slow first opens depend on order, not on the file: the first splat a page
+opens takes about a second, the second about 12 s, the third about a minute,
+and re-opening any of them takes under half a second. The JS heap after each
+close stayed at 13-17 MB and no canvas outlived its dialog, so it isn't a
+main-thread leak; the time is inside Spark's load after the fetch. This was
+only seen on SwiftShader and isn't explained yet. Nebula doesn't convert
+Idol's PLYs to SPZ for now: the rule was to convert if a 262,144-Gaussian
+load took over about 5 s, and here one did only as the third splat opened on
+SwiftShader. Check that on a real GPU before deciding.
+
+The same check found that every World viewer in a production build failed with
+"FullScreenQuad is not a constructor", on main too: Spark constructs
+`FullScreenQuad` at module load, and Rolldown put three's
+`postprocessing/Pass.js` in the World viewer's chunk, which imports
+`spark-vendor`, which imported it back. `vite.config.ts` now keeps `Pass.js`
+in the `spark-vendor` group, and `check-build-budget.mjs` fails a build in
+which a `spark-vendor` chunk is in an import cycle with another chunk.
+
+`view_output` can't show agents 3D, so for a World v2 PLY splat it adds the
+backend's summary (`GET /api/graph/node/{id}/splat-summary`): Gaussian count,
+bounding box, file size, spherical-harmonics degree, opacity spread, and the
+world's provider, model, seed and axes.
 
 ## Backend capability gate
 

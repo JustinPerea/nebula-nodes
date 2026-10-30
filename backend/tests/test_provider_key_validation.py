@@ -57,6 +57,7 @@ PROVIDER_KEYS = {
     "World Labs": "WORLDLABS_API_KEY",
     "BytePlus": "BYTEPLUS_API_KEY",
     "Black Forest Labs": "BFL_API_KEY",
+    "Hugging Face": "HF_TOKEN",
     # Nous has no settings.json key — it resolves an OAuth credential from
     # Hermes auth files via services.nous_auth.load_nous_credential().
 }
@@ -619,6 +620,9 @@ def test_provider_checks_cover_every_catalog_credential():
         if isinstance(names, str):
             names = [names]
         catalog_keys.update(name for name in names if name)
+        # A keyless route's optional key (HF_TOKEN) is checked once saved too.
+        for route in definition.get("routes") or []:
+            catalog_keys.update(name for name in route.get("optionalKeys") or [] if name)
 
     health_keys = {
         key

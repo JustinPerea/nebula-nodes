@@ -219,7 +219,14 @@ def instance_access(
         return KREA if krea_signed_in else None
     keys = {key: "set" for key in configured_keys}
     route = node_route.select_route(definition, params, keys)
-    return None if route.kind == node_route.UNSET else KEY
+    if route.kind == node_route.UNSET:
+        return None
+    # A keyless route (a maker's free Hugging Face Space) run without its
+    # optional key runs free; with the key set it runs on that key.
+    spec = node_route.route_by_id(definition, route.route_id) or {}
+    if node_route.is_keyless(spec) and route.key is None:
+        return FREE
+    return KEY
 
 
 KREA_SIGN_IN = "needs the Krea account signed in (Settings > Providers)"

@@ -15,7 +15,8 @@ import type {
 import type { PortDataType, PortValue } from '../../types';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { parseRepresentation, type ParsedRepresentation } from '../../lib/representationViewerRegistry';
-import { WorldPreview } from './DeferredViewers';
+import { WorldPreview, WorldSplatPreview } from './DeferredViewers';
+import { previewSplat } from '../../lib/worldV2Splat';
 import '../../styles/spatial-preview.css';
 
 interface ViewerOptions {
@@ -69,6 +70,7 @@ function SummaryCard({
   chips = [],
   assets,
   compact,
+  action,
 }: {
   readonly eyebrow: string;
   readonly title: string;
@@ -77,6 +79,8 @@ function SummaryCard({
   readonly chips?: readonly string[];
   readonly assets?: AssetSummary;
   readonly compact: boolean;
+  /** One control under the header (a World v2 splat's "Explore in 3D"). */
+  readonly action?: ReactNode;
 }) {
   return (
     <section
@@ -91,6 +95,7 @@ function SummaryCard({
         </span>
       </header>
       {subtitle && <p className="spatial-preview__subtitle">{subtitle}</p>}
+      {action}
       <dl className="spatial-preview__metrics">
         {metrics.slice(0, compact ? 3 : 4).map((metric) => (
           <div className="spatial-preview__metric" key={metric.label}>
@@ -381,6 +386,7 @@ function worldV2Summary(value: WorldValueV2, options: ViewerOptions): ReactNode 
         ...(value.defaultCamera ? ['Default camera'] : []),
       ]}
       assets={collectWorldAssets(value)}
+      action={previewSplat(value) ? <WorldSplatPreview world={value} compact={options.compact} /> : undefined}
     />
   );
 }

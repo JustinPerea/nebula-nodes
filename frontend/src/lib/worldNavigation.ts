@@ -22,6 +22,10 @@ export interface WorldSceneBounds {
   clipRadius: number;
   /** Authoritative reset position when the source frame defines a capture origin. */
   resetPosition?: [number, number, number];
+  /** Where the reset camera looks, for an object seen from outside (a World
+   * v2 object splat). Without it the camera looks along -Z from its position,
+   * as for an environment. */
+  resetTarget?: [number, number, number];
 }
 
 export interface WorldCameraPose {
@@ -144,7 +148,7 @@ export function worldCameraPose(bounds: WorldSceneBounds): WorldCameraPose {
   const position: [number, number, number] = bounds.resetPosition
     ? [...bounds.resetPosition]
     : [bounds.center[0], WORLD_EYE_HEIGHT_METERS, bounds.center[2]];
-  const target: [number, number, number] = [
+  const target: [number, number, number] = bounds.resetTarget ? [...bounds.resetTarget] : [
     position[0],
     position[1],
     position[2] - lookDistance,

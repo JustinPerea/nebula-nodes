@@ -74,6 +74,8 @@ export type APIProvider =
   | 'worldlabs'
   | 'nous'
   | 'typesafe'
+  | 'speridlabs'
+  | 'huggingface'
   | 'utility';
 
 export interface PortDefinition {
@@ -215,7 +217,8 @@ export interface ModelNodeDefinition {
 }
 
 /** Which client runs a route (backend execution/route_clients.py). */
-export type RouteHandler = 'bfl' | 'fal' | 'replicate-model' | 'openrouter-images' | 'openrouter-videos' | 'krea';
+export type RouteHandler = 'bfl' | 'fal' | 'replicate-model' | 'openrouter-images' | 'openrouter-videos' | 'krea'
+  | 'hf-space';
 
 /** One provider route of a route-table node (ModelNodeDefinition.routes;
  *  backend services/node_route.py RouteSpec has the field notes). */
@@ -229,6 +232,10 @@ export interface RouteSpec {
   maker?: true;
   /** Any of these keys runs it, tried in order. */
   keys: string[];
+  /** A keyless route (a maker's free Hugging Face Space): it runs with no
+   *  key, and uses the first of these that is set (the person's own quota).
+   *  `keys` is then [], and these stay out of `envKeyName`. */
+  optionalKeys?: string[];
   /** A Krea route that can bill the signed-in plan: 'optional' when
    *  `_kreaAuth` is 'mcp', 'only' always. */
   plan?: 'optional' | 'only';
