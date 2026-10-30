@@ -125,7 +125,7 @@ describe('the proposal bar in the region (GM 2)', () => {
     useGraphStore.getState().notify('Imported. One note.', 'info');
     withRegion('canvas', <ProposalBar />);
     const bar = await screen.findByRole('region', { name: 'Proposal from Codex' }, LAZY);
-    const later = (await screen.findByText(/Run them when the current run finishes/, {}, LAZY)).closest('.proposal-bar')!;
+    const later = (await screen.findByText(/^You can run .+ (?:now|when the current run finishes)\.$/, {}, LAZY)).closest('.proposal-bar')!;
     const notice = await screen.findByText('Imported. One note.', {}, LAZY);
     expect(above(bar, later)).toBe(true);
     expect(above(later, notice)).toBe(true);
@@ -211,7 +211,7 @@ describe('every toast joins the region (GM 3)', () => {
     act(() => reportPersonRequired());
     await screen.findByRole('region', { name: 'Proposal from Codex' }, LAZY);
     await screen.findByText('Imported. One note.', {}, LAZY);
-    await screen.findByText(/Run them when the current run finishes/, {}, LAZY);
+    await screen.findByText(/^You can run .+ (?:now|when the current run finishes)\.$/, {}, LAZY);
     const shown = [...document.querySelectorAll<HTMLElement>('[data-notice-slot]')]
       .filter((slot) => slot.childElementCount > 0)
       .map((slot) => slot.dataset.noticeSlot);

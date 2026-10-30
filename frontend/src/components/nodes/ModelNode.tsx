@@ -50,6 +50,8 @@ import { JEV_CARD_FIELDS, jevCardText, jevResultKey, upstreamPortValues } from '
 import { failureMessage } from '../../lib/errorCopy';
 import { showNotice } from '../../lib/canvasNotice';
 import { useCanvasLock } from '../../lib/canvasLock';
+import { RUN_LOCK_VERBS, runFinishesLine } from '../../lib/runLock';
+import { OFFLINE_VERBS } from '../../lib/useBackendOffline';
 
 // Input cards that name the file they hold, under the picture for an image.
 const INPUT_FILE_CARDS = new Set(['image-input', 'video-input', 'audio-input', 'document-input']);
@@ -391,7 +393,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         {hasMediaPreview && <button type="button"
           className={inToolbar ? 'selection-toolbar__button nodrag' : 'model-node__next-step nodrag'}
           data-next-step-anchor={id}
-          {...lock.act({ disabled: !nextStepSource || !/^n\d+$/.test(id), title: nextStepTitle }, { run: isExecuting })}
+          {...lock.act({ disabled: !nextStepSource || !/^n\d+$/.test(id), title: nextStepTitle }, { run: isExecuting, runTitle: runFinishesLine(RUN_LOCK_VERBS.runIt) })}
           onMouseDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
@@ -540,7 +542,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
           {nodeData.outputFreshness.runId && <button type="button"
             {...lock.act({ disabled: !latestPaperSourceReady, offline: 'rerun',
               title: latestPaperSourceReady ? 'Reuse the saved recipe with the latest exported artwork' : 'Refresh or reconnect the Paper source first' },
-            { run: isExecuting })}
+            { run: isExecuting, runTitle: runFinishesLine(OFFLINE_VERBS.rerun) })}
             onClick={(event) => {
             event.stopPropagation();
             const runId = nodeData.outputFreshness?.runId;

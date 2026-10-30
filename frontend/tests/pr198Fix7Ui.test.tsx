@@ -35,7 +35,6 @@ import { SelectionToolbar } from '../src/components/SelectionToolbar';
 import { Toolbar } from '../src/components/panels/Toolbar';
 import { ContextMenu } from '../src/components/ContextMenu';
 import { AgentLog } from '../src/components/panels/AgentLog';
-import { RUN_LOCK_REASON } from '../src/lib/cinemaScene';
 import { FOLLOWING_MARK, canvasLockOf } from '../src/lib/canvasLock';
 import { resetCanvasFollowForTests, setFollowingSwitch } from '../src/lib/canvasFollow';
 import { noteBackendConnection, resetBackendConnectionForTests } from '../src/lib/backendConnection';
@@ -62,21 +61,23 @@ const button = (name: RegExp) => screen.getAllByRole('button')
 describe('M2: the run lock comes first, and carries no following mark', () => {
   it('canvasLockOf: run, then follow, then offline', () => {
     const lock = canvasLockOf({ projectName: 'Second canvas', agent: 'Codex' }, true);
-    expect(lock.act(undefined, { run: true })).toEqual({ disabled: true, title: RUN_LOCK_REASON });
+    // GM r39 item 2: no shared default; the control's own line wins.
+    expect(lock.act(undefined, { run: true, runTitle: 'You can run it when the run finishes.' }))
+      .toEqual({ disabled: true, title: 'You can run it when the run finishes.' });
     expect(lock.act(undefined, { run: true, runTitle: 'Wait for the graph import to finish.' }).title)
       .toBe('Wait for the graph import to finish.');
     expect(lock.act()).toMatchObject({ disabled: true, title: WAIT, [FOLLOWING_MARK]: '' });
     expect(canvasLockOf(null, true).act()).toMatchObject({ disabled: true });
-    expect(canvasLockOf(null, true).act().title).not.toBe(RUN_LOCK_REASON);
+    expect(canvasLockOf(null, true).act().title ?? '').not.toMatch(/when the run finishes/);
   });
 
   it('SelectionToolbar, run and follow: the run-locked buttons have no following mark; Ask keeps it', () => {
     useGraphStore.setState({ nodes: [textNode('n1', 'Brief'), textNode('n2', 'Note')], edges: [], isExecuting: true });
     follow();
     render(<SelectionToolbar />);
-    for (const name of [/^Run/i, /^Duplicate/i, /^Arrange/i, /^Delete/i]) {
+    for (const [name, verb] of [[/^Run/i, 'run'], [/^Duplicate/i, 'duplicate'], [/^Arrange/i, 'arrange'], [/^Delete/i, 'delete']] as const) {
       const b = button(name)!;
-      expect(b.getAttribute('title'), String(name)).toBe(RUN_LOCK_REASON);
+      expect(b.getAttribute('title'), String(name)).toBe(`You can ${verb} them when the run finishes.`);
       expect(b.hasAttribute(FOLLOWING_MARK), String(name)).toBe(false);
     }
     expect(button(/^Ask/i)!.hasAttribute(FOLLOWING_MARK)).toBe(true);
@@ -87,11 +88,15 @@ describe('M2: the run lock comes first, and carries no following mark', () => {
     follow();
     render(<Toolbar />);
     fireEvent.click(screen.getByRole('button', { name: 'Canvas actions' }));
-    for (const name of ['Load graph', 'Import CLI graph', 'Clear canvas', 'Arrange']) {
+    // GM r39 item 2: Load, Import, Clear and Auto-layout, each in GM's words.
+    for (const [name, line] of [['Load graph', 'You can load a canvas when the run finishes.'],
+      ['Import CLI graph', 'You can import a canvas when the run finishes.'],
+      ['Clear canvas', 'You can clear the canvas when the run finishes.'],
+      ['Arrange', 'You can arrange the canvas when the run finishes.']] as const) {
       const b = screen.getAllByRole('button').find((candidate) => candidate.textContent?.startsWith(name));
       expect(b, name).toBeDefined();
       expect(b, name).toBeDisabled();
-      expect(b!.getAttribute('title'), name).toBe(RUN_LOCK_REASON);
+      expect(b!.getAttribute('title'), name).toBe(line);
       expect(b!.hasAttribute(FOLLOWING_MARK), name).toBe(false);
     }
   });
@@ -102,7 +107,7 @@ describe('M2: the run lock comes first, and carries no following mark', () => {
     render(<Toolbar />);
     fireEvent.click(screen.getByRole('button', { name: 'Canvas actions' }));
     const arrange = screen.getAllByRole('button').find((b) => b.textContent?.startsWith('Arrange'))!;
-    expect(arrange.getAttribute('title')).toBe(RUN_LOCK_REASON);
+    expect(arrange.getAttribute('title')).toBe('You can arrange the canvas when the run finishes.');
   });
 
   it('the context menu, run and follow: Run, Duplicate and Delete read the run line', () => {
@@ -110,10 +115,11 @@ describe('M2: the run lock comes first, and carries no following mark', () => {
     follow();
     act(() => useUIStore.getState().showContextMenu({ x: 20, y: 30 }, 'n4', null));
     render(<ContextMenu />);
-    for (const name of [/^Run This Node/i, /^Duplicate/i, /^Delete/i]) {
+    // GM r39 item 2: the row's verb plus "it".
+    for (const [name, verb] of [[/^Run This Node/i, 'run'], [/^Duplicate/i, 'duplicate'], [/^Delete/i, 'delete']] as const) {
       const b = button(name)!;
       expect(b, String(name)).toBeDefined();
-      expect(b.getAttribute('title'), String(name)).toBe(RUN_LOCK_REASON);
+      expect(b.getAttribute('title'), String(name)).toBe(`You can ${verb} it when the run finishes.`);
       expect(b.hasAttribute(FOLLOWING_MARK), String(name)).toBe(false);
     }
   });
@@ -123,12 +129,12 @@ describe('M2: the run lock comes first, and carries no following mark', () => {
     follow();
     useGraphStore.getState().deleteSelected();
     expect(useGraphStore.getState().nodes).toHaveLength(1);
-    expect(JSON.stringify(useGraphStore.getState().undoNotice ?? useGraphStore.getState())).toMatch(/Wait for the active run to finish/);
+    expect(useGraphStore.getState().undoNotice?.text).toBe('Couldn’t delete “Brief”. You can delete it when the run finishes.');
     const step = { kind: 'snapshot', nodes: [], edges: [] };
     useGraphStore.setState({ undoNotice: null, undoStack: [step], redoStack: [] } as never);
     useGraphStore.getState().undo();
     expect(useGraphStore.getState().nodes).toHaveLength(1);
-    expect(JSON.stringify(useGraphStore.getState().undoNotice)).toMatch(/Wait for the active run to finish/);
+    expect(useGraphStore.getState().undoNotice?.text).toBe('Couldn’t undo. You can undo when the run finishes.');
   });
 });
 
@@ -166,7 +172,8 @@ describe('fix round 8, L5 (review 7): the last run-locked buttons read canvasLoc
     render(<DeferredRunNotice />);
     const run = screen.getByRole('button', { name: /Run/ });
     expect(run).toBeDisabled();
-    expect(run.getAttribute('title')).toBe(RUN_LOCK_REASON);
+    // GM r40 item 3: the notice's own line, read live (no node n1 on this canvas: "it").
+    expect(run.getAttribute('title')).toBe('You can run it when the current run finishes.');
     expect(run.hasAttribute(FOLLOWING_MARK)).toBe(false);
     act(() => useGraphStore.setState({ isExecuting: false }));
     expect(screen.getByRole('button', { name: /Run/ }).getAttribute('title')).toBe(WAIT);
@@ -176,9 +183,9 @@ describe('fix round 8, L5 (review 7): the last run-locked buttons read canvasLoc
   it('the sources: Rerun with latest source, Forget and the deferred Run go through lock.act with the run', () => {
     const root = resolve(__dirname, '../src/components');
     const sites: [string, RegExp][] = [
-      ['nodes/ModelNode.tsx', /lock\.act\(\{ disabled: !latestPaperSourceReady,[\s\S]{0,240}\{ run: isExecuting \}\)\}\s*onClick[\s\S]{0,240}Rerun with latest source/],
-      ['panels/RunHistoryPanel.tsx', /lock\.act\(\{ disabled: clearingRecovery === key, title: FORGET_TITLE \}, \{ run: isExecuting \}\)/],
-      ['canvas/DeferredRunNotice.tsx', /lock\.act\(\{\}, \{ run: isExecuting \|\| runStarting \}\)/],
+      ['nodes/ModelNode.tsx', /lock\.act\(\{ disabled: !latestPaperSourceReady,[\s\S]{0,240}\{ run: isExecuting, runTitle: runFinishesLine\(OFFLINE_VERBS\.rerun\) \}\)\}\s*onClick[\s\S]{0,240}Rerun with latest source/],
+      ['panels/RunHistoryPanel.tsx', /lock\.act\(\{ disabled: clearingRecovery === key, title: FORGET_TITLE \}, \{ run: isExecuting, runTitle: runFinishesLine\(RUN_LOCK_VERBS\.forgetRun\) \}\)/],
+      ['canvas/DeferredRunNotice.tsx', /lock\.act\(\{\}, \{ run: running, runTitle: line \}\)/],
     ];
     for (const [file, pattern] of sites) {
       const source = readFileSync(resolve(root, file), 'utf8');

@@ -158,11 +158,14 @@ describe('L-4: the selected chip and variation use the shared selected style; di
 
   // Fix round 3 (review 3 M-3): the variation, an image-only button, left the
   // unfilled rule for its own (its thumbnail dims; agentPresenceFollowups.r3).
-  it('disabled: the chip is in the shared unfilled rule, the variation in the image rule; the checked switch turns the grey fill', () => {
+  it('disabled: the chip is in the shared unfilled rule, the variation in the image rule; a locked switch turns the grey fill, on or off', () => {
     const unfilled = /:is\(([^)]*)\):is\(:disabled, \[aria-disabled='true'\]:not\(\[data-held-pending\]\)\),/.exec(shared)?.[1] ?? '';
     expect(unfilled).toMatch(/\.cinema-shared-controls__chip\b/);
     expect(shared).toMatch(/:is\(\.cinema-shot-panel__variation\):is\(:disabled, \[aria-disabled='true'\]\) img/);
-    const switches = cssRules(shared).filter(({ selector }) => /\.settings-switch:checked/.test(selector) && /:disabled/.test(selector));
+    // GM, PR #198 r39 item 1: no rule names the on state (`:checked`); the
+    // locked switch's own rule covers it.
+    expect(cssRules(shared).filter(({ selector }) => /\.settings-switch:checked/.test(selector))).toEqual([]);
+    const switches = cssRules(shared).filter(({ selector }) => /\.settings-switch:is\(:disabled/.test(selector) && !/::before/.test(selector));
     expect(switches.length).toBeGreaterThan(0);
     expect(switches[0].body).toMatch(/background:\s*var\(--sr-disabled-fill[^;]*!important/);
   });

@@ -40,6 +40,7 @@ import '../../styles/panels.css';
 import '../../styles/canvas-toolbar.css';
 import { refuseEditWhileOffline } from '../../lib/backendConnection';
 import { useCanvasLock } from '../../lib/canvasLock';
+import { RUN_LOCK_VERBS, RUN_LOCKED_FILES_LINE, runFinishesLine } from '../../lib/runLock';
 
 const CLEAR_CANVAS = "Couldn't clear the canvas.";
 
@@ -94,13 +95,15 @@ export function Toolbar() {
   const importFitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const actionsId = useId();
   const blockedId = useId();
+  // The panel's one line for the group (GM r39 item 2's pattern; each
+  // control's tooltip names its own verb, lib/runLock).
   const loadBlockedReason = isPreparing
     ? 'Wait for generation preparation to finish.'
     : isImportingGraph
       ? 'Wait for the graph import to finish.'
-      : 'Wait for the active run to finish.';
+      : RUN_LOCKED_FILES_LINE;
   const saveBlockedReason = !canLoad
-    ? loadBlockedReason
+    ? (loadBlockedReason === RUN_LOCKED_FILES_LINE ? runFinishesLine(RUN_LOCK_VERBS.saveCanvas) : loadBlockedReason)
     : 'Check the waiting World Labs run before you save.';
 
   const closeActions = useCallback((restoreFocus = false) => {
@@ -339,19 +342,19 @@ export function Toolbar() {
                 <ToolbarIcon name="save" /><span>Save graph</span><kbd aria-hidden="true">Ctrl / ⌘ S</kbd>
               </button>
               <button type="button" className="toolbar__action"
-                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Load graph (Ctrl+O or ⌘O)' }, { run: isExecuting, runTitle: loadBlockedReason })}
+                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Load graph (Ctrl+O or ⌘O)' }, { run: isExecuting, runTitle: runFinishesLine(RUN_LOCK_VERBS.loadCanvas) })}
                 aria-describedby={!canLoad ? blockedId : undefined}
                 aria-keyshortcuts="Control+o Meta+o" onClick={() => runSecondaryAction(requestGraphLoad)}>
                 <ToolbarIcon name="load" /><span>Load graph</span><kbd aria-hidden="true">Ctrl / ⌘ O</kbd>
               </button>
               <button type="button" className="toolbar__action"
-                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Import graph built by Nebula CLI' }, { run: isExecuting, runTitle: loadBlockedReason })}
+                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Import graph built by Nebula CLI' }, { run: isExecuting, runTitle: runFinishesLine(RUN_LOCK_VERBS.importCanvas) })}
                 aria-describedby={!canLoad ? blockedId : undefined}
                 onClick={() => runSecondaryAction(() => void handleImportCLI())}>
                 <ToolbarIcon name="cli" /><span>Import CLI graph</span>
               </button>
               <button type="button" className="toolbar__action toolbar__action--danger"
-                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Clear canvas — asks for confirmation' }, { run: isExecuting, runTitle: loadBlockedReason })}
+                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Clear canvas — asks for confirmation' }, { run: isExecuting, runTitle: runFinishesLine(RUN_LOCK_VERBS.clearCanvas) })}
                 aria-describedby={!canLoad ? blockedId : undefined}
                 onClick={() => runSecondaryAction(() => void handleClear())}>
                 <ToolbarIcon name="clear" /><span>Clear canvas…</span>
@@ -360,7 +363,7 @@ export function Toolbar() {
             <div className="toolbar__action-group" role="group" aria-label="Canvas layout">
               <h2 className="toolbar__action-heading">Layout</h2>
               <button type="button" className="toolbar__action"
-                {...lock.act({ disabled: nodeCount === 0, title: 'Arrange nodes by dependency' }, { run: isExecuting })} onClick={() => runSecondaryAction(autoLayout)}>
+                {...lock.act({ disabled: nodeCount === 0, title: 'Arrange nodes by dependency' }, { run: isExecuting, runTitle: runFinishesLine(RUN_LOCK_VERBS.arrangeCanvas) })} onClick={() => runSecondaryAction(autoLayout)}>
                 <ToolbarIcon name="layout" /><span>Arrange nodes</span>
               </button>
               <button type="button" className="toolbar__action toolbar__layout-reset" title="Reset panel positions and sizes"

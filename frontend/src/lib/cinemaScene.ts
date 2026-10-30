@@ -7,6 +7,7 @@
  */
 import type { ActiveRun } from './runHistory';
 import { nodeNameList } from './errorCopy';
+import { RUN_LOCK_VERBS, runFinishesLine } from './runLock';
 import type { CinemaSceneSpec, CinemaShot, NodeState } from '../types';
 
 export const DEFAULT_SCENE_MODEL = 'seedream-4-5';
@@ -175,27 +176,24 @@ export function scenesDeleteBlockTitle(stoppable: boolean): string {
   return stoppable ? 'Stop the runs first.' : 'Wait for the running shots to finish.';
 }
 
-/** The run lock's reason (GM, PR #198 r5 item 2): while this tab runs
- * something, deleting and undoing wait for it. The toolbar's disabled
- * Delete says it too ("Wait for the active run to finish", its tooltip). */
-export const RUN_LOCK_REASON = 'Wait for the active run to finish.';
-
-/** GM, PR #198 r5 item 2: what failed first, then the run lock's reason.
- * "Couldn't delete “X”. Wait for the active run to finish." ("the node"
- * with no name), "Couldn't delete 3 nodes. …", "Couldn't undo. …",
- * "Couldn't redo. …". */
+/** GM, PR #198 r5 item 2, with r39 item 2's lock line: what failed first,
+ * then what unlocks it, by its own verb (lib/runLock). "Couldn't delete “X”.
+ * You can delete it when the run finishes." ("the node" with no name),
+ * "Couldn't delete 3 nodes. You can delete them …", "Couldn't undo. You can
+ * undo when the run finishes.", "Couldn't redo. …". */
 export function runLockedLine(action: 'delete' | 'undo' | 'redo', count = 1, name?: string, names?: readonly string[]): string {
-  if (action !== 'delete') return `Couldn’t ${action}. ${RUN_LOCK_REASON}`;
+  if (action !== 'delete') return `Couldn’t ${action}. ${runFinishesLine(RUN_LOCK_VERBS[action])}`;
   // GM r6: several nodes are named, up to 3, grouped by title, counted from 4.
+  const several = names && names.length > 1 ? true : count > 1;
   const what = names && names.length > 1 ? nodeNameList([...names]) : count === 1 ? name ?? 'the node' : `${count} nodes`;
-  return `Couldn’t delete ${what}. ${RUN_LOCK_REASON}`;
+  return `Couldn’t delete ${what}. ${runFinishesLine(several ? RUN_LOCK_VERBS.deleteThem : RUN_LOCK_VERBS.deleteIt)}`;
 }
 
 /** The run lock over a selection of only wires (PR #198 review 5, N1): the
  * Delete key is off during the run, and never silently. GM's pattern;
  * "connection" as the canvas's other wire lines say it. */
 export function runLockedWiresLine(count: number): string {
-  return `Couldn’t delete ${count === 1 ? 'the connection' : `${count} connections`}. ${RUN_LOCK_REASON}`;
+  return `Couldn’t delete ${count === 1 ? 'the connection' : `${count} connections`}. ${runFinishesLine(count === 1 ? RUN_LOCK_VERBS.deleteIt : RUN_LOCK_VERBS.deleteThem)}`;
 }
 
 /** GM, PR #198 r3 item 1: the scene's Delete, disabled while a shot

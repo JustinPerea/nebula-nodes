@@ -27,7 +27,9 @@ vi.mock('../src/lib/backend', () => ({ apiFetch: net.apiFetch }));
 vi.mock('../src/store/graphStore', () => {
   const useGraphStore = (selector: (state: typeof graph.state) => unknown) => selector(graph.state);
   useGraphStore.getState = () => graph.state;
-  return { useGraphStore, watchGraphSyncs: () => ({ seen: new Set<string>(), stop: () => {} }) };
+  // DeferredRunNotice reads its nodes' names live (GM r40 item 3).
+  const nodeCardTitle = (node: { data?: { label?: string } } | undefined) => node?.data?.label ?? '';
+  return { useGraphStore, nodeCardTitle, watchGraphSyncs: () => ({ seen: new Set<string>(), stop: () => {} }) };
 });
 
 const { ProposalBar } = await import('../src/components/canvas/ProposalBar');
@@ -92,7 +94,7 @@ describe('ProposalBar', () => {
     try {
       const { container } = render(<ProposalBar />);
       expect(container.innerHTML).toBe('');
-      expect(screen.queryByText(/Run them when the current run finishes/)).toBeNull();
+      expect(screen.queryByText(/^You can run .+ (?:now|when the current run finishes)\.$/)).toBeNull();
       expect(screen.queryByText('Imported. One note.')).toBeNull();
     } finally {
       delete state.undoNotice;
@@ -169,7 +171,7 @@ describe('ProposalBar', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Accept & run (1 paid)' }));
     });
     expect(graph.state.executeNode).not.toHaveBeenCalled();
-    expect(screen.getByText(/Run them when the current run finishes/)).toBeTruthy();
+    expect(screen.getByText(/^You can run .+ when the current run finishes\.$/)).toBeTruthy();
   });
 
   it('rejects with the key', async () => {

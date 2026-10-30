@@ -4,6 +4,7 @@ import { getCinemaUploadIssue, useCinemaUploadStore } from '../../store/cinemaUp
 import { WorkspaceHeader } from '../WorkspaceHeader';
 import { lockedAction, useCanvasLock } from '../../lib/canvasLock';
 import { OFFLINE_VERBS } from '../../lib/useBackendOffline';
+import { RUN_LOCK_VERBS, runFinishesLine } from '../../lib/runLock';
 
 interface CinemaStudioToolbarProps {
   cinemaNodeId: string;
@@ -60,7 +61,8 @@ export function CinemaStudioToolbar({ cinemaNodeId }: CinemaStudioToolbarProps) 
           disabled: isImportingGraph || Boolean(referenceIssue),
           title: referenceIssue ?? 'Generate every shot using the current scene settings',
           offline: 'generate',
-        }, { verb: OFFLINE_VERBS.generate, neutral: true, run: isExecuting || runStarting })}
+        }, { verb: OFFLINE_VERBS.generate, neutral: true, run: isExecuting || runStarting,
+          runTitle: runFinishesLine(RUN_LOCK_VERBS.generateShot) })}
       >
         {sceneRuns.length > 0 ? 'Generating…' : 'Generate all'}
       </button>

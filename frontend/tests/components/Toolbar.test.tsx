@@ -241,7 +241,7 @@ describe('Canvas toolbar hierarchy', () => {
   });
 
   it.each([
-    [{ isExecuting: true }, 'Wait for the active run to finish.'],
+    [{ isExecuting: true }, 'You can save, load, import or clear the canvas when the run finishes.'],
     [{ isImportingGraph: true }, 'Wait for the graph import to finish.'],
     [{ createLaunchingIds: ['preparing'] }, 'Wait for generation preparation to finish.'],
   ])('keeps replacement and saving blocked while unavailable: %j', (state, reason) => {

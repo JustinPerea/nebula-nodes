@@ -24,6 +24,7 @@ import {
 } from '../lib/canvasSelection';
 import { failureMessage } from '../lib/errorCopy';
 import { useCanvasLock } from '../lib/canvasLock';
+import { itOrThem, RUN_LOCK_VERBS, runFinishesLine, type RunLockVerb } from '../lib/runLock';
 
 
 export function SelectionToolbar() {
@@ -41,7 +42,10 @@ export function SelectionToolbar() {
   // A control this tab's own run also locks (#198's run lock): its reason
   // wins over following's and offline's, in lib/canvasLock (GM r9 answer 3:
   // run, follow, offline; the Next step its node portals here reads the same).
-  const runLocked = (running: boolean, own: { disabled?: boolean; title?: string }) => lock.act(own, { run: running });
+  // Its line names the control's verb (GM r39 item 2, lib/runLock): "it" for
+  // one selected node, "them" for several.
+  const runLocked = (running: boolean, verb: RunLockVerb, own: { disabled?: boolean; title?: string }) =>
+    lock.act(own, { run: running, runTitle: runFinishesLine(verb) });
   const executeNode = useGraphStore((state) => state.executeNode);
   const executeCluster = useGraphStore((state) => state.executeCluster);
   const copySelected = useGraphStore((state) => state.copySelected);
@@ -157,7 +161,8 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button selection-toolbar__button--primary"
         onClick={runSelection}
-        {...runLocked(isExecuting || runStarting, { title: `Run selected nodes. ${describeRunScope(runScope)}` })}
+        {...runLocked(isExecuting || runStarting, itOrThem(ids.length, RUN_LOCK_VERBS.runIt, RUN_LOCK_VERBS.runThem),
+          { title: `Run selected nodes. ${describeRunScope(runScope)}` })}
         aria-label="Run selected nodes"
         aria-describedby={runScopeId}
       >
@@ -181,7 +186,7 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button"
         onClick={duplicateSelected}
-        {...runLocked(isExecuting, { title: 'Duplicate selected nodes' })}
+        {...runLocked(isExecuting, itOrThem(ids.length, RUN_LOCK_VERBS.duplicateIt, RUN_LOCK_VERBS.duplicateThem), { title: 'Duplicate selected nodes' })}
       >
         <Files size={17} aria-hidden="true" />
         <span className="selection-toolbar__label--compact">Duplicate</span>
@@ -190,7 +195,7 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button"
         onClick={autoLayoutSelected}
-        {...runLocked(isExecuting, { disabled: ids.length < 2, title: 'Arrange selected nodes' })}
+        {...runLocked(isExecuting, RUN_LOCK_VERBS.arrangeThem, { disabled: ids.length < 2, title: 'Arrange selected nodes' })}
       >
         <LayoutGrid size={17} aria-hidden="true" />
         <span className="selection-toolbar__label--compact">Arrange</span>
@@ -217,7 +222,8 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button selection-toolbar__button--danger"
         onClick={removeSelection}
-        {...runLocked(isExecuting, { disabled: sceneHeld !== null, title: sceneHeld ?? 'Delete selected nodes' })}
+        {...runLocked(isExecuting, itOrThem(ids.length, RUN_LOCK_VERBS.deleteIt, RUN_LOCK_VERBS.deleteThem),
+          { disabled: sceneHeld !== null, title: sceneHeld ?? 'Delete selected nodes' })}
         aria-label="Delete selected nodes"
       >
         <Trash2 size={17} aria-hidden="true" />

@@ -11,6 +11,14 @@ import { act, cleanup, fireEvent, render } from '@testing-library/react';
  * grey (data-held-look) shows only once 150 ms pass with no answer, the
  * shared disabled rule passes over the hold until then (data-held-pending),
  * and an answer inside 150 ms means no grey at all.
+ *
+ * Review 24 NIT-1: the 150 ms are measured from the press, stamped
+ * synchronously just before the click (`pressAt`), never from the
+ * observer's "held" stamp: that one is a microtask after act() has already
+ * started the hook's timer, so under load it lands late and the gap shrank
+ * (125.7 ms in 7 of 33 loaded runs). The timer starts after the press, so
+ * the grey can only follow the press by 150 ms or more, whatever the load;
+ * a later stamp only makes the gap longer.
  */
 const transport = vi.hoisted(() => ({ handlers: [] as ((event: unknown) => void)[] }));
 vi.mock('../src/lib/wsClient', () => ({
@@ -129,13 +137,16 @@ describe('review 23 NIT-5: the 150 ms rule, by the order of events', () => {
     h.heal();
     const release = h.hold();
     const log = record();
+    const pressAt = performance.now();
     act(() => { fireEvent.click(button()!); });
     await vi.waitFor(() => expect(button()?.hasAttribute('data-held-look')).toBe(true), { timeout: 3000, interval: 5 });
     const held = log.events.find((event) => event.held)!;
     const grey = log.events.find((event) => event.grey)!;
     expect(held.pending).toBe(true);
     expect(held.grey).toBe(false);
-    expect(grey.at - held.at).toBeGreaterThanOrEqual(HELD_LOOK_DELAY_MS - 1);
+    // In order: the press, the hold, then the grey 150 ms after the press at the earliest.
+    expect(log.events.indexOf(held)).toBeLessThan(log.events.indexOf(grey));
+    expect(grey.at - pressAt).toBeGreaterThanOrEqual(HELD_LOOK_DELAY_MS - 1);
     expect(grey.pending).toBe(false);
     // Every moment between: held and pending, never grey.
     for (const event of log.events.slice(log.events.indexOf(held), log.events.indexOf(grey))) expect([event.held, event.pending, event.grey]).toEqual([true, true, false]);
@@ -148,6 +159,7 @@ describe('review 23 NIT-5: the 150 ms rule, by the order of events', () => {
   it('an answer inside 150 ms: never grey; whatever the machine, a grey only ever follows 150 ms with no answer', async () => {
     const { h, button } = await stoppedLine();
     const log = record();
+    const pressAt = performance.now();
     act(() => { fireEvent.click(button()!); });
     // The try fails again (500): the line comes back with a live [Try again].
     await vi.waitFor(() => expect(log.events.some((event) => event.held)).toBe(true), { timeout: 3000, interval: 5 });
@@ -155,12 +167,15 @@ describe('review 23 NIT-5: the 150 ms rule, by the order of events', () => {
     await sleep(HELD_LOOK_DELAY_MS * 2);
     log.stop();
     const held = log.events.find((event) => event.held)!;
-    const answeredIn = h.timing.answered - held.at;
     for (const event of log.events.filter((one) => one.grey)) {
-      expect(event.at - held.at).toBeGreaterThanOrEqual(HELD_LOOK_DELAY_MS - 1);
+      expect(event.at - pressAt).toBeGreaterThanOrEqual(HELD_LOOK_DELAY_MS - 1);
       expect(h.timing.answered).toBeGreaterThan(event.at);
     }
-    if (answeredIn < HELD_LOOK_DELAY_MS - 10) expect(log.events.some((event) => event.grey)).toBe(false);
+    // Released (the hold off) before 150 ms had passed since the press: the
+    // timer was cleared before it could fire, so there was never a grey. By
+    // the order of events, not by how fast the answer was.
+    const released = log.events.slice(log.events.indexOf(held)).find((event) => !event.held);
+    if (released && released.at - pressAt < HELD_LOOK_DELAY_MS - 1) expect(log.events.some((event) => event.grey)).toBe(false);
     expect(button()?.hasAttribute('data-held-pending')).toBe(false);
     expect(button()?.hasAttribute('data-held-look')).toBe(false);
   });

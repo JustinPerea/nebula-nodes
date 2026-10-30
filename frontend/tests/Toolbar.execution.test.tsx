@@ -79,7 +79,7 @@ describe('Toolbar execution lifecycle', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Canvas actions' }));
     const save = screen.getByRole('button', { name: 'Save graph' });
     expect(save).toBeDisabled();
-    expect(save).toHaveAttribute('title', 'Wait for the active run to finish.');
+    expect(save).toHaveAttribute('title', 'You can save the canvas when the run finishes.');
     fireEvent.click(save);
     fireEvent(window, new CustomEvent('nebula:save'));
 

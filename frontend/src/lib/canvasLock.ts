@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import { followingSwitch, refuseEditWhileFollowing, useFollowingSwitch, waitToOpenTooltip, type FollowingSwitch } from './canvasFollow';
 import { isBackendOffline, refuseEditWhileOffline } from './backendConnection';
 import { OFFLINE_MARK, OFFLINE_NEUTRAL, offlineReason, useBackendOffline, type OfflineVerb } from './useBackendOffline';
-import { RUN_LOCK_REASON } from './cinemaScene';
 import { offlineDisabledReason } from './errorCopy';
 
 /**
@@ -57,9 +56,12 @@ export interface LockOwn {
   offline?: string | true;
 }
 
-/** The run lock's hold on one control (M2): `runTitle` when a run holds it
- * for a reason of its own (a shot that is rendering), else GM's run line. */
-export interface RunLock { run?: boolean; runTitle?: string }
+/** The run lock's hold on one control (M2). A control the run can hold
+ * names its own line with it (GM r39 item 2: "You can <verb> when the run
+ * finishes.", lib/runLock's table, or a reason of its own such as a shot
+ * that is rendering): there is no shared default, so a new lock can't fall
+ * back to a generic line. */
+export type RunLock = { run?: undefined; runTitle?: undefined } | { run: boolean; runTitle: string };
 
 export interface ActProps {
   disabled: boolean;
@@ -103,7 +105,7 @@ export function canvasLockOf(following: FollowingSwitch | null, offline: boolean
     locked, following, offline, mark, title,
     act: (own = {}, options = {}) => (options.run
       // The run's line first, alone (PR #198 M2, N1).
-      ? { disabled: true, title: options.runTitle ?? RUN_LOCK_REASON }
+      ? { disabled: true, title: options.runTitle }
       : {
         ...mark,
         disabled: locked || Boolean(own.disabled),

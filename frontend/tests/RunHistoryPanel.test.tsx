@@ -164,7 +164,7 @@ describe('RunHistoryPanel replay actions', () => {
     {
       label: 'an active execution',
       state: { isExecuting: true },
-      title: 'Wait for the run to finish first.',
+      title: 'You can clear the run history when the run finishes.',
     },
     {
       label: 'a saved provider recovery',

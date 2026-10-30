@@ -8,7 +8,8 @@ import type { NodeData } from '../src/types';
 /**
  * PR #198 fix round 5:
  * - Review 5, N2: the selection toolbar's run-lock tooltip is GM's sentence,
- *   with its period (RUN_LOCK_REASON).
+ *   with its period; GM r39 item 2 made it each control's own verb
+ *   (lib/runLock): "You can duplicate it when the run finishes."
  * - GM r7 item 2: one selection style. The Cinema scene card drops #FF5A1F
  *   and takes the selected style every model card has, in its category's
  *   colour (--node-category-color, set on the card as ModelNode sets it),
@@ -20,23 +21,24 @@ vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), disconnect
 
 import { SelectionToolbar } from '../src/components/SelectionToolbar';
 import { CinemaSceneNode } from '../src/components/nodes/CinemaSceneNode';
-import { RUN_LOCK_REASON } from '../src/lib/cinemaScene';
 import { CATEGORY_COLORS } from '../src/constants/ports';
 import { useGraphStore } from '../src/store/graphStore';
 
 afterEach(() => { cleanup(); useGraphStore.setState({ nodes: [], isExecuting: false }); });
 
 describe('N2: the toolbar\'s run-lock tooltip', () => {
-  it('Duplicate and Delete read "Wait for the active run to finish." while this tab runs', () => {
+  it('Run, Duplicate, Arrange and Delete each say their own verb while this tab runs (GM r39 item 2)', () => {
     const node = { id: 'n1', type: 'model-node', position: { x: 0, y: 0 }, selected: true,
       data: { label: 'Text', definitionId: 'text-input', params: {}, outputs: {}, state: 'idle' } } as unknown as Node<NodeData>;
     useGraphStore.setState({ nodes: [node], edges: [], isExecuting: true });
     render(<SelectionToolbar />);
-    expect(RUN_LOCK_REASON).toBe('Wait for the active run to finish.');
     // Round 6 (GM r8 merge check): Run and Arrange, which the run also
-    // locks, say so too.
-    expect(screen.getAllByTitle(RUN_LOCK_REASON).length).toBe(4);
-    expect(screen.queryByTitle('Wait for the active run to finish')).toBeNull();
+    // locks, say so too. One node: "it" (Arrange needs two, so "them").
+    for (const line of ['You can run it when the run finishes.', 'You can duplicate it when the run finishes.',
+      'You can arrange them when the run finishes.', 'You can delete it when the run finishes.']) {
+      expect(screen.getAllByTitle(line), line).toHaveLength(1);
+    }
+    expect(document.body.innerHTML).not.toMatch(/Wait for the active run/);
   });
 });
 

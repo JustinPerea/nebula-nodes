@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * - M1: the run lock is never silent. During the tab's own run (a real
  *   executeShot: isExecuting is true) the Delete key, the menu, deleteSelected
  *   and Undo/Redo say why: GM's scene and shot lines when that is the
- *   reason, else "… Wait for the active run to finish." (GM r5 item 2).
+ *   reason, else "… You can delete it when the run finishes." (GM r5 item 2, r39 item 2).
  * - M1: another window's run: one line, the backend's named one, never the
  *   generic "Couldn’t delete the node." in front (GM r5 item 3); a
  *   multi-select keeps "Deleted 2 nodes." with Undo and GM's kept line.
@@ -37,7 +37,7 @@ const { GRAPH_PARAMS_VERSION } = await import('../../src/lib/savedParamsUpgrades
 const { setProjectContext } = await import('../../src/lib/projectContext');
 const { resetBackendConnectionForTests } = await import('../../src/lib/backendConnection');
 const { apiFetch } = await import('../../src/lib/backend');
-const { scenesKeptLine, shotRemovalBlock, RUN_LOCK_REASON, runLockedLine } = await import('../../src/lib/cinemaScene');
+const { scenesKeptLine, shotRemovalBlock, runLockedLine } = await import('../../src/lib/cinemaScene');
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status, headers: { 'content-type': 'application/json' } });
@@ -210,25 +210,25 @@ describe('M1: during the tab\'s own run, every delete and undo path says why', (
     expect(ids()).toEqual(['n4', 'n5', 'n6', 'n7']);
   });
 
-  it('another node: "Couldn’t delete “Brief”. Wait for the active run to finish."', async () => {
+  it('another node: "Couldn’t delete “Brief”. You can delete it when the run finishes."', async () => {
     await ownShotRun();
     useGraphStore.getState().deleteNode('n5');
-    expect(notice()).toBe("Couldn’t delete “Brief”. Wait for the active run to finish.");
+    expect(notice()).toBe("Couldn’t delete “Brief”. You can delete it when the run finishes.");
     useGraphStore.setState({ undoNotice: null } as never);
     expect(useGraphStore.getState().allowCanvasDelete(['n5'])).toBe(false);
-    expect(notice()).toBe("Couldn’t delete “Brief”. Wait for the active run to finish.");
+    expect(notice()).toBe("Couldn’t delete “Brief”. You can delete it when the run finishes.");
     expect(ids()).toContain('n5');
   });
 
-  it('a multi-select with the scene: "Couldn’t delete 4 nodes. Wait for the active run to finish."', async () => {
+  it('a multi-select with the scene: "Couldn’t delete 4 nodes. You can delete them when the run finishes."', async () => {
     await ownShotRun();
     select('n4', 'n5', 'n6', 'n7');
     useGraphStore.getState().deleteSelected();
-    expect(notice()).toBe("Couldn’t delete 4 nodes. Wait for the active run to finish.");
+    expect(notice()).toBe("Couldn’t delete 4 nodes. You can delete them when the run finishes.");
     useGraphStore.setState({ undoNotice: null } as never);
     useGraphStore.getState().onNodesChange(['n5', 'n6'].map((id) => ({ id, type: 'remove' as const })));
     // GM r6: several nodes are named.
-    expect(notice()).toBe("Couldn’t delete “Brief” and “Note”. Wait for the active run to finish.");
+    expect(notice()).toBe("Couldn’t delete “Brief” and “Note”. You can delete them when the run finishes.");
     await sleep(20);
     expect(sent('DELETE')).toHaveLength(0);
     expect(ids()).toEqual(['n4', 'n5', 'n6', 'n7']);
@@ -244,7 +244,7 @@ describe('M1: during the tab\'s own run, every delete and undo path says why', (
     expect(shotsOf('n4').map((shot) => shot.id)).toEqual(['s1', 's2', added]);
   });
 
-  it('Undo or Redo of anything else: "Couldn’t undo. Wait for the active run to finish."', async () => {
+  it('Undo or Redo of anything else: "Couldn’t undo. You can undo when the run finishes."', async () => {
     useGraphStore.setState({ nodes: [cinema('n4', [{ id: 's1', prompt: 'a' }, { id: 's2', prompt: 'b' }], 'Opening'),
       textNode('n5', 'Brief')] } as never);
     useGraphStore.getState().duplicateNode('n5');
@@ -261,9 +261,9 @@ describe('M1: during the tab\'s own run, every delete and undo path says why', (
     expect(stacks[0]).toBeGreaterThan(0);
     expect(stacks[1]).toBeGreaterThan(0);
     useGraphStore.getState().redo();
-    expect(notice()).toBe("Couldn’t redo. Wait for the active run to finish.");
+    expect(notice()).toBe("Couldn’t redo. You can redo when the run finishes.");
     useGraphStore.getState().undo();
-    expect(notice()).toBe("Couldn’t undo. Wait for the active run to finish.");
+    expect(notice()).toBe("Couldn’t undo. You can undo when the run finishes.");
     await sleep(20);
     expect(restoresSent()).toBe(0);
     expect([useGraphStore.getState().undoStack.length, useGraphStore.getState().redoStack.length]).toEqual(stacks);
@@ -276,13 +276,12 @@ describe('M1: during the tab\'s own run, every delete and undo path says why', (
     expect(notice()).toBeNull();
   });
 
-  it('the line\'s parts are GM\'s (r5 item 2)', () => {
-    expect(RUN_LOCK_REASON).toBe('Wait for the active run to finish.');
-    expect(runLockedLine('delete', 1, '“X”')).toBe("Couldn’t delete “X”. Wait for the active run to finish.");
-    expect(runLockedLine('delete', 1)).toBe("Couldn’t delete the node. Wait for the active run to finish.");
-    expect(runLockedLine('delete', 3)).toBe("Couldn’t delete 3 nodes. Wait for the active run to finish.");
-    expect(runLockedLine('undo')).toBe("Couldn’t undo. Wait for the active run to finish.");
-    expect(runLockedLine('redo')).toBe("Couldn’t redo. Wait for the active run to finish.");
+  it('the line\'s parts are GM\'s (r5 item 2, with r39 item 2\'s lock line)', () => {
+    expect(runLockedLine('delete', 1, '“X”')).toBe("Couldn’t delete “X”. You can delete it when the run finishes.");
+    expect(runLockedLine('delete', 1)).toBe("Couldn’t delete the node. You can delete it when the run finishes.");
+    expect(runLockedLine('delete', 3)).toBe("Couldn’t delete 3 nodes. You can delete them when the run finishes.");
+    expect(runLockedLine('undo')).toBe("Couldn’t undo. You can undo when the run finishes.");
+    expect(runLockedLine('redo')).toBe("Couldn’t redo. You can redo when the run finishes.");
   });
 });
 

@@ -189,8 +189,9 @@ export function CinemaShotsRail({
                 aria-label={`Remove Shot ${idx + 1}`}
                 // M2: a run that holds the shot says so first, over following
                 // and offline (lib/canvasLock's order).
-                {...lockedAction(lock, { title: 'Remove shot', offline: 'remove shots' }, { verb: OFFLINE_VERBS.removeShots, run: Boolean(block),
-                  runTitle: block ? shotRemovalBlockTitle(block, `Shot ${idx + 1}`) : undefined })}
+                {...lockedAction(lock, { title: 'Remove shot', offline: 'remove shots' }, block
+                  ? { verb: OFFLINE_VERBS.removeShots, run: true, runTitle: shotRemovalBlockTitle(block, `Shot ${idx + 1}`) }
+                  : { verb: OFFLINE_VERBS.removeShots })}
                 onClick={() => handleRemove(shot.id, idx)}>×</button>
             </div>
           </div>

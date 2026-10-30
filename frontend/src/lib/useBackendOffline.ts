@@ -99,13 +99,6 @@ export function reconnectsLine(verb?: string): string {
   return verb ? `You can ${verb} when Nebula reconnects.` : OFFLINE_RECONNECT_FALLBACK;
 }
 
-/** GM r37: a lock reason says what unlocks it, "You can … when …": a
- * control a run holds, by the verb of what it does ("You can rerun it when
- * the run finishes."). */
-export function runFinishesLine(verb: string): string {
-  return `You can ${verb} when the run finishes.`;
-}
-
 /** A control's title: the offline reason while offline, else its own. */
 export function offlineTitle(offline: boolean, verb: OfflineVerb | undefined, own?: string): string | undefined {
   return offline ? offlineReason(verb) : own;

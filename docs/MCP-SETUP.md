@@ -214,11 +214,17 @@ The server exposes these tools for building and running (see
   sync that still shows them meanwhile leaves them off. If Nebula refuses
   it, the nodes come back where they were, with their connections, not
   selected, with the usual line saying why, and the waiting edits go out.
-  A Cmd+Z pressed while a delete is still on its way undoes nothing and
-  says "Nothing was undone. Your last change was still saving."; once the
-  delete has landed, one Cmd+Z brings the nodes back with their
-  connections, on the canvas and in Nebula's graph, and Redo deletes them
-  again. A Cmd+Z the person presses before another step has reached Nebula
+  A Cmd+Z pressed while a delete is still on its way waits for the
+  delete's answer, saying nothing meanwhile, then brings the nodes back
+  with their connections, on the canvas and in Nebula's graph, with the
+  usual "Restored the node." (Redo deletes them again), as a Cmd+Z after
+  the delete has landed does. If Nebula refuses the delete, the nodes come
+  back with the delete's own line and the waiting Cmd+Z says nothing more.
+  If the restore is refused or fails, or the delete gets no answer within
+  15 s, the canvas says "Nebula couldn’t bring back “X”. Try Undo again."
+  (the names as the cards read then; several nodes by the usual list, four
+  or more counted); after the 15 s give-up, a late answer to the delete
+  never brings the nodes back by itself: the next Cmd+Z does. A Cmd+Z the person presses before another step has reached Nebula
   waits for Nebula's answer, then undoes it (a clear, an upload once its
   node is on the canvas, an accepted proposal, a model picked on an
   OpenRouter or Replicate node; a step Nebula refused undoes nothing, and
@@ -4011,16 +4017,16 @@ finish." for several scenes).
 How a delete or an undo reads depends on whose run it is:
 
 - **A run this window started** locks every delete, undo and redo on the
-  canvas until it ends (the toolbar's are disabled, titled "Wait for the
-  active run to finish."). The Delete key, the menu's Delete and Undo/Redo
+  canvas until it ends (the toolbar's are disabled, each titled by its
+  own verb: "You can delete it when the run finishes."). The Delete key, the menu's Delete and Undo/Redo
   are never silent: a selection of only rendering scenes reads GM's scene
   line ("Couldn’t delete “Scene”. “Shot 2” is still running. Stop the run
   first."), an undo that would remove a rendering shot reads "Couldn’t undo.
   It would remove “Shot 2”, which is still running. Stop the run first.",
-  and anything else reads the lock's own reason: "Couldn't delete “Brief”.
-  Wait for the active run to finish.", "Couldn't delete 3 nodes. Wait for
-  the active run to finish.", "Couldn't undo. Wait for the active run to
-  finish." ("Couldn't redo. …"). Nothing is sent.
+  and anything else reads the lock's own reason: "Couldn’t delete “Brief”.
+  You can delete it when the run finishes.", "Couldn’t delete 3 nodes. You
+  can delete them when the run finishes.", "Couldn’t undo. You can undo
+  when the run finishes." ("Couldn’t redo. …"). Nothing is sent.
 - **A run another window (or an agent) started** doesn't lock the canvas.
   The Delete key over a selection deletes the rest and keeps the scene and
   its connections: "Deleted 3 nodes. “Scene” wasn't deleted because “Shot 2” is

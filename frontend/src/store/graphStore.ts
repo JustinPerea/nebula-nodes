@@ -100,7 +100,7 @@ import { sceneRetryingLine, sceneStoppedLine, sceneStopStateLine, type SceneStop
 import { ORDER, PRESENCE, WHOLE, mergeScenes, stillClashing, unionFields, withFields, type SceneField } from '../lib/cinemaSceneMerge';
 import { cleanPending, pendingSkipLine, type PendingAgent, type PendingSkipSummary } from '../lib/pendingNodes';
 import { MISSING_KEY_FAILURE, MODEL_SETTINGS_FAILURE, MODEL_SETTINGS_FAILURE_HEADER, modelKeyMissingText, modelSettingsFailedText, modelSetupFailedText } from '../lib/failureLines';
-import { cleanRemovals, deletedNoticeText, DROPPED_REDO_TEXT, DROPPED_UNDO_TEXT, skippedPressText, lateRestoreText, mergeRemovals, notRestoredText, pinsOnAnotherModel, restoredNoticeText, supersededBy, type RemovalRecord } from '../lib/deleteNotice';
+import { bringBackFailedText, cleanRemovals, deletedNoticeText, DROPPED_REDO_TEXT, DROPPED_UNDO_TEXT, skippedPressText, lateRestoreText, mergeRemovals, notRestoredText, pinsOnAnotherModel, restoredNoticeText, supersededBy, type RemovalRecord } from '../lib/deleteNotice';
 import { NOTHING_RAN_LINE, OTHER_NODE_LINE, SHOT_NOT_STARTED_LINE, validationReadings, writtenReading, type ValidationReading } from '../lib/validationCopy';
 import {
   RUNTIME_FIELDS, applySlice, captureOwnAdd, diffCanvas, edgeKey, stableJson, editArrivedText, foldArrange, forgetClearedPlaceholders,
@@ -140,6 +140,7 @@ import { noteCanvasReplaced, type CanvasReplacement } from '../lib/canvasReplace
 import { boundingRect, findOpenGroupOffset, UNMEASURED_NODE_SIZE, type NodeRect } from '../lib/nodePlacement';
 import { withParamDefaults } from '../lib/paramDefaults';
 import { replaceChanged, shareUnchanged } from '../lib/structuralShare';
+import { RUN_LOCK_VERBS, runFinishesLine } from '../lib/runLock';
 
 export type TrackItemOrderAction = 'send-to-back' | 'send-backward' | 'bring-forward' | 'bring-to-front';
 
@@ -6088,13 +6089,19 @@ function changeCanvasNodes(
   // go through the same path." (Before: the node stayed until Nebula
   // answered, so it could be typed into while its delete was on its way,
   // and those writes reached Nebula after it: round 17's open class.)
+  // GM r39 item 3 (r40 items 1 and 2) reverses the Cmd+Z part: the press is
+  // held for the delete's answer with nothing said, then restores as any
+  // Undo ("Restored the node."); a refused delete drops it silently; a
+  // refused or failed restore, or no answer in 15 s, says "Nebula couldn’t
+  // bring back “X”. Try Undo again." (holdsHistory, runHeldPresses,
+  // giveUpHeld, sendRestore).
   breakUndoDebounce();
   const undoStep = shared?.step ?? pushUndo(set, get);
   const shownBefore = new Set(get().nodes.map((node) => node.id));
   // A project opened (or a graph loaded) before the answers came: the
   // canvas and its steps are another graph's now (second review).
   const replacementRevision = canvasReplacementRevision;
-  // A Cmd+Z pressed before the answers is dropped with GM's line (stepHistory).
+  // A Cmd+Z pressed before the answers waits for them, then restores (GM r39 item 3).
   holdStep(undoStep);
   removedBy.set(undoStep, new Set([...(removedBy.get(undoStep) ?? []), ...cliRemovedIds]));
   markDeleteStep(undoStep);
@@ -7028,9 +7035,10 @@ function withoutRenderingScenes(state: GraphState, changes: NodeChange[], set: G
  * (isExecuting: a run of the graph, a Cinema shot run, a Create launch), no
  * node is deleted, and never silently (GM r5 item 2). When every node asked
  * for is a scene with a shot rendering, GM's scene line says why (r3 item 1,
- * r4 item 2); otherwise what failed, then the lock's reason: "Couldn't delete
- * “Brief”. Wait for the active run to finish." / "Couldn't delete 4 nodes.
- * …". True when it refused; nothing is sent.
+ * r4 item 2); otherwise what failed, then the lock's line (GM r39 item 2):
+ * "Couldn't delete “Brief”. You can delete it when the run finishes." /
+ * "Couldn't delete 4 nodes. You can delete them …". True when it refused;
+ * nothing is sent.
  */
 function refuseRunLockedDelete(state: GraphState, ids: readonly string[], set: GraphSet): boolean {
   if (!state.isExecuting) return false;
@@ -8176,12 +8184,28 @@ const HOLD_LIMIT_MS = 15_000;
  * line followed by "1 undo was skipped while a change was saving." So do the
  * 15 s limit (a press is never applied late, L-3) and a project switch (L-4).
  * A target that was taken off (its request failed: cancelUndoStep, a refused
- * delete) drops that press quietly: its failure has its own line (a refused
- * delete's, the model pickers' and chat /clear's, review 12 L-4).
+ * delete) drops that press: its failure has its own line (a refused
+ * delete's, the model pickers' and chat /clear's, review 12 L-4), and the
+ * press counts in the skipped line beside it (review 15, L-2), except an
+ * Undo held on a refused Delete, which says nothing (GM r39 item 3).
+ *
+ * GM r39 item 3 (reversing r18's option (c) refusal): an Undo pressed while
+ * its Delete is on its way is held like any other (`onDelete`). The 15 s
+ * limit on it says "Nebula couldn’t bring back “X”. Try Undo again." with the
+ * names read when it gives up (giveUpHeld), and a refused or failed restore
+ * says the same (sendRestore). A press behind it bound to a step above its
+ * target lets it apply beneath that step (undoneLater): both were asked for.
  */
 type PressTarget = { entry: UndoEntry } | { inverseOf: number };
 /** `order`: when it was pressed, against when each clear was issued (clearSteps). */
-interface HeldPress { id: number; action: 'undo' | 'redo'; target: PressTarget | null; order: number }
+interface HeldPress {
+  id: number; action: 'undo' | 'redo'; target: PressTarget | null; order: number;
+  /** GM r39 item 3: an Undo pressed while its Delete was still on its way.
+   * It waits silently; a refused Delete drops it with no line of its own;
+   * a refused or failed restore, or no answer in 15 s, says
+   * bringBackFailedText. */
+  onDelete?: boolean;
+}
 /** The order presses and clears were issued in (review 13, L-2). */
 let historyOrder = 0;
 /** The clears' steps (the toolbar's, chat /clear's), by when each was issued.
@@ -8863,8 +8887,35 @@ function waitFor(step: UndoEntry, set: GraphSet): void {
   // The limit drops the presses (L-3): a late answer is then an ordinary step.
   heldTimer = setTimeout(() => {
     heldTimer = null;
-    if (heldFor === step) announceDrop(set, dropHeldPresses());
+    if (heldFor === step) giveUpHeld(step, set);
   }, HOLD_LIMIT_MS);
+}
+
+/** The 15 s limit on the step the front press waits for (L-3). An Undo held
+ * on a Delete that never answered says GM's r40 line, naming what it couldn't
+ * bring back as the canvas reads it now; the others say announceDrop's. A
+ * late answer to that Delete is then an ordinary step: it never restores by
+ * itself, and the next Undo press does (GM r40 item 2). */
+function giveUpHeld(step: UndoEntry, set: GraphSet): void {
+  const front = heldPresses[0];
+  const onDelete = Boolean(front?.onDelete && batchLastApplied === null && pressTarget(front) === step);
+  const dropped = dropHeldPresses();
+  if (!onDelete) {
+    announceDrop(set, dropped);
+    return;
+  }
+  set((state) => besideFailure(state, bringBackFailedText(namesBroughtBack(step, state.nodes))));
+}
+
+/** What a delete step brings back, named as the canvas shows each node now
+ * (its card title; the step's copy for one off the canvas), by the shared
+ * name-list rule (GM r39 item 3: "with X read live from cardTitle"). */
+function namesBroughtBack(step: UndoEntry, nodes: readonly Node<NodeData>[]): string {
+  const removed = [...(removedBy.get(step) ?? [])];
+  const ids = removed.length > 0 ? removed : isSliceStep(step) ? [] : step.nodes.map((node) => node.id);
+  const copies = isSliceStep(step) ? [] : step.nodes;
+  const ordered = [...ids].sort((a, b) => copies.findIndex((node) => node.id === a) - copies.findIndex((node) => node.id === b));
+  return nodeNameList(ordered.map((id) => listedNodeTitle(nodes.some((node) => node.id === id) ? nodes : copies, id)));
 }
 
 /** Runs the held presses whose step has settled, in order (see above). */
@@ -8910,7 +8961,10 @@ function runHeldPresses(set: GraphSet, get: GraphGet): void {
     // change lands after this one: review 12 probe H4, delete, Cmd+Z, delete
     // again before the first answer), or under the person's own older delete
     // re-pushed by its late answer (L-1): it applies beneath them (applyHistory).
-    if (at >= 0 && stack.slice(at + 1).every((above) => staysAbove(above, entry))) {
+    // GM r39 item 3: or under a step a later held press of this batch undoes
+    // (delete n1, Cmd+Z, delete n3, Cmd+Z, n3 answering first): the person
+    // asked for both, so each press undoes its own step, in order.
+    if (at >= 0 && stack.slice(at + 1).every((above) => staysAbove(above, entry) || undoneLater(above))) {
       if (changesNothing(entry, state.nodes, state.edges)) {
         // Nothing it changed is left to change (review 15, L-2): the step
         // goes, and the press goes to the step below it, unless a later
@@ -8931,7 +8985,7 @@ function runHeldPresses(set: GraphSet, get: GraphGet): void {
         continue;
       }
       heldPresses.shift();
-      const done = applyHistory(press.action, set, get, entry);
+      const done = applyHistory(press.action, set, get, entry, { heldOnDelete: press.onDelete });
       if (done) {
         heldInverses.set(press.id, done.inverse);
         batchLastApplied = { action: press.action, noticeId: done.noticeId, inverse: done.inverse };
@@ -8945,13 +8999,21 @@ function runHeldPresses(set: GraphSet, get: GraphGet): void {
     }
     // Its step was taken off (the request failed, and said so): this press
     // goes to nothing, the presses after it still count. It counts in the
-    // skipped line, beside the failure's own (review 15, L-2: C7).
+    // skipped line, beside the failure's own (review 15, L-2: C7), except an
+    // Undo held on a refused Delete: the node is back with the Delete's own
+    // failure line, and nothing else is said (GM r39 item 3).
     heldPresses.shift();
-    skipPress(press);
+    if (!press.onDelete) skipPress(press);
   }
   // Presses a clear superseded while later ones waited: the line says so (L-B).
   if (batchSkipped.undos + batchSkipped.redos > 0) announceDrop(set, { ...batchSkipped, applied: batchLastApplied });
   endHeldBatch();
+}
+
+/** Whether a press still held behind the front one is bound to `step`. */
+function undoneLater(step: UndoEntry): boolean {
+  return heldPresses.slice(1).some((held) => held.action === 'undo' && held.target !== null
+    && sameTarget(held.target, { entry: step }));
 }
 
 /** A held press that did nothing: counted into the line its batch ends with. */
@@ -8960,28 +9022,24 @@ function skipPress(press: HeldPress): void {
     ? { ...batchSkipped, undos: batchSkipped.undos + 1 } : { ...batchSkipped, redos: batchSkipped.redos + 1 };
 }
 
-/** Whether an undo pressed now would go to a delete still on its way (the
- * step on top, or the one the held presses leave on top). */
-function pressHitsDeleteInFlight(state: GraphState): boolean {
-  const target = heldPresses.length > 0 ? nextPressTarget('undo', state) : (() => {
-    const top = state.undoStack[state.undoStack.length - 1];
-    return top ? { entry: top } : null;
-  })();
-  if (!target || !('entry' in target)) return false;
-  const entry = target.entry;
+/** A delete still on its way (not a clear): an Undo bound to it waits for its
+ * answer, then restores (GM r39 item 3, reversing r18's option (c) refusal). */
+function isDeleteInFlight(entry: UndoEntry): boolean {
   return stepsInFlight.has(entry) && Boolean(removedBy.get(entry)?.size) && !clearSteps.has(entry);
 }
 
 /** Whether this press waits for a step's answer (and is queued, bound to its target). */
 function holdsHistory(action: 'undo' | 'redo', state: GraphState, set: GraphSet): boolean {
   if (heldPresses.length > 0) {
-    heldPresses.push({ id: ++heldPressSeq, action, target: nextPressTarget(action, state), order: ++historyOrder });
+    const target = nextPressTarget(action, state);
+    heldPresses.push({ id: ++heldPressSeq, action, target, order: ++historyOrder,
+      onDelete: action === 'undo' && Boolean(target && 'entry' in target && isDeleteInFlight(target.entry)) });
     return true;
   }
   const top = state.undoStack[state.undoStack.length - 1];
   if (action !== 'undo' || !top || !stepsInFlight.has(top)) return false;
   endHeldBatch();
-  heldPresses = [{ id: ++heldPressSeq, action, target: { entry: top }, order: ++historyOrder }];
+  heldPresses = [{ id: ++heldPressSeq, action, target: { entry: top }, order: ++historyOrder, onDelete: isDeleteInFlight(top) }];
   waitFor(top, set);
   return true;
 }
@@ -8994,7 +9052,7 @@ function stepHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet): voi
   const state = get();
   // The run lock keeps every step where it is, and says why (PR #198 review
   // 4, M1; GM r5 item 2): GM's shot line when the step would take away a shot
-  // that is rendering, else "Couldn't undo. Wait for the active run to finish."
+  // that is rendering, else "Couldn't undo. You can undo when the run finishes."
   if (state.isExecuting) {
     refuseRunLockedStep(action, state, set);
     return;
@@ -9002,13 +9060,6 @@ function stepHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet): voi
   if (state.providerRecoveries.length > 0 || state.providerStartAmbiguities.length > 0) return;
   // Review 15, L-2: a step with nothing left to change never takes a press.
   dropDeadSteps(action, set, get);
-  // GM r18, item 2 (option (c)): "Cmd+Z while the delete is in flight shows
-  // the existing "Nothing was undone. Your last change was still saving.""
-  // The press isn't held for the delete's answer, and is never applied late.
-  if (action === 'undo' && pressHitsDeleteInFlight(get())) {
-    set((now) => besideFailure(now, DROPPED_UNDO_TEXT));
-    return;
-  }
   if (holdsHistory(action, get(), set)) return;
   applyHistory(action, set, get);
   // And none is left on top of it for the next one (the Undo control greys out).
@@ -9023,7 +9074,8 @@ function stepHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet): voi
  * inverse and the id of the notice it shows (or will show, once the restore
  * answers), or null when nothing was there to undo or redo.
  */
-function applyHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet, target?: UndoEntry): { inverse: UndoEntry; noticeId: number } | null {
+function applyHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet, target?: UndoEntry,
+  options: { heldOnDelete?: boolean } = {}): { inverse: UndoEntry; noticeId: number } | null {
   const state = get();
   if (state.isExecuting) {
     // A held press that comes due while this tab runs something: never
@@ -9160,14 +9212,14 @@ function applyHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet, tar
   // older step keeps owning what it added (review 16, H1).
   noteArrivedElsewhere(back.map((node) => node.id), get, [...above, ...(jumpedOver.get(entry) ?? [])]);
   void sendRestore(action, nodes, edges, nextNodes, next.edges, entry, inverse, set,
-    { noticeId, ownLine: ownLine?.kind === 'restored' && waitsForBackend ? ownLine : null });
+    { noticeId, ownLine: ownLine?.kind === 'restored' && waitsForBackend ? ownLine : null, heldOnDelete: options.heldOnDelete });
   return { inverse, noticeId };
 }
 
 /** An undo or redo pressed (or coming due) while this tab runs something:
  * nothing moves, and the line says why (PR #198 review 4, M1; GM r5 item 2):
  * GM's shot line when the step would take away a shot that is rendering,
- * else the run lock's ("Couldn't undo. Wait for the active run to finish.").
+ * else the run lock's ("Couldn't undo. You can undo when the run finishes.").
  * Nothing is read off the canvas into the step (no captureOwnAdd). */
 function refuseRunLockedStep(action: 'undo' | 'redo', state: GraphState, set: GraphSet, target?: UndoEntry): void {
   const from = action === 'undo' ? state.undoStack : state.redoStack;
@@ -9387,7 +9439,7 @@ function sendRestore(
   entry: UndoEntry,
   inverse: UndoEntry,
   set: GraphSet,
-  notice: { noticeId: number; ownLine: OwnStepLine | null },
+  notice: { noticeId: number; ownLine: OwnStepLine | null; heldOnDelete?: boolean },
 ): Promise<void> {
   const body = restoreRequest(action, prevNodes, prevEdges, nextNodes, nextEdges);
   if (!body) {
@@ -9446,6 +9498,11 @@ function sendRestore(
    * the hold limit. The person reads the undo failure line, always. On
    * the graph it was made in, the canvas goes back to where Nebula is. */
   const refused = (reason: string, how: { text?: string; quiet?: boolean } = {}) => {
+    // An Undo held on a Delete (GM r39 item 3, r40 item 2): one neutral line
+    // for a refused or failed restore, naming what it couldn't bring back as
+    // the cards read now, in place of "Couldn't undo that." or the timeout's.
+    const heldLine = notice.heldOnDelete && action === 'undo' && !how.quiet
+      ? (state: GraphState) => bringBackFailedText(namesBroughtBack(entry, state.nodes)) : null;
     ownLinesWaiting.delete(notice.noticeId);
     skippedAfter.delete(notice.noticeId);
     // Another graph is open now: nothing here is that graph's (as before).
@@ -9453,7 +9510,7 @@ function sendRestore(
     set((state) => {
       // A refusal written for the person already says what couldn't be
       // done ("Couldn’t undo. It would remove “Shot 2”, …"; PR #198 GM r3 item 3).
-      const line = how.quiet ? {} : { undoNotice: { id: ++undoNoticeSeq, text: how.text ?? headedLine(`Couldn’t ${action} that.`, reason), offer: null,
+      const line = how.quiet ? {} : { undoNotice: { id: ++undoNoticeSeq, text: heldLine?.(state) ?? how.text ?? headedLine(`Couldn’t ${action} that.`, reason), offer: null,
         ...(isForeignEdit(entry) ? { agentColor: entry.agentColor, entry } : {}) } };
       if (how.text) timeoutNoticeId = undoNoticeSeq;
       const stack = action === 'undo' ? state.redoStack : state.undoStack;
@@ -11269,7 +11326,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     const fail = (reason: string) => reportNodeCreationFailure(definition?.displayName ?? definitionId, reason);
     if (!definition) return fail('This node is no longer available.');
     const before = get();
-    if (before.isExecuting || before.isImportingGraph) return fail('Wait for the current run or graph import to finish.');
+    // GM r39 item 2's pattern for the run; the import keeps its own line.
+    if (before.isExecuting) return fail(runFinishesLine(RUN_LOCK_VERBS.addIt));
+    if (before.isImportingGraph) return fail('Wait for the graph import to finish.');
     if (pendingConnectedNodeCreationAttempt || pendingNodeCreationAttempt) return fail('Another node-create request is still unresolved. Wait for the exact connected pair to sync, or reload the canvas before trying again.');
     if (connect.newNodeIs !== 'source' && connect.newNodeIs !== 'target') return fail('The connection direction is invalid.');
     if (!Number.isFinite(position.x) || !Number.isFinite(position.y)) return fail('The canvas position is invalid.');

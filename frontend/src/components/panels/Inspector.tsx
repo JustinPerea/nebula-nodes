@@ -37,6 +37,7 @@ import { failureMessage } from '../../lib/errorCopy';
 import { extractPaletteFromImage, paletteNotice } from '../../lib/paletteExtract';
 import { fileNameParam, inputFileName } from '../../lib/fileName';
 import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
+import { RUN_LOCK_VERBS, runFinishesLine } from '../../lib/runLock';
 
 type InspectorParamDefinition = ParamDefinition | DynamicParamDefinition;
 
@@ -1207,7 +1208,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button"
-            {...lock.act({ title: 'Run this node and its dependencies' }, { run: runLocked || runStarting })}
+            {...lock.act({ title: 'Run this node and its dependencies' }, { run: runLocked || runStarting, runTitle: runFinishesLine(RUN_LOCK_VERBS.runIt) })}
             onClick={() => executeNode(renderNode.id)}
           >
             <Play
@@ -1222,7 +1223,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button"
-            {...lock.act({ title: 'Duplicate this node' }, { run: runLocked })}
+            {...lock.act({ title: 'Duplicate this node' }, { run: runLocked, runTitle: runFinishesLine(RUN_LOCK_VERBS.duplicateIt) })}
             onClick={() => duplicateNode(renderNode.id)}
           >
             <Copy
@@ -1237,7 +1238,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button inspector__action-button--danger"
-            {...lock.act({ disabled: sceneHeld !== null, title: sceneHeld ?? 'Delete this node' }, { run: runLocked })}
+            {...lock.act({ disabled: sceneHeld !== null, title: sceneHeld ?? 'Delete this node' }, { run: runLocked, runTitle: runFinishesLine(RUN_LOCK_VERBS.deleteIt) })}
             onClick={() => {
               // A World Labs hold refuses, with its notice; otherwise it deletes at
               // once and says "Deleted the node." with Undo (GM, 2026-10-23).

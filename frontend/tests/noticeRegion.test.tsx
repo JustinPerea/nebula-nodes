@@ -150,11 +150,11 @@ describe('one app-level notice region', () => {
     expect(useGraphStore.getState().undoNotice).toBeNull();
   }, SLOW);
 
-  it('the proposal bar\'s own notice (Run when the current run finishes) lands there', async () => {
+  it('the proposal bar\'s own notice (the deferred run\'s state line, GM r40 item 3) lands there', async () => {
     const { container } = render(<App />);
     await screen.findByTestId('canvas');
     act(() => useCanvasProposalsStore.setState({ deferredRun: { agentName: 'Claude Code', nodeIds: ['n7'] } as never }));
-    const line = await screen.findByText(/Run them when the current run finishes/, {}, LAZY);
+    const line = await screen.findByText(/^You can run it now\.$/, {}, LAZY);
     expectInRegion(line, container);
     expect(line.closest('.proposal-bar-panel')).toBeNull();
   }, SLOW);

@@ -63,6 +63,9 @@ const valueOf = (id: string) => store().nodes.find((node) => node.id === id)?.da
 const stacks = () => ({ undo: store().undoStack.length, redo: store().redoStack.length });
 /** Whether GM's dropped-undo line shows, in either notice place. */
 const dropped = () => store().undoNotice?.text === DROPPED_UNDO_TEXT || store().messageNotice?.text === DROPPED_UNDO_TEXT;
+/** GM r40 item 2: a held Undo's give-up line, in either notice place; with a name, that line exactly. */
+const broughtBack = (name?: string) => [store().undoNotice?.text, store().messageNotice?.text].some((text) => (name
+  ? text === `Nebula couldn\u2019t bring back \u201c${name}\u201d. Try Undo again.` : Boolean(text?.startsWith('Nebula couldn\u2019t bring back'))));
 const settle = () => act(async () => { for (let i = 0; i < 6; i += 1) await new Promise((resolve) => setTimeout(resolve, 5)); });
 const undo = async () => { act(() => { store().undo(); }); await settle(); };
 const redo = async () => { act(() => { store().redo(); }); await settle(); };
@@ -109,25 +112,30 @@ describe('a held Cmd+Z is bound to the step it was pressed for (review 11, M-1)'
     expect(DROPPED_UNDO_TEXT).toBe('Nothing was undone. Your last change was still saving.');
   });
 
-  it('H1 (control) a delete whose answer lands after an agent edit: the press is dropped; then Codex\'s edit, then the delete, are undone in turn', async () => {
+  it('H1 (control) a delete whose answer lands after an agent edit: the held press waits silently, then is dropped under the newer edit; then Codex\'s edit, then the delete, are undone in turn', async () => {
     setGraph([textNode('n1'), textNode('n2')], [wire('n1', 'n2')]);
     act(() => { store().deleteNode('n2'); });
     await settle();
     // Round 18 (GM option (c)): the node and its wire leave the canvas at once.
     expect(graph()).toEqual({ nodes: ['n1'], edges: [] });
     await undo();
-    // Round 18 (GM option (c)): the press during the delete's flight says so and changes nothing.
-    expect(dropped()).toBe(true);
+    // GM r39 item 3: the press waits, silently, and changes nothing yet.
+    expect(dropped()).toBe(false);
     expect(graph()).toEqual({ nodes: ['n1'], edges: [] });
     agentSync([textNode('n1'), textNode('n2'), textNode('n3')], [wire('n1', 'n2')]);
     await answer('n2');
-    // Round 18 (GM option (c)): the sync that still showed n2 leaves it off; the press is never applied late.
+    // Since r18 the delete's step is placed when Delete is pressed (the node
+    // leaves then), so Codex's edit is the newer step on top when the answer
+    // lands. The bound-press rule (review 11, M-1) drops the press with GM's
+    // line rather than undo beneath Codex's edit. (Pre-r18 the delete's step
+    // was re-pushed above it at the answer, and the press restored n2.)
     expect(graph()).toEqual({ nodes: ['n1', 'n3'], edges: [] });
+    expect(dropped()).toBe(true);
     expect(restores()).toHaveLength(0);
-    // Round 18 (GM option (c)): the delete's step stays below Codex's edit: the first press undoes the edit.
+    // The delete's step stays below Codex's edit: the first press undoes the edit.
     await undo();
     expect(graph()).toEqual({ nodes: ['n1'], edges: [] });
-    // Round 18 (GM option (c)): the next press undoes the delete, node and wire together.
+    // The next press undoes the delete, node and wire together.
     await undo();
     expect(graph()).toEqual({ nodes: ['n1', 'n2'], edges: ['e-n1-n2'] });
     expect(stacks()).toEqual({ undo: 0, redo: 2 });
@@ -199,21 +207,24 @@ describe('a held Cmd+Z is bound to the step it was pressed for (review 11, M-1)'
     expect(dropped()).toBe(false);
   });
 
-  it('H5 the person types after the press, before the delete answers: the press is dropped; the typing, then the delete, are undone in turn', async () => {
+  it('H5 the person types after the press, before the delete answers: the held press is dropped under the typing; the typing, then the delete, are undone in turn', async () => {
     setGraph([textNode('n1'), textNode('n2')]);
     act(() => { store().deleteNode('n2'); });
     await settle();
     await undo();
-    // Round 18 (GM option (c)): the press during the delete's flight says so and changes nothing.
-    expect(dropped()).toBe(true);
+    // GM r39 item 3: held, silently.
+    expect(dropped()).toBe(false);
     expect(graph().nodes).toEqual(['n1']);
     act(() => { store().updateNodeData('n1', { params: { value: 'Typed' } }); });
     await answer('n2');
-    // Round 18 (GM option (c)): the press is never applied late: n2 stays deleted, the typing stays.
+    // Since r18 the delete's step is placed at the press, so the typing is the
+    // newer settled step: the press is dropped with GM's line, never applied
+    // beneath it (review 11, M-1). n2 stays deleted, the typing stays.
+    expect(dropped()).toBe(true);
     expect(graph().nodes).toEqual(['n1']);
     expect(valueOf('n1')).toBe('Typed');
     expect(restores()).toHaveLength(0);
-    // Round 18 (GM option (c)): the delete's step isn't re-pushed: the typing is the newer step and goes first.
+    // The typing is the newer step and goes first, then the delete.
     await undo();
     expect(graph().nodes).toEqual(['n1']);
     expect(valueOf('n1')).toBe('n1');
@@ -288,7 +299,7 @@ describe('a held Cmd+Z is bound to the step it was pressed for (review 11, M-1)'
     expect(dropped()).toBe(true);
   });
 
-  it('H10 (L-3) the 15 s limit drops the press; the late answer deletes as usual, and the next press undoes it', async () => {
+  it('H10 (L-3) the 15 s limit gives the press up; the late answer deletes as usual, and the next press undoes it', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     setGraph([textNode('n1'), textNode('n2')], [wire('n1', 'n2')]);
     act(() => { store().deleteNode('n2'); });
@@ -296,16 +307,22 @@ describe('a held Cmd+Z is bound to the step it was pressed for (review 11, M-1)'
     // Round 18 (GM option (c)): the node and its wire leave the canvas at once.
     expect(graph()).toEqual({ nodes: ['n1'], edges: [] });
     act(() => { store().undo(); });
-    // Round 18 (GM option (c)): the press is dropped at once, not at the 15 s limit.
-    expect(dropped()).toBe(true);
+    // GM r39 item 3: held, silently, until the limit.
+    expect(dropped()).toBe(false);
+    expect(broughtBack()).toBe(false);
     await act(async () => { await vi.advanceTimersByTimeAsync(15_010); });
+    // GM r40 item 2 (c): the give-up names the node, not DROPPED_UNDO_TEXT.
+    expect(broughtBack('n2')).toBe(true);
+    expect(dropped()).toBe(false);
     expect(graph()).toEqual({ nodes: ['n1'], edges: [] });
     expect(stacks()).toEqual({ undo: 1, redo: 0 });
     const resolve = net.held.get('n2')!;
     net.held.delete('n2');
     await act(async () => { resolve({ status: 200, body: { status: 'deleted', id: 'n2' } }); await vi.advanceTimersByTimeAsync(50); });
+    // GM r40 item 2: the late answer never restores by itself.
     expect(graph().nodes).toEqual(['n1']);
     expect(stacks()).toEqual({ undo: 1, redo: 0 });
+    expect(restores()).toHaveLength(0);
     net.holdDeletes = false;
     act(() => { store().undo(); });
     await act(async () => { await vi.advanceTimersByTimeAsync(50); });
@@ -313,7 +330,7 @@ describe('a held Cmd+Z is bound to the step it was pressed for (review 11, M-1)'
     expect(stacks()).toEqual({ undo: 0, redo: 1 });
   });
 
-  it('H11 (L-3) the echo is in, the limit drops the press: the canvas and Nebula agree, no restore, no stray redo', async () => {
+  it('H11 (L-3) the echo is in, the limit gives the press up: the canvas and Nebula agree, no restore, no stray redo', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     setGraph([textNode('n1'), textNode('n2')], [wire('n1', 'n2')]);
     act(() => { store().deleteNode('n2'); });
@@ -321,7 +338,8 @@ describe('a held Cmd+Z is bound to the step it was pressed for (review 11, M-1)'
     ownSync([textNode('n1')]);
     act(() => { store().undo(); });
     await act(async () => { await vi.advanceTimersByTimeAsync(15_010); });
-    expect(dropped()).toBe(true);
+    // GM r40 item 2 (c): the give-up line, read live.
+    expect(broughtBack('n2')).toBe(true);
     expect(graph().nodes).toEqual(['n1']);
     expect(restores()).toHaveLength(0);
     const resolve = net.held.get('n2')!;
@@ -340,7 +358,8 @@ describe('a held Cmd+Z is bound to the step it was pressed for (review 11, M-1)'
     await act(async () => { await vi.advanceTimersByTimeAsync(10); });
     act(() => { store().undo(); });
     await act(async () => { await vi.advanceTimersByTimeAsync(15_010); });
-    expect(dropped()).toBe(true);
+    // GM r40 item 2 (c): the give-up line, read live.
+    expect(broughtBack('n2')).toBe(true);
     expect(valueOf('n1')).toBe('Edited');
     const resolve = net.held.get('n2')!;
     net.held.delete('n2');
@@ -378,20 +397,16 @@ describe('a held Cmd+Z is bound to the step it was pressed for (review 11, M-1)'
     await settle();
     ownSync([textNode('n1')]);
     await undo();
-    // Round 18 (GM option (c)): the press says so at once, not when the answer lands.
-    expect(dropped()).toBe(true);
+    // GM r39 item 3: held, silently, until the answer.
+    expect(dropped()).toBe(false);
     expect(graph().nodes).toEqual(['n1']);
     agentSync([textNode('n1'), textNode('n4')]);
     await answer('n2');
     expect(graph().nodes).toEqual(['n1', 'n4']);
     expect(stacks()).toEqual({ undo: 2, redo: 0 });
+    // A newer step (Codex's) landed on top: the press is dropped and says so, as before r18.
+    expect(dropped()).toBe(true);
     expect(restores()).toHaveLength(0);
-    // Round 18 (GM option (c)): after the answer, presses undo Codex's edit, then the delete.
-    await undo();
-    expect(graph().nodes).toEqual(['n1']);
-    await undo();
-    expect(graph().nodes).toEqual(['n1', 'n2']);
-    expect(stacks()).toEqual({ undo: 0, redo: 2 });
   });
 });
 
